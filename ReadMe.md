@@ -4,8 +4,7 @@ An Open Source Client-Server ORM/SOA framework, version 2
 
 (c) 2008-2020 Synopse Informatique
 
-    https://synopse.info
-    http://*mORMot*.net
+https://synopse.info  - http://mORMot.net
 
 ## Version 2
 
@@ -184,7 +183,7 @@ This allows the use of our code in as wide a variety of software projects as pos
 (to be fixed)
 
 Main project page:
-http://*mORMot*.net
+http://mORMot.net
 
 Documentation:
 https://synopse.info/files/html/Synopse%20*mORMot*%20Framework%20SAD%201.18.html
@@ -208,7 +207,7 @@ Issues and feature requests can be posted (take a look at the forums and latest 
 https://synopse.info/fossil/reportlist
 
 You can also monitor/fork our projects on GitHub:
-https://github.com/synopse/*mORMot*
+https://github.com/synopse/mORMot
 
 You may also install it as a Delphinus package: Delphinus-Support
 
