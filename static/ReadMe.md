@@ -2,9 +2,9 @@
 
 ## Folder Content
 
-This folder contains all raw binary files needed for FPC and Delphi static linking.
+This folder should contain all raw binary files needed for FPC and Delphi static linking.
 
-If this folder is void (e.g. when retrieved from https://synopse.info/fossil), you can download all the needed sub-folders from http://synopse.info/files/sqlite3fpc.7z
+If this folder is void (e.g. when retrieved from https://synopse.info/fossil), you can download all the needed sub-folders from a matching release from https://github.com/synopse/mORMot2/releases
 
 ## Static Linking
 
