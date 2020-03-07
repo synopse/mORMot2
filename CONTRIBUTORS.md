@@ -2,7 +2,7 @@
 
 According to our LICENSE.md terms, Synopse Informatique, and Arnaud Bouchez as the main Author of the Open Source *mORMot* framework, are the Copyright Holders.
 
-But nothing would have been possible without a big number of Contributors, which provided fixes or enhancements.
+But nothing would have been possible without a big number of Contributors, who provided fixes or enhancements.
 
 ## Contributors
 
