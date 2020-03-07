@@ -992,6 +992,12 @@ asm
   // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
 
+function Rdtsc: Int64;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // returns the TSC in EDX:EAX
+        rdtsc
+end;
+
 function IsXmmYmmOSEnabled: boolean; assembler;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled

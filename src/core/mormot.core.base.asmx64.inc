@@ -823,6 +823,13 @@ function RdRand32: cardinal;
   // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
 
+function Rdtsc: Int64;
+{$ifdef FPC}nostackframe; assembler; asm{$else} asm .noframe {$endif FPC}
+        rdtsc // returns the TSC in EDX:EAX
+        shl     rdx, 32
+        or      rax, rdx
+end;
+
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
 // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled

@@ -419,6 +419,14 @@ function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: 
 function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
   NoDuplicates: boolean=false): integer;
 
+/// compute a random GUID value
+procedure RandomGUID(out result: TGUID); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute a random GUID value
+function RandomGUID: TGUID; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// compute the new capacity when expanding an array of items
 // - handle tiny, small, medium, large and huge sizes properly to reduce
 // memory usage and maximize performance
@@ -1404,6 +1412,11 @@ var
 // - caller should ensure that  cfSSE42 in CpuFeatures
 // - you should rather call Random32() functions which are faster and safer
 function RdRand32: cardinal;
+
+/// returns the 64-bit Intel Time Stamp Counter (TSC)
+// - could be used as entropy source for randomness - use TPrecisionTimer if
+// you expect a cross-platform and cross-CPU high resolution performance counter
+function Rdtsc: Int64;
 {$endif CPUINTEL}
 
 {$ifdef ASMINTEL}
@@ -1456,6 +1469,61 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = Compar
 // - to be efficiently inlined in processing code
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+type
+  /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
+  // - cross-compiler and cross-platform efficient randomness generator, very
+  // fast with a much better distribution than Delphi system's Random() function
+  // - as used by Random32 overloaded functions - via a threadvar for thread safety
+  // - L'Ecuyer's algorithm is also much faster (and safer) than RDRAND HW opcode
+  // as reported by https://en.wikipedia.org/wiki/RdRand#Performance
+  TLecuyer = object
+  public
+    rs1, rs2, rs3, seedcount: cardinal;
+    /// force an immediate seed of the generator from current system state
+    // - should be called before any call to the Next method
+    // - on supported Intel/AMD CPUs, will call RdRand32 to gather some entropy
+    procedure Seed(entropy: PByteArray; entropylen: PtrInt);
+    /// compute the next 32-bit generated value
+    // - will automatically reseed after around 65,000 generated values
+    function Next: cardinal; overload;
+    /// compute the next 32-bit generated value, in range [0..max-1]
+    // - will automatically reseed after around 65,000 generated values
+    function Next(max: cardinal): cardinal; overload;
+  end;
+
+/// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
+// - this function will use well documented and proven Pierre L'Ecuyer software
+// generator - which happens to be faster (and safer) than RDRAND opcode
+// - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
+// - thread-safe function: each thread will maintain its own TLecuyer table
+function Random32: cardinal; overload;
+
+/// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
+// - calls internally the overloaded Random32 function
+function Random32(max: cardinal): cardinal; overload;
+
+/// seed the gsl_rng_taus2 Random32 generator
+// - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
+// often than the Pierre L'Ecuyer's algorithm period of 2^88
+// - you can specify some additional entropy buffer; note that calling this
+// function with the same entropy again WON'T seed the generator with the same
+// sequence (as with RTL's RandomSeed function), but initiate a new one
+// - thread-specific function: each thread will maintain its own seed table
+procedure Random32Seed(entropy: pointer=nil; entropylen: PtrInt=0);
+
+/// fill some memory buffer with random values
+// - the destination buffer is expected to be allocated as 32-bit items
+// - use internally crc32c() with some rough entropy source, and Random32
+// gsl_rng_taus2 generator
+// - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
+// method from the SynCrypto unit
+procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
+
+/// retrieve 128-bit of entropy, from system time and current execution state
+// - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs
+// - entropy is gathered using 4 crc32c 32-bit hashes, via crcblock()
+procedure XorEntropy(entropy: PBlock128);
 
 
 { ************ Variable Length Integer Encoding / Decoding }
@@ -1778,6 +1846,16 @@ end;
 procedure FillZero(var result: TGUID);
 begin
   FillZero(PHash128(@result)^);
+end;
+
+function RandomGUID: TGUID;
+begin
+  FillRandom(@result, SizeOf(TGUID) shr 2);
+end;
+
+procedure RandomGUID(out result: TGUID);
+begin
+  FillRandom(@result, SizeOf(TGUID) shr 2);
 end;
 
 function NextGrow(capacity: integer): integer;
@@ -2665,10 +2743,11 @@ begin
 {$endif FPC}
 end;
 
+// CompareMemSmall defined now for proper inlining within AnyScanIndex() below
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
 label
   zero;
-begin // defined here for proper inlining within AnyScanIndex() below
+begin
   {$ifndef CPUX86}
   result := false; {$endif}
   inc(Length, PtrInt(PtrUInt(P1)));
@@ -4539,6 +4618,122 @@ end;
 
 
 { ************ Faster alternative to RTL standard functions }
+
+threadvar
+  _Lecuyer: TLecuyer; // uses only 16 bytes per thread
+var
+  _EntropyGlobal: THash128Rec; // to avoid replay attacks
+
+procedure XorEntropy(entropy: PBlock128);
+var e: THash128Rec;
+begin // xor entropy with its random on-stack values
+  e := _EntropyGlobal;
+  {$ifdef CPUINTEL}
+  e.Hi := e.Hi xor Rdtsc;
+  {$endif CPUINTEL}
+  crcblock(entropy, @e.b);
+  crcblock(entropy, @_Lecuyer);     // ensure TLecuyer.Seed() is not consistent
+  unaligned(PDouble(@e.L)^) := Now; // cross-platform time
+  e.H := e.H xor {$ifdef FPC} PtrUInt(GetCurrentThreadID) xor {$endif} PtrUInt(entropy);
+  crcblock(entropy, @e.b);
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then
+  begin // won't hurt
+    e.c0 := e.c0 xor RdRand32;
+    e.c1 := e.c1 xor RdRand32;
+    e.c2 := e.c2 xor RdRand32;
+    e.c3 := e.c3 xor RdRand32;
+    crcblock(entropy, @e.b);
+  end;
+  e.Lo := e.Lo xor Rdtsc; // has changed in-between
+  {$else}
+  e.i0 := e.i0 xor Random(maxInt);
+  e.i1 := e.i1 xor Random(maxInt);
+  e.i2 := e.i2 xor Random(maxInt);
+  e.i3 := e.i3 xor Random(maxInt);
+  {$endif CPUINTEL}
+  _EntropyGlobal.c := entropy^;
+  crcblock(entropy, @e.b);
+end;
+
+procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
+var e: THash128Rec;
+    i, j: PtrInt;
+begin
+  repeat
+    if entropy <> nil then
+      for i := 0 to entropylen - 1 do
+      begin
+        j := i and 15;
+        e.b[j] := e.b[j] xor entropy^[i];
+      end;
+    XorEntropy(@e.c);
+    rs1 := rs1 xor e.c0 xor e.c3;
+    rs2 := rs2 xor e.c1;
+    rs3 := rs3 xor e.c2;
+  until (rs1 > 1) and (rs2 > 7) and (rs3 > 15);
+  seedcount := 1;
+  for i := 1 to e.i3 and 15 do
+    Next; // warm up
+end;
+
+function TLecuyer.Next: cardinal;
+begin
+  if word(seedcount) = 0 then // reseed after 256KB of output
+    Seed(nil, 0)
+  else
+    inc(seedcount);
+  result := rs1;
+  rs1 := ((result and -2) shl 12) xor (((result shl 13) xor result) shr 19);
+  result := rs2;
+  rs2 := ((result and -8) shl 4) xor (((result shl 2) xor result) shr 25);
+  result := rs3;
+  rs3 := ((result and -16) shl 17) xor (((result shl 3) xor result) shr 11);
+  result := rs1 xor rs2 xor result;
+end;
+
+function TLecuyer.Next(max: cardinal): cardinal;
+begin
+  result := (QWord(Next) * max) shr 32;
+end;
+
+procedure Random32Seed(entropy: pointer; entropylen: PtrInt);
+begin
+  _Lecuyer.Seed(entropy, entropylen);
+end;
+
+function Random32: cardinal;
+begin
+  result := _Lecuyer.Next;
+end;
+
+function Random32(max: cardinal): cardinal;
+begin
+  result := (QWord(_Lecuyer.Next) * max) shr 32;
+end;
+
+procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
+var c: cardinal;
+    gen: ^TLecuyer;
+begin
+  if CardinalCount <= 0 then
+    exit;
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then // won't hurt
+    c := RdRand32
+  else
+    c := Rdtsc;
+  {$else}
+  c := Random(MaxInt);          // good enough as seed
+  {$endif CPUINTEL}
+  gen := @_Lecuyer;
+  repeat
+    c := c xor gen^.Next;
+    Dest^ := Dest^ xor c;
+    inc(Dest);
+    dec(CardinalCount);
+  until CardinalCount = 0;
+end;
 
 {$ifdef CPUINTEL}
 
