@@ -9,6 +9,7 @@ unit mormot.core.base;
   Basic types and reusable stand-alone functions shared by all framework units:
   - Framework Version and Information
   - Common Types Used for Compatibility Between Compilers and CPU
+  - Numbers (floats and integers) Low-level Definitions
   - Integer Arrays Manipulation
   - Low-level Types Mapping Binary or Bits Structures
   - Variable Length Integer Encoding / Decoding
@@ -422,6 +423,121 @@ function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
 // - handle tiny, small, medium, large and huge sizes properly to reduce
 // memory usage and maximize performance
 function NextGrow(capacity: integer): integer;
+
+
+{ ************ Numbers (floats and integers) Low-level Definitions }
+
+var
+  /// best possible precision when rendering a "single" kind of float
+  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  SINGLE_PRECISION: integer = 8;
+  /// best possible precision when rendering a "double" kind of float
+  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  DOUBLE_PRECISION: integer = 15;
+  /// best possible precision when rendering a "extended" kind of float
+  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  EXTENDED_PRECISION: integer = 18;
+
+type
+  {$ifdef CPUARM}
+  // ARM does not support 80bit extended -> 64bit double is enough for us
+  TSynExtended = double;
+  {$else}
+  {$ifdef CPU64}
+  TSynExtended = double;
+  {$else}
+  /// the floating-point type to be used for best precision and speed
+  // - will allow to fallback to double e.g. on x64 and ARM CPUs
+  TSynExtended = extended;
+  {$endif}
+  {$endif}
+  /// the non-number values potentially stored in an IEEE floating point
+  TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
+  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+  /// will actually change anything only on FPC ARM/Aarch64 plaforms
+  unaligned = Double;
+  {$endif}
+
+/// get the signed 32-bit integer value stored in P^
+// - we use the PtrInt result type, even if expected to be 32-bit, to use
+// native CPU register size (don't want any 32-bit overflow here)
+// - will end parsing when P^ does not contain any number (e.g. it reaches any
+// ending #0 char)
+function GetInteger(P: PUTF8Char): PtrInt; overload;
+
+/// get the signed 32-bit integer value stored in P^..PEnd^
+// - will end parsing when P^ does not contain any number (e.g. it reaches any
+// ending #0 char), or when P reached PEnd (avoiding any buffer overflow)
+function GetInteger(P,PEnd: PUTF8Char): PtrInt; overload;
+
+/// get the signed 32-bit integer value stored in P^
+// - if P if nil or not start with a valid numerical value, returns Default
+function GetIntegerDef(P: PUTF8Char; Default: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get the signed 32-bit integer value stored in P^
+// - this version return 0 in err if no error occured, and 1 if an invalid
+// character was found, not its exact index as for the val() function
+function GetInteger(P: PUTF8Char; var err: integer): PtrInt; overload;
+
+/// get the unsigned 32-bit integer value stored in P^
+// - we use the PtrUInt result type, even if expected to be 32-bit, to use
+// native CPU register size (don't want any 32-bit overflow here)
+function GetCardinal(P: PUTF8Char): PtrUInt;
+
+/// get the unsigned 32-bit integer value stored in P^
+// - if P if nil or not start with a valid numerical value, returns Default
+function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
+
+/// get the unsigned 32-bit integer value stored as Unicode string in P^
+function GetCardinalW(P: PWideChar): PtrUInt;
+
+/// get a boolean value stored as true/false text in P^
+// - would also recognize any non 0 integer as true
+function GetBoolean(P: PUTF8Char): boolean;
+
+/// get the 64-bit integer value stored in P^
+function GetInt64(P: PUTF8Char): Int64; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get the 64-bit integer value stored in P^
+// - if P if nil or not start with a valid numerical value, returns Default
+function GetInt64Def(P: PUTF8Char; const Default: Int64): Int64;
+
+/// get the 64-bit signed integer value stored in P^
+procedure SetInt64(P: PUTF8Char; var result: Int64);
+  {$ifdef CPU64}inline;{$endif}
+
+/// get the 64-bit unsigned integer value stored in P^
+procedure SetQWord(P: PUTF8Char; var result: QWord);
+  {$ifdef CPU64}inline;{$endif}
+
+/// get the 64-bit signed integer value stored in P^
+// - set the err content to the index of any faulty character, 0 if conversion
+// was successful (same as the standard val function)
+function GetInt64(P: PUTF8Char; var err: integer): Int64; overload;
+  {$ifdef CPU64}inline;{$endif}
+
+/// get the 64-bit unsigned integer value stored in P^
+// - set the err content to the index of any faulty character, 0 if conversion
+// was successful (same as the standard val function)
+function GetQWord(P: PUTF8Char; var err: integer): QWord;
+
+/// get the extended floating point value stored in P^
+// - set the err content to the index of any faulty character, 0 if conversion
+// was successful (same as the standard val function)
+function GetExtended(P: PUTF8Char; out err: integer): TSynExtended; overload;
+
+/// get the extended floating point value stored in P^
+// - this overloaded version returns 0 as a result if the content of P is invalid
+function GetExtended(P: PUTF8Char): TSynExtended; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************ Integer Arrays Manipulation }
@@ -1681,6 +1797,628 @@ begin // algorithm similar to TFPList.Expand for the increasing ranges
   else
     inc(result, 16 shl 20);
 end;
+
+
+{ ************ Numbers (floats and integers) Low-level Definitions }
+
+function GetInteger(P: PUTF8Char): PtrInt;
+var c: byte;
+    minus: boolean;
+begin
+  result := 0;
+  if P=nil then
+    exit;
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := byte(P^);
+  until false;
+  if c=ord('-') then begin
+    minus := true;
+    repeat inc(P); c := byte(P^); until c<>ord(' ');
+  end else begin
+    minus := false;
+    if c=ord('+') then
+      repeat inc(P); c := byte(P^); until c<>ord(' ');
+  end;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    c := byte(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+PtrInt(c);
+  until false;
+  if minus then
+    result := -result;
+end;
+
+function GetInteger(P,PEnd: PUTF8Char): PtrInt;
+var c: byte;
+    minus: boolean;
+begin
+  result := 0;
+  if (P=nil) or (P>=PEnd) then
+    exit;
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    if P=PEnd then
+      exit;
+    c := byte(P^);
+  until false;
+  if c=ord('-') then begin
+    minus := true;
+    repeat inc(P); if P=PEnd then exit; c := byte(P^); until c<>ord(' ');
+  end else begin
+    minus := false;
+    if c=ord('+') then
+      repeat inc(P); if P=PEnd then exit; c := byte(P^); until c<>ord(' ');
+  end;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    if P=PEnd then
+      break;
+    c := byte(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+PtrInt(c);
+  until false;
+  if minus then
+    result := -result;
+end;
+
+function GetInteger(P: PUTF8Char; var err: integer): PtrInt;
+var c: byte;
+    minus: boolean;
+begin
+  result := 0;
+  err := 1; // don't return the exact index, just 1 as error flag
+  if P=nil then
+    exit;
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := byte(P^);
+  until false;
+  if c=ord('-') then begin
+    minus := true;
+    repeat inc(P); c := byte(P^); until c<>ord(' ');
+  end else begin
+    minus := false;
+    if c=ord('+') then
+      repeat inc(P); c := byte(P^); until c<>ord(' ');
+  end;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    c := byte(P^);
+    dec(c,48);
+    if c<=9 then
+      result := result*10+PtrInt(c) else
+      if c<>256-48 then
+        exit else
+        break;
+  until false;
+  err := 0; // success
+  if minus then
+    result := -result;
+end;
+
+function GetIntegerDef(P: PUTF8Char; Default: PtrInt): PtrInt;
+var err: integer;
+begin
+  result := GetInteger(P,err);
+  if err<>0 then
+    result := Default;
+end;
+
+const
+  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
+  TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
+
+function GetBoolean(P: PUTF8Char): boolean;
+begin
+  if P<>nil then
+    case PInteger(P)^ of
+      TRUE_LOW:  result := true;
+      FALSE_LOW: result := false;
+      else result := PWord(P)^<>ord('0');
+    end else
+    result := false;
+end;
+
+function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
+var c: byte;
+begin
+  result := Default;
+  if P=nil then
+    exit;
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := byte(P^);
+  until false;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    c := byte(P^)-48;
+    if c>9 then
+      break;
+    result := result*10+PtrUInt(c);
+  until false;
+end;
+
+function GetCardinal(P: PUTF8Char): PtrUInt;
+var c: byte;
+begin
+  result := 0;
+  if P=nil then
+    exit;
+  c := byte(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := byte(P^);
+  until false;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    c := byte(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+PtrUInt(c);
+  until false;
+end;
+
+function GetCardinalW(P: PWideChar): PtrUInt;
+var c: PtrUInt;
+begin
+  result := 0;
+  if P=nil then
+    exit;
+  c := ord(P^);
+  repeat
+    if c=0 then
+      exit;
+    if c>ord(' ') then
+      break;
+    inc(P);
+    c := ord(P^);
+  until false;
+  dec(c,48);
+  if c>9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    c := ord(P^);
+    dec(c,48);
+    if c>9 then
+      break;
+    result := result*10+c;
+  until false;
+end;
+
+{$ifdef CPU64}
+procedure SetInt64(P: PUTF8Char; var result: Int64);
+begin // PtrInt is already int64 -> call PtrInt version
+  result := GetInteger(P);
+end;
+{$else}
+procedure SetInt64(P: PUTF8Char; var result: Int64);
+var c: cardinal;
+    minus: boolean;
+begin
+  result := 0;
+  if P=nil then
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  if P^='-' then begin
+    minus := true;
+    repeat inc(P) until P^<>' ';
+  end else begin
+    minus := false;
+    if P^='+' then
+      repeat inc(P) until P^<>' ';
+  end;
+  c := byte(P^)-48;
+  if c>9 then
+    exit;
+  PCardinal(@result)^ := c;
+  inc(P);
+  repeat // fast 32-bit loop
+    c := byte(P^)-48;
+    if c>9 then
+      break else
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
+    inc(P);
+    if PCardinal(@result)^>=high(cardinal)div 10 then begin
+      repeat // 64-bit loop
+        c := byte(P^)-48;
+        if c>9 then
+          break;
+        result := result shl 3+result+result; // fast result := result*10
+        inc(result,c);
+        inc(P);
+      until false;
+      break;
+    end;
+  until false;
+  if minus then
+    result := -result;
+end;
+{$endif}
+
+{$ifdef CPU64}
+procedure SetQWord(P: PUTF8Char; var result: QWord);
+begin // PtrUInt is already QWord -> call PtrUInt version
+  result := GetCardinal(P);
+end;
+{$else}
+procedure SetQWord(P: PUTF8Char; var result: QWord);
+var c: cardinal;
+begin
+  result := 0;
+  if P=nil then
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  if P^='+' then
+    repeat inc(P) until P^<>' ';
+  c := byte(P^)-48;
+  if c>9 then
+    exit;
+  PCardinal(@result)^ := c;
+  inc(P);
+  repeat // fast 32-bit loop
+    c := byte(P^)-48;
+    if c>9 then
+      break else
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
+    inc(P);
+    if PCardinal(@result)^>=high(cardinal)div 10 then begin
+      repeat // 64-bit loop
+        c := byte(P^)-48;
+        if c>9 then
+          break;
+        result := result shl 3+result+result; // fast result := result*10
+        inc(result,c);
+        inc(P);
+      until false;
+      break;
+    end;
+  until false;
+end;
+{$endif}
+
+{$ifdef CPU64}
+function GetInt64(P: PUTF8Char): Int64;
+begin // PtrInt is already int64 -> call previous version
+  result := GetInteger(P);
+end;
+{$else}
+function GetInt64(P: PUTF8Char): Int64;
+begin
+  SetInt64(P,result);
+end;
+{$endif}
+
+function GetInt64Def(P: PUTF8Char; const Default: Int64): Int64;
+var err: integer;
+begin
+  result := GetInt64(P,err);
+  if err>0 then
+    result := Default;
+end;
+
+{$ifdef CPU64}
+function GetInt64(P: PUTF8Char; var err: integer): Int64;
+begin // PtrInt is already int64 -> call previous version
+  result := GetInteger(P,err);
+end;
+{$else}
+function GetInt64(P: PUTF8Char; var err: integer): Int64;
+var c: cardinal;
+    minus: boolean;
+begin
+  err := 0;
+  result := 0;
+  if P=nil then
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  if P^='-' then begin
+    minus := true;
+    repeat inc(P) until P^<>' ';
+  end else begin
+    minus := false;
+    if P^='+' then
+      repeat inc(P) until P^<>' ';
+  end;
+  inc(err);
+  c := byte(P^)-48;
+  if c>9 then
+    exit;
+  PCardinal(@result)^ := c;
+  inc(P);
+  repeat // fast 32-bit loop
+    c := byte(P^);
+    if c<>0 then begin
+      dec(c,48);
+      inc(err);
+      if c>9 then
+        exit;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
+      inc(P);
+      if PCardinal(@result)^>=high(cardinal)div 10 then begin
+        repeat // 64-bit loop
+          c := byte(P^);
+          if c=0 then begin
+            err := 0; // conversion success without error
+            break;
+          end;
+          dec(c,48);
+          inc(err);
+          if c>9 then
+            exit else
+            {$ifdef CPU32DELPHI}
+            result := result shl 3+result+result;
+            {$else}
+            result := result*10;
+            {$endif}
+          inc(result,c);
+          if result<0 then
+            exit; // overflow (>$7FFFFFFFFFFFFFFF)
+          inc(P);
+        until false;
+        break;
+      end;
+    end else begin
+      err := 0; // reached P^=#0 -> conversion success without error
+      break;
+    end;
+  until false;
+  if minus then
+    result := -result;
+end;
+{$endif}
+
+function GetQWord(P: PUTF8Char; var err: integer): QWord;
+var c: PtrUInt;
+begin
+  err := 1; // error
+  result := 0;
+  if P=nil then
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  c := byte(P^)-48;
+  if c>9 then
+    exit;
+  {$ifdef CPU64}
+  result := c;
+  inc(P);
+  repeat
+    c := byte(P^);
+    if c=0 then
+      break;
+    dec(c,48);
+    if c>9 then
+      exit;
+    result := result*10+c;
+    inc(P);
+  until false;
+  err := 0; // success
+  {$else}
+  PByte(@result)^ := c;
+  inc(P);
+  repeat // fast 32-bit loop
+    c := byte(P^);
+    if c<>0 then begin
+      dec(c,48);
+      inc(err);
+      if c>9 then
+        exit;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
+      inc(P);
+      if PCardinal(@result)^>=high(cardinal)div 10 then begin
+        repeat // 64-bit loop
+          c := byte(P^);
+          if c=0 then begin
+            err := 0; // conversion success without error
+            break;
+          end;
+          dec(c,48);
+          inc(err);
+          if c>9 then
+            exit else
+            {$ifdef CPU32DELPHI}
+            result := result shl 3+result+result;
+            {$else}
+            result := result*10;
+            {$endif}
+          inc(result,c);
+          inc(P);
+        until false;
+        break;
+      end;
+    end else begin
+      err := 0; // reached P^=#0 -> conversion success without error
+      break;
+    end;
+  until false;
+  {$endif CPU64}
+end;
+
+function GetExtended(P: PUTF8Char): TSynExtended;
+var err: integer;
+begin
+  result := GetExtended(P,err);
+  if err<>0 then
+    result := 0;
+end;
+
+function HugePower10(exponent: integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
+var pow10: TSynExtended;
+begin
+  result := 1.0;
+  if exponent<0 then begin
+    pow10 := 0.1;
+    exponent := -exponent;
+  end else
+    pow10 := 10;
+  repeat
+    while exponent and 1=0 do begin
+      exponent := exponent shr 1;
+      pow10 := sqr(pow10);
+    end;
+    result := result*pow10;
+    dec(exponent);
+  until exponent=0;
+end;
+
+{$ifndef CPU32DELPHI} // inspired by ValExt_JOH_PAS_8_a by John O'Harrow
+function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
+const POW10: array[-31..31] of TSynExtended = (
+  1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
+  1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
+  1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
+  1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
+  1E26,1E27,1E28,1E29,1E30,1E31);
+var digits, exp: PtrInt;
+    ch: byte;
+    flags: set of (fNeg, fNegExp, fValid);
+    U: PByte; // Delphi Win64 doesn't like if P^ is used directly
+{$ifndef CPUX86}ten: TSynExtended;{$endif} // stored in (e.g. xmm2) register
+begin
+  {$ifndef CPUX86} ten := 10.0; {$endif}
+  result := 0;
+  if P=nil then begin
+    err := 1;
+    exit;
+  end;
+  byte(flags) := 0;
+  U := pointer(P);
+  ch := U^;
+  if ch=ord(' ') then
+    repeat
+      inc(U);
+      ch := U^;
+    until ch<>ord(' '); // trailing spaces
+  if ch=ord('+') then begin
+    inc(U);
+    ch := U^;
+  end else
+  if ch=ord('-') then begin
+    inc(U);
+    ch := U^;
+    include(flags,fNeg);
+  end;
+  repeat
+    inc(U);
+    if (ch<ord('0')) or (ch>ord('9')) then
+      break;
+    dec(ch,ord('0'));
+    {$ifdef CPUX86}
+    result := (result*10.0)+ch;
+    {$else}
+    result := result*ten; // better SSE code generation in two steps
+    result := result+ch;
+    {$endif}
+    include(flags,fValid);
+    ch := U^;
+  until false;
+  digits := 0;
+  if ch=ord('.') then
+    repeat
+      ch := U^;
+      inc(U);
+      if (ch<ord('0')) or (ch>ord('9')) then begin
+        if not(fValid in flags) then // starts with '.'
+          if ch=0 then
+            dec(U); // U^='.'
+        break;
+      end;
+      dec(ch,ord('0'));
+      {$ifdef CPUX86}
+      result := (result*10.0)+ch;
+      {$else}
+      result := result*ten;
+      result := result+ch;
+      {$endif}
+      dec(digits);
+      include(flags,fValid);
+    until false;
+  if (ch=ord('E')) or (ch=ord('e')) then begin
+    exp := 0;
+    exclude(flags,fValid);
+    ch := U^;
+    if ch=ord('+') then
+      inc(U) else
+    if ch=ord('-') then begin
+      inc(U);
+      include(flags,fNegExp);
+    end;
+    repeat
+      ch := U^;
+      inc(U);
+      if (ch<ord('0')) or (ch>ord('9')) then
+        break;
+      dec(ch,ord('0'));
+      exp := (exp*10)+PtrInt(ch);
+      include(flags,fValid);
+    until false;
+    if fNegExp in flags then
+      dec(digits,exp) else
+      inc(digits,exp);
+  end;
+  if digits<>0 then
+    if (digits>=low(POW10)) and (digits<=high(POW10)) then
+      result := result*POW10[digits] else
+      result := result*HugePower10(digits);
+  if fNeg in flags then
+    result := -result;
+  if (fValid in flags) and (ch=0) then
+    err := 0 else
+    err := PUTF8Char(U)-P+1;
+end;
+{$endif CPU32DELPHI}
 
 
 { ************ integer arrays manipulation }

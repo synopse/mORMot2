@@ -1032,3 +1032,127 @@ asm
         pop     esi
 end;
 
+{$ifdef CPU32DELPHI} // inspired by ValExt_JOH_PAS_8_a by John O'Harrow
+function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
+const Ten: double = 10.0;
+asm     // in: eax=text, edx=@err  out: st(0)=result
+        push    ebx                 // save used registers
+        push    esi
+        push    edi
+        mov     esi, eax            // string pointer
+        push    eax                 // save for error condition
+        xor     ebx, ebx
+        push    eax                 // allocate local storage for loading fpu
+        test    esi, esi
+        jz      @nil                // nil string
+@trim:  movzx   ebx, byte ptr[esi]  // strip leading spaces
+        inc     esi
+        cmp     bl, ' '
+        je      @trim
+        xor     ecx, ecx            // clear sign flag
+        fld     qword[Ten]          // load 10 into fpu
+        xor     eax, eax            // zero number of decimal places
+        fldz                        // zero result in fpu
+        cmp     bl, '0'
+        jl      @chksig             // check for sign character
+@dig1:  xor     edi, edi            // zero exponent value
+@digl:  sub     bl, '0'
+        cmp     bl, 9
+        ja      @frac               // non-digit
+        mov     cl, 1               // set digit found flag
+        mov     [esp], ebx          // store for fpu use
+        fmul    st(0), st(1)        // multply by 10
+        fiadd   dword ptr[esp]      // add next digit
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        test    bl, bl              // end reached?
+        jnz     @digl               // no,get next digit
+        jmp     @finish             // yes,finished
+@chksig:cmp     bl, '-'
+        je      @minus
+        cmp     bl, '+'
+        je      @sigset
+@gdig1: test    bl, bl
+        jz      @error              // no digits found
+        jmp     @dig1
+@minus: mov     ch, 1               // set sign flag
+@sigset:movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        jmp     @gdig1
+@frac:  cmp     bl, '.' - '0'
+        jne     @exp                // no decimal point
+        movzx   ebx, byte ptr[esi]  // get next char
+        test    bl, bl
+        jz      @dotend             // string ends with '.'
+        inc     esi
+@fracl: sub     bl, '0'
+        cmp     bl, 9
+        ja      @exp                // non-digit
+        mov     [esp], ebx
+        dec     eax                 // -(number of decimal places)
+        fmul    st(0), st(1)        // multply by 10
+        fiadd   dword ptr[esp]      // add next digit
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        test    bl, bl              // end reached?
+        jnz     @fracl              // no, get next digit
+        jmp     @finish             // yes, finished (no exponent)
+@dotend:test    cl, cl              // any digits found before '.'?
+        jnz     @finish             // yes, valid
+        jmp     @error              // no,invalid
+@exp:   or      bl, $20
+        cmp     bl, 'e' - '0'
+        jne     @error              // not 'e' or 'e'
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        mov     cl, 0               // clear exponent sign flag
+        cmp     bl, '-'
+        je      @minexp
+        cmp     bl, '+'
+        je      @expset
+        jmp     @expl
+@minexp:mov     cl, 1               // set exponent sign flag
+@expset:movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+@expl:  sub     bl, '0'
+        cmp     bl, 9
+        ja      @error              // non-digit
+        lea     edi, [edi + edi * 4]// multiply by 10
+        add     edi, edi
+        add     edi, ebx            // add next digit
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        test    bl, bl              // end reached?
+        jnz     @expl               // no, get next digit
+@endexp:test    cl, cl              // positive exponent?
+        jz      @finish             // yes, keep exponent value
+        neg     edi                 // no, negate exponent value
+@finish:add     eax, edi            // exponent value - number of decimal places
+        mov     [edx], ebx          // result code = 0
+        jz      @pow                // no call to _pow10 needed
+        mov     edi, ecx            // save decimal sign flag
+        call    System.@Pow10       // raise to power of 10
+        mov     ecx, edi            // restore decimal sign flag
+@pow:   test    ch, ch              // decimal sign flag set?
+        jnz     @negate             // yes, negate value
+@ok:    add     esp, 8              // dump local storage and string pointer
+@exit:  ffree   st(1)               // remove ten value from fpu
+        pop     edi                 // restore used registers
+        pop     esi
+        pop     ebx
+        ret                         // finished
+@negate:fchs                        // negate result in fpu
+        jmp     @ok
+@nil:   inc     esi                 // force result code = 1
+        fldz                        // result value = 0
+@error: pop     ebx                 // dump local storage
+        pop     eax                 // string pointer
+        sub     esi, eax            // error offset
+        mov     [edx], esi          // set result code
+        test    ch, ch              // decimal sign flag set?
+        jz      @exit               // no,exit
+        fchs                        // yes. negate result in fpu
+        jmp     @exit               // exit setting result code
+end;
+{$endif CPU32DELPHI}
+
