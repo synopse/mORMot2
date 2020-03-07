@@ -1,7 +1,7 @@
 /// defines some framework core types and RTL-like functions
 // - this unit is a part of the freeware Synopse mORMot framework 2,
-// licensed under a MPL/GPL/LGPL tri-license; version 1.18
-unit mormot.core.types;
+// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
+unit mormot.core.base;
 
 (*
     This file is part of the mORMot framework 2.
@@ -2010,7 +2010,7 @@ begin
     8:
       result := Int64ScanExists(P, Count, PInt64(Elem)^);
     // small ElemSize version (<SizeOf(PtrInt))
-    3,5..7:
+    3, 5..7:
       begin
         result := true;
         if Count > 0 then
@@ -2027,7 +2027,8 @@ begin
       result := true;
       if Count > 0 then
         repeat
-          if (PInt64(P)^ = PInt64(Elem)^) and CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
+          if (PInt64(P)^ = PInt64(Elem)^) and
+             CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
             exit;
           inc(PByte(P), ElemSize);
           dec(Count);
@@ -3828,10 +3829,10 @@ type
   end;
 
 {$ifdef CPUX64}
-  {$include mormot.core.types.asmx64.inc}
+  {$include mormot.core.base.asmx64.inc}
 {$endif}
 {$ifdef CPUX86}
-  {$include mormot.core.types.asmx86.inc}
+  {$include mormot.core.base.asmx86.inc}
 {$endif}
 
 procedure TestIntelCpuFeatures;
@@ -4149,16 +4150,13 @@ begin
     Dest^ := (Value and $7F) or $80;
     Value := Value shr 7;
     inc(Dest);
-_3:
-    Dest^ := (Value and $7F) or $80;
+_3: Dest^ := (Value and $7F) or $80;
     Value := Value shr 7;
     inc(Dest);
-_2:
-    Dest^ := (Value and $7F) or $80;
+_2: Dest^ := (Value and $7F) or $80;
     Value := Value shr 7;
     inc(Dest);
-_1:
-    Dest^ := (Value and $7F) or $80;
+_1: Dest^ := (Value and $7F) or $80;
     Value := Value shr 7;
     inc(Dest);
   end;
@@ -4440,7 +4438,7 @@ function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
 var
   c: cardinal;
 label
-  _1,_2,_4; // ugly but fast
+  _1, _2, _4; // ugly but fast
 begin
   repeat
     c := Value;
