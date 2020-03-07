@@ -744,6 +744,37 @@ procedure crcblockSSE42(crc128, data128: PBlock128);
         mov     dword ptr[crc128 + 12], r10d
 end;
 
+procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        test    count, count
+        jle     @z
+        mov     rax, data128
+        {$ifdef win64}
+        mov     rdx, rcx
+        mov     ecx, r8d
+        {$else}
+        mov     ecx, edx
+        mov     rdx, rdi
+        {$endif win64}
+        mov     r8d,  dword ptr [rdx] // we can't use qword ptr here
+        mov     r9d,  dword ptr [rdx + 4]
+        mov     r10d, dword ptr [rdx + 8]
+        mov     r11d, dword ptr [rdx + 12]
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     crc32   r8d,  dword ptr [rax]
+        crc32   r9d,  dword ptr [rax + 4]
+        crc32   r10d, dword ptr [rax + 8]
+        crc32   r11d, dword ptr [rax + 12]
+        add     rax, 16
+        dec     ecx
+        jnz     @s
+        mov     dword ptr [rdx], r8d
+        mov     dword ptr [rdx + 4], r9d
+        mov     dword ptr [rdx + 8], r10d
+        mov     dword ptr [rdx + 12], r11d
+@z:
+end;
+
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, crc

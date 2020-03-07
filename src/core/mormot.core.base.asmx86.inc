@@ -308,6 +308,67 @@ asm  // adapted from Aleksandr Sharahov code and Maxim Masiutin remarks
         not     eax
 end;
 
+procedure crcblockfast(crc128, data128: PBlock128);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // Delphi is not efficient about corresponding pascal code
+        push    ebp
+        push    edi
+        push    esi
+        mov     ebp, eax  // ebp=crc128 edi=data128
+        mov     edi, edx
+        mov     edx, dword ptr[eax]
+        mov     ecx, dword ptr[eax + 4]
+        xor     edx, dword ptr[edi]
+        xor     ecx, dword ptr[edi + 4]
+        movzx   esi, dl
+        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        movzx   esi, dh
+        shr     edx, 16
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        movzx   esi, dl
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        movzx   esi, dh
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
+        mov     edx, dword ptr[ebp + 8]
+        xor     edx, dword ptr[edi + 8]
+        mov     dword ptr[ebp], eax
+        movzx   esi, cl
+        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        movzx   esi, ch
+        shr     ecx, 16
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        movzx   esi, cl
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        movzx   esi, ch
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
+        mov     dword ptr[ebp + 4], eax
+        mov     ecx, dword ptr[ebp + 12]
+        xor     ecx, dword ptr[edi + 12]
+        movzx   esi, dl
+        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        movzx   esi, dh
+        shr     edx, 16
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        movzx   esi, dl
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        movzx   esi, dh
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
+        mov     dword ptr[ebp + 8], eax
+        movzx   esi, cl
+        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        movzx   esi, ch
+        shr     ecx, 16
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        movzx   esi, cl
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        movzx   esi, ch
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
+        mov     dword ptr[ebp + 12], eax
+        pop     esi
+        pop     edi
+        pop     ebp
+end;
+
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm  // eax=Data edx=Len
@@ -557,67 +618,6 @@ asm // eax=crc, edx=buf, ecx=len
         pop     ebx
         pop     esi
         pop     edi
-end;
-
-procedure crcblockFast(crc128, data128: PBlock128);
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm // Delphi is not efficient about compiling corresponding pascal code
-        push    ebp
-        push    edi
-        push    esi
-        mov     ebp, eax  // ebp=crc128 edi=data128
-        mov     edi, edx
-        mov     edx, dword ptr[eax]
-        mov     ecx, dword ptr[eax + 4]
-        xor     edx, dword ptr[edi]
-        xor     ecx, dword ptr[edi + 4]
-        movzx   esi, dl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
-        movzx   esi, dh
-        shr     edx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
-        movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
-        movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     edx, dword ptr[ebp + 8]
-        xor     edx, dword ptr[edi + 8]
-        mov     dword ptr[ebp], eax
-        movzx   esi, cl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
-        movzx   esi, ch
-        shr     ecx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
-        movzx   esi, cl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
-        movzx   esi, ch
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     dword ptr[ebp + 4], eax
-        mov     ecx, dword ptr[ebp + 12]
-        xor     ecx, dword ptr[edi + 12]
-        movzx   esi, dl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
-        movzx   esi, dh
-        shr     edx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
-        movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
-        movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     dword ptr[ebp + 8], eax
-        movzx   esi, cl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
-        movzx   esi, ch
-        shr     ecx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
-        movzx   esi, cl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
-        movzx   esi, ch
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     dword ptr[ebp + 12], eax
-        pop     esi
-        pop     edi
-        pop     ebp
 end;
 
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
@@ -882,6 +882,44 @@ asm // eax=crc128, edx=data128
         db      $F2, $0F, $38, $F1, $42, $0C
         mov     dword ptr[ecx + 12], eax
         {$endif FPC_OR_UNICODE}
+end;
+
+procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // eax=crc128 edx=data128 ecx=count
+          push    ebx
+          push    esi
+          push    edi
+          push    ebp
+          test    count, count
+          jle     @z
+          mov     ebp, count
+          mov     esi, crc128
+          mov     edi, data128
+          mov     eax, dword ptr[esi]
+          mov     ebx, dword ptr[esi + 4]
+          mov     ecx, dword ptr[esi + 8]
+          mov     edx, dword ptr[esi + 12]
+{$ifdef FPC} align 8
+@s:       crc32   eax, dword ptr[edi]
+          crc32   ebx, dword ptr[edi + 4]
+          crc32   ecx, dword ptr[edi + 8]
+          crc32   edx, dword ptr[edi + 12]
+{$else}@s:db $F2, $0F, $38, $F1, $07
+          db $F2, $0F, $38, $F1, $5F, $04
+          db $F2, $0F, $38, $F1, $4F, $08
+          db $F2, $0F, $38, $F1, $57, $0C
+{$endif}  add     edi, 16
+          dec     ebp
+          jnz     @s
+          mov     dword ptr[esi], eax
+          mov     dword ptr[esi + 4], ebx
+          mov     dword ptr[esi + 8], ecx
+          mov     dword ptr[esi + 12], edx
+@z:       pop     ebp
+          pop     edi
+          pop     esi
+          pop     ebx
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
