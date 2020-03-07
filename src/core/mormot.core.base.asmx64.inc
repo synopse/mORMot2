@@ -1,13 +1,9 @@
-(*
-    This file is part of the mORMot framework 2.
+{
+  This file is a part of the freeware Synopse mORMot framework 2,
+  licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
-      Synopse Informatique - https://synopse.info
-
-    LICENSED UNDER  MPL 1.1/GPL 2.0/LGPL 2.1
-
-       x86_64 assembly used by mormot.core.types
-*)
+  Contains x86_64 assembly used by mormot.core.base
+}
 
 {$ifdef ASMX64}
 
@@ -24,7 +20,7 @@ const
   http://blog.synopse.info/post/2020/02/17/New-move/fillchar-optimized-sse2/avx-asm-version
 }
 
-// these stand-alone functions will use CPUIDX64 to adjust the algorithm
+// these stand-alone functions will use CPUIDX64 global to adjust the algorithm
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt

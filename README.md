@@ -2,9 +2,12 @@
 
 An Open Source Client-Server ORM/SOA framework, version 2
 
-(c) 2008-2020 Synopse Informatique
+(c) 2008-2020 Synopse Informatique - Arnaud Bouchez
 
 https://synopse.info  - http://mORMot.net
+
+See CONTRIBUTORS.md for a list of contributors.
+
 
 ## Version 2
 
@@ -22,89 +25,6 @@ The main refactoring points tried to better follow SOLID principles:
 We therefore created a whole new project and repository, since switching to version 2 induced some backward uncompatible changes. New unit names were used, to avoid unexpected issues during migration, or if 1.18 is to remain installed for a compatibility project.
 
 (See below if you are upgrading from 1.18 branch)
-
-## Contributors
-
-- Alan Chate
-- Alexander (sha)
-- Alexander (volax)
-- AlexPirate
-- Alfred Glaenzer (alf)
-- Andre Heider (dhewg)
-- Arnaud Bouchez
-- ASiwon
-- Aweste
-- Bas Schouten
-- BigStar
-- BugsDigger
-- Cheemeng
-- CoMPi
-- Damien (ddemars)
-- Darian Miller
-- Daniel Kuettner
-- David Mead (MDW)
-- Delphinium (louisyeow)
-- DigDiver
-- Dominikcz
-- EgorovAlex
-- Emanuele (lele9)
-- Eric Grange
-- Esmond
-- Esteban Martin (EMartin)
-- Eugene Ilyin
-- Eva Freimann (EVaF)
-- F-Vicente
-- Goran Despalatovic (gigo)
-- Jean-Baptiste Roussia (jbroussia)
-- Joe (jokusoft)
-- Johan Bontes
-- Jordi Tudela
-- Kevin Chen
-- Lagodny
-- Leon Oosthuizen
-- Macc2010
-- Maciej Izak (hnb)
-- Marcos Douglas B. Santos (mdbs99)
-- Mario Moretti
-- Marius Maximus (mariuszekpl)
-- Martin Eckes
-- Martin Suer
-- Maxim Masiutin
-- Mazinsw
-- MChaos
-- Miab3
-- Michael (EgonHugeist)
-- Michalis Kamburelis
-- MilesYou
-- Mingda
-- Mr Yang (ysair)
-- Nicolas Marchand (MC)
-- Nortg
-- Nzsolt
-- Oleg Tretyakov
-- Ondrej (reddwarf)
-- Pavel Mashlyakovskii (mpv)
-- Pierre le Riche
-- RalfS
-- Richard6688
-- Sabbiolina
-- Sanyin
-- Sinisa (sinisav)
-- Sllimr7139
-- SSoftPro
-- Stefan (itSDS)
-- Svetozar Belic (transmogrifix)
-- Transmogrifix
-- Uian2000
-- Vaclav
-- Vadim Orel
-- Willo vd Merwe
-- Win2014
-- Wloochacz
-- Wolfgang Ehrhardt
-- Yoanq
-- Ysair
-- Zed
 
 
 ## Presentation
@@ -170,13 +90,15 @@ The framework source code:
  - Is validated against FPC trunk SVN 40491, Delphi 7, XE4, XE7 and 10.3;
  - Please submit pull requests for non-validated versions.
 
-## MPL/GPL/LGPL Tri-License
+## MPL/GPL/LGPL Three-License
 
-Licensed under a disjunctive tri-license giving you the choice of one of the three following sets of free software/open source licensing terms:
+Licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
  - Mozilla Public License, version 1.1 or later;
  - GNU General Public License, version 2.0 or later;
  - GNU Lesser General Public License, version 2.1 or later.
 This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
+
+See LICENSE.md for the licensing terms.
 
 ## Links
 

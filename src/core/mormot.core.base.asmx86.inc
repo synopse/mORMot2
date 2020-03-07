@@ -1,13 +1,9 @@
-(*
-    This file is part of the mORMot framework 2.
+{
+  This file is a part of the freeware Synopse mORMot framework 2,
+  licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-    Synopse framework. Copyright (C) 2020 Arnaud Bouchez
-      Synopse Informatique - https://synopse.info
-
-    LICENSED UNDER  MPL 1.1/GPL 2.0/LGPL 2.1
-
-       x86 32-bit assembly used by mormot.core.types
-*)
+  Contains x86 32-bit assembly used by mormot.core.base
+}
 
 {$ifdef ASMX86}
 
