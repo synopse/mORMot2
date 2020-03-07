@@ -18,7 +18,10 @@ The source code tree is split into the following sub-folders:
 
 - `core` for low-level shared components like JSON, compression, crypto, network;
 - `db` for our SQLite3 kernel, and SQL/NoSQL direct access;
-- `rest` for high-level ORM, SOA and MVC features.
+- `rest` for high-level ORM, SOA and MVC features;
+- `app` for hosting REST (micro)services/daemons and applications;
+- `ddd` for *Domain-Driven-Design* related code.
+
 
 ## Units Naming
 

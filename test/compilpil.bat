@@ -13,7 +13,7 @@ if "%bin%"==""    set bin=c:\temp\tempbuild
 if "%target%"=="" set target=win32
 
 set units=%lib2%\src\core;%lib2%\src\db;%lib2%\src\rest
-set sw=-B -Q -GD -R%lib2%\src -I%lib2%\src -U%units% -O%lib2%\static\delphi-%target% -E%bin%\exe -N%bin%\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
+set sw=-B -Q -GD -R%lib2%\src -I%lib2%\src;%lib2%\src\core -U%units% -O%lib2%\static\delphi-%target% -E%bin%\exe -N%bin%\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
 
 if "%DelphiVersion%"=="" (
 	rem ** Default compiler is Delphi 7
@@ -24,7 +24,7 @@ if "%DelphiVersion%"=="" (
 
 if not exist %DCC% goto NoDCCCompiler
 
-echo %sw%
+rem echo %sw%
 
 echo.
 echo ***** mORMot 2 integration using %DelphiVersion% for %target% *****

@@ -27,7 +27,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -82,7 +82,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -133,7 +133,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -189,7 +189,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -247,7 +247,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -295,7 +295,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -343,7 +343,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -399,7 +399,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -457,7 +457,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -505,7 +505,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;$(ProjOutDir)"/>
+            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
             <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
@@ -563,7 +563,7 @@
       <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="../src;$(ProjOutDir)"/>
+      <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
       <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
       <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
       <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>

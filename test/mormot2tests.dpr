@@ -4,7 +4,7 @@ program mormot2tests;
 
 {$ifdef MSWINDOWS}
   {$apptype console}
-  {$R ../src/mormot.win.default.manifest.res}
+  {$R ..\src\mormot.win.default.manifest.res}
 {$endif MSWINDOWS}
 
 uses 

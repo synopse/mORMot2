@@ -47,30 +47,6 @@
 {  Those conditionals below can be enabled in your project Options,
    to tune the compilation depending your setup or your project expectations. }
 
-{.$define PUREPASCAL}
-// define this if your compiler doesn't support Delphi's x86 asm
-// - is set automaticaly in case of a 64 bits compiler (only FPC exists now)
-
-{$define USENORMTOUPPER}
-// if defined, text functions will use the NormToUpper[] array, as defined
-// in our custom SysUtils.pas (not the LVCL version) -> when using LVCL,
-// define the global LVCL compiler directive, and this unit will initialize
-// its own NormToUpper[] array
-// -> define ENHANCEDRTL conditional below if our Enhanced RTL IS installed
-// -> in practice, this conditional is ALWAYS DEFINED, since needed by SQLite3
-
-{.$define ENHANCEDRTL}
-// define this if you DID install our Enhanced Runtime library or the LVCL:
-// - it's better to define this conditional globaly in the Project/Options window
-// - we need to hack the "legacy" LoadResString() procedure and add a
-//   LoadResStringTranslate() function, for on the fly resourcestring i18n
-// - it will also define the TwoDigitLookup[] array and some very fast x86 asm
-//   IntToStr() and other functions, available in our Enhanced Runtime library
-//   (and our LVCL library)
-// - it will be unset automaticaly (see below) for Delphi 2009 and up
-// - this conditional must be defined in both SQLite3Commons and SQLite3i18n units,
-//   or (even better) globally in the Project options
-
 {.$define USEPACKAGES}
 // define this if you compile the unit within a Delphi package
 // - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
@@ -100,24 +76,14 @@
 // conditional is defined to use more verbose TAutoLockerDebug
 // (may be used for race condition debugging, in multi-threaded apps)
 
-{.$define OLDTEXTWRITERFORMAT}
-// force TTextWriter.Add(Format) to handle the alternate deprecated $ % tags
-
 {.$define OPT4AMD}
 // you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
 // which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
 // (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
 
-{.$define FORCE_STRSSE42}
-// sse4.2 string instructions may read up to 16 bytes after the actual end buffer
-// -> define this if you want StrLen/StrComp/strspn/strcspn to use SSE4.2 opcodes
-// but you would eventually experiment weird random GPF in your project, raising
-// unexpected SIGABRT/SIGSEGV under POSIX system: so is disabled below for our
-// LINUX conditional - and use at your own risk under Windows!
-
 {.$define DISABLE_SSE42}
 // if defined, no SSE4.2 nor AES-NI instruction will be used, i.e. disable
-// FORCE_STRSSE42 and all crc32c opcodes - is set for FPC DARWIN target
+// all crc32c and aesenc/aesdec opcodes - is set for FPC DARWIN target
 
 {.$define WITH_ERMS}
 // you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
@@ -131,36 +97,18 @@
 // enable low-level logging of SQlite3 virtual table query planner costs
 // -> to be defined only for internal debugging
 
-{.$define NOSYNDBZEOS}
-// made SynDBZeos.pas a "void" unit - defined for FPC/Lazarus packages only
+{.$define VOIDSQLZEOS}
+// make mormot.db.sql.zeos.pas a "void" unit - defined for FPC/Lazarus packages only
 
-{.$define DDDNOSYNDB}
-// SynDB / external SQL DB won't be linked to the executable by dddInfraSettings
-{.$define DDDNOMONGODB}
-// Mongo DB client won't be linked to the executable by dddInfraSettings
+{.$define DISABLEAPPSQL}
+// mormot.db.sql external SQL DB won't be linked to the executable by mormot.app
+{.$define DISABLEAPPNOSQL}
+// Mongo DB client won't be linked to the executable by mormot.app
 
 
 {$ifdef FPC}
 
 (********************** FPC Conditionals **********************)
-
-{ Free Pascal adaptation notes:
-  - we use the Delphi compatibility mode
-  - from system.pp use these constants (Win32/64 values listed):
-      LineEnding = #13#10;
-      DirectorySeparator = '\';
-  - for Cross-Platform and all CPU:
-      integer is NOT CPU-dependent (thanks to objpas), i.e. always 32 bits
-      cardinal is NOT CPU-dependent (thanks to objpas), i.e. always 32 bits
-      PtrUInt is an unsigned integer type of same size as a pointer / register
-        -> must be used for pointer arithmetic
-        -> may be used in loops
-      PtrInt is a signed integer type of same size as a pointer / register
-        -> must be used for pointer arithmetic
-        -> may be used in loops
-      all 32 bits x86 asm code is replaced by a pascal only version, if the
-      conditional PUREPASCAL is defined (e.g. for CPUX64)
-}
 
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
@@ -172,23 +120,15 @@
   {$PACKENUM 1}
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
 
-  {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
   {$undef DOPATCHTRTL}
   {$define HASINLINE}
-  {$define HASUINT64}
-  {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define HASAESNI}    // should be commented to test project with valgrind
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
-  {$define DELPHI5ORFPC}
-  {$define FPC_OR_PUREPASCAL}
-  {$define FPC_OR_KYLIX}
   {$define FPC_OR_UNICODE}
-  {$define USERECORDWITHMETHODS}
-  {$define FPC_OR_DELPHIXE}
-  {$define FPC_OR_DELPHIXE4}
+  {$define USERECORDWITHMETHODS}  // use "object" only for Delphi 7
   {$define FPC_ENUMHASINNER}
 
   // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
@@ -239,33 +179,6 @@
     {$define LINUX} // a Linux-based system
   {$endif}
 
-  // define FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
-  // -> expect *.o files download from https://synopse.info/files/sqlite3fpc.7z
-  // -> could be disabled to force external .so/.dll linking
-  {$ifdef MSWINDOWS}
-  {$ifdef CPUX86}
-    {$define FPCSQLITE3STATIC}   // use static\i386-win32\sqlite3.o
-  {$else}
-    {$define FPCSQLITE3STATIC}   // use static\x86_64-win64\sqlite3.o
-  {$endif}
-  {$endif}
-  {$ifdef LINUX}
-    {$ifdef CPUX86}
-      {$define FPCSQLITE3STATIC} // use static/i386-linux\sqlite3.o
-    {$endif}
-    {$ifdef CPUX64}
-      {$define FPCSQLITE3STATIC} // use static/x86_64-linux\sqlite3.o
-    {$endif}
-    {$ifdef CPUARM}
-      {$define FPCSQLITE3STATIC} // use static/arm-linux\sqlite3.o
-    {$endif}
-    {$ifdef CPUAARCH64}
-      {$ifdef ANDROID}
-        {$define FPCSQLITE3STATIC} // note: problems with current static/aarch64-linux\sqlite3.o
-      {$endif}
-    {$endif}
-  {$endif}
-
   {$ifdef BSD}
     // LINUX conditional includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
@@ -274,8 +187,6 @@
       {$ifdef CPUINTEL}
         {$define FPC_PIC} // may have not be defined by the compiler options
       {$endif}
-      {$undef FORCE_STRSSE42}  // fails otherwise for sure
-      {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
       {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
     {$endif}
@@ -283,50 +194,45 @@
     {$ifdef LINUX}
       {$define LINUXNOTBSD} // e.g. to disable epoll API
       {$define FPCLINUXNOTBSD}
-    {$endif}
-  {$endif}
+    {$endif LINUX}
+  {$endif BSD}
 
   {$ifdef LINUX}
-     {$undef FORCE_STRSSE42}  // avoid fatal SIGABRT/SIGSEGV on POSIX systems
      {$define FPCLINUX}
-     {$ifdef CPUX64}
-       {$define CPUX64LINUX}  // e.g. for tuned server-side asm
-     {$endif CPUX64}
-  {$endif}
-  {$ifdef FPC_PIC}
-    {$define PUREPASCAL} // most asm code is not PIC-safe with global constants
-  {$endif}
+  {$endif LINUX}
 
   {$ifdef CPU64}
     {$define FPC_64}
-    {$define PUREPASCAL} // e.g. x64, AARCH64
     {$ifdef CPUX64}
+      {$ASMMODE INTEL}       // as Delphi expects
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$ifndef DARWIN}
-        {$define CPUX64ASM} // Delphi XE4 SSE asm is buggy :(
+        {$define ASMX64}     // supports asm with globals
+        {$define ASMINTEL}
+        {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
+        {$ifdef LINUX}
+          {$define ASMX64LINUX}  // e.g. for tuned server-side asm
+        {$endif LINUX}
       {$endif DARWIN}
-      {$define FPC_X64}   // supports AVX/AVX2/AVX512 - which Delphi doesn't
-      {$ASMMODE INTEL}    // to share asm code with Delphi
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
       {$define CPUARM3264}
     {$endif CPUAARCH64}
   {$else}
     {$define FPC_32}
-    {$ifdef CPUARM}
-      {$define PUREPASCAL} // ARM32
-      {$define CPUARM3264}
-    {$endif CPUARM}
     {$ifdef CPUX86}
+      {$ASMMODE INTEL}       // as Delphi expects
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
-      {$define FPC_X86}
-      {$ASMMODE INTEL} // as Delphi expects
-      {$ifndef FPC_PIC}
-        {$define CPUX86NOTPIC} // use "absolute" instead of local register
-      {$endif FPC_PIC}
+      {$ifndef DARWIN}
+        {$define ASMX86}     // supports asm with globals
+        {$define ASMINTEL}
+      {$endif DARWIN}
     {$endif CPUX86}
+    {$ifdef CPUARM}
+      {$define CPUARM3264}
+    {$endif CPUARM}
   {$endif CPU64}
 
   {$ifdef ISFPC30}
@@ -342,15 +248,7 @@
     // FPC has its own RTTI layout only since late 3.x
     {$define FPC_NEWRTTI}
     // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
-    {$ifdef CPUINTEL}
-      {$define HASINTERFACERTTI}
-    {$endif}
-    {$ifdef CPUARM}
-      {$define HASINTERFACERTTI}
-    {$endif}
-    {$ifdef CPUAARCH64}
-      {$define HASINTERFACERTTI}
-    {$endif}
+    {$define HASINTERFACERTTI}
   {$endif}
 
   {$ifdef FPC_NEWRTTI}
@@ -382,21 +280,50 @@
     {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
+  // define FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
+  // -> to be downloaded from https://github.com/synopse/mORMot2/releases
+  // -> could be disabled to force external .so/.dll linking
+  {$ifdef MSWINDOWS}
+  {$ifdef CPUX86}
+    {$define FPCSQLITE3STATIC}   // use static\i386-win32\sqlite3.o
+  {$else}
+    {$define FPCSQLITE3STATIC}   // use static\x86_64-win64\sqlite3.o
+  {$endif}
+  {$endif}
+  {$ifdef LINUXNOTBSD}
+    {$ifdef CPUX86}
+      {$define FPCSQLITE3STATIC} // use static/i386-linux/sqlite3.o
+    {$endif}
+    {$ifdef CPUX64}
+      {$define FPCSQLITE3STATIC} // use static/x86_64-linux/sqlite3.o
+    {$endif}
+    {$ifdef CPUARM}
+      {$define FPCSQLITE3STATIC} // use static/arm-linux/sqlite3.o
+    {$endif}
+    {$ifdef CPUAARCH64}
+      {$ifdef ANDROID}
+        {$define FPCSQLITE3STATIC}
+        // note: problems with current static/aarch64-linux/sqlite3.o
+      {$endif}
+    {$endif}
+  {$endif}
 
 {$else FPC}
 
 (********************** Delphi Conditionals **********************)
 
-  {$define DELPHI_OR_FPC_OLDRTTI}
-
-  {$ifdef LVCL}
-    {$define OWNNORMTOUPPER} // NormToUpper[] exists only in our enhanced RTL
-    {$define NOVARIANTS} // LVCL does not support variants
-    {$define EXTENDEDTOSTRING_USESTR} // no FloatToText implemented in LVCL
+  {$ifndef MSWINDOWS}
+  Kylix or Delphi for MacOS/Linux/Mobile are unsupported
+  -> we recommend using FPC for POSIX platforms
+  {$endif MSWINDOWS}
+  {$IFNDEF CONDITIONALEXPRESSIONS}
+  Delphi 2-5 are not supported
+  {$ENDIF CONDITIONALEXPRESSIONS}
+  {$ifdef VER140}
+  Delphi 6 is not supported
   {$endif}
 
   {$ifdef UNICODE}
-    {$undef ENHANCEDRTL} // Delphi 2009 and up don't have our Enhanced Runtime library
     {$define HASVARUSTRING}
     {$define HASCODEPAGE}
     {$define FPC_OR_UNICODE}
@@ -407,183 +334,139 @@
     {$define UNDIRECTDYNARRAY}
   {$endif}
 
-  {$ifndef PUREPASCAL}
-    {$define CPUINTEL} // Delphi only for Intel by now
-  {$endif}
+  {$define CPUINTEL}   // Delphi only for Intel by now
+  {$define ASMINTEL}
   {$ifdef CPUX64}
-    {$define CPU64} // Delphi compiler for 64 bit CPU
-    {$define CPU64DELPHI}
     {$undef CPU32}
-    {$define PUREPASCAL}   // no x86 32 bit asm to be used
+    {$define CPU64}    // Delphi compiler for 64 bit CPU
+    {$define CPU64DELPHI}
+    {$define ASMX64}   // supports asm with globals
     {$define EXTENDEDTOSTRING_USESTR} // FloatToText() much slower in x64 mode
   {$else CPUX64}
-    {$define CPU32} // Delphi compiler for 32 bit CPU
-    {$define CPU32DELPHI}
+    {$define CPU32}    // Delphi compiler for 32 bit CPU
     {$undef CPU64}
-    {$define CPUX86} // for compatibility with older versions of Delphi
-    {$define CPUX86NOTPIC} // use "absolute" instead of local register
+    {$define CPU32DELPHI}
+    {$define CPUX86}   // for compatibility with older versions of Delphi
+    {$define ASMX86}   // supports asm with globals
   {$endif CPUX64}
 
-  {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$define HASINTERFACERTTI} // interface RTTI (not FPC)
-    {$ifdef LINUX}
-      {$if RTLVersion = 14.5}
-        {$define KYLIX3}
-        {$define FPC_OR_KYLIX}
-        // Kylix 3 will be handled just like Delphi 7
-        {$undef ENHANCEDRTL}   // Enhanced Runtime library not fully tested yet
-        {$define EXTENDEDTOSTRING_USESTR}
-        {$define DOPATCHTRTL}  // nice speed up for server apps
-        {$define NOVARCOPYPROC}
-        {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
-        {$define LINUXNOTBSD}     // e.g. to disable epoll API
-      {$else}
-      Kylix1/2 or Delphi Tokyo/ARC are unsupported
-      {$ifend}
-    {$else}
-      {$ifdef VER140}
-        {$define ISDELPHI6ANDUP} // Delphi 6 or newer
-        {$define DELPHI6OROLDER}
-        {$define NOVARCOPYPROC}
-        {$undef ENHANCEDRTL} // Delphi 6 doesn't have our Enhanced Runtime library
-        {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 7
-      {$else}
-        {$define ISDELPHI7ANDUP} // Delphi 7 or newer
-        {$define WITHUXTHEME}   // VCL handle UI theming
-        {$define HASUINT64}
-        {$warn UNSAFE_CODE OFF} // Delphi for .Net does not exist any more!
-        {$warn UNSAFE_TYPE OFF}
-        {$warn UNSAFE_CAST OFF}
-        {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
-      {$endif}
-      {$ifdef USEPACKAGES}
-        {$undef DOPATCHTRTL}
-      {$endif}
-    {$endif LINUX}
-    {$if CompilerVersion >= 17}
-      {$define ISDELPHI2005ANDUP} // Delphi 2005 or newer
-      {$if CompilerVersion >= 18}
-        {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
-        {$define HASNEWFILEAGE}
-        {$define HASINLINE}
-        {$define HASINLINEDELPHI}
-        {$define HASINLINENOTX86}
-        {$define HASREGION}
-        {$define HASFASTMM4}
-        // you can define this so that GetMemoryInfo/TSynMonitorMemory returns
-        // low-level FastMM4 information
-        {.$define WITH_FASTMM4STATS}
-      {$ifend}
-      {$ifdef VER180}
-        {$define ISDELPHI20062007} // to circumvent some specific bugs
-      {$endif}
-      {$ifdef VER185}
-        {$define ISDELPHI20062007}
-      {$endif}
-      {$if CompilerVersion > 18}
-        {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
-      {$ifend}
-      {$if CompilerVersion = 20}
-        {$define ISDELPHI20092010} // specific compilation issues
-      {$ifend}
-      {$if CompilerVersion = 21}
-        {$define ISDELPHI20092010} //specific compilation issues
-      {$ifend}
-      {$if CompilerVersion >= 21.0}
-        {$define ISDELPHI2010}
-        {$define ISDELPHI2010_OR_FPC} // eltype2 field
-        {$define ISDELPHI2010_OR_FPC_NEWRTTI}
-        {$define HASTTHREADSTART}
-        {$define HASINTERFACEASTOBJECT}
-        {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
-          {$WEAKLINKRTTI ON}
-          {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
-        {$endif NEWRTTINOTUSED}
-      {$ifend}
-      {$if CompilerVersion >= 22.0}
-        {$define FPC_OR_DELPHIXE} // Delphi 2007/2009/2010 inlining bugs
-        {$define ISDELPHIXE}
-      {$ifend}
-      {$if CompilerVersion >= 23.0}
-        // Delphi XE2 has some cross-platform features
-        // e.g. {$ifdef ISDELPHIXE2}VCL.Graphics{$else}Graphics{$endif}
-        {$define ISDELPHIXE2}
-        {$define HASVARUSTRARG}
-        {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
-      {$ifend}
-      {$if CompilerVersion >= 24.0}
-        {$define ISDELPHIXE3}
-      {$ifend}
-      {$if CompilerVersion >= 25.0}
-        {$define ISDELPHIXE4}
-        {$define FPC_OR_DELPHIXE4} // circumvent Internal Error: C2130 on XE3
-        {$define HASAESNI}
-      {$ifend}
-      {$if CompilerVersion >= 26.0}
-        {$define ISDELPHIXE5}
-        {$define PUBLISHRECORD}
-        // if defined, will handle RTTI available only since Delphi XE5 for
-        // record published properties
-      {$ifend}
-      {$if CompilerVersion >= 27.0}
-        {$define ISDELPHIXE6}
-      {$ifend}
-      {$if CompilerVersion >= 28.0}
-        {$define ISDELPHIXE7}
-        {$ifdef CPU64}
-          {$define CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
-        {$endif}
-      {$ifend}
-      {$if CompilerVersion >= 29.0}
-        {$define ISDELPHIXE8}
-      {$ifend}
-      {$if CompilerVersion >= 30.0}
-        {$define ISDELPHI10}
-      {$ifend}
-      {$if CompilerVersion >= 31.0}
-        {$define ISDELPHI101}
-      {$ifend}
-      {$if CompilerVersion >= 32.0}
-        {$define ISDELPHI102}
-        {$ifdef CPUX64}
-        {$ifdef VER320withoutAprilUpdate}
-          // circumvent early Delphi 10.2 Tokyo Win64 compiler bug
-          {$undef HASINLINE}
-          {$define HASINLINENOTX86}
-        {$endif}
-        {$endif}
-      {$ifend}
-      {$if CompilerVersion >= 33.0}
-        {$define ISDELPHI103}
-      {$ifend}
-    {$ifend CompilerVersion >= 17}
-    {$ifopt O-} // if we don't expect fast code, don't optimize the framework
-      {$undef ENHANCEDRTL}
-      {$undef DOPATCHTRTL}
-    {$endif}
-  {$ELSE}
-    // Delphi 5 or older
-    {$define DELPHI6OROLDER}
-    {$define DELPHI5OROLDER}
-    {$define DELPHI5ORFPC}
-    {$define MSWINDOWS}
-    {$define NOVARIANTS}
-    {$define NOVARCOPYPROC}
-    {$undef ENHANCEDRTL} // Delphi 5 doesn't have our Enhanced Runtime library
-    {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 7
+  {$define DELPHI_OR_FPC_OLDRTTI}
+  {$define HASINTERFACERTTI} // interface RTTI (not oldest FPC)
+  {$warn UNSAFE_CODE OFF}    // Delphi for .Net does not exist any more!
+  {$warn UNSAFE_TYPE OFF}
+  {$warn UNSAFE_CAST OFF}
+  {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
+  {$warn SYMBOL_PLATFORM OFF}
+  {$warn UNIT_PLATFORM OFF}
+  {$ifdef USEPACKAGES}
     {$undef DOPATCHTRTL}
-  {$ENDIF CONDITIONALEXPRESSIONS}
+  {$endif USEPACKAGES}
+
+  {$if CompilerVersion >= 17}
+    {$define ISDELPHI2005ANDUP} // Delphi 2005 or newer
+    {$if CompilerVersion >= 18}
+      {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
+      {$define HASNEWFILEAGE}
+      {$define HASINLINE}
+      {$define HASINLINEDELPHI}
+      {$define HASINLINENOTX86}
+      {$define HASREGION}
+      {$define HASFASTMM4}
+      // you can define this so that GetMemoryInfo/TSynMonitorMemory returns
+      // low-level FastMM4 information
+      {.$define WITH_FASTMM4STATS}
+    {$ifend}
+    {$ifdef VER180}
+      {$define ISDELPHI20062007} // to circumvent some specific bugs
+    {$endif}
+    {$ifdef VER185}
+      {$define ISDELPHI20062007}
+    {$endif}
+    {$if CompilerVersion > 18}
+      {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
+    {$ifend}
+    {$if CompilerVersion = 20}
+      {$define ISDELPHI20092010} // specific compilation issues
+    {$ifend}
+    {$if CompilerVersion = 21}
+      {$define ISDELPHI20092010} //specific compilation issues
+    {$ifend}
+    {$if CompilerVersion >= 21.0}
+      {$define ISDELPHI2010}
+      {$define ISDELPHI2010_OR_FPC} // eltype2 field
+      {$define ISDELPHI2010_OR_FPC_NEWRTTI}
+      {$define HASTTHREADSTART}
+      {$define HASINTERFACEASTOBJECT}
+      {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
+        {$WEAKLINKRTTI ON}
+        {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
+      {$endif NEWRTTINOTUSED}
+    {$ifend}
+    {$if CompilerVersion >= 22.0}
+      {$define FPC_OR_DELPHIXE} // Delphi 2007/2009/2010 inlining bugs
+      {$define ISDELPHIXE}
+    {$ifend}
+    {$if CompilerVersion >= 23.0}
+      // Delphi XE2 has some cross-platform features
+      // e.g. {$ifdef ISDELPHIXE2}VCL.Graphics{$else}Graphics{$endif}
+      {$define ISDELPHIXE2}
+      {$define HASVARUSTRARG}
+      {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+    {$ifend}
+    {$if CompilerVersion >= 24.0}
+      {$define ISDELPHIXE3}
+    {$ifend}
+    {$if CompilerVersion >= 25.0}
+      {$define ISDELPHIXE4}
+      {$define FPC_OR_DELPHIXE4} // circumvent Internal Error: C2130 on XE3
+      {$define HASAESNI}
+    {$ifend}
+    {$if CompilerVersion >= 26.0}
+      {$define ISDELPHIXE5}
+      {$define PUBLISHRECORD}
+      // if defined, will handle RTTI available only since Delphi XE5 for
+      // record published properties
+    {$ifend}
+    {$if CompilerVersion >= 27.0}
+      {$define ISDELPHIXE6}
+    {$ifend}
+    {$if CompilerVersion >= 28.0}
+      {$define ISDELPHIXE7}
+      {$ifdef CPU64}
+        {$define CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
+      {$endif}
+    {$ifend}
+    {$if CompilerVersion >= 29.0}
+      {$define ISDELPHIXE8}
+    {$ifend}
+    {$if CompilerVersion >= 30.0}
+      {$define ISDELPHI10}
+    {$ifend}
+    {$if CompilerVersion >= 31.0}
+      {$define ISDELPHI101}
+    {$ifend}
+    {$if CompilerVersion >= 32.0}
+      {$define ISDELPHI102}
+      {$ifdef CPUX64}
+      {$ifdef VER320withoutAprilUpdate}
+        // circumvent early Delphi 10.2 Tokyo Win64 compiler bug
+        {$undef HASINLINE}
+        {$define HASINLINENOTX86}
+      {$endif}
+      {$endif}
+    {$ifend}
+    {$if CompilerVersion >= 33.0}
+      {$define ISDELPHI103}
+    {$ifend}
+  {$ifend CompilerVersion >= 17}
+  {$ifopt O-} // if we don't expect fast code, don't optimize the framework
+    {$undef DOPATCHTRTL}
+  {$endif}
 
 {$endif FPC}
 
 
 (********************** Shared Conditionals **********************)
-
-{$ifdef PUREPASCAL}
-  {$define NODELPHIASM}
-  {$define FPC_OR_PUREPASCAL}
-{$else}
-{$endif PUREPASCAL}
 
 {$H+} // we use long strings
 {$R-} // disable Range checking in our code
@@ -595,51 +478,17 @@
 {$V-} // disable Var-String Checking
 {$T-} // Typed @ operator
 {$Z1} // enumerators stored as byte by default
-
-{$ifndef FPC}
-  {$P+} // Open string params
-  {$ifdef VER150}
-    {$WARN SYMBOL_DEPRECATED OFF}
-    {$WARN UNSAFE_TYPE OFF}
-    {$WARN UNSAFE_CODE OFF}
-    {$WARN UNSAFE_CAST OFF}
-  {$ENDIF}
-  {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$WARN SYMBOL_PLATFORM OFF}
-    {$WARN UNIT_PLATFORM OFF}
-  {$endif}
-{$endif FPC}
+{$P+} // Open string params
 
 {$ifdef CPUINTEL}
-  {$ifdef CPUX86} // safest to reset x87 exceptions
-    {$ifndef PUREPASCAL}
-      {$ifndef DELPHI5OROLDER}
-        {$define RESETFPUEXCEPTION}
-      {$endif}
-    {$endif}
-  {$endif}
-  {$ifdef DISABLE_SSE42}
-    {$undef FORCE_STRSSE42}
-  {$endif DISABLE_SSE42}
+  {$ifdef MSWINDOWS}
+  {$ifdef CPUX86} // safest to reset x87 exceptions on Win32
+    {$define RESETFPUEXCEPTION}
+  {$endif CPUX86}
+  {$endif MSWINDOWS}
 {$else}
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
-  {$define ABSOLUTEPASCALORNOTINTEL}
 {$endif CPUINTEL}
-
-{$ifdef ABSOLUTEPASCAL}
-  {$define ABSOLUTEORPUREPASCAL}
-  {$define ABSOLUTEPASCALORNOTINTEL}
-{$endif ABSOLUTEPASCAL}
-{$ifdef PUREPASCAL}
-  {$define ABSOLUTEORPUREPASCAL}
-{$endif PUREPASCAL}
-
-{$define WITHLOG}
-// if defined, logging will be supported via the TSQLLog family
-// - should be left defined: TSQLog.Family.Level default setting won't log
-// anything, so there won't be any noticeable performance penalty to have
-// this WITHLOG conditional defined, which is expected by high-level part
-// of the framework, like DDD or UI units
 
 {$ifdef FPC}
   {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
