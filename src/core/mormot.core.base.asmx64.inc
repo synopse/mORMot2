@@ -2,7 +2,7 @@
   This file is a part of the freeware Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-  Contains x86_64 assembly used by mormot.core.base
+   x86_64 assembly used by mormot.core.base.pas
 }
 
 {$ifdef ASMX64}
@@ -15,7 +15,7 @@ const
 {
   regarding benchmark numbers from TTestLowLevelCommon.CustomRTL
   -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
-  -> Delphi RTL is lower than FPC's, and it doesn't support AVX assembly yet
+  -> Delphi RTL is slower than FPC's, and it doesn't support AVX assembly yet
   -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
   http://blog.synopse.info/post/2020/02/17/New-move/fillchar-optimized-sse2/avx-asm-version
 }
@@ -367,6 +367,74 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 {$endif FPC}
 end;
 
+function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+{$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
+        push    rsi
+        push    rdi
+        mov     rdi, rcx
+        mov     rsi, rdx
+{$endif}mov     r8, rsi
+        sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
+        jz      @fail
+        mov     ecx, edi
+        movaps  xmm0, [rip + @for10]
+        movaps  xmm1, [rip + @for13]
+        and     rdi, -16 // check first aligned 16 bytes
+        and     ecx, 15  // lower cl 4 bits indicate misalignment
+        movaps  xmm2, [rdi]
+        movaps  xmm3, xmm2
+        pcmpeqb xmm2, xmm0
+        pcmpeqb xmm3, xmm1
+        por     xmm3, xmm2
+        pmovmskb eax, xmm3
+        shr     eax, cl  // shift out unaligned bytes
+        test    eax, eax
+        jz      @main
+        bsf     eax, eax
+        add     rax, rcx
+        add     rax, rdi
+        sub     rax, rsi
+        jae     @fail   // don't exceed TextEnd
+        add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}ret
+@main:  add     rdi, 16
+        sub     rdi, rsi
+        jae     @fail
+        jmp     @by16
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@for10: dq      $0a0a0a0a0a0a0a0a
+        dq      $0a0a0a0a0a0a0a0a
+@for13: dq      $0d0d0d0d0d0d0d0d
+        dq      $0d0d0d0d0d0d0d0d
+@by16:  movaps  xmm2, [rdi + rsi] // check 16 bytes per loop
+        movaps  xmm3, xmm2
+        pcmpeqb xmm2, xmm0
+        pcmpeqb xmm3, xmm1
+        por     xmm3, xmm2
+        pmovmskb eax, xmm3
+        test    eax, eax
+        jnz     @found
+        add     rdi, 16
+        jnc     @by16
+@fail:  mov     rax, r8 // returns TextLen if no CR/LF found
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}ret
+@found: bsf     eax, eax
+        add     rax, rdi
+        jc      @fail
+        add     rax, r8
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}
+end;
+
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         {$ifndef win64}
@@ -636,6 +704,137 @@ procedure mul64x64(const left, right: QWord; out product: THash128Rec);
         mul     rsi
 {$endif}mov     qword ptr [r8], rax
         mov     qword ptr [r8+8], rdx
+end;
+
+function StrLenSSE2(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
+        {$ifdef win64}
+        mov     rax, rcx             // get pointer to string from rcx
+        mov     r8,  rcx             // copy pointer
+        test    rcx, rcx
+        {$else}
+        mov     rax, rdi
+        mov     ecx, edi
+        test    rdi, rdi
+        {$endif}
+        jz      @null                // returns 0 if S=nil
+        // rax=s,ecx=32-bit of s
+        pxor    xmm0, xmm0           // set to zero
+        and     ecx, 15              // lower 4 bits indicate misalignment
+        and     rax, -16             // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm1, [rax]          // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        shr     edx, cl              // shift out false bits
+        shl     edx, cl              // shift back again
+        bsf     edx, edx             // find first 1-bit
+        jnz     @L2                  // found
+        // Main loop, search 16 bytes at a time
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@L1:    add     rax, 10H             // increment pointer by 16
+        movaps  xmm1, [rax]          // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        bsf     edx, edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @L1                  // loop if not found
+@L2:    // Zero-byte found. Compute string length
+        {$ifdef win64}
+        sub     rax, r8              // subtract start address
+        {$else}
+        sub     rax, rdi
+        {$endif}
+        add     rax, rdx             // add byte index
+@null:
+end;
+
+function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifndef win64}
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif win64}
+        mov     r10, rdx
+        sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
+        xor     rdx, r10
+        sub     rdx, r10        // rdx=abs(val)
+        cmp     rdx, 10
+        jb      @3              // direct process of common val<10
+        mov     rax, rdx
+        lea     r8, [rip + TwoDigitLookup]
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@s:     lea     rcx, [rcx - 2]
+        cmp     rax, 100
+        jb      @2
+        lea     r9, [rax * 2]
+        shr     rax, 2
+        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
+        mul     rdx
+        shr     rdx, 2
+        mov     rax, rdx
+        imul    rdx, -200
+        lea     rdx, [rdx + r8]
+        movzx   rdx, word ptr[rdx + r9]
+        mov     [rcx], dx
+        cmp     rax, 10
+        jae     @s
+@1:     or      al, '0'
+        mov     byte ptr[rcx - 2], '-'
+        mov     [rcx - 1], al
+        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
+        ret
+@2:     movzx   eax, word ptr[r8 + rax * 2]
+        mov     byte ptr[rcx - 1], '-'
+        mov     [rcx], ax
+        lea     rax, [rcx + r10]           // includes '-' if val<0
+        ret
+@3:     or      dl, '0'
+        mov     byte ptr[rcx - 2], '-'
+        mov     [rcx - 1], dl
+        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
+end;
+
+function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifndef win64}
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif win64}
+        cmp     rdx, 10
+        jb      @3           // direct process of common val<10
+        mov     rax, rdx
+        lea     r8, [rip + TwoDigitLookup]
+@s:     lea     rcx, [rcx - 2]
+        cmp     rax, 100
+        jb      @2
+        lea     r9, [rax * 2]
+        shr     rax, 2
+        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
+        mul     rdx
+        shr     rdx, 2
+        mov     rax, rdx
+        imul    rdx, -200
+        add     rdx, r8
+        movzx   rdx, word ptr[rdx + r9]
+        mov     [rcx], dx
+        cmp     rax, 10
+        jae     @s
+@1:     dec     rcx
+        or      al, '0'
+        mov     [rcx], al
+@0:     mov     rax, rcx
+        ret
+@2:     movzx   eax, word ptr[r8 + rax * 2]
+        mov     [rcx], ax
+        mov     rax, rcx
+        ret
+@3:     lea     rax, [rcx - 1]
+        or      dl, '0'
+        mov     [rax], dl
 end;
 
 {$endif ASMX64}

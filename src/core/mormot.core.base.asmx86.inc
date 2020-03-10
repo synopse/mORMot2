@@ -2,7 +2,7 @@
   This file is a part of the freeware Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-  Contains x86 32-bit assembly used by mormot.core.base
+   x86 32-bit assembly used by mormot.core.base.pas
 }
 
 {$ifdef ASMX86}
@@ -790,9 +790,282 @@ asm // eax=P, edx=Count, Value=ecx
 @ok:    mov     al, 1
 end;
 
+function StrLenSSE2(S: pointer): PtrInt;
+asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
+        mov     ecx, eax            // copy pointer
+        test    eax, eax
+        jz      @null               // returns 0 if S=nil
+        push    eax                 // save start address
+        pxor    xmm0, xmm0          // set to zero
+        and     ecx, 15             // lower 4 bits indicate misalignment
+        and     eax, -16            // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm1, [eax]         // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        shr     edx, cl             // shift out false bits
+        shl     edx, cl             // shift back again
+        bsf     edx, edx            // find first 1-bit
+        jnz     @A200               // found
+        // Main loop, search 16 bytes at a time
+@A100:  add     eax, 10H            // increment pointer by 16
+        movaps  xmm1, [eax]         // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        bsf     edx, edx            // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @A100               // loop if not found
+@A200:  // Zero-byte found. Compute string length
+        pop     ecx                 // restore start address
+        sub     eax, ecx            // subtract start address
+        add     eax, edx            // add byte index
+@null:
+end;
+
+function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
+asm // eax=P, edx=val
+        mov     ecx, edx
+        sar     ecx, 31         // 0 if val>=0 or -1 if val<0
+        push    ecx
+        xor     edx, ecx
+        sub     edx, ecx        // edx=abs(val)
+        cmp     edx, 10
+        jb      @3  // direct process of common val<10
+        push    edi
+        mov     edi, eax
+        mov     eax, edx
+@s:     sub     edi, 2
+        cmp     eax, 100
+        jb      @2
+        mov     ecx, eax
+        mov     edx, 1374389535 // use power of two reciprocal to avoid division
+        mul     edx
+        shr     edx, 5          // now edx=eax div 100
+        mov     eax, edx
+        imul    edx, -200
+        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        mov     [edi], dx
+        cmp     eax, 10
+        jae     @s
+@1:     dec     edi
+        or      al, '0'
+        mov     byte ptr[edi - 1], '-'
+        mov     [edi], al
+        mov     eax, edi
+        pop     edi
+        pop     ecx
+        add     eax, ecx // includes '-' if val<0
+        ret
+@2:     movzx   eax, word ptr[TwoDigitLookup + eax * 2]
+        mov     byte ptr[edi - 1], '-'
+        mov     [edi], ax
+        mov     eax, edi
+        pop     edi
+        pop     ecx
+        add     eax, ecx // includes '-' if val<0
+        ret
+@3:     dec     eax
+        pop     ecx
+        or      dl, '0'
+        mov     byte ptr[eax - 1], '-'
+        mov     [eax], dl
+        add     eax, ecx // includes '-' if val<0
+end;
+
+function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm     // eax=P, edx=val
+        cmp     edx, 10
+        jb      @3  // direct process of common val=0 (or val<10)
+        push    edi
+        mov     edi, eax
+        mov     eax, edx
+        nop
+        nop         // @s loop alignment
+@s:     sub     edi, 2
+        cmp     eax, 100
+        jb      @2
+        mov     ecx, eax
+        mov     edx, 1374389535 // use power of two reciprocal to avoid division
+        mul     edx
+        shr     edx, 5          // now edx=eax div 100
+        mov     eax, edx
+        imul    edx, -200
+        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        mov     [edi], dx
+        cmp     eax, 10
+        jae     @s
+@1:     dec     edi
+        or      al, '0'
+        mov     [edi], al
+        mov     eax, edi
+        pop     edi
+        ret
+@2:     movzx   eax, word ptr[TwoDigitLookup + eax * 2]
+        mov     [edi], ax
+        mov     eax, edi
+        pop     edi
+        ret
+@3:     dec     eax
+        or      dl, '0'
+        mov     [eax], dl
+end;
+
+procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // eax=Y, edx=P
+        push    edx
+        mov     ecx, eax
+        mov     edx, 1374389535 // use power of two reciprocal to avoid division
+        mul     edx
+        shr     edx, 5          // now edx=Y div 100
+        movzx   eax, word ptr[TwoDigitLookup + edx * 2]
+        imul    edx, -200
+        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        pop     ecx
+        shl     edx, 16
+        or      eax, edx
+        mov     [ecx], eax
+end;
+
 {$endif ASMX86}
 
 // functions below are always available, even on DARWIN
+
+function StrLenSafe(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // slower than StrLenSSE2(), but won't read any byte beyond the string
+        mov     edx, eax
+        test    eax, eax
+        jz      @0
+        xor     eax, eax
+@s:     cmp     byte ptr[eax + edx + 0], 0
+        je      @0
+        cmp     byte ptr[eax + edx + 1], 0
+        je      @1
+        cmp     byte ptr[eax + edx + 2], 0
+        je      @2
+        cmp     byte ptr[eax + edx + 3], 0
+        je      @3
+        add     eax, 4
+        jmp     @s
+@1:     inc     eax
+        ret
+@0:     rep     ret
+@2:     add     eax, 2
+        ret
+@3:     add     eax, 3
+end;
+
+function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm     // eax=SubStr, edx=S, ecx=Offset
+        push    ebx
+        push    esi
+        push    edx
+        test    eax, eax
+        jz      @notfnd            // exit if SubStr=''
+        test    edx, edx
+        jz      @notfnd            // exit if S=''
+        mov     esi, ecx
+        mov     ecx, [edx - 4]     // length(S)
+        mov     ebx, [eax - 4]     // length(SubStr)
+        add     ecx, edx
+        sub     ecx, ebx              // ecx = max start pos for full match
+        lea     edx, [edx + esi - 1]  // edx = start position
+        cmp     edx, ecx
+        jg      @notfnd            // startpos > max start pos
+        cmp     ebx, 1
+        jle     @onec              // optimized loop for length(SubStr)<=1
+        push    edi
+        push    ebp
+        lea     edi, [ebx - 2]     // edi = length(SubStr)-2
+        mov     esi, eax           // esi = SubStr
+        movzx   ebx, byte ptr[eax] // bl = search character
+        nop; nop
+@l:     cmp     bl, [edx]          // compare 2 characters per @l
+        je      @c1fnd
+@notc1: cmp     bl, [edx + 1]
+        je      @c2fnd
+@notc2: add     edx, 2
+        cmp     edx, ecx            // next start position <= max start position
+        jle     @l
+        pop     ebp
+        pop     edi
+@notfnd:xor     eax, eax            // returns 0 if not fnd
+        pop     edx
+        pop     esi
+        pop     ebx
+        ret
+@c1fnd: mov     ebp, edi            // ebp = length(SubStr)-2
+@c1l:   movzx   eax, word ptr[esi + ebp]
+        cmp     ax, [edx + ebp]     // compare 2 chars per @c1l (may include #0)
+        jne     @notc1
+        sub     ebp, 2
+        jnc     @c1l
+        pop     ebp
+        pop     edi
+        jmp     @setres
+@c2fnd: mov     ebp, edi            // ebp = length(SubStr)-2
+@c2l:   movzx   eax, word ptr[esi + ebp]
+        cmp     ax, [edx + ebp + 1] // compare 2 chars per @c2l (may include #0)
+        jne     @notc2
+        sub     ebp, 2
+        jnc     @c2l
+        pop     ebp
+        pop     edi
+        jmp     @chkres
+@onec:  jl      @notfnd             // needed for zero-length non-nil strings
+        movzx   eax, byte ptr[eax]  // search character
+@charl: cmp     al, [edx]
+        je      @setres
+        cmp     al, [edx + 1]
+        je      @chkres
+        add     edx, 2
+        cmp     edx, ecx
+        jle     @charl
+        jmp     @notfnd
+@chkres:cmp     edx, ecx           // check within ansistring
+        jge     @notfnd
+        add     edx, 1
+@setres:pop     ecx                // ecx = S
+        pop     esi
+        pop     ebx
+        neg     ecx
+        lea     eax, [edx + ecx + 1]
+end;
+
+function StrComp(Str1, Str2: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // no branch taken in case of not equal first char
+        cmp     eax, edx
+        je      @zero  // same string or both nil
+        test    eax, edx
+        jz      @maynil
+@1:     mov     cl, [eax]
+        mov     ch, [edx]
+        inc     eax
+        inc     edx
+        test    cl, cl
+        jz      @exit
+        cmp     cl, ch
+        je      @1
+@exit:  movzx   eax, cl
+        movzx   edx, ch
+        sub     eax, edx
+        ret
+@maynil:test    eax, eax  // Str1='' ?
+        jz      @max
+        test    edx, edx  // Str2='' ?
+        jnz     @1
+        mov     eax, 1
+        ret
+@max:   dec     eax
+        ret
+@zero:  xor     eax, eax
+end;
 
 {$ifndef FPC_OR_UNICODE}
 
@@ -1038,8 +1311,11 @@ asm
         pop     esi
 end;
 
-{$ifdef CPU32DELPHI} // inspired by ValExt_JOH_PAS_8_a by John O'Harrow
+{$ifdef CPU32DELPHI}
+
+// inspired by ValExt_JOH_PAS_8_a by John O'Harrow
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 const Ten: double = 10.0;
 asm     // in: eax=text, edx=@err  out: st(0)=result
         push    ebx                 // save used registers
@@ -1160,5 +1436,24 @@ asm     // in: eax=text, edx=@err  out: st(0)=result
         fchs                        // yes. negate result in fpu
         jmp     @exit               // exit setting result code
 end;
+
+procedure Div100(Y: cardinal; var result: TDiv100Rec);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+      push    ebx
+      mov     ecx, eax // ecx=Y
+      mov     ebx, edx // ebx=result
+      mov     edx, eax
+      mov     eax, 1374389535
+      mul     edx
+      shr     edx, 5   // edx=Y div 100
+      mov     dword ptr [ebx].TDiv100Rec.D, edx
+      mov     eax, 100
+      mul     edx
+      sub     ecx, eax // ecx=Y-(edx*100)
+      mov     dword ptr [ebx].TDiv100Rec.M, ecx
+      pop     ebx
+end;
+
 {$endif CPU32DELPHI}
 

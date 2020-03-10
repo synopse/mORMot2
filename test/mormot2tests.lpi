@@ -27,9 +27,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -82,9 +82,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -133,9 +133,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -189,9 +189,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -228,14 +228,6 @@
             <CompilerMessages>
               <IgnoredMessages idx5089="True"/>
             </CompilerMessages>
-            <OtherDefines Count="6">
-              <Define0 Value="FPC_CMEM"/>
-              <Define1 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-              <Define2 Value="FPC_SYNCMEM"/>
-              <Define3 Value="FPC_FASTMM4"/>
-              <Define4 Value="FPC_SYNTBB"/>
-              <Define5 Value="FPC_SYNJEMALLOC"/>
-            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item5>
@@ -247,9 +239,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -295,9 +287,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -343,9 +335,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -399,9 +391,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="//if TargetOS='darwin' then
@@ -457,9 +449,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -505,9 +497,9 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -555,6 +547,40 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
+    <Units Count="8">
+      <Unit0>
+        <Filename Value="mormot2tests.dpr"/>
+        <IsPartOfProject Value="True"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="..\src\core\mormot.core.base.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit1>
+      <Unit2>
+        <Filename Value="..\src\core\mormot.core.data.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="..\src\core\mormot.core.text.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="..\src\core\mormot.core.json.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit4>
+      <Unit5>
+        <Filename Value="..\src\core\mormot.core.os.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit5>
+      <Unit6>
+        <Filename Value="..\src\core\mormot.core.variants.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit6>
+      <Unit7>
+        <Filename Value="..\src\core\mormot.core.datetime.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit7>
+    </Units>
   </ProjectOptions>
   <CompilerOptions>
     <Version Value="11"/>
@@ -563,9 +589,9 @@
       <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="../src;../src/core;$(ProjOutDir)"/>
+      <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
       <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-      <OtherUnitFiles Value="../src;../src/core;../src/db;../src/rest"/>
+      <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
       <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Conditionals Value="if TargetOS='darwin' then
