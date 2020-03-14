@@ -7,12 +7,14 @@ unit mormot.core.os;
   *****************************************************************************
 
   Cross-platform functions shared by all framework units
-  - Gather System Information
+  - Gather Operating System Information
+  - Operating System Specific Types (e.g. TWinRegistry)
   - Unicode, Time, File process
 
   Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid using $ifdef/$endif in "uses" clauses.
-  In practice, no "Windows", nor "Linux/Unix" should be needed in regular units. 
+  In practice, no "Windows", nor "Linux/Unix" reference should be needed in
+  regular units, once mormot.core.os is included.
 
   *****************************************************************************
 }
@@ -23,19 +25,20 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  Windows, // needed here for redefinition of standard types
-  {$endif}
-  Classes,
-  Contnrs,
-  Types,
-  SysUtils,
+  windows, // needed here e.g. for redefinition of standard types
+  {$endif MSWINDOWS}
+  classes,
+  contnrs,
+  types,
+  sysutils,
   mormot.core.base;
 
-{ ****************** Gather System Information }
+
+{ ****************** Gather Operating System Information }
 
 type
   /// the recognized operating systems
-  // - it will also recognize some Linux distributions
+  // - it will also recognize most Linux distributions
   TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX,
     osArch, osAurox, osDebian, osFedora, osGentoo, osKnoppix, osMint, osMandrake,
     osMandriva, osNovell, osUbuntu, osSlackware, osSolaris, osSuse, osSynology,
@@ -90,9 +93,9 @@ const
   OS_INITIAL: array[TOperatingSystem] of AnsiChar =
     ('?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
      'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
-     'c', 'd', 'x', 'Z', 'r', 'p', 'J'); // for Android ... J = Java VM
+     'c', 'd', 'x', 'Z', 'r', 'p', 'J'); // for Android: J=JVM
 
-  /// the operating systems items which actually are Linux distributions
+  /// the operating systems items which actually have a Linux kernel
   OS_LINUX = [osLinux, osArch .. osAndroid];
 
   /// the compiler family used
@@ -105,10 +108,9 @@ const
 
   /// the CPU architecture used for compilation
   CPU_ARCH_TEXT = {$ifdef CPUX86}'x86'{$else}{$ifdef CPUX64}'x64'{$else}
-    {$ifdef CPUARM}'arm'+{$else}
-    {$ifdef CPUAARCH64}'arm'+{$else}
+    {$ifdef CPUARM3264}'arm'+{$else}
     {$ifdef CPUPOWERPC}'ppc'+{$else}
-    {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}{$endif}
+    {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
     {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
 
 var
@@ -133,9 +135,10 @@ var
   OSVersionInt32: integer absolute OSVersion32;
 
 {$ifdef MSWINDOWS}
-  {$ifndef UNICODE}
+
+{$ifndef UNICODE}
 type
-  /// low-level API structure, not defined in older Delphi versions
+  /// low-level API structure, not defined in old Delphi versions
   TOSVersionInfoEx = record
     dwOSVersionInfoSize: DWORD;
     dwMajorVersion: DWORD;
@@ -149,7 +152,7 @@ type
     wProductType: BYTE;
     wReserved: BYTE;
   end;
-  {$endif UNICODE}
+{$endif UNICODE}
 
 var
   /// is set to TRUE if the current process is a 32-bit image running under WOW64
@@ -168,6 +171,34 @@ var
   OSVersionInfo: TOSVersionInfoEx;
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
+
+{$else MSWINDOWS}
+
+var
+  /// emulate only some used fields of Windows' TSystemInfo
+  SystemInfo: record
+    // retrieved from libc's getpagesize() - is expected to not be 0
+    dwPageSize: cardinal;
+    // retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    dwNumberOfProcessors: cardinal;
+    // meaningful system information, as returned by fpuname()
+    uts: record
+      sysname, release, version: RawUTF8;
+    end;
+    /// Linux Distribution release name, retrieved from /etc/*-release
+    release: RawUTF8;
+  end;
+  
+{$endif MSWINDOWS}
+
+/// return the Delphi/FPC Compiler Version
+// - returns 'Delphi 10.3 Rio', 'Delphi 2010' or 'Free Pascal 3.3.1' e.g.
+function GetCompilerVersion: RawUTF8;
+
+
+{ ****************** Operating System Specific Types (e.g. TWinRegistry) }
+
+{$ifdef MSWINDOWS}
 
 type
   /// direct access to the Windows Registry
@@ -198,33 +229,86 @@ type
     function ReadEnumEntries: TRawUTF8DynArray;
   end;
 
-{$else MSWINDOWS}
-
-var
-  /// emulate only some used fields of Windows' TSystemInfo
-  SystemInfo: record
-    // retrieved from libc's getpagesize() - is expected to not be 0
-    dwPageSize: cardinal;
-    // retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
-    dwNumberOfProcessors: cardinal;
-    // meaningful system information, as returned by fpuname()
-    uts: record
-      sysname, release, version: RawUTF8;
-    end;
-    // as from /etc/*-release
-    release: RawUTF8;
-  end;
-  
 {$endif MSWINDOWS}
 
 
 { ****************** Unicode, Time, File process }
 
-{$ifndef FPC}
+{$ifdef MSWINDOWS}
 type
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
   TSystemTime = Windows.TSystemTime;
-{$endif FPC}
+
+  {$ifndef FPC}
+  /// redefined as our own mormot.core.os type to avoid dependency to Windows
+  TRTLCriticalSection = Windows.TRTLCriticalSection;
+  {$endif FPC}
+
+/// returns the current UTC time as TSystemTime
+// - under Delphi/Windows, directly call the homonymous Win32 API
+// - redefined in mormot.core.os to avoid dependency to Windows
+// - you should call directly FPC's version otherwise
+procedure GetLocalTime(out result: TSystemTime); stdcall;
+
+/// try to enter a Critical Section (Lock)
+// - redefined in mormot.core.os to avoid dependency to Windows
+// - under Delphi/Windows, directly call the homonymous Win32 API
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; stdcall;
+
+/// enter a Critical Section (Lock)
+// - redefined in mormot.core.os to avoid dependency to Windows
+// - under Delphi/Windows, directly call the homonymous Win32 API
+procedure EnterCriticalSection(var cs: TRTLCriticalSection); stdcall;
+
+/// leave a Critical Section (UnLock)
+// - redefined in mormot.core.os to avoid dependency to Windows
+// - under Delphi/Windows, directly call the homonymous Win32 API
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
+
+/// redefined here to avoid warning to include "Windows" in uses clause
+// - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
+function DeleteFile(const aFileName: TFileName): boolean;
+
+/// redefined here to avoid warning to include "Windows" in uses clause
+// - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
+function RenameFile(const OldName, NewName: TFileName): boolean;
+
+{$endif MSWINDOWS}
+
+/// initialize a Critical Section (for Lock/UnLock)
+// - redefined in mormot.core.os to avoid dependency to Windows
+// - under Delphi/Windows, directly call the homonymous Win32 API
+procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
+/// finalize a Critical Section (for Lock/UnLock)
+// - redefined in mormot.core.os to avoid dependency to Windows
+// - under Delphi/Windows, directly call the homonymous Win32 API
+procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
+/// returns TRUE if the supplied mutex has been initialized
+// - will check if the supplied mutex is void (i.e. all filled with 0 bytes)
+function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// on need initialization of a mutex, then enter the lock
+// - if the supplied mutex has been initialized, do nothing
+// - if the supplied mutex is void (i.e. all filled with 0), initialize it
+procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// on need finalization of a mutex
+// - if the supplied mutex has been initialized, delete it
+// - if the supplied mutex is void (i.e. all filled with 0), do nothing
+procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
+
+/// returns the current UTC time as TSystemTime
+// - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
+// - under Windows, directly call the homonymous Win32 API
+procedure GetSystemTime(out result: TSystemTime);
+  {$ifdef MSWINDOWS} stdcall; {$endif}
+
 
 /// compatibility function, wrapping GetACP() Win32 API function
 // - returns the curent system code page (default WinAnsi)
@@ -248,13 +332,18 @@ function os_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): in
 
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
-// for older Windows versions (XP) to avoid 32-bit overflow issue
+// redirected to a custom wrapper function for older Windows versions (XP)
+// to avoid the 32-bit overflow/wrapping issue of GetTickCount
 // - warning: FPC's SysUtils.GetTickCount64 or TThread.GetTickCount64 don't
 // handle properly 49 days wrapping under XP -> always use this safe version
-// - on POSIX, will call the very fast CLOCK_MONOTONIC_COARSE if available
+// - on POSIX, will call (via vDSO) the very fast CLOCK_MONOTONIC_COARSE if available
 // - do not expect extact millisecond resolution - it may rather be within the
 // 10-16 ms range, especially under Windows
+{$ifdef MSWINDOWS}
+var GetTickCount64: function: Int64; stdcall;
+{$else}
 function GetTickCount64: Int64;
+{$endif MSWINDOWS}
 
 /// returns the current UTC time
 // - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
@@ -285,17 +374,24 @@ function UnixMSTimeUTC: Int64;
 function UnixMSTimeUTCFast: Int64;
   {$ifdef LINUX} inline; {$endif}
 
-/// returns the current UTC time as TSystemTime
-// - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
-// - under Windows, directly call the homonymous Win32 API
-procedure GetSystemTime(out result: TSystemTime);
+{$ifndef MSWINDOWS}
 
-{$ifdef MSWINDOWS}
-/// returns the current UTC time as TSystemTime
-// - under Delphi/Windows, directly call the homonymous Win32 API
-// - would call FPC's version otherwise
-procedure GetLocalTime(out result: TSystemTime);
+var
+  /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
+  // - in practice, it has been reported as buggy under POSIX systems
+  // - even Linus Torvald himself raged against its usage - see e.g.
+  // https://www.realworldtech.com/forum/?threadid=189711&curpostid=189752
+  // - you may tempt the devil and try it by yourself
+  SleepHiRes0Yield: boolean = false;
+
 {$endif MSWINDOWS}
+
+/// similar to Windows sleep() API call, to be truly cross-platform
+// - using millisecond resolution
+// - SleepHiRes(0) calls ThreadSwitch on Windows, but POSIX version will
+// wait 10 microsecond unless SleepHiRes0Yield is forced to true (bad idea)
+// - in respect to RTL's Sleep() function, it will return on ESysEINTR
+procedure SleepHiRes(ms: cardinal);
 
 /// returns a high-resolution system-wide monotonic timestamp as microseconds
 // - under Linux/POSIX, has true microseconds resolution, calling e.g.
@@ -382,7 +478,67 @@ implementation
 {$endif MSWINDOWS}
 
 
+{ ****************** Gather Operating System Information }
+
+function GetCompilerVersion: RawUTF8;
+begin
+  result :=
+{$ifdef FPC}
+  'Free Pascal'
+  {$ifdef VER2_6_4} + ' 2.6.4'{$endif}
+  {$ifdef VER3_0_0} + ' 3.0.0'{$endif}
+  {$ifdef VER3_0_1} + ' 3.0.1'{$endif}
+  {$ifdef VER3_0_2} + ' 3.0.2'{$endif}
+  {$ifdef VER3_1_1} + ' 3.1.1'{$endif}
+  {$ifdef VER3_2}   + ' 3.2'  {$endif}
+  {$ifdef VER3_3_1} + ' 3.3.1'{$endif}
+{$else}
+  'Delphi'
+  {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
+    {$if     defined(VER140)} + ' 6'
+    {$elseif defined(VER150)} + ' 7'
+    {$elseif defined(VER160)} + ' 8'
+    {$elseif defined(VER170)} + ' 2005'
+    {$elseif defined(VER185)} + ' 2007'
+    {$elseif defined(VER180)} + ' 2006'
+    {$elseif defined(VER200)} + ' 2009'
+    {$elseif defined(VER210)} + ' 2010'
+    {$elseif defined(VER220)} + ' XE'
+    {$elseif defined(VER230)} + ' XE2'
+    {$elseif defined(VER240)} + ' XE3'
+    {$elseif defined(VER250)} + ' XE4'
+    {$elseif defined(VER260)} + ' XE5'
+    {$elseif defined(VER265)} + ' AppMethod 1'
+    {$elseif defined(VER270)} + ' XE6'
+    {$elseif defined(VER280)} + ' XE7'
+    {$elseif defined(VER290)} + ' XE8'
+    {$elseif defined(VER300)} + ' 10 Seattle'
+    {$elseif defined(VER310)} + ' 10.1 Berlin'
+    {$elseif defined(VER320)} + ' 10.2 Tokyo'
+    {$elseif defined(VER330)} + ' 10.3 Rio'
+    {$elseif defined(VER340)} + ' 10.4 Next'
+    {$ifend}
+  {$endif CONDITIONALEXPRESSIONS}
+{$endif FPC}
+{$ifdef CPU64} +' 64 bit' {$else} +' 32 bit' {$endif}
+end;
+
+
+
 { ****************** Unicode, Time, File process }
+
+procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection);
+begin
+  if not IsInitializedCriticalSection(cs) then
+    InitializeCriticalSection(cs);
+  EnterCriticalSection(cs);
+end;
+
+procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
+begin
+  if IsInitializedCriticalSection(cs) then
+    DeleteCriticalSection(cs);
+end;
 
 function os_CodePage: integer;
 begin
@@ -394,11 +550,6 @@ const
   _CASEFLAG: array[boolean] of DWORD = (0, NORM_IGNORECASE);
 begin
   result := CompareStringW(LOCALE_USER_DEFAULT, _CASEFLAG[IgnoreCase], PW1, L1, PW2, L2);
-end;
-
-function GetTickCount64: Int64;
-begin
-  result := os_GetTickCount64;
 end;
 
 function NowUTC: TDateTime;

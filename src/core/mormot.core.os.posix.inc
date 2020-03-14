@@ -19,6 +19,8 @@ uses
   {$endif BSD}
   dl;
 
+
+{ ****************** Unicode, Time, File process }
 var
   /// contains the curent system code page (default WinAnsi)
   GetACP: integer = CODEPAGE_US;
@@ -142,15 +144,15 @@ var
 procedure QueryPerformanceCounter(out Value: Int64);
 begin // returns time in nano second resolution
   Value := mach_absolute_time;
-  if mach_timeinfo.Denom=1 then
-    if mach_timeinfo.Numer=1 then
+  if mach_timeinfo.Denom = 1 then
+    if mach_timeinfo.Numer = 1 then
       // seems to be the case on Intel CPUs
       exit
     else
-      Value := Value*mach_timeinfo.Numer
+      Value := Value * mach_timeinfo.Numer
   else
     // use floating point to avoid potential overflow
-    Value := round(Value*mach_timecoeff);
+    Value := round(Value * mach_timecoeff);
 end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
@@ -164,7 +166,7 @@ begin
   end;
 end;
 
-function os_GetTickCount64: Int64;
+function GetTickCount64: Int64;
 begin
   if mach_timenanosecond then
     result := mach_absolute_time
@@ -250,7 +252,7 @@ function UnixTimeUTC: Int64;
 var
   r: timespec;
 begin
-  clock_gettime(CLOCK_REALTIME_FAST,@r);
+  clock_gettime(CLOCK_REALTIME_FAST, @r);
   result := r.tv_sec;
 end;
 
@@ -258,20 +260,21 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
   r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC,@r);
-  value := PtrUInt(r.tv_nsec) div THOUSAND+r.tv_sec*MILLION; // as microseconds
+  clock_gettime(CLOCK_MONOTONIC, @r);
+  value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION; // as microseconds
 end;
 
 procedure GetSystemTime(out result: TSystemTime);
 var
   r: timespec;
 begin
-  clock_gettime(CLOCK_REALTIME_FAST,@r); // faster than fpgettimeofday()
-  EpochToSystemTime(r.tv_sec,result);
+  // faster than fpgettimeofday() which makes a syscall and don't use vDSO
+  clock_gettime(CLOCK_REALTIME_FAST, @r);
+  EpochToSystemTime(r.tv_sec, result);
   result.MilliSecond := r.tv_nsec div MILLION;
 end;
 
-function os_GetTickCount64: Int64;
+function GetTickCount64: Int64;
 var
   tp: timespec;
 begin
@@ -384,6 +387,48 @@ begin
   FpFsync(hFile);
 end;
 
+procedure SleepHiRes(ms: cardinal);
+var
+  timeout: TTimespec;
+begin
+  if ms = 0 then // handle SleepHiRes(0) special case
+    if SleepHiRes0Yield then
+    begin // reported as buggy by Alan on POSIX
+      ThreadSwitch; // call e.g. pthread's sched_yield API
+      exit;
+    end
+    else
+    begin
+      timeout.tv_sec := 0;
+      timeout.tv_nsec := 10000; // 10us is around timer resolution on modern HW
+    end
+  else
+  begin
+    timeout.tv_sec := ms div 1000;
+    timeout.tv_nsec := 1000000 * (ms mod 1000);
+  end;
+  fpnanosleep(@timeout, nil)
+  // no retry loop on ESysEINTR (as with regular RTL's Sleep)
+end;
+
+procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
+begin
+  InitCriticalSection(cs);
+end;
+
+function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
+begin
+  {$ifdef LINUXNOTBSD}
+  result := cs.__m_kind <> 0;
+  {$else}
+  result := not IsZero(@cs, SizeOf(cs));
+  {$endif LINUXNOTBSD}
+end;
+
+procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
+begin
+  DoneCriticalSection(cs);
+end;
 
 {$ifdef BSD}
 
@@ -432,6 +477,9 @@ begin
 end;
 
 {$endif BSD}
+
+
+{ ****************** Gather Operating System Information }
 
 function getpagesize: Integer; cdecl; external 'c';
 

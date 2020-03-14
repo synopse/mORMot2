@@ -7,7 +7,9 @@
 
 uses
   mormot.core.text;
-  
+
+{ ****************** Unicode, Time, File process }
+
 const
   DefaultCharVar: AnsiChar = '?';
 
@@ -91,19 +93,21 @@ begin
   result := FileTimeToUnixMSTime(ft);
 end;
 
-procedure GetSystemTime(out result: TSystemTime);
-begin
-  Windows.GetSystemTime(result);
-end;
+procedure GetSystemTime;              external kernel32;
+procedure GetLocalTime;               external kernel32;
+procedure InitializeCriticalSection;  external kernel32;
+procedure EnterCriticalSection;       external kernel32;
+procedure LeaveCriticalSection;       external kernel32;
+procedure DeleteCriticalSection;      external kernel32;
+function  TryEnterCriticalSection;    external kernel32;
 
-procedure GetLocalTime(out result: TSystemTime);
+function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
-  Windows.GetLocalTime(result);
+  result := not IsZero(@cs, SizeOf(cs));
 end;
 
 var
-  os_GetTickCount64: function: Int64; stdcall;
-  os_QueryPerformanceFrequency: QWord;
+  os_QueryPerformanceFrequency: QWord; // is documented as stable after boot
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
@@ -117,7 +121,7 @@ end;
 {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
 {$endif}
 const
-  faInvalidFile = faDirectory + faVolumeID + faSysFile + faHidden;
+  faInvalidFile   = faDirectory + faVolumeID + faSysFile + faHidden;
   faDirectoryMask = faDirectory + faHidden;
 {$ifndef DELPHI5OROLDER}
 {$WARN SYMBOL_DEPRECATED ON}
@@ -128,7 +132,9 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   ST, LT: TSystemTime;
 begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
-  if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and FileTimeToSystemTime(FA.ftLastWriteTime, ST) and SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
+  if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and
+     FileTimeToSystemTime(FA.ftLastWriteTime, ST) and
+     SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
     result := SystemTimeToDateTime(LT)
   else
     result := 0;
@@ -180,6 +186,16 @@ begin
     res.Lo := GetFileSize(F, @res.Hi);
 end;
 
+function DeleteFile(const aFileName: TFileName): boolean;
+begin
+  result := SysUtils.DeleteFile(aFileName);
+end;
+
+function RenameFile(const OldName, NewName: TFileName): boolean;
+begin
+  result := SysUtils.RenameFile(OldName,NewName);
+end;
+
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin
   if OSVersion>=wVista then // don't use the flag on XP
@@ -198,10 +214,10 @@ var
   t32: cardinal;
   p: PQWordRec;
 begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
-  t32 := Windows.GetTickCount;
+  t32 := Windows.GetTickCount; // we only have the 32-bit counter
   p := @LastTickXP;
   if t32 < p^.L then
-    inc(p^.H); // wrap-up overflow after 49 days
+    inc(p^.H);  // wrap-up overflow after 49 days
   p^.L := t32;
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
@@ -216,6 +232,8 @@ begin
     Windows.Sleep(ms);
 end;
 
+
+{ ****************** Operating System Specific Types (e.g. TWinRegistry) }
 
 { TWinRegistry }
 
@@ -310,6 +328,9 @@ begin
   tmp.Done;
 end;
 
+
+{ ****************** Gather Operating System Information }
+
 const
   // lpMinimumApplicationAddress retrieved from Windows is very low ($10000)
   // - i.e. maximum number of ID per table would be 65536 in TSQLRecord.GetID
@@ -343,9 +364,9 @@ var
 begin
   // late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
-  os_GetTickCount64 := GetProcAddress(h, 'GetTickCount64');
-  if not Assigned(os_GetTickCount64) then // WinXP+
-    os_GetTickCount64 := @GetTickCount64ForXP;
+  GetTickCount64 := GetProcAddress(h, 'GetTickCount64');
+  if not Assigned(GetTickCount64) then // WinXP+
+    GetTickCount64 := @GetTickCount64ForXP;
   GetSystemTimePreciseAsFileTime := GetProcAddress(h, 'GetSystemTimePreciseAsFileTime');
   if not Assigned(GetSystemTimePreciseAsFileTime) then // Win8+
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
@@ -366,7 +387,8 @@ begin
   else
     Windows.GetSystemInfo(SystemInfo);
   GetMem(P, 10); // ensure that using MIN_PTR_VALUE won't break anything
-  if (PtrUInt(P) > MIN_PTR_VALUE) and (PtrUInt(SystemInfo.lpMinimumApplicationAddress) <= MIN_PTR_VALUE) then
+  if (PtrUInt(P) > MIN_PTR_VALUE) and
+     (PtrUInt(SystemInfo.lpMinimumApplicationAddress) <= MIN_PTR_VALUE) then
     PtrUInt(SystemInfo.lpMinimumApplicationAddress) := MIN_PTR_VALUE;
   Freemem(P);
   OSVersionInfo.dwOSVersionInfoSize := SizeOf(OSVersionInfo);
@@ -381,7 +403,8 @@ begin
           1:
             Vers := wXP;
           2:
-            if (wProductType = VER_NT_WORKSTATION) and (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) then
+            if (wProductType = VER_NT_WORKSTATION) and
+               (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) then
               Vers := wXP_64
             else if GetSystemMetrics(SM_SERVERR2) = 0 then
               Vers := wServer2003
