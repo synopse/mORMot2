@@ -17,9 +17,9 @@ uses
   mormot.core.text in '..\src\core\mormot.core.text.pas',
   mormot.core.data in '..\src\core\mormot.core.data.pas',
   mormot.core.datetime in '..\src\core\mormot.core.datetime.pas',
+  mormot.core.rtti in '..\src\core\mormot.core.rtti.pas',
   mormot.core.json in '..\src\core\mormot.core.json.pas',
   mormot.core.variants in '..\src\core\mormot.core.variants.pas';
-
 
 begin
   writeln('mORMot ' + SYNOPSE_FRAMEWORK_FULLVERSION + ' compiles!');
