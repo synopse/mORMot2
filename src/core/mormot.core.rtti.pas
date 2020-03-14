@@ -690,7 +690,6 @@ function ClassFieldCountWithParents(ClassType: TClass;
 implementation
 
 uses
-  mormot.core.text,
   typinfo; // retrieve raw RTTI from official RTL
 
 {$ifdef FPC}
@@ -747,7 +746,7 @@ begin
   begin
     result := PropList;
     for i := 1 to PropCount do
-      if IdemPropName(result^.Name^, PropName) then
+      if PropNameEquals(result^.Name, @PropName) then
         exit
       else
         result := result^.Next;

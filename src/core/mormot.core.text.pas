@@ -1612,32 +1612,35 @@ function PropNameValid(P: PUTF8Char): boolean;
 // - this function won't check the first char the same way than PropNameValid()
 function PropNamesValid(const Values: array of RawUTF8): boolean;
 
-/// case insensitive comparison of ASCII identifiers
+/// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
 function IdemPropName(const P1, P2: shortstring): boolean; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
-/// case insensitive comparison of ASCII identifiers
-// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
-// - this version expects P2 to be a PAnsiChar with a specified length
-
+  /// case insensitive comparison of ASCII 7-bit identifiers
+  // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+  // - behavior is undefined with UTF-8 encoding (some false positive may occur)
 function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
-/// case insensitive comparison of ASCII identifiers
+/// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
 // - this version expects P1 and P2 to be a PAnsiChar with specified lengths
 function IdemPropName(P1, P2: PUTF8Char; P1Len, P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
-/// case insensitive comparison of ASCII identifiers
+/// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
 // - this version expects P2 to be a PAnsiChar with specified length
 function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
-/// case insensitive comparison of ASCII identifiers of same length
+/// case insensitive comparison of ASCII 7-bit identifiers of same length
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
 // - this version expects P1 and P2 to be a PAnsiChar with an already checked
 // identical length, so may be used for a faster process, e.g. in a loop
 // - if P1 and P2 are RawUTF8, you should better call overloaded function
@@ -1646,8 +1649,9 @@ function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: PtrInt): boolean
 function IdemPropNameUSameLen(P1, P2: PUTF8Char; P1P2Len: PtrInt): boolean;
   {$ifndef ANDROID}{$ifdef HASINLINE} inline;{$endif}{$endif}
 
-/// case insensitive comparison of ASCII identifiers
+/// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
 function IdemPropNameU(const P1, P2: RawUTF8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 

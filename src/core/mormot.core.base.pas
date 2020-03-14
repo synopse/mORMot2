@@ -542,6 +542,15 @@ function ClassNameShort(Instance: TObject): PShortString; overload;
 function GetClassParent(C: TClass): TClass;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// case-insensitive comparison of two shortstrings only containing ASCII 7-bit
+// - use e.g. with RTTI property names values only including A..Z,0..9,_ chars
+// - will make the "XOR AND $DF" trick to quickly test A-Z / a-z characters
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
+// - see IdemPropName/IdemPropNameU functions in mormot.core.text for a similar
+// comparison with other kind of input variables
+function PropNameEquals(P1, P2: PShortString): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 { ************ Numbers (floats and integers) Low-level Definitions }
 
@@ -2539,6 +2548,39 @@ begin
   if result <> nil then
     result := PPointer(result)^;
   {$endif HASDIRECTTYPEINFO}
+end;
+
+function PropNameEquals(P1, P2: PShortString): boolean;
+var
+  P1P2Len: PtrInt;
+label
+  zero;
+begin
+  P1P2Len := ord(P1^[0]);
+  if P1P2Len <> ord(P2^[0]) then
+    goto zero;
+  inc(PByte(P1));
+  inc(PByte(P2));
+  P1P2Len := PtrInt(@PByteArray(P1)[P1P2Len - SizeOf(cardinal)]); // 32-bit end
+  if P1P2Len >= PtrInt(PtrUInt(P1)) then
+    repeat // case-insensitive compare 4 bytes per loop
+      if (PCardinal(P1)^ xor PCardinal(P2)^) and $dfdfdfdf <> 0 then
+        goto zero;
+      inc(PCardinal(P1));
+      inc(PCardinal(P2));
+    until P1P2Len < PtrInt(PtrUInt(P1));
+  inc(PCardinal(P1P2Len));
+  dec(PtrUInt(P2), PtrUInt(P1));
+  if PtrInt(PtrUInt(P1)) < P1P2Len then
+    repeat
+      if (PByte(P1)^ xor PByteArray(P2)[PtrUInt(P1)]) and $df <> 0 then
+        goto zero;
+      inc(PByte(P1));
+    until PtrInt(PtrUInt(P1)) >= P1P2Len;
+  result := true;
+  exit;
+zero:
+  result := false;
 end;
 
 
