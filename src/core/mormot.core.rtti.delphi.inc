@@ -6,23 +6,7 @@
 }
 
 
-const
-  NO_INDEX = longint($80000000);
-
-  ptField = $ff;
-  ptVirtual = $fe;
-
 type
-  /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
-  // - defined here for proper Delphi inlining
-  PropWrap = packed record
-    FillBytes: array [0 .. SizeOf(Pointer) - 2] of byte;
-    /// =$ff for a ptField address, or =$fe for a ptVirtual method
-    Kind: byte;
-  end;
-
-  PPropData = ^TPropData; // not defined e.g. in Delphi 7
-
   AlignToPtr = Pointer;
 
   {$ifdef ISDELPHI2010}
@@ -35,19 +19,6 @@ type
   end;
   PEnhancedRecordInfo = ^TEnhancedRecordInfo;
   {$endif ISDELPHI2010}
-
-  TRecordInfo = packed record // not defined e.g. in Delphi 7
-    RecSize: cardinal;
-    ManagedCount: integer;
-    ManagedFields: array[0..0] of TRecordField;
-    {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
-    NumOps: Byte;
-    //RecOps: array[1..NumOps] of Pointer;
-    AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
-    AllFields: array[0..0] of TEnhancedRecordInfo;
-    {$endif ISDELPHI2010}
-  end;
-  PRecordInfo = ^TRecordInfo;
 
 
 function TTypeInfo.ClassType: PClassType; // for proper inlining below
@@ -155,12 +126,13 @@ begin
   result := PRecordInfo(GetTypeData(@self))^.RecSize;
 end;
 
-function TTypeInfo.RecordManagedFields(out Fields: PRecordField): integer;
+procedure TTypeInfo.RecordManagedFields(out Fields: TRecordManagedFields);
 begin
   with PRecordInfo(GetTypeData(@self))^ do
   begin
-    Fields := @ManagedFields;
-    result := ManagedCount;
+    Fields.Size := RecSize;
+    Fields.Count := ManagedFldCount;
+    Fields.Fields := @PIntegerArray(@ManagedFldCount)[1];
   end;
 end;
 

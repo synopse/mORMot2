@@ -31,6 +31,7 @@ interface
 
 uses
   classes,
+  typinfo, // Delphi requires those definitions for proper inlining
   mormot.core.base;
 
 
@@ -368,6 +369,17 @@ type
   /// pointer to a wrapper to interface type information
   PInterfaceTypeData = ^TInterfaceTypeData;
 
+  /// information returned by TTypeInfo.RecordManagedFields
+  TRecordManagedFields = record
+    /// the record size in bytes
+    Size: integer;
+    /// how many managed Fields[] are defintion in this record
+    Count: integer;
+    /// points to the first field RTTI
+    // - use inc(Fields) to go to the next one
+    Fields: PRecordField;
+  end;
+
   /// main entry-point wrapper to access RTTI for a given pascal type
   // - as returned by the TypeInfo() low-level compiler function
   // - other RTTI objects can be computed from a pointer to this structure
@@ -400,7 +412,8 @@ type
     function RecordSize: integer; {$ifdef HASINLINE} inline; {$endif}
     /// retrieve RTTI information about all managed fields of this record
     // - non managed fields (e.g. integers, double...) are not listed here
-    function RecordManagedFields(out Fields: PRecordField): integer;
+    // - optionally returns the total record size in bytes
+    procedure RecordManagedFields(out Fields: TRecordManagedFields);
       {$ifdef HASINLINE} inline; {$endif}
     /// for tkDynArray: get the dynamic array type information of the stored item
     function DynArrayItemType(aDataSize: PInteger = nil): PTypeInfo;
@@ -658,6 +671,37 @@ type
 const
   NO_DEFAULT = longint($80000000);
 
+{$ifndef FPC} // Delphi requires those definitions for proper inlining
+
+const
+  NO_INDEX = longint($80000000);
+
+  ptField = $ff;
+  ptVirtual = $fe;
+
+type
+  /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
+  // - defined here for proper Delphi inlining
+  PropWrap = packed record
+    FillBytes: array [0 .. SizeOf(Pointer) - 2] of byte;
+    /// =$ff for a ptField address, or =$fe for a ptVirtual method
+    Kind: byte;
+  end;
+
+  {$ifdef UNICODE}
+  TRecordInfo = TTypeData;
+  PRecordInfo = PTypeData;
+  {$else}
+  TRecordInfo = packed record // tkRecord not defined in Delphi 7/2007 TTypeData
+    RecSize: integer;
+    ManagedFldCount: integer;
+  end;
+  PRecordInfo = ^TRecordInfo;
+  PPropData = ^TPropData; // not defined e.g. in Delphi 7/2007
+  {$endif UNICODE}
+
+{$endif FPC}
+
 /// retrieve the class property RTTI information for a specific class
 function InternalClassProp(ClassType: TClass): PClassProp;
   {$ifdef HASINLINE}inline;{$endif}
@@ -688,9 +732,6 @@ function ClassFieldCountWithParents(ClassType: TClass;
 
 
 implementation
-
-uses
-  typinfo; // retrieve raw RTTI from official RTL
 
 {$ifdef FPC}
   {$include mormot.core.rtti.fpc.inc}

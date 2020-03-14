@@ -10,11 +10,12 @@ const
 
 {$ifdef HASDIRECTTYPEINFO}
 
-  'older FPC RTTI is not supported' // e.g. ParentInfoRef: PPTypeInfo
+type
+  DeRef = pointer;
 
 {$else}
 
-function Deref(Info: pointer): pointer; inline;
+function Deref(Info: pointer): pointer; inline; // e.g. ParentInfoRef: PPTypeInfo
 begin
   result := Info;
   if result <> nil then
@@ -43,7 +44,7 @@ type
 
 Function GetTypeData(TypeInfo: pointer): PTypeData; inline;
 begin // (aligned) jump over Kind + Name ShortString
-  result := AlignTypeData(TypeInfo + 2 + PByte(TypeInfo + 1)^);
+  result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
 
 function TTypeInfo.ClassType: PClassType; // for proper inlining below
@@ -53,7 +54,7 @@ end;
 
 function TClassType.ParentInfo: PTypeInfo;
 begin
-  result := pointer(PTypeData(@self)^.ParentInfoRef^);
+  result := DeRef(PTypeData(@self)^.ParentInfoRef);
 end;
 
 function TClassType.ClassProp: PClassProp;
@@ -129,13 +130,13 @@ end;
 
 function TInterfaceTypeData.IntfParent: PTypeInfo;
 begin
-  result := Pointer(PTypeData(@self)^.IntfParentRef^);
+  result := DeRef(PTypeData(@self)^.IntfParentRef);
 end;
 
 
 function TPropInfo.TypeInfo: PTypeInfo;
 begin
-  result := pointer(TypInfo.PPropInfo(@self)^.PropTypeRef^);
+  result := DeRef(TypInfo.PPropInfo(@self)^.PropTypeRef);
 end;
 
 function TPropInfo.GetterIsField: boolean;
@@ -158,16 +159,17 @@ end;
 
 {$ifdef FPC_NEWRTTI}
 
-function TTypeInfo.RecordManagedFields(out Fields: PRecordField): integer;
+procedure TTypeInfo.RecordManagedFields(out Fields: TRecordManagedFields);
 var
   d: PRecInitData; // = PRecordInfoInit in rtti.inc
 begin
   d := pointer(GetTypeData(@self));
+  Fields.Size := d^.Size;
   if Assigned(d^.Terminator) then // see RTTIRecordOp() in rtti.inc
     d := pointer(GetTypeData(d^.Terminator));
-  result := d^.ManagedFieldCount;
+  Fields.Count := d^.ManagedFieldCount;
   inc(PByte(d), SizeOf(d^.ManagedFieldCount));
-  Fields := AlignToPtr(d);
+  Fields.Fields := AlignToPtr(d);
 end;
 
 {$else}
@@ -176,9 +178,9 @@ function TTypeInfo.RecordManagedFields(out Fields: PRecordField): integer;
 begin
   with GetTypeData(@self)^ do
   begin
-    Fields := @ManagedFldCount;
-    inc(Fields); // ManagedFields aligned just after ManagedFldCount: integer
-    result := ManagedFldCount;
+    Fields.Size := RecSize;
+    Fields.Count := ManagedFldCount;
+    Fields.Fields := AlignToPtr(PByte(@ManagedFldCount) + SizeOf(integer));
   end;
 end;
 
