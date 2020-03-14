@@ -15,7 +15,7 @@ unit mormot.core.rtti;
     - Published Methods RTTI
     - IInvokable Interface RTTI
 
-    Purpose of this unit is to avoid any use of TypInfo.pas RTL unit,
+    Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
     which is not exactly compatible between compilers, and lack of direct
     RTTI access with no memory allocation. We define pointers to RTTI
     record/object to access TypeInfo() via a set of explicit methods.
@@ -31,7 +31,7 @@ interface
 
 uses
   classes,
-  typinfo, // Delphi requires those definitions for proper inlining
+  typinfo, // Delphi requires those definitions up here for proper inlining
   mormot.core.base;
 
 
@@ -775,12 +775,13 @@ begin
 end;
 
 function TPropInfo.Next: PPropInfo;
-begin
+begin // this abtract code compiles into 2 asm lines under FPC :)
   with TypInfo.PPropInfo(@self)^ do
-    result := AlignToPtr(PAnsiChar(@Name[0]) + SizeOf(Name[0]) + Length(Name));
+    result := AlignToPtr(@PByteArray(@self)[
+      (PtrUInt(@TypInfo.PPropInfo(nil).Name) + SizeOf(Name[0])) + Length(Name)]);
 end;
 
-function TClassProp.FieldProp(const PropName: shortstring): mormot.core.rtti.PPropInfo;
+function TClassProp.FieldProp(const PropName: shortstring): PPropInfo;
 var i: integer;
 begin
   if @self<>nil then
@@ -1386,7 +1387,7 @@ end;
 function ClassFieldCountWithParents(ClassType: TClass;
   onlyWithoutGetter: boolean): integer;
 var CP: PClassProp;
-    P: mormot.core.rtti.PPropInfo;
+    P: PPropInfo;
     i: integer;
 begin
   result := 0;

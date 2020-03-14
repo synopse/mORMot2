@@ -92,7 +92,7 @@ begin // see TPropData.GetProp(0)
 end;
 
 function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
-var CP: mormot.core.rtti.PClassProp;
+var CP: PClassProp;
 begin
   if ClassType<>nil then begin
     CP := InternalClassProp(ClassType);
@@ -109,7 +109,7 @@ end;
 
 function TEnumType.EnumBaseType: PEnumType;
 var
-  base: mormot.core.rtti.PTypeInfo;
+  base: PTypeInfo;
 begin
   result := @self;
   base := pointer(PTypeData(result)^.BaseType);
@@ -119,7 +119,7 @@ end;
 
 function TEnumType.SetBaseType: PEnumType;
 var
-  base: mormot.core.rtti.PTypeInfo;
+  base: PTypeInfo;
 begin
   result := @self;
   base := pointer(PTypeData(result)^.CompType);
