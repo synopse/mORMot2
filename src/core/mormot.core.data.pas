@@ -7,8 +7,13 @@ unit mormot.core.data;
   *****************************************************************************
 
    Low-Level Data Processing Functions shared by all framework units
+    - Record Process
+    - RTL TPersistent / TInterfacedObject with Custom Constructor
+    - TSynPersistent / TSynList / TSynObjectList / TSynLocker classes
     - Variable Length Integer Encoding / Decoding
     - Base64 and Base64URI Encoding / Decoding
+    - RawUTF8 String Values Interning
+    - TSynNameValue Name/Value Storage
     - INI Files and In-memory Access
 
   *****************************************************************************
@@ -19,11 +24,401 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  Classes,
-  Contnrs,
-  Types,
-  SysUtils,
-  mormot.core.base;
+  classes,
+  contnrs,
+  types,
+  sysutils,
+  mormot.core.base,
+  mormot.core.os;
+
+
+{ ************ RTL TPersistent / TInterfacedObject with Custom Constructor }
+
+type
+    /// abstract parent class with a virtual constructor, ready to be overridden
+  // to initialize the instance
+  // - you can specify such a class if you need an object including published
+  // properties (like TPersistent) with a virtual constructor (e.g. to
+  // initialize some nested class properties)
+  TPersistentWithCustomCreate = class(TPersistent)
+  public
+    /// this virtual constructor will be called at instance creation
+    // - this constructor does nothing, but is declared as virtual so that
+    // inherited classes may safely override this default void implementation
+    constructor Create; virtual;
+  end;
+
+  {$M+}
+  /// abstract parent class with threadsafe implementation of IInterface and
+  // a virtual constructor
+  // - you can specify e.g. such a class to TSQLRestServer.ServiceRegister() if
+  // you need an interfaced object with a virtual constructor, ready to be
+  // overridden to initialize the instance
+  TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
+  public
+    /// this virtual constructor will be called at instance creation
+    // - this constructor does nothing, but is declared as virtual so that
+    // inherited classes may safely override this default void implementation
+    constructor Create; virtual;
+    /// used to mimic TInterfacedObject reference counting
+    // - Release=true will call TInterfacedObject._Release
+    // - Release=false will call TInterfacedObject._AddRef
+    // - could be used to emulate proper reference counting of the instance
+    // via interfaces variables, but still storing plain class instances
+    // (e.g. in a global list of instances)
+    procedure RefCountUpdate(Release: boolean); virtual;
+  end;
+  {$M-}
+
+  /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
+  // - could be used to create instances using its virtual constructor
+  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
+
+  /// used to determine the exact class type of a TPersistentWithCustomCreateClass
+  // - could be used to create instances using its virtual constructor
+  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
+
+
+{ ************ TSynPersistent / TSynList / TSynObjectList / TSynLocker classes }
+
+type
+  {$M+}
+  /// our own empowered TPersistent-like parent class
+  // - TPersistent has an unexpected speed overhead due a giant lock introduced
+  // to manage property name fixup resolution (which we won't use outside the VCL)
+  // - this class has a virtual constructor, so is a preferred alternative
+  // to both TPersistent and TPersistentWithCustomCreate classes
+  // - for best performance, any type inheriting from this class will bypass
+  // some regular steps: do not implement interfaces or use TMonitor with them!
+  TSynPersistent = class(TObject)
+  protected
+    // this default implementation will call AssignError()
+    procedure AssignTo(Dest: TSynPersistent); virtual;
+    procedure AssignError(Source: TSynPersistent);
+  public
+    /// this virtual constructor will be called at instance creation
+    // - this constructor does nothing, but is declared as virtual so that
+    // inherited classes may safely override this default void implementation
+    constructor Create; virtual;
+    /// allows to implement a TPersistent-like assignement mechanism
+    // - inherited class should override AssignTo() protected method
+    // to implement the proper assignment
+    procedure Assign(Source: TSynPersistent); virtual;
+    /// optimized initialization code
+    // - somewhat faster than the regular RTL implementation - especially
+    // since rewritten in pure asm on Delphi/x86
+    // - warning: this optimized version won't initialize the vmtIntfTable
+    // for this class hierarchy: as a result, you would NOT be able to
+    // implement an interface with a TSynPersistent descendent (but you should
+    // not need to, but inherit from TInterfacedObject)
+    // - warning: under FPC, it won't initialize fields management operators
+    class function NewInstance: TObject; override;
+  end;
+  {$M-}
+
+  /// simple and efficient TList, without any notification
+  // - regular TList has an internal notification mechanism which slows down
+  // basic process, and can't be easily inherited
+  // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
+  // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
+  TSynList = class(TSynPersistent)
+  protected
+    fCount: integer;
+    fList: TPointerDynArray;
+    function Get(index: Integer): pointer; {$ifdef HASINLINE} inline; {$endif}
+  public
+    /// add one item to the list
+    function Add(item: pointer): integer; virtual;
+    /// delete all items of the list
+    procedure Clear; virtual;
+    /// delete one item from the list
+    procedure Delete(index: integer); virtual;
+    /// fast retrieve one item in the list
+    function IndexOf(item: pointer): integer; virtual;
+    /// fast check if one item exists in the list
+    function Exists(item: pointer): boolean; virtual;
+    /// fast delete one item in the list
+    function Remove(item: pointer): integer; virtual;
+    /// how many items are stored in this TList instance
+    property Count: integer read fCount;
+    /// low-level access to the items stored in this TList instance
+    property List: TPointerDynArray read fList;
+    /// low-level array-like access to the items stored in this TList instance
+    // - warning: if index is out of range, will return nil and won't raise
+    // any exception
+    property Items[index: Integer]: pointer read Get; default;
+  end;
+
+  /// simple and efficient TObjectList, without any notification
+  TSynObjectList = class(TSynList)
+  protected
+    fOwnObjects: boolean;
+  public
+    /// initialize the object list
+    constructor Create(aOwnObjects: boolean=true); reintroduce;
+    /// delete one object from the list
+    procedure Delete(index: integer); override;
+    /// delete all objects of the list
+    procedure Clear; override;
+    /// delete all objects of the list in reverse order
+    // - for some kind of processes, owned objects should be removed from the
+    // last added to the first
+    procedure ClearFromLast; virtual;
+    /// finalize the store items
+    destructor Destroy; override;
+  end;
+
+  /// allow to add cross-platform locking methods to any class instance
+  // - typical use is to define a Safe: TSynLocker property, call Safe.Init
+  // and Safe.Done in constructor/destructor methods, and use Safe.Lock/UnLock
+  // methods in a try ... finally section
+  // - in respect to the TCriticalSection class, fix a potential CPU cache line
+  // conflict which may degrade the multi-threading performance, as reported by
+  // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
+  // - internal padding is used to safely store up to 7 values protected
+  // from concurrent access with a mutex, so that SizeOf(TSynLocker)>128
+  // - for object-level locking, see TSynPersistentLock which owns one such
+  // instance, or call low-level fSafe := NewSynLocker in your constructor,
+  // then fSafe^.DoneAndFreemem in your destructor
+  TSynLocker = object
+  protected
+    fSection: TRTLCriticalSection;
+    fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
+    fLocked, fInitialized: boolean;
+    function GetVariant(Index: integer): Variant;
+    procedure SetVariant(Index: integer; const Value: Variant);
+    function GetInt64(Index: integer): Int64;
+    procedure SetInt64(Index: integer; const Value: Int64);
+    function GetBool(Index: integer): boolean;
+    procedure SetBool(Index: integer; const Value: boolean);
+    function GetUnlockedInt64(Index: integer): Int64;
+    procedure SetUnlockedInt64(Index: integer; const Value: Int64);
+    function GetPointer(Index: integer): Pointer;
+    procedure SetPointer(Index: integer; const Value: Pointer);
+    function GetUTF8(Index: integer): RawUTF8;
+    procedure SetUTF8(Index: integer; const Value: RawUTF8);
+  public
+    /// internal padding data, also used to store up to 7 variant values
+    // - this memory buffer will ensure no CPU cache line mixup occurs
+    // - you should not use this field directly, but rather the Locked[],
+    // LockedInt64[], LockedUTF8[] or LockedPointer[] methods
+    // - if you want to access those array values, ensure you protect them
+    // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
+    // and maintain the PaddingUsedCount field accurately
+    Padding: array[0..6] of TVarData;
+    /// number of values stored in the internal Padding[] array
+    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
+    // - you should not have to use this field, but for optimized low-level
+    // direct access to Padding[] values, within a Lock/UnLock safe block
+    PaddingUsedCount: integer;
+    /// initialize the mutex
+    // - calling this method is mandatory (e.g. in the class constructor owning
+    // the TSynLocker instance), otherwise you may encounter unexpected
+    // behavior, like access violations or memory leaks
+    procedure Init;
+    /// finalize the mutex
+    // - calling this method is mandatory (e.g. in the class destructor owning
+    // the TSynLocker instance), otherwise you may encounter unexpected
+    // behavior, like access violations or memory leaks
+    procedure Done;
+    /// finalize the mutex, and call FreeMem() on the pointer of this instance
+    // - should have been initiazed with a NewSynLocker call
+    procedure DoneAndFreeMem;
+    /// lock the instance for exclusive access
+    // - this method is re-entrant from the same thread (you can nest Lock/UnLock
+    // calls in the same thread), but would block any other Lock attempt in
+    // another thread
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! Safe.Lock;
+    // ! try
+    // !   ...
+    // ! finally
+    // !   Safe.Unlock;
+    // ! end;
+    procedure Lock; {$ifdef HASINLINE}inline;{$endif}
+    /// will try to acquire the mutex
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! if Safe.TryLock then
+    // !   try
+    // !     ...
+    // !   finally
+    // !     Safe.Unlock;
+    // !   end;
+    function TryLock: boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// will try to acquire the mutex for a given time
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! if Safe.TryLockMS(100) then
+    // !   try
+    // !     ...
+    // !   finally
+    // !     Safe.Unlock;
+    // !   end;
+    function TryLockMS(retryms: integer): boolean;
+    /// release the instance for exclusive access
+    // - each Lock/TryLock should have its exact UnLock opposite, so a
+    // try..finally block is mandatory for safe code
+    procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
+    /// will enter the mutex until the IUnknown reference is released
+    // - could be used as such under Delphi:
+    // !begin
+    // !  ... // unsafe code
+    // !  Safe.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // local hidden IUnknown will release the lock for the method
+    // - warning: under FPC, you should assign its result to a local variable -
+    // see bug http://bugs.freepascal.org/view.php?id=26602
+    // !var LockFPC: IUnknown;
+    // !begin
+    // !  ... // unsafe code
+    // !  LockFPC := Safe.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // LockFPC will release the lock for the method
+    // or
+    // !begin
+    // !  ... // unsafe code
+    // !  with Safe.ProtectMethod do begin
+    // !    ... // thread-safe code
+    // !  end; // local hidden IUnknown will release the lock for the method
+    // !end;
+    function ProtectMethod: IUnknown;
+    /// returns true if the mutex is currently locked by another thread
+    property IsLocked: boolean read fLocked;
+    /// returns true if the Init method has been called for this mutex
+    // - is only relevant if the whole object has been previously filled with 0,
+    // i.e. as part of a class or as global variable, but won't be accurate
+    // when allocated on stack
+    property IsInitialized: boolean read fInitialized;
+    /// safe locked access to a Variant value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // LockedBool, LockedInt64, LockedPointer and LockedUTF8 array properties
+    // - returns null if the Index is out of range
+    property Locked[Index: integer]: Variant read GetVariant write SetVariant;
+    /// safe locked access to a Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns nil if the Index is out of range, or does not store a Int64
+    property LockedInt64[Index: integer]: Int64 read GetInt64 write SetInt64;
+    /// safe locked access to a boolean value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked, LockedInt64, LockedPointer and LockedUTF8 array properties
+    // - value will be stored internally as a varBoolean variant
+    // - returns nil if the Index is out of range, or does not store a boolean
+    property LockedBool[Index: integer]: boolean read GetBool write SetBool;
+    /// safe locked access to a pointer/TObject value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked, LockedBool, LockedInt64 and LockedUTF8 array properties
+    // - pointers will be stored internally as a varUnknown variant
+    // - returns nil if the Index is out of range, or does not store a pointer
+    property LockedPointer[Index: integer]: Pointer read GetPointer write SetPointer;
+    /// safe locked access to an UTF-8 string value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedPointer array properties
+    // - UTF-8 string will be stored internally as a varString variant
+    // - returns '' if the Index is out of range, or does not store a string
+    property LockedUTF8[Index: integer]: RawUTF8 read GetUTF8 write SetUTF8;
+    /// safe locked in-place increment to an Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns the newly stored value
+    // - if the internal value is not defined yet, would use 0 as default value
+    function LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+    /// safe locked in-place exchange of a Variant value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - returns the previous stored value, or null if the Index is out of range
+    function LockedExchange(Index: integer; const Value: variant): variant;
+    /// safe locked in-place exchange of a pointer/TObject value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - pointers will be stored internally as a varUnknown variant
+    // - returns the previous stored value, nil if the Index is out of range,
+    // or does not store a pointer
+    function LockedPointerExchange(Index: integer; Value: pointer): pointer;
+    /// unsafe access to a Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns nil if the Index is out of range, or does not store a Int64
+    // - you should rather call LockedInt64[] property, or use this property
+    // with a Lock; try ... finally UnLock block
+    property UnlockedInt64[Index: integer]: Int64 read GetUnlockedInt64 write SetUnlockedInt64;
+  end;
+  PSynLocker = ^TSynLocker;
+
+  /// adding locking methods to a TSynPersistent with virtual constructor
+  // - you may use this class instead of the RTL TCriticalSection, since it
+  // would use a TSynLocker which does not suffer from CPU cache line conflit
+  TSynPersistentLock = class(TSynPersistent)
+  protected
+    fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
+  public
+    /// initialize the instance, and its associated lock
+    constructor Create; override;
+    /// finalize the instance, and its associated lock
+    destructor Destroy; override;
+    /// access to the associated instance critical section
+    // - call Safe.Lock/UnLock to protect multi-thread access on this storage
+    property Safe: PSynLocker read fSafe;
+  end;
+
+  /// used for backward compatibility only with existing code
+  TSynPersistentLocked = class(TSynPersistentLock);
+
+  /// adding locking methods to a TInterfacedObject with virtual constructor
+  TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
+  protected
+    fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
+  public
+    /// initialize the object instance, and its associated lock
+    constructor Create; override;
+    /// release the instance (including the locking resource)
+    destructor Destroy; override;
+    /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: PSynLocker read fSafe;
+  end;
+
+  /// add locking methods to a TSynObjectList
+  // - this class overrides the regular TSynObjectList, and do not share any
+  // code with the TObjectListHashedAbstract/TObjectListHashed classes
+  // - you need to call the Safe.Lock/Unlock methods by hand to protect the
+  // execution of index-oriented methods (like Delete/Items/Count...): the
+  // list content may change in the background, so using indexes is thread-safe
+  // - on the other hand, Add/Clear/ClearFromLast/Remove stateless methods have
+  // been overriden in this class to call Safe.Lock/Unlock, and therefore are
+  // thread-safe and protected to any background change
+  TSynObjectListLocked = class(TSynObjectList)
+  protected
+    fSafe: TSynLocker;
+  public
+    /// initialize the list instance
+    // - the stored TObject instances will be owned by this TSynObjectListLocked,
+    // unless AOwnsObjects is set to false
+    constructor Create(aOwnsObjects: boolean=true); reintroduce;
+    /// release the list instance (including the locking resource)
+    destructor Destroy; override;
+    /// add one item to the list using the global critical section
+    function Add(item: pointer): integer; override;
+    /// delete all items of the list using the global critical section
+    procedure Clear; override;
+    /// delete all items of the list in reverse order, using the global critical section
+    procedure ClearFromLast; override;
+    /// fast delete one item in the list
+    function Remove(item: pointer): integer; override;
+    /// check an item using the global critical section
+    function Exists(item: pointer): boolean; override;
+    /// the critical section associated to this list instance
+    // - could be used to protect shared resources within the internal process,
+    // for index-oriented methods like Delete/Items/Count...
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: TSynLocker read fSafe;
+  end;
+
+  /// used to determine the exact class type of a TSynPersistent
+  // - could be used to create instances using its virtual constructor
+  TSynPersistentClass = class of TSynPersistent;
 
 
 { ************ Variable Length Integer Encoding / Decoding }
@@ -343,7 +738,266 @@ function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: Ptr
 // - you should better not use this, but Base64uriToBin() overloaded functions
 function Base64uriDecode(sp,rp: PAnsiChar; len: PtrInt): boolean;
 
+(*
 
+{ ************ RawUTF8 String Values Interning }
+
+type
+  /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef USERECORDWITHMETHODS}TRawUTF8InterningSlot = record
+    {$else}TRawUTF8InterningSlot = object{$endif}
+  public
+    /// actual RawUTF8 storage
+    Value: TRawUTF8DynArray;
+    /// hashed access to the Value[] list
+    Values: TDynArrayHashed;
+    /// associated mutex for thread-safe process
+    Safe: TSynLocker;
+    /// initialize the RawUTF8 slot (and its Safe mutex)
+    procedure Init;
+    /// finalize the RawUTF8 slot - mainly its associated Safe mutex
+    procedure Done;
+    /// returns the interned RawUTF8 value
+    procedure Unique(var aResult: RawUTF8; const aText: RawUTF8; aTextHash: cardinal);
+    /// ensure the supplied RawUTF8 value is interned
+    procedure UniqueText(var aText: RawUTF8; aTextHash: cardinal);
+    /// delete all stored RawUTF8 values
+    procedure Clear;
+    /// reclaim any unique RawUTF8 values
+    function Clean(aMaxRefCount: integer): integer;
+    /// how many items are currently stored in Value[]
+    function Count: integer;
+  end;
+
+  /// allow to store only one copy of distinct RawUTF8 values
+  // - thanks to the Copy-On-Write feature of string variables, this may
+  // reduce a lot the memory overhead of duplicated text content
+  // - this class is thread-safe and optimized for performance
+  TRawUTF8Interning = class(TSynPersistent)
+  protected
+    fPool: array of TRawUTF8InterningSlot;
+    fPoolLast: integer;
+  public
+    /// initialize the storage and its internal hash pools
+    // - aHashTables is the pool size, and should be a power of two <= 512
+    constructor Create(aHashTables: integer=4); reintroduce;
+    /// finalize the storage
+    destructor Destroy; override;
+    /// return a RawUTF8 variable stored within this class
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    function Unique(const aText: RawUTF8): RawUTF8; overload;
+    /// return a RawUTF8 variable stored within this class from a text buffer
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    function Unique(aText: PUTF8Char; aTextLen: PtrInt): RawUTF8; overload;
+    /// return a RawUTF8 variable stored within this class
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    procedure Unique(var aResult: RawUTF8; const aText: RawUTF8); overload;
+    /// return a RawUTF8 variable stored within this class from a text buffer
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    procedure Unique(var aResult: RawUTF8; aText: PUTF8Char; aTextLen: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// ensure a RawUTF8 variable is stored within this class
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, set the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    procedure UniqueText(var aText: RawUTF8);
+    /// return a variant containing a RawUTF8 stored within this class
+    // - similar to RawUTF8ToVariant(), but with string interning
+    procedure UniqueVariant(var aResult: variant; const aText: RawUTF8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return a variant containing a RawUTF8 stored within this class
+    // - similar to RawUTF8ToVariant(StringToUTF8()), but with string interning
+    // - this method expects the text to be supplied as a VCL string, which will
+    // be converted into a variant containing a RawUTF8 varString instance
+    procedure UniqueVariantString(var aResult: variant; const aText: string);
+    /// return a variant, may be containing a RawUTF8 stored within this class
+    // - similar to TextToVariant(), but with string interning
+    // - first try with GetNumericVariantFromJSON(), then fallback to
+    // RawUTF8ToVariant() with string variable interning
+    procedure UniqueVariant(var aResult: variant; aText: PUTF8Char; aTextLen: PtrInt;
+      aAllowVarDouble: boolean=false); overload;
+    /// ensure a variant contains only RawUTF8 stored within this class
+    // - supplied variant should be a varString containing a RawUTF8 value
+    procedure UniqueVariant(var aResult: variant); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// delete any previous storage pool
+    procedure Clear;
+    /// reclaim any unique RawUTF8 values
+    // - i.e. run a garbage collection process of all values with RefCount=1
+    // by default, i.e. all string which are not used any more; you may set
+    // aMaxRefCount to a higher value, depending on your expecations, i.e. 2 to
+    // delete all string which are referenced only once outside of the pool
+    // - returns the number of unique RawUTF8 cleaned from the internal pool
+    // - to be executed on a regular basis - but not too often, since the
+    // process can be time consumming, and void the benefit of interning
+    function Clean(aMaxRefCount: integer=1): integer;
+    /// how many items are currently stored in this instance
+    function Count: integer;
+  end;
+
+
+{ ************ TSynNameValue Name/Value Storage }
+
+type
+  /// store one Name/Value pair, as used by TSynNameValue class
+  TSynNameValueItem = record
+    /// the name of the Name/Value pair
+    // - this property is hashed by TSynNameValue for fast retrieval
+    Name: RawUTF8;
+    /// the value of the Name/Value pair
+    Value: RawUTF8;
+    /// any associated Pointer or numerical value
+    Tag: PtrInt;
+  end;
+
+  /// Name/Value pairs storage, as used by TSynNameValue class
+  TSynNameValueItemDynArray = array of TSynNameValueItem;
+
+  /// event handler used to convert on the fly some UTF-8 text content
+  TOnSynNameValueConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
+
+  /// callback event used by TSynNameValue
+  TOnSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
+
+  /// pseudo-class used to store Name/Value RawUTF8 pairs
+  // - use internaly a TDynArrayHashed instance for fast retrieval
+  // - is therefore faster than TRawUTF8List
+  // - is defined as an object, not as a class: you can use this in any
+  // class, without the need to destroy the content
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
+  {$else}TSynNameValue = object protected{$endif}
+    fOnAdd: TOnSynNameValueNotify;
+    function GetBlobData: RawByteString;
+    procedure SetBlobData(const aValue: RawByteString);
+    function GetStr(const aName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
+    function GetInt(const aName: RawUTF8): Int64; {$ifdef HASINLINE}inline;{$endif}
+    function GetBool(const aName: RawUTF8): Boolean; {$ifdef HASINLINE}inline;{$endif}
+  public
+    /// the internal Name/Value storage
+    List: TSynNameValueItemDynArray;
+    /// the number of Name/Value pairs
+    Count: integer;
+    /// low-level access to the internal storage hasher
+    DynArray: TDynArrayHashed;
+    /// initialize the storage
+    // - will also reset the internal List[] and the internal hash array
+    procedure Init(aCaseSensitive: boolean);
+    /// add an element to the array
+    // - if aName already exists, its associated Value will be updated
+    procedure Add(const aName, aValue: RawUTF8; aTag: PtrInt=0);
+    /// reset content, then add all name=value pairs from a supplied .ini file
+    // section content
+    // - will first call Init(false) to initialize the internal array
+    // - Section can be retrieved e.g. via FindSectionFirstLine()
+    procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TOnSynNameValueConvertRawUTF8=nil;
+      OnAdd: TOnSynNameValueNotify=nil);
+    /// reset content, then add all name=value; CSV pairs
+    // - will first call Init(false) to initialize the internal array
+    // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
+    procedure InitFromCSV(CSV: PUTF8Char; NameValueSep: AnsiChar='=';
+      ItemSep: AnsiChar=#10);
+    /// reset content, then add all fields from an JSON object
+    // - will first call Init() to initialize the internal array
+    // - then parse the incoming JSON object, storing all its field values
+    // as RawUTF8, and returning TRUE if the supplied content is correct
+    // - warning: the supplied JSON buffer will be decoded and modified in-place
+    function InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean=false): boolean;
+    /// reset content, then add all name, value pairs
+    // - will first call Init(false) to initialize the internal array
+    procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
+    /// search for a Name, return the index in List
+    // - using fast O(1) hash algoritm
+    function Find(const aName: RawUTF8): integer;
+    /// search for the first chars of a Name, return the index in List
+    // - using O(n) calls of IdemPChar() function
+    // - here aUpperName should be already uppercase, as expected by IdemPChar()
+    function FindStart(const aUpperName: RawUTF8): integer;
+    /// search for a Value, return the index in List
+    // - using O(n) brute force algoritm with case-sensitive aValue search
+    function FindByValue(const aValue: RawUTF8): integer;
+    /// search for a Name, and delete its entry in the List if it exists
+    function Delete(const aName: RawUTF8): boolean;
+    /// search for a Value, and delete its entry in the List if it exists
+    // - returns the number of deleted entries
+    // - you may search for more than one match, by setting a >1 Limit value
+    function DeleteByValue(const aValue: RawUTF8; Limit: integer=1): integer;
+    /// search for a Name, return the associated Value as a UTF-8 string
+    function Value(const aName: RawUTF8; const aDefaultValue: RawUTF8=''): RawUTF8;
+    /// search for a Name, return the associated Value as integer
+    function ValueInt(const aName: RawUTF8; const aDefaultValue: Int64=0): Int64;
+    /// search for a Name, return the associated Value as boolean
+    // - returns true only if the value is exactly '1'
+    function ValueBool(const aName: RawUTF8): Boolean;
+    /// search for a Name, return the associated Value as an enumerate
+    // - returns true and set aEnum if aName was found, and associated value
+    // matched an aEnumTypeInfo item
+    // - returns false if no match was found
+    function ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer; out aEnum;
+      aEnumDefault: byte=0): boolean; overload;
+    /// returns all values, as CSV or INI content
+    function AsCSV(const KeySeparator: RawUTF8='=';
+      const ValueSeparator: RawUTF8=#13#10; const IgnoreKey: RawUTF8=''): RawUTF8;
+    /// returns all values as a JSON object of string fields
+    function AsJSON: RawUTF8;
+    /// fill the supplied two arrays of RawUTF8 with the stored values
+    procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
+    /// search for a Name, return the associated Value as variant
+    // - returns null if the name was not found
+    function ValueVariantOrNull(const aName: RawUTF8): variant;
+    /// compute a TDocVariant document from the stored values
+    // - output variant will be reset and filled as a TDocVariant instance,
+    // ready to be serialized as a JSON object
+    // - if there is no value stored (i.e. Count=0), set null
+    procedure AsDocVariant(out DocVariant: variant;
+      ExtendedJson: boolean=false; ValueAsString: boolean=true;
+      AllowVarDouble: boolean=false); overload;
+    /// compute a TDocVariant document from the stored values
+    function AsDocVariant(ExtendedJson: boolean=false; ValueAsString: boolean=true): variant; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// merge the stored values into a TDocVariant document
+    // - existing properties would be updated, then new values will be added to
+    // the supplied TDocVariant instance, ready to be serialized as a JSON object
+    // - if ValueAsString is TRUE, values would be stored as string
+    // - if ValueAsString is FALSE, numerical values would be identified by
+    // IsString() and stored as such in the resulting TDocVariant
+    // - if you let ChangedProps point to a TDocVariantData, it would contain
+    // an object with the stored values, just like AsDocVariant
+    // - returns the number of updated values in the TDocVariant, 0 if
+    // no value was changed
+    function MergeDocVariant(var DocVariant: variant;
+      ValueAsString: boolean; ChangedProps: PVariant=nil;
+      ExtendedJson: boolean=false; AllowVarDouble: boolean=false): integer;
+    /// returns true if the Init() method has been called
+    function Initialized: boolean;
+    /// can be used to set all data from one BLOB memory buffer
+    procedure SetBlobDataPtr(aValue: pointer);
+    /// can be used to set or retrieve all stored data as one BLOB content
+    property BlobData: RawByteString read GetBlobData write SetBlobData;
+    /// event triggerred after an item has just been added to the list
+    property OnAfterAdd: TOnSynNameValueNotify read fOnAdd write fOnAdd;
+    /// search for a Name, return the associated Value as a UTF-8 string
+    // - returns '' if aName is not found in the stored keys
+    property Str[const aName: RawUTF8]: RawUTF8 read GetStr; default;
+    /// search for a Name, return the associated Value as integer
+    // - returns 0 if aName is not found, or not a valid Int64 in the stored keys
+    property Int[const aName: RawUTF8]: Int64 read GetInt;
+    /// search for a Name, return the associated Value as boolean
+    // - returns true if aName stores '1' as associated value
+    property Bool[const aName: RawUTF8]: Boolean read GetBool;
+  end;
+
+  /// a reference pointer to a Name/Value RawUTF8 pairs storage
+  PSynNameValue = ^TSynNameValue;
+
+*)
 
 { ************ INI Files and In-memory Access }
 
@@ -464,18 +1118,563 @@ function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValu
 implementation
 
 uses
-  mormot.core.text,
-  mormot.core.os;
+  mormot.core.text;
 
 
-{$ifdef CPUARM} // circumvent FPC issue on ARM
-function ToByte(value: cardinal): cardinal; inline;
-begin
-  result := value and $ff;
+
+{ ************ RTL TPersistent / TInterfacedObject with Custom Constructor }
+
+{ TPersistentWithCustomCreate }
+
+constructor TPersistentWithCustomCreate.Create;
+begin // nothing to do by default - overridden constructor may add custom code
 end;
-{$else}
-type ToByte = byte;
-{$endif}
+
+
+{ TInterfacedObjectWithCustomCreate }
+
+constructor TInterfacedObjectWithCustomCreate.Create;
+begin // nothing to do by default - overridden constructor may add custom code
+end;
+
+procedure TInterfacedObjectWithCustomCreate.RefCountUpdate(Release: boolean);
+begin
+  if Release then
+    _Release
+  else
+    _AddRef;
+end;
+
+
+{ ************ TSynPersistent / TSynList / TSynObjectList / TSynLocker classes }
+
+function NewSynLocker: PSynLocker;
+begin
+  result := AllocMem(SizeOf(result^));
+  result^.Init;
+end;
+
+
+{ TSynPersistent }
+
+constructor TSynPersistent.Create;
+begin // nothing to do by default - overridden constructor may add custom code
+end;
+
+procedure TSynPersistent.AssignError(Source: TSynPersistent);
+var
+  SourceName: string;
+begin
+  if Source <> nil then
+    SourceName := Source.ClassName
+  else
+    SourceName := 'nil';
+  raise EConvertError.CreateFmt('Cannot assign a %s to a %s', [SourceName, ClassName]);
+end;
+
+procedure TSynPersistent.AssignTo(Dest: TSynPersistent);
+begin
+  Dest.AssignError(Self);
+end;
+
+procedure TSynPersistent.Assign(Source: TSynPersistent);
+begin
+  if Source <> nil then
+    Source.AssignTo(Self)
+  else
+    AssignError(nil);
+end;
+
+class function TSynPersistent.NewInstance: TObject;
+begin // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
+  GetMem(pointer(result), InstanceSize); // InstanceSize is inlined
+  FillCharFast(pointer(result)^, InstanceSize, 0);
+  PPointer(result)^ := pointer(self); // store VMT
+end; // no benefit of rewriting FreeInstance/CleanupInstance
+
+
+{ TSynList }
+
+function TSynList.Add(item: pointer): integer;
+begin
+  result := ObjArrayAddCount(fList, item, fCount);
+end;
+
+procedure TSynList.Clear;
+begin
+  fList := nil;
+  fCount := 0;
+end;
+
+procedure TSynList.Delete(index: integer);
+begin
+  PtrArrayDelete(fList, index, @fCount);
+  if (fCount > 64) and (length(fList) > fCount * 2) then
+    SetLength(fList, fCount); // reduce capacity when half list is void
+end;
+
+function TSynList.Exists(item: pointer): boolean;
+begin
+  result := PtrUIntScanExists(pointer(fList), fCount, PtrUInt(item));
+end;
+
+function TSynList.Get(index: Integer): pointer;
+begin
+  if cardinal(index) < cardinal(fCount) then
+    result := fList[index]
+  else
+    result := nil;
+end;
+
+function TSynList.IndexOf(item: pointer): integer;
+begin
+  result := PtrUIntScanIndex(pointer(fList), fCount, PtrUInt(item));
+end;
+
+function TSynList.Remove(item: Pointer): integer;
+begin
+  result := PtrUIntScanIndex(pointer(fList), fCount, PtrUInt(item));
+  if result >= 0 then
+    Delete(result);
+end;
+
+
+{ TSynObjectList }
+
+constructor TSynObjectList.Create(aOwnObjects: boolean);
+begin
+  fOwnObjects := aOwnObjects;
+  inherited Create;
+end;
+
+procedure TSynObjectList.Delete(index: integer);
+begin
+  if cardinal(index) >= cardinal(fCount) then
+    exit;
+  if fOwnObjects then
+    TObject(fList[index]).Free;
+  inherited Delete(index);
+end;
+
+procedure TSynObjectList.Clear;
+begin
+  if fOwnObjects then
+    RawObjectsClear(pointer(fList), fCount);
+  inherited Clear;
+end;
+
+procedure TSynObjectList.ClearFromLast;
+var
+  i: PtrInt;
+begin
+  if fOwnObjects then
+    for i := fCount - 1 downto 0 do // call Free in reverse order
+      TObject(fList[i]).Free;
+  inherited Clear;
+end;
+
+destructor TSynObjectList.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+
+{ TSynLocker }
+
+procedure TSynLocker.Init;
+begin
+  fSectionPadding := 0;
+  PaddingUsedCount := 0;
+  InitializeCriticalSection(fSection);
+  fLocked := false;
+  fInitialized := true;
+end;
+
+procedure TSynLocker.Done;
+var
+  i: PtrInt;
+begin
+  for i := 0 to PaddingUsedCount - 1 do
+    if not (integer(Padding[i].VType) in VTYPE_SIMPLE) then
+      VarClear(variant(Padding[i]));
+  DeleteCriticalSection(fSection);
+  fInitialized := false;
+end;
+
+procedure TSynLocker.DoneAndFreeMem;
+begin
+  Done;
+  FreeMem(@self);
+end;
+
+procedure TSynLocker.Lock;
+begin
+  EnterCriticalSection(fSection);
+  fLocked := true;
+end;
+
+procedure TSynLocker.UnLock;
+begin
+  fLocked := false;
+  LeaveCriticalSection(fSection);
+end;
+
+function TSynLocker.TryLock: boolean;
+begin
+  result := not fLocked and (TryEnterCriticalSection(fSection) <> 0);
+end;
+
+function TSynLocker.TryLockMS(retryms: integer): boolean;
+begin
+  repeat
+    result := TryLock;
+    if result or (retryms <= 0) then
+      break;
+    SleepHiRes(1);
+    dec(retryms);
+  until false;
+end;
+
+function TSynLocker.ProtectMethod: IUnknown;
+begin
+//  result := TAutoLock.Create(@self);
+end;
+
+function TSynLocker.GetVariant(Index: integer): Variant;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    result := variant(Padding[Index]);
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    VarClear(result);
+end;
+
+procedure TSynLocker.SetVariant(Index: integer; const Value: Variant);
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    variant(Padding[Index]) := Value;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end;
+end;
+
+function TSynLocker.GetInt64(Index: integer): Int64;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if not VariantToInt64(variant(Padding[Index]), result) then
+      result := 0;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := 0;
+end;
+
+procedure TSynLocker.SetInt64(Index: integer; const Value: Int64);
+begin
+  SetVariant(Index, Value);
+end;
+
+function TSynLocker.GetBool(Index: integer): boolean;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if not VariantToBoolean(variant(Padding[Index]), result) then
+      result := false;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := false;
+end;
+
+procedure TSynLocker.SetBool(Index: integer; const Value: boolean);
+begin
+  SetVariant(Index, Value);
+end;
+
+function TSynLocker.GetUnLockedInt64(Index: integer): Int64;
+begin
+  if (cardinal(Index) >= cardinal(PaddingUsedCount)) or not VariantToInt64(variant(Padding[Index]), result) then
+    result := 0;
+end;
+
+procedure TSynLocker.SetUnlockedInt64(Index: integer; const Value: Int64);
+begin
+  if cardinal(Index) <= high(Padding) then
+  begin
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    variant(Padding[Index]) := Value;
+  end;
+end;
+
+function TSynLocker.GetPointer(Index: integer): Pointer;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    with Padding[Index] do
+      if VType = varUnknown then
+        result := VUnknown
+      else
+        result := nil;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := nil;
+end;
+
+procedure TSynLocker.SetPointer(Index: integer; const Value: Pointer);
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    with Padding[Index] do
+    begin
+      if not (integer(VType) in VTYPE_SIMPLE) then
+        VarClear(PVariant(@VType)^);
+      VType := varUnknown;
+      VUnknown := Value;
+    end;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end;
+end;
+
+function TSynLocker.GetUTF8(Index: integer): RawUTF8;
+var
+  wasString: Boolean;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    VariantToUTF8(variant(Padding[Index]), result, wasString);
+    if not wasString then
+      result := '';
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := '';
+end;
+
+procedure TSynLocker.SetUTF8(Index: integer; const Value: RawUTF8);
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    RawUTF8ToVariant(Value, variant(Padding[Index]));
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end;
+end;
+
+function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    result := 0;
+    if Index < PaddingUsedCount then
+      VariantToInt64(variant(Padding[Index]), result)
+    else
+      PaddingUsedCount := Index + 1;
+    variant(Padding[Index]) := Int64(result + Increment);
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := 0;
+end;
+
+function TSynLocker.LockedExchange(Index: integer; const Value: Variant): Variant;
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    with Padding[Index] do
+    begin
+      if Index < PaddingUsedCount then
+        result := PVariant(@VType)^
+      else
+      begin
+        PaddingUsedCount := Index + 1;
+        VarClear(result);
+      end;
+      PVariant(@VType)^ := Value;
+    end;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    VarClear(result);
+end;
+
+function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): pointer;
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    with Padding[Index] do
+    begin
+      if Index < PaddingUsedCount then
+        if VType = varUnknown then
+          result := VUnknown
+        else
+        begin
+          VarClear(PVariant(@VType)^);
+          result := nil;
+        end
+      else
+      begin
+        PaddingUsedCount := Index + 1;
+        result := nil;
+      end;
+      VType := varUnknown;
+      VUnknown := Value;
+    end;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := nil;
+end;
+
+
+{ TSynPersistentLock }
+
+constructor TSynPersistentLock.Create;
+begin
+  inherited Create;
+  fSafe := NewSynLocker;
+end;
+
+destructor TSynPersistentLock.Destroy;
+begin
+  inherited Destroy;
+  fSafe^.DoneAndFreeMem;
+end;
+
+
+{ TInterfacedObjectLocked }
+
+constructor TInterfacedObjectLocked.Create;
+begin
+  inherited Create;
+  fSafe := NewSynLocker;
+end;
+
+destructor TInterfacedObjectLocked.Destroy;
+begin
+  inherited Destroy;
+  fSafe^.DoneAndFreeMem;
+end;
+
+
+{ TSynObjectListLocked }
+
+constructor TSynObjectListLocked.Create(AOwnsObjects: Boolean);
+begin
+  inherited Create(AOwnsObjects);
+  fSafe.Init;
+end;
+
+destructor TSynObjectListLocked.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
+end;
+
+function TSynObjectListLocked.Add(item: pointer): integer;
+begin
+  Safe.Lock;
+  try
+    result := inherited Add(item);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynObjectListLocked.Remove(item: pointer): integer;
+begin
+  Safe.Lock;
+  try
+    result := inherited Remove(item);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynObjectListLocked.Exists(item: pointer): boolean;
+begin
+  Safe.Lock;
+  try
+    result := inherited Exists(item);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynObjectListLocked.Clear;
+begin
+  Safe.Lock;
+  try
+    inherited Clear;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynObjectListLocked.ClearFromLast;
+begin
+  Safe.Lock;
+  try
+    inherited ClearFromLast;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
 
 { ************ Variable Length Integer Encoding / Decoding }
 
@@ -1780,6 +2979,14 @@ begin // '\uFFF0base64encodedbinary' checked and decode into binary
   else
     result := Base64ToBinSafe(PAnsiChar(Value) + 3, ValueLen - 3, Blob);
 end;
+
+
+
+{ ************ RawUTF8 String Values Interning }
+
+
+{ ************ TSynNameValue Name/Value Storage }
+
 
 
 
