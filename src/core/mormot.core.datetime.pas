@@ -20,10 +20,10 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  Classes,
-  Contnrs,
-  Types,
-  SysUtils,
+  classes,
+  contnrs,
+  types,
+  sysutils,
   mormot.core.base,
   mormot.core.text;
 
