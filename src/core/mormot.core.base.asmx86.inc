@@ -369,186 +369,6 @@ asm // Delphi is not efficient about corresponding pascal code
         pop     ebp
 end;
 
-function Hash32(Data: PCardinalArray; Len: integer): cardinal;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm  // eax=Data edx=Len
-        push    esi
-        push    edi
-        mov     cl, dl
-        mov     ch, dl
-        xor     esi, esi
-        xor     edi, edi
-        test    eax, eax
-        jz      @z
-        shr     edx, 4
-        jz      @by4
-        nop
-@by16:  add     esi, dword ptr[eax]
-        add     edi, esi
-        add     esi, dword ptr[eax+4]
-        add     edi, esi
-        add     esi, dword ptr[eax+8]
-        add     edi, esi
-        add     esi, dword ptr[eax+12]
-        add     edi, esi
-        add     eax, 16
-        dec     edx
-        jnz     @by16
-@by4:   and     cl, 15
-        jz      @0
-        shr     cl, 2
-        jz      @rem
-@4:     add     esi, dword ptr[eax]
-        add     edi, esi
-        add     eax, 4
-        dec     cl
-        jnz     @4
-@rem:   and     ch, 3
-        jz      @0
-        dec     ch
-        jz      @1
-        dec     ch
-        jz      @2
-        mov     eax, dword ptr[eax]
-        and     eax, $ffffff
-        jmp     @e
-@2:     movzx   eax, word ptr[eax]
-        jmp     @e
-@1:     movzx   eax, byte ptr[eax]
-@e:     add     esi, eax
-@0:     add     edi, esi
-        mov     eax, esi
-        shl     edi, 16
-        xor     eax, edi
-@z:     pop     edi
-        pop     esi
-end;
-
-function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm
-        xchg    edx, ecx
-        push    ebp
-        push    edi
-        lea     ebp, [ecx+edx]
-        push    esi
-        push    ebx
-        sub     esp, 8
-        mov     ebx, eax
-        mov     dword ptr [esp], edx
-        lea     eax, [ebx+165667B1H]
-        cmp     edx, 15
-        jbe     @2
-        lea     eax, [ebp-10H]
-        lea     edi, [ebx+24234428H]
-        lea     esi, [ebx-7A143589H]
-        mov     dword ptr [esp+4H], ebp
-        mov     edx, eax
-        lea     eax, [ebx+61C8864FH]
-        mov     ebp, edx
-@1:     mov     edx, dword ptr [ecx]
-        imul    edx, -2048144777
-        add     edi, edx
-        rol     edi, 13
-        imul    edi, -1640531535
-        mov     edx, dword ptr [ecx+4]
-        imul    edx, -2048144777
-        add     esi, edx
-        rol     esi, 13
-        imul    esi, -1640531535
-        mov     edx, dword ptr [ecx+8]
-        imul    edx, -2048144777
-        add     ebx, edx
-        rol     ebx, 13
-        imul    ebx, -1640531535
-        mov     edx, dword ptr [ecx+12]
-        lea     ecx, [ecx+16]
-        imul    edx, -2048144777
-        add     eax, edx
-        rol     eax, 13
-        imul    eax, -1640531535
-        cmp     ebp, ecx
-        jnc     @1
-        rol     edi, 1
-        rol     esi, 7
-        rol     ebx, 12
-        add     esi, edi
-        mov     ebp, dword ptr [esp+4H]
-        ror     eax, 14
-        add     ebx, esi
-        add     eax, ebx
-@2:     lea     esi, [ecx+4H]
-        add     eax, dword ptr [esp]
-        cmp     ebp, esi
-        jc      @4
-        mov     ebx, esi
-        nop
-@3:     imul    edx, dword ptr [ebx-4H], -1028477379
-        add     ebx, 4
-        add     eax, edx
-        ror     eax, 15
-        imul    eax, 668265263
-        cmp     ebp, ebx
-        jnc     @3
-        lea     edx, [ebp-4H]
-        sub     edx, ecx
-        mov     ecx, edx
-        and     ecx, 0FFFFFFFCH
-        add     ecx, esi
-@4:     cmp     ebp, ecx
-        jbe     @6
-@5:     movzx   edx, byte ptr [ecx]
-        add     ecx, 1
-        imul    edx, 374761393
-        add     eax, edx
-        rol     eax, 11
-        imul    eax, -1640531535
-        cmp     ebp, ecx
-        jnz     @5
-        nop
-@6:     mov     edx, eax
-        add     esp, 8
-        shr     edx, 15
-        xor     eax, edx
-        imul    eax, -2048144777
-        pop     ebx
-        pop     esi
-        mov     edx, eax
-        shr     edx, 13
-        xor     eax, edx
-        imul    eax, -1028477379
-        pop     edi
-        pop     ebp
-        mov     edx, eax
-        shr     edx, 16
-        xor     eax, edx
-end;
-
-function GetBitsCountPas(value: PtrInt): PtrInt;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm // branchless Wilkes-Wheeler-Gill i386 asm implementation
-        mov     edx, eax
-        shr     eax, 1
-        and     eax, $55555555
-        sub     edx, eax
-        mov     eax, edx
-        shr     edx, 2
-        and     eax, $33333333
-        and     edx, $33333333
-        add     eax, edx
-        mov     edx, eax
-        shr     eax, 4
-        add     eax, edx
-        and     eax, $0f0f0f0f
-        mov     edx, eax
-        shr     edx, 8
-        add     eax, edx
-        mov     edx, eax
-        shr     edx, 16
-        add     eax, edx
-        and     eax, $3f
-end;
-
 function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=crc, edx=buf, ecx=len
@@ -618,36 +438,6 @@ asm // eax=crc, edx=buf, ecx=len
         pop     ebx
         pop     esi
         pop     edi
-end;
-
-procedure mul64x64(const left, right: QWord; out product: THash128Rec);
-{$ifdef FPC}nostackframe; assembler; {$endif}
-asm // adapted from FPC compiler output, which is much better than Delphi's here
-        mov     ecx, eax
-        mov     eax, dword ptr [ebp+8H]
-        mul     dword ptr [ebp+10H]
-        mov     dword ptr [ecx], eax
-        mov     dword ptr [ebp-4H], edx
-        mov     eax, dword ptr [ebp+8H]
-        mul     dword ptr [ebp+14H]
-        add     eax, dword ptr [ebp-4H]
-        adc     edx, 0
-        mov     dword ptr [ebp-10H], eax
-        mov     dword ptr [ebp-0CH], edx
-        mov     eax, dword ptr [ebp+0CH]
-        mul     dword ptr [ebp+10H]
-        add     eax, dword ptr [ebp-10H]
-        adc     edx, 0
-        mov     dword ptr [ecx+4H], eax
-        mov     dword ptr [ebp-14H], edx
-        mov     eax, dword ptr [ebp+0CH]
-        mul     dword ptr [ebp+14H]
-        add     eax, dword ptr [ebp-0CH]
-        adc     edx, 0
-        add     eax, dword ptr [ebp-14H]
-        adc     edx, 0
-        mov     dword ptr [ecx+8H], eax
-        mov     dword ptr [ecx+0CH], edx
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
@@ -934,29 +724,236 @@ end;
 
 // functions below are always available, even on DARWIN
 
+function Hash32(Data: PCardinalArray; Len: integer): cardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm  // eax=Data edx=Len
+        push    esi
+        push    edi
+        mov     cl, dl
+        mov     ch, dl
+        xor     esi, esi
+        xor     edi, edi
+        test    eax, eax
+        jz      @z
+        shr     edx, 4
+        jz      @by4
+        nop
+@by16:  add     esi, dword ptr[eax]
+        add     edi, esi
+        add     esi, dword ptr[eax+4]
+        add     edi, esi
+        add     esi, dword ptr[eax+8]
+        add     edi, esi
+        add     esi, dword ptr[eax+12]
+        add     edi, esi
+        add     eax, 16
+        dec     edx
+        jnz     @by16
+@by4:   and     cl, 15
+        jz      @0
+        shr     cl, 2
+        jz      @rem
+@4:     add     esi, dword ptr[eax]
+        add     edi, esi
+        add     eax, 4
+        dec     cl
+        jnz     @4
+@rem:   and     ch, 3
+        jz      @0
+        dec     ch
+        jz      @1
+        dec     ch
+        jz      @2
+        mov     eax, dword ptr[eax]
+        and     eax, $ffffff
+        jmp     @e
+@2:     movzx   eax, word ptr[eax]
+        jmp     @e
+@1:     movzx   eax, byte ptr[eax]
+@e:     add     esi, eax
+@0:     add     edi, esi
+        mov     eax, esi
+        shl     edi, 16
+        xor     eax, edi
+@z:     pop     edi
+        pop     esi
+end;
+
+function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        xchg    edx, ecx
+        push    ebp
+        push    edi
+        lea     ebp, [ecx+edx]
+        push    esi
+        push    ebx
+        sub     esp, 8
+        mov     ebx, eax
+        mov     dword ptr [esp], edx
+        lea     eax, [ebx+165667B1H]
+        cmp     edx, 15
+        jbe     @2
+        lea     eax, [ebp-10H]
+        lea     edi, [ebx+24234428H]
+        lea     esi, [ebx-7A143589H]
+        mov     dword ptr [esp+4H], ebp
+        mov     edx, eax
+        lea     eax, [ebx+61C8864FH]
+        mov     ebp, edx
+@1:     mov     edx, dword ptr [ecx]
+        imul    edx, -2048144777
+        add     edi, edx
+        rol     edi, 13
+        imul    edi, -1640531535
+        mov     edx, dword ptr [ecx+4]
+        imul    edx, -2048144777
+        add     esi, edx
+        rol     esi, 13
+        imul    esi, -1640531535
+        mov     edx, dword ptr [ecx+8]
+        imul    edx, -2048144777
+        add     ebx, edx
+        rol     ebx, 13
+        imul    ebx, -1640531535
+        mov     edx, dword ptr [ecx+12]
+        lea     ecx, [ecx+16]
+        imul    edx, -2048144777
+        add     eax, edx
+        rol     eax, 13
+        imul    eax, -1640531535
+        cmp     ebp, ecx
+        jnc     @1
+        rol     edi, 1
+        rol     esi, 7
+        rol     ebx, 12
+        add     esi, edi
+        mov     ebp, dword ptr [esp+4H]
+        ror     eax, 14
+        add     ebx, esi
+        add     eax, ebx
+@2:     lea     esi, [ecx+4H]
+        add     eax, dword ptr [esp]
+        cmp     ebp, esi
+        jc      @4
+        mov     ebx, esi
+        nop
+@3:     imul    edx, dword ptr [ebx-4H], -1028477379
+        add     ebx, 4
+        add     eax, edx
+        ror     eax, 15
+        imul    eax, 668265263
+        cmp     ebp, ebx
+        jnc     @3
+        lea     edx, [ebp-4H]
+        sub     edx, ecx
+        mov     ecx, edx
+        and     ecx, 0FFFFFFFCH
+        add     ecx, esi
+@4:     cmp     ebp, ecx
+        jbe     @6
+@5:     movzx   edx, byte ptr [ecx]
+        add     ecx, 1
+        imul    edx, 374761393
+        add     eax, edx
+        rol     eax, 11
+        imul    eax, -1640531535
+        cmp     ebp, ecx
+        jnz     @5
+        nop
+@6:     mov     edx, eax
+        add     esp, 8
+        shr     edx, 15
+        xor     eax, edx
+        imul    eax, -2048144777
+        pop     ebx
+        pop     esi
+        mov     edx, eax
+        shr     edx, 13
+        xor     eax, edx
+        imul    eax, -1028477379
+        pop     edi
+        pop     ebp
+        mov     edx, eax
+        shr     edx, 16
+        xor     eax, edx
+end;
+
+function GetBitsCountPas(value: PtrInt): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // branchless Wilkes-Wheeler-Gill i386 asm implementation
+        mov     edx, eax
+        shr     eax, 1
+        and     eax, $55555555
+        sub     edx, eax
+        mov     eax, edx
+        shr     edx, 2
+        and     eax, $33333333
+        and     edx, $33333333
+        add     eax, edx
+        mov     edx, eax
+        shr     eax, 4
+        add     eax, edx
+        and     eax, $0f0f0f0f
+        mov     edx, eax
+        shr     edx, 8
+        add     eax, edx
+        mov     edx, eax
+        shr     edx, 16
+        add     eax, edx
+        and     eax, $3f
+end;
+
+procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+{$ifdef FPC}nostackframe; assembler; {$endif}
+asm // adapted from FPC compiler output, which is much better than Delphi's here
+        mov     ecx, eax
+        mov     eax, dword ptr [ebp+8H]
+        mul     dword ptr [ebp+10H]
+        mov     dword ptr [ecx], eax
+        mov     dword ptr [ebp-4H], edx
+        mov     eax, dword ptr [ebp+8H]
+        mul     dword ptr [ebp+14H]
+        add     eax, dword ptr [ebp-4H]
+        adc     edx, 0
+        mov     dword ptr [ebp-10H], eax
+        mov     dword ptr [ebp-0CH], edx
+        mov     eax, dword ptr [ebp+0CH]
+        mul     dword ptr [ebp+10H]
+        add     eax, dword ptr [ebp-10H]
+        adc     edx, 0
+        mov     dword ptr [ecx+4H], eax
+        mov     dword ptr [ebp-14H], edx
+        mov     eax, dword ptr [ebp+0CH]
+        mul     dword ptr [ebp+14H]
+        add     eax, dword ptr [ebp-0CH]
+        adc     edx, 0
+        add     eax, dword ptr [ebp-14H]
+        adc     edx, 0
+        mov     dword ptr [ecx+8H], eax
+        mov     dword ptr [ecx+0CH], edx
+end;
+
 function StrLenSafe(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // slower than StrLenSSE2(), but won't read any byte beyond the string
         mov     edx, eax
         test    eax, eax
         jz      @0
-        xor     eax, eax
-@s:     cmp     byte ptr[eax + edx + 0], 0
+@s:     cmp     byte ptr[eax], 0
         je      @0
-        cmp     byte ptr[eax + edx + 1], 0
+        cmp     byte ptr[eax + 1], 0
         je      @1
-        cmp     byte ptr[eax + edx + 2], 0
+        cmp     byte ptr[eax + 2], 0
         je      @2
-        cmp     byte ptr[eax + edx + 3], 0
+        cmp     byte ptr[eax + 3], 0
         je      @3
         add     eax, 4
         jmp     @s
+@3:     inc     eax
+@2:     inc     eax
 @1:     inc     eax
-        ret
-@0:     rep     ret
-@2:     add     eax, 2
-        ret
-@3:     add     eax, 3
+@0:     sub     eax, edx
 end;
 
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): integer;
@@ -1456,4 +1453,5 @@ asm
 end;
 
 {$endif CPU32DELPHI}
+
 

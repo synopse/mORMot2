@@ -367,74 +367,6 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 {$endif FPC}
 end;
 
-function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-{$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
-        push    rsi
-        push    rdi
-        mov     rdi, rcx
-        mov     rsi, rdx
-{$endif}mov     r8, rsi
-        sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
-        jz      @fail
-        mov     ecx, edi
-        movaps  xmm0, [rip + @for10]
-        movaps  xmm1, [rip + @for13]
-        and     rdi, -16 // check first aligned 16 bytes
-        and     ecx, 15  // lower cl 4 bits indicate misalignment
-        movaps  xmm2, [rdi]
-        movaps  xmm3, xmm2
-        pcmpeqb xmm2, xmm0
-        pcmpeqb xmm3, xmm1
-        por     xmm3, xmm2
-        pmovmskb eax, xmm3
-        shr     eax, cl  // shift out unaligned bytes
-        test    eax, eax
-        jz      @main
-        bsf     eax, eax
-        add     rax, rcx
-        add     rax, rdi
-        sub     rax, rsi
-        jae     @fail   // don't exceed TextEnd
-        add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
-{$ifdef MSWINDOWS}
-        pop     rdi
-        pop     rsi
-{$endif}ret
-@main:  add     rdi, 16
-        sub     rdi, rsi
-        jae     @fail
-        jmp     @by16
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@for10: dq      $0a0a0a0a0a0a0a0a
-        dq      $0a0a0a0a0a0a0a0a
-@for13: dq      $0d0d0d0d0d0d0d0d
-        dq      $0d0d0d0d0d0d0d0d
-@by16:  movaps  xmm2, [rdi + rsi] // check 16 bytes per loop
-        movaps  xmm3, xmm2
-        pcmpeqb xmm2, xmm0
-        pcmpeqb xmm3, xmm1
-        por     xmm3, xmm2
-        pmovmskb eax, xmm3
-        test    eax, eax
-        jnz     @found
-        add     rdi, 16
-        jnc     @by16
-@fail:  mov     rax, r8 // returns TextLen if no CR/LF found
-{$ifdef MSWINDOWS}
-        pop     rdi
-        pop     rsi
-{$endif}ret
-@found: bsf     eax, eax
-        add     rax, rdi
-        jc      @fail
-        add     rax, r8
-{$ifdef MSWINDOWS}
-        pop     rdi
-        pop     rsi
-{$endif}
-end;
-
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         {$ifndef win64}
@@ -513,6 +445,96 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         jnz     @tail
 @e:     not     eax
 end;
+
+function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifndef win64}
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif win64}
+        mov     r10, rdx
+        sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
+        xor     rdx, r10
+        sub     rdx, r10        // rdx=abs(val)
+        cmp     rdx, 10
+        jb      @3              // direct process of common val<10
+        mov     rax, rdx
+        lea     r8, [rip + TwoDigitLookup]
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@s:     lea     rcx, [rcx - 2]
+        cmp     rax, 100
+        jb      @2
+        lea     r9, [rax * 2]
+        shr     rax, 2
+        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
+        mul     rdx
+        shr     rdx, 2
+        mov     rax, rdx
+        imul    rdx, -200
+        lea     rdx, [rdx + r8]
+        movzx   rdx, word ptr[rdx + r9]
+        mov     [rcx], dx
+        cmp     rax, 10
+        jae     @s
+@1:     or      al, '0'
+        mov     byte ptr[rcx - 2], '-'
+        mov     [rcx - 1], al
+        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
+        ret
+@2:     movzx   eax, word ptr[r8 + rax * 2]
+        mov     byte ptr[rcx - 1], '-'
+        mov     [rcx], ax
+        lea     rax, [rcx + r10]           // includes '-' if val<0
+        ret
+@3:     or      dl, '0'
+        mov     byte ptr[rcx - 2], '-'
+        mov     [rcx - 1], dl
+        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
+end;
+
+function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifndef win64}
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif win64}
+        cmp     rdx, 10
+        jb      @3           // direct process of common val<10
+        mov     rax, rdx
+        lea     r8, [rip + TwoDigitLookup]
+@s:     lea     rcx, [rcx - 2]
+        cmp     rax, 100
+        jb      @2
+        lea     r9, [rax * 2]
+        shr     rax, 2
+        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
+        mul     rdx
+        shr     rdx, 2
+        mov     rax, rdx
+        imul    rdx, -200
+        add     rdx, r8
+        movzx   rdx, word ptr[rdx + r9]
+        mov     [rcx], dx
+        cmp     rax, 10
+        jae     @s
+@1:     dec     rcx
+        or      al, '0'
+        mov     [rcx], al
+@0:     mov     rax, rcx
+        ret
+@2:     movzx   eax, word ptr[r8 + rax * 2]
+        mov     [rcx], ax
+        mov     rax, rcx
+        ret
+@3:     lea     rax, [rcx - 1]
+        or      dl, '0'
+        mov     [rax], dl
+end;
+
+{$endif ASMX64}
+
+
+// functions below are always available, even on DARWIN
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
@@ -752,94 +774,73 @@ function StrLenSSE2(S: pointer): PtrInt;
 @null:
 end;
 
-function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifndef win64}
-        mov     rcx, rdi
-        mov     rdx, rsi
-        {$endif win64}
-        mov     r10, rdx
-        sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
-        xor     rdx, r10
-        sub     rdx, r10        // rdx=abs(val)
-        cmp     rdx, 10
-        jb      @3              // direct process of common val<10
-        mov     rax, rdx
-        lea     r8, [rip + TwoDigitLookup]
-{$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@s:     lea     rcx, [rcx - 2]
-        cmp     rax, 100
-        jb      @2
-        lea     r9, [rax * 2]
-        shr     rax, 2
-        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
-        mul     rdx
-        shr     rdx, 2
-        mov     rax, rdx
-        imul    rdx, -200
-        lea     rdx, [rdx + r8]
-        movzx   rdx, word ptr[rdx + r9]
-        mov     [rcx], dx
-        cmp     rax, 10
-        jae     @s
-@1:     or      al, '0'
-        mov     byte ptr[rcx - 2], '-'
-        mov     [rcx - 1], al
-        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
-        ret
-@2:     movzx   eax, word ptr[r8 + rax * 2]
-        mov     byte ptr[rcx - 1], '-'
-        mov     [rcx], ax
-        lea     rax, [rcx + r10]           // includes '-' if val<0
-        ret
-@3:     or      dl, '0'
-        mov     byte ptr[rcx - 2], '-'
-        mov     [rcx - 1], dl
-        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
+function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+{$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
+        push    rsi
+        push    rdi
+        mov     rdi, rcx
+        mov     rsi, rdx
+{$endif}mov     r8, rsi
+        sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
+        jz      @fail
+        mov     ecx, edi
+        movaps  xmm0, [rip + @for10]
+        movaps  xmm1, [rip + @for13]
+        and     rdi, -16 // check first aligned 16 bytes
+        and     ecx, 15  // lower cl 4 bits indicate misalignment
+        movaps  xmm2, [rdi]
+        movaps  xmm3, xmm2
+        pcmpeqb xmm2, xmm0
+        pcmpeqb xmm3, xmm1
+        por     xmm3, xmm2
+        pmovmskb eax, xmm3
+        shr     eax, cl  // shift out unaligned bytes
+        test    eax, eax
+        jz      @main
+        bsf     eax, eax
+        add     rax, rcx
+        add     rax, rdi
+        sub     rax, rsi
+        jae     @fail   // don't exceed TextEnd
+        add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}ret
+@main:  add     rdi, 16
+        sub     rdi, rsi
+        jae     @fail
+        jmp     @by16
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@for10: dq      $0a0a0a0a0a0a0a0a
+        dq      $0a0a0a0a0a0a0a0a
+@for13: dq      $0d0d0d0d0d0d0d0d
+        dq      $0d0d0d0d0d0d0d0d
+@by16:  movaps  xmm2, [rdi + rsi] // check 16 bytes per loop
+        movaps  xmm3, xmm2
+        pcmpeqb xmm2, xmm0
+        pcmpeqb xmm3, xmm1
+        por     xmm3, xmm2
+        pmovmskb eax, xmm3
+        test    eax, eax
+        jnz     @found
+        add     rdi, 16
+        jnc     @by16
+@fail:  mov     rax, r8 // returns TextLen if no CR/LF found
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}ret
+@found: bsf     eax, eax
+        add     rax, rdi
+        jc      @fail
+        add     rax, r8
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}
 end;
-
-function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
-{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifndef win64}
-        mov     rcx, rdi
-        mov     rdx, rsi
-        {$endif win64}
-        cmp     rdx, 10
-        jb      @3           // direct process of common val<10
-        mov     rax, rdx
-        lea     r8, [rip + TwoDigitLookup]
-@s:     lea     rcx, [rcx - 2]
-        cmp     rax, 100
-        jb      @2
-        lea     r9, [rax * 2]
-        shr     rax, 2
-        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
-        mul     rdx
-        shr     rdx, 2
-        mov     rax, rdx
-        imul    rdx, -200
-        add     rdx, r8
-        movzx   rdx, word ptr[rdx + r9]
-        mov     [rcx], dx
-        cmp     rax, 10
-        jae     @s
-@1:     dec     rcx
-        or      al, '0'
-        mov     [rcx], al
-@0:     mov     rax, rcx
-        ret
-@2:     movzx   eax, word ptr[r8 + rax * 2]
-        mov     [rcx], ax
-        mov     rax, rcx
-        ret
-@3:     lea     rax, [rcx - 1]
-        or      dl, '0'
-        mov     [rax], dl
-end;
-
-{$endif ASMX64}
-
-// functions below are always available, even on DARWIN
 
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
@@ -856,7 +857,11 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
         lea     r10, qword ptr[rax - 1] // branchless loop
         lea     r11, qword ptr[rax + 1]
         movzx   ecx, word ptr[rdi + rax * 2]
-        cmp     cx, Value
+        {$ifdef win64}
+        cmp     ecx, r8d
+        {$else}
+        cmp     ecx, edx // 'cmp cx,Value' is silently rejected by Darwin asm
+        {$endif win64}
         je      @ok
         cmovg   R, r10
         cmovl   r9, r11
@@ -920,7 +925,6 @@ asm     .noframe
         {$else}        db $f3,$48,$0f,$B8,$c7 {$endif}
 {$endif FPC}
 end;
-
 function crc32cBy4SSE42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, crc
@@ -1017,9 +1021,9 @@ end;
 
 function RdRand32: cardinal;
 {$ifdef FPC}nostackframe; assembler; asm{$else} asm .noframe {$endif FPC}
-  // rdrand eax: same opcodes for x86 and x64
-  db $0f, $c7, $f0
-  // returns in eax, ignore carry flag (eax=0 won't hurt)
+        // rdrand eax: same opcodes for x86 and x64
+        db $0f, $c7, $f0
+        // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
 
 function Rdtsc: Int64;

@@ -11,6 +11,7 @@ unit mormot.core.base;
     - Common Types Used for Compatibility Between Compilers and CPU
     - Numbers (floats and integers) Low-level Definitions
     - Integer Arrays Manipulation
+    - ObjArray PtrArray InterfaceArray Wrapper Functions
     - Low-level Types Mapping Binary or Bits Structures
     - Buffers (e.g. Hashing) Functions
     - Date / Time Processing
@@ -30,11 +31,11 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  Variants,
-  Classes,
-  Contnrs,
-  Types,
-  SysUtils;
+  variants,
+  classes,
+  contnrs,
+  types,
+  sysutils;
 
 
 
@@ -207,18 +208,19 @@ type
   /// SynUnicode is the fastest available Unicode native string type, depending
   //  on the compiler used
   // - this type is native to the compiler, so you can use Length() Copy() and
-  //   such functions with it (this is not possible with RawUnicodeString type)
+  // such functions with it (this is not possible with RawUnicodeString type)
   // - before Delphi 2009+, it uses slow OLE compatible WideString
-  //   (with our Enhanced RTL, WideString allocation can be made faster by using
-  //   an internal caching mechanism of allocation buffers - WideString allocation
-  //   has been made much faster since Windows Vista/Seven)
+  // (with our Enhanced RTL, WideString allocation can be made faster by using
+  // an internal caching mechanism of allocation buffers - WideString allocation
+  // has been made much faster since Windows Vista/Seven)
   // - starting with Delphi 2009, it uses fastest UnicodeString type, which
-  //   allow Copy On Write, Reference Counting and fast heap memory allocation
-  {$ifdef UNICODE}
+  // allow Copy On Write, Reference Counting and fast heap memory allocation
+  // - on recent FPC, HASVARUSTRING is defined and native UnicodeString is set
+  {$ifdef HASVARUSTRING}
   SynUnicode = UnicodeString;
   {$else}
   SynUnicode = WideString;
-  {$endif UNICODE}
+  {$endif HASVARUSTRING}
 
   PRawUnicode = ^RawUnicode;
   PRawJSON = ^RawJSON;
@@ -235,7 +237,7 @@ type
   PPUTF8Char = ^PUTF8Char;
 
   /// a Row/Col array of PUTF8Char, for containing sqlite3_get_table() result
-  TPUtf8CharArray = array[0..MaxInt div SizeOf(PUTF8Char)-1] of PUTF8Char;
+  TPUtf8CharArray = array[0 .. MaxInt div SizeOf(PUTF8Char) - 1 ] of PUTF8Char;
   PPUtf8CharArray = ^TPUtf8CharArray;
 
   /// a dynamic array of PUTF8Char pointers
@@ -252,9 +254,9 @@ type
   /// a TVarData values array
   // - is not called TVarDataArray to avoid confusion with the corresponding
   // type already defined in Variants.pas, and used for custom late-binding
-  TVarDataStaticArray = array[0..MaxInt div SizeOf(TVarData)-1] of TVarData;
+  TVarDataStaticArray = array[0 .. MaxInt div SizeOf(TVarData) - 1 ] of TVarData;
   PVarDataStaticArray = ^TVarDataStaticArray;
-  TVariantArray = array[0..MaxInt div SizeOf(Variant)-1] of Variant;
+  TVariantArray = array[0 .. MaxInt div SizeOf(Variant) - 1 ] of Variant;
   PVariantArray = ^TVariantArray;
   TVariantDynArray = array of variant;
 
@@ -325,44 +327,46 @@ type
   PObject = ^TObject;
   PClass = ^TClass;
   PByteArray = ^TByteArray;
-  TByteArray = array[0..MaxInt-1] of Byte; // redefine here with {$R-}
+  TByteArray = array[0 .. MaxInt - 1] of Byte; // redefine here with {$R-}
   PBooleanArray = ^TBooleanArray;
-  TBooleanArray = array[0..MaxInt-1] of Boolean;
-  TWordArray  = array[0..MaxInt div SizeOf(word)-1] of word;
+  TBooleanArray = array[0 .. MaxInt - 1] of Boolean;
+  TWordArray  = array[0 .. MaxInt div SizeOf(word) - 1 ] of word;
   PWordArray = ^TWordArray;
-  TIntegerArray = array[0..MaxInt div SizeOf(integer)-1] of integer;
+  TIntegerArray = array[0 .. MaxInt div SizeOf(integer) - 1 ] of integer;
   PIntegerArray = ^TIntegerArray;
   PIntegerArrayDynArray = array of PIntegerArray;
-  TPIntegerArray = array[0..MaxInt div SizeOf(PIntegerArray)-1] of PInteger;
+  TPIntegerArray = array[0 .. MaxInt div SizeOf(PIntegerArray) - 1 ] of PInteger;
   PPIntegerArray = ^TPIntegerArray;
-  TCardinalArray = array[0..MaxInt div SizeOf(cardinal)-1] of cardinal;
+  TCardinalArray = array[0 .. MaxInt div SizeOf(cardinal) - 1 ] of cardinal;
   PCardinalArray = ^TCardinalArray;
-  TInt64Array = array[0..MaxInt div SizeOf(Int64)-1] of Int64;
+  TInt64Array = array[0 .. MaxInt div SizeOf(Int64) - 1 ] of Int64;
   PInt64Array = ^TInt64Array;
-  TQWordArray = array[0..MaxInt div SizeOf(QWord)-1] of QWord;
+  TQWordArray = array[0 .. MaxInt div SizeOf(QWord) - 1 ] of QWord;
   PQWordArray = ^TQWordArray;
-  TPtrUIntArray = array[0..MaxInt div SizeOf(PtrUInt)-1] of PtrUInt;
+  TPtrUIntArray = array[0 .. MaxInt div SizeOf(PtrUInt) - 1 ] of PtrUInt;
   PPtrUIntArray = ^TPtrUIntArray;
-  TSmallIntArray = array[0..MaxInt div SizeOf(SmallInt)-1] of SmallInt;
+  TSmallIntArray = array[0 .. MaxInt div SizeOf(SmallInt) - 1 ] of SmallInt;
   PSmallIntArray = ^TSmallIntArray;
-  TSingleArray = array[0..MaxInt div SizeOf(Single)-1] of Single;
+  TSingleArray = array[0 .. MaxInt div SizeOf(Single) - 1 ] of Single;
   PSingleArray = ^TSingleArray;
-  TDoubleArray = array[0..MaxInt div SizeOf(Double)-1] of Double;
+  TDoubleArray = array[0 .. MaxInt div SizeOf(Double) - 1 ] of Double;
   PDoubleArray = ^TDoubleArray;
-  TDateTimeArray = array[0..MaxInt div SizeOf(TDateTime)-1] of TDateTime;
+  TDateTimeArray = array[0 .. MaxInt div SizeOf(TDateTime) - 1 ] of TDateTime;
   PDateTimeArray = ^TDateTimeArray;
-  TPAnsiCharArray = array[0..MaxInt div SizeOf(PAnsiChar)-1] of PAnsiChar;
+  TPAnsiCharArray = array[0 .. MaxInt div SizeOf(PAnsiChar) - 1 ] of PAnsiChar;
   PPAnsiCharArray = ^TPAnsiCharArray;
-  TRawUTF8Array = array[0..MaxInt div SizeOf(RawUTF8)-1] of RawUTF8;
+  TRawUTF8Array = array[0 .. MaxInt div SizeOf(RawUTF8) - 1 ] of RawUTF8;
   PRawUTF8Array = ^TRawUTF8Array;
-  TRawByteStringArray = array[0..MaxInt div SizeOf(RawByteString)-1] of RawByteString;
+  TRawByteStringArray = array[0 .. MaxInt div SizeOf(RawByteString) - 1 ] of RawByteString;
   PRawByteStringArray = ^TRawByteStringArray;
-  PShortStringArray = array[0..MaxInt div SizeOf(pointer)-1] of PShortString;
-  PointerArray = array [0..MaxInt div SizeOf(Pointer)-1] of Pointer;
+  PShortStringArray = array[0 .. MaxInt div SizeOf(pointer) - 1 ] of PShortString;
+  PointerArray = array [0 .. MaxInt div SizeOf(Pointer) - 1 ] of Pointer;
   PPointerArray = ^PointerArray;
-  TObjectArray = array [0..MaxInt div SizeOf(TObject)-1] of TObject;
+  TClassArray = array[0 .. MaxInt div SizeOf(TClass) - 1 ] of TClass;
+  PClassArray = ^TClassArray;
+  TObjectArray = array [0 .. MaxInt div SizeOf(TObject) - 1 ] of TObject;
   PObjectArray = ^TObjectArray;
-  TPtrIntArray = array[0..MaxInt div SizeOf(PtrInt)-1] of PtrInt;
+  TPtrIntArray = array[0 .. MaxInt div SizeOf(PtrInt) - 1 ] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
   PInt64Rec = ^Int64Rec;
   PPShortString = ^PShortString;
@@ -394,28 +398,77 @@ type
   TRefCnt = {$ifdef FPC} SizeInt {$else} longint {$endif};
   /// pointer to cross-compiler type used for string/dynarray reference counter
   PRefCnt = ^TRefCnt;
+
   /// cross-compiler type used for string length
-  TStrLen = {$ifdef FPC}SizeInt{$else}longint{$endif};
+  TStrLen = {$ifdef FPC} SizeInt {$else} longint {$endif};
   /// pointer to cross-compiler type used for string length
   PStrLen = ^TStrLen;
+  
+  /// pointer to cross-compiler type used for dynamic array length
+  PDALen = ^PtrInt;
+
+  type
+    /// map the Delphi/FPC string header (stored before each instance)
+    // - defined here to avoid linking mormot.core.rtti.pas
+  {$ifdef FPC}
+    {$packrecords c} // as expected by FPC's RTTI record definitions
+    TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+    {$ifdef HASCODEPAGE}
+      codePage: TSystemCodePage; // =Word
+      elemSize: Word;
+      {$ifdef CPU64}
+      _PaddingToQWord: DWord;
+      {$endif}
+    {$endif HASCODEPAGE}
+      refCnt: TRefCnt; // =SizeInt
+      length: SizeInt;
+    end;
+  {$else FPC}
+    TStrRec = packed record
+   {$ifdef HASCODEPAGE}
+      {$ifdef CPU64}
+      _Padding: LongInt;
+      {$endif}
+      codePage: Word;
+      elemSize: Word;
+    {$endif HASCODEPAGE}
+      refCnt: TRefCnt;
+      length: Longint;
+    end;
+  {$endif FPC}
+    PStrRec = ^TStrRec;
+
+  const
+    /// codePage offset = string header size
+    // - used to calc the beginning of memory allocation of a string
+    _STRRECSIZE = SizeOf(TStrRec);
 
 const
   /// cross-compiler negative offset to TStrRec.length field
+  // - to be used inlined e.g. as PStrLen(p - _STRLEN)^
   _STRLEN = SizeOf(TStrLen);
+
   /// cross-compiler negative offset to TDynArrayRec.high/length field
+  // - to be used inlined e.g. as
+  // ! PDALen(PtrUInt(Values) - _DALEN)^ {$ifdef FPC} + 1 {$endif}
   _DALEN = SizeOf(PtrInt);
+  
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
-  _DAREFCNT = Sizeof(TRefCnt)+_DALEN;
+  // - to be used inlined e.g. as PRefCnt(PtrUInt(Values) - _DAREFCNT)^
+  _DAREFCNT = Sizeof(TRefCnt) + _DALEN;
+
+{$ifndef CPUARM}
+type
+  /// used as ToByte() to properly truncate any integer into 8-bit
+  // - is defined as an inlined "and 255" function under ARM to work as expected
+  ToByte = byte;
+{$else}
+function ToByte(value: cardinal): cardinal; inline;
+{$endif CPUARM}
 
 const
   /// a TGUID containing '{00000000-0000-0000-0000-00000000000}'
   GUID_NULL: TGUID = ();
-
-/// returns TRUE if Value is nil or all supplied Values[] equal ''
-function IsZero(const Values: TRawUTF8DynArray): boolean; overload;
-
-/// fill all entries of a supplied array of RawUTF8 with ''
-procedure FillZero(var Values: TRawUTF8DynArray); overload;
 
 /// fill a GUID with 0
 procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endif}
@@ -439,7 +492,7 @@ function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: 
 // - returning the newly inserted index in guids[], or an existing index in
 // guids[] if NoDuplicates is TRUE and TGUID already exists
 function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
-  NoDuplicates: boolean=false): integer;
+  NoDuplicates: boolean = false): integer;
 
 /// compute a random GUID value
 procedure RandomGUID(out result: TGUID); overload;
@@ -476,6 +529,18 @@ procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
 function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// just a wrapper around vmtClassName to avoid a string conversion
+function ClassNameShort(C: TClass): PShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// just a wrapper around vmtClassName to avoid a string conversion
+function ClassNameShort(Instance: TObject): PShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// just a wrapper around vmtParent to avoid a function call
+// - slightly faster than TClass.ClassParent thanks to proper inlining
+function GetClassParent(C: TClass): TClass;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************ Numbers (floats and integers) Low-level Definitions }
@@ -522,24 +587,26 @@ type
     D, M: cardinal;
   end;
 
-  {$ifdef CPUARM}
-  // ARM does not support 80bit extended -> 64bit double is enough for us
-  TSynExtended = double;
-  {$else}
+  {$ifdef CPUINTEL}
   {$ifdef CPU64}
   TSynExtended = double;
   {$else}
   /// the floating-point type to be used for best precision and speed
   // - will allow to fallback to double e.g. on x64 and ARM CPUs
   TSynExtended = extended;
-  {$endif}
-  {$endif}
+  {$endif CPU64}
+  {$else}
+  // ARM does not support 80bit extended -> 64bit double is enough for us
+  TSynExtended = double;
+  {$endif CPUINTEL}
+
   /// the non-number values potentially stored in an IEEE floating point
   TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
+
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-  /// will actually change anything only on FPC ARM/Aarch64 plaforms
+  /// unaligned() will be defined and useful only on FPC ARM/Aarch64 plaforms
   unaligned = Double;
-  {$endif}
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 /// simple wrapper to efficiently compute result.D = Y div 100 and result.M = Y mod 100 
 procedure Div100(Y: cardinal; var result: TDiv100Rec);
@@ -623,18 +690,18 @@ function GetExtended(P: PUTF8Char): TSynExtended; overload;
 /// get the signed 32-bit integer value stored in a RawUTF8 string
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
-function UTF8ToInteger(const value: RawUTF8; Default: PtrInt=0): PtrInt; overload;
+function UTF8ToInteger(const value: RawUTF8; Default: PtrInt = 0): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 64-bit integer value stored in a RawUTF8 string
 // - returns the default value if the supplied text was not successfully
 // converted into an Int64
-function UTF8ToInt64(const text: RawUTF8; const default: Int64=0): Int64;
+function UTF8ToInt64(const text: RawUTF8; const default: Int64 = 0): Int64;
 
 /// get and check range of a signed 32-bit integer stored in a RawUTF8 string
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
-function UTF8ToInteger(const value: RawUTF8; min,max: PtrInt; default: PtrInt=0): PtrInt; overload;
+function UTF8ToInteger(const value: RawUTF8; min,max: PtrInt; default: PtrInt = 0): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 32-bit integer value stored in a RawUTF8 string
@@ -918,24 +985,24 @@ function FastLocateWordSorted(P: PWordArray; R: integer; Value: word): PtrInt;
 // - if CoValues is set, its content will be moved to allow inserting a new
 // value at CoValues[result] position
 function AddSortedInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: integer; CoValues: PIntegerDynArray=nil): PtrInt; overload;
+  Value: integer; CoValues: PIntegerDynArray = nil): PtrInt; overload;
 
 /// add an integer value in a sorted dynamic array of integers
 // - overloaded function which do not expect an external Count variable
 function AddSortedInteger(var Values: TIntegerDynArray;
-  Value: integer; CoValues: PIntegerDynArray=nil): PtrInt; overload;
+  Value: integer; CoValues: PIntegerDynArray = nil): PtrInt; overload;
 
 /// insert an integer value at the specified index position of a dynamic array
 // of integers
 // - if Index is invalid, the Value is inserted at the end of the array
 function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: Integer; Index: PtrInt; CoValues: PIntegerDynArray=nil): PtrInt;
+  Value: Integer; Index: PtrInt; CoValues: PIntegerDynArray = nil): PtrInt;
 
 /// add an integer value at the end of a dynamic array of integers
 // - returns TRUE if Value was added successfully in Values[], in this case
 // length(Values) will be increased
 function AddInteger(var Values: TIntegerDynArray; Value: integer;
-  NoDuplicates: boolean=false): boolean; overload;
+  NoDuplicates: boolean = false): boolean; overload;
 
 /// add an integer value at the end of a dynamic array of integers
 // - this overloaded function will use a separate Count variable (faster)
@@ -986,13 +1053,13 @@ procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; 
 // - Excluded is declared as var, since it will be sorted in-place during process
 // if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
 procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
-  ExcludedSortSize: Integer=32);
+  ExcludedSortSize: Integer = 32);
 
 /// ensure some 32-bit integer from Values[] will only contain Included[]
 // - Included is declared as var, since it will be sorted in-place during process
 // if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
 procedure IncludeInteger(var Values, Included: TIntegerDynArray;
-  IncludedSortSize: Integer=32);
+  IncludedSortSize: Integer = 32);
 
 /// sort and remove any 32-bit duplicated integer from Values[]
 procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
@@ -1020,13 +1087,13 @@ procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Inde
 // - Excluded is declared as var, since it will be sorted in-place during process
 // if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
-  ExcludedSortSize: Integer=32);
+  ExcludedSortSize: Integer = 32);
 
 /// ensure some 64-bit integer from Values[] will only contain Included[]
 // - Included is declared as var, since it will be sorted in-place during process
 // if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
 procedure IncludeInt64(var Values, Included: TInt64DynArray;
-  IncludedSortSize: Integer=32);
+  IncludedSortSize: Integer = 32);
 
 /// sort and remove any 64-bit duplicated integer from Values[]
 procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
@@ -1044,10 +1111,10 @@ procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
 
 /// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
-  MaxStart: integer=-1): Integer;
+  MaxStart: Integer = -1): integer;
 
 /// sum all 32-bit integers in Values[]
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): Integer;
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): integer;
 
 /// fill already allocated Reversed[] so that Reversed[Values[i]]=i
 procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
@@ -1098,9 +1165,9 @@ function FromU64(const Values: array of QWord): TQWordDynArray;
 
 type
   /// used to store and retrieve Words in a sorted array
-  // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TSortedWordArray = record
-    {$else}TSortedWordArray = object{$endif}
+  // - this "object" (i.e. record with methods) should be filled with zeros
+  // before use - e.g. when defined as a private member of a class
+  TSortedWordArray = object
   public
     /// the actual 16-bit word storage
     Values: TWordDynArray;
@@ -1117,9 +1184,9 @@ type
   PSortedWordArray = ^TSortedWordArray;
 
   /// used to store and retrieve Integers in a sorted array
-  // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TSortedIntegerArray = record
-    {$else}TSortedIntegerArray = object{$endif}
+  // - this "object" (i.e. record with methods) should be filled with zeros
+  // before use - e.g. when defined as a private member of a class
+  TSortedIntegerArray = object
   public
     /// the actual 32-bit integers storage
     Values: TIntegerDynArray;
@@ -1149,6 +1216,177 @@ function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
 /// compute GCD of two integers using substraction-based Euclidean algorithm
 function gcd(a, b: cardinal): cardinal;
 
+
+{ ************ ObjArray PtrArray InterfaceArray Wrapper Functions }
+
+/// wrapper to add an item to a array of pointer dynamic array storage
+function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to add once an item to a array of pointer dynamic array storage
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
+
+/// wrapper to delete an item from a array of pointer dynamic array storage
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger=nil): integer; overload;
+
+/// wrapper to delete an item from a array of pointer dynamic array storage
+procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger=nil); overload;
+
+/// wrapper to find an item to a array of pointer dynamic array storage
+function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+
+/// wrapper to add an item to a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - could be used as such (note the T*ObjArray type naming convention):
+// ! TUserObjArray = array of TUser;
+// ! ...
+// ! var arr: TUserObjArray;
+// !     user: TUser;
+// ! ..
+// ! try
+// !   user := TUser.Create;
+// !   user.Name := 'Name';
+// !   index := ObjArrayAdd(arr,user);
+// ! ...
+// ! finally
+// !   ObjArrayClear(arr); // release all items
+// ! end;
+// - return the index of the item in the dynamic array
+function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to add items to a T*ObjArray dynamic array storage
+// - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
+// - return the new number of the items in aDestObjArray
+function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+
+/// wrapper to add and move items to a T*ObjArray dynamic array storage
+// - aSourceObjArray[] items will be owned by aDestObjArray[], therefore
+// aSourceObjArray is set to nil
+// - return the new number of the items in aDestObjArray
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
+
+/// wrapper to add an item to a T*ObjArray dynamic array storage
+// - this overloaded function will use a separated variable to store the items
+// count, so will be slightly faster: but you should call SetLength() when done,
+// to have an array as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - return the index of the item in the dynamic array
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
+
+/// wrapper to add once an item to a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - if the object is already in the array (searching by address/reference,
+// not by content), return its current index in the dynamic array
+// - if the object does not appear in the array, add it at the end
+procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
+
+// - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
+// - will first check if aSourceObjArray[] items are not already in aDestObjArray
+// - return the new number of the items in aDestObjArray
+function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+
+/// wrapper to set the length of a T*ObjArray dynamic array storage
+// - could be used as an alternative to SetLength() when you do not
+// know the exact T*ObjArray type
+procedure ObjArraySetLength(var aObjArray; aLength: integer);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to search an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - returns -1 if the item is not found in the dynamic array
+function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to search an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - returns -1 if the item is not found in the dynamic array
+function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to count all not nil items in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+function ObjArrayCount(const aObjArray): integer;
+
+/// wrapper to delete an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - do nothing if the index is out of range in the dynamic array
+procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
+  aContinueOnException: boolean=false; aCount: PInteger=nil); overload;
+
+/// wrapper to delete an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - do nothing if the item is not found in the dynamic array
+function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt; overload;
+
+/// wrapper to delete an item in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - search is performed by address/reference, not by content
+// - do nothing if the item is not found in the dynamic array
+function ObjArrayDelete(var aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
+
+/// wrapper to release all items stored in a T*ObjArray dynamic array
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - you should always use ObjArrayClear() before the array storage is released,
+// e.g. in the owner class destructor
+// - will also set the dynamic array length to 0, so could be used to re-use
+// an existing T*ObjArray
+procedure ObjArrayClear(var aObjArray); overload;
+
+/// wrapper to release all items stored in a T*ObjArray dynamic array
+// - this overloaded function will use the supplied array length as parameter
+// - you should always use ObjArrayClear() before the array storage is released,
+// e.g. in the owner class destructor
+// - will also set the dynamic array length to 0, so could be used to re-use
+// an existing T*ObjArray
+procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
+
+/// wrapper to release all items stored in a T*ObjArray dynamic array
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - you should always use ObjArrayClear() before the array storage is released,
+// e.g. in the owner class destructor
+// - will also set the dynamic array length to 0, so could be used to re-use
+// an existing T*ObjArray
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean;
+  aCount: PInteger=nil); overload;
+
+/// wrapper to release all items stored in an array of T*ObjArray dynamic array
+// - e.g. aObjArray may be defined as "array of array of TSynFilter"
+procedure ObjArrayObjArrayClear(var aObjArray);
+
+/// wrapper to release all items stored in several T*ObjArray dynamic arrays
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+procedure ObjArraysClear(const aObjArray: array of pointer);
+
+/// low-level function calling FreeAndNil(o^) successively n times
+procedure RawObjectsClear(o: PObject; n: integer);
+
+
+/// wrapper to add an item to a T*InterfaceArray dynamic array storage
+function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): PtrInt;
+
+/// wrapper to add once an item to a T*InterfaceArray dynamic array storage
+procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
+
+/// wrapper to search an item in a T*InterfaceArray dynamic array storage
+// - search is performed by address/reference, not by content
+// - return -1 if the item is not found in the dynamic array, or the index of
+// the matching entry otherwise
+function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// wrapper to delete an item in a T*InterfaceArray dynamic array storage
+// - search is performed by address/reference, not by content
+// - do nothing if the item is not found in the dynamic array
+function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt; overload;
+
+/// wrapper to delete an item in a T*InterfaceArray dynamic array storage
+// - do nothing if the item is not found in the dynamic array
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt); overload;
 
 
 { ************ Low-level Types Mapping Binary Structures }
@@ -1220,7 +1458,7 @@ type
 
   /// map an infinite array of 128-bit hash values
   // - each item consumes 16 bytes of memory
-  THash128Array = array[0..(maxInt div SizeOf(THash128))-1] of THash128;
+  THash128Array = array[0 .. maxInt div SizeOf(THash128) - 1] of THash128;
   /// pointer to an infinite array of 128-bit hash values
   PHash128Array = ^THash128Array;
   /// store several 128-bit hash values
@@ -1245,7 +1483,7 @@ type
 
   /// map an infinite array of 256-bit hash values
   // - each item consumes 32 bytes of memory
-  THash256Array = array[0..(maxInt div SizeOf(THash256))-1] of THash256;
+  THash256Array = array[0 .. maxInt div SizeOf(THash256)- 1] of THash256;
   /// pointer to an infinite array of 256-bit hash values
   PHash256Array = ^THash256Array;
   /// store several 256-bit hash values
@@ -1271,7 +1509,7 @@ type
 
   /// map an infinite array of 512-bit hash values
   // - each item consumes 64 bytes of memory
-  THash512Array = array[0..(maxInt div SizeOf(THash512))-1] of THash512;
+  THash512Array = array[0 .. maxInt div SizeOf(THash512) - 1] of THash512;
   /// pointer to an infinite array of 512-bit hash values
   PHash512Array = ^THash512Array;
   /// store several 512-bit hash values
@@ -1477,7 +1715,7 @@ type
   // - the compiler will generate bt/btr/bts opcodes
   TBits8 = set of 0..7;
   PBits8 = ^TBits8;
-  TBits8Array = array[0..maxInt-1] of TBits8;
+  TBits8Array = array[0 .. MaxInt - 1] of TBits8;
   /// fast access to 32-bit integer bits
   // - the compiler will generate bt/btr/bts opcodes
   TBits32 = set of 0..31;
@@ -1602,6 +1840,13 @@ var
 // introduced in latest updates
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 
+/// fill all bytes of a memory buffer with zero
+// - is expected to be used with a constant count from SizeOf() so that
+// inlining make it more efficient than FillCharFast(..,...,0):
+// ! FillZero(variable,SizeOf(variable));
+procedure FillZero(var dest; count: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
@@ -1635,9 +1880,19 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = Compar
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+{$ifndef CPUX86}
+/// low-level function used when inlining PosEx()
+function PosExPas(pSub, p: PUTF8Char; Offset: PtrUInt): PtrInt;
+{$endif CPUX86}
+
 /// faster RawUTF8 Equivalent of standard StrUtils.PosEx
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): PtrInt;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+{$ifdef UNICODE}
+/// low-level function used when inlining PosExString()
+function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
+{$endif UNICODE}
 
 /// our own PosEx() function dedicated to VCL/LCL string process
 // - Delphi XE or older don't support Pos() with an Offset
@@ -1678,8 +1933,8 @@ type
   public
     rs1, rs2, rs3, seedcount: cardinal;
     /// force an immediate seed of the generator from current system state
-    // - should be called before any call to the Next method
-    // - on supported Intel/AMD CPUs, will call RdRand32 to gather some entropy
+    // - should be executed before any call to the Next method
+    // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray; entropylen: PtrInt);
     /// compute the next 32-bit generated value
     // - will automatically reseed after around 65,000 generated values
@@ -1691,7 +1946,8 @@ type
 
 /// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
 // - this function will use well documented and proven Pierre L'Ecuyer software
-// generator - which happens to be faster (and safer) than RDRAND opcode
+// generator - which happens to be faster (and safer) than RDRAND opcode (which
+// is used for seeding anyway)
 // - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
 // - thread-safe function: each thread will maintain its own TLecuyer table
 function Random32: cardinal; overload;
@@ -1706,8 +1962,9 @@ function Random32(max: cardinal): cardinal; overload;
 // - you can specify some additional entropy buffer; note that calling this
 // function with the same entropy again WON'T seed the generator with the same
 // sequence (as with RTL's RandomSeed function), but initiate a new one
+// - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
 // - thread-specific function: each thread will maintain its own seed table
-procedure Random32Seed(entropy: pointer=nil; entropylen: PtrInt=0);
+procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 
 /// fill some memory buffer with random values
 // - the destination buffer is expected to be allocated as 32-bit items
@@ -1775,11 +2032,12 @@ type
   end;
 
 /// compute the line length from a size-delimited source array of chars
-// - will use fast assembly on x86-64 CPU, and expects TextEnd to be not nil
+// - will use fast assembly on x86-64 CPU
 // - is likely to read some bytes after the TextEnd buffer, so GetLineSize()
 // from mormot.core.text may be preferred, e.g. on memory mapped files
+// - expects Text and TextEnd to be not nil - see GetLineSize() instead
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
-  {$ifndef ASMX64}{$ifdef FPC}inline;{$endif}{$endif}
+  {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
   
 type
   /// function prototype to be used for hashing of an element
@@ -1928,6 +2186,11 @@ function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 // - will use optimized asm for x86/x64, or a pascal version on other CPUs
 function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
 
+/// shuffle a 32-bit value using the last stage of xxHash32 algorithm
+// - is a cascade of binary shifts and multiplications by prime numbers
+function xxHash32Mixup(crc: cardinal): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+
 var
   /// the default hasher used by TDynArrayHashed
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
@@ -1958,7 +2221,7 @@ const
   {$endif}
 
   /// this variant type will map the current string type
-  // - depending on the compiler version
+  // - depending on the compiler string definition (UnicodeString or AnsiString)
   {$ifdef UNICODE}
   varNativeString = varUString;
   {$else}
@@ -1976,8 +2239,14 @@ const
   VTYPE_STATIC = $BFE8;
 
   /// those TVarData.VType values are meant to be direct values
-  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64];
+  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
 
+  /// a slightly faster alternative to Variants.Null function with TVarData
+  NullVarData: TVarData = (VType: varNull);
+  
+var
+  /// a slightly faster alternative to Variants.Null function
+  Null: variant absolute NullVarData;
 
 {$ifdef FPC}
 /// overloaded function which can be properly inlined
@@ -1988,7 +2257,6 @@ procedure VarClear(var v: variant); inline;
 // - will return TRUE for all simple values after varByRef unreference, and
 // copying the unreferenced Source value into Dest raw storage
 // - will return FALSE for not varByRef values, or complex values (e.g. string)
-
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
   {$ifdef HASINLINE} inline;{$endif}
 
@@ -1996,7 +2264,6 @@ function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): 
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
 // Value variable content
-
 function VariantToInteger(const V: Variant; var Value: integer): boolean;
 
 /// convert any numerical Variant into a 64-bit integer
@@ -2027,6 +2294,16 @@ function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return the supplied DefaultValue
 function VariantToIntegerDef(const V: Variant; DefaultValue: integer): integer; overload;
+
+/// convert an UTF-8 encoded text buffer into a variant RawUTF8 varString
+procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant); overload;
+
+/// convert an UTF-8 encoded string into a variant RawUTF8 varString
+procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
+
+/// convert an UTF-8 encoded string into a variant RawUTF8 varString
+function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************ Some Convenient TStream descendants }
@@ -2094,25 +2371,12 @@ implementation
 
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
-function IsZero(const Values: TRawUTF8DynArray): boolean;
-var
-  i: integer;
+{$ifdef CPUARM}
+function ToByte(value: cardinal): cardinal;
 begin
-  result := false;
-  for i := 0 to length(Values) - 1 do
-    if Values[i] <> '' then
-      exit;
-  result := true;
+  result := value and $ff;
 end;
-
-procedure FillZero(var Values: TRawUTF8DynArray);
-var
-  i: integer;
-begin
-  for i := 0 to length(Values) - 1 do    {$ifdef FPC}
-    Finalize(Values[i]); {$else}
-  Values[i] := ''; {$endif}
-end;
+{$endif CPUARM}
 
 function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
   guid1, guid2: TGUID): Boolean;
@@ -2182,36 +2446,6 @@ begin // algorithm similar to TFPList.Expand for the increasing ranges
     inc(result, 16 shl 20);
 end;
 
-// some definitions extracted from mormot.core.rtti.pas
-type
-  /// map the Delphi/FPC string header (stored before each instance)
-{$ifdef FPC}
-  {$packrecords c} // as expected by FPC's RTTI record definitions
-  TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
-  {$ifdef HASCODEPAGE}
-    codePage: TSystemCodePage; // =Word
-    elemSize: Word;
-    {$ifdef CPU64}
-    _PaddingToQWord: DWord;
-    {$endif}
-  {$endif HASCODEPAGE}
-    refCnt: TRefCnt; // =SizeInt
-    length: SizeInt;
-  end;
-{$else FPC}
-  TStrRec = packed record
- {$ifdef HASCODEPAGE}
-    {$ifdef CPU64}
-    _Padding: LongInt;
-    {$endif}
-    codePage: Word;
-    elemSize: Word;
-  {$endif HASCODEPAGE}
-    refCnt: TRefCnt;
-    length: Longint;
-  end;
-{$endif FPC}
-  PStrRec = ^TStrRec;
 
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 var
@@ -2284,6 +2518,27 @@ begin
   UniqueString(UTF8); // @UTF8[1] won't call UniqueString() under FPC :(
   {$endif FPC}
   result := @UTF8[1];
+end;
+
+function ClassNameShort(C: TClass): PShortString;
+// new TObject.ClassName is UnicodeString (since Delphi 2009) -> inline code
+// with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
+begin
+  result := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^;
+end;
+
+function ClassNameShort(Instance: TObject): PShortString;
+begin
+  result := PPointer(PPtrInt(Instance)^ + vmtClassName)^;
+end;
+
+function GetClassParent(C: TClass): TClass;
+begin
+  result := PPointer(PtrInt(PtrUInt(C)) + vmtParent)^;
+  {$ifndef HASDIRECTTYPEINFO} // e.g. for Delphi and newer FPC
+  if result <> nil then
+    result := PPointer(result)^;
+  {$endif HASDIRECTTYPEINFO}
 end;
 
 
@@ -3969,7 +4224,7 @@ begin
   MoveFast(Source[0], Dest[0], n * SizeOf(Int64));
 end;
 
-function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): Integer;
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): integer;
 var
   i: integer;
 begin
@@ -3979,7 +4234,7 @@ begin
       result := Values[i];
 end;
 
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): Integer;
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): integer;
 var
   i: integer;
 begin
@@ -4903,6 +5158,367 @@ begin
 end;
 
 
+{ ************ ObjArray PtrArray InterfaceArray Wrapper Functions }
+
+{ PtrArr* wrapper functions }
+
+function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
+var
+  a: TPointerDynArray absolute aPtrArray;
+begin
+  result := length(a);
+  SetLength(a, result + 1);
+  a[result] := aItem;
+end;
+
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
+var
+  a: TPointerDynArray absolute aPtrArray;
+  n: integer;
+begin
+  n := length(a);
+  result := PtrUIntScanIndex(pointer(a), n, PtrUInt(aItem));
+  if result >= 0 then
+    exit;
+  SetLength(a, n + 1);
+  a[n] := aItem;
+  result := n;
+end;
+
+procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger);
+var
+  a: TPointerDynArray absolute aPtrArray;
+  n: integer;
+begin
+  if aCount = nil then
+    n := length(a)
+  else
+    n := aCount^;
+  if cardinal(aIndex) >= cardinal(n) then
+    exit; // out of range
+  dec(n);
+  if n > aIndex then
+    MoveFast(a[aIndex + 1], a[aIndex], (n - aIndex) * SizeOf(pointer));
+  if aCount = nil then
+    SetLength(a, n)
+  else
+    aCount^ := n;
+end;
+
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): integer;
+var
+  a: TPointerDynArray absolute aPtrArray;
+  n: integer;
+begin
+  if aCount = nil then
+    n := length(a)
+  else
+    n := aCount^;
+  result := PtrUIntScanIndex(pointer(a), n, PtrUInt(aItem));
+  if result < 0 then
+    exit;
+  dec(n);
+  if n > result then
+    MoveFast(a[result + 1], a[result], (n - result) * SizeOf(pointer));
+  if aCount = nil then
+    SetLength(a, n)
+  else
+    aCount^ := n;
+end;
+
+function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
+var
+  a: TPointerDynArray absolute aPtrArray;
+begin
+  result := PtrUIntScanIndex(pointer(a), length(a), PtrUInt(aItem));
+end;
+
+
+{ wrapper functions to T*ObjArr types }
+
+function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
+var
+  a: TObjectDynArray absolute aObjArray;
+begin
+  result := length(a);
+  SetLength(a, result + 1);
+  a[result] := aItem;
+end;
+
+function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+var
+  n: PtrInt;
+  s: TObjectDynArray absolute aSourceObjArray;
+  d: TObjectDynArray absolute aDestObjArray;
+begin
+  result := length(d);
+  n := length(s);
+  SetLength(d, result + n);
+  MoveFast(s[0], d[result], n * SizeOf(pointer));
+  inc(result, n);
+end;
+
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
+begin
+  result := ObjArrayAddFrom(aDestObjArray, aSourceObjArray);
+  TObjectDynArray(aSourceObjArray) := nil; // aSourceObjArray[] changed ownership
+end;
+
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
+var
+  a: TObjectDynArray absolute aObjArray;
+begin
+  result := aObjArrayCount;
+  if result = length(a) then
+    SetLength(a, NextGrow(result));
+  a[result] := aItem;
+  inc(aObjArrayCount);
+end;
+
+procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
+var
+  a: TObjectDynArray absolute aObjArray;
+  n: PtrInt;
+begin
+  n := length(a);
+  if not PtrUIntScanExists(pointer(a), n, PtrUInt(aItem)) then
+  begin
+    SetLength(a, n + 1);
+    a[n] := aItem;
+  end;
+end;
+
+function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+var
+  n, i: PtrInt;
+  s: TObjectDynArray absolute aSourceObjArray;
+  d: TObjectDynArray absolute aDestObjArray;
+begin
+  result := length(d);
+  n := length(s);
+  if n = 0 then
+    exit;
+  SetLength(d, result + n);
+  for i := 0 to n - 1 do
+    if not PtrUIntScanExists(pointer(d), result, PtrUInt(s[i])) then
+    begin
+      d[result] := s[i];
+      inc(result);
+    end;
+  if result <> length(d) then
+    SetLength(d, result);
+end;
+
+procedure ObjArraySetLength(var aObjArray; aLength: integer);
+begin
+  SetLength(TObjectDynArray(aObjArray), aLength);
+end;
+
+function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt;
+begin
+  result := PtrUIntScanIndex(pointer(aObjArray), length(TObjectDynArray(aObjArray)), PtrUInt(aItem));
+end;
+
+function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt;
+begin
+  result := PtrUIntScanIndex(pointer(aObjArray), aCount, PtrUInt(aItem));
+end;
+
+function ObjArrayCount(const aObjArray): integer;
+var
+  i: PtrInt;
+  a: TObjectDynArray absolute aObjArray;
+begin
+  result := 0;
+  for i := 0 to length(a) - 1 do
+    if a[i] <> nil then
+      inc(result);
+end;
+
+procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
+  aContinueOnException: boolean; aCount: PInteger);
+var
+  n: PtrInt;
+  a: TObjectDynArray absolute aObjArray;
+begin
+  if aCount = nil then
+    n := length(a)
+  else
+    n := aCount^;
+  if cardinal(aItemIndex) >= cardinal(n) then
+    exit; // out of range
+  if aContinueOnException then
+    try
+      a[aItemIndex].Free;
+    except
+    end
+  else
+    a[aItemIndex].Free;
+  dec(n);
+  if n > aItemIndex then
+    MoveFast(a[aItemIndex + 1], a[aItemIndex], (n - aItemIndex) * SizeOf(TObject));
+  if aCount = nil then
+    SetLength(a, n)
+  else
+    aCount^ := n;
+end;
+
+function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt;
+begin
+  result := PtrUIntScanIndex(pointer(aObjArray), length(TObjectDynArray(aObjArray)), PtrUInt(aItem));
+  if result >= 0 then
+    ObjArrayDelete(aObjArray, result);
+end;
+
+function ObjArrayDelete(var aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
+begin
+  result := PtrUIntScanIndex(pointer(aObjArray), aCount, PtrUInt(aItem));
+  if result >= 0 then
+    ObjArrayDelete(aObjArray, result, false, @aCount);
+end;
+
+procedure RawObjectsClear(o: PObject; n: integer);
+var
+  obj: TObject;
+begin
+  if n > 0 then
+    repeat
+      obj := o^;
+      if obj <> nil then
+      begin // inlined FreeAndNil(o^)
+        o^ := nil;
+        obj.Destroy;
+      end;
+      inc(o);
+      dec(n);
+    until n = 0;
+end;
+
+procedure ObjArrayClear(var aObjArray);
+var
+  a: TObjectDynArray absolute aObjArray;
+begin
+  if a = nil then
+    exit;
+  RawObjectsClear(pointer(aObjArray), length(a));
+  a := nil;
+end;
+
+procedure ObjArrayClear(var aObjArray; aCount: integer);
+var
+  a: TObjectDynArray absolute aObjArray;
+  n: integer;
+begin
+  n := length(a);
+  if n = 0 then
+    exit;
+  if n < aCount then
+    aCount := n;
+  RawObjectsClear(pointer(aObjArray), aCount);
+  a := nil;
+end;
+
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean; aCount: PInteger);
+var
+  n, i: PtrInt;
+  a: TObjectDynArray absolute aObjArray;
+begin
+  if aCount = nil then
+    n := length(a)
+  else
+  begin
+    n := aCount^;
+    aCount^ := 0;
+  end;
+  if n = 0 then
+    exit;
+  if aContinueOnException then
+    for i := 0 to n - 1 do
+    try
+      a[i].Free;
+    except
+    end
+  else
+    RawObjectsClear(pointer(a), n);
+  a := nil;
+end;
+
+procedure ObjArrayObjArrayClear(var aObjArray);
+var
+  i: PtrInt;
+  a: TPointerDynArray absolute aObjArray;
+begin
+  if a <> nil then
+  begin
+    for i := 0 to length(a) - 1 do
+      ObjArrayClear(a[i]);
+    a := nil;
+  end;
+end;
+
+procedure ObjArraysClear(const aObjArray: array of pointer);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(aObjArray) do
+    if aObjArray[i] <> nil then
+      ObjArrayClear(aObjArray[i]^);
+end;
+
+
+{ wrapper functions to array of interface types }
+
+function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): PtrInt;
+var
+  a: TInterfaceDynArray absolute aInterfaceArray;
+begin
+  result := length(a);
+  SetLength(a, result + 1);
+  a[result] := aItem;
+end;
+
+procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
+var
+  a: TInterfaceDynArray absolute aInterfaceArray;
+  n: PtrInt;
+begin
+  if PtrUIntScanExists(pointer(aInterfaceArray), length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem)) then
+    exit;
+  n := length(a);
+  SetLength(a, n + 1);
+  a[n] := aItem;
+end;
+
+function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): PtrInt;
+begin
+  result := PtrUIntScanIndex(pointer(aInterfaceArray), length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem));
+end;
+
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt);
+var
+  n: PtrInt;
+  a: TInterfaceDynArray absolute aInterfaceArray;
+begin
+  n := length(a);
+  if PtrUInt(aItemIndex) >= PtrUInt(n) then
+    exit; // out of range
+  a[aItemIndex] := nil;
+  dec(n);
+  if n > aItemIndex then
+    MoveFast(a[aItemIndex + 1], a[aItemIndex], (n - aItemIndex) * SizeOf(IInterface));
+  TPointerDynArray(aInterfaceArray)[n] := nil; // avoid GPF in SetLength()
+  SetLength(a, n);
+end;
+
+function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt;
+begin
+  result := InterfaceArrayFind(aInterfaceArray, aItem);
+  if result >= 0 then
+    InterfaceArrayDelete(aInterfaceArray, result);
+end;
+
+
+
 { ************ low-level types mapping binary structures }
 
 function IsZero(const dig: THash128): boolean;
@@ -5131,16 +5747,6 @@ end;
 
 { ************ low-level functions manipulating bits }
 
-{$ifdef CPUARM} // circumvent FPC issue on ARM
-function ToByte(value: cardinal): cardinal; inline;
-begin
-  result := value and $ff;
-end;
-{$else}
-type
-  ToByte = byte; // will properly truncate any integer value into 8-bit
-{$endif CPUARM}
-
 // naive code gives the best performance - bts [Bits] has an overhead
 
 function GetBit(const Bits; aIndex: PtrInt): boolean;
@@ -5334,32 +5940,27 @@ end;
 {$ifndef CPUX86} // those functions have their own PIC-compatible x86 asm version
 
 function StrLenSafe(S: pointer): PtrInt;
+label
+  _0, _1, _2, _3; // ugly but faster
 begin
-  result := 0;
-  if S <> nil then
+  result := PtrUInt(S);
+  if S <> nil then begin
     while true do
-      if PAnsiChar(S)[result + 0] <> #0 then
-        if PAnsiChar(S)[result + 1] <> #0 then
-          if PAnsiChar(S)[result + 2] <> #0 then
-            if PAnsiChar(S)[result + 3] <> #0 then
-              inc(result, 4)
-            else
-            begin
-              inc(result, 3);
-              exit;
-            end
-          else
-          begin
-            inc(result, 2);
-            exit;
-          end
-        else
-        begin
-          inc(result);
-          exit;
-        end
+      if PAnsiChar(result)[0] = #0 then
+        goto _0
+      else if PAnsiChar(result)[1] = #0 then
+        goto _1
+      else if PAnsiChar(result)[2] = #0 then
+        goto _2
+      else if PAnsiChar(result)[3] = #0 then
+        goto _3
       else
-        exit;
+        inc(result, 4);
+_3: inc(result);
+_2: inc(result);
+_1: inc(result);
+_0: dec(result, PtrUInt(S)); // return length
+  end;
 end;
 
 function StrComp(Str1, Str2: pointer): PtrInt;
@@ -5595,10 +6196,15 @@ begin
   result := PosEx(SubStr, S, Offset);
   {$else}
   result := PosExPas(pointer(SubStr), pointer(S), Offset);
-  {$endif}
+  {$endif CPUX86}
 end;
 
 {$endif UNICODE}
+
+procedure FillZero(var dest; count: PtrInt);
+begin
+  FillCharFast(dest, count, 0);
+end;
 
 function StrLenW(S: PWideChar): PtrInt;
 begin
@@ -5629,7 +6235,6 @@ begin
         exit;
 end;
 
-
 threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 var
@@ -5637,33 +6242,44 @@ var
 
 procedure XorEntropy(entropy: PBlock128);
 var e: THash128Rec;
-begin // xor entropy with its random on-stack values
+begin // xor entropy with its existing (on-stack) values
   e := _EntropyGlobal;
   {$ifdef CPUINTEL}
   e.Hi := e.Hi xor Rdtsc;
+  {$else}
+  e.Hi := e.Hi xor GetTickCount64; // FPC always defines this function
   {$endif CPUINTEL}
   crcblock(entropy, @e.b);
-  crcblock(entropy, @_Lecuyer);     // ensure TLecuyer.Seed() is not consistent
-  unaligned(PDouble(@e.L)^) := Now; // cross-platform time
-  e.H := e.H xor {$ifdef FPC} PtrUInt(GetCurrentThreadID) xor {$endif} PtrUInt(entropy);
+  crcblock(entropy, @_Lecuyer); // perfect forward security
+  unaligned(PDouble(@e.L)^) := Now * 2123923447; // cross-platform time
+  e.i2 := e.i3 xor e.i1 xor PtrInt(entropy);
+  e.i3 := e.i2 xor e.i0 {$ifdef FPC} xor PtrInt(GetCurrentThreadID) {$endif};
   crcblock(entropy, @e.b);
   {$ifdef CPUINTEL}
   if cfRAND in CpuFeatures then
   begin // won't hurt
-    e.c0 := e.c0 xor RdRand32;
-    e.c1 := e.c1 xor RdRand32;
-    e.c2 := e.c2 xor RdRand32;
-    e.c3 := e.c3 xor RdRand32;
+    e.c0 := e.c3 xor RdRand32;
+    e.c1 := e.c2 xor RdRand32;
+    e.c2 := e.c1 xor RdRand32;
+    e.c3 := e.c0 xor RdRand32;
     crcblock(entropy, @e.b);
   end;
   e.Lo := e.Lo xor Rdtsc; // has changed in-between
-  {$else}
-  e.i0 := e.i0 xor Random(maxInt);
-  e.i1 := e.i1 xor Random(maxInt);
-  e.i2 := e.i2 xor Random(maxInt);
-  e.i3 := e.i3 xor Random(maxInt);
   {$endif CPUINTEL}
+  e.i0 := e.i3 xor Random(maxInt);
+  e.i1 := e.i2 xor Random(maxInt);
+  e.i2 := e.i1 xor Random(maxInt);
+  e.i3 := e.i0 xor Random(maxInt);
+  crcblock(entropy, @e.b);
+  {$ifdef MSWINDOWS}
+  CreateGUID(PGuid(@e)^); // FPC uses Random() on non-Windows
+  crcblock(entropy, @e.b);
+  {$endif MSWINDOWS}
   _EntropyGlobal.c := entropy^;
+  e.c0 := e.c0 xor xxHash32(e.c3, @e, SizeOf(e)); // cascade crcblock hashes
+  e.c1 := e.c1 xor xxHash32(e.c2, @e, SizeOf(e));
+  e.c2 := e.c2 xor xxHash32(e.c1, @e, SizeOf(e));
+  e.c3 := e.c3 xor xxHash32(e.c0, @e, SizeOf(e));
   crcblock(entropy, @e.b);
 end;
 
@@ -5690,7 +6306,7 @@ end;
 
 function TLecuyer.Next: cardinal;
 begin
-  if word(seedcount) = 0 then // reseed after 256KB of output
+  if word(seedcount) = 0 then // reseed at startup, and after 256KB of output
     Seed(nil, 0)
   else
     inc(seedcount);
@@ -5832,43 +6448,9 @@ begin
   end;
 end;
 
-{$endif CPUINTEL}
+{$else}
 
-// fallback to pure pascal version for ARM or Intel PIC
-
-{$ifndef ASMINTEL}
-
-function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-var
-  tab: PCrc32tab;
-begin // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
-  tab := @crc32ctab;
-  result := not crc;
-  if (buf <> nil) and (len > 0) then
-  begin
-    repeat
-      if PtrUInt(buf) and 3 = 0 then // align to 4 bytes boundary
-        break;
-      result := tab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
-      dec(len);
-      inc(buf);
-    until len = 0;
-    if len >= 4 then
-      repeat
-        result := result xor PCardinal(buf)^;
-        inc(buf, 4);
-        dec(len, 4);
-        result := tab[3, ToByte(result)] xor tab[2, ToByte(result shr 8)] xor tab[1, ToByte(result shr 16)] xor tab[0, ToByte(result shr 24)];
-      until len < 4;
-    while len > 0 do
-    begin
-      result := tab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
-      dec(len);
-      inc(buf);
-    end;
-  end;
-  result := not result;
-end;
+// fallback to pure pascal version for ARM
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 var
@@ -5972,7 +6554,7 @@ begin
     result := RolDWord(result, 11) * PRIME32_1;
     inc(P);
   end;
-  result := result xor (result shr 15);
+  result := result xor (result shr 15); // inlined xxHash32Mixup()
   result := result * PRIME32_2;
   result := result xor (result shr 13);
   result := result * PRIME32_3;
@@ -6028,6 +6610,44 @@ begin // CPU-neutral implementation
   product.L := t3.V shl 32 or t1.L;
 end;
 
+{$endif CPUINTEL}
+
+{$ifndef ASMINTEL}
+
+// fallback to pure pascal version for ARM or Intel PIC (no globals allowed)
+
+function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+var
+  tab: PCrc32tab;
+begin // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
+  tab := @crc32ctab;
+  result := not crc;
+  if (buf <> nil) and (len > 0) then
+  begin
+    repeat
+      if PtrUInt(buf) and 3 = 0 then // align to 4 bytes boundary
+        break;
+      result := tab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
+      dec(len);
+      inc(buf);
+    until len = 0;
+    if len >= 4 then
+      repeat
+        result := result xor PCardinal(buf)^;
+        inc(buf, 4);
+        dec(len, 4);
+        result := tab[3, ToByte(result)] xor tab[2, ToByte(result shr 8)] xor tab[1, ToByte(result shr 16)] xor tab[0, ToByte(result shr 24)];
+      until len < 4;
+    while len > 0 do
+    begin
+      result := tab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
+      dec(len);
+      inc(buf);
+    end;
+  end;
+  result := not result;
+end;
+
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 begin
   if val < 0 then
@@ -6072,6 +6692,7 @@ end;
 {$endif ASMINTEL}
 
 {$ifdef HASINLINE}
+
 function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
 label
   zero;
@@ -6102,38 +6723,33 @@ zero:
   result := false;
   {$endif}
 end;
+
 {$endif HASINLINE}
 
 
 { ************ Buffers (e.g. Hashing) Functions }
 
-{$ifndef ASMX64}
+{$ifndef CPUX64} // there is fast branchless SSE2 assembly on x86-64
 
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
 var
-  c: cardinal;
+  c: byte;
 begin
-  result := 0;
-  dec(PtrInt(TextEnd), PtrInt(Text)); // compute TextLen
-  if TextEnd <> nil then
-    repeat
-      c := ord(Text[result]);
-      if c > 13 then
-      begin
-        inc(result);
-        if result >= PtrInt(PtrUInt(TextEnd)) then
-          break;
+  result := PtrUInt(Text) - 1;
+  repeat
+    inc(result);
+    if PtrUInt(result) < PtrUInt(TextEnd) then
+    begin
+      c := PByte(result)^;
+      if (c > 13) or ((c <> 10) and (c <> 13)) then
         continue;
-      end;
-      if (c = 10) or (c = 13) then
-        break;
-      inc(result);
-      if result >= PtrInt(PtrUInt(TextEnd)) then
-        break;
-    until false;
+    end;
+    break;
+  until false;
+  dec(result, PtrInt(Text)); // returns length
 end;
 
-{$endif ASMX64}
+{$endif CPUX64}
 
 { TSynTempBuffer }
 
@@ -6345,6 +6961,16 @@ end;
 function Hash32(const Text: RawByteString): cardinal;
 begin
   result := Hash32(pointer(Text), Length(Text));
+end;
+
+function xxHash32Mixup(crc: cardinal): cardinal;
+begin
+  result := crc;
+  result := result xor (result shr 15);
+  result := result * 2246822519;
+  result := result xor (result shr 13);
+  result := result * 3266489917;
+  result := result xor (result shr 16);
 end;
 
 {$ifdef ASMX86}
@@ -6900,6 +7526,44 @@ function VariantToIntegerDef(const V: Variant; DefaultValue: integer): integer;
 begin
   if not VariantToInteger(V, result) then
     result := DefaultValue;
+end;
+
+procedure ClearVariantForString(var Value: variant); {$ifdef HASINLINE} inline; {$endif}
+var
+  v: cardinal;
+begin
+  v := TVarData(Value).VType;
+  if v = varString then
+    Finalize(RawByteString(TVarData(Value).VAny))
+  else
+    begin
+      if v and VTYPE_STATIC <> 0 then
+        VarClearProc(TVarData(Value));
+      TVarData(Value).VType := varString;
+      TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
+    end;
+end;
+
+procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
+begin
+  ClearVariantForString(Value);
+  FastSetString(RawUTF8(TVarData(Value).VString), Txt, TxtLen);
+end;
+
+procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant);
+begin
+  ClearVariantForString(Value);
+  if Txt = '' then
+    exit;
+  RawByteString(TVarData(Value).VAny) := Txt;
+  {$ifdef HASCODEPAGE} // force explicit UTF-8
+  SetCodePage(RawByteString(TVarData(Value).VAny), CP_UTF8, false);
+  {$endif HASCODEPAGE}
+end;
+
+function RawUTF8ToVariant(const Txt: RawUTF8): variant;
+begin
+  RawUTF8ToVariant(Txt, result);
 end;
 
 

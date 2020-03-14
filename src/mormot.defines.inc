@@ -87,8 +87,7 @@
 
   {$undef DOPATCHTRTL}
   {$define HASINLINE}
-  {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
-  {$define HASAESNI}    // should be commented to test project with valgrind
+  {$define NODELPHIASM} // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
@@ -136,7 +135,7 @@
   {$endif}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
     {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
-    // on compilation error in SynFPCTypInfo, undefine the above conditional
+    // on compilation error in mormot.core.Rtti, undefine the above conditional
     // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
   {$ifend}
 
@@ -176,6 +175,7 @@
         {$define ASMX64}     // supports asm with globals
         {$define ASMINTEL}
         {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
+        {$define HASAESNI}   // mormot.core.crypto rejected by Darwin asm
         {$ifdef LINUX}
           {$define ASMX64LINUX}  // e.g. for tuned server-side asm
         {$endif LINUX}
@@ -193,7 +193,9 @@
       {$ifndef DARWIN}
         {$define ASMX86}     // supports asm with globals
         {$define ASMINTEL}
+        {$define CPUX86NOTPIC} // use "absolute" instead of local register
       {$endif DARWIN}
+      {$define HASAESNI}
     {$endif CPUX86}
     {$ifdef CPUARM}
       {$define CPUARM3264}
@@ -313,6 +315,7 @@
     {$define CPU32DELPHI}
     {$define CPUX86}   // for compatibility with older versions of Delphi
     {$define ASMX86}   // supports asm with globals
+    {$define CPUX86NOTPIC} // use "absolute" instead of local register
   {$endif CPUX64}
 
   {$define DELPHI_OR_FPC_OLDRTTI}
