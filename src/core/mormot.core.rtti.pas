@@ -334,7 +334,7 @@ type
   /// RTTI of a record/object type definition (managed) field
   // - defined as a record since it is the same for FPC and Delphi, and
   // is not available in oldest Delphi's TypInfo.pas
-  // - see e.g. TRecordElement in FPC rtti.inc
+  // - maps TRecordElement in FPC rtti.inc or TManagedField in Delphi TypInfo
   TRecordField = record
     /// the RTTI of this managed field
     {$ifdef HASDIRECTTYPEINFO}
@@ -369,16 +369,30 @@ type
   /// pointer to a wrapper to interface type information
   PInterfaceTypeData = ^TInterfaceTypeData;
 
-  /// information returned by TTypeInfo.RecordManagedFields
+  /// record RTTI as returned by TTypeInfo.RecordManagedFields
   TRecordManagedFields = record
     /// the record size in bytes
     Size: integer;
-    /// how many managed Fields[] are defintion in this record
+    /// how many managed Fields[] are defined in this record
     Count: integer;
     /// points to the first field RTTI
     // - use inc(Fields) to go to the next one
     Fields: PRecordField;
   end;
+
+  /// enhanced RTTI of a record/object type definition
+  // - as returned by TTypeInfo.RecordAllFields on Delphi 2010+
+  TRecordAllField = record
+    /// the field RTTI definition
+    TypeInfo: PTypeInfo;
+    /// the field offset in the record
+    Offset: PtrUInt;
+    /// the field property name
+    Name: PShortString;
+  end;
+  PRecordAllField = ^TRecordAllField;
+  /// as returned by TTypeInfo.RecordAllFields
+  TRecordAllFieldDynArray = array of TRecordAllField;
 
   /// main entry-point wrapper to access RTTI for a given pascal type
   // - as returned by the TypeInfo() low-level compiler function
@@ -412,9 +426,12 @@ type
     function RecordSize: integer; {$ifdef HASINLINE} inline; {$endif}
     /// retrieve RTTI information about all managed fields of this record
     // - non managed fields (e.g. integers, double...) are not listed here
-    // - optionally returns the total record size in bytes
+    // - also includes the total record size in bytes
     procedure RecordManagedFields(out Fields: TRecordManagedFields);
       {$ifdef HASINLINE} inline; {$endif}
+    /// retrieve enhanced RTTI information about all fields of this record
+    // - this information is currently only available since Delphi 2010
+    function RecordAllFields(out RecSize: integer): TRecordAllFieldDynArray;
     /// for tkDynArray: get the dynamic array type information of the stored item
     function DynArrayItemType(aDataSize: PInteger = nil): PTypeInfo;
       {$ifdef HASINLINE} inline; {$endif}
@@ -688,7 +705,7 @@ type
     Kind: byte;
   end;
 
-  {$ifdef UNICODE}
+  {$ifdef UNICODE} // will use official RTTI definition
   TRecordInfo = TTypeData;
   PRecordInfo = PTypeData;
   {$else}
@@ -932,11 +949,6 @@ end;
 function TInterfaceTypeData.IntfFlags: TIntfFlags;
 begin
   byte(result) := byte(PTypeData(@self)^.IntfFlags);
-end;
-
-function TInterfaceTypeData.IntfGuid: PGUID;
-begin
-  result := @PTypeData(@self)^.Guid;
 end;
 
 function TInterfaceTypeData.IntfUnit: PShortString;

@@ -42,8 +42,8 @@ type
 
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-Function GetTypeData(TypeInfo: pointer): PTypeData; inline;
-begin // (aligned) jump over Kind + Name ShortString
+function GetTypeData(TypeInfo: pointer): PTypeData; inline;
+begin // (aligned) jump over Kind + Name ShortString - compiles into 2 asm opcodes
   result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
 
@@ -128,6 +128,11 @@ begin
 end;
 
 
+function TInterfaceTypeData.IntfGuid: PGUID;
+begin
+  result := @PTypeData(@self)^.Guid;
+end;
+
 function TInterfaceTypeData.IntfParent: PTypeInfo;
 begin
   result := DeRef(PTypeData(@self)^.IntfParentRef);
@@ -161,14 +166,15 @@ end;
 
 procedure TTypeInfo.RecordManagedFields(out Fields: TRecordManagedFields);
 var
-  d: PRecInitData; // = PRecordInfoInit in rtti.inc
+  info: PTypeData;
+  d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
 begin
-  d := pointer(GetTypeData(@self));
-  Fields.Size := d^.Size;
-  if Assigned(d^.Terminator) then // see RTTIRecordOp() in rtti.inc
-    d := pointer(GetTypeData(d^.Terminator));
+  info := GetTypeData(@self);
+  Fields.Size := info^.RecSize;
+  if Assigned(info^.RecInitInfo) then // see RTTIRecordOp() in rtti.inc
+    d := pointer(GetTypeData(info^.RecInitInfo));
   Fields.Count := d^.ManagedFieldCount;
-  inc(PByte(d), SizeOf(d^.ManagedFieldCount));
+  inc(d); // ManagedFields[] just follow TRecInitData/TRecordInfoInit
   Fields.Fields := AlignToPtr(d);
 end;
 
@@ -181,10 +187,16 @@ begin
     Fields.Size := RecSize;
     Fields.Count := ManagedFldCount;
     Fields.Fields := AlignToPtr(PByte(@ManagedFldCount) + SizeOf(integer));
-  end;
+  end; // warning: older FPC RTTI includes all fields, not only managed fields
 end;
 
 {$endif FPC_NEWRTTI}
+
+function TTypeInfo.RecordAllFields(out RecSize: integer): TRecordAllFieldDynArray;
+begin
+  RecSize := self.RecordSize;
+  Finalize(result); // enhanced RTTI not available yet on FPC
+end;
 
 function TTypeInfo.IsQWord: boolean;
 begin

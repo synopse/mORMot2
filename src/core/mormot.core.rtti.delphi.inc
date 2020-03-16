@@ -9,17 +9,27 @@
 type
   AlignToPtr = Pointer;
 
-  {$ifdef ISDELPHI2010}
-  /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
-  TEnhancedRecordInfo = packed record
-    TypeInfo: PPTypeInfo;
-    Offset: PtrUInt;
-    Flags: byte;
-    NameLen: byte; // = Name[0] = length(Name)
-  end;
-  PEnhancedRecordInfo = ^TEnhancedRecordInfo;
-  {$endif ISDELPHI2010}
+{$ifdef HASINLINE} // Delphi RTL TypInfo.GetTypeData() is awful on x86_64
 
+function GetTypeData(TypeInfo: pointer): PTypeData; inline;
+begin // weird code which compiles and inlines best on Delphi Win32 and Win64
+  {$ifdef CPU64}
+  result := pointer(PtrInt(TypeInfo) + ord(TypInfo.PTypeInfo(result)^.Name[0]) + 2);
+  {$else}
+  result := TypeInfo;
+  inc(PByte(result), ord(TypInfo.PTypeInfo(result)^.Name[0]) + 2);
+  {$endif CPU64}
+end;
+
+{$else}
+
+function GetTypeData(TypeInfo: pointer): PTypeData;
+asm // faster code for oldest Delphi
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+end;
+
+{$endif HASINLINE}
 
 function TTypeInfo.ClassType: PClassType; // for proper inlining below
 begin
@@ -98,6 +108,15 @@ begin
 end;
 
 
+function TInterfaceTypeData.IntfGuid: PGUID;
+begin
+  {$ifdef ISDELPHI102} // adapt to latest TypInfo.pas changes
+  result := @PTypeData(@self)^.IntfGuid;
+  {$else}
+  result := @PTypeData(@self)^.Guid;
+  {$endif ISDELPHI102}
+end;
+
 function TInterfaceTypeData.IntfParent: PTypeInfo;
 begin
   result := Pointer(PTypeData(@self)^.IntfParent^);
@@ -135,6 +154,56 @@ begin
     Fields.Fields := @PIntegerArray(@ManagedFldCount)[1];
   end;
 end;
+
+{$ifdef ISDELPHI2010} // read enhanced RTTI available since Delphi 2010
+
+type
+  /// map Delphi tkRecord TypeInfo with enhanced RTTI
+  TRecordEnhancedTypeData = packed record
+    RecSize: cardinal;
+    ManagedCount: integer;
+    // ManagedFields: array[0..0] of TManagedField;
+    NumOps: Byte;
+    // RecOps: array[0..0] of pointer;
+    AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
+    AllFields: array[0..0] of TRecordTypeField; // as defined in TypInfo.pas
+  end;
+
+function TTypeInfo.RecordAllFields(out RecSize: integer): TRecordAllFieldDynArray;
+var
+  info: ^TRecordEnhancedTypeData;
+  p: PRecordTypeField;
+  f: PtrInt;
+begin
+  info := pointer(GetTypeData(@self));
+  RecSize := info^.RecSize;
+  inc(PByte(info), info^.ManagedCount * SizeOf(TManagedField));
+  inc(PByte(info), info^.NumOps * SizeOf(pointer));
+  result := nil; // don't reallocate previous answer
+  SetLength(result, info^.AllCount);
+  p := @info^.AllFields[0];
+  for f := 0 to info^.AllCount - 1 do
+    begin
+      with result[f] do
+      begin
+        TypeInfo := PPointer(p^.Field.TypeRef)^;
+        Offset := p^.Field.FldOffset;
+        Name := @p^.Name;
+      end;
+      p := pointer(PtrInt(@p^.Name[1]) + ord(p^.Name[0]));
+      inc(PByte(p), PWord(p)^); // jump attributes
+    end;
+end;
+
+{$else}
+
+function TTypeInfo.RecordAllFields(out RecSize: integer): TRecordAllFieldDynArray;
+begin
+  RecSize := self.RecordSize;
+  result := nil; // not available until Delphi 2010
+end;
+
+{$endif ISDELPHI2010}
 
 function TTypeInfo.IsQWord: boolean;
 begin
