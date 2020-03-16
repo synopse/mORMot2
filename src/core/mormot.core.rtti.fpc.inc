@@ -5,9 +5,6 @@
    FPC specific definitions used by mormot.core.rtti.pas implementation
 }
 
-const
-  NO_INDEX = 0;
-
 {$ifdef HASDIRECTTYPEINFO}
 
 type
@@ -47,17 +44,17 @@ begin // (aligned) jump over Kind + Name ShortString - compiles into 2 asm opcod
   result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
 
-function TTypeInfo.ClassType: PClassType; // for proper inlining below
+function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
   result := pointer(GetTypeData(@self));
 end;
 
-function TClassType.ParentInfo: PTypeInfo;
+function TRttiClass.ParentInfo: PRttiInfo;
 begin
   result := DeRef(PTypeData(@self)^.ParentInfoRef);
 end;
 
-function TClassType.ClassProp: PClassProp;
+function TRttiClass.RttiProps: PRttiProps;
 begin
   result := @self;
   if result <> nil then
@@ -69,102 +66,242 @@ begin
       {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
 
-function TClassType.PropCount: integer;
+function TRttiClass.PropCount: integer;
 begin
   result := PTypeData(@self)^.PropCount;
 end;
 
-function InternalClassProp(ClassType: TClass): PClassProp;
+function GetRttiProps(RttiClass: TClass): PRttiProps;
 begin
-  result := PTypeInfo(PPointer(PtrUInt(ClassType) + vmtTypeInfo)^)^.
-    ClassType^.ClassProp;
+  result := PRttiInfo(PPointer(PtrUInt(RttiClass) + vmtTypeInfo)^)^.
+    RttiClass^.RttiProps;
 end;
 
 
-function TClassProp.PropCount: integer;
+function TRttiProps.PropCount: integer;
 begin
   result := PPropData(@self)^.PropCount;
 end;
 
-function TClassProp.PropList: PPropInfo;
+function TRttiProps.PropList: PRttiProp;
 begin // see TPropData.GetProp(0)
   result := AlignToPtr(@PPropData(@self)^.PropList);
 end;
 
-function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
-var CP: PClassProp;
+function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
+var CP: PRttiProps;
 begin
-  if ClassType<>nil then begin
-    CP := InternalClassProp(ClassType);
-    if CP<>nil then
+  if C<>nil then begin
+    CP := GetRttiProps(C);
+    if CP <> nil then
     begin // no more RTTI information available
       PropInfo := CP^.PropList;
-      result := CP^.PropCount;
-      exit;
+      exit(CP^.PropCount);
     end;
   end;
   result := 0;
 end;
 
 
-function TEnumType.EnumBaseType: PEnumType;
+function TRttiEnumType.EnumBaseType: PRttiEnumType;
 var
   base: PTypeInfo;
 begin
   result := @self;
-  base := pointer(PTypeData(result)^.BaseType);
+  base := DeRef(PTypeData(@self)^.BaseTypeRef);
   if base <> nil then
     result := pointer(GetTypeData(base));
 end;
 
-function TEnumType.SetBaseType: PEnumType;
+function TRttiEnumType.SetBaseType: PRttiEnumType;
 var
   base: PTypeInfo;
 begin
   result := @self;
-  base := pointer(PTypeData(result)^.CompType);
+  base := DeRef(PTypeData(@self)^.CompTypeRef);
   if base <> nil then
     result := pointer(GetTypeData(base));
 end;
 
+function TRttiEnumType.GetEnumNameOrd(Value: cardinal): PShortString;
+var
+  by4: integer;
+begin // this code is very aggressively inlined on FPC
+  if Value <= cardinal(PTypeData(@self).MaxValue) then
+  begin
+    result := @PTypeData(@self).NameList;
+    by4 := Value shr 2;
+    if by4 <> 0 then
+      repeat
+        result := @PByteArray(result)^[ord(result^[0]) + 1];
+        result := @PByteArray(result)^[ord(result^[0]) + 1];
+        result := @PByteArray(result)^[ord(result^[0]) + 1];
+        result := @PByteArray(result)^[ord(result^[0]) + 1];
+        dec(by4);
+      until by4 = 0;
+    Value := Value and 3;
+    if Value <> 0 then
+      repeat
+        result := @PByteArray(result)^[ord(result^[0]) + 1];
+        dec(Value);
+      until Value = 0;
+  end
+  else
+    result := @NULL_SHORTSTRING;
+end;
 
-function TInterfaceTypeData.IntfGuid: PGUID;
+function TRttiInfo.EnumBaseType: PRttiEnumType; // moved here for proper inlining
+begin
+  result := pointer(GetTypeData(@self));
+  if Kind <> rkBool then
+    result := result^.EnumBaseType;
+end;
+
+function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+begin
+  result := PRttiInfo(aTypeInfo)^.EnumBaseType.GetEnumNameOrd(aIndex);
+end;
+
+
+function TRttiInterfaceTypeData.IntfGuid: PGUID;
 begin
   result := @PTypeData(@self)^.Guid;
 end;
 
-function TInterfaceTypeData.IntfParent: PTypeInfo;
+function TRttiInterfaceTypeData.IntfParent: PRttiInfo;
 begin
   result := DeRef(PTypeData(@self)^.IntfParentRef);
 end;
 
 
-function TPropInfo.TypeInfo: PTypeInfo;
+function TRttiProp.TypeInfo: PRttiInfo;
 begin
-  result := DeRef(TypInfo.PPropInfo(@self)^.PropTypeRef);
+  result := DeRef(PPropInfo(@self)^.PropTypeRef);
 end;
 
-function TPropInfo.GetterIsField: boolean;
+function TRttiProp.GetterIsField: boolean;
 begin
-  with TypInfo.PPropInfo(@self)^ do
+  with PPropInfo(@self)^ do
     result := integer(PropProcs) and 3 = ptField;
 end;
 
-function TPropInfo.SetterIsField: boolean;
+function TRttiProp.SetterIsField: boolean;
 begin
-  with TypInfo.PPropInfo(@self)^ do
+  with PPropInfo(@self)^ do
     result := integer(PropProcs shr 2) and 3 = ptField;
 end;
 
+function TRttiProp.WriteIsDefined: boolean;
+begin
+  with PPropInfo(@self)^ do // see typinfo.IsWriteableProp
+    result := (SetProc <> nil) and
+      ((integer(PropProcs) shr 2) and 3 in [ptField..ptVirtual]);
+end;
 
-function TTypeInfo.RecordSize: integer;
+function TRttiProp.IsStored(Instance: TObject): boolean;
+type
+  TGetProc = function: boolean of object;
+  TGetIndexed = function(Index: integer): boolean of object;
+var
+  call: TMethod;
+begin
+  with PPropInfo(@self)^ do
+  begin
+    case (integer(PropProcs) shr 4) and 3 of // bits 4..5 = StoredProc
+      ptConst:
+        exit(boolean(PtrUInt(StoredProc)));
+      ptField:
+        exit(PBoolean(PtrUInt(Instance) + PtrUInt(StoredProc))^);
+      ptVirtual:
+        call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(StoredProc))^;
+      else
+        call.Code := pointer(StoredProc);
+    end;
+    call.Data := Instance;
+    if integer(PropProcs) and (1 shl 6) <> 0 then
+      result := TGetIndexed(call)(Index)
+    else
+      result := TGetProc(call);
+  end;
+end;
+
+function TRttiProp.Getter(Instance: TObject; Call: PMethod): TRttiPropCall;
+begin
+  with PPropInfo(@self)^ do
+  begin
+    if GetProc = nil then
+      // no 'read' was defined -> try from 'write' field
+      if (SetProc <> nil) and ((integer(PropProcs) shr 2) and 3 = ptField) then
+      begin // bits 2..3 = SetProc
+        Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc));
+        exit(rpcField);
+      end
+      else
+        exit(rpcNone)
+    else
+    case integer(PropProcs) and 3 of // bits 0..1 = GetProc
+      ptField:
+        begin  // GetProc is an offset to the instance fields
+          Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc));
+          exit(rpcField);
+        end;
+      ptVirtual: // GetProc is an offset to the class VMT
+        Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(GetProc))^;
+      ptConst:
+        exit(rpcNone);
+    else // ptStatic: GetProc is the method code itself
+      Call.Code := GetProc;
+    end;
+    Call.Data := Instance;
+    result := rpcMethod;
+    if integer(PropProcs) and (1 shl 6) <> 0 then // bit 6 = constant index property
+      result := rpcIndexed;
+  end;
+end;
+
+function TRttiProp.Setter(Instance: TObject; Call: PMethod): TRttiPropCall;
+begin
+  with PPropInfo(@self)^ do
+  begin
+    if SetProc = nil then
+      // no 'write' was defined -> try from 'read' field
+      if (GetProc <> nil) and (integer(PropProcs) and 3 = ptField) then
+      begin // bits 0..1 = GetProc
+        Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc));
+        exit(rpcField);
+      end
+      else
+        exit(rpcNone)
+    else
+    case (integer(PropProcs) shr 2) and 3 of // bits 2..3 = SetProc
+      ptField:
+        begin  // SetProc is an offset to the instance fields
+          Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc));
+          exit(rpcField);
+        end;
+      ptVirtual: // SetProc is an offset to the class VMT
+        Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(SetProc))^;
+      ptConst:
+        exit(rpcNone);
+    else // ptStatic: SetProc is the method code itself
+      Call.Code := SetProc;
+    end;
+    Call.Data := Instance;
+    result := rpcMethod;
+    if integer(PropProcs) and (1 shl 6) <> 0 then // bit 6 = constant index property
+      result := rpcIndexed;
+  end;
+end;
+
+
+function TRttiInfo.RecordSize: integer;
 begin
   result := GetTypeData(@self)^.RecSize;
 end;
 
 {$ifdef FPC_NEWRTTI}
 
-procedure TTypeInfo.RecordManagedFields(out Fields: TRecordManagedFields);
+procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
 var
   info: PTypeData;
   d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
@@ -180,7 +317,7 @@ end;
 
 {$else}
 
-function TTypeInfo.RecordManagedFields(out Fields: PRecordField): integer;
+procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
 begin
   with GetTypeData(@self)^ do
   begin
@@ -192,22 +329,68 @@ end;
 
 {$endif FPC_NEWRTTI}
 
-function TTypeInfo.RecordAllFields(out RecSize: integer): TRecordAllFieldDynArray;
+function TRttiInfo.RecordAllFields(out RecSize: integer): TRttiRecordAllFields;
 begin
-  RecSize := self.RecordSize;
+  RecSize := RecordSize;
   Finalize(result); // enhanced RTTI not available yet on FPC
 end;
 
-function TTypeInfo.IsQWord: boolean;
+function TRttiInfo.IsQWord: boolean;
 begin
-  result := (Kind = tkQWord);
+  result := (Kind = rkQWord);
 end;
 
-function TTypeInfo.EnumBaseType: PEnumType;
+function TRttiInfo.DynArrayItemType(aDataSize: PInteger): PRttiInfo;
 begin
-  result := pointer(GetTypeData(@self));
-  if Kind <> tkBool then
-    result := result^.EnumBaseType;
+  result := nil;
+  if (@self <> nil) and (Kind = rkDynArray) then
+  begin
+    result := pointer(GetTypeData(@self));
+    if aDataSize <> nil then
+      aDataSize^ := PTypeData(result)^.elSize and $7FFFFFFF;
+    result := DeRef(PTypeData(result)^.elTypeRef);
+  end;
+end;
+
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
+  aClass: TClass): integer;
+
+  procedure AddParentsFirst(C: TClass);
+  type
+    TMethodInfo = packed record
+      Name: PShortString;
+      Addr: Pointer;
+    end;
+  var
+    Table: PCardinalArray;
+    M: ^TMethodInfo;
+    i: integer;
+  begin
+    if C = nil then
+      exit;
+    AddParentsFirst(GetClassParent(C)); // put children published methods afterward
+    Table := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
+    if Table = nil then
+      exit;
+    SetLength(Methods, result + Table^[0]);
+    M := @Table^[1];
+    for i := 1 to Table^[0] do  // Table^[0] = methods count
+      with Methods[result] do
+      begin
+        ShortStringToAnsi7String(M^.Name^, Name);
+        Method.Data := Instance;
+        Method.Code := M^.Addr;
+        inc(M);
+        inc(result);
+      end;
+  end;
+
+begin
+  result := 0;
+  if aClass <> nil then
+    AddParentsFirst(aClass)
+  else if Instance <> nil then
+    AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
 
 

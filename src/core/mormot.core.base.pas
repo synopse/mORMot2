@@ -71,10 +71,6 @@ const
   // - used e.g. for Delphi 2009+ UnicodeString=String type
   CP_UTF16 = 1200;
 
-  /// fake code page used to recognize TSQLRawBlob
-  // - as returned e.g. by TTypeInfo.AnsiStringCodePage from mormot.rtti.pas
-  CP_SQLRAWBLOB = 65534;
-
   /// internal Code Page for RawByteString undefined string
   CP_RAWBYTESTRING = 65535;
 
@@ -86,6 +82,9 @@ const
 
   /// internal Code Page for UTF-8 Unicode encoding
   CP_UTF8 = 65001;
+
+  /// internal Code Page for System AnsiString encoding
+  CP_ACP = 0;
 
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 
@@ -134,6 +133,9 @@ type
   PWord = System.PWord;
   // redefined here to not use the unexpected PSingle definition from Windows.pas
   PSingle = System.PSingle;
+
+  // this pointer is not defined on older Delphi revisions
+  PMethod = ^TMethod;
 
   {$ifndef ISDELPHIXE2}
   /// used to store the handle of a system Thread
@@ -536,6 +538,9 @@ function ClassNameShort(C: TClass): PShortString; overload;
 /// just a wrapper around vmtClassName to avoid a string conversion
 function ClassNameShort(Instance: TObject): PShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// just a wrapper around vmtClassName to avoid a string conversion
+procedure ClassToText(C: TClass; var result: RawUTF8);
 
 /// just a wrapper around vmtParent to avoid a function call
 // - slightly faster than TClass.ClassParent thanks to proper inlining
@@ -1873,20 +1878,20 @@ procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// our fast version of CompareMem() with optimized asm for x86 and tune pascal
-function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 
 {$ifdef HASINLINE}
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean; inline;
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean; inline;
 {$else}
 /// a CompareMem()-like function designed for small and fixed-sized content
 // - here, Length is expected to be a constant value - typically from sizeof() -
 // so that inlining has better performance than calling the CompareMem() function
-var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = CompareMem;
+var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): boolean = CompareMem;
 {$endif HASINLINE}
 
 /// a CompareMem()-like function designed for small (a few bytes) content
 // - to be efficiently inlined in processing code
-function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef CPUX86}
@@ -2262,6 +2267,22 @@ var
 procedure VarClear(var v: variant); inline;
 {$endif FPC}
 
+/// same as Value := Null, but slightly faster
+procedure SetVariantNull(var Value: variant);
+  {$ifdef HASINLINE} inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - we also discovered some issues with FPC's Variants unit, so this function
+// may be used even in end-user cross-compiler code
+function VarIsEmptyOrNull(const V: Variant): Boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+
+/// same as VarIsEmpty(PVariant(V)^) or VarIsEmpty(PVariant(V)^), but faster
+// - we also discovered some issues with FPC's Variants unit, so this function
+// may be used even in end-user cross-compiler code
+function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+
 /// same as Dest := TVarData(Source) for simple values
 // - will return TRUE for all simple values after varByRef unreference, and
 // copying the unreferenced Source value into Dest raw storage
@@ -2479,8 +2500,11 @@ begin
     if p <> nil then
       MoveFast(p^, sr^, len);
   end;
-  {$ifdef FPC}  Finalize(RawByteString(s)); {$else}
-  RawByteString(s) := ''; {$endif}
+  {$ifdef FPC}
+  Finalize(RawByteString(s));
+  {$else}
+  RawByteString(s) := '';
+  {$endif FPC}
   pointer(s) := r;
 end;
 
@@ -2507,8 +2531,11 @@ begin
     if p <> nil then
       MoveFast(p^, sr^, len);
   end;
-  {$ifdef FPC}  Finalize(s); {$else}
-  s := ''; {$endif}
+  {$ifdef FPC}
+  Finalize(s);
+  {$else}
+  s := '';
+  {$endif FPC}
   pointer(s) := r;
 end;
 
@@ -2539,6 +2566,19 @@ end;
 function ClassNameShort(Instance: TObject): PShortString;
 begin
   result := PPointer(PPtrInt(Instance)^ + vmtClassName)^;
+end;
+
+procedure ClassToText(C: TClass; var result: RawUTF8);
+var
+  P: PShortString;
+begin
+  if C = nil then
+    result := ''
+  else
+  begin
+    P := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^;
+    FastSetString(result, @P^[1], ord(P^[0]));
+  end;
 end;
 
 function GetClassParent(C: TClass): TClass;
@@ -7308,6 +7348,7 @@ end;
 { ************ Efficient Variant Values Conversion }
 
 {$ifdef FPC}
+
 procedure VarClear(var v: variant); // defined here for proper inlining
 var
   p: pointer; // more efficient generated asm with an explicit temp variable
@@ -7318,7 +7359,38 @@ begin
   else
     VarClearProc(PVarData(p)^);
 end;
+
 {$endif FPC}
+
+procedure SetVariantNull(var Value: variant);
+begin
+  if integer(TVarData(Value).VType) and VTYPE_STATIC <> 0 then
+    VarClearProc(TVarData(Value));
+  PPtrInt(@Value)^ := varNull;
+end;
+
+function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+var
+  vt: cardinal;
+begin
+  repeat
+    vt := PVarData(VarData)^.VType;
+    if vt <> varVariant or varByRef then
+      break;
+    VarData := PVarData(VarData)^.VPointer;
+    if VarData = nil then
+    begin
+      result := true;
+      exit;
+    end;
+  until false;
+  result := (vt <= varNull) or (vt = varNull or varByRef);
+end;
+
+function VarIsEmptyOrNull(const V: Variant): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
 
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
 var

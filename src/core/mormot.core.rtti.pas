@@ -8,11 +8,10 @@ unit mormot.core.rtti;
 
    Cross-Compiler RTTI Definitions shared by all framework units
     - Low-Level Cross-Compiler RTTI Definitions
-
     - Enumerations RTTI
+    - Published Class Properties and Methods RTTI
+
     - Record And Dynamic Array RTTI
-    - Published Class Properties RTTI
-    - Published Methods RTTI
     - IInvokable Interface RTTI
 
     Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
@@ -21,6 +20,8 @@ unit mormot.core.rtti;
     record/object to access TypeInfo() via a set of explicit methods.
     Here fake record/objects are just wrappers around pointers defined in
     Delphi/FPC RTL's TypInfo.pas with the magic of inlining.
+    We redefined all RTTI definitions as TRtti* types to avoid confusion
+    with TypInfo unit names.
 
   *****************************************************************************
 }
@@ -31,58 +32,57 @@ interface
 
 uses
   classes,
-  typinfo, // Delphi requires those definitions up here for proper inlining
-  mormot.core.base;
+  mormot.core.base,
+  mormot.core.text; // used e.g. on enumerations
 
 
 { ************* Low-Level Cross-Compiler RTTI Definitions }
 
 type
-  /// specify ordinal (tkInteger and tkEnumeration) storage size and sign
-  // - note: on FPC, Int64 is stored as its own TTypeKind, not as tkInteger
-  TOrdType = (otSByte, otUByte, otSWord, otUWord, otSLong, otULong
-    {$ifdef FPC_NEWRTTI} , otSQWord, otUQWord {$endif});
+  /// map TOrdType, to specify ordinal (rkInteger and rkEnumeration) storage size and sign
+  // - note: on FPC, Int64 is stored as its own TRttiKind, not as rkInteger
+  TRttiOrd = (roSByte, roUByte, roSWord, roUWord, roSLong, roULong
+    {$ifdef FPC_NEWRTTI} ,roSQWord, roUQWord {$endif});
 
-  /// specify floating point (ftFloat) storage size and precision
-  // - here ftDouble is renamed ftDoub to avoid confusion with TSQLDBFieldType
-  TFloatType = (ftSingle, ftDoub, ftExtended, ftComp, ftCurr);
+  /// map TFloatType, to specify floating point (ftFloat) storage size and precision
+  TRttiFloat = (rfSingle, rfDouble, rfExtended, rfComp, rfCurr);
 
 {$ifdef FPC}
 
-  /// available type families for FPC RTTI values
-  // - values differs from Delphi,  and are taken from FPC typinfo.pp unit
-  // - here below,  we defined tkLString instead of tkAString to match Delphi -
+  /// map TTypeKind, to specify available type families for FPC RTTI values
+  // - FPC types differs from Delphi, and are taken from FPC typinfo.pp unit
+  // - here below,  we defined rtLString instead of rtAString to match Delphi -
   // see https://lists.freepascal.org/pipermail/fpc-devel/2013-June/032360.html
   // "Compiler uses internally some LongStrings which is not possible to use
-  // for variable declarations" so tkLStringOld seems never used in practice
-  TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat, tkSet,
-    tkMethod, tkSString, tkLStringOld {=tkLString}, tkLString {=tkAString},
-    tkWString, tkVariant, tkArray, tkRecord, tkInterface,
-    tkClass, tkObject, tkWChar, tkBool, tkInt64, tkQWord,
-    tkDynArray, tkInterfaceRaw, tkProcVar, tkUString, tkUChar,
-    tkHelper, tkFile, tkClassRef, tkPointer);
+  // for variable declarations" so rtLStringOld seems never used in practice
+  TRttiKind = (rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat, rkSet,
+    rkMethod, rkSString, rkLStringOld {=rkLString}, rkLString {=rkAString},
+    rkWString, rkVariant, rkArray, rkRecord, rkInterface,
+    rkClass, rkObject, rkWChar, rkBool, rkInt64, rkQWord,
+    rkDynArray, rkInterfaceRaw, rkProcVar, rkUString, rkUChar,
+    rkHelper, rkFile, rkClassRef, rkPointer);
 
 const
-  /// potentially managed types in TTypeKind RTTI enumerate
+  /// potentially managed types in TRttiKind enumerate
   // - should match ManagedType*() functions
-  tkManagedTypes = [tkLStringOld, tkLString, tkWstring, tkUstring, tkArray,
-                    tkObject, tkRecord, tkDynArray, tkInterface, tkVariant];
-  /// maps record or object in TTypeKind RTTI enumerate
-  tkRecordTypes = [tkObject, tkRecord];
-  /// maps record or object in TTypeKind RTTI enumerate
-  tkRecordKinds = [tkObject, tkRecord];
+  rkManagedTypes = [rkLStringOld, rkLString, rkWstring, rkUstring, rkArray,
+                    rkObject, rkRecord, rkDynArray, rkInterface, rkVariant];
+  /// maps record or object in TRttiKind enumerate
+  rkRecordTypes = [rkObject, rkRecord];
+  /// maps record or object in TRttiKind enumerate
+  rkRecordKinds = [rkObject, rkRecord];
 
 type
-  ///  TTypeKind RTTI enumerate as defined in Delphi 6 and up
-  TDelphiTypeKind = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
+  ///  TTypeKind enumerate as defined in Delphi 6 and up
+  TDelphiType = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
     dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
     dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
     dkUString, dkClassRef, dkPointer, dkProcedure);
 
 const
-  /// convert FPC's TTypeKind to Delphi's RTTI enumerate
+  /// convert our TRttiKind to Delphi's TTypeKind enumerate
   // - used internally for cross-compiler TDynArray binary serialization
-  FPCTODELPHI: array[TTypeKind] of TDelphiTypeKind = (
+  FPCTODELPHI: array[TRttiKind] of TDelphiType = (
     dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
     dkSet, dkMethod, dkString, dkLString, dkLString,
     dkWString, dkVariant, dkArray, dkRecord, dkInterface,
@@ -90,92 +90,90 @@ const
     dkDynArray, dkInterface, dkProcedure, dkUString, dkWChar,
     dkPointer, dkPointer, dkClassRef, dkPointer);
 
-  /// convert Delphi's TTypeKind to FPC's RTTI enumerate
-  DELPHITOFPC: array[TDelphiTypeKind] of TTypeKind = (
-    tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
-    tkSString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
-    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray,
-    tkUString, tkClassRef, tkPointer, tkProcVar);
+  /// convert Delphi's TTypeKind to our TRttiKind enumerate
+  DELPHITOFPC: array[TDelphiType] of TRttiKind = (
+    rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat,
+    rkSString, rkSet, rkClass, rkMethod, rkWChar, rkLString, rkWString,
+    rkVariant, rkArray, rkRecord, rkInterface, rkInt64, rkDynArray,
+    rkUString, rkClassRef, rkPointer, rkProcVar);
 
 {$else}
 
   /// available type families for Delphi 6 and up, similar to typinfo.pas
   // - redefined here to be shared between SynCommons.pas and mORMot.pas,
   // also leveraging FPC compatibility as much as possible (FPC's typinfo.pp
-  // is not convenient to share code with Delphi - see e.g. its tkLString)
-  TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
-    tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
-    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
-    {$ifdef UNICODE} , tkUString, tkClassRef, tkPointer, tkProcedure {$endif} );
+  // is not convenient to share code with Delphi - see e.g. its rtLString)
+  TRttiKind = (rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat,
+    rkString, rkSet, rkClass, rkMethod, rkWChar, rkLString, rkWString,
+    rkVariant, rkArray, rkRecord, rkInterface, rkInt64, rkDynArray
+    {$ifdef UNICODE}, rkUString, rkClassRef, rkPointer, rkProcedure {$endif});
 
 const
   /// maps record or object in TTypeKind RTTI enumerate
-  tkRecordTypes = [tkRecord];
+  rkRecordTypes = [rkRecord];
   /// maps record or object in TTypeKind RTTI enumerate
-  tkRecordKinds = tkRecord;
+  rkRecordKinds = rkRecord;
 
 {$endif FPC}
 
-  /// maps long string in TTypeKind RTTI enumerate
-  tkStringTypes =
-    [tkLString, {$ifdef FPC} tkLStringOld, {$endif} tkWString
-     {$ifdef HASVARUSTRING} , tkUString {$endif} ];
+  /// maps long string in TRttiKind RTTI enumerate
+  rkStringTypes =
+    [rkLString, {$ifdef FPC} rkLStringOld, {$endif} rkWString
+     {$ifdef HASVARUSTRING} , rkUString {$endif} ];
 
-  /// maps 1, 8, 16, 32 and 64-bit ordinal in TTypeKind RTTI enumerate
-  tkOrdinalTypes =
-    [tkInteger, tkChar, tkWChar, tkEnumeration, tkSet, tkInt64
-     {$ifdef FPC} , tkBool, tkQWord {$endif} ];
+  /// maps 1, 8, 16, 32 and 64-bit ordinal in TRttiKind RTTI enumerate
+  rkOrdinalTypes =
+    [rkInteger, rkChar, rkWChar, rkEnumeration, rkSet, rkInt64
+     {$ifdef FPC} , rkBool, rkQWord {$endif} ];
 
   /// quick retrieve how many bytes an ordinal consist in
-  ORDTYPE_SIZE: array[TOrdType] of byte =
+  ORDTYPE_SIZE: array[TRttiOrd] of byte =
     (1, 1, 2, 2, 4, 4 {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
 
+  /// some RTTI methods may return a PShortString pointing to this void text
   NULL_SHORTSTRING: string[1] = '';
 
   
 type
-  PTypeKind = ^TTypeKind;
-  TTypeKinds = set of TTypeKind;
-  POrdType = ^TOrdType;
-  PFloatType = ^TFloatType;
+  PRttiKind = ^TRttiKind;
+  TRttiKinds = set of TRttiKind;
+  PRttiOrd = ^TRttiOrd;
+  PRttiFloat = ^TRttiFloat;
 
 type
-  {$ifndef FPC}
-  PMethod = ^TMethod; // not defined on older Delphi revisions
-  {$endif FPC}
-
   /// pointer to low-level RTTI of a type definition, as returned by TypeInfo()
   // system function
-  PTypeInfo = ^TTypeInfo;
+  // - equivalency to PTypeInfo as definied in TypInfo RTL unit
+  PRttiInfo = ^TRttiInfo;
 
   /// double-reference to RTTI type definition
   // - Delphi and newer FPC do store all nested TTypeInfo as pointer to pointer,
   // to ease linking of the executable
-  PPTypeInfo = ^PTypeInfo;
+  PPRttiInfo = ^PRttiInfo;
 
   /// dynamic array of low-level RTTI type definitions
-  PTypeInfoDynArray = array of PTypeInfo;
+  PRttiInfoDynArray = array of PRttiInfo;
 
   /// pointer to a RTTI class property definition as stored in PClassProp.PropList
-  PPropInfo = ^TPropInfo;
+  PRttiProp = ^TRttiProp;
 
   /// used to store a chain of properties RTTI
   // - could be used e.g. by TSQLPropInfo to handled flattened properties
-  PPropInfoDynArray = array of PPropInfo;
+  PRttiPropDynArray = array of PRttiProp;
 
   /// pointer to all RTTI class properties definitions
-  // - as returned by PTypeInfo.ClassProp()
-  PClassProp = ^TClassProp;
+  // - as returned by PRttiInfo.RttiProps()
+  PRttiProps = ^TRttiProps;
 
   /// a wrapper to published properties of a class, as defined by compiler RTTI
   // - access properties for only a given class level, not inherited properties
-  // - start enumeration by getting a PClassProp with PTypeInfo.ClassProp(), then
+  // - start enumeration by getting a PClassProp with PRttiInfo.RttiProps(), then
   // use P := PropList to get the first PPropInfo, and iterate with P^.Next
   // - this enumeration is very fast and doesn't require any temporary memory,
   //  as in the TypInfo.GetPropInfos() PPropList usage
   // - for TSQLRecord, you should better use the RecordProps.Fields[] array,
   // which is faster and contains the properties published in parent classes
-  TClassProp = object
+  TRttiProps = object
   public
     /// number of published properties in this object
     function PropCount: integer; {$ifdef HASINLINE} inline; {$endif}
@@ -188,55 +186,55 @@ type
     // !   // ... do something with P
     // !   P := P^.Next;
     // ! end;
-    function PropList: PPropInfo; {$ifdef HASINLINE} inline; {$endif}
+    function PropList: PRttiProp; {$ifdef HASINLINE} inline; {$endif}
     /// retrieve a Field property RTTI information from a Property Name
-    function FieldProp(const PropName: shortstring): PPropInfo;
+    function FieldProp(const PropName: shortstring): PRttiProp;
   end;
 
-  /// pointer to TClassType, as returned by PTypeInfo.ClassType()
-  PClassType = ^TClassType;
+  /// pointer to TClassType, as returned by PTypeInfo.RttiClass()
+  PRttiClass = ^TRttiClass;
 
   /// a wrapper to class type information, as defined by the compiler RTTI
-  // - get a PClassType with PTypeInfo.ClassType()
-  TClassType = object
+  // - get a PClassType with PTypeInfo.RttiClass()
+  TRttiClass = object
   public
     /// the class type
     // - not defined as an inlined function, since first field is always aligned
-    ClassType: TClass;
+    RttiClass: TClass;
     /// the parent class type information
-    function ParentInfo: PTypeInfo; {$ifdef HASINLINE} inline; {$endif}
+    function ParentInfo: PRttiInfo; {$ifdef HASINLINE} inline; {$endif}
     /// the number of published properties
     function PropCount: integer; {$ifdef HASINLINE} inline; {$endif}
     /// the name (without .pas extension) of the unit were the class was defined
-    // - then the PClassProp follows: use the method ClassProp to retrieve its
+    // - then the PClassProp follows: use the method RttiProps to retrieve its
     // address
     function UnitName: ShortString; {$ifdef HASINLINE} inline; {$endif}
     /// get the information about the published properties of this class
     // - stored after UnitName memory
-    function ClassProp: PClassProp; {$ifdef HASINLINE} inline; {$endif}
+    function RttiProps: PRttiProps; {$ifdef HASINLINE} inline; {$endif}
     /// fast and easy find if this class inherits from a specific class type
-    // - you should rather consider using TTypeInfo.InheritsFrom directly
+    // - you should rather consider using TRttiInfo.InheritsFrom directly
     function InheritsFrom(AClass: TClass): boolean;
   end;
 
   /// pointer to TEnumType, as returned by PTypeInfo.EnumBaseType/SetEnumType
-  PEnumType = ^TEnumType;
+  PRttiEnumType = ^TRttiEnumType;
 
   /// a wrapper to enumeration type information, as defined by the compiler RTTI
   // and returned by PTypeInfo.EnumBaseType/SetEnumType
   // - we use this to store the enumeration values as integer, but easily provide
   // a text equivalent, translated if necessary, from the enumeration type
   // definition itself
-  TEnumType = object
+  TRttiEnumType = object
   private
-    // as used by TTypeInfo.EnumBaseType/SetBaseType
-    function EnumBaseType: PEnumType; {$ifdef HASINLINE} inline; {$endif}
-    function SetBaseType: PEnumType; {$ifdef HASINLINE} inline; {$endif}
+    // as used by TRttiInfo.EnumBaseType/SetBaseType
+    function EnumBaseType: PRttiEnumType; {$ifdef HASINLINE} inline; {$endif}
+    function SetBaseType: PRttiEnumType;  {$ifdef HASINLINE} inline; {$endif}
   public
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
     // - not defined as an inlined function, since first field is always aligned
-    OrdType: TOrdType;
+    RttiOrd: TRttiOrd;
     /// first value of enumeration type, typicaly 0
     // - may be < 0 e.g. for boolean
     function MinValue: PtrInt; {$ifdef HASINLINE} inline; {$endif}
@@ -248,7 +246,7 @@ type
     function NameList: PShortString; {$ifdef HASINLINE} inline; {$endif}
     /// get the corresponding enumeration name
     // - return the first one if Value is invalid (>MaxValue)
-    function GetEnumNameOrd(Value: Integer): PShortString;
+    function GetEnumNameOrd(Value: cardinal): PShortString; {$ifdef HASINLINE} inline; {$endif}
     /// get the corresponding enumeration name
     // - return the first one if Value is invalid (>MaxValue)
     // - Value will be converted to the matching ordinal value (byte or word)
@@ -273,7 +271,7 @@ type
     // e.g. GetEnumNameValue('Warning') will find sllWarning item
     // - return -1 if not found (don't use directly this value to avoid any GPF)
     function GetEnumNameValue(const EnumName: ShortString): Integer; overload;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// get the corresponding enumeration ordinal value, from its name
     // - if Value does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
@@ -281,7 +279,7 @@ type
     // e.g. GetEnumNameValue('Warning') will find sllWarning item
     // - return -1 if not found (don't use directly this value to avoid any GPF)
     function GetEnumNameValue(Value: PUTF8Char): Integer; overload;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// get the corresponding enumeration ordinal value, from its name
     // - if Value does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
@@ -291,29 +289,19 @@ type
     // - return -1 if not found (don't use directly this value to avoid any GPF)
     function GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
       AlsoTrimLowerCase: boolean = true): Integer; overload;
+    /// get the corresponding enumeration ordinal value, from its trimmed name
+    function GetEnumNameValueTrimmed(Value: PUTF8Char; ValueLen: integer;
+      ExactCase: boolean): Integer;
     /// get the corresponding enumeration name, without the first lowercase chars
     // (otDone -> 'Done')
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetEnumNameTrimed(const Value): RawUTF8; {$ifdef HASINLINE} inline; {$endif}
     /// get the enumeration names corresponding to a set value
-    function GetSetNameCSV(Value: integer; SepChar: AnsiChar = ',';
+    function GetSetNameCSV(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUTF8; overload;
-    ///  get the corresponding caption name, without the first lowercase chars
-    // (otDone -> 'Done')
-    // - return "string" type, i.e. UnicodeString for Delphi 2009+
-    // - internally call UnCamelCase() then System.LoadResStringTranslate() if available
-    // - Value will be converted to the matching ordinal value (byte or word)
-    function GetCaption(const Value): string;
-    /// get all caption names, ready to be display, as lines separated by #13#10
-    // - return "string" type, i.e. UnicodeString for Delphi 2009+
-    // - if UsedValuesBits is not nil, only the corresponding bits set are added
-    function GetCaptionStrings(UsedValuesBits: Pointer = nil): string;
-    /// add caption names, ready to be display, to a TStrings class
-    // - add pointer(ord(element)) as Objects[] value
-    // - if UsedValuesBits is not nil, only the corresponding bits set are added
-    // - can be used e.g. to populate a combo box as such:
-    // ! PTypeInfo(TypeInfo(TMyEnum))^.EnumBaseType^.AddCaptionStrings(ComboBox.Items);
-    procedure AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer = nil);
+    /// get the enumeration names corresponding to a set value
+    procedure GetSetNameCSV(W: TAbstractWriter; Value: cardinal; SepChar: AnsiChar = ',';
+      FullSetsAsStar: boolean = false); overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
@@ -335,31 +323,31 @@ type
   // - defined as a record since it is the same for FPC and Delphi, and
   // is not available in oldest Delphi's TypInfo.pas
   // - maps TRecordElement in FPC rtti.inc or TManagedField in Delphi TypInfo
-  TRecordField = record
+  TRttiRecordField = record
     /// the RTTI of this managed field
     {$ifdef HASDIRECTTYPEINFO}
-    TypeInfo: PTypeInfo;
+    TypeInfo: PRttiInfo;
     {$else}
-    TypeInfoRef: PPTypeInfo;
+    TypeInfoRef: PPRttiInfo;
     {$endif}
     /// where this managed field starts in the record memory layout
     Offset: PtrUInt;
   end;
   /// pointer to the RTTI of a record/object type definition (managed) field
-  PRecordField = ^TRecordField;
+  PRttiRecordField = ^TRttiRecordField;
 
   /// define the interface abilities
-  TIntfFlag = (ifHasGuid, ifDispInterface, ifDispatch
+  TRttiIntfFlag = (ifHasGuid, ifDispInterface, ifDispatch
     {$ifdef FPC} , ifHasStrGUID {$endif});
   /// define the set of interface abilities
-  TIntfFlags = set of TIntfFlag;
+  TRttiIntfFlags = set of TRttiIntfFlag;
 
   /// a wrapper to interface type information, as defined by the the compiler RTTI
-  TInterfaceTypeData = object
+  TRttiInterfaceTypeData = object
     /// ancestor interface type
-    function IntfParent: PTypeInfo; {$ifdef HASINLINE} inline; {$endif}
+    function IntfParent: PRttiInfo; {$ifdef HASINLINE} inline; {$endif}
     /// interface abilities
-    function IntfFlags: TIntfFlags; {$ifdef HASINLINE} inline; {$endif}
+    function IntfFlags: TRttiIntfFlags; {$ifdef HASINLINE} inline; {$endif}
     /// interface 128-bit GUID
     function IntfGuid: PGUID; {$ifdef HASINLINE} inline; {$endif}
     /// where the interface has been defined
@@ -367,32 +355,33 @@ type
   end;
 
   /// pointer to a wrapper to interface type information
-  PInterfaceTypeData = ^TInterfaceTypeData;
+  PRttiInterfaceTypeData = ^TRttiInterfaceTypeData;
 
-  /// record RTTI as returned by TTypeInfo.RecordManagedFields
-  TRecordManagedFields = record
+  /// record RTTI as returned by TRttiInfo.RecordManagedFields
+  TRttiRecordManagedFields = record
     /// the record size in bytes
     Size: integer;
     /// how many managed Fields[] are defined in this record
     Count: integer;
     /// points to the first field RTTI
     // - use inc(Fields) to go to the next one
-    Fields: PRecordField;
+    Fields: PRttiRecordField;
   end;
 
   /// enhanced RTTI of a record/object type definition
-  // - as returned by TTypeInfo.RecordAllFields on Delphi 2010+
-  TRecordAllField = record
+  // - as returned by TRttiInfo.RecordAllFields on Delphi 2010+
+  TRttiRecordAllField = record
     /// the field RTTI definition
-    TypeInfo: PTypeInfo;
+    TypeInfo: PRttiInfo;
     /// the field offset in the record
     Offset: PtrUInt;
     /// the field property name
     Name: PShortString;
   end;
-  PRecordAllField = ^TRecordAllField;
-  /// as returned by TTypeInfo.RecordAllFields
-  TRecordAllFieldDynArray = array of TRecordAllField;
+  PRttiRecordAllField = ^TRttiRecordAllField;
+
+  /// as returned by TRttiInfo.RecordAllFields
+  TRttiRecordAllFields = array of TRttiRecordAllField;
 
   /// main entry-point wrapper to access RTTI for a given pascal type
   // - as returned by the TypeInfo() low-level compiler function
@@ -405,140 +394,143 @@ type
   // ! type
   // !   TNewType = type TOldType;
   // here TypeInfo(TNewType) <> TypeInfo(TOldType)
-  TTypeInfo = object
+  TRttiInfo = object
     /// the value type family
     // - not defined as an inlined function, since first field is always aligned
-    Kind: TTypeKind;
+    Kind: TRttiKind;
     /// the declared name of the type ('String','Word','RawUnicode'...)
     // - all subsequent properties should be accessed via TTypeInfo methods
     function Name: ShortString; {$ifdef HASINLINE} inline; {$endif}
     /// for ordinal types, get the storage size and sign
-    function OrdType: TOrdType; {$ifdef HASINLINE} inline; {$endif}
-    /// return TRUE if the property is an unsigned 64-bit field
-    function IsQWord: boolean; {$ifdef HASINLINE} inline; {$endif}
-    /// for tkFloat: get the storage size and precision
-    function FloatType: TFloatType; {$ifdef HASINLINE} inline; {$endif}
-    /// for tkEnumeration: get the enumeration type information
-    function EnumBaseType: PEnumType; {$ifdef HASINLINE} inline; {$endif}
-    /// for tkSet: get the type information of its associated enumeration
-    function SetEnumType: PEnumType;
-    /// for tkRecordTypes: get the record size
-    function RecordSize: integer; {$ifdef HASINLINE} inline; {$endif}
-    /// retrieve RTTI information about all managed fields of this record
+    function RttiOrd: TRttiOrd; {$ifdef HASINLINE} inline; {$endif}
+    /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
+    function IsQWord: boolean;  {$ifdef HASINLINE} inline; {$endif}
+    /// for rtFloat: get the storage size and precision
+    function RttiFloat: TRttiFloat;       {$ifdef HASINLINE} inline; {$endif}
+    /// for rtEnumeration: get the enumeration type information
+    function EnumBaseType: PRttiEnumType; {$ifdef HASINLINE} inline; {$endif}
+    /// for rtSet: get the type information of its associated enumeration
+    function SetEnumType: PRttiEnumType;  {$ifdef HASINLINE} inline; {$endif}
+    /// for rtRecordTypes: get the record size
+    function RecordSize: integer;         {$ifdef HASINLINE} inline; {$endif}
+    /// for rtRecordTypes: retrieve RTTI information about all managed fields
+    // of this record
     // - non managed fields (e.g. integers, double...) are not listed here
     // - also includes the total record size in bytes
-    procedure RecordManagedFields(out Fields: TRecordManagedFields);
+    procedure RecordManagedFields(out Fields: TRttiRecordManagedFields);
       {$ifdef HASINLINE} inline; {$endif}
-    /// retrieve enhanced RTTI information about all fields of this record
+    /// for rtRecordTypes: retrieve enhanced RTTI information about all fields
+    // of this record
     // - this information is currently only available since Delphi 2010
-    function RecordAllFields(out RecSize: integer): TRecordAllFieldDynArray;
-    /// for tkDynArray: get the dynamic array type information of the stored item
-    function DynArrayItemType(aDataSize: PInteger = nil): PTypeInfo;
+    function RecordAllFields(out RecSize: integer): TRttiRecordAllFields;
+    /// for rtDynArray: get the dynamic array type information of the stored item
+    function DynArrayItemType(aDataSize: PInteger = nil): PRttiInfo;
       {$ifdef HASINLINE} inline; {$endif}
-    /// for tkDynArray: get the dynamic array size (in bytes) of the stored item
+    /// for rtDynArray: get the dynamic array size (in bytes) of the stored item
     function DynArrayItemSize: integer; {$ifdef HASINLINE} inline; {$endif}
     /// recognize most used string types, returning their code page
-    // - will recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code page
-    // - will return the exact code page since Delphi 2009, from RTTI
+    // - will return the exact code page on FPC and since Delphi 2009, from RTTI
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
+    // - warning: it won't recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code
+    // page - so caller should first check for TypeInfo(TSQLRawBlob)
     function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
-    /// for tkClass: get the class type information
-    function ClassType: PClassType; {$ifdef HASINLINE} inline; {$endif}
-    /// for tkClass: return the number of published properties in this class
+    /// for rtClass: get the class type information
+    function RttiClass: PRttiClass;       {$ifdef HASINLINE} inline; {$endif}
+    /// for rtClass: return the number of published properties in this class
     // - you can count the plain fields without any getter function, if you
     // do need only the published properties corresponding to some value
     // actually stored, and ignore e.g. any textual conversion
     function ClassFieldCount(onlyWithoutGetter: boolean): integer;
-    /// for tkClass: fast and easy check if a class inherits from this RTTI
+    /// for rtClass: fast and easy check if a class inherits from this RTTI
     function InheritsFrom(AClass: TClass): boolean;
-    /// for tkInterface: get the interface type information
-    function InterfaceType: PInterfaceTypeData; {$ifdef HASINLINE} inline; {$endif}
-    /// for tkInterface: get the TGUID of a given interface type information
+    /// for rtInterface: get the interface type information
+    function InterfaceType: PRttiInterfaceTypeData; {$ifdef HASINLINE} inline; {$endif}
+    /// for rtInterface: get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
     function InterfaceGUID: PGUID;
-    /// for tkInterface: get the unit name of a given interface type information
+    /// for rtInterface: get the unit name of a given interface type information
     // - returns '' if this type is not an interface
     function InterfaceUnitName: PShortString;
-    /// for tkInterface: get the ancestor/parent of a given interface type information
+    /// for rtInterface: get the ancestor/parent of a given interface type information
     // - returns nil if this type has no parent
-    function InterfaceAncestor: PTypeInfo;
-    /// for tkInterface: get all ancestors/parents of a given interface type information
+    function InterfaceAncestor: PRttiInfo;
+    /// for rtInterface: get all ancestors/parents of a given interface type information
     // - only ancestors with an associated TGUID will be added
     // - if OnlyImplementedBy is not nil, only the interface explicitly
     // implemented by this class will be added, and AncestorsImplementedEntry[]
     // will contain the corresponding PInterfaceEntry values
-    procedure InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
+    procedure InterfaceAncestors(out Ancestors: PRttiInfoDynArray;
       OnlyImplementedBy: TInterfacedObjectClass;
       out AncestorsImplementedEntry: TPointerDynArray);
   end;
 
   /// how a RTTI property definition access its value
   // - as returned by TPropInfo.Getter/Setter methods
-  TPropInfoCall = (
-    picNone, picField, picMethod, picIndexed);
+  TRttiPropCall = (
+    rpcNone, rpcField, rpcMethod, rpcIndexed);
 
   /// a wrapper containing a RTTI class property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
   // - doesn't depend on RTL's TypInfo unit, to enhance cross-compiler support
-  TPropInfo = object
+  TRttiProp = object
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
-    function Getter(Instance: TObject; Call: PMethod): TPropInfoCall; {$ifdef HASINLINE} inline; {$endif}
+    function Getter(Instance: TObject; Call: PMethod): TRttiPropCall; {$ifdef HASINLINE} inline; {$endif}
     /// raw retrieval of the property access definition
-    function Setter(Instance: TObject; Call: PMethod): TPropInfoCall; {$ifdef HASINLINE} inline; {$endif}
-    /// raw retrieval of tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkBool
+    function Setter(Instance: TObject; Call: PMethod): TRttiPropCall; {$ifdef HASINLINE} inline; {$endif}
+    /// raw retrieval of rtInteger,rtEnumeration,rtSet,rtChar,rtWChar,rtBool
     // - rather call GetOrdValue/GetInt64Value
     function GetOrdProp(Instance: TObject): PtrInt;
-    /// raw assignment of tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkBool
+    /// raw assignment of rtInteger,rtEnumeration,rtSet,rtChar,rtWChar,rtBool
     // - rather call SetOrdValue/SetInt64Value
     procedure SetOrdProp(Instance: TObject; Value: PtrInt);
-    /// raw retrieval of tkClass
+    /// raw retrieval of rtClass
     function GetObjProp(Instance: TObject): TObject;
-    /// raw retrieval of tkInt64,tkQWord
+    /// raw retrieval of rtInt64,rtQWord
     // - rather call GetInt64Value
     function GetInt64Prop(Instance: TObject): Int64;
-    /// raw assignment of tkInt64,tkQWord
+    /// raw assignment of rtInt64,rtQWord
     // - rather call SetInt64Value
     procedure SetInt64Prop(Instance: TObject; const Value: Int64);
-    /// raw retrieval of tkLString
+    /// raw retrieval of rtLString
     procedure GetLongStrProp(Instance: TObject; var Value: RawByteString);
-    /// raw assignment of tkLString
+    /// raw assignment of rtLString
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
-    /// raw copy of tkLString
+    /// raw copy of rtLString
     procedure CopyLongStrProp(Source,Dest: TObject);
-    /// raw retrieval of tkString into an Ansi7String
+    /// raw retrieval of rtString into an Ansi7String
     procedure GetShortStrProp(Instance: TObject; var Value: RawByteString);
-    /// raw retrieval of tkWString
+    /// raw retrieval of rtWString
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
-    /// raw assignment of tkWString
+    /// raw assignment of rtWString
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
     {$ifdef HASVARUSTRING}
-    /// raw retrieval of tkUString
+    /// raw retrieval of rtUString
     procedure GetUnicodeStrProp(Instance: TObject; var Value: UnicodeString);
-    /// raw assignment of tkUString
+    /// raw assignment of rtUString
     procedure SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
     {$endif HASVARUSTRING}
-    /// raw retrieval of tkFloat/currency
+    /// raw retrieval of rtFloat/currency
     // - use instead GetCurrencyValue
     function GetCurrencyProp(Instance: TObject): currency;
-    /// raw assignment of tkFloat/currency
+    /// raw assignment of rtFloat/currency
     procedure SetCurrencyProp(Instance: TObject; const Value: Currency);
-    /// raw retrieval of tkFloat/double
+    /// raw retrieval of rtFloat/double
     function GetDoubleProp(Instance: TObject): double;
-    /// raw assignment of tkFloat/double
+    /// raw assignment of rtFloat/double
     procedure SetDoubleProp(Instance: TObject; Value: Double);
-    /// raw retrieval of tkFloat - with conversion to 64-bit double
+    /// raw retrieval of rtFloat - with conversion to 64-bit double
     // - use instead GetDoubleValue
     function GetFloatProp(Instance: TObject): double;
-    /// raw assignment of tkFloat
+    /// raw assignment of rtFloat
     // - use instead SetDoubleValue
     procedure SetFloatProp(Instance: TObject; Value: TSynExtended);
-    /// raw retrieval of tkVariant
+    /// raw retrieval of rtVariant
     procedure GetVariantProp(Instance: TObject; var result: Variant);
-    /// raw assignment of tkVariant
+    /// raw assignment of rtVariant
     procedure SetVariantProp(Instance: TObject; const Value: Variant);
   public
     /// contains the index value of an indexed class data property
@@ -561,99 +553,22 @@ type
     function Name: PShortString; {$ifdef HASINLINE} inline; {$endif}
     /// the type information of this property
     // - will de-reference the PropType pointer on Delphi and newer FPC compilers
-    function TypeInfo: PTypeInfo; {$ifdef HASINLINE} inline; {$endif}
+    function TypeInfo: PRttiInfo; {$ifdef HASINLINE} inline; {$endif}
     /// get the next property information
-    // - no range check: use ClassProp()^.PropCount to determine the properties count
-    // - get the first PPropInfo with ClassProp()^.PropList
-    function Next: PPropInfo; {$ifdef HASINLINE} inline; {$endif}
+    // - no range check: use RttiProps()^.PropCount to determine the properties count
+    // - get the first PPropInfo with RttiProps()^.PropList
+    function Next: PRttiProp; {$ifdef HASINLINE} inline; {$endif}
     /// return FALSE (AS_UNIQUE) if was marked as "stored AS_UNIQUE"
     //  (i.e. "stored false"), or TRUE by default
     // - if Instance=nil, will work only at RTTI level, not with field or method
     // (and will return TRUE if nothing is defined in the RTTI)
     function IsStored(Instance: TObject): boolean;
-    /// copy a published property value from one instance to another
-    // - this method use direct copy of the low-level binary content, and is
-    // therefore faster than a SetValue(Dest,GetValue(Source)) call
-    // - if DestInfo is nil, it will assume DestInfo=@self
-    procedure CopyValue(Source, Dest: TObject; DestInfo: PPropInfo = nil);
-    /// create a new instance of a published property
-    // - copying its properties values from a given instance of another class
-    // - if the destination property is not of the aFrom class, it will first
-    // search for any extact mach in the destination nested properties
-    function CopyToNewObject(aFrom: TObject): TObject;
-    /// compare two published properties
-    function SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
     /// return the Default RTTI value defined for this property, or 0 if not set
     function DefaultOr0: integer; {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has its Default RTTI value, or is 0/""/nil
     function IsDefaultOrVoid(Instance: TObject): boolean;
     /// compute in how many bytes this property is stored
     function RetrieveFieldSize: integer;
-    /// low-level getter of the ordinal property value of a given instance
-    // - this method will check if the corresponding property is ordinal
-    // - return -1 on any error
-    function GetOrdValue(Instance: TObject): PtrInt; {$ifdef HASINLINE} inline; {$endif}
-    /// low-level getter of the ordinal property value of a given instance
-    // - this method will check if the corresponding property is ordinal
-    // - ordinal properties smaller than tkInt64 will return an Int64-converted
-    // value (e.g. tkInteger)
-    // - return 0 on any error
-    function GetInt64Value(Instance: TObject): Int64;
-    /// low-level getter of the currency property value of a given instance
-    // - this method will check if the corresponding property is exactly currency
-    // - return 0 on any error
-    function GetCurrencyValue(Instance: TObject): Currency;
-    /// low-level getter of the floating-point property value of a given instance
-    // - this method will check if the corresponding property is floating-point
-    // - return 0 on any error
-    function GetDoubleValue(Instance: TObject): double;
-    /// low-level setter of the floating-point property value of a given instance
-    // - this method will check if the corresponding property is floating-point
-    procedure SetDoubleValue(Instance: TObject; const Value: double);
-    /// low-level getter of the long string property value of a given instance
-    // - this method will check if the corresponding property is a Long String,
-    // and will return '' if it's not the case
-    // - it will convert the property content into RawUTF8, for RawUnicode,
-    // WinAnsiString, TSQLRawBlob and generic Delphi 6-2007 string property
-    // - WideString and UnicodeString properties will also be UTF-8 converted
-    procedure GetLongStrValue(Instance: TObject; var result: RawUTF8);
-    /// low-level getter of the long string property content of a given instance
-    // - just a wrapper around low-level GetLongStrProp() function
-    // - call GetLongStrValue() method if you want a conversion into RawUTF8
-    // - will work only for Kind=tkLString
-    procedure GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
-    /// low-level setter of the ordinal property value of a given instance
-    // - this method will check if the corresponding property is ordinal
-    procedure SetOrdValue(Instance: TObject; Value: PtrInt);
-    /// low-level setter of the ordinal property value of a given instance
-    // - this method will check if the corresponding property is ordinal
-    procedure SetInt64Value(Instance: TObject; Value: Int64);
-    /// low-level setter of the long string property value of a given instance
-    // - this method will check if the corresponding property is a Long String
-    // - it will convert the property content into RawUTF8, for RawUnicode,
-    // WinAnsiString, TSQLRawBlob and generic Delphi 6-2007 string property
-    // - will set WideString and UnicodeString properties from UTF-8 content
-    procedure SetLongStrValue(Instance: TObject; const Value: RawUTF8);
-    /// low-level setter of the string property value of a given instance
-    // - uses the generic string type: to be used within the VCL
-    // - this method will check if the corresponding property is a Long String
-    // or an UnicodeString (for Delphi 2009+), and will call the corresponding
-    // SetLongStrValue() or SetUnicodeStrValue() method
-    procedure SetGenericStringValue(Instance: TObject; const Value: string);
-    /// low-level getter of the long string property value of a given instance
-    // - uses the generic string type: to be used within the VCL
-    // - this method will check if the corresponding property is a Long String,
-    // or an UnicodeString (for Delphi 2009+),and will return '' if it's
-    // not the case
-    function GetGenericStringValue(Instance: TObject): string;
-    {$ifdef HASVARUSTRING}
-    /// low-level setter of the Unicode string property value of a given instance
-    // - this method will check if the corresponding property is a Unicode String
-    procedure SetUnicodeStrValue(Instance: TObject; const Value: UnicodeString);
-    /// low-level getter of the Unicode string property value of a given instance
-    // - this method will check if the corresponding property is a Unicode String
-    function GetUnicodeStrValue(Instance: TObject): UnicodeString;
-    {$endif HASVARUSTRING}
     /// return TRUE if the property has no getter but direct field read
     function GetterIsField: boolean;  {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has no setter but direct field write
@@ -667,22 +582,47 @@ type
     /// low-level getter of the field value memory pointer
     // - return NIL if both getter and setter are methods
     function GetFieldAddr(Instance: TObject): pointer; {$ifdef HASINLINE} inline; {$endif}
-    /// low-level setter of the property value as its default
-    // - this method will check the property type, e.g. setting '' for strings,
-    // and 0 for numbers, or running FreeAndNil() on any nested object (unless
-    // FreeAndNilNestedObjects is false so that ClearObject() is used
-    procedure SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean = true);
-    /// low-level setter of the property value from a supplied variant
-    // - will optionally make some conversion if the property type doesn't
-    // match the variant type, e.g. a text variant could be converted to integer
-    // when setting a tkInteger kind of property
-    // - a tkDynArray property is expected to be a T*ObjArray and will be
-    // converted from a TDocVariant using a newly allocated T*ObjArray
-    procedure SetFromVariant(Instance: TObject; const Value: variant);
-    /// low-level getter of the property value into a variant value
-    // - a tkDynArray property is expected to be a T*ObjArray and will be
-    // converted into a TDocVariant using a temporary JSON serialization
-    procedure GetVariant(Instance: TObject; var Dest: variant);
+
+    /// low-level getter of the ordinal property value of a given instance
+    // - this method will check if the corresponding property is ordinal
+    // - return -1 on any error
+    function GetOrdValue(Instance: TObject): PtrInt; {$ifdef HASINLINE} inline; {$endif}
+    /// low-level getter of the ordinal property value of a given instance
+    // - this method will check if the corresponding property is ordinal
+    // - ordinal properties smaller than rtInt64 will return an Int64-converted
+    // value (e.g. rtInteger)
+    // - return 0 on any error
+    function GetInt64Value(Instance: TObject): Int64;
+    /// low-level getter of the currency property value of a given instance
+    // - this method will check if the corresponding property is exactly currency
+    // - return 0 on any error
+    function GetCurrencyValue(Instance: TObject): Currency;
+    /// low-level getter of the floating-point property value of a given instance
+    // - this method will check if the corresponding property is floating-point
+    // - return 0 on any error
+    function GetDoubleValue(Instance: TObject): double;
+    /// low-level setter of the floating-point property value of a given instance
+    // - this method will check if the corresponding property is floating-point
+    procedure SetDoubleValue(Instance: TObject; const Value: double);
+    /// low-level getter of the long string property content of a given instance
+    // - just a wrapper around low-level GetLongStrProp() function
+    // - call GetLongStrValue() method if you want a conversion into RawUTF8
+    // - will work only for Kind=rtLString
+    procedure GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
+    /// low-level setter of the ordinal property value of a given instance
+    // - this method will check if the corresponding property is ordinal
+    procedure SetOrdValue(Instance: TObject; Value: PtrInt);
+    /// low-level setter of the ordinal property value of a given instance
+    // - this method will check if the corresponding property is ordinal
+    procedure SetInt64Value(Instance: TObject; Value: Int64);
+    {$ifdef HASVARUSTRING}
+    /// low-level setter of the Unicode string property value of a given instance
+    // - this method will check if the corresponding property is a Unicode String
+    procedure SetUnicodeStrValue(Instance: TObject; const Value: UnicodeString);
+    /// low-level getter of the Unicode string property value of a given instance
+    // - this method will check if the corresponding property is a Unicode String
+    function GetUnicodeStrValue(Instance: TObject): UnicodeString;
+    {$endif HASVARUSTRING}
   end;
 
 const
@@ -705,22 +645,19 @@ type
     Kind: byte;
   end;
 
-  {$ifdef UNICODE} // will use official RTTI definition
-  TRecordInfo = TTypeData;
-  PRecordInfo = PTypeData;
-  {$else}
-  TRecordInfo = packed record // tkRecord not defined in Delphi 7/2007 TTypeData
+  TRecordInfo = packed record // rtRecord not defined in Delphi 7/2007 TTypeData
     RecSize: integer;
     ManagedFldCount: integer;
   end;
   PRecordInfo = ^TRecordInfo;
-  PPropData = ^TPropData; // not defined e.g. in Delphi 7/2007
-  {$endif UNICODE}
 
 {$endif FPC}
 
+
+{ **************** Published Class Properties and Methods RTTI }
+
 /// retrieve the class property RTTI information for a specific class
-function InternalClassProp(ClassType: TClass): PClassProp;
+function GetRttiProps(RttiClass: TClass): PRttiProps;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the class property RTTI information for a specific class
@@ -729,11 +666,11 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 // - typical use to enumerate all published properties could be:
 //  !  var i: integer;
 //  !      CT: TClass;
-//  !      P: PPropInfo;
+//  !      P: PRttiProp;
 //  !  begin
 //  !    CT := ..;
 //  !    repeat
-//  !      for i := 1 to InternalClassPropInfo(CT,P) do begin
+//  !      for i := 1 to GetRttiProps(CT,P) do begin
 //  !        // use P^
 //  !        P := P^.Next;
 //  !      end;
@@ -741,42 +678,157 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 //  !    until CT=nil;
 //  !  end;
 // such a loop is much faster than using the RTL's TypeInfo or RTTI units
-function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
+function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
 
 /// retrieve the total number of properties for a class, including its parents
-function ClassFieldCountWithParents(ClassType: TClass;
-  onlyWithoutGetter: boolean = false): integer;
+function ClassFieldCountWithParents(C: TClass;  onlyWithoutGetter: boolean = false): integer;
+
+type
+  /// information about one method, as returned by GetPublishedMethods
+  TPublishedMethodInfo = record
+    /// the method name
+    Name: RawUTF8;
+    /// a callback to the method, for the given class instance
+    Method: TMethod;
+  end;
+  /// information about all methods, as returned by GetPublishedMethods
+  TPublishedMethodInfoDynArray = array of TPublishedMethodInfo;
+
+/// retrieve published methods information about any class instance
+// - will optionaly accept a Class, in this case Instance is ignored
+// - will work with FPC and Delphi RTTI
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
+  aClass: TClass = nil): integer;
+
+
+{ *************** Enumerations RTTI }
+
+/// helper to retrieve the text of an enumerate item
+// - just a wrapper around PTypeInfo(aTypeInfo)^.EnumBaseType.GetEnumNameOrd(aIndex)
+function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+
+/// helper to retrieve all texts of an enumerate
+// - may be used as cache for overloaded ToText() content
+procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
+
+/// helper to retrieve all trimmed texts of an enumerate
+// - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
+procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8); overload;
+
+/// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
+function GetEnumTrimmedNames(aTypeInfo: pointer): TRawUTF8DynArray; overload;
+
+/// helper to retrieve the index of an enumerate item from its text
+// - returns -1 if aValue was not found
+// - will search for the exact text and also trim the lowercase 'a'..'z' chars on
+// left side of the text if no exact match is found and AlsoTrimLowerCase is TRUE
+function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: PtrInt;
+  AlsoTrimLowerCase: boolean = false): Integer; overload;
+
+/// retrieve the index of an enumerate item from its left-trimmed text
+// - text comparison is case-insensitive for A-Z characters
+// - will trim the lowercase 'a'..'z' chars on left side of the supplied aValue text
+// - returns -1 if aValue was not found
+function GetEnumNameValueTrimmed(aTypeInfo: pointer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+
+/// retrieve the index of an enumerate item from its left-trimmed text
+// - text comparison is case-sensitive for A-Z characters
+// - will trim the lowercase 'a'..'z' chars on left side of the supplied aValue text
+// - returns -1 if aValue was not found
+function GetEnumNameValueTrimmedExact(aTypeInfo: pointer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+
+/// helper to retrieve the index of an enumerate item from its text
+function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
+  AlsoTrimLowerCase: boolean = false): Integer; overload;
+
+/// helper to retrieve the CSV text of all enumerate items defined in a set
+function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
+
+/// helper to retrieve the CSV text of all enumerate items defined in a set
+procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString;
+  trimlowercase: boolean = false);
+
 
 
 implementation
 
+uses
+  TypInfo;
+
+
+{ some inlined functions which should be defined before $include code }
+
+function FromRttiOrd(o: TRttiOrd; P: pointer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  case o of
+    roSByte:
+      result := PShortInt(P)^;
+    roSWord:
+      result := PSmallInt(P)^;
+    roSLong:
+      result := PInteger(P)^;
+    roUByte:
+      result := PByte(P)^;
+    roUWord:
+      result := PWord(P)^;
+    roULong:
+      result := PCardinal(P)^;
+    {$ifdef FPC_NEWRTTI}
+    roSQWord, roUQWord:
+      result := PInt64(P)^;
+    {$endif}
+  else
+    result := 0; // should nro happen
+  end;
+end;
+
+procedure ToRttiOrd(o: TRttiOrd; P: pointer; Value: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  case o of
+    roUByte, roSByte:
+      PByte(P)^ := Value;
+    roUWord, roSWord:
+      PWord(P)^ := Value;
+    roULong, roSLong:
+      PCardinal(P)^ := Value;
+    {$ifdef FPC_NEWRTTI}
+    roSQWord, roUQWord:
+      PInt64(P)^ := Value;
+    {$endif}
+  end;
+end;
+
 {$ifdef FPC}
-  {$include mormot.core.rtti.fpc.inc}
+  {$include mormot.core.rtti.fpc.inc}      // FPC specific RTTI access
 {$else}
-  {$include mormot.core.rtti.delphi.inc}
+  {$include mormot.core.rtti.delphi.inc}   // Delphi specific RTTI access
 {$endif FPC}
 
 
 { ************* Low-Level Cross-Compiler RTTI Definitions }
 
-{ TClassType }
+{ TRttiClass }
 
-function TClassType.UnitName: ShortString;
+function TRttiClass.UnitName: ShortString;
 begin
   result := PTypeData(@self)^.UnitName;
 end;
 
-function TClassType.InheritsFrom(AClass: TClass): boolean;
+function TRttiClass.InheritsFrom(AClass: TClass): boolean;
 var
-  P: PTypeInfo;
+  P: PRttiInfo;
 begin
   result := true;
-  if ClassType = AClass then
+  if RttiClass = AClass then
     exit;
   P := ParentInfo;
   while P <> nil do
-    with P^.ClassType^ do
-      if ClassType = AClass then
+    with P^.RttiClass^ do
+      if RttiClass = AClass then
         exit
       else
         P := ParentInfo;
@@ -784,22 +836,24 @@ begin
 end;
 
 
-{ TClassProp = TPropData in TypInfo }
-
-function TPropInfo.Name: PShortString;
+function TRttiProp.Name: PShortString;
 begin
-  result := @TypInfo.PPropInfo(@self)^.Name;
+  result := @PPropInfo(@self)^.Name;
 end;
 
-function TPropInfo.Next: PPropInfo;
+function TRttiProp.Next: PRttiProp;
 begin // this abtract code compiles into 2 asm lines under FPC :)
-  with TypInfo.PPropInfo(@self)^ do
+  with PPropInfo(@self)^ do
     result := AlignToPtr(@PByteArray(@self)[
-      (PtrUInt(@TypInfo.PPropInfo(nil).Name) + SizeOf(Name[0])) + Length(Name)]);
+      (PtrUInt(@PPropInfo(nil).Name) + SizeOf(Name[0])) + Length(Name)]);
 end;
 
-function TClassProp.FieldProp(const PropName: shortstring): PPropInfo;
-var i: integer;
+
+{ TRttiProps = TPropData in TypInfo }
+
+function TRttiProps.FieldProp(const PropName: shortstring): PRttiProp;
+var
+  i: integer;
 begin
   if @self<>nil then
   begin
@@ -814,31 +868,29 @@ begin
 end;
 
 
+{ TRttiEnumType }
 
-
-{ TEnumType }
-
-function TEnumType.MinValue: PtrInt;
+function TRttiEnumType.MinValue: PtrInt;
 begin
   result := PTypeData(@self).MinValue;
 end;
 
-function TEnumType.MaxValue: PtrInt;
+function TRttiEnumType.MaxValue: PtrInt;
 begin
   result := PTypeData(@self).MaxValue;
 end;
 
-function TEnumType.NameList: PShortString;
+function TRttiEnumType.NameList: PShortString;
 begin
   result := @PTypeData(@self).NameList;
 end;
 
-function TEnumType.SizeInStorageAsEnum: Integer;
+function TRttiEnumType.SizeInStorageAsEnum: Integer;
 begin
-  result := ORDTYPE_SIZE[OrdType]; // MaxValue does not work e.g. with WordBool
+  result := ORDTYPE_SIZE[RttiOrd]; // MaxValue does not work e.g. with WordBool
 end;
 
-function TEnumType.SizeInStorageAsSet: Integer;
+function TRttiEnumType.SizeInStorageAsSet: Integer;
 begin
   case MaxValue of
     0..7:
@@ -847,205 +899,313 @@ begin
       result := sizeof(word);
     16..31:
       result := sizeof(cardinal);
-    else
-      result := 0;
+  else
+    result := 0;
   end;
 end;
 
-function TEnumType.GetEnumNameOrd(Value: Integer): PShortString;
+function TRttiEnumType.GetEnumName(const Value): PShortString;
 begin
-
+  result := GetEnumNameOrd(FromRttiOrd(RttiOrd, @Value));
 end;
 
-function TEnumType.GetEnumName(const Value): PShortString;
-begin
-
-end;
-
-procedure TEnumType.GetEnumNameAll(var result: TRawUTF8DynArray;
+procedure TRttiEnumType.GetEnumNameAll(var result: TRawUTF8DynArray;
   TrimLeftLowerCase: boolean);
+var
+  max, i: integer;
+  V: PShortString;
 begin
-
+  Finalize(result);
+  max := MaxValue - MinValue;
+  SetLength(result, max + 1);
+  V := NameList;
+  for i := 0 to max do
+  begin
+    if TrimLeftLowerCase then
+      result[i] := TrimLeftLowerCaseShort(V)
+    else
+      result[i] := RawUTF8(V^);
+    inc(PByte(V), length(V^) + 1);
+  end;
 end;
 
-procedure TEnumType.GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8;
+procedure TRttiEnumType.GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8;
   quotedValues: boolean; const Suffix: RawUTF8; trimedValues, unCamelCased: boolean);
+var
+  i: integer;
+  V: PShortString;
+  uncamel: shortstring;
+  temp: TTextWriterStackBuffer;
 begin
-
+  with TAbstractWriter.CreateOwnedStream(temp) do
+  try
+    AddString(Prefix);
+    V := NameList;
+    for i := MinValue to MaxValue do
+    begin
+      if quotedValues then
+        Add('"');
+      if unCamelCased then
+      begin
+        TrimLeftLowerCaseToShort(V, uncamel);
+        AddShort(uncamel);
+      end
+      else if trimedValues then
+        AddTrimLeftLowerCase(V)
+      else
+        AddShort(V^);
+      if quotedValues then
+        Add('"');
+      Add(',');
+      inc(PByte(V), length(V^) + 1);
+    end;
+    CancelLastComma;
+    AddString(Suffix);
+    SetText(result);
+  finally
+    Free;
+  end;
 end;
 
-procedure TEnumType.GetEnumNameTrimedAll(var result: RawUTF8;
-  const Prefix: RawUTF8; quotedValues: boolean; const Suffix: RawUTF8);
+procedure TRttiEnumType.GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8;
+  quotedValues: boolean; const Suffix: RawUTF8);
 begin
-
+  GetEnumNameAll(result, Prefix, quotedValues, Suffix, {trimed=}true);
 end;
 
-function TEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean;
+function TRttiEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean;
   UnCamelCased: boolean): RawUTF8;
 begin
-
+  GetEnumNameAll(result, '[', {quoted=}true, ']', TrimLeftLowerCase, UnCamelCased);
 end;
 
-function TEnumType.GetEnumNameValue(const EnumName: ShortString): Integer;
+function TRttiEnumType.GetEnumNameValue(const EnumName: ShortString): Integer;
 begin
-
+  result := GetEnumNameValue(@EnumName[1], ord(EnumName[0]));
 end;
 
-function TEnumType.GetEnumNameValue(Value: PUTF8Char): Integer;
+function TRttiEnumType.GetEnumNameValue(Value: PUTF8Char): Integer;
 begin
-
+  result := GetEnumNameValue(Value, StrLen(Value));
 end;
 
-function TEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
+function TRttiEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
   AlsoTrimLowerCase: boolean): Integer;
 begin
-
+  if (Value <> nil) and (ValueLen > 0) then
+  begin
+    result := FindShortStringListExact(NameList, MaxValue, Value, ValueLen);
+    if (result < 0) and AlsoTrimLowerCase then
+      result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen);
+  end
+  else
+    result := -1;
 end;
 
-function TEnumType.GetEnumNameTrimed(const Value): RawUTF8;
+function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUTF8Char; ValueLen: integer;
+  ExactCase: boolean): Integer;
 begin
-
+  if (Value <> nil) and (ValueLen > 0) then
+    if ExactCase then
+      result := FindShortStringListTrimLowerCaseExact(NameList, MaxValue, Value, ValueLen)
+    else
+      result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen)
+  else
+    result := -1;
 end;
 
-function TEnumType.GetSetNameCSV(Value: integer; SepChar: AnsiChar;
+function TRttiEnumType.GetEnumNameTrimed(const Value): RawUTF8;
+begin
+  result := TrimLeftLowerCaseShort(GetEnumName(Value));
+end;
+
+procedure TRttiEnumType.GetSetNameCSV(W: TAbstractWriter; Value: cardinal;
+  SepChar: AnsiChar; FullSetsAsStar: boolean);
+var
+  j: integer;
+  PS: PShortString;
+begin
+  W.Add('[');
+  if FullSetsAsStar and GetAllBits(Value, MaxValue + 1) then
+    W.AddShort('"*"')
+  else
+  begin
+    PS := NameList;
+    for j := MinValue to MaxValue do
+    begin
+      if GetBitPtr(@Value, j) then
+      begin
+        W.Add('"');
+        if twoTrimLeftEnumSets in W.CustomOptions then
+          W.AddTrimLeftLowerCase(PS)
+        else
+          W.AddShort(PS^);
+        W.Add('"', SepChar);
+      end;
+      inc(PByte(PS), ord(PS^[0]) + 1); // next item
+    end;
+  end;
+  W.CancelLastComma;
+  W.Add(']');
+end;
+
+function TRttiEnumType.GetSetNameCSV(Value: cardinal; SepChar: AnsiChar;
   FullSetsAsStar: boolean): RawUTF8;
+var
+  W: TAbstractWriter;
+  temp: TTextWriterStackBuffer;
 begin
-
+  W := TAbstractWriter.CreateOwnedStream(temp);
+  try
+    GetSetNameCSV(W, Value, SepChar, FullSetsAsStar);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
-function TEnumType.GetCaption(const Value): string;
+function TRttiEnumType.GetEnumNameTrimedValue(const EnumName: ShortString): Integer;
 begin
-
+  result := GetEnumNameTrimedValue(@EnumName[1], ord(EnumName[0]));
 end;
 
-function TEnumType.GetCaptionStrings(UsedValuesBits: Pointer): string;
+function TRttiEnumType.GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer): Integer;
 begin
-
+  if Value = nil then
+    result := -1
+  else
+  begin
+    if ValueLen = 0 then
+      ValueLen := StrLen(Value);
+    result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen);
+    if result < 0 then
+      result := FindShortStringListExact(NameList, MaxValue, Value, ValueLen);
+  end;
 end;
 
-procedure TEnumType.AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer);
+procedure TRttiEnumType.SetEnumFromOrdinal(out Value; Ordinal: Integer);
 begin
-
-end;
-
-function TEnumType.GetEnumNameTrimedValue(const EnumName: ShortString): Integer;
-begin
-
-end;
-
-function TEnumType.GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer): Integer;
-begin
-
-end;
-
-procedure TEnumType.SetEnumFromOrdinal(out Value; Ordinal: Integer);
-begin
-
+  ToRttiOrd(RttiOrd, @Value, Ordinal); // MaxValue does not work e.g. with WordBool
 end;
 
 
-{ TInterfaceTypeData }
 
-function TInterfaceTypeData.IntfFlags: TIntfFlags;
+{ TRttiInterfaceTypeData }
+
+function TRttiInterfaceTypeData.IntfFlags: TRttiIntfFlags;
 begin
-  byte(result) := byte(PTypeData(@self)^.IntfFlags);
+  result := TRttiIntfFlags(PTypeData(@self)^.IntfFlags);
 end;
 
-function TInterfaceTypeData.IntfUnit: PShortString;
+function TRttiInterfaceTypeData.IntfUnit: PShortString;
 begin
   result := @PTypeData(@self)^.IntfUnit;
 end;
 
 
-{ TTypeInfo }
+{ TRttiInfo }
 
-function TTypeInfo.Name: ShortString;
+function TRttiInfo.Name: ShortString;
 begin
   result := PTypeInfo(@self)^.Name;
 end;
 
-function TTypeInfo.OrdType: TOrdType;
+function TRttiInfo.RttiOrd: TRttiOrd;
 begin
-  byte(result) := byte(GetTypeData(@self)^.OrdType);
+  result := TRttiOrd(GetTypeData(@self)^.OrdType);
 end;
 
-function TTypeInfo.FloatType: TFloatType;
+function TRttiInfo.RttiFloat: TRttiFloat;
 begin
-  byte(result) := byte(GetTypeData(@self)^.FloatType);
+  result := TRttiFloat(GetTypeData(@self)^.FloatType);
 end;
 
-function TTypeInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
+function TRttiInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
 begin
-  result := ClassFieldCountWithParents(ClassType^.ClassType, onlyWithoutGetter);
+  result := ClassFieldCountWithParents(RttiClass^.RttiClass, onlyWithoutGetter);
 end;
 
-function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
+function TRttiInfo.InheritsFrom(AClass: TClass): boolean;
 begin
-  result := ClassType^.InheritsFrom(AClass);
+  result := RttiClass^.InheritsFrom(AClass);
 end;
 
-function TTypeInfo.SetEnumType: PEnumType;
+function TRttiInfo.SetEnumType: PRttiEnumType;
 begin
-  if (@self = nil) or (Kind <> tkSet) then
+  if (@self = nil) or (Kind <> rkSet) then
     result := nil
   else
-    result := PEnumType(GetTypeData(@self))^.SetBaseType;
+    result := PRttiEnumType(GetTypeData(@self))^.SetBaseType;
 end;
 
-function TTypeInfo.InterfaceType: PInterfaceTypeData;
+function TRttiInfo.InterfaceType: PRttiInterfaceTypeData;
 begin
   result := pointer(GetTypeData(@self));
 end;
 
-function TTypeInfo.DynArrayItemType(aDataSize: PInteger): PTypeInfo;
+function TRttiInfo.DynArrayItemSize: integer;
 begin
-
+  if DynArrayItemType(@result) = nil then
+    result := 0;
 end;
 
-function TTypeInfo.DynArrayItemSize: integer;
+function TRttiInfo.AnsiStringCodePage: integer;
 begin
-
+  {$ifdef HASCODEPAGE}
+  if Kind = rkLString then // has rtLStringOld any codepage? -> UTF-8
+    result := PWord(GetTypeData(@self))^
+  else
+    result := CP_UTF8; // default is UTF-8
+  {$else}
+  if @self = TypeInfo(RawUTF8) then
+    result := CP_UTF8
+  else if @self = TypeInfo(WinAnsiString) then
+    result := CODEPAGE_US
+  else if @self = TypeInfo(RawUnicode) then
+    result := CP_UTF16
+  else if @self = TypeInfo(RawByteString) then
+    result := CP_RAWBYTESTRING
+  else if @self = TypeInfo(AnsiString) then
+    result := CP_ACP
+  else
+    result := CP_UTF8; // default is UTF-8
+  {$endif HASCODEPAGE}
 end;
 
-function TTypeInfo.AnsiStringCodePage: integer;
+function TRttiInfo.InterfaceGUID: PGUID;
 begin
-
-end;
-
-function TTypeInfo.InterfaceGUID: PGUID;
-begin
-  if (@self = nil) or (Kind <> tkInterface) then
+  if (@self = nil) or (Kind <> rkInterface) then
     result := nil
   else
     result := InterfaceType^.IntfGuid;
 end;
 
-function TTypeInfo.InterfaceUnitName: PShortString;
+function TRttiInfo.InterfaceUnitName: PShortString;
 begin
-  if (@self = nil) or (Kind <> tkInterface) then
+  if (@self = nil) or (Kind <> rkInterface) then
     result := @NULL_SHORTSTRING
   else
     result := InterfaceType^.IntfUnit;
 end;
 
-function TTypeInfo.InterfaceAncestor: PTypeInfo;
+function TRttiInfo.InterfaceAncestor: PRttiInfo;
 begin
-  if (@self = nil) or (Kind <> tkInterface) then
+  if (@self = nil) or (Kind <> rkInterface) then
     result := nil
   else
     result := InterfaceType^.IntfParent;
 end;
 
-procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
+procedure TRttiInfo.InterfaceAncestors(out Ancestors: PRttiInfoDynArray;
   OnlyImplementedBy: TInterfacedObjectClass;
   out AncestorsImplementedEntry: TPointerDynArray);
 var
   n: integer;
-  nfo: PTypeInfo;
-  typ: PInterfaceTypeData;
+  nfo: PRttiInfo;
+  typ: PRttiInterfaceTypeData;
   entry: pointer;
 begin
-  if (@self = nil) or (Kind <> tkInterface) then
+  if (@self = nil) or (Kind <> rkInterface) then
     exit;
   n := 0;
   typ := InterfaceType;
@@ -1074,339 +1234,708 @@ begin
 end;
 
 
-{ TPropInfo }
+{ TRttiProp }
 
-function TPropInfo.Index: Integer;
+function TRttiProp.Index: Integer;
 begin
-  result := TypInfo.PPropInfo(@self)^.Index;
+  result := PPropInfo(@self)^.Index;
 end;
 
-function TPropInfo.Default: Longint;
+function TRttiProp.Default: Longint;
 begin
-  result := TypInfo.PPropInfo(@self)^.Default;
+  result := PPropInfo(@self)^.Default;
 end;
 
-function TPropInfo.NameIndex: integer;
+function TRttiProp.NameIndex: integer;
 begin
-  result := TypInfo.PPropInfo(@self)^.NameIndex;
+  result := PPropInfo(@self)^.NameIndex;
 end;
 
-function TPropInfo.IsStored(Instance: TObject): boolean;
-type
-  TGetProc = function: boolean of object;
-  TGetIndexed = function(Index: integer): boolean of object;
-var
-  pt: byte;
-  call: TMethod;
+function TRttiProp.DefaultOr0: integer;
 begin
-  with TypInfo.PPropInfo(@self)^ do
-  begin
-    pt := {$ifdef FPC} (PropProcs shr 4) and 3 {$else} PropWrap(StoredProc).Kind {$endif};
-    if {$ifdef FPC} pt = ptConst {$else} (PtrUInt(StoredProc) and (not PtrUInt($ff))) = 0 {$endif} then
-      result := boolean(PtrUInt(StoredProc))
-    else
-    begin
-      case pt of
-        ptField:
-          begin
-            result := PBoolean(PtrUInt(Instance) +
-              PtrUInt(StoredProc) {$ifndef FPC} and $00ffffff {$endif})^;
-            exit;
-          end;
-        ptVirtual:
-          call.Code := PPointer(PPtrUInt(Instance)^ +
-            {$ifdef FPC} PtrUInt {$else} word {$endif}(StoredProc))^;
-        else
-          call.Code := pointer(StoredProc);
-      end;
-      call.Data := Instance;
-      if {$ifdef FPC} (PropProcs shr 6) and 1 {$else} Index {$endif} <> NO_INDEX then
-        result := TGetIndexed(call)(Index)
-      else
-        result := TGetProc(call);
-    end;
-  end;
-end;
-
-function TPropInfo.DefaultOr0: integer;
-begin
-  result := TypInfo.PPropInfo(@self)^.Default;
+  result := PPropInfo(@self)^.Default;
   if result = NO_DEFAULT then
     result := 0;
 end;
 
-function TPropInfo.IsDefaultOrVoid(Instance: TObject): boolean;
+function TRttiProp.IsDefaultOrVoid(Instance: TObject): boolean;
+var
+  p: PPointer;
 begin
-
+  case TypeInfo^.Kind of
+    rkInteger, rkEnumeration, rkSet, rkChar, rkWChar
+    {$ifdef FPC}, rkBool {$endif}:
+      result := GetOrdProp(Instance) = DefaultOr0;
+    rkFloat:
+      result := GetFloatProp(Instance) = 0;
+    rkInt64 {$ifdef FPC}, rkQWord {$endif}:
+      result := GetInt64Prop(Instance) = 0;
+    rkLString, {$ifdef FPC} rkLStringOld, {$endif}
+    {$ifdef HASVARUSTRING} rkUString, {$endif}
+    rkWString, rkDynArray, rkClass, rkInterface:
+      begin
+        p := GetFieldAddr(Instance);
+        result := (p <> nil) and (p^ = nil);
+      end;
+    rkVariant:
+      begin
+        p := GetFieldAddr(Instance);
+        result := (p <> nil) and VarDataIsEmptyOrNull(p^);
+      end;
+  else
+    result := false;
+  end;
 end;
 
-function TPropInfo.RetrieveFieldSize: integer;
+function TRttiProp.RetrieveFieldSize: integer;
+var
+  info: PRttiInfo;
 begin
-
+  info := TypeInfo;
+  case info^.Kind of
+    rkInteger, rkEnumeration, rkSet, rkChar, rkWChar
+    {$ifdef FPC}, rkBool{$endif}:
+      result := ORDTYPE_SIZE[info^.RttiOrd];
+    rkFloat:
+      case info^.RttiFloat of
+        rfSingle:
+          result := 4;
+        rfExtended:
+          result := 10;
+      else
+        result := 8;
+      end;
+    rkLString, {$ifdef FPC} rkLStringOld, {$endif}
+    {$ifdef HASVARUSTRING} rkUString, {$endif}
+    rkWString, rkClass, rkInterface, rkDynArray:
+      result := SizeOf(pointer);
+    rkInt64 {$ifdef FPC}, rkQWord{$endif}:
+      result := 8;
+    rkVariant:
+      result := SizeOf(variant);
+  else
+    result := 0;
+  end;
 end;
 
-function TPropInfo.WriteIsDefined: boolean;
-begin
-
-end;
-
-function TPropInfo.GetterAddr(Instance: pointer): pointer;
+function TRttiProp.GetterAddr(Instance: pointer): pointer;
 begin
   result := Pointer(PtrUInt(Instance) +
-     PtrUInt(TypInfo.PPropInfo(@self)^.GetProc) {$ifndef FPC} and $00ffffff {$endif} );
+    PtrUInt(PPropInfo(@self)^.GetProc) {$ifndef FPC} and $00ffffff {$endif} );
 end;
 
-function TPropInfo.SetterAddr(Instance: pointer): pointer;
+function TRttiProp.SetterAddr(Instance: pointer): pointer;
 begin
   result := Pointer(PtrUInt(Instance) +
-     PtrUInt(TypInfo.PPropInfo(@self)^.SetProc) {$ifndef FPC} and $00ffffff {$endif} );
+    PtrUInt(PPropInfo(@self)^.SetProc) {$ifndef FPC} and $00ffffff {$endif} );
 end;
 
-function TPropInfo.GetFieldAddr(Instance: TObject): pointer;
+function TRttiProp.GetFieldAddr(Instance: TObject): pointer;
 begin
-
+  if not GetterIsField then
+    if not SetterIsField then
+      // both are methods -> returns nil
+      result := nil
+    else  // field - Setter is the field offset in the instance data
+      result := SetterAddr(Instance)
+  else    // field - Getter is the field offset in the instance data
+    result := GetterAddr(Instance);
 end;
 
-function TPropInfo.Getter(Instance: TObject; Call: PMethod): TPropInfoCall;
+function TRttiProp.GetOrdProp(Instance: TObject): PtrInt;
+type
+  TGetProc = function: Pointer of object; // pointer result is a PtrInt register
+  TGetIndexed = function(Index: Integer): Pointer of object;
+var
+  call: TMethod;
 begin
-
+  case Getter(Instance, @call) of
+    rpcField:
+      call.Code := PPointer(call.Data)^;
+    rpcMethod:
+      call.Code := TGetProc(call);
+    rpcIndexed:
+      call.Code := TGetIndexed(call)(Index);
+  else
+    call.Code := nil; // call.Code is used to store the raw value
+  end;
+  with TypeInfo^ do
+    if Kind in [rkClass, rkDynArray, rkInterface] then
+      result := PtrInt(call.Code)
+    else
+      result := FromRttiOrd(RttiOrd, @call.Code);
 end;
 
-function TPropInfo.Setter(Instance: TObject; Call: PMethod): TPropInfoCall;
+procedure TRttiProp.SetOrdProp(Instance: TObject; Value: PtrInt);
+type
+  TSetProc = procedure(Value: PtrInt) of object;
+  TSetIndexed = procedure(Index: integer; Value: PtrInt) of object;
+var
+  call: TMethod;
 begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      with TypeInfo^ do
+        if Kind = rkClass then
+          PPtrInt(call.Data)^ := Value
+        else
+          ToRttiOrd(RttiOrd, call.Data, Value);
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
-function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
+function TRttiProp.GetObjProp(Instance: TObject): TObject;
+type
+  TGetProc = function: TObject of object;
+  TGetIndexed = function(Index: Integer): TObject of object;
+var
+  call: TMethod;
 begin
-
+  case Getter(Instance, @call) of
+    rpcField:
+      result := PObject(call.Data)^;
+    rpcMethod:
+      result := TGetProc(call);
+    rpcIndexed:
+      result := TGetIndexed(call)(Index);
+  else
+    result := nil;
+  end;
 end;
 
-procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
+function TRttiProp.GetInt64Prop(Instance: TObject): Int64;
+type
+  TGetProc = function: Int64 of object;
+  TGetIndexed = function(Index: Integer): Int64 of object;
+var
+  call: TMethod;
 begin
-
+  case Getter(Instance, @call) of
+    rpcField:
+      result := PInt64(call.Data)^;
+    rpcMethod:
+      result := TGetProc(call);
+    rpcIndexed:
+      result := TGetIndexed(call)(Index);
+  else
+    result := 0;
+  end;
 end;
 
-function TPropInfo.GetObjProp(Instance: TObject): TObject;
+procedure TRttiProp.SetInt64Prop(Instance: TObject; const Value: Int64);
+type
+  TSetProc = procedure(Value: Int64) of object;
+  TSetIndexed = procedure(Index: integer; Value: Int64) of object;
+var
+  call: TMethod;
 begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      PInt64(call.Data)^ := Value;
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
-function TPropInfo.GetInt64Prop(Instance: TObject): Int64;
-begin
+procedure TRttiProp.GetLongStrProp(Instance: TObject; var Value: RawByteString);
+var
+  rpc: TRttiPropCall;
+  call: TMethod;
 
+    procedure SubProc(rpc: TRttiPropCall); // avoid try..finally
+    type
+      TGetProc = function: RawByteString of object;
+      TGetIndexed = function(Index: Integer): RawByteString of object;
+    begin
+      case rpc of
+        rpcMethod:
+          Value := TGetProc(call);
+        rpcIndexed:
+          Value := TGetIndexed(call)(Index);
+      else
+        Value := '';
+      end;
+    end;
+
+begin
+  rpc := Getter(Instance, @call);
+  if rpc = rpcField then
+    Value := PRawByteString(call.Data)^
+  else
+    SubProc(rpc);
 end;
 
-procedure TPropInfo.SetInt64Prop(Instance: TObject; const Value: Int64);
+procedure TRttiProp.SetLongStrProp(Instance: TObject; const Value: RawByteString);
+type
+  TSetProc = procedure(const Value: RawByteString) of object;
+  TSetIndexed = procedure(Index: integer; const Value: RawByteString) of object;
+var
+  call: TMethod;
 begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      PRawByteString(call.Data)^ := Value;
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
-procedure TPropInfo.GetLongStrProp(Instance: TObject; var Value: RawByteString);
+procedure TRttiProp.CopyLongStrProp(Source, Dest: TObject);
+var
+  tmp: RawByteString;
 begin
-
+  GetLongStrProp(Source, tmp);
+  SetLongStrProp(Dest, tmp);
 end;
 
-procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
+procedure TRttiProp.GetShortStrProp(Instance: TObject; var Value: RawByteString);
+type
+  TGetProc = function: ShortString of object;
+  TGetIndexed = function(Index: Integer): ShortString of object;
+var
+  call: TMethod;
+  tmp: ShortString;
 begin
+  case Getter(Instance, @call) of
+    rpcField:
+      tmp := PShortString(call.Data)^;
+    rpcMethod:
+      tmp := TGetProc(call);
+    rpcIndexed:
+      tmp := TGetIndexed(call)(Index);
+  else
+    tmp := '';
+  end;
+  ShortStringToAnsi7String(tmp, RawUTF8(Value));
+end; // no SetShortStrProp() by now
 
+procedure TRttiProp.GetWideStrProp(Instance: TObject; var Value: WideString);
+type
+  TGetProc = function: WideString of object;
+  TGetIndexed = function(Index: Integer): WideString of object;
+var
+  call: TMethod;
+begin
+  case Getter(Instance, @call) of
+    rpcField:
+      Value := PWideString(call.Data)^;
+    rpcMethod:
+      Value := TGetProc(call);
+    rpcIndexed:
+      Value := TGetIndexed(call)(Index);
+  else
+    Value := '';
+  end;
 end;
 
-procedure TPropInfo.CopyLongStrProp(Source, Dest: TObject);
+procedure TRttiProp.SetWideStrProp(Instance: TObject; const Value: WideString);
+type
+  TSetProc = procedure(const Value: WideString) of object;
+  TSetIndexed = procedure(Index: integer; const Value: WideString) of object;
+var
+  call: TMethod;
 begin
-
-end;
-
-procedure TPropInfo.GetShortStrProp(Instance: TObject; var Value: RawByteString);
-begin
-
-end;
-
-procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
-begin
-
-end;
-
-procedure TPropInfo.SetWideStrProp(Instance: TObject; const Value: WideString);
-begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      PWideString(call.Data)^ := Value;
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
 {$ifdef HASVARUSTRING}
 
-procedure TPropInfo.GetUnicodeStrProp(Instance: TObject; var Value: UnicodeString);
-begin
+procedure TRttiProp.GetUnicodeStrProp(Instance: TObject; var Value: UnicodeString);
+var
+  rpc: TRttiPropCall;
+  call: TMethod;
 
+    procedure SubProc(rpc: TRttiPropCall); // avoid try..finally
+    type
+      TGetProc = function: UnicodeString of object;
+      TGetIndexed = function(Index: Integer): UnicodeString of object;
+    begin
+      case rpc of
+        rpcMethod:
+          Value := TGetProc(call);
+        rpcIndexed:
+          Value := TGetIndexed(call)(Index);
+      else
+        Value := '';
+      end;
+    end;
+
+begin
+  rpc := Getter(Instance, @call);
+  if rpc = rpcField then
+    Value := PUnicodeString(call.Data)^
+  else
+    SubProc(rpc);
 end;
 
-procedure TPropInfo.SetUnicodeStrProp(Instance: TObject;
-  const Value: UnicodeString);
+procedure TRttiProp.SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
+type
+  TSetProc = procedure(const Value: UnicodeString) of object;
+  TSetIndexed = procedure(Index: integer; const Value: UnicodeString) of object;
+var
+  call: TMethod;
 begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      PUnicodeString(call.Data)^ := Value;
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
 {$endif HASVARUSTRING}
 
-function TPropInfo.GetCurrencyProp(Instance: TObject): currency;
+function TRttiProp.GetCurrencyProp(Instance: TObject): currency;
+type
+  TGetProc = function: currency of object;
+  TGetIndexed = function(Index: Integer): currency of object;
+var
+  call: TMethod;
 begin
-
+  case Getter(Instance, @call) of
+    rpcField:
+      result := PCurrency(call.Data)^;
+    rpcMethod:
+      result := TGetProc(call);
+    rpcIndexed:
+      result := TGetIndexed(call)(Index);
+  else
+    result := 0;
+  end;
 end;
 
-procedure TPropInfo.SetCurrencyProp(Instance: TObject; const Value: Currency);
+procedure TRttiProp.SetCurrencyProp(Instance: TObject; const Value: Currency);
+type
+  TSetProc = procedure(const Value: currency) of object;
+  TSetIndexed = procedure(Index: integer; const Value: currency) of object;
+var
+  call: TMethod;
 begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      PCurrency(call.Data)^ := Value;
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
-function TPropInfo.GetDoubleProp(Instance: TObject): double;
+function TRttiProp.GetDoubleProp(Instance: TObject): double;
+type
+  TGetProc = function: double of object;
+  TGetIndexed = function(Index: Integer): double of object;
+var
+  call: TMethod;
 begin
-
+  case Getter(Instance, @call) of
+    rpcField:
+      result := unaligned(PDouble(call.Data)^);
+    rpcMethod:
+      result := TGetProc(call);
+    rpcIndexed:
+      result := TGetIndexed(call)(Index);
+  else
+    result := 0;
+  end;
 end;
 
-procedure TPropInfo.SetDoubleProp(Instance: TObject; Value: Double);
+procedure TRttiProp.SetDoubleProp(Instance: TObject; Value: Double);
+type
+  TSetProc = procedure(const Value: double) of object;
+  TSetIndexed = procedure(Index: integer; const Value: double) of object;
+var
+  call: TMethod;
 begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      unaligned(PDouble(call.Data)^) := Value;
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
-function TPropInfo.GetFloatProp(Instance: TObject): double;
+function TRttiProp.GetFloatProp(Instance: TObject): double;
+type
+  TSingleProc = function: Single of object;
+  TSingleIndexed = function(Index: Integer): Single of object;
+  TDoubleProc = function: Double of object;
+  TDoubleIndexed = function(Index: Integer): Double of object;
+  TExtendedProc = function: Extended of object;
+  TExtendedIndexed = function(Index: Integer): Extended of object;
+  TCurrencyProc = function: Currency of object;
+  TCurrencyIndexed = function(Index: Integer): Currency of object;
+var
+  call: TMethod;
+  rf: TRttiFloat;
 begin
-
+  result := 0;
+  rf := TypeInfo^.RttiFloat;
+  case Getter(Instance, @call) of
+    rpcField:
+      case rf of
+        rfSingle:
+          result := PSingle(call.Data)^;
+        rfDouble:
+          result := unaligned(PDouble(call.Data)^);
+        rfExtended:
+          result := PExtended(call.Data)^;
+        rfCurr:
+          result := PCurrency(call.Data)^;
+      end;
+    rpcMethod:
+      case rf of
+        rfSingle:
+          result := TSingleProc(call);
+        rfDouble:
+          result := TDoubleProc(call);
+        rfExtended:
+          result := TExtendedProc(call);
+        rfCurr:
+          result := TCurrencyProc(call);
+      end;
+    rpcIndexed:
+      case rf of
+        rfSingle:
+          result := TSingleIndexed(call)(Index);
+        rfDouble:
+          result := TDoubleIndexed(call)(Index);
+        rfExtended:
+          result := TExtendedIndexed(call)(Index);
+        rfCurr:
+          result := TCurrencyIndexed(call)(Index);
+      end;
+  end;
 end;
 
-procedure TPropInfo.SetFloatProp(Instance: TObject; Value: TSynExtended);
+procedure TRttiProp.SetFloatProp(Instance: TObject; Value: TSynExtended);
+type
+  TSingleProc = procedure(const Value: Single) of object;
+  TSingleIndexed = procedure(Index: integer; const Value: Single) of object;
+  TDoubleProc = procedure(const Value: double) of object;
+  TDoubleIndexed = procedure(Index: integer; const Value: double) of object;
+  TExtendedProc = procedure(const Value: Extended) of object;
+  TExtendedIndexed = procedure(Index: integer; const Value: Extended) of object;
+  TCurrencyProc = procedure(const Value: Currency) of object;
+  TCurrencyIndexed = procedure(Index: integer; const Value: Currency) of object;
+var
+  call: TMethod;
+  rf: TRttiFloat;
 begin
-
+  Value := 0;
+  rf := TypeInfo^.RttiFloat;
+  case Setter(Instance, @call) of
+    rpcField:
+      case rf of
+        rfSingle:
+          PSingle(call.Data)^ := Value;
+        rfDouble:
+          unaligned(PDouble(call.Data)^) := Value;
+        rfExtended:
+          PExtended(call.Data)^ := Value;
+        rfCurr:
+          PCurrency(call.Data)^ := Value;
+      end;
+    rpcMethod:
+      case rf of
+        rfSingle:
+          TSingleProc(call)(Value);
+        rfDouble:
+          TDoubleProc(call)(Value);
+        rfExtended:
+          TExtendedProc(call)(Value);
+        rfCurr:
+          TCurrencyProc(call)(Value);
+      end;
+    rpcIndexed:
+      case rf of
+        rfSingle:
+          TSingleIndexed(call)(Index, Value);
+        rfDouble:
+          TDoubleIndexed(call)(Index, Value);
+        rfExtended:
+          TExtendedIndexed(call)(Index, Value);
+        rfCurr:
+          TCurrencyIndexed(call)(Index, Value);
+      end;
+  end;
 end;
 
-procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
-begin
+procedure TRttiProp.GetVariantProp(Instance: TObject; var result: Variant);
+var
+  rpc: TRttiPropCall;
+  call: TMethod;
 
+  procedure SubProc(rpc: TRttiPropCall); // avoid try..finally
+  type
+    TGetProc = function: variant of object;
+    TGetIndexed = function(Index: Integer): variant of object;
+  begin
+    case rpc of
+      rpcMethod:
+        result := TGetProc(call);
+      rpcIndexed:
+        result := TGetIndexed(call)(Index);
+    else
+      SetVariantNull(result);
+    end;
+  end;
+
+begin
+  rpc := Getter(Instance, @call);
+  if rpc <> rpcField then
+    SubProc(rpc)
+  else if not SetVariantUnRefSimpleValue(PVariant(call.Data)^, PVarData(@result)^) then
+    result := PVariant(call.Data)^;
 end;
 
-procedure TPropInfo.SetVariantProp(Instance: TObject; const Value: Variant);
+procedure TRttiProp.SetVariantProp(Instance: TObject; const Value: Variant);
+type
+  TSetProc = procedure(const Value: variant) of object;
+  TSetIndexed = procedure(Index: integer; const Value: variant) of object;
+var
+  call: TMethod;
 begin
-
+  case Setter(Instance, @call) of
+    rpcField:
+      PVariant(call.Data)^ := Value;
+    rpcMethod:
+      TSetProc(call)(Value);
+    rpcIndexed:
+      TSetIndexed(call)(Index, Value);
+  end;
 end;
 
-procedure TPropInfo.CopyValue(Source, Dest: TObject; DestInfo: PPropInfo);
+function TRttiProp.GetOrdValue(Instance: TObject): PtrInt;
 begin
-
+  if (Instance <> nil) and (@self <> nil) and
+     (TypeInfo^.Kind in [rkInteger, rkEnumeration, rkSet, {$ifdef FPC}rkBool, {$endif} rkClass]) then
+    result := GetOrdProp(Instance)
+  else
+    result := -1;
 end;
 
-function TPropInfo.CopyToNewObject(aFrom: TObject): TObject;
+function TRttiProp.GetInt64Value(Instance: TObject): Int64;
 begin
-
+  if (Instance <> nil) and (@self <> nil) then
+    case TypeInfo^.Kind of
+      rkInteger, rkEnumeration, rkSet, rkChar, rkWChar, rkClass{$ifdef FPC}, rkBool{$endif}:
+        result := GetOrdProp(Instance);
+      rkInt64{$ifdef FPC}, rkQWord{$endif}:
+        result := GetInt64Prop(Instance);
+    else
+      result := 0;
+    end
+  else
+    result := 0;
 end;
 
-function TPropInfo.SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
+function TRttiProp.GetCurrencyValue(Instance: TObject): Currency;
 begin
-
+  if (Instance <> nil) and (@self <> nil) then
+    with TypeInfo^ do
+      if Kind = rkFloat then
+        if RttiFloat = rfCurr then
+          result := GetCurrencyProp(Instance)
+        else
+          result := GetFloatProp(Instance)
+      else
+        result := 0
+  else
+    result := 0;
 end;
 
-function TPropInfo.GetOrdValue(Instance: TObject): PtrInt;
+function TRttiProp.GetDoubleValue(Instance: TObject): double;
 begin
-
+  if (Instance <> nil) and (@self <> nil) and (TypeInfo^.Kind = rkFloat) then
+    result := GetFloatProp(Instance)
+  else
+    result := 0;
 end;
 
-function TPropInfo.GetInt64Value(Instance: TObject): Int64;
+procedure TRttiProp.SetDoubleValue(Instance: TObject; const Value: double);
 begin
-
+  if (Instance <> nil) and (@self <> nil) and (TypeInfo^.Kind = rkFloat) then
+    SetFloatProp(Instance, Value);
 end;
 
-function TPropInfo.GetCurrencyValue(Instance: TObject): Currency;
+procedure TRttiProp.GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
 begin
-
+  if (Instance <> nil) and (@self <> nil) and
+     (TypeInfo^.Kind in [{$ifdef FPC}rkLStringOld, {$endif} rkLString]) then
+    GetLongStrProp(Instance, Value)
+  else
+    Finalize(Value);
 end;
 
-function TPropInfo.GetDoubleValue(Instance: TObject): double;
+procedure TRttiProp.SetOrdValue(Instance: TObject; Value: PtrInt);
 begin
-
+  if (Instance <> nil) and (@self <> nil) and
+     (TypeInfo^.Kind in [rkInteger, rkEnumeration, rkSet, {$ifdef FPC}rkBool, {$endif}rkClass]) then
+    SetOrdProp(Instance, Value);
 end;
 
-procedure TPropInfo.SetDoubleValue(Instance: TObject; const Value: double);
+procedure TRttiProp.SetInt64Value(Instance: TObject; Value: Int64);
 begin
-
-end;
-
-procedure TPropInfo.GetLongStrValue(Instance: TObject; var result: RawUTF8);
-begin
-
-end;
-
-procedure TPropInfo.GetRawByteStringValue(Instance: TObject;
-  var Value: RawByteString);
-begin
-
-end;
-
-procedure TPropInfo.SetOrdValue(Instance: TObject; Value: PtrInt);
-begin
-
-end;
-
-procedure TPropInfo.SetInt64Value(Instance: TObject; Value: Int64);
-begin
-
-end;
-
-procedure TPropInfo.SetLongStrValue(Instance: TObject; const Value: RawUTF8);
-begin
-
-end;
-
-procedure TPropInfo.SetGenericStringValue(Instance: TObject; const Value: string);
-begin
-
-end;
-
-function TPropInfo.GetGenericStringValue(Instance: TObject): string;
-begin
-
+  if (Instance <> nil) and (@self <> nil) then
+    case TypeInfo^.Kind of
+      rkInteger, rkEnumeration, rkSet, rkChar, rkWChar, rkClass {$ifdef FPC}, rkBool{$endif}:
+        SetOrdProp(Instance, Value);
+      rkInt64{$ifdef FPC}, rkQWord{$endif}:
+        SetInt64Prop(Instance, Value);
+    end;
 end;
 
 {$ifdef HASVARUSTRING}
 
-procedure TPropInfo.SetUnicodeStrValue(Instance: TObject;
-  const Value: UnicodeString);
+function TRttiProp.GetUnicodeStrValue(Instance: TObject): UnicodeString;
 begin
-
+  if (Instance <> nil) and (@self <> nil) and (TypeInfo^.Kind = rkUString) then
+    GetUnicodeStrProp(Instance, result)
+  else
+    result := '';
 end;
 
-function TPropInfo.GetUnicodeStrValue(Instance: TObject): UnicodeString;
+procedure TRttiProp.SetUnicodeStrValue(Instance: TObject; const Value: UnicodeString);
 begin
-
+  if (Instance <> nil) and (@self <> nil) and (TypeInfo^.Kind = rkUString) then
+    SetUnicodeStrProp(Instance, Value);
 end;
 
 {$endif HASVARUSTRING}
 
-procedure TPropInfo.SetDefaultValue(Instance: TObject;
-  FreeAndNilNestedObjects: boolean);
-begin
-
-end;
-
-procedure TPropInfo.SetFromVariant(Instance: TObject; const Value: variant);
-begin
-
-end;
-
-procedure TPropInfo.GetVariant(Instance: TObject; var Dest: variant);
-begin
-
-end;
 
 
+{ **************** Published Class Properties and Methods RTTI }
 
-function ClassFieldCountWithParents(ClassType: TClass;
-  onlyWithoutGetter: boolean): integer;
-var CP: PClassProp;
-    P: PPropInfo;
+function ClassFieldCountWithParents(C: TClass; onlyWithoutGetter: boolean): integer;
+var CP: PRttiProps;
+    P: PRttiProp;
     i: integer;
 begin
   result := 0;
-  while ClassType <> nil do
+  while C <> nil do
   begin
-    CP := InternalClassProp(ClassType);
-    if CP=nil then
+    CP := GetRttiProps(C);
+    if CP = nil then
       break; // no RTTI information (e.g. reached TObject level)
     if onlyWithoutGetter then
     begin
@@ -1420,9 +1949,130 @@ begin
     end
     else
       inc(result,CP^.PropCount);
-    ClassType := GetClassParent(ClassType);
+    C := GetClassParent(C);
   end;
 end;
+
+
+
+{ *************** Enumerations RTTI }
+
+procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
+var
+  info: PRttiEnumType;
+  p: PShortString;
+  i: PtrInt;
+begin
+  info := PRttiInfo(aTypeInfo)^.EnumBaseType;
+  if info <> nil then
+  begin
+    p := info^.NameList;
+    for i := 0 to info^.MaxValue do
+    begin
+      aDest^ := p;
+      p := @PByteArray(p)^[ord(p^[0]) + 1];
+      inc(aDest);
+    end;
+  end;
+end;
+
+procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
+var
+  info: PRttiEnumType;
+  p: PShortString;
+  i: PtrInt;
+begin
+  info := PRttiInfo(aTypeInfo)^.EnumBaseType;
+  if info <> nil then
+  begin
+    p := info^.NameList;
+    for i := 0 to info^.MaxValue do
+    begin
+      aDest^ := TrimLeftLowerCaseShort(p);
+      p := @PByteArray(p)^[ord(p^[0]) + 1];
+      inc(aDest);
+    end;
+  end;
+end;
+
+function GetEnumTrimmedNames(aTypeInfo: pointer): TRawUTF8DynArray;
+begin
+  PRttiInfo(aTypeInfo)^.EnumBaseType^.GetEnumNameAll(result, {trim=}true);
+end;
+
+function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char;
+  aValueLen: PtrInt; AlsoTrimLowerCase: boolean): Integer;
+begin
+  result := PRttiInfo(aTypeInfo)^.EnumBaseType^.
+    GetEnumNameValue(aValue, aValueLen, AlsoTrimLowerCase);
+end;
+
+function GetEnumNameValueTrimmed(aTypeInfo: pointer; aValue: PUTF8Char;
+  aValueLen: PtrInt): integer;
+begin
+  result := PRttiInfo(aTypeInfo)^.EnumBaseType^.
+    GetEnumNameValueTrimmed(aValue, aValueLen, {exact=}false);
+end;
+
+function GetEnumNameValueTrimmedExact(aTypeInfo: pointer; aValue: PUTF8Char;
+  aValueLen: PtrInt): integer;
+begin
+  result := PRttiInfo(aTypeInfo)^.EnumBaseType^.
+    GetEnumNameValueTrimmed(aValue, aValueLen, {exact=}true);
+end;
+
+function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
+  AlsoTrimLowerCase: boolean): Integer;
+begin
+  result := PRttiInfo(aTypeInfo)^.EnumBaseType^.
+    GetEnumNameValue(pointer(aValue), length(aValue), AlsoTrimLowerCase);
+end;
+
+function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
+var
+  info: PRttiEnumType;
+  PS: PShortString;
+  i: PtrInt;
+begin
+  result := '';
+  info := PRttiInfo(aTypeInfo)^.SetEnumType;
+  if info <> nil then
+  begin
+    PS := info^.NameList;
+    for i := 0 to info^.MaxValue do
+    begin
+      if GetBitPtr(@value, i) then
+        result := FormatUTF8('%%,', [result, PS^]);
+      inc(PByte(PS), PByte(PS)^ + 1); // next
+    end;
+    if result <> '' then
+      SetLength(result, length(result) - 1); // trim last comma
+  end;
+end;
+
+procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString;
+  trimlowercase: boolean);
+var
+  info: PRttiEnumType;
+  PS: PShortString;
+  i: PtrInt;
+begin
+  result := '';
+  info := PRttiInfo(aTypeInfo)^.SetEnumType;
+  if info <> nil then
+  begin
+    PS := info^.NameList;
+    for i := 0 to info^.MaxValue do
+    begin
+      if GetBitPtr(@value, i) then
+        AppendShortComma(@PS^[1], PByte(PS)^, result, trimlowercase);
+      inc(PByte(PS), PByte(PS)^ + 1); // next
+    end;
+    if result[ord(result[0])] = ',' then
+      dec(result[0]);
+  end;
+end;
+
 
 end.
 

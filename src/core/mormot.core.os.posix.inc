@@ -516,6 +516,8 @@ var
   SR: TSearchRec;
   {$endif BSD}
 begin
+  // initialize mormot.core.text to avoid GPF in this function
+  InitializeTextConstants;
   // retrieve Kernel and Hardware information
   modname := nil;
   SystemInfo.dwPageSize := getpagesize;

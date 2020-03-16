@@ -283,12 +283,30 @@ function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
 // - return a shortstring: enumeration names are pure 7bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a shortstring: enumeration names are pure 7bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
 procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); overload;
+
+/// fast append some UTF-8 text into a shortstring, with an ending ','
+procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: shortstring;
+  trimlowercase: boolean);   {$ifdef FPC} inline; {$endif}
+
+/// fast search of an exact case-insensitive match of a RTTI's PShortString array
+function FindShortStringListExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+
+/// fast case-insensitive search of a left-trimmed lowercase match
+// of a RTTI's PShortString array
+function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+
+/// fast case-sensitive search of a left-trimmed lowercase match
+// of a RTTI's PShortString array
+function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
 
 /// convert a CamelCase string into a space separated one
 // - 'OnLine' will return 'On line' e.g., and 'OnMyLINE' will return 'On my LINE'
@@ -328,7 +346,7 @@ procedure CamelCase(P: PAnsiChar; len: PtrInt; var s: RawUTF8;
 // - as such, it is not the reverse function to UnCamelCase()
 procedure CamelCase(const text: RawUTF8; var s: RawUTF8;
   const isWord: TSynByteSet = [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 
@@ -587,11 +605,9 @@ type
   TAbstractWriter = class
   private
     // all those abstract methods should be made public and overriden !
-    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape);
-      virtual; abstract;
+    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape); virtual;
     function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
-      EndOfObject: PUTF8Char): PUTF8Char;
-      virtual; abstract;
+      EndOfObject: PUTF8Char): PUTF8Char; virtual;
   protected
     fStream: TStream;
     fInitialStreamPosition: PtrUInt;
@@ -649,7 +665,7 @@ type
 
     /// retrieve the data as a string
     function Text: RawUTF8;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve the data as a string
     // - will avoid creation of a temporary RawUTF8 variable as for Text function
     procedure SetText(var result: RawUTF8; reformat: TTextWriterJSONFormat = jsonCompact);
@@ -673,13 +689,13 @@ type
 
     /// append one ASCII char to the buffer
     procedure Add(c: AnsiChar); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append one ASCII char to the buffer, if not already there as LastChar
     procedure AddOnce(c: AnsiChar); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append two chars to the buffer
     procedure Add(c1,c2: AnsiChar); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
     /// append a 64-bit signed Integer Value as text
     procedure Add(Value: Int64); overload;
@@ -689,19 +705,19 @@ type
     /// append a boolean Value as text
     // - write either 'true' or 'false'
     procedure Add(Value: boolean); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: Int64); overload;
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: currency); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append an Unsigned 32-bit Integer Value as a String
     procedure AddU(Value: cardinal);
     /// append an Unsigned 64-bit Integer Value as a String
     procedure AddQ(Value: QWord);
     /// append an Unsigned 64-bit Integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
     procedure Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID); overload;
@@ -710,13 +726,13 @@ type
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
     // notation in the resulting text
     procedure AddDouble(Value: double; noexp: boolean = false);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
     // notation in the resulting text
     procedure AddSingle(Value: single; noexp: boolean = false);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
@@ -756,7 +772,7 @@ type
     /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJSONEscapeUTF8(const text: RawByteString);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append some unicode chars to the buffer
     // - WideCharCount is the unicode chars count, not the byte size
     // - don't escapes chars according to the JSON RFC
@@ -780,7 +796,7 @@ type
     /// append a UTF-8 String excluding any space or control char
     // - this won't escape the text as expected by JSON
     procedure AddTrimSpaces(const Text: RawUTF8); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a UTF-8 String excluding any space or control char
     // - this won't escape the text as expected by JSON
     procedure AddTrimSpaces(P: PUTF8Char); overload;
@@ -807,14 +823,14 @@ type
     // 'PropName:' without the double quotes
     // - is a wrapper around AddProp()
     procedure AddPropName(const PropName: ShortString);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a RawUTF8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
     // - if twoForceJSONExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
     // - is a wrapper around AddProp()
     procedure AddFieldName(const FieldName: RawUTF8);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// append the class name of an Object instance as text
     // - aClass must be not nil
     procedure AddClassName(aClass: TClass);
@@ -840,7 +856,7 @@ type
     procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
     /// add the pointer into significant hexa chars, ready to be displayed
     procedure AddPointer(P: PtrUInt);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// write a byte as hexa chars
     procedure AddByteToHex(Value: byte);
 
@@ -850,7 +866,7 @@ type
     /// how many bytes are currently in the internal buffer and not on disk
     // - see TextLength for the total number of bytes, on both disk and memory
     function PendingBytes: PtrUInt;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// how many bytes were currently written on disk
     // - excluding the bytes in the internal buffer
     // - see TextLength for the total number of bytes, on both disk and memory
@@ -859,17 +875,17 @@ type
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastChar; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// the last char appended is canceled, if match the supplied one
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastChar(aCharToCancel: AnsiChar); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// the last char appended is canceled if it was a ','
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastComma;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -1091,7 +1107,7 @@ function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
 
 /// fast RawUTF8 version of 32-bit IntToStr()
 function Int32ToUtf8(Value: PtrInt): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast RawUTF8 version of 32-bit IntToStr()
 // - result as var parameter saves a local assignment and a try..finally
@@ -1099,7 +1115,7 @@ procedure Int32ToUTF8(Value: PtrInt; var result: RawUTF8); overload;
 
 /// fast RawUTF8 version of 64-bit IntToStr()
 function Int64ToUtf8(Value: Int64): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast RawUTF8 version of 64-bit IntToStr()
 // - result as var parameter saves a local assignment and a try..finally
@@ -1107,21 +1123,21 @@ procedure Int64ToUtf8(Value: Int64; var result: RawUTF8); overload;
 
 /// fast RawUTF8 version of 32-bit IntToStr()
 function ToUTF8(Value: PtrInt): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 {$ifndef CPU64}
 /// fast RawUTF8 version of 64-bit IntToStr()
 function ToUTF8(Value: Int64): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 {$endif CPU64}
 
 /// optimized conversion of a cardinal into RawUTF8
 function UInt32ToUtf8(Value: PtrUInt): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
 procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUTF8); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast RawUTF8 version of 64-bit IntToStr(), with proper QWord support
 procedure UInt64ToUtf8(Value: QWord; var result: RawUTF8);
@@ -1136,20 +1152,20 @@ function StrToCurr64(P: PUTF8Char; NoDecimal: PBoolean = nil): Int64;
 /// convert a string into its currency representation
 // - will call StrToCurr64()
 function StrToCurrency(P: PUTF8Char): currency;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a currency value into a string
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 function CurrencyToStr(Value: currency): RawUTF8;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
 // - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 function Curr64ToStr(const Value: Int64): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
 // - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
@@ -1208,13 +1224,13 @@ function ExtendedToStringNoExp(var S: ShortString; Value: TSynExtended;
 // - as returned by ExtendedToString() textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
 function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
 // - as returned by ExtendedToString() textual conversion
 // - such values do appear as IEEE floating points, but are not defined in JSON
 function ExtendedToStrNan(const s: RawUTF8): TSynExtendedNan;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a floating-point value to its numerical text equivalency
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8; overload;
@@ -1224,7 +1240,7 @@ procedure ExtendedToStr(Value: TSynExtended; Precision: integer; var result: Raw
 
 /// convert a floating-point value to its numerical text equivalency
 function DoubleToStr(Value: Double): RawUTF8;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
@@ -1281,24 +1297,24 @@ type
 // - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
 function UInt4DigitsToShort(Value: Cardinal): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// creates a 3 digits short string from a 0..999 value
 // - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
 function UInt3DigitsToShort(Value: Cardinal): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// creates a 2 digits short string from a 0..99 value
 // - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
 function UInt2DigitsToShort(Value: byte): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// creates a 2 digits short string from a 0..99 value
 // - won't test Value>99 as UInt2DigitsToShort()
 function UInt2DigitsToShortFast(Value: byte): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ************ Text Formatting functions }
@@ -1336,7 +1352,7 @@ function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, returning FALSE if the argument was not a string value
 function VarRecToUTF8IsString(const V: TVarRec; var value: RawUTF8): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an open array (const Args: array of const) argument to an Int64
 // - returns TRUE and set Value if the supplied argument is a vtInteger, vtInt64
@@ -1365,7 +1381,7 @@ procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
 /// get an open array (const Args: array of const) character argument
 // - only handle varChar and varWideChar kind of arguments
 function VarRecAsChar(const V: TVarRec): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
 // - only supported token is %, which will be written in the resulting string
@@ -1653,7 +1669,7 @@ function IdemPropNameUSameLen(P1, P2: PUTF8Char; P1P2Len: PtrInt): boolean;
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - behavior is undefined with UTF-8 encoding (some false positive may occur)
 function IdemPropNameU(const P1, P2: RawUTF8): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// returns true if the beginning of p^ is the same as up^
 // - ignore case - up^ must be already Upper
@@ -1663,12 +1679,12 @@ function IdemPropNameU(const P1, P2: RawUTF8): boolean; overload;
 // - if p is nil, will return FALSE
 // - if up is nil, will return TRUE
 function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// returns true if the beginning of p^ is the same as up^
 // - this overloaded function accept the uppercase lookup buffer as parameter
 function IdemPChar(p: PUTF8Char; up: PAnsiChar; table: PNormTable): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// returns true if the beginning of p^ is the same as up^, ignoring white spaces
 // - ignore case - up^ must be already Upper
@@ -1735,7 +1751,7 @@ function IdemFileExts(p: PUTF8Char; const extup: array of PAnsiChar; sepChar: An
 
 /// fast retrieve the position of a given character
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast retrieve the position of any value of a given set of characters
 // - see also strspn() function which is likely to be faster
@@ -2009,7 +2025,7 @@ function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean; overl
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,nil,1)
 function HexToCharValid(Hex: PAnsiChar): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast check if the supplied Hex buffer is an hexadecimal representation
 // of a binary buffer of a given number of bytes
@@ -2020,12 +2036,12 @@ function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
 // - similar to HexToBin(Hex,Bin,1) but with Bin<>nil
 // - use HexToCharValid if you want to check a hexadecimal char content
 function HexToChar(Hex: PAnsiChar; Bin: PUTF8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast conversion from two hexa bytes into a 16 bit UTF-16 WideChar
 // - similar to HexToBin(Hex,@wordvar,2) + bswap(wordvar)
 function HexToWideChar(Hex: PAnsiChar): cardinal;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast conversion from binary data into hexa chars
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -2062,11 +2078,11 @@ procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
 
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexLower(const Bin: RawByteString): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast conversion from binary data into lowercase hexa chars
 procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUTF8); overload;
@@ -2118,7 +2134,7 @@ type
 // - used e.g. to implement logBinaryFrameContent option for WebSockets
 function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
   enabled: boolean=true): PAnsiChar;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// returns a text buffer with the (hexadecimal) chars of the input binary
 // - is much slower than LogEscape/EscapeToShort, but has no size limitation
@@ -2196,7 +2212,7 @@ function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean
 // unsigned integer
 // - returns true and set aValue with the decoded number, on success
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
-    {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    {$ifndef FPC}{$ifdef HASINLINE} inline; {$endif}{$endif}
     // inline gives an error under release conditions with FPC
 
 /// fast conversion from hexa chars into a cardinal
@@ -2205,7 +2221,7 @@ function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
 // signed integer
 // - returns true and set aValue with the decoded number, on success
 function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload;
-    {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    {$ifndef FPC}{$ifdef HASINLINE} inline; {$endif}{$endif}
     { inline gives an error under release conditions with FPC }
 
 /// fast conversion from hexa chars into a cardinal
@@ -2213,7 +2229,7 @@ function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload
 // - returns 0 if the supplied text buffer is not a valid hexadecimal 64-bit
 // signed integer
 function HexDisplayToInt64(const Hex: RawByteString): Int64; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 /// append a TGUID binary content as text
@@ -2241,7 +2257,7 @@ type
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
 function GUIDToShort(const
-  guid: TGUID): TGUIDShortString; overload; {$ifdef HASINLINE}inline;{$endif}
+  guid: TGUID): TGUIDShortString; overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
@@ -2266,11 +2282,11 @@ function GetHighUTF8UCS4(var U: PUTF8Char): PtrUInt;
 /// get the WideChar stored in P^ (decode UTF-8 if necessary)
 // - any surrogate (UCS4>$ffff) will be returned as '?'
 function GetUTF8Char(P: PUTF8Char): cardinal;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// get the UCS4 char stored in P^ (decode UTF-8 if necessary)
 function NextUTF8UCS4(var P: PUTF8Char): cardinal;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 type
   /// an abstract class to handle Ansi to/from Unicode translation
@@ -2342,7 +2358,7 @@ type
     /// convert any UTF-8 encoded buffer into Ansi Text
     // - internaly calls UTF8BufferToAnsi virtual method
     function UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal): RawByteString; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// convert any UTF-8 encoded buffer into Ansi Text
     // - internaly calls UTF8BufferToAnsi virtual method
     procedure UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
@@ -2547,12 +2563,12 @@ procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: Integer = maxInt)
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
 // - return '?' for an unknown WideChar in code page 1252
 function WideCharToWinAnsiChar(wc: cardinal): AnsiChar;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char index
 // - return -1 for an unknown WideChar in code page 1252
 function WideCharToWinAnsi(wc: cardinal): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if the supplied buffer only contains 7-bits Ansi characters
 function IsAnsiCompatible(PC: PAnsiChar): boolean; overload;
@@ -2565,7 +2581,7 @@ function IsAnsiCompatibleW(PW: PWideChar): boolean; overload;
 
 /// return TRUE if the supplied text only contains 7-bits Ansi characters
 function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
 function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
@@ -2573,29 +2589,29 @@ function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
 /// return TRUE if the supplied unicode buffer only contains WinAnsi characters
 // - i.e. if the text can be displayed using ANSI_CHARSET
 function IsWinAnsi(WideText: PWideChar): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if the supplied unicode buffer only contains WinAnsi characters
 // - i.e. if the text can be displayed using ANSI_CHARSET
 function IsWinAnsi(WideText: PWideChar; Length: integer): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if the supplied UTF-8 buffer only contains WinAnsi characters
 // - i.e. if the text can be displayed using ANSI_CHARSET
 function IsWinAnsiU(UTF8Text: PUTF8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if the supplied UTF-8 buffer only contains WinAnsi 8 bit characters
 // - i.e. if the text can be displayed using ANSI_CHARSET with only 8 bit unicode
 // characters (e.g. no "tm" or such)
 function IsWinAnsiU8Bit(UTF8Text: PUTF8Char): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// UTF-8 encode one UTF-16 character into Dest
 // - return the number of bytes written into Dest (i.e. 1,2 or 3)
 // - this method does NOT handle UTF-16 surrogate pairs
 function WideCharToUtf8(Dest: PUTF8Char; aWideChar: PtrUInt): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// UTF-8 encode one UTF-16 encoded UCS4 character into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
@@ -2619,30 +2635,30 @@ procedure AnyAnsiToUTF8(const s: RawByteString; var result: RawUTF8); overload;
 // - will assume CurrentAnsiConvert.CodePage prior to Delphi 2009
 // - newer UNICODE versions of Delphi will retrieve the code page from string
 function AnyAnsiToUTF8(const s: RawByteString): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a WinAnsi (CodePage 1252) string into a UTF-8 encoded String
 // - faster than SysUtils: don't use Utf8Encode(WideString) -> no Windows.Global(),
 // and use a fixed pre-calculated array for individual chars conversion
 function WinAnsiToUtf8(const S: WinAnsiString): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a WinAnsi (CodePage 1252) string into a UTF-8 encoded String
 // - faster than SysUtils: don't use Utf8Encode(WideString) -> no Windows.Global(),
 // and use a fixed pre-calculated array for individual chars conversion
 function WinAnsiToUtf8(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a WinAnsi PAnsiChar buffer into a UTF-8 encoded buffer
 // - Dest^ buffer must be reserved with at least SourceChars*3
 // - call internally WinAnsiConvert fast conversion class
 function WinAnsiBufferToUtf8(Dest: PUTF8Char; Source: PAnsiChar; SourceChars: Cardinal): PUTF8Char;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a WinAnsi shortstring into a UTF-8 text
 // - call internally WinAnsiConvert fast conversion class
 function ShortStringToUTF8(const source: ShortString): RawUTF8;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a WinAnsi (CodePage 1252) string into a Unicode encoded String
 // - very fast, by using a fixed pre-calculated array for individual chars conversion
@@ -2652,23 +2668,23 @@ function WinAnsiToRawUnicode(const S: WinAnsiString): RawUnicode;
 // - very fast, by using a fixed pre-calculated array for individual chars conversion
 // - text will be truncated if necessary to avoid buffer overflow in Dest[]
 procedure WinAnsiToUnicodeBuffer(const S: WinAnsiString; Dest: PWordArray; DestLen: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a UTF-8 encoded string into a WinAnsi String
 function Utf8ToWinAnsi(const S: RawUTF8): WinAnsiString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a UTF-8 encoded zero terminated buffer into a WinAnsi String
 function Utf8ToWinAnsi(P: PUTF8Char): WinAnsiString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a UTF-8 encoded zero terminated buffer into a RawUTF8 String
 procedure Utf8ToRawUTF8(P: PUTF8Char; var result: RawUTF8);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a UTF-8 encoded buffer into a WinAnsi PAnsiChar buffer
 function UTF8ToWinPChar(dest: PAnsiChar; source: PUTF8Char; count: integer): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a UTF-8 encoded buffer into a WinAnsi shortstring buffer
 procedure UTF8ToShortString(var dest: shortstring; source: PUTF8Char);
@@ -2676,12 +2692,12 @@ procedure UTF8ToShortString(var dest: shortstring; source: PUTF8Char);
 /// direct conversion of an ANSI-7 shortstring into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
 function ShortStringToAnsi7String(const source: shortstring): RawByteString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of an ANSI-7 shortstring into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
 procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an UTF-8 encoded text into a WideChar (UTF-16) buffer
 // - faster than System.UTF8ToUnicode
@@ -2772,7 +2788,7 @@ function Utf8DecodeToRawUnicode(P: PUTF8Char; L: integer): RawUnicode; overload;
 
 /// convert a UTF-8 string into a RawUnicode string
 function Utf8DecodeToRawUnicode(const S: RawUTF8): RawUnicode; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a UTF-8 string into a RawUnicode string
 // - this version doesn't resize the length of the result RawUnicode
@@ -2796,7 +2812,7 @@ procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 /// convert a RawUnicode PWideChar into a UTF-8 string
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a RawUnicode UTF-16 PWideChar into a UTF-8 buffer
 // - replace system.UnicodeToUtf8 implementation, which is rather slow
@@ -2822,34 +2838,34 @@ function SynUnicodeToUtf8(const Unicode: SynUnicode): RawUTF8;
 
 /// convert a WideString into a UTF-8 string
 function WideStringToUTF8(const aText: WideString): RawUTF8;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// direct conversion of a Unicode encoded buffer into a WinAnsi PAnsiChar buffer
 procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: integer);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a RawUnicode PWideChar into a WinAnsi (code page 1252) string
 function RawUnicodeToWinAnsi(WideChar: PWideChar; WideCharCount: integer): WinAnsiString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a RawUnicode string into a WinAnsi (code page 1252) string
 function RawUnicodeToWinAnsi(const Unicode: RawUnicode): WinAnsiString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a WideString into a WinAnsi (code page 1252) string
 function WideStringToWinAnsi(const Wide: WideString): WinAnsiString;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an AnsiChar buffer (of a given code page) into a UTF-8 string
 procedure AnsiCharToUTF8(P: PAnsiChar; L: Integer; var result: RawUTF8; ACP: integer);
 
 /// convert any Raw Unicode encoded String into a generic SynUnicode Text
 function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any Raw Unicode encoded String into a generic SynUnicode Text
 function RawUnicodeToSynUnicode(WideChar: PWideChar; WideCharCount: integer): SynUnicode; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an Unicode buffer into a WinAnsi (code page 1252) string
 procedure UnicodeBufferToWinAnsi(source: PWideChar; out Dest: WinAnsiString);
@@ -2897,7 +2913,7 @@ function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; in
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
 function StringToUTF8(const Text: string): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any generic VCL Text buffer into an UTF-8 encoded String
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
@@ -2905,22 +2921,22 @@ function StringToUTF8(const Text: string): RawUTF8; overload;
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
 procedure StringToUTF8(Text: PChar; TextLen: PtrInt; var result: RawUTF8); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any generic VCL Text into an UTF-8 encoded String
 // - this overloaded function use a faster by-reference parameter for the result
 procedure StringToUTF8(const Text: string; var result: RawUTF8); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any generic VCL Text into an UTF-8 encoded String
 function ToUTF8(const Text: string): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
 // - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
 // a RTTI type or property name: it won't work with Ansi-encoded strings
 function ToUTF8(const Ansi7Text: ShortString): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a TGUID into UTF-8 encoded text
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
@@ -2959,12 +2975,12 @@ function StringToRawUnicode(const S: string): RawUnicode; overload;
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
 function StringToSynUnicode(const S: string): SynUnicode; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any generic VCL Text into a SynUnicode encoded String
 // - overloaded to avoid a copy to a temporary result string of a function
 procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any generic VCL Text into a Raw Unicode encoded String
 // - it's prefered to use TLanguageFile.StringToUTF8() method in mORMoti18n,
@@ -2987,7 +3003,7 @@ procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string); over
 
 /// convert any SynUnicode encoded string into a generic VCL Text
 function SynUnicodeToString(const U: SynUnicode): string;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any UTF-8 encoded String into a generic VCL Text
 // - it's prefered to use TLanguageFile.UTF8ToString() in mORMoti18n,
@@ -2997,7 +3013,7 @@ function SynUnicodeToString(const U: SynUnicode): string;
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
 function UTF8ToString(const Text: RawUTF8): string;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any UTF-8 encoded buffer into a generic VCL Text
 // - it's prefered to use TLanguageFile.UTF8ToString() in mORMoti18n,
@@ -3014,11 +3030,11 @@ procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string); over
 
 /// convert any UTF-8 encoded String into a generic WideString Text
 function UTF8ToWideString(const Text: RawUTF8): WideString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any UTF-8 encoded String into a generic WideString Text
 procedure UTF8ToWideString(const Text: RawUTF8; var result: WideString); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any UTF-8 encoded String into a generic WideString Text
 procedure UTF8ToWideString(Text: PUTF8Char; Len: PtrInt; var result: WideString); overload;
@@ -3035,12 +3051,12 @@ procedure UTF8ToSynUnicode(Text: PUTF8Char; Len: PtrInt; var result: SynUnicode)
 /// convert any Ansi 7 bit encoded String into a generic VCL Text
 // - the Text content must contain only 7 bit pure ASCII characters
 function Ansi7ToString(const Text: RawByteString): string; overload;
-  {$ifndef UNICODE}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifndef UNICODE}{$ifdef HASINLINE} inline; {$endif}{$endif}
 
 /// convert any Ansi 7 bit encoded String into a generic VCL Text
 // - the Text content must contain only 7 bit pure ASCII characters
 function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert any Ansi 7 bit encoded String into a generic VCL Text
 // - the Text content must contain only 7 bit pure ASCII characters
@@ -3054,6 +3070,10 @@ function StringToAnsi7(const Text: string): RawByteString;
 function StringToWinAnsi(const Text: string): WinAnsiString;
   {$ifdef UNICODE}inline;{$endif}
 
+
+/// low-level initialization of mormot.core.text unit
+// - is called from mormot.core.os to allow proper setup
+procedure InitializeTextConstants;
 
 
 implementation
@@ -3972,6 +3992,108 @@ begin
     FastSetString(result, @V^[1], length(V^))
   else
     FastSetString(result, P, L);
+end;
+
+procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: shortstring;
+  trimlowercase: boolean);
+begin
+  if trimlowercase then
+    while text^ in ['a'..'z'] do
+      if len = 1 then
+        exit
+      else
+      begin
+        inc(text);
+        dec(len);
+      end;
+  if integer(ord(result[0])) + len >= 255 then
+    exit;
+  if len > 0 then
+    MoveSmall(text, @result[ord(result[0]) + 1], len);
+  inc(result[0], len + 1);
+  result[ord(result[0])] := ',';
+end;
+
+function IdemPropNameUSmallNotVoid(P1, P2, P1P2Len: PtrInt): boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+label
+  zero;
+begin
+  inc(P1P2Len, P1);
+  dec(P2, P1);
+  repeat
+    if (PByte(P1)^ xor ord(PAnsiChar(P1)[P2])) and $df <> 0 then
+      goto zero;
+    inc(P1);
+  until P1 >= P1P2Len;
+  result := true;
+  exit;
+zero:
+  result := false;
+end;
+
+function FindShortStringListExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+var
+  PLen: PtrInt;
+begin
+  if aValueLen <> 0 then
+    for result := 0 to MaxValue do
+    begin
+      PLen := PByte(List)^;
+      if (PLen = aValueLen) and
+         IdemPropNameUSmallNotVoid(PtrInt(@List^[1]), PtrInt(aValue), PLen) then
+        exit;
+      List := pointer(@PAnsiChar(PLen)[PtrUInt(List) + 1]); // next
+    end;
+  result := -1;
+end;
+
+function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+var
+  PLen: PtrInt;
+begin
+  if aValueLen <> 0 then
+    for result := 0 to MaxValue do
+    begin
+      PLen := ord(List^[0]);
+      inc(PUTF8Char(List));
+      repeat // trim lower case
+        if not (PUTF8Char(List)^ in ['a'..'z']) then
+          break;
+        inc(PUTF8Char(List));
+        dec(PLen);
+      until PLen = 0;
+      if (PLen = aValueLen) and
+         IdemPropNameUSmallNotVoid(PtrInt(aValue), PtrInt(List), PLen) then
+        exit;
+      inc(PUTF8Char(List), PLen); // next
+    end;
+  result := -1;
+end;
+
+function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+var
+  PLen: PtrInt;
+begin
+  if aValueLen <> 0 then
+    for result := 0 to MaxValue do
+    begin
+      PLen := ord(List^[0]);
+      inc(PUTF8Char(List));
+      repeat
+        if not (PUTF8Char(List)^ in ['a'..'z']) then
+          break;
+        inc(PUTF8Char(List));
+        dec(PLen);
+      until PLen = 0;
+      if (PLen = aValueLen) and CompareMemFixed(aValue, List, PLen) then
+        exit;
+      inc(PUTF8Char(List), PLen);
+    end;
+  result := -1;
 end;
 
 function UnCamelCase(const S: RawUTF8): RawUTF8;
@@ -4954,6 +5076,18 @@ begin
   inherited;
 end;
 
+procedure TAbstractWriter.AddVariant(const Value: variant;
+  Escape: TTextWriterKind);
+begin
+  raise ESynException.CreateUTF8('%.AddVariant unimplemented', [self]);
+end;
+
+function TAbstractWriter.AddJSONReformat(JSON: PUTF8Char;
+  Format: TTextWriterJSONFormat; EndOfObject: PUTF8Char): PUTF8Char;
+begin
+  raise ESynException.CreateUTF8('%.AddJSONReformat unimplemented', [self]);
+end;
+
 function TAbstractWriter.GetTextLength: PtrUInt;
 begin
   if self = nil then
@@ -5272,7 +5406,7 @@ begin
   inc(B, Len);
 end;
 
-procedure TAbstractWriter.AddQHex(Value: QWord);
+procedure TAbstractWriter.AddQHex(Value: Qword);
 begin
   AddBinToHexDisplayQuoted(@Value, SizeOf(Value));
 end;
@@ -7540,19 +7674,6 @@ smlu32:   Res.Text := pointer(SmallUInt32UTF8[result]);
   Res.Text := Res.TempRawUTF8;
   Res.Len := length(RawUTF8(Res.TempRawUTF8));
   result := Res.Len;
-end;
-
-procedure ClassToText(C: TClass; var result: RawUTF8); {$ifdef HASINLINE}inline;{$endif}
-var
-  P: PShortString;
-begin
-  if C = nil then
-    result := ''
-  else
-  begin
-    P := ClassNameShort(C);
-    FastSetString(result, @P^[1], ord(P^[0]));
-  end;
 end;
 
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean);
@@ -12407,7 +12528,7 @@ end;
 
 
 
-procedure InitializeConstants;
+procedure InitializeTextConstants;
 var
   i: PtrInt;
   v: byte;
@@ -12426,6 +12547,8 @@ const
      198, 67, 69, 69, 69, 69, 73, 73, 73, 73, 68, 78, 79, 79, 79, 79,
      79, 247, 79, 85, 85, 85, 85, 89, 222, 89);
 begin
+  if CurrentAnsiConvert <> nil then
+    exit; // could be called several times, e.g. from core.os then core.text
   for i := 0 to 255 do
     NormToNormByte[i] := i;
   NormToUpperAnsi7Byte := NormToNormByte;
@@ -12478,7 +12601,7 @@ begin
 end;
 
 initialization
-  InitializeConstants;
+  InitializeTextConstants; // should alredy be done from mormot.core.os
 
 finalization
   SynAnsiConvertList.Free;

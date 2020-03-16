@@ -362,6 +362,8 @@ var
   cpu, manuf, prod, prodver: RawUTF8;
   reg: TWinRegistry;
 begin
+  // initialize mormot.core.text to avoid GPF in this function
+  InitializeTextConstants;
   // late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(h, 'GetTickCount64');
