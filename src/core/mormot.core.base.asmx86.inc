@@ -934,6 +934,24 @@ asm // adapted from FPC compiler output, which is much better than Delphi's here
         mov     dword ptr [ecx+0CH], edx
 end;
 
+function InterlockedIncrement(var I: Integer): Integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        mov     edx, 1
+        xchg    eax, edx
+   lock xadd    [edx], eax
+        inc     eax
+end;
+
+function InterlockedDecrement(var I: Integer): Integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        mov     edx, -1
+        xchg    eax, edx
+   lock xadd    [edx], eax
+        dec     eax
+end;
+
 function StrLenSafe(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // slower than StrLenSSE2(), but won't read any byte beyond the string

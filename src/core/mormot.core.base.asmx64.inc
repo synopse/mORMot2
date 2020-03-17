@@ -1033,6 +1033,24 @@ function Rdtsc: Int64;
         or      rax, rdx
 end;
 
+function InterlockedIncrement(var I: Integer): Integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rax, I
+        mov     edx, 1
+        xchg    eax, edx
+   lock xadd    [edx], eax
+        inc     eax
+end;
+
+function InterlockedDecrement(var I: Integer): Integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rax, I
+        mov     edx, -1
+        xchg    eax, edx
+   lock xadd    [edx], eax
+        dec     eax
+end;
+
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
 // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled

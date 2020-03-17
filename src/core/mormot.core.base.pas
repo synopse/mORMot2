@@ -16,7 +16,7 @@ unit mormot.core.base;
     - Buffers (e.g. Hashing) Functions
     - Date / Time Processing
     - Efficient Variant Values Conversion
-    - Some Convenient TStream descendants
+    - Some Convenient TStream descendants and File access functions
     - Faster Alternative to RTL Standard Functions
 
   Aim of those types and functions is to be cross-platform and cross-compiler,
@@ -230,6 +230,7 @@ type
   PWinAnsiString = ^WinAnsiString;
   PWinAnsiChar = type PAnsiChar;
   PSynUnicode = ^SynUnicode;
+  PFileName = ^TFileName;
 
   /// a simple wrapper to UTF-8 encoded zero-terminated PAnsiChar
   // - PAnsiChar is used only for Win-Ansi encoded text
@@ -395,6 +396,12 @@ type
   TShort16 = string[16];
   PShort16 = ^TShort16;
 
+  /// available console colors (under Windows at least)
+  TConsoleColor = (
+    ccBlack, ccBlue, ccGreen, ccCyan, ccRed, ccMagenta, ccBrown, ccLightGray,
+    ccDarkGray, ccLightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
+    ccYellow, ccWhite);
+
 type
   /// cross-compiler type used for string/dynarray reference counter
   TRefCnt = {$ifdef FPC} SizeInt {$else} longint {$endif};
@@ -555,6 +562,10 @@ function GetClassParent(C: TClass): TClass;
 // comparison with other kind of input variables
 function PropNameEquals(P1, P2: PShortString): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// use the RTL to return a date/time as ISO-8601 text
+// - slow function, here to avoid linking mormot.core.datetime
+function DateTimeToIsoString(dt: TDateTime): string;
 
 
 { ************ Numbers (floats and integers) Low-level Definitions }
@@ -772,6 +783,20 @@ function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 /// add the 4 digits of integer Y to P^ as '0000'..'9999'
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
   {$ifndef ASMX86} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
+/// compare to floating point values, with IEEE 754 double precision
+// - use this function instead of raw = operator
+// - the precision is calculated from the A and B value range
+// - faster equivalent than SameValue() in Math unit
+// - if you know the precision range of A and B, it's faster to check abs(A-B)<range
+function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
+
+/// compare to floating point values, with IEEE 754 double precision
+// - use this function instead of raw = operator
+// - the precision is calculated from the A and B value range
+// - faster equivalent than SameValue() in Math unit
+// - if you know the precision range of A and B, it's faster to check abs(A-B)<range
+function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-12): Boolean;
 
 
 { ************ Integer Arrays Manipulation }
@@ -1657,7 +1682,6 @@ procedure mul64x64(const left, right: QWord; out product: THash128Rec);
   {$ifndef CPUINTEL}inline;{$endif}
 
 
-
 { ************ Low-level Functions Manipulating Bits }
 
 /// retrieve a particular bit status from a bit array
@@ -1818,6 +1842,7 @@ type
   TIntelCpuFeatures = set of TIntelCpuFeature;
 
 {$ifdef CPUINTEL}
+
 var
   /// the available CPU features, as recognized at program startup
   CpuFeatures: TIntelCpuFeatures;
@@ -1832,11 +1857,24 @@ function RdRand32: cardinal;
 // - could be used as entropy source for randomness - use TPrecisionTimer if
 // you expect a cross-platform and cross-CPU high resolution performance counter
 function Rdtsc: Int64;
+
+/// compatibility function, to be implemented according to the running CPU
+// - expect the same result as the homonymous Win32 API function
+// - FPC will define this function as intrinsic for non-Intel CPUs
+function InterlockedIncrement(var I: Integer): Integer;
+
+/// compatibility function, to be implemented according to the running CPU
+// - expect the same result as the homonymous Win32 API function
+// - FPC will define this function as intrinsic for non-Intel CPUs
+function InterlockedDecrement(var I: Integer): Integer;
+
 {$endif CPUINTEL}
+
 
 {$ifdef ASMINTEL}
 
 {$ifdef ASMX64} // will define its own self-dispatched SSE2/AVX functions
+
 type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
   // - cpuERMS is slightly slower than cpuAVX so is not available by default
@@ -1844,6 +1882,7 @@ type
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   CPUIDX64: TX64CpuFeatures;
+
 {$endif ASMX64}
 
 /// our fast version of FillChar()
@@ -1866,9 +1905,13 @@ procedure FillZero(var dest; count: PtrInt); overload;
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 procedure MoveFast(const src; var dst; cnt: PtrInt);
+
+
 {$else} // fallback to RTL versions on non-INTEL or PIC platforms
+
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = FillChar;
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+
 {$endif ASMINTEL}
 
 /// an alternative Move() function tuned for small unaligned counts
@@ -1935,6 +1978,11 @@ var StrLen: function(S: pointer): PtrInt = StrLenSafe;
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
+
+/// extract file name, without its extension
+// - may optionally return the associated extension, as '.ext'
+function GetFileNameWithoutExt(const FileName: TFileName;
+  Extension: PFileName = nil): TFileName;
 
 type
   /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
@@ -2336,7 +2384,7 @@ function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 
-{ ************ Some Convenient TStream descendants }
+{ ************ Some Convenient TStream descendants and File access functions }
 
 type
   /// a fake TStream, which will just count the number of bytes written
@@ -2396,8 +2444,15 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+/// creates a directory if not already existing
+// - returns the full expanded directory name, including trailing backslash
+// - returns '' on error, unless RaiseExceptionOnCreationFailure is true
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+
 
 implementation
+
 
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
@@ -2621,6 +2676,11 @@ begin
   exit;
 zero:
   result := false;
+end;
+
+function DateTimeToIsoString(dt: TDateTime): string;
+begin // avoid to link mormot.core.datetime
+  DateTimeToString(result, 'yyyy-mm-dd hh:nn:ss', dt);
 end;
 
 
@@ -6317,6 +6377,29 @@ begin
         exit;
 end;
 
+function GetFileNameWithoutExt(const FileName: TFileName; Extension: PFileName): TFileName;
+var
+  i, max: PtrInt;
+begin
+  i := length(FileName);
+  max := i - 16;
+  while (i > 0) and not (cardinal(FileName[i]) in
+     [ord('\'), ord('/'), ord('.')]) and (i >= max) do
+    dec(i);
+  if (i = 0) or (FileName[i] <> '.') then
+  begin
+    result := FileName;
+    if Extension <> nil then
+      Extension^ := '';
+  end
+  else
+  begin
+    result := copy(FileName, 1, i - 1);
+    if Extension <> nil then
+      Extension^ := copy(FileName, i, 20);
+  end;
+end;
+
 threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 var
@@ -6433,7 +6516,7 @@ begin
   else
     c := Rdtsc;
   {$else}
-  c := Random(MaxInt);          // good enough as seed
+  c := Random(MaxInt); // good enough as seed
   {$endif CPUINTEL}
   gen := @_Lecuyer;
   repeat
@@ -7344,6 +7427,50 @@ begin
   end;
 end;
 
+function SameValue(const A, B: Double; DoublePrec: double): Boolean;
+var
+  AbsA, AbsB, Res: double;
+begin
+  if PInt64(@DoublePrec)^ = 0 then
+  begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
+    AbsA := Abs(A);
+    AbsB := Abs(B);
+    Res := 1E-12;
+    if AbsA < AbsB then
+      DoublePrec := AbsA * Res
+    else
+      DoublePrec := AbsB * Res;
+    if DoublePrec < Res then
+      DoublePrec := Res;
+  end;
+  if A < B then
+    result := (B - A) <= DoublePrec
+  else
+    result := (A - B) <= DoublePrec;
+end;
+
+function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended): Boolean;
+var
+  AbsA, AbsB, Res: TSynExtended;
+begin
+  if DoublePrec = 0 then
+  begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
+    AbsA := Abs(A);
+    AbsB := Abs(B);
+    Res := 1E-12; // also for TSynExtended (FPC uses 1E-4!)
+    if AbsA < AbsB then
+      DoublePrec := AbsA * Res
+    else
+      DoublePrec := AbsB * Res;
+    if DoublePrec < Res then
+      DoublePrec := Res;
+  end;
+  if A < B then
+    result := (B - A) <= DoublePrec
+  else
+    result := (A - B) <= DoublePrec;
+end;
+
 
 { ************ Efficient Variant Values Conversion }
 
@@ -7792,8 +7919,20 @@ function TSynMemoryStream.Write(const Buffer; Count: Integer): Longint;
 begin
   {$ifdef FPC}
   result := 0; // makes FPC compiler happy
-  {$endif}
+  {$endif FPC}
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
+end;
+
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean): TFileName;
+begin
+  result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
+  if not DirectoryExists(result) then
+    if not CreateDir(result) then
+      if not RaiseExceptionOnCreationFailure then
+        result := ''
+      else
+        raise Exception.CreateFmt('Impossible to create folder %s', [result]);
 end;
 
 
