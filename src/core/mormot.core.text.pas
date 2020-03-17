@@ -585,6 +585,61 @@ type
   // - via the TTextWriter.CreateOwnedStream overloaded constructor
   TTextWriterStackBuffer = array[0..8191] of AnsiChar;
 
+  /// available options for TTextWriter.WriteObject() method
+  // - woHumanReadable will add some line feeds and indentation to the content,
+  // to make it more friendly to the human eye
+  // - woDontStoreDefault (which is set by default for WriteObject method) will
+  // avoid serializing properties including a default value (JSONToObject function
+  // will set the default values, so it may help saving some bandwidth or storage)
+  // - woFullExpand will generate a debugger-friendly layout, including instance
+  // class name, sets/enumerates as text, and reference pointer - as used by
+  // TSynLog and ObjectToJSONFull()
+  // - woStoreClassName will add a "ClassName":"TMyClass" field
+  // - woStorePointer will add a "Address":"0431298A" field, and .map/.mab
+  // source code line number corresponding to ESynException.RaisedAt
+  // - woStoreStoredFalse will write the 'stored false' properties, even
+  // if they are marked as such (used e.g. to persist all settings on file,
+  // but disallow the sensitive - password - fields be logged)
+  // - woHumanReadableFullSetsAsStar will store an human-readable set with
+  // all its enumerates items set to be stored as ["*"]
+  // - woHumanReadableEnumSetAsComment will add a comment at the end of the
+  // line, containing all available values of the enumaration or set, e.g:
+  // $ "Enum": "Destroying", // Idle,Started,Finished,Destroying
+  // - woEnumSetsAsText will store sets and enumerables as text (is also
+  // included in woFullExpand or woHumanReadable)
+  // - woDateTimeWithMagic will append the JSON_SQLDATE_MAGIC (i.e. U+FFF1)
+  // before the ISO-8601 encoded TDateTime value
+  // - woDateTimeWithZSuffix will append the Z suffix to the ISO-8601 encoded
+  // TDateTime value, to identify the content as strict UTC value
+  // - TTimeLog would be serialized as Int64, unless woTimeLogAsText is defined
+  // - since TSQLRecord.ID could be huge Int64 numbers, they may be truncated
+  // on client side, e.g. to 53-bit range in JavaScript: you could define
+  // woIDAsIDstr to append an additional "ID_str":"##########" field
+  // - by default, TSQLRawBlob properties are serialized as null, unless
+  // woSQLRawBlobAsBase64 is defined
+  // - if woHideSynPersistentPassword is set, TSynPersistentWithPassword.Password
+  // field will be serialized as "***" to prevent security issues (e.g. in log)
+  // - by default, TObjectList will set the woStoreClassName for its nested
+  // objects, unless woObjectListWontStoreClassName is defined
+  // - void strings would be serialized as "", unless woDontStoreEmptyString
+  // is defined so that such properties would not be written
+  // - all inherited properties would be serialized, unless woDontStoreInherited
+  // is defined, and only the topmost class level properties would be serialized
+  // - woInt64AsHex will force Int64/QWord to be written as hexadecimal string -
+  // see j2oAllowInt64Hex reverse option fot Json2Object
+  // - woDontStore0 will avoid serializating number properties equal to 0
+  TTextWriterWriteObjectOption = (
+    woHumanReadable, woDontStoreDefault, woFullExpand,
+    woStoreClassName, woStorePointer, woStoreStoredFalse,
+    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
+    woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix, woTimeLogAsText,
+    woIDAsIDstr, woSQLRawBlobAsBase64, woHideSynPersistentPassword,
+    woObjectListWontStoreClassName, woDontStoreEmptyString,
+    woDontStoreInherited, woInt64AsHex, woDontStore0);
+    
+  /// options set for TTextWriter.WriteObject() method
+  TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
+
   /// the available JSON format, for TTextWriter.AddJSONReformat() and its
   // JSONBufferReformat() and JSONReformat() wrappers
   // - jsonCompact is the default machine-friendly single-line layout
@@ -611,11 +666,6 @@ type
   // - see TJSONSerializer in mormot.core.reflection for proper class
   // serialization via WriteObject
   TAbstractWriter = class
-  private
-    // all those abstract methods should be made public and overriden !
-    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape); virtual;
-    function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
-      EndOfObject: PUTF8Char): PUTF8Char; virtual;
   protected
     fStream: TStream;
     fInitialStreamPosition: PtrUInt;
@@ -868,6 +918,18 @@ type
     /// write a byte as hexa chars
     procedure AddByteToHex(Value: byte);
 
+    /// this class implementation will raise an exception
+    // - use overriden version instead!
+    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape); virtual;
+    /// this class implementation will raise an exception
+    // - use overriden version instead!
+    function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
+      EndOfObject: PUTF8Char): PUTF8Char; virtual;
+    /// this class implementation will raise an exception
+    // - use overriden version instead!
+    procedure WriteObject(Value: TObject;
+      Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]); virtual;
+    
     /// return the last char appended
     // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
@@ -5113,6 +5175,11 @@ function TAbstractWriter.AddJSONReformat(JSON: PUTF8Char;
   Format: TTextWriterJSONFormat; EndOfObject: PUTF8Char): PUTF8Char;
 begin
   raise ESynException.CreateUTF8('%.AddJSONReformat unimplemented', [self]);
+end;
+
+procedure TAbstractWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
+begin
+  raise ESynException.CreateUTF8('%.WriteObject unimplemented', [self]);
 end;
 
 function TAbstractWriter.GetTextLength: PtrUInt;
