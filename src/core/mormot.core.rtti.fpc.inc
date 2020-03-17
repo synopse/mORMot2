@@ -40,9 +40,10 @@ type
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 function GetTypeData(TypeInfo: pointer): PTypeData; inline;
-begin // (aligned) jump over Kind + Name ShortString - compiles into 2 asm opcodes
+begin // (qword aligned) jump over Kind+Name - compiles as 2 x86_64 asm opcodes
   result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
+
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
@@ -58,12 +59,12 @@ function TRttiClass.RttiProps: PRttiProps;
 begin
   result := @self;
   if result <> nil then
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    result := pointer(PClassData(result)^.PropertyTable)
+    {$else}
     with PTypeData(result)^ do
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      result := pointer(GetPropertyTable)
-      {$else}
       result := @UnitName[ord(UnitName[0]) + 1];
-      {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
 
 function TRttiClass.PropCount: integer;
@@ -294,6 +295,20 @@ begin
 end;
 
 
+const
+  INTEGER_NAME:  string[7] = 'Integer';   // FPC names integer  as "longint"
+  CARDINAL_NAME: string[8] = 'Cardinal';  // FPC names cardinal as "longword"
+
+function TRttiInfo.Name: PShortString;
+begin // TypeInfo(Integer/Cardinal)=TypeInfo(LongInt/LongWord)
+  if @self = TypeInfo(integer) then
+    result := @INTEGER_NAME
+  else if @self = TypeInfo(cardinal) then
+    result := @CARDINAL_NAME
+  else
+    result := @RawName;
+end;
+
 function TRttiInfo.RecordSize: integer;
 begin
   result := GetTypeData(@self)^.RecSize;
@@ -352,6 +367,24 @@ begin
   end;
 end;
 
+function TRttiInfo.ArrayItemType(out aDataSize: integer): PRttiInfo;
+var
+  info: ^TArrayTypeData;
+begin
+  if (@self <> nil) and (Kind = rkArray) then
+  begin
+    info := @GetTypeData(@self)^.ArrayData;
+    result := DeRef(info^.ElTypeRef);
+    if (info^.DimCount = 1) and (result <> nil) and (result^.Kind in rkManagedTypes) then
+    begin
+      aDataSize := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
+      exit;
+    end;
+  end;
+  aDataSize := 0;
+  result := nil;
+end;
+
 function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
   aClass: TClass): integer;
 
@@ -392,5 +425,80 @@ begin
   else if Instance <> nil then
     AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
+
+
+const
+  {$if defined(CPUI386) or defined(CPUI8086) or defined(CPUX86_64) or defined(CPUM68K)}
+  DEFCC = ccReg;
+  {$else}
+  DEFCC = ccStdCall;
+  {$ifend}
+
+procedure TGetRttiInterface.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
+var
+  info: PInterfaceData;
+  ancestor: PTypeInfo;
+  methods: PIntfMethodTable;
+  m: PIntfMethodEntry;
+  a: PVmtMethodParam;
+  res: PRttiInfo;
+  mn, an: integer;
+begin
+  info := pointer(GetTypeData(aInterface));
+  if IdemPropName(info^.UnitName, 'System') then
+    exit;
+  if Definition.Name = '' then
+  begin
+    ShortStringToAnsi7String(aInterface^.Name, Definition.Name);
+    ShortStringToAnsi7String(info^.UnitName, Definition.UnitName);
+    Definition.GUID := info^.GUID;
+  end;
+  ancestor := DeRef(info^.Parent);
+  if ancestor <> nil then
+  begin
+    AddMethodsFromTypeInfo(ancestor);
+    inc(Level);
+  end;
+  methods := info^.MethodTable;
+  m := methods^.Method[0];
+  if m = nil then
+    exit;
+  SetLength(Definition.Methods, MethodCount + methods^.Count);
+  mn :=  methods^.Count;
+  repeat
+    AddMethod(m^.Name, m^.ParamCount, m^.Kind);
+    if m^.CC <> DEFCC then
+      RaiseError('unsupported %', [GetEnumName(TypeInfo(TCallConv), ord(m^.CC))^]);
+    a := m^.Param[0];
+    if a <> nil then
+    begin
+      an := m^.ParamCount;
+      repeat
+        if not (pfResult in a^.Flags) then // result may not be the last on ARM
+          AddArgument( {$ifdef VER3_1} @a^.Name {$else} a^.NamePtr {$endif},
+          { since https://svn.freepascal.org/cgi-bin/viewvc.cgi?view=revision&revision=39684
+            TVmtMethodParam.Name is a local stack copy -> direct NamePtr use }
+            nil, DeRef(a^.ParamType), a^.Flags);
+        dec(an);
+        if an = 0 then
+          break;
+        a := a^.Next;
+      until false;
+    end;
+    res := DeRef(m^.ResultType);
+    if res <> nil then
+      AddArgument(nil, nil, res, []);
+    if ArgCount <> length(CurrentMethod^.Args) then
+      SetLength(CurrentMethod^.Args, ArgCount); // only on ARM
+    dec(mn);
+    if mn = 0 then
+      break;
+    m := m^.Next;
+  until false;
+  CurrentMethod := nil;
+  if MethodCount <> length(Definition.Methods) then
+    RaiseError('missing method', []);
+end;
+
 
 

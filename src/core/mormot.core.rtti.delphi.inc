@@ -9,19 +9,15 @@
 type
   AlignToPtr = Pointer;
 
-  {$ifndef UNICODE}
-  PPropData = ^TPropData; // not defined e.g. in Delphi 7/2007
-  {$endif UNICODE}
-
 {$ifdef HASINLINE} // Delphi RTL TypInfo.GetTypeData() is awful on x86_64
 
 function GetTypeData(TypeInfo: pointer): PTypeData; inline;
 begin // weird code which compiles and inlines best on Delphi Win32 and Win64
   {$ifdef CPU64}
-  result := pointer(PtrInt(TypeInfo) + ord(PTypeInfo(TypeInfo)^.Name[0]) + 2);
+  result := pointer(PtrInt(TypeInfo) + ord(PRttiInfo(TypeInfo)^.RawName[0]) + 2);
   {$else}
   result := TypeInfo;
-  inc(PByte(result), ord(PTypeInfo(result)^.Name[0]) + 2);
+  inc(PByte(result), ord(PRttiInfo(result)^.RawName[0]) + 2);
   {$endif CPU64}
 end;
 
@@ -130,7 +126,7 @@ begin
     result := @NULL_SHORTSTRING;
 end;
 
-{$ifdef CPUX86} // Delphi is not efficient when inlining code :(
+{$ifdef ASMX86} // Delphi is not efficient when inlining code :(
 
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 asm // eax=aTypeInfo edx=aIndex
@@ -166,11 +162,11 @@ asm // eax=aTypeInfo edx=aIndex
         ret
 @1:     pop     edx
 @s:     movzx   ecx, byte ptr[eax]
-        lea     eax, [eax + ecx + 1] // next
+        lea     eax, [eax + ecx + 1] // last 1..3 iterations
         dec     edx
         jnz     @s
 @z:     ret
-@0:     lea     eax, NULL_SHORTSTRING
+@0:     lea     eax, NULL_SHORTSTRING // not Darwin/PIC CPUX86 compatible
 end;
 
 {$else}
@@ -184,7 +180,7 @@ begin
     result := @NULL_SHORTSTRING;
 end;
 
-{$endif CPUX86}
+{$endif ASMX86}
 
 
 function TRttiInterfaceTypeData.IntfGuid: PGUID;
@@ -322,6 +318,11 @@ begin
 end;
 
 
+function TRttiInfo.Name: PShortString;
+begin
+  result := @RawName;
+end;
+
 function TRttiInfo.RecordSize: integer;
 begin
   result := PRecordInfo(GetTypeData(@self))^.RecSize;
@@ -382,7 +383,7 @@ end;
 function TRttiInfo.RecordAllFields(out RecSize: integer): TRttiRecordAllFields;
 begin
   RecSize := self.RecordSize;
-  result := nil; // not available until Delphi 2010
+  result := nil; // not available before Delphi 2010
 end;
 
 {$endif ISDELPHI2010}
@@ -409,14 +410,30 @@ end;
 
 function TRttiInfo.DynArrayItemType(aDataSize: PInteger): PRttiInfo;
 begin
-  result := nil;
   if (@self <> nil) and (Kind = rkDynArray) then
-  begin
-    result := pointer(GetTypeData(@self));
-    if aDataSize <> nil then
-      aDataSize^ := PTypeData(result)^.elSize;
-    result := PPointer(PTypeData(result)^.elType)^;
-  end;
+    with GetTypeData(@self)^ do
+    begin
+      if aDataSize <> nil then
+        aDataSize^ := elSize;
+      result := PPointer(elType)^;
+    end
+  else
+    result := nil;
+end;
+
+function TRttiInfo.ArrayItemType(out aDataSize: integer): PRttiInfo;
+begin
+  if (@self <> nil) and (Kind = rkArray) then
+    with PArrayInfo(GetTypeData(@self))^ do
+      if (DimCount = 1) and (ArrayType <> nil) then
+      begin
+        aDatasize := ArraySize;
+        result := ArrayType^;
+        if result <> nil then
+          exit;
+      end;
+  aDataSize := 0;
+  result := nil;
 end;
 
 function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
@@ -460,4 +477,115 @@ begin
   else if Instance <> nil then
     AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
+
+{$ifndef UNICODE} // not defined on Delphi 7/2007
+type
+  TCallConv = (ccReg, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
+
+const
+  /// fake TTypeInfo RTTI used for TGUID on older versions of the compiler
+  GUID_FAKETYPEINFO: packed record
+    Kind: TTypeKind;
+    Name: string[5];
+    Size: cardinal;
+    Count: integer;
+  end = (
+    Kind: tkRecord;
+    Name: 'TGUID';
+    Size: SizeOf(TGUID);
+    Count: 0);
+    
+{$endif UNICODE}
+
+procedure TGetRttiInterface.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
+var
+  mn, an: integer;
+  ancestor: PTypeInfo;
+  kind: TMethodKind;
+  cc: TCallConv;
+  flags: ^TParamFlags;
+  name, argtypename: PShortString;
+  argtypeinfo: PRttiInfo;
+  p: PByte;
+  pw: PWord absolute p;
+  pi: PTypeData absolute p;
+  ps: PShortString absolute p;
+
+  procedure AddArgFromRTTI;
+  var
+    pp: ^PPRttiInfo absolute p;
+  begin
+    argtypename := ps;
+    ps := @ps^[ord(ps^[0]) + 1];
+    if pp^ = nil then
+      {$ifndef UNICODE}
+      if IdemPropName(argtypename^, 'TGUID') then
+        argtypeinfo := @GUID_FAKETYPEINFO
+      else
+      {$endif UNICODE}
+        RaiseError('"%: %" parameter has no RTTI', [name^, argtypename^])
+    else
+      argtypeinfo := pp^^;
+    inc(pp);
+    AddArgument(name, argtypename, argtypeinfo, flags^);
+  end;
+
+begin
+  pi := GetTypeData(aInterface);
+  if IdemPropName(pi^.IntfUnit, 'System') then
+    exit;
+  if Definition.Name = '' then
+  begin
+    ShortStringToAnsi7String(aInterface^.Name, Definition.Name);
+    ShortStringToAnsi7String(pi^.IntfUnit, Definition.UnitName);
+    Definition.GUID := pi^.Guid;
+  end;
+  ancestor := pi^.IntfParent^;
+  if ancestor <> nil then
+  begin
+    AddMethodsFromTypeInfo(ancestor);
+    inc(Level);
+  end;
+  p := @pi^.IntfUnit[ord(pi^.IntfUnit[0]) + 1];
+  mn := pw^;
+  inc(pw);
+  if (pw^ = $ffff) or (mn = 0) then
+    exit; // no method
+  inc(pw);
+  SetLength(Definition.Methods, MethodCount + mn);
+  repeat
+    name := ps;
+    ps := @ps^[ord(ps^[0]) + 1];
+    kind := TMethodKind(p^);
+    inc(p);
+    cc := TCallConv(p^);
+    inc(p);
+    an := p^;
+    inc(p);
+    AddMethod(name^, an, kind);
+    if cc <> ccReg then
+      RaiseError('unsupported %', [GetEnumName(TypeInfo(TCallConv), ord(cc))^]);
+    while an > 0 do
+    begin
+      flags := pointer(p);
+      inc(p, SizeOf(flags^));
+      name := ps;
+      ps := @ps^[ord(ps^[0]) + 1];
+      AddArgFromRTTI;
+      {$ifdef ISDELPHIXE}
+      inc(p, pw^); // skip custom attributes
+      {$endif ISDELPHIXE}
+      dec(an);
+    end;
+    name := nil;
+    if kind = mkFunction then
+      AddArgFromRTTI;
+    {$ifdef ISDELPHIXE}
+    inc(p, pw^); // skip custom attributes
+    {$endif ISDELPHIXE}
+    dec(mn);
+  until mn = 0;
+  CurrentMethod := nil;
+end;
+
 

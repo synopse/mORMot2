@@ -10,8 +10,6 @@ unit mormot.core.rtti;
     - Low-Level Cross-Compiler RTTI Definitions
     - Enumerations RTTI
     - Published Class Properties and Methods RTTI
-
-    - Record And Dynamic Array RTTI
     - IInvokable Interface RTTI
 
     Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
@@ -39,6 +37,9 @@ uses
 { ************* Low-Level Cross-Compiler RTTI Definitions }
 
 type
+  /// the kind of Exception raised by this unit
+  ERttiException = class(ESynException);
+
   /// map TOrdType, to specify ordinal (rkInteger and rkEnumeration) storage size and sign
   // - note: on FPC, Int64 is stored as its own TRttiKind, not as rkInteger
   TRttiOrd = (roSByte, roUByte, roSWord, roUWord, roSLong, roULong
@@ -322,7 +323,7 @@ type
   /// RTTI of a record/object type definition (managed) field
   // - defined as a record since it is the same for FPC and Delphi, and
   // is not available in oldest Delphi's TypInfo.pas
-  // - maps TRecordElement in FPC rtti.inc or TManagedField in Delphi TypInfo
+  // - maps TRecordElement in FPC rtti.inc or TManagedField in TypInfo
   TRttiRecordField = record
     /// the RTTI of this managed field
     {$ifdef HASDIRECTTYPEINFO}
@@ -383,6 +384,8 @@ type
   /// as returned by TRttiInfo.RecordAllFields
   TRttiRecordAllFields = array of TRttiRecordAllField;
 
+  {$A-}
+
   /// main entry-point wrapper to access RTTI for a given pascal type
   // - as returned by the TypeInfo() low-level compiler function
   // - other RTTI objects can be computed from a pointer to this structure
@@ -399,8 +402,11 @@ type
     // - not defined as an inlined function, since first field is always aligned
     Kind: TRttiKind;
     /// the declared name of the type ('String','Word','RawUnicode'...)
-    // - all subsequent properties should be accessed via TTypeInfo methods
-    function Name: ShortString; {$ifdef HASINLINE} inline; {$endif}
+    // - won't adjust internal/cardinal names on FPC as with Name method
+    RawName: ShortString;
+    /// the declared name of the type ('String','Word','RawUnicode'...)
+    // - on FPC, will adjust integer/cardinal not as 'longint'/'longword'
+    function Name: PShortString;    {$ifdef HASINLINE} inline; {$endif}
     /// for ordinal types, get the storage size and sign
     function RttiOrd: TRttiOrd; {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
@@ -428,6 +434,10 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// for rtDynArray: get the dynamic array size (in bytes) of the stored item
     function DynArrayItemSize: integer; {$ifdef HASINLINE} inline; {$endif}
+    /// for rtArray: get the static array type information of the stored item
+    // - returns nil if the array type is unmanaged (i.e. behave like Delphi)
+    function ArrayItemType(out aDataSize: integer): PRttiInfo;
+      {$ifdef HASINLINE} inline; {$endif}
     /// recognize most used string types, returning their code page
     // - will return the exact code page on FPC and since Delphi 2009, from RTTI
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
@@ -465,6 +475,8 @@ type
       OnlyImplementedBy: TInterfacedObjectClass;
       out AncestorsImplementedEntry: TPointerDynArray);
   end;
+
+  {$A+}
 
   /// how a RTTI property definition access its value
   // - as returned by TPropInfo.Getter/Setter methods
@@ -628,7 +640,7 @@ type
 const
   NO_DEFAULT = longint($80000000);
 
-{$ifndef FPC} // Delphi requires those definitions for proper inlining
+{$ifdef ISDELPHI} // Delphi requires those definitions for proper inlining
 
 const
   NO_INDEX = longint($80000000);
@@ -645,13 +657,28 @@ type
     Kind: byte;
   end;
 
+  TPropData = packed record // PPropData not defined in Delphi 7/2007 TypInfo
+    PropCount: word;
+    PropList: record end;
+  end;
+  PPropData = ^TPropData;
+
   TRecordInfo = packed record // rtRecord not defined in Delphi 7/2007 TTypeData
     RecSize: integer;
     ManagedFldCount: integer;
   end;
   PRecordInfo = ^TRecordInfo;
 
-{$endif FPC}
+  TArrayInfo = packed record // rtArray not defined in Delphi 7/2007 TTypeData
+    ArraySize: integer;
+    ElCount: integer;
+    ArrayType: PPRttiInfo;
+    DimCount: byte;
+    Dims: array[0..255 {DimCount-1}] of PPRttiInfo;
+  end;
+  PArrayInfo = ^TArrayInfo;
+
+{$endif ISDELPHI}
 
 
 { **************** Published Class Properties and Methods RTTI }
@@ -751,14 +778,72 @@ procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortStri
   trimlowercase: boolean = false);
 
 
+{ ***************** IInvokable Interface RTTI }
+
+type
+  /// handled kind of parameters direction for an interface method
+  // - IN, IN/OUT, OUT directions can be applied to arguments, e.g. to be
+  // available through our JSON-serialized remote access: rmdVar and rmdOut
+  // kind of parameters will be returned within the "result": JSON array
+  // - rmdResult is used for a function method, to handle the returned value
+  TRttiMethodArgDirection = (
+    rmdConst,
+    rmdVar,
+    rmdOut,
+    rmdResult);
+  /// set of parameter directions e.g. for an interface-based service method
+  TRttiMethodArgDirections = set of TRttiMethodArgDirection;
+
+  TRttiMethodArg = record
+    /// the argument name, as declared in pascal code
+    ParamName: PShortString;
+    /// the type name, as declared in pascal code
+    TypeName: PShortString;
+    /// the low-level RTTI information of this argument
+    TypeInfo: PRttiInfo;
+    /// how the parameter has been defined (const/var/out/result)
+    Direction: TRttiMethodArgDirection;
+  end;
+  PRttiMethodArg = ^TRttiMethodArg;
+
+  /// store IInvokable method information
+  TRttiMethod = record
+    /// the method name, e.g. 'Add' for ICalculator.Add
+    Name: RawUTF8;
+    /// 0 for the root interface, >0 for inherited interfaces
+    HierarchyLevel: integer;
+    /// the method arguments
+    Args: array of TRttiMethodArg;
+    /// if this method is a function, i.e. expects a result
+    IsFunction: boolean;
+  end;
+  PRttiMethod = ^TRttiMethod;
+
+  /// store IInvokable methods information
+  TRttiInterface = record
+    /// the interface name, e.g. 'ICalculator'
+    Name: RawUTF8;
+    /// the unit where the interface was defined
+    UnitName: RawUTF8;
+    /// the associated GUID of this interface
+    GUID: TGUID;
+    /// the interface methods
+    Methods: array of TRttiMethod;
+  end;
+  PRttiInterface = ^TRttiInterface;
+
+/// retrieve methods information of a given IInvokable
+// - all methods will be added, also from inherited interface definitions
+// - returns the number of methods detected
+function GetRttiInterface(aTypeInfo: pointer; out aDefinition: TRttiInterface): integer;
+
 
 implementation
 
 uses
   TypInfo;
 
-
-{ some inlined functions which should be defined before $include code }
+{ some inlined definitions which should be declared before $include code }
 
 function FromRttiOrd(o: TRttiOrd; P: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
@@ -801,6 +886,25 @@ begin
     {$endif}
   end;
 end;
+
+type
+  TGetRttiInterface = class
+  public
+    Level: integer;
+    MethodCount, ArgCount: integer;
+    CurrentMethod: PRttiMethod;
+    Definition: TRttiInterface;
+    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo);
+    procedure AddMethod(const aMethodName: ShortString; aParamCount: integer;
+      aKind: TMethodKind);
+    procedure AddArgument(aParamName, aTypeName: PShortString; aInfo: PRttiInfo;
+      aFlags: TParamFlags);
+    procedure RaiseError(const Format: RawUTF8; const Args: array of const);
+  end;
+
+const
+  PSEUDO_RESULT_NAME: string[6] = 'Result';
+  PSEUDO_SELF_NAME: string[4] = 'Self';
 
 {$ifdef FPC}
   {$include mormot.core.rtti.fpc.inc}      // FPC specific RTTI access
@@ -1105,11 +1209,6 @@ end;
 
 { TRttiInfo }
 
-function TRttiInfo.Name: ShortString;
-begin
-  result := PTypeInfo(@self)^.Name;
-end;
-
 function TRttiInfo.RttiOrd: TRttiOrd;
 begin
   result := TRttiOrd(GetTypeData(@self)^.OrdType);
@@ -1321,13 +1420,13 @@ end;
 function TRttiProp.GetterAddr(Instance: pointer): pointer;
 begin
   result := Pointer(PtrUInt(Instance) +
-    PtrUInt(PPropInfo(@self)^.GetProc) {$ifndef FPC} and $00ffffff {$endif} );
+    PtrUInt(PPropInfo(@self)^.GetProc) {$ifdef ISDELPHI} and $00ffffff {$endif} );
 end;
 
 function TRttiProp.SetterAddr(Instance: pointer): pointer;
 begin
   result := Pointer(PtrUInt(Instance) +
-    PtrUInt(PPropInfo(@self)^.SetProc) {$ifndef FPC} and $00ffffff {$endif} );
+    PtrUInt(PPropInfo(@self)^.SetProc) {$ifdef ISDELPHI} and $00ffffff {$endif} );
 end;
 
 function TRttiProp.GetFieldAddr(Instance: TObject): pointer;
@@ -2074,5 +2173,90 @@ begin
 end;
 
 
+{ ***************** IInvokable Interface RTTI }
+
+procedure TGetRttiInterface.AddMethod(const aMethodName: ShortString;
+  aParamCount: integer; aKind: TMethodKind);
+var
+  i: PtrInt;
+begin
+  CurrentMethod := @Definition.Methods[MethodCount];
+  ShortStringToAnsi7String(aMethodName, CurrentMethod^.Name);
+  for i := 0 to MethodCount - 1 do
+    if IdemPropNameU(Definition.Methods[i].Name, CurrentMethod^.Name) then
+      RaiseError('duplicated method name', []);
+  CurrentMethod^.HierarchyLevel := Level;
+  if aKind = mkFunction then
+    inc(aParamCount);
+  SetLength(CurrentMethod^.Args, aParamCount);
+  CurrentMethod^.IsFunction := aKind = mkFunction;
+  inc(MethodCount);
+  ArgCount := 0;
+end;
+
+procedure TGetRttiInterface.AddArgument(aParamName, aTypeName: PShortString;
+  aInfo: PRttiInfo; aFlags: TParamFlags);
+var
+  a: PRttiMethodArg;
+begin
+  a := @CurrentMethod^.Args[ArgCount];
+  inc(ArgCount);
+  if {$ifdef FPC} pfSelf in aFlags {$else} ArgCount = 1 {$endif} then
+    a^.ParamName := @PSEUDO_SELF_NAME
+  else if aParamName = nil then
+    a^.ParamName := @PSEUDO_RESULT_NAME
+  else
+    a^.ParamName := aParamName;
+  a^.TypeInfo := aInfo;
+  if aTypeName = nil then
+    aTypeName := aInfo^.Name;
+  a^.TypeName := aTypeName;
+  if ArgCount > 1 then
+    if aInfo^.Kind in (rkRecordTypes + [rkDynArray])  then
+    begin
+      if aFlags * [pfConst, pfVar, pfOut] = [] then
+        RaiseError('%: % parameter should be declared as const, var or out',
+          [aParamName^, aTypeName^]);
+    end else if aInfo^.Kind = rkInterface then
+      if not (pfConst in aFlags) then
+        RaiseError('%: % parameter should be declared as const',
+          [aParamName^, aTypeName^]);
+  if aParamName = nil then
+    a^.Direction := rmdResult
+  else if pfVar in aFlags then
+    a^.Direction := rmdVar
+  else if pfOut in aFlags then
+    a^.Direction := rmdOut;
+end;
+
+procedure TGetRttiInterface.RaiseError(const Format: RawUTF8; const Args: array of const);
+var
+  m: RawUTF8;
+begin
+  if CurrentMethod <> nil then
+    m := '.' + CurrentMethod^.Name;
+  raise ERttiException.CreateUTF8('GetRttiInterface(%%) failed - %',
+    [Definition.Name, m, FormatUTF8(Format, Args)]);
+end;
+
+function GetRttiInterface(aTypeInfo: pointer; out aDefinition: TRttiInterface): integer;
+var
+  getter: TGetRttiInterface;
+begin
+  getter := TGetRttiInterface.Create;
+  try
+    getter.AddMethodsFromTypeInfo(aTypeInfo);
+    aDefinition := getter.Definition;
+  finally
+    getter.Free;
+  end;
+  result := length(aDefinition.Methods);
+end;
+
+
+initialization
+  {$ifdef FPC_OR_UNICODE}
+  assert(SizeOf(TRttiRecordField) = SizeOf(TManagedField));
+  {$endif FPC_OR_UNICODE}
 end.
 
