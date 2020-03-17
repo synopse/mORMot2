@@ -239,10 +239,10 @@ type
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
   TSystemTime = Windows.TSystemTime;
 
-  {$ifndef FPC}
+  {$ifdef ISDELPHI}
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
   TRTLCriticalSection = Windows.TRTLCriticalSection;
-  {$endif FPC}
+  {$endif ISDELPHI}
 
 /// returns the current UTC time as TSystemTime
 // - under Delphi/Windows, directly call the homonymous Win32 API

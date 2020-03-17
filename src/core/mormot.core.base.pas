@@ -5771,7 +5771,7 @@ begin
   d[7] := 0;
 end;
 
-{$ifndef FPC} // intrinsic in FPC
+{$ifdef ISDELPHI} // intrinsic in FPC
 procedure ReadBarrier;
 asm
         {$ifdef CPUX86}
@@ -5780,7 +5780,7 @@ asm
         lfence // lfence requires an SSE CPU, which is OK on x86-64
         {$endif CPUX86}
 end;
-{$endif FPC}
+{$endif ISDELPHI}
 
 procedure RCU32(var src, dst);
 begin

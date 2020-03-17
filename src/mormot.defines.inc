@@ -301,6 +301,7 @@
     {$define UNDIRECTDYNARRAY}
   {$endif}
 
+  {$define ISDELPHI}
   {$define CPUINTEL}   // Delphi only for Intel by now
   {$define ASMINTEL}
   {$ifdef CPUX64}
