@@ -387,6 +387,14 @@ procedure GetNextItemTrimedCRLF(var P: PUTF8Char; var result: RawUTF8);
 // therefore can be used with ready to be displayed text (e.g. for the VCL)
 function GetNextItemString(var P: PChar; Sep: Char = ','): string;
 
+/// extract a file extension from a file name, then compare with a comma
+// separated list of extensions
+// - e.g. GetFileNameExtIndex('test.log','exe,log,map')=1
+// - will return -1 if no file extension match
+// - will return any matching extension, starting count at 0
+// - extension match is case-insensitive
+function GetFileNameExtIndex(const FileName, CSVExt: TFileName): integer;
+
 /// return next CSV string from P, nil if no more
 // - output text would be trimmed from any left or right space
 procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: AnsiChar = ',');
@@ -4360,6 +4368,25 @@ begin
     else
       P := nil;
   end;
+end;
+
+function GetFileNameExtIndex(const FileName, CSVExt: TFileName): integer;
+var
+  Ext: TFileName;
+  P: PChar;
+begin
+  result := -1;
+  P := pointer(CSVExt);
+  Ext := ExtractFileExt(FileName);
+  if (P = nil) or (Ext = '') or (Ext[1] <> '.') then
+    exit;
+  delete(Ext, 1, 1);
+  repeat
+    inc(result);
+    if SameText(GetNextItemString(P), Ext) then
+      exit;
+  until P = nil;
+  result := -1;
 end;
 
 procedure AppendCSVValues(const CSV: string; const Values: array of string;
@@ -9152,7 +9179,7 @@ begin
     until (PW - Start >= UpperLen) or (ord(PW^) = 0) or
           ((ord(PW^) < 126) and (not (ord(PW^) in IsWord)));
     if PW - Start >= UpperLen then
-      if os_CompareString(Start, Upper, UpperLen, UpperLen, {ignorecase=}true) = 2 then
+      if Unicode_CompareString(Start, Upper, UpperLen, UpperLen, {ignorecase=}true) = 2 then
       begin
         result := true; // case-insensitive match found
         exit;
@@ -11664,7 +11691,7 @@ begin
     until (SourceChars = 0) or (ord(Source^) >= 128);
   if SourceChars > 0 then
     // rely on the Operating System for all remaining ASCII characters
-    inc(Dest, os_AnsiToWide(Source, Dest, SourceChars, SourceChars, fCodePage));
+    inc(Dest, Unicode_AnsiToWide(Source, Dest, SourceChars, SourceChars, fCodePage));
   if not NoTrailingZero then
     Dest^ := #0;
   result := Dest;
@@ -11843,7 +11870,7 @@ begin
     until (SourceChars = 0) or (ord(Source^) >= 128);
   // rely on the Operating System for all remaining ASCII characters
   if SourceChars > 0 then
-    inc(Dest, os_WideToAnsi(Source, Dest, SourceChars, SourceChars, fCodePage));
+    inc(Dest, Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars, fCodePage));
   result := Dest;
 end;
 
@@ -12125,7 +12152,7 @@ begin
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
     FillcharFast(U256, SizeOf(U256), 0);
-    if os_AnsiToWide(A256, U256, 256, 256, fCodePage) <> 256 then
+    if Unicode_AnsiToWide(A256, U256, 256, 256, fCodePage) <> 256 then
       // warning: CreateUTF8() uses UTF8ToString() -> use CreateFmt() now
       raise ESynException.CreateFmt('OS error for %s.Create(%d)', [ClassName, aCodePage]);
     MoveFast(U256[0], fAnsiToWide[0], 512);
@@ -12595,7 +12622,7 @@ begin
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true] := 'true';
   SynAnsiConvertList := TObjectList.Create;
-  CurrentAnsiConvert := TSynAnsiConvert.Engine(os_CodePage);
+  CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);
   WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
   UTF8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUTF8;
 end;

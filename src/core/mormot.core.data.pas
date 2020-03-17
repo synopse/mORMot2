@@ -7,13 +7,14 @@ unit mormot.core.data;
   *****************************************************************************
 
    Low-Level Data Processing Functions shared by all framework units
-    - Record Process
     - RTL TPersistent / TInterfacedObject with Custom Constructor
     - TSynPersistent / TSynList / TSynObjectList / TSynLocker classes
     - Variable Length Integer Encoding / Decoding
     - Base64 and Base64URI Encoding / Decoding
+
     - RawUTF8 String Values Interning
     - TSynNameValue Name/Value Storage
+
     - INI Files and In-memory Access
 
   *****************************************************************************
@@ -235,7 +236,7 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    procedure Lock; {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock; {$ifdef FPC} inline; {$endif}
     /// will try to acquire the mutex
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLock then
@@ -244,7 +245,7 @@ type
     // !   finally
     // !     Safe.Unlock;
     // !   end;
-    function TryLock: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function TryLock: boolean; {$ifdef FPC} inline; {$endif}
     /// will try to acquire the mutex for a given time
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLockMS(100) then
@@ -257,7 +258,7 @@ type
     /// release the instance for exclusive access
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
-    procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
+    procedure UnLock; {$ifdef FPC} inline; {$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
     // !begin
@@ -1150,7 +1151,7 @@ end;
 
 function NewSynLocker: PSynLocker;
 begin
-  result := AllocMem(SizeOf(result^));
+  GetMem(result, SizeOf(TSynLocker));
   result^.Init;
 end;
 
