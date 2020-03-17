@@ -6,19 +6,21 @@
 }
 
 uses
+  messages,
   mormot.core.text;
+
 
 { ****************** Unicode, Time, File process }
 
 const
   DefaultCharVar: AnsiChar = '?';
 
-function os_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
+function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 begin
   result := MultiByteToWideChar(CodePage, MB_PRECOMPOSED, A, LA, W, LW);
 end;
 
-function os_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 begin
   result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, @DefaultCharVar, nil);
 end;
@@ -107,14 +109,14 @@ begin
 end;
 
 var
-  os_QueryPerformanceFrequency: QWord; // is documented as stable after boot
+  _QueryPerformanceFrequency: QWord; // is documented as stable after boot
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
   cnt: QWord;
 begin
   QueryPerformanceCounter(PInt64(@cnt)^);
-  Value := (cnt * 1000000) div os_QueryPerformanceFrequency;
+  Value := (cnt * 1000000) div _QueryPerformanceFrequency;
 end;
 
 {$ifndef DELPHI5OROLDER}
@@ -230,6 +232,229 @@ procedure SleepHiRes(ms: cardinal);
 begin
   if (ms <> 0) or not SwitchToThread then
     Windows.Sleep(ms);
+end;
+
+
+{$I-}
+
+var
+  TextAttr: integer = ord(ccDarkGray);
+
+procedure InitConsole;
+begin
+  StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  if StdOut = INVALID_HANDLE_VALUE then
+    StdOut := 0;
+end;
+
+procedure TextColor(Color: TConsoleColor);
+var
+  oldAttr: integer;
+begin
+  if StdOut = 0 then
+    InitConsole;
+  oldAttr := TextAttr;
+  TextAttr := (TextAttr and $F0) or ord(Color);
+  if TextAttr <> oldAttr then
+    SetConsoleTextAttribute(StdOut, TextAttr);
+end;
+
+procedure TextBackground(Color: TConsoleColor);
+var
+  oldAttr: integer;
+begin
+  if StdOut = 0 then
+    InitConsole;
+  oldAttr := TextAttr;
+  TextAttr := (TextAttr and $0F) or (ord(Color) shl 4);
+  if TextAttr <> oldAttr then
+    SetConsoleTextAttribute(StdOut, TextAttr);
+end;
+
+function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
+var
+  lpNumberOfEvents: DWORD;
+  lpBuffer: TInputRecord;
+  lpNumberOfEventsRead: DWORD;
+  nStdHandle: THandle;
+begin
+  result := false;
+  nStdHandle := GetStdHandle(STD_INPUT_HANDLE);
+  lpNumberOfEvents := 0;
+  GetNumberOfConsoleInputEvents(nStdHandle, lpNumberOfEvents);
+  if lpNumberOfEvents <> 0 then
+  begin
+    PeekConsoleInput(nStdHandle, lpBuffer, 1, lpNumberOfEventsRead);
+    if lpNumberOfEventsRead <> 0 then
+      if lpBuffer.EventType = KEY_EVENT then
+        if lpBuffer.Event.KeyEvent.bKeyDown and
+           ((ExpectedKey = 0) or
+            (lpBuffer.Event.KeyEvent.wVirtualKeyCode = ExpectedKey)) then
+          result := true
+        else
+          FlushConsoleInputBuffer(nStdHandle)
+      else
+        FlushConsoleInputBuffer(nStdHandle);
+  end;
+end;
+
+procedure ConsoleWaitForEnterKey;
+var
+  msg: TMsg;
+begin
+  while not ConsoleKeyPressed(VK_RETURN) do
+  begin
+    if GetCurrentThreadID = MainThreadID then
+      CheckSynchronize{$ifdef WITHUXTHEME}(1000){$endif}
+    else
+      WaitMessage;
+    while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
+      if msg.Message = WM_QUIT then
+        exit
+      else
+      begin
+        TranslateMessage(msg);
+        DispatchMessage(msg);
+      end;
+  end;
+end;
+
+function Utf8ToConsole(const S: RawUTF8): RawByteString;
+begin
+  result := TSynAnsiConvert.Engine(CP_OEMCP).UTF8ToAnsi(S);
+end;
+
+{$I+}
+
+constructor TFileVersion.Create(const aFileName: TFileName; aMajor, aMinor, aRelease, aBuild: integer);
+var
+  M, D: word;
+  Size, Size2: DWord;
+  Pt, StrPt, StrValPt: Pointer;
+  LanguageInfo: RawUTF8;
+  Info: ^TVSFixedFileInfo;
+  FileTime: TFILETIME;
+  SystemTime: TSYSTEMTIME;
+  tmp: TFileName;
+
+  function ReadResourceByName(const From: RawUTF8): RawUTF8;
+  var
+    sz: DWord;
+  begin
+    VerQueryValueA(Pt, PAnsiChar('\StringFileInfo\' + LanguageInfo + '\' + From), StrValPt, sz);
+    if sz > 0 then
+      FastSetString(Result, StrValPt, sz)
+  end;
+
+begin
+  fFileName := aFileName;
+  if aFileName <> '' then
+  begin
+    // GetFileVersionInfo modifies the filename parameter data while parsing.
+    // Copy the string const into a local variable to create a writeable copy.
+    SetString(tmp, PChar(aFileName), length(aFileName));
+    Size := GetFileVersionInfoSize(pointer(tmp), Size2);
+    if Size > 0 then
+    begin
+      GetMem(Pt, Size);
+      try
+        GetFileVersionInfo(pointer(aFileName), 0, Size, Pt);
+        VerQueryValue(Pt, '\', pointer(Info), Size2);
+        with Info^ do
+        begin
+          if Version32 = 0 then
+          begin
+            aMajor := dwFileVersionMS shr 16;
+            aMinor := word(dwFileVersionMS);
+            aRelease := dwFileVersionLS shr 16;
+          end;
+          aBuild := word(dwFileVersionLS);
+          if (dwFileDateLS <> 0) and (dwFileDateMS <> 0) then
+          begin
+            FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
+            FileTime.dwHighDateTime := dwFileDateMS;
+            FileTimeToSystemTime(FileTime, SystemTime);
+            fBuildDateTime := EncodeDate(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
+          end;
+        end;
+        VerQueryValue(Pt, '\VarFileInfo\Translation', StrPt, Size2);
+        if Size2 >= 4 then
+        begin
+          LanguageInfo := BinToHexDisplay(PAnsiChar(StrPt), 2) + BinToHexDisplay(PAnsiChar(StrPt) + 2, 2);
+          CompanyName := ReadResourceByName('CompanyName');
+          FileDescription := ReadResourceByName('FileDescription');
+          FileVersion := ReadResourceByName('FileVersion');
+          InternalName := ReadResourceByName('InternalName');
+          LegalCopyright := ReadResourceByName('LegalCopyright');
+          OriginalFilename := ReadResourceByName('OriginalFilename');
+          ProductName := ReadResourceByName('ProductName');
+          ProductVersion := ReadResourceByName('ProductVersion');
+          Comments := ReadResourceByName('Comments');
+        end
+      finally
+        Freemem(Pt);
+      end;
+    end;
+  end;
+  SetVersion(aMajor, aMinor, aRelease, aBuild);
+  if fBuildDateTime = 0 then  // get build date from file age
+    fBuildDateTime := FileAgeToDateTime(aFileName);
+  if fBuildDateTime <> 0 then
+    DecodeDate(fBuildDateTime, BuildYear, M, D);
+end;
+
+procedure GetUserHost(out User, Host: RawUTF8);
+var
+  tmp: array[byte] of WideChar;
+  tmpsize: cardinal;
+begin
+  tmpsize := SizeOf(tmp);
+  GetComputerNameW(tmp, tmpsize);
+  RawUnicodeToUtf8(@tmp, StrLenW(tmp), Host);
+  tmpsize := SizeOf(tmp);
+  GetUserNameW(tmp, tmpsize);
+  RawUnicodeToUtf8(@tmp, StrLenW(tmp), User);
+end;
+
+// avoid unneeded reference to ShlObj.pas
+function SHGetFolderPath(hwnd: hwnd; csidl: Integer; hToken: THandle; dwFlags: DWord;
+  pszPath: PChar): HRESULT; stdcall; external 'SHFolder.dll' name
+  {$ifdef UNICODE} 'SHGetFolderPathW'; {$else} 'SHGetFolderPathA'; {$endif}
+
+var
+  _SystemPath: array[TSystemPath] of TFileName;
+
+function GetSystemPath(kind: TSystemPath): TFileName;
+const
+  CSIDL_PERSONAL = $0005;
+  CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
+  CSIDL_COMMON_APPDATA = $0023;
+  CSIDL_COMMON_DOCUMENTS = $002E;
+  csidl: array[TSystemPath] of integer =(
+    // spCommonData,       spUserData,          spCommonDocuments
+    CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_DOCUMENTS,
+    // spUserDocuments, spTempFolder, spLog
+    CSIDL_PERSONAL, 0, CSIDL_LOCAL_APPDATA);
+  ENV: array[TSystemPath] of TFileName = (
+    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP', 'LOCALAPPDATA');
+var
+  tmp: array[0..MAX_PATH] of char;
+  k: TSystemPath;
+begin
+  if _SystemPath[spCommonData] = '' then
+    for k := low(k) to high(k) do
+      if (k = spLog) and IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+        _SystemPath[k] := EnsureDirectoryExists(ExeVersion.ProgramFilePath + 'log')
+      else if (csidl[k] <> 0) and (SHGetFolderPath(0, csidl[k], 0, 0, @tmp) = S_OK) then
+        _SystemPath[k] := IncludeTrailingPathDelimiter(tmp)
+      else
+      begin
+        _SystemPath[k] := GetEnvironmentVariable(ENV[k]);
+        if _SystemPath[k] = '' then
+          _SystemPath[k] := GetEnvironmentVariable('APPDATA');
+        _SystemPath[k] := IncludeTrailingPathDelimiter(_SystemPath[k]);
+      end;
+  result := _SystemPath[kind];
 end;
 
 
@@ -372,8 +597,8 @@ begin
   GetSystemTimePreciseAsFileTime := GetProcAddress(h, 'GetSystemTimePreciseAsFileTime');
   if not Assigned(GetSystemTimePreciseAsFileTime) then // Win8+
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
-  QueryPerformanceFrequency(PInt64(@os_QueryPerformanceFrequency)^);
-  if os_QueryPerformanceFrequency = 0 then
+  QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
+  if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
   Res := false;
@@ -385,7 +610,8 @@ begin
     @GetNativeSystemInfo := nil;
   // retrieve system information
   if Assigned(GetNativeSystemInfo) then
-    GetNativeSystemInfo(SystemInfo)
+
+  GetNativeSystemInfo(SystemInfo)
   else
     Windows.GetSystemInfo(SystemInfo);
   GetMem(P, 10); // ensure that using MIN_PTR_VALUE won't break anything

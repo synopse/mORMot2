@@ -17,6 +17,15 @@ uses
   {$else}
   linux,
   {$endif BSD}
+  {$ifdef FPCUSEVERSIONINFO} // to be enabled in mormot.defines.inc
+    fileinfo,        // FPC 3.0 and up
+    {$ifdef DARWIN}
+      machoreader,   // MACH-O executables
+    {$else}
+      elfreader,     // ELF executables
+    {$endif DARWIN}
+  {$endif FPCUSEVERSIONINFO}
+  termio,
   dl;
 
 
@@ -48,7 +57,7 @@ begin // not inlined to avoid try..finally UnicodeString protection
   result := widestringmanager.CompareUnicodeStringProc(U1, U2, TCompareOptions(dwCmpFlags)) + 2;
 end;
 
-function os_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
+function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 var
   tmp: UnicodeString;
 begin
@@ -57,7 +66,7 @@ begin
   MoveFast(Pointer(tmp)^, W^, result * 2);
 end;
 
-function os_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 var
   tmp: RawByteString;
 begin
@@ -458,7 +467,218 @@ begin
     result := nil;
 end;
 
-{$else}
+{$endif BSD}
+
+// we bypass crt.pp since this unit cancels the SIGINT signal
+
+{$I-}
+
+var
+  TextAttr: integer = ord(ccDarkGray);
+
+procedure TextColor(Color: TConsoleColor);
+const
+  AnsiTbl: string[8] = '04261537';
+begin
+{$ifdef LINUX}
+  if not stdoutIsTTY then
+    exit;
+{$endif LINUX}
+  if ord(Color) = TextAttr then
+    exit;
+  TextAttr := ord(Color);
+  if ord(Color) >= 8 then
+    write(#27'[1;3', AnsiTbl[(ord(Color) and 7) + 1], 'm')
+  else
+    write(#27'[0;3', AnsiTbl[(ord(Color) and 7) + 1], 'm');
+  ioresult;
+end;
+
+procedure TextBackground(Color: TConsoleColor);
+begin // not implemented yet - but not needed either
+end;
+
+function UnixKeyPending: boolean;
+var
+  fdsin: tfdSet;
+begin
+  fpFD_ZERO(fdsin);
+  fpFD_SET(StdInputHandle, fdsin);
+  result := fpSelect(StdInputHandle + 1, @fdsin, nil, nil, 0) > 0;
+end;
+
+procedure ConsoleWaitForEnterKey;
+var
+  c: AnsiChar;
+begin
+  if IsMultiThread and (GetCurrentThreadID = MainThreadID) then
+    repeat
+      CheckSynchronize(100);
+      if UnixKeyPending then
+        repeat
+          c := #0;
+          if FpRead(StdInputHandle, c, 1) <> 1 then
+            break;
+          if c in [#10, #13] then
+            exit;
+        until false;
+    until false
+  else
+    ReadLn;
+  ioresult;
+end;
+
+function Utf8ToConsole(const S: RawUTF8): RawByteString;
+begin
+  result := S; // expect a UTF-8 console under Linux/BSD
+end;
+
+{$I+}
+
+constructor TFileVersion.Create(const aFileName: TFileName;
+  aMajor, aMinor, aRelease, aBuild: integer);
+var
+  M, D: word;
+{$ifdef FPCUSEVERSIONINFO}
+  VI: TVersionInfo;
+  TI, I: Integer;
+{$endif FPCUSEVERSIONINFO}
+begin
+  fFileName := aFileName;
+  {$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in Synopse.inc / project options
+  if aFileName <> '' then
+  begin
+    VI := TVersionInfo.Create;
+    try
+      if (aFileName <> '') and (aFileName <> ParamStr(0)) then
+        VI.Load(aFileName)
+      else
+        VI.Load(HInstance); // load info for currently running program
+      aMajor := VI.FixedInfo.FileVersion[0];
+      aMinor := VI.FixedInfo.FileVersion[1];
+      aRelease := VI.FixedInfo.FileVersion[2];
+      aBuild := VI.FixedInfo.FileVersion[3];
+      // detect translation
+      if VI.VarFileInfo.Count > 0 then
+        with VI.VarFileInfo.Items[0] do
+          LanguageInfo := Format('%.4x%.4x', [language, codepage]);
+      if LanguageInfo = '' then
+      begin
+        // take first language
+        TI := 0;
+        if VI.StringFileInfo.Count > 0 then
+          LanguageInfo := VI.StringFileInfo.Items[0].Name
+      end
+      else
+      begin
+        // look for index of language
+        TI := VI.StringFileInfo.Count - 1;
+        while (TI >= 0) and
+              (CompareText(VI.StringFileInfo.Items[TI].Name, LanguageInfo) <> 0) do
+          dec(TI);
+        if TI < 0 then
+        begin
+          TI := 0; // revert to first translation
+          LanguageInfo := VI.StringFileInfo.Items[TI].Name;
+        end;
+      end;
+      with VI.StringFileInfo.Items[TI] do
+      begin
+        CompanyName := Values['CompanyName'];
+        FileDescription := Values['FileDescription'];
+        FileVersion := Values['FileVersion'];
+        InternalName := Values['InternalName'];
+        LegalCopyright := Values['LegalCopyright'];
+        OriginalFilename := Values['OriginalFilename'];
+        ProductName := Values['ProductName'];
+        ProductVersion := Values['ProductVersion'];
+        Comments := Values['Comments'];
+      end;
+    finally
+      VI.Free;
+    end;
+  end;
+  {$endif FPCUSEVERSIONINFO}
+  SetVersion(aMajor, aMinor, aRelease, aBuild);
+  if fBuildDateTime = 0 then  // get build date from file age
+    fBuildDateTime := FileAgeToDateTime(aFileName);
+  if fBuildDateTime <> 0 then
+    DecodeDate(fBuildDateTime, BuildYear, M, D);
+end;
+
+procedure GetUserHost(out User, Host: RawUTF8);
+var
+  tmp: string;
+begin
+  StringToUTF8(GetHostName, Host);
+  if Host = '' then
+    StringToUTF8(GetEnvironmentVariable('HOSTNAME'), Host);
+  tmp := GetEnvironmentVariable('LOGNAME'); // POSIX
+  if tmp = '' then
+    tmp := GetEnvironmentVariable('USER');
+  StringToUTF8(tmp, User);
+end;
+
+var
+  _HomePath, _TempPath, _UserPath, _LogPath: TFileName;
+
+function GetSystemPath(kind: TSystemPath): TFileName;
+begin
+  case kind of
+    spLog:
+      begin
+        if _LogPath = '' then
+          if IsDirectoryWritable('/var/log') then
+            _LogPath := '/var/log/'
+          else // may not be writable by not root on POSIX
+          if IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+            _LogPath := ExeVersion.ProgramFilePath
+          else
+            _LogPath := GetSystemPath(spUserData);
+        result := _LogPath;
+      end;
+    spUserData:
+      begin
+        if _UserPath = '' then
+        begin //  ~/.cache/appname
+          _UserPath := GetEnvironmentVariable('XDG_CACHE_HOME');
+          if (_UserPath = '') or not IsDirectoryWritable(_UserPath) then
+            _UserPath := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
+          _UserPath := EnsureDirectoryExists(_UserPath + UTF8ToString(ExeVersion.ProgramName));
+        end;
+        result := _UserPath;
+      end;
+    spTempFolder:
+      begin
+        if _TempPath = '' then
+        begin
+          _TempPath := GetEnvironmentVariable('TMPDIR'); // POSIX
+          if _TempPath = '' then
+            _TempPath := GetEnvironmentVariable('TMP');
+          if _TempPath = '' then
+            if DirectoryExists('/tmp') then
+              _TempPath := '/tmp'
+            else
+              _TempPath := '/var/tmp';
+          _TempPath := IncludeTrailingPathDelimiter(_TempPath);
+        end;
+        result := _TempPath;
+      end
+  else
+    begin
+      if _HomePath = '' then // POSIX requires a value for $HOME
+        _HomePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
+      result := _HomePath;
+    end;
+  end;
+end;
+
+
+{ ****************** Gather Operating System Information }
+
+function getpagesize: Integer; cdecl; external 'c';
+
+{$ifndef BSD}
 
 procedure SetLinuxDistrib(const release: RawUTF8);
 var
@@ -478,33 +698,27 @@ end;
 
 {$endif BSD}
 
-
-{ ****************** Gather Operating System Information }
-
-function getpagesize: Integer; cdecl; external 'c';
+function GetNextCardinal(var P: PAnsiChar): cardinal;
+var
+  c: cardinal;
+begin
+  result := 0;
+  repeat
+    c := ord(P^) - 48;
+    if c > 9 then
+      break
+    else
+      result := result * 10 + c;
+    inc(P);
+  until false;
+  while P^ in ['.', '-', ' '] do
+    inc(P);
+end;
 
 procedure InitializeUnit;
 var
   tp: timespec;
   P: PAnsiChar;
-
-  function GetNext: cardinal;
-  var
-    c: cardinal;
-  begin
-    result := 0;
-    repeat
-      c := ord(P^) - 48;
-      if c > 9 then
-        break
-      else
-        result := result * 10 + c;
-      inc(P);
-    until false;
-    if P^ in ['.', '-', ' '] then
-      inc(P);
-  end;
-
 var
   modname, beg: PUTF8Char;
   uts: UtsName;
@@ -598,7 +812,8 @@ begin
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
   P := @uts.release[0];
-  KernelRevision := GetNext shl 16 + GetNext shl 8 + GetNext;
+  KernelRevision := GetNextCardinal(P) shl 16 + GetNextCardinal(P) shl 8 +
+    GetNextCardinal(P);
   OSVersionInt32 := integer(KernelRevision shl 8) + ord(OS_KIND);
   with SystemInfo.uts do
     FormatUTF8('% %', [sysname, release], OSVersionText);

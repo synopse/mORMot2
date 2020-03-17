@@ -205,7 +205,7 @@
   {$ifdef ISFPC30}
     {$ifndef MSWINDOWS}
       // define FPCUSEVERSIONINFO to link low-level executable file information
-      // units in SynCommons.pas
+      // with ExeVersion from mormot.core.os.pas
       // => disabled by default, to reduce the executable overhead
       {.$define FPCUSEVERSIONINFO}
     {$endif MSWINDOWS}

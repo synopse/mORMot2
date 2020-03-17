@@ -18,6 +18,7 @@ unit mormot.core.rtti;
     record/object to access TypeInfo() via a set of explicit methods.
     Here fake record/objects are just wrappers around pointers defined in
     Delphi/FPC RTL's TypInfo.pas with the magic of inlining.
+
     We redefined all RTTI definitions as TRtti* types to avoid confusion
     with TypInfo unit names.
 
@@ -29,7 +30,6 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  classes,
   mormot.core.base,
   mormot.core.text; // used e.g. on enumerations
 
@@ -901,10 +901,6 @@ type
       aFlags: TParamFlags);
     procedure RaiseError(const Format: RawUTF8; const Args: array of const);
   end;
-
-const
-  PSEUDO_RESULT_NAME: string[6] = 'Result';
-  PSEUDO_SELF_NAME: string[4] = 'Self';
 
 {$ifdef FPC}
   {$include mormot.core.rtti.fpc.inc}      // FPC specific RTTI access
@@ -2193,6 +2189,10 @@ begin
   inc(MethodCount);
   ArgCount := 0;
 end;
+
+const
+  PSEUDO_RESULT_NAME: string[6] = 'Result';
+  PSEUDO_SELF_NAME:   string[4] = 'Self';
 
 procedure TGetRttiInterface.AddArgument(aParamName, aTypeName: PShortString;
   aInfo: PRttiInfo; aFlags: TParamFlags);

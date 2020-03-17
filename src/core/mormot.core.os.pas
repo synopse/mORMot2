@@ -9,7 +9,7 @@ unit mormot.core.os;
   Cross-platform functions shared by all framework units
   - Gather Operating System Information
   - Operating System Specific Types (e.g. TWinRegistry)
-  - Unicode, Time, File process
+  - Unicode, Time, File, Console process
 
   Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid using $ifdef/$endif in "uses" clauses.
@@ -132,7 +132,54 @@ var
   BiosInfoText: RawUTF8;
   /// the running Operating System
   OSVersion32: TOperatingSystemVersion;
+  /// the running Operating System, encoded as a 32-bit integer
   OSVersionInt32: integer absolute OSVersion32;
+
+const
+  /// contains the Delphi/FPC Compiler Version as text
+  // - e.g. 'Delphi 10.3 Rio', 'Delphi 2010' or 'Free Pascal 3.3.1'
+  COMPILER_VERSION: RawUTF8 =
+  {$ifdef FPC}
+    'Free Pascal'
+    {$ifdef VER2_6_4} + ' 2.6.4'{$endif}
+    {$ifdef VER3_0_0} + ' 3.0.0'{$endif}
+    {$ifdef VER3_0_1} + ' 3.0.1'{$endif}
+    {$ifdef VER3_0_2} + ' 3.0.2'{$endif}
+    {$ifdef VER3_1_1} + ' 3.1.1'{$endif}
+    {$ifdef VER3_2}   + ' 3.2'  {$endif}
+    {$ifdef VER3_3_1} + ' 3.3.1'{$endif}
+  {$else}
+    'Delphi'
+    {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
+      {$if     defined(VER140)} + ' 6'
+      {$elseif defined(VER150)} + ' 7'
+      {$elseif defined(VER160)} + ' 8'
+      {$elseif defined(VER170)} + ' 2005'
+      {$elseif defined(VER185)} + ' 2007'
+      {$elseif defined(VER180)} + ' 2006'
+      {$elseif defined(VER200)} + ' 2009'
+      {$elseif defined(VER210)} + ' 2010'
+      {$elseif defined(VER220)} + ' XE'
+      {$elseif defined(VER230)} + ' XE2'
+      {$elseif defined(VER240)} + ' XE3'
+      {$elseif defined(VER250)} + ' XE4'
+      {$elseif defined(VER260)} + ' XE5'
+      {$elseif defined(VER265)} + ' AppMethod 1'
+      {$elseif defined(VER270)} + ' XE6'
+      {$elseif defined(VER280)} + ' XE7'
+      {$elseif defined(VER290)} + ' XE8'
+      {$elseif defined(VER300)} + ' 10 Seattle'
+      {$elseif defined(VER310)} + ' 10.1 Berlin'
+      {$elseif defined(VER320)} + ' 10.2 Tokyo'
+      {$elseif defined(VER330)} + ' 10.3 Rio'
+      {$elseif defined(VER340)} + ' 10.4 Next'
+      {$ifend}
+    {$endif CONDITIONALEXPRESSIONS}
+  {$endif FPC}
+  {$ifdef CPU64} + ' 64 bit' {$else} + ' 32 bit' {$endif};
+
+// deprecated function: use COMPILER_VERSION constant instead
+function GetDelphiCompilerVersion: RawUTF8; deprecated;
 
 {$ifdef MSWINDOWS}
 
@@ -191,9 +238,162 @@ var
   
 {$endif MSWINDOWS}
 
-/// return the Delphi/FPC Compiler Version
-// - returns 'Delphi 10.3 Rio', 'Delphi 2010' or 'Free Pascal 3.3.1' e.g.
-function GetCompilerVersion: RawUTF8;
+{$M+} // to have existing RTTI for published properties
+
+type
+  /// used to retrieve version information from any EXE
+  // - under Linux, all version numbers are set to 0 by default, unless
+  // you define the FPCUSEVERSIONINFO conditional and information is
+  // extracted from executable resources
+  // - you should not have to use this class directly, but via the
+  // ExeVersion global variable
+  TFileVersion = class
+  protected
+    fDetailed: string;
+    fFileName: TFileName;
+    fBuildDateTime: TDateTime;
+    /// change the version (not to be used in most cases)
+    procedure SetVersion(aMajor, aMinor, aRelease, aBuild: integer);
+  public
+    /// executable major version number
+    Major: Integer;
+    /// executable minor version number
+    Minor: Integer;
+    /// executable release version number
+    Release: Integer;
+    /// executable release build number
+    Build: Integer;
+    /// build year of this exe file
+    BuildYear: word;
+    /// version info of the exe file as '3.1'
+    // - return "string" type, i.e. UnicodeString for Delphi 2009+
+    Main: string;
+    /// associated CompanyName string version resource
+    CompanyName: RawUTF8;
+    /// associated FileDescription string version resource
+    FileDescription: RawUTF8;
+    /// associated FileVersion string version resource
+    FileVersion: RawUTF8;
+    /// associated InternalName string version resource
+    InternalName: RawUTF8;
+    /// associated LegalCopyright string version resource
+    LegalCopyright: RawUTF8;
+    /// associated OriginalFileName string version resource
+    OriginalFilename: RawUTF8;
+    /// associated ProductName string version resource
+    ProductName: RawUTF8;
+    /// associated ProductVersion string version resource
+    ProductVersion: RawUTF8;
+    /// associated Comments string version resource
+    Comments: RawUTF8;
+    /// associated Language Translation string version resource
+    LanguageInfo: RawUTF8;
+    /// retrieve application version from exe file name
+    // - DefaultVersion32 is used if no information Version was included into
+    // the executable resources (on compilation time)
+    // - you should not have to use this constructor, but rather access the
+    // ExeVersion global variable
+    constructor Create(const aFileName: TFileName; aMajor: integer = 0;
+      aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0);
+    /// retrieve the version as a 32-bit integer with Major.Minor.Release
+    // - following Major shl 16+Minor shl 8+Release bit pattern
+    function Version32: integer;
+    /// build date and time of this exe file, as plain text
+    function BuildDateTimeString: string;
+    /// version info of the exe file as '3.1.0.123' or ''
+    // - this method returns '' if Detailed is '0.0.0.0'
+    function DetailedOrVoid: string;
+    /// returns the version information of this exe file as text
+    // - includes FileName (without path), Detailed and BuildDateTime properties
+    // - e.g. 'myprogram.exe 3.1.0.123 (2016-06-14 19:07:55)'
+    function VersionInfo: RawUTF8;
+    /// returns a ready-to-use User-Agent header with exe name, version and OS
+    // - e.g. 'myprogram/3.1.0.123W32' for myprogram running on Win32
+    // - here OS_INITIAL[] character is used to identify the OS, with '32'
+    // appended on Win32 only (e.g. 'myprogram/3.1.0.2W', is for Win64)
+    function UserAgent: RawUTF8;
+    /// returns the version information of a specified exe file as text
+    // - includes FileName (without path), Detailed and BuildDateTime properties
+    // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
+    class function GetVersionInfo(const aFileName: TFileName): RawUTF8;
+  published
+    /// version info of the exe file as '3.1.0.123'
+    // - return "string" type, i.e. UnicodeString for Delphi 2009+
+    // - under Linux, always return '0.0.0.0' if no custom version number
+    // has been defined
+    // - consider using DetailedOrVoid method if '0.0.0.0' is not expected
+    property Detailed: string read fDetailed write fDetailed;
+    /// build date and time of this exe file
+    property BuildDateTime: TDateTime read fBuildDateTime write fBuildDateTime;
+  end;
+
+{$M-}
+
+type
+  /// stores some global information about the current executable and computer
+  TExeVersion = record
+    /// the main executable name, without any path nor extension
+    // - e.g. 'Test' for 'c:\pathto\Test.exe'
+    ProgramName: RawUTF8;
+    /// the main executable details, as used e.g. by TSynLog
+    // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.123 (2011-03-29 11:09:06)'
+    ProgramFullSpec: RawUTF8;
+    /// the main executable file name (including full path)
+    // - same as paramstr(0)
+    ProgramFileName: TFileName;
+    /// the main executable full path (excluding .exe file name)
+    // - same as ExtractFilePath(paramstr(0))
+    ProgramFilePath: TFileName;
+    /// the full path of the running executable or library
+    // - for an executable, same as paramstr(0)
+    // - for a library, will contain the whole .dll file name
+    InstanceFileName: TFileName;
+    /// the current executable version
+    Version: TFileVersion;
+    /// the current computer host name
+    Host: RawUTF8;
+    /// the current computer user name
+    User: RawUTF8;
+    /// some hash representation of this information
+    // - the very same executable on the very same computer run by the very
+    // same user will always have the same Hash value
+    // - is computed from the crc32c of this TExeVersion fields: c0 from
+    // Version32, CpuFeatures and Host, c1 from User, c2 from ProgramFullSpec
+    // and c3 from InstanceFileName
+    // - may be used as an entropy seed, or to identify a process execution
+    Hash: THash128Rec;
+  end;
+
+var
+  /// global information about the current executable and computer
+  // - this structure is initialized in this unit's initialization block below
+  // - you can call SetExecutableVersion() with a custom version, if needed
+  ExeVersion: TExeVersion;
+
+/// initialize ExeVersion global variable, supplying a custom version number
+// - by default, the version numbers will be retrieved at startup from the
+// executable itself (if it was included at build time)
+// - but you can use this function to set any custom version numbers
+procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer); overload;
+
+/// initialize ExeVersion global variable, supplying the version as text
+// - e.g. SetExecutableVersion('7.1.2.512');
+procedure SetExecutableVersion(const aVersionText: RawUTF8); overload;
+
+type
+  /// identify an operating system folder
+  TSystemPath = (
+    spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder, spLog);
+
+/// returns an operating system folder
+// - will return the full path of a given kind of private or shared folder,
+// depending on the underlying operating system
+// - will use SHGetFolderPath and the corresponding CSIDL constant under Windows
+// - under POSIX, will return $TMP/$TMPDIR folder for spTempFolder, ~/.cache/appname
+// for spUserData, /var/log for spLog, or the $HOME folder
+// - returned folder name contains the trailing path delimiter (\ or /)
+function GetSystemPath(kind: TSystemPath): TFileName;
+
 
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
@@ -232,7 +432,7 @@ type
 {$endif MSWINDOWS}
 
 
-{ ****************** Unicode, Time, File process }
+{ ****************** Unicode, Time, File, Console process }
 
 {$ifdef MSWINDOWS}
 type
@@ -312,7 +512,7 @@ procedure GetSystemTime(out result: TSystemTime);
 
 /// compatibility function, wrapping GetACP() Win32 API function
 // - returns the curent system code page (default WinAnsi)
-function os_CodePage: integer;
+function Unicode_CodePage: integer;
 
 /// compatibility function, wrapping CompareStringW() Win32 API text comparison
 // - returns 1 if PW1>PW2, 2 if PW1=PW2, 3 if PW1<PW2 - so substract 2 to have
@@ -320,15 +520,15 @@ function os_CodePage: integer;
 // - will compute StrLen(PW1/PW2) if L1 or L2 < 0
 // - somewhat slow by using two temporary UnicodeString on POSIX - but seldom
 // called, unless our proprietary WIN32CASE collation is used in SynSQLite3
-function os_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
+function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
 
 /// compatibility function, wrapping MultiByteToWideChar() Win32 API call
 // - returns the number of WideChar written into W^ destination buffer
-function os_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
+function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 
 /// compatibility function, wrapping WideCharToMultiByte() Win32 API call
 // - returns the number of AnsiChar written into A^ destination buffer
-function os_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
@@ -464,6 +664,70 @@ function StringFromFile(const FileName: TFileName; HasNoSize: boolean = false): 
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean = false; FileDate: TDateTime = 0): boolean;
 
+/// compute an unique temporary file name
+// - following 'exename_01234567.tmp' pattern, in the system temporary folder
+function TemporaryFileName: TFileName;
+
+/// check if the directory is writable for the current user
+// - try to write a small file with a random name
+function IsDirectoryWritable(const Directory: TFileName): boolean;
+
+
+{$ifdef LINUX}
+var
+  stdoutIsTTY: boolean;
+{$endif LINUX}
+
+/// change the console text writing color
+// - you should call this procedure to initialize StdOut global variable, if
+// you manually initialized the Windows console, e.g. via the following code:
+// ! AllocConsole;
+// ! TextColor(ccLightGray); // initialize internal console context
+procedure TextColor(Color: TConsoleColor);
+
+/// write some text to the console using a given color
+procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor = ccLightGray;
+  NoLineFeed: boolean = false; NoColor: boolean = false); overload;
+
+/// write some text to the console using a given color
+procedure ConsoleWrite(const Fmt: RawUTF8; const Args: array of const;
+  Color: TConsoleColor = ccLightGray; NoLineFeed: boolean = false); overload;
+
+/// change the console text background color
+procedure TextBackground(Color: TConsoleColor);
+
+/// will wait for the ENTER key to be pressed, processing Synchronize() pending
+// notifications, and the internal Windows Message loop (on this OS)
+// - to be used e.g. for proper work of console applications with interface-based
+// service implemented as optExecInMainThread
+procedure ConsoleWaitForEnterKey;
+
+/// read all available content from stdin
+// - could be used to retrieve some file piped to the command line
+// - the content is not converted, so will follow the encoding used for storage
+function ConsoleReadBody: RawByteString;
+
+{$ifdef MSWINDOWS}
+/// low-level access to the keyboard state of a given key
+function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
+{$endif MSWINDOWS}
+
+/// direct conversion of a UTF-8 encoded string into a console OEM-encoded String
+// - under Windows, will use the CP_OEMCP encoding
+// - under Linux, will expect the console to be defined with UTF-8 encoding
+function Utf8ToConsole(const S: RawUTF8): RawByteString;
+
+/// direct conversion of a VCL string into a console OEM-encoded String
+// - under Windows, will use the CP_OEMCP encoding
+// - under Linux, will expect the console to be defined with UTF-8 encoding
+function StringToConsole(const S: string): RawByteString;
+
+var
+  /// low-level handle used for console writing
+  // - may be overriden when console is redirected
+  // - is initialized when TextColor() is called
+  StdOut: THandle;
+
 
 implementation
 
@@ -478,54 +742,7 @@ implementation
 {$endif MSWINDOWS}
 
 
-{ ****************** Gather Operating System Information }
-
-function GetCompilerVersion: RawUTF8;
-begin
-  result :=
-{$ifdef FPC}
-  'Free Pascal'
-  {$ifdef VER2_6_4} + ' 2.6.4'{$endif}
-  {$ifdef VER3_0_0} + ' 3.0.0'{$endif}
-  {$ifdef VER3_0_1} + ' 3.0.1'{$endif}
-  {$ifdef VER3_0_2} + ' 3.0.2'{$endif}
-  {$ifdef VER3_1_1} + ' 3.1.1'{$endif}
-  {$ifdef VER3_2}   + ' 3.2'  {$endif}
-  {$ifdef VER3_3_1} + ' 3.3.1'{$endif}
-{$else}
-  'Delphi'
-  {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$if     defined(VER140)} + ' 6'
-    {$elseif defined(VER150)} + ' 7'
-    {$elseif defined(VER160)} + ' 8'
-    {$elseif defined(VER170)} + ' 2005'
-    {$elseif defined(VER185)} + ' 2007'
-    {$elseif defined(VER180)} + ' 2006'
-    {$elseif defined(VER200)} + ' 2009'
-    {$elseif defined(VER210)} + ' 2010'
-    {$elseif defined(VER220)} + ' XE'
-    {$elseif defined(VER230)} + ' XE2'
-    {$elseif defined(VER240)} + ' XE3'
-    {$elseif defined(VER250)} + ' XE4'
-    {$elseif defined(VER260)} + ' XE5'
-    {$elseif defined(VER265)} + ' AppMethod 1'
-    {$elseif defined(VER270)} + ' XE6'
-    {$elseif defined(VER280)} + ' XE7'
-    {$elseif defined(VER290)} + ' XE8'
-    {$elseif defined(VER300)} + ' 10 Seattle'
-    {$elseif defined(VER310)} + ' 10.1 Berlin'
-    {$elseif defined(VER320)} + ' 10.2 Tokyo'
-    {$elseif defined(VER330)} + ' 10.3 Rio'
-    {$elseif defined(VER340)} + ' 10.4 Next'
-    {$ifend}
-  {$endif CONDITIONALEXPRESSIONS}
-{$endif FPC}
-{$ifdef CPU64} +' 64 bit' {$else} +' 32 bit' {$endif}
-end;
-
-
-
-{ ****************** Unicode, Time, File process }
+{ ****************** Unicode, Time, File, Console process }
 
 procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection);
 begin
@@ -540,12 +757,12 @@ begin
     DeleteCriticalSection(cs);
 end;
 
-function os_CodePage: integer;
+function Unicode_CodePage: integer;
 begin
   result := GetACP;
 end;
 
-function os_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
+function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
 const
   _CASEFLAG: array[boolean] of DWORD = (0, NORM_IGNORECASE);
 begin
@@ -675,11 +892,265 @@ begin
   result := true;
 end;
 
+var
+  _TmpCounter: integer;
+
+function TemporaryFileName: TFileName;
+var
+  folder: TFileName;
+  retry: integer;
+begin // fast cross-platform implementation
+  folder := GetSystemPath(spTempFolder);
+  if _TmpCounter = 0 then
+    _TmpCounter := Random32;
+  retry := 10;
+  repeat // thread-safe unique file name generation
+    FormatString('%%_%.tmp', [folder, ExeVersion.ProgramName,
+      CardinalToHexShort(InterlockedIncrement(_TmpCounter))], string(result));
+    if not FileExists(result) then
+      exit;
+    dec(retry); // no endless loop
+  until retry = 0;
+  raise ESynException.Create('TemporaryFileName failed');
+end;
+
+function IsDirectoryWritable(const Directory: TFileName): boolean;
+var
+  dir, fn: TFileName;
+  f: THandle;
+  retry: integer;
+begin
+  dir := ExcludeTrailingPathDelimiter(Directory);
+  result := false;
+  if FileIsReadOnly(dir) then
+    exit;
+  retry := 20;
+  repeat
+    FormatString('%' + PathDelim + '%.test', [dir, CardinalToHexShort(Random32)],
+      string(fn));
+    if not FileExists(fn) then
+      break;
+    dec(retry); // never loop forever
+    if retry = 0 then
+      exit;
+  until false;
+  f := FileCreate(fn);
+  if PtrInt(f) < 0 then
+    exit;
+  FileClose(f);
+  result := DeleteFile(fn);
+end;
+
+
+function GetDelphiCompilerVersion: RawUTF8;
+begin
+  result := COMPILER_VERSION;
+end;
+
+{$I-}
+
+function ConsoleReadBody: RawByteString;
+var
+  len, n: integer;
+  P: PByte;
+  {$ifndef FPC}
+  StdInputHandle: THandle;
+  {$endif FPC}
+begin
+  result := '';
+  {$ifdef MSWINDOWS}
+  {$ifndef FPC}
+  StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
+  {$endif FPC}
+  if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @len, nil) then
+  {$else}
+  if fpioctl(StdInputHandle, FIONREAD, @len) < 0 then
+  {$endif MSWINDOWS}
+    len := 0;
+  SetLength(result, len);
+  P := pointer(result);
+  while len > 0 do
+  begin
+    n := FileRead(StdInputHandle, P^, len);
+    if n <= 0 then
+    begin
+      result := ''; // read error
+      break;
+    end;
+    dec(len, n);
+    inc(P, n);
+  end;
+end;
+
+function StringToConsole(const S: string): RawByteString;
+begin
+  result := Utf8ToConsole(StringToUTF8(S));
+end;
+
+procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor;
+  NoLineFeed, NoColor: boolean);
+begin
+  if not NoColor then
+    TextColor(Color);
+  write(Utf8ToConsole(Text));
+  if not NoLineFeed then
+    writeln;
+  ioresult;
+end;
+
+procedure ConsoleWrite(const Fmt: RawUTF8; const Args: array of const;
+  Color: TConsoleColor; NoLineFeed: boolean);
+var
+  tmp: RawUTF8;
+begin
+  FormatUTF8(Fmt, Args, tmp);
+  ConsoleWrite(tmp, Color, NoLineFeed);
+end;
+
+procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
+begin
+  ConsoleWrite(#13#10'Fatal exception ', cclightRed, true);
+  ConsoleWrite('%', [E.ClassName], ccWhite, true);
+  ConsoleWrite(' raised with message ', ccLightRed, true);
+  ConsoleWrite('%', [E.Message], ccLightMagenta);
+  TextColor(ccLightGray);
+  if WaitForEnterKey then
+  begin
+    writeln(#13#10'Program will now abort');
+    {$ifndef LINUX}
+    writeln('Press [Enter] to quit');
+    if ioresult = 0 then
+      Readln;
+    {$endif}
+  end;
+  ioresult;
+end;
+
+{$I+}
+
+{ TFileVersion }
+
+function TFileVersion.Version32: integer;
+begin
+  result := Major shl 16 + Minor shl 8 + Release;
+end;
+
+procedure TFileVersion.SetVersion(aMajor, aMinor, aRelease, aBuild: integer);
+begin
+  Major := aMajor;
+  Minor := aMinor;
+  Release := aRelease;
+  Build := aBuild;
+  Main := IntToString(Major) + '.' + IntToString(Minor);
+  fDetailed := Main + '.' + IntToString(Release) + '.' + IntToString(Build);
+end;
+
+function TFileVersion.BuildDateTimeString: string;
+begin
+  result := DateTimeToIsoString(fBuildDateTime);
+end;
+
+function TFileVersion.DetailedOrVoid: string;
+begin
+  if (self = nil) or (Major or Minor or Release or Build = 0) then
+    result := ''
+  else
+    result := fDetailed;
+end;
+
+function TFileVersion.VersionInfo: RawUTF8;
+begin
+  FormatUTF8('% % (%)', [ExtractFileName(fFileName), DetailedOrVoid, BuildDateTimeString], result);
+end;
+
+function TFileVersion.UserAgent: RawUTF8;
+begin
+  if self = nil then
+    result := ''
+  else
+    FormatUTF8('%/%%', [GetFileNameWithoutExt(ExtractFileName(fFileName)),
+      DetailedOrVoid, OS_INITIAL[OS_KIND]], result);
+  {$ifdef MSWINDOWS}
+  if OSVersion in WINDOWS_32 then
+    result := result + '32';
+  {$endif MSWINDOWS}
+end;
+
+class function TFileVersion.GetVersionInfo(const aFileName: TFileName): RawUTF8;
+begin
+  with Create(aFileName, 0, 0, 0, 0) do
+  try
+    result := VersionInfo;
+  finally
+    Free;
+  end;
+end;
+
+procedure SetExecutableVersion(const aVersionText: RawUTF8);
+var
+  P: PUTF8Char;
+  i: integer;
+  ver: array[0..3] of integer;
+begin
+  P := pointer(aVersionText);
+  for i := 0 to 3 do
+    ver[i] := GetNextItemCardinal(P, '.');
+  SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
+end;
+
+procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
+begin
+  with ExeVersion do
+  begin
+    if Version = nil then
+    begin
+      {$ifdef MSWINDOWS}
+      ProgramFileName := paramstr(0);
+      {$else}
+      ProgramFileName := GetModuleName(HInstance);
+      if ProgramFileName = '' then
+        ProgramFileName := ExpandFileName(paramstr(0));
+      {$endif MSWINDOWS}
+      ProgramFilePath := ExtractFilePath(ProgramFileName);
+      if IsLibrary then
+        InstanceFileName := GetModuleName(HInstance)
+      else
+        InstanceFileName := ProgramFileName;
+      ProgramName := StringToUTF8(GetFileNameWithoutExt(ExtractFileName(ProgramFileName)));
+      GetUserHost(User, Host);
+      if Host = '' then
+        Host := 'unknown';
+      if User = '' then
+        User := 'unknown';
+      Version := TFileVersion.Create( // on POSIX FileName='' -> current process
+        {$ifdef MSWINDOWS} InstanceFileName {$else} '' {$endif},
+        aMajor, aMinor, aRelease, aBuild);
+    end
+    else
+      Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
+    FormatUTF8('% % (%)', [ProgramFileName, Version.Detailed,
+      Version.BuildDateTimeString], ProgramFullSpec);
+    Hash.c0 := Version.Version32;
+    {$ifdef CPUINTEL}
+    Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
+    {$endif CPUINTEL}
+    Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
+    Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
+    Hash.c2 := crc32c(Hash.c1, pointer(ProgramFullSpec), length(ProgramFullSpec));
+    Hash.c3 := crc32c(Hash.c2, pointer(InstanceFileName), length(InstanceFileName));
+  end;
+end;
+
+
 initialization
-  InitializeUnit; // in the mormot.core.os.*.inc files
   {$ifdef ISFPC27}
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
+  InitializeUnit; // in the mormot.core.os.*.inc files
+  SetExecutableVersion(0,0,0,0);
+
+finalization
+  ExeVersion.Version.Free;
 end.
 

@@ -496,8 +496,6 @@ begin
     m := m^.Next;
   until false;
   CurrentMethod := nil;
-  if MethodCount <> length(Definition.Methods) then
-    RaiseError('missing method', []);
 end;
 
 
