@@ -673,6 +673,81 @@ begin
   end;
 end;
 
+{$ifdef BSD}
+// https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c/
+
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+begin
+  result := nil;
+end;
+
+function EnumProcessName(PID: Cardinal): RawUTF8;
+begin
+  result := '';
+end;
+
+{$else}
+
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+var
+  sr: TSearchRec;
+  n, pid: integer;
+  status: RawUTF8;
+begin
+  result := nil;
+  if FindFirst('/proc/*', faAnyFile, sr) <> 0 then
+    exit;
+  n := 0;
+  SetLength(result, 64);
+  repeat
+     if (sr.Name <> '') and (ord(sr.Name[1]) in [ord('0') .. ord('9')]) and
+        ToInteger(sr.Name, pid) and (pid > 0) then
+     begin // ensure is a real process, not a thread
+       status := StringFromFile('/proc/' + sr.Name + '/status', {nosize=}true);
+       if GetInteger(FindNameValue(pointer(status), 'TGID:')) = pid then
+         // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
+         AddInteger(TIntegerDynArray(result), n, pid);
+     end;
+  until FindNext(sr) <> 0;
+  FindClose(sr);
+  SetLength(result, n);
+end;
+
+var
+  tryprocexe: boolean = true;
+
+function EnumProcessName(PID: Cardinal): RawUTF8;
+var
+  proc: TFileName;
+  cmdline: RawUTF8;
+begin
+  proc := '/proc/' + IntToStr(PID);
+  if tryprocexe then
+  begin // need to be root to follow /proc/[pid]/exe
+    result := fpReadLink(proc + '/exe');
+    if result <> '' then
+      exit;
+  end;
+  cmdline := StringFromFile(proc + '/cmdline', {nosize=}true);
+  // set of strings separated by null bytes -> exe is the first argument
+  Utf8ToRawUTF8(pointer(cmdline), result);
+  if result <> '' then
+    tryprocexe := false; // no need to try again next time
+end;
+
+{$endif BSD}
+
+function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+begin
+  result := false;
+end;
+
+function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
+  out WorkKB, VirtualKB: cardinal): boolean;
+begin
+  result := false;
+end;
+
 
 { ****************** Gather Operating System Information }
 
@@ -773,13 +848,13 @@ begin
   modname := PosChar(modname, ':');
   if modname <> nil then
     modname := GotoNextNotSpace(modname + 1);
-  release := trim(FindIniNameValue(pointer(StringFromFile('/etc/os-release')), 'PRETTY_NAME='));
+  FindNameValue(StringFromFile('/etc/os-release'), 'PRETTY_NAME=', release);
   if (release <> '') and (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
   release := trim(release);
   if release = '' then
   begin
-    release := trim(FindIniNameValue(pointer(StringFromFile('/etc/lsb-release')), 'DISTRIB_DESCRIPTION='));
+    FindNameValue(StringFromFile('/etc/lsb-release'), 'DISTRIB_DESCRIPTION=', release);
     if (release <> '') and (release[1] = '"') then
       release := copy(release, 2, length(release) - 2);
   end;

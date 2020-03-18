@@ -234,6 +234,129 @@ begin
     Windows.Sleep(ms);
 end;
 
+type
+  TProcessMemoryCounters = record
+    cb: DWORD;
+    PageFaultCount: DWORD;
+    PeakWorkingSetSize: PtrUInt;
+    WorkingSetSize: PtrUInt;
+    QuotaPeakPagedPoolUsage: PtrUInt;
+    QuotaPagedPoolUsage: PtrUInt;
+    QuotaPeakNonPagedPoolUsage: PtrUInt;
+    QuotaNonPagedPoolUsage: PtrUInt;
+    PagefileUsage: PtrUInt;
+    PeakPagefileUsage: PtrUInt;
+  end;
+
+const
+  PROCESS_QUERY_LIMITED_INFORMATION = $1000;
+
+var
+  // PROCESS_QUERY_INFORMATION (XP) / PROCESS_QUERY_LIMITED_INFORMATION (Vista+)
+  OpenProcessAccess: DWORD;
+
+  // late-binding of Windows version specific API entries
+  GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetProcessTimes: function(hProcess: THandle;
+    var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetProcessMemoryInfo: function(Process: THandle;
+    var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
+  EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
+    var lpcbNeeded: DWORD): BOOL; stdcall;
+  EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD; var cbNeeded: DWORD): BOOL; stdcall;
+  GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
+    lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
+  // Vista+/WS2008+ (use GetModuleFileNameEx on XP)
+  QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWORD;
+    lpExeName: PWideChar; lpdwSize: PDWORD): BOOL; stdcall;
+
+
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+var n: cardinal;
+begin
+  result := nil;
+  n := 2048;
+  repeat
+    SetLength(result, n);
+    if EnumProcesses(pointer(result), n * 4, Count) then
+      Count := Count shr 2 else
+      Count := 0;
+    if Count < n then
+    begin
+      if Count = 0 then
+        result := nil;
+      exit;
+    end;
+    inc(n, 1024); // (very unlikely) too small buffer
+  until n > 8192;
+end;
+
+function EnumProcessName(PID: Cardinal): RawUTF8;
+var h: THandle;
+    len: DWORD;
+    name: array[0..4095] of WideChar;
+begin
+  result := '';
+  if PID = 0 then
+    exit;
+  h := OpenProcess(OpenProcessAccess, false, PID);
+  if h <> 0 then
+    try
+      if Assigned(QueryFullProcessImageNameW) then begin
+        len := high(name);
+        if QueryFullProcessImageNameW(h, 0, name, @len) then
+          RawUnicodeToUtf8(name, len, result);
+      end else
+        if GetModuleFileNameExW(h,0,name,high(name)) <> 0 then
+          RawUnicodeToUtf8(name, StrLenW(name), result);
+    finally
+      CloseHandle(h);
+    end;
+end;
+
+function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+var
+  ftidl, ftkrn, ftusr: TFileTime;
+begin
+  result := Assigned(GetSystemTimes) and GetSystemTimes(ftidl, ftkrn, ftusr);
+  if not result then
+    exit;
+  FileTimeToInt64(ftidl, IdleTime);
+  FileTimeToInt64(ftkrn, KernelTime);
+  FileTimeToInt64(ftusr, UserTime);
+end;
+
+function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
+  out WorkKB, VirtualKB: cardinal): boolean;
+var
+  h: THandle;
+  ftkrn, ftusr, ftp, fte: TFileTime;
+  mem: TProcessMemoryCounters;
+begin
+  result := false;
+  if not Assigned(GetProcessTimes) or not Assigned(GetProcessMemoryInfo) then
+    exit;
+  h := OpenProcess(OpenProcessAccess, false, PID);
+  if h = 0 then
+    exit;
+  try
+    if GetProcessTimes(h, ftp, fte, ftkrn, ftusr) then
+    begin
+      FileTimeToInt64(ftkrn, KernelTime);
+      FileTimeToInt64(ftusr, UserTime);
+      FillCharFast(mem,SizeOf(mem),0);
+      mem.cb := SizeOf(mem);
+      if GetProcessMemoryInfo(h,mem,SizeOf(mem)) then
+      begin
+        WorkKB := mem.WorkingSetSize shr 10;
+        VirtualKB := mem.PagefileUsage shr 10;
+      end;
+      result := true;
+    end;
+  finally
+    CloseHandle(h);
+  end;
+end;
 
 {$I-}
 
@@ -603,15 +726,25 @@ begin
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and IsWow64Process(GetCurrentProcess, Res) and Res;
-  FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
   if IsWow64 then // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
     GetNativeSystemInfo := GetProcAddress(h, 'GetNativeSystemInfo')
   else
     @GetNativeSystemInfo := nil;
+  @GetSystemTimes := GetProcAddress(h, 'GetSystemTimes');
+  @GetProcessTimes := GetProcAddress(h, 'GetProcessTimes');
+  @QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW');
+  h := LoadLibrary('Psapi.dll');
+  if h >= 32 then
+  begin
+    @EnumProcesses := GetProcAddress(h, 'EnumProcesses');
+    @GetModuleFileNameExW := GetProcAddress(h, 'GetModuleFileNameExW');
+    @EnumProcessModules := GetProcAddress(h, 'EnumProcessModules');
+    @GetProcessMemoryInfo := GetProcAddress(h, 'GetProcessMemoryInfo');
+  end;
   // retrieve system information
+  FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
   if Assigned(GetNativeSystemInfo) then
-
-  GetNativeSystemInfo(SystemInfo)
+    GetNativeSystemInfo(SystemInfo)
   else
     Windows.GetSystemInfo(SystemInfo);
   GetMem(P, 10); // ensure that using MIN_PTR_VALUE won't break anything
@@ -667,12 +800,26 @@ begin
       inc(Vers);   // e.g. wEight -> wEight64
   end;
   OSVersion := Vers;
+  if OSVersion >= wVista then
+    OpenProcessAccess := PROCESS_QUERY_LIMITED_INFORMATION
+  else
+    OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   with OSVersionInfo do
     if wServicePackMajor = 0 then
       FormatUTF8('Windows % (%.%.%)', [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText)
     else
       FormatUTF8('Windows % SP% (%.%.%)', [WINDOWS_NAME[Vers], wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText);
   OSVersionInt32 := (integer(Vers) shl 8) + ord(osWindows);
+  h := LoadLibrary('ntdll.dll');
+  if h > 0 then
+  begin
+    wine_get_version := GetProcAddress(h, 'wine_get_version');
+    if Assigned(wine_get_version) then
+      OSVersionInfoEx := trim('Wine ' + trim(wine_get_version));
+    FreeLibrary(h);
+  end;
+  if OSVersionInfoEx <> '' then
+    OSVersionText := FormatUTF8('% - %', [OSVersionText, OSVersionInfoEx]);
   // retrieve Hardware information from Registry
   if reg.ReadOpen(HKEY_LOCAL_MACHINE, 'Hardware\Description\System\CentralProcessor\0') then
   begin
@@ -709,16 +856,6 @@ begin
     cpu := StringToUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   cpu := Trim(cpu);
   FormatUTF8('% x % (' + CPU_ARCH_TEXT + ')', [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
-  h := LoadLibrary('ntdll.dll');
-  if h > 0 then
-  begin
-    wine_get_version := GetProcAddress(h, 'wine_get_version');
-    if Assigned(wine_get_version) then
-      OSVersionInfoEx := trim('Wine ' + trim(wine_get_version));
-    FreeLibrary(h);
-  end;
-  if OSVersionInfoEx <> '' then
-    OSVersionText := FormatUTF8('% - %', [OSVersionText, OSVersionInfoEx]);
 end;
 
 

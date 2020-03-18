@@ -736,7 +736,7 @@ function ToInteger(const text: RawUTF8; out value: integer): boolean;
 
 /// get the unsigned 32-bit cardinal value stored in a RawUTF8 string
 // - returns TRUE if the supplied text was successfully converted into a cardinal
-function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal=0): boolean;
+function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal = 0): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 64-bit integer value stored in a RawUTF8 string

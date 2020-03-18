@@ -673,6 +673,27 @@ function TemporaryFileName: TFileName;
 function IsDirectoryWritable(const Directory: TFileName): boolean;
 
 
+/// return the PIDs of all running processes
+// - under Windows, is a wrapper around EnumProcesses() PsAPI call
+// - on Linux, will enumerate /proc/* pseudo-files
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+
+/// return the process name of a given PID
+// - under Windows, is a wrapper around QueryFullProcessImageNameW/GetModuleFileNameEx
+// PsAPI call
+// - on Linux, will query /proc/[pid]/exe or /proc/[pid]/cmdline pseudo-file
+function EnumProcessName(PID: Cardinal): RawUTF8;
+
+/// return the system-wide time usage information
+// - under Windows, is a wrapper around GetSystemTimes() kernel API call
+function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+
+/// return the time and memory usage information about a given process
+// - under Windows, is a wrapper around GetProcessTimes/GetProcessMemoryInfo
+function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
+  out WorkKB, VirtualKB: cardinal): boolean;
+
+
 {$ifdef LINUX}
 var
   stdoutIsTTY: boolean;
