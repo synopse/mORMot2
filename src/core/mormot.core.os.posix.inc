@@ -733,6 +733,7 @@ begin
   // initialize mormot.core.text to avoid GPF in this function
   InitializeTextConstants;
   // retrieve Kernel and Hardware information
+  stdoutIsTTY := IsATTY(StdOutputHandle)=1;
   modname := nil;
   SystemInfo.dwPageSize := getpagesize;
   fpuname(uts);
