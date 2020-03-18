@@ -1104,8 +1104,7 @@ function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
 /// find the integer Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
 // - return 0 if no NAME= entry was found
-function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+function FindIniNameValueInteger(P: PUTF8Char; const UpperName: RawUTF8): PtrInt;
 
 /// replace a value from a given set of name=value lines
 // - expect UpperName as 'UPPERNAME=', otherwise returns false
@@ -2993,16 +2992,37 @@ end;
 
 { ************ INI Files and In-memory Access }
 
+function IdemPChar2(table: PNormTable; p: PUTF8Char; up: PAnsiChar): boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+var
+  u: AnsiChar;
+begin // here p and up are expected to be <> nil
+  result := false;
+  dec(PtrUInt(p), PtrUInt(up));
+  repeat
+    u := up^;
+    if u = #0 then
+      break;
+    if table^[up[PtrUInt(p)]] <> u then
+      exit;
+    inc(up);
+  until false;
+  result := true;
+end;
+
 function FindSectionFirstLine(var source: PUTF8Char; search: PAnsiChar): boolean;
+var
+  table: PNormTable;
 begin
   result := false;
-  if source = nil then
+  if (source = nil) or (search = nil) then
     exit;
+  table := @NormToUpperAnsi7;
   repeat
     if source^ = '[' then
     begin
       inc(source);
-      result := IdemPChar(source, search);
+      result := IdemPChar2(table, source, search);
     end;
     while source^ in ANSICHARNOT01310 do
       inc(source);
@@ -3074,9 +3094,8 @@ begin // expect UpperName as 'NAME='
           else
             inc(u);
         if u^ in [#0, #10, #13] then
-          break
-        else
-          inc(u);
+          break;
+        inc(u);
       until false;
       if PBeg <> nil then
       begin
@@ -3110,31 +3129,14 @@ begin // expect UpperName as 'NAME='
   result := '';
 end;
 
-function IdemPChar2(table: PNormTable; p: PUTF8Char; up: PAnsiChar): boolean;
-  {$ifdef HASINLINE} inline;{$endif}
-var
-  u: AnsiChar;
-begin // here p and up are expected to be <> nil
-  result := false;
-  dec(PtrUInt(p), PtrUInt(up));
-  repeat
-    u := up^;
-    if u = #0 then
-      break;
-    if table^[up[PtrUInt(p)]] <> u then
-      exit;
-    inc(up);
-  until false;
-  result := true;
-end;
-
 function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
 var
   table: PNormTable;
 begin
   result := false;
-  table := @NormToUpperAnsi7;
   if (P <> nil) and (P^ <> '[') then
+  begin
+    table := @NormToUpperAnsi7;
     repeat
       if P^ = ' ' then
       begin
@@ -3185,15 +3187,19 @@ begin
         end;
       until false;
     until P^ = '[';
+  end;
 end;
 
 function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
   const UpperValues: array of PAnsiChar): boolean;
 var
   PBeg: PUTF8Char;
+  table: PNormTable;
 begin
   result := true;
-  if high(UpperValues) >= 0 then
+  if (high(UpperValues) >= 0) and (UpperName <> '') then
+  begin
+    table := @NormToUpperAnsi7;
     while (P <> nil) and (P^ <> '[') do
     begin
       if P^ = ' ' then
@@ -3201,7 +3207,7 @@ begin
           inc(P)
         until P^ <> ' '; // trim left ' '
       PBeg := P;
-      if IdemPChar(PBeg, pointer(UpperName)) then
+      if IdemPChar2(table, PBeg, pointer(UpperName)) then
       begin
         inc(PBeg, length(UpperName));
         if IdemPCharArray(PBeg, UpperValues) >= 0 then
@@ -3210,6 +3216,7 @@ begin
       end;
       P := GotoNextLine(P);
     end;
+  end;
   result := false;
 end;
 
@@ -3309,9 +3316,22 @@ begin
     Content := Content + '[' + SectionName + ']'#13#10 + NewSectionContent;
 end;
 
-function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): PtrInt;
+function FindIniNameValueInteger(P: PUTF8Char; const UpperName: RawUTF8): PtrInt;
+var
+  table: PNormTable;
 begin
-  result := GetInteger(pointer(FindIniNameValue(P, UpperName)));
+  result := 0;
+  if (P = nil) or (UpperName = '') then
+    exit;
+  table := @NormToUpperAnsi7;
+  repeat
+    if IdemPChar2(table, P, pointer(UpperName)) then
+      break;
+    P := GotoNextLine(P);
+    if P = nil then
+      exit;
+  until false;
+  result := GetInteger(P + length(UpperName));
 end;
 
 function FindIniEntry(const Content, Section, Name: RawUTF8): RawUTF8;
@@ -3364,28 +3384,29 @@ var
   PBeg: PUTF8Char;
   i: integer;
 begin
-  while (P <> nil) and (P^ <> '[') do
-  begin
-    while P^ = ' ' do
-      inc(P);   // trim left ' '
-    PBeg := P;
-    P := GotoNextLine(P);
-    if IdemPChar(PBeg, UpperName) then
+  if UpperName <> nil then
+    while (P <> nil) and (P^ <> '[') do
     begin
-     // update Name=Value entry
-      result := true;
-      inc(PBeg, UpperNameLength);
-      i := (PBeg - pointer(Content)) + 1;
-      if (i = length(NewValue)) and CompareMem(PBeg, pointer(NewValue), i) then
-        exit; // new Value is identical to the old one -> no change
-      if P = nil then // avoid last line (P-PBeg) calculation error
-        SetLength(Content, i - 1)
-      else
-        delete(Content, i, P - PBeg); // delete old Value
-      insert(NewValueCRLF, Content, i); // set new value
-      exit;
+      while P^ = ' ' do
+        inc(P);   // trim left ' '
+      PBeg := P;
+      P := GotoNextLine(P);
+      if IdemPChar2(@NormToUpperAnsi7, PBeg, UpperName) then
+      begin
+       // update Name=Value entry
+        result := true;
+        inc(PBeg, UpperNameLength);
+        i := (PBeg - pointer(Content)) + 1;
+        if (i = length(NewValue)) and CompareMem(PBeg, pointer(NewValue), i) then
+          exit; // new Value is identical to the old one -> no change
+        if P = nil then // avoid last line (P-PBeg) calculation error
+          SetLength(Content, i - 1)
+        else
+          delete(Content, i, P - PBeg); // delete old Value
+        insert(NewValueCRLF, Content, i); // set new value
+        exit;
+      end;
     end;
-  end;
   result := false;
 end;
 
