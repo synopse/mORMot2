@@ -18,10 +18,7 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  Classes, 
-  Contnrs,
-  Types, 
-  SysUtils, 
+  SysUtils,
   mormot.core.base,
   mormot.core.data,
   mormot.core.text,
@@ -38,29 +35,45 @@ type
   /// allows to tune TSynTest process
   // - tcoLogEachCheck will log as sllCustom4 each non void Check() message
   TSynTestOption = (tcoLogEachCheck);
+
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
+
+  TSynTest = class;
+
+  /// how published method information is stored within TSynTest
+  TSynTestMethodInfo = record
+    /// the uncamelcased method name
+    TestName: string;
+    /// ready-to-be-displayed 'Ident - TestName' text, as UTF-8
+    IdentTestName: RawUTF8;
+    /// raw method name, as defined in pascal code (not uncamelcased)
+    MethodName: RawUTF8;
+    /// direct access to the method execution
+    Method: TSynTestEvent;
+    /// the test case holding this method
+    Test: TSynTest;
+    /// the index of this method in the TSynTestCase
+    MethodIndex: integer;
+  end;
+  /// pointer access to published method information
+
+  PSynTestMethodInfo = ^TSynTestMethodInfo;
 
   /// abstract parent class for both tests suit (TSynTests) and cases (TSynTestCase)
   // - purpose of this ancestor is to have RTTI for its published methods,
   // and to handle a class text identifier, or uncamelcase its class name
   // if no identifier was defined
+  // - sample code about how to use this test framework is available in
+  // the "Sample\07 - SynTest" folder
   TSynTest = class(TSynPersistent)
   protected
-    fTests: array of record
-      TestName: string;
-      TestNameUTF8: RawUTF8;
-      Method: TSynTestEvent;
-    end;
+    fTests: array of TSynTestMethodInfo;
     fIdent: string;
     fInternalTestsCount: integer;
     fOptions: TSynTestOptions;
-    function GetTestName(Index: integer): string;
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetTestMethod(Index: integer): TSynTestEvent;
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetCount: Integer;  {$ifdef HASINLINE}inline;{$endif}
-    function GetIdent: string;   {$ifdef HASINLINE}inline;{$endif}
+    function GetCount: Integer;
+    function GetIdent: string;
   public
     /// create the test instance
     // - if an identifier is not supplied, the class name is used, after
@@ -69,7 +82,9 @@ type
     // test list, accessible via the Count/TestName/TestMethod properties
     constructor Create(const Ident: string = ''); reintroduce; virtual;
     /// register a specified test to this class instance
-    procedure Add(const aMethod: TSynTestEvent; const aName: string);
+    // - Create will register all published methods of this class, but
+    // your code may initialize its own set of methods on need
+    procedure Add(const aMethod: TSynTestEvent; const aMethodName: RawUTF8; const aIdent: string);
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
@@ -78,12 +93,6 @@ type
     // - i.e. the number of registered tests by the Register() method PLUS
     // the number of published methods defined within this class
     property Count: Integer read GetCount;
-    /// get the name of a specified test
-    // - Index range is from 0 to Count-1 (including)
-    property TestName[Index: integer]: string read GetTestName;
-    /// get the event of a specified test
-    // - Index range is from 0 to Count-1 (including)
-    property TestMethod[Index: integer]: TSynTestEvent read GetTestMethod;
     /// return the number of published methods defined within this class as tests
     // - i.e. the number of tests added by the Create() constructor from RTTI
     // - any TestName/TestMethod[] index higher or equal to this value has been
@@ -108,8 +117,6 @@ type
     fAssertionsFailed: integer;
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
-    fMethodIndex: integer;
-    fTestCaseIndex: integer;
     /// any number not null assigned to this field will display a "../s" stat
     fRunConsoleOccurenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
@@ -119,12 +126,16 @@ type
     fCheckLogTime: TPrecisionTimer;
     fCheckLastMsg: cardinal;
     fCheckLastTix: cardinal;
-    /// override this method to prepare any published method execution
+    /// called before all published properties are executed
     procedure Setup; virtual;
-    /// override this method to process some clean-up before Destroy call
+    /// called after all published properties are executed
     // - WARNING: this method should be re-entrant - so using FreeAndNil() is
     // a good idea in this method :)
     procedure CleanUp; virtual;
+    /// called before each published properties execution
+    procedure MethodSetup; virtual;
+    /// called after each published properties execution
+    procedure MethodCleanUp; virtual;
     procedure AddLog(condition: Boolean; const msg: string);
   public
     /// create the test case instance
@@ -155,32 +166,32 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(a,b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function CheckEqual(a, b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE} inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(const a,b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function CheckEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE} inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(a,b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function CheckEqual(a, b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE} inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(a,b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function CheckNotEqual(a, b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE} inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(const a,b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE} inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(a,b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function CheckNotEqual(a, b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE} inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
     // - includes some optional precision argument
-    function CheckSame(const Value1,Value2: double;
-      const Precision: double=1E-12; const msg: string = ''): Boolean;
+    function CheckSame(const Value1, Value2: double; const Precision: double = 1E-12;
+      const msg: string = ''): Boolean;
     /// perform a string comparison with several value
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
@@ -204,8 +215,8 @@ type
     // - condition must equals TRUE to pass the test
     // - the supplied message would be appended, with its timing
     // - warning: this method is not thread-safe
-    procedure CheckLogTime(condition: boolean;
-      const msg: RawUTF8; const args: array of const; level: TSynLogInfo = sllTrace);
+    procedure CheckLogTime(condition: boolean; const msg: RawUTF8; const args: array of const;
+      level: TSynLogInfo = sllTrace);
     /// create a temporary string random content, WinAnsi (code page 1252) content
     class function RandomString(CharCount: Integer): RawByteString;
     /// create a temporary UTF-8 string random content, using WinAnsi
@@ -221,8 +232,8 @@ type
     /// create a temporary string random content, using uri-compatible chars only
     class function RandomURI(CharCount: Integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
-    class function RandomTextParagraph(WordCount: Integer;
-      LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUTF8 = ''): RawUTF8;
+    class function RandomTextParagraph(WordCount: Integer; LastPunctuation: AnsiChar = '.';
+      const RandomInclude: RawUTF8 = ''): RawUTF8;
     /// add containing some "bla bli blo blu" fake text, with paragraphs
     class procedure AddRandomTextParagraph(WR: TAbstractWriter; WordCount: Integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUTF8 = '';
@@ -235,11 +246,11 @@ type
     // - OnlyLog will compute and append the info to the log, but not on the console
     // - warning: this method is not thread-safe if a local Timer is not specified
     function NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-      SizeInBytes: cardinal=0; Timer: PPrecisionTimer = nil;
+      SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// will add to the console a formatted message with a speed estimation
     function NotifyTestSpeed(const ItemNameFmt: RawUTF8; const ItemNameArgs: array of const;
-      ItemCount: integer; SizeInBytes: cardinal=0; Timer: PPrecisionTimer = nil;
+      ItemCount: integer; SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// append some text to the current console
     // - OnlyLog will compute and append the info to the log, but not on the console
@@ -254,10 +265,6 @@ type
     property Assertions: integer read fAssertions;
     /// the number of assertions (i.e. Check() method call) for this test case
     property AssertionsFailed: integer read fAssertionsFailed;
-    /// the index of the associated Owner.TestMethod[] which created this test
-    property MethodIndex: integer read fMethodIndex;
-    /// the index of the test case, starting at 0 for the associated MethodIndex
-    property TestCaseIndex: integer read fTestCaseIndex;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter
@@ -267,47 +274,49 @@ type
   /// class-reference type (metaclass) of a test case
   TSynTestCaseClass = class of TSynTestCase;
 
+  /// information about a failed test
+  TSynTestFailed = record
+    /// the contextual message associated with this failed test
+    Error: string;
+    /// the uncamelcased method name
+    TestName: string;
+    /// ready-to-be-displayed 'TestCaseIdent - TestName' text, as UTF-8
+    IdentTestName: RawUTF8;
+  end;
+
+  TSynTestFaileds = array of TSynTestFailed;
+
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
   protected
     /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurenceNumber: cardinal;
-    /// a list containing all failed tests after a call to the Run method
-    // - if integer(Objects[]) is equal or higher than InternalTestsCount,
-    // the Objects[] points to the TSynTestCase, and the Strings[] to the
-    // associated failure message
-    // - if integer(Objects[]) is lower than InternalTestsCount, then
-    // it is an index to the corresponding published method, and the Strings[]
-    // contains the associated failure message
-    fFailed: TStringList;
-    fTestCase: TSynObjectList;
+    fTestCase: TSynList; // stores TSynTestCaseClass during Run
     fAssertions: integer;
     fAssertionsFailed: integer;
-    fCurrentMethod, fCurrentMethodIndex: integer;
+    fCurrentMethodInfo: PSynTestMethodInfo;
     fSaveToFile: Text;
     fSafe: TSynLocker;
-    function GetTestCase(Index: integer): TSynTestCase;
-    function GetTestCaseCount: Integer;
-    function GetFailedCaseIdent(Index: integer): string;
+    fFailed: TSynTestFaileds;
+    fFailedCount: integer;
     function GetFailedCount: integer;
-    function GetFailedMessage(Index: integer): string;
-    function GetFailedCase(Index: integer): TSynTestCase;
+    function GetFailed(Index: integer): TSynTestFailed;
     procedure CreateSaveToFile; virtual;
+    procedure Color(aColor: TConsoleColor);
+    /// could be overriden to redirect the content to proper TSynLog.Log()
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUTF8;
       const TextArg: array of const); virtual;
-    procedure Color(aColor: TConsoleColor);
     /// called when a test case failed: default is to add item to fFailed[]
-    procedure Failed(const msg: string; aTest: TSynTestCase); virtual;
+    procedure AddFailed(const msg: string); virtual;
     /// this method is called before every run
     // - default implementation will just return nil
     // - can be overridden to implement a per-test case logging for instance
-    function BeforeRun(const TestName: RawUTF8): IUnknown; virtual;
-    /// this method is called during the run, for every testcase
+    function BeforeRun: IUnknown; virtual;
+    /// this method is called during the run, after every testcase
     // - this implementation just report some minimal data to the console
     // by default, but may be overridden to update a real UI or reporting system
-    // - the TestMethodIndex is first -1 before any TestMethod[] method call,
-    // then called once after every TestMethod[] run
-    procedure DuringRun(TestCaseIndex, TestMethodIndex: integer); virtual;
+    // - method implementation can use fCurrentMethodInfo^ to get run context
+    procedure AfterOneRun; virtual;
   public
     /// you can put here some text to be displayed at the end of the messages
     // - some internal versions, e.g.
@@ -337,28 +346,20 @@ type
     // ! TSynLogTestLog := TSQLLog;
     // ! TMyTestsClass.RunAsConsole('My Automated Tests',LOG_VERBOSE);
     class procedure RunAsConsole(const CustomIdent: string = '';
-      withLogs: TSynLogInfos = [sllLastError,sllError,sllException,sllExceptionOS];
+      withLogs: TSynLogInfos = [sllLastError, sllError, sllException, sllExceptionOS];
       options: TSynTestOptions = []); virtual;
     /// save the debug messages into an external file
     // - if no file name is specified, the current Ident is used
     procedure SaveToFile(const DestPath: TFileName; const FileName: TFileName = '');
-    /// register a specified Test case instance
-    // - all these instances will be freed by the TSynTests.Destroy
-    // - the published methods of the children must call this method in order
-    // to add test cases
-    // - example of use (code from a TSynTests published method):
-    // !  AddCase(TOneTestCase.Create(self));
-    procedure AddCase(TestCase: TSynTestCase); overload;
     /// register a specified Test case from its class name
-    // - all these instances will be freed by the TSynTests.Destroy
+    // - an instance of the supplied class will be created during Run
     // - the published methods of the children must call this method in order
     // to add test cases
     // - example of use (code from a TSynTests published method):
     // !  AddCase(TOneTestCase);
     procedure AddCase(TestCase: TSynTestCaseClass); overload;
     /// register a specified Test case from its class name
-    // - an instance of the supplied class is created, and will be freed by
-    // TSynTests.Destroy
+    // - an instance of the supplied classes will be created during Run
     // - the published methods of the children must call this method in order
     // to add test cases
     // - example of use (code from a TSynTests published method):
@@ -366,12 +367,10 @@ type
     procedure AddCase(const TestCase: array of TSynTestCaseClass); overload;
     /// call of this method will run all associated tests cases
     // - function will return TRUE if all test passed
-    // - all failed test cases will be added to the Failed[] list
-    // - the TestCase[] list is created first, by running all published methods,
-    // which must call the AddCase() method above to register test cases
-    // - the Failed[] list is cleared at the beginning of the run
-    // - Assertions and AssertionsFailed properties are reset and computed during
-    // the run
+    // - all failed test cases will be added to the Failed[] list - which is
+    // cleared at the beginning of the run
+    // - Assertions and AssertionsFailed counter properties are reset and
+    // computed during the run
     // - you may override this method to provide additional information, e.g.
     // ! function TMySynTests.Run: Boolean;
     // ! begin // need SynSQLite3.pas unit in the uses clause
@@ -381,23 +380,13 @@ type
     // !   result := inherited Run;
     // ! end;
     function Run: Boolean; virtual;
-    /// the number of items in the TestCase[] array
-    property TestCaseCount: Integer read GetTestCaseCount;
-    /// an array containing all registered Test case instances
-    // - Test cases are registered by the AddCase() method above, mainly
-    // by published methods of the children
-    // - Test cases instances are freed by TSynTests.Destroy
-    property TestCase[Index: integer]: TSynTestCase read GetTestCase;
+    /// method information currently running
+    // - is set by Run and available within TTestCase methods
+    property CurrentMethodInfo: PSynTestMethodInfo read fCurrentMethodInfo;
     /// number of failed tests after the last call to the Run method
     property FailedCount: integer read GetFailedCount;
-    /// retrieve the TSynTestCase instance associated with this failure
-    // - returns nil if this failure was not triggered by a TSynTestCase,
-    // but directly by a method
-    property FailedCase[Index: integer]: TSynTestCase read GetFailedCase;
-    /// retrieve the ident of the case test associated with this failure
-    property FailedCaseIdent[Index: integer]: string read GetFailedCaseIdent;
-    /// retrieve the error message associated with this failure
-    property FailedMessage[Index: integer]: string read GetFailedMessage;
+    /// retrieve the information associated with a failure
+    property Failed[Index: integer]: TSynTestFailed read GetFailed;
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
     property Assertions: integer read fAssertions;
@@ -429,22 +418,30 @@ uses
 
 { TSynTest }
 
-procedure TSynTest.Add(const aMethod: TSynTestEvent; const aName: string);
+procedure TSynTest.Add(const aMethod: TSynTestEvent; const aMethodName: RawUTF8;
+  const aIdent: string);
 var
-  i: integer;
+  n: integer;
 begin
   if self = nil then
     exit; // avoid GPF
-  i := Length(fTests);
-  SetLength(fTests, i + 1);
-  fTests[i].TestName := aName;
-  fTests[i].TestNameUTF8 := StringToUTF8(fIdent + ' - ' + aName);
-  fTests[i].Method := aMethod;
+  n := Length(fTests);
+  SetLength(fTests, n + 1);
+  with fTests[n] do
+  begin
+    TestName := aIdent;
+    IdentTestName := StringToUTF8(fIdent + ' - ' + TestName);
+    Method := aMethod;
+    MethodName := aMethodName;
+    Test := self;
+    MethodIndex := n;
+  end;
 end;
 
 constructor TSynTest.Create(const Ident: string);
 var
   id: RawUTF8;
+  s: string;
   methods: TPublishedMethodInfoDynArray;
   i: integer;
 begin
@@ -463,17 +460,17 @@ begin
       Delete(id, 1, 5)
     else if id[1] = 'T' then
       Delete(id, 1, 1);
-    fIdent := Ansi7ToString(UnCamelCase(id));
+    fIdent := string(UnCamelCase(id));
   end;
   for i := 0 to GetPublishedMethods(self, methods) - 1 do
     with methods[i] do
     begin
       inc(fInternalTestsCount);
       if Name[1] = '_' then
-        delete(Name, 1, 1)
+        s := Ansi7ToString(copy(Name, 2, 100))
       else
-        Name := UnCamelCase(Name);
-      Add(TSynTestEvent(Method), Ansi7ToString(Name));
+        s := Ansi7ToString(UnCamelCase(Name));
+      Add(TSynTestEvent(Method), Name, s);
     end;
 end;
 
@@ -493,24 +490,41 @@ begin
     result := fIdent;
 end;
 
-function TSynTest.GetTestMethod(Index: integer): TSynTestEvent;
-begin
-  if (self = nil) or (Cardinal(Index) >= Cardinal(length(fTests))) then
-    result := nil
-  else
-    result := fTests[Index].Method;
-end;
-
-function TSynTest.GetTestName(Index: integer): string;
-begin
-  if (self = nil) or (Cardinal(Index) >= Cardinal(length(fTests))) then
-    result := ''
-  else
-    result := fTests[Index].TestName;
-end;
-
 
 { TSynTestCase }
+
+constructor TSynTestCase.Create(Owner: TSynTests; const Ident: string);
+begin
+  inherited Create(Ident);
+  fOwner := Owner;
+  fOptions := Owner.Options;
+end;
+
+procedure TSynTestCase.Setup;
+begin
+  // do nothing by default
+end;
+
+procedure TSynTestCase.CleanUp;
+begin
+  // do nothing by default
+end;
+
+procedure TSynTestCase.MethodSetup;
+begin
+  // do nothing by default
+end;
+
+procedure TSynTestCase.MethodCleanUp;
+begin
+  // do nothing by default
+end;
+
+destructor TSynTestCase.Destroy;
+begin
+  CleanUp;
+  inherited;
+end;
 
 procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
 const
@@ -532,8 +546,9 @@ begin
   end
   else
     fCheckLastMsg := 0;
-  fOwner.DoLog(LEV[condition], '% % [%]',
-    [ClassType, TestName[fOwner.fCurrentMethodIndex], msg]);
+  if fOwner.fCurrentMethodInfo <> nil then
+    fOwner.DoLog(LEV[condition], '% % [%]', [ClassType,
+      fOwner.fCurrentMethodInfo^.TestName, msg]);
 end;
 
 procedure TSynTestCase.Check(condition: Boolean; const msg: string);
@@ -577,7 +592,7 @@ begin
   CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqual(const a, b, msg: RawUTF8): Boolean;
+function TSynTestCase.CheckEqual(const a, b: RawUTF8; const msg: RawUTF8): Boolean;
 begin
   result := a = b;
   CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
@@ -595,7 +610,7 @@ begin
   CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckNotEqual(const a, b, msg: RawUTF8): Boolean;
+function TSynTestCase.CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8): Boolean;
 begin
   result := a <> b;
   CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
@@ -607,14 +622,15 @@ begin
   CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckSame(const Value1, Value2: double;
-  const Precision: double; const msg: string): Boolean;
+function TSynTestCase.CheckSame(const Value1, Value2: double; const Precision: double;
+  const msg: string): Boolean;
 begin
   result := SameValue(Value1, Value2, Precision);
   CheckUTF8(result, EQUAL_MSG, [Value1, Value2, msg]);
 end;
 
-function TSynTestCase.CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8; CaseSentitive: Boolean; ExpectedResult: Boolean; const msg: string): Boolean;
+function TSynTestCase.CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
+  CaseSentitive: Boolean; ExpectedResult: Boolean; const msg: string): Boolean;
 begin
   result := (FindRawUTF8(Values, Value, CaseSentitive) >= 0) = ExpectedResult;
   Check(result);
@@ -627,7 +643,8 @@ begin
     CheckUTF8(condition, '%', [msg]);
 end;
 
-procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8; const args: array of const);
+procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
+  const args: array of const);
 var
   str: string; // using a sub-proc may be faster, but unstable on Android
 begin
@@ -661,32 +678,9 @@ begin
   fCheckLogTime.Start;
 end;
 
-constructor TSynTestCase.Create(Owner: TSynTests; const Ident: string);
-begin
-  inherited Create(Ident);
-  fOwner := Owner;
-  fOptions := Owner.Options;
-end;
-
-procedure TSynTestCase.Setup;
-begin
-  // do nothing by default
-end;
-
-procedure TSynTestCase.CleanUp;
-begin
-  // do nothing by default
-end;
-
-destructor TSynTestCase.Destroy;
-begin
-  CleanUp;
-  inherited;
-end;
-
 class function TSynTestCase.RandomString(CharCount: Integer): RawByteString;
 var
-  i: integer;
+  i: PtrInt;
   R: PByteArray;
   tmp: TSynTempBuffer;
 begin
@@ -699,7 +693,7 @@ end;
 
 class function TSynTestCase.RandomAnsi7(CharCount: Integer): RawByteString;
 var
-  i: integer;
+  i: PtrInt;
   R: PByteArray;
   tmp: TSynTempBuffer;
 begin
@@ -712,14 +706,14 @@ end;
 
 procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawByteString);
 var
-  i: integer;
+  i: PtrInt;
   R: PByteArray;
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(count);
   SetString(result, nil, count);
   for i := 0 to count - 1 do
-    PByteArray(result)[i] := ord(chars64[integer(R[i]) and 63]);
+    PByteArray(result)[i] := ord(chars64[PtrInt(R[i]) and 63]);
   tmp.Done;
 end;
 
@@ -770,9 +764,8 @@ class procedure TSynTestCase.AddRandomTextParagraph(WR: TAbstractWriter;
 type
   TKind = (space, comma, dot, question, paragraph);
 const
-  bla: array[0..7] of string[3] = (
-    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
-  endKind = [ dot, paragraph, question ];
+  bla: array[0..7] of string[3] = ('bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
+  endKind =[dot, paragraph, question];
 var
   n: integer;
   s: string[3];
@@ -844,11 +837,11 @@ end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
 begin
-  fOwner.fSafe.Lock; // protect when the test case is run from multiple threads
+  fOwner.fSafe.Lock; // protect when Check() is done from multiple threads
   try
     fOwner.DoLog(sllFail, '#% %', [fAssertions - fAssertionsBeforeRun, msg]);
     if Owner <> nil then // avoid GPF
-      Owner.Failed(msg, self);
+      Owner.AddFailed(msg);
     inc(fAssertionsFailed);
   finally
     fOwner.fSafe.UnLock;
@@ -905,27 +898,20 @@ end;
 
 { TSynTests }
 
-procedure TSynTests.AddCase(TestCase: TSynTestCase);
-begin
-  TestCase.fMethodIndex := fCurrentMethod;
-  TestCase.fTestCaseIndex := fTestCase.Count - fCurrentMethodIndex;
-  fTestCase.Add(TestCase);
-end;
-
 procedure TSynTests.AddCase(const TestCase: array of TSynTestCaseClass);
 var
   i: integer;
 begin
   for i := low(TestCase) to high(TestCase) do
-    AddCase(TestCase[i].Create(self));
+    fTestCase.Add(TestCase[i]);
 end;
 
 procedure TSynTests.AddCase(TestCase: TSynTestCaseClass);
 begin
-  AddCase(TestCase.Create(self));
+  fTestCase.Add(TestCase);
 end;
 
-function TSynTests.BeforeRun(const TestName: RawUTF8): IUnknown;
+function TSynTests.BeforeRun: IUnknown;
 begin
   result := nil;
 end;
@@ -933,17 +919,20 @@ end;
 constructor TSynTests.Create(const Ident: string);
 begin
   inherited Create(Ident);
-  fFailed := TStringList.Create;
-  fTestCase := TSynObjectList.Create;
+  fTestCase := TSynList.Create;
   fSafe.Init;
 end;
 
-{$I-}
-
-procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUTF8;
-  const TextArg: array of const);
-begin // do nothing by default
+destructor TSynTests.Destroy;
+begin
+  fTestCase.Free;
+  if TTextRec(fSaveToFile).Handle <> 0 then
+    Close(fSaveToFile);
+  inherited Destroy;
+  fSafe.Done;
 end;
+
+{$I-}
 
 procedure TSynTests.Color(aColor: TConsoleColor);
 begin
@@ -951,129 +940,43 @@ begin
     TextColor(aColor);
 end;
 
+procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUTF8;
+  const TextArg: array of const);
+begin // do nothing by default
+end;
+
 procedure TSynTests.CreateSaveToFile;
 begin
   System.Assign(fSaveToFile, '');
   Rewrite(fSaveToFile);
+  {$ifndef MSWINDOWS}
+  TTextRec(fSaveToFile).LineEnd := #13#10;
+  {$endif}
   StdOut := TTextRec(fSaveToFile).Handle;
 end;
 
-destructor TSynTests.Destroy;
+procedure TSynTests.AddFailed(const msg: string);
 begin
-  fFailed.Free;
-  fTestCase.Free; // TObjectList will free all TSynTestCase instance
-  if TTextRec(fSaveToFile).Handle <> 0 then
-    Close(fSaveToFile);
-  inherited Destroy;
-  fSafe.Done;
-end;
-
-procedure TSynTests.DuringRun(TestCaseIndex, TestMethodIndex: integer);
-var
-  C: TSynTestCase;
-  Run, Failed: integer;
-begin
-  C := TestCase[TestCaseIndex];
-  if C = nil then
-    Exit;
-  if TestMethodIndex < 0 then
+  if fFailedCount = length(fFailed) then
+    SetLength(fFailed, NextGrow(fFailedCount));
+  with fFailed[fFailedCount] do
   begin
-    Color(ccWhite);
-    writeln(fSaveToFile, #13#10' ', C.MethodIndex + 1, '.', C.TestCaseIndex + 1,
-      '. ', C.Ident, ': '{$ifdef LINUX}, #13{$endif});
-  end
-  else
-  begin
-    Run := C.Assertions - C.fAssertionsBeforeRun;
-    Failed := C.AssertionsFailed - C.fAssertionsFailedBeforeRun;
-    if Failed = 0 then
+    Error := msg;
+    if fCurrentMethodInfo <> nil then
     begin
-      Color(ccGreen);
-      Write(fSaveToFile, '  - ', C.TestName[TestMethodIndex], ': ');
-      if Run = 0 then
-        Write(fSaveToFile, 'no assertion')
-      else if Run = 1 then
-        Write(fSaveToFile, '1 assertion passed')
-      else
-        Write(fSaveToFile, IntToThousandString(Run), ' assertions passed');
-    end
-    else
-    begin
-      Color(ccLightRed);
-      Write(fSaveToFile, {$ifdef LINUX}#10 + {$endif}'!  - ',
-        C.TestName[TestMethodIndex], ': ', IntToThousandString(Failed),
-        ' / ', IntToThousandString(Run), ' FAILED'); // ! to highlight the line
+      TestName := fCurrentMethodInfo^.TestName;
+      IdentTestName := fCurrentMethodInfo^.IdentTestName;
     end;
-    Write(fSaveToFile, '  ', TestTimer.Stop);
-    if C.fRunConsoleOccurenceNumber > 0 then
-      Write(fSaveToFile, '  ',
-        IntToThousandString(TestTimer.PerSec(C.fRunConsoleOccurenceNumber)), '/s');
-    if C.fRunConsoleMemoryUsed > 0 then
-    begin
-      Write(fSaveToFile, '  ', KB(C.fRunConsoleMemoryUsed));
-      C.fRunConsoleMemoryUsed := 0; // display only once
-    end;
-    Writeln(fSaveToFile{$ifdef LINUX}, #13{$endif});
-    if C.fRunConsole <> '' then
-    begin
-      Writeln(fSaveToFile, '     ', C.fRunConsole {$ifdef LINUX},#13{$endif});
-      C.fRunConsole := '';
-    end;
-    if TestMethodIndex = C.Count - 1 then
-    begin
-      if C.AssertionsFailed = 0 then
-        Color(ccLightGreen)
-      else
-        Color(ccLightRed);
-      Write(fSaveToFile, '  Total failed: ', IntToThousandString(C.AssertionsFailed),
-        ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident);
-      if C.AssertionsFailed = 0 then
-        Write(fSaveToFile, ' PASSED')
-      else
-        Write(fSaveToFile, ' FAILED');
-      Writeln(fSaveToFile, '  ', TotalTimer.Stop {$ifdef LINUX},#13{$endif});
-    end;
-    Color(ccLightGray);
   end;
+  inc(fFailedCount);
 end;
 
-procedure TSynTests.Failed(const msg: string; aTest: TSynTestCase);
+function TSynTests.GetFailed(Index: integer): TSynTestFailed;
 begin
-  fFailed.AddObject(msg, aTest);
-end;
-
-function TSynTests.GetFailedCase(Index: integer): TSynTestCase;
-begin
-  if (self = nil) or (cardinal(Index) >= cardinal(fFailed.Count)) then
-    result := nil
+  if (self = nil) or (cardinal(Index) >= cardinal(fFailedCount)) then
+    Finalize(result)
   else
-  begin
-    Index := integer(fFailed.Objects[Index]);
-    if Index < InternalTestsCount then
-      result := nil
-    else
-      result := TSynTestCase(Index);
-  end;
-end;
-
-function TSynTests.GetFailedCaseIdent(Index: integer): string;
-begin
-  if (self = nil) or (cardinal(Index) >= cardinal(fFailed.Count)) then
-    result := ''
-  else
-  begin
-    Index := integer(fFailed.Objects[Index]);
-    if Index < InternalTestsCount then
-      // if integer(Objects[]) is lower than InternalTestsCount, then
-      // it is an index to the corresponding published method, and the Strings[]
-      // contains the associated failure message
-      result := TestName[Index]
-    else
-      // if integer(Objects[]) is equal or higher than InternalTestsCount,
-      // the Objects[] points to the TSynTestCase, and the Strings[] to the
-      // associated failure message
-      result := TSynTestCase(Index).Ident;
-  end;
+    result := fFailed[Index];
 end;
 
 function TSynTests.GetFailedCount: integer;
@@ -1081,37 +984,14 @@ begin
   if self = nil then
     result := 0
   else
-    result := fFailed.Count;
-end;
-
-function TSynTests.GetFailedMessage(Index: integer): string;
-begin
-  if (self = nil) or (cardinal(Index) >= cardinal(fFailed.Count)) then
-    result := ''
-  else
-    result := fFailed.Strings[Index];
-end;
-
-function TSynTests.GetTestCase(Index: integer): TSynTestCase;
-begin
-  if (self = nil) or (cardinal(Index) >= cardinal(fTestCase.Count)) then
-    result := nil
-  else
-    result := TSynTestCase(fTestCase[Index]);
-end;
-
-function TSynTests.GetTestCaseCount: Integer;
-begin
-  if self = nil then
-    result := 0
-  else
-    result := fTestCase.Count;
+    result := fFailedCount;
 end;
 
 function TSynTests.Run: Boolean;
 var
   i, t, m: integer;
   Elapsed, Version: RawUTF8;
+  err: string;
   C: TSynTestCase;
   log: IUnknown;
 begin
@@ -1120,85 +1000,99 @@ begin
   Color(ccLightCyan);
   Writeln(fSaveToFile, #13#10'   ', Ident, #13#10'  ', StringOfChar('-', length(Ident) + 2));
   RunTimer.Start;
+  Randomize;
+  fFailed := nil;
+  fAssertions := 0;
+  fAssertionsFailed := 0;
+  for m := 0 to count - 1 do
   try
-    // 1. register all test cases
-    fTestCase.Clear;
-    for m := 0 to count - 1 do
-    begin
-      fCurrentMethod := m;
-      fCurrentMethodIndex := fTestCase.Count;
-      // published methods will call AddCase() to register tests in fTestCase[]
-      TSynTestEvent(TestMethod[m])();
-    end;
-    // 2. launch the tests
-    Randomize;
-    fFailed.Clear;
-    fAssertions := 0;
-    fAssertionsFailed := 0;
-    m := -1;
-    for i := 0 to fTestCase.Count - 1 do
-    begin
-      C := TestCase[i];
-      if C.MethodIndex <> m then
+    Color(ccWhite);
+    writeln(fSaveToFile, #13#10#13#10, m + 1, '. ', fTests[m].TestName);
+    Color(ccLightGray);
+    fTests[m].Method(); // call AddCase() to add instances into fTestCase
+    try
+      for i := 0 to fTestCase.Count - 1 do
       begin
-        m := C.MethodIndex;
-        Color(ccWhite);
-        writeln(fSaveToFile, #13#10#13#10, m + 1, '. ', TestName[m]);
-        Color(ccLightGray);
-      end;
-      DuringRun(i, -1);
-      C.fAssertions := 0; // reset assertions count
-      C.fAssertionsFailed := 0;
-      TotalTimer.Start;
-      C.Setup;
-      for t := 0 to C.Count - 1 do
-      try
-        C.fAssertionsBeforeRun := C.fAssertions;
-        C.fAssertionsFailedBeforeRun := C.fAssertionsFailed;
-        C.fRunConsoleOccurenceNumber := fRunConsoleOccurenceNumber;
-        fCurrentMethod := i;
-        fCurrentMethodIndex := t;
-        log := BeforeRun(C.fTests[t].TestNameUTF8);
-        TestTimer.Start;
-        TSynTestEvent(C.TestMethod[t])(); // run tests + Check() and TestFailed()
-        log := nil; // will trigger logging leave method e.g.
-        DuringRun(i, t);
-      except
-        on E: Exception do
-        begin
-          Color(ccLightRed);
-          fFailed.AddObject(E.ClassName + ': ' + E.Message, C);
-          write(fSaveToFile, '! ', C.fTests[t].TestNameUTF8);
-          if E.InheritsFrom(EControlC) then
-            raise; // Control-C should just abort whole test
-          writeln(fSaveToFile, #13#10'! Exception ', E.ClassName,
-            ' raised with messsage:'#13#10'!  ', E.Message);
+        C := TSynTestCaseClass(fTestCase[i]).Create(self);
+        try
+          Color(ccWhite);
+          writeln(fSaveToFile, #13#10' ', m + 1, '.', i + 1, '. ', C.Ident, ': ');
           Color(ccLightGray);
+          C.fAssertions := 0; // reset assertions count
+          C.fAssertionsFailed := 0;
+          TotalTimer.Start;
+          C.Setup;
+          for t := 0 to C.Count - 1 do
+          try
+            C.fAssertionsBeforeRun := C.fAssertions;
+            C.fAssertionsFailedBeforeRun := C.fAssertionsFailed;
+            C.fRunConsoleOccurenceNumber := fRunConsoleOccurenceNumber;
+            fCurrentMethodInfo := @C.fTests[t];
+            log := BeforeRun;
+            TestTimer.Start;
+            C.MethodSetup;
+            try
+              fCurrentMethodInfo^.Method(); // run tests + Check()
+              AfterOneRun;
+            finally
+              C.MethodCleanUp;
+            end;
+            log := nil; // will trigger logging leave method e.g.
+          except
+            on E: Exception do
+            begin
+              Color(ccLightRed);
+              AddFailed(E.ClassName + ': ' + E.Message);
+              write(fSaveToFile, '! ', fCurrentMethodInfo^.IdentTestName);
+              if E.InheritsFrom(EControlC) then
+                raise; // Control-C should just abort whole test
+              writeln(fSaveToFile, #13#10'! Exception ', E.ClassName,
+                ' raised with messsage:'#13#10'!  ', E.Message);
+              Color(ccLightGray);
+            end;
+          end;
+          C.CleanUp; // should be done before Destroy call
+          if C.AssertionsFailed = 0 then
+            Color(ccLightGreen)
+          else
+            Color(ccLightRed);
+          Write(fSaveToFile, '  Total failed: ', IntToThousandString(C.AssertionsFailed),
+            ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident);
+          if C.AssertionsFailed = 0 then
+            Write(fSaveToFile, ' PASSED')
+          else
+            Write(fSaveToFile, ' FAILED');
+          Writeln(fSaveToFile, '  ', TotalTimer.Stop);
+          Color(ccLightGray);
+          inc(fAssertions, C.fAssertions); // compute global assertions count
+          inc(fAssertionsFailed, C.fAssertionsFailed);
+        finally
+          C.Free;
         end;
       end;
-      C.CleanUp; // should be done before Destroy call
-      inc(fAssertions, C.fAssertions); // compute global assertions count
-      inc(fAssertionsFailed, C.fAssertionsFailed);
+    finally
+      fTestCase.Clear;
+      fCurrentMethodInfo := nil;
     end;
   except
     on E: Exception do
     begin
       // assume any exception not intercepted above is a failure
       Color(ccLightRed);
-      fFailed.AddObject(E.ClassName + ': ' + E.Message, nil);
-      writeln(fSaveToFile, #13#10'! Exception ', E.ClassName,
-        ' raised with messsage:'#13#10'!  ', E.Message);
+      err := E.ClassName + ': ' + E.Message;
+      AddFailed(err);
+      write(fSaveToFile, '! ', err);
     end;
   end;
   Color(ccLightCyan);
-  result := (fFailed.Count = 0);
+  result := (fFailedCount = 0);
   if Exeversion.Version.Major <> 0 then
     Version := FormatUTF8(#13#10'Software version tested: % (%)',
       [ExeVersion.Version.Detailed, ExeVersion.Version.BuildDateTimeString]);
   FormatUTF8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
     [RunTimer.Stop, NowToString, Exeversion.User, Exeversion.Host], Elapsed);
-  Writeln(fSaveToFile, #13#10, Version, CustomVersions, #13#10'Generated with: ' +
-    COMPILER_VERSION + ' compiler', Utf8ToConsole(Elapsed));
+  Writeln(fSaveToFile, #13#10, Version, CustomVersions, #13#10'Generated with: ',
+    COMPILER_VERSION, ' compiler', Utf8ToConsole(Elapsed));
   if result then
     Color(ccWhite)
   else
@@ -1215,7 +1109,51 @@ begin
   Color(ccLightGray);
 end;
 
-procedure TSynTests.SaveToFile(const DestPath, FileName: TFileName);
+procedure TSynTests.AfterOneRun;
+var
+  Run, Failed: integer;
+  C: TSynTestCase;
+begin
+  if fCurrentMethodInfo = nil then
+    exit;
+  C := fCurrentMethodInfo^.Test as TSynTestCase;
+  Run := C.Assertions - C.fAssertionsBeforeRun;
+  Failed := C.AssertionsFailed - C.fAssertionsFailedBeforeRun;
+  if Failed = 0 then
+  begin
+    Color(ccGreen);
+    Write(fSaveToFile, '  - ', fCurrentMethodInfo^.TestName, ': ');
+    if Run = 0 then
+      Write(fSaveToFile, 'no assertion')
+    else if Run = 1 then
+      Write(fSaveToFile, '1 assertion passed')
+    else
+      Write(fSaveToFile, IntToThousandString(Run), ' assertions passed');
+  end
+  else
+  begin
+    Color(ccLightRed);   // ! to highlight the line
+    Write(fSaveToFile, '!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(Failed), ' / ', IntToThousandString(Run), ' FAILED');
+  end;
+  Write(fSaveToFile, '  ', TestTimer.Stop);
+  if C.fRunConsoleOccurenceNumber > 0 then
+    Write(fSaveToFile, '  ', IntToThousandString(TestTimer.PerSec(C.fRunConsoleOccurenceNumber)), '/s');
+  if C.fRunConsoleMemoryUsed > 0 then
+  begin
+    Write(fSaveToFile, '  ', KB(C.fRunConsoleMemoryUsed));
+    C.fRunConsoleMemoryUsed := 0; // display only once
+  end;
+  Writeln(fSaveToFile);
+  if C.fRunConsole <> '' then
+  begin
+    Writeln(fSaveToFile, '     ', C.fRunConsole);
+    C.fRunConsole := '';
+  end;
+  Color(ccLightGray);
+end;
+
+procedure TSynTests.SaveToFile(const DestPath: TFileName;
+  const FileName: TFileName);
 var
   FN: TFileName;
 begin
@@ -1230,18 +1168,20 @@ begin
   system.assign(fSaveToFile, FN);
   rewrite(fSaveToFile);
   if IOResult <> 0 then
-    fillchar(fSaveToFile, sizeof(fSaveToFile), 0);
+    FillCharFast(fSaveToFile, sizeof(fSaveToFile), 0);
 end;
 
 {$I+}
 
-class procedure TSynTests.RunAsConsole(const CustomIdent: string;
-  withLogs: TSynLogInfos; options: TSynTestOptions);
+class procedure TSynTests.RunAsConsole(const CustomIdent: string; withLogs: TSynLogInfos; options: TSynTestOptions);
 var
   tests: TSynTests;
 begin
   if self = TSynTests then
     raise ESynException.Create('You should inherit from TSynTests');
+  {$ifdef MSWINDOWS}
+  AllocConsole;
+  {$endif MSWINDOWS}
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);
   try
