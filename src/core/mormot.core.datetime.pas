@@ -1447,7 +1447,8 @@ begin
   end;
 end;
 
-function TSynSystemTime.ToText(Expanded: boolean; FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
+function TSynSystemTime.ToText(Expanded: boolean; FirstTimeChar: AnsiChar;
+  const TZD: RawUTF8): RawUTF8;
 begin
   result := DateTimeMSToString(Hour, Minute, Second, MilliSecond,
     Year, Month, Day, Expanded, FirstTimeChar, TZD);
@@ -1661,7 +1662,8 @@ end;
 const
   DTMS_FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%%:%:%.%%');
 
-function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean; FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
+function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
+  FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
 var
   T: TSynSystemTime;
 begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format

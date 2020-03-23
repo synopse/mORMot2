@@ -401,7 +401,7 @@ function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInf
   begin
     if C = nil then
       exit;
-    AddParentsFirst(GetClassParent(C)); // put children published methods afterward
+    AddParentsFirst(GetClassParent(C)); // put children methods afterwards
     Table := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
     if Table = nil then
       exit;

@@ -30,22 +30,6 @@ uses
   
 { ************** Low-Level Variant Wrappers }
 
-/// same as Value := Null, but slightly faster
-procedure SetVariantNull(var Value: variant);
-  {$ifdef HASINLINE} inline;{$endif}
-
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
-// - we also discovered some issues with FPC's Variants unit, so this function
-// may be used even in end-user cross-compiler code
-function VarIsEmptyOrNull(const V: Variant): Boolean;
-  {$ifdef HASINLINE} inline;{$endif}
-
-/// same as VarIsEmpty(PVariant(V)^) or VarIsEmpty(PVariant(V)^), but faster
-// - we also discovered some issues with FPC's Variants unit, so this function
-// may be used even in end-user cross-compiler code
-function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
-  {$ifdef HASINLINE} inline;{$endif}
-
 /// fastcheck if a variant hold a value
 // - varEmpty, varNull or a '' string would be considered as void
 // - varBoolean=false or varDate=0 would be considered as void
@@ -113,10 +97,10 @@ type
   // - also feature custom JSON parsing, via TryJSONToVariant() protected method
   TSynInvokeableVariantType = class(TInvokeableVariantType)
   protected
-    {$ifndef FPC}
+    {$ifdef ISDELPHI}
     /// our custom call backs do not want the function names to be uppercased
     function FixupIdent(const AText: string): string; override;
-    {$endif FPC}
+    {$endif ISDELPHI}
     /// override those two abstract methods for fast getter/setter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
@@ -200,36 +184,6 @@ implementation
 
 { ************** Low-Level Variant Wrappers }
 
-procedure SetVariantNull(var Value: variant);
-begin
-  if integer(TVarData(Value).VType) and VTYPE_STATIC <> 0 then
-    VarClearProc(TVarData(Value));
-  PPtrInt(@Value)^ := varNull;
-end;
-
-function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
-var
-  vt: cardinal;
-begin
-  repeat
-    vt := PVarData(VarData)^.VType;
-    if vt <> varVariant or varByRef then
-      break;
-    VarData := PVarData(VarData)^.VPointer;
-    if VarData = nil then
-    begin
-      result := true;
-      exit;
-    end;
-  until false;
-  result := (vt <= varNull) or (vt = varNull or varByRef);
-end;
-
-function VarIsEmptyOrNull(const V: Variant): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
 function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
 var
   vd: PVarData;
@@ -290,10 +244,7 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 var
   vt: cardinal;
 begin
-  {$ifndef FPC}
-  if TVarData(Dest).VType and VTYPE_STATIC <> 0 then
-  {$endif FPC}
-    VarClear(Dest);
+  VarClear(Dest);
   vt := TVarData(Source).VType;
   if (vt = varVariant or varByRef) or (vt in VTYPE_SIMPLE) then
     TVarData(Dest) := TVarData(Source)
@@ -311,10 +262,7 @@ var
   vt: cardinal;
 begin
   s := @Source;
-  {$ifndef FPC}
-  if d.VType and VTYPE_STATIC <> 0 then
-  {$endif FPC}
-    VarClear(Dest);
+  VarClear(Dest);
   vt := s^.VType;
   if vt = varVariant or varByRef then
   begin
@@ -452,12 +400,12 @@ procedure TSynInvokeableVariantType.Iterate(var Dest: TVarData; const V: TVarDat
 begin // do nothing
 end;
 
-{$ifndef FPC}
+{$ifdef ISDELPHI}
 function TSynInvokeableVariantType.FixupIdent(const AText: string): string;
 begin
   result := AText; // NO uppercased identifier for our custom types!
 end;
-{$endif FPC}
+{$endif ISDELPHI}
 
 function TSynInvokeableVariantType.IntGet(var Dest: TVarData; const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
 begin
@@ -566,8 +514,7 @@ begin
     SimplisticCopy(Dest, Source, true)
   else
   begin
-    {$ifndef FPC}    if Dest.VType and VTYPE_STATIC <> 0 then{$endif}
-      VarClear(variant(Dest)); // Dest may be a complex type
+    VarClear(variant(Dest)); // Dest may be a complex type
     Dest := Source;
   end;
 end;
@@ -630,7 +577,7 @@ begin
     v := PVarData(v.VPointer)^;
   until false;
   repeat
-    if vt and VTYPE_STATIC = 0 then
+    if vt <= varString then
       exit; // we need a complex type to lookup
     GetNextItemShortString(FullName, itemName, '.');
     if itemName[0] in [#0, #255] then

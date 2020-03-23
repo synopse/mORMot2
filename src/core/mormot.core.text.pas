@@ -476,7 +476,7 @@ function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar = ','): QWord;
 // - if Sep is #0, it won't be searched for
 // - will first fill the 64-bit value with 0, then decode each two hexadecimal
 // characters available in P
-// - could be used to decode TTextWriter.AddBinToHexDisplayMinChars() output
+// - could be used to decode TAbstractWriter.AddBinToHexDisplayMinChars() output
 function GetNextItemHexa(var P: PUTF8Char; Sep: AnsiChar = ','): QWord;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
@@ -549,17 +549,17 @@ function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8; const 
 { ************ TAbstractWriter parent class for Text Generation }
 
 type
-  /// defines how text is to be added into TTextWriter / TAbstractWriter
+  /// defines how text is to be added into TAbstractWriter / TAbstractWriter
   // - twNone will write the supplied text with no escaping
   // - twJSONEscape will properly escape " and \ as expected by JSON
   // - twOnSameLine will convert any line feeds or control chars into spaces
   TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
 
-  /// available global options for a TTextWriter / TAbstractWriter instance
-  // - TTextWriter.WriteObject() method behavior would be set via their own
+  /// available global options for a TAbstractWriter / TAbstractWriter instance
+  // - TAbstractWriter.WriteObject() method behavior would be set via their own
   // TTextWriterWriteObjectOptions, and work in conjunction with those settings
   // - twoStreamIsOwned would be set if the associated TStream is owned by
-  // the TTextWriter instance
+  // the TAbstractWriter instance
   // - twoFlushToStreamNoAutoResize would forbid FlushToStream to resize the
   // internal memory buffer when it appears undersized - FlushFinal will set it
   // before calling a last FlushToStream
@@ -575,8 +575,8 @@ type
   // - when enumerates and sets are serialized as text into JSON, you may force
   // the identifiers to be left-trimed for all their lowercase characters
   // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option
-  // would default to the global TTextWriter.SetDefaultEnumTrim setting
-  // - twoEndOfLineCRLF would reflect the TTextWriter.EndOfLineCRLF property
+  // would default to the global TAbstractWriter.SetDefaultEnumTrim setting
+  // - twoEndOfLineCRLF would reflect the TAbstractWriter.EndOfLineCRLF property
   // - twoBufferIsExternal would be set if the temporary buffer is not handled
   // by the instance, but specified at constructor, maybe from the stack
   // - twoIgnoreDefaultInRecord will force custom record serialization to avoid
@@ -595,16 +595,16 @@ type
     twoBufferIsExternal,
     twoIgnoreDefaultInRecord);
     
-  /// options set for a TTextWriter / TAbstractWriter instance
+  /// options set for a TAbstractWriter / TAbstractWriter instance
   // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior;
-  // or set global process customization for a TTextWriter
+  // or set global process customization for a TAbstractWriter
   TTextWriterOptions = set of TTextWriterOption;
 
-  /// may be used to allocate on stack a 8KB work buffer for a TTextWriter
-  // - via the TTextWriter.CreateOwnedStream overloaded constructor
+  /// may be used to allocate on stack a 8KB work buffer for a TAbstractWriter
+  // - via the TAbstractWriter.CreateOwnedStream overloaded constructor
   TTextWriterStackBuffer = array[0..8191] of AnsiChar;
 
-  /// available options for TTextWriter.WriteObject() method
+  /// available options for TAbstractWriter.WriteObject() method
   // - woHumanReadable will add some line feeds and indentation to the content,
   // to make it more friendly to the human eye
   // - woDontStoreDefault (which is set by default for WriteObject method) will
@@ -656,10 +656,10 @@ type
     woObjectListWontStoreClassName, woDontStoreEmptyString,
     woDontStoreInherited, woInt64AsHex, woDontStore0);
     
-  /// options set for TTextWriter.WriteObject() method
+  /// options set for TAbstractWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
-  /// the available JSON format, for TTextWriter.AddJSONReformat() and its
+  /// the available JSON format, for TAbstractWriter.AddJSONReformat() and its
   // JSONBufferReformat() and JSONReformat() wrappers
   // - jsonCompact is the default machine-friendly single-line layout
   // - jsonHumanReadable will add line feeds and indentation, for a more
@@ -678,9 +678,9 @@ type
     jsonUnquotedPropName,
     jsonUnquotedPropNameCompact);
     
-  /// abstract parent to TTextWriter, with the minimum set of methods
+  /// abstract parent to TAbstractWriter, with the minimum set of methods
   // - use an internal buffer, so much faster than naive string+string
-  // - see TTextWriter in mormot.core.json for proper JSON support
+  // - see TAbstractWriter in mormot.core.json for proper JSON support
   // - see TJSONWriter in mormot.rest.orm.table for SQL resultset export
   // - see TJSONSerializer in mormot.core.reflection for proper class
   // serialization via WriteObject
@@ -715,19 +715,19 @@ type
     // - will use an external buffer (which may be allocated on stack)
     constructor Create(aStream: TStream; aBuf: pointer; aBufSize: integer); overload;
     /// the data will be written to an internal TRawByteStringStream
-    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
+    // - TRawByteStringStream.DataString method will be used by TAbstractWriter.Text
     // to retrieve directly the content without any data move nor allocation
     // - default internal buffer size if 4096 (enough for most JSON objects)
     // - consider using a stack-allocated buffer and the overloaded method
     constructor CreateOwnedStream(aBufSize: integer = 4096); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use an external buffer (which may be allocated on stack)
-    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
+    // - TRawByteStringStream.DataString method will be used by TAbstractWriter.Text
     // to retrieve directly the content without any data move nor allocation
     constructor CreateOwnedStream(aBuf: pointer; aBufSize: integer); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer if possible
-    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
+    // - TRawByteStringStream.DataString method will be used by TAbstractWriter.Text
     // to retrieve directly the content without any data move nor allocation
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
       aBufSize: integer = SizeOf(TTextWriterStackBuffer)); overload;
@@ -988,10 +988,10 @@ type
     // - you should call the FlushFinal (or FlushToStream) methods before using
     // this TStream content, to flush all pending characters
     // - if the TStream instance has not been specified when calling the
-    // TTextWriter constructor, it can be forced via this property, before
+    // TAbstractWriter constructor, it can be forced via this property, before
     // any writting
     property Stream: TStream read fStream write SetStream;
-    /// global options to customize this TTextWriter instance process
+    /// global options to customize this TAbstractWriter instance process
     // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior
     property CustomOptions: TTextWriterOptions read fCustomOptions write fCustomOptions;
   end;
@@ -1185,7 +1185,7 @@ const
   PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
 
   /// the JavaScript-like values of non-number IEEE constants
-  // - as recognized by ExtendedToStringNan, and used by TTextWriter.Add()
+  // - as recognized by ExtendedToStringNan, and used by TAbstractWriter.Add()
   // when serializing such single/double/extended floating-point values
   JSON_NAN: array[TSynExtendedNan] of string[11] = (
     '', '"NaN"', '"Infinity"', '"-Infinity"');
@@ -1331,6 +1331,13 @@ procedure ExtendedToStr(Value: TSynExtended; Precision: integer; var result: Raw
 function DoubleToStr(Value: Double): RawUTF8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// copy a floating-point text buffer with proper correction and validation
+// - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
+// - will end not only on #0 but on any char not matching 1[.2[e[-]3]] pattern
+// - is used when the input comes from a third-party source with no regular
+// output, e.g. a database driver, via TAbstractWriter.AddFloatStr
+function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
+
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
@@ -1364,7 +1371,7 @@ function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 /// save a variant value into a JSON content
 // - is properly implemented by mormot.core.json.pas: if this unit is not
 // included in the project, this function will raise an exception
-// - follows the TTextWriter.AddVariant() and VariantLoadJSON() format
+// - follows the TAbstractWriter.AddVariant() and VariantLoadJSON() format
 // - is able to handle simple and custom variant types, for instance:
 // !  VariantSaveJSON(1.5)='1.5'
 // !  VariantSaveJSON('test')='"test"'
@@ -3907,41 +3914,46 @@ end;
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
 label
   _0, _1, _2, _3; // ugly but faster
+var
+  c: AnsiChar;
 begin
-  result := source;
   repeat
-    if result[0] < #13 then
+    if source[0] < #13 then
       goto _0
-    else if result[1] < #13 then
+    else if source[1] < #13 then
       goto _1
-    else if result[2] < #13 then
+    else if source[2] < #13 then
       goto _2
-    else if result[3] < #13 then
+    else if source[3] < #13 then
       goto _3
     else
     begin
-      inc(result, 4);
+      inc(source, 4);
       continue;
     end;
-_3: inc(result);
-_2: inc(result);
-_1: inc(result);
-_0: case result^ of
-      #0:
-        result := nil;
-      #10:
-        inc(result);
-      #13:
-        if result[1] = #10 then
-          inc(result, 2)
-        else
-          inc(result);
-    else
+_3: inc(source);
+_2: inc(source);
+_1: inc(source);
+_0: c := source^;
+    if c = #13 then
+    begin
+      if source[1] = #10 then
       begin
-        inc(result);
-        continue;
+        result := source + 2; // most common case is text ending with #13#10
+        exit;
       end;
+    end
+    else if c = #0 then
+    begin
+      result := nil;
+      exit;
+    end
+    else if c <> #10 then
+    begin
+      inc(source);
+      continue; // e.g. #9
     end;
+    result := source + 1;
     exit;
   until false;
 end;
@@ -3974,7 +3986,7 @@ begin
   {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
   repeat
     c := UpperName^;
-    if table[P^] = c then
+    if table[P^] = c then // first character is likely not to match
     begin
       inc(P);
       u := UpperName + 1;
@@ -3997,29 +4009,28 @@ begin
         c := P^;
         inc(P);
       until c <= #13;
-      if c <> #13 then
-        if c <> #10 then
-          if c <> #0 then
-            continue // e.g. #9
-          else
-            goto _0
-        else
-          repeat
-            c := P^;
-            if c <> #10 then
-              break;
-            inc(P);
-          until false
-      else
+      if c = #13 then // most common case is text ending with #13#10
         repeat
           c := P^;
           if (c <> #10) and (c <> #13) then
             break;
           inc(P);
+        until false
+      else if c <> #10 then
+        if c <> #0 then
+          continue // e.g. #9
+        else
+          goto _0
+      else
+        repeat
+          c := P^;
+          if c <> #10 then
+            break;
+          inc(P);
         until false;
       if c <> #0 then
-        break;
-_0:   result := nil;
+        break; // check if UpperName is at the begining of the new line
+_0:   result := nil; // reached P^=#0 -> not found
       exit;
     until false;
   until false;
@@ -4037,8 +4048,10 @@ begin
     while P^ in [#9, ' '] do // trim left
       inc(P);
     L := 0;
-    while P[L] > #13 do // trim right
+    while P[L] > #13 do // end of line/value
       inc(L);
+    while P[L - 1] = ' ' do // trim right
+      dec(L);
     FastSetString(Value, P, L);
     result := true;
   end
@@ -5488,7 +5501,7 @@ var
   P: PAnsiChar;
   Len: PtrInt;
 begin
-  if BEnd - B <= 16 then
+  if BEnd - B <= 23 then
     FlushToStream;
   if PtrUInt(Value) <= high(SmallUInt32UTF8) then
   begin
@@ -5663,32 +5676,16 @@ begin
 end;
 
 procedure TAbstractWriter.AddFloatStr(P: PUTF8Char);
-var
-  L: PtrUInt;
 begin
-  L := StrLen(P);
-  if (L = 0) or (L > 30) then
-    Add('0')
+  if StrLen(P) > 127 then
+    exit; // clearly invalid input
+  if BEnd - B <= 127 then
+    FlushToStream;
+  inc(B);
+  if P <> nil then
+    B := FloatStrCopy(P, B) - 1
   else
-  begin
-    if BEnd - B <= 31 then
-      FlushToStream;
-    inc(B);
-    if PWord(P)^ = ord('-') + ord('.') shl 8 then
-    begin
-      PWord(B)^ := ord('-') + ord('0') shl 8; // '-.3' -> '-0.3'
-      inc(B, 2);
-      inc(P);
-      dec(L);
-    end
-    else if P^ = '.' then
-    begin
-      B^ := '0'; // '.5' -> '0.5'
-      inc(B);
-    end;
-    MoveSmall(P, B, L);
-    inc(B, L - 1);
-  end;
+    B^ := '0';
 end;
 
 procedure TAbstractWriter.Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID);
@@ -7479,6 +7476,64 @@ end;
 function DoubleToStr(Value: Double): RawUTF8;
 begin
   ExtendedToStr(Value, DOUBLE_PRECISION, result);
+end;
+
+function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
+var
+  c: AnsiChar;
+begin
+  while s^ = ' ' do
+    inc(s);
+  if PWord(s)^ = ord('-') + ord('.') shl 8 then
+  begin
+    PCardinal(d)^ := ord('-') + ord('0') shl 8; // '-.3' -> '-0.3'
+    inc(d, 2);
+    inc(s);
+  end;
+  c := s^;
+  if (c = '+') or (c = '-') then
+  begin
+    inc(s);
+    d^ := c;
+    inc(d);
+    c := s^;
+  end
+  else if c = '.' then
+  begin
+    d^ := '0'; // '.5' -> '0.5'
+    inc(d);
+  end;
+  if (c >= '0') and (c <= '9') then
+    repeat
+      inc(s);
+      d^ := c;
+      inc(d);
+      c := s^;
+      if ((c >= '0') and (c <= '9')) or (c = '.') then
+        continue;
+      if (c <> 'e') and (c <> 'E') then
+        break;
+      inc(s);
+      d^ := c; // 1.23e120 or 1.23e-45
+      inc(d);
+      c := s^;
+      if c = '-' then
+      begin
+        inc(s);
+        d^ := c;
+        inc(d);
+        c := s^;
+      end;
+      while (c >= '0') and (c <= '9') do
+      begin
+        inc(s);
+        d^ := c;
+        inc(d);
+        c := s^;
+      end;
+      break;
+    until false;
+  result := d;
 end;
 
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8; var wasString: boolean);

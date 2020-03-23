@@ -485,12 +485,15 @@ procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endi
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
 function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-  guid1, guid2: TGUID): Boolean; {$ifdef HASINLINE}inline;{$endif}
+  guid1, guid2: TGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// compare two TGUID values
+// - this version is faster than the one supplied by SysUtils
+function IsEqualGUID(guid1, guid2: PGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched
-function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-  guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
@@ -1569,7 +1572,9 @@ type
   7: (b384: THash384);
   8: (w: array[0..31] of word);
   9: (c: array[0..15] of cardinal);
-  10: (l,h: THash256Rec);
+  10: (i: array[0..7] of Int64);
+  11: (r: array[0..3] of THash128Rec);
+  12: (l,h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -1592,7 +1597,7 @@ function IsEqual(const A,B: THash128): boolean; overload;
 procedure FillZero(out dig: THash128); overload;
 
 /// fast O(n) search of a 128-bit item in an array of such values
-function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
+function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
 
 /// returns TRUE if all 20 bytes of this 160-bit buffer equal zero
 // - e.g. a SHA-1 digest
@@ -1622,6 +1627,9 @@ function IsZero(const dig: THash256): boolean; overload;
 // for cryptographic purpose
 function IsEqual(const A,B: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fast O(n) search of a 256-bit item in an array of such values
+function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
 
 /// fill all 32 bytes of this 256-bit buffer with zero
 // - may be used to cleanup stack-allocated content
@@ -2290,16 +2298,6 @@ const
   varNativeString = varString;
   {$endif}
 
-  /// those TVarData.VType values are un-managed and do not need to be cleared
-  // - used mainly in low-level code similar to the folllowing:
-  // !  if TVarData(aVariant).VType and VTYPE_STATIC<>0 then
-  // !    VarClear(aVariant);
-  // - equals private constant varDeepData in Delphi's Variants.pas and
-  // varComplexType in FPC's variants.pp - seldom used on FPC
-  // - make some false positive to varBoolean and varError
-  // - our overloaded VarClear() inlined function uses this constant
-  VTYPE_STATIC = $BFE8;
-
   /// those TVarData.VType values are meant to be direct values
   VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
 
@@ -2310,10 +2308,10 @@ var
   /// a slightly faster alternative to Variants.Null function
   Null: variant absolute NullVarData;
 
-{$ifdef FPC}
+{$ifdef HASINLINE}
 /// overloaded function which can be properly inlined
 procedure VarClear(var v: variant); inline;
-{$endif FPC}
+{$endif HASINLINE}
 
 /// same as Value := Null, but slightly faster
 procedure SetVariantNull(var Value: variant);
@@ -2470,29 +2468,32 @@ begin
             (PHash128Rec(@guid1).H = PHash128Rec(@guid2).H);
 end;
 
-function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-  guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUID(guid1, guid2: PGUID): Boolean;
 begin
-  for result := 0 to high(guids) do
-    if IsEqualGUID(guid, guids[result]) then
-      exit;
-  result := -1;
+  result := (PHash128Rec(guid1).L = PHash128Rec(guid2).L) and
+            (PHash128Rec(guid1).H = PHash128Rec(guid2).H);
+end;
+
+function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+begin
+  result := Hash128Index(@guids[0], length(guids), @guid);
 end;
 
 function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
 var
   a: TPtrIntArray absolute guid;
 begin
-  result := (a[0] = 0) and (a[1] = 0)
-    {$ifndef CPU64} and (a[2] = 0) and (a[3] = 0){$endif};
+  result := (a[0] = 0) and (a[1] = 0) {$ifndef CPU64} and (a[2] = 0) and (a[3] = 0){$endif};
 end;
 
 function AddGUID(var guids: TGUIDDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
 begin
   if NoDuplicates then
-    for result := 0 to length(guids) - 1 do
-      if IsEqualGUID(guid, guids[result]) then
-        exit;
+  begin
+    result := Hash128Index(pointer(guids), length(guids), @guid);
+    if result>=0 then
+      exit;
+  end;
   result := length(guids);
   SetLength(guids, result + 1);
   guids[result] := guid;
@@ -5687,32 +5688,67 @@ begin
   d[1] := 0;
 end;
 
-function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
+{$ifdef CPU64}
+
+function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
 var
-  first: PtrInt;
-  {$ifdef CPU64}
-  second: PtrInt;
-  {$endif CPU64}
-  i: integer;
-begin // fast O(n) brute force search
+  _0, _1: PtrInt;
+begin
   if P <> nil then
   begin
-    result := true;
-    first := h.Lo;
-    {$ifdef CPU64}
-    second := h.hi;
-    for i := 1 to Count do
-      if (P^.Lo = first) and (P^.Hi = second) then
-    {$else}
-    for i := 1 to Count do
-      if (P^.i0 = first) and (P^.i1 = h.i1) and (P^.i2 = h.i2) and (P^.i3 = h.i3) then
-    {$endif CPU64}
+    _0 := h^.Lo;
+    _1 := h^.Hi;
+    for result := 0 to Count - 1 do
+      if (P^.Lo = _0) and (P^.Hi = _1) then
         exit
       else
         inc(P);
   end;
-  result := false;
+  result := -1; // not found
 end;
+
+function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
+var _0, _1: PtrInt;
+begin
+  if P<>nil then
+  begin
+    _0 := h^.d0;
+    _1 := h^.d1;
+    for result := 0 to Count - 1 do
+      if (P^.d0 = _0) and (P^.d1 = _1) and (P^.d2 = h^.d2) and (P^.d3 = h^.d3) then
+        exit
+      else
+        inc(P);
+  end;
+  result := -1; // not found
+end;
+
+{$else}
+
+function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
+begin
+  if P <> nil then
+    for result := 0 to Count - 1 do
+      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and (P^.i2 = h^.i2) and (P^.i3 = h^.i3) then
+        exit
+      else
+        inc(P);
+  result := -1; // not found
+end;
+
+function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
+begin
+  if P <> nil then
+    for result := 0 to Count - 1 do
+      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and (P^.i2 = h^.i2) and (P^.i3 = h^.i3) and
+         (P^.i4 = h^.i4) and (P^.i5 = h^.i5) and (P^.i6 = h^.i6) and (P^.i7 = h^.i7) then
+        exit
+      else
+        inc(P);
+  result := -1; // not found
+end;
+
+{$endif CPU64}
 
 function IsZero(const dig: THash160): boolean;
 var
@@ -6856,41 +6892,6 @@ end;
 
 {$endif ASMINTEL}
 
-{$ifdef HASINLINE}
-
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
-label
-  zero;
-begin // cut-down version of our pure pascal CompareMem() function
-  {$ifndef CPUX86}
-  result := false;
-  {$endif}
-  Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt)]);
-  if Length >= PtrInt(PtrUInt(P1)) then
-    repeat // compare one PtrInt per loop
-      if PPtrInt(P1)^ <> PPtrInt(P2)^ then
-        goto zero;
-      inc(PPtrInt(P1));
-      inc(PPtrInt(P2));
-    until Length < PtrInt(PtrUInt(P1));
-  inc(Length, SizeOf(PtrInt));
-  dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < Length then
-    repeat
-      if PByte(P1)^ <> PByteArray(P2)[PtrUInt(P1)] then
-        goto zero;
-      inc(PByte(P1));
-    until PtrInt(PtrUInt(P1)) >= Length;
-  result := true;
-  exit;
-zero:
-  {$ifdef CPUX86}
-  result := false;
-  {$endif}
-end;
-
-{$endif HASINLINE}
-
 
 { ************ Buffers (e.g. Hashing) Functions }
 
@@ -7027,6 +7028,7 @@ begin
 end;
 
 {$ifdef HASINLINE}
+
 function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 var
   tab: PCrc32tab;
@@ -7043,11 +7045,45 @@ begin
   end;
   result := not result;
 end;
+
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
+label
+  zero;
+begin // cut-down version of our pure pascal CompareMem() function
+  {$ifndef CPUX86}
+  result := false;
+  {$endif}
+  Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt)]);
+  if Length >= PtrInt(PtrUInt(P1)) then
+    repeat // compare one PtrInt per loop
+      if PPtrInt(P1)^ <> PPtrInt(P2)^ then
+        goto zero;
+      inc(PPtrInt(P1));
+      inc(PPtrInt(P2));
+    until Length < PtrInt(PtrUInt(P1));
+  inc(Length, SizeOf(PtrInt));
+  dec(PtrUInt(P2), PtrUInt(P1));
+  if PtrInt(PtrUInt(P1)) < Length then
+    repeat
+      if PByte(P1)^ <> PByteArray(P2)[PtrUInt(P1)] then
+        goto zero;
+      inc(PByte(P1));
+    until PtrInt(PtrUInt(P1)) >= Length;
+  result := true;
+  exit;
+zero:
+  {$ifdef CPUX86}
+  result := false;
+  {$endif}
+end;
+
 {$else}
+
 function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
   result := crc32c(crc, buf, len);
 end;
+
 {$endif HASINLINE}
 
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
@@ -7474,25 +7510,37 @@ end;
 
 { ************ Efficient Variant Values Conversion }
 
-{$ifdef FPC}
+{$ifdef HASINLINE}
+
+{$if defined(BSD) and defined(ARM3264)}
+
+procedure VarClear(var v: variant); // Alfred reported issues with VTYPE_STATIC
+begin
+  VarClearProc(PVarData(@v)^);
+end;
+
+{$else}
 
 procedure VarClear(var v: variant); // defined here for proper inlining
+const
+  VTYPE_STATIC = $BFE8; // bitmask to avoid unneeded VarClearProc call
 var
-  p: pointer; // more efficient generated asm with an explicit temp variable
+  p: PInteger; // more efficient generated asm with an explicit temp variable
 begin
   p := @v;
-  if integer(PVarData(p)^.VType) and VTYPE_STATIC = 0 then
-    PPtrInt(p)^ := 0
+  if p^ and VTYPE_STATIC = 0 then
+    p^ := 0
   else
     VarClearProc(PVarData(p)^);
 end;
 
-{$endif FPC}
+{$ifend}
+
+{$endif HASINLINE}
 
 procedure SetVariantNull(var Value: variant);
 begin
-  if integer(TVarData(Value).VType) and VTYPE_STATIC <> 0 then
-    VarClearProc(TVarData(Value));
+  VarClear(Value);
   PPtrInt(@Value)^ := varNull;
 end;
 
@@ -7778,8 +7826,7 @@ begin
     Finalize(RawByteString(TVarData(Value).VAny))
   else
     begin
-      if v and VTYPE_STATIC <> 0 then
-        VarClearProc(TVarData(Value));
+      VarClear(Value);
       TVarData(Value).VType := varString;
       TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
     end;
