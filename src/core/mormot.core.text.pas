@@ -494,12 +494,12 @@ function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar = ','): double;
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar = ','): currency; overload;
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar = ','): TSynCurrency; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar = ','); overload;
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: TSynCurrency; Sep: AnsiChar = ','); overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
 function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8; overload;
@@ -794,9 +794,9 @@ type
     procedure Add(Value: boolean); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// append a Currency from its Int64 in-memory representation
-    procedure AddCurr64(const Value: Int64); overload;
+    procedure AddCurr64(Value: PInt64); overload;
     /// append a Currency from its Int64 in-memory representation
-    procedure AddCurr64(const Value: currency); overload;
+    procedure AddCurr64(const Value: TSynCurrency); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// append an Unsigned 32-bit Integer Value as a String
     procedure AddU(Value: cardinal);
@@ -1250,13 +1250,13 @@ function StrToCurr64(P: PUTF8Char; NoDecimal: PBoolean = nil): Int64;
 
 /// convert a string into its currency representation
 // - will call StrToCurr64()
-function StrToCurrency(P: PUTF8Char): currency;
+function StrToCurrency(P: PUTF8Char): TSynCurrency;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a currency value into a string
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
-function CurrencyToStr(Value: currency): RawUTF8;
+function CurrencyToStr(const Value: TSynCurrency): RawUTF8;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
@@ -3203,7 +3203,7 @@ uses
 
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
-  {$WARN 4056 off : Conversion between ordinals and pointers is not portable}
+  {$WARN 4056 off : Conversion between ordinals and pointers is not portable }
 {$endif FPC}
 
  
@@ -5027,12 +5027,12 @@ begin
     result := 0;
 end;
 
-function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar): currency;
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar): TSynCurrency;
 begin
   GetNextItemCurrency(P, result, Sep);
 end;
 
-procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar);
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: TSynCurrency; Sep: AnsiChar);
 var
   tmp: TChar64;
 begin
@@ -5580,7 +5580,7 @@ begin
 end;
 {$endif CPU64}
 
-procedure TAbstractWriter.AddCurr64(const Value: Int64);
+procedure TAbstractWriter.AddCurr64(Value: PInt64);
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
@@ -5588,7 +5588,7 @@ var
 begin
   if BEnd - B <= 31 then
     FlushToStream;
-  P := StrCurr64(@tmp[31], Value);
+  P := StrCurr64(@tmp[31], Value^);
   Len := @tmp[31] - P;
   if Len > 4 then
     if P[Len - 1] = '0' then
@@ -5606,9 +5606,9 @@ begin
   inc(B, Len);
 end;
 
-procedure TAbstractWriter.AddCurr64(const Value: currency);
+procedure TAbstractWriter.AddCurr64(const Value: TSynCurrency);
 begin
-  AddCurr64(PInt64(@Value)^);
+  AddCurr64(PInt64(@Value));
 end;
 
 procedure TAbstractWriter.AddU(Value: cardinal);
@@ -7069,7 +7069,7 @@ begin
   Curr64ToStr(Value, result);
 end;
 
-function CurrencyToStr(Value: currency): RawUTF8;
+function CurrencyToStr(const Value: TSynCurrency): RawUTF8;
 begin
   result := Curr64ToStr(PInt64(@Value)^);
 end;
@@ -7194,7 +7194,7 @@ begin
     result := -result;
 end;
 
-function StrToCurrency(P: PUTF8Char): currency;
+function StrToCurrency(P: PUTF8Char): TSynCurrency;
 begin
   PInt64(@result)^ := StrToCurr64(P, nil);
 end;
@@ -7785,7 +7785,7 @@ begin
     vtExtended:
       value := V.VExtended^;
     vtCurrency:
-      value := V.VCurrency^;
+      CurrencyToDouble(PSynCurrency(@V.VCurrency), value);
     vtVariant:
       value := V.VVariant^;
   else

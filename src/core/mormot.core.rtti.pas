@@ -527,9 +527,9 @@ type
     {$endif HASVARUSTRING}
     /// raw retrieval of rtFloat/currency
     // - use instead GetCurrencyValue
-    function GetCurrencyProp(Instance: TObject): currency;
+    function GetCurrencyProp(Instance: TObject): TSynCurrency;
     /// raw assignment of rtFloat/currency
-    procedure SetCurrencyProp(Instance: TObject; const Value: Currency);
+    procedure SetCurrencyProp(Instance: TObject; const Value: TSynCurrency);
     /// raw retrieval of rtFloat/double
     function GetDoubleProp(Instance: TObject): double;
     /// raw assignment of rtFloat/double
@@ -608,7 +608,7 @@ type
     /// low-level getter of the currency property value of a given instance
     // - this method will check if the corresponding property is exactly currency
     // - return 0 on any error
-    function GetCurrencyValue(Instance: TObject): Currency;
+    function GetCurrencyValue(Instance: TObject): TSynCurrency;
     /// low-level getter of the floating-point property value of a given instance
     // - this method will check if the corresponding property is floating-point
     // - return 0 on any error
@@ -1696,16 +1696,16 @@ end;
 
 {$endif HASVARUSTRING}
 
-function TRttiProp.GetCurrencyProp(Instance: TObject): currency;
+function TRttiProp.GetCurrencyProp(Instance: TObject): TSynCurrency;
 type
-  TGetProc = function: currency of object;
-  TGetIndexed = function(Index: Integer): currency of object;
+  TGetProc = function: TSynCurrency of object;
+  TGetIndexed = function(Index: Integer): TSynCurrency of object;
 var
   call: TMethod;
 begin
   case Getter(Instance, @call) of
     rpcField:
-      result := PCurrency({%H-}call.Data)^;
+      result := PSynCurrency({%H-}call.Data)^;
     rpcMethod:
       result := TGetProc(call);
     rpcIndexed:
@@ -1715,16 +1715,16 @@ begin
   end;
 end;
 
-procedure TRttiProp.SetCurrencyProp(Instance: TObject; const Value: Currency);
+procedure TRttiProp.SetCurrencyProp(Instance: TObject; const Value: TSynCurrency);
 type
-  TSetProc = procedure(const Value: currency) of object;
-  TSetIndexed = procedure(Index: integer; const Value: currency) of object;
+  TSetProc = procedure(const Value: TSynCurrency) of object;
+  TSetIndexed = procedure(Index: integer; const Value: TSynCurrency) of object;
 var
   call: TMethod;
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PCurrency({%H-}call.Data)^ := Value;
+      PSynCurrency({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -1776,8 +1776,8 @@ type
   TDoubleIndexed = function(Index: Integer): Double of object;
   TExtendedProc = function: Extended of object;
   TExtendedIndexed = function(Index: Integer): Extended of object;
-  TCurrencyProc = function: Currency of object;
-  TCurrencyIndexed = function(Index: Integer): Currency of object;
+  TCurrencyProc = function: TSynCurrency of object;
+  TCurrencyIndexed = function(Index: Integer): TSynCurrency of object;
 var
   call: TMethod;
   rf: TRttiFloat;
@@ -1794,7 +1794,7 @@ begin
         rfExtended:
           result := PExtended(call.Data)^;
         rfCurr:
-          result := PCurrency(call.Data)^;
+          CurrencyToDouble(PSynCurrency(call.Data), result);
       end;
     rpcMethod:
       case rf of
@@ -1805,7 +1805,7 @@ begin
         rfExtended:
           result := TExtendedProc(call);
         rfCurr:
-          result := TCurrencyProc(call);
+          CurrencyToDouble(TCurrencyProc(call), result);
       end;
     rpcIndexed:
       case rf of
@@ -1816,7 +1816,7 @@ begin
         rfExtended:
           result := TExtendedIndexed(call)(Index);
         rfCurr:
-          result := TCurrencyIndexed(call)(Index);
+          CurrencyToDouble(TCurrencyIndexed(call)(Index), result);
       end;
   end;
 end;
@@ -1829,8 +1829,8 @@ type
   TDoubleIndexed = procedure(Index: integer; const Value: double) of object;
   TExtendedProc = procedure(const Value: Extended) of object;
   TExtendedIndexed = procedure(Index: integer; const Value: Extended) of object;
-  TCurrencyProc = procedure(const Value: Currency) of object;
-  TCurrencyIndexed = procedure(Index: integer; const Value: Currency) of object;
+  TCurrencyProc = procedure(const Value: TSynCurrency) of object;
+  TCurrencyIndexed = procedure(Index: integer; const Value: TSynCurrency) of object;
 var
   call: TMethod;
   rf: TRttiFloat;
@@ -1847,7 +1847,7 @@ begin
         rfExtended:
           PExtended(call.Data)^ := Value;
         rfCurr:
-          PCurrency(call.Data)^ := Value;
+          DoubleToCurrency(Value, PSynCurrency(call.Data));
       end;
     rpcMethod:
       case rf of
@@ -1858,7 +1858,7 @@ begin
         rfExtended:
           TExtendedProc(call)(Value);
         rfCurr:
-          TCurrencyProc(call)(Value);
+          TCurrencyProc(call)(DoubleToCurrency(Value));
       end;
     rpcIndexed:
       case rf of
@@ -1869,7 +1869,7 @@ begin
         rfExtended:
           TExtendedIndexed(call)(Index, Value);
         rfCurr:
-          TCurrencyIndexed(call)(Index, Value);
+          TCurrencyIndexed(call)(Index, DoubleToCurrency(Value));
       end;
   end;
 end;
@@ -1943,7 +1943,7 @@ begin
     result := 0;
 end;
 
-function TRttiProp.GetCurrencyValue(Instance: TObject): Currency;
+function TRttiProp.GetCurrencyValue(Instance: TObject): TSynCurrency;
 begin
   if (Instance <> nil) and (@self <> nil) then
     with TypeInfo^ do
@@ -1951,7 +1951,7 @@ begin
         if RttiFloat = rfCurr then
           result := GetCurrencyProp(Instance)
         else
-          result := GetFloatProp(Instance)
+          DoubleToCurrency(GetFloatProp(Instance), result)
       else
         result := 0
   else

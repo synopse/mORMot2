@@ -6,9 +6,10 @@
 }
 
 {$ifdef FPC}
-  {$WARN 7119 off : Exported/global symbols should be accessed via the GOT}
-  {$WARN 7121 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits]"}
-  {$WARN 7123 off : Check "$1: offset of memory operand is negative "$2 byte"}
+  // disabled some FPC paranoid warnings
+  {$WARN 7119 off : Exported/global symbols should be accessed via the GOT }
+  {$WARN 7121 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits]" }
+  {$WARN 7123 off : Check "$1: offset of memory operand is negative "$2 byte" }
 {$endif FPC}
 
 {$ifdef ASMX64}

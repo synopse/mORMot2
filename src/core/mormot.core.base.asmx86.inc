@@ -6,8 +6,9 @@
 }
 
 {$ifdef FPC}
-  {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here}
-  {$WARN 7104 off : Use of -offset(%ebp) is not recommended for local variable access}
+  // disabled some FPC paranoid warnings
+  {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here }
+  {$WARN 7104 off : Use of -offset(%ebp) is not recommended for local variable access }
 {$endif FPC}
 
 {$ifdef ASMX86}

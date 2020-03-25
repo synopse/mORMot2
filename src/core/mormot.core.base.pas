@@ -276,8 +276,6 @@ type
   TPtrUIntDynArray = array of PtrUInt;
   PDoubleDynArray = ^TDoubleDynArray;
   TDoubleDynArray = array of double;
-  PCurrencyDynArray = ^TCurrencyDynArray;
-  TCurrencyDynArray = array of Currency;
   TWordDynArray = array of word;
   PWordDynArray = ^TWordDynArray;
   TByteDynArray = array of byte;
@@ -627,6 +625,30 @@ type
   TSynExtended = double;
   {$endif CPUINTEL}
 
+  {$ifdef CPUX86}
+  /// the floating-point type to be used for 64-bit currency
+  // - on 32-bit Intel/AMD, currency is a native x87 FPU type
+  // - will allow to fallback to Int64 (*10000) e.g. on x64 and ARM CPUs
+  TSynCurrency = type currency;
+  {$else}
+  /// the floating-point type to be used for 64-bit currency
+  // - fallback to Int64 (*10000) e.g. on x64 and ARM CPUs
+  // - we discovered some weird incompatibilities, e.g. when cross-compiling
+  // from FPC Win64 into the Win32 platform - any feedback is welcome!
+  TSynCurrency = type Int64;
+
+  /// force to use our TSynCurrency wrapper instead of the native "currency" type
+  // - and CurrencyToDouble/DoubleToCurrency/CurrencyToInt64/Int64ToCurrency
+  // associated functions
+  currency = record end;
+  {$endif CPUX86}
+
+  PSynCurrency = ^TSynCurrency;
+  PSynCurrencyDynArray = ^TSynCurrencyDynArray;
+  TSynCurrencyDynArray = array of TSynCurrency;
+  PCurrencyDynArray = PSynCurrencyDynArray;
+  TCurrencyDynArray = TSynCurrencyDynArray;
+
   /// the non-number values potentially stored in an IEEE floating point
   TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
 
@@ -635,7 +657,61 @@ type
   unaligned = Double;
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-/// simple wrapper to efficiently compute result.D = Y div 100 and result.M = Y mod 100 
+const
+  /// used e.g. to convert a TSynCurrency (via PInt64) into a double
+  CURR_RES = 10000;
+
+/// convert a TSynCurrency value into a double
+// - using Int64 division by CURR_RES (=10000)
+procedure CurrencyToDouble(const c: TSynCurrency; out d: double); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a TSynCurrency value into a double
+// - using PInt64() division by CURR_RES (=10000)
+procedure CurrencyToDouble(c: PSynCurrency; out d: double); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a TSynCurrency value into a double
+// - using PInt64() division by CURR_RES (=10000)
+function CurrencyToDouble(c: PSynCurrency): double; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a double value into a TSynCurrency
+// - using truncated multiplication by CURR_RES (=10000)
+procedure DoubleToCurrency(const d: double; out c: TSynCurrency); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a double value into a TSynCurrency
+// - using truncated multiplication by CURR_RES (=10000)
+procedure DoubleToCurrency(const d: double; c: PSynCurrency); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a double value into a TSynCurrency
+// - using truncated multiplication by CURR_RES (=10000)
+function DoubleToCurrency(const d: double): TSynCurrency; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a TSynCurrency value into a Int64
+// - using Int64 division by CURR_RES (=10000)
+procedure CurrencyToInt64(const c: TSynCurrency; var i: Int64); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a TSynCurrency value into a Int64
+// - using PInt64() division by CURR_RES (=10000)
+procedure CurrencyToInt64(c: PSynCurrency; var i: Int64); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a Int64 value into a TSynCurrency
+// - using truncated multiplication by CURR_RES (=10000)
+procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// convert a Int64 value into a TSynCurrency
+// - using truncated multiplication by CURR_RES (=10000)
+procedure Int64ToCurrency(const i: Int64; c: PSynCurrency); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// simple wrapper to efficiently compute result.D = Y div 100 and result.M = Y mod 100
 procedure Div100(Y: cardinal; var result: TDiv100Rec);
   {$ifndef CPU32DELPHI} inline; {$endif}
 
@@ -2359,7 +2435,7 @@ function VariantToDouble(const V: Variant; var Value: double): boolean;
 function VariantToDoubleDef(const V: Variant; const default: double = 0): double;
 
 /// convert any numerical Variant into a fixed decimals floating point value
-function VariantToCurrency(const V: Variant; var Value: currency): boolean;
+function VariantToCurrency(const V: Variant; var Value: TSynCurrency): boolean;
 
 /// convert any numerical Variant into a boolean value
 // - text content will return true after case-sensitive 'true' comparison
@@ -2452,8 +2528,9 @@ implementation
 
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
-  {$WARN 4056 off : Conversion between ordinals and pointers is not portable}
+  {$WARN 4056 off : Conversion between ordinals and pointers is not portable }
 {$endif FPC}
+
 
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
@@ -2463,6 +2540,61 @@ begin
   result := value and $ff;
 end;
 {$endif CPUARM}
+
+procedure CurrencyToDouble(const c: TSynCurrency; out d: double);
+begin
+  unaligned(d) := PInt64(@c)^ / CURR_RES;
+end;
+
+procedure CurrencyToDouble(c: PSynCurrency; out d: double);
+begin
+  unaligned(d) := PInt64(c)^ / CURR_RES;
+end;
+
+function CurrencyToDouble(c: PSynCurrency): double;
+begin
+  result := PInt64(c)^ / CURR_RES;
+end;
+
+procedure DoubleToCurrency(const d: double; out c: TSynCurrency);
+begin
+  PInt64(@c)^ := trunc(d * CURR_RES);
+end;
+
+procedure DoubleToCurrency(const d: double; c: PSynCurrency);
+begin
+  PInt64(c)^ := trunc(d * CURR_RES);
+end;
+
+function DoubleToCurrency(const d: double): TSynCurrency;
+begin
+  {$ifdef CPUX86}
+  result := d; // directly use the x87 FPU stack
+  {$else}
+  result := trunc(d * CURR_RES);
+  {$endif CPUX86}
+end;
+
+procedure CurrencyToInt64(const c: TSynCurrency; var i: Int64);
+begin
+  i := PInt64(@c)^ div CURR_RES;
+end;
+
+procedure CurrencyToInt64(c: PSynCurrency; var i: Int64);
+begin
+  i := PInt64(c)^ div CURR_RES;
+end;
+
+procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency);
+begin
+  PInt64(@c)^ := i * CURR_RES;
+end;
+
+procedure Int64ToCurrency(const i: Int64; c: PSynCurrency);
+begin
+  PInt64(c)^ := i * CURR_RES;
+end;
+
 
 function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
   guid1, guid2: TGUID): Boolean;
@@ -3841,7 +3973,8 @@ end;
 
 function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
 begin
-  case ElemSize of    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+  case ElemSize of
+    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
     1:
       result := ByteScanIndex(P, Count, PByte(Elem)^);
     2:
@@ -3875,7 +4008,8 @@ end;
 
 function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
 begin
-  case ElemSize of    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+  case ElemSize of
+    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
     1:
       result := ByteScanIndex(P, Count, PInteger(Elem)^) >= 0;
     2:
@@ -7671,7 +7805,7 @@ begin
         varSingle:
           Value := TVarData(V).VSingle;
         varCurrency:
-          Value := TVarData(V).VCurrency;
+          CurrencyToDouble(@TVarData(V).VCurrency, Value);
       else
         begin
           if SetVariantUnRefSimpleValue(V, tmp) then
@@ -7689,7 +7823,7 @@ begin
     result := default;
 end;
 
-function VariantToCurrency(const V: Variant; var Value: currency): boolean;
+function VariantToCurrency(const V: Variant; var Value: TSynCurrency): boolean;
 var
   tmp: TVarData;
   vt: cardinal;
@@ -7701,15 +7835,15 @@ begin
   begin
     result := true;
     if VariantToInt64(V, tmp.VInt64) then
-      Value := tmp.VInt64
+      Int64ToCurrency(tmp.VInt64, Value)
     else
       case vt of
         varDouble, varDate:
-          Value := TVarData(V).VDouble;
+          DoubleToCurrency(TVarData(V).VDouble, Value);
         varSingle:
-          Value := TVarData(V).VSingle;
+          DoubleToCurrency(TVarData(V).VSingle, Value);
         varCurrency:
-          Value := TVarData(V).VCurrency;
+          Value := PSynCurrency(@TVarData(V).VCurrency)^;
       else
         if SetVariantUnRefSimpleValue(V, tmp) then
           result := VariantToCurrency(variant(tmp), Value)

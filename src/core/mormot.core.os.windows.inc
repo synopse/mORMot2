@@ -120,15 +120,9 @@ begin
   Value := (cnt * 1000000) div _QueryPerformanceFrequency;
 end;
 
-{$ifndef DELPHI5OROLDER}
-{$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-{$endif}
 const
   faInvalidFile   = faDirectory + faVolumeID{%H-} + faSysFile{%H-} + faHidden{%H-};
   faDirectoryMask = faDirectory + faHidden{%H-};
-{$ifndef DELPHI5OROLDER}
-{$WARN SYMBOL_DEPRECATED ON}
-{$endif}
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 var

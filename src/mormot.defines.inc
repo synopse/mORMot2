@@ -326,6 +326,7 @@
   {$warn UNSAFE_CAST OFF}
   {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
   {$warn SYMBOL_PLATFORM OFF}
+  {$warn SYMBOL_DEPRECATED OFF} // for faVolumeID
   {$warn UNIT_PLATFORM OFF}
   {$ifdef USEPACKAGES}
     {$undef DOPATCHTRTL}
