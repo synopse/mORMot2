@@ -5,6 +5,11 @@
    x86 32-bit assembly used by mormot.core.base.pas
 }
 
+{$ifdef FPC}
+  {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here}
+  {$WARN 7104 off : Use of -offset(%ebp) is not recommended for local variable access}
+{$endif FPC}
+
 {$ifdef ASMX86}
 
 // fast x87 versions by John O'Harrow - SSE2 are not faster

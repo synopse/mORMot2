@@ -471,6 +471,10 @@ end;
 
 // we bypass crt.pp since this unit cancels the SIGINT signal
 
+procedure AllocConsole;
+begin // nothing to do on Linux
+end;
+
 {$I-}
 
 var
@@ -701,7 +705,7 @@ begin
   SetLength(result, 64);
   repeat
      if (sr.Name <> '') and (ord(sr.Name[1]) in [ord('0') .. ord('9')]) and
-        ToInteger(sr.Name, pid) and (pid > 0) then
+        ToInteger(sr.Name, pid) and ({%H-}pid > 0) then
      begin // ensure is a real process, not a thread
        status := StringFromFile('/proc/' + sr.Name + '/status', {nosize=}true);
        if GetInteger(FindNameValue(pointer(status), 'TGID:')) = pid then
@@ -874,7 +878,7 @@ begin
   if (release <> '') and (OS_KIND = osLinux) then
   begin
     SetLinuxDistrib(release);
-    if (OS_KIND = osLinux) and (dist <> '') then
+    if (OS_KIND = osLinux) and ({%H-}dist <> '') then
     begin
       SetLinuxDistrib(dist);
       release := dist;

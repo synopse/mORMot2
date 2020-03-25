@@ -1446,7 +1446,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcField:
-      call.Code := PPointer(call.Data)^;
+      call.Code := PPointer({%H-}call.Data)^;
     rpcMethod:
       call.Code := TGetProc(call);
     rpcIndexed:
@@ -1472,7 +1472,7 @@ begin
     rpcField:
       with TypeInfo^ do
         if Kind = rkClass then
-          PPtrInt(call.Data)^ := Value
+          PPtrInt({%H-}call.Data)^ := Value
         else
           ToRttiOrd(RttiOrd, call.Data, Value);
     rpcMethod:
@@ -1491,7 +1491,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcField:
-      result := PObject(call.Data)^;
+      result := PObject({%H-}call.Data)^;
     rpcMethod:
       result := TGetProc(call);
     rpcIndexed:
@@ -1510,7 +1510,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcField:
-      result := PInt64(call.Data)^;
+      result := PInt64({%H-}call.Data)^;
     rpcMethod:
       result := TGetProc(call);
     rpcIndexed:
@@ -1529,7 +1529,7 @@ var
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PInt64(call.Data)^ := Value;
+      PInt64({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -1574,7 +1574,7 @@ var
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PRawByteString(call.Data)^ := Value;
+      PRawByteString({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -1600,7 +1600,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcField:
-      tmp := PShortString(call.Data)^;
+      tmp := PShortString({%H-}call.Data)^;
     rpcMethod:
       tmp := TGetProc(call);
     rpcIndexed:
@@ -1620,7 +1620,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcField:
-      Value := PWideString(call.Data)^;
+      Value := PWideString({%H-}call.Data)^;
     rpcMethod:
       Value := TGetProc(call);
     rpcIndexed:
@@ -1639,7 +1639,7 @@ var
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PWideString(call.Data)^ := Value;
+      PWideString({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -1686,7 +1686,7 @@ var
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PUnicodeString(call.Data)^ := Value;
+      PUnicodeString({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -1705,7 +1705,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcField:
-      result := PCurrency(call.Data)^;
+      result := PCurrency({%H-}call.Data)^;
     rpcMethod:
       result := TGetProc(call);
     rpcIndexed:
@@ -1724,7 +1724,7 @@ var
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PCurrency(call.Data)^ := Value;
+      PCurrency({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -1741,7 +1741,7 @@ var
 begin
   case Getter(Instance, @call) of
     rpcField:
-      result := unaligned(PDouble(call.Data)^);
+      result := unaligned(PDouble({%H-}call.Data)^);
     rpcMethod:
       result := TGetProc(call);
     rpcIndexed:
@@ -1760,7 +1760,7 @@ var
 begin
   case Setter(Instance, @call) of
     rpcField:
-      unaligned(PDouble(call.Data)^) := Value;
+      unaligned(PDouble({%H-}call.Data)^) := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -1788,7 +1788,7 @@ begin
     rpcField:
       case rf of
         rfSingle:
-          result := PSingle(call.Data)^;
+          result := PSingle({%H-}call.Data)^;
         rfDouble:
           result := unaligned(PDouble(call.Data)^);
         rfExtended:
@@ -1841,7 +1841,7 @@ begin
     rpcField:
       case rf of
         rfSingle:
-          PSingle(call.Data)^ := Value;
+          PSingle({%H-}call.Data)^ := Value;
         rfDouble:
           unaligned(PDouble(call.Data)^) := Value;
         rfExtended:
@@ -1911,7 +1911,7 @@ var
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PVariant(call.Data)^ := Value;
+      PVariant({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -2236,7 +2236,7 @@ begin
   if CurrentMethod <> nil then
     m := '.' + CurrentMethod^.Name;
   raise ERttiException.CreateUTF8('GetRttiInterface(%%) failed - %',
-    [Definition.Name, m, FormatUTF8(Format, Args)]);
+    [Definition.Name, {%H-}m, FormatUTF8(Format, Args)]);
 end;
 
 function GetRttiInterface(aTypeInfo: pointer; out aDefinition: TRttiInterface): integer;

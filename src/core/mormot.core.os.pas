@@ -672,7 +672,6 @@ function TemporaryFileName: TFileName;
 // - try to write a small file with a random name
 function IsDirectoryWritable(const Directory: TFileName): boolean;
 
-
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
 // - on Linux, will enumerate /proc/* pseudo-files
@@ -698,6 +697,11 @@ function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
 var
   stdoutIsTTY: boolean;
 {$endif LINUX}
+
+/// similar to Windows AllocConsole API call, to be truly cross-platform
+// - do nothing on Linux/POSIX
+procedure AllocConsole;
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// change the console text writing color
 // - you should call this procedure to initialize StdOut global variable, if

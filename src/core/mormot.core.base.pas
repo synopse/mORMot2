@@ -25,7 +25,6 @@ unit mormot.core.base;
 
   *****************************************************************************
 }
-
 interface
 
 {$I ..\mormot.defines.inc}
@@ -477,7 +476,7 @@ function ToByte(value: cardinal): cardinal; inline;
 
 const
   /// a TGUID containing '{00000000-0000-0000-0000-00000000000}'
-  GUID_NULL: TGUID = ();
+  GUID_NULL: TGUID = ({%H-});
 
 /// fill a GUID with 0
 procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endif}
@@ -2302,7 +2301,7 @@ const
   VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
 
   /// a slightly faster alternative to Variants.Null function with TVarData
-  NullVarData: TVarData = (VType: varNull);
+  NullVarData: TVarData = (VType: varNull{%H-});
   
 var
   /// a slightly faster alternative to Variants.Null function
@@ -2451,6 +2450,10 @@ function EnsureDirectoryExists(const Directory: TFileName;
 
 implementation
 
+{$ifdef FPC}
+  // globally disable some FPC paranoid warnings - rely on x86_64 as reference
+  {$WARN 4056 off : Conversion between ordinals and pointers is not portable}
+{$endif FPC}
 
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
@@ -6457,8 +6460,8 @@ begin // xor entropy with its existing (on-stack) values
   crcblock(entropy, @e.b);
   crcblock(entropy, @_Lecuyer); // perfect forward security
   unaligned(PDouble(@e.L)^) := Now * 2123923447; // cross-platform time
-  e.i2 := e.i3 xor e.i1 xor PtrInt(entropy);
-  e.i3 := e.i2 xor e.i0 {$ifdef FPC} xor PtrInt(GetCurrentThreadID) {$endif};
+  e.c2 := e.c3 xor e.c1 xor PtrUInt(entropy);
+  e.c3 := e.c2 xor e.c0 {$ifdef FPC} xor PtrUInt(GetCurrentThreadID) {$endif};
   crcblock(entropy, @e.b);
   {$ifdef CPUINTEL}
   if cfRAND in CpuFeatures then
@@ -6497,7 +6500,7 @@ begin
       for i := 0 to entropylen - 1 do
       begin
         j := i and 15;
-        e.b[j] := e.b[j] xor entropy^[i];
+        e.b[j] := {%H-}e.b[j] xor entropy^[i];
       end;
     XorEntropy(@e.c);
     rs1 := rs1 xor e.c0 xor e.c3;
@@ -7637,7 +7640,7 @@ begin
       else
         exit;
   else
-    if SetVariantUnRefSimpleValue(V, tmp) then
+    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
     begin
       result := VariantToInteger(variant(tmp), Value);
       exit;
@@ -7741,7 +7744,7 @@ begin
       Value := UnicodeString(TVarData(V).VAny) = 'true';
   {$endif HASVARUSTRING}
   else
-    if SetVariantUnRefSimpleValue(V, tmp) then
+    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
       if tmp.VType = varBoolean then
         Value := tmp.VBoolean
       else
@@ -7795,7 +7798,7 @@ begin
     varInt64:
       Value := TVarData(V).VInt64;
   else
-    if SetVariantUnRefSimpleValue(V, tmp) then
+    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
     begin
       result := VariantToInt64(variant(tmp), Value);
       exit;

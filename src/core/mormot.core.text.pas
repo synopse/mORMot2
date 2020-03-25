@@ -739,6 +739,16 @@ type
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
+    /// allow to override the default (JSON) serialization of enumerations and
+    // sets as text, which would write the whole identifier (e.g. 'sllError')
+    // - calling SetDefaultEnumTrim(true) would force the enumerations to
+    // be trimmed for any lower case char, e.g. sllError -> 'Error'
+    // - this is global to the current process, and should be use mainly for
+    // compatibility purposes for the whole process
+    // - you may change the default behavior by setting twoTrimLeftEnumSets
+    // in the TTextWriter.CustomOptions property of a given serializer
+    // - note that unserialization process would recognize both formats
+    class procedure SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 
     /// retrieve the data as a string
     function Text: RawUTF8;
@@ -3190,7 +3200,12 @@ implementation
 uses
   mormot.core.os,
   mormot.core.datetime;
-  
+
+{$ifdef FPC}
+  // globally disable some FPC paranoid warnings - rely on x86_64 as reference
+  {$WARN 4056 off : Conversion between ordinals and pointers is not portable}
+{$endif FPC}
+
  
 { ************ UTF-8 String Manipulation Functions }
 
@@ -3611,7 +3626,7 @@ begin
   for i := 0 to high(Buffers) do
     if Buffers[i] <> nil then
     begin
-      MoveFast(Buffers[i]^, P^, lens[i]);
+      MoveFast(Buffers[i]^, P^, {%H-}lens[i]);
       inc(P, lens[i]);
     end;
 end;
@@ -5307,7 +5322,7 @@ begin
   raise ESynException.CreateUTF8('%.AddVariant unimplemented', [self]);
 end;
 
-function TAbstractWriter.AddJSONReformat(JSON: PUTF8Char;
+function TAbstractWriter.{%H-}AddJSONReformat(JSON: PUTF8Char;
   Format: TTextWriterJSONFormat; EndOfObject: PUTF8Char): PUTF8Char;
 begin
   raise ESynException.CreateUTF8('%.AddJSONReformat unimplemented', [self]);
@@ -5329,6 +5344,11 @@ end;
 var
   DefaultTextWriterTrimEnum: boolean;
   
+class procedure TAbstractWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
+begin
+  DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
+end;
+
 procedure TAbstractWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
 begin
   if aBufSize <= 16 then
@@ -7483,7 +7503,7 @@ begin
   if Value = i64 then
     Int64ToUtf8(i64, result)
   else
-    FastSetString(result, @tmp[1], ExtendedToString(tmp, Value, Precision));
+    FastSetString(result, @tmp[1], ExtendedToString(tmp{%H-}, Value, Precision));
 end;
 
 function DoubleToStr(Value: Double): RawUTF8;
@@ -7614,7 +7634,7 @@ begin
           RawUnicodeToUtf8(VAny, length(WideString(VAny)), result);
         end;
     else
-      if SetVariantUnRefSimpleValue(V, tmp) then
+      if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
         VariantToUTF8(Variant(tmp), result, wasString)
       else if vt = varVariant or varByRef then // complex varByRef
         VariantToUTF8(PVariant(VPointer)^, result, wasString)
@@ -8223,7 +8243,7 @@ begin
     exit; // avoid buffer overflow
   end;
   process.Parse(Format, Args);
-  result := PtrInt(process.WriteMax(Dest, DestLen)) - PtrInt(Dest);
+  result := PtrUInt(process.WriteMax(Dest, DestLen)) - PtrUInt(Dest);
 end;
 
 function FormatToShort(const Format: RawUTF8; const Args: array of const): shortstring;
@@ -10363,7 +10383,7 @@ _nxt:   Bin^ := c;
       inc(Bin);
       inc(Oct, 2);
     until false;
-  result := PtrInt(Bin)-result;
+  result := PtrUInt(Bin)-PtrUInt(result);
 end;
 
 function OctToBin(const Oct: RawUTF8): RawByteString;
@@ -12260,7 +12280,7 @@ begin
   begin
     if result > SizeOf(tmp) then
       result := SizeOf(tmp);
-    result := UTF8BufferToAnsi(tmp, pointer(S), result) - tmp;
+    result := UTF8BufferToAnsi(tmp{%H-}, pointer(S), result) - {%H-}tmp;
     if result >= DestSize then
       result := DestSize - 1;
     MoveFast(tmp, Dest^, result);
@@ -12309,8 +12329,8 @@ begin
   else if (Source = nil) or (SourceChars = 0) then
     result := ''
   else if SourceChars < SizeOf(tmpU) shr 1 then
-    result := UnicodeBufferToAnsi(tmpU, (PtrUInt(From.AnsiBufferToUnicode(
-      tmpU, Source, SourceChars)) - PtrUInt(@tmpU)) shr 1)
+    result := UnicodeBufferToAnsi(tmpU{%H-}, (PtrUInt(From.AnsiBufferToUnicode(
+      tmpU{%H-}, Source, SourceChars)) - PtrUInt(@tmpU)) shr 1)
   else
   begin
     GetMem(U, SourceChars * 2 + 2);
@@ -12894,6 +12914,7 @@ const
   HexChars:      array[0..15] of AnsiChar = '0123456789ABCDEF';
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
   n2u: array[138..255] of byte =
+    // reference 8 bit upper chars as in WinAnsi / code page 1252
     (83, 139, 140, 141, 90, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
      153, 83, 155, 140, 157, 90, 89, 160, 161, 162, 163, 164, 165, 166, 167,
      168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181,

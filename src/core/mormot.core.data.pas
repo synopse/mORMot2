@@ -1280,6 +1280,30 @@ begin
 end;
 
 
+{ TAutoLock }
+
+type
+  /// used by TAutoLocker.ProtectMethod and TSynLocker.ProtectMethod
+  TAutoLock = class(TInterfacedObject)
+  protected
+    fLock: PSynLocker;
+  public
+    constructor Create(aLock: PSynLocker);
+    destructor Destroy; override;
+  end;
+
+constructor TAutoLock.Create(aLock: PSynLocker);
+begin
+  fLock := aLock;
+  fLock^.Lock;
+end;
+
+destructor TAutoLock.Destroy;
+begin
+  fLock^.UnLock;
+end;
+
+
 { TSynLocker }
 
 procedure TSynLocker.Init;
@@ -1338,7 +1362,7 @@ end;
 
 function TSynLocker.ProtectMethod: IUnknown;
 begin
-//  result := TAutoLock.Create(@self);
+  result := TAutoLock.Create(@self);
 end;
 
 function TSynLocker.GetVariant(Index: integer): Variant;
@@ -3243,7 +3267,7 @@ var
   UpperSection: array[byte] of AnsiChar;
 begin
   P := pointer(Content);
-  PWord(UpperCopy255(UpperSection, SectionName))^ := ord(']');
+  PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
   if FindSectionFirstLine(P, UpperSection) then
     result := GetSectionContent(P)
   else
@@ -3258,7 +3282,7 @@ var
 begin
   result := false; // no modification
   P := pointer(Content);
-  PWord(UpperCopy255(UpperSection, SectionName))^ := ord(']');
+  PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
   if FindSectionFirstLine(P, UpperSection) then
     result := DeleteSection(P, Content, EraseSectionHeader);
 end;
@@ -3313,7 +3337,7 @@ var
   P: PUTF8Char;
 begin
   P := pointer(Content);
-  PWord(UpperCopy255(UpperSection, SectionName))^ := ord(']');
+  PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
   if FindSectionFirstLine(P, UpperSection) then
     ReplaceSection(P, Content, NewSectionContent)
   else
@@ -3348,14 +3372,14 @@ begin
   if P = nil then
     exit;
   // UpperName := UpperCase(Name)+'=';
-  PWord(UpperCopy255(UpperName, Name))^ := ord('=');
+  PWord(UpperCopy255(UpperName{%H-}, Name))^ := ord('=');
   if Section = '' then
     // find the Name= entry before any [Section]
     result := FindIniNameValue(P, UpperName)
   else
   begin
     // find the Name= entry in the specified [Section]
-    PWord(UpperCopy255(UpperSection, Section))^ := ord(']');
+    PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
     if FindSectionFirstLine(P, UpperSection) then
       result := FindIniNameValue(P, UpperName);
   end;
@@ -3447,7 +3471,7 @@ label
   Sec;
 begin
   UpperNameLength := length(Name);
-  PWord(UpperCopy255Buf(UpperName, pointer(Name), UpperNameLength))^ := ord('=');
+  PWord(UpperCopy255Buf(UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
   inc(UpperNameLength);
   V := Value + CRLF;
   P := pointer(Content);
@@ -3455,7 +3479,7 @@ begin
   if Section = '' then
     goto Sec; // find the Name= entry before any [Section]
   SectionFound := false;
-  PWord(UpperCopy255(UpperSection, Section))^ := ord(']');
+  PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
   if FindSectionFirstLine(P, UpperSection) then
   begin
 Sec:SectionFound := true;
@@ -3489,8 +3513,20 @@ begin
   FileFromString(Content, FileName);
 end;
 
+procedure InitializeConstants;
+var
+  i: PtrInt;
+begin
+  FillcharFast(ConvertBase64ToBin,256,255); // invalid value set to -1
+  for i := 0 to high(b64enc) do
+    ConvertBase64ToBin[b64enc[i]] := i;
+  ConvertBase64ToBin['='] := -2; // special value for '='
+  for i := 0 to high(b64urienc) do
+    ConvertBase64uriToBin[b64urienc[i]] := i;
+end;
+
 
 initialization
-
+  InitializeConstants;
 end.
 

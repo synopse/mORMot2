@@ -734,7 +734,7 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16);
       FormatShort16('0.%%', [UInt2DigitsToShortFast(value), u], result)
     else
     begin
-      Div100(value, d100);
+      Div100(value, d100{%H-});
       if d100.m = 0 then
         FormatShort16('%%', [d100.d, u], result)
       else

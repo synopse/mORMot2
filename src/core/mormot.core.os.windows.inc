@@ -102,6 +102,7 @@ procedure EnterCriticalSection;       external kernel32;
 procedure LeaveCriticalSection;       external kernel32;
 procedure DeleteCriticalSection;      external kernel32;
 function  TryEnterCriticalSection;    external kernel32;
+procedure AllocConsole;               external kernel32;
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
@@ -123,8 +124,8 @@ end;
 {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
 {$endif}
 const
-  faInvalidFile   = faDirectory + faVolumeID + faSysFile + faHidden;
-  faDirectoryMask = faDirectory + faHidden;
+  faInvalidFile   = faDirectory + faVolumeID{%H-} + faSysFile{%H-} + faHidden{%H-};
+  faDirectoryMask = faDirectory + faHidden{%H-};
 {$ifndef DELPHI5OROLDER}
 {$WARN SYMBOL_DEPRECATED ON}
 {$endif}
@@ -135,7 +136,7 @@ var
   ST, LT: TSystemTime;
 begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
   if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and
-     FileTimeToSystemTime(FA.ftLastWriteTime, ST) and
+     FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
     result := SystemTimeToDateTime(LT)
   else
@@ -532,7 +533,7 @@ var
   tmpsize: cardinal;
 begin
   tmpsize := SizeOf(tmp);
-  GetComputerNameW(tmp, tmpsize);
+  GetComputerNameW(tmp{%H-}, tmpsize);
   RawUnicodeToUtf8(@tmp, StrLenW(tmp), Host);
   tmpsize := SizeOf(tmp);
   GetUserNameW(tmp, tmpsize);
@@ -662,7 +663,7 @@ var
 begin
   result := nil;
   if (RegQueryInfoKeyW(key, nil, nil, nil, @count, @maxlen, nil, nil, nil, nil, nil, nil) <> 0) or
-     (count = 0) then
+     ({%H-}count = 0) then
     exit;
   SetLength(result, count);
   inc(maxlen);
@@ -837,7 +838,7 @@ begin
     if prodver = '' then
       prodver := reg.ReadString('BIOSVersion');
   end;
-  if (prod = '') or (prodver = '') then
+  if ({%H-}prod = '') or ({%H-}prodver = '') then
   begin
     if reg.ReadOpen(HKEY_LOCAL_MACHINE, 'Hardware\Description\System', true) then
     begin
@@ -849,10 +850,10 @@ begin
   end;
   reg.Close;
   if prodver <> '' then
-    FormatUTF8('%% %', [manuf, prod, prodver], BiosInfoText)
+    FormatUTF8('%% %', [{%H-}manuf, prod, prodver], BiosInfoText)
   else
     FormatUTF8('%%', [manuf, prod], BiosInfoText);
-  if cpu = '' then
+  if {%H-}cpu = '' then
     cpu := StringToUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   cpu := Trim(cpu);
   FormatUTF8('% x % (' + CPU_ARCH_TEXT + ')', [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);

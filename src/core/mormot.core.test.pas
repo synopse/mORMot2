@@ -658,7 +658,7 @@ begin
         AddLog(condition, str);
     end;
     if not condition then
-      TestFailed(str);
+      TestFailed(str{%H-});
   end;
 end;
 
@@ -1179,9 +1179,7 @@ var
 begin
   if self = TSynTests then
     raise ESynException.Create('You should inherit from TSynTests');
-  {$ifdef MSWINDOWS}
   AllocConsole;
-  {$endif MSWINDOWS}
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);
   try

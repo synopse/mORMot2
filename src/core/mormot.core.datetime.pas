@@ -781,7 +781,7 @@ begin
     end;
     if Y > 9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
-    Div100(Y, d100);
+    Div100(Y, d100{%H-});
     unaligned(result) := (146097 * d100.d) shr 2 + (1461 * d100.m) shr 2 +
       (153 * M + 2) div 5 + D - 693900;
     if L < 15 then
@@ -1045,7 +1045,7 @@ const
 var
   tmp: array[0..31] of AnsiChar;
 begin // D=0 is handled in DateTimeToIso8601Text()
-  DateToIso8601PChar(D, tmp, Expanded);
+  DateToIso8601PChar(D, tmp{%H-}, Expanded);
   if Expanded then
     TimeToIso8601PChar(D, @tmp[10], true, FirstChar, WithMS)
   else
@@ -1636,7 +1636,7 @@ begin
     end
     else
       exit; // Month <= 0
-    Div100(Year, d100);
+    Div100(Year, d100{%H-});
     Date := (146097 * d100.D) shr 2 + (1461 * d100.M) shr 2 +
             (153 * Month + 2) div 5 + Day - 693900;
     result := true;
@@ -2095,7 +2095,7 @@ begin
   if Value = 0 then
     result := ''
   else
-    FastSetString(result, @tmp, Text(tmp, Expanded, FirstTimeChar));
+    FastSetString(result, @tmp, Text(tmp{%H-}, Expanded, FirstTimeChar));
 end;
 
 function TimeLogNow: TTimeLog;
