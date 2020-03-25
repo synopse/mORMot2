@@ -214,9 +214,9 @@ var
   // more optimistic/realistic value ($100000 instead of default $10000)
   // - under BSD/Linux, only contain dwPageSize and dwNumberOfProcessors fields
   SystemInfo: TSystemInfo;
-  /// the current Operating System information, as retrieved for the current process
+  /// low-level Operating System information, as retrieved for the current process
   OSVersionInfo: TOSVersionInfoEx;
-  /// the current Operating System version, as retrieved for the current process
+  /// the current Windows edition, as retrieved for the current process
   OSVersion: TWindowsVersion;
 
 {$else MSWINDOWS}

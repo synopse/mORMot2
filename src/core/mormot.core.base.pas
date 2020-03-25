@@ -632,10 +632,13 @@ type
   TSynCurrency = type currency;
   {$else}
   /// the floating-point type to be used for 64-bit currency
-  // - fallback to Int64 (*10000) e.g. on x64 and ARM CPUs
+  // - our framework fallbacks to Int64 (*CURR_RES=10000) e.g. on x64 and ARM
+  // - this type does NOT store double values, but Int64*CURR_RES - we only
+  // define it as double so that RTTI identifies it as a rfDouble floating-point
   // - we discovered some weird incompatibilities, e.g. when cross-compiling
-  // from FPC Win64 into the Win32 platform - any feedback is welcome!
-  TSynCurrency = type Int64;
+  // from FPC Win64 into the Win32 platform, or when the generated code is
+  // very inefficient (e.g. with Delphi Win64) - any feedback is welcome!
+  TSynCurrency = type double;
 
   /// force to use our TSynCurrency wrapper instead of the native "currency" type
   // - and CurrencyToDouble/DoubleToCurrency/CurrencyToInt64/Int64ToCurrency
@@ -2543,12 +2546,12 @@ end;
 
 procedure CurrencyToDouble(const c: TSynCurrency; out d: double);
 begin
-  unaligned(d) := PInt64(@c)^ / CURR_RES;
+  unaligned(d{%H-}) := PInt64(@c)^ / CURR_RES;
 end;
 
 procedure CurrencyToDouble(c: PSynCurrency; out d: double);
 begin
-  unaligned(d) := PInt64(c)^ / CURR_RES;
+  unaligned(d{%H-}) := PInt64(c)^ / CURR_RES;
 end;
 
 function CurrencyToDouble(c: PSynCurrency): double;

@@ -412,6 +412,7 @@ type
     /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
     function IsQWord: boolean;  {$ifdef HASINLINE} inline; {$endif}
     /// for rtFloat: get the storage size and precision
+    // - will also properly detect our TSynCurrency internal type
     function RttiFloat: TRttiFloat;       {$ifdef HASINLINE} inline; {$endif}
     /// for rtEnumeration: get the enumeration type information
     function EnumBaseType: PRttiEnumType; {$ifdef HASINLINE} inline; {$endif}
@@ -1212,7 +1213,12 @@ end;
 
 function TRttiInfo.RttiFloat: TRttiFloat;
 begin
-  result := TRttiFloat(GetTypeData(@self)^.FloatType);
+  {$ifndef CPUX86}
+  if @self = TypeInfo(TSynCurrency) then
+    result := rfCurr // RTTI identifies TSynCurrency as rfDouble
+  else
+  {$endif CPUX86}
+    result := TRttiFloat(GetTypeData(@self)^.FloatType);
 end;
 
 function TRttiInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
