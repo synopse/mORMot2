@@ -2117,6 +2117,19 @@ var
 // order (most-signignifican byte first)
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean; overload;
 
+/// fast conversion with no validity check from hexa chars into binary data
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached
+// - returns the number of bytes written to Bin^
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+function OctToBin(const Oct: RawUTF8): RawByteString; overload;
+
 /// fast conversion from one hexa char pair into a 8 bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,nil,1)
@@ -10200,7 +10213,7 @@ end;
 
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 var
-  B, C: PtrUInt;
+  b, c: PtrUInt;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
@@ -10215,11 +10228,13 @@ begin
   begin
     inc(Bin, BinBytes - 1);
     repeat
-      B := tab[Ord(Hex[0])];
-      C := tab[Ord(Hex[1])];
-      if (B > 15) or (C > 15) then
+      b := tab[Ord(Hex[0])];
+      c := tab[Ord(Hex[1])];
+      if (b > 15) or (c > 15) then
         exit;
-      Bin^ := B shl 4 + C;
+      b := b shl 4; // better FPC generation code in small explicit steps
+      b := b or c;
+      Bin^ := b;
       dec(Bin);
       inc(Hex, 2);
       dec(BinBytes);
@@ -10250,7 +10265,7 @@ end;
 
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
 var
-  B, C: PtrUInt;
+  b, c: byte;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
@@ -10264,12 +10279,14 @@ begin
   if BinBytes > 0 then
     if Bin <> nil then
       repeat
-        B := tab[Ord(Hex[0])];
-        C := tab[Ord(Hex[1])];
-        if (B > 15) or (C > 15) then
+        b := tab[Ord(Hex[0])];
+        c := tab[Ord(Hex[1])];
+        if (b > 15) or (c > 15) then
           exit;
         inc(Hex, 2);
-        Bin^ := B shl 4 + C;
+        b := b shl 4;
+        b := b or c;
+        Bin^ := b;
         inc(Bin);
         dec(BinBytes);
       until BinBytes = 0
@@ -10281,6 +10298,86 @@ begin
         dec(BinBytes);
       until BinBytes = 0;
   result := true; // conversion OK
+end;
+
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
+var
+  c: byte;
+  {$ifdef CPUX86NOTPIC}
+  tab: TNormTableByte absolute ConvertHexToBin;
+  {$else}
+  tab: PNormTableByte; // faster on PIC, ARM and x86_64
+  {$endif}
+begin
+  {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
+  if BinBytes > 0 then
+    repeat
+      c := tab[ord(Hex[0])];
+      c := c shl 4;
+      c := tab[ord(Hex[1])] or c;
+      Bin^ := c;
+      inc(Hex, 2);
+      inc(Bin);
+      dec(BinBytes);
+    until BinBytes = 0;
+end;
+
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt;
+var
+  c, v: cardinal;
+label
+  _nxt;
+begin
+  result := PtrInt(Bin);
+  if Oct <> nil then
+    repeat
+      c := ord(Oct^);
+      inc(Oct);
+      if c <> ord('\') then
+      begin
+        if c = 0 then
+          break;
+_nxt:   Bin^ := c;
+        inc(Bin);
+        continue;
+      end;
+      c := ord(Oct^);
+      inc(Oct);
+      if c = ord('\') then
+        goto _nxt;
+      dec(c, ord('0'));
+      if c > 3 then
+        break; // stop at malformated input (includes #0)
+      c := c shl 6;
+      v := c;
+      c := ord(Oct[0]) - ord('0');
+      if c > 7 then
+        break;
+      c := c shl 3;
+      v := v or c;
+      c := ord(Oct[1]) - ord('0');
+      if c > 7 then
+        break;
+      c := c or v;
+      Bin^ := c;
+      inc(Bin);
+      inc(Oct, 2);
+    until false;
+  result := PtrInt(Bin)-result;
+end;
+
+function OctToBin(const Oct: RawUTF8): RawByteString;
+var
+  tmp: TSynTempBuffer;
+  L: integer;
+begin
+  tmp.Init(length(Oct));
+  try
+    L := OctToBin(pointer(Oct), tmp.buf);
+    SetString(result, PAnsiChar(tmp.buf), L);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;

@@ -1108,7 +1108,7 @@ procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
 
 /// sort and remove any 32-bit duplicated integer from Values[]
 // - returns the new Values[] length
-function DeduplicateInteger(var Values: TIntegerDynArray; Count: integer): integer; overload;
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: PtrInt): PtrInt; overload;
 
 /// low-level function called by DeduplicateInteger()
 function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
@@ -1142,7 +1142,7 @@ procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
 
 /// sort and remove any 64-bit duplicated integer from Values[]
 // - returns the new Values[] length
-function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer; overload;
+function DeduplicateInt64(var Values: TInt64DynArray; Count: PtrInt): PtrInt; overload;
 
 /// low-level function called by DeduplicateInt64()
 // - warning: caller should ensure that last>0
@@ -1152,21 +1152,21 @@ function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
 
 /// find the maximum 32-bit integer in Values[]
-function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt;
   MaxStart: Integer = -1): integer;
 
 /// sum all 32-bit integers in Values[]
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): integer;
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
 
 /// fill already allocated Reversed[] so that Reversed[Values[i]]=i
-procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt;
   Reversed: PIntegerArray);
 
 /// fill some values with i,i+1,i+2...i+Count-1
 procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
 
 /// copy some Int64 values into an unsigned integer array
-procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: integer);
+procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
 
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
@@ -4288,7 +4288,7 @@ begin // sub-function for better code generation
   end;
 end;
 
-function DeduplicateInteger(var Values: TIntegerDynArray; Count: integer): integer;
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: PtrInt): PtrInt;
 begin
   result := Count;
   dec(Count);
@@ -4336,7 +4336,7 @@ begin // sub-function for better code generation
   end;
 end;
 
-function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer;
+function DeduplicateInt64(var Values: TInt64DynArray; Count: PtrInt): PtrInt;
 begin
   result := Count;
   dec(Count);
@@ -4367,28 +4367,32 @@ begin
   MoveFast(Source[0], Dest[0], n * SizeOf(Int64));
 end;
 
-function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): integer;
+function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt; MaxStart: integer): integer;
 var
-  i: integer;
+  i: PtrInt;
+  v: integer;
 begin
   result := MaxStart;
   for i := 0 to ValuesCount - 1 do
-    if Values[i] > result then
-      result := Values[i];
+  begin
+    v := Values[i];
+    if v > result then
+      result := v; // movca branchless opcode on FPC
+  end;
 end;
 
-function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): integer;
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := 0;
   for i := 0 to ValuesCount - 1 do
     inc(result, Values[i]);
 end;
 
-procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer; Reversed: PIntegerArray);
+procedure Reverse(const Values: TIntegerDynArray; ValuesCount: PtrInt; Reversed: PIntegerArray);
 var
-  i: integer;
+  i: PtrInt;
 begin
   i := 0;
   if ValuesCount >= 4 then
@@ -4428,9 +4432,9 @@ begin
       end;
 end;
 
-procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: integer);
+procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: PtrInt);
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to Count - 1 do
     Values32[i] := Values64[i];

@@ -539,16 +539,21 @@ end;
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
 var
   vt: cardinal;
+  vd: PVarData;
 begin
-  if self = nil then
-    result := false
-  else
+  if self <> nil then
   begin
-    vt := TVarData(V).VType;
-    while vt = varByRef or varVariant do
-      vt := PVarData(TVarData(V).VPointer)^.VType;
+    vd := @V;
+    repeat
+      vt := vd^.VType;
+      if vt <> varByRef or varVariant then
+        break;
+      vd := vd^.VPointer;
+    until false;
     result := vt = VarType;
-  end;
+  end
+  else
+    result := false;
 end;
 
 function TSynInvokeableVariantType.FindSynVariantType(aVarType: Word; out CustomType: TSynInvokeableVariantType): boolean;

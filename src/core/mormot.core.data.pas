@@ -2383,22 +2383,23 @@ end;
 
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
 var
-  i: integer;
   c: cardinal;
   enc: PBase64Enc; // use local register
 begin
   enc := @b64enc;
-  result := len div 3;
-  for i := 1 to result do
-  begin
-    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := enc[(c shr 18) and $3f];
-    rp[1] := enc[(c shr 12) and $3f];
-    rp[2] := enc[(c shr 6) and $3f];
-    rp[3] := enc[c and $3f];
-    inc(rp, 4);
-    inc(sp, 3);
-  end;
+  len := len div 3;
+  result := len;
+  if len <> 0 then
+    repeat
+      c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
+      rp[0] := enc[(c shr 18) and $3f];
+      rp[1] := enc[(c shr 12) and $3f];
+      rp[2] := enc[(c shr 6) and $3f];
+      rp[3] := enc[c and $3f];
+      inc(rp, 4);
+      inc(sp, 3);
+      dec(len)
+    until len = 0;
 end;
 
 {$endif ASMX86}
@@ -2420,7 +2421,7 @@ begin
       end;
     2:
       begin
-        c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
+        c := (ord(sp[0]) shl 10) or (ord(sp[1]) shl 2);
         rp[0] := enc[(c shr 12) and $3f];
         rp[1] := enc[(c shr 6) and $3f];
         rp[2] := enc[c and $3f];
@@ -2757,22 +2758,25 @@ end;
 
 procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
 var
-  i, main, c: cardinal;
-  enc: PBase64Enc; // slightly faster
+  main, c: cardinal;
+  enc: PBase64Enc; // faster especially on x86_64 and PIC
 begin
   enc := @b64URIenc;
   main := len div 3;
-  for i := 1 to main do
-  begin
-    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := enc[(c shr 18) and $3f];
-    rp[1] := enc[(c shr 12) and $3f];
-    rp[2] := enc[(c shr 6) and $3f];
-    rp[3] := enc[c and $3f];
-    inc(rp, 4);
-    inc(sp, 3);
+  if main <> 0 then begin
+    dec(len, main * 3); // fast modulo
+    repeat
+      c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
+      rp[0] := enc[(c shr 18) and $3f];
+      rp[1] := enc[(c shr 12) and $3f];
+      rp[2] := enc[(c shr 6) and $3f];
+      rp[3] := enc[c and $3f];
+      inc(rp, 4);
+      inc(sp, 3);
+      dec(main)
+    until main = 0;
   end;
-  case len - main * 3 of
+  case len of
     1:
       begin
         c := ord(sp[0]) shl 4;
@@ -2781,7 +2785,7 @@ begin
       end;
     2:
       begin
-        c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
+        c := (ord(sp[0]) shl 10) or (ord(sp[1]) shl 2);
         rp[0] := enc[(c shr 12) and $3f];
         rp[1] := enc[(c shr 6) and $3f];
         rp[2] := enc[c and $3f];
