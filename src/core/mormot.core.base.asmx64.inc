@@ -1260,6 +1260,7 @@ asm // rcx=src, edx=size, r8=dest
         jc      @29
         shr     r12, 3
         jz      @30
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @27:    mov     rbx, qword ptr [r14 + rsi] // inline move by 8 bytes
         mov     qword ptr [r8 + rsi], rbx
         add     rsi, 8
@@ -1274,6 +1275,7 @@ asm // rcx=src, edx=size, r8=dest
         dec     r15
         jnz     @28
         jmp     @31
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @29:    mov     bl, byte ptr [r14 + rsi] // overlaping move
         mov     byte ptr [r8 + rsi], bl
         inc     rsi

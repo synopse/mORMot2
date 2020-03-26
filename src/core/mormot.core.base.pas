@@ -4111,12 +4111,15 @@ zero:
 end;
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
+var
+  c: AnsiChar; // better code generation on FPC
 begin
   inc(PtrUInt(Source), Count);
   inc(PtrUInt(Dest), Count);
   PtrInt(Count) := - PtrInt(Count);
   repeat
-    PAnsiChar(Dest)[Count] := PAnsiChar(Source)[Count];
+    c := PAnsiChar(Source)[Count];
+    PAnsiChar(Dest)[Count] := c;
     inc(Count);
   until Count = 0;
 end;
@@ -7160,7 +7163,7 @@ begin
   CWpoint := pointer(dst);
   PCardinal(dst)^ := 0;
   inc(dst, sizeof(CWpoint^));
-  fillchar(offset, sizeof(offset), 0); // fast 16KB reset to 0
+  FillCharFast(offset, sizeof(offset), 0); // fast 16KB reset to 0
   // 1. main loop to search using hash[]
   if src <= src_endmatch then
     repeat
@@ -7251,21 +7254,6 @@ begin
   result := dst - dst_beg;
 end;
 
-procedure movechars(s, d: PAnsiChar; t: PtrUInt); {$ifdef HASINLINE} inline;{$endif}
-// system.move() alternative for overlapping small data blocks
-var
-  c: AnsiChar; // better code generation on FPC
-begin
-  inc(PtrUInt(s), t);
-  inc(PtrUInt(d), t);
-  PtrInt(t) := -PtrInt(t);
-  repeat
-    c := s[t];
-    d[t] := c;
-    inc(t);
-  until t = 0;
-end;
-
 // better code generation with sub-functions for raw decoding
 procedure SynLZdecompress1passub(src, src_end, dst: PAnsiChar; var offset: TOffsets);
 var
@@ -7318,16 +7306,16 @@ nextCW:
         {$ifdef CPU64}
         o := offset[h];
         if PtrUInt(dst - o) < t then
-          movechars(o, dst, t)
+          MoveSmall(o, dst, t)
         else if t <= 8 then
           PInt64(dst)^ := PInt64(o)^
         else
-          move(o^, dst^, t);
+          MoveFast(o^, dst^, t);
         {$else}
         if PtrUInt(dst - offset[h]) < t then
-          movechars(offset[h], dst, t)
+          MoveSmall(offset[h], dst, t)
         else if t > 8 then // safe since src_endmatch := src_end-(6+5)
-          move(offset[h]^, dst^, t)
+          MoveFast(offset[h]^, dst^, t)
         else
           PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
         {$endif}
@@ -7419,20 +7407,20 @@ nextCW:
         end;
         if dst + t >= dst_end then
         begin // avoid buffer overflow by all means
-          movechars(offset[h], dst, dst_end - dst);
+          MoveSmall(offset[h], dst, dst_end - dst);
           break;
         end;
         {$ifdef CPU64}
         o := offset[h];
         if (t <= 8) or (PtrUInt(dst - o) < t) then
-          movechars(o, dst, t)
+          MoveSmall(o, dst, t)
         else
-          move(o^, dst^, t);
+          MoveFast(o^, dst^, t);
         {$else}
         if (t <= 8) or (PtrUInt(dst - offset[h]) < t) then
-          movechars(offset[h], dst, t)
+          MoveSmall(offset[h], dst, t)
         else
-          move(offset[h]^, dst^, t);
+          MoveFast(offset[h]^, dst^, t);
         {$endif}
         if src >= src_end then
           break;
