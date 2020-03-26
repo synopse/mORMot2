@@ -8390,7 +8390,7 @@ end;
 function PropNameValid(P: PUTF8Char): boolean;
 var
   tab: PTextCharSet;
-begin
+{%H-}begin
   tab := @TEXT_CHARS;
   if (P <> nil) and (tcIdentifierFirstChar in tab[P^]) then
     // first char must be alphabetical

@@ -182,16 +182,7 @@ begin
     repeat
       inc(P);
     until not (jcJsonIdentifier in tab[P^]);
-    if P^ = #0 then
-    begin
-      result := true;
-      exit;
-    end
-    else
-    begin
-      result := false;
-      exit;
-    end;
+    result := P^ = #0;
   end
   else
     result := false;
@@ -428,10 +419,10 @@ var
   i: PtrInt;
   c: AnsiChar;
 begin
-  // branchless JSON escaping
-  JSON_ESCAPE[0] := 1;         // 1 for #0 end of input
-  for i := 1 to 31 do          // 0 indicates no JSON escape needed
-    JSON_ESCAPE[i] := 2;       // 2 should be escaped as \u00xx
+  // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
+  JSON_ESCAPE[0] := JSON_ESCAPE_ENDINGZERO;   // 1 for #0 end of input
+  for i := 1 to 31 do
+    JSON_ESCAPE[i] := JSON_ESCAPE_UNICODEHEX; // 2 should be escaped as \u00xx
   JSON_ESCAPE[8] := ord('b');  // others contain the escaped character
   JSON_ESCAPE[9] := ord('t');
   JSON_ESCAPE[10] := ord('n');

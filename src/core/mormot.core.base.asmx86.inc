@@ -11,6 +11,7 @@
   {$WARN 7104 off : Use of -offset(%ebp) is not recommended for local variable access }
 {$endif FPC}
 
+
 {$ifdef ASMX86}
 
 // fast x87 versions by John O'Harrow - SSE2 are not faster
@@ -1276,6 +1277,334 @@ asm // eax=crc, edx=buf, ecx=len
         dec     ecx
         jnz     @by8
         jmp     @rem
+end;
+
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebp
+        push    ebx
+        push    esi
+        push    edi
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -24
+        mov     esi, ecx
+        mov     ebx, eax
+        add     edx, eax
+        mov     [esp+8H], esi
+        mov     [esp+10H], edx
+        movzx   eax, word ptr [ebx]
+        mov     [esp], eax
+        or      eax,eax
+        je      @@0917
+        add     ebx, 2
+        mov     eax, [esp]
+        test    ah, 80H
+        jz      @@0907
+        and     eax, 7FFFH
+        movzx   edx, word ptr [ebx]
+        shl     edx, 15
+        or      eax, edx
+        mov     [esp], eax
+        add     ebx, 2
+@@0907: lea     ebp, [esi-1]
+@@0908: mov     ecx, [ebx]
+        add     ebx, 4
+        mov     [esp+14H], ecx
+        mov     edi, 1             // edi=CWbit
+        cmp     ebx, [esp+10H]
+        jnc     @@0917
+@@0909: mov     ecx, [esp+14H]
+@@090A: test    ecx, edi
+        jnz     @@0911
+        mov     al, [ebx]
+        inc     ebx
+        mov     [esi], al
+        inc     esi
+        cmp     ebx, [esp+10H]
+        lea     eax, [esi-3]
+        jnc     @@0917
+        cmp     eax, ebp
+        jbe     @@0910
+        inc     ebp
+        mov     eax, [ebp]
+        mov     edx, eax
+        shr     eax, 12
+        xor     eax, edx
+        and     eax, 0FFFH
+        mov     [esp+eax*4+1CH], ebp
+@@0910: add     edi, edi
+        jnz     @@090A
+        jmp     @@0908
+@@0911: movzx   edx, word ptr [ebx]
+        add     ebx, 2
+        mov     eax, edx
+        and     edx, 0FH
+        add     edx, 2
+        shr     eax, 4
+        cmp     edx,2
+        jnz     @@0912
+        movzx   edx, byte ptr [ebx]
+        inc     ebx
+        add     edx, 18
+@@0912: mov     eax, [esp+eax*4+1CH]
+        mov     ecx, esi
+        mov     [esp+18H], edx
+        sub     ecx, eax
+        cmp     ecx, edx
+        jl      @@0913
+        cmp     edx, 32            // inlined optimized move()
+        ja      @large
+        sub     edx, 8
+        jg      @9_32
+        mov     ecx, [eax]
+        mov     eax, [eax+4]       // always copy 8 bytes for 0..8
+        mov     [esi], ecx         // safe since src_endmatch := src_end-(6+5)
+        mov     [esi+4], eax
+        jmp     @movend
+@9_32:  fild    qword ptr[eax+edx]
+        fild    qword ptr[eax]
+        cmp     edx, 8
+        jle     @16
+        fild    qword ptr[eax+8]
+        cmp     edx, 16
+        jle     @24
+        fild    qword ptr[eax+16]
+        fistp   qword ptr[esi+16]
+@24:    fistp   qword ptr[esi+8]
+@16:    fistp   qword ptr[esi]
+        fistp   qword ptr[esi+edx]
+        jmp     @movend
+        nop
+@large: push    esi
+        fild    qword ptr[eax]
+        lea     eax, [eax+edx-8]
+        lea     edx, [esi+edx-8]
+        fild    qword ptr[eax]
+        push    edx
+        neg     edx
+        and     esi,  -8
+        lea     edx, [edx+esi+8]
+        pop     esi
+@lrgnxt:fild    qword ptr[eax+edx]
+        fistp   qword ptr[esi+edx]
+        add     edx, 8
+        jl      @lrgnxt
+        fistp   qword ptr[esi]
+        pop     esi
+        fistp   qword ptr[esi]
+@movend:cmp     esi, ebp
+        jbe     @@0916
+@@0915: inc     ebp
+        mov     edx, [ebp]
+        mov     eax, edx
+        shr     edx, 12
+        xor     eax, edx
+        and     eax, 0FFFH
+        mov     [esp+eax*4+1CH], ebp
+        cmp     esi, ebp
+        ja      @@0915
+@@0916: add     esi, [esp+18H]
+        cmp     ebx, [esp+10H]
+        jnc     @@0917
+        add     edi, edi
+        lea     ebp, [esi-1]
+        jz      @@0908
+        jmp     @@0909
+@@0913: push    ebx
+        xor     ecx, ecx
+@s:     dec     edx
+        mov     bl, [eax+ecx]
+        mov     [esi+ecx], bl
+        lea     ecx,[ecx+1]
+        jnz     @s
+        pop     ebx
+        jmp     @movend
+@@0917: mov     eax, [esp]
+        add     esp, 16412
+        pop     edi
+        pop     esi
+        pop     ebx
+        pop     ebp
+end;
+
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebp
+        push    ebx
+        push    esi
+        push    edi
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -32
+        mov     esi, eax // esi=src
+        mov     edi, ecx // edi=dst
+        mov     [esp+08H], ecx
+        mov     eax, edx
+        cmp     eax, 32768
+        jl      @@0889
+        or      ax, 8000H
+        mov     [edi], eax
+        mov     eax, edx
+        shr     eax, 15
+        mov     [edi+2], eax
+        add     edi, 4
+        jmp     @@0891
+@@0890: mov     eax, 2
+        jmp     @@0904
+@@0889: mov     [edi], eax
+        test    eax, eax
+        jz      @@0890
+        add     edi, 2
+@@0891: lea     eax, [edx+esi]
+        mov     [esp+18H], edi
+        mov     [esp+0CH], eax
+        sub     eax, 11
+        mov     [esp+4], eax
+        lea     ebx, [esp+24H]
+        xor     eax, eax
+        mov     ecx, 1024
+@@089I: mov     [ebx], eax // faster than FillChar / stosb
+        mov     [ebx+4], eax
+        mov     [ebx+8], eax
+        mov     [ebx+12], eax
+        add     ebx, 16
+        dec     ecx
+        jnz     @@089I
+        mov     [edi], eax
+        add     edi, 4
+        mov     ebx, 1 // ebx=1 shl CWbit
+        // main loop:
+        cmp     esi, [esp+4]
+        ja      @@0900
+@@0892: mov     edx, [esi]
+        mov     eax, edx
+        shr     edx, 12
+        xor     edx, eax
+        and     edx, 0FFFH
+        mov     ebp, [esp+edx*4+24H]
+        mov     ecx, [esp+edx*4+4024H]
+        mov     [esp+edx*4+24H], esi
+        xor     ecx, eax
+        test    ecx, 0FFFFFFH
+        mov     [esp+edx*4+4024H], eax
+        jnz     @@0897
+        mov     eax, esi
+        or      ebp, ebp
+        jz      @@0897
+        sub     eax, ebp
+        mov     ecx, [esp+18H]
+        cmp     eax, 2
+        jle     @@0897
+        lea     esi, [esi+2]
+        or      dword ptr[ecx], ebx
+        mov     ecx, [esp+0CH]
+        add     ebp, 2
+        mov     eax, 1
+        sub     ecx, esi
+        dec     ecx
+        mov     [esp], ecx
+        cmp     ecx, 271
+        jl      @@0894
+        mov     dword ptr [esp], 271
+        jmp     @@0894
+@@0893: inc     eax
+@@0894: mov     ecx, [ebp+eax]
+        cmp     cl, [esi+eax]
+        jnz     @@0895
+        cmp     eax, [esp]
+        jge     @@0895
+        inc     eax
+        cmp     ch, [esi+eax]
+        jnz     @@0895
+        shr     ecx, 16
+        cmp     eax, [esp]
+        jge     @@0895
+        inc     eax
+        cmp     cl, [esi+eax]
+        jnz     @@0895
+        cmp     eax, [esp]
+        jge     @@0895
+        inc     eax
+        cmp     ch, [esi+eax]
+        jnz     @@0895
+        cmp     eax, [esp]
+        jl      @@0893
+@@0895: add     esi, eax
+        shl     edx, 4
+        cmp     eax, 15
+        jg      @@0896
+        or      eax, edx
+        mov     word ptr [edi], ax
+        add     edi, 2
+        jmp     @@0898
+@@0896: sub     eax, 16
+        mov     [edi], dx
+        mov     [edi+2H], al
+        add     edi, 3
+        jmp     @@0898
+@@0897: mov     al, [esi] // movsb is actually slower!
+        mov     [edi], al
+        inc     esi
+        inc     edi
+@@0898: add     ebx, ebx
+        jz      @@0899
+        cmp     esi, [esp+4]
+        jbe     @@0892
+        jmp     @@0900
+@@0899: mov     [esp+18H], edi
+        mov     [edi], ebx
+        inc     ebx
+        add     edi, 4
+        cmp     esi, [esp+4]
+        jbe     @@0892
+@@0900: cmp     esi, [esp+0CH]
+        jnc     @@0903
+@@0901: mov     al, [esi]
+        mov     [edi], al
+        inc     esi
+        inc     edi
+        add     ebx, ebx
+        jz      @@0902
+        cmp     esi, [esp+0CH]
+        jc      @@0901
+        jmp     @@0903
+@@0902: mov     [edi], ebx
+        inc     ebx
+        add     edi, 4
+        cmp     esi, [esp+0CH]
+        jc      @@0901
+@@0903: mov     eax, edi
+        sub     eax, [esp+08H]
+@@0904: add     esp, 32804
+        pop     edi
+        pop     esi
+        pop     ebx
+        pop     ebp
 end;
 
 function RdRand32: cardinal;

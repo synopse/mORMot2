@@ -13,7 +13,7 @@ unit mormot.core.base;
     - Integer Arrays Manipulation
     - ObjArray PtrArray InterfaceArray Wrapper Functions
     - Low-level Types Mapping Binary or Bits Structures
-    - Buffers (e.g. Hashing) Functions
+    - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
     - Date / Time Processing
     - Efficient Variant Values Conversion
     - Some Convenient TStream descendants and File access functions
@@ -1862,38 +1862,6 @@ procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
 procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// logical OR of two memory buffers
-// - will perform on all buffer bytes:
-// ! Dest[i] := Dest[i] or Source[i];
-procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// logical XOR of two memory buffers
-// - will perform on all buffer bytes:
-// ! Dest[i] := Dest[i] xor Source[i];
-procedure XorMemory(Dest,Source: PByteArray; size: PtrInt); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// logical XOR of two memory buffers into a third
-// - will perform on all buffer bytes:
-// ! Dest[i] := Source1[i] xor Source2[i];
-procedure XorMemory(Dest,Source1,Source2: PByteArray; size: PtrInt); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// logical AND of two memory buffers
-// - will perform on all buffer bytes:
-// ! Dest[i] := Dest[i] and Source[i];
-procedure AndMemory(Dest,Source: PByteArray; size: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// returns TRUE if all bytes equal zero
-function IsZero(P: pointer; Length: integer): boolean; overload;
-
-/// returns TRUE if all of a few bytes equal zero
-// - to be called instead of IsZero() e.g. for 1..8 bytes
-function IsZeroSmall(P: pointer; Length: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-
 
 
 { ************ Faster Alternative to RTL Standard Functions }
@@ -2129,10 +2097,10 @@ procedure XorEntropy(entropy: PBlock128);
 
 
 
-{ ************ Buffers (e.g. Hashing) Functions }
+{ ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
 
 type
-  /// implements a stack-based storage of some (UTF-8 or binary) text
+  /// implements a stack-based storage of some (UTF-8 or binary) content
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of data
@@ -2178,6 +2146,38 @@ type
     // default 4KB buffer allocated on stack - after the len/buf main fields
     tmp: array[0..4095] of AnsiChar;
   end;
+
+/// logical OR of two memory buffers
+// - will perform on all buffer bytes:
+// ! Dest[i] := Dest[i] or Source[i];
+procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// logical XOR of two memory buffers
+// - will perform on all buffer bytes:
+// ! Dest[i] := Dest[i] xor Source[i];
+procedure XorMemory(Dest,Source: PByteArray; size: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// logical XOR of two memory buffers into a third
+// - will perform on all buffer bytes:
+// ! Dest[i] := Source1[i] xor Source2[i];
+procedure XorMemory(Dest,Source1,Source2: PByteArray; size: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// logical AND of two memory buffers
+// - will perform on all buffer bytes:
+// ! Dest[i] := Dest[i] and Source[i];
+procedure AndMemory(Dest,Source: PByteArray; size: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns TRUE if all bytes equal zero
+function IsZero(P: pointer; Length: integer): boolean; overload;
+
+/// returns TRUE if all of a few bytes equal zero
+// - to be called instead of IsZero() e.g. for 1..8 bytes
+function IsZeroSmall(P: pointer; Length: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the line length from a size-delimited source array of chars
 // - will use fast assembly on x86-64 CPU
@@ -2349,6 +2349,44 @@ var
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
   // or fallback to xxHash32() which performs better than crc32cfast()
   InterningHasher: THasher = xxHash32;
+
+
+type
+  TOffsets = array[0..4095] of PAnsiChar; // 16KB/32KB hash table used by SynLZ
+
+/// get maximum possible (worse) SynLZ compressed size
+function SynLZcompressdestlen(in_len: integer): integer;
+
+/// get exact uncompressed size from SynLZ-compressed buffer (to reserve memory, e.g.)
+function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
+
+/// SynLZ compression algorithm implemented in pascal
+// - you should rather call SynLZcompress1() which is likely to be much faster
+function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+
+/// SynLZ decompression algorithm implemented in pascal
+// - you should rather call SynLZdecompress1() which is likely to be much faster
+function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+
+/// SynLZ decompression algorithm with memory boundaries check
+// - this function is slower, but will allow to uncompress only the start
+// of the content (e.g. to read some metadata header)
+// - it will also check for dst buffer overflow, so will be more secure than
+// other functions, which expect the content to be verified (e.g. via CRC)
+function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
+  maxDst: integer): integer;
+
+/// SynLZ compression algorithm implemented in pascal
+// - includes optimized x86/x64 asm version on Intel/AMD
+// - just redirect to SynLZcompress1pas on other CPUs
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// SynLZ decompression algorithm implemented in pascal
+// - includes optimized x86/x64 asm version on Intel/AMD
+// - just redirect to SynLZcompress1pas on other CPUs
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+  {$ifndef CPUINTEL} inline; {$endif}
 
 
 
@@ -4044,22 +4082,28 @@ end;
 // CompareMemSmall/MoveSmall defined now for proper inlining below
 
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
+var
+  c: AnsiChar;
 label
   zero;
 begin
   {$ifndef CPUX86}
   result := false;
   {$endif}
-  inc(Length, PtrInt(PtrUInt(P1)));
-  dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < Length then
+  inc(PtrUInt(P1), PtrUInt(Length));
+  inc(PtrUInt(P2), PtrUInt(Length));
+  Length := - Length;
+  if Length <> 0 then
     repeat
-      if PByte(P1)^ <> PByteArray(P2)[PtrUInt(P1)] then
+      c := PAnsiChar(P1)[Length];
+      if c <> PAnsiChar(P2)[Length] then
         goto zero;
-      inc(PByte(P1));
-    until PtrInt(PtrUInt(P1)) >= Length;
+      inc(Length);
+    until Length = 0;
   result := true;
+  {$ifdef CPUX86}
   exit;
+  {$endif}
 zero:
   {$ifdef CPUX86}
   result := false;
@@ -4068,12 +4112,13 @@ end;
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
 begin
-  dec(PtrUInt(Source), PtrUInt(Dest));
-  inc(Count, PtrUInt(Dest));
+  inc(PtrUInt(Source), Count);
+  inc(PtrUInt(Dest), Count);
+  PtrInt(Count) := - PtrInt(Count);
   repeat
-    PAnsiChar(Dest)^ := PAnsiChar(Source)[PtrUInt(Dest)];
-    inc(PtrUInt(Dest));
-  until PtrUInt(Dest) = Count;
+    PAnsiChar(Dest)[Count] := PAnsiChar(Source)[Count];
+    inc(Count);
+  until Count = 0;
 end;
 
 function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
@@ -6251,113 +6296,6 @@ begin
     result := false;
 end;
 
-procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
-begin
-  while size >= SizeOf(PtrInt) do
-  begin
-    dec(size, SizeOf(PtrInt));
-    PPtrInt(Dest)^ := PPtrInt(Dest)^ or PPtrInt(Source)^;
-    inc(PPtrInt(Dest));
-    inc(PPtrInt(Source));
-  end;
-  while size > 0 do
-  begin
-    dec(size);
-    Dest[size] := Dest[size] or Source[size];
-  end;
-end;
-
-procedure XorMemory(Dest, Source: PByteArray; size: PtrInt);
-begin
-  while size >= SizeOf(PtrInt) do
-  begin
-    dec(size, SizeOf(PtrInt));
-    PPtrInt(Dest)^ := PPtrInt(Dest)^ xor PPtrInt(Source)^;
-    inc(PPtrInt(Dest));
-    inc(PPtrInt(Source));
-  end;
-  while size > 0 do
-  begin
-    dec(size);
-    Dest[size] := Dest[size] xor Source[size];
-  end;
-end;
-
-procedure XorMemory(Dest, Source1, Source2: PByteArray; size: PtrInt);
-begin
-  while size >= SizeOf(PtrInt) do
-  begin
-    dec(size, SizeOf(PtrInt));
-    PPtrInt(Dest)^ := PPtrInt(Source1)^ xor PPtrInt(Source2)^;
-    inc(PPtrInt(Dest));
-    inc(PPtrInt(Source1));
-    inc(PPtrInt(Source2));
-  end;
-  while size > 0 do
-  begin
-    dec(size);
-    Dest[size] := Source1[size] xor Source2[size];
-  end;
-end;
-
-procedure AndMemory(Dest, Source: PByteArray; size: PtrInt);
-begin
-  while size >= SizeOf(PtrInt) do
-  begin
-    dec(size, SizeOf(PtrInt));
-    PPtrInt(Dest)^ := PPtrInt(Dest)^ and PPtrInt(Source)^;
-    inc(PPtrInt(Dest));
-    inc(PPtrInt(Source));
-  end;
-  while size > 0 do
-  begin
-    dec(size);
-    Dest[size] := Dest[size] and Source[size];
-  end;
-end;
-
-function IsZero(P: pointer; Length: integer): boolean;
-var
-  i: integer;
-begin
-  result := false;
-  for i := 1 to Length shr 4 do // 16 bytes (4 DWORD) by loop - aligned read
-    {$ifdef CPU64}
-    if (PInt64Array(P)^[0] <> 0) or (PInt64Array(P)^[1] <> 0) then
-    {$else}
-    if (PCardinalArray(P)^[0] <> 0) or (PCardinalArray(P)^[1] <> 0) or
-       (PCardinalArray(P)^[2] <> 0) or (PCardinalArray(P)^[3] <> 0) then
-    {$endif}
-        exit
-      else
-        inc(PByte(P), 16);
-  for i := 1 to (Length shr 2) and 3 do // 4 bytes (1 DWORD) by loop
-    if PCardinal(P)^ <> 0 then
-      exit
-    else
-      inc(PByte(P), 4);
-  for i := 1 to Length and 3 do // remaining content
-    if PByte(P)^ <> 0 then
-      exit
-    else
-      inc(PByte(P));
-  result := true;
-end;
-
-function IsZeroSmall(P: pointer; Length: PtrInt): boolean;
-begin
-  result := false;
-  repeat
-    if PByte(P)^ <> 0 then
-      exit;
-    inc(PByte(P));
-    dec(Length);
-    if Length = 0 then
-      break;
-  until false;
-  result := true;
-end;
-
 
 { ************ Faster alternative to RTL standard functions }
 
@@ -7057,6 +6995,16 @@ begin // CPU-neutral implementation
   product.L := t3.V shl 32 or t1.L;
 end;
 
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+begin
+  result := SynLZcompress1pas(src,size,dst);
+end;
+
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+begin
+  result := SynLZdecompress1pas(src,size,dst);
+end;
+
 {$endif CPUINTEL}
 
 {$ifndef ASMINTEL}
@@ -7139,7 +7087,7 @@ end;
 {$endif ASMINTEL}
 
 
-{ ************ Buffers (e.g. Hashing) Functions }
+{ ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
 
 {$ifndef CPUX64} // there is fast branchless SSE2 assembly on x86-64
 
@@ -7162,6 +7110,371 @@ begin
 end;
 
 {$endif CPUX64}
+
+function SynLZcompressdestlen(in_len: integer): integer;
+begin // get maximum possible (worse) compressed size for out_p
+  result := in_len + in_len shr 3 + 16;
+end;
+
+function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
+begin // get uncompressed size from lz-compressed buffer (to reserve memory, e.g.)
+  result := PWord(in_p)^;
+  if result and $8000 <> 0 then
+    result := (result and $7fff) or (integer(PWord(in_p + 2)^) shl 15);
+end;
+
+function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+var
+  dst_beg,          // initial dst value
+  src_end,          // real last byte available in src
+  src_endmatch,     // last byte to try for hashing
+  o: PAnsiChar;
+  CWbit: byte;
+  CWpoint: PCardinal;
+  v, h, cached, t, tmax: PtrUInt;
+  offset: TOffsets;
+  cache: array[0..4095] of cardinal; // 16KB+16KB=32KB on stack (48KB under Win64)
+begin
+  dst_beg := dst;
+  // 1. store in_len
+  if size >= $8000 then
+  begin // size in 32KB..2GB -> stored as integer
+    PWord(dst)^ := $8000 or (size and $7fff);
+    PWord(dst + 2)^ := size shr 15;
+    inc(dst, 4);
+  end
+  else
+  begin
+    PWord(dst)^ := size; // size<32768 -> stored as word
+    if size = 0 then
+    begin
+      result := 2;
+      exit;
+    end;
+    inc(dst, 2);
+  end;
+  // 2. compress
+  src_end := src + size;
+  src_endmatch := src_end - (6 + 5);
+  CWbit := 0;
+  CWpoint := pointer(dst);
+  PCardinal(dst)^ := 0;
+  inc(dst, sizeof(CWpoint^));
+  fillchar(offset, sizeof(offset), 0); // fast 16KB reset to 0
+  // 1. main loop to search using hash[]
+  if src <= src_endmatch then
+    repeat
+      v := PCardinal(src)^;
+      h := ((v shr 12) xor v) and 4095;
+      o := offset[h];
+      offset[h] := src;
+      cached := v xor {%H-}cache[h]; // o=nil if cache[h] is uninitialized
+      cache[h] := v;
+      if (cached and $00ffffff = 0) and (o <> nil) and (src - o > 2) then
+      begin
+        CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
+        inc(src, 2);
+        inc(o, 2);
+        t := 1;
+        tmax := src_end - src - 1;
+        if tmax >= (255 + 16) then
+          tmax := (255 + 16);
+        while (o[t] = src[t]) and (t < tmax) do
+          inc(t);
+        inc(src, t);
+        h := h shl 4;
+        // here we have always t>0
+        if t <= 15 then
+        begin // mark 2 to 17 bytes -> size=1..15
+          PWord(dst)^ := integer(t or h);
+          inc(dst, 2);
+        end
+        else
+        begin // mark 18 to (255+16) bytes -> size=0, next byte=t
+          dec(t, 16);
+          PWord(dst)^ := h; // size=0
+          dst[2] := ansichar(t);
+          inc(dst, 3);
+        end;
+      end
+      else
+      begin
+        dst^ := src^;
+        inc(src);
+        inc(dst);
+      end;
+      if CWbit < 31 then
+      begin
+        inc(CWbit);
+        if src <= src_endmatch then
+          continue
+        else
+          break;
+      end
+      else
+      begin
+        CWpoint := pointer(dst);
+        PCardinal(dst)^ := 0;
+        inc(dst, sizeof(CWpoint^));
+        CWbit := 0;
+        if src <= src_endmatch then
+          continue
+        else
+          break;
+      end;
+    until false;
+  // 2. store remaining bytes
+  if src < src_end then
+    repeat
+      dst^ := src^;
+      inc(src);
+      inc(dst);
+      if CWbit < 31 then
+      begin
+        inc(CWbit);
+        if src < src_end then
+          continue
+        else
+          break;
+      end
+      else
+      begin
+        PCardinal(dst)^ := 0;
+        inc(dst, 4);
+        CWbit := 0;
+        if src < src_end then
+          continue
+        else
+          break;
+      end;
+    until false;
+  result := dst - dst_beg;
+end;
+
+procedure movechars(s, d: PAnsiChar; t: PtrUInt); {$ifdef HASINLINE} inline;{$endif}
+// system.move() alternative for overlapping small data blocks
+var
+  c: AnsiChar; // better code generation on FPC
+begin
+  inc(PtrUInt(s), t);
+  inc(PtrUInt(d), t);
+  PtrInt(t) := -PtrInt(t);
+  repeat
+    c := s[t];
+    d[t] := c;
+    inc(t);
+  until t = 0;
+end;
+
+// better code generation with sub-functions for raw decoding
+procedure SynLZdecompress1passub(src, src_end, dst: PAnsiChar; var offset: TOffsets);
+var
+  last_hashed: PAnsiChar; // initial src and dst value
+  {$ifdef CPU64}
+  o: PAnsiChar;
+  {$endif}
+  CW, CWbit: cardinal;
+  v, t, h: PtrUInt;
+label
+  nextCW;
+begin
+  last_hashed := dst - 1;
+nextCW:
+  CW := PCardinal(src)^;
+  inc(src, 4);
+  CWbit := 1;
+  if src < src_end then
+    repeat
+      if CW and CWbit = 0 then
+      begin
+        dst^ := src^;
+        inc(src);
+        inc(dst);
+        if src >= src_end then
+          break;
+        if last_hashed < dst - 3 then
+        begin
+          inc(last_hashed);
+          v := PCardinal(last_hashed)^;
+          offset[((v shr 12) xor v) and 4095] := last_hashed;
+        end;
+        CWbit := CWbit shl 1;
+        if CWbit <> 0 then
+          continue
+        else
+          goto nextCW;
+      end
+      else
+      begin
+        h := PWord(src)^;
+        inc(src, 2);
+        t := (h and 15) + 2;
+        h := h shr 4;
+        if t = 2 then
+        begin
+          t := ord(src^) + (16 + 2);
+          inc(src);
+        end;
+        {$ifdef CPU64}
+        o := offset[h];
+        if PtrUInt(dst - o) < t then
+          movechars(o, dst, t)
+        else if t <= 8 then
+          PInt64(dst)^ := PInt64(o)^
+        else
+          move(o^, dst^, t);
+        {$else}
+        if PtrUInt(dst - offset[h]) < t then
+          movechars(offset[h], dst, t)
+        else if t > 8 then // safe since src_endmatch := src_end-(6+5)
+          move(offset[h]^, dst^, t)
+        else
+          PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
+        {$endif}
+        if src >= src_end then
+          break;
+        if last_hashed < dst then
+          repeat
+            inc(last_hashed);
+            v := PCardinal(last_hashed)^;
+            offset[((v shr 12) xor v) and 4095] := last_hashed;
+          until last_hashed >= dst;
+        inc(dst, t);
+        last_hashed := dst - 1;
+        CWbit := CWbit shl 1;
+        if CWbit <> 0 then
+          continue
+        else
+          goto nextCW;
+      end;
+    until false;
+end;
+
+function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+var
+  offset: TOffsets;
+  src_end: PAnsiChar;
+begin
+  src_end := src + size;
+  result := PWord(src)^;
+  if result = 0 then
+    exit;
+  inc(src, 2);
+  if result and $8000 <> 0 then
+  begin
+    result := (result and $7fff) or (integer(PWord(src)^) shl 15);
+    inc(src, 2);
+  end;
+  SynLZdecompress1passub(src, src_end, dst, offset);
+end;
+
+procedure SynLZdecompress1partialsub(src, dst, src_end, dst_end: PAnsiChar;
+  var offset: TOffsets);
+var
+  last_hashed: PAnsiChar; // initial src and dst value
+  CWbit, CW: integer;
+  v, t, h: PtrUInt;
+  {$ifdef CPU64}
+  o: PAnsiChar;
+  {$endif}
+label
+  nextCW;
+begin
+  last_hashed := dst - 1;
+nextCW:
+  CW := PCardinal(src)^;
+  inc(src, 4);
+  CWbit := 1;
+  if src < src_end then
+    repeat
+      if CW and CWbit = 0 then
+      begin
+        dst^ := src^;
+        inc(src);
+        inc(dst);
+        if (src >= src_end) or (dst >= dst_end) then
+          break;
+        if last_hashed < dst - 3 then
+        begin
+          inc(last_hashed);
+          v := PCardinal(last_hashed)^;
+          offset[((v shr 12) xor v) and 4095] := last_hashed;
+        end;
+        CWbit := CWbit shl 1;
+        if CWbit <> 0 then
+          continue
+        else
+          goto nextCW;
+      end
+      else
+      begin
+        h := PWord(src)^;
+        inc(src, 2);
+        t := (h and 15) + 2;
+        h := h shr 4;
+        if t = 2 then
+        begin
+          t := ord(src^) + (16 + 2);
+          inc(src);
+        end;
+        if dst + t >= dst_end then
+        begin // avoid buffer overflow by all means
+          movechars(offset[h], dst, dst_end - dst);
+          break;
+        end;
+        {$ifdef CPU64}
+        o := offset[h];
+        if (t <= 8) or (PtrUInt(dst - o) < t) then
+          movechars(o, dst, t)
+        else
+          move(o^, dst^, t);
+        {$else}
+        if (t <= 8) or (PtrUInt(dst - offset[h]) < t) then
+          movechars(offset[h], dst, t)
+        else
+          move(offset[h]^, dst^, t);
+        {$endif}
+        if src >= src_end then
+          break;
+        if last_hashed < dst then
+          repeat
+            inc(last_hashed);
+            v := PCardinal(last_hashed)^;
+            offset[((v shr 12) xor v) and 4095] := last_hashed;
+          until last_hashed >= dst;
+        inc(dst, t);
+        last_hashed := dst - 1;
+        CWbit := CWbit shl 1;
+        if CWbit <> 0 then
+          continue
+        else
+          goto nextCW;
+      end;
+    until false;
+end;
+
+function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
+  maxDst: integer): integer;
+var
+  offset: TOffsets;
+  src_end: PAnsiChar;
+begin
+  src_end := src + size;
+  result := PWord(src)^;
+  if result = 0 then
+    exit;
+  inc(src, 2);
+  if result and $8000 <> 0 then
+  begin
+    result := (result and $7fff) or (integer(PWord(src)^) shl 15);
+    inc(src, 2);
+  end;
+  if maxDst < result then
+    result := maxDst;
+  if result > 0 then
+    SynLZdecompress1partialsub(src, dst, src_end, dst + result, offset);
+end;
+
 
 { TSynTempBuffer }
 
@@ -7262,6 +7575,112 @@ begin
     FreeMem(buf);
 end;
 
+
+procedure OrMemory(Dest, Source: PByteArray; size: PtrInt);
+begin
+  while size >= SizeOf(PtrInt) do
+  begin
+    dec(size, SizeOf(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Dest)^ or PPtrInt(Source)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source));
+  end;
+  while size > 0 do
+  begin
+    dec(size);
+    Dest[size] := Dest[size] or Source[size];
+  end;
+end;
+
+procedure XorMemory(Dest, Source: PByteArray; size: PtrInt);
+begin
+  while size >= SizeOf(PtrInt) do
+  begin
+    dec(size, SizeOf(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Dest)^ xor PPtrInt(Source)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source));
+  end;
+  while size > 0 do
+  begin
+    dec(size);
+    Dest[size] := Dest[size] xor Source[size];
+  end;
+end;
+
+procedure XorMemory(Dest, Source1, Source2: PByteArray; size: PtrInt);
+begin
+  while size >= SizeOf(PtrInt) do
+  begin
+    dec(size, SizeOf(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Source1)^ xor PPtrInt(Source2)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source1));
+    inc(PPtrInt(Source2));
+  end;
+  while size > 0 do
+  begin
+    dec(size);
+    Dest[size] := Source1[size] xor Source2[size];
+  end;
+end;
+
+procedure AndMemory(Dest, Source: PByteArray; size: PtrInt);
+begin
+  while size >= SizeOf(PtrInt) do
+  begin
+    dec(size, SizeOf(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Dest)^ and PPtrInt(Source)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source));
+  end;
+  while size > 0 do
+  begin
+    dec(size);
+    Dest[size] := Dest[size] and Source[size];
+  end;
+end;
+
+function IsZero(P: pointer; Length: integer): boolean;
+var
+  i: integer;
+begin
+  result := false;
+  for i := 1 to Length shr 4 do // 16 bytes (4 DWORD) by loop - aligned read
+    {$ifdef CPU64}
+    if (PInt64Array(P)^[0] <> 0) or (PInt64Array(P)^[1] <> 0) then
+    {$else}
+    if (PCardinalArray(P)^[0] <> 0) or (PCardinalArray(P)^[1] <> 0) or
+       (PCardinalArray(P)^[2] <> 0) or (PCardinalArray(P)^[3] <> 0) then
+    {$endif}
+        exit
+      else
+        inc(PByte(P), 16);
+  for i := 1 to (Length shr 2) and 3 do // 4 bytes (1 DWORD) by loop
+    if PCardinal(P)^ <> 0 then
+      exit
+    else
+      inc(PByte(P), 4);
+  for i := 1 to Length and 3 do // remaining content
+    if PByte(P)^ <> 0 then
+      exit
+    else
+      inc(PByte(P));
+  result := true;
+end;
+
+function IsZeroSmall(P: pointer; Length: PtrInt): boolean;
+begin
+  result := false;
+  dec(PtrUInt(P), PtrUInt(Length));
+  Length := - Length;
+  repeat
+    if PByteArray(P)[Length] <> 0 then
+      exit;
+    inc(Length);
+  until Length = 0;
+  result := true;
+end;
 
 function crc32cBy4fast(crc, value: cardinal): cardinal;
 var
