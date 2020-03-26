@@ -10,7 +10,7 @@ unit mormot.core.data;
     - RTL TPersistent / TInterfacedObject with Custom Constructor
     - TSynPersistent / TSynList / TSynObjectList / TSynLocker classes
     - Variable Length Integer Encoding / Decoding
-    - Base64 and Base64URI Encoding / Decoding
+    - Base64, Base64URI and Baudot Encoding / Decoding
 
     - RawUTF8 String Values Interning
     - TSynNameValue Name/Value Storage
@@ -519,7 +519,7 @@ function FromVarInt64Value(Source: PByte): Int64;
 function GotoNextVarInt(Source: PByte): pointer; {$ifdef HASINLINE}inline;{$endif}
 
 
-{ ************ Base64 and Base64URI Encoding / Decoding }
+{ ************ Base64, Base64URI and Baudot Encoding / Decoding }
 
 const
   /// UTF-8 encoded \uFFF0 special code to mark Base64 binary content in JSON
@@ -727,7 +727,8 @@ function Base64uriToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt): bool
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 // - will check supplied text is a valid Base64-URI encoded stream
-function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean; overload;
+function Base64uriToBin(const base64: RawByteString;
+  bin: PAnsiChar; binlen: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct low-level decoding of a Base64-URI encoded buffer
@@ -737,7 +738,42 @@ function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: Ptr
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 // - you should better not use this, but Base64uriToBin() overloaded functions
-function Base64uriDecode(sp,rp: PAnsiChar; len: PtrInt): boolean;
+function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
+
+/// convert some ASCII-7 text into binary, using Emile Baudot code
+// - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
+// charset, following a custom static-huffman-like encoding with 5-bit masks
+// - any upper case char will be converted into lowercase during encoding
+// - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
+// - resulting binary will consume 5 (or 10) bits per character
+// - reverse of the BaudotToAscii() function
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString; overload;
+
+/// convert some ASCII-7 text into binary, using Emile Baudot code
+// - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
+// charset, following a custom static-huffman-like encoding with 5-bit masks
+// - any upper case char will be converted into lowercase during encoding
+// - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
+// - resulting binary will consume 5 (or 10) bits per character
+// - reverse of the BaudotToAscii() function
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function AsciiToBaudot(const Text: RawUTF8): RawByteString; overload;
+
+/// convert some Baudot code binary, into ASCII-7 text
+// - reverse of the AsciiToBaudot() function
+// - any uppercase character would be decoded as lowercase - and some characters
+// may have disapeared
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUTF8; overload;
+
+/// convert some Baudot code binary, into ASCII-7 text
+// - reverse of the AsciiToBaudot() function
+// - any uppercase character would be decoded as lowercase - and some characters
+// may have disapeared
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function BaudotToAscii(const Baudot: RawByteString): RawUTF8; overload;
+
 
 (*
 
@@ -2251,7 +2287,7 @@ end;
 
 
 
-{ ************ Base64 and Base64URI Encoding / Decoding }
+{ ************ Base64, Base64URI and Baudot Encoding / Decoding }
 
 type
   TBase64Enc = array[0..63] of AnsiChar;
@@ -3009,6 +3045,135 @@ begin // '\uFFF0base64encodedbinary' checked and decode into binary
 end;
 
 
+{ --------- Baudot encoding/decoding }
+
+const
+  // see https://en.wikipedia.org/wiki/Baudot_code
+  Baudot2Char: array[0..63] of AnsiChar =
+   #0'e'#10'a siu'#13'drjnfcktzlwhypqobg'#254'mxv'#255+
+   #0'3'#10'- ''87'#13#0'4'#0',!:(5+)2$6019?@'#254'./;'#255;
+var
+  Char2Baudot: array[AnsiChar] of byte;
+
+function AsciiToBaudot(const Text: RawUTF8): RawByteString;
+begin
+  result := AsciiToBaudot(pointer(Text), length(Text));
+end;
+
+function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString;
+var
+  i: PtrInt;
+  c, d, bits: integer;
+  shift: boolean;
+  dest: PByte;
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  if (P = nil) or (len = 0) then
+    exit;
+  shift := false;
+  dest := tmp.Init((len * 10) shr 3);
+  d := 0;
+  bits := 0;
+  for i := 0 to len - 1 do
+  begin
+    c := Char2Baudot[P[i]];
+    if c > 32 then
+    begin
+      if not shift then
+      begin
+        d := (d shl 5) or 27;
+        inc(bits, 5);
+        shift := true;
+      end;
+      d := (d shl 5) or (c - 32);
+      inc(bits, 5);
+    end
+    else if c > 0 then
+    begin
+      if shift and (P[i] >= ' ') then
+      begin
+        d := (d shl 5) or 31;
+        inc(bits, 5);
+        shift := false;
+      end;
+      d := (d shl 5) or c;
+      inc(bits, 5);
+    end;
+    while bits >= 8 do
+    begin
+      dec(bits, 8);
+      dest^ := d shr bits;
+      inc(dest);
+    end;
+  end;
+  if bits > 0 then
+  begin
+    dest^ := d shl (8 - bits);
+    inc(dest);
+  end;
+  SetString(result, PAnsiChar(tmp.buf), PAnsiChar(dest) - PAnsiChar(tmp.buf));
+  tmp.Done;
+end;
+
+function BaudotToAscii(const Baudot: RawByteString): RawUTF8;
+begin
+  result := BaudotToAscii(pointer(Baudot), length(Baudot));
+end;
+
+function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUTF8;
+var
+  i: PtrInt;
+  c, b, bits, shift: integer;
+  tmp: TSynTempBuffer;
+  dest: PAnsiChar;
+begin
+  result := '';
+  if (Baudot = nil) or (len <= 0) then
+    exit;
+  dest := tmp.Init((len shl 3) div 5);
+  try
+    shift := 0;
+    b := 0;
+    bits := 0;
+    for i := 0 to len - 1 do
+    begin
+      b := (b shl 8) or Baudot[i];
+      inc(bits, 8);
+      while bits >= 5 do
+      begin
+        dec(bits, 5);
+        c := (b shr bits) and 31;
+        case c of
+          27:
+            if shift <> 0 then
+              exit
+            else
+              shift := 32;
+          31:
+            if shift <> 0 then
+              shift := 0
+            else
+              exit;
+        else
+          begin
+            c := ord(Baudot2Char[c + shift]);
+            if c = 0 then
+              if Baudot[i + 1] = 0 then // allow triming of last 5 bits
+                break
+              else
+                exit;
+            dest^ := AnsiChar(c);
+            inc(dest);
+          end;
+        end;
+      end;
+    end;
+  finally
+    tmp.Done(dest, result);
+  end;
+end;
+
 
 { ************ RawUTF8 String Values Interning }
 
@@ -3041,20 +3206,22 @@ end;
 function FindSectionFirstLine(var source: PUTF8Char; search: PAnsiChar): boolean;
 var
   table: PNormTable;
+  charset: PTextCharSet;
 begin
   result := false;
   if (source = nil) or (search = nil) then
     exit;
   table := @NormToUpperAnsi7;
+  charset := @TEXT_CHARS;
   repeat
     if source^ = '[' then
     begin
       inc(source);
       result := IdemPChar2(table, source, search);
     end;
-    while source^ in ANSICHARNOT01310 do
+    while tcNot01013 in charset[source^] do
       inc(source);
-    while source^ in [#10, #13] do
+    while tc1013 in charset[source^] do
       inc(source);
     if result then
       exit; // found
@@ -3467,8 +3634,6 @@ var
   i, UpperNameLength: PtrInt;
   V: RawUTF8;
   UpperSection, UpperName: array[byte] of AnsiChar;
-label
-  Sec;
 begin
   UpperNameLength := length(Name);
   PWord(UpperCopy255Buf(UpperName{%H-}, pointer(Name), UpperNameLength))^ := ord('=');
@@ -3477,16 +3642,15 @@ begin
   P := pointer(Content);
   // 1. find Section, and try update within it
   if Section = '' then
-    goto Sec; // find the Name= entry before any [Section]
-  SectionFound := false;
-  PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
-  if FindSectionFirstLine(P, UpperSection) then
+    SectionFound := true // find the Name= entry before any [Section]
+  else
   begin
-Sec:SectionFound := true;
-    if UpdateIniNameValueInternal(Content, Value, V, P, @UpperName, UpperNameLength) then
-      exit;
-    // we reached next [Section] without having found Name=
+    PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
+    SectionFound := FindSectionFirstLine(P, UpperSection);
   end;
+  if SectionFound and
+     UpdateIniNameValueInternal(Content, Value, V, P, @UpperName, UpperNameLength) then
+      exit;
   // 2. section or Name= entry not found: add Name=Value
   V := Name + '=' + V;
   if not SectionFound then
@@ -3517,12 +3681,17 @@ procedure InitializeConstants;
 var
   i: PtrInt;
 begin
-  FillcharFast(ConvertBase64ToBin,256,255); // invalid value set to -1
+  FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
   ConvertBase64ToBin['='] := -2; // special value for '='
   for i := 0 to high(b64urienc) do
     ConvertBase64uriToBin[b64urienc[i]] := i;
+  for i := high(Baudot2Char) downto 0 do
+    if Baudot2Char[i]<#128 then
+      Char2Baudot[Baudot2Char[i]] := i;
+  for i := ord('a') to ord('z') do
+    Char2Baudot[AnsiChar(i - 32)] := Char2Baudot[AnsiChar(i)]; // A-Z -> a-z
 end;
 
 

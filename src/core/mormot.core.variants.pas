@@ -122,7 +122,7 @@ type
     function TryJSONToVariant(var JSON: PUTF8Char; var Value: variant;
       EndOfObject: PUTF8Char): boolean; virtual;
     /// customization of variant into JSON serialization
-    procedure ToJSON(W: TAbstractWriter; const Value: variant; Escape: TTextWriterKind); overload; virtual;
+    procedure ToJSON(W: TBaseWriter; const Value: variant; Escape: TTextWriterKind); overload; virtual;
     /// retrieve the field/column value
     // - this method will call protected IntGet abstract method
     function GetProperty(var Dest: TVarData; const V: TVarData;
@@ -530,7 +530,7 @@ begin
   result := false;
 end;
 
-procedure TSynInvokeableVariantType.ToJSON(W: TAbstractWriter; const Value: variant;
+procedure TSynInvokeableVariantType.ToJSON(W: TBaseWriter; const Value: variant;
   Escape: TTextWriterKind);
 begin
   raise ESynException.CreateUTF8('%.ToJSON is not implemented', [self]);

@@ -235,7 +235,7 @@ type
     class function RandomTextParagraph(WordCount: Integer; LastPunctuation: AnsiChar = '.';
       const RandomInclude: RawUTF8 = ''): RawUTF8;
     /// add containing some "bla bli blo blu" fake text, with paragraphs
-    class procedure AddRandomTextParagraph(WR: TAbstractWriter; WordCount: Integer;
+    class procedure AddRandomTextParagraph(WR: TBaseWriter; WordCount: Integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUTF8 = '';
       NoLineFeed: boolean = false);
     /// this method is triggered internaly - e.g. by Check() - when a test failed
@@ -341,8 +341,8 @@ type
     // to the console
     // - it will optionally enable full logging during the process
     // - a typical use will first assign the same log class for the whole
-    // framework, if the mORMot.pas unit is to be used - in such case, before
-    // calling RunAsConsole(), the caller should execute:
+    // framework - in such case, before calling RunAsConsole(), the caller
+    // should execute:
     // ! TSynLogTestLog := TSQLLog;
     // ! TMyTestsClass.RunAsConsole('My Automated Tests',LOG_VERBOSE);
     class procedure RunAsConsole(const CustomIdent: string = '';
@@ -747,9 +747,9 @@ class function TSynTestCase.RandomTextParagraph(WordCount: Integer;
   LastPunctuation: AnsiChar; const RandomInclude: RawUTF8): RawUTF8;
 var
   tmp: TTextWriterStackBuffer;
-  WR: TAbstractWriter;
+  WR: TBaseWriter;
 begin
-  WR := TAbstractWriter.CreateOwnedStream(tmp);
+  WR := TBaseWriter.CreateOwnedStream(tmp);
   try
     AddRandomTextParagraph(WR, WordCount, LastPunctuation, RandomInclude);
     WR.SetText(result);
@@ -758,7 +758,7 @@ begin
   end;
 end;
 
-class procedure TSynTestCase.AddRandomTextParagraph(WR: TAbstractWriter;
+class procedure TSynTestCase.AddRandomTextParagraph(WR: TBaseWriter;
   WordCount: Integer; LastPunctuation: AnsiChar; const RandomInclude: RawUTF8;
   NoLineFeed: boolean);
 type

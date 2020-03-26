@@ -101,9 +101,7 @@ const
 {$else}
 
   /// available type families for Delphi 6 and up, similar to typinfo.pas
-  // - redefined here to be shared between SynCommons.pas and mORMot.pas,
-  // also leveraging FPC compatibility as much as possible (FPC's typinfo.pp
-  // is not convenient to share code with Delphi - see e.g. its rtLString)
+  // - redefined here to leverage FPC and Delphi compatibility as much as possible
   TRttiKind = (rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat,
     rkString, rkSet, rkClass, rkMethod, rkWChar, rkLString, rkWString,
     rkVariant, rkArray, rkRecord, rkInterface, rkInt64, rkDynArray
@@ -301,7 +299,7 @@ type
     function GetSetNameCSV(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUTF8; overload;
     /// get the enumeration names corresponding to a set value
-    procedure GetSetNameCSV(W: TAbstractWriter; Value: cardinal; SepChar: AnsiChar = ',';
+    procedure GetSetNameCSV(W: TBaseWriter; Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false); overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
@@ -321,8 +319,8 @@ type
   end;
 
   /// RTTI of a record/object type definition (managed) field
-  // - defined as a record since it is the same for FPC and Delphi, and
-  // is not available in oldest Delphi's TypInfo.pas
+  // - defined here since this structure is not available in oldest
+  // Delphi's TypInfo.pas
   // - maps TRecordElement in FPC rtti.inc or TManagedField in TypInfo
   TRttiRecordField = record
     /// the RTTI of this managed field
@@ -330,7 +328,7 @@ type
     TypeInfo: PRttiInfo;
     {$else}
     TypeInfoRef: PPRttiInfo;
-    {$endif}
+    {$endif HASDIRECTTYPEINFO}
     /// where this managed field starts in the record memory layout
     Offset: PtrUInt;
   end;
@@ -1038,7 +1036,7 @@ var
   uncamel: shortstring;
   temp: TTextWriterStackBuffer;
 begin
-  with TAbstractWriter.CreateOwnedStream(temp) do
+  with TBaseWriter.CreateOwnedStream(temp) do
   try
     AddString(Prefix);
     V := NameList;
@@ -1120,7 +1118,7 @@ begin
   result := TrimLeftLowerCaseShort(GetEnumName(Value));
 end;
 
-procedure TRttiEnumType.GetSetNameCSV(W: TAbstractWriter; Value: cardinal;
+procedure TRttiEnumType.GetSetNameCSV(W: TBaseWriter; Value: cardinal;
   SepChar: AnsiChar; FullSetsAsStar: boolean);
 var
   j: integer;
@@ -1153,10 +1151,10 @@ end;
 function TRttiEnumType.GetSetNameCSV(Value: cardinal; SepChar: AnsiChar;
   FullSetsAsStar: boolean): RawUTF8;
 var
-  W: TAbstractWriter;
+  W: TBaseWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := TAbstractWriter.CreateOwnedStream(temp);
+  W := TBaseWriter.CreateOwnedStream(temp);
   try
     GetSetNameCSV(W, Value, SepChar, FullSetsAsStar);
     W.SetText(result);

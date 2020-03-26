@@ -15,13 +15,8 @@
 {.$define USEPACKAGES}
 // define this if you compile the unit within a Delphi package
 // - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
-//   to access 'VarCopyProc' from unit 'SynCommons'"
+// to access 'VarCopyProc'
 // - shall be set at the package options level, and left untouched by default
-
-{.$define DOPATCHTRTL}
-// if defined, the low-level patches made to RecordCopy() low-level function
-// as defined in SynCommons.pas will be applied (if applicable to your Delphi
-// version) - you should better use it, but we have unset it by default
 
 {.$define NEWRTTINOTUSED}
 // if defined, the new RTTI (available since Delphi 2010) won't be linked to
@@ -40,11 +35,6 @@
 // by default, some IAutoLocker instances would use TAutoLocker, unless this
 // conditional is defined to use more verbose TAutoLockerDebug
 // (may be used for race condition debugging, in multi-threaded apps)
-
-{.$define OPT4AMD}
-// you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
-// which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
-// (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
 
 {.$define DISABLE_SSE42}
 // if defined, no SSE4.2 nor AES-NI instruction will be used, i.e. disable

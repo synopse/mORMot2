@@ -402,7 +402,7 @@ type
     procedure LockedPerSecProperties; virtual;
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
-    procedure WriteDetailsTo(W: TAbstractWriter); virtual;
+    procedure WriteDetailsTo(W: TBaseWriter); virtual;
     procedure Changed; virtual;
   public
     /// low-level high-precision timer instance
@@ -459,7 +459,7 @@ type
     function ComputeDetailsJSON: RawUTF8;
     /// appends a JSON content with all published properties information
     // - thread-safe method
-    procedure ComputeDetailsTo(W: TAbstractWriter); virtual;
+    procedure ComputeDetailsTo(W: TBaseWriter); virtual;
     /// used to allow thread safe timing
     // - by default, the internal TPrecisionTimer is not thread safe: you can
     // use this method to update the timing from many threads
@@ -1224,7 +1224,7 @@ begin
   inc(fInternalErrors, another.Errors);
 end;
 
-procedure TSynMonitor.WriteDetailsTo(W: TAbstractWriter);
+procedure TSynMonitor.WriteDetailsTo(W: TBaseWriter);
 begin
   fSafe^.Lock;
   try
@@ -1234,7 +1234,7 @@ begin
   end;
 end;
 
-procedure TSynMonitor.ComputeDetailsTo(W: TAbstractWriter);
+procedure TSynMonitor.ComputeDetailsTo(W: TBaseWriter);
 begin
   fSafe^.Lock;
   try
@@ -1247,7 +1247,7 @@ end;
 
 function TSynMonitor.ComputeDetailsJSON: RawUTF8;
 var
-  W: TAbstractWriter;
+  W: TBaseWriter;
   temp: TTextWriterStackBuffer;
 begin
   W := DefaultTextWriterSerializer.CreateOwnedStream(temp);

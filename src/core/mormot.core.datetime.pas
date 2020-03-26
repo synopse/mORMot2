@@ -306,10 +306,10 @@ type
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - as called by TTextWriter.AddCurrentLogTime()
-    procedure AddLogTime(WR: TAbstractWriter);
+    procedure AddLogTime(WR: TBaseWriter);
     /// append the stored date and time, in apache-like format, to a TTextWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
-    procedure AddNCSAText(WR: TAbstractWriter);
+    procedure AddNCSAText(WR: TBaseWriter);
     /// append the stored date and time, in apache-like format, to a memory buffer
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - returns the number of chars added to P, i.e. always 21
@@ -1454,7 +1454,7 @@ begin
     Year, Month, Day, Expanded, FirstTimeChar, TZD);
 end;
 
-procedure TSynSystemTime.AddLogTime(WR: TAbstractWriter);
+procedure TSynSystemTime.AddLogTime(WR: TBaseWriter);
 var
   y, d100: PtrUInt;
   P: PUTF8Char;
@@ -1546,7 +1546,7 @@ begin
     UInt2DigitsToShortFast(Minute), UInt2DigitsToShortFast(Second)], text);
 end;
 
-procedure TSynSystemTime.AddNCSAText(WR: TAbstractWriter);
+procedure TSynSystemTime.AddNCSAText(WR: TBaseWriter);
 begin
   if WR.BEnd - WR.B <= 21 then
     WR.FlushToStream;
