@@ -218,6 +218,17 @@ function GotoNextSpace(P: PUTF8Char): PUTF8Char;
 function NextNotSpaceCharIs(var P: PUTF8Char; ch: AnsiChar): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// retrieve the next SQL-like identifier within the UTF-8 buffer
+// - will also trim any space (or line feeds) and trailing ';'
+// - returns true if something was set to Prop
+function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
+
+/// retrieve the next identifier within the UTF-8 buffer on the same line
+// - GetNextFieldProp() will just handle line feeds (and ';') as spaces - which
+// is fine e.g. for SQL, but not for regular config files with name/value pairs
+// - returns true if something was set to Prop
+function GetNextFieldPropSameLine(var P: PUTF8Char; var Prop: ShortString): boolean;
+
 /// return true if IdemPChar(source,searchUp), and go to the next line of source
 function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
 
@@ -1677,8 +1688,8 @@ type
   // than a regular set of AnsiChar which generates much slower BT [MEM], IMM
   // - the same 256-byte memory will also be reused from L1 CPU cache
   // during the parsing of complex input
-  TTextChar = set of (tcNot01013, tc1013, tcNot1013, tcCtrlNotLF, tcWord,
-    tcIdentifierFirstChar, tcIdentifier, tcURIUnreserved);
+  TTextChar = set of (tcNot01013, tc1013, tcCtrlNotLF, tcCtrlNot0Comma,
+    tcWord, tcIdentifierFirstChar, tcIdentifier, tcURIUnreserved);
 
   /// defines an AnsiChar lookup table used for branch-less text parsing
   TTextCharSet = array[AnsiChar] of TTextChar;
@@ -3828,6 +3839,40 @@ begin
   end
   else
     result := false;
+end;
+
+function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
+var
+  B: PUTF8Char;
+  tab: PTextCharSet;
+begin
+  tab := @TEXT_CHARS;
+  while tcCtrlNot0Comma in tab[P^] do
+    inc(P);
+  B := P;
+  while tcIdentifier in tab[P^] do
+    inc(P); // go to end of field name
+  FastSetString(Prop, B, P - B);
+  while tcCtrlNot0Comma in tab[P^] do
+    inc(P);
+  result := Prop <> '';
+end;
+
+function GetNextFieldPropSameLine(var P: PUTF8Char; var Prop: ShortString): boolean;
+var
+  B: PUTF8Char;
+  tab: PTextCharSet;
+begin
+  tab := @TEXT_CHARS;
+  while tcCtrlNotLF in tab[P^] do
+    inc(P);
+  B := P;
+  while tcIdentifier in tab[P^] do
+    inc(P); // go to end of field name
+  SetString(Prop, PAnsiChar(B), P - B);
+  while tcCtrlNotLF in TEXT_CHARS[P^] do
+    inc(P);
+  result := Prop <> '';
 end;
 
 function UnQuoteSQLStringVar(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
@@ -8346,17 +8391,18 @@ function PropNameValid(P: PUTF8Char): boolean;
 var
   tab: PTextCharSet;
 begin
-  result := false;
   tab := @TEXT_CHARS;
-  if (P = nil) or not (tcIdentifierFirstChar in tab[P^]) then
-    exit; // first char must be alphabetical
-  inc(P);
-  while P^ <> #0 do
-    if not (tcIdentifier in tab[P^]) then
-      exit
-    else
+  if (P <> nil) and (tcIdentifierFirstChar in tab[P^]) then
+    // first char must be alphabetical
+    repeat
       inc(P); // following chars can be alphanumerical
-  result := true;
+      if tcIdentifier in tab[P^] then
+        continue;
+      result := P^ = #0;
+      exit;
+    until false
+  else
+    result := false;
 end;
 
 function PropNamesValid(const Values: array of RawUTF8): boolean;
@@ -13024,9 +13070,7 @@ begin
     if not (c in [#0, #10, #13]) then
       include(TEXT_CHARS[c], tcNot01013);
     if c in [#10, #13] then
-      include(TEXT_CHARS[c], tc1013)
-    else
-      include(TEXT_CHARS[c], tcNot1013);
+      include(TEXT_CHARS[c], tc1013);
     if c in ['0'..'9', 'a'..'z', 'A'..'Z'] then
       include(TEXT_CHARS[c], tcWord);
     if c in ['_', 'a'..'z', 'A'..'Z'] then
@@ -13037,6 +13081,8 @@ begin
       include(TEXT_CHARS[c], tcURIUnreserved);
     if c in [#1..#9, #11, #12, #14..' '] then
       include(TEXT_CHARS[c], tcCtrlNotLF);
+    if c in [#1..' ', ';'] then
+      include(TEXT_CHARS[c], tcCtrlNot0Comma);
   end;
   SynAnsiConvertList := TObjectList.Create;
   CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);
