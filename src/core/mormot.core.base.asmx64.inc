@@ -557,6 +557,7 @@ function Hash32(Data: PCardinalArray; Len: integer): cardinal;
         shr     esi, 4
         {$endif}
         jz      @by4
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @by16:  add     eax, dword ptr[Data]
         add     r9d, eax
         add     eax, dword ptr[Data+4]
@@ -1260,7 +1261,7 @@ asm // rcx=src, edx=size, r8=dest
         jc      @29
         shr     r12, 3
         jz      @30
-        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @27:    mov     rbx, qword ptr [r14 + rsi] // inline move by 8 bytes
         mov     qword ptr [r8 + rsi], rbx
         add     rsi, 8
@@ -1275,7 +1276,7 @@ asm // rcx=src, edx=size, r8=dest
         dec     r15
         jnz     @28
         jmp     @31
-        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @29:    mov     bl, byte ptr [r14 + rsi] // overlaping move
         mov     byte ptr [r8 + rsi], bl
         inc     rsi
@@ -1346,6 +1347,47 @@ function InterlockedDecrement(var I: Integer): Integer;
    lock xadd    [edx], eax
         dec     eax
 end;
+
+{$ifndef FPC}
+
+// those functions are intrinsics with FPC :)
+
+function BSRdword(c: cardinal): cardinal;
+asm
+        .noframe
+        mov     eax, c
+        bsr     eax, eax
+        jnz     @nz
+        mov     eax, 255
+@nz:
+end;
+
+function BSRqword(const q: qword): cardinal;
+asm
+        .noframe
+        mov     rax, q
+        bsr     rax, rax
+        jnz     @nz
+        mov     eax, 255
+@nz:
+end;
+
+// FPC will properly inline multiplication by reciprocal
+procedure Div100(Y: cardinal; var res: TDiv100Rec);
+asm
+        .noframe
+        mov     r8, res
+        mov     edx, Y
+        mov     dword ptr [r8].TDiv100Rec.M,edx
+        mov     eax, 1374389535
+        mul     edx
+        shr     edx, 5
+        mov     dword ptr [r8].TDiv100Rec.D, edx
+        imul    eax, edx, 100
+        sub     dword ptr [r8].TDiv100Rec.M, eax
+end;
+
+{$endif FPC}
 
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}

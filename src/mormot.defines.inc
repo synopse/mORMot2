@@ -75,12 +75,12 @@
   {$PACKENUM 1}
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
 
-  {$undef DOPATCHTRTL}
   {$define HASINLINE}
   {$define NODELPHIASM} // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
-  {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
+  {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
+  {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
   {$define FPC_OR_UNICODE}
   {$define USERECORDWITHMETHODS}  // use "object" only for Delphi 7
   {$define FPC_ENUMHASINNER}
@@ -163,7 +163,7 @@
       {$define FPC_CPUINTEL}
       {$ifndef DARWIN}
         {$define ASMX64}     // supports asm with globals
-        {$define ASMINTEL}
+        {$define ASMINTEL}   // either ASMX86 or ASMX64
         {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
         {$define HASAESNI}   // mormot.core.crypto rejected by Darwin asm
         {$ifdef LINUX}
@@ -182,10 +182,11 @@
       {$define FPC_CPUINTEL}
       {$ifndef DARWIN}
         {$define ASMX86}     // supports asm with globals
-        {$define ASMINTEL}
+        {$define ASMINTEL}   // either ASMX86 or ASMX64
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
       {$endif DARWIN}
       {$define HASAESNI}
+      {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
     {$endif CPUX86}
     {$ifdef CPUARM}
       {$define CPUARM3264}
@@ -293,13 +294,14 @@
 
   {$define ISDELPHI}
   {$define CPUINTEL}   // Delphi only for Intel by now
-  {$define ASMINTEL}
+  {$define ASMINTEL}   // either ASMX86 or ASMX64
   {$ifdef CPUX64}
     {$undef CPU32}
     {$define CPU64}    // Delphi compiler for 64 bit CPU
     {$define CPU64DELPHI}
     {$define ASMX64}   // supports asm with globals
-    {$define EXTENDEDTOSTRING_USESTR} // FloatToText() much slower in x64 mode
+    {$define EXTENDEDTOSHORT_USESTR} // FloatToText() slower in Delphi Win64
+    {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii() - not Delphi Win32
   {$else CPUX64}
     {$define CPU32}    // Delphi compiler for 32 bit CPU
     {$undef CPU64}
@@ -307,6 +309,7 @@
     {$define CPUX86}   // for compatibility with older versions of Delphi
     {$define ASMX86}   // supports asm with globals
     {$define CPUX86NOTPIC} // use "absolute" instead of local register
+    {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
   {$endif CPUX64}
 
   {$define DELPHI_OR_FPC_OLDRTTI}
@@ -318,9 +321,6 @@
   {$warn SYMBOL_PLATFORM OFF}
   {$warn SYMBOL_DEPRECATED OFF} // for faVolumeID
   {$warn UNIT_PLATFORM OFF}
-  {$ifdef USEPACKAGES}
-    {$undef DOPATCHTRTL}
-  {$endif USEPACKAGES}
 
   {$if CompilerVersion >= 17}
     {$define ISDELPHI2005ANDUP} // Delphi 2005 or newer
@@ -419,9 +419,6 @@
       {$define ISDELPHI103}
     {$ifend}
   {$ifend CompilerVersion >= 17}
-  {$ifopt O-} // if we don't expect fast code, don't optimize the framework
-    {$undef DOPATCHTRTL}
-  {$endif}
 
 {$endif FPC}
 

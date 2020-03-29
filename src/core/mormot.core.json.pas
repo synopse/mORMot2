@@ -79,15 +79,12 @@ type
   PJsonCharSet = ^TJsonCharSet;
 
 var
-  /// fast 256-byte branchless lookup table for fast JSON text escaping
+  /// 256-byte lookup table for fast branchless JSON text escaping
   // - 0 = JSON_ESCAPE_NONE indicates no escape needed
   // - 1 = JSON_ESCAPE_ENDINGZERO indicates #0 (end of string)
   // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
   // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
   JSON_ESCAPE: TNormTableByte;
-
-  /// 256-byte lookup table for fast JSON parsing
-  JSON_CHARS: TJsonCharSet;
 
 const
   /// JSON_ESCAPE[] lookup value: indicates no escape needed
@@ -96,6 +93,12 @@ const
   JSON_ESCAPE_ENDINGZERO = 1;
   /// JSON_ESCAPE[] lookup value: should be escaped as \u00xx
   JSON_ESCAPE_UNICODEHEX = 2;
+
+var
+  /// 256-byte lookup table for fast branchless JSON parsing
+  // - to be used e.g. as:
+  // ! if jvJsonIdentifier in JSON_CHARS[P^] then ...
+  JSON_CHARS: TJsonCharSet;
 
 
 
@@ -188,7 +191,7 @@ begin
     result := false;
 end;
 
-// note: JsonEscapeToUtf8() is inlined below otherwise the code is inefficient
+// note: JsonEscapeToUtf8() is inlined below otherwise the code is slower
 
 function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char; wasString: PBoolean;
   EndOfObject: PUTF8Char; Len: PInteger): PUTF8Char;

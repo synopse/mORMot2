@@ -23,6 +23,7 @@ unit mormot.core.base;
   Aim of those types and functions is to be cross-platform and cross-compiler,
   without any dependency but the main FPC/Delphi RTL. It also detects the
   kind of Intel/AMD it runs on, to adapt to the fastest asm version available.
+  It is the main unit where x86_64 or i386 asm stubs are included.
 
   *****************************************************************************
 }
@@ -591,17 +592,17 @@ var
   TwoDigitLookupW: packed array[0..99] of word absolute TwoDigitLookup;
 
   /// best possible precision when rendering a "single" kind of float
-  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
   // - is defined as a var, so that you may be able to override the default
   // settings, for the whole process
   SINGLE_PRECISION: integer = 8;
   /// best possible precision when rendering a "double" kind of float
-  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
   // - is defined as a var, so that you may be able to override the default
   // settings, for the whole process
   DOUBLE_PRECISION: integer = 15;
   /// best possible precision when rendering a "extended" kind of float
-  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
   // - is defined as a var, so that you may be able to override the default
   // settings, for the whole process
   EXTENDED_PRECISION: integer = 18;
@@ -612,18 +613,19 @@ type
     D, M: cardinal;
   end;
 
-  {$ifdef CPUINTEL}
-  {$ifdef CPU64}
-  TSynExtended = double;
-  {$else}
+  {$ifdef TSYNEXTENDED80}
   /// the floating-point type to be used for best precision and speed
   // - will allow to fallback to double e.g. on x64 and ARM CPUs
   TSynExtended = extended;
-  {$endif CPU64}
   {$else}
-  // ARM does not support 80bit extended -> 64bit double is enough for us
+  /// ARM/Delphi 64-bit does not support 80bit extended -> double is enough
   TSynExtended = double;
-  {$endif CPUINTEL}
+  {$endif TSYNEXTENDED80}
+
+  /// compiler native currency type
+  // - we may redefine a fake "currency" type below, so you may use this
+  // type alias in existing (third-party) code requiring regular currency values
+  TSystemCurrency = currency;
 
   {$ifdef CPUX86}
   /// the floating-point type to be used for 64-bit currency
@@ -635,14 +637,17 @@ type
   // - our framework fallbacks to Int64 (*CURR_RES=10000) e.g. on x64 and ARM
   // - this type does NOT store double values, but Int64*CURR_RES - we only
   // define it as double so that RTTI identifies it as a rfDouble floating-point
+  // and let our mormot.core.rtti unit handle it as TSynCurrency = Int64*CURR_RES
   // - we discovered some weird incompatibilities, e.g. when cross-compiling
   // from FPC Win64 into the Win32 platform, or when the generated code is
   // very inefficient (e.g. with Delphi Win64) - any feedback is welcome!
+  // - so don't use directly this type, but call CurrencyToDouble DoubleToCurrency
+  // CurrencyToInt64 Int64ToCurrency dedicated functions
   TSynCurrency = type double;
 
-  /// force to use our TSynCurrency wrapper instead of the native "currency" type
-  // - and CurrencyToDouble/DoubleToCurrency/CurrencyToInt64/Int64ToCurrency
-  // associated functions
+  /// force to use our TSynCurrency wrapper instead of the plain "currency" type
+  // - this void record type would break compilation each time plain "curerency"
+  // type is used in your code
   currency = record end;
   {$endif CPUX86}
 
@@ -653,7 +658,7 @@ type
   TCurrencyDynArray = TSynCurrencyDynArray;
 
   /// the non-number values potentially stored in an IEEE floating point
-  TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
+  TFloatNan = (fnNumber, fnNan, fnInf, fnNegInf);
 
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   /// unaligned() will be defined and useful only on FPC ARM/Aarch64 plaforms
@@ -663,6 +668,8 @@ type
 const
   /// used e.g. to convert a TSynCurrency (via PInt64) into a double
   CURR_RES = 10000;
+
+{ TODO : define operators for TSynCurrency on FPC and new Delphi }
 
 /// convert a TSynCurrency value into a double
 // - using Int64 division by CURR_RES (=10000)
@@ -715,8 +722,8 @@ procedure Int64ToCurrency(const i: Int64; c: PSynCurrency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// simple wrapper to efficiently compute result.D = Y div 100 and result.M = Y mod 100
-procedure Div100(Y: cardinal; var result: TDiv100Rec);
-  {$ifndef CPU32DELPHI} inline; {$endif}
+procedure Div100(Y: cardinal; var res: TDiv100Rec);
+  {$ifdef FPC} inline; {$endif}
 
 /// get the signed 32-bit integer value stored in P^
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
@@ -1924,6 +1931,19 @@ function InterlockedDecrement(var I: Integer): Integer;
 
 {$endif CPUINTEL}
 
+{$ifndef FPC}
+
+/// return the position of the leftmost set bit in a 32-bit value
+// - returns 255 if c equals 0
+// - this function is an intrinsic on FPC
+function BSRdword(c: cardinal): cardinal;
+
+/// return the position of the leftmost set bit in a 64-bit value
+// - returns 255 if q equals 0
+// - this function is an intrinsic on FPC
+function BSRqword(const q: Qword): cardinal;
+
+{$endif FPC}
 
 {$ifdef ASMINTEL}
 
@@ -2356,15 +2376,16 @@ type
 
 /// get maximum possible (worse) SynLZ compressed size
 function SynLZcompressdestlen(in_len: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// get exact uncompressed size from SynLZ-compressed buffer (to reserve memory, e.g.)
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
 
-/// SynLZ compression algorithm implemented in pascal
+/// raw SynLZ compression algorithm implemented in pascal
 // - you should rather call SynLZcompress1() which is likely to be much faster
 function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
-/// SynLZ decompression algorithm implemented in pascal
+/// raw SynLZ decompression algorithm implemented in pascal
 // - you should rather call SynLZdecompress1() which is likely to be much faster
 function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
@@ -2376,15 +2397,15 @@ function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): int
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
   maxDst: integer): integer;
 
-/// SynLZ compression algorithm implemented in pascal
+/// raw SynLZ compression algorithm
 // - includes optimized x86/x64 asm version on Intel/AMD
-// - just redirect to SynLZcompress1pas on other CPUs
+// - just redirects to SynLZcompress1pas on other CPUs
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
   {$ifndef CPUINTEL} inline; {$endif}
 
-/// SynLZ decompression algorithm implemented in pascal
+/// raw SynLZ decompression algorithm
 // - includes optimized x86/x64 asm version on Intel/AMD
-// - just redirect to SynLZcompress1pas on other CPUs
+// - just redirects to SynLZcompress1pas on other CPUs
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
   {$ifndef CPUINTEL} inline; {$endif}
 
@@ -2636,10 +2657,10 @@ const
   BOOL_STR: array[boolean] of string[7] = ('false','true');
 
   /// the JavaScript-like values of non-number IEEE constants
-  // - as recognized by ExtendedToStringNan, and used by TBaseWriter.Add()
+  // - as recognized by FloatToShortNan, and used by TBaseWriter.Add()
   // when serializing such single/double/extended floating-point values
-  JSON_NAN: array[TSynExtendedNan] of string[11] = (
-    '', '"NaN"', '"Infinity"', '"-Infinity"');
+  JSON_NAN: array[TFloatNan] of string[11] = (
+    '0', '"NaN"', '"Infinity"', '"-Infinity"');
 
 var
   /// MIME content type used for JSON communication
@@ -3579,7 +3600,7 @@ const
     1E29,  1E30,  1E31);
 var
   digits, exp: PtrInt;
-  ch: byte;
+  c: byte;
   flags: set of (fNeg, fNegExp, fValid);
   U: PByte; // Delphi Win64 doesn't like if P^ is used directly
   {$ifndef CPUX86}
@@ -3597,78 +3618,78 @@ begin
   end;
   byte(flags) := 0;
   U := pointer(P);
-  ch := U^;
-  if ch = ord(' ') then
+  c := U^;
+  if c = ord(' ') then
     repeat
       inc(U);
-      ch := U^;
-    until ch <> ord(' '); // trailing spaces
-  if ch = ord('+') then
+      c := U^;
+    until c <> ord(' '); // trailing spaces
+  if c = ord('+') then
   begin
     inc(U);
-    ch := U^;
+    c := U^;
   end
-  else if ch = ord('-') then
+  else if c = ord('-') then
   begin
     inc(U);
-    ch := U^;
+    c := U^;
     include(flags, fNeg);
   end;
   repeat
     inc(U);
-    if (ch < ord('0')) or (ch > ord('9')) then
+    if (c < ord('0')) or (c > ord('9')) then
       break;
-    dec(ch, ord('0'));
+    dec(c, ord('0'));
     {$ifdef CPUX86}
-    result := (result * 10.0) + ch;
+    result := (result * 10.0) + c;
     {$else}
     result := result * ten; // better SSE code generation in two steps
-    result := result + ch;
+    result := result + c;
     {$endif}
     include(flags, fValid);
-    ch := U^;
+    c := U^;
   until false;
   digits := 0;
-  if ch = ord('.') then
+  if c = ord('.') then
     repeat
-      ch := U^;
+      c := U^;
       inc(U);
-      if (ch < ord('0')) or (ch > ord('9')) then
+      if (c < ord('0')) or (c > ord('9')) then
       begin
         if not (fValid in flags) then // starts with '.'
-          if ch = 0 then
+          if c = 0 then
             dec(U); // U^='.'
         break;
       end;
-      dec(ch, ord('0'));
+      dec(c, ord('0'));
       {$ifdef CPUX86}
-      result := (result * 10.0) + ch;
+      result := (result * 10.0) + c;
       {$else}
       result := result * ten;
-      result := result + ch;
+      result := result + c;
       {$endif}
       dec(digits);
       include(flags, fValid);
     until false;
-  if (ch = ord('E')) or (ch = ord('e')) then
+  if (c = ord('E')) or (c = ord('e')) then
   begin
     exp := 0;
     exclude(flags, fValid);
-    ch := U^;
-    if ch = ord('+') then
+    c := U^;
+    if c = ord('+') then
       inc(U)
-    else if ch = ord('-') then
+    else if c = ord('-') then
     begin
       inc(U);
       include(flags, fNegExp);
     end;
     repeat
-      ch := U^;
+      c := U^;
       inc(U);
-      if (ch < ord('0')) or (ch > ord('9')) then
+      if (c < ord('0')) or (c > ord('9')) then
         break;
-      dec(ch, ord('0'));
-      exp := (exp * 10) + PtrInt(ch);
+      dec(c, ord('0'));
+      exp := (exp * 10) + PtrInt(c);
       include(flags, fValid);
     until false;
     if fNegExp in flags then
@@ -3683,16 +3704,10 @@ begin
       result := result * HugePower10(digits);
   if fNeg in flags then
     result := -result;
-  if (fValid in flags) and (ch = 0) then
+  if (fValid in flags) and (c = 0) then
     err := 0
   else
     err := PUTF8Char(U) - P + 1;
-end;
-
-procedure Div100(Y: cardinal; var result: TDiv100Rec);
-begin
-  result.D := Y div 100; // FPC will use fast reciprocal
-  result.M := Y-(result.D*100); // avoid div twice
 end;
 
 {$endif CPU32DELPHI}
@@ -4041,30 +4056,29 @@ begin
   {$endif}
 end;
 
+{$ifdef FPC}
+
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
 begin
-{$ifdef FPC}
   result := IndexByte(P^, Count, Value); // will use fast FPC SSE version
-{$else}
-  result := 0;
-  if P <> nil then
-    repeat
-      if result >= Count then
-        break;
-      if P^[result] = Value then
-        exit
-      else
-        inc(result);
-    until false;
-  result := -1;
-{$endif FPC}
 end;
 
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 begin
-{$ifdef FPC}
   result := IndexWord(P^, Count, Value); // will use fast FPC SSE version
-{$else}
+end;
+
+procedure Div100(Y: cardinal; var res: TDiv100Rec); // asm on Delphi
+begin
+  res.M := Y;
+  res.D := Y div 100;   // FPC will use fast reciprocal
+  dec(res.M,res.D*100); // avoid div twice
+end;
+
+{$else not FPC}
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
+begin
   result := 0;
   if P <> nil then
     repeat
@@ -4076,8 +4090,25 @@ begin
         inc(result);
     until false;
   result := -1;
-{$endif FPC}
 end;
+
+function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
+begin
+  result := 0;
+  if P <> nil then
+    repeat
+      if result >= Count then
+        break;
+      if P^[result] = Value then
+        exit
+      else
+        inc(result);
+    until false;
+  result := -1;
+end;
+
+{$endif FPC}
+
 
 // CompareMemSmall/MoveSmall defined now for proper inlining below
 

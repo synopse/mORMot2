@@ -1663,9 +1663,8 @@ end;
 
 {$ifdef CPU32DELPHI}
 
-// inspired by ValExt_JOH_PAS_8_a by John O'Harrow
+// inspired by ValExt_JOH_PAS_8_a by John O'Harrow - calls Delphi System.@Pow10
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
-{$ifdef FPC}nostackframe; assembler;{$endif}
 const Ten: double = 10.0;
 asm     // in: eax=text, edx=@err  out: st(0)=result
         push    ebx                 // save used registers
@@ -1787,22 +1786,40 @@ asm     // in: eax=text, edx=@err  out: st(0)=result
         jmp     @exit               // exit setting result code
 end;
 
-procedure Div100(Y: cardinal; var result: TDiv100Rec);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+// FPC will properly inline multiplication by reciprocal
+procedure Div100(Y: cardinal; var res: TDiv100Rec);
 asm
-      push    ebx
-      mov     ecx, eax // ecx=Y
-      mov     ebx, edx // ebx=result
-      mov     edx, eax
-      mov     eax, 1374389535
-      mul     edx
-      shr     edx, 5   // edx=Y div 100
-      mov     dword ptr [ebx].TDiv100Rec.D, edx
-      mov     eax, 100
-      mul     edx
-      sub     ecx, eax // ecx=Y-(edx*100)
-      mov     dword ptr [ebx].TDiv100Rec.M, ecx
-      pop     ebx
+        mov     dword ptr [edx].TDiv100Rec.M, eax
+        mov     ecx, edx
+        mov     edx, eax
+        mov     eax, 1374389535
+        mul     edx
+        shr     edx, 5
+        mov     dword ptr [ecx].TDiv100Rec.D, edx
+        imul    eax, edx, 100
+        sub     dword ptr [ecx].TDiv100Rec.M, eax
+end;
+
+// those functions are intrinsics with FPC :)
+
+function BSRdword(c: cardinal): cardinal;
+asm
+        bsr     eax, eax
+        jnz     @nz
+        mov     eax, 255
+@nz:
+end;
+
+function BSRqword(const q: qword): cardinal;
+asm
+        bsr     eax, [esp + 8]
+        jz      @1
+        add     eax, 32
+        ret
+@1:     bsr     eax, [esp + 4]
+        jnz     @2
+        mov     eax, 255
+@2:
 end;
 
 {$endif CPU32DELPHI}
