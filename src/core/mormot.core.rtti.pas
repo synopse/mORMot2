@@ -11,6 +11,7 @@ unit mormot.core.rtti;
     - Enumerations RTTI
     - Published Class Properties and Methods RTTI
     - IInvokable Interface RTTI
+    - Efficient Dynamic Arrays and Records Process
 
     Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
     which is not exactly compatible between compilers, and lack of direct
@@ -31,7 +32,7 @@ interface
 
 uses
   mormot.core.base,
-  mormot.core.text; // used e.g. on enumerations
+  mormot.core.text; // ESynException, and enumerations text process
 
 
 { ************* Low-Level Cross-Compiler RTTI Definitions }
@@ -108,6 +109,10 @@ const
     {$ifdef UNICODE}, rkUString, rkClassRef, rkPointer, rkProcedure {$endif});
 
 const
+  /// potentially managed types in TRttiKind enumerate
+  // - should match ManagedType*() functions
+  rkManagedTypes = [rkLString, rkWstring, {$ifdef UNICODE} rkUstring, {$endif}
+                    rkArray, rkRecord, rkDynArray, rkInterface, rkVariant];
   /// maps record or object in TTypeKind RTTI enumerate
   rkRecordTypes = [rkRecord];
   /// maps record or object in TTypeKind RTTI enumerate
@@ -129,10 +134,7 @@ const
   ORDTYPE_SIZE: array[TRttiOrd] of byte =
     (1, 1, 2, 2, 4, 4 {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
 
-  /// some RTTI methods may return a PShortString pointing to this void text
-  NULL_SHORTSTRING: string[1] = '';
 
-  
 type
   PRttiKind = ^TRttiKind;
   TRttiKinds = set of TRttiKind;
@@ -142,7 +144,7 @@ type
 type
   /// pointer to low-level RTTI of a type definition, as returned by TypeInfo()
   // system function
-  // - equivalency to PTypeInfo as definied in TypInfo RTL unit
+  // - equivalency to PTypeInfo as defined in TypInfo RTL unit
   PRttiInfo = ^TRttiInfo;
 
   /// double-reference to RTTI type definition
@@ -359,9 +361,9 @@ type
   /// record RTTI as returned by TRttiInfo.RecordManagedFields
   TRttiRecordManagedFields = record
     /// the record size in bytes
-    Size: integer;
+    Size: PtrInt;
     /// how many managed Fields[] are defined in this record
-    Count: integer;
+    Count: PtrInt;
     /// points to the first field RTTI
     // - use inc(Fields) to go to the next one
     Fields: PRttiRecordField;
@@ -404,38 +406,55 @@ type
     RawName: ShortString;
     /// the declared name of the type ('String','Word','RawUnicode'...)
     // - on FPC, will adjust integer/cardinal not as 'longint'/'longword'
-    function Name: PShortString;    {$ifdef HASINLINE} inline; {$endif}
+    function Name: PShortString;          {$ifdef HASINLINE} inline; {$endif}
+    /// efficiently finalize any (managed) type
+    // - do nothing for unmanaged types (e.g. integer)
+    // - if you are sure that your type is managed, you may call directly
+    // $ _FINALIZE[Info^.Kind](Data, Info);
+    procedure Clear(Data: pointer);       {$ifdef HASINLINE} inline; {$endif}
     /// for ordinal types, get the storage size and sign
-    function RttiOrd: TRttiOrd; {$ifdef HASINLINE} inline; {$endif}
+    function RttiOrd: TRttiOrd;           {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
-    function IsQWord: boolean;  {$ifdef HASINLINE} inline; {$endif}
+    function IsQWord: boolean;            {$ifdef HASINLINE} inline; {$endif}
     /// for rtFloat: get the storage size and precision
-    // - will also properly detect our TSynCurrency internal type
+    // - will also properly detect our TSynCurrency internal type as rfCurr
     function RttiFloat: TRttiFloat;       {$ifdef HASINLINE} inline; {$endif}
     /// for rtEnumeration: get the enumeration type information
     function EnumBaseType: PRttiEnumType; {$ifdef HASINLINE} inline; {$endif}
     /// for rtSet: get the type information of its associated enumeration
     function SetEnumType: PRttiEnumType;  {$ifdef HASINLINE} inline; {$endif}
     /// for rtRecordTypes: get the record size
-    function RecordSize: integer;         {$ifdef HASINLINE} inline; {$endif}
+    // - returns 0 if the type is not a record/object
+    function RecordSize: PtrInt;         {$ifdef HASINLINE} inline; {$endif}
     /// for rtRecordTypes: retrieve RTTI information about all managed fields
     // of this record
     // - non managed fields (e.g. integers, double...) are not listed here
     // - also includes the total record size in bytes
+    // - caller should ensure the type is indeed a record/object
+    // - note: if FPC_OLDRTTI is defined, unmanaged fields are included
     procedure RecordManagedFields(out Fields: TRttiRecordManagedFields);
       {$ifdef HASINLINE} inline; {$endif}
     /// for rtRecordTypes: retrieve enhanced RTTI information about all fields
     // of this record
     // - this information is currently only available since Delphi 2010
-    function RecordAllFields(out RecSize: integer): TRttiRecordAllFields;
+    function RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
     /// for rtDynArray: get the dynamic array type information of the stored item
-    function DynArrayItemType(aDataSize: PInteger = nil): PRttiInfo;
+    // - caller should ensure the type is indeed a dynamic array
+    function DynArrayItemType: PRttiInfo; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// for rtDynArray: get the dynamic array type information of the stored item
+    // - this overloaded method will also return the item size in bytes
+    // - caller should ensure the type is indeed a dynamic array
+    function DynArrayItemType(out aDataSize: PtrInt): PRttiInfo; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// for rtDynArray: get the dynamic array size (in bytes) of the stored item
-    function DynArrayItemSize: integer; {$ifdef HASINLINE} inline; {$endif}
+    function DynArrayItemSize: PtrInt; {$ifdef HASINLINE} inline; {$endif}
     /// for rtArray: get the static array type information of the stored item
     // - returns nil if the array type is unmanaged (i.e. behave like Delphi)
-    function ArrayItemType(out aDataSize: integer): PRttiInfo;
+    // - aDataSize is the size in bytes of all aDataCount static items (not
+    // the size of each item)
+    // - caller should ensure the type is indeed a static array
+    function ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
       {$ifdef HASINLINE} inline; {$endif}
     /// recognize most used string types, returning their code page
     // - will return the exact code page on FPC and since Delphi 2009, from RTTI
@@ -579,7 +598,7 @@ type
     /// return TRUE if the property has its Default RTTI value, or is 0/""/nil
     function IsDefaultOrVoid(Instance: TObject): boolean;
     /// compute in how many bytes this property is stored
-    function RetrieveFieldSize: integer;
+    function RetrieveFieldSize: PtrInt;
     /// return TRUE if the property has no getter but direct field read
     function GetterIsField: boolean;  {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has no setter but direct field write
@@ -635,6 +654,22 @@ type
     function GetUnicodeStrValue(Instance: TObject): UnicodeString;
     {$endif HASVARUSTRING}
   end;
+
+  /// internal function handler for finalizing a managed type value
+  // - i.e. the kind of functions called via _FINALIZE[] lookup table
+  // - as used by TRttiInfo.Clear() inlined method
+  TRttiFinalizer = procedure(Data: pointer; Info: PRttiInfo);
+
+  /// the type of _FINALIZE[] efficient lookup table
+  TRttiFinalizers = array[TRttiKind] of TRttiFinalizer;
+  PRttiFinalizers = ^TRttiFinalizers;
+
+var
+  /// lookup table of finalization functions for managed types
+  // - as used by TRttiInfo.Clear() inlined method
+  // - _FINALIZE[] contains nil for unmanaged types
+  _FINALIZE: TRttiFinalizers;
+
 
 const
   NO_DEFAULT = longint($80000000);
@@ -835,6 +870,39 @@ type
 // - all methods will be added, also from inherited interface definitions
 // - returns the number of methods detected
 function GetRttiInterface(aTypeInfo: pointer; out aDefinition: TRttiInterface): integer;
+
+
+{ ************* Efficient Dynamic Arrays and Records Process }
+
+/// faster alternative to Finalize(aVariantDynArray)
+// - this function will take account and optimize the release of a dynamic
+// array of custom variant types values
+// - for instance, an array of TDocVariant will be optimized for speed
+procedure VariantDynArrayClear(var Value: TVariantDynArray);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// low-level finalization of a dynamic array of any kind
+// - faster than RTL Finalize() or setting nil, when you know ElemInfo
+// - see also TRttiInfo.Clear if you want to finalize any type
+procedure FastDynArrayClear(Value: PPointer; ElemInfo: PRttiInfo);
+
+/// clear a record content
+// - caller should ensure the type is indeed a record/object
+// - see also TRttiInfo.Clear if you want to finalize any type
+procedure FastRecordClear(R: pointer; Info: PRttiInfo);
+
+/// low-level finalization of a dynamic array of RawUTF8
+// - faster than RTL Finalize() or setting nil
+procedure RawUTF8DynArrayClear(var Value: TRawUTF8DynArray);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// copy a record content from source to Dest
+procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
+
+/// initialize a record content
+// - calls FastRecordClear() and FillCharFast() with 0
+// - do nothing if the TypeInfo is not from a record/object
+procedure RecordZero(var Dest; Info: PRttiInfo);
 
 
 implementation
@@ -1204,6 +1272,15 @@ end;
 
 { TRttiInfo }
 
+procedure TRttiInfo.Clear(Data: pointer);
+var
+  fin: TRttiFinalizer;
+begin
+  fin := _FINALIZE[Kind];
+  if Assigned(fin) then
+    fin(Data, @self);
+end;
+
 function TRttiInfo.RttiOrd: TRttiOrd;
 begin
   result := TRttiOrd(GetTypeData(@self)^.OrdType);
@@ -1242,9 +1319,9 @@ begin
   result := pointer(GetTypeData(@self));
 end;
 
-function TRttiInfo.DynArrayItemSize: integer;
+function TRttiInfo.DynArrayItemSize: PtrInt;
 begin
-  if DynArrayItemType(@result) = nil then
+  if DynArrayItemType(result) = nil then
     result := 0;
 end;
 
@@ -1282,7 +1359,7 @@ end;
 function TRttiInfo.InterfaceUnitName: PShortString;
 begin
   if (@self = nil) or (Kind <> rkInterface) then
-    result := @NULL_SHORTSTRING
+    result := @NULCHAR
   else
     result := InterfaceType^.IntfUnit;
 end;
@@ -1386,7 +1463,7 @@ begin
   end;
 end;
 
-function TRttiProp.RetrieveFieldSize: integer;
+function TRttiProp.RetrieveFieldSize: PtrInt;
 var
   info: PRttiInfo;
 begin
@@ -1780,6 +1857,7 @@ type
   TDoubleIndexed = function(Index: Integer): Double of object;
   TExtendedProc = function: Extended of object;
   TExtendedIndexed = function(Index: Integer): Extended of object;
+  // warning: TSynCurrency getters are very likely to fail
   TCurrencyProc = function: TSynCurrency of object;
   TCurrencyIndexed = function(Index: Integer): TSynCurrency of object;
 var
@@ -1787,7 +1865,7 @@ var
   rf: TRttiFloat;
 begin
   result := 0;
-  rf := TypeInfo^.RttiFloat;
+  rf := TypeInfo^.RttiFloat; // detect TSynCurrency as rfCurr
   case Getter(Instance, @call) of
     rpcField:
       case rf of
@@ -1833,6 +1911,7 @@ type
   TDoubleIndexed = procedure(Index: integer; const Value: double) of object;
   TExtendedProc = procedure(const Value: Extended) of object;
   TExtendedIndexed = procedure(Index: integer; const Value: Extended) of object;
+  // warning: TSynCurrency setters are very likely to fail
   TCurrencyProc = procedure(const Value: TSynCurrency) of object;
   TCurrencyIndexed = procedure(Index: integer; const Value: TSynCurrency) of object;
 var
@@ -1840,7 +1919,7 @@ var
   rf: TRttiFloat;
 begin
   Value := 0;
-  rf := TypeInfo^.RttiFloat;
+  rf := TypeInfo^.RttiFloat; // detect TSynCurrency as rfCurr
   case Setter(Instance, @call) of
     rpcField:
       case rf of
@@ -1952,7 +2031,7 @@ begin
   if (Instance <> nil) and (@self <> nil) then
     with TypeInfo^ do
       if Kind = rkFloat then
-        if RttiFloat = rfCurr then
+        if RttiFloat = rfCurr then // RttiFloat detect TSynCurrency as rfCurr
           result := GetCurrencyProp(Instance)
         else
           DoubleToCurrency(GetFloatProp(Instance), result)
@@ -2258,7 +2337,243 @@ begin
 end;
 
 
+{ ************* Efficient Dynamic Arrays and Records Process }
+
+procedure VariantDynArrayClear(var Value: TVariantDynArray);
+begin
+  FastDynArrayClear(@Value, TypeInfo(variant));
+end;
+
+procedure RawUTF8DynArrayClear(var Value: TRawUTF8DynArray);
+begin
+  FastDynArrayClear(@Value, TypeInfo(RawUTF8));
+end;
+
+procedure RecordZero(var Dest; Info: PRttiInfo);
+var
+  size: PtrInt;
+begin
+  size := Info.RecordSize;
+  if size <> 0 then
+  begin // record/object only
+    FastRecordClear(@Dest, Info);
+    FillCharFast(Dest, size, 0);
+  end;
+end;
+
+procedure _RecordDynArrayClear(v: PAnsiChar; info: PRttiInfo; n: integer);
+var
+  fields: TRttiRecordManagedFields;
+  f: PRttiRecordField;
+  p: PRttiInfo;
+  i: PtrInt;
+  fin: PRttiFinalizers;
+begin
+  info.RecordManagedFields(fields); // retrieve RTTI once for n items
+  if fields.Count > 0 then
+  begin
+    fin := @_FINALIZE;
+    repeat
+      f := fields.Fields;
+      i := fields.Count;
+      repeat
+        p := {$ifdef HASDIRECTTYPEINFO}f^.TypeInfo{$else}f^.TypeInfoRef^{$endif};
+        {$ifdef FPC_OLDRTTI}
+        if Assigned(fin[p^.Kind]) then
+        {$endif FPC_OLDRTTI}
+          fin[p^.Kind](v + f^.Offset, p);
+        inc(f);
+        dec(i);
+      until i = 0;
+      inc(v, fields.Size);
+      dec(n);
+    until n = 0;
+  end;
+end;
+
+procedure _StringDynArrayClear(v: PPointer; n: PtrInt);
+var
+  p: PStrRec;
+begin
+  repeat
+    p := v^;
+    if p <> nil then
+    begin
+      v^ := nil;
+      dec(p);
+      if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
+        Freemem(p); // works for both rkLString + rkUString
+    end;
+    inc(v);
+    dec(n);
+  until n = 0;
+end;
+
+procedure FastFinalizeArray(v: PPointer; ElemTypeInfo: PRttiInfo; n: integer);
+var
+  fin: TRttiFinalizer;
+begin //  caller ensured ElemTypeInfo<>nil and n>0
+  case ElemTypeInfo^.Kind of
+    rkRecord {$ifdef FPC} , rkObject {$endif}:
+      // retrieve ElemTypeInfo.RecordManagedFields once
+      _RecordDynArrayClear(pointer(v), ElemTypeInfo, n);
+    {$ifdef HASVARUSTRING} rkUString, {$endif} {$ifdef FPC} rkLStringOld, {$endif}
+    rkLString:
+      // optimized loop for AnsiString / UnicodeString (PStrRec header)
+      _StringDynArrayClear(pointer(v), n);
+    rkVariant:
+      // from mormot.core.variants - supporting custom variants
+      // or at least from mormot.core.base
+      _VariantDynArrayClear(pointer(v), n);
+    rkWString, rkInterface, rkDynArray:
+      // generic finalization of pointer-sized managed type variables
+      begin
+        fin := _FINALIZE[ElemTypeInfo^.Kind];
+        repeat
+          if v^ <> nil then
+            fin(v, ElemTypeInfo);
+          inc(v);
+          dec(n);
+        until n = 0;
+      end;
+    rkArray:
+      // use RTL for this one
+      ArrayFinalize(v, ElemTypeInfo, n);
+  end; // other Kind are unmanaged types
+end;
+
+procedure FastDynArrayClear(Value: PPointer; ElemInfo: PRttiInfo);
+var
+  p: PDynArrayRec;
+begin
+  if Value <> nil then
+  begin
+    p := Value^;
+    if p <> nil then
+    begin
+      dec(p);
+      if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
+      begin
+        if ElemInfo <> nil then
+          FastFinalizeArray(Value^, ElemInfo, p^.length);
+        Freemem(p);
+      end;
+      Value^ := nil;
+    end;
+  end;
+end;
+
+procedure FastRecordClear(R: pointer; Info: PRttiInfo);
+var
+  fields: TRttiRecordManagedFields;
+  f: PRttiRecordField;
+  p: PRttiInfo;
+  n: PtrInt;
+  fin: PRttiFinalizers;
+begin // caller ensured Info is indeed a record/object
+  Info.RecordManagedFields(fields);
+  n := fields.Count;
+  if n > 0 then
+  begin
+    fin := @_FINALIZE;
+    f := fields.Fields;
+    repeat
+      p := {$ifdef HASDIRECTTYPEINFO}f^.TypeInfo{$else}f^.TypeInfoRef^{$endif};
+      {$ifdef FPC_OLDRTTI}
+      if Assigned(fin[p^.Kind]) then
+      {$endif FPC_OLDRTTI}
+        fin[p^.Kind](PAnsiChar(R) + f^.Offset, p);
+      inc(f);
+      dec(n);
+    until n = 0;
+  end;
+end;
+
+procedure _StringClear(V: PPointer; Info: PRttiInfo);
+var
+  p: PStrRec;
+begin
+  p := V^;
+  if p <> nil then
+  begin
+    V^ := nil;
+    dec(p);
+    if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
+      Freemem(p); // works for both rkLString + rkUString
+  end;
+end;
+
+procedure _WStringClear(V: PWideString; Info: PRttiInfo);
+begin
+  if V^ <> '' then
+    {$ifdef FPC}
+    Finalize(V^);
+    {$else}
+    V^ := '';
+    {$endif}
+end;
+
+procedure _VariantClear(V: PVariant; Info: PRttiInfo);
+begin
+  VarClear(V^);
+end;
+
+procedure _InterfaceClear(V: PInterface; Info: PRttiInfo);
+begin
+  if V^ <> nil then
+    {$ifdef FPC}
+    Finalize(V^);
+    {$else}
+    V^ := nil;
+    {$endif}
+end;
+
+procedure _DynArrayClear(Value: PPointer; Info: PRttiInfo);
+var
+  p: PDynArrayRec;
+begin
+  p := Value^;
+  if p <> nil then
+  begin
+    dec(p);
+    if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
+    begin
+      Info := Info^.DynArrayItemType;
+      if Info <> nil then
+        FastFinalizeArray(Value^, Info, p^.length);
+      Freemem(p);
+    end;
+    Value^ := nil;
+  end;
+end;
+
+
+procedure InitializeConstants;
+var
+  k: TRttiKind;
+begin
+  _FINALIZE[rkLString]      := @_StringClear;
+  _FINALIZE[rkWString]      := @_WStringClear;
+  _FINALIZE[rkVariant]      := @_VariantClear;
+  _FINALIZE[rkArray]        := @TypeFinalize;
+  _FINALIZE[rkRecord]       := @FastRecordClear;
+  _FINALIZE[rkInterface]    := @_InterfaceClear;
+  _FINALIZE[rkDynArray]     := @_DynArrayClear;
+  {$ifdef HASVARUSTRING}
+  _FINALIZE[rkUString]      := @_StringClear; // share same PStrRec layout
+  {$endif}
+  {$ifdef FPC}
+  _FINALIZE[rkLStringOld]   := @_StringClear;
+  _FINALIZE[rkObject]       := @FastRecordClear;
+  {$endif FPC}
+  for k := low(k) to high(k) do // paranoid check
+    if Assigned(_FINALIZE[k]) <> (k in rkManagedTypes) then
+      raise ERttiException.CreateFmt('Missing _FINALIZE[%s]',
+        [GetEnumName(TypeInfo(TRttiKind), ord(k))^]);
+end;
+
 initialization
+  InitializeConstants;
   {$ifdef FPC_OR_UNICODE}
   assert(SizeOf(TRttiRecordField) = SizeOf(TManagedField));
   {$endif FPC_OR_UNICODE}

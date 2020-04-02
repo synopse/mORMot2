@@ -114,7 +114,7 @@ begin
     result := @PTypeData(@self).NameList;
     if Value > 0 then
       repeat
-        inc(PByte(result), PByte(result)^ + 1); // next
+        inc(PByte(result), PByte(result)^ + 1);  // next
         dec(Value);
         if Value = 0 then
           break;
@@ -123,7 +123,7 @@ begin
       until Value = 0;
   end
   else
-    result := @NULL_SHORTSTRING;
+    result := @NULCHAR;
 end;
 
 {$ifdef ASMX86} // Delphi is not efficient when inlining code :(
@@ -166,7 +166,7 @@ asm // eax=aTypeInfo edx=aIndex
         dec     edx
         jnz     @s
 @z:     ret
-@0:     lea     eax, NULL_SHORTSTRING // not Darwin/PIC CPUX86 compatible
+@0:     lea     eax, NULCHAR
 end;
 
 {$else}
@@ -177,7 +177,7 @@ begin
     with GetTypeData(aTypeInfo).BaseType^^ do
       result := PRttiEnumType(@Name[ord(Name[0]) + 1])^.GetEnumNameOrd(aIndex)
   else
-    result := @NULL_SHORTSTRING;
+    result := @NULCHAR;
 end;
 
 {$endif ASMX86}
@@ -323,7 +323,7 @@ begin
   result := @RawName;
 end;
 
-function TRttiInfo.RecordSize: integer;
+function TRttiInfo.RecordSize: PtrInt;
 begin
   result := PRecordInfo(GetTypeData(@self))^.RecSize;
 end;
@@ -352,7 +352,7 @@ type
     AllFields: array[0..0] of TRecordTypeField; // as defined in TypInfo.pas
   end;
 
-function TRttiInfo.RecordAllFields(out RecSize: integer): TRttiRecordAllFields;
+function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 var
   info: ^TRecordEnhancedTypeData;
   p: PRecordTypeField;
@@ -380,7 +380,7 @@ end;
 
 {$else}
 
-function TRttiInfo.RecordAllFields(out RecSize: integer): TRttiRecordAllFields;
+function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 begin
   RecSize := self.RecordSize;
   result := nil; // not available before Delphi 2010
@@ -408,32 +408,31 @@ begin
   result := result^.EnumBaseType;
 end;
 
-function TRttiInfo.DynArrayItemType(aDataSize: PInteger): PRttiInfo;
+function TRttiInfo.DynArrayItemType: PRttiInfo;
 begin
-  if (@self <> nil) and (Kind = rkDynArray) then
-    with GetTypeData(@self)^ do
-    begin
-      if aDataSize <> nil then
-        aDataSize^ := elSize;
-      result := PPointer(elType)^;
-    end
-  else
-    result := nil;
+ result := PPointer(GetTypeData(@self)^.elType)^;
 end;
 
-function TRttiInfo.ArrayItemType(out aDataSize: integer): PRttiInfo;
+function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
 begin
-  if (@self <> nil) and (Kind = rkArray) then
-    with PArrayInfo(GetTypeData(@self))^ do
-      if (DimCount = 1) and (ArrayType <> nil) then
-      begin
-        aDatasize := ArraySize;
-        result := ArrayType^;
-        if result <> nil then
-          exit;
-      end;
-  aDataSize := 0;
-  result := nil;
+  with GetTypeData(@self)^ do
+  begin
+    aDataSize := elSize;
+    result := PPointer(elType)^;
+  end;
+end;
+
+function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+begin
+  with PArrayInfo(GetTypeData(@self))^ do
+  begin
+    aDataCount := ElCount;
+    aDataSize := ArraySize;
+    if (DimCount = 1) and (ArrayType <> nil) then
+      result := ArrayType^
+    else
+      result := nil;
+  end;
 end;
 
 function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
@@ -586,6 +585,33 @@ begin
     dec(mn);
   until mn = 0;
   CurrentMethod := nil;
+end;
+
+procedure TypeFinalize(Data: Pointer; Info: Pointer);
+asm
+        {$ifdef CPU64}
+        .noframe
+        mov     r8, 1 // =ElemCount
+        {$else}
+        mov     ecx, 1
+        {$endif}
+        jmp     System.@FinalizeArray
+end;
+
+procedure ArrayFinalize(p: Pointer; Info: Pointer; elemCount: PtrUInt);
+asm
+        {$ifdef CPU64}
+        .noframe
+        {$endif}
+        jmp     System.@FinalizeArray
+end;
+
+procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
+asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
+        {$ifdef CPU64}
+        .noframe
+        {$endif}
+        jmp     System.@CopyRecord
 end;
 
 

@@ -92,7 +92,8 @@ end;
 function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
 var CP: PRttiProps;
 begin
-  if C<>nil then begin
+  if C<>nil then
+  begin
     CP := GetRttiProps(C);
     if CP <> nil then
     begin // no more RTTI information available
@@ -148,7 +149,7 @@ begin // this code is very aggressively inlined on FPC
       until Value = 0;
   end
   else
-    result := @NULL_SHORTSTRING;
+    result := @NULCHAR;
 end;
 
 function TRttiInfo.EnumBaseType: PRttiEnumType; // moved here for proper inlining
@@ -301,17 +302,22 @@ const
 
 function TRttiInfo.Name: PShortString;
 begin // TypeInfo(Integer/Cardinal)=TypeInfo(LongInt/LongWord)
-  if @self = TypeInfo(integer) then
-    result := @INTEGER_NAME
-  else if @self = TypeInfo(cardinal) then
-    result := @CARDINAL_NAME
+  result := pointer(@self);
+  if result <> TypeInfo(integer) then
+    if result <> TypeInfo(cardinal) then
+      result := @RawName
+    else
+      result := @CARDINAL_NAME
   else
-    result := @RawName;
+    result := @INTEGER_NAME;
 end;
 
-function TRttiInfo.RecordSize: integer;
+function TRttiInfo.RecordSize: PtrInt;
 begin
-  result := GetTypeData(@self)^.RecSize;
+  if (Kind <> rkRecord) and (Kind <> rkObject) then
+    result := 0
+  else
+    result := GetTypeData(@self)^.RecSize;
 end;
 
 {$ifdef FPC_NEWRTTI}
@@ -344,10 +350,10 @@ end;
 
 {$endif FPC_NEWRTTI}
 
-function TRttiInfo.RecordAllFields(out RecSize: integer): TRttiRecordAllFields;
+function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 begin
   RecSize := RecordSize;
-  Finalize(result); // enhanced RTTI not available yet on FPC
+  Finalize(result{%H-}); // enhanced RTTI not available yet on FPC
 end;
 
 function TRttiInfo.IsQWord: boolean;
@@ -355,34 +361,28 @@ begin
   result := (Kind = rkQWord);
 end;
 
-function TRttiInfo.DynArrayItemType(aDataSize: PInteger): PRttiInfo;
+function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
 begin
-  result := nil;
-  if (@self <> nil) and (Kind = rkDynArray) then
-  begin
-    result := pointer(GetTypeData(@self));
-    if aDataSize <> nil then
-      aDataSize^ := PTypeData(result)^.elSize and $7FFFFFFF;
-    result := DeRef(PTypeData(result)^.elTypeRef);
-  end;
+  result := pointer(GetTypeData(@self));
+  aDataSize := PTypeData(result)^.elSize and $7FFFFFFF;
+  result := DeRef(PTypeData(result)^.elTypeRef);
 end;
 
-function TRttiInfo.ArrayItemType(out aDataSize: integer): PRttiInfo;
+function TRttiInfo.DynArrayItemType: PRttiInfo;
+begin
+  result := DeRef(GetTypeData(@self)^.elTypeRef);
+end;
+
+function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
 var
   info: ^TArrayTypeData;
 begin
-  if (@self <> nil) and (Kind = rkArray) then
-  begin
-    info := @GetTypeData(@self)^.ArrayData;
-    result := DeRef(info^.ElTypeRef);
-    if (info^.DimCount = 1) and (result <> nil) and (result^.Kind in rkManagedTypes) then
-    begin
-      aDataSize := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
-      exit;
-    end;
-  end;
-  aDataSize := 0;
-  result := nil;
+  info := @GetTypeData(@self)^.ArrayData;
+  aDataCount := info^.ElCount;
+  aDataSize := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
+  result := DeRef(info^.ElTypeRef);
+  if (info^.DimCount <> 1) or (result = nil) or not (result^.Kind in rkManagedTypes) then
+    result := nil;
 end;
 
 function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
@@ -498,5 +498,18 @@ begin
   CurrentMethod := nil;
 end;
 
+procedure TypeFinalize(Data: Pointer; Info: Pointer);
+  external name 'FPC_FINALIZE';
+
+procedure ArrayFinalize(p: Pointer; Info: Pointer; elemCount: PtrUInt);
+  external name 'FPC_FINALIZE_ARRAY';
+
+procedure FPC_COPY(const Source; var Dest; Info: pointer);
+  external name 'FPC_COPY';
+
+procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
+begin // parameter order differs from FPC_COPY
+  FPC_COPY(Source, Dest, Info);
+end;
 
 
