@@ -3688,152 +3688,150 @@ begin
     result := 0;
 end;
 
-function HugePower10(exponent: integer): TSynExtended; {$ifdef HASINLINE} inline;{$endif}
-var
-  pow10: TSynExtended;
-begin
-  result := 1.0;
-  if exponent < 0 then
-  begin
-    pow10 := 0.1;
-    exponent := -exponent;
-  end
-  else
-    pow10 := 10;
-  repeat
-    while exponent and 1 = 0 do
-    begin
-      exponent := exponent shr 1;
-      pow10 := sqr(pow10);
-    end;
-    result := result * pow10;
-    dec(exponent);
-  until exponent = 0;
-end;
-
 {$ifndef CPU32DELPHI}
 
-// inspired by ValExt_JOH_PAS_8_a by John O'Harrow
-function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 const
-  pow10: array[-31..31] of TSynExtended = (
+  POW10: array[-31..32] of TSynExtended = (
     1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
     1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
     1E-11, 1E-10, 1E-9,  1E-8,  1E-7,  1E-6,  1E-5,  1E-4,  1E-3,  1E-2,
     1E-1,  1E0,   1E1,   1E2,   1E3,   1E4,   1E5,   1E6,   1E7,   1E8,
     1E9,   1E10,  1E11,  1E12,  1E13,  1E14,  1E15,  1E16,  1E17,  1E18,
     1E19,  1E20,  1E21,  1E22,  1E23,  1E24,  1E25,  1E26,  1E27,  1E28,
-    1E29,  1E30,  1E31);
+    1E29,  1E30,  1E31,  0);
+
+function HugePower10(exponent: integer): TSynExtended;
+  {$ifdef HASINLINE} inline;{$endif}
 var
-  digits, exp: PtrInt;
-  c: byte;
-  flags: set of (fNeg, fNegExp, fValid);
-  U: PByte; // Delphi Win64 doesn't like if P^ is used directly
-  {$ifndef CPUX86}
-  ten: TSynExtended; // stored in (e.g. xmm2) register - unneeded with x87 stack
-  {$endif}
+  e: TSynExtended;
 begin
-  {$ifndef CPUX86}
-  ten := 10.0;
-  {$endif}
-  result := 0;
-  if P = nil then
+  result := POW10[0]; // 1
+  if exponent < 0 then
   begin
-    err := 1;
-    exit;
-  end;
-  byte(flags) := 0;
-  U := pointer(P);
-  c := U^;
-  if c = ord(' ') then
-    repeat
-      inc(U);
-      c := U^;
-    until c <> ord(' '); // trailing spaces
-  if c = ord('+') then
-  begin
-    inc(U);
-    c := U^;
+    e := POW10[-1];  // 0.1
+    exponent := -exponent;
   end
-  else if c = ord('-') then
+  else
+    e := POW10[1];   // 10
+  repeat
+    while exponent and 1 = 0 do
+    begin
+      exponent := exponent shr 1;
+      e := sqr(e);
+    end;
+    result := result * e;
+    dec(exponent);
+  until exponent = 0;
+end;
+
+function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
+var
+  digit, frac, exp: PtrInt;
+  c: AnsiChar;
+  flags: set of (fNeg, fNegExp, fValid);
+  v: Int64; // allows 64-bit resolution for the digits
+label
+  e;
+begin
+  if P = nil then
+    goto e;
+  byte(flags) := 0;
+  c := P^;
+  if c = ' ' then
+    repeat
+      inc(P);
+      c := P^;
+    until c <> ' '; // trailing spaces
+  if c = '+' then
   begin
-    inc(U);
-    c := U^;
+    inc(P);
+    c := P^;
+  end
+  else if c = '-' then
+  begin
+    inc(P);
+    c := P^;
     include(flags, fNeg);
   end;
+  v := 0;
+  frac := 0;
+  digit := 18; // max Int64 resolution
   repeat
-    inc(U);
-    if (c < ord('0')) or (c > ord('9')) then
-      break;
-    dec(c, ord('0'));
-    {$ifdef CPUX86}
-    result := (result * 10.0) + c;
-    {$else}
-    result := result * ten; // better SSE code generation in two steps
-    result := result + c;
-    {$endif}
-    include(flags, fValid);
-    c := U^;
-  until false;
-  digits := 0;
-  if c = ord('.') then
-    repeat
-      c := U^;
-      inc(U);
-      if (c < ord('0')) or (c > ord('9')) then
+    inc(P);
+    if (c >= '0') and (c <= '9') then
+    begin
+      if digit <> 0 then
       begin
-        if not (fValid in flags) then // starts with '.'
-          if c = 0 then
-            dec(U); // U^='.'
-        break;
+        dec(c, ord('0'));
+        {$ifdef CPU64}
+        v := v * 10;
+        {$else}
+        v := v shl 3 + v + v;
+        {$endif}
+        inc(v, byte(c));
+        dec(digit); // over-required digits are just ignored
+        include(flags, fValid);
+        if frac <> 0 then
+          dec(frac); // digits after '.'
+        c := P^;
+        continue;
       end;
-      dec(c, ord('0'));
-      {$ifdef CPUX86}
-      result := (result * 10.0) + c;
-      {$else}
-      result := result * ten;
-      result := result + c;
-      {$endif}
-      dec(digits);
-      include(flags, fValid);
-    until false;
-  if (c = ord('E')) or (c = ord('e')) then
+      if frac >= 0 then
+        inc(frac); // handle #############00000
+      c := P^;
+      continue;
+    end;
+    if c <> '.' then
+      break;
+    if frac > 0 then
+      goto e;
+    dec(frac);
+    c := P^;
+  until false;
+  if frac < 0 then
+    inc(frac); // adjust digits after '.'
+  if (c = 'E') or (c = 'e') then
   begin
     exp := 0;
     exclude(flags, fValid);
-    c := U^;
-    if c = ord('+') then
-      inc(U)
-    else if c = ord('-') then
+    c := P^;
+    if c = '+' then
+      inc(P)
+    else if c = '-' then
     begin
-      inc(U);
+      inc(P);
       include(flags, fNegExp);
     end;
     repeat
-      c := U^;
-      inc(U);
-      if (c < ord('0')) or (c > ord('9')) then
+      c := P^;
+      inc(P);
+      if (c < '0') or (c > '9') then
         break;
       dec(c, ord('0'));
-      exp := (exp * 10) + PtrInt(c);
+      exp := (exp * 10) + byte(c);
       include(flags, fValid);
     until false;
     if fNegExp in flags then
-      dec(digits, exp)
+      dec(frac, exp)
     else
-      inc(digits, exp);
+      inc(frac, exp);
   end;
-  if digits <> 0 then
-    if (digits >= low(pow10)) and (digits <= high(pow10)) then
-      result := result * pow10[digits]
-    else
-      result := result * HugePower10(digits);
+  if (frac >= low(POW10)) and (frac < high(POW10)) then
+    result := POW10[frac]
+  else
+    result := HugePower10(frac);
   if fNeg in flags then
     result := -result;
-  if (fValid in flags) and (c = 0) then
-    err := 0
+  if (fValid in flags) and (c = #0) then
+  begin
+    err := 0;
+    result := result * v;
+  end
   else
-    err := PUTF8Char(U) - P + 1;
+  begin
+e:  err := 1;
+    result := POW10[32]; // return some value to make the compile happy
+  end;
 end;
 
 {$endif CPU32DELPHI}
