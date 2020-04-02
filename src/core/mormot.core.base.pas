@@ -75,6 +75,12 @@ const
   /// internal Code Page for RawByteString undefined string
   CP_RAWBYTESTRING = 65535;
 
+  /// fake code page used to recognize TSQLRawBlob
+  // - TSQLRawBlob internal code page will be CP_RAWBYTESTRING = 65535, but
+  // our ORM will identify TSQLRawBlob and serialize using CP_SQLRAWBLOB instead
+  // - TTextWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
+  CP_SQLRAWBLOB = 65534;
+
   /// US English Windows Code Page, i.e. WinAnsi standard character encoding
   CODEPAGE_US = 1252;
 
@@ -416,11 +422,9 @@ type
   PDALen = ^PtrInt;
 
   type
-    /// map the Delphi/FPC string header (stored before each instance)
-    // - defined here to avoid linking mormot.core.rtti.pas
   {$ifdef FPC}
-    {$packrecords c} // as expected by FPC's RTTI record definitions
-    TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+
+    TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
     {$ifdef HASCODEPAGE}
       codePage: TSystemCodePage; // =Word
       elemSize: Word;
@@ -431,20 +435,52 @@ type
       refCnt: TRefCnt; // =SizeInt
       length: SizeInt;
     end;
+
+    TDynArrayRec = packed record
+      refCnt: TRefCnt; // =SizeInt
+      high: tdynarrayindex;  // equals length-1
+      function GetLength: sizeint; inline;
+      procedure SetLength(len: sizeint); inline;
+      property length: sizeint read GetLength write SetLength; // wrapper
+    end;
+
   {$else FPC}
+
+    /// map the Delphi/FPC string header (stored before each instance)
     TStrRec = packed record
    {$ifdef HASCODEPAGE}
       {$ifdef CPU64}
+      /// padding bytes for 16 byte alignment of the header
       _Padding: LongInt;
       {$endif}
+      /// the string code page - e.g. CP_UTF8 for RawUTF8
       codePage: Word;
+      /// 1 for AnsiString/RawByteString/RawUTF8, 2 for UnicodeString
       elemSize: Word;
     {$endif HASCODEPAGE}
+      /// string reference count (basic garbage memory mechanism)
       refCnt: TRefCnt;
+      /// equals length(s) - i.e. size in AnsiChar/WideChar, not bytes
       length: Longint;
     end;
+
+    /// map the Delphi/FPC dynamic array header (stored before each instance)
+    TDynArrayRec = packed record
+      {$ifdef CPUX64}
+      /// padding bytes for 16 byte alignment of the header
+      _Padding: LongInt;
+      {$endif}
+      /// dynamic array reference count (basic garbage memory mechanism)
+      refCnt: TRefCnt;
+      /// length in element count
+      // - size in bytes = length*ElemSize
+      length: PtrInt;
+    end;
+
   {$endif FPC}
+
     PStrRec = ^TStrRec;
+    PDynArrayRec = ^TDynArrayRec;
 
   const
     /// codePage offset = string header size
@@ -670,10 +706,10 @@ const
   /// used e.g. to convert a TSynCurrency (via PInt64) into a double
   CURR_RES = 10000;
 
-{ TODO : define operators for TSynCurrency on FPC and new Delphi }
+{ TODO : define operators for TSynCurrency on FPC and latest Delphi }
 
 /// convert a TSynCurrency value into a double
-// - using Int64 division by CURR_RES (=10000)
+// - using PInt64() division by CURR_RES (=10000)
 procedure CurrencyToDouble(const c: TSynCurrency; out d: double); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -703,22 +739,17 @@ function DoubleToCurrency(const d: double): TSynCurrency; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a TSynCurrency value into a Int64
-// - using Int64 division by CURR_RES (=10000)
-procedure CurrencyToInt64(const c: TSynCurrency; var i: Int64); overload;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// convert a TSynCurrency value into a Int64
 // - using PInt64() division by CURR_RES (=10000)
 procedure CurrencyToInt64(c: PSynCurrency; var i: Int64); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a Int64 value into a TSynCurrency
-// - using truncated multiplication by CURR_RES (=10000)
+// - using multiplication by CURR_RES (=10000)
 procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a Int64 value into a TSynCurrency
-// - using truncated multiplication by CURR_RES (=10000)
+// - using multiplication by CURR_RES (=10000)
 procedure Int64ToCurrency(const i: Int64; c: PSynCurrency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -1932,6 +1963,13 @@ function InterlockedDecrement(var I: Integer): Integer;
 
 {$endif CPUINTEL}
 
+/// low-level string/dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+// - returns true if the managed variable should be released (i.e. refcnt was 1)
+// - on Delphi, RefCnt field is a 32-bit longint, whereas on FPC it is a SizeInt/PtrInt
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+  {$ifndef CPUINTEL}inline;{$endif}
+
 {$ifndef FPC}
 
 /// return the position of the leftmost set bit in a 32-bit value
@@ -2035,9 +2073,21 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast dedicated RawUTF8 version of Trim()
+function Trim(const S: RawUTF8): RawUTF8;
+
+/// returns the left part of a RawUTF8 string, according to SepStr separator
+// - if SepStr is found, returns Str first chars until (and excluding) SepStr
+// - if SepStr is not found, returns Str
+function Split(const Str, SepStr: RawUTF8; StartPos: integer = 1): RawUTF8; overload;
+
 /// buffer-safe version of StrComp(), to be used with PUTF8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// our fast version of StrComp(), to be used with PWideChar
+function StrCompW(Str1, Str2: PWideChar): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// simple version of StrLen(), but which will never read beyond the string
 // - this version won't access the memory beyond the string, so may be
@@ -2053,6 +2103,12 @@ var StrLen: function(S: pointer): PtrInt = StrLenSafe;
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
+
+/// fast go to next text line, ended by #13 or #13#10
+// - source is expected to be not nil
+// - returns the beginning of next line, or nil if source^=#0 was reached
+function GotoNextLine(source: PUTF8Char): PUTF8Char;
+  {$ifdef HASINLINE} inline;{$endif}
 
 /// extract file name, without its extension
 // - may optionally return the associated extension, as '.ext'
@@ -2447,12 +2503,19 @@ var
   Null: variant absolute NullVarData;
 
 {$ifdef HASINLINE}
-/// overloaded function which can be properly inlined
+
+/// overloaded function which can be properly inlined to clear a variant
 procedure VarClear(var v: variant); inline;
+
 {$endif HASINLINE}
 
 /// same as Value := Null, but slightly faster
 procedure SetVariantNull(var Value: variant);
+  {$ifdef HASINLINE} inline;{$endif}
+
+/// get the root PVarData of a variant, redirecting any varByRef
+// - if result^.VPointer=nil, returns varEmpty
+function VarDataFromVariant(const Value: variant): PVarData;
   {$ifdef HASINLINE} inline;{$endif}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
@@ -2807,7 +2870,6 @@ var
 
 
 
-
 implementation
 
 {$ifdef ISDELPHI20062007}
@@ -2863,11 +2925,6 @@ begin
   {$else}
   result := trunc(d * CURR_RES);
   {$endif CPUX86}
-end;
-
-procedure CurrencyToInt64(const c: TSynCurrency; var i: Int64);
-begin
-  i := PInt64(@c)^ div CURR_RES;
 end;
 
 procedure CurrencyToInt64(c: PSynCurrency; var i: Int64);
@@ -3283,10 +3340,6 @@ begin
   if err <> 0 then
     result := Default;
 end;
-
-const
-  FALSE_LOW = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
-  TRUE_LOW  = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
 
 function GetBoolean(P: PUTF8Char): boolean;
 begin
@@ -4181,6 +4234,16 @@ begin
 end;
 
 {$ifdef FPC}
+
+function TDynArrayRec.GetLength: sizeint;
+begin
+  result := high + 1;
+end;
+
+procedure TDynArrayRec.SetLength(len: sizeint);
+begin
+  high := len - 1;
+end;
 
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
 begin
@@ -6604,6 +6667,30 @@ end;
 
 {$endif CPUX86}
 
+function StrCompW(Str1, Str2: PWideChar): PtrInt;
+begin
+  if Str1 <> Str2 then
+    if Str1 <> nil then
+      if Str2 <> nil then
+      begin
+        if Str1^ = Str2^ then
+          repeat
+            if (Str1^ = #0) or (Str2^ = #0) then
+              break;
+            inc(Str1);
+            inc(Str2);
+          until Str1^ <> Str2^;
+        result := PWord(Str1)^ - PWord(Str2)^;
+        exit;
+      end
+      else
+        result := 1 // Str2=''
+    else
+      result := -1  // Str1=''
+  else
+    result := 0;    // Str1=Str2
+end;
+
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
 begin
   if Str <> '' then
@@ -6722,9 +6809,42 @@ end;
 
 {$endif UNICODE}
 
-procedure FillZero(var dest; count: PtrInt);
+function Trim(const S: RawUTF8): RawUTF8;
+var
+  I, L: PtrInt;
 begin
-  FillCharFast(dest, count, 0);
+  L := Length(S);
+  I := 1;
+  while (I <= L) and (S[I] <= ' ') do
+    inc(I);
+  if I > L then
+    result := ''
+  else if (I = 1) and (S[L] > ' ') then
+    result := S
+  else
+  begin
+    while S[L] <= ' ' do
+      dec(L);
+    result := Copy(S, I, L - I + 1);
+  end;
+end;
+
+function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;
+var
+  i: integer;
+begin
+  {$ifdef FPC} // to use fast FPC SSE version
+  if length(SepStr) = 1 then
+    i := PosExChar(SepStr[1], Str)
+  else
+  {$endif FPC}
+    i := PosEx(SepStr, Str, StartPos);
+  if i > 0 then
+    result := Copy(Str, StartPos, i - StartPos)
+  else if StartPos = 1 then
+    result := Str
+  else
+    result := Copy(Str, StartPos, maxInt);
 end;
 
 function StrLenW(S: PWideChar): PtrInt;
@@ -6756,6 +6876,50 @@ begin
         exit;
 end;
 
+function GotoNextLine(source: PUTF8Char): PUTF8Char;
+label
+  _0, _1, _2, _3; // ugly but faster
+begin
+  repeat
+    if source[0] < #13 then
+      goto _0
+    else if source[1] < #13 then
+      goto _1
+    else if source[2] < #13 then
+      goto _2
+    else if source[3] < #13 then
+      goto _3
+    else
+    begin
+      inc(source, 4);
+      continue;
+    end;
+_3: inc(source);
+_2: inc(source);
+_1: inc(source);
+_0: if source[0] = #13 then
+    begin
+      if source[1] = #10 then
+      begin
+        result := source + 2; // most common case is text ending with #13#10
+        exit;
+      end;
+    end
+    else if source[0] = #0 then
+    begin
+      result := nil;
+      exit;
+    end
+    else if source[0] <> #10 then
+    begin
+      inc(source);
+      continue; // e.g. #9
+    end;
+    result := source + 1;
+    exit;
+  until false;
+end;
+
 function GetFileNameWithoutExt(const FileName: TFileName; Extension: PFileName): TFileName;
 var
   i, max: PtrInt;
@@ -6777,6 +6941,11 @@ begin
     if Extension <> nil then
       Extension^ := copy(FileName, i, 20);
   end;
+end;
+
+procedure FillZero(var dest; count: PtrInt);
+begin
+  FillCharFast(dest, count, 0);
 end;
 
 threadvar
@@ -7203,6 +7372,15 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 begin
   result := SynLZdecompress1pas(src,size,dst);
 end;
+
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+begin // fallback to RTL asm e.g. for ARM
+  {$ifdef FPC_64}
+  result := InterLockedDecrement64(refcnt)<=0;
+  {$else}
+  result := InterLockedDecrement(refcnt)<=0;
+  {$endif FPC_64}
+end; // we don't check for ismultithread global
 
 {$endif CPUINTEL}
 
@@ -8367,27 +8545,32 @@ begin
   PPtrInt(@Value)^ := varNull;
 end;
 
-function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
-var
-  vt: cardinal;
+function VarDataFromVariant(const Value: variant): PVarData;
 begin
+  result := @Value;
   repeat
-    vt := PVarData(VarData)^.VType;
-    if vt <> varVariant or varByRef then
-      break;
-    VarData := PVarData(VarData)^.VPointer;
-    if VarData = nil then
+    if integer(result^.VType) <> varVariant or varByRef then
+      exit;
+    if result^.VPointer <> nil then
+      result := result^.VPointer
+    else
     begin
-      result := true;
+      result := @result^.VPointer; // so VType will point to 0=varEmpty
       exit;
     end;
   until false;
-  result := (vt <= varNull) or (vt = varNull or varByRef);
+end;
+
+function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+begin
+  with VarDataFromVariant(PVariant(VarData)^)^ do
+    result := (VType <= varNull) or (VType = varNull or varByRef);
 end;
 
 function VarIsEmptyOrNull(const V: Variant): Boolean;
 begin
-  result := VarDataIsEmptyOrNull(@V);
+  with VarDataFromVariant(V)^ do
+    result := (VType <= varNull) or (VType = varNull or varByRef);
 end;
 
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
@@ -8415,87 +8598,107 @@ begin
   end;
 end;
 
-function VariantToInteger(const V: Variant; var Value: integer): boolean;
+function SetVarDataUnRefSimpleValue(V: PVarData; var tmp: TVarData): PVarData;
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  tmp: TVarData;
-  vt: cardinal;
+  typ: cardinal;
 begin
-  result := false;
-  vt := TVarData(V).VType;
-  case vt of
-    varNull, varEmpty:
-      Value := 0;
-    varBoolean:
-      if TVarData(V).VBoolean then
-        Value := 1
-      else
-        Value := 0; // normalize
-    varSmallint:
-      Value := TVarData(V).VSmallInt;
-    varShortInt:
-      Value := TVarData(V).VShortInt;
-    varWord:
-      Value := TVarData(V).VWord;
-    varLongWord:
-      if TVarData(V).VLongWord <= cardinal(High(integer)) then
-        Value := TVarData(V).VLongWord
-      else
-        exit;
-    varByte:
-      Value := TVarData(V).VByte;
-    varInteger:
-      Value := TVarData(V).VInteger;
-    varWord64:
-      if (TVarData(V).VInt64 >= 0) and (TVarData(V).VInt64 <= High(integer)) then
-        Value := TVarData(V).VInt64
-      else
-        exit;
-    varInt64:
-      if (TVarData(V).VInt64 >= Low(integer)) and (TVarData(V).VInt64 <= High(integer)) then
-        Value := TVarData(V).VInt64
-      else
-        exit;
-  else
-    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
+  typ := V^.VType;
+  if typ and varByRef <> 0 then
+  begin
+    typ := typ and not varByRef;
+    if typ in VTYPE_SIMPLE then
     begin
-      result := VariantToInteger(variant(tmp), Value);
+      tmp.VType := typ;
+      tmp.VInt64 := PInt64(V^.VAny)^;
+      result := @tmp;
       exit;
     end
-    else
-      exit;
   end;
+  result := nil;
+end;
+
+function VariantToInteger(const V: Variant; var Value: integer): boolean;
+var
+  vd: PVarData;
+  tmp: TVarData;
+begin
+  result := false;
+  vd := VarDataFromVariant(V);
+  repeat
+    case cardinal(vd^.VType) of
+      varNull, varEmpty:
+        Value := 0;
+      varBoolean:
+        if vd^.VBoolean then
+          Value := 1
+        else
+          Value := 0; // normalize
+      varSmallint:
+        Value := vd^.VSmallInt;
+      varShortInt:
+        Value := vd^.VShortInt;
+      varWord:
+        Value := vd^.VWord;
+      varLongWord:
+        if vd^.VLongWord <= cardinal(High(integer)) then
+          Value := vd^.VLongWord
+        else
+          exit;
+      varByte:
+        Value := vd^.VByte;
+      varInteger:
+        Value := vd^.VInteger;
+      varWord64:
+        if (vd^.VInt64 >= 0) and (vd^.VInt64 <= High(integer)) then
+          Value := vd^.VInt64
+        else
+          exit;
+      varInt64:
+        if (vd^.VInt64 >= Low(integer)) and (vd^.VInt64 <= High(integer)) then
+          Value := vd^.VInt64
+        else
+          exit;
+      varDouble, varDate, varSingle, varCurrency, varString, varOleStr:
+        exit;
+    else
+      begin
+        vd := SetVarDataUnRefSimpleValue(vd, tmp{%H-});
+        if vd <> nil then
+          continue; // avoid a goto
+        exit;
+      end;
+    end;
+    break;
+  until false;
   result := true;
 end;
 
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 var
+  vd: PVarData;
   tmp: TVarData;
-  vt: cardinal;
 begin
-  vt := TVarData(V).VType;
-  if vt = varVariant or varByRef then
-    result := VariantToDouble(PVariant(TVarData(V).VPointer)^, Value)
+  vd := VarDataFromVariant(V);
+  result := true;
+  case cardinal(vd^.VType) of
+    varDouble, varDate:
+      Value := vd^.VDouble;
+    varSingle:
+      Value := vd^.VSingle;
+    varCurrency:
+      CurrencyToDouble(@vd^.VCurrency, Value);
+    varDouble or varByRef, varDate or varByRef:
+      Value := unaligned(PDouble(vd^.VAny)^);
+    varSingle or varByRef:
+      Value := {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}unaligned{$endif}(PSingle(vd^.VAny)^);
+    varCurrency or varByRef:
+      CurrencyToDouble(vd^.VAny, Value);
   else
-  begin
-    result := true;
-    if VariantToInt64(V, tmp.VInt64) then // also handle varEmpty,varNull
-      Value := tmp.VInt64
+    if VariantToInt64(PVariant(vd)^, tmp.VInt64) then
+      Value := tmp.VInt64 // also handle varEmpty,varNull
     else
-      case vt of
-        varDouble, varDate:
-          Value := TVarData(V).VDouble;
-        varSingle:
-          Value := TVarData(V).VSingle;
-        varCurrency:
-          CurrencyToDouble(@TVarData(V).VCurrency, Value);
-      else
-        begin
-          if SetVariantUnRefSimpleValue(V, tmp) then
-            result := VariantToDouble(variant(tmp), Value)
-          else
-            result := false;
-        end;
-      end;
+      result := false;
   end;
 end;
 
@@ -8507,124 +8710,119 @@ end;
 
 function VariantToCurrency(const V: Variant; var Value: TSynCurrency): boolean;
 var
+  vd: PVarData;
   tmp: TVarData;
-  vt: cardinal;
 begin
-  vt := TVarData(V).VType;
-  if vt = varVariant or varByRef then
-    result := VariantToCurrency(PVariant(TVarData(V).VPointer)^, Value)
+  vd := VarDataFromVariant(V);
+  result := true;
+  case cardinal(vd^.VType) of
+    varDouble, varDate:
+      DoubleToCurrency(vd^.VDouble, Value);
+    varSingle:
+      DoubleToCurrency(vd^.VSingle, Value);
+    varCurrency:
+      Value := PSynCurrency(@vd^.VCurrency)^;
+    varDouble or varByRef, varDate or varByRef:
+      DoubleToCurrency(PDouble(vd^.VAny)^, Value);
+    varSingle or varByRef:
+      DoubleToCurrency(PSingle(vd^.VAny)^, Value);
+    varCurrency or varByRef:
+      Value := PSynCurrency(vd^.VAny)^;
   else
-  begin
-    result := true;
-    if VariantToInt64(V, tmp.VInt64) then
-      Int64ToCurrency(tmp.VInt64, Value)
+    if VariantToInt64(PVariant(vd)^, tmp.VInt64) then
+      Int64ToCurrency(tmp.VInt64, Value) // also handle varEmpty,varNull
     else
-      case vt of
-        varDouble, varDate:
-          DoubleToCurrency(TVarData(V).VDouble, Value);
-        varSingle:
-          DoubleToCurrency(TVarData(V).VSingle, Value);
-        varCurrency:
-          Value := PSynCurrency(@TVarData(V).VCurrency)^;
-      else
-        if SetVariantUnRefSimpleValue(V, tmp) then
-          result := VariantToCurrency(variant(tmp), Value)
-        else
-          result := false;
-      end;
+      result := false;
   end;
 end;
 
 function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
 var
+  vd: PVarData;
   tmp: TVarData;
-  vt: cardinal;
 begin
-  vt := TVarData(V).VType;
-  case vt of
-    varEmpty, varNull:
+  vd := VarDataFromVariant(V);
+  repeat
+    case cardinal(vd^.VType) of
+      varEmpty, varNull:
+        begin
+          result := false;
+          exit;
+        end;
+      varBoolean: // 16-bit WordBool to 8-bit boolean
+        Value := vd^.VBoolean;
+      varInteger: // coming e.g. from GetJsonField()
+        Value := vd^.VInteger = 1;
+      varString:
+        Value := GetBoolean(vd^.VAny);
+      varOleStr:
+        Value := WideString(vd^.VAny) = 'true';
+    {$ifdef HASVARUSTRING}
+      varUString:
+        Value := UnicodeString(vd^.VAny) = 'true';
+    {$endif HASVARUSTRING}
+    else
       begin
+        vd := SetVarDataUnRefSimpleValue(vd, tmp{%H-});
+        if vd <> nil then
+          continue;
         result := false;
         exit;
       end;
-    varBoolean: // 16-bit WordBool to 8-bit boolean
-      Value := TVarData(V).VBoolean;
-    varInteger: // coming e.g. from GetJsonField()
-      Value := TVarData(V).VInteger = 1;
-    varString:
-      Value := GetBoolean(TVarData(V).VAny);
-    varOleStr:
-      Value := WideString(TVarData(V).VAny) = 'true';
-  {$ifdef HASVARUSTRING}
-    varUString:
-      Value := UnicodeString(TVarData(V).VAny) = 'true';
-  {$endif HASVARUSTRING}
-  else
-    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
-      if tmp.VType = varBoolean then
-        Value := tmp.VBoolean
-      else
-      begin
-        result := false;
-        exit;
-      end
-    else
-    begin
-      result := false;
-      exit;
     end;
-  end;
+    break;
+  until false;
   result := true;
 end;
 
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
 var
+  vd: PVarData;
   tmp: TVarData;
-  vt: cardinal;
 begin
-  vt := TVarData(V).VType;
-  case vt of
-    varNull, varEmpty:
-      Value := 0;
-    varBoolean:
-      if TVarData(V).VBoolean then
-        Value := 1
-      else
-        Value := 0; // normalize
-    varSmallint:
-      Value := TVarData(V).VSmallInt;
-    varShortInt:
-      Value := TVarData(V).VShortInt;
-    varWord:
-      Value := TVarData(V).VWord;
-    varLongWord:
-      Value := TVarData(V).VLongWord;
-    varByte:
-      Value := TVarData(V).VByte;
-    varInteger:
-      Value := TVarData(V).VInteger;
-    varWord64:
-      if TVarData(V).VInt64 >= 0 then
-        Value := TVarData(V).VInt64
-      else
+  vd := VarDataFromVariant(V);
+  repeat
+    case cardinal(vd^.VType) of
+      varNull, varEmpty:
+        Value := 0;
+      varBoolean:
+        if vd^.VBoolean then
+          Value := 1
+        else
+          Value := 0; // normalize
+      varSmallint:
+        Value := vd^.VSmallInt;
+      varShortInt:
+        Value := vd^.VShortInt;
+      varWord:
+        Value := vd^.VWord;
+      varLongWord:
+        Value := vd^.VLongWord;
+      varByte:
+        Value := vd^.VByte;
+      varInteger:
+        Value := vd^.VInteger;
+      varWord64:
+        if vd^.VInt64 >= 0 then
+          Value := vd^.VInt64
+        else
+        begin
+          result := false;
+          exit;
+        end;
+      varInt64:
+        Value := vd^.VInt64;
+    else
       begin
+        vd := SetVarDataUnRefSimpleValue(vd, tmp{%H-});
+        if vd <> nil then
+          continue;
         result := false;
         exit;
       end;
-    varInt64:
-      Value := TVarData(V).VInt64;
-  else
-    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
-    begin
-      result := VariantToInt64(variant(tmp), Value);
-      exit;
-    end
-    else
-    begin
-      result := false;
-      exit;
     end;
-  end;
+    break;
+  until false;
   result := true;
 end;
 
@@ -8675,6 +8873,166 @@ end;
 function RawUTF8ToVariant(const Txt: RawUTF8): variant;
 begin
   RawUTF8ToVariant(Txt, result);
+end;
+
+procedure VariantStringToUTF8(const V: Variant; var result: RawUTF8);
+begin
+  with VarDataFromVariant(V)^ do
+    if VType = varString then
+      result := RawUTF8(VString)
+    else
+      result := '';
+end;
+
+function VariantStringToUTF8(const V: Variant): RawUTF8;
+begin
+  VariantStringToUTF8(V, result);
+end;
+
+procedure BaseVariantDynArrayClear(V: PVariant; n: integer);
+begin
+  if n > 0 then
+    repeat
+      VarClear(V^);
+      inc(V);
+      dec(n);
+    until n = 0;
+end;
+
+
+{ ************ Sorting/Comparison Functions }
+
+function SortDynArrayBoolean(const A, B): integer;
+begin
+  if boolean(A) then // normalize (seldom used, anyway)
+    if boolean(B) then
+      result := 0
+    else
+      result := 1
+  else if boolean(B) then
+    result := -1
+  else
+    result := 0;
+end;
+
+function SortDynArrayByte(const A, B): integer;
+begin
+  result := byte(A) - byte(B);
+end;
+
+function SortDynArraySmallint(const A, B): integer;
+begin
+  result := smallint(A) - smallint(B);
+end;
+
+function SortDynArrayShortint(const A, B): integer;
+begin
+  result := shortint(A) - shortint(B);
+end;
+
+function SortDynArrayWord(const A, B): integer;
+begin
+  result := word(A) - word(B);
+end;
+
+function SortDynArrayString(const A, B): integer;
+begin
+  {$ifdef UNICODE}
+  result := StrCompW(PWideChar(A), PWideChar(B));
+  {$else}
+  result := StrComp(PUTF8Char(A), PUTF8Char(B));
+  {$endif}
+end;
+
+function SortDynArrayFileName(const A, B): integer;
+var
+  Aname, Aext, Bname, Bext: TFileName;
+begin // code below is not very fast, but correct ;)
+  Aname := GetFileNameWithoutExt(string(A), @Aext);
+  Bname := GetFileNameWithoutExt(string(B), @Bext);
+  result := AnsiCompareFileName(Aext, Bext);
+  if result = 0 then // if both extensions matches, compare by filename
+    result := AnsiCompareFileName(Aname, Bname);
+end;
+
+function SortDynArrayUnicodeString(const A, B): integer;
+begin // works for tkWString and tkUString
+  result := StrCompW(PWideChar(A), PWideChar(B));
+end;
+
+function SortDynArray128(const A, B): integer;
+begin
+  if THash128Rec(A).Lo < THash128Rec(B).Lo then
+    result := -1
+  else if THash128Rec(A).Lo > THash128Rec(B).Lo then
+    result := 1
+  else if THash128Rec(A).Hi < THash128Rec(B).Hi then
+    result := -1
+  else if THash128Rec(A).Hi > THash128Rec(B).Hi then
+    result := 1
+  else
+    result := 0;
+end;
+
+function SortDynArray256(const A, B): integer;
+begin
+  result := SortDynArray128(THash256Rec(A).Lo, THash256Rec(B).Lo);
+  if result = 0 then
+    result := SortDynArray128(THash256Rec(A).Hi, THash256Rec(B).Hi);
+end;
+
+function SortDynArray512(const A, B): integer;
+begin
+  result := SortDynArray128(THash512Rec(A).c0, THash512Rec(B).c0);
+  if result = 0 then
+  begin
+    result := SortDynArray128(THash512Rec(A).c1, THash512Rec(B).c1);
+    if result = 0 then
+    begin
+      result := SortDynArray128(THash512Rec(A).c2, THash512Rec(B).c2);
+      if result = 0 then
+        result := SortDynArray128(THash512Rec(A).c3, THash512Rec(B).c3);
+    end;
+  end;
+end;
+
+function SortDynArrayRawByteString(const A, B): integer;
+var
+  p1, p2: PByteArray;
+  l1, l2, i, l: PtrInt; // FPC will use very efficiently the CPU registers
+begin // we can't use StrComp() since a RawByteString may contain #0
+  p1 := pointer(A);
+  p2 := pointer(B);
+  if p1 <> p2 then
+    if p1 <> nil then
+      if p2 <> nil then
+      begin
+        l1 := PStrLen(PtrUInt(p1) - _STRLEN)^;
+        l2 := PStrLen(PtrUInt(p2) - _STRLEN)^;
+        l := l1;
+        if l2 < l1 then
+          l := l2;
+        i := 0;
+        repeat
+          result := p1[i];
+          dec(result, p2[i]);
+          if result <> 0 then
+            exit;
+          inc(i);
+        until i >= l;
+        result := l1 - l2;
+      end
+      else
+        result := 1
+    else  // p2=''
+      result := -1
+  else // p1=''
+    result := 0;      // p1=p2
+end;
+
+function SortDynArrayPUTF8Char(const A, B): integer;
+begin
+  result := StrComp(pointer(A), pointer(B));
 end;
 
 
