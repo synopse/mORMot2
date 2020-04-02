@@ -543,6 +543,111 @@ end;
 
 // functions below are always available, even on DARWIN
 
+function SortDynArrayInteger(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     r8d, dword ptr[A]
+        mov     edx, dword ptr[B]
+        xor     eax, eax
+        xor     ecx, ecx
+        cmp     r8d, edx
+        setl    cl
+        setg    al
+        sub     eax, ecx
+end;
+
+function SortDynArrayCardinal(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     ecx, dword ptr[A]
+        mov     edx, dword ptr[B]
+        xor     eax, eax
+        cmp     ecx, edx
+        seta    al
+        sbb     eax, 0
+end;
+
+function SortDynArrayInt64(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     r8, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        xor     eax, eax
+        xor     ecx, ecx
+        cmp     r8, rdx
+        setl    cl
+        setg    al
+        sub     eax, ecx
+end;
+
+function SortDynArrayQWord(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rcx, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        xor     eax, eax
+        cmp     rcx, rdx
+        seta    al
+        sbb     eax, 0
+end;
+
+function SortDynArrayPointer(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rcx, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        xor     eax, eax
+        cmp     rcx, rdx
+        seta    al
+        sbb     eax, 0
+end;
+
+function SortDynArrayDouble(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        movsd   xmm0, qword ptr[A]
+        movsd   xmm1, qword ptr[B]
+        xor     eax, eax
+        xor     edx, edx
+        comisd  xmm0, xmm1
+        seta    al
+        setb    dl
+        sub     eax, edx
+end;
+
+function SortDynArraySingle(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        movss   xmm0, dword ptr[A]
+        movss   xmm1, dword ptr[B]
+        xor     eax, eax
+        xor     edx, edx
+        comiss  xmm0, xmm1
+        seta    al
+        setb    dl
+        sub     eax, edx
+end;
+
+function SortDynArrayAnsiString(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rcx, qword ptr[A]
+        mov     rdx, qword ptr[B]
+        cmp     rcx, rdx // A=B (happens with string refcounting)
+        je      @0
+        test    rcx, rdx // A^ or B^ may be nil i.e. ''
+        jz      @n1
+@s:     mov     al, byte ptr[rcx] // by char comparison
+        cmp     al, byte ptr[rdx]
+        jne     @ne
+        inc     rcx
+        inc     rdx
+        test    al, al
+        jnz     @s
+@0:     xor     eax, eax
+        ret
+@n1:    test    rcx, rcx
+        jz      @less    // A='' -> -1
+        test    rdx, rdx
+        jnz     @s       // B='' -> 1
+@1:     mov     eax, 1
+        ret
+@ne:    jnc     @1
+@less:  mov     eax, -1
+end; // note: SSE4.2 read up to 16 bytes after buffer, this version won't
+
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
         xor     eax, eax
@@ -1347,6 +1452,15 @@ function InterlockedDecrement(var I: Integer): Integer;
    lock xadd    [edx], eax
         dec     eax
 end;
+
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+{$ifdef FPC}nostackframe; assembler; asm
+        lock dec qword ptr[refcnt]  // TRefCnt=SizeInt=Int64 for FPC_64
+{$else} asm .noframe
+        lock dec dword ptr[refcnt]  // TRefCnt=longint on Delphi Win64
+{$endif FPC}
+        setbe   al
+end; // we don't check for ismultithread global since lock is cheap on new CPUs
 
 {$ifndef FPC}
 

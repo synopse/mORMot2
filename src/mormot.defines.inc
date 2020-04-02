@@ -196,7 +196,7 @@
   {$ifdef ISFPC30}
     {$ifndef MSWINDOWS}
       // define FPCUSEVERSIONINFO to link low-level executable file information
-      // with ExeVersion from mormot.core.os.pas
+      // retrieval for ExeVersion from mormot.core.os.pas
       // => disabled by default, to reduce the executable overhead
       {.$define FPCUSEVERSIONINFO}
     {$endif MSWINDOWS}
@@ -271,14 +271,14 @@
 (********************** Delphi Conditionals **********************)
 
   {$ifndef MSWINDOWS}
-  Kylix or Delphi for MacOS/Linux/Mobile are unsupported
-  -> we recommend using FPC for POSIX platforms
+  'Kylix or Delphi for MacOS/Linux/Mobile are unsupported'
+  '-> we recommend using FPC for POSIX platforms'
   {$endif MSWINDOWS}
   {$IFNDEF CONDITIONALEXPRESSIONS}
-  Delphi 2-5 are not supported
+  'Delphi 2-5 are not supported'
   {$ENDIF CONDITIONALEXPRESSIONS}
   {$ifdef VER140}
-  Delphi 6 is not supported
+  'Delphi 6 is not supported'
   {$endif}
 
   {$ifdef UNICODE}

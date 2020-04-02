@@ -1089,6 +1089,166 @@ asm // no branch taken in case of not equal first char
 @zero:  xor     eax, eax
 end;
 
+function SortDynArrayInteger(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        mov     ecx, [eax]
+        mov     edx, [edx]
+        xor     eax, eax
+        cmp     ecx, edx
+        setl    cl
+        setg    al
+        movzx   ecx, cl
+        sub     eax, ecx
+end;
+
+function SortDynArrayCardinal(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        mov     ecx, [eax]
+        mov     edx, [edx]
+        xor     eax, eax
+        cmp     ecx, edx
+        seta    al
+        sbb     eax,0
+end;
+
+function SortDynArrayPointer(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        mov     ecx, [eax]
+        mov     edx, [edx]
+        xor     eax, eax
+        cmp     ecx, edx
+        seta    al
+        sbb     eax,0
+end;
+
+function SortDynArrayInt64(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // Delphi x86 compiler is not efficient at compiling Int64 comparisons
+        mov     ecx, [eax]
+        mov     eax, [eax + 4]
+        cmp     eax, [edx + 4]
+        jnz     @nz
+        cmp     ecx, [edx]
+        jz      @0
+        jnb     @p
+@n:     mov     eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@nz:    jl      @n
+@p:     mov     eax, 1
+end;
+
+function SortDynArrayQWord(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // Delphi x86 compiler is not efficient, and oldest even incorrect
+        mov     ecx, [eax]
+        mov     eax, [eax + 4]
+        cmp     eax, [edx + 4]
+        jnz     @nz
+        cmp     ecx, [edx]
+        jz      @0
+@nz:    jnb     @p
+        mov     eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@p:     mov     eax, 1
+end;
+
+function SortDynArrayAnsiString(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
+        mov     eax, [eax]
+        mov     edx, [edx]
+        cmp     eax, edx
+        je      @0
+        test    eax, edx
+        jz      @n1
+@n2:    movzx   ecx, byte ptr[eax] // first char comparison (quicksort speedup)
+        sub     cl, [edx]
+        jne     @no
+        push    ebx
+        mov     ebx, [eax - 4]
+        sub     ebx, [edx - 4]   // ebx = length(A)-length(B)
+        push    ebx
+        adc     ecx, -1
+        and     ecx, ebx
+        sub     ecx, [eax - 4]
+        sub     eax, ecx
+        sub     edx, ecx
+@s:     mov     ebx, [eax + ecx]  // compare by dword
+        xor     ebx, [edx + ecx]
+        jnz     @d
+        add     ecx, 4
+        js      @s
+@l:     pop     eax            // all chars equal -> returns length(a)-length(b)
+        pop     ebx
+        ret
+@d:     bsf     ebx, ebx       // char differs -> returns pbyte(a)^-pbyte(b)^
+        shr     ebx, 3
+        add     ecx, ebx
+        jns     @l
+        movzx   eax, byte ptr[eax + ecx]
+        movzx   edx, byte ptr[edx + ecx]
+        pop     ebx
+        pop     ebx
+        sub     eax, edx
+        ret
+@n1:    test    eax, eax       // a or b may be ''
+        jz      @n0
+        test    edx, edx
+        jnz     @n2
+        cmp     [eax - 4], edx
+        je      @0
+@no:    jnc     @1
+        mov     eax, -1
+        ret
+@n0:    cmp     eax, [edx - 4]
+        je      @0
+        jnc     @1
+        mov     eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@1:     mov     eax, 1
+end;
+
+function SortDynArrayDouble(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        fld     qword ptr[eax]
+        fcomp   qword ptr[edx]
+        fstsw   ax
+        sahf
+        jz      @0
+@nz:    jnb     @p
+        mov     eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@p:     mov     eax, 1
+end;
+
+function SortDynArraySingle(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        fld     dword ptr[eax]
+        fcomp   dword ptr[edx]
+        fstsw   ax
+        sahf
+        jz      @0
+@nz:    jnb     @p
+        mov     eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@p:     mov     eax, 1
+end;
+
 {$ifndef FPC_OR_UNICODE}
 
 function CompareInt64(const A, B: Int64): integer;
@@ -1621,7 +1781,14 @@ asm // returns the TSC in EDX:EAX
         rdtsc
 end;
 
-function IsXmmYmmOSEnabled: boolean; assembler;
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        lock dec dword ptr[refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
+        setbe   al
+end; // we don't check for ismultithread global since lock is cheap on new CPUs
+
+function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         xor     ecx, ecx  // specify control register XCR0 = XFEATURE_ENABLED_MASK
