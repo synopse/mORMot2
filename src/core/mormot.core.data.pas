@@ -10,7 +10,7 @@ unit mormot.core.data;
     - RTL TPersistent / TInterfacedObject with Custom Constructor
     - TSynPersistent / TSynList / TSynObjectList / TSynLocker classes
     - Variable Length Integer Encoding / Decoding
-    - Base64, Base64URI and Baudot Encoding / Decoding
+    - Base64, Base64URI, URL and Baudot Encoding / Decoding
 
     - RawUTF8 String Values Interning
     - TSynNameValue Name/Value Storage
@@ -519,7 +519,7 @@ function FromVarInt64Value(Source: PByte): Int64;
 function GotoNextVarInt(Source: PByte): pointer; {$ifdef HASINLINE}inline;{$endif}
 
 
-{ ************ Base64, Base64URI and Baudot Encoding / Decoding }
+{ ************ Base64, Base64URI, URL and Baudot Encoding / Decoding }
 
 const
   /// UTF-8 encoded \uFFF0 special code to mark Base64 binary content in JSON
@@ -581,6 +581,15 @@ function BinToBase64WithMagic(const data: RawByteString): RawUTF8; overload;
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8; overload;
+
+/// raw function for efficient binary to Base64 encoding of the main block
+// - don't use this function, but rather the BinToBase64() overloaded functions
+function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
+
+/// raw function for efficient binary to Base64 encoding of the last bytes
+// - don't use this function, but rather the BinToBase64() overloaded functions
+procedure Base64EncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
+  {$ifdef FPC}inline;{$endif}
 
 /// fast conversion from Base64 encoded text into binary data
 // - is now just an alias to Base64ToBinSafe() overloaded function
@@ -774,6 +783,122 @@ function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUTF8; overload;
 // - the "baud" symbol rate measurement comes from Emile's name ;)
 function BaudotToAscii(const Baudot: RawByteString): RawUTF8; overload;
 
+
+/// encode a string to be compatible with URI encoding
+function UrlEncode(const svar: RawUTF8): RawUTF8; overload;
+
+/// encode a string to be compatible with URI encoding
+function UrlEncode(Text: PUTF8Char): RawUTF8; overload;
+
+/// encode supplied parameters to be compatible with URI encoding
+// - parameters must be supplied two by two, as Name,Value pairs, e.g.
+// ! url := UrlEncode(['select','*','where','ID=12','offset',23,'object',aObject]);
+// - parameters names should be plain ASCII-7 RFC compatible identifiers
+// (0..9a..zA..Z_.~), otherwise their values are skipped
+// - parameters values can be either textual, integer or extended, or any TObject
+// - TObject serialization into UTF-8 will be processed by the ObjectToJSON()
+// function
+function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
+
+/// decode a string compatible with URI encoding into its original value
+// - you can specify the decoding range (as in copy(s,i,len) function)
+function UrlDecode(const s: RawUTF8; i: PtrInt = 1; len: PtrInt = -1): RawUTF8; overload;
+
+/// decode a string compatible with URI encoding into its original value
+function UrlDecode(U: PUTF8Char): RawUTF8; overload;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// textual value
+// - UrlDecodeValue('select=%2A&where=LastName%3D%27M%C3%B4net%27','SELECT=',V,@Next)
+// will return Next^='where=...' and V='*'
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8; var Value: RawUTF8;
+  Next: PPUTF8Char = nil): boolean;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// integer numerical value
+// - UrlDecodeInteger('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
+// will return Next^='where=...' and O=20
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8; var Value: integer;
+  Next: PPUTF8Char = nil): boolean;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// cardinal numerical value
+// - UrlDecodeCardinal('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
+// will return Next^='where=...' and O=20
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8; var Value: Cardinal;
+  Next: PPUTF8Char = nil): boolean;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// Int64 numerical value
+// - UrlDecodeInt64('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
+// will return Next^='where=...' and O=20
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8; var Value: Int64;
+  Next: PPUTF8Char = nil): boolean;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// floating-point value
+// - UrlDecodeExtended('price=20.45&where=LastName%3D%27M%C3%B4net%27','PRICE=',P,@Next)
+// will return Next^='where=...' and P=20.45
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8; var Value: TSynExtended;
+  Next: PPUTF8Char = nil): boolean;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// floating-point value
+// - UrlDecodeDouble('price=20.45&where=LastName%3D%27M%C3%B4net%27','PRICE=',P,@Next)
+// will return Next^='where=...' and P=20.45
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8; var Value: double;
+  Next: PPUTF8Char = nil): boolean;
+
+/// returns TRUE if all supplied parameters do exist in the URI encoded text
+// - CSVNames parameter shall provide as a CSV list of names
+// - e.g. UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where')
+// will return TRUE
+function UrlDecodeNeedParameters(U, CSVNames: PUTF8Char): boolean;
+
+/// decode the next Name=Value&.... pair from input URI
+// - Name is returned directly (should be plain ASCII 7 bit text)
+// - Value is returned after URI decoding (from %.. patterns)
+// - if a pair is decoded, return a PUTF8Char pointer to the next pair in
+// the input buffer, or points to #0 if all content has been processed
+// - if a pair is not decoded, return nil
+function UrlDecodeNextNameValue(U: PUTF8Char; var Name,Value: RawUTF8): PUTF8Char;
+
+/// decode a URI-encoded Value from an input buffer
+// - decoded value is set in Value out variable
+// - returns a pointer just after the decoded value (may points e.g. to
+// #0 or '&') - it is up to the caller to continue the process or not
+function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+
+/// decode a URI-encoded Name from an input buffer
+// - decoded value is set in Name out variable
+// - returns a pointer just after the decoded name, after the '='
+// - returns nil if there was no name=... pattern in U
+function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
+
+/// checks if the supplied UTF-8 text don't need URI encoding
+// - returns TRUE if all its chars are non-void plain ASCII-7 RFC compatible
+// identifiers (0..9a..zA..Z-_.~)
+function IsUrlValid(P: PUTF8Char): boolean;
+
+/// checks if the supplied UTF-8 text values don't need URI encoding
+// - returns TRUE if all its chars of all strings are non-void plain ASCII-7 RFC
+// compatible identifiers (0..9a..zA..Z-_.~)
+function AreUrlValid(const Url: array of RawUTF8): boolean;
+
+/// ensure the supplied URI contains a trailing '/' charater
+function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
 
 (*
 
@@ -1154,7 +1279,7 @@ function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValu
 implementation
 
 uses
-  mormot.core.text;
+  mormot.core.text; // for INI process
 
 
 
@@ -1530,16 +1655,12 @@ begin
 end;
 
 function TSynLocker.GetUTF8(Index: integer): RawUTF8;
-var
-  wasString: Boolean;
 begin
   if cardinal(Index) < cardinal(PaddingUsedCount) then
   try
     EnterCriticalSection(fSection);
     fLocked := true;
-    VariantToUTF8(variant(Padding[Index]), result, wasString);
-    if not wasString then
-      result := '';
+    VariantStringToUTF8(variant(Padding[Index]), result);
   finally
     fLocked := false;
     LeaveCriticalSection(fSection);
@@ -2287,7 +2408,7 @@ end;
 
 
 
-{ ************ Base64, Base64URI and Baudot Encoding / Decoding }
+{ ************ Base64, Base64URI, URL and Baudot Encoding / Decoding }
 
 type
   TBase64Enc = array[0..63] of AnsiChar;
@@ -2465,7 +2586,6 @@ end;
 {$endif ASMX86}
 
 procedure Base64EncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
-  {$ifdef HASINLINE} inline; {$endif}
 var
   c: cardinal;
   enc: PBase64Enc; // use local register
@@ -2823,7 +2943,8 @@ var
 begin
   enc := @b64URIenc;
   main := len div 3;
-  if main <> 0 then begin
+  if main <> 0 then
+  begin
     dec(len, main * 3); // fast modulo
     repeat
       c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
@@ -3172,6 +3293,528 @@ begin
   finally
     tmp.Done(dest, result);
   end;
+end;
+
+{ --------- URL encoding/decoding }
+
+function UrlEncode(const svar: RawUTF8): RawUTF8;
+begin
+  result := UrlEncode(pointer(svar));
+end;
+
+function UrlEncode(Text: PUTF8Char): RawUTF8;
+
+  function Enc(s, p: PUTF8Char): PUTF8Char;
+  var
+    c: PtrInt;
+  begin
+    repeat
+      c := ord(s^);
+      case c of
+        0:
+          break;
+        ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z'),
+        ord('_'), ord('-'), ord('.'), ord('~'):
+          begin
+            // cf. rfc3986 2.3. Unreserved Characters
+            p^ := AnsiChar(c);
+            inc(p);
+            inc(s);
+            continue;
+          end;
+        ord(' '):
+          p^ := '+';
+      else
+        begin
+          p^ := '%';
+          inc(p);
+          PWord(p)^ := TwoDigitsHexWB[c];
+          inc(p);
+        end;
+      end; // case c of
+      inc(p);
+      inc(s);
+    until false;
+    result := p;
+  end;
+
+  function Size(s: PUTF8Char): PtrInt;
+  begin
+    result := 0;
+    if s <> nil then
+      repeat
+        case s^ of
+          #0:
+            exit;
+          '0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ':
+            begin
+              inc(result);
+              inc(s);
+              continue;
+            end;
+        else
+          inc(result, 3);
+        end;
+        inc(s);
+      until false;
+  end;
+
+begin
+  result := '';
+  if Text = nil then
+    exit;
+  FastSetString(result, nil, Size(Text)); // reserve exact memory count
+  Enc(Text, pointer(result));
+end;
+
+function UrlEncode(const NameValuePairs: array of const): RawUTF8;
+// (['select','*','where','ID=12','offset',23,'object',aObject]);
+var
+  A, n: PtrInt;
+  name, value: RawUTF8;
+begin
+  result := '';
+  n := high(NameValuePairs);
+  if (n > 0) and (n and 1 = 1) then
+  begin
+    for A := 0 to n shr 1 do
+    begin
+      VarRecToUTF8(NameValuePairs[A * 2], name);
+      if not IsUrlValid(pointer(name)) then
+        continue; // just skip invalid names
+      with NameValuePairs[A * 2 + 1] do
+        if VType = vtObject then
+          value := ObjectToJSON(VObject, [])
+        else
+          VarRecToUTF8(NameValuePairs[A * 2 + 1], value);
+      result := result + '&' + name + '=' + UrlEncode(value);
+    end;
+    result[1] := '?';
+  end;
+end;
+
+function IsUrlValid(P: PUTF8Char): boolean;
+var
+  tab: PTextCharSet;
+begin
+  result := false;
+  if P = nil then
+    exit;
+  tab := @TEXT_CHARS;
+  repeat // cf. rfc3986 2.3. Unreserved Characters
+    if tcURIUnreserved in tab[P^] then
+      inc(P)
+    else
+      exit;
+  until P^ = #0;
+  result := true;
+end;
+
+function AreUrlValid(const Url: array of RawUTF8): boolean;
+var
+  i: integer;
+begin
+  result := false;
+  for i := 0 to high(Url) do
+    if not IsUrlValid(pointer(Url[i])) then
+      exit;
+  result := true;
+end;
+
+function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+begin
+  if (URI <> '') and (URI[length(URI)] <> '/') then
+    result := URI + '/'
+  else
+    result := URI;
+end;
+
+function UrlDecode(const s: RawUTF8; i, len: PtrInt): RawUTF8;
+var
+  L: PtrInt;
+  P: PUTF8Char;
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  L := PtrInt(s);
+  if L = 0 then
+    exit;
+  L := PStrLen(L - _STRLEN)^;
+  if len < 0 then
+    len := L;
+  if i > L then
+    exit;
+  dec(i);
+  if len = i then
+    exit;
+  P := tmp.Init(len - i);  // reserve enough space for result
+  while i < len do
+  begin
+    case s[i + 1] of
+      #0:
+        break; // reached end of s
+      '%':
+        if not HexToChar(PAnsiChar(pointer(s)) + i + 1, P) then
+          P^ := s[i + 1]
+        else
+          inc(i, 2); // browsers may not follow the RFC (e.g. encode % as % !)
+      '+':
+        P^ := ' ';
+    else
+      P^ := s[i + 1];
+    end; // case s[i] of
+    inc(i);
+    inc(P);
+  end;
+  tmp.Done(P, result);
+end;
+
+function UrlDecode(U: PUTF8Char): RawUTF8;
+var
+  P: PUTF8Char;
+  L: integer;
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  L := StrLen(U);
+  if L = 0 then
+    exit;
+  P := tmp.Init(L);
+  repeat
+    case U^ of
+      #0:
+        break; // reached end of URI
+      '%':
+        if not HexToChar(PAnsiChar(U + 1), P) then
+          P^ := U^
+        else
+          inc(U, 2); // browsers may not follow the RFC (e.g. encode % as % !)
+      '+':
+        P^ := ' ';
+    else
+      P^ := U^;
+    end; // case s[i] of
+    inc(U);
+    inc(P);
+  until false;
+  tmp.Done(P, result);
+end;
+
+function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+var
+  Beg, V: PUTF8Char;
+  len: PtrInt;
+begin
+  if U <> nil then
+  begin
+    // compute resulting length of value
+    Beg := U;
+    len := 0;
+    while (U^ <> #0) and (U^ <> '&') do
+    begin
+      if (U^ = '%') and HexToCharValid(PAnsiChar(U + 1)) then
+        inc(U, 3)
+      else
+        inc(U);
+      inc(len);
+    end;
+    // decode value content
+    if len <> 0 then
+    begin
+      FastSetString(Value, nil, len);
+      V := pointer(Value);
+      U := Beg;
+      repeat
+        if (U^ = '%') and HexToChar(PAnsiChar(U + 1), V) then
+        begin
+          inc(V);
+          inc(U, 3);
+        end
+        else
+        begin
+          if U^ = '+' then
+            V^ := ' '
+          else
+            V^ := U^;
+          inc(V);
+          inc(U);
+        end;
+        dec(len);
+      until len = 0;
+    end;
+  end;
+  result := U;
+end;
+
+function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
+var
+  Beg, V: PUTF8Char;
+  len: PtrInt;
+begin
+  result := nil;
+  if U = nil then
+    exit;
+  // compute resulting length of name
+  Beg := U;
+  len := 0;
+  repeat
+    case U^ of
+      #0:
+        exit;
+      '=':
+        begin
+          result := U + 1;
+          break;
+        end;
+      '%':
+        if (U[1] = '3') and (U[2] in ['D', 'd']) then
+        begin
+          result := U + 3;
+          break;  // %3d means = according to the RFC
+        end
+        else if HexToCharValid(PAnsiChar(U + 1)) then
+          inc(U, 3)
+        else
+          inc(U);
+    else
+      inc(U);
+    end;
+    inc(len);
+  until false;
+  if len = 0 then
+    exit;
+  // decode name content
+  FastSetString(Name, nil, len);
+  V := pointer(Name);
+  U := Beg;
+  repeat
+    if (U^ = '%') and HexToChar(PAnsiChar(U + 1), V) then
+    begin
+      inc(V);
+      inc(U, 3);
+    end
+    else
+    begin
+      if U^ = '+' then
+        V^ := ' '
+      else
+        V^ := U^;
+      inc(V);
+      inc(U);
+    end;
+    dec(len);
+  until len = 0;
+end;
+
+function UrlDecodeNextNameValue(U: PUTF8Char; var Name, Value: RawUTF8): PUTF8Char;
+begin
+  result := nil;
+  if U = nil then
+    exit;
+  U := UrlDecodeNextName(U, Name);
+  if U = nil then
+    exit;
+  U := UrlDecodeNextValue(U, Value);
+  if U^ = #0 then
+    result := U
+  else
+    result := U + 1; // jump '&' to let decode the next name=value pair
+end;
+
+function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8; var Value: RawUTF8; Next: PPUTF8Char): boolean;
+begin
+  // UrlDecodeValue('select=%2A&where=LastName%3D%27M%C3%B4net%27','SELECT=',V,@U)
+  // -> U^='where=...' and V='*'
+  result := false; // mark value not modified by default
+  if U = nil then
+  begin
+    if Next <> nil then
+      Next^ := U;
+    exit;
+  end;
+  if IdemPChar(U, pointer(Upper)) then
+  begin
+    result := true;
+    inc(U, length(Upper));
+    U := UrlDecodeNextValue(U, Value);
+  end;
+  if Next = nil then
+    exit;
+  while not (U^ in [#0, '&']) do
+    inc(U);
+  if U^ = #0 then
+    Next^ := nil
+  else
+    Next^ := U + 1; // jump '&'
+end;
+
+function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8; var Value: integer; Next: PPUTF8Char): boolean;
+var
+  V: PtrInt;
+  SignNeg: boolean;
+begin
+  // UrlDecodeInteger('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
+  // -> Next^='where=...' and O=20
+  result := false; // mark value not modified by default
+  if U = nil then
+  begin
+    if Next <> nil then
+      Next^ := U;
+    exit;
+  end;
+  if IdemPChar(U, pointer(Upper)) then
+  begin
+    inc(U, length(Upper));
+    if U^ = '-' then
+    begin
+      SignNeg := True;
+      Inc(U);
+    end
+    else
+      SignNeg := false;
+    if U^ in ['0'..'9'] then
+    begin
+      V := 0;
+      repeat
+        V := (V * 10) + ord(U^) - 48;
+        inc(U);
+      until not (U^ in ['0'..'9']);
+      if SignNeg then
+        Value := -V
+      else
+        Value := V;
+      result := true;
+    end;
+  end;
+  if Next = nil then
+    exit;
+  while not (U^ in [#0, '&']) do
+    inc(U);
+  if U^ = #0 then
+    Next^ := nil
+  else
+    Next^ := U + 1; // jump '&'
+end;
+
+function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8; var Value: Cardinal; Next: PPUTF8Char): boolean;
+var
+  V: PtrInt;
+begin
+  // UrlDecodeInteger('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
+  // -> Next^='where=...' and O=20
+  result := false; // mark value not modified by default
+  if U = nil then
+  begin
+    if Next <> nil then
+      Next^ := U;
+    exit;
+  end;
+  if IdemPChar(U, pointer(Upper)) then
+  begin
+    inc(U, length(Upper));
+    if U^ in ['0'..'9'] then
+    begin
+      V := 0;
+      repeat
+        V := (V * 10) + ord(U^) - 48;
+        inc(U);
+      until not (U^ in ['0'..'9']);
+      Value := V;
+      result := true;
+    end;
+  end;
+  if Next = nil then
+    exit;
+  while not (U^ in [#0, '&']) do
+    inc(U);
+  if U^ = #0 then
+    Next^ := nil
+  else
+    Next^ := U + 1; // jump '&'
+end;
+
+function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8; var Value: Int64; Next: PPUTF8Char): boolean;
+var
+  tmp: RawUTF8;
+begin
+  result := UrlDecodeValue(U, Upper, tmp, Next);
+  if result then
+    SetInt64(pointer(tmp), Value);
+end;
+
+function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8; var Value: TSynExtended; Next: PPUTF8Char): boolean;
+var
+  tmp: RawUTF8;
+  err: integer;
+begin
+  result := UrlDecodeValue(U, Upper, tmp, Next);
+  if result then
+  begin
+    Value := GetExtended(pointer(tmp), err);
+    if err <> 0 then
+      result := false;
+  end;
+end;
+
+function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8; var Value: double; Next: PPUTF8Char): boolean;
+var
+  tmp: RawUTF8;
+  err: integer;
+begin
+  result := UrlDecodeValue(U, Upper, tmp, Next);
+  if result then
+  begin
+    Value := GetExtended(pointer(tmp), err);
+    if err <> 0 then
+      result := false;
+  end;
+end;
+
+function UrlDecodeNeedParameters(U, CSVNames: PUTF8Char): boolean;
+var
+  tmp: array[byte] of AnsiChar;
+  L: integer;
+  Beg: PUTF8Char;
+// UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where') will
+// return TRUE
+begin
+  result := (CSVNames = nil);
+  if result then
+    exit; // no parameter to check -> success
+  if U = nil then
+    exit; // no input data -> error
+  repeat
+    L := 0;
+    while (CSVNames^ <> #0) and (CSVNames^ <> ',') do
+    begin
+      tmp[L] := NormToUpper[CSVNames^];
+      if L = high(tmp) then
+        exit
+      else // invalid CSV parameter
+        inc(L);
+      inc(CSVNames);
+    end;
+    if L = 0 then
+      exit; // invalid CSV parameter
+    PWord(@tmp[L])^ := ord('=');
+    Beg := U;
+    repeat
+      if IdemPChar(U, tmp) then
+        break;
+      while not (U^ in [#0, '&']) do
+        inc(U);
+      if U^ = #0 then
+        exit
+      else // didn't find tmp in U
+        inc(U); // Jump &
+    until false;
+    U := Beg;
+    if CSVNames^ = #0 then
+      Break
+    else // no more parameter to check
+      inc(CSVNames); // jump &
+  until false;
+  result := true; // all parameters found
 end;
 
 
