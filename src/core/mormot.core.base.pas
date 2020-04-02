@@ -16,6 +16,7 @@ unit mormot.core.base;
     - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
     - Date / Time Processing
     - Efficient Variant Values Conversion
+    - Sorting/Comparison Functions
     - Some Convenient TStream descendants and File access functions
     - Faster Alternative to RTL Standard Functions
     - Some Reusable Constant Definitions
@@ -372,7 +373,7 @@ type
   PInt64Rec = ^Int64Rec;
   PPShortString = ^PShortString;
 
-  PIInterface = ^IInterface;
+  PInterface = ^IInterface;
   TInterfaceDynArray = array of IInterface;
   PInterfaceDynArray = ^TInterfaceDynArray;
 
@@ -2518,6 +2519,117 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert a Variant varString value into RawUTF8 encoded String
+// - works as the exact reverse of RawUTF8ToVariant() function
+// - non varString variants (e.g. UnicodeString, WideString, numbers, empty and
+// null) will be returned as ''
+// - use VariantToUTF8() instead if you need to convert numbers or other strings
+// - use VariantSaveJSON() instead if you need a conversion to JSON with
+// custom parameters
+procedure VariantStringToUTF8(const V: Variant; var result: RawUTF8); overload;
+
+/// convert Variant string values into RawUTF8 encoded String
+// - works as the exact reverse of RawUTF8ToVariant() function
+// - non varString variants (e.g. UnicodeString, WideString, numbers, empty and
+// null) will be returned as ''
+function VariantStringToUTF8(const V: Variant): RawUTF8; overload;
+
+/// efficient initialization of successive variant items from a (dynamic) array
+// - this unit will include a basic version calling VarClear()
+// - mormot.core.variants will assign a more efficient implementation
+var
+  _VariantDynArrayClear: procedure(V: PVarData; n: integer);
+
+
+{ ************ Sorting/Comparison Functions }
+
+type
+  /// function prototype to be used for TDynArray Sort and Find method
+  // - common functions exist for base types: see e.g. SortDynArrayBoolean,
+  // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
+  // SortDynArrayInt64, SortDynArrayQWord, SordDynArraySingle, SortDynArrayDouble,
+  // SortDynArrayAnsiString, SortDynArrayAnsiStringI, SortDynArrayUnicodeString,
+  // SortDynArrayUnicodeStringI, SortDynArrayString, SortDynArrayStringI
+  // - any custom type (even records) can be compared then sort by defining
+  // such a custom function
+  // - must return 0 if A=B, -1 if A<B, 1 if A>B
+  // - simple types are compared within this unit (with proper optimized asm
+  // if possible), whereas more complex types are implemented in other units -
+  // e.g. SortDynArrayVariant/SortDynArrayVariantI are in mormot.core.variants
+  // and SortDynArrayPUTF8CharI/SortDynArrayStringI in mormot.core.text
+  TDynArraySortCompare = function(const A, B): integer;
+
+/// compare two "array of boolean" elements
+function SortDynArrayBoolean(const A, B): integer;
+
+/// compare two "array of shortint" elements
+function SortDynArrayShortint(const A, B): integer;
+
+/// compare two "array of byte" elements
+function SortDynArrayByte(const A, B): integer;
+
+/// compare two "array of smallint" elements
+function SortDynArraySmallint(const A, B): integer;
+
+/// compare two "array of word" elements
+function SortDynArrayWord(const A, B): integer;
+
+/// compare two "array of integer" elements
+function SortDynArrayInteger(const A, B): integer;
+
+/// compare two "array of cardinal" elements
+function SortDynArrayCardinal(const A, B): integer;
+
+/// compare two "array of Int64" or "array of Currency" elements
+function SortDynArrayInt64(const A, B): integer;
+
+/// compare two "array of QWord" elements
+// - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
+// should better use this function or CompareQWord() to properly compare two
+// QWord values over CPUX86
+function SortDynArrayQWord(const A, B): integer;
+
+/// compare two "array of THash128" elements
+function SortDynArray128(const A, B): integer;
+
+/// compare two "array of THash256" elements
+function SortDynArray256(const A, B): integer;
+
+/// compare two "array of THash512" elements
+function SortDynArray512(const A, B): integer;
+
+/// compare two "array of TObject/pointer" elements
+function SortDynArrayPointer(const A, B): integer;
+
+/// compare two "array of single" elements
+function SortDynArraySingle(const A, B): integer;
+
+/// compare two "array of double" elements
+function SortDynArrayDouble(const A, B): integer;
+
+/// compare two "array of AnsiString" elements, with case sensitivity
+function SortDynArrayAnsiString(const A, B): integer;
+
+/// compare two "array of RawByteString" elements, with case sensitivity
+// - can't use StrComp() or similar functions since RawByteString may contain #0
+function SortDynArrayRawByteString(const A, B): integer;
+
+/// compare two "array of PUTF8Char/PAnsiChar" elements, with case sensitivity
+function SortDynArrayPUTF8Char(const A, B): integer;
+
+/// compare two "array of WideString/UnicodeString" elements, with case sensitivity
+function SortDynArrayUnicodeString(const A, B): integer;
+
+/// compare two "array of generic string" elements, with case sensitivity
+// - the expected string type is the generic VCL string
+function SortDynArrayString(const A, B): integer;
+
+/// compare two "array of TFileName" elements, as file names
+// - i.e. with no case sensitivity, and grouped by file extension
+// - the expected string type is the generic RTL string, i.e. TFileName
+// - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
+function SortDynArrayFileName(const A, B): integer;
+
 
 { ************ Some Convenient TStream descendants and File access functions }
 
@@ -2589,6 +2701,11 @@ function EnsureDirectoryExists(const Directory: TFileName;
 { ************ Some Reusable Constant Definitions }
 
 const
+  NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
+  FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
+  FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
+  TRUE_LOW   = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
+
   /// HTTP header name for the content type, as defined in the corresponding RFC
   HEADER_CONTENT_TYPE = 'Content-Type: ';
 
@@ -2662,6 +2779,9 @@ const
   JSON_NAN: array[TFloatNan] of string[11] = (
     '0', '"NaN"', '"Infinity"', '"-Infinity"');
 
+  /// used to mark the end of ASCIIZ buffer, or return a void shortstring
+  NULCHAR: AnsiChar = #0;
+
 var
   /// MIME content type used for JSON communication
   // - i.e. 'application/json; charset=UTF-8'
@@ -2689,6 +2809,12 @@ var
 
 
 implementation
+
+{$ifdef ISDELPHI20062007}
+uses
+  Windows; // circumvent unexpected warning about inlining (WTF!)
+{$endif ISDELPHI20062007}
+
 
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
@@ -6340,7 +6466,8 @@ label
   _0, _1, _2, _3; // ugly but faster
 begin
   result := PtrUInt(S);
-  if S <> nil then begin
+  if S <> nil then
+  begin
     while true do
       if PAnsiChar(result)[0] = #0 then
         goto _0
@@ -6867,7 +6994,7 @@ begin
   end;
 end;
 
-{$else}
+{$else not CPUINTEL}
 
 // fallback to pure pascal version for ARM
 
@@ -6978,6 +7105,46 @@ begin
   result := result xor (result shr 13);
   result := result * PRIME32_3;
   result := result xor (result shr 16);
+end;
+
+function SortDynArrayInteger(const A, B): integer;
+begin
+  result := ord(integer(A) > integer(B)) - ord(integer(A) < integer(B));
+end;
+
+function SortDynArrayCardinal(const A, B): integer;
+begin
+  result := ord(cardinal(A) > cardinal(B)) - ord(cardinal(A) < cardinal(B));
+end;
+
+function SortDynArrayInt64(const A, B): integer;
+begin
+  result := ord(Int64(A) > Int64(B)) - ord(Int64(A) < Int64(B));
+end;
+
+function SortDynArrayQWord(const A, B): integer;
+begin
+  result := ord(QWord(A) > QWord(B)) - ord(QWord(A) < QWord(B));
+end;
+
+function SortDynArrayPointer(const A, B): integer;
+begin
+  result := ord(PtrUInt(A) > PtrUInt(B)) - ord(PtrUInt(A) < PtrUInt(B));
+end;
+
+function SortDynArrayDouble(const A, B): integer;
+begin
+  result := ord(double(A) > double(B)) - ord(double(A) < double(B));
+end;
+
+function SortDynArraySingle(const A, B): integer;
+begin
+  result := ord(single(A) > single(B)) - ord(single(A) < single(B));
+end;
+
+function SortDynArrayAnsiString(const A, B): integer;
+begin
+  result := StrComp(pointer(A), pointer(B));
 end;
 
 {  FPC x86_64 Linux:
@@ -8121,37 +8288,6 @@ end;
 
 {$endif ASMX86}
 
-procedure InitializeConstants;
-var
-  i, n: integer;
-  crc: cardinal;
-begin
-  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
-  JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
-  NULL_STR_VAR := 'null';
-  BOOL_UTF8[false] := 'false';
-  BOOL_UTF8[true] := 'true';
-  for i := 0 to 255 do
-  begin
-    crc := i;
-    for n := 1 to 8 do
-      if (crc and 1) <> 0 then // polynom is not the same as with zlib's crc32()
-        crc := (crc shr 1) xor $82f63b78
-      else
-        crc := crc shr 1;
-    crc32ctab[0, i] := crc; // for crc32cfast() and SymmetricEncrypt/FillRandom
-  end;
-  for i := 0 to 255 do
-  begin
-    crc := crc32ctab[0, i];
-    for n := 1 to high(crc32ctab) do
-    begin
-      crc := (crc shr 8) xor crc32ctab[0, ToByte(crc)];
-      crc32ctab[n, i] := crc;
-    end;
-  end;
-end;
-
 function SameValue(const A, B: Double; DoublePrec: double): Boolean;
 var
   AbsA, AbsB, Res: double;
@@ -8546,7 +8682,6 @@ end;
 
 { ************ Some Convenient TStream descendants }
 
-
 { TFakeWriterStream }
 
 function TFakeWriterStream.Read(var Buffer; Count: Longint): Longint;
@@ -8671,6 +8806,38 @@ begin
         raise Exception.CreateFmt('Impossible to create folder %s', [result]);
 end;
 
+
+procedure InitializeConstants;
+var
+  i, n: integer;
+  crc: cardinal;
+begin
+  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
+  JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
+  NULL_STR_VAR := 'null';
+  BOOL_UTF8[false] := 'false';
+  BOOL_UTF8[true] := 'true';
+  for i := 0 to 255 do
+  begin
+    crc := i;
+    for n := 1 to 8 do
+      if (crc and 1) <> 0 then // polynom is not the same as with zlib's crc32()
+        crc := (crc shr 1) xor $82f63b78
+      else
+        crc := crc shr 1;
+    crc32ctab[0, i] := crc; // for crc32cfast() and SymmetricEncrypt/FillRandom
+  end;
+  for i := 0 to 255 do
+  begin
+    crc := crc32ctab[0, i];
+    for n := 1 to high(crc32ctab) do
+    begin
+      crc := (crc shr 8) xor crc32ctab[0, ToByte(crc)];
+      crc32ctab[n, i] := crc;
+    end;
+  end;
+  _VariantDynArrayClear := @BaseVariantDynArrayClear;
+end;
 
 initialization
   InitializeConstants;
