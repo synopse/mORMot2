@@ -20,8 +20,8 @@ uses
   mormot.core.perf in '..\src\core\mormot.core.perf.pas',
   mormot.core.test in '..\src\core\mormot.core.test.pas',
   mormot.core.data in '..\src\core\mormot.core.data.pas',
+  mormot.core.variants in '..\src\core\mormot.core.variants.pas',
   mormot.core.json in '..\src\core\mormot.core.json.pas',
-{ mormot.core.variants in '..\src\core\mormot.core.variants.pas',}
   test.core.base;
 
 type

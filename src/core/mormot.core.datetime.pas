@@ -388,6 +388,10 @@ procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16); 
 // - useful for direct on screen logging e.g.
 function TimeToString: RawUTF8;
 
+const
+  /// used e.g. by DateTimeMSToString and TTextWriter.AddDateTimeMS
+  DTMS_FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%%:%:%.%%');
+
 
 
 { ************ TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time }
@@ -512,7 +516,7 @@ type
   TTimeLog = type Int64;
 
   /// dynamic array of TTimeLog
-  // - used by TDynArray JSON serialization to handle textual serialization
+  // - recognized e.g. by TDynArray JSON serialization
   TTimeLogDynArray = array of TTimeLog;
 
   /// pointer to a memory structure for direct access to a TTimeLog type value
@@ -1658,9 +1662,6 @@ begin
   I.FromUTCTime;
   result := I.Text(Expanded, FirstTimeChar);
 end;
-
-const
-  DTMS_FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%%:%:%.%%');
 
 function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
