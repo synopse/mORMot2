@@ -6,8 +6,6 @@
 }
 
 uses
-  mormot.core.text,
-  mormot.core.data,
   baseunix,
   unix,
   unixcp,
@@ -59,7 +57,7 @@ end;
 
 function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 var
-  tmp: UnicodeString;
+  tmp: UnicodeString; // not called often on UNIX which is likely to be UTF-8
 begin
   widestringmanager.Ansi2UnicodeMoveProc(A, {$ifdef ISFPC27}CodePage, {$endif} tmp, LA);
   result := length(tmp);
@@ -196,7 +194,7 @@ function UnixMSTimeUTC: Int64;
 var
   tz: timeval;
 begin
-  fpgettimeofday(@tz,nil);
+  fpgettimeofday(@tz, nil);
   result := (tz.tv_sec * THOUSAND) + tz.tv_usec div THOUSAND; // in milliseconds
 end;
 
@@ -367,7 +365,7 @@ end;
 
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin // SysUtils.FileOpen = fpOpen + fpFlock
-  result := fpOpen(pointer(FileName), O_RDONLY);
+  result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
 end;
 
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
@@ -458,7 +456,7 @@ var mib: array[0..1] of cint;
 begin
   mib[0] := CTL_HW;
   mib[1] := hwid;
-  FillChar(temp, SizeOf(temp), 0); // use shortstring as temp 0-terminated buffer
+  FillCharFast(temp, SizeOf(temp), 0); // shortstring as 0-terminated buffer
   len := SizeOf(temp);
   fpsysctl(pointer(@mib), 2, @temp, @len, nil, 0);
   if temp[0] <> #0 then
@@ -468,6 +466,74 @@ begin
 end;
 
 {$endif BSD}
+
+// define some raw functions, to avoid linking mormot.core.text
+
+function IdemPChar(p, up: PUTF8Char): boolean;
+var
+  c, u: AnsiChar;
+begin
+  result := false;
+  if (p = nil) or (up = nil) then
+    exit;
+  repeat
+    u := up^;
+    if u = #0 then
+      break;
+    inc(up);
+    c := p^;
+    inc(p);
+    if (c >= 'a') and (c <= 'z') then
+      dec(c, 32);
+    if c <> u then
+      exit;
+  until false;
+  result := true;
+end;
+
+procedure FindNameValue(const s, up: RawUTF8; var res: RawUTF8);
+var
+  p: PUTF8Char;
+  L: PtrInt;
+begin
+  p := pointer(s);
+  while p <> nil do
+  begin
+    if IdemPChar(p, pointer(up)) then
+    begin
+      inc(p, length(up));
+      while (p^ <= ' ') and (p^ <> #0) do
+        inc(p);
+      L := 0;
+      while p[L] > #13 do
+        inc(L);
+      while p[L - 1] = ' ' do
+        dec(L);
+      FastSetString(res, p, L);
+      exit;
+    end;
+    p := GotoNextLine(p);
+  end;
+  res := '';
+end;
+
+function GetNextCardinal(var P: PAnsiChar): cardinal;
+var
+  c: cardinal;
+begin
+  result := 0;
+  repeat
+    c := ord(P^) - 48;
+    if c > 9 then
+      break
+    else
+      result := result * 10 + c;
+    inc(P);
+  until false;
+  while P^ in ['.', '-', ' '] do
+    inc(P);
+end;
+
 
 // we bypass crt.pp since this unit cancels the SIGINT signal
 
@@ -604,23 +670,20 @@ begin
   end;
   {$endif FPCUSEVERSIONINFO}
   SetVersion(aMajor, aMinor, aRelease, aBuild);
-  if fBuildDateTime = 0 then  // get build date from file age
+  if fBuildDateTime = 0 then // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
   if fBuildDateTime <> 0 then
     DecodeDate(fBuildDateTime, BuildYear, M, D);
 end;
 
 procedure GetUserHost(out User, Host: RawUTF8);
-var
-  tmp: string;
 begin
-  StringToUTF8(GetHostName, Host);
+  Host := RawUTF8(GetHostName);
   if Host = '' then
-    StringToUTF8(GetEnvironmentVariable('HOSTNAME'), Host);
-  tmp := GetEnvironmentVariable('LOGNAME'); // POSIX
-  if tmp = '' then
-    tmp := GetEnvironmentVariable('USER');
-  StringToUTF8(tmp, User);
+    Host := RawUTF8(GetEnvironmentVariable('HOSTNAME'));
+  User := RawUTF8(GetEnvironmentVariable('LOGNAME')); // POSIX
+  if User = '' then
+    User := RawUTF8(GetEnvironmentVariable('USER'));
 end;
 
 var
@@ -648,7 +711,7 @@ begin
           _UserPath := GetEnvironmentVariable('XDG_CACHE_HOME');
           if (_UserPath = '') or not IsDirectoryWritable(_UserPath) then
             _UserPath := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
-          _UserPath := EnsureDirectoryExists(_UserPath + UTF8ToString(ExeVersion.ProgramName));
+          _UserPath := EnsureDirectoryExists(_UserPath + TFileName(ExeVersion.ProgramName));
         end;
         result := _UserPath;
       end;
@@ -692,28 +755,52 @@ end;
 
 {$else}
 
+const
+  // function DirectoryFileNames(const Folder: TFileName): TFileNameDynArray; ?
+  // function DirectoryFolderNames(const Folder: TFileName): TFileNameDynArray; ?
+  DT_UNKNOWN  = 0; // need to call fpstat() if returned this
+  DT_FIFO     = 1;
+  DT_CHR      = 2;
+  DT_DIR      = 4;
+  DT_BLK      = 6;
+  DT_REG      = 8;
+  DT_LNK      = 10;
+  DT_SOCK     = 12;
+  DT_WHT      = 14;
+
 function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
 var
-  sr: TSearchRec;
-  n, pid: integer;
-  status: RawUTF8;
+  d: pDir;
+  e: pDirent;
+  n: integer;
+  pid: cardinal;
+  fn, status, tgid: RawUTF8;
 begin
   result := nil;
-  if FindFirst('/proc/*', faAnyFile, sr) <> 0 then
+  d := FpOpendir('/proc'); // alternative to FindFirst()
+  if d = nil then
     exit;
   n := 0;
   SetLength(result, 64);
   repeat
-     if (sr.Name <> '') and (ord(sr.Name[1]) in [ord('0') .. ord('9')]) and
-        ToInteger(sr.Name, pid) and ({%H-}pid > 0) then
-     begin // ensure is a real process, not a thread
-       status := StringFromFile('/proc/' + sr.Name + '/status', {nosize=}true);
-       if GetInteger(FindNameValue(pointer(status), 'TGID:')) = pid then
-         // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
-         AddInteger(TIntegerDynArray(result), n, pid);
-     end;
-  until FindNext(sr) <> 0;
-  FindClose(sr);
+    e := FpReaddir(d^);
+    if e = nil then
+      break;
+    if (e.d_type <> DT_UNKNOWN) and (e.d_type <> DT_DIR) and
+       (e.d_name[0] in ['1'..'9']) then
+      continue;
+    pid := GetCardinal(@e.d_name[0]);
+    if pid = 0 then
+      continue;
+    fn := e.d_name;
+    status := StringFromFile('/proc/' + fn + '/status', {nosize=}true);
+    FindNameValue(status, 'TGID:', tgid);
+    if GetCardinal(pointer(tgid)) = pid then
+      // ensure is a real process, not a thread
+      // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
+      AddInteger(TIntegerDynArray(result), n, pid);
+  until false;
+  FpClosedir(d^);
   SetLength(result, n);
 end;
 
@@ -734,7 +821,7 @@ begin
   end;
   cmdline := StringFromFile(proc + '/cmdline', {nosize=}true);
   // set of strings separated by null bytes -> exe is the first argument
-  Utf8ToRawUTF8(pointer(cmdline), result);
+  FastSetString(result, pointer(cmdline), StrLen(pointer(cmdline)));
   if result <> '' then
     tryprocexe := false; // no need to try again next time
 end;
@@ -762,12 +849,13 @@ function getpagesize: Integer; cdecl; external 'c';
 procedure SetLinuxDistrib(const release: RawUTF8);
 var
   distrib: TOperatingSystem;
-  dist: RawUTF8;
+  rel, dist: RawUTF8;
 begin
+  rel := UpperCase(release);
   for distrib := osArch to high(distrib) do
   begin
     dist := UpperCase(OS_NAME[distrib]);
-    if PosI(pointer(dist), release) > 0 then
+    if PosEx(dist, rel) > 0 then
     begin
       OS_KIND := distrib;
       break;
@@ -776,23 +864,6 @@ begin
 end;
 
 {$endif BSD}
-
-function GetNextCardinal(var P: PAnsiChar): cardinal;
-var
-  c: cardinal;
-begin
-  result := 0;
-  repeat
-    c := ord(P^) - 48;
-    if c > 9 then
-      break
-    else
-      result := result * 10 + c;
-    inc(P);
-  until false;
-  while P^ in ['.', '-', ' '] do
-    inc(P);
-end;
 
 procedure InitializeUnit;
 var
@@ -808,29 +879,28 @@ var
   proccpuinfo, prod, prodver, release, dist: RawUTF8;
   SR: TSearchRec;
   {$endif BSD}
+  c: cardinal;
 begin
-  // initialize mormot.core.text to avoid GPF in this function
-  InitializeTextConstants;
+  EnumAllProcesses(c);
   // retrieve Kernel and Hardware information
-  stdoutIsTTY := IsATTY(StdOutputHandle)=1;
+  stdoutIsTTY := IsATTY(StdOutputHandle) = 1;
   modname := nil;
   SystemInfo.dwPageSize := getpagesize;
   fpuname(uts);
   {$ifdef BSD}
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
-  Utf8ToRawUTF8(fpsysctlhwstr(HW_MACHINE, temp), BiosInfoText);
+  beg := fpsysctlhwstr(HW_MACHINE, temp);
+  FastSetString(BiosInfoText, beg, StrLen(beg));
   modname := fpsysctlhwstr(HW_MODEL, temp);
   with uts do
-    FormatUTF8('%-% %', [sysname, release, version], OSVersionText);
+    OSVersionText := sysname + '-' + release + ' ' + version;
   {$else}
   prod := Trim(StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
   begin
     prodver := Trim(StringFromFile('/sys/class/dmi/id/product_version', true));
     if prodver <> '' then
-      FormatUTF8('% %', [prod, prodver], BiosInfoText)
-    else
-      BiosInfoText := prod;
+      prod := prod + ' ' + prodver;
   end;
   BiosInfoText := prod;
   SystemInfo.dwNumberOfProcessors := 0;
@@ -849,9 +919,12 @@ begin
     if IdemPChar(beg, 'MODEL NAME') then
       modname := beg;
   end;
-  modname := PosChar(modname, ':');
   if modname <> nil then
-    modname := GotoNextNotSpace(modname + 1);
+    modname := strscan(modname, ':');
+  if modname <> nil then
+    repeat
+      inc(modname);
+    until (modname^ = #0) or (modname^ > ' ');
   FindNameValue(StringFromFile('/etc/os-release'), 'PRETTY_NAME=', release);
   if (release <> '') and (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
@@ -864,9 +937,9 @@ begin
   end;
   if (release = '') and (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then
   begin
-    release := StringToUTF8(SR.Name); // 'redhat-release' 'SuSE-release'
+    release := SR.Name; // 'redhat-release' 'SuSE-release'
     if IdemPChar(pointer(release), 'LSB-') and (FindNext(SR) = 0) then
-      release := StringToUTF8(SR.Name);
+      release := SR.Name;
     release := split(release, '-');
     dist := split(trim(StringFromFile('/etc/' + SR.Name)), #10);
     if (dist <> '') and (PosExChar('=', dist) = 0) and (PosExChar(' ', dist) > 0) then
@@ -896,9 +969,9 @@ begin
     GetNextCardinal(P);
   OSVersionInt32 := integer(KernelRevision shl 8) + ord(OS_KIND);
   with SystemInfo.uts do
-    FormatUTF8('% %', [sysname, release], OSVersionText);
+    OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then
-    OSVersionText := FormatUTF8('% - %', [SystemInfo.release, OSVersionText]);
+    OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
   {$ifdef Android}
   OSVersionText := 'Android (' + OSVersionText + ')';
   {$endif}
@@ -912,7 +985,8 @@ begin
       inc(modname);
     end;
     modname^ := #0;
-    FormatUTF8('% x % (' + CPU_ARCH_TEXT + ')', [SystemInfo.dwNumberOfProcessors, beg], CpuInfoText);
+    CpuInfoText := Format('%d x %s (' + CPU_ARCH_TEXT + ')',
+      [SystemInfo.dwNumberOfProcessors, beg]);
   end;
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
@@ -932,7 +1006,7 @@ begin
   if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0 then
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
   if (clock_gettime(CLOCK_REALTIME_FAST, @tp) <> 0) or // paranoid check
-    (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) then
+     (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) then
     raise Exception.CreateFmt('clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);
   {$endif LINUX}

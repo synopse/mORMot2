@@ -13,8 +13,10 @@ unit mormot.core.os;
 
   Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid using $ifdef/$endif in "uses" clauses.
-  In practice, no "Windows", nor "Linux/Unix" reference should be needed in
+    In practice, no "Windows", nor "Linux/Unix" reference should be needed in
   regular units, once mormot.core.os is included.
+
+  This unit only refers to mormot.core.base so could be used almost stand-alone.
 
   *****************************************************************************
 }
@@ -37,6 +39,9 @@ uses
 { ****************** Gather Operating System Information }
 
 type
+  /// Exception types raised by this mormot.core.os unit
+  EOSException = class(Exception);
+
   /// the recognized operating systems
   // - it will also recognize most Linux distributions
   TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX,
@@ -142,12 +147,12 @@ const
   {$ifdef FPC}
     'Free Pascal'
     {$ifdef VER2_6_4} + ' 2.6.4'{$endif}
-    {$ifdef VER3_0_0} + ' 3.0.0'{$endif}
-    {$ifdef VER3_0_1} + ' 3.0.1'{$endif}
-    {$ifdef VER3_0_2} + ' 3.0.2'{$endif}
-    {$ifdef VER3_1_1} + ' 3.1.1'{$endif}
+    {$ifdef VER3_0}   + ' 3.0'  {$ifdef VER3_0_4} + '.4' {$else}
+    {$ifdef VER3_0_2} + '.2'    {$endif} {$endif} {$endif}
+    {$ifdef VER3_1}   + ' 3.1'  {$ifdef VER3_1_1} + '.1' {$endif} {$endif}
     {$ifdef VER3_2}   + ' 3.2'  {$endif}
-    {$ifdef VER3_3_1} + ' 3.3.1'{$endif}
+    {$ifdef VER3_3}   + ' 3.3'  {$ifdef VER3_3_1} + '.1' {$endif} {$endif}
+    {$ifdef VER3_4}   + ' 3.4'  {$endif}
   {$else}
     'Delphi'
     {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
@@ -252,6 +257,7 @@ type
     fDetailed: string;
     fFileName: TFileName;
     fBuildDateTime: TDateTime;
+    fVersionInfo, fUserAgent: RawUTF8;
     /// change the version (not to be used in most cases)
     procedure SetVersion(aMajor, aMinor, aRelease, aBuild: integer);
   public
@@ -411,13 +417,13 @@ type
     key: HKEY;
     /// start low-level read access to a Windows Registry node
     // - on success (returned true), ReadClose() should be called
-    function ReadOpen(root: HKEY; const keyname: RawUTF8; closefirst: boolean=false): boolean;
+    function ReadOpen(root: HKEY; const keyname: RawUTF8; closefirst: boolean = false): boolean;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
     /// low-level read a string from the Windows Registry after ReadOpen()
     // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
     // (return the first value of the multi-list)
-    function ReadString(const entry: SynUnicode; andtrim: boolean=true): RawUTF8;
+    function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUTF8;
     /// low-level read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
     function ReadData(const entry: SynUnicode): RawByteString;
@@ -642,7 +648,7 @@ function SearchRecValidFolder(const F: TSearchRec): boolean;
 // - note: under XP, we observed ERROR_NO_SYSTEM_RESOURCES problems when calling
 // FileRead() for chunks bigger than 32MB on files opened with this flag,
 // so it would use regular FileOpen() on this deprecated OS
-// - under POSIX, calls plain FileOpen(FileName,fmOpenRead or fmShareDenyNone)
+// - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 function FileOpenSequentialRead(const FileName: string): Integer;
   {$ifdef HASINLINE}inline;{$endif}
@@ -665,7 +671,7 @@ function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean = false; FileDate: TDateTime = 0): boolean;
 
 /// compute an unique temporary file name
-// - following 'exename_01234567.tmp' pattern, in the system temporary folder
+// - following 'exename_123.tmp' pattern, in the system temporary folder
 function TemporaryFileName: TFileName;
 
 /// check if the directory is writable for the current user
@@ -714,10 +720,6 @@ procedure TextColor(Color: TConsoleColor);
 procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor = ccLightGray;
   NoLineFeed: boolean = false; NoColor: boolean = false); overload;
 
-/// write some text to the console using a given color
-procedure ConsoleWrite(const Fmt: RawUTF8; const Args: array of const;
-  Color: TConsoleColor = ccLightGray; NoLineFeed: boolean = false); overload;
-
 /// change the console text background color
 procedure TextBackground(Color: TConsoleColor);
 
@@ -741,11 +743,6 @@ function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
 // - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
-
-/// direct conversion of a VCL string into a console OEM-encoded String
-// - under Windows, will use the CP_OEMCP encoding
-// - under Linux, will expect the console to be defined with UTF-8 encoding
-function StringToConsole(const S: string): RawByteString;
 
 var
   /// low-level handle used for console writing
@@ -930,13 +927,13 @@ begin // fast cross-platform implementation
     _TmpCounter := Random32;
   retry := 10;
   repeat // thread-safe unique file name generation
-    FormatString('%%_%.tmp', [folder, ExeVersion.ProgramName,
-      CardinalToHexShort(InterlockedIncrement(_TmpCounter))], string(result));
+    result := Format('%s%s_%d.tmp', [folder, ExeVersion.ProgramName,
+      InterlockedIncrement(_TmpCounter)]);
     if not FileExists(result) then
       exit;
     dec(retry); // no endless loop
   until retry = 0;
-  raise ESynException.Create('TemporaryFileName failed');
+  raise EOSException.Create('TemporaryFileName failed');
 end;
 
 function IsDirectoryWritable(const Directory: TFileName): boolean;
@@ -951,8 +948,7 @@ begin
     exit;
   retry := 20;
   repeat
-    FormatString('%' + PathDelim + '%.test', [dir, CardinalToHexShort(Random32)],
-      string(fn));
+    fn := Format('%s' + PathDelim + '%s.test', [dir, Random32]);
     if not FileExists(fn) then
       break;
     dec(retry); // never loop forever
@@ -1007,11 +1003,6 @@ begin
   end;
 end;
 
-function StringToConsole(const S: string): RawByteString;
-begin
-  result := Utf8ToConsole(StringToUTF8(S));
-end;
-
 procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 begin
@@ -1020,34 +1011,6 @@ begin
   write(Utf8ToConsole(Text));
   if not NoLineFeed then
     writeln;
-  ioresult;
-end;
-
-procedure ConsoleWrite(const Fmt: RawUTF8; const Args: array of const;
-  Color: TConsoleColor; NoLineFeed: boolean);
-var
-  tmp: RawUTF8;
-begin
-  FormatUTF8(Fmt, Args, tmp);
-  ConsoleWrite(tmp, Color, NoLineFeed);
-end;
-
-procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
-begin
-  ConsoleWrite(#13#10'Fatal exception ', cclightRed, true);
-  ConsoleWrite('%', [E.ClassName], ccWhite, true);
-  ConsoleWrite(' raised with message ', ccLightRed, true);
-  ConsoleWrite('%', [E.Message], ccLightMagenta);
-  TextColor(ccLightGray);
-  if WaitForEnterKey then
-  begin
-    writeln(#13#10'Program will now abort');
-    {$ifndef LINUX}
-    writeln('Press [Enter] to quit');
-    if ioresult = 0 then
-      Readln;
-    {$endif}
-  end;
   ioresult;
 end;
 
@@ -1066,8 +1029,8 @@ begin
   Minor := aMinor;
   Release := aRelease;
   Build := aBuild;
-  Main := IntToString(Major) + '.' + IntToString(Minor);
-  fDetailed := Main + '.' + IntToString(Release) + '.' + IntToString(Build);
+  Main := Format('%d.%d', [Major, Minor]);
+  fDetailed := Format('%d.%d.%d.%d', [Major, Minor, Release, Build]);
 end;
 
 function TFileVersion.BuildDateTimeString: string;
@@ -1085,7 +1048,15 @@ end;
 
 function TFileVersion.VersionInfo: RawUTF8;
 begin
-  FormatUTF8('% % (%)', [ExtractFileName(fFileName), DetailedOrVoid, BuildDateTimeString], result);
+  if self = nil then
+    result := ''
+  else
+  begin
+    if fVersionInfo = '' then
+      fVersionInfo := RawUTF8(Format('%s %s (%s)', [ExtractFileName(fFileName),
+        DetailedOrVoid, BuildDateTimeString]));
+    result := fVersionInfo;
+  end;
 end;
 
 function TFileVersion.UserAgent: RawUTF8;
@@ -1093,12 +1064,18 @@ begin
   if self = nil then
     result := ''
   else
-    FormatUTF8('%/%%', [GetFileNameWithoutExt(ExtractFileName(fFileName)),
-      DetailedOrVoid, OS_INITIAL[OS_KIND]], result);
-  {$ifdef MSWINDOWS}
-  if OSVersion in WINDOWS_32 then
-    result := result + '32';
-  {$endif MSWINDOWS}
+  begin
+    if fUserAgent = '' then
+    begin
+      fUserAgent := RawUTF8(Format('%s/%s%s', [GetFileNameWithoutExt(
+        ExtractFileName(fFileName)), DetailedOrVoid, OS_INITIAL[OS_KIND]]));
+      {$ifdef MSWINDOWS}
+      if OSVersion in WINDOWS_32 then
+        fUserAgent := fUserAgent + '32';
+      {$endif MSWINDOWS}
+    end;
+    result := fUserAgent;
+  end;
 end;
 
 class function TFileVersion.GetVersionInfo(const aFileName: TFileName): RawUTF8;
@@ -1113,13 +1090,13 @@ end;
 
 procedure SetExecutableVersion(const aVersionText: RawUTF8);
 var
-  P: PUTF8Char;
+  P: PAnsiChar;
   i: integer;
   ver: array[0..3] of integer;
 begin
   P := pointer(aVersionText);
   for i := 0 to 3 do
-    ver[i] := GetNextItemCardinal(P, '.');
+    ver[i] := GetNextCardinal(P);
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
@@ -1141,20 +1118,19 @@ begin
         InstanceFileName := GetModuleName(HInstance)
       else
         InstanceFileName := ProgramFileName;
-      ProgramName := StringToUTF8(GetFileNameWithoutExt(ExtractFileName(ProgramFileName)));
+      ProgramName := RawUTF8(GetFileNameWithoutExt(ExtractFileName(ProgramFileName)));
       GetUserHost(User, Host);
       if Host = '' then
         Host := 'unknown';
       if User = '' then
         User := 'unknown';
-      Version := TFileVersion.Create( // on POSIX FileName='' -> current process
-        {$ifdef MSWINDOWS} InstanceFileName {$else} '' {$endif},
-        aMajor, aMinor, aRelease, aBuild);
+      Version := TFileVersion.Create(
+        InstanceFileName, aMajor, aMinor, aRelease, aBuild);
     end
     else
       Version.SetVersion(aMajor, aMinor, aRelease, aBuild);
-    FormatUTF8('% % (%)', [ProgramFileName, Version.Detailed,
-      Version.BuildDateTimeString], ProgramFullSpec);
+    ProgramFullSpec := RawUTF8(Format('%s %s (%s)', [ProgramFileName,
+      Version.Detailed, Version.BuildDateTimeString]));
     Hash.c0 := Version.Version32;
     {$ifdef CPUINTEL}
     Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
@@ -1172,7 +1148,7 @@ initialization
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
-  InitializeUnit; // in the mormot.core.os.*.inc files
+  InitializeUnit; // in mormot.core.os.posix/windows.inc files
   SetExecutableVersion(0,0,0,0);
 
 finalization

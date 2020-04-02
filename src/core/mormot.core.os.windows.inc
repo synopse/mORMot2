@@ -6,8 +6,7 @@
 }
 
 uses
-  messages,
-  mormot.core.text;
+  messages;
 
 
 { ****************** Unicode, Time, File process }
@@ -274,8 +273,9 @@ begin
   repeat
     SetLength(result, n);
     if EnumProcesses(pointer(result), n * 4, Count) then
-      Count := Count shr 2 else
-      Count := 0;
+      Count := Count shr 2
+    else // Count=n if buffer is too small
+      Count := 0; // error
     if Count < n then
     begin
       if Count = 0 then
@@ -284,6 +284,18 @@ begin
     end;
     inc(n, 1024); // (very unlikely) too small buffer
   until n > 8192;
+end;
+
+procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUTF8);
+var // defined here to avoid linking mormot.core.text.pas
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(Len * 3);
+  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // use RTL function
+  if Len > 0 then
+    dec(Len); // UnicodeToUtf8() result includes the null terminator
+  FastSetString(res, tmp.buf, Len);
+  tmp.Done;
 end;
 
 function EnumProcessName(PID: Cardinal): RawUTF8;
@@ -297,7 +309,8 @@ begin
   h := OpenProcess(OpenProcessAccess, false, PID);
   if h <> 0 then
     try
-      if Assigned(QueryFullProcessImageNameW) then begin
+      if Assigned(QueryFullProcessImageNameW) then
+      begin
         len := high(name);
         if QueryFullProcessImageNameW(h, 0, name, @len) then
           RawUnicodeToUtf8(name, len, result);
@@ -438,8 +451,13 @@ begin
 end;
 
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
+var
+  tmp: SynUnicode;
 begin
-  result := TSynAnsiConvert.Engine(CP_OEMCP).UTF8ToAnsi(S);
+  tmp := UTF8Decode(S);
+  SetLength(result, length(tmp) * 4);
+  CharToOemW(pointer(tmp), pointer(result));
+  SetLength(result, StrLen(pointer(result)));
 end;
 
 {$I+}
@@ -448,7 +466,8 @@ constructor TFileVersion.Create(const aFileName: TFileName; aMajor, aMinor, aRel
 var
   M, D: word;
   Size, Size2: DWord;
-  Pt, StrPt, StrValPt: Pointer;
+  Pt: Pointer;
+  Trans: PWordArray;
   LanguageInfo: RawUTF8;
   Info: ^TVSFixedFileInfo;
   FileTime: TFILETIME;
@@ -457,11 +476,16 @@ var
 
   function ReadResourceByName(const From: RawUTF8): RawUTF8;
   var
+    StrValPt: pointer;
     sz: DWord;
+    u: SynUnicode;
   begin
-    VerQueryValueA(Pt, PAnsiChar('\StringFileInfo\' + LanguageInfo + '\' + From), StrValPt, sz);
+    u := UTF8Decode('\StringFileInfo\' + LanguageInfo + '\' + From);
+    VerQueryValueW(Pt, pointer(u), StrValPt, sz);
     if sz > 0 then
-      FastSetString(Result, StrValPt, sz)
+      RawUnicodeToUtf8(StrValPt, StrLenW(StrValPt), result)
+    else
+      result := '';
   end;
 
 begin
@@ -495,10 +519,10 @@ begin
             fBuildDateTime := EncodeDate(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
           end;
         end;
-        VerQueryValue(Pt, '\VarFileInfo\Translation', StrPt, Size2);
+        VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
         if Size2 >= 4 then
         begin
-          LanguageInfo := BinToHexDisplay(PAnsiChar(StrPt), 2) + BinToHexDisplay(PAnsiChar(StrPt) + 2, 2);
+          LanguageInfo := RawUTF8(format('%4.4x%4.4x', [Trans^[0], Trans^[1]]));
           CompanyName := ReadResourceByName('CompanyName');
           FileDescription := ReadResourceByName('FileDescription');
           FileVersion := ReadResourceByName('FileVersion');
@@ -583,11 +607,13 @@ end;
 function TWinRegistry.ReadOpen(root: HKEY; const keyname: RawUTF8; closefirst: boolean): boolean;
 var
   tmp: TSynTempBuffer;
+  L: integer;
 begin
   if closefirst then
     Close;
-  tmp.Init(length(keyname) * 2);
-  UTF8ToWideChar(tmp.buf, pointer(keyname));
+  L := length(keyname);
+  tmp.Init(L * 2);
+  Utf8ToUnicode(tmp.buf, L, pointer(keyname), L); // uses RTL
   key := 0;
   result := RegOpenKeyExW(root, tmp.buf, 0, KEY_READ, key) = 0;
   tmp.Done;
@@ -671,6 +697,23 @@ begin
   tmp.Done;
 end;
 
+function GetNextCardinal(var P: PAnsiChar): cardinal;
+var
+  c: cardinal;
+begin
+  result := 0;
+  repeat
+    c := ord(P^) - 48;
+    if c > 9 then
+      break
+    else
+      result := result * 10 + c;
+    inc(P);
+  until false;
+  while P^ in ['.', '-', ' '] do
+    inc(P);
+end;
+
 
 { ****************** Gather Operating System Information }
 
@@ -705,8 +748,6 @@ var
   cpu, manuf, prod, prodver: RawUTF8;
   reg: TWinRegistry;
 begin
-  // initialize mormot.core.text to avoid GPF in this function
-  InitializeTextConstants;
   // late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(h, 'GetTickCount64');
@@ -801,20 +842,25 @@ begin
     OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   with OSVersionInfo do
     if wServicePackMajor = 0 then
-      FormatUTF8('Windows % (%.%.%)', [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText)
+      OSVersionText := RawUTF8(Format('Windows %s (%d.%d.%d)',
+        [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber]))
     else
-      FormatUTF8('Windows % SP% (%.%.%)', [WINDOWS_NAME[Vers], wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText);
+      OSVersionText := RawUTF8(Format('Windows %s SP%d (%d.%d.%d)',
+        [WINDOWS_NAME[Vers], wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
   OSVersionInt32 := (integer(Vers) shl 8) + ord(osWindows);
   h := LoadLibrary('ntdll.dll');
   if h > 0 then
   begin
     wine_get_version := GetProcAddress(h, 'wine_get_version');
     if Assigned(wine_get_version) then
-      OSVersionInfoEx := trim('Wine ' + trim(wine_get_version));
+    begin
+      OSVersionInfoEx := wine_get_version;
+      OSVersionInfoEx := trim('Wine ' + trim(OSVersionInfoEx));
+    end;
     FreeLibrary(h);
   end;
   if OSVersionInfoEx <> '' then
-    OSVersionText := FormatUTF8('% - %', [OSVersionText, OSVersionInfoEx]);
+    OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
   // retrieve Hardware information from Registry
   if reg.ReadOpen(HKEY_LOCAL_MACHINE, 'Hardware\Description\System\CentralProcessor\0') then
   begin
@@ -843,14 +889,14 @@ begin
     end;
   end;
   reg.Close;
+  BiosInfoText := manuf + prod;
   if prodver <> '' then
-    FormatUTF8('%% %', [{%H-}manuf, prod, prodver], BiosInfoText)
-  else
-    FormatUTF8('%%', [manuf, prod], BiosInfoText);
+    BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
-    cpu := StringToUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
+    cpu := RawUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   cpu := Trim(cpu);
-  FormatUTF8('% x % (' + CPU_ARCH_TEXT + ')', [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
+  CpuInfoText := RawUTF8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
+    [SystemInfo.dwNumberOfProcessors, cpu]));
 end;
 
 
