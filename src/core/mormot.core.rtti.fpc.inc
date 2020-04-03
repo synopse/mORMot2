@@ -12,7 +12,7 @@ type
 
 {$else}
 
-function Deref(Info: pointer): pointer; inline; // e.g. ParentInfoRef: PPTypeInfo
+function Deref(Info: pointer): pointer; // e.g. ParentInfoRef: PPTypeInfo
 begin
   result := Info;
   if result <> nil then
@@ -26,7 +26,7 @@ end;
 // will use complex AlignTypeData() inlined function from typinfo.pp
 // = AlignToQword() as defined in system.inc and used in rtti.inc
 
-function AlignToPtr(p: pointer): pointer; inline; // not exported by typinfo.pp
+function AlignToPtr(p: pointer): pointer; // not exported by typinfo.pp
 begin
   result := align(p, sizeof(p));
 end;
@@ -39,7 +39,7 @@ type
 
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-function GetTypeData(TypeInfo: pointer): PTypeData; inline;
+function GetTypeData(TypeInfo: pointer): PTypeData;
 begin // (qword aligned) jump over Kind+Name - compiles as 2 x86_64 asm opcodes
   result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;

@@ -31,6 +31,7 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
+  TypInfo,  // use official RTL for accurate layouts (especially FPC)
   mormot.core.base,
   mormot.core.text; // ESynException, and enumerations text process
 
@@ -76,6 +77,7 @@ const
 
 type
   ///  TTypeKind enumerate as defined in Delphi 6 and up
+  // - dkUString and following appear only since Delphi 2009
   TDelphiType = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
     dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
     dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
@@ -144,7 +146,8 @@ type
 type
   /// pointer to low-level RTTI of a type definition, as returned by TypeInfo()
   // system function
-  // - equivalency to PTypeInfo as defined in TypInfo RTL unit
+  // - equivalency to PTypeInfo as defined in TypInfo RTL unit and old mORMot.pas
+  // - this is the main entry point of all the information exposed by this unit
   PRttiInfo = ^TRttiInfo;
 
   /// double-reference to RTTI type definition
@@ -155,7 +158,8 @@ type
   /// dynamic array of low-level RTTI type definitions
   PRttiInfoDynArray = array of PRttiInfo;
 
-  /// pointer to a RTTI class property definition as stored in PClassProp.PropList
+  /// pointer to a RTTI class property definition as stored in PRttiProps.PropList
+  // - equivalency to PPropInfo as defined in TypInfo RTL unit and old mORMot.pas
   PRttiProp = ^TRttiProp;
 
   /// used to store a chain of properties RTTI
@@ -168,8 +172,8 @@ type
 
   /// a wrapper to published properties of a class, as defined by compiler RTTI
   // - access properties for only a given class level, not inherited properties
-  // - start enumeration by getting a PClassProp with PRttiInfo.RttiProps(), then
-  // use P := PropList to get the first PPropInfo, and iterate with P^.Next
+  // - start enumeration by getting a PRttiProps with PRttiInfo.RttiProps(), then
+  // use P := PropList to get the first PRttiProp, and iterate with P^.Next
   // - this enumeration is very fast and doesn't require any temporary memory,
   //  as in the TypInfo.GetPropInfos() PPropList usage
   // - for TSQLRecord, you should better use the RecordProps.Fields[] array,
@@ -192,11 +196,12 @@ type
     function FieldProp(const PropName: shortstring): PRttiProp;
   end;
 
-  /// pointer to TClassType, as returned by PTypeInfo.RttiClass()
+  /// pointer to TClassType, as returned by PRttiInfo.RttiClass()
+  // - equivalency to PClassData/PClassType as defined in old mORMot.pas
   PRttiClass = ^TRttiClass;
 
   /// a wrapper to class type information, as defined by the compiler RTTI
-  // - get a PClassType with PTypeInfo.RttiClass()
+  // - get a PRttiClass with PRttiInfo.RttiClass()
   TRttiClass = object
   public
     /// the class type
@@ -207,8 +212,8 @@ type
     /// the number of published properties
     function PropCount: integer; {$ifdef HASINLINE} inline; {$endif}
     /// the name (without .pas extension) of the unit were the class was defined
-    // - then the PClassProp follows: use the method RttiProps to retrieve its
-    // address
+    // - then the PRttiProps information follows: use the method
+    // RttiProps to retrieve its address
     function UnitName: ShortString; {$ifdef HASINLINE} inline; {$endif}
     /// get the information about the published properties of this class
     // - stored after UnitName memory
@@ -218,11 +223,12 @@ type
     function InheritsFrom(AClass: TClass): boolean;
   end;
 
-  /// pointer to TEnumType, as returned by PTypeInfo.EnumBaseType/SetEnumType
+  /// pointer to TEnumType, as returned by PRttiInfo.EnumBaseType/SetEnumType
+  // - equivalency to PEnumType as defined in old mORMot.pas
   PRttiEnumType = ^TRttiEnumType;
 
   /// a wrapper to enumeration type information, as defined by the compiler RTTI
-  // and returned by PTypeInfo.EnumBaseType/SetEnumType
+  // and returned by PRttiInfo.EnumBaseType/SetEnumType
   // - we use this to store the enumeration values as integer, but easily provide
   // a text equivalent, translated if necessary, from the enumeration type
   // definition itself
@@ -461,8 +467,7 @@ type
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
-    // - warning: it won't recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code
-    // page - so caller should first check for TypeInfo(TSQLRawBlob)
+    // - it will also recognize TSQLRawBlob as the fake CP_SQLRAWBLOB codepage
     function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
     /// for rtClass: get the class type information
     function RttiClass: PRttiClass;       {$ifdef HASINLINE} inline; {$endif}
@@ -586,7 +591,7 @@ type
     function TypeInfo: PRttiInfo; {$ifdef HASINLINE} inline; {$endif}
     /// get the next property information
     // - no range check: use RttiProps()^.PropCount to determine the properties count
-    // - get the first PPropInfo with RttiProps()^.PropList
+    // - get the first PRttiProp with RttiProps()^.PropList
     function Next: PRttiProp; {$ifdef HASINLINE} inline; {$endif}
     /// return FALSE (AS_UNIQUE) if was marked as "stored AS_UNIQUE"
     //  (i.e. "stored false"), or TRUE by default
@@ -667,14 +672,33 @@ type
 var
   /// lookup table of finalization functions for managed types
   // - as used by TRttiInfo.Clear() inlined method
-  // - _FINALIZE[] contains nil for unmanaged types
+  // - _FINALIZE[...]=nil for unmanaged types (e.g. rkOrdinalTypes)
   _FINALIZE: TRttiFinalizers;
 
 
 const
   NO_DEFAULT = longint($80000000);
 
-{$ifdef ISDELPHI} // Delphi requires those definitions for proper inlining
+{$ifdef HASINLINE}
+// some functions which should be defined here for proper inlining
+
+function GetTypeData(TypeInfo: pointer): PTypeData; inline;
+
+{$ifdef FPC}
+
+{$ifndef HASDIRECTTYPEINFO}
+function Deref(Info: pointer): pointer; inline;
+{$endif HASDIRECTTYPEINFO}
+
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+function AlignToPtr(p: pointer): pointer; inline;
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
+{$endif FPC}
+
+{$endif HASINLINE}
+
+{$ifdef ISDELPHI }// Delphi requires those definitions for proper inlining
 
 const
   NO_INDEX = longint($80000000);
@@ -691,19 +715,25 @@ type
     Kind: byte;
   end;
 
-  TPropData = packed record // PPropData not defined in Delphi 7/2007 TypInfo
+  /// PPropData not defined in Delphi 7/2007 TypInfo
+  // - defined here for proper Delphi inlining
+  TPropData = packed record
     PropCount: word;
     PropList: record end;
   end;
   PPropData = ^TPropData;
 
-  TRecordInfo = packed record // rtRecord not defined in Delphi 7/2007 TTypeData
+  /// rtRecord RTTI is not defined in Delphi 7/2007 TTypeData
+  // - defined here for proper Delphi inlining
+  TRecordInfo = packed record
     RecSize: integer;
     ManagedFldCount: integer;
   end;
   PRecordInfo = ^TRecordInfo;
 
-  TArrayInfo = packed record // rtArray not defined in Delphi 7/2007 TTypeData
+  /// rtArray RTTI not defined in Delphi 7/2007 TTypeData
+  // - defined here for proper Delphi inlining
+  TArrayInfo = packed record
     ArraySize: integer;
     ElCount: integer;
     ArrayType: PPRttiInfo;
@@ -765,7 +795,8 @@ function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInf
 { *************** Enumerations RTTI }
 
 /// helper to retrieve the text of an enumerate item
-// - just a wrapper around PTypeInfo(aTypeInfo)^.EnumBaseType.GetEnumNameOrd(aIndex)
+// - just a wrapper around
+// $ PRttiInfo(aTypeInfo)^.EnumBaseType.GetEnumNameOrd(aIndex)
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 
 /// helper to retrieve all texts of an enumerate
@@ -907,8 +938,6 @@ procedure RecordZero(var Dest; Info: PRttiInfo);
 
 implementation
 
-uses
-  TypInfo;
 
 { some inlined definitions which should be declared before $include code }
 
@@ -955,18 +984,20 @@ begin
 end;
 
 type
+  // wrapper to retrieve IInvokable Interface RTTI via GetRttiInterface()
   TGetRttiInterface = class
   public
     Level: integer;
     MethodCount, ArgCount: integer;
     CurrentMethod: PRttiMethod;
     Definition: TRttiInterface;
-    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo);
     procedure AddMethod(const aMethodName: ShortString; aParamCount: integer;
       aKind: TMethodKind);
     procedure AddArgument(aParamName, aTypeName: PShortString; aInfo: PRttiInfo;
       aFlags: TParamFlags);
     procedure RaiseError(const Format: RawUTF8; const Args: array of const);
+    // this method will be implemented in mormot.core.rtti.fpc/delphi.inc
+    procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo);
   end;
 
 {$ifdef FPC}
@@ -1327,6 +1358,9 @@ end;
 
 function TRttiInfo.AnsiStringCodePage: integer;
 begin
+  if @self = TypeInfo(TSQLRawBlob) then
+    result := CP_SQLRAWBLOB
+  else
   {$ifdef HASCODEPAGE}
   if Kind = rkLString then // has rtLStringOld any codepage? -> UTF-8
     result := PWord(GetTypeData(@self))^
