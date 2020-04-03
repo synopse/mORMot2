@@ -23,26 +23,29 @@ end;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 
-// will use complex AlignTypeData() inlined function from typinfo.pp
-// = AlignToQword() as defined in system.inc and used in rtti.inc
-
 function AlignToPtr(p: pointer): pointer; // not exported by typinfo.pp
 begin
   result := align(p, sizeof(p));
 end;
 
+// use complex AlignTypeData() inlined function from typinfo.pp
+// = AlignToQword() as defined in system.inc and used in rtti.inc
+function GetTypeData(TypeInfo: pointer): PTypeData;
+begin // qword aligned jump over Kind+Name - compiles as 2 x86_64 asm opcodes
+  result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
+end;
+
 {$else}
 
 type
-  AlignTypeData = pointer;
   AlignToPtr = pointer;
 
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
 function GetTypeData(TypeInfo: pointer): PTypeData;
-begin // (qword aligned) jump over Kind+Name - compiles as 2 x86_64 asm opcodes
-  result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
+begin // jump over Kind+Name - compiles as 2 x86_64 asm opcodes
+  result := @PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2];
 end;
+
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
@@ -383,6 +386,14 @@ begin
   result := DeRef(info^.ElTypeRef);
   if (info^.DimCount <> 1) or (result = nil) or not (result^.Kind in rkManagedTypes) then
     result := nil;
+end;
+
+function TRttiInfo.ArrayItemSize: PtrInt;
+var
+  info: ^TArrayTypeData;
+begin
+  info := @GetTypeData(@self)^.ArrayData;
+  result := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
 end;
 
 function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;

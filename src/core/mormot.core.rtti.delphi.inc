@@ -435,6 +435,11 @@ begin
   end;
 end;
 
+function TRttiInfo.ArrayItemSize: PtrInt;
+begin
+  result := PArrayInfo(GetTypeData(@self))^.ArraySize;
+end;
+
 function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
   aClass: TClass): integer;
 

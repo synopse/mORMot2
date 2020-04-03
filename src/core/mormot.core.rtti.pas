@@ -136,6 +136,10 @@ const
   ORDTYPE_SIZE: array[TRttiOrd] of byte =
     (1, 1, 2, 2, 4, 4 {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
 
+  /// quick retrieve how many bytes a floating-point consist in
+  FLOATTYPE_SIZE: array[TRttiFloat] of byte =
+    (4, 8, {$ifdef TSYNEXTENDED80} 10 {$else} 8 {$endif}, 8, 8 );
+
 
 type
   PRttiKind = ^TRttiKind;
@@ -429,9 +433,12 @@ type
     function EnumBaseType: PRttiEnumType; {$ifdef HASINLINE} inline; {$endif}
     /// for rtSet: get the type information of its associated enumeration
     function SetEnumType: PRttiEnumType;  {$ifdef HASINLINE} inline; {$endif}
+    /// compute in how many bytes this type is stored
+    // - will use Kind (and RttiOrd/RttiFloat) to return the exact value
+    function RttiSize: PtrInt;
     /// for rtRecordTypes: get the record size
     // - returns 0 if the type is not a record/object
-    function RecordSize: PtrInt;         {$ifdef HASINLINE} inline; {$endif}
+    function RecordSize: PtrInt;          {$ifdef HASINLINE} inline; {$endif}
     /// for rtRecordTypes: retrieve RTTI information about all managed fields
     // of this record
     // - non managed fields (e.g. integers, double...) are not listed here
@@ -462,6 +469,9 @@ type
     // - caller should ensure the type is indeed a static array
     function ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
       {$ifdef HASINLINE} inline; {$endif}
+    /// for rtArray: get the size in bytes of all the static array items
+    // - caller should ensure the type is indeed a static array
+    function ArrayItemSize: PtrInt;       {$ifdef HASINLINE} inline; {$endif}
     /// recognize most used string types, returning their code page
     // - will return the exact code page on FPC and since Delphi 2009, from RTTI
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
@@ -469,6 +479,12 @@ type
     // AnsiString as 0, and any other type as RawUTF8
     // - it will also recognize TSQLRawBlob as the fake CP_SQLRAWBLOB codepage
     function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
+    {$ifdef HASCODEPAGE}
+    /// returning the code page stored in the RTTI
+    // - without recognizing e.g. TSQLRawBlob
+    // - caller should ensure the type is indeed a rkLString
+    function AnsiStringCodePageStored: integer; inline;
+    {$endif HASCODEPAGE}
     /// for rtClass: get the class type information
     function RttiClass: PRttiClass;       {$ifdef HASINLINE} inline; {$endif}
     /// for rtClass: return the number of published properties in this class
@@ -603,13 +619,13 @@ type
     /// return TRUE if the property has its Default RTTI value, or is 0/""/nil
     function IsDefaultOrVoid(Instance: TObject): boolean;
     /// compute in how many bytes this property is stored
-    function RetrieveFieldSize: PtrInt;
+    function RetrieveFieldSize: PtrInt; {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has no getter but direct field read
-    function GetterIsField: boolean;  {$ifdef HASINLINE} inline; {$endif}
+    function GetterIsField: boolean;    {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has no setter but direct field write
-    function SetterIsField: boolean;  {$ifdef HASINLINE} inline; {$endif}
+    function SetterIsField: boolean;    {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has a write setter or direct field
-    function WriteIsDefined: boolean; {$ifdef HASINLINE} inline; {$endif}
+    function WriteIsDefined: boolean;   {$ifdef HASINLINE} inline; {$endif}
     /// returns the low-level field read address, if GetterIsField is TRUE
     function GetterAddr(Instance: pointer): pointer; {$ifdef HASINLINE} inline; {$endif}
     /// returns the low-level field write address, if SetterIsField is TRUE
@@ -682,10 +698,7 @@ const
 {$ifdef HASINLINE}
 // some functions which should be defined here for proper inlining
 
-function GetTypeData(TypeInfo: pointer): PTypeData; inline;
-
 {$ifdef FPC}
-
 {$ifndef HASDIRECTTYPEINFO}
 function Deref(Info: pointer): pointer; inline;
 {$endif HASDIRECTTYPEINFO}
@@ -693,8 +706,9 @@ function Deref(Info: pointer): pointer; inline;
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
 {$endif FPC}
+
+function GetTypeData(TypeInfo: pointer): PTypeData; inline;
 
 {$endif HASINLINE}
 
@@ -941,6 +955,7 @@ implementation
 
 { some inlined definitions which should be declared before $include code }
 
+/// convert an ordinal value into its (signed) 64-bit integer representation
 function FromRttiOrd(o: TRttiOrd; P: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -1327,6 +1342,29 @@ begin
     result := TRttiFloat(GetTypeData(@self)^.FloatType);
 end;
 
+function TRttiInfo.RttiSize: PtrInt;
+begin
+  case Kind of
+    rkInteger, rkEnumeration, rkSet, rkChar, rkWChar
+    {$ifdef FPC}, rkBool{$endif}:
+      result := ORDTYPE_SIZE[RttiOrd];
+    rkFloat:
+      result := FLOATTYPE_SIZE[RttiFloat];
+    rkLString, {$ifdef FPC} rkLStringOld, {$endif}
+    {$ifdef HASVARUSTRING} rkUString, {$endif}
+    rkWString, rkClass, rkInterface, rkDynArray:
+      result := SizeOf(pointer);
+    rkInt64 {$ifdef FPC}, rkQWord{$endif}:
+      result := 8;
+    rkVariant:
+      result := SizeOf(variant);
+    rkArray:
+      result := ArrayItemSize;
+  else
+    result := 0;
+  end;
+end;
+
 function TRttiInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
 begin
   result := ClassFieldCountWithParents(RttiClass^.RttiClass, onlyWithoutGetter);
@@ -1381,6 +1419,15 @@ begin
     result := CP_UTF8; // default is UTF-8
   {$endif HASCODEPAGE}
 end;
+
+{$ifdef HASCODEPAGE}
+
+function TRttiInfo.AnsiStringCodePageStored: integer;
+begin
+  result := PWord(GetTypeData(@self))^
+end;
+
+{$endif HASCODEPAGE}
 
 function TRttiInfo.InterfaceGUID: PGUID;
 begin
@@ -1498,34 +1545,8 @@ begin
 end;
 
 function TRttiProp.RetrieveFieldSize: PtrInt;
-var
-  info: PRttiInfo;
 begin
-  info := TypeInfo;
-  case info^.Kind of
-    rkInteger, rkEnumeration, rkSet, rkChar, rkWChar
-    {$ifdef FPC}, rkBool{$endif}:
-      result := ORDTYPE_SIZE[info^.RttiOrd];
-    rkFloat:
-      case info^.RttiFloat of
-        rfSingle:
-          result := 4;
-        rfExtended:
-          result := 10;
-      else
-        result := 8;
-      end;
-    rkLString, {$ifdef FPC} rkLStringOld, {$endif}
-    {$ifdef HASVARUSTRING} rkUString, {$endif}
-    rkWString, rkClass, rkInterface, rkDynArray:
-      result := SizeOf(pointer);
-    rkInt64 {$ifdef FPC}, rkQWord{$endif}:
-      result := 8;
-    rkVariant:
-      result := SizeOf(variant);
-  else
-    result := 0;
-  end;
+  result := TypeInfo^.RttiSize;
 end;
 
 function TRttiProp.GetterAddr(Instance: pointer): pointer;
@@ -2411,7 +2432,7 @@ begin
       f := fields.Fields;
       i := fields.Count;
       repeat
-        p := {$ifdef HASDIRECTTYPEINFO}f^.TypeInfo{$else}f^.TypeInfoRef^{$endif};
+        p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
         {$ifdef FPC_OLDRTTI}
         if Assigned(fin[p^.Kind]) then
         {$endif FPC_OLDRTTI}
@@ -2458,7 +2479,7 @@ begin //  caller ensured ElemTypeInfo<>nil and n>0
     rkVariant:
       // from mormot.core.variants - supporting custom variants
       // or at least from mormot.core.base
-      _VariantDynArrayClear(pointer(v), n);
+      VariantDynArrayClearSeveral(pointer(v), n);
     rkWString, rkInterface, rkDynArray:
       // generic finalization of pointer-sized managed type variables
       begin
@@ -2512,7 +2533,7 @@ begin // caller ensured Info is indeed a record/object
     fin := @_FINALIZE;
     f := fields.Fields;
     repeat
-      p := {$ifdef HASDIRECTTYPEINFO}f^.TypeInfo{$else}f^.TypeInfoRef^{$endif};
+      p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
       {$ifdef FPC_OLDRTTI}
       if Assigned(fin[p^.Kind]) then
       {$endif FPC_OLDRTTI}
