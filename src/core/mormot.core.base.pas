@@ -2659,11 +2659,18 @@ procedure VariantStringToUTF8(const V: Variant; var result: RawUTF8); overload;
 // null) will be returned as ''
 function VariantStringToUTF8(const V: Variant): RawUTF8; overload;
 
-/// efficient initialization of successive variant items from a (dynamic) array
-// - this unit will include a basic version calling VarClear()
-// - mormot.core.variants will assign a more efficient implementation
 var
-  _VariantDynArrayClear: procedure(V: PVarData; n: integer);
+  /// efficient initialization of successive variant items from a (dynamic) array
+  // - this unit will include a basic version calling VarClear()
+  // - mormot.core.variants will assign a more efficient implementation
+  VariantDynArrayClearSeveral: procedure(V: PVarData; n: integer);
+
+  /// compare two "array of variant" elements, with or without case sensitivity
+  // - this low-level function will call the RTL variants unit
+  // - this unit will include a basic case-sensitive version calling VarCompareValue()
+  // - mormot.core.variants will assign a more efficient implementation handling
+  // case insensitive comparison in string, if needed
+  SortDynArrayVariantComp: function(const A, B: TVarData; caseInsensitive: boolean): integer;
 
 
 { ************ Sorting/Comparison Functions }
@@ -9228,7 +9235,7 @@ begin
   VariantStringToUTF8(V, result);
 end;
 
-procedure BaseVariantDynArrayClear(V: PVariant; n: integer);
+procedure _VariantDynArrayClearSeveral(V: PVariant; n: integer);
 begin
   if n > 0 then
     repeat
@@ -9236,6 +9243,14 @@ begin
       inc(V);
       dec(n);
     until n = 0;
+end;
+
+function _SortDynArrayVariantComp(const A, B: TVarData;
+  caseInsensitive: boolean): integer;
+const
+  ICMP: array[TVariantRelationship] of integer = (0, -1, 1, 1);
+begin
+  result := ICMP[VarCompareValue(PVariant(@A)^, PVariant(@B)^)];
 end;
 
 
@@ -9528,7 +9543,8 @@ begin
       crc32ctab[n, i] := crc;
     end;
   end;
-  _VariantDynArrayClear := @BaseVariantDynArrayClear;
+  VariantDynArrayClearSeveral := @_VariantDynArrayClearSeveral;
+  SortDynArrayVariantComp := @_SortDynArrayVariantComp;
 end;
 
 initialization

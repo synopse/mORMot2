@@ -132,11 +132,6 @@ function SortDynArrayVariant(const A, B): integer;
 /// compare two "array of variant" elements, with no case sensitivity
 function SortDynArrayVariantI(const A, B): integer;
 
-/// compare two "array of variant" elements, with or without case sensitivity
-// - this low-level function is called by SortDynArrayVariant/VariantCompare
-// - more optimized than the RTL function if A and B share the same type
-function SortDynArrayVariantComp(const A, B: TVarData; caseInsensitive: boolean): integer;
-
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
@@ -2032,7 +2027,7 @@ begin
   VarClear(value);
 end;
 
-procedure EnhancedVariantDynArrayClear(V: PVarData; n: integer);
+procedure _VariantDynArrayClearSeveral(V: PVarData; n: integer);
 var
   vt, docv: cardinal;
   handler: TCustomVariantType;
@@ -2172,7 +2167,7 @@ begin
       {$ifdef FPC}
       vtQWord:
         begin
-          VType := varQWord;
+          VType := varWord64;
           VQWord := V.VQWord^;
         end;
       {$endif}
@@ -2208,27 +2203,6 @@ begin
     end;
 end;
 
-
-function VariantCompare(const V1, V2: variant): PtrInt;
-begin
-  result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), {caseins=}false);
-end;
-
-function VariantCompareI(const V1, V2: variant): PtrInt;
-begin
-  result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), {caseins=}true);
-end;
-
-function SortDynArrayVariant(const A, B): integer;
-begin
-  result := SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}false);
-end;
-
-function SortDynArrayVariantI(const A, B): integer;
-begin
-  result := SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}true);
-end;
-
 function SortDynArrayVariantCompareAsString(const A, B: variant): integer;
 var
   UA, UB: RawUTF8;
@@ -2254,7 +2228,7 @@ begin
   result := 0;
 end;
 
-function SortDynArrayVariantComp(const A, B: TVarData; caseInsensitive: boolean): integer;
+function _SortDynArrayVariantComp(const A, B: TVarData; caseInsensitive: boolean): integer;
 type
   TSortDynArrayVariantComp = function(const A, B: variant): integer;
 const
@@ -2314,6 +2288,26 @@ begin
     result := ICMP[VarCompareValue(variant(A), variant(B))]
   else
     result := CMP[caseInsensitive](variant(A), variant(B));
+end;
+
+function VariantCompare(const V1, V2: variant): PtrInt;
+begin
+  result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), {caseins=}false);
+end;
+
+function VariantCompareI(const V1, V2: variant): PtrInt;
+begin
+  result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), {caseins=}true);
+end;
+
+function SortDynArrayVariant(const A, B): integer;
+begin
+  result := _SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}false);
+end;
+
+function SortDynArrayVariantI(const A, B): integer;
+begin
+  result := _SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}true);
 end;
 
 function VariantEquals(const V: Variant; const Str: RawUTF8; CaseSensitive: boolean): boolean;
@@ -3967,7 +3961,8 @@ function TDocVariantData.SearchItemByValue(const aValue: Variant;
   CaseInsensitive: boolean; StartIndex: PtrInt): PtrInt;
 begin
   for result := StartIndex to VCount - 1 do
-    if SortDynArrayVariantComp(TVarData(VValue[result]), TVarData(aValue), CaseInsensitive) = 0 then
+    if _SortDynArrayVariantComp(
+      TVarData(VValue[result]), TVarData(aValue), CaseInsensitive) = 0 then
       exit;
   result := -1;
 end;
@@ -4438,7 +4433,8 @@ begin
   end
   else
     for ndx := VCount - 1 downto 0 do
-      if SortDynArrayVariantComp(TVarData(VValue[ndx]), TVarData(aValue), CaseInsensitive) = 0 then
+      if _SortDynArrayVariantComp(
+         TVarData(VValue[ndx]), TVarData(aValue), CaseInsensitive) = 0 then
       begin
         Delete(ndx);
         inc(result);
@@ -5878,8 +5874,15 @@ begin
   end;
 end;
 
+procedure _BinaryVariantLoadAsJSON(var Value: variant; JSON: PUTF8Char);
+begin
+  GetJSONToAnyVariant(Value, JSON, nil, @JSON_OPTIONS[true], {double=}true);
+end;
+
 
 initialization
-  _VariantDynArrayClear := EnhancedVariantDynArrayClear;
+  BinaryVariantLoadAsJSON := _BinaryVariantLoadAsJSON;
+  VariantDynArrayClearSeveral := _VariantDynArrayClearSeveral;
+  SortDynArrayVariantComp := _SortDynArrayVariantComp;
 end.
 

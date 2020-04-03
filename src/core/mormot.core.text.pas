@@ -977,8 +977,8 @@ type
     // - see TextLength for the total number of bytes, on both disk and memory
     function PendingBytes: PtrUInt;
       {$ifdef HASINLINE} inline; {$endif}
-    /// how many bytes were currently written on disk
-    // - excluding the bytes in the internal buffer
+    /// how many bytes were currently written on disk/stream
+    // - excluding the bytes in the internal buffer (see PendingBytes)
     // - see TextLength for the total number of bytes, on both disk and memory
     property WrittenBytes: PtrUInt read fTotalFileSize;
     /// the last char appended is canceled
@@ -1003,7 +1003,7 @@ type
 
     /// count of added bytes to the stream
     // - see PendingBytes for the number of bytes currently in the memory buffer
-    // or WrittenBytes for the number of bytes already written to disk
+    // or WrittenBytes for the number of bytes already written to disk/stream
     property TextLength: PtrUInt read GetTextLength;
     /// the internal TStream used for storage
     // - you should call the FlushFinal (or FlushToStream) methods before using
@@ -1471,6 +1471,14 @@ function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 // a RawUTF8 instance - which does make sense in the mORMot area
 procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
   var result: RawUTF8);
+
+var
+  /// unserialize a JSON content into a variant
+  // - is properly implemented by mormot.core.json.pas: if this unit is not
+  // included in the project, this function is nil
+  // - used by mormot.core.data.pas _BINARYLOAD[tkVariant]() for complex types
+  BinaryVariantLoadAsJSON: procedure(var Value: variant; JSON: PUTF8Char);
+
 
 type
   /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
@@ -2019,11 +2027,16 @@ function strcspn(s, reject: pointer): integer;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// our fast version of StrCompL(), to be used with PUTF8Char
-function StrCompL(P1, P2: PUTF8Char; L, Default: Integer): PtrInt;
+// - i.e. make a binary comparison of two memory buffers, using supplied length
+// - Default value is returned if both P1 and P2 buffers are equal
+function StrCompL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// our fast version of StrCompIL(), to be used with PUTF8Char
-function StrCompIL(P1, P2: PUTF8Char; L: Integer; Default: Integer = 0): PtrInt;
+// - i.e. make a case-insensitive comparison of two memory buffers, using
+// supplied length
+// - Default value is returned if both P1 and P2 buffers are equal
+function StrCompIL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
@@ -5381,8 +5394,7 @@ begin
   SetBuffer(nil, aBufSize);
 end;
 
-constructor TBaseWriter.Create(aStream: TStream; aBuf: pointer;
-  aBufSize: integer);
+constructor TBaseWriter.Create(aStream: TStream; aBuf: pointer; aBufSize: integer);
 begin
   SetStream(aStream);
   SetBuffer(aBuf, aBufSize);
@@ -5396,8 +5408,7 @@ begin
   Include(fCustomOptions, twoStreamIsOwned);
 end;
 
-constructor TBaseWriter.CreateOwnedStream(aBuf: pointer;
-  aBufSize: integer);
+constructor TBaseWriter.CreateOwnedStream(aBuf: pointer; aBufSize: integer);
 begin
   SetStream(TRawByteStringStream.Create);
   SetBuffer(aBuf, aBufSize);
@@ -9095,7 +9106,7 @@ procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
   var result: RawUTF8);
 var
   temp: TTextWriterStackBuffer;
-begin // fast enough in practice, and creates valid JSON
+begin // not very fast, but creates valid JSON
   with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     AddVariant(Value, Escape); // may encounter TObjectVariant -> WriteObject
@@ -10255,13 +10266,13 @@ begin // returns size of initial segment of s which are not in reject
   until false;
 end;
 
-function StrCompL(P1, P2: PUTF8Char; L, Default: Integer): PtrInt;
+function StrCompL(P1, P2: pointer; L, Default: PtrInt): PtrInt;
 var
   i: PtrInt;
 begin
   i := 0;
   repeat
-    result := PtrInt(P1[i]) - PtrInt(P2[i]);
+    result := PByteArray(P1)[i] - PByteArray(P2)[i];
     if result = 0 then
     begin
       inc(i);
@@ -10275,19 +10286,19 @@ begin
   result := Default;
 end;
 
-function StrCompIL(P1, P2: PUTF8Char; L, Default: Integer): PtrInt;
+function StrCompIL(P1, P2: pointer; L, Default: PtrInt): PtrInt;
 var
   i: PtrInt;
   {$ifdef CPUX86NOTPIC}
-  tab: TNormTable absolute NormToUpperAnsi7;
+  tab: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
-  tab: PNormTable; // faster on PIC/ARM and x86_64
+  tab: PNormTableByte; // faster on PIC/ARM and x86_64
   {$endif}
 begin
   i := 0;
-  {$ifndef CPUX86NOTPIC} tab := @NormToUpperAnsi7; {$endif}
+  {$ifndef CPUX86NOTPIC} tab := @NormToUpperAnsi7Byte; {$endif}
   repeat
-    if tab[P1[i]] = tab[P2[i]] then
+    if tab[PByteArray(P1)[i]] = tab[PByteArray(P2)[i]] then
     begin
       inc(i);
       if i < L then
@@ -10295,7 +10306,7 @@ begin
       else
         break;
     end;
-    result := PtrInt(P1[i]) - PtrInt(P2[i]);
+    result := PByteArray(P1)[i] - PByteArray(P2)[i];
     exit;
   until false;
   result := Default;

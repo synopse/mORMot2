@@ -14,8 +14,8 @@ unit mormot.core.data;
     - Base64, Base64URI, URL and Baudot Encoding / Decoding
     - INI Files and In-memory Access
     - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
+    - Efficient RTTI Values Binary Serialization and Comparison
   TODO:
-    - Record and Dynamic Arrays binary serialization
     - TDynArray wrapper
     - RawUTF8 String Values Interning
     - TSynNameValue Name/Value Storage
@@ -964,6 +964,8 @@ type
     procedure VarBlob(out result: TValueResult); overload; {$ifdef HASINLINE} inline;{$endif}
     /// read the next pointer and length value from the buffer
     function VarBlob: TValueResult; overload;  {$ifdef HASINLINE} inline;{$endif}
+    /// copy the next VarBlob value from the buffer into a TSynTempBuffer
+    procedure VarBlob(out Value: TSynTempBuffer); overload;
     /// read the next ShortString value from the buffer
     function VarShortString: shortstring; {$ifdef HASINLINE}inline;{$endif}
     /// fast ignore the next VarUInt32/VarInt32/VarUInt64/VarInt64 value
@@ -987,11 +989,11 @@ type
     /// returns the current position, and move ahead the specified bytes
     function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
-    procedure Copy(out Dest; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+    procedure Copy(Dest: Pointer; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
-    function CopySafe(out Dest; DataLen: PtrInt): boolean;
+    function CopySafe(Dest: Pointer; DataLen: PtrInt): boolean;
     /// retrieved cardinal values encoded with TBufferWriter.WriteVarUInt32Array
     // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
@@ -1039,6 +1041,7 @@ type
     fTag: PtrInt;
     procedure InternalFlush;
     function GetTotalWritten: Int64; {$ifdef HASINLINE} inline; {$endif}
+    procedure FlushAndWrite(Data: pointer; DataLen: PtrInt);
   public
     /// initialize the buffer, and specify a file handle to use for writing
     // - define an internal buffer of the specified size
@@ -1074,32 +1077,36 @@ type
     // - warning: an explicit call to Flush is needed to write the data pending
     // in internal buffer
     destructor Destroy; override;
-    /// append some data at the current position
-    procedure Write(Data: pointer; DataLen: PtrInt); overload;
     /// append 1 byte of data at the current position
     procedure Write1(Data: Byte); {$ifdef HASINLINE}inline;{$endif}
     /// append 2 bytes of data at the current position
-    procedure Write2(Data: Word); {$ifdef HASINLINE}inline;{$endif}
+    procedure Write2(Data: cardinal); {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
     procedure Write4(Data: integer); {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data, encoded as BigEndian, at the current position
     procedure Write4BigEndian(Data: integer); {$ifdef HASINLINE}inline;{$endif}
     /// append 8 bytes of data at the current position
     procedure Write8(const Data8Bytes); {$ifdef HASINLINE}inline;{$endif}
+    /// append 8 bytes of 64-bit integer at the current position
+    procedure WriteI64(Data: Int64); {$ifdef HASINLINE}inline;{$endif}
     /// append the same byte a given number of occurences at the current position
     procedure WriteN(Data: Byte; Count: integer);
     /// append some content (may be text or binary) prefixed by its encoded length
     // - will write DataLen as VarUInt32, then the Data content, as expected
     // by FromVarString/FromVarBlob functions
     procedure WriteVar(Data: pointer; DataLen: PtrInt);
+    /// append some UTF-8 encoded text at the current position
+    // - will write the string length (as VarUInt32), then the string content
+    // - is just a wrapper around WriteVar()
+    procedure WriteShort(const Text: ShortString); {$ifdef HASINLINE} inline;{$endif}
     /// append some length-prefixed UTF-8 text at the current position
     // - will write the string length (as VarUInt32), then the string content, as expected
     // by the FromVarString() function
     // - is just a wrapper around WriteVar()
     procedure Write(const Text: RawByteString); overload; {$ifdef HASINLINE} inline;{$endif}
-    /// append some UTF-8 encoded text at the current position
-    // - will write the string length (as VarUInt32), then the string content
-    procedure WriteShort(const Text: ShortString); {$ifdef HASINLINE} inline;{$endif}
+    /// append some data at the current position
+    // - will be inlined as a MoveFast() most of the time
+    procedure Write(Data: pointer; DataLen: PtrInt); overload; {$ifdef HASINLINE} inline;{$endif}
     /// append some content at the current position
     // - will write the binary data, without any length prefix
     procedure WriteBinary(const Data: RawByteString);
@@ -1562,6 +1569,84 @@ function AreUrlValid(const Url: array of RawUTF8): boolean;
 
 /// ensure the supplied URI contains a trailing '/' charater
 function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+
+
+
+{ ********** RTTI Values Binary Serialization and Comparison }
+
+type
+  /// internal function handler for binary persistence of any RTTI type value
+  // - i.e. the kind of functions called via _BINARYSAVE[] lookup table
+  // - work with managed and unmanaged types
+  // - persist Data^ into Dest, returning the size in Data^ as bytes
+  TRttiBinarySave = function(Data: pointer; Dest: TBufferWriter;
+    Info: PRttiInfo): PtrInt;
+
+  /// the type of _BINARYSAVE[] efficient lookup table
+  TRttiBinarySaves = array[TRttiKind] of TRttiBinarySave;
+  PRttiBinarySaves = ^TRttiBinarySaves;
+
+  /// internal function handler for binary persistence of any RTTI type value
+  // - i.e. the kind of functions called via _BINARYLOAD[] lookup table
+  // - work with managed and unmanaged types
+  // - fill Data^ from Source, returning the size in Data^ as bytes
+  TRttiBinaryLoad = function(Data: pointer; var Source: TFastReader;
+    Info: PRttiInfo): PtrInt;
+
+  /// the type of _BINARYLOAD[] efficient lookup table
+  TRttiBinaryLoads = array[TRttiKind] of TRttiBinaryLoad;
+  PRttiBinaryLoads = ^TRttiBinaryLoads;
+
+  /// internal function handler for fast comparison of any RTTI type value
+  // - i.e. the kind of functions called via _BINARYCOMPARE[] lookup table
+  // - work with managed and unmanaged types
+  // - returns the size in Data1/Data2^ as bytes, and the result in Compared
+  TRttiBinaryCompare = function(Data1, Data2: pointer; Info: PRttiInfo;
+    out Compared: integer): PtrInt;
+
+  /// the type of _BINARYCOMPARE[] efficient lookup table
+  TRttiBinaryCompares = array[TRttiKind] of TRttiBinaryCompare;
+  PRttiBinaryCompares = ^TRttiBinaryCompares;
+
+var
+  /// lookup table for binary persistence of any RTTI type value
+  // - for efficient persistence into binary of managed and unmanaged types
+  _BINARYSAVE: TRttiBinarySaves;
+
+  /// lookup table for binary persistence of any RTTI type value
+  // - for efficient retrieval from binary of managed and unmanaged types
+  _BINARYLOAD: TRttiBinaryLoads;
+
+  /// lookup table for case-sensitive comparison of any RTTI type value
+  // - for efficient search or sorting of managed and unmanaged types
+  _BINARYCOMPARE: TRttiBinaryCompares;
+
+  /// lookup table for case-insensitive comparison of any RTTI type value
+  // - for efficient search or sorting of managed and unmanaged types
+  _BINARYCOMPAREI: TRttiBinaryCompares;
+
+
+/// raw binary serialization of a dynamic array
+// - as called e.g. by TDynArray.SaveTo, using ExternalCount optional parameter
+// - _BINARYSAVE[rkDynArray] is a wrapper to this function, with ExternalCount=nil
+procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
+  Dest: TBufferWriter; Info: PRttiInfo);
+
+/// raw comparison of two dynamic arrays
+// - as called e.g. by TDynArray.Equals, using ExternalCountA/B optional parameter
+// - _BINARYCOMPARE[rkDynArray] and _BINARYCOMPAREI[rkDynArray] are wrappers
+// to this function, with ExternalCountA/B=nil
+function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
+  Info: PRttiInfo; CaseSensitive: boolean): integer;
+
+/// raw comparison of two records
+// - _BINARYCOMPARE[rkRecord] and _BINARYCOMPAREI[rkRecord] are wrappers to this
+function RecordCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean): integer;
+
+/// raw comparison of two static arrays
+// - _BINARYCOMPARE[rkArray] and _BINARYCOMPAREI[rkArray] are wrappers to this
+function ArrayCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean;
+  out ArraySize: PtrInt): integer;
 
 
 { ************ INI Files and In-memory Access }
@@ -3509,21 +3594,21 @@ begin
   end;
 end;
 
-procedure TFastReader.Copy(out Dest; DataLen: PtrInt);
+procedure TFastReader.Copy(Dest: pointer; DataLen: PtrInt);
 begin
   if P + DataLen > Last then
     ErrorOverflow;
-  MoveFast(P^, Dest, DataLen);
+  MoveFast(P^, Dest^, DataLen);
   inc(P, DataLen);
 end;
 
-function TFastReader.CopySafe(out Dest; DataLen: PtrInt): boolean;
+function TFastReader.CopySafe(Dest: pointer; DataLen: PtrInt): boolean;
 begin
   if P + DataLen > Last then
     result := false
   else
   begin
-    MoveFast(P^, Dest, DataLen);
+    MoveFast(P^, Dest^, DataLen);
     inc(P, DataLen);
     result := true;
   end;
@@ -3821,6 +3906,17 @@ begin
   inc(P, len);
 end;
 
+procedure TFastReader.VarBlob(out Value: TSynTempBuffer);
+var
+  len: PtrUInt;
+begin
+  len := VarUInt32;
+  if P + len > Last then
+    ErrorOverflow;
+  Value.Init(P, len);
+  inc(P, len);
+end;
+
 function TFastReader.VarBlob: TValueResult;
 var
   len: PtrUInt;
@@ -3931,10 +4027,10 @@ var
 begin
   result := VarUInt32;
   SetLength(Values, result);
-  Copy(k, 1);
+  k := TBufferWriterKind(NextByte);
   if k = wkUInt32 then
   begin
-    Copy(Values[0], result * 4);
+    Copy(pointer(Values), result * 4);
     exit;
   end;
   Next(4); // format: Isize+varUInt32s
@@ -4067,22 +4163,33 @@ begin
     fStream.Seek(0, soBeginning);
 end;
 
-procedure TBufferWriter.Write(Data: pointer; DataLen: PtrInt);
+procedure TBufferWriter.FlushAndWrite(Data: pointer; DataLen: PtrInt);
 begin
-  if (DataLen <= 0) or (Data = nil) then
+  if DataLen < 0 then
     exit;
-  if fPos + DataLen > fBufLen then
+  if fPos > 0 then
+    InternalFlush;
+  if DataLen > fBufLen then
+    fStream.WriteBuffer(Data^, DataLen)
+  else
   begin
-    if fPos > 0 then
-      InternalFlush;
-    if DataLen > fBufLen then
-    begin
-      fStream.WriteBuffer(Data^, DataLen);
-      exit;
-    end;
+    MoveFast(Data^, fBuffer^[fPos], DataLen);
+    inc(fPos, DataLen);
   end;
-  MoveFast(Data^, fBuffer^[fPos], DataLen);
-  inc(fPos, DataLen);
+end;
+
+procedure TBufferWriter.Write(Data: pointer; DataLen: PtrInt);
+var
+  p: PtrUInt;
+begin
+  p := fPos;
+  if p + PtrUInt(DataLen) <= PtrUInt(fBufLen) then
+  begin
+    MoveFast(Data^, fBuffer^[p], DataLen);
+    inc(fPos, DataLen);
+  end
+  else
+    FlushAndWrite(Data, DataLen); // will also handle DataLen<0
 end;
 
 procedure TBufferWriter.WriteN(Data: Byte; Count: integer);
@@ -4111,7 +4218,7 @@ begin
   inc(fPos);
 end;
 
-procedure TBufferWriter.Write2(Data: Word);
+procedure TBufferWriter.Write2(Data: cardinal);
 begin
   if fPos > fBufLen16 then
     InternalFlush;
@@ -4140,13 +4247,19 @@ begin
   inc(fPos, SizeOf(Int64));
 end;
 
+procedure TBufferWriter.WriteI64(Data: Int64);
+begin
+  if fPos > fBufLen16 then
+    InternalFlush;
+  PInt64(@fBuffer^[fPos])^ := Data;
+  inc(fPos, SizeOf(Data));
+end;
+
 procedure TBufferWriter.WriteVar(Data: pointer; DataLen: PtrInt);
 label
   wr;
 begin
-  if fPos + DataLen > fBufLen16 then
-    InternalFlush;
-  if DataLen < fBufLen16 then
+  if fPos + DataLen <= fBufLen16 then // inlined most common cases
   begin
     if DataLen < $80 then // e.g. small strings
     begin
@@ -6755,7 +6868,7 @@ begin
       PCardinal(R + 5)^ := AlgoHash(0, R + 9, len);
     end;
     if R = @tmp[BufferOffset] then
-      SetString(result, tmp, len + BufferOffset + 9)
+      SetString(result, PAnsiChar(@tmp), len + BufferOffset + 9)
     else
       SetLength(result, len + BufferOffset + 9); // MM may not move the data
   end;
@@ -7082,10 +7195,723 @@ end;
 
 
 
+{ ********** RTTI Values Binary Serialization and Comparison }
+
+function _BS_Ord(Data: pointer; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+begin
+  result := ORDTYPE_SIZE[Info^.RttiOrd];
+  Dest.Write(Data, result);
+end;
+
+function _BL_Ord(Data: pointer; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+begin
+  result := ORDTYPE_SIZE[Info^.RttiOrd];
+  Source.Copy(Data, result);
+end;
+
+function _BC_Ord(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+var
+  ro: TRttiOrd;
+begin
+  ro := Info^.RttiOrd;
+  case ro of // branchless comparison
+    roSByte:
+      Compared := ord(PShortInt(A)^ > PShortInt(B)^) - ord(PShortInt(A)^ < PShortInt(B)^);
+    roUByte:
+      Compared := ord(PByte(A)^ > PByte(B)^) - ord(PByte(A)^ < PByte(B)^);
+    roSWord:
+      Compared := ord(PSmallInt(A)^ > PSmallInt(B)^) - ord(PSmallInt(A)^ < PSmallInt(B)^);
+    roUWord:
+      Compared := ord(PWord(A)^ > PWord(B)^) - ord(PWord(A)^ < PWord(B)^);
+    roSLong:
+      Compared := ord(PInteger(A)^ > PInteger(B)^) - ord(PInteger(A)^ < PInteger(B)^);
+    roULong:
+      Compared := ord(PCardinal(A)^ > PCardinal(B)^) - ord(PCardinal(A)^ < PCardinal(B)^);
+    {$ifdef FPC_NEWRTTI}
+    roSQWord:
+      Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
+    roUQWord:
+      Compared := ord(PQWord(A)^ > PQWord(B)^) - ord(PQWord(A)^ < PQWord(B)^);
+    {$endif}
+  end;
+  result := ORDTYPE_SIZE[ro];
+end;
+
+function _BS_Float(Data: pointer; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+begin
+  result := FLOATTYPE_SIZE[Info^.RttiFloat];
+  Dest.Write(Data, result);
+end;
+
+function _BL_Float(Data: pointer; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+begin
+  result := FLOATTYPE_SIZE[Info^.RttiFloat];
+  Source.Copy(Data, result);
+end;
+
+function _BC_Float(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+var
+  rf: TRttiFloat;
+begin
+  rf := Info^.RttiFloat;
+  case rf of // branchless comparison
+    rfSingle:
+      Compared := ord(PSingle(A)^ > PSingle(B)^) - ord(PSingle(A)^ < PSingle(B)^);
+    rfDouble:
+      Compared := ord(PDouble(A)^ > PDouble(B)^) - ord(PDouble(A)^ < PDouble(B)^);
+    rfExtended:
+      Compared := ord(PExtended(A)^ > PExtended(B)^) - ord(PExtended(A)^ < PExtended(B)^);
+    rfComp, rfCurr:
+      Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
+  end;
+  result := FLOATTYPE_SIZE[rf];
+end;
+
+function _BS_64(Data: PInt64; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+begin
+  {$ifdef CPU32}
+  Dest.Write8(Data^);
+  {$else}
+  Dest.WriteI64(Data^);
+  {$endif CPU32}
+  result := 8;
+end;
+
+function _BL_64(Data: PQWord; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+begin
+  Data^ := Source.Next8;
+  result := 8;
+end;
+
+function _BC_64(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  if Info^.IsQWord then
+    Compared := ord(PQWord(A)^ > PQWord(B)^) - ord(PQWord(A)^ < PQWord(B)^)
+  else
+    Compared := ord(PInt64(A)^ > PInt64(B)^) - ord(PInt64(A)^ < PInt64(B)^);
+  result := 8;
+end;
+
+function _BS_String(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+var
+  Len: TStrLen;
+begin
+  Data := PPointer(Data)^;
+  if Data = nil then
+    Len := 0
+  else
+  begin
+    Len := PStrLen(Data - _STRLEN)^;
+    {$ifdef HASVARUSTRING}
+    if Info^.Kind = rkUString then
+      Len := Len * 2; // UnicodeString length in WideChars
+    {$endif HASVARUSTRING}
+  end;
+  Dest.WriteVar(Data, Len);
+  result := SizeOf(pointer);
+end;
+
+function _BL_LString(Data: PRawByteString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+begin
+  with Source.VarBlob do
+    {$ifdef HASCODEPAGE}
+    FastSetStringCP(Data^, Ptr, Len, Info^.AnsiStringCodePageStored);
+    {$else}
+    SetString(Data^, Ptr, Len);
+    {$endif HASCODEPAGE}
+  result := SizeOf(pointer);
+end;
+
+{$ifdef HASVARUSTRING}
+
+function _BL_UString(Data: PUnicodeString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+begin
+  with Source.VarBlob do
+    SetString(Data^, PWideChar(Ptr), Len shr 1); // length in bytes was stored
+  result := SizeOf(pointer);
+end;
+
+{$endif HASVARUSTRING}
+
+function _BS_WString(Data: PWideString; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+begin // PStrLen() doesn't match WideString header
+  Dest.WriteVar(pointer(Data^), length(Data^) * 2);
+  result := SizeOf(pointer);
+end;
+
+function _BL_WString(Data: PWideString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+begin
+  with Source.VarBlob do
+    SetString(Data^, PWideChar(Ptr), Len shr 1); // length in bytes was stored
+  result := SizeOf(pointer);
+end;
+
+function _BC_PUTF8Char(A, B: PUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrComp(A, B);
+  result := SizeOf(pointer);
+end;
+
+function _BC_PWideChar(A, B: PWideChar; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrCompW(A, B);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_PUTF8Char(A, B: PUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := StrIComp(A, B);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_PWideChar(A, B: PWideChar; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  compared := AnsiICompW(A, B);
+  result := SizeOf(pointer);
+end;
+
+function DelphiType(Info: PRttiInfo): integer; {$ifdef HASINLINE} inline; {$endif}
+begin // compatible with legacy TDynArray.SaveTo() format
+  if Info = nil then
+    result := 0
+  else
+    {$ifdef FPC}
+    result := ord(FPCTODELPHI[Info^.Kind]);
+    {$else}
+    result := ord(Info^.Kind);
+    {$endif FPC}
+end;
+
+procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
+  Dest: TBufferWriter; Info: PRttiInfo);
+var
+  n, itemsize: PtrInt;
+  sav: TRttiBinarySave;
+begin
+  Info := Info^.DynArrayItemType(itemsize);
+  Dest.Write1(0); // no stored itemsize for 32-bit/64-bit compatibility
+  Dest.Write1(DelphiType(Info));
+  Data := PPointer(Data)^; // de-reference pointer to array data
+  if Data = nil then
+    Dest.Write1(0) // store dynamic array count of 0
+  else
+  begin
+    if ExternalCount <> nil then
+      n := ExternalCount^ // e.g. from TDynArray with external count
+    else
+      n := PDynArrayRec(Data - SizeOf(TDynArrayRec))^.length;
+    Dest.WriteVarUInt32(n);
+    Dest.Write4(0); // warning: we don't store any Hash32 checksum any more
+    if Info = nil then
+      Dest.Write(Data, itemsize * n)
+    else
+    begin
+      sav := _BINARYSAVE[Info^.Kind];
+      if Assigned(sav) then // paranoid check
+        repeat
+          inc(Data, sav(Data, Dest, Info));
+          dec(n);
+        until n = 0;
+    end;
+  end;
+end;
+
+function _BS_DynArray(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+begin
+  DynArraySave(Data, nil, Dest, Info);
+  result := SizeOf(pointer);
+end;
+
+function _BL_DynArray(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+var
+  n, itemsize: PtrInt;
+  iteminfo: PRttiInfo;
+  load: TRttiBinaryLoad;
+begin
+  iteminfo := Info^.DynArrayItemType(itemsize);
+  Source.VarNextInt; // ignore stored itemsize for 32-bit/64-bit compatibility
+  if Source.NextByte <> DelphiType(iteminfo) then
+    Source.ErrorData('_BINARYLOAD[rkDynArray] failed for %', [Info.Name^]);
+  if PPointer(Data)^ <> nil then
+    FastDynArrayClear(pointer(Data), iteminfo);
+  n := Source.VarUInt32;
+  Source.Next4; // ignore legacy Hash32 checksum (was to avoid buffer overflow)
+  if n > 0 then
+  begin
+    DynArraySetLength(pointer(Data), Info, 1, @n); // allocate memory
+    Data := PPointer(Data)^; // point to first item
+    if iteminfo = nil then
+      Source.Copy(Data, itemsize * n)
+    else
+    begin
+      load := _BINARYLOAD[iteminfo^.Kind];
+      if Assigned(load) then
+        repeat
+          inc(Data, load(Data, Source, iteminfo));
+          dec(n);
+        until n = 0;
+    end;
+  end;
+  result := SizeOf(pointer);
+end;
+
+function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
+  Info: PRttiInfo; CaseSensitive: boolean): integer;
+var
+  n1, n2, itemsize: PtrInt;
+  comps: PRttiBinaryCompares;
+  comp: TRttiBinaryCompare;
+begin
+  A := PPointer(A)^;
+  B := PPointer(B)^;
+  if A = B then
+  begin
+    result := 0;
+    exit;
+  end
+  else if A = nil then
+  begin
+    result := -1;
+    exit;
+  end
+  else if B = nil then
+  begin
+    result := 1;
+    exit;
+  end;
+  Info := Info^.DynArrayItemType;
+  if ExternalCountA <> nil then
+    n1 := ExternalCountA^ // e.g. from TDynArray with external count
+  else
+    n1 := PDynArrayRec(A - SizeOf(TDynArrayRec))^.length;
+  if ExternalCountB <> nil then
+    n2 := ExternalCountB^
+  else
+    n2 := PDynArrayRec(B - SizeOf(TDynArrayRec))^.length;
+  if CaseSensitive then
+    comps := @_BINARYCOMPARE
+  else
+    comps := @_BINARYCOMPAREI;
+  comp := comps^[Info^.Kind];
+  repeat
+    itemsize := comp(A, B, Info, result);
+    inc(A, itemsize);
+    inc(B, itemsize);
+    if result <> 0 then
+      exit;
+    dec(n1); // both items are equal -> continue to next items
+    dec(n2);
+  until (n1 = 0) or (n2 = 0);
+  result := n1 - n2;
+end;
+
+function _BC_DynArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := DynArrayCompare(A, B, nil, nil, Info, {casesens=}true);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_DynArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := DynArrayCompare(A, B, nil, nil, Info, {casesens=}false);
+  result := SizeOf(pointer);
+end;
+
+function _BS_Record(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+var
+  fields: TRttiRecordManagedFields; // Size/Count/Fields
+  offset: PtrUInt;
+  f: PRttiRecordField;
+begin
+  Info^.RecordManagedFields(fields);
+  f := fields.Fields;
+  fields.Fields := @_BINARYSAVE; // reuse pointer slot on stack
+  offset := 0;
+  while fields.Count <> 0 do
+  begin
+    dec(fields.Count);
+    Info := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+    {$ifdef FPC_OLDRTTI}
+    if Info^.Kind in rkManagedTypes then
+    {$endif FPC_OLDRTTI}
+    begin
+      offset := f^.Offset - offset;
+      if offset <> 0 then
+      begin
+        Dest.Write(Data, offset);
+        inc(Data, offset);
+      end;
+      inc(Data, PRttiBinarySaves(fields.Fields)[Info^.Kind](Data, Dest, Info));
+      inc(offset, f^.Offset);
+    end;
+    inc(f);
+  end;
+  offset := PtrUInt(fields.Size) - offset;
+  if offset > 0 then
+    Dest.Write(Data, offset);
+  result := fields.Size;
+end;
+
+function _BL_Record(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+var
+  fields: TRttiRecordManagedFields; // Size/Count/Fields
+  offset: PtrUInt;
+  f: PRttiRecordField;
+begin
+  Info^.RecordManagedFields(fields);
+  f := fields.Fields;
+  fields.Fields := @_BINARYLOAD; // reuse pointer slot on stack
+  offset := 0;
+  while fields.Count <> 0 do
+  begin
+    dec(fields.Count);
+    Info := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+    {$ifdef FPC_OLDRTTI}
+    if Info^.Kind in rkManagedTypes then
+    {$endif FPC_OLDRTTI}
+    begin
+      offset := f^.Offset - offset;
+      if offset <> 0 then
+      begin
+        Source.Copy(Data, offset);
+        inc(Data, offset);
+      end;
+      inc(Data, PRttiBinaryLoads(fields.Fields)[Info^.Kind](Data, Source, Info));
+      inc(offset, f^.Offset);
+    end;
+    inc(f);
+  end;
+  offset := PtrUInt(fields.Size) - offset;
+  if offset > 0 then
+    Source.Copy(Data, offset);
+  result := fields.Size;
+end;
+
+function RecordCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean): integer;
+var
+  fields: TRttiRecordManagedFields; // Size/Count/Fields
+  offset, fieldsize: PtrUInt;
+  f: PRttiRecordField;
+begin
+  Info^.RecordManagedFields(fields);
+  f := fields.Fields;
+  if CaseSensitive then
+    fields.Fields := @_BINARYCOMPARE // reuse pointer slot on stack
+  else
+    fields.Fields := @_BINARYCOMPAREI;
+  offset := 0;
+  while fields.Count <> 0 do
+  begin
+    dec(fields.Count);
+    Info := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+    {$ifdef FPC_OLDRTTI}
+    if Info^.Kind in rkManagedTypes then
+    {$endif FPC_OLDRTTI}
+    begin
+      offset := f^.Offset - offset;
+      if offset <> 0 then
+      begin
+        result := StrCompL(A, B, offset); // binary comparison with length
+        if result <> 0 then
+          exit;
+        inc(A, offset);
+        inc(B, offset);
+      end;
+      fieldsize := PRttiBinaryCompares(fields.Fields)[Info^.Kind](A, B, Info, result);
+      inc(A, fieldsize);
+      inc(B, fieldsize);
+      if result <> 0 then
+        exit;
+      inc(offset, f^.Offset);
+    end;
+    inc(f);
+  end;
+  offset := PtrUInt(fields.Size) - offset;
+  if offset > 0 then
+    result := StrCompL(A, B, offset);
+end;
+
+function _BC_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := RecordCompare(A, B, Info, {casesens=}true);
+  result := Info^.RecordSize;
+end;
+
+function _BCI_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := RecordCompare(A, B, Info, {casesens=}false);
+  result := Info^.RecordSize;
+end;
+
+function _BS_Array(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+var
+  n: PtrInt;
+  sav: TRttiBinarySave;
+begin
+  Info := Info^.ArrayItemType(n, result);
+  if Info = nil then
+    Dest.Write(Data, result)
+  else
+  begin
+    sav := _BINARYSAVE[Info^.Kind];
+    if Assigned(sav) then // paranoid check
+      repeat
+        inc(Data, sav(Data, Dest, Info));
+        dec(n);
+      until n = 0;
+  end;
+end;
+
+function _BL_Array(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+var
+  n: PtrInt;
+  load: TRttiBinaryLoad;
+begin
+  Info := Info^.ArrayItemType(n, result);
+  if Info = nil then
+    Source.Copy(Data, result)
+  else
+  begin
+    load := _BINARYLOAD[Info^.Kind];
+    if Assigned(load) then // paranoid check
+      repeat
+        inc(Data, load(Data, Source, Info));
+        dec(n);
+      until n = 0;
+  end;
+end;
+
+function ArrayCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean;
+  out ArraySize: PtrInt): integer;
+var
+  n, itemsize: PtrInt;
+  cmp: TRttiBinaryCompare;
+begin
+  Info := Info^.ArrayItemType(n, ArraySize);
+  if Info = nil then
+    result := StrCompL(A, B, ArraySize)
+  else
+  begin
+    if CaseSensitive then
+      cmp := _BINARYCOMPARE[Info^.Kind]
+    else
+      cmp := _BINARYCOMPAREI[Info^.Kind];
+    if Assigned(cmp) then // paranoid check
+      repeat
+        itemsize := cmp(A, B, Info, result);
+        inc(A, itemsize);
+        inc(B, itemsize);
+        if result <> 0 then
+          exit;
+        dec(n);
+      until n = 0
+    else
+      result := A - B;
+  end;
+end;
+
+function _BC_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ArrayCompare(A, B, Info, {casesens=}true, result);
+end;
+
+function _BCI_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ArrayCompare(A, B, Info, {casesens=}false, result);
+end;
+
+procedure _BS_VariantComplex(Data: PVariant; Dest: TBufferWriter);
+var
+  temp: TTextWriterStackBuffer;
+  tempstr: RawUTF8;
+begin // not very fast, but creates valid JSON - see also VariantSaveJSON()
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
+  try
+    AddVariant(Data^, twJSONEscape);
+    if WrittenBytes = 0 then
+      Dest.WriteVar(@temp, PendingBytes) // no tempstr allocation needed
+    else
+    begin
+      SetText(tempstr);
+      Dest.Write(tempstr);
+    end;
+  finally
+    Free;
+  end;
+end;
+
+procedure _BL_VariantComplex(Data: PVariant; var Source: TFastReader);
+var
+  temp: TSynTempBuffer;
+begin
+  Source.VarBlob(temp); // load and make a private copy for in-place JSON parsing
+  try
+    BinaryVariantLoadAsJSON(Data^, temp.buf);
+  finally
+    temp.Done;
+  end;
+end;
+
+const
+  // 0 for unserialized VType, 255 for valOleStr
+  VARIANT_SIZE: array[varEmpty .. varWord64] of byte = (
+    0, 0, 2, 4, 4, 8, 8, 8, 255, 0, 0, 2, 0, 0, 0, 0, 1, 1, 2, 4, 8, 8);
+
+function _BS_Variant(Data: PVarData; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+var
+  vt: cardinal;
+begin
+  Data := VarDataFromVariant(PVariant(Data)^); // handle varByRef
+  vt := Data^.VType;
+  Dest.Write2(vt);
+  if vt <= high(VARIANT_SIZE) then
+  begin
+    vt := VARIANT_SIZE[vt];
+    if vt <> 0 then
+      if vt = 255 then
+        Dest.WriteVar(Data^.vAny, length(PWideString(Data^.vAny)^) * 2)
+      else
+        Dest.Write(@Data^.VInt64, vt); // simple types
+  end
+  else if vt = varString then // expect only RawUTF8
+    Dest.WriteVar(Data^.vAny, length(PRawByteString(Data^.vAny)^))
+  {$ifdef HASVARUSTRING}
+  else if vt = varUString then
+    Dest.WriteVar(Data^.vAny, length(PUnicodeString(Data^.vAny)^))
+  {$endif HASVARUSTRING}
+  else
+    _BS_VariantComplex(pointer(Data), Dest);
+  result := SizeOf(Data^);
+end;
+
+function _BL_Variant(Data: PVarData; var Source: TFastReader; Info: PRttiInfo): PtrInt;
+var
+  vt: cardinal;
+begin
+  VarClear(PVariant(Data)^);
+  Source.Copy(@Data^.VType, 2);
+  Data^.VAny := nil; // to avoid GPF below
+  vt := Data^.VType;
+  if vt <= high(VARIANT_SIZE) then
+  begin
+    vt := VARIANT_SIZE[vt];
+    if vt <> 0 then
+      if vt = 255 then
+        with Source.VarBlob do
+          SetString(PWideString(Data^.vAny)^, PWideChar(Ptr), Len shr 1)
+      else
+        Source.Copy(@Data^.VInt64, vt); // simple types
+  end
+  else if vt = varString then
+    with Source.VarBlob do
+      FastSetString(PRawUTF8(Data^.vAny)^, Ptr, Len) // expect only RawUTF8
+  {$ifdef HASVARUSTRING}
+  else if vt = varUString then
+    with Source.VarBlob do
+      SetString(PUnicodeString(Data^.vAny)^, PWideChar(Ptr), Len shr 1)
+  {$endif HASVARUSTRING}
+  else if Assigned(BinaryVariantLoadAsJSON) then
+    _BL_VariantComplex(pointer(Data), Source)
+  else
+    Source.ErrorData('_BINARYLOAD[tkVariant]: missing mormot.core.variants.pas', []);
+  result := SizeOf(Data^);
+end;
+
+function _BC_Variant(A, B: PVarData; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := SortDynArrayVariantComp(A^, B^, {caseinsens=}false);
+  result := SizeOf(variant);
+end;
+
+function _BCI_Variant(A, B: PVarData; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := SortDynArrayVariantComp(A^, B^, {caseinsens=}true);
+  result := SizeOf(variant);
+end;
+
+
 procedure InitializeConstants;
 var
   i: PtrInt;
+  k: TRttiKind;
 begin
+  for k := low(k) to high(k) do
+    case k of
+      rkInteger, rkEnumeration, rkSet, rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
+      begin
+        _BINARYSAVE[k] := @_BS_Ord;
+        _BINARYLOAD[k] := @_BL_Ord;
+        _BINARYCOMPARE[k] := @_BC_Ord;
+        _BINARYCOMPAREI[k] := @_BC_Ord;
+      end;
+      {$ifdef FPC} rkQWord, {$endif} rkInt64:
+      begin
+        _BINARYSAVE[k] := @_BS_64;
+        _BINARYLOAD[k] := @_BL_64;
+        _BINARYCOMPARE[k] := @_BC_64;
+        _BINARYCOMPAREI[k] := @_BC_64;
+      end;
+      rkFloat:
+      begin
+        _BINARYSAVE[k] := @_BS_Float;
+        _BINARYLOAD[k] := @_BS_Float;
+        _BINARYCOMPARE[k] := @_BC_Float;
+        _BINARYCOMPAREI[k] := @_BC_Float;
+      end;
+      {$ifdef HASVARUSTRING} rkUString, {$endif} rkLString:
+      begin
+        _BINARYSAVE[k] := @_BS_String;
+        if k = rkLString then
+        begin
+          _BINARYLOAD[k] := @_BL_LString;
+          _BINARYCOMPARE[k] := @_BC_PUTF8Char;
+          _BINARYCOMPAREI[k] := @_BCI_PUTF8Char;
+        end
+        {$ifdef HASVARUSTRING}
+        else if k = rkUString then
+        begin
+          _BINARYLOAD[k] := @_BL_UString;
+          _BINARYCOMPARE[k] := @_BC_PWideChar;
+          _BINARYCOMPAREI[k] := @_BCI_PWideChar;
+        end;
+        {$endif HASVARUSTRING}
+      end; // rkLStringOld not generated any more
+      rkWString:
+      begin
+        _BINARYSAVE[k] := @_BS_WString;
+        _BINARYLOAD[k] := @_BL_WString;
+        _BINARYCOMPARE[k] := @_BC_PWideChar;
+        _BINARYCOMPAREI[k] := @_BCI_PWideChar;
+      end;
+      {$ifdef FPC} rkObject, {$endif} rkRecord:
+      begin
+        _BINARYSAVE[k] := @_BS_Record;
+        _BINARYLOAD[k] := @_BL_Record;
+        _BINARYCOMPARE[k] := @_BC_Record;
+        _BINARYCOMPAREI[k] := @_BCI_Record;
+      end;
+      rkDynArray:
+      begin
+        _BINARYSAVE[k] := @_BS_DynArray;
+        _BINARYLOAD[k] := @_BL_DynArray;
+        _BINARYCOMPARE[k] := @_BC_DynArray;
+        _BINARYCOMPAREI[k] := @_BCI_DynArray;
+      end;
+      rkArray:
+      begin
+        _BINARYSAVE[k] := @_BS_Array;
+        _BINARYLOAD[k] := @_BL_Array;
+        _BINARYCOMPARE[k] := @_BC_Array;
+        _BINARYCOMPAREI[k] := @_BCI_Array;
+      end;
+      rkVariant:
+      begin
+        _BINARYSAVE[k] := @_BS_Variant;
+        _BINARYLOAD[k] := @_BL_Variant;
+        _BINARYCOMPARE[k] := @_BC_Variant;
+        _BINARYCOMPAREI[k] := @_BCI_Variant;
+      end;
+    end; // other unsupported types will return 0
   FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
@@ -7104,6 +7930,9 @@ initialization
   InitializeConstants;
   SynCompressAlgos := TSynObjectList.Create;
   AlgoSynLZ := TAlgoSynLZ.Create;
+
+finalization
+  SynCompressAlgos.Free;
 
 end.
 
