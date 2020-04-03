@@ -8,7 +8,7 @@ unit mormot.core.datetime;
 
    Date and Time definitions and process shared by all framework units
     - ISO-8601 Compatible Date/Time Text Encoding
-    - TSynDate / TSynDateTime High-Level objects
+    - TSynDate / TSynDateTime / TSynSystemTime High-Level objects
     - TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time
     - TTimeLog efficient 64-bit custom date/time encoding
 
@@ -200,7 +200,7 @@ procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
 
 
 
-{ ************ TSynDate / TSynDateTime High-Level objects }
+{ ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
 type
   /// a type alias, which will be serialized as ISO-8601 with milliseconds
@@ -341,8 +341,12 @@ type
   /// pointer to our cross-platform and cross-compiler TSystemTime 128-bit structure
   PSynSystemTime = ^TSynSystemTime;
 
-/// our own fast version of the corresponding low-level function
+/// our own faster version of the corresponding RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
+
+/// our own faster version of the corresponding RTL function
+function IsLeapYear(Year: cardinal): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -771,7 +775,7 @@ begin
           exit; // invalid date format
         D := ord(P[6]) * 10 + ord(P[7]) - (48 + 480);
         if (D = 0) or (D > MonthDays[true][M]) then
-          exit; // worse is leap year=true
+          exit; // worse day number to allow is for leapyear=true
       end;
     end
     else
@@ -898,6 +902,7 @@ begin
     inc(P);
   D := ord(P[6]) * 10 + ord(P[7]) - (48 + 480);
   if (D <> 0) and (D <= MonthDays[true][M]) then
+    // worse day number to allow is for leapyear=true
     result := true;
 end;
 
@@ -1092,7 +1097,7 @@ begin
   M := 0;
   if Days > 31 then
   begin
-    inc(M);
+    inc(M); // years as increment, not absolute: always 365 days with no leap
     while Days > MonthDays[false][M] do
     begin
       dec(Days, MonthDays[false][M]);
@@ -1149,7 +1154,7 @@ begin
 end;
 
 
-{ ************ TSynDate / TSynDateTime High-Level objects }
+{ ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
 var
   // GlobalTime[LocalTime] cache protected using RCU128()
@@ -1491,7 +1496,8 @@ const
   HTML_WEEK_DAYS: array[1..7] of string[3] = (
     'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
   HTML_MONTH_NAMES: array[1..12] of string[3] = (
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
 
 function TSynSystemTime.ToNCSAText(P: PUTF8Char): PtrInt;
 var
@@ -1580,28 +1586,40 @@ begin
   PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
 end;
 
-procedure TSynSystemTime.IncrementMS(ms: integer);
+function IsLeapYear(Year: cardinal): boolean;
 begin
-  inc(MilliSecond, ms);
-  if MilliSecond >= 1000 then
+  result := (Year and 3 <> 0) and
+            ((Year - (Year div 100) * 100 <> 0) or  // (Year mod 100 > 0)
+             (Year - (Year div 400) * 400 = 0));    // (Year mod 400 = 0))
+end;
+
+procedure TSynSystemTime.IncrementMS(ms: integer);
+var
+  s, m, h: integer;
+begin
+  inc(ms, MilliSecond);
+  if ms >= 1000 then
     repeat
-      dec(MilliSecond, 1000);
-      if Second < 60 then
-        inc(Second)
+      dec(ms, 1000);
+      s := Second;
+      if s < 60 then
+        inc(s)
       else
       begin
-        Second := 0;
-        if Minute < 60 then
-          inc(Minute)
+        s := 0;
+        m := Minute;
+        if m < 60 then
+          inc(m)
         else
         begin
-          Minute := 0;
-          if Hour < 24 then
-            inc(Hour)
+          m := 0;
+          h := Hour;
+          if h < 24 then
+            inc(h)
           else
           begin
-            Hour := 0;
-            if Day < MonthDays[false, Month] then
+            h := 0;
+            if Day < MonthDays[IsLeapYear(Year)][Month] then
               inc(Day)
             else
             begin
@@ -1615,36 +1633,34 @@ begin
               end;
             end;
           end;
+          Hour := h;
         end;
+        Minute := m;
       end;
-    until MilliSecond < 1000;
+      Second := s;
+    until ms < 1000;
+  MilliSecond := ms;
 end;
 
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 var
   d100: TDiv100Rec;
 begin 
-  Result := False;
-  if (Month < 1) or (Month > 12) then
+  result := false;
+  if (Month = 0) or (Month > 12) or (Day = 0) or (Year = 0) or (Year > 10000) or
+     (Day > MonthDays[IsLeapYear(Year)][Month]) then
     exit;
-  if (Day <= MonthDays[((Year and 3) = 0) and
-    ((Year mod 100 > 0) or (Year mod 400 = 0))][Month]) and
-    (Year >= 1) and (Year < 10000) and (Month < 13) and (Day > 0) then
+  if Month > 2 then
+    dec(Month, 3)
+  else if Month > 0 then
   begin
-    if Month > 2 then
-      dec(Month, 3)
-    else if (Month > 0) then
-    begin
-      inc(Month, 9);
-      dec(Year);
-    end
-    else
-      exit; // Month <= 0
-    Div100(Year, d100{%H-});
-    Date := (146097 * d100.D) shr 2 + (1461 * d100.M) shr 2 +
-            (153 * Month + 2) div 5 + Day - 693900;
-    result := true;
+    inc(Month, 9);
+    dec(Year);
   end;
+  Div100(Year, d100{%H-});
+  Date := (146097 * d100.D) shr 2 + (1461 * d100.M) shr 2 +
+          (153 * Month + 2) div 5 + Day - 693900;
+  result := true;
 end;
 
 function NowToString(Expanded: boolean; FirstTimeChar: AnsiChar): RawUTF8;
@@ -1869,9 +1885,9 @@ end;
 procedure TTimeLogBits.From(FileDate: integer);
 begin
   {$ifdef MSWINDOWS}
-  From(PInt64Rec(@FileDate)^.Hi shr 9 + 1980, PInt64Rec(@FileDate)^.Hi shr 5 and 15,
-    PInt64Rec(@FileDate)^.Hi and 31, PInt64Rec(@FileDate)^.Lo shr 11,
-    PInt64Rec(@FileDate)^.Lo shr 5 and 63, PInt64Rec(@FileDate)^.Lo and 31 shl 1);
+  with PInt64Rec(@FileDate)^ do
+    From(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, Lo shr 11,
+      Lo shr 5 and 63, Lo and 31 shl 1);
   {$else} // FileDate depends on the running OS
   From(FileDateToDateTime(FileDate));
   {$endif}
