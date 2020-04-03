@@ -404,6 +404,9 @@ type
     procedure LockedSum(another: TSynMonitor); virtual;
     procedure WriteDetailsTo(W: TBaseWriter); virtual;
     procedure Changed; virtual;
+    // customize JSON Serialization to set woEnumSetsAsText
+    function BeforeWriteObject(W: TBaseWriter;
+      var Options: TTextWriterWriteObjectOptions): boolean; override;
   public
     /// low-level high-precision timer instance
     InternalTimer: TPrecisionTimer;
@@ -1052,6 +1055,17 @@ end;
 
 procedure TSynMonitor.Changed;
 begin // do nothing by default - overriden classes may track modified changes
+end;
+
+function TSynMonitor.BeforeWriteObject(W: TBaseWriter;
+  var Options: TTextWriterWriteObjectOptions): boolean;
+begin
+ if woFullExpand in Options then
+ begin // nested values do not need Instance name, but textual enums
+   exclude(Options, woFullExpand);
+   include(Options, woEnumSetsAsText);
+ end;
+ result := false; // continue serialization as usual
 end;
 
 procedure TSynMonitor.ProcessStart;

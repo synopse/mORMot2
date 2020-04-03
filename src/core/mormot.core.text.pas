@@ -667,6 +667,7 @@ type
     // internal temporary buffer
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
+    fCustomComment: PRawUTF8; // not RawUTF8 to avoid managed fields
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
@@ -955,16 +956,20 @@ type
 
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
-    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape); virtual;
-    /// this class implementation will raise an exception
-    // - use overriden TTextWriter version instead!
     function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
       EndOfObject: PUTF8Char): PUTF8Char; virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
+    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape); virtual;
+    /// this class implementation will raise an exception
+    // - use overriden TTextWriter version instead!
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]); virtual;
-    
+    /// used internally by WriteObject() when serializing a published property
+    // - will call AddCRAndIndent and check fCustomComment
+    procedure WriteObjectPropName(const PropName: ShortString;
+      Options: TTextWriterWriteObjectOptions);
+
     /// return the last char appended
     // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
@@ -1055,9 +1060,6 @@ type
 
 /// returns TRUE if Value is nil or all supplied Values[] equal ''
 function IsZero(const Values: TRawUTF8DynArray): boolean; overload;
-
-/// fill all entries of a supplied array of RawUTF8 with ''
-procedure FillZero(var Values: TRawUTF8DynArray); overload;
 
 /// quick helper to initialize a dynamic array of RawUTF8 from some constants
 // - can be used e.g. as:
@@ -5443,6 +5445,26 @@ begin
   raise ESynException.CreateUTF8('%.WriteObject unimplemented: use TTextWriter', [self]);
 end;
 
+procedure TBaseWriter.WriteObjectPropName(const PropName: ShortString;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  if woHumanReadable in Options then
+  begin
+    if (fCustomComment <> nil) and (fCustomComment^ <> '') then
+    begin
+      AddShort(' // ');
+      AddString(fCustomComment^);
+      fCustomComment^ := '';
+    end;
+    AddCRAndIndent; // won't do anything if has already be done
+  end;
+  if PropName = '' then
+    exit;
+  AddPropName(PropName); // handle twoForceJSONExtended in CustomOptions
+  if woHumanReadable in Options then
+    Add(' ');
+end;
+
 function TBaseWriter.GetTextLength: PtrUInt;
 begin
   if self = nil then
@@ -5749,15 +5771,14 @@ end;
 procedure TBaseWriter.AddQ(Value: QWord);
 var
   tmp: array[0..23] of AnsiChar;
-  V: Int64Rec absolute Value;
   P: PAnsiChar;
   Len: PtrInt;
 begin
   if BEnd - B <= 32 then
     FlushToStream;
-  if (V.Hi = 0) and (V.Lo <= high(SmallUInt32UTF8)) then
+  if Value <= high(SmallUInt32UTF8) then
   begin
-    P := pointer(SmallUInt32UTF8[V.Lo]);
+    P := pointer(SmallUInt32UTF8[Value]);
     Len := PStrLen(P - _STRLEN)^;
   end
   else
@@ -5841,7 +5862,7 @@ begin
   if BEnd - B <= PtrInt(ntabs) + 1 then
     FlushToStream;
   PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
-  FillCharFast(B[3], ntabs, 9); // #9=tab
+  FillCharFast(B[3], ntabs, 9);   // #9=tab
   inc(B, ntabs + 2);
 end;
 
@@ -6668,7 +6689,7 @@ end;
 
 function IsZero(const Values: TRawUTF8DynArray): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   for i := 0 to length(Values) - 1 do
@@ -6677,21 +6698,9 @@ begin
   result := true;
 end;
 
-procedure FillZero(var Values: TRawUTF8DynArray);
-var
-  i: integer;
-begin
-  for i := 0 to length(Values) - 1 do
-  {$ifdef FPC}
-    Finalize(Values[i]);
-  {$else}
-    Values[i] := '';
-  {$endif FPC}
-end;
-
 function TRawUTF8DynArrayFrom(const Values: array of RawUTF8): TRawUTF8DynArray;
 var
-  i: integer;
+  i: PtrInt;
 begin
   Finalize(result);
   SetLength(result, length(Values));
@@ -6952,7 +6961,7 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char
         ret
 @lt:    mov     r9, r13 // very unlikely P[rax]=nil
         jmp     @nxt
-@eq:    mov     r11, Value
+@eq:    mov     r11, Value // first char equal -> check others
 @sub:   mov     cl, byte ptr[r10]
         inc     r10
         inc     r11
@@ -7363,7 +7372,6 @@ function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 var
   c: QWord;
   d: cardinal;
-  {$ifndef CPU64} c64: Int64Rec absolute c; {$endif}
 begin
   if Value = 0 then
   begin
@@ -7375,11 +7383,7 @@ begin
     c := -Value
   else
     c := Value;
-  {$ifdef CPU64}
   if c < 10000 then
-  {$else}
-  if (c64.Hi = 0) and (c64.Lo < 10000) then
-  {$endif CPU64}
   begin
     result := P - 6; // only decimals -> append '0.xxxx'
     PWord(result)^ := ord('0') + ord('.') shl 8;
@@ -14434,6 +14438,7 @@ begin
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z'] then
       include(TEXT_CHARS[c], tcIdentifier);
     if c in ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z'] then
+      // cf. rfc3986 2.3. Unreserved Characters
       include(TEXT_CHARS[c], tcURIUnreserved);
     if c in [#1..#9, #11, #12, #14..' '] then
       include(TEXT_CHARS[c], tcCtrlNotLF);

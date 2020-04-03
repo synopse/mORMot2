@@ -573,6 +573,10 @@ type
     // - if Len is 0, writing will stop at #0 (default Len = 0 is slightly faster
     // than specifying Len>0 if you are sure P is zero-ended - e.g. from RawUTF8)
     procedure AddJSONEscape(P: Pointer; Len: PtrInt = 0); overload;
+    /// append some Unicode encoded chars to the buffer
+    // - if Len is 0, Len is calculated from zero-ended widechar
+    // - escapes chars according to the JSON RFC
+    procedure AddJSONEscapeW(P: PWord; Len: PtrInt = 0);
     /// append some UTF-8 encoded chars to the buffer, from a generic string type
     // - faster than AddJSONEscape(pointer(StringToUTF8(string))
     // - escapes chars according to the JSON RFC
@@ -585,10 +589,6 @@ type
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
     procedure AddNoJSONEscapeString(const s: string);  {$ifdef HASINLINE}inline;{$endif}
-    /// append some Unicode encoded chars to the buffer
-    // - if Len is 0, Len is calculated from zero-ended widechar
-    // - escapes chars according to the JSON RFC
-    procedure AddJSONEscapeW(P: PWord; Len: PtrInt = 0);
     /// append an open array constant value to the buffer
     // - "" will be added if necessary
     // - escapes chars according to the JSON RFC
@@ -651,6 +651,7 @@ type
     // - is the reverse of the JSONObjectAsJSONArrays() function
     procedure AddJSONArraysAsJSONObject(keys, values: PUTF8Char);
   end;
+
 
 implementation
 
@@ -2610,11 +2611,16 @@ var
 begin
   if Len > 0 then
     case CodePage of
-      CP_UTF8, CP_RAWBYTESTRING: // direct write of RawUTF8/RawByteString
+      CP_UTF8:          // direct write of RawUTF8 content
+        if Escape = twJSONEscape then
+          Add(PUTF8Char(P), 0, Escape) // faster with no Len
+        else
+          Add(PUTF8Char(P), Len, Escape); // expects a supplied Len
+      CP_RAWBYTESTRING: // direct write of RawByteString content
         Add(PUTF8Char(P), Len, Escape);
-      CP_UTF16:                  // direct write of UTF-16 content
+      CP_UTF16:         // direct write of UTF-16 content
         AddW(PWord(P), 0, Escape);
-      CP_SQLRAWBLOB:             // TSQLRawBlob written with Base-64 encoding
+      CP_SQLRAWBLOB:    // TSQLRawBlob written with Base-64 encoding
         begin
           AddNoJSONEscape(@PByteArray(@JSON_BASE64_MAGIC_QUOTE_VAR)[1], 3);
           WrBase64(P, Len, {withMagic=}false);
@@ -3070,7 +3076,7 @@ begin
   if P = nil then
     exit;
   if Len = 0 then
-    dec(Len); // -1 = no end
+    dec(Len); // -1 = no end = AddJSONEscape(P, 0)
   i := 0;
   {$ifndef CPUX86NOTPIC}
   tab := @JSON_ESCAPE;
@@ -3079,8 +3085,8 @@ begin
   begin
 noesc:
     start := i;
-    if Len < 0 then
-      repeat // fastest loop is for AddJSONEscape(P,nil)
+    if Len < 0 then  // fastest loop is with AddJSONEscape(P, 0)
+      repeat
         inc(i);
       until tab[PByteArray(P)[i]] <> JSON_ESCAPE_NONE
     else
@@ -3416,19 +3422,54 @@ begin
   Add('}');
 end;
 
-procedure TTextWriter.WriteObject(Value: TObject;
-  Options: TTextWriterWriteObjectOptions);
+
+type
+  TJSONObject =
+    (oNone, oObject, oException, oSynException, oList, oObjectList,
+     oCollection, oUtfs, oStrings, oPersistent,
+     oCustomReaderWriter, oCustomPropName);
+
+  (*
+  type
+    /// use a dedicated structure for easy maintenance of this recurcive code
+    TWriteAsJSONContext = record
+      W: TBaseWriter;
+      Options: TTextWriterWriteObjectOptions;
+      Instance: TObject;
+      Added: boolean;
+      PropName: PShortString;
+      CustomComment: RawUTF8;
+      tmpWS: WideString;
+      {$ifdef HASVARUSTRING}
+      tmpUS: UnicodeString;
+      {$endif HASVARUSTRING}
+      tmpS: RawByteString;
+      tmpV: variant;
+    end;
+
+  procedure TRttiProp.WriteAsJSON(var ctxt: TWriteAsJSONContext);
+  var
+    info: PRttiInfo;
+  begin
+    ctxt.W.WriteObjectPropName(ctxt.PropName^, ctxt.Options);
+    info := TypeInfo;
+
+  end;
+  *)
+
+procedure TTextWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
 begin
 
 
+  {  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
+  {  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
-  {
-    TODODODODODO !!!!!!!!!
-   *************************
-  }
+  {  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
+  {  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
+  {  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
 
 end;
