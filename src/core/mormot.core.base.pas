@@ -214,6 +214,14 @@ type
   // transmission of TSQLTableJSON result
   RawJSON = type RawUTF8;
 
+  /// a RawByteString sub-type used to store the BLOB content in our ORM
+  // - equals RawByteString for byte storage
+  // - TRttiInfo.AnsiStringCodePage will identify this type, and return
+  // CP_SQLRAWBLOB fake codepage for such a published property
+  // - our ORM will therefore identify such properties as BLOB
+  // - is defined here for proper TRttiProp.WriteAsJSON serialization
+  TSQLRawBlob = type RawByteString;
+
   /// SynUnicode is the fastest available Unicode native string type, depending
   //  on the compiler used
   // - this type is native to the compiler, so you can use Length() Copy() and
@@ -647,7 +655,10 @@ var
 type
   /// small structure used as convenient result to Div100() procedure
   TDiv100Rec = packed record
-    D, M: cardinal;
+    /// contains V div 100 after Div100(V)
+    D: cardinal;
+    /// contains V mod 100 after Div100(V)
+    M: cardinal;
   end;
 
   {$ifdef TSYNEXTENDED80}
@@ -1555,7 +1566,7 @@ type
   TDWordRec = record
     case integer of
     0: (V: DWord);
-    1: (L,H: word);
+    1: (L, H: word);
     2: (B: array[0..3] of byte);
   end;
   /// points to the binary of an unsigned 32-bit value
@@ -1565,9 +1576,10 @@ type
   TQWordRec = record
     case integer of
     0: (V: Qword);
-    1: (L,H: cardinal);
-    2: (W: array[0..3] of word);
-    3: (B: array[0..7] of byte);
+    1: (L, H: cardinal);
+    2: (Li, Hi: integer);
+    3: (W: array[0..3] of word);
+    4: (B: array[0..7] of byte);
   end;
   /// points to the binary of an unsigned 64-bit value
   PQWordRec = ^TQWordRec;
@@ -2172,6 +2184,19 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 // - entropy is gathered using 4 crc32c 32-bit hashes, via crcblock()
 procedure XorEntropy(entropy: PBlock128);
 
+/// convert the endianness of a given unsigned 32-bit integer into BigEndian
+function bswap32(a: cardinal): cardinal;
+  {$ifndef CPUINTEL}inline;{$endif}
+
+/// convert the endianness of a given unsigned 64-bit integer into BigEndian
+function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
+  {$ifndef CPUINTEL}inline;{$endif}
+
+/// convert the endianness of an array of unsigned 64-bit integer into BigEndian
+// - n is required to be > 0
+// - warning: on x86, a should be <> b
+procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+
 
 
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
@@ -2467,6 +2492,43 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
   {$ifndef CPUINTEL} inline; {$endif}
 
 
+/// retrieve the MIME content type from a supplied binary buffer
+// - inspect the first bytes, to guess from standard known headers
+// - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
+// - returns DefaultContentType if the binary buffer has an unknown layout
+function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
+  const DefaultContentType: RawUTF8): RawUTF8;
+
+/// retrieve the MIME content type from its file name or a supplied binary buffer
+// - will first check for known file extensions, then inspect the binary content
+// - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
+// - default is 'application/octet-stream' (BINARY_CONTENT_TYPE) or
+// 'application/fileextension' if FileName was specified
+// - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
+function GetMimeContentType(Content: Pointer; Len: PtrInt;
+  const FileName: TFileName = ''): RawUTF8;
+
+/// retrieve the HTTP header for MIME content type from a supplied binary buffer
+// - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
+// - can be used as such:
+// !  Call.OutHead := GetMimeContentTypeHeader(Call.OutBody,aFileName);
+function GetMimeContentTypeHeader(const Content: RawByteString;
+  const FileName: TFileName = ''): RawUTF8;
+
+/// retrieve if some content is compressed, from a supplied binary buffer
+// - returns TRUE, if the header in binary buffer "may" be compressed (this method
+// can trigger false positives), e.g. begin with most common already compressed
+// zip/gz/gif/png/jpeg/avi/mp3/mp4 markers (aka "magic numbers")
+function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
+
+/// fast guess of the size, in pixels, of a JPEG memory buffer
+// - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
+// - returns TRUE if the buffer is likely to be a JPEG picture, and set the
+// Height + Width variable with its dimensions - but there may be false positive
+// recognition, and no waranty that the memory buffer holds a valid JPEG picture
+// - returns FALSE if the buffer does not have any expected SOI/SOF markers
+function GetJpegSize(jpeg: PAnsiChar; len: PtrInt; out Height, Width: integer): boolean; overload;
+
 
 { ************ Efficient Variant Values Conversion }
 
@@ -2705,12 +2767,12 @@ type
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
 
-  /// a TStream using a RawByteString as internal storage
+  /// TStream using a RawByteString as internal storage
   // - default TStringStream uses WideChars since Delphi 2009, so it is
   // not compatible with previous versions, and it does make sense to
-  // work with RawByteString in our UTF-8 oriented framework
-  // - jus tlike TStringSTream, is designed for appending data, not modifying
-  // in-place, as requested e.g. by TTextWriter or TFileBufferWriter classes
+  // work with RawByteString/RawUTF8 in our UTF-8 oriented framework
+  // - just like TStringStream, is designed for appending data, not modifying
+  // in-place, as requested e.g. by TTextWriter or TBufferWriter classes
   TRawByteStringStream = class(TStream)
   protected
     fDataString: RawByteString;
@@ -2734,7 +2796,7 @@ type
     property DataString: RawByteString read fDataString write fDataString;
   end;
 
-  /// a TStream pointing to some in-memory data, for instance UTF-8 text
+  /// TStream pointing to some existing in-memory data, for instance UTF-8 text
   // - warning: there is no local copy of the supplied content: the
   // source data must be available during all the TSynMemoryStream usage
   TSynMemoryStream = class(TCustomMemoryStream)
@@ -3962,7 +4024,7 @@ var
   tab: PWordArray;
   {$endif}
 begin
-  if PInt64Rec(@val)^.Hi = 0 then
+  if PCardinalArray(@val)^[1] = 0 then
     P := StrUInt32(P, PCardinal(@val)^)
   else
   begin
@@ -3998,7 +4060,7 @@ begin
       dec(P, 2);
       PWord(P)^ := tab[c];
       c := c100;
-      if PInt64Rec(@c)^.Hi = 0 then
+      if (PCardinalArray(@c)^[1] = 0) then
       begin
         if PCardinal(@c)^ <> 0 then
           P := StrUInt32(P, PCardinal(@c)^);
@@ -4259,7 +4321,7 @@ procedure Div100(Y: cardinal; var res: TDiv100Rec); // asm on Delphi
 begin
   res.M := Y;
   res.D := Y div 100;   // FPC will use fast reciprocal
-  dec(res.M,res.D*100); // avoid div twice
+  dec(res.M, res.D * 100); // avoid div twice
 end;
 
 {$else not FPC}
@@ -7382,6 +7444,24 @@ begin // fallback to RTL asm e.g. for ARM
   {$endif FPC_64}
 end; // we don't check for ismultithread global
 
+procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+var
+  i: PtrInt;
+begin
+  for i := 0 to n-1 do
+    b^[i] := {$ifdef FPC}SwapEndian{$else}bswap64{$endif}(a^[i]);
+end;
+
+function bswap32(a: cardinal): cardinal;
+begin
+  result := SwapEndian(a); // use fast platform-specific function
+end;
+
+function bswap64(const a: QWord): QWord;
+begin
+  result := SwapEndian(a); // use fast platform-specific function
+end;
+
 {$endif CPUINTEL}
 
 {$ifndef ASMINTEL}
@@ -8115,18 +8195,18 @@ end;
 
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 var
-  hilo: Int64Rec absolute result;
+  lo: PtrInt;
 begin
-  hilo.Lo := crc32c(0, buf, len);
-  hilo.Hi := crc32c(hilo.Lo, buf, len);
+  lo := crc32c(0, buf, len);
+  result := Int64(lo) or (Int64(crc32c(lo, buf, len)) shl 32);
 end;
 
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 var
-  hilo: Int64Rec absolute result;
+  lo: PtrInt;
 begin
-  hilo.Lo := crc32c(0, buf, len);
-  hilo.Hi := crc32c(hilo.Lo, buf, len) and $7fffffff;
+  lo := crc32c(0, buf, len);
+  result := Int64(lo) or (Int64(crc32c(lo, buf, len) and $7fffffff) shl 32);
 end;
 
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
@@ -8507,6 +8587,265 @@ begin
   else
     result := (A - B) <= DoublePrec;
 end;
+
+function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
+  const DefaultContentType: RawUTF8): RawUTF8;
+begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
+  result := DefaultContentType;
+  if (Content <> nil) and (Len > 4) then
+    case PCardinal(Content)^ of
+      $04034B50:
+        result := 'application/zip'; // 50 4B 03 04
+      $46445025:
+        result := 'application/pdf'; //  25 50 44 46 2D 31 2E
+      $21726152:
+        result := 'application/x-rar-compressed'; // 52 61 72 21 1A 07 00
+      $AFBC7A37:
+        result := 'application/x-7z-compressed';  // 37 7A BC AF 27 1C
+      $694C5153:
+        result := 'application/x-sqlite3'; // SQlite format 3 = 53 51 4C 69
+      $75B22630:
+        result := 'audio/x-ms-wma'; // 30 26 B2 75 8E 66
+      $9AC6CDD7:
+        result := 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
+      $474E5089:
+        result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
+      $38464947:
+        result := 'image/gif'; // 47 49 46 38
+      $46464F77:
+        result := 'application/font-woff'; // wOFF in BigEndian
+      $A3DF451A:
+        result := 'video/webm'; // 1A 45 DF A3 MKV Matroska stream file
+      $002A4949, $2A004D4D, $2B004D4D:
+        result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
+      $46464952:
+        if Len > 16 then // RIFF
+          case PCardinalArray(Content)^[2] of
+            $50424557:
+              result := 'image/webp';
+            $20495641:
+              if PCardinalArray(Content)^[3] = $5453494C then
+                result := 'video/x-msvideo'; // Windows Audio Video Interleave file
+          end;
+      $E011CFD0: // Microsoft Office applications D0 CF 11 E0=DOCFILE
+        if Len > 600 then
+          case PWordArray(Content)^[256] of // at offset 512
+            $A5EC:
+              result := 'application/msword'; // EC A5 C1 00
+            $FFFD: // FD FF FF
+              case PByteArray(Content)^[516] of
+                $0E, $1C, $43:
+                  result := 'application/vnd.ms-powerpoint';
+                $10, $1F, $20, $22, $23, $28, $29:
+                  result := 'application/vnd.ms-excel';
+              end;
+          end;
+      $5367674F:
+        if Len > 14 then // OggS
+          if (PCardinalArray(Content)^[1] = $00000200) and
+             (PCardinalArray(Content)^[2] = $00000000) and
+                 (PWordArray(Content)^[6] = $0000) then
+            result := 'video/ogg';
+      $1C000000:
+        if Len > 12 then
+          if PCardinalArray(Content)^[1] = $70797466 then  // ftyp
+            case PCardinalArray(Content)^[2] of
+              $6D6F7369, // isom: ISO Base Media file (MPEG-4) v1
+              $3234706D: // mp42: MPEG-4 video/QuickTime file
+                result := 'video/mp4';
+              $35706733: // 3gp5: MPEG-4 video files
+                result := 'video/3gpp';
+            end;
+    else
+      case PCardinal(Content)^ and $00ffffff of
+        $685A42:
+          result := 'application/bzip2'; // 42 5A 68
+        $088B1F:
+          result := 'application/gzip'; // 1F 8B 08
+        $492049:
+          result := 'image/tiff'; // 49 20 49
+        $FFD8FF:
+          result := JPEG_CONTENT_TYPE; // FF D8 FF DB/E0/E1/E2/E3/E8
+      else
+        case PWord(Content)^ of
+          $4D42:
+            result := 'image/bmp'; // 42 4D
+        end;
+      end;
+    end;
+end;
+
+function GetMimeContentType(Content: Pointer; Len: PtrInt;
+  const FileName: TFileName): RawUTF8;
+begin
+  if FileName <> '' then
+  begin // file extension is more precise -> check first
+    result := RawUTF8(LowerCase(ExtractFileExt(FileName)));
+    case PosEx(copy(result, 2, 4),
+      'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,' +
+      // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
+      'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,' +
+      // 63  68  72  76   81   86   91   96  100  105  110 114 118 122
+      'm2p,mp3,h264,text,log,gz,webm,mkv,rar,7z') of
+      // 126 130 134 139 144 148 151 156 160 164
+      1:
+        result := 'image/png';
+      5:
+        result := 'image/gif';
+      9:
+        result := 'image/tiff';
+      14, 18:
+        result := JPEG_CONTENT_TYPE;
+      23:
+        result := 'image/bmp';
+      27, 91:
+        result := 'application/msword';
+      31, 35:
+        result := HTML_CONTENT_TYPE;
+      40:
+        result := 'text/css';
+      44: // text/javascript and application/x-javascript are obsolete (RFC 4329)
+        result := 'application/javascript';
+      47:
+        result := 'image/x-icon';
+      51, 105:
+        result := 'application/font-woff';
+      55, 139, 144:
+        result := TEXT_CONTENT_TYPE;
+      59:
+        result := 'image/svg+xml';
+      63, 68, 72, 96:
+        result := XML_CONTENT_TYPE;
+      76:
+        result := 'image/webp';
+      81, 86:
+        result := 'text/cache-manifest';
+      100:
+        result := JSON_CONTENT_TYPE_VAR;
+      110, 114:
+        result := 'video/ogg';  // RFC 5334
+      118:
+        result := 'video/mp4';  // RFC 4337 6381
+      122, 126:
+        result := 'video/mp2';
+      130:
+        result := 'audio/mpeg'; // RFC 3003
+      134:
+        result := 'video/H264'; // RFC 6184
+      148:
+        result := 'application/gzip';
+      151, 156:
+        result := 'video/webm';
+      160:
+        result := 'application/x-rar-compressed';
+      164:
+        result := 'application/x-7z-compressed';
+    else
+      result := GetMimeContentTypeFromBuffer(Content, Len,
+        'application/' + copy(result, 2, 20));
+    end;
+  end
+  else
+    result := GetMimeContentTypeFromBuffer(Content, Len, BINARY_CONTENT_TYPE);
+end;
+
+function GetMimeContentTypeHeader(const Content: RawByteString;
+  const FileName: TFileName): RawUTF8;
+begin
+  result := HEADER_CONTENT_TYPE +
+    GetMimeContentType(Pointer(Content), length(Content), FileName);
+end;
+
+function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
+begin // see http://www.garykessler.net/library/file_sigs.html
+  result := false;
+  if (Content <> nil) and (Len > 8) then
+    case PCardinal(Content)^ of
+      $002a4949, $2a004d4d, $2b004d4d, // 'image/tiff'
+      $04034b50, // 'application/zip' = 50 4B 03 04
+      $184d2204, // LZ4 stream format = 04 22 4D 18
+      $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
+      $28635349, // cab = 49 53 63 28
+      $38464947, // 'image/gif' = 47 49 46 38
+      $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
+      $4643534d, // cab = 4D 53 43 46 [MSCF]
+      $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]
+      $46464f77, // 'application/font-woff' = wOFF in BigEndian
+      $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+      $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
+      $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
+      $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
+      $89a8275f, // jar = 5F 27 A8 89
+      $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
+      $a5a5a5a5, // .mab file = MAGIC_MAB in SynLog.pas
+      $a5aba5a5, // .data = TSQLRESTSTORAGEINMEMORY_MAGIC in mORMot.pas
+      $aba51051, // .log.synlz = LOG_MAGIC in SynLog.pas
+      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in SynSQLite3.pas
+      $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
+      $b7010000, $ba010000, // mpeg = 00 00 01 Bx
+      $cececece, // jceks = CE CE CE CE
+      $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
+        result := true;
+    else
+      case PCardinal(Content)^ and $00ffffff of
+        $088b1f, // 'application/gzip' = 1F 8B 08
+        $334449, // mp3 = 49 44 33 [ID3]
+        $492049, // 'image/tiff' = 49 20 49
+        $535746, // swf = 46 57 53 [FWS]
+        $535743, // swf = 43 57 53 [zlib]
+        $53575a, // zws/swf = 5A 57 53 [FWS]
+        $564c46, // flv = 46 4C 56 [FLV]
+        $685a42, // 'application/bzip2' = 42 5A 68
+        $ffd8ff: // JPEG_CONTENT_TYPE = FF D8 FF DB/E0/E1/E2/E3/E8
+          result := true;
+      else
+        case PCardinalArray(Content)^[1] of // 4 byte offset
+          1{TAlgoSynLZ.AlgoID}: // crc32 01 00 00 00 crc32 = Compress() header
+            result := PCardinalArray(Content)^[0] <> PCardinalArray(Content)^[2];
+          $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
+          $766f6f6d: // mov = 6D 6F 6F 76
+            result := true;
+        end;
+      end;
+    end;
+end;
+
+function GetJpegSize(jpeg: PAnsiChar; len: PtrInt; out Height, Width: integer): boolean;
+var
+  je: PAnsiChar;
+begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
+  result := false;
+  if (jpeg = nil) or (len < 100) or (PWord(jpeg)^ <> $d8ff) then // SOI
+    exit;
+  je := jpeg + len - 1;
+  inc(jpeg, 2);
+  while jpeg < je do
+  begin
+    if jpeg^ <> #$ff then
+      exit;
+    inc(jpeg);
+    case ord(jpeg^) of
+      $c0..$c3, $c5..$c7, $c9..$cb, $cd..$cf: // SOF
+        begin
+          Height := swap(PWord(jpeg + 4)^);
+          Width := swap(PWord(jpeg + 6)^);
+          result := (Height > 0) and (Height < 20000) and
+                    (Width > 0) and (Width < 20000);
+          exit;
+        end;
+      $d0..$d8, $01: // RST, SOI
+        inc(jpeg);
+      $d9: // EOI
+        break;
+      $ff: // padding
+        ;
+    else
+      inc(jpeg, swap(PWord(jpeg + 1)^) + 1);
+    end;
+  end;
+end;
+
+
 
 
 { ************ Efficient Variant Values Conversion }
@@ -9144,9 +9483,6 @@ end;
 
 function TSynMemoryStream.Write(const Buffer; Count: Integer): Longint;
 begin
-  {$ifdef FPC}
-  result := 0; // makes FPC compiler happy
-  {$endif FPC}
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
 end;
 

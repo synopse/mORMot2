@@ -941,6 +941,45 @@ asm // adapted from FPC compiler output, which is much better than Delphi's here
         mov     dword ptr [ecx+0CH], edx
 end;
 
+function bswap32(a: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+  bswap eax
+end;
+
+function bswap64({$ifdef FPC}constref{$else}const{$endif} a: QWord): QWord;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        {$ifdef FPC}
+        mov     edx, dword ptr[eax]
+        mov     eax, dword ptr[eax + 4]
+        {$else}
+        mov     edx, a.TQWordRec.L
+        mov     eax, a.TQWordRec.H
+        {$endif FPC}
+        bswap   edx
+        bswap   eax
+end;
+
+procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+@1:     mov     ebx, dword ptr[eax]
+        mov     esi, dword ptr[eax + 4]
+        bswap   ebx
+        bswap   esi
+        mov     dword ptr[edx + 4], ebx
+        mov     dword ptr[edx], esi
+        add     eax, 8
+        add     edx, 8
+        dec     ecx
+        jnz     @1
+        pop     esi
+        pop     ebx
+end;
+
 function InterlockedIncrement(var I: Integer): Integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

@@ -841,6 +841,29 @@ procedure mul64x64(const left, right: QWord; out product: THash128Rec);
         mov     qword ptr [r8+8], rdx
 end;
 
+function bswap32(a: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     eax, a
+        bswap   eax
+end;
+
+function bswap64(const a: QWord): QWord;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     rax, a
+        bswap   rax
+end;
+
+procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+@1:     mov     rax, qword ptr[a]
+        bswap   rax
+        mov     qword ptr[b], rax
+        add     a, 8
+        add     b, 8
+        dec     n
+        jnz @1
+end;
+
 function StrLenSSE2(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize

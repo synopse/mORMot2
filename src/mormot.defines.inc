@@ -180,6 +180,7 @@
       {$ASMMODE INTEL}       // as Delphi expects
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X86}
       {$ifndef DARWIN}
         {$define ASMX86}     // supports asm with globals
         {$define ASMINTEL}   // either ASMX86 or ASMX64
