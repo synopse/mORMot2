@@ -953,7 +953,7 @@ begin // fast cross-platform implementation
     _TmpCounter := Random32;
   retry := 10;
   repeat // thread-safe unique file name generation
-    result := Format('%s%s_%d.tmp', [folder, ExeVersion.ProgramName,
+    result := Format('%s%s_%x.tmp', [folder, ExeVersion.ProgramName,
       InterlockedIncrement(_TmpCounter)]);
     if not FileExists(result) then
       exit;
@@ -974,7 +974,7 @@ begin
     exit;
   retry := 20;
   repeat
-    fn := Format('%s' + PathDelim + '%s.test', [dir, Random32]);
+    fn := Format('%s' + PathDelim + '%x.test', [dir, Random32]);
     if not FileExists(fn) then
       break;
     dec(retry); // never loop forever
@@ -1057,6 +1057,8 @@ begin
   Build := aBuild;
   Main := Format('%d.%d', [Major, Minor]);
   fDetailed := Format('%d.%d.%d.%d', [Major, Minor, Release, Build]);
+  fVersionInfo :=  '';
+  fUserAgent := '';
 end;
 
 function TFileVersion.BuildDateTimeString: string;
