@@ -182,6 +182,18 @@ begin
     res.Lo := GetFileSize(F, @res.Hi);
 end;
 
+function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
+var
+  r: TQWordRec;
+begin
+  r.V := Offset;
+  r.L := SetFilePointer(Handle, R.L, @R.H, Origin);
+  if (r.Li = -1) and (GetLastError <> 0) then
+    result := -1
+  else
+    result := r.V;
+end;
+
 function DeleteFile(const aFileName: TFileName): boolean;
 begin
   result := SysUtils.DeleteFile(aFileName);
@@ -889,7 +901,7 @@ begin
     end;
   end;
   reg.Close;
-  BiosInfoText := manuf + prod;
+  BiosInfoText := manuf{%H-} + prod;
   if prodver <> '' then
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then

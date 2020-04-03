@@ -619,6 +619,11 @@ function FileSize(const FileName: TFileName): Int64; overload;
 // - returns 0 if file doesn't exist
 function FileSize(F: THandle): Int64; overload;
 
+/// FileSeek() overloaded function, working with huge files
+// - Delphi FileSeek() is buggy -> use this function to safe access files > 2 GB
+// (thanks to sanyin for the report)
+function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int64;
+
 /// get low-level file information, in a cross-platform way
 // - returns true on success
 // - here file write/creation time are given as TUnixMSTime values, for better
@@ -655,6 +660,7 @@ function FileOpenSequentialRead(const FileName: string): Integer;
 
 /// returns a TFileStream optimized for one pass file reading
 // - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
+// - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 
 /// read a File content into a String
@@ -816,9 +822,29 @@ begin
             (F.Name <> '') and (F.Name <> '.') and (F.Name <> '..');
 end;
 
+{$ifdef FPC}
+type
+  // FPC TFileStream miss a Create(aHandle) constructor like Delphi
+  TFileStreamFromHandle = class(THandleStream)
+  public
+    destructor Destroy; override;
+  end;
+
+destructor TFileStreamFromHandle.Destroy;
+begin
+  FileClose(Handle); // otherwise file is still opened
+end;
+
+{$else}
+
+type
+  TFileStreamFromHandle = TFileStream;
+
+{$endif FPC}
+
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 begin
-  result := THandleStream.Create(FileOpenSequentialRead(FileName));
+  result := TFileStreamFromHandle.Create(FileOpenSequentialRead(FileName));
 end;
 
 function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;

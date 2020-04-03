@@ -335,6 +335,11 @@ begin
     result := FileInfo.st_size;
 end;
 
+function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
+begin
+  result := FPLSeek(Handle, Offset, Origin);
+end;
+
 function FileInfoByHandle(aFileHandle: THandle;
   out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): Boolean;
 var
@@ -366,22 +371,6 @@ end;
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin // SysUtils.FileOpen = fpOpen + fpFlock
   result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
-end;
-
-function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
-  lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;
-var
-  offs: Int64;
-begin
-  Int64Rec(offs).Lo := lDistanceToMove;
-  if lpDistanceToMoveHigh = nil then
-    Int64Rec(offs).Hi := 0
-  else
-    Int64Rec(offs).Hi := PDWord(lpDistanceToMoveHigh)^;
-  offs := FpLseek(hFile, offs, dwMoveMethod);
-  result := Int64Rec(offs).Lo;
-  if lpDistanceToMoveHigh <> nil then
-    PDWord(lpDistanceToMoveHigh)^ := Int64Rec(offs).Hi;
 end;
 
 procedure SetEndOfFile(hFile: cInt);
