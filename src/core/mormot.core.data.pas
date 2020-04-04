@@ -1617,13 +1617,11 @@ var
   // - for efficient retrieval from binary of managed and unmanaged types
   _BINARYLOAD: TRttiBinaryLoads;
 
-  /// lookup table for case-sensitive comparison of any RTTI type value
+  /// lookup table for comparison of any RTTI type value
   // - for efficient search or sorting of managed and unmanaged types
-  _BINARYCOMPARE: TRttiBinaryCompares;
-
-  /// lookup table for case-insensitive comparison of any RTTI type value
-  // - for efficient search or sorting of managed and unmanaged types
-  _BINARYCOMPAREI: TRttiBinaryCompares;
+  // - _BINARYCOMPARE[false] for case-sensitive comparison
+  // - _BINARYCOMPARE[true] for case-insensitive comparison
+  _BINARYCOMPARE: array[{caseinsensitive=}boolean] of TRttiBinaryCompares;
 
 
 /// raw binary serialization of a dynamic array
@@ -1634,17 +1632,16 @@ procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
 
 /// raw comparison of two dynamic arrays
 // - as called e.g. by TDynArray.Equals, using ExternalCountA/B optional parameter
-// - _BINARYCOMPARE[rkDynArray] and _BINARYCOMPAREI[rkDynArray] are wrappers
-// to this function, with ExternalCountA/B=nil
+// - _BINARYCOMPARE[true/false,rkDynArray] are wrappers to this, with ExternalCount=nil
 function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
   Info: PRttiInfo; CaseSensitive: boolean): integer;
 
 /// raw comparison of two records
-// - _BINARYCOMPARE[rkRecord] and _BINARYCOMPAREI[rkRecord] are wrappers to this
+// - _BINARYCOMPARE[true/false,rkRecord] are wrappers to this
 function RecordCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean): integer;
 
 /// raw comparison of two static arrays
-// - _BINARYCOMPARE[rkArray] and _BINARYCOMPAREI[rkArray] are wrappers to this
+// - _BINARYCOMPARE[true/false,rkArray] are wrappers to this
 function ArrayCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean;
   out ArraySize: PtrInt): integer;
 
@@ -7488,11 +7485,7 @@ begin
     n2 := ExternalCountB^
   else
     n2 := PDynArrayRec(B - SizeOf(TDynArrayRec))^.length;
-  if CaseSensitive then
-    comps := @_BINARYCOMPARE
-  else
-    comps := @_BINARYCOMPAREI;
-  comp := comps^[Info^.Kind];
+  comp := _BINARYCOMPARE[CaseSensitive, Info^.Kind];
   repeat
     itemsize := comp(A, B, Info, result);
     inc(A, itemsize);
@@ -7595,10 +7588,7 @@ var
 begin
   Info^.RecordManagedFields(fields);
   f := fields.Fields;
-  if CaseSensitive then
-    fields.Fields := @_BINARYCOMPARE // reuse pointer slot on stack
-  else
-    fields.Fields := @_BINARYCOMPAREI;
+  fields.Fields := @_BINARYCOMPARE[CaseSensitive]; // reuse pointer slot on stack
   offset := 0;
   while fields.Count <> 0 do
   begin
@@ -7692,10 +7682,7 @@ begin
     result := StrCompL(A, B, ArraySize)
   else
   begin
-    if CaseSensitive then
-      cmp := _BINARYCOMPARE[Info^.Kind]
-    else
-      cmp := _BINARYCOMPAREI[Info^.Kind];
+    cmp := _BINARYCOMPARE[CaseSensitive, Info^.Kind];
     if Assigned(cmp) then // paranoid check
       repeat
         itemsize := cmp(A, B, Info, result);
@@ -7841,22 +7828,22 @@ begin
       begin
         _BINARYSAVE[k] := @_BS_Ord;
         _BINARYLOAD[k] := @_BL_Ord;
-        _BINARYCOMPARE[k] := @_BC_Ord;
-        _BINARYCOMPAREI[k] := @_BC_Ord;
+        _BINARYCOMPARE[false, k] := @_BC_Ord;
+        _BINARYCOMPARE[true, k] := @_BC_Ord;
       end;
       {$ifdef FPC} rkQWord, {$endif} rkInt64:
       begin
         _BINARYSAVE[k] := @_BS_64;
         _BINARYLOAD[k] := @_BL_64;
-        _BINARYCOMPARE[k] := @_BC_64;
-        _BINARYCOMPAREI[k] := @_BC_64;
+        _BINARYCOMPARE[false, k] := @_BC_64;
+        _BINARYCOMPARE[true, k] := @_BC_64;
       end;
       rkFloat:
       begin
         _BINARYSAVE[k] := @_BS_Float;
         _BINARYLOAD[k] := @_BS_Float;
-        _BINARYCOMPARE[k] := @_BC_Float;
-        _BINARYCOMPAREI[k] := @_BC_Float;
+        _BINARYCOMPARE[false, k] := @_BC_Float;
+        _BINARYCOMPARE[true, k] := @_BC_Float;
       end;
       {$ifdef HASVARUSTRING} rkUString, {$endif} rkLString:
       begin
@@ -7864,15 +7851,15 @@ begin
         if k = rkLString then
         begin
           _BINARYLOAD[k] := @_BL_LString;
-          _BINARYCOMPARE[k] := @_BC_PUTF8Char;
-          _BINARYCOMPAREI[k] := @_BCI_PUTF8Char;
+          _BINARYCOMPARE[false, k] := @_BC_PUTF8Char;
+          _BINARYCOMPARE[true, k] := @_BCI_PUTF8Char;
         end
         {$ifdef HASVARUSTRING}
         else if k = rkUString then
         begin
           _BINARYLOAD[k] := @_BL_UString;
-          _BINARYCOMPARE[k] := @_BC_PWideChar;
-          _BINARYCOMPAREI[k] := @_BCI_PWideChar;
+          _BINARYCOMPARE[false, k] := @_BC_PWideChar;
+          _BINARYCOMPARE[true, k] := @_BCI_PWideChar;
         end;
         {$endif HASVARUSTRING}
       end; // rkLStringOld not generated any more
@@ -7880,36 +7867,36 @@ begin
       begin
         _BINARYSAVE[k] := @_BS_WString;
         _BINARYLOAD[k] := @_BL_WString;
-        _BINARYCOMPARE[k] := @_BC_PWideChar;
-        _BINARYCOMPAREI[k] := @_BCI_PWideChar;
+        _BINARYCOMPARE[false, k] := @_BC_PWideChar;
+        _BINARYCOMPARE[true, k] := @_BCI_PWideChar;
       end;
       {$ifdef FPC} rkObject, {$endif} rkRecord:
       begin
         _BINARYSAVE[k] := @_BS_Record;
         _BINARYLOAD[k] := @_BL_Record;
-        _BINARYCOMPARE[k] := @_BC_Record;
-        _BINARYCOMPAREI[k] := @_BCI_Record;
+        _BINARYCOMPARE[false, k] := @_BC_Record;
+        _BINARYCOMPARE[true, k] := @_BCI_Record;
       end;
       rkDynArray:
       begin
         _BINARYSAVE[k] := @_BS_DynArray;
         _BINARYLOAD[k] := @_BL_DynArray;
-        _BINARYCOMPARE[k] := @_BC_DynArray;
-        _BINARYCOMPAREI[k] := @_BCI_DynArray;
+        _BINARYCOMPARE[false, k] := @_BC_DynArray;
+        _BINARYCOMPARE[true, k] := @_BCI_DynArray;
       end;
       rkArray:
       begin
         _BINARYSAVE[k] := @_BS_Array;
         _BINARYLOAD[k] := @_BL_Array;
-        _BINARYCOMPARE[k] := @_BC_Array;
-        _BINARYCOMPAREI[k] := @_BCI_Array;
+        _BINARYCOMPARE[false, k] := @_BC_Array;
+        _BINARYCOMPARE[true, k] := @_BCI_Array;
       end;
       rkVariant:
       begin
         _BINARYSAVE[k] := @_BS_Variant;
         _BINARYLOAD[k] := @_BL_Variant;
-        _BINARYCOMPARE[k] := @_BC_Variant;
-        _BINARYCOMPAREI[k] := @_BCI_Variant;
+        _BINARYCOMPARE[false, k] := @_BC_Variant;
+        _BINARYCOMPARE[true, k] := @_BCI_Variant;
       end;
     end; // other unsupported types will return 0
   FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
