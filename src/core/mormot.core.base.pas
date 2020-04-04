@@ -2130,6 +2130,12 @@ function GotoNextLine(source: PUTF8Char): PUTF8Char;
 function GetFileNameWithoutExt(const FileName: TFileName;
   Extension: PFileName = nil): TFileName;
 
+/// creates a directory if not already existing
+// - returns the full expanded directory name, including trailing backslash
+// - returns '' on error, unless RaiseExceptionOnCreationFailure is true
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+
 type
   /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
   // - cross-compiler and cross-platform efficient randomness generator, very
@@ -2219,6 +2225,10 @@ type
     /// where the text/binary is available (and any Source has been copied)
     // - equals nil if len=0
     buf: pointer;
+    /// default 4KB buffer allocated on stack - after the len/buf main fields
+    // - 16 last bytes are reseverd to prevent potential buffer overflow,
+    // so usable length is 4080 bytes
+    tmp: array[0..4095] of AnsiChar;
     /// initialize a temporary copy of the content supplied as RawByteString
     // - will also allocate and copy the ending #0 (even for binary)
     procedure Init(const Source: RawByteString); overload;
@@ -2230,7 +2240,7 @@ type
     function Init(SourceLen: PtrInt): pointer; overload;
     /// initialize a temporary buffer with the length of the internal stack
     function InitOnStack: pointer;
-    /// initialize the buffer returning the internal buffer size (4095 bytes)
+    /// initialize the buffer returning the internal buffer size (4080 bytes)
     // - could be used e.g. for an API call, first trying with plain temp.Init
     // and using temp.buf and temp.len safely in the call, only calling
     // temp.Init(expectedsize) if the API returned an error about an insufficient
@@ -2247,9 +2257,6 @@ type
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload;
-  private
-    // default 4KB buffer allocated on stack - after the len/buf main fields
-    tmp: array[0..4095] of AnsiChar;
   end;
 
 /// logical OR of two memory buffers
@@ -2787,6 +2794,7 @@ type
   protected
     fDataString: RawByteString;
     fPosition: Integer;
+    function  GetSize: Int64; override;
     procedure SetSize(NewSize: Longint); override;
   public
     /// initialize the storage, optionally with some RawByteString content
@@ -2794,6 +2802,8 @@ type
     /// read some bytes from the internal storage
     // - returns the number of bytes filled into Buffer (<=Count)
     function Read(var Buffer; Count: Longint): Longint; override;
+    /// change the current Read/Write position, within current stored range
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// change the current Read/Write position, within current stored range
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// append some data to the buffer
@@ -2825,12 +2835,6 @@ type
     /// this TStream is read-only: calling this method will raise an exception
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
-
-/// creates a directory if not already existing
-// - returns the full expanded directory name, including trailing backslash
-// - returns '' on error, unless RaiseExceptionOnCreationFailure is true
-function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
 
 
 { ************ Some Reusable Constant Definitions }
@@ -7017,6 +7021,18 @@ begin
   end;
 end;
 
+function EnsureDirectoryExists(const Directory: TFileName;
+  RaiseExceptionOnCreationFailure: boolean): TFileName;
+begin
+  result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
+  if not DirectoryExists(result) then
+    if not CreateDir(result) then
+      if not RaiseExceptionOnCreationFailure then
+        result := ''
+      else
+        raise Exception.CreateFmt('Impossible to create folder %s', [result]);
+end;
+
 procedure FillZero(var dest; count: PtrInt);
 begin
   FillCharFast(dest, count, 0);
@@ -7935,14 +7951,14 @@ end;
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: PtrInt);
 begin
   len := SourceLen;
-  if len <= 0 then
+  if SourceLen <= 0 then
     buf := nil
   else
   begin
-    if len <= SizeOf(tmp) - 16 then
+    if SourceLen <= SizeOf(tmp) - 16 then // max internal tmp is 4080 bytes
       buf := @tmp
     else
-      GetMem(buf, len + 16); // +16 for trailing #0 and for PInteger() parsing
+      GetMem(buf, SourceLen + 16); // +16 for trailing #0 and for PInteger() parsing
     if Source <> nil then
     begin
       MoveFast(Source^, buf^, len);
@@ -7972,14 +7988,14 @@ end;
 function TSynTempBuffer.Init(SourceLen: PtrInt): pointer;
 begin
   len := SourceLen;
-  if len <= 0 then
+  if SourceLen <= 0 then
     buf := nil
   else
   begin
-    if len <= SizeOf(tmp) - 16 then
+    if SourceLen <= SizeOf(tmp) - 16 then // max internal tmp is 4080 bytes
       buf := @tmp
     else
-      GetMem(buf, len + 16); // +16 for trailing #0 and for PInteger() parsing
+      GetMem(buf, SourceLen + 16); // +16 for trailing #0 and buffer overflow
   end;
   result := buf;
 end;
@@ -7987,7 +8003,7 @@ end;
 function TSynTempBuffer.Init: integer;
 begin
   buf := @tmp;
-  result := SizeOf(tmp) - 16;
+  result := SizeOf(tmp) - 16; // set to maximum safe size, which is 4080 bytes
   len := result;
 end;
 
@@ -9422,7 +9438,7 @@ begin
   fDataString := aString;
 end;
 
-function TRawByteStringStream.Read(var Buffer; Count: Integer): Longint;
+function TRawByteStringStream.Read(var Buffer; Count: Longint): Longint;
 begin
   if Count <= 0 then
     result := 0
@@ -9436,31 +9452,44 @@ begin
   end;
 end;
 
-function TRawByteStringStream.Seek(Offset: Integer; Origin: Word): Longint;
+function TRawByteStringStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+var
+  size: Int64;
 begin
+  size := length(fDataString);
   case Origin of
-    soFromBeginning:
-      fPosition := Offset;
-    soFromCurrent:
-      fPosition := fPosition + Offset;
-    soFromEnd:
-      fPosition := Length(fDataString) - Offset;
+    soBeginning:
+      result := Offset;
+    soEnd:
+      result := size - Offset;
+    else
+      result := fPosition + Offset;
   end;
-  if fPosition > Length(fDataString) then
-    fPosition := Length(fDataString)
-  else if fPosition < 0 then
-    fPosition := 0;
-  result := fPosition;
+  if result > size then
+    result := size
+  else if result < 0 then
+    result := 0;
+  fPosition := result;
 end;
 
-procedure TRawByteStringStream.SetSize(NewSize: Integer);
+function TRawByteStringStream.Seek(Offset: Longint; Origin: Word): Longint;
+begin
+  result := Seek(Offset, TSeekOrigin(Origin)); // call the 64-bit version above
+end;
+
+function TRawByteStringStream.GetSize: Int64;
+begin // faster than the TStream inherited method calling Seek() twice
+  result := length(fDataString);
+end;
+
+procedure TRawByteStringStream.SetSize(NewSize: Longint);
 begin
   SetLength(fDataString, NewSize);
   if fPosition > NewSize then
     fPosition := NewSize;
 end;
 
-function TRawByteStringStream.Write(const Buffer; Count: Integer): Longint;
+function TRawByteStringStream.Write(const Buffer; Count: Longint): Longint;
 begin
   if Count <= 0 then
     result := 0
@@ -9479,7 +9508,7 @@ begin
   begin
     {$ifdef HASCODEPAGE} // FPC expects this
     SetCodePage(fDataString, CP_UTF8, false);
-    {$endif}
+    {$endif HASCODEPAGE}
     Text := fDataString;
   end
   else
@@ -9504,18 +9533,6 @@ end;
 function TSynMemoryStream.Write(const Buffer; Count: Integer): Longint;
 begin
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
-end;
-
-function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean): TFileName;
-begin
-  result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
-  if not DirectoryExists(result) then
-    if not CreateDir(result) then
-      if not RaiseExceptionOnCreationFailure then
-        result := ''
-      else
-        raise Exception.CreateFmt('Impossible to create folder %s', [result]);
 end;
 
 

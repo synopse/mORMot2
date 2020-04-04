@@ -72,8 +72,6 @@ const
                     rkObject, rkRecord, rkDynArray, rkInterface, rkVariant];
   /// maps record or object in TRttiKind enumerate
   rkRecordTypes = [rkObject, rkRecord];
-  /// maps record or object in TRttiKind enumerate
-  rkRecordKinds = [rkObject, rkRecord];
 
 type
   ///  TTypeKind enumerate as defined in Delphi 6 and up
@@ -117,8 +115,6 @@ const
                     rkArray, rkRecord, rkDynArray, rkInterface, rkVariant];
   /// maps record or object in TTypeKind RTTI enumerate
   rkRecordTypes = [rkRecord];
-  /// maps record or object in TTypeKind RTTI enumerate
-  rkRecordKinds = rkRecord;
 
 {$endif FPC}
 
