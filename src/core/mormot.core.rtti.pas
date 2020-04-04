@@ -434,7 +434,7 @@ type
     function RttiSize: PtrInt;
     /// for rtRecordTypes: get the record size
     // - returns 0 if the type is not a record/object
-    function RecordSize: PtrInt;          {$ifdef HASINLINE} inline; {$endif}
+    function RecordSize: PtrInt;  {$ifdef HASINLINE} inline; {$endif}
     /// for rtRecordTypes: retrieve RTTI information about all managed fields
     // of this record
     // - non managed fields (e.g. integers, double...) are not listed here

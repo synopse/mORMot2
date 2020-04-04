@@ -7938,18 +7938,14 @@ begin
   result := SizeOf(variant);
 end;
 
-function RecordEquals(const RecA, RecB; TypeInfo: pointer;
-  PRecSize: PInteger): boolean;
-var
-  cmp, size: integer;
+function RecordEquals(const RecA, RecB; TypeInfo: pointer; PRecSize: PInteger): boolean;
 begin
   if @RecA <> @RecB then
     if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
     begin
-      size := _BINARYCOMPARE[false, rkRecord](@RecA, @RecB, TypeInfo, cmp);
+      result:= RecordCompare(@RecA, @RecB, TypeInfo, {casesensitive=}true) = 0;
       if PRecSize <> nil then
-        PRecSize^ := size;
-      result := cmp <> 0;
+        PRecSize^ := PRttiInfo(TypeInfo)^.RecordSize;
     end
     else
       result := false
@@ -7961,7 +7957,7 @@ function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger): integer;
 var
   size: integer;
   W: TBufferWriter; // not very fast, but good enough (RecordSave don't use it)
-  temp: array[byte] of byte; // will use TFakeWriterStream.Write() most time
+  temp: array[byte] of byte; // will use mostly TFakeWriterStream.Write()
 begin { TODO : define _BINARYSAVELEN[] wrappers if performance is a problem }
   if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
   begin
