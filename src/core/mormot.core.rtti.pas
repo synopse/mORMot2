@@ -54,10 +54,10 @@ type
 
   /// map TTypeKind, to specify available type families for FPC RTTI values
   // - FPC types differs from Delphi, and are taken from FPC typinfo.pp unit
-  // - here below,  we defined rtLString instead of rtAString to match Delphi -
+  // - here below,  we defined rkLString instead of rkAString to match Delphi -
   // see https://lists.freepascal.org/pipermail/fpc-devel/2013-June/032360.html
   // "Compiler uses internally some LongStrings which is not possible to use
-  // for variable declarations" so rtLStringOld seems never used in practice
+  // for variable declarations" so rkLStringOld seems never used in practice
   TRttiKind = (rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat, rkSet,
     rkMethod, rkSString, rkLStringOld {=rkLString}, rkLString {=rkAString},
     rkWString, rkVariant, rkArray, rkRecord, rkInterface,
@@ -66,11 +66,12 @@ type
     rkHelper, rkFile, rkClassRef, rkPointer);
 
 const
-  /// potentially managed types in TRttiKind enumerate
+  /// potentially managed types in TRttiKind enumerates
   // - should match ManagedType*() functions
   rkManagedTypes = [rkLStringOld, rkLString, rkWstring, rkUstring, rkArray,
                     rkObject, rkRecord, rkDynArray, rkInterface, rkVariant];
-  /// maps record or object in TRttiKind enumerate
+
+  /// maps record or object in TRttiKind enumerates
   rkRecordTypes = [rkObject, rkRecord];
 
 type
@@ -109,24 +110,28 @@ const
     {$ifdef UNICODE}, rkUString, rkClassRef, rkPointer, rkProcedure {$endif});
 
 const
-  /// potentially managed types in TRttiKind enumerate
+  /// potentially managed types in TRttiKind enumerates
   // - should match ManagedType*() functions
   rkManagedTypes = [rkLString, rkWstring, {$ifdef UNICODE} rkUstring, {$endif}
                     rkArray, rkRecord, rkDynArray, rkInterface, rkVariant];
-  /// maps record or object in TTypeKind RTTI enumerate
+  /// maps record or object in TTypeKind RTTI enumerates
   rkRecordTypes = [rkRecord];
 
 {$endif FPC}
 
-  /// maps long string in TRttiKind RTTI enumerate
+  /// maps long string in TRttiKind RTTI enumerates
   rkStringTypes =
     [rkLString, {$ifdef FPC} rkLStringOld, {$endif} rkWString
      {$ifdef HASVARUSTRING} , rkUString {$endif} ];
 
-  /// maps 1, 8, 16, 32 and 64-bit ordinal in TRttiKind RTTI enumerate
+  /// maps 1, 8, 16, 32 and 64-bit ordinal in TRttiKind RTTI enumerates
   rkOrdinalTypes =
     [rkInteger, rkChar, rkWChar, rkEnumeration, rkSet, rkInt64
      {$ifdef FPC} , rkBool, rkQWord {$endif} ];
+
+  /// maps all available TRttiKind RTTI enumerates
+  rkAllTypes =
+    [succ(low(TRttiKind)) .. high(TRttiKind)];
 
   /// quick retrieve how many bytes an ordinal consist in
   ORDTYPE_SIZE: array[TRttiOrd] of byte =
@@ -422,20 +427,20 @@ type
     function RttiOrd: TRttiOrd;           {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
     function IsQWord: boolean;            {$ifdef HASINLINE} inline; {$endif}
-    /// for rtFloat: get the storage size and precision
+    /// for rkFloat: get the storage size and precision
     // - will also properly detect our TSynCurrency internal type as rfCurr
     function RttiFloat: TRttiFloat;       {$ifdef HASINLINE} inline; {$endif}
-    /// for rtEnumeration: get the enumeration type information
+    /// for rkEnumeration: get the enumeration type information
     function EnumBaseType: PRttiEnumType; {$ifdef HASINLINE} inline; {$endif}
-    /// for rtSet: get the type information of its associated enumeration
+    /// for rkSet: get the type information of its associated enumeration
     function SetEnumType: PRttiEnumType;  {$ifdef HASINLINE} inline; {$endif}
     /// compute in how many bytes this type is stored
     // - will use Kind (and RttiOrd/RttiFloat) to return the exact value
     function RttiSize: PtrInt;
-    /// for rtRecordTypes: get the record size
+    /// for rkRecordTypes: get the record size
     // - returns 0 if the type is not a record/object
     function RecordSize: PtrInt;  {$ifdef HASINLINE} inline; {$endif}
-    /// for rtRecordTypes: retrieve RTTI information about all managed fields
+    /// for rkRecordTypes: retrieve RTTI information about all managed fields
     // of this record
     // - non managed fields (e.g. integers, double...) are not listed here
     // - also includes the total record size in bytes
@@ -443,29 +448,29 @@ type
     // - note: if FPC_OLDRTTI is defined, unmanaged fields are included
     procedure RecordManagedFields(out Fields: TRttiRecordManagedFields);
       {$ifdef HASINLINE} inline; {$endif}
-    /// for rtRecordTypes: retrieve enhanced RTTI information about all fields
+    /// for rkRecordTypes: retrieve enhanced RTTI information about all fields
     // of this record
     // - this information is currently only available since Delphi 2010
     function RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
-    /// for rtDynArray: get the dynamic array type information of the stored item
+    /// for rkDynArray: get the dynamic array type information of the stored item
     // - caller should ensure the type is indeed a dynamic array
     function DynArrayItemType: PRttiInfo; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// for rtDynArray: get the dynamic array type information of the stored item
+    /// for rkDynArray: get the dynamic array type information of the stored item
     // - this overloaded method will also return the item size in bytes
     // - caller should ensure the type is indeed a dynamic array
     function DynArrayItemType(out aDataSize: PtrInt): PRttiInfo; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// for rtDynArray: get the dynamic array size (in bytes) of the stored item
+    /// for rkDynArray: get the dynamic array size (in bytes) of the stored item
     function DynArrayItemSize: PtrInt; {$ifdef HASINLINE} inline; {$endif}
-    /// for rtArray: get the static array type information of the stored item
+    /// for rkArray: get the static array type information of the stored item
     // - returns nil if the array type is unmanaged (i.e. behave like Delphi)
     // - aDataSize is the size in bytes of all aDataCount static items (not
     // the size of each item)
     // - caller should ensure the type is indeed a static array
     function ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
       {$ifdef HASINLINE} inline; {$endif}
-    /// for rtArray: get the size in bytes of all the static array items
+    /// for rkArray: get the size in bytes of all the static array items
     // - caller should ensure the type is indeed a static array
     function ArrayItemSize: PtrInt;       {$ifdef HASINLINE} inline; {$endif}
     /// recognize most used string types, returning their code page
@@ -481,27 +486,27 @@ type
     // - caller should ensure the type is indeed a rkLString
     function AnsiStringCodePageStored: integer; inline;
     {$endif HASCODEPAGE}
-    /// for rtClass: get the class type information
+    /// for rkClass: get the class type information
     function RttiClass: PRttiClass;       {$ifdef HASINLINE} inline; {$endif}
-    /// for rtClass: return the number of published properties in this class
+    /// for rkClass: return the number of published properties in this class
     // - you can count the plain fields without any getter function, if you
     // do need only the published properties corresponding to some value
     // actually stored, and ignore e.g. any textual conversion
     function ClassFieldCount(onlyWithoutGetter: boolean): integer;
-    /// for rtClass: fast and easy check if a class inherits from this RTTI
+    /// for rkClass: fast and easy check if a class inherits from this RTTI
     function InheritsFrom(AClass: TClass): boolean;
-    /// for rtInterface: get the interface type information
+    /// for rkInterface: get the interface type information
     function InterfaceType: PRttiInterfaceTypeData; {$ifdef HASINLINE} inline; {$endif}
-    /// for rtInterface: get the TGUID of a given interface type information
+    /// for rkInterface: get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
     function InterfaceGUID: PGUID;
-    /// for rtInterface: get the unit name of a given interface type information
+    /// for rkInterface: get the unit name of a given interface type information
     // - returns '' if this type is not an interface
     function InterfaceUnitName: PShortString;
-    /// for rtInterface: get the ancestor/parent of a given interface type information
+    /// for rkInterface: get the ancestor/parent of a given interface type information
     // - returns nil if this type has no parent
     function InterfaceAncestor: PRttiInfo;
-    /// for rtInterface: get all ancestors/parents of a given interface type information
+    /// for rkInterface: get all ancestors/parents of a given interface type information
     // - only ancestors with an associated TGUID will be added
     // - if OnlyImplementedBy is not nil, only the interface explicitly
     // implemented by this class will be added, and AncestorsImplementedEntry[]
@@ -528,56 +533,56 @@ type
     function Getter(Instance: TObject; Call: PMethod): TRttiPropCall; {$ifdef HASINLINE} inline; {$endif}
     /// raw retrieval of the property access definition
     function Setter(Instance: TObject; Call: PMethod): TRttiPropCall; {$ifdef HASINLINE} inline; {$endif}
-    /// raw retrieval of rtInteger,rtEnumeration,rtSet,rtChar,rtWChar,rtBool
+    /// raw retrieval of rkInteger,rkEnumeration,rkSet,rkChar,rkWChar,rkBool
     // - rather call GetOrdValue/GetInt64Value
     function GetOrdProp(Instance: TObject): PtrInt;
-    /// raw assignment of rtInteger,rtEnumeration,rtSet,rtChar,rtWChar,rtBool
+    /// raw assignment of rkInteger,rkEnumeration,rkSet,rkChar,rkWChar,rkBool
     // - rather call SetOrdValue/SetInt64Value
     procedure SetOrdProp(Instance: TObject; Value: PtrInt);
-    /// raw retrieval of rtClass
+    /// raw retrieval of rkClass
     function GetObjProp(Instance: TObject): TObject;
-    /// raw retrieval of rtInt64,rtQWord
+    /// raw retrieval of rkInt64, rkQWord
     // - rather call GetInt64Value
     function GetInt64Prop(Instance: TObject): Int64;
-    /// raw assignment of rtInt64,rtQWord
+    /// raw assignment of rkInt64, rkQWord
     // - rather call SetInt64Value
     procedure SetInt64Prop(Instance: TObject; const Value: Int64);
-    /// raw retrieval of rtLString
+    /// raw retrieval of rkLString
     procedure GetLongStrProp(Instance: TObject; var Value: RawByteString);
-    /// raw assignment of rtLString
+    /// raw assignment of rkLString
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
-    /// raw copy of rtLString
+    /// raw copy of rkLString
     procedure CopyLongStrProp(Source,Dest: TObject);
-    /// raw retrieval of rtString into an Ansi7String
+    /// raw retrieval of rkString into an Ansi7String
     procedure GetShortStrProp(Instance: TObject; var Value: RawByteString);
-    /// raw retrieval of rtWString
+    /// raw retrieval of rkWString
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
-    /// raw assignment of rtWString
+    /// raw assignment of rkWString
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
     {$ifdef HASVARUSTRING}
-    /// raw retrieval of rtUString
+    /// raw retrieval of rkUString
     procedure GetUnicodeStrProp(Instance: TObject; var Value: UnicodeString);
-    /// raw assignment of rtUString
+    /// raw assignment of rkUString
     procedure SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
     {$endif HASVARUSTRING}
-    /// raw retrieval of rtFloat/currency
+    /// raw retrieval of rkFloat/currency
     // - use instead GetCurrencyValue
     function GetCurrencyProp(Instance: TObject): TSynCurrency;
-    /// raw assignment of rtFloat/currency
+    /// raw assignment of rkFloat/currency
     procedure SetCurrencyProp(Instance: TObject; const Value: TSynCurrency);
-    /// raw retrieval of rtFloat/double
+    /// raw retrieval of rkFloat/double
     function GetDoubleProp(Instance: TObject): double;
-    /// raw assignment of rtFloat/double
+    /// raw assignment of rkFloat/double
     procedure SetDoubleProp(Instance: TObject; Value: Double);
-    /// raw retrieval of rtFloat - with conversion to 64-bit double
+    /// raw retrieval of rkFloat - with conversion to 64-bit double
     // - use instead GetDoubleValue
     function GetFloatProp(Instance: TObject): double;
-    /// raw assignment of rtFloat
+    /// raw assignment of rkFloat
     // - use instead SetDoubleValue
     procedure SetFloatProp(Instance: TObject; Value: TSynExtended);
-    /// raw retrieval of rtVariant
+    /// raw retrieval of rkVariant
     procedure GetVariantProp(Instance: TObject; var result: Variant);
-    /// raw assignment of rtVariant
+    /// raw assignment of rkVariant
     procedure SetVariantProp(Instance: TObject; const Value: Variant);
   public
     /// contains the index value of an indexed class data property
@@ -636,8 +641,8 @@ type
     function GetOrdValue(Instance: TObject): PtrInt; {$ifdef HASINLINE} inline; {$endif}
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
-    // - ordinal properties smaller than rtInt64 will return an Int64-converted
-    // value (e.g. rtInteger)
+    // - ordinal properties smaller than rkInt64 will return an Int64-converted
+    // value (e.g. rkInteger)
     // - return 0 on any error
     function GetInt64Value(Instance: TObject): Int64;
     /// low-level getter of the currency property value of a given instance
@@ -654,7 +659,7 @@ type
     /// low-level getter of the long string property content of a given instance
     // - just a wrapper around low-level GetLongStrProp() function
     // - call GetLongStrValue() method if you want a conversion into RawUTF8
-    // - will work only for Kind=rtLString
+    // - will work only for Kind=rkLString
     procedure GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
     /// low-level setter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
@@ -733,7 +738,7 @@ type
   end;
   PPropData = ^TPropData;
 
-  /// rtRecord RTTI is not defined in Delphi 7/2007 TTypeData
+  /// rkRecord RTTI is not defined in Delphi 7/2007 TTypeData
   // - defined here for proper Delphi inlining
   TRecordInfo = packed record
     RecSize: integer;
@@ -741,7 +746,7 @@ type
   end;
   PRecordInfo = ^TRecordInfo;
 
-  /// rtArray RTTI not defined in Delphi 7/2007 TTypeData
+  /// rkArray RTTI not defined in Delphi 7/2007 TTypeData
   // - defined here for proper Delphi inlining
   TArrayInfo = packed record
     ArraySize: integer;
@@ -1396,7 +1401,7 @@ begin
     result := CP_SQLRAWBLOB
   else
   {$ifdef HASCODEPAGE}
-  if Kind = rkLString then // has rtLStringOld any codepage? -> UTF-8
+  if Kind = rkLString then // has rkLStringOld any codepage? -> UTF-8
     result := PWord(GetTypeData(@self))^
   else
     result := CP_UTF8; // default is UTF-8
