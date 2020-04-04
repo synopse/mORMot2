@@ -688,6 +688,7 @@ type
     function GetArrayExistingByName(const aName: RawUTF8): PDocVariantData;
     function GetArrayOrAddByName(const aName: RawUTF8): PDocVariantData;
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
+    procedure ClearFast;
   public
     /// initialize a TDocVariantData to store some document-based content
     // - can be used with a stack-allocated TDocVariantData variable:
@@ -844,7 +845,7 @@ type
     // !  Doc.Clear; // to release memory before following InitObject()
     // !  Doc.InitObject(['name','John','year',1972]);
     // !end;
-    // - implemented as just a wrapper around DocVariantType.Clear()
+    // - will check the VType, and call ClearFast private method
     procedure Clear;
     /// delete all internal stored values
     // - like Clear + Init() with the same options
@@ -2019,11 +2020,8 @@ end;
 
 procedure FillZero(var value: variant);
 begin
-  with TVarData(value) do
-    case cardinal(VType) of
-      varString:
-        FillZero(RawByteString(VAny));
-    end;
+  if TVarData(value).VType = varString then
+    FillZero(RawByteString(TVarData(value).VAny));
   VarClear(value);
 end;
 
@@ -2031,41 +2029,48 @@ procedure _VariantDynArrayClearSeveral(V: PVarData; n: integer);
 var
   vt, docv: cardinal;
   handler: TCustomVariantType;
+  clearproc: procedure(V: PVarData);
+label
+  clr, hdr;
 begin
   handler := nil;
   docv := DocVariantVType;
+  clearproc := @VarClearProc;
   repeat
     vt := V^.VType;
-    case vt of
-      varEmpty..varDate, varError, varBoolean, varShortInt..varWord64:
-        ;
-      varString:
-      {$ifdef FPC}
-        Finalize(RawUTF8(V^.VAny));
-      {$else}
-        RawUTF8(V^.VAny) := '';
-      {$endif}
-      varOleStr:
-        WideString(V^.VAny) := '';
-      {$ifdef HASVARUSTRING}
-      varUString:
-        UnicodeString(V^.VAny) := '';
-      {$endif}
-    else
-      if vt = docv then
-        DocVariantType.Clear(V^)
-      else if vt = varVariant or varByRef then
-        VarClear(PVariant(V^.VPointer)^)
-      else if handler = nil then
-        if (vt and varByRef = 0) and FindCustomVariantType(vt, handler) then
-          handler.Clear(V^)
+    if vt < varWord64 then
+    begin
+      if (vt >= varOleStr) and (vt <= varError) then
+        if vt = varOleStr then
+          WideString(V^.VAny) := ''
         else
-          VarClear(variant(V^))
+          goto clr;
+    end
+    else if vt = varString then
+      {$ifdef FPC}
+      Finalize(RawUTF8(V^.VAny))
+      {$else}
+      RawUTF8(V^.VAny) := ''
+      {$endif}
+    else if vt < varByRef then // varByRef has no refcount -> nothing to clear
+      if vt = docv then
+        PDocVariantData(V)^.ClearFast
+      {$ifdef HASVARUSTRING}
+      else if vt = varUString then
+        UnicodeString(V^.VAny) := ''
+      {$endif HASVARUSTRING}
+      else if vt >= varArray then // custom types are below varArray
+clr:    clearproc(V)
+      else if handler = nil then
+        if FindCustomVariantType(vt, handler) then
+hdr:      handler.Clear(V^)
+        else
+          goto clr
       else if vt = handler.VarType then
-        handler.Clear(V^)
+        goto hdr
       else
-        VarClearProc(V^);
-    end;
+        goto clr;
+    PInteger(V)^ := 0; // set VType=varEmpty
     inc(V);
     dec(n);
   until n = 0;
@@ -2866,13 +2871,9 @@ begin
 end;
 
 procedure TDocVariant.Clear(var V: TVarData);
-var
-  dv: TDocVariantData absolute V;
 begin
   //Assert(V.VType=DocVariantVType);
-  RawUTF8DynArrayClear(dv.VName);
-  VariantDynArrayClear(dv.VValue);
-  ZeroFill(@V); // will set V.VType := varEmpty and VCount=0
+  TDocVariantData(V).ClearFast;
 end;
 
 procedure TDocVariant.Copy(var Dest: TVarData; const Source: TVarData;
@@ -3686,15 +3687,18 @@ begin
   VariantDynArrayClear(SourceVValue);
 end;
 
+procedure TDocVariantData.ClearFast;
+begin
+  PInteger(@VType)^ := 0;
+  RawUTF8DynArrayClear(VName);
+  VariantDynArrayClear(VValue);
+  VCount := 0;
+end;
+
 procedure TDocVariantData.Clear;
 begin
   if cardinal(VType) = DocVariantVType then
-  begin
-    PInteger(@VType)^ := 0;
-    RawUTF8DynArrayClear(VName);
-    VariantDynArrayClear(VValue);
-    VCount := 0;
-  end
+    ClearFast
   else
     VarClear(variant(self));
 end;
@@ -3706,7 +3710,7 @@ begin
   if VCount = 0 then
     exit;
   backup := VOptions - [dvoIsArray, dvoIsObject];
-  DocVariantType.Clear(TVarData(self));
+  ClearFast;
   VType := DocVariantVType;
   VOptions := backup;
 end;
