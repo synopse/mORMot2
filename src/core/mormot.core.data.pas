@@ -15,8 +15,8 @@ unit mormot.core.data;
     - INI Files and In-memory Access
     - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
     - Efficient RTTI Values Binary Serialization and Comparison
-    - TDynArray wrapper
   TODO:
+    - TDynArray wrapper
     - RawUTF8 String Values Interning
     - TSynNameValue Name/Value Storage
 
@@ -1639,22 +1639,57 @@ procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
 function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
   Info: PRttiInfo; CaseSensitive: boolean): integer;
 
-/// raw comparison of two records
-// - _BINARYCOMPARE[true/false,rkRecord] are wrappers to this
-function RecordCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean): integer;
 
-/// raw comparison of two static arrays
-// - _BINARYCOMPARE[true/false,rkArray] are wrappers to this
-function ArrayCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean;
-  out ArraySize: PtrInt): integer;
+/// check case-sensitive equality of two values by content, using RTTI
+function BinaryEquals(A, B: pointer; Info: PRttiInfo; PSize: PInteger;
+  Kinds: TRttiKinds): boolean;
+
+/// how many bytes a BinarySave() may return
+// - deprecated function - use overloaded BinarySave() functions instead
+function BinarySaveLength(Data: pointer; Info: PRttiInfo; Len: PInteger;
+  Kinds: TRttiKinds): integer; deprecated;
+
+/// binary persistence of any value using RTTI, into a memory buffer
+// - deprecated function - use overloaded BinarySave() functions instead
+function BinarySave(Data: pointer; Dest: PAnsiChar; Info: PRttiInfo;
+  out Len: integer; Kinds: TRttiKinds): PAnsiChar; overload; deprecated;
+
+/// binary persistence of any value using RTTI, into a RawByteString buffer
+function BinarySave(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): RawByteString; overload;
+
+/// binary persistence of any value using RTTI, into a TBytes buffer
+function BinarySaveBytes(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): TBytes;
+
+/// binary persistence of any value using RTTI, into a TSynTempBuffer buffer
+procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
+  Info: PRttiInfo; Kinds: TRttiKinds); overload;
+
+/// binary persistence of any value using RTTI, into a Base64-encoded text
+function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
+  Kinds: TRttiKinds): RawUTF8;
+
+/// unserialize any value from BinarySave() memory buffer, using RTTI
+function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
+  Len: PInteger; SourceMax: PAnsiChar; Kinds: TRttiKinds): PAnsiChar; overload;
+
+/// unserialize any value from BinarySave() RawByteString, using RTTI
+function BinaryLoad(Data: pointer; const Source: RawByteString; Info: PRttiInfo;
+  Kinds: TRttiKinds): boolean; overload;
+
+/// unserialize any value from BinarySaveBase64() encoding, using RTTI
+function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
+  Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds): boolean;
+
 
 /// check equality of two records by content
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties
 // - will use binary-level comparison: it could fail to match two floating-point
 // values because of rounding issues (Currency won't have this problem)
+// - is a wrapper around BinaryEquals(rkRecordTypes)
 function RecordEquals(const RecA, RecB; TypeInfo: pointer;
   PRecSize: PInteger = nil): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// save a record content into a RawByteString
 // - will handle packed records, with binaries (byte, word, integer...) and
@@ -1668,62 +1703,48 @@ function RecordEquals(const RecA, RecB; TypeInfo: pointer;
 // 2009: if you want to use this function between UNICODE and NOT UNICODE
 // versions of Delphi, you should use some explicit types like RawUTF8,
 // WinAnsiString, SynUnicode or even RawUnicode/WideString
+// - is a wrapper around BinarySave(rkRecordTypes)
 function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// save a record content into a TBytes dynamic array
 // - could be used as an alternative to RawByteString's RecordSave()
+// - is a wrapper around BinarySaveBytes(rkRecordTypes)
 function RecordSaveBytes(const Rec; TypeInfo: pointer): TBytes;
-
-/// save a record content into a destination memory buffer
-// - Dest must be at least RecordSaveLength() bytes long
-// - will return the Rec size, in bytes, into Len reference variable
-// - will handle packed records, with binaries (byte, word, integer...) and
-// string types properties (but not with internal raw pointers, of course)
-// - will use a proprietary binary format, with some variable-length encoding
-// of the string length - note that if you change the type definition, any
-// previously-serialized content will fail, maybe triggering unexpected GPF: you
-// may use TypeInfoToHash() if you share this binary data accross executables
-// - warning: will encode generic string fields as AnsiString (one byte per char)
-// prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
-// 2009: if you want to use this function between UNICODE and NOT UNICODE
-// versions of Delphi, you should use some explicit types like RawUTF8,
-// WinAnsiString, SynUnicode or even RawUnicode/WideString
-function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
-  out Len: integer): PAnsiChar; overload;
-
-/// save a record content into a destination memory buffer
-// - Dest must be at least RecordSaveLength() bytes long
-// - will handle packed records, with binaries (byte, word, integer...) and
-// string types properties (but not with internal raw pointers, of course)
-// - will use a proprietary binary format, with some variable-length encoding
-// of the string length - note that if you change the type definition, any
-// previously-serialized content will fail, maybe triggering unexpected GPF: you
-// may use TypeInfoToHash() if you share this binary data accross executables
-// - warning: will encode generic string fields as AnsiString (one byte per char)
-// prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
-// 2009: if you want to use this function between UNICODE and NOT UNICODE
-// versions of Delphi, you should use some explicit types like RawUTF8,
-// WinAnsiString, SynUnicode or even RawUnicode/WideString
-function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; overload;
   {$ifdef HASINLINE}inline;{$endif}
-
-/// save a record content into a destination memory buffer
-// - caller should make Dest.Done once finished with Dest.buf/Dest.len buffer
-procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer); overload;
-
-/// save a record content into a Base-64 encoded UTF-8 text content
-// - will use RecordSave() format, with a left-sided binary CRC
-function RecordSaveBase64(const Rec; TypeInfo: pointer;
-  UriCompatible: boolean = false): RawUTF8;
 
 /// compute the number of bytes needed to save a record content
 // using the RecordSave() function
-// - will return 0 in case of an invalid (not handled) record type (e.g. if
-// it contains an unknown variant)
-// - optional Len parameter will contain the Rec memory buffer length, in bytes
-// - marked as deprecated: use TBufferWriter instead
+// - deprecated function - use overloaded BinarySave() functions instead
 function RecordSaveLength(const Rec; TypeInfo: pointer;
   Len: PInteger = nil): integer; deprecated;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// save a record content into a destination memory buffer
+// - Dest must be at least RecordSaveLength() bytes long
+// - deprecated function - use overloaded BinarySave() functions instead
+function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
+  out Len: integer): PAnsiChar; overload; deprecated;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// save a record content into a destination memory buffer
+// - Dest must be at least RecordSaveLength() bytes long
+// - deprecated function - use overloaded BinarySave() functions instead
+function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+  overload; deprecated; {$ifdef HASINLINE}inline;{$endif}
+
+/// save a record content into a destination memory buffer
+// - caller should make Dest.Done once finished with Dest.buf/Dest.len buffer
+// - is a wrapper around BinarySave(rkRecordTypes)
+procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// save a record content into a Base-64 encoded UTF-8 text content
+// - will use RecordSave() format, with a left-sided binary CRC
+// - is a wrapper around BinarySaveBase64(rkRecordTypes)
+function RecordSaveBase64(const Rec; TypeInfo: pointer;
+  UriCompatible: boolean = false): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a record content from a memory buffer as saved by RecordSave()
 // - return nil if the Source buffer is incorrect
@@ -1737,19 +1758,25 @@ function RecordSaveLength(const Rec; TypeInfo: pointer;
 // memory buffer, which will be used to avoid any unexpected buffer overflow -
 // would be mandatory when decoding the content from any external process
 // (e.g. a maybe-forged client) - only with slightly performance penalty
+// - is a wrapper around BinaryLoad(rkRecordTypes)
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger = nil; SourceMax: PAnsiChar = nil): PAnsiChar; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a record content from a memory buffer as saved by RecordSave()
 // - will use the Source length to detect and avoid any buffer overlow
 // - returns false if the Source buffer was incorrect, true on success
-function RecordLoad(var Res; const Source: RawByteString;
+// - is a wrapper around BinaryLoad(rkRecordTypes)
+function RecordLoad(var Rec; const Source: RawByteString;
   TypeInfo: pointer): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// read a record content from a Base-64 encoded content
 // - expects RecordSaveBase64() format, with a left-sided binary CRC32C
+// - is a wrapper around BinaryLoadBase64(rkRecordTypes)
 function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec; TypeInfo: pointer;
   UriCompatible: boolean = false): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 
@@ -7702,7 +7729,7 @@ begin
   result := fields.Size;
 end;
 
-function RecordCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean): integer;
+function _RecordCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean): integer;
 var
   fields: TRttiRecordManagedFields; // Size/Count/Fields
   offset, fieldsize: PtrUInt;
@@ -7745,13 +7772,13 @@ end;
 
 function _BC_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := RecordCompare(A, B, Info, {casesens=}true);
+  Compared := _RecordCompare(A, B, Info, {casesens=}true);
   result := Info^.RecordSize;
 end;
 
 function _BCI_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := RecordCompare(A, B, Info, {casesens=}false);
+  Compared := _RecordCompare(A, B, Info, {casesens=}false);
   result := Info^.RecordSize;
 end;
 
@@ -7793,7 +7820,7 @@ begin
   end;
 end;
 
-function ArrayCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean;
+function _ArrayCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseSensitive: boolean;
   out ArraySize: PtrInt): integer;
 var
   n, itemsize: PtrInt;
@@ -7821,12 +7848,12 @@ end;
 
 function _BC_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := ArrayCompare(A, B, Info, {casesens=}true, result);
+  Compared := _ArrayCompare(A, B, Info, {casesens=}true, result);
 end;
 
 function _BCI_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := ArrayCompare(A, B, Info, {casesens=}false, result);
+  Compared := _ArrayCompare(A, B, Info, {casesens=}false, result);
 end;
 
 procedure _BS_VariantComplex(Data: PVariant; Dest: TBufferWriter);
@@ -7938,14 +7965,19 @@ begin
   result := SizeOf(variant);
 end;
 
-function RecordEquals(const RecA, RecB; TypeInfo: pointer; PRecSize: PInteger): boolean;
+
+function BinaryEquals(A, B: pointer; Info: PRttiInfo; PSize: PInteger;
+  Kinds: TRttiKinds): boolean;
+var
+  size, comp: integer;
 begin
-  if @RecA <> @RecB then
-    if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+  if A <> B then
+    if Info^.Kind in Kinds then
     begin
-      result:= RecordCompare(@RecA, @RecB, TypeInfo, {casesensitive=}true) = 0;
-      if PRecSize <> nil then
-        PRecSize^ := PRttiInfo(TypeInfo)^.RecordSize;
+      size := _BINARYCOMPARE[false, Info^.Kind](A, B, Info, comp);
+      if PSize <> nil then
+        PSize^ := size;
+      result := comp = 0;
     end
     else
       result := false
@@ -7953,17 +7985,18 @@ begin
     result := true;
 end;
 
-function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger): integer;
+function BinarySaveLength(Data: pointer; Info: PRttiInfo; Len: PInteger;
+  Kinds: TRttiKinds): integer;
 var
   size: integer;
   W: TBufferWriter; // not very fast, but good enough (RecordSave don't use it)
   temp: array[byte] of byte; // will use mostly TFakeWriterStream.Write()
-begin { TODO : define _BINARYSAVELEN[] wrappers if performance is a problem }
-  if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+begin { TODO : define _BINARYSAVELEN[] wrappers if performance is a problem? }
+  if Info^.Kind in Kinds then
   begin
     W := TBufferWriter.Create(TFakeWriterStream, @temp, SizeOf(temp));
     try
-      size := _BINARYSAVE[rkRecord](@Rec, W, TypeInfo);
+      size := _BINARYSAVE[Info^.Kind](Data, W, Info);
       result := W.TotalWritten;
       if Len <> nil then
         Len^ := size;
@@ -7975,16 +8008,16 @@ begin { TODO : define _BINARYSAVELEN[] wrappers if performance is a problem }
     result := 0;
 end;
 
-function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
-  out Len: integer): PAnsiChar;
+function BinarySave(Data: pointer; Dest: PAnsiChar; Info: PRttiInfo;
+  out Len: integer; Kinds: TRttiKinds): PAnsiChar;
 var
   W: TBufferWriter;
 begin
-  if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+  if Info^.Kind in Kinds then
   begin
     W := TBufferWriter.Create(TFakeWriterStream, Dest, 1 shl 30);
     try
-      Len := _BINARYSAVE[rkRecord](@Rec, W, TypeInfo);
+      Len := _BINARYSAVE[Info^.Kind](Data, W, Info);
       result := Dest + W.fPos; // Dest was a 1GB temporary buffer :)
     finally
       W.Free;
@@ -7994,23 +8027,16 @@ begin
     result := nil;
 end;
 
-function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar;
-var
-  dummylen: integer;
-begin
-  result := RecordSave(Rec, Dest, TypeInfo, dummylen);
-end;
-
-function RecordSave(const Rec; TypeInfo: pointer): RawByteString;
+function BinarySave(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): RawByteString;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
 begin
-  if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+  if Info^.Kind in Kinds then
   begin
     W := TBufferWriter.Create(temp);
     try
-      _BINARYSAVE[rkRecord](@Rec, W, TypeInfo);
+      _BINARYSAVE[Info^.Kind](Data, W, Info);
       result := W.FlushTo;
     finally
       W.Free;
@@ -8020,16 +8046,16 @@ begin
     result := '';
 end;
 
-function RecordSaveBytes(const Rec; TypeInfo: pointer): TBytes;
+function BinarySaveBytes(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): TBytes;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
 begin
-  if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+  if Info^.Kind in Kinds then
   begin
     W := TBufferWriter.Create(temp);
     try
-      _BINARYSAVE[rkRecord](@Rec, W, TypeInfo);
+      _BINARYSAVE[Info^.Kind](Data, W, Info);
       result := W.FlushToBytes;
     finally
       W.Free;
@@ -8039,16 +8065,17 @@ begin
     result := nil;
 end;
 
-procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer);
+procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
+  Info: PRttiInfo; Kinds: TRttiKinds);
 var
   W: TBufferWriter;
 begin
-  if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+  if Info^.Kind in Kinds then
   begin
     W := TBufferWriter.Create(TRawByteStringStream, @Dest.tmp,
       SizeOf(Dest.tmp) - 16); // Dest.Init() reserves 16 additional bytes
     try
-      _BINARYSAVE[rkRecord](@Rec, W, TypeInfo);
+      _BINARYSAVE[Info^.Kind](Data, W, Info);
       if W.Stream.Position = 0 then
         Dest.Init(W.TotalWritten)  // only Dest.tmp buffer was used
       else
@@ -8061,19 +8088,20 @@ begin
     Dest.Init(0);
 end;
 
-function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawUTF8;
+function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
+  Kinds: TRttiKinds): RawUTF8;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
   P: PAnsiChar;
   len: integer;
 begin
-  if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+  if Info^.Kind in Kinds then
   begin
     W := TBufferWriter.Create(temp);
     try
       W.Write4(0); // placeholder for the trailing crc32c
-      _BINARYSAVE[rkRecord](@Rec, W, TypeInfo);
+      _BINARYSAVE[Info^.Kind](Data, W, Info);
       len := W.TotalWritten;
       if W.Stream.Position = 0 then
         P := pointer(@temp)       // only temp buffer was used
@@ -8092,16 +8120,16 @@ begin
     result := '';
 end;
 
-function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
-  Len: PInteger; SourceMax: PAnsiChar): PAnsiChar;
+function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
+  Len: PInteger; SourceMax: PAnsiChar; Kinds: TRttiKinds): PAnsiChar;
 var
   size: integer;
   read: TFastReader;
 begin
-  if PRttiInfo(TypeInfo)^.Kind in rkRecordTypes then
+  if Info^.Kind in Kinds then
   begin
     read.Init(Source, SourceMax - Source);
-    size := _BINARYLOAD[rkRecord](@Rec, read, TypeInfo);
+    size := _BINARYLOAD[Info^.Kind](Data, read, Info);
     if Len <> nil then
       Len^ := size;
     result := read.P;
@@ -8110,32 +8138,101 @@ begin
     result := nil;
 end;
 
-function RecordLoad(var Res; const Source: RawByteString; TypeInfo: pointer): boolean;
+function BinaryLoad(Data: pointer; const Source: RawByteString; Info: PRttiInfo;
+  Kinds: TRttiKinds): boolean;
 var
   P: PAnsiChar;
 begin
-  P := pointer(Source);
-  P := RecordLoad(Res, P, TypeInfo, nil, P + length(Source));
-  result := (P <> nil) and (P - pointer(Source) = length(Source));
+  if Info^.Kind in Kinds then
+  begin
+    P := pointer(Source);
+    P := BinaryLoad(Data, P, Info, nil, P + length(Source), Kinds);
+    result := (P <> nil) and (P - pointer(Source) = length(Source));
+  end
+  else
+    result := false;
+end;
+
+function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
+  Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds): boolean;
+var
+  temp: TSynTempBuffer;
+begin
+  if (Len > 6) and (Info^.Kind in Kinds) then
+  begin
+    if UriCompatible then
+      result := Base64uriToBin(Source, Len, temp)
+    else
+      result := Base64ToBin(Source, Len, temp);
+    result := result and (temp.len >= 4) and
+      (crc32c(0, PAnsiChar(temp.buf) + 4, temp.len - 4) = PCardinal(temp.buf)^) and
+      (BinaryLoad(Data, PAnsiChar(temp.buf) + 4, Info, nil,
+       PAnsiChar(temp.buf) + temp.len, Kinds) <> nil);
+    temp.Done;
+  end
+  else
+    result := false;
+end;
+
+
+function RecordEquals(const RecA, RecB; TypeInfo: pointer; PRecSize: PInteger): boolean;
+begin
+  result := BinaryEquals(@RecA, @RecB, TypeInfo, PRecSize, rkRecordTypes);
+end;
+
+function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger): integer;
+begin
+ result := {%H-}BinarySaveLength(@Rec, TypeInfo, Len, rkRecordTypes);
+end;
+
+function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
+  out Len: integer): PAnsiChar;
+begin
+  result := {%H-}BinarySave(@Rec, Dest, TypeInfo, Len, rkRecordTypes);
+end;
+
+function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+var
+  dummylen: integer;
+begin
+  result := {%H-}BinarySave(@Rec, Dest, TypeInfo, dummylen, rkRecordTypes);
+end;
+
+function RecordSave(const Rec; TypeInfo: pointer): RawByteString;
+begin
+  result := BinarySave(@Rec, TypeInfo, rkRecordTypes);
+end;
+
+function RecordSaveBytes(const Rec; TypeInfo: pointer): TBytes;
+begin
+ result := BinarySaveBytes(@Rec, TypeInfo, rkRecordTypes);
+end;
+
+procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer);
+begin
+  BinarySave(@Rec, Dest, TypeInfo, rkRecordTypes);
+end;
+
+function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawUTF8;
+begin
+  result := BinarySaveBase64(@Rec, TypeInfo, UriCompatible, rkRecordTYpes);
+end;
+
+function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
+  Len: PInteger; SourceMax: PAnsiChar): PAnsiChar;
+begin
+  result := BinaryLoad(@Rec, Source, TypeInfo, Len, SourceMax, rkRecordTypes);
+end;
+
+function RecordLoad(var Rec; const Source: RawByteString; TypeInfo: pointer): boolean;
+begin
+  result := BinaryLoad(@Rec, Source, TypeInfo, rkRecordTypes);
 end;
 
 function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec;
   TypeInfo: pointer; UriCompatible: boolean): boolean;
-var
-  temp: TSynTempBuffer;
 begin
-  result := false;
-  if Len<=6 then
-    exit;
-  if UriCompatible then
-    result := Base64uriToBin(Source, Len, temp)
-  else
-    result := Base64ToBin(Source, Len, temp);
-  result := result and (temp.len >= 4) and
-    (crc32c(0, PAnsiChar(temp.buf) + 4, temp.len - 4) = PCardinal(temp.buf)^) and
-    (RecordLoad(Rec, PAnsiChar(temp.buf) + 4, TypeInfo, nil,
-     PAnsiChar(temp.buf) + temp.len) <> nil);
-  temp.Done;
+  result := BinaryLoadBase64(Source, Len, @Rec, TypeInfo, UriCompatible, rkRecordTypes);
 end;
 
 
