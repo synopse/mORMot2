@@ -764,7 +764,10 @@ procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency); overload;
 procedure Int64ToCurrency(const i: Int64; c: PSynCurrency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple wrapper to efficiently compute result.D = Y div 100 and result.M = Y mod 100
+/// simple wrapper to efficiently compute both division and modulo per 100
+// - compute result.D = Y div 100 and result.M = Y mod 100
+// - under FPC, will use fast multiplication by reciprocal so can be inlined
+// - under Delphi, we use our own optimized asm version (which can't be inlined)
 procedure Div100(Y: cardinal; var res: TDiv100Rec);
   {$ifdef FPC} inline; {$endif}
 
@@ -4325,10 +4328,12 @@ begin
 end;
 
 procedure Div100(Y: cardinal; var res: TDiv100Rec); // asm on Delphi
+var
+  Y100: cardinal;
 begin
-  res.M := Y;
-  res.D := Y div 100;   // FPC will use fast reciprocal
-  dec(res.M, res.D * 100); // avoid div twice
+  Y100 := Y div 100; // FPC will use fast reciprocal
+  res.D := Y100;
+  res.M := Y - Y100 * 100; // avoid div twice
 end;
 
 {$else not FPC}

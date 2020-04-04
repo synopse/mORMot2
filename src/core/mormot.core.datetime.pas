@@ -1587,10 +1587,17 @@ begin
 end;
 
 function IsLeapYear(Year: cardinal): boolean;
+var
+  d100: TDiv100Rec;
 begin
-  result := (Year and 3 <> 0) and
-            ((Year - (Year div 100) * 100 <> 0) or  // (Year mod 100 > 0)
-             (Year - (Year div 400) * 400 = 0));    // (Year mod 400 = 0))
+  if Year and 3 = 0 then
+  begin
+    Div100(Year, d100{%H-});
+    result := ((d100.M <> 0) or // (Year mod 100 > 0)
+               (Year - ((d100.D shr 2) * 400) = 0)); // (Year mod 400 = 0))
+  end
+  else
+    result := false;
 end;
 
 procedure TSynSystemTime.IncrementMS(ms: integer);

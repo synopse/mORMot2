@@ -1086,7 +1086,7 @@ type
     /// append 4 bytes of data, encoded as BigEndian, at the current position
     procedure Write4BigEndian(Data: integer); {$ifdef HASINLINE}inline;{$endif}
     /// append 8 bytes of data at the current position
-    procedure Write8(const Data8Bytes); {$ifdef HASINLINE}inline;{$endif}
+    procedure Write8(Data8Bytes: pointer); {$ifdef HASINLINE}inline;{$endif}
     /// append 8 bytes of 64-bit integer at the current position
     procedure WriteI64(Data: Int64); {$ifdef HASINLINE}inline;{$endif}
     /// append the same byte a given number of occurences at the current position
@@ -3678,7 +3678,7 @@ e:begin
   end;
   c := ord(P^) shl 28;
   inc(P);
-  result := result and $FFFFFFF or c;
+  result := result {%H-}and $FFFFFFF or c;
 end;
 
 procedure TFastReader.VarNextInt;
@@ -4239,11 +4239,11 @@ begin
   Write4(bswap32(Data));
 end;
 
-procedure TBufferWriter.Write8(const Data8Bytes);
+procedure TBufferWriter.Write8(Data8Bytes: pointer);
 begin
   if fPos > fBufLen16 then
     InternalFlush;
-  PInt64(@fBuffer^[fPos])^ := PInt64(@Data8Bytes)^;
+  PInt64(@fBuffer^[fPos])^ := PInt64(Data8Bytes)^;
   inc(fPos, SizeOf(Int64));
 end;
 
@@ -7270,7 +7270,7 @@ end;
 function _BS_64(Data: PInt64; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 begin
   {$ifdef CPU32}
-  Dest.Write8(Data^);
+  Dest.Write8(Data);
   {$else}
   Dest.WriteI64(Data^);
   {$endif CPU32}
