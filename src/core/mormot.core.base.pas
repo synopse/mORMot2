@@ -565,16 +565,20 @@ const
   // - to be used inlined e.g. as PStrLen(p - _STRLEN)^
   _STRLEN = SizeOf(TStrLen);
 
+  /// cross-compiler negative offset to TStrRec.refCnt field
+  // - to be used inlined e.g. as PRefCnt(p - _STRREFCNT)^
+  _STRREFCNT = Sizeof(TRefCnt) + _STRLEN;
+
   /// cross-compiler negative offset to TDynArrayRec.high/length field
   // - to be used inlined e.g. as
-  // ! PDALen(PtrUInt(Values) - _DALEN)^ + _DAOFF
+  // ! PDALen(PAnsiChar(Values) - _DALEN)^ + _DAOFF
   _DALEN = SizeOf(PtrInt);
 
   /// cross-compiler adjuster to get length from TDynArrayRec.high/length field
   _DAOFF = {$ifdef FPC} 1 {$else} 0 {$endif};
   
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
-  // - to be used inlined e.g. as PRefCnt(PtrUInt(Values) - _DAREFCNT)^
+  // - to be used inlined e.g. as PRefCnt(PAnsiChar(Values) - _DAREFCNT)^
   _DAREFCNT = Sizeof(TRefCnt) + _DALEN;
 
 {$ifndef CPUARM}
@@ -2738,6 +2742,11 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 /// convert an UTF-8 encoded string into a variant RawUTF8 varString
 function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// internal efficient wrapper of VarClear() + set VType=varString and VAny=nil
+// - used e.g. by RawUTF8ToVariant() functions
+procedure ClearVariantForString(var Value: variant);
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a Variant varString value into RawUTF8 encoded String
 // - works as the exact reverse of RawUTF8ToVariant() function
@@ -9348,7 +9357,7 @@ begin
     result := DefaultValue;
 end;
 
-procedure ClearVariantForString(var Value: variant); {$ifdef HASINLINE} inline; {$endif}
+procedure ClearVariantForString(var Value: variant);
 var
   v: cardinal;
 begin
@@ -9357,7 +9366,8 @@ begin
     Finalize(RawByteString(TVarData(Value).VAny))
   else
     begin
-      VarClear(Value);
+      if v >= varOleStr then // bypass for most obvious types
+        VarClearProc(TVarData(Value));
       TVarData(Value).VType := varString;
       TVarData(Value).VAny := nil; // to avoid GPF when assigned to a RawByteString
     end;

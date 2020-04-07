@@ -16,8 +16,8 @@ unit mormot.core.data;
     - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray and TDynArrayHashed Wrappers
-  TODO:
     - RawUTF8 String Values Interning
+  TODO:
     - TSynNameValue Name/Value Storage
 
 
@@ -2512,8 +2512,8 @@ type
      aEventCompare: TEventDynArraySortCompare; aCaseInsensitive: boolean);
     /// initialize a known hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
-    procedure InitSpecific(aDynArray: PDynArray;
-      aKind: TRttiParserType; aCaseInsensitive: boolean);
+    procedure InitSpecific(aDynArray: PDynArray; aKind: TRttiParserType;
+      aCaseInsensitive: boolean; aHasher: THasher);
     /// allow custom hashing via a method event
     procedure SetEventHash(const event: TEventDynArrayHashOne);
     /// search for an element value inside the dynamic array without hashing
@@ -2630,7 +2630,8 @@ type
     // ensure that aKind matches the dynamic array element definition
     // - aCaseInsensitive will be used for djRawUTF8..djHash512 text comparison
     procedure InitSpecific(aTypeInfo: pointer; var aValue; aKind: TRttiParserType;
-      aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false);
+      aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false;
+      aHasher: THasher = nil);
     /// will compute all hash from the current items of the dynamic array
     // - is called within the TDynArrayHashed.Init method to initialize the
     // internal hash array
@@ -2765,6 +2766,13 @@ type
     property Hasher: TDynArrayHasher read fHash;
   end;
 
+var
+  /// helper array to get the hash function corresponding to a given
+  // standard array type
+  // - e.g. as PT_HASH[CaseInSensitive,ptRawUTF8]
+  // - not to be used as such, but e.g. when inlining TDynArray methods
+  PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of TDynArrayHashOne;
+
 {$ifdef CPU32DELPHI}
 const
   /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
@@ -2892,8 +2900,6 @@ function FindIniNameValueInteger(P: PUTF8Char; const UpperName: RawUTF8): PtrInt
 function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValue: RawUTF8): boolean;
 
 
-(*
-
 { ************ RawUTF8 String Values Interning }
 
 type
@@ -2919,7 +2925,8 @@ type
     /// delete all stored RawUTF8 values
     procedure Clear;
     /// reclaim any unique RawUTF8 values
-    function Clean(aMaxRefCount: integer): integer;
+    // - any string with an usage count <= aMinimumRefCount will be removed
+    function Clean(aMinimumRefCount: TRefCnt): integer;
     /// how many items are currently stored in Value[]
     function Count: integer;
   end;
@@ -2935,7 +2942,8 @@ type
   public
     /// initialize the storage and its internal hash pools
     // - aHashTables is the pool size, and should be a power of two <= 512
-    constructor Create(aHashTables: integer=4); reintroduce;
+    // (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
+    constructor Create(aHashTables: integer = 4); reintroduce;
     /// finalize the storage
     destructor Destroy; override;
     /// return a RawUTF8 variable stored within this class
@@ -2966,6 +2974,8 @@ type
     procedure UniqueText(var aText: RawUTF8);
     /// return a variant containing a RawUTF8 stored within this class
     // - similar to RawUTF8ToVariant(), but with string interning
+    // - see also UniqueVariant() from mormot.core.variants if you want to
+    // intern only non-numerical values
     procedure UniqueVariant(var aResult: variant; const aText: RawUTF8); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// return a variant containing a RawUTF8 stored within this class
@@ -2973,12 +2983,6 @@ type
     // - this method expects the text to be supplied as a VCL string, which will
     // be converted into a variant containing a RawUTF8 varString instance
     procedure UniqueVariantString(var aResult: variant; const aText: string);
-    /// return a variant, may be containing a RawUTF8 stored within this class
-    // - similar to TextToVariant(), but with string interning
-    // - first try with GetNumericVariantFromJSON(), then fallback to
-    // RawUTF8ToVariant() with string variable interning
-    procedure UniqueVariant(var aResult: variant; aText: PUTF8Char; aTextLen: PtrInt;
-      aAllowVarDouble: boolean=false); overload;
     /// ensure a variant contains only RawUTF8 stored within this class
     // - supplied variant should be a varString containing a RawUTF8 value
     procedure UniqueVariant(var aResult: variant); overload; {$ifdef HASINLINE}inline;{$endif}
@@ -2992,12 +2996,12 @@ type
     // - returns the number of unique RawUTF8 cleaned from the internal pool
     // - to be executed on a regular basis - but not too often, since the
     // process can be time consumming, and void the benefit of interning
-    function Clean(aMaxRefCount: integer=1): integer;
+    function Clean(aMinimumRefCount: TRefCnt = 1): integer;
     /// how many items are currently stored in this instance
     function Count: integer;
   end;
 
-
+(*
 { ************ TSynNameValue Name/Value Storage }
 
 type
@@ -8323,9 +8327,262 @@ end;
 
 { ************ RawUTF8 String Values Interning }
 
-{  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
-{  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
+{ TRawUTF8InterningSlot }
+
+procedure TRawUTF8InterningSlot.Init;
+begin
+  Safe.Init;
+  Safe.LockedInt64[0] := 0;
+  Values.InitSpecific(TypeInfo(TRawUTF8DynArray), Value, ptRawUTF8,
+    @Safe.Padding[0].VInteger, false, InterningHasher);
+end;
+
+procedure TRawUTF8InterningSlot.Done;
+begin
+  Safe.Done;
+end;
+
+function TRawUTF8InterningSlot.Count: integer;
+begin
+  result := Safe.LockedInt64[0];
+end;
+
+procedure TRawUTF8InterningSlot.Unique(var aResult: RawUTF8;
+  const aText: RawUTF8; aTextHash: cardinal);
+var
+  i: PtrInt;
+  added: boolean;
+begin
+  EnterCriticalSection(Safe.fSection);
+  try
+    i := Values.FindHashedForAdding(aText, added, aTextHash);
+    if added then
+    begin
+      Value[i] := aText;   // copy new value to the pool
+      aResult := aText;
+    end
+    else
+      aResult := Value[i]; // return unified string instance
+  finally
+    LeaveCriticalSection(Safe.fSection);
+  end;
+end;
+
+procedure TRawUTF8InterningSlot.UniqueText(var aText: RawUTF8; aTextHash: cardinal);
+var
+  i: PtrInt;
+  added: boolean;
+begin
+  EnterCriticalSection(Safe.fSection);
+  try
+    i := Values.FindHashedForAdding(aText, added, aTextHash);
+    if added then
+      Value[i] := aText
+    else  // copy new value to the pool
+      aText := Value[i];      // return unified string instance
+  finally
+    LeaveCriticalSection(Safe.fSection);
+  end;
+end;
+
+procedure TRawUTF8InterningSlot.Clear;
+begin
+  EnterCriticalSection(Safe.fSection);
+  try
+    Values.SetCount(0); // Values.Clear
+    Values.Hasher.Clear;
+  finally
+    LeaveCriticalSection(Safe.fSection);
+  end;
+end;
+
+function TRawUTF8InterningSlot.Clean(aMinimumRefCount: TRefCnt): integer;
+var
+  i: integer;
+  s, d: PPtrUInt; // points to RawUTF8 values
+begin
+  result := 0;
+  EnterCriticalSection(Safe.fSection);
+  try
+    if Safe.Padding[0].VInteger = 0 then // len = 0 ?
+      exit;
+    s := pointer(Value);
+    d := s;
+    for i := 1 to Safe.Padding[0].VInteger do
+    begin
+      if PRefCnt(PAnsiChar(s) - _STRREFCNT)^ <= aMinimumRefCount then
+      begin
+        {$ifdef FPC}
+        Finalize(PRawUTF8(s)^);
+        {$else}
+        PRawUTF8(s)^ := '';
+        {$endif FPC}
+        inc(result);
+      end
+      else
+      begin
+        if s <> d then
+        begin
+          d^ := s^; // bypass COW assignments
+          s^ := 0;  // avoid GPF
+        end;
+        inc(d);
+      end;
+      inc(s);
+    end;
+    if result > 0 then
+    begin
+      Values.SetCount((PtrUInt(d) - PtrUInt(Value)) div SizeOf(d^));
+      Values.ReHash;
+    end;
+  finally
+    LeaveCriticalSection(Safe.fSection);
+  end;
+end;
+
+
+{ TRawUTF8Interning }
+
+constructor TRawUTF8Interning.Create(aHashTables: integer);
+var
+  p: integer;
+  i: PtrInt;
+begin
+  for p := 0 to 9 do
+    if aHashTables = 1 shl p then
+    begin
+      SetLength(fPool, aHashTables);
+      fPoolLast := aHashTables - 1;
+      for i := 0 to fPoolLast do
+        fPool[i].Init;
+      exit;
+    end;
+  raise ESynException.CreateUTF8('%.Create(%) not allowed: should be a power of 2',
+    [self, aHashTables]);
+end;
+
+destructor TRawUTF8Interning.Destroy;
+var
+  i: PtrInt;
+begin
+  for i := 0 to fPoolLast do
+    fPool[i].Done;
+  inherited Destroy;
+end;
+
+procedure TRawUTF8Interning.Clear;
+var
+  i: PtrInt;
+begin
+  if self <> nil then
+    for i := 0 to fPoolLast do
+      fPool[i].Clear;
+end;
+
+function TRawUTF8Interning.Clean(aMinimumRefCount: TRefCnt): integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  if self <> nil then
+    for i := 0 to fPoolLast do
+      inc(result, fPool[i].Clean(aMinimumRefCount));
+end;
+
+function TRawUTF8Interning.Count: integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  if self <> nil then
+    for i := 0 to fPoolLast do
+      inc(result, fPool[i].Count);
+end;
+
+procedure TRawUTF8Interning.Unique(var aResult: RawUTF8; const aText: RawUTF8);
+var
+  hash: cardinal;
+begin
+  if aText = '' then
+    aResult := ''
+  else if self = nil then
+    aResult := aText
+  else
+  begin // inlined fPool[].Values.HashElement
+    hash := InterningHasher(0, pointer(aText), length(aText));
+    fPool[hash and fPoolLast].Unique(aResult, aText, hash);
+  end;
+end;
+
+procedure TRawUTF8Interning.UniqueText(var aText: RawUTF8);
+var
+  hash: cardinal;
+begin
+  if (self <> nil) and (aText <> '') then
+  begin // inlined fPool[].Values.HashElement
+    hash := InterningHasher(0, pointer(aText), length(aText));
+    fPool[hash and fPoolLast].UniqueText(aText, hash);
+  end;
+end;
+
+function TRawUTF8Interning.Unique(const aText: RawUTF8): RawUTF8;
+var
+  hash: cardinal;
+begin
+  if aText = '' then
+    result := ''
+  else if self = nil then
+    result := aText
+  else
+  begin // inlined fPool[].Values.HashElement
+    hash := InterningHasher(0, pointer(aText), length(aText));
+    fPool[hash and fPoolLast].Unique(result, aText, hash);
+  end;
+end;
+
+function TRawUTF8Interning.Unique(aText: PUTF8Char; aTextLen: PtrInt): RawUTF8;
+begin
+  FastSetString(result, aText, aTextLen);
+  UniqueText(result);
+end;
+
+procedure TRawUTF8Interning.Unique(var aResult: RawUTF8;
+  aText: PUTF8Char; aTextLen: PtrInt);
+begin
+  FastSetString(aResult, aText, aTextLen);
+  UniqueText(aResult);
+end;
+
+procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
+begin
+  ClearVariantForString(aResult);
+  Unique(RawUTF8(TVarData(aResult).VAny), aText);
+end;
+
+procedure TRawUTF8Interning.UniqueVariantString(var aResult: variant;
+  const aText: string);
+var
+  tmp: RawUTF8;
+begin
+  StringToUTF8(aText, tmp);
+  UniqueVariant(aResult, tmp);
+end;
+
+procedure TRawUTF8Interning.UniqueVariant(var aResult: variant);
+var
+  vd: TVarData absolute aResult;
+  vt: cardinal;
+begin
+  vt := vd.VType;
+  if vt = varString then
+    UniqueText(RawUTF8(vd.VString))
+  else if vt = varVariant or varByRef then
+    UniqueVariant(PVariant(vd.VPointer)^)
+  else if vt = varString or varByRef then
+    UniqueText(PRawUTF8(vd.VPointer)^);
+end;
+
 
 
 { ************ TSynNameValue Name/Value Storage }
@@ -11002,7 +11259,7 @@ begin
 end;
 
 const
-  PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
+  _PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
 
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
@@ -11034,7 +11291,7 @@ begin
   HashItem := aHashItem;
   EventHash := aEventHash;
   if (@HashItem = nil) and (@EventHash = nil) then // fallback to first field RTTI
-    HashItem := PT_HASH[aCaseInsensitive, DynArray^.GuessKnownType];
+    HashItem := _PT_HASH[aCaseInsensitive, DynArray^.GuessKnownType];
   Compare := aCompare;
   EventCompare := aEventCompare;
   if (@Compare = nil) and (@EventCompare = nil) then
@@ -11044,16 +11301,16 @@ begin
 end;
 
 procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray; aKind: TRttiParserType;
-  aCaseInsensitive: boolean);
+  aCaseInsensitive: boolean; aHasher: THasher);
 var
   cmp: TDynArraySortCompare;
   hsh: TDynArrayHashOne;
 begin
   cmp := PT_SORT[aCaseInsensitive, aKind];
-  hsh := PT_HASH[aCaseInsensitive, aKind];
+  hsh := _PT_HASH[aCaseInsensitive, aKind];
   if (@hsh = nil) or (@cmp = nil) then
     raise ESynException.CreateUTF8('TDynArrayHasher.InitSpecific: %?', [ToText(aKind)^]);
-  Init(aDynArray, hsh, nil, nil, cmp, nil, aCaseInsensitive)
+  Init(aDynArray, hsh, nil, aHasher, cmp, nil, aCaseInsensitive)
 end;
 
 procedure TDynArrayHasher.Clear;
@@ -11601,11 +11858,12 @@ begin
 end;
 
 procedure TDynArrayHashed.InitSpecific(aTypeInfo: pointer; var aValue;
-  aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean);
+  aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean;
+  aHasher: THasher);
 begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
     Init(aTypeInfo, aValue, aCountPointer);
-  fHash.InitSpecific(@self, aKind, aCaseInsensitive);
+  fHash.InitSpecific(@self, aKind, aCaseInsensitive, aHasher);
   {$ifdef UNDIRECTDYNARRAY} with InternalDynArray do {$endif}
   begin
     fCompare := fHash.Compare;
@@ -11777,6 +12035,7 @@ var
   k: TRttiKind;
 begin
   // initialize RTTI binary persistence and comparison
+  MoveFast(_PT_HASH, PT_HASH, SizeOf(PT_HASH));
   for k := low(k) to high(k) do
     case k of
       rkInteger, rkEnumeration, rkSet, rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
