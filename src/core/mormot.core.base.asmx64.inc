@@ -9,6 +9,7 @@
   // disabled some FPC paranoid warnings
   {$WARN 7119 off : Exported/global symbols should be accessed via the GOT }
   {$WARN 7121 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits]" }
+  {$WARN 7122 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits + $4 byte offset]" }
   {$WARN 7123 off : Check "$1: offset of memory operand is negative "$2 byte" }
 {$endif FPC}
 
@@ -78,7 +79,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         lea     dst, [dst + rax]
         ja     @lrgbwd
 @lrgfwd:{$ifdef WITH_ERMS}
-        test    byte ptr[rip+CPUIDX64], 1 shl cpuERMS
+        test    byte ptr[rip + CPUIDX64], 1 shl cpuERMS
         jz      @nofwe
         cmp     rax, 2048
         jb      @nofwe
@@ -102,12 +103,12 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         ret
 @nofwe: {$endif WITH_ERMS}
         mov     r9, dst
-        {$ifdef FPC} // no AVX asm on Delphi :(
+        {$ifdef ASMX64AVX} // no AVX asm on Delphi :(
         cmp     rax, 256  // vzeroupper penaly for cnt>255
         jb      @fsse2
-        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        test    byte ptr[rip + CPUIDX64], 1 shl cpuAVX
         jnz     @fwdavx
-        {$endif FPC}
+        {$endif ASMX64AVX}
 @fsse2: movups  xmm2, oword ptr[src]  // first 16
         lea     src, [src + rax - 16]
         lea     rax, [rax + dst - 16]
@@ -133,7 +134,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jl      @fwdnv
         sfence
         jmp     @fwdend
-{$ifdef FPC}
+{$ifdef ASMX64AVX}
 @fwdavx:vmovups ymm2, oword ptr[src]  // first 32
         lea     src, [src + rax - 32]
         lea     rax, [rax + dst - 32]
@@ -161,9 +162,9 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jl      @favxn
         sfence
         jmp     @favxe
-{$endif FPC}
+{$endif ASMX64AVX}
 @lrgbwd:{$ifdef WITH_ERMS}  // backward move
-        test    byte ptr[rip+CPUIDX64], 1 shl cpuERMS
+        test    byte ptr[rip + CPUIDX64], 1 shl cpuERMS
         jz      @nobwe
         cmp     rax, 2048
         jb      @nobwe
@@ -172,12 +173,12 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         lea     dst, [dst + rax - 1]
         jmp     @repmov
 @nobwe: {$endif WITH_ERMS}
-        {$ifdef FPC}
+        {$ifdef ASMX64AVX}
         cmp     rax, 256
         jb      @bsse2
-        test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        test    byte ptr[rip + CPUIDX64], 1 shl cpuAVX
         jnz      @bwdavx
-        {$endif FPC}
+        {$endif ASMX64AVX}
 @bsse2: sub     rax, 16
         mov     r9, rax
         movups  xmm2, oword ptr[src + rax]  // last 16
@@ -205,7 +206,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jg      @bwdnv
         sfence
         jmp     @bwdend
-{$ifdef FPC}
+{$ifdef ASMX64AVX}
 @bwdavx:sub     rax, 32
         mov     r9, rax
         vmovups ymm2, oword ptr[src + rax]  // last 32
@@ -231,7 +232,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         jg      @bavxn
         sfence
         jmp     @bavxe
-{$endif FPC}
+{$endif ASMX64AVX}
 @03:    movzx   eax, word ptr[src]
         mov     cl, byte ptr[src + 2]
         mov     word ptr[dst], ax
@@ -297,10 +298,10 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         lea     r8, [dst+cnt]  // r8 point to end
         pshufd  xmm0, xmm0, 0  // broadcast value into all bytes of xmm0
         mov     r10, rdx       // save rdx=cnt
-        {$ifdef FPC} // Delphi doesn't support avx, and erms is slower
+        {$ifdef ASMX64AVX} // Delphi doesn't support avx, and erms is slower
         cmp     rdx, 256
         jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penaly)
-        {$endif FPC}
+        {$endif ASMX64AVX}
 @sse2:  movups  oword ptr[dst], xmm0  // first unaligned 16 bytes
         lea     rdx, [dst+rdx-1]
         and     rdx, -16
@@ -323,9 +324,9 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         sfence
         movups  oword ptr[r8-16], xmm0
         ret
-{$ifdef FPC}
+{$ifdef ASMX64AVX}
 @abv256:{$ifdef WITH_ERMS}
-        mov     r9b, byte ptr[rip+CPUIDX64]
+        mov     r9b, byte ptr[rip + CPUIDX64]
         test    r9b, 1 shl cpuERMS
         jz      @noerms
         cmp     rdx, 2048  // ERMS is worth it for cnt>2KB
@@ -343,7 +344,8 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         rep stosb
 {$endif}ret
 @noerms:test    r9b, 1 shl cpuAVX
-{$else} test    byte ptr[rip+CPUIDX64], 1 shl cpuAVX
+        {$else}
+        test    byte ptr[rip + CPUIDX64], 1 shl cpuAVX
         {$endif WITH_ERMS}
         jz      @sse2
         movups  oword ptr[dst], xmm0 // first unaligned 1..16 bytes
@@ -371,7 +373,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         jnz      @avxnv
         sfence
         jmp      @avxok
-{$endif FPC}
+{$endif ASMX64AVX}
 end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -538,7 +540,120 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     [rax], dl
 end;
 
+
 {$endif ASMX64}
+
+{$ifdef CPUX64ASM} /// proper compilation on FPC and Delphi XE7+
+
+{ some numbers, with CITIES_MAX=200000, deleting 1/128 entries
+  first column (3..23) is the max number of indexes[] chunk to rehash
+  -> TDynArray.Delete move() takes more time than the HashTable update :)
+  1. naive loop
+    for i := 0 to HashTableSize-1 do
+      if HashTable[i]>aArrayIndex then
+        dec(HashTable[i]);
+    3 #257  adjust=7.95ms 191.7MB hash=8us
+    23 #195075  adjust=4.27s 548.6MB/s hash=2.47ms
+  2. branchless pure pascal code is about 10x faster!
+    3 #257  adjust=670us 2.2GB hash=8us
+    23 #195075  adjust=520.85ms 4.3GB/s hash=2.45ms
+  3. SSE2 simd assembly makes about 3x improvement
+    3 #257  adjust=290us 5.1GB hash=8us
+    23 #195075  adjust=201.53ms 11.3GB/s hash=2.44ms
+  4. AVX2 simd assembly gives some additional 40% (on my iCore3 cpu)
+    3 #257  adjust=262us 5.6GB hash=8us
+    23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
+}
+
+// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+{$ifdef Linux}
+        mov     r8, rdx
+        mov     rcx, rdi
+        mov     rdx, rsi
+{$endif Linux}
+        xor     eax, eax    // reset eax high bits for setg al below
+        movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
+        pshufd  xmm0, xmm0, 0
+        test    cl, 3
+        jnz     @1  // paranoid: a dword dynamic array is always dword-aligned
+        // ensure P is 256-bit aligned (for avx2)
+@align: test    cl, 31
+        jz      @ok
+        cmp     dword ptr[rcx], edx
+        setg    al                  // P[]>deleted -> al=1, 0 otherwise
+        sub     dword ptr[rcx], eax // branchless dec(P[])
+        add     rcx, 4
+        dec     r8
+        jmp     @align
+@ok:    {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.3) :(
+        test    byte ptr[rip + CPUIDX64], 1 shl cpuAVX2
+        jz      @sse2
+        vpshufd ymm0, ymm0, 0          // shuffle to ymm0 128-bit low lane
+        vperm2f128 ymm0, ymm0, ymm0, 0 // copy to ymm0 128-bit high lane
+        // avx process of 128 bytes (32 indexes) per loop iteration
+        align 16
+@avx2:  sub      r8, 32
+        vmovdqa  ymm1, [rcx]       // 4 x 256-bit process = 4 x 8 integers
+        vmovdqa  ymm3, [rcx + 32]
+        vmovdqa  ymm5, [rcx + 64]
+        vmovdqa  ymm7, [rcx + 96]
+        vpcmpgtd ymm2, ymm1, ymm0  // compare P[]>deleted -> -1, 0 otherwise
+        vpcmpgtd ymm4, ymm3, ymm0
+        vpcmpgtd ymm6, ymm5, ymm0
+        vpcmpgtd ymm8, ymm7, ymm0
+        vpaddd   ymm1, ymm1, ymm2  // adjust by adding -1 / 0
+        vpaddd   ymm3, ymm3, ymm4
+        vpaddd   ymm5, ymm5, ymm6
+        vpaddd   ymm7, ymm7, ymm8
+        vmovdqa  [rcx], ymm1
+        vmovdqa  [rcx + 32], ymm3
+        vmovdqa  [rcx + 64], ymm5
+        vmovdqa  [rcx + 96], ymm7
+        add      rcx, 128
+        cmp      r8, 32
+        jae      @avx2
+        vzeroupper
+        jmp      @2
+        {$endif ASMX64AVX}
+        // SSE2 process of 64 bytes (16 indexes) per loop iteration
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sse2:  sub     r8, 16
+        movaps  xmm1, dqword [rcx]  // 4 x 128-bit process = 4 x 4 integers
+        movaps  xmm3, dqword [rcx + 16]
+        movaps  xmm5, dqword [rcx + 32]
+        movaps  xmm7, dqword [rcx + 48]
+        movaps  xmm2, xmm1  // keep copy for paddd below
+        movaps  xmm4, xmm3
+        movaps  xmm6, xmm5
+        movaps  xmm8, xmm7
+        pcmpgtd xmm1, xmm0  // quad compare P[]>deleted -> -1, 0 otherwise
+        pcmpgtd xmm3, xmm0
+        pcmpgtd xmm5, xmm0
+        pcmpgtd xmm7, xmm0
+        paddd   xmm1, xmm2  // quad adjust by adding -1 / 0
+        paddd   xmm3, xmm4
+        paddd   xmm5, xmm6
+        paddd   xmm7, xmm8
+        movaps  dqword [rcx], xmm1  // quad store back
+        movaps  dqword [rcx + 16], xmm3
+        movaps  dqword [rcx + 32], xmm5
+        movaps  dqword [rcx + 48], xmm7
+        add     rcx, 64
+        cmp     r8, 16
+        jae     @sse2
+        jmp     @2
+        // trailing indexes
+@1:     dec     r8
+        cmp     dword ptr[rcx + r8 * 4], edx
+        setg    al
+        sub     dword ptr[rcx + r8 * 4], eax
+@2:     test    r8, r8
+        jnz     @1
+end;
+
+{$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
 
 
 // functions below are always available, even on DARWIN
@@ -1462,8 +1577,8 @@ function InterlockedIncrement(var I: Integer): Integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, I
         mov     edx, 1
-        xchg    eax, edx
-   lock xadd    [edx], eax
+        xchg    rax, rdx
+   lock xadd    dword ptr [rdx], eax
         inc     eax
 end;
 
@@ -1471,8 +1586,8 @@ function InterlockedDecrement(var I: Integer): Integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, I
         mov     edx, -1
-        xchg    eax, edx
-   lock xadd    [edx], eax
+        xchg    rax, rdx
+   lock xadd    dword ptr [rdx], eax
         dec     eax
 end;
 

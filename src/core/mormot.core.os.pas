@@ -183,8 +183,10 @@ const
   {$endif FPC}
   {$ifdef CPU64} + ' 64 bit' {$else} + ' 32 bit' {$endif};
 
+{$ifndef PUREMORMOT2}
 // deprecated function: use COMPILER_VERSION constant instead
 function GetDelphiCompilerVersion: RawUTF8; deprecated;
+{$endif PUREMORMOT2}
 
 {$ifdef MSWINDOWS}
 

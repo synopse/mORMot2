@@ -126,12 +126,6 @@ function VariantCompare(const V1, V2: variant): PtrInt;
 function VariantCompareI(const V1, V2: variant): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// compare two "array of variant" elements, with case sensitivity
-function SortDynArrayVariant(const A, B): integer;
-
-/// compare two "array of variant" elements, with no case sensitivity
-function SortDynArrayVariantI(const A, B): integer;
-
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
@@ -2025,7 +2019,7 @@ begin
   VarClear(value);
 end;
 
-procedure _VariantDynArrayClearSeveral(V: PVarData; n: integer);
+procedure _VariantClearSeveral(V: PVarData; n: integer);
 var
   vt, docv: cardinal;
   handler: TCustomVariantType;
@@ -2038,13 +2032,13 @@ begin
   clearproc := @VarClearProc;
   repeat
     vt := V^.VType;
-    if vt < varWord64 then
+    if vt <= varWord64 then
     begin
       if (vt >= varOleStr) and (vt <= varError) then
         if vt = varOleStr then
           WideString(V^.VAny) := ''
         else
-          goto clr;
+          goto clr; // varError, varDispatch
     end
     else if vt = varString then
       {$ifdef FPC}
@@ -2305,17 +2299,8 @@ begin
   result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), {caseins=}true);
 end;
 
-function SortDynArrayVariant(const A, B): integer;
-begin
-  result := _SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}false);
-end;
-
-function SortDynArrayVariantI(const A, B): integer;
-begin
-  result := _SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}true);
-end;
-
-function VariantEquals(const V: Variant; const Str: RawUTF8; CaseSensitive: boolean): boolean;
+function VariantEquals(const V: Variant; const Str: RawUTF8;
+  CaseSensitive: boolean): boolean;
 
   function Complex: boolean;
   var
@@ -3969,35 +3954,6 @@ begin
       TVarData(VValue[result]), TVarData(aValue), CaseInsensitive) = 0 then
       exit;
   result := -1;
-end;
-
-procedure ExchgPointer(n1, n2: PPointer); {$ifdef HASINLINE} inline;{$endif}
-var
-  n: pointer;
-begin
-  n := n2^;
-  n2^ := n1^;
-  n1^ := n;
-end;
-
-procedure ExchgVariant(v1, v2: PPtrIntArray); {$ifdef CPU64} inline;{$endif}
-var
-  c: PtrInt; // 32-bit:16bytes=4ptr 64-bit:24bytes=3ptr
-begin
-  c := v2[0];
-  v2[0] := v1[0];
-  v1[0] := c;
-  c := v2[1];
-  v2[1] := v1[1];
-  v1[1] := c;
-  c := v2[2];
-  v2[2] := v1[2];
-  v1[2] := c;
-  {$ifdef CPU32}
-  c := v2[3];
-  v2[3] := v1[3];
-  v1[3] := c;
-  {$endif}
 end;
 
 type
@@ -5886,7 +5842,7 @@ end;
 
 initialization
   BinaryVariantLoadAsJSON := _BinaryVariantLoadAsJSON;
-  VariantDynArrayClearSeveral := _VariantDynArrayClearSeveral;
+  VariantClearSeveral := _VariantClearSeveral;
   SortDynArrayVariantComp := _SortDynArrayVariantComp;
 end.
 

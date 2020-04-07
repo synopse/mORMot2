@@ -203,16 +203,6 @@ procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
 type
-  /// a type alias, which will be serialized as ISO-8601 with milliseconds
-  // - i.e. 'YYYY-MM-DD hh:mm:ss.sss' or 'YYYYMMDD hhmmss.sss' format
-  TDateTimeMS = type TDateTime;
-
-  /// a dynamic array of TDateTimeMS values
-  TDateTimeMSDynArray = array of TDateTimeMS;
-
-  /// pointer to a dynamic array of TDateTimeMS values
-  PDateTimeMSDynArray = ^TDateTimeMSDynArray;
-
   /// a simple way to store a date as Year/Month/Day
   // - with no needed computation as with TDate/TUnixTime values
   // - consider using TSynSystemTime if you need to handle both Date and Time
@@ -400,35 +390,6 @@ const
 
 { ************ TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time }
 
-type
-  /// timestamp stored as second-based Unix Time
-  // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
-  // - is stored as 64-bit value, so that it won't be affected by the
-  // "Year 2038" overflow issue
-  // - see TUnixMSTime for a millisecond resolution Unix Timestamp
-  // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
-  // a regular TDateTime
-  // - use UnixTimeUTC to return the current timestamp, using fast OS API call
-  // - also one of the encodings supported by SQLite3 date/time functions
-  TUnixTime = type Int64;
-
-  /// timestamp stored as millisecond-based Unix Time
-  // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
-  // - see TUnixTime for a second resolution Unix Timestamp
-  // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
-  // to/from a regular TDateTime
-  // - also one of the JavaScript date encodings
-  TUnixMSTime = type Int64;
-
-  /// pointer to a timestamp stored as second-based Unix Time
-  PUnixTime = ^TUnixTime;
-  /// pointer to a timestamp stored as millisecond-based Unix Time
-  PUnixMSTime = ^TUnixMSTime;
-  /// dynamic array of timestamps stored as second-based Unix Time
-  TUnixTimeDynArray = array of TUnixTime;
-  /// dynamic array of timestamps stored as millisecond-based Unix Time
-  TUnixMSTimeDynArray = array of TUnixMSTime;
-
 const
   /// a contemporary, but elapsed, TUnixTime second-based value
   // - corresponds to Thu, 08 Dec 2016 08:50:20 GMT
@@ -505,24 +466,6 @@ function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
 { ************ TTimeLog efficient 64-bit custom date/time encoding }
 
 type
-  /// fast bit-encoded date and time value
-  // - faster than Iso-8601 text and TDateTime, e.g. can be used as published
-  // property field in mORMot's TSQLRecord (see also TModTime and TCreateTime)
-  // - use internally for computation an abstract "year" of 16 months of 32 days
-  // of 32 hours of 64 minutes of 64 seconds - same as Iso8601ToTimeLog()
-  // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow functions, or
-  // type-cast any TTimeLog value with the TTimeLogBits memory structure for
-  // direct access to its bit-oriented content (or via PTimeLogBits pointer)
-  // - since TTimeLog type is bit-oriented, you can't just add or substract two
-  // TTimeLog values when doing date/time computation: use a TDateTime temporary
-  // conversion in such case:
-  // ! aTimestamp := TimeLogFromDateTime(IncDay(TimeLogToDateTime(aTimestamp)));
-  TTimeLog = type Int64;
-
-  /// dynamic array of TTimeLog
-  // - recognized e.g. by TDynArray JSON serialization
-  TTimeLogDynArray = array of TTimeLog;
-
   /// pointer to a memory structure for direct access to a TTimeLog type value
   PTimeLogBits = ^TTimeLogBits;
 

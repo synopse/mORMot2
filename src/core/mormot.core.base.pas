@@ -2,7 +2,6 @@
 // - this unit is a part of the freeware Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.base;
-
 {
   *****************************************************************************
 
@@ -391,15 +390,82 @@ type
   TInterfaceDynArray = array of IInterface;
   PInterfaceDynArray = ^TInterfaceDynArray;
 
+  TStreamClass = class of TStream;
+  TInterfacedObjectClass = class of TInterfacedObject;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
 
-  /// class-reference type (metaclass) of a TStream
-  TStreamClass = class of TStream;
+{ some types defined here, but implemented in mormot.core.datetime or
+  mormot.core.base, so that it may be identified by mormot.core.rtti }
 
-  /// class-reference type (metaclass) of a TInterfacedObject
-  TInterfacedObjectClass = class of TInterfacedObject;
+type
+  /// fast bit-encoded date and time value
+  // - see TTimeLog helper functions and types in mormot.core.datetime
+  // - faster than Iso-8601 text and TDateTime, e.g. can be used as published
+  // property field in mORMot's TSQLRecord (see also TModTime and TCreateTime)
+  // - use internally for computation an abstract "year" of 16 months of 32 days
+  // of 32 hours of 64 minutes of 64 seconds - same as Iso8601ToTimeLog()
+  // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow functions, or
+  // type-cast any TTimeLog value with the TTimeLogBits memory structure for
+  // direct access to its bit-oriented content (or via PTimeLogBits pointer)
+  // - since TTimeLog type is bit-oriented, you can't just add or substract two
+  // TTimeLog values when doing date/time computation: use a TDateTime temporary
+  // conversion in such case:
+  // ! aTimestamp := TimeLogFromDateTime(IncDay(TimeLogToDateTime(aTimestamp)));
+  TTimeLog = type Int64;
+  /// dynamic array of TTimeLog
+  // - recognized e.g. by TDynArray JSON serialization
+  TTimeLogDynArray = array of TTimeLog;
 
+  /// a type alias, which will be serialized as ISO-8601 with milliseconds
+  // - i.e. 'YYYY-MM-DD hh:mm:ss.sss' or 'YYYYMMDD hhmmss.sss' format
+  TDateTimeMS = type TDateTime;
+  /// a dynamic array of TDateTimeMS values
+  TDateTimeMSDynArray = array of TDateTimeMS;
+  /// pointer to a dynamic array of TDateTimeMS values
+  PDateTimeMSDynArray = ^TDateTimeMSDynArray;
+
+  /// a 64-bit identifier, defined for TSynPersistentWithID
+  // - type used for our ORM primary key, i.e. TSQLRecord.ID
+  // - it maps the SQLite3 64-bit RowID definition
+  TID = type Int64;
+  /// a pointer to TSynPersistentWithID.ID, i.e. our ORM primary key
+  PID = ^TID;
+  /// used to store a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
+  TIDDynArray = array of TID;
+  /// pointer to a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
+  PIDDynArray = ^TIDDynArray;
+
+  /// timestamp stored as second-based Unix Time
+  // - see Unix Time helper functions and types in mormot.core.datetime
+  // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
+  // - is stored as 64-bit value, so that it won't be affected by the
+  // "Year 2038" overflow issue
+  // - see TUnixMSTime for a millisecond resolution Unix Timestamp
+  // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
+  // a regular TDateTime
+  // - use UnixTimeUTC to return the current timestamp, using fast OS API call
+  // - also one of the encodings supported by SQLite3 date/time functions
+  TUnixTime = type Int64;
+  /// pointer to a timestamp stored as second-based Unix Time
+  PUnixTime = ^TUnixTime;
+  /// dynamic array of timestamps stored as second-based Unix Time
+  TUnixTimeDynArray = array of TUnixTime;
+
+  /// timestamp stored as millisecond-based Unix Time
+  // - see Unix Time helper functions and types in mormot.core.datetime
+  // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
+  // - see TUnixTime for a second resolution Unix Timestamp
+  // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
+  // to/from a regular TDateTime
+  // - also one of the JavaScript date encodings
+  TUnixMSTime = type Int64;
+  /// pointer to a timestamp stored as millisecond-based Unix Time
+  PUnixMSTime = ^TUnixMSTime;
+  /// dynamic array of timestamps stored as millisecond-based Unix Time
+  TUnixMSTimeDynArray = array of TUnixMSTime;
+
+type
   /// stack-allocated ASCII string, used by GUIDToShort() function
   TGUIDShortString = string[38];
 
@@ -415,7 +481,6 @@ type
     ccDarkGray, ccLightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
     ccYellow, ccWhite);
 
-type
   /// cross-compiler type used for string/dynarray reference counter
   TRefCnt = {$ifdef FPC} SizeInt {$else} longint {$endif};
   /// pointer to cross-compiler type used for string/dynarray reference counter
@@ -502,8 +567,11 @@ const
 
   /// cross-compiler negative offset to TDynArrayRec.high/length field
   // - to be used inlined e.g. as
-  // ! PDALen(PtrUInt(Values) - _DALEN)^ {$ifdef FPC} + 1 {$endif}
+  // ! PDALen(PtrUInt(Values) - _DALEN)^ + _DAOFF
   _DALEN = SizeOf(PtrInt);
+
+  /// cross-compiler adjuster to get length from TDynArrayRec.high/length field
+  _DAOFF = {$ifdef FPC} 1 {$else} 0 {$endif};
   
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
   // - to be used inlined e.g. as PRefCnt(PtrUInt(Values) - _DAREFCNT)^
@@ -665,9 +733,17 @@ type
   /// the floating-point type to be used for best precision and speed
   // - will allow to fallback to double e.g. on x64 and ARM CPUs
   TSynExtended = extended;
+
+  TSynExtendedDynArray = array of TSynExtended;
+  PSynExtendedDynArray = ^TSynExtendedDynArray;
+
   {$else}
   /// ARM/Delphi 64-bit does not support 80bit extended -> double is enough
   TSynExtended = double;
+
+  TSynExtendedDynArray = TDoubleDynArray;
+  PSynExtendedDynArray = PDoubleDynArray;
+
   {$endif TSYNEXTENDED80}
 
   /// compiler native currency type
@@ -700,8 +776,10 @@ type
   {$endif CPUX86}
 
   PSynCurrency = ^TSynCurrency;
+
   PSynCurrencyDynArray = ^TSynCurrencyDynArray;
   TSynCurrencyDynArray = array of TSynCurrency;
+
   PCurrencyDynArray = PSynCurrencyDynArray;
   TCurrencyDynArray = TSynCurrencyDynArray;
 
@@ -1869,11 +1947,11 @@ var GetBitsCountPtrInt: function(value: PtrInt): PtrInt = GetBitsCountPas;
 
 const
   /// could be used to compute the index in a pointer list from its position
-  POINTERSHR = {$ifdef CPU64}3{$else}2{$endif};
+  POINTERSHR = {$ifdef CPU64} 3 {$else} 2 {$endif};
   /// could be used to compute the bitmask of a pointer integer
-  POINTERAND = {$ifdef CPU64}7{$else}3{$endif};
+  POINTERAND = {$ifdef CPU64} 7 {$else} 3 {$endif};
   /// could be used to check all bits on a pointer
-  POINTERBITS = {$ifdef CPU64}64{$else}32{$endif};
+  POINTERBITS = {$ifdef CPU64} 64 {$else} 32 {$endif};
 
   /// constant array used by GetAllBits() function (when inlined)
   ALLBITS_CARDINAL: array[1..32] of Cardinal = (
@@ -1894,10 +1972,12 @@ type
   TBits8 = set of 0..7;
   PBits8 = ^TBits8;
   TBits8Array = array[0 .. MaxInt - 1] of TBits8;
+
   /// fast access to 32-bit integer bits
   // - the compiler will generate bt/btr/bts opcodes
   TBits32 = set of 0..31;
   PBits32 = ^TBits32;
+
   /// fast access to 64-bit integer bits
   // - the compiler will generate bt/btr/bts opcodes
   // - as used by GetBit64/SetBit64/UnSetBit64
@@ -1922,10 +2002,10 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 
 type
   /// the potential features, retrieved from an Intel CPU
-  // - see https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
-  // - is defined on all platforms, since an ARM desktop could browse Intel logs
-  TIntelCpuFeature =
-   ( { CPUID 1 in EDX }
+  // - cf https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
+  // - is defined on all platforms, so that an ARM desktop may browse Intel logs
+  TIntelCpuFeature = (
+   { CPUID 1 in EDX }
    cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
    cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
    cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
@@ -2539,6 +2619,11 @@ function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
 // - returns FALSE if the buffer does not have any expected SOI/SOF markers
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt; out Height, Width: integer): boolean; overload;
 
+/// internal hash table adjustment as called from TDynArrayHasher.HashDelete
+// - brute force O(n) indexes fix after deletion (much faster than full ReHash)
+// - we offer very optimized SSE2 and AVX2 versions on x86_64
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+
 
 { ************ Efficient Variant Values Conversion }
 
@@ -2669,17 +2754,24 @@ procedure VariantStringToUTF8(const V: Variant; var result: RawUTF8); overload;
 // null) will be returned as ''
 function VariantStringToUTF8(const V: Variant): RawUTF8; overload;
 
+/// compare two "array of variant" elements, with case sensitivity
+// - just a wrapper around SortDynArrayVariantComp(A,B,false)
+function SortDynArrayVariant(const A, B): integer;
+
+/// compare two "array of variant" elements, with no case sensitivity
+// - just a wrapper around SortDynArrayVariantComp(A,B,true)
+function SortDynArrayVariantI(const A, B): integer;
+
 var
   /// efficient initialization of successive variant items from a (dynamic) array
   // - this unit will include a basic version calling VarClear()
   // - mormot.core.variants will assign a more efficient implementation
-  VariantDynArrayClearSeveral: procedure(V: PVarData; n: integer);
+  VariantClearSeveral: procedure(V: PVarData; n: integer);
 
   /// compare two "array of variant" elements, with or without case sensitivity
-  // - this low-level function will call the RTL variants unit
-  // - this unit will include a basic case-sensitive version calling VarCompareValue()
-  // - mormot.core.variants will assign a more efficient implementation handling
-  // case insensitive comparison in string, if needed
+  // - this unit registeres a basic case-sensitive version calling VarCompareValue()
+  // - mormot.core.variants will assign a (much) more efficient implementation,
+  // also properly handling case insensitive comparison in text
   SortDynArrayVariantComp: function(const A, B: TVarData; caseInsensitive: boolean): integer;
 
 
@@ -2749,6 +2841,9 @@ function SortDynArraySingle(const A, B): integer;
 /// compare two "array of double" elements
 function SortDynArrayDouble(const A, B): integer;
 
+/// compare two "array of extended" elements
+function SortDynArrayExtended(const A, B): integer;
+
 /// compare two "array of AnsiString" elements, with case sensitivity
 function SortDynArrayAnsiString(const A, B): integer;
 
@@ -2772,6 +2867,21 @@ function SortDynArrayString(const A, B): integer;
 // - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
 
+/// low-level inlined function for exchanging two pointers
+// - used e.g. during sorting process
+procedure ExchgPointer(n1, n2: PPointer);
+  {$ifdef HASINLINE} inline;{$endif}
+
+/// low-level inlined function for exchanging two variants
+// - used e.g. during sorting process
+procedure ExchgVariant(v1, v2: PPtrIntArray);
+  {$ifdef CPU64} inline;{$endif}
+
+/// low-level inlined function for exchanging two memory buffers
+// - used e.g. during sorting process
+procedure Exchg(P1, P2: PAnsiChar; count: PtrInt);
+  {$ifdef HASINLINE} inline;{$endif}
+
 
 { ************ Some Convenient TStream descendants and File access functions }
 
@@ -2794,11 +2904,16 @@ type
   protected
     fDataString: RawByteString;
     fPosition: Integer;
+    {$ifdef FPC}
+    function GetPosition: Int64; override;
+    {$endif FPC}
     function  GetSize: Int64; override;
     procedure SetSize(NewSize: Longint); override;
   public
+    /// initialize a void storage
+    constructor Create; overload;
     /// initialize the storage, optionally with some RawByteString content
-    constructor Create(const aString: RawByteString = ''); overload;
+    constructor Create(const aString: RawByteString); overload;
     /// read some bytes from the internal storage
     // - returns the number of bytes filled into Buffer (<=Count)
     function Read(var Buffer; Count: Longint): Longint; override;
@@ -3820,14 +3935,14 @@ end;
 {$ifndef CPU32DELPHI}
 
 const
-  POW10: array[-31..32] of TSynExtended = (
+  POW10: array[-31..33] of TSynExtended = (
     1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
     1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
     1E-11, 1E-10, 1E-9,  1E-8,  1E-7,  1E-6,  1E-5,  1E-4,  1E-3,  1E-2,
     1E-1,  1E0,   1E1,   1E2,   1E3,   1E4,   1E5,   1E6,   1E7,   1E8,
     1E9,   1E10,  1E11,  1E12,  1E13,  1E14,  1E15,  1E16,  1E17,  1E18,
     1E19,  1E20,  1E21,  1E22,  1E23,  1E24,  1E25,  1E26,  1E27,  1E28,
-    1E29,  1E30,  1E31,  0);
+    1E29,  1E30,  1E31,  0,     -1);
 
 function HugePower10(exponent: integer): TSynExtended;
   {$ifdef HASINLINE} inline;{$endif}
@@ -3945,12 +4060,12 @@ begin
     else
       inc(frac, exp);
   end;
-  if (frac >= low(POW10)) and (frac < high(POW10)) then
+  if (frac >= -31) and (frac <= 31) then
     result := POW10[frac]
   else
     result := HugePower10(frac);
   if fNeg in flags then
-    result := -result;
+    result := result * POW10[33]; // * -1
   if (fValid in flags) and (c = #0) then
   begin
     err := 0;
@@ -3959,7 +4074,7 @@ begin
   else
   begin
 e:  err := 1;
-    result := POW10[32]; // return some value to make the compile happy
+    result := POW10[32]; // returns 0 to make the compile happy
   end;
 end;
 
@@ -8873,7 +8988,32 @@ begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
   end;
 end;
 
+{$ifndef CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
 
+// pure pascal alternative to SSE2 / AVX2 very fast asm
+
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+begin
+  repeat
+    dec(count, 8);
+    dec(P[0], ord(P[0] > deleted)); // branchless code is 10x faster than if :)
+    dec(P[1], ord(P[1] > deleted));
+    dec(P[2], ord(P[2] > deleted));
+    dec(P[3], ord(P[3] > deleted));
+    dec(P[4], ord(P[4] > deleted));
+    dec(P[5], ord(P[5] > deleted));
+    dec(P[6], ord(P[6] > deleted));
+    dec(P[7], ord(P[7] > deleted));
+    P := @P[8];
+  until count < 8;
+  while count > 0 do
+  begin
+    dec(count);
+    dec(P[count], ord(P[count] > deleted));
+  end;
+end;
+
+{$endif CPUX64ASM}
 
 
 { ************ Efficient Variant Values Conversion }
@@ -8884,7 +9024,10 @@ end;
 
 procedure VarClear(var v: variant); // Alfred reported issues with VTYPE_STATIC
 begin
-  VarClearProc(PVarData(@v)^);
+  if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
+    VarClearProc(PVarData(@v)^)
+  else
+    PInteger(@v)^ := 0;
 end;
 
 {$else}
@@ -9239,7 +9382,7 @@ end;
 
 function RawUTF8ToVariant(const Txt: RawUTF8): variant;
 begin
-  RawUTF8ToVariant(Txt, result);
+  RawUTF8ToVariant(Txt, result{%H-});
 end;
 
 procedure VariantStringToUTF8(const V: Variant; var result: RawUTF8);
@@ -9253,10 +9396,10 @@ end;
 
 function VariantStringToUTF8(const V: Variant): RawUTF8;
 begin
-  VariantStringToUTF8(V, result);
+  VariantStringToUTF8(V, result{%H-});
 end;
 
-procedure _VariantDynArrayClearSeveral(V: PVariant; n: integer);
+procedure _VariantClearSeveral(V: PVariant; n: integer);
 begin
   if n > 0 then
     repeat
@@ -9270,8 +9413,18 @@ function _SortDynArrayVariantComp(const A, B: TVarData;
   caseInsensitive: boolean): integer;
 const
   ICMP: array[TVariantRelationship] of integer = (0, -1, 1, 1);
-begin
+begin // caseInsensitive not supported by the RTL
   result := ICMP[VarCompareValue(PVariant(@A)^, PVariant(@B)^)];
+end;
+
+function SortDynArrayVariant(const A, B): integer;
+begin
+  result := SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}false);
+end;
+
+function SortDynArrayVariantI(const A, B): integer;
+begin
+  result := SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}true);
 end;
 
 
@@ -9308,6 +9461,11 @@ end;
 function SortDynArrayWord(const A, B): integer;
 begin
   result := word(A) - word(B);
+end;
+
+function SortDynArrayExtended(const A, B): integer;
+begin
+  result := ord(TSynExtended(A) > TSynExtended(B)) - ord(TSynExtended(A) < TSynExtended(B));
 end;
 
 function SortDynArrayString(const A, B): integer;
@@ -9410,6 +9568,59 @@ begin
   result := StrComp(pointer(A), pointer(B));
 end;
 
+procedure ExchgPointer(n1, n2: PPointer);
+var
+  n: pointer;
+begin
+  n := n2^;
+  n2^ := n1^;
+  n1^ := n;
+end;
+
+procedure ExchgVariant(v1, v2: PPtrIntArray);
+var
+  c: PtrInt; // 32-bit:16bytes=4ptr 64-bit:24bytes=3ptr
+begin
+  c := v2[0];
+  v2[0] := v1[0];
+  v1[0] := c;
+  c := v2[1];
+  v2[1] := v1[1];
+  v1[1] := c;
+  c := v2[2];
+  v2[2] := v1[2];
+  v1[2] := c;
+  {$ifdef CPU32}
+  c := v2[3];
+  v2[3] := v1[3];
+  v1[3] := c;
+  {$endif}
+end;
+
+procedure Exchg(P1, P2: PAnsiChar; count: PtrInt);
+var
+  i, c: PtrInt;
+  u: AnsiChar;
+begin
+  i := count shr POINTERSHR;
+  if i <> 0 then
+    repeat
+      c := PPtrInt(P1)^;
+      PPtrInt(P1)^ := PPtrInt(P2)^;
+      PPtrInt(P2)^ := c;
+      inc(P1, SizeOf(c));
+      inc(P2, SizeOf(c));
+      dec(i);
+    until i = 0;
+  i := count and POINTERAND;
+  if i <> 0 then
+    repeat
+      dec(i);
+      u := P1[i];
+      P1[i] := P2[i];
+      P2[i] := u;
+    until i = 0;
+end;
 
 { ************ Some Convenient TStream descendants }
 
@@ -9432,6 +9643,10 @@ end;
 
 
 { TRawByteStringStream }
+
+constructor TRawByteStringStream.Create;
+begin
+end;
 
 constructor TRawByteStringStream.Create(const aString: RawByteString);
 begin
@@ -9476,6 +9691,13 @@ function TRawByteStringStream.Seek(Offset: Longint; Origin: Word): Longint;
 begin
   result := Seek(Offset, TSeekOrigin(Origin)); // call the 64-bit version above
 end;
+
+{$ifdef FPC}
+function TRawByteStringStream.GetPosition: Int64;
+begin
+  result := fPosition;
+end;
+{$endif FPC}
 
 function TRawByteStringStream.GetSize: Int64;
 begin // faster than the TStream inherited method calling Seek() twice
@@ -9565,7 +9787,7 @@ begin
       crc32ctab[n, i] := crc;
     end;
   end;
-  VariantDynArrayClearSeveral := @_VariantDynArrayClearSeveral;
+  VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
 end;
 
