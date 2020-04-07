@@ -483,23 +483,53 @@ begin
 end;
 
 {$ifndef UNICODE} // not defined on Delphi 7/2007
+
 type
   TCallConv = (ccReg, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
 
-const
-  /// fake TTypeInfo RTTI used for TGUID on older versions of the compiler
-  GUID_FAKETYPEINFO: packed record
-    Kind: TTypeKind;
-    Name: string[5];
-    Size: cardinal;
-    Count: integer;
-  end = (
-    Kind: tkRecord;
-    Name: 'TGUID';
-    Size: SizeOf(TGUID);
-    Count: 0);
-    
 {$endif UNICODE}
+
+/// fake TTypeInfo RTTI used for TGUID/THash128... on Delphi 7/2007
+{$ifdef HASNOSTATICRTTI}
+
+type
+  // enough Delphi RTTI for TRttiInfo.RecordManagedFields
+  TFakeTypeInfo = packed record
+    Kind: TTypeKind;
+    case integer of
+      5: (
+        Name5: string[5];
+        RecSize5: cardinal;
+        ManagedCount5: integer);
+      8: (
+        Name8: string[8];
+        RecSize8: cardinal;
+        ManagedCount8: integer);
+  end;
+const
+  _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGUID]
+    Kind: tkRecord;
+    Name5: 'TGUID';
+    RecSize5: SizeOf(TGUID);
+    ManagedCount5: 0);
+  _THASH128: TFakeTypeInfo = ( // stored in PT_INFO[ptHash128]
+    Kind: tkRecord;
+    Name8: 'THash128';
+    RecSize8: SizeOf(THash128);
+    ManagedCount8: 0);
+  _THASH256: TFakeTypeInfo = ( // stored in PT_INFO[ptHash256]
+    Kind: tkRecord;
+    Name8: 'THash256';
+    RecSize8: SizeOf(THash256);
+    ManagedCount8: 0);
+  _THASH512: TFakeTypeInfo = ( // stored in PT_INFO[ptHash512]
+    Kind: tkRecord;
+    Name8: 'THash512';
+    RecSize8: SizeOf(THash512);
+    ManagedCount8: 0);
+
+{$endif HASNOSTATICRTTI}
+
 
 procedure TGetRttiInterface.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 var
@@ -522,11 +552,10 @@ var
     argtypename := ps;
     ps := @ps^[ord(ps^[0]) + 1];
     if pp^ = nil then
-      {$ifndef UNICODE}
-      if IdemPropName(argtypename^, 'TGUID') then
-        argtypeinfo := @GUID_FAKETYPEINFO
-      else
-      {$endif UNICODE}
+      {$ifdef HASNOSTATICRTTI} // detect e.g. TGUID/THash128 -> fake TypeInfo()
+      argtypeinfo := PT_INFO[TypeNameToParserType(argtypename^)];
+      if argtypeinfo = nil then
+      {$endif HASNOSTATICRTTI}
         RaiseError('"%: %" parameter has no RTTI', [name^, argtypename^])
     else
       argtypeinfo := pp^^;
@@ -591,32 +620,4 @@ begin
   until mn = 0;
   CurrentMethod := nil;
 end;
-
-procedure TypeFinalize(Data: Pointer; Info: Pointer);
-asm
-        {$ifdef CPU64}
-        .noframe
-        mov     r8, 1 // =ElemCount
-        {$else}
-        mov     ecx, 1
-        {$endif}
-        jmp     System.@FinalizeArray
-end;
-
-procedure ArrayFinalize(p: Pointer; Info: Pointer; elemCount: PtrUInt);
-asm
-        {$ifdef CPU64}
-        .noframe
-        {$endif}
-        jmp     System.@FinalizeArray
-end;
-
-procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
-asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
-        {$ifdef CPU64}
-        .noframe
-        {$endif}
-        jmp     System.@CopyRecord
-end;
-
 

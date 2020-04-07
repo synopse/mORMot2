@@ -509,18 +509,5 @@ begin
   CurrentMethod := nil;
 end;
 
-procedure TypeFinalize(Data: Pointer; Info: Pointer);
-  external name 'FPC_FINALIZE';
-
-procedure ArrayFinalize(p: Pointer; Info: Pointer; elemCount: PtrUInt);
-  external name 'FPC_FINALIZE_ARRAY';
-
-procedure FPC_COPY(const Source; var Dest; Info: pointer);
-  external name 'FPC_COPY';
-
-procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
-begin // parameter order differs from FPC_COPY
-  FPC_COPY(Source, Dest, Info);
-end;
 
 
