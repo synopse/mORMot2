@@ -9,6 +9,7 @@ unit mormot.core.json;
    JSON functions shared by all framework units
     - Low-Level JSON Processing Functions
     - TTextWriter class with proper JSON escaping and WriteObject() support
+    - TSynNameValue Name/Value RawUTF8 Storage
 
   *****************************************************************************
 }
@@ -21,7 +22,8 @@ uses
   Classes,
   SysUtils,
   mormot.core.base,
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.data;
 
 
 { ********** Low-Level JSON Processing Functions }
@@ -653,11 +655,165 @@ type
   end;
 
 
+{ ************ TSynNameValue Name/Value RawUTF8 Storage }
+
+type
+  /// store one Name/Value pair, as used by TSynNameValue class
+  TSynNameValueItem = record
+    /// the name of the Name/Value pair
+    // - this property is hashed by TSynNameValue for fast retrieval
+    Name: RawUTF8;
+    /// the value of the Name/Value pair
+    Value: RawUTF8;
+    /// any associated Pointer or numerical value
+    Tag: PtrInt;
+  end;
+
+  /// Name/Value pairs storage, as used by TSynNameValue class
+  TSynNameValueItemDynArray = array of TSynNameValueItem;
+
+  /// event handler used to convert on the fly some UTF-8 text content
+  TOnSynNameValueConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
+
+  /// callback event used by TSynNameValue
+  TOnSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
+
+  /// pseudo-class used to store Name/Value RawUTF8 pairs
+  // - use internaly a TDynArrayHashed instance for fast retrieval
+  // - is therefore faster than TRawUTF8List
+  // - is defined as an object, not as a class: you can use this in any
+  // class, without the need to destroy the content
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
+  {$else}TSynNameValue = object protected{$endif}
+    fOnAdd: TOnSynNameValueNotify;
+    function GetBlobData: RawByteString;
+    procedure SetBlobData(const aValue: RawByteString);
+    function GetStr(const aName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
+    function GetInt(const aName: RawUTF8): Int64; {$ifdef HASINLINE}inline;{$endif}
+    function GetBool(const aName: RawUTF8): Boolean; {$ifdef HASINLINE}inline;{$endif}
+  public
+    /// the internal Name/Value storage
+    List: TSynNameValueItemDynArray;
+    /// the number of Name/Value pairs
+    Count: integer;
+    /// low-level access to the internal storage hasher
+    DynArray: TDynArrayHashed;
+    /// initialize the storage
+    // - will also reset the internal List[] and the internal hash array
+    procedure Init(aCaseSensitive: boolean);
+    /// add an element to the array
+    // - if aName already exists, its associated Value will be updated
+    procedure Add(const aName, aValue: RawUTF8; aTag: PtrInt = 0);
+    /// reset content, then add all name=value pairs from a supplied .ini file
+    // section content
+    // - will first call Init(false) to initialize the internal array
+    // - Section can be retrieved e.g. via FindSectionFirstLine()
+    procedure InitFromIniSection(Section: PUTF8Char;
+      OnTheFlyConvert: TOnSynNameValueConvertRawUTF8 = nil;
+      OnAdd: TOnSynNameValueNotify = nil);
+    /// reset content, then add all name=value; CSV pairs
+    // - will first call Init(false) to initialize the internal array
+    // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
+    procedure InitFromCSV(CSV: PUTF8Char; NameValueSep: AnsiChar = '=';
+      ItemSep: AnsiChar = #10);
+    /// reset content, then add all fields from an JSON object
+    // - will first call Init() to initialize the internal array
+    // - then parse the incoming JSON object, storing all its field values
+    // as RawUTF8, and returning TRUE if the supplied content is correct
+    // - warning: the supplied JSON buffer will be decoded and modified in-place
+    function InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean = false): boolean;
+    /// reset content, then add all name, value pairs
+    // - will first call Init(false) to initialize the internal array
+    procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
+    /// search for a Name, return the index in List
+    // - using fast O(1) hash algoritm
+    function Find(const aName: RawUTF8): integer;
+    /// search for the first chars of a Name, return the index in List
+    // - using O(n) calls of IdemPChar() function
+    // - here aUpperName should be already uppercase, as expected by IdemPChar()
+    function FindStart(const aUpperName: RawUTF8): integer;
+    /// search for a Value, return the index in List
+    // - using O(n) brute force algoritm with case-sensitive aValue search
+    function FindByValue(const aValue: RawUTF8): integer;
+    /// search for a Name, and delete its entry in the List if it exists
+    function Delete(const aName: RawUTF8): boolean;
+    /// search for a Value, and delete its entry in the List if it exists
+    // - returns the number of deleted entries
+    // - you may search for more than one match, by setting a >1 Limit value
+    function DeleteByValue(const aValue: RawUTF8; Limit: integer = 1): integer;
+    /// search for a Name, return the associated Value as a UTF-8 string
+    function Value(const aName: RawUTF8; const aDefaultValue: RawUTF8 = ''): RawUTF8;
+    /// search for a Name, return the associated Value as integer
+    function ValueInt(const aName: RawUTF8; const aDefaultValue: Int64 = 0): Int64;
+    /// search for a Name, return the associated Value as boolean
+    // - returns true only if the value is exactly '1'
+    function ValueBool(const aName: RawUTF8): Boolean;
+    /// search for a Name, return the associated Value as an enumerate
+    // - returns true and set aEnum if aName was found, and associated value
+    // matched an aEnumTypeInfo item
+    // - returns false if no match was found
+    function ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer; out aEnum;
+      aEnumDefault: byte = 0): boolean; overload;
+    /// returns all values, as CSV or INI content
+    function AsCSV(const KeySeparator: RawUTF8 = '=';
+      const ValueSeparator: RawUTF8 = #13#10; const IgnoreKey: RawUTF8 = ''): RawUTF8;
+    /// returns all values as a JSON object of string fields
+    function AsJSON: RawUTF8;
+    /// fill the supplied two arrays of RawUTF8 with the stored values
+    procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
+    /// search for a Name, return the associated Value as variant
+    // - returns null if the name was not found
+    function ValueVariantOrNull(const aName: RawUTF8): variant;
+    /// compute a TDocVariant document from the stored values
+    // - output variant will be reset and filled as a TDocVariant instance,
+    // ready to be serialized as a JSON object
+    // - if there is no value stored (i.e. Count=0), set null
+    procedure AsDocVariant(out DocVariant: variant;
+      ExtendedJson: boolean = false; ValueAsString: boolean = true;
+      AllowVarDouble: boolean = false); overload;
+    /// compute a TDocVariant document from the stored values
+    function AsDocVariant(ExtendedJson: boolean = false;
+      ValueAsString: boolean = true): variant; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// merge the stored values into a TDocVariant document
+    // - existing properties would be updated, then new values will be added to
+    // the supplied TDocVariant instance, ready to be serialized as a JSON object
+    // - if ValueAsString is TRUE, values would be stored as string
+    // - if ValueAsString is FALSE, numerical values would be identified by
+    // IsString() and stored as such in the resulting TDocVariant
+    // - if you let ChangedProps point to a TDocVariantData, it would contain
+    // an object with the stored values, just like AsDocVariant
+    // - returns the number of updated values in the TDocVariant, 0 if
+    // no value was changed
+    function MergeDocVariant(var DocVariant: variant; ValueAsString: boolean;
+      ChangedProps: PVariant = nil; ExtendedJson: boolean = false;
+      AllowVarDouble: boolean = false): integer;
+    /// returns true if the Init() method has been called
+    function Initialized: boolean;
+    /// can be used to set all data from one BLOB memory buffer
+    procedure SetBlobDataPtr(aValue: pointer);
+    /// can be used to set or retrieve all stored data as one BLOB content
+    property BlobData: RawByteString read GetBlobData write SetBlobData;
+    /// event triggerred after an item has just been added to the list
+    property OnAfterAdd: TOnSynNameValueNotify read fOnAdd write fOnAdd;
+    /// search for a Name, return the associated Value as a UTF-8 string
+    // - returns '' if aName is not found in the stored keys
+    property Str[const aName: RawUTF8]: RawUTF8 read GetStr; default;
+    /// search for a Name, return the associated Value as integer
+    // - returns 0 if aName is not found, or not a valid Int64 in the stored keys
+    property Int[const aName: RawUTF8]: Int64 read GetInt;
+    /// search for a Name, return the associated Value as boolean
+    // - returns true if aName stores '1' as associated value
+    property Bool[const aName: RawUTF8]: Boolean read GetBool;
+  end;
+
+  /// a reference pointer to a Name/Value RawUTF8 pairs storage
+  PSynNameValue = ^TSynNameValue;
+
 implementation
 
 uses
   mormot.core.rtti,
-  mormot.core.data,
   mormot.core.datetime,
   mormot.core.variants;
 
@@ -3472,6 +3628,401 @@ begin
   {  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
 
+end;
+
+
+
+{ ************ TSynNameValue Name/Value RawUTF8 Storage }
+
+{ TSynNameValue }
+
+procedure TSynNameValue.Add(const aName, aValue: RawUTF8; aTag: PtrInt);
+var
+  added: boolean;
+  i: Integer;
+begin
+  i := DynArray.FindHashedForAdding(aName, added);
+  with List[i] do
+  begin
+    if added then
+      Name := aName;
+    Value := aValue;
+    Tag := aTag;
+  end;
+  if Assigned(fOnAdd) then
+    fOnAdd(List[i], i);
+end;
+
+procedure TSynNameValue.InitFromIniSection(Section: PUTF8Char;
+  OnTheFlyConvert: TOnSynNameValueConvertRawUTF8; OnAdd: TOnSynNameValueNotify);
+var
+  s: RawUTF8;
+  i: integer;
+begin
+  Init(false);
+  fOnAdd := OnAdd;
+  while (Section <> nil) and (Section^ <> '[') do
+  begin
+    s := GetNextLine(Section, Section);
+    i := PosExChar('=', s);
+    if (i > 1) and not (s[1] in [';', '[']) then
+      if Assigned(OnTheFlyConvert) then
+        Add(copy(s, 1, i - 1), OnTheFlyConvert(copy(s, i + 1, 1000)))
+      else
+        Add(copy(s, 1, i - 1), copy(s, i + 1, 1000));
+  end;
+end;
+
+procedure TSynNameValue.InitFromCSV(CSV: PUTF8Char; NameValueSep, ItemSep: AnsiChar);
+var
+  n, v: RawUTF8;
+begin
+  Init(false);
+  while CSV <> nil do
+  begin
+    GetNextItem(CSV, NameValueSep, n);
+    if ItemSep = #10 then
+      GetNextItemTrimedCRLF(CSV, v)
+    else
+      GetNextItem(CSV, ItemSep, v);
+    if n = '' then
+      break;
+    Add(n, v);
+  end;
+end;
+
+procedure TSynNameValue.InitFromNamesValues(const Names, Values: array of RawUTF8);
+var
+  i: integer;
+begin
+  Init(false);
+  if high(Names) <> high(Values) then
+    exit;
+  DynArray.Capacity := length(Names);
+  for i := 0 to high(Names) do
+    Add(Names[i], Values[i]);
+end;
+
+function TSynNameValue.InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean): boolean;
+var
+  N, V: PUTF8Char;
+  nam, val: RawUTF8;
+  Nlen, Vlen, c: integer;
+  EndOfObject: AnsiChar;
+begin
+  result := false;
+  Init(aCaseSensitive);
+  if JSON = nil then
+    exit;
+  while (JSON^ <= ' ') and (JSON^ <> #0) do
+    inc(JSON);
+  if JSON^ <> '{' then
+    exit;
+  repeat
+    inc(JSON)
+  until (JSON^ = #0) or (JSON^ > ' ');
+  c := JSONObjectPropCount(JSON);
+  if c <= 0 then
+    exit;
+  DynArray.Capacity := c;
+  repeat
+    N := GetJSONPropName(JSON, @Nlen);
+    if N = nil then
+      exit;
+    V := GetJSONFieldOrObjectOrArray(JSON, nil, @EndOfObject, true, true, @Vlen);
+    if V = nil then
+      exit;
+    FastSetString(nam, N, Nlen);
+    FastSetString(val, V, Vlen);
+    Add(nam, val);
+  until EndOfObject = '}';
+  result := true;
+end;
+
+procedure TSynNameValue.Init(aCaseSensitive: boolean);
+begin
+  // release dynamic arrays memory before FillcharFast()
+  List := nil;
+  DynArray.Hasher.Clear;
+  // initialize hashed storage
+  FillCharFast(self, SizeOf(self), 0);
+  DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray), List,
+    djRawUTF8, @Count, not aCaseSensitive);
+end;
+
+function TSynNameValue.Find(const aName: RawUTF8): integer;
+begin
+  result := DynArray.FindHashed(aName);
+end;
+
+function TSynNameValue.FindStart(const aUpperName: RawUTF8): integer;
+begin
+  for result := 0 to Count - 1 do
+    if IdemPChar(pointer(List[result].Name), pointer(aUpperName)) then
+      exit;
+  result := -1;
+end;
+
+function TSynNameValue.FindByValue(const aValue: RawUTF8): integer;
+begin
+  for result := 0 to Count - 1 do
+    if List[result].Value = aValue then
+      exit;
+  result := -1;
+end;
+
+function TSynNameValue.Delete(const aName: RawUTF8): boolean;
+begin
+  result := DynArray.FindHashedAndDelete(aName) >= 0;
+end;
+
+function TSynNameValue.DeleteByValue(const aValue: RawUTF8; Limit: integer): integer;
+var
+  ndx: integer;
+begin
+  result := 0;
+  if Limit < 1 then
+    exit;
+  for ndx := Count - 1 downto 0 do
+    if List[ndx].Value = aValue then
+    begin
+      DynArray.Delete(ndx);
+      inc(result);
+      if result >= Limit then
+        break;
+    end;
+  if result > 0 then
+    DynArray.ReHash;
+end;
+
+function TSynNameValue.Value(const aName: RawUTF8; const aDefaultValue: RawUTF8): RawUTF8;
+var
+  i: integer;
+begin
+  if @self = nil then
+    i := -1
+  else
+    i := DynArray.FindHashed(aName);
+  if i < 0 then
+    result := aDefaultValue
+  else
+    result := List[i].Value;
+end;
+
+function TSynNameValue.ValueInt(const aName: RawUTF8; const aDefaultValue: Int64): Int64;
+var
+  i, err: integer;
+begin
+  i := DynArray.FindHashed(aName);
+  if i < 0 then
+    result := aDefaultValue
+  else
+  begin
+    result := GetInt64(pointer(List[i].Value), err);
+    if err <> 0 then
+      result := aDefaultValue;
+  end;
+end;
+
+function TSynNameValue.ValueBool(const aName: RawUTF8): Boolean;
+begin
+  result := Value(aName) = '1';
+end;
+
+function TSynNameValue.ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer;
+  out aEnum; aEnumDefault: byte): boolean;
+var
+  v: RawUTF8;
+  err, i: integer;
+begin
+  result := false;
+  byte(aEnum) := aEnumDefault;
+  v := trim(Value(aName, ''));
+  if v = '' then
+    exit;
+  i := GetInteger(pointer(v), err);
+  if (err <> 0) or (i < 0) then
+    i := GetEnumNameValue(aEnumTypeInfo, v, true);
+  if i >= 0 then
+  begin
+    byte(aEnum) := i;
+    result := true;
+  end;
+end;
+
+function TSynNameValue.Initialized: boolean;
+begin
+  result := DynArray.Value = @List;
+end;
+
+function TSynNameValue.GetBlobData: RawByteString;
+begin
+  result := DynArray.SaveTo;
+end;
+
+procedure TSynNameValue.SetBlobDataPtr(aValue: pointer);
+begin
+  DynArray.LoadFrom(aValue);
+  DynArray.ReHash;
+end;
+
+procedure TSynNameValue.SetBlobData(const aValue: RawByteString);
+begin
+  DynArray.LoadFromBinary(aValue);
+  DynArray.ReHash;
+end;
+
+function TSynNameValue.GetStr(const aName: RawUTF8): RawUTF8;
+begin
+  result := Value(aName, '');
+end;
+
+function TSynNameValue.GetInt(const aName: RawUTF8): Int64;
+begin
+  result := ValueInt(aName, 0);
+end;
+
+function TSynNameValue.GetBool(const aName: RawUTF8): Boolean;
+begin
+  result := Value(aName) = '1';
+end;
+
+function TSynNameValue.AsCSV(const KeySeparator, ValueSeparator, IgnoreKey: RawUTF8): RawUTF8;
+var
+  i: integer;
+  temp: TTextWriterStackBuffer;
+begin
+  with TBaseWriter.CreateOwnedStream(temp) do
+  try
+    for i := 0 to Count - 1 do
+      if (IgnoreKey = '') or (List[i].Name <> IgnoreKey) then
+      begin
+        AddNoJSONEscapeUTF8(List[i].Name);
+        AddNoJSONEscapeUTF8(KeySeparator);
+        AddNoJSONEscapeUTF8(List[i].Value);
+        AddNoJSONEscapeUTF8(ValueSeparator);
+      end;
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
+function TSynNameValue.AsJSON: RawUTF8;
+var
+  i: integer;
+  temp: TTextWriterStackBuffer;
+begin
+  with TTextWriter.CreateOwnedStream(temp) do
+  try
+    Add('{');
+    for i := 0 to Count - 1 do
+      with List[i] do
+      begin
+        AddProp(pointer(Name), length(Name));
+        Add('"');
+        AddJSONEscape(pointer(Value));
+        Add('"', ',');
+      end;
+    CancelLastComma;
+    Add('}');
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
+procedure TSynNameValue.AsNameValues(out Names, Values: TRawUTF8DynArray);
+var
+  i: integer;
+begin
+  SetLength(Names, Count);
+  SetLength(Values, Count);
+  for i := 0 to Count - 1 do
+  begin
+    Names[i] := List[i].Name;
+    Values[i] := List[i].Value;
+  end;
+end;
+
+function TSynNameValue.ValueVariantOrNull(const aName: RawUTF8): variant;
+var
+  i: integer;
+begin
+  i := Find(aName);
+  if i < 0 then
+    SetVariantNull(result)
+  else
+    RawUTF8ToVariant(List[i].Value, result);
+end;
+
+procedure TSynNameValue.AsDocVariant(out DocVariant: variant;
+  ExtendedJson, ValueAsString, AllowVarDouble: boolean);
+var
+  ndx: PtrInt;
+  dv: TDocVariantData absolute DocVariant;
+begin
+  if Count > 0 then
+    begin
+      dv.Init(JSON_OPTIONS_NAMEVALUE[ExtendedJson], dvObject);
+      dv.SetCount(Count);
+      dv.Capacity := Count;
+      for ndx := 0 to Count - 1 do
+      begin
+        dv.Names[ndx] := List[ndx].Name;
+        if ValueAsString or
+           not GetNumericVariantFromJSON(pointer(List[ndx].Value),
+             TVarData(dv.Values[ndx]), AllowVarDouble) then
+          RawUTF8ToVariant(List[ndx].Value, dv.Values[ndx]);
+      end;
+    end
+  else
+    TVarData(DocVariant).VType := varNull;
+end;
+
+function TSynNameValue.AsDocVariant(ExtendedJson, ValueAsString: boolean): variant;
+begin
+  AsDocVariant(result, ExtendedJson, ValueAsString);
+end;
+
+function TSynNameValue.MergeDocVariant(var DocVariant: variant;
+  ValueAsString: boolean; ChangedProps: PVariant; ExtendedJson,
+  AllowVarDouble: Boolean): integer;
+var
+  dv: TDocVariantData absolute DocVariant;
+  i, ndx: PtrInt;
+  v: variant;
+  intvalues: TRawUTF8Interning;
+begin
+  if dv.VarType <> DocVariantVType then
+    TDocVariant.New(DocVariant, JSON_OPTIONS_NAMEVALUE[ExtendedJson]);
+  if ChangedProps <> nil then
+    TDocVariant.New(ChangedProps^, dv.Options);
+  if dvoInternValues in dv.Options then
+    intvalues := DocVariantType.InternValues
+  else
+    intvalues := nil;
+  result := 0; // returns number of changed values
+  for i := 0 to Count - 1 do
+    if List[i].Name <> '' then
+    begin
+      VarClear(v);
+      if ValueAsString or
+         not GetNumericVariantFromJSON(pointer(List[i].Value),
+           TVarData(v), AllowVarDouble) then
+        RawUTF8ToVariant(List[i].Value, v);
+      ndx := dv.GetValueIndex(List[i].Name);
+      if ndx < 0 then
+        ndx := dv.InternalAdd(List[i].Name)
+      else if SortDynArrayVariantComp(TVarData(v), TVarData(dv.Values[ndx]), false) = 0 then
+        continue; // value not changed -> skip
+      if ChangedProps <> nil then
+        PDocVariantData(ChangedProps)^.AddValue(List[i].Name, v);
+      SetVariantByValue(v, dv.Values[ndx]);
+      if intvalues <> nil then
+        intvalues.UniqueVariant(dv.Values[ndx]);
+      inc(result);
+    end;
 end;
 
 

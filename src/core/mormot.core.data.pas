@@ -17,8 +17,6 @@ unit mormot.core.data;
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray and TDynArrayHashed Wrappers
     - RawUTF8 String Values Interning
-  TODO:
-    - TSynNameValue Name/Value Storage
 
 
   *****************************************************************************
@@ -40,7 +38,7 @@ uses
   mormot.core.os,
   mormot.core.rtti,
   mormot.core.datetime,
-  mormot.core.text; // for INI process
+  mormot.core.text;
 
 
 { ************ RTL TPersistent / TInterfacedObject with Custom Constructor }
@@ -3001,161 +2999,6 @@ type
     function Count: integer;
   end;
 
-(*
-{ ************ TSynNameValue Name/Value Storage }
-
-type
-  /// store one Name/Value pair, as used by TSynNameValue class
-  TSynNameValueItem = record
-    /// the name of the Name/Value pair
-    // - this property is hashed by TSynNameValue for fast retrieval
-    Name: RawUTF8;
-    /// the value of the Name/Value pair
-    Value: RawUTF8;
-    /// any associated Pointer or numerical value
-    Tag: PtrInt;
-  end;
-
-  /// Name/Value pairs storage, as used by TSynNameValue class
-  TSynNameValueItemDynArray = array of TSynNameValueItem;
-
-  /// event handler used to convert on the fly some UTF-8 text content
-  TOnSynNameValueConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
-
-  /// callback event used by TSynNameValue
-  TOnSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
-
-  /// pseudo-class used to store Name/Value RawUTF8 pairs
-  // - use internaly a TDynArrayHashed instance for fast retrieval
-  // - is therefore faster than TRawUTF8List
-  // - is defined as an object, not as a class: you can use this in any
-  // class, without the need to destroy the content
-  // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
-  {$else}TSynNameValue = object protected{$endif}
-    fOnAdd: TOnSynNameValueNotify;
-    function GetBlobData: RawByteString;
-    procedure SetBlobData(const aValue: RawByteString);
-    function GetStr(const aName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
-    function GetInt(const aName: RawUTF8): Int64; {$ifdef HASINLINE}inline;{$endif}
-    function GetBool(const aName: RawUTF8): Boolean; {$ifdef HASINLINE}inline;{$endif}
-  public
-    /// the internal Name/Value storage
-    List: TSynNameValueItemDynArray;
-    /// the number of Name/Value pairs
-    Count: integer;
-    /// low-level access to the internal storage hasher
-    DynArray: TDynArrayHashed;
-    /// initialize the storage
-    // - will also reset the internal List[] and the internal hash array
-    procedure Init(aCaseSensitive: boolean);
-    /// add an element to the array
-    // - if aName already exists, its associated Value will be updated
-    procedure Add(const aName, aValue: RawUTF8; aTag: PtrInt=0);
-    /// reset content, then add all name=value pairs from a supplied .ini file
-    // section content
-    // - will first call Init(false) to initialize the internal array
-    // - Section can be retrieved e.g. via FindSectionFirstLine()
-    procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TOnSynNameValueConvertRawUTF8=nil;
-      OnAdd: TOnSynNameValueNotify=nil);
-    /// reset content, then add all name=value; CSV pairs
-    // - will first call Init(false) to initialize the internal array
-    // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
-    procedure InitFromCSV(CSV: PUTF8Char; NameValueSep: AnsiChar='=';
-      ItemSep: AnsiChar=#10);
-    /// reset content, then add all fields from an JSON object
-    // - will first call Init() to initialize the internal array
-    // - then parse the incoming JSON object, storing all its field values
-    // as RawUTF8, and returning TRUE if the supplied content is correct
-    // - warning: the supplied JSON buffer will be decoded and modified in-place
-    function InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean=false): boolean;
-    /// reset content, then add all name, value pairs
-    // - will first call Init(false) to initialize the internal array
-    procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
-    /// search for a Name, return the index in List
-    // - using fast O(1) hash algoritm
-    function Find(const aName: RawUTF8): integer;
-    /// search for the first chars of a Name, return the index in List
-    // - using O(n) calls of IdemPChar() function
-    // - here aUpperName should be already uppercase, as expected by IdemPChar()
-    function FindStart(const aUpperName: RawUTF8): integer;
-    /// search for a Value, return the index in List
-    // - using O(n) brute force algoritm with case-sensitive aValue search
-    function FindByValue(const aValue: RawUTF8): integer;
-    /// search for a Name, and delete its entry in the List if it exists
-    function Delete(const aName: RawUTF8): boolean;
-    /// search for a Value, and delete its entry in the List if it exists
-    // - returns the number of deleted entries
-    // - you may search for more than one match, by setting a >1 Limit value
-    function DeleteByValue(const aValue: RawUTF8; Limit: integer=1): integer;
-    /// search for a Name, return the associated Value as a UTF-8 string
-    function Value(const aName: RawUTF8; const aDefaultValue: RawUTF8=''): RawUTF8;
-    /// search for a Name, return the associated Value as integer
-    function ValueInt(const aName: RawUTF8; const aDefaultValue: Int64=0): Int64;
-    /// search for a Name, return the associated Value as boolean
-    // - returns true only if the value is exactly '1'
-    function ValueBool(const aName: RawUTF8): Boolean;
-    /// search for a Name, return the associated Value as an enumerate
-    // - returns true and set aEnum if aName was found, and associated value
-    // matched an aEnumTypeInfo item
-    // - returns false if no match was found
-    function ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer; out aEnum;
-      aEnumDefault: byte=0): boolean; overload;
-    /// returns all values, as CSV or INI content
-    function AsCSV(const KeySeparator: RawUTF8='=';
-      const ValueSeparator: RawUTF8=#13#10; const IgnoreKey: RawUTF8=''): RawUTF8;
-    /// returns all values as a JSON object of string fields
-    function AsJSON: RawUTF8;
-    /// fill the supplied two arrays of RawUTF8 with the stored values
-    procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
-    /// search for a Name, return the associated Value as variant
-    // - returns null if the name was not found
-    function ValueVariantOrNull(const aName: RawUTF8): variant;
-    /// compute a TDocVariant document from the stored values
-    // - output variant will be reset and filled as a TDocVariant instance,
-    // ready to be serialized as a JSON object
-    // - if there is no value stored (i.e. Count=0), set null
-    procedure AsDocVariant(out DocVariant: variant;
-      ExtendedJson: boolean=false; ValueAsString: boolean=true;
-      AllowVarDouble: boolean=false); overload;
-    /// compute a TDocVariant document from the stored values
-    function AsDocVariant(ExtendedJson: boolean=false; ValueAsString: boolean=true): variant; overload; {$ifdef HASINLINE}inline;{$endif}
-    /// merge the stored values into a TDocVariant document
-    // - existing properties would be updated, then new values will be added to
-    // the supplied TDocVariant instance, ready to be serialized as a JSON object
-    // - if ValueAsString is TRUE, values would be stored as string
-    // - if ValueAsString is FALSE, numerical values would be identified by
-    // IsString() and stored as such in the resulting TDocVariant
-    // - if you let ChangedProps point to a TDocVariantData, it would contain
-    // an object with the stored values, just like AsDocVariant
-    // - returns the number of updated values in the TDocVariant, 0 if
-    // no value was changed
-    function MergeDocVariant(var DocVariant: variant;
-      ValueAsString: boolean; ChangedProps: PVariant=nil;
-      ExtendedJson: boolean=false; AllowVarDouble: boolean=false): integer;
-    /// returns true if the Init() method has been called
-    function Initialized: boolean;
-    /// can be used to set all data from one BLOB memory buffer
-    procedure SetBlobDataPtr(aValue: pointer);
-    /// can be used to set or retrieve all stored data as one BLOB content
-    property BlobData: RawByteString read GetBlobData write SetBlobData;
-    /// event triggerred after an item has just been added to the list
-    property OnAfterAdd: TOnSynNameValueNotify read fOnAdd write fOnAdd;
-    /// search for a Name, return the associated Value as a UTF-8 string
-    // - returns '' if aName is not found in the stored keys
-    property Str[const aName: RawUTF8]: RawUTF8 read GetStr; default;
-    /// search for a Name, return the associated Value as integer
-    // - returns 0 if aName is not found, or not a valid Int64 in the stored keys
-    property Int[const aName: RawUTF8]: Int64 read GetInt;
-    /// search for a Name, return the associated Value as boolean
-    // - returns true if aName stores '1' as associated value
-    property Bool[const aName: RawUTF8]: Boolean read GetBool;
-  end;
-
-  /// a reference pointer to a Name/Value RawUTF8 pairs storage
-  PSynNameValue = ^TSynNameValue;
-
-*)
 
 implementation
 
@@ -8582,14 +8425,6 @@ begin
   else if vt = varString or varByRef then
     UniqueText(PRawUTF8(vd.VPointer)^);
 end;
-
-
-
-{ ************ TSynNameValue Name/Value Storage }
-
-{  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
-
-{  TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO }
 
 
 
