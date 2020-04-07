@@ -973,13 +973,13 @@ type
     /// return the last char appended
     // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
-    /// how many bytes are currently in the internal buffer and not on disk
-    // - see TextLength for the total number of bytes, on both disk and memory
+    /// how many bytes are currently in the internal buffer and not on disk/stream
+    // - see TextLength for the total number of bytes, on both stream and memory
     function PendingBytes: PtrUInt;
       {$ifdef HASINLINE} inline; {$endif}
     /// how many bytes were currently written on disk/stream
     // - excluding the bytes in the internal buffer (see PendingBytes)
-    // - see TextLength for the total number of bytes, on both disk and memory
+    // - see TextLength for the total number of bytes, on both stream and memory
     property WrittenBytes: PtrUInt read fTotalFileSize;
     /// the last char appended is canceled
     // - only one char cancelation is allowed at the same position: don't call
@@ -1476,7 +1476,7 @@ var
   /// unserialize a JSON content into a variant
   // - is properly implemented by mormot.core.json.pas: if this unit is not
   // included in the project, this function is nil
-  // - used by mormot.core.data.pas _BINARYLOAD[tkVariant]() for complex types
+  // - used by mormot.core.data.pas RTTI_BINARYLOAD[tkVariant]() for complex types
   BinaryVariantLoadAsJSON: procedure(var Value: variant; JSON: PUTF8Char);
 
 
@@ -2097,13 +2097,14 @@ function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiCha
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
 // AnsiChar)
 function UpperCopy255W(dest: PAnsiChar; const source: SynUnicode): PAnsiChar; overload;
+  {$ifdef HASINLINE} inline;{$endif}
 
 /// copy WideChar source into dest^ with upper case conversion
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
 // AnsiChar)
-function UpperCopy255W(dest: PAnsiChar; source: PWideChar; L: integer): PAnsiChar; overload;
+function UpperCopy255W(dest: PAnsiChar; source: PWideChar; L: PtrInt): PAnsiChar; overload;
 
 /// copy source into dest^ with 7 bits upper case conversion
 // - returns final dest pointer
@@ -5439,8 +5440,7 @@ begin
   inherited;
 end;
 
-procedure TBaseWriter.AddVariant(const Value: variant;
-  Escape: TTextWriterKind);
+procedure TBaseWriter.AddVariant(const Value: variant; Escape: TTextWriterKind);
 begin
   raise ESynException.CreateUTF8('%.AddVariant unimplemented: use TTextWriter', [self]);
 end;
@@ -5521,7 +5521,7 @@ begin
   if aStream <> nil then
   begin
     fStream := aStream;
-    fInitialStreamPosition := fStream.Seek(0, soFromCurrent);
+    fInitialStreamPosition := fStream.Position;
     fTotalFileSize := fInitialStreamPosition;
   end;
 end;
@@ -8282,7 +8282,7 @@ begin
       dec(P, 2);
       c100 := x div 100;
       dec(x, c100 * 100);
-      PWord(P)^ := tab[x];
+      PWord(P)^ := tab[x]; // 2 digits per loop
       if c100 = 0 then
         break;
       x := c100;
@@ -8291,11 +8291,11 @@ begin
     if x < 10 then
     begin
       dec(P);
-      P^ := AnsiChar(x);
+      P^ := AnsiChar(x); // 0..9
       break;
     end;
     dec(P, 2);
-    PWord(P)^ := tab[x];
+    PWord(P)^ := tab[x]; // 10..99
     break;
   until false;
   PQWordArray(buf)[0] := PQWordArray(P)[0]; // faster than MoveSmall(P,buf,result)
@@ -11011,9 +11011,9 @@ end;
 
 function UpperCopy255Buf(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 var
-  i, c, d{$ifdef CPU64}, _80, _61, _7b{$endif}: PtrUInt;
+  i, c, d {$ifdef CPU64}, _80, _61, _7b {$endif}: PtrUInt;
 begin
-  if sourceLen > 0 then
+  if sourceLen <> 0 then
   begin
     if sourceLen > 248 then
       sourceLen := 248; // avoid buffer overflow
@@ -11040,10 +11040,8 @@ begin
         not (d - PtrUInt($7b7b7b7b))) and ((not c) and PtrUInt($80808080)) shr 2;
     end;
     {$endif CPU64}
-    result := dest + sourceLen; // but we always return the exact size
-  end
-  else
-    result := dest;
+  end;
+  result := dest + sourceLen; // return the exact size
 end;
 
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
@@ -11161,50 +11159,33 @@ begin
 end;
 
 function UpperCopy255W(dest: PAnsiChar; const source: SynUnicode): PAnsiChar;
-var
-  c: cardinal;
-  i, L: integer;
 begin
-  L := length(source);
-  if L > 0 then
-  begin
-    if L > 250 then
-      L := 250; // avoid buffer overflow
-    result := dest + L;
-    for i := 0 to L - 1 do
-    begin
-      c := PWordArray(source)[i];
-      if c < 255 then
-        dest[i] := AnsiChar(NormToUpperAnsi7Byte[c])
-      else
-        dest[i] := '?';
-    end;
-  end
-  else
-    result := dest;
+  result := UpperCopy255W(dest, pointer(source), length(source));
 end;
 
-function UpperCopy255W(dest: PAnsiChar; source: PWideChar; L: integer): PAnsiChar;
+function UpperCopy255W(dest: PAnsiChar; source: PWideChar; L: PtrInt): PAnsiChar;
 var
-  c: cardinal;
-  i: integer;
+  c: PtrUInt;
+  d: byte;
+  lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
   if L > 0 then
   begin
     if L > 250 then
       L := 250; // avoid buffer overflow
-    result := dest + L;
-    for i := 0 to L - 1 do
-    begin
-      c := PWordArray(source)[i];
+    lookupper := @NormToUpperAnsi7Byte;
+    repeat
+      c := PWord(source)^;
+      d := ord('?');
       if c < 255 then
-        dest[i] := AnsiChar(NormToUpperAnsi7Byte[c])
-      else
-        dest[i] := '?';
-    end;
-  end
-  else
-    result := dest;
+        d := lookupper[c];
+      dest^ := AnsiChar(d);
+      inc(dest);
+      inc(source);
+      dec(L);
+    until L = 0;
+  end;
+  result := dest;
 end;
 
 function UpperCopy(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
