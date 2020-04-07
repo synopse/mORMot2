@@ -18,6 +18,11 @@
 // to access 'VarCopyProc'
 // - shall be set at the package options level, and left untouched by default
 
+{.$define PUREMORMOT2}
+// if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
+// - by default, existing projects should compile with mORMot 2 - you may define
+// this conditional to make a perfect code conversion to the new expectations
+
 {.$define NEWRTTINOTUSED}
 // if defined, the new RTTI (available since Delphi 2010) won't be linked to
 // the executable: resulting file size will be much smaller, and mORMot won't
@@ -165,6 +170,7 @@
         {$define ASMX64}     // supports asm with globals
         {$define ASMINTEL}   // either ASMX86 or ASMX64
         {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
+        {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
         {$define HASAESNI}   // mormot.core.crypto rejected by Darwin asm
         {$ifdef LINUX}
           {$define ASMX64LINUX}  // e.g. for tuned server-side asm
@@ -291,6 +297,8 @@
       since TDynArrayHashed = object(TDynArray) fails to initialize
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
+  {$else}
+    {$define HASNOSTATICRTTI} // Delphi 7/2007 has no TypeInfo(TGUID)
   {$endif}
 
   {$define ISDELPHI}
