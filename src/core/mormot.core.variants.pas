@@ -89,11 +89,13 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
 /// convert an open array (const Args: array of const) argument to a variant
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
+// - vt*String or vtVariant arguments are returned as varByRef
 procedure VarRecToVariant(const V: TVarRec; var result: variant); overload;
 
 /// convert an open array (const Args: array of const) argument to a variant
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
+// - vt*String or vtVariant arguments are returned as varByRef
 function VarRecToVariant(const V: TVarRec): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -241,67 +243,6 @@ function CustomVariantToJSON(W: TTextWriter; const Value: variant;
 type
   /// exception class associated to TDocVariant JSON/BSON document
   EDocVariant = class(ESynException);
-
-  /// possible options for a TDocVariant JSON/BSON document storage
-  // - dvoIsArray and dvoIsObject will store the "Kind: TDocVariantKind" state -
-  // you should never have to define these two options directly
-  // - dvoNameCaseSensitive will be used for every name lookup - here
-  // case-insensitivity is restricted to a-z A-Z 0-9 and _ characters
-  // - dvoCheckForDuplicatedNames will be used for method
-  // TDocVariantData.AddValue(), but not when setting properties at
-  // variant level: for consistency, "aVariant.AB := aValue" will replace
-  // any previous value for the name "AB"
-  // - dvoReturnNullForUnknownProperty will be used when retrieving any value
-  // from its name (for dvObject kind of instance), or index (for dvArray or
-  // dvObject kind of instance)
-  // - by default, internal values will be copied by-value from one variant
-  // instance to another, to ensure proper safety - but it may be too slow:
-  // if you set dvoValueCopiedByReference, the internal
-  // TDocVariantData.VValue/VName instances will be copied by-reference,
-  // to avoid memory allocations, BUT it may break internal process if you change
-  // some values in place (since VValue/VName and VCount won't match) - as such,
-  // if you set this option, ensure that you use the content as read-only
-  // - any registered custom types may have an extended JSON syntax (e.g.
-  // TBSONVariant does for MongoDB types), and will be searched during JSON
-  // parsing, unless dvoJSONParseDoNotTryCustomVariants is set (slightly faster)
-  // - by default, it will only handle direct JSON [array] of {object}: but if
-  // you define dvoJSONObjectParseWithinString, it will also try to un-escape
-  // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
-  // used e.g. when JSON has been retrieved from a database TEXT column) - is
-  // used for instance by VariantLoadJSON()
-  // - JSON serialization will follow the standard layout, unless
-  // dvoSerializeAsExtendedJson is set so that the property names would not
-  // be escaped with double quotes, writing '{name:"John",age:123}' instead of
-  // '{"name":"John","age":123}': this extended json layout is compatible with
-  // http://docs.mongodb.org/manual/reference/mongodb-extended-json and with
-  // TDocVariant JSON unserialization, also our SynCrossPlatformJSON unit, but
-  // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
-  // - by default, only integer/Int64/currency number values are allowed, unless
-  // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
-  // with potential loss of precision during the conversion
-  // - dvoInternNames and dvoInternValues will use shared TRawUTF8Interning
-  // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
-  // so that redundant text content will be allocated only once on heap
-  TDocVariantOption =
-    (dvoIsArray, dvoIsObject,
-     dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
-     dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
-     dvoJSONObjectParseWithinString, dvoSerializeAsExtendedJson,
-     dvoAllowDoubleValue, dvoInternNames, dvoInternValues);
-
-  /// set of options for a TDocVariant storage
-  // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
-  // local document as with _ObjFast/_ArrFast/_JsonFast - i.e.
-  // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
-  // - when specifying the options, you should not include dvoIsArray nor
-  // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
-  TDocVariantOptions = set of TDocVariantOption;
-
-  /// pointer to a set of options for a TDocVariant storage
-  // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
-  // @JSON_OPTIONS_FAST_STRICTJSON or @JSON_OPTIONS_FAST_EXTENDED
-  PDocVariantOptions = ^TDocVariantOptions;
 
 const
   /// some convenient TDocVariant options, as JSON_OPTIONS[CopiedByReference]
@@ -1954,7 +1895,7 @@ var
 begin
   VarClear(Dest);
   vt := TVarData(Source).VType;
-  if (vt = varVariant or varByRef) or (vt in VTYPE_SIMPLE) then
+  if ((vt and varByRef) <> 0) or (vt in VTYPE_SIMPLE) then
     TVarData(Dest) := TVarData(Source)
   else if not SetVariantUnRefSimpleValue(Source, TVarData(Dest)) then
   begin
@@ -2181,7 +2122,7 @@ begin
       vtCurrency:
         begin
           VType := varCurrency;
-          VCurrency := V.VCurrency^;
+          VInt64 := PInt64(@V.VCurrency)^;
         end;
       vtExtended:
         begin
@@ -2189,19 +2130,32 @@ begin
           VDouble := V.VExtended^;
         end;
       vtVariant:
-        result := V.VVariant^;
+        begin
+          VType := varVariant or varByRef;
+          VAny := V.VVariant;
+        end;
       vtAnsiString:
         begin
-          VType := varString;
-          VAny := nil;
-          RawByteString(VAny) := RawByteString(V.VAnsiString);
+          VType := varString or varByRef;
+          VString := V.VAnsiString;
         end;
-      vtString, {$ifdef HASVARUSTRING} vtUnicodeString, {$endif}
-      vtPChar, vtChar, vtWideChar, vtWideString, vtClass:
+      vtWideString:
+        begin
+          VType := varOleStr or varByRef;
+          VString := V.VWideString;
+        end;
+      {$ifdef HASVARUSTRING}
+      vtUnicodeString:
+        begin
+          VType := varUString or varByRef;
+          VString := V.VUnicodeString;
+        end;
+      {$endif}
+      vtString, vtPChar, vtChar, vtWideChar, vtClass:
         begin
           VType := varString;
           VString := nil; // avoid GPF on next line
-          VarRecToUTF8(V, RawUTF8(VString)); // convert to a new RawUTF8 instance
+          VarRecToUTF8(V, RawUTF8(VString)); // return as new RawUTF8 instance
         end;
       vtObject: // class instance will be serialized as a TDocVariant
         ObjectToVariant(V.VObject, result, [woDontStoreDefault]);
@@ -2359,19 +2313,26 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
 var // owned by Variants.pas as TInvokeableVariantType/TCustomVariantType
   SynVariantTypes: array of TSynInvokeableVariantType;
 
-function FindSynVariantTypeFromVType(aVarType: cardinal): TSynInvokeableVariantType;
+function FindSynVariantTypeFromVType(aVarType: word): TSynInvokeableVariantType;
   {$ifdef HASINLINE} inline;{$endif}
 var
-  i: integer;
+  n: integer;
   t: ^TSynInvokeableVariantType;
 begin
-  t := pointer(SynVariantTypes);
-  for i := 1 to length(TObjectDynArray(t)) do
+  if (cardinal(aVarType) > varNativeString) and (cardinal(aVarType) < varArray) then
   begin
-    result := t^;
-    if result.VarType = aVarType then
-      exit;
-    inc(t);
+    t := pointer(SynVariantTypes);
+    if t <> nil then
+    begin
+      n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
+      repeat
+        result := t^;
+        if result.VarType = aVarType then
+          exit;
+        inc(t);
+        dec(n);
+      until n = 0;
+    end;
   end;
   result := nil;
 end;
@@ -2585,7 +2546,7 @@ begin
     v := PVarData(v.VPointer)^;
   until false;
   repeat
-    if vt <= varString then
+    if vt <= varNativeString then
       exit; // we need a complex type to lookup
     GetNextItemShortString(FullName, itemName, '.');
     if itemName[0] in [#0, #255] then
@@ -2618,16 +2579,23 @@ end;
 function CustomVariantToJSON(W: TTextWriter; const Value: variant;
   Escape: TTextWriterKind): boolean;
 var
-  c: TCustomVariantType;
+  v: TCustomVariantType;
+  tmp: variant;
 begin
   result := true;
-  if FindCustomVariantType(TVarData(Value).VType, c) then
-    if c.InheritsFrom(TSynInvokeableVariantType) then
-      TSynInvokeableVariantType(c).ToJson(W, Value, Escape)
+  if FindCustomVariantType(TVarData(Value).VType, v) then
+    if v.InheritsFrom(TSynInvokeableVariantType) then
+      TSynInvokeableVariantType(v).ToJSON(W, Value, Escape)
     else
-      //GlobalJSONCustomParsers.VariantWrite(CustomVariantType, W, Value, Escape)
-    else
-      result := false;
+      try
+        v.CastTo(TVarData(tmp), TVarData(Value), varNativeString);
+        W.AddVariant(tmp, Escape);
+      except
+        result := false;
+      end
+  else
+    result := false;
+    //GlobalJSONCustomParsers.VariantWrite(CustomVariantType, W, Value, Escape)
 end;
 
 
@@ -2795,7 +2763,7 @@ procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant; escape: TText
 var
   ndx: integer;
   vt: cardinal;
-  backup: TTextWriterOptions;
+  forced: TTextWriterOptions;
   checkExtendedPropName: boolean;
 begin
   vt := TDocVariantData(Value).VType;
@@ -2803,15 +2771,19 @@ begin
     if vt = DocVariantVType then
       with TDocVariantData(Value) do
         if [dvoIsArray, dvoIsObject] * VOptions = [] then
-          W.AddShort('null')
+          W.AddNull
         else
         begin
-          backup := W.CustomOptions;
-          if [twoForceJSONExtended, twoForceJSONStandard] * backup = [] then
+          if [twoForceJSONExtended, twoForceJSONStandard] * W.CustomOptions = [] then
+          begin
             if dvoSerializeAsExtendedJson in VOptions then
-              W.CustomOptions := W.CustomOptions + [twoForceJSONExtended]
+              forced := [twoForceJSONExtended]
             else
-              W.CustomOptions := W.CustomOptions + [twoForceJSONStandard];
+              forced := [twoForceJSONStandard];
+            W.CustomOptions := W.CustomOptions + forced;
+          end
+          else
+            forced := [];
           if dvoIsObject in VOptions then
           begin
             checkExtendedPropName := twoForceJSONExtended in W.CustomOptions;
@@ -2846,12 +2818,13 @@ begin
             W.CancelLastComma;
             W.Add(']');
           end;
-          W.CustomOptions := backup;
+          if forced <> [] then
+            W.CustomOptions := W.CustomOptions - forced;
         end
     else
       raise ESynException.CreateUTF8('Unexpected variant type %', [vt])
   else
-    W.AddShort('null');
+    W.AddNull;
 end;
 
 procedure TDocVariant.Clear(var V: TVarData);
@@ -5563,7 +5536,7 @@ var
 begin
   result := varString;
   c := json[0];
-  if (jcDigitFirstChar in JSON_CHARS[c]) and
+  if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
      (((c >= '1') and (c <= '9')) or // is first char numeric?
      ((c = '0') and ((json[1] = '.') or (json[1] = #0))) or // '012' not JSON
      ((c = '-') and (json[1] >= '0') and (json[1] <= '9'))) then
@@ -5597,7 +5570,7 @@ label
 begin
   result := varString;
   c := json[0];
-  if (jcDigitFirstChar in JSON_CHARS[c]) and
+  if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
      (((c >= '1') and (c <= '9')) or // is first char numeric?
      ((c = '0') and ((json[1] = '.') or (json[1] = #0))) or // '012' not JSON
      ((c = '-') and (json[1] >= '0') and (json[1] <= '9'))) then

@@ -677,6 +677,7 @@ type
     B: PUTF8Char;
     /// direct access to the low-level last position in the buffer
     // - you should not use this field directly
+    // - points in fact to 16 bytes before the buffer ending
     BEnd: PUTF8Char;
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -739,7 +740,7 @@ type
     // memory buffer to the destination Stream
     // - you can set FlushToStreamNoAutoResize=true or call FlushFinal if you
     // do not want the automatic memory buffer resizal to take place
-    procedure FlushToStream; virtual;
+    function FlushToStream: PUTF8Char; virtual;
     /// write pending data to the Stream, without automatic buffer resizal
     // - will append the internal memory buffer to the Stream
     // - in short, FlushToStream may be called during the adding process, and
@@ -781,7 +782,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
-    procedure Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID); overload;
+    procedure Add(Value: PGUID; QuotedChar: AnsiChar = #0); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
@@ -862,6 +863,12 @@ type
     procedure AddStrings(const Text: RawUTF8; count: integer); overload;
     /// append a ShortString
     procedure AddShort(const Text: ShortString);
+    /// append a TShort16 - Text should be not '', and up to 8 chars long
+    // - this method is aggressively inlined, so may be preferred to AddShort()
+    // for appending simple constant UTF-8 text
+    procedure AddShorter(const Text: TShort8); {$ifdef HASINLINE} inline; {$endif}
+    /// append 'null' as text
+    procedure AddNull; {$ifdef HASINLINE} inline; {$endif}
     /// append a sub-part of an UTF-8  String
     // - emulates AddString(copy(Text,start,len))
     procedure AddStringCopy(const Text: RawUTF8; start,len: PtrInt);
@@ -936,10 +943,12 @@ type
     procedure AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
     /// fast conversion from binary data into MSB hexa chars
     // - up to the internal buffer bytes may be converted
-    procedure AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer);
+    procedure AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer;
+      QuotedChar: AnsiChar = #0);
     /// fast conversion from binary data into quoted MSB lowercase hexa chars
     // - up to the internal buffer bytes may be converted
     procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a Value as significant hexadecimal text
     // - append its minimal size, i.e. excluding highest bytes containing 0
     // - use GetNextItemHexa() to decode such a text value
@@ -960,16 +969,21 @@ type
       EndOfObject: PUTF8Char): PUTF8Char; virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
-    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape); virtual;
+    procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape;
+      WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
+    function AddTypedJSON(Value, TypeInfo: pointer;
+      WriteOptions: TTextWriterWriteObjectOptions = []): PtrInt; virtual;
+
+    /// serialize as JSON the given object
+    // - is just a wrapper around AddTypeJSON()
     procedure WriteObject(Value: TObject;
-      Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]); virtual;
+      Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent and check fCustomComment
     procedure WriteObjectPropName(const PropName: ShortString;
       Options: TTextWriterWriteObjectOptions);
-
     /// return the last char appended
     // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
@@ -3972,10 +3986,10 @@ var
 begin
   tab := @TEXT_CHARS;
   while tcCtrlNot0Comma in tab[P^] do
-    inc(P);
+    inc(P); // in [#1..' ', ';']
   B := P;
   while tcIdentifier in tab[P^] do
-    inc(P); // go to end of field name
+    inc(P); // go to end of ['_', '0'..'9', 'a'..'z', 'A'..'Z'] chars
   FastSetString(Prop, B, P - B);
   while tcCtrlNot0Comma in tab[P^] do
     inc(P);
@@ -3989,7 +4003,7 @@ var
 begin
   tab := @TEXT_CHARS;
   while tcCtrlNotLF in tab[P^] do
-    inc(P);
+    inc(P); // ignore [#1..#9, #11, #12, #14..' ']
   B := P;
   while tcIdentifier in tab[P^] do
     inc(P); // go to end of field name
@@ -5440,9 +5454,16 @@ begin
   inherited;
 end;
 
-procedure TBaseWriter.AddVariant(const Value: variant; Escape: TTextWriterKind);
+procedure TBaseWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
+  WriteOptions: TTextWriterWriteObjectOptions);
 begin
   raise ESynException.CreateUTF8('%.AddVariant unimplemented: use TTextWriter', [self]);
+end;
+
+function TBaseWriter.AddTypedJSON(Value, TypeInfo: pointer;
+  WriteOptions: TTextWriterWriteObjectOptions): PtrInt;
+begin
+  raise ESynException.CreateUTF8('%.AddTypedJSON unimplemented: use TTextWriter', [self]);
 end;
 
 function TBaseWriter.{%H-}AddJSONReformat(JSON: PUTF8Char;
@@ -5451,9 +5472,38 @@ begin
   raise ESynException.CreateUTF8('%.AddJSONReformat unimplemented: use TTextWriter', [self]);
 end;
 
+procedure TBaseWriter.AddShorter(const Text: TShort8);
+var
+  P: PUTF8Char;
+  S: PUTF8Char {$ifndef FPC} absolute Text{$endif};
+begin
+  P := B;
+  if P >= BEnd then // BEnd is 16 bytes before end of buffer -> 8 chars OK
+    P := FlushToStream;
+  {$ifdef FPC}
+  S := @Text; // better code generation when inlined
+  {$endif FPC}
+  inc(B, ord(S[0]));
+  PInt64(P + 1)^ := PInt64(S + 1)^;
+end;
+
+procedure TBaseWriter.AddNull;
+var
+  P: PUTF8Char;
+begin
+  P := B;
+  if P >= BEnd then
+    P := FlushToStream;
+  PCardinal(P + 1)^ := NULL_LOW;
+  inc(B, 4);
+end;
+
 procedure TBaseWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
 begin
-  raise ESynException.CreateUTF8('%.WriteObject unimplemented: use TTextWriter', [self]);
+  if Value <> nil then
+    AddTypedJSON(@Value, Value.ClassInfo, Options)
+  else
+    AddNull;
 end;
 
 procedure TBaseWriter.WriteObjectPropName(const PropName: ShortString;
@@ -5463,7 +5513,7 @@ begin
   begin
     if (fCustomComment <> nil) and (fCustomComment^ <> '') then
     begin
-      AddShort(' // ');
+      AddShorter(' // ');
       AddString(fCustomComment^);
       fCustomComment^ := '';
     end;
@@ -5532,37 +5582,39 @@ begin
   FlushToStream;
 end;
 
-procedure TBaseWriter.FlushToStream;
+function TBaseWriter.FlushToStream: PUTF8Char;
 var
   i: PtrInt;
   s: PtrUInt;
 begin
   i := B - fTempBuf + 1;
-  if i <= 0 then
-    exit;
-  fStream.WriteBuffer(fTempBuf^, i);
-  inc(fTotalFileSize, i);
-  if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
+  if i > 0 then
   begin
-    s := fTotalFileSize - fInitialStreamPosition;
-    if (fTempBufSize < 49152) and (s > PtrUInt(fTempBufSize) * 4) then
-      s := fTempBufSize * 2 // tune small (stack-alloc?) buffer
-    else if (fTempBufSize < 1 shl 20) and (s > 40 shl 20) then
-      s := 1 shl 20 // 40MB -> 1MB buffer
-    else
-      s := 0;
-    if s > 0 then
+    fStream.WriteBuffer(fTempBuf^, i);
+    inc(fTotalFileSize, i);
+    if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
     begin
-      fTempBufSize := s;
-      if twoBufferIsExternal in fCustomOptions then // use heap, not stack
-        exclude(fCustomOptions, twoBufferIsExternal)
+      s := fTotalFileSize - fInitialStreamPosition;
+      if (fTempBufSize < 49152) and (s > PtrUInt(fTempBufSize) * 4) then
+        s := fTempBufSize * 2 // tune small (stack-alloc?) buffer
+      else if (fTempBufSize < 1 shl 20) and (s > 40 shl 20) then
+        s := 1 shl 20 // 40MB -> 1MB buffer
       else
-        FreeMem(fTempBuf); // with big content comes bigger buffer
-      GetMem(fTempBuf, fTempBufSize);
-      BEnd := fTempBuf + (fTempBufSize - 2);
+        s := 0;
+      if s > 0 then
+      begin
+        fTempBufSize := s;
+        if twoBufferIsExternal in fCustomOptions then // use heap, not stack
+          exclude(fCustomOptions, twoBufferIsExternal)
+        else
+          FreeMem(fTempBuf); // with big content comes bigger buffer
+        GetMem(fTempBuf, fTempBufSize);
+        BEnd := fTempBuf + (fTempBufSize - 16);
+      end;
     end;
+    B := fTempBuf - 1;
   end;
-  B := fTempBuf - 1;
+  result := B;
 end;
 
 procedure TBaseWriter.ForceContent(const text: RawUTF8);
@@ -5629,8 +5681,11 @@ begin
 end;
 
 procedure TBaseWriter.CancelLastComma;
+var
+  P: PUTF8Char;
 begin
-  if (B >= fTempBuf) and (B^ = ',') then
+  P := B;
+  if (P >= fTempBuf) and (P^ = ',') then
     dec(B);
 end;
 
@@ -5648,29 +5703,38 @@ begin
 end;
 
 procedure TBaseWriter.Add(c: AnsiChar);
+var
+  P: PUTF8Char;
 begin
-  if B >= BEnd then
-    FlushToStream;
-  B[1] := c;
+  P := B;
+  if P >= BEnd then
+    P := FlushToStream;
+  P[1] := c;
   inc(B);
 end;
 
 procedure TBaseWriter.AddOnce(c: AnsiChar);
+var
+  P: PUTF8Char;
 begin
-  if (B >= fTempBuf) and (B^ = c) then
+  P := B;
+  if (P >= fTempBuf) and (P^ = c) then
     exit; // no duplicate
-  if B >= BEnd then
-    FlushToStream;
-  B[1] := c;
+  if P >= BEnd then
+    P := FlushToStream;
+  P[1] := c;
   inc(B);
 end;
 
 procedure TBaseWriter.Add(c1, c2: AnsiChar);
+var
+  P: PUTF8Char;
 begin
-  if BEnd - B <= 1 then
-    FlushToStream;
-  B[1] := c1;
-  B[2] := c2;
+  P := B;
+  if P >= BEnd then
+    P := FlushToStream;
+  P[1] := c1;
+  P[2] := c2;
   inc(B, 2);
 end;
 
@@ -5803,7 +5867,7 @@ end;
 
 procedure TBaseWriter.AddQHex(Value: Qword);
 begin
-  AddBinToHexDisplayQuoted(@Value, SizeOf(Value));
+  AddBinToHexDisplayLower(@Value, SizeOf(Value), '"');
 end;
 
 procedure TBaseWriter.Add(Value: Extended; precision: integer; noexp: boolean);
@@ -5829,7 +5893,7 @@ end;
 
 procedure TBaseWriter.Add(Value: boolean);
 begin
-  AddShort(BOOL_STR[Value]);
+  AddShorter(BOOL_STR[Value]);
 end;
 
 procedure TBaseWriter.AddFloatStr(P: PUTF8Char);
@@ -5845,19 +5909,32 @@ begin
     B^ := '0';
 end;
 
-procedure TBaseWriter.Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID);
+procedure TBaseWriter.Add(Value: PGUID; QuotedChar: AnsiChar);
 begin
-  if BEnd - B <= 36 then
+  if BEnd - B <= 38 then
     FlushToStream;
-  GUIDToText(B + 1, @guid);
+  inc(B);
+  if QuotedChar <> #0 then
+  begin
+    B^ := QuotedChar;
+    inc(B);
+  end;
+  GUIDToText(B, pointer(Value));
   inc(B, 36);
+  if QuotedChar <> #0 then
+    B^ := QuotedChar
+  else
+    dec(B);
 end;
 
 procedure TBaseWriter.AddCR;
+var
+  P: PUTF8Char;
 begin
-  if BEnd - B <= 1 then
-    FlushToStream;
-  PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
+  P := B;
+  if P >= BEnd then
+    P := FlushToStream;
+  PWord(P + 1)^ := 13 + 10 shl 8; // CR + LF
   inc(B, 2);
 end;
 
@@ -5870,7 +5947,7 @@ begin
   ntabs := fHumanReadableLevel;
   if ntabs >= cardinal(fTempBufSize) then
     exit; // avoid buffer overflow
-  if BEnd - B <= PtrInt(ntabs) + 1 then
+  if BEnd - B <= PtrInt(ntabs) then
     FlushToStream;
   PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
   FillCharFast(B[3], ntabs, 9);   // #9=tab
@@ -5895,7 +5972,7 @@ end;
 
 procedure TBaseWriter.Add2(Value: PtrUInt);
 begin
-  if BEnd - B <= 3 then
+  if B >= BEnd then
     FlushToStream;
   if Value > 99 then
     PCardinal(B + 1)^ := $3030 + ord(',') shl 16
@@ -5918,7 +5995,7 @@ procedure TBaseWriter.Add3(Value: PtrUInt);
 var
   V: PtrUInt;
 begin
-  if BEnd - B <= 4 then
+  if B >= BEnd then
     FlushToStream;
   if Value > 999 then
     PCardinal(B + 1)^ := $303030
@@ -5933,7 +6010,7 @@ end;
 
 procedure TBaseWriter.Add4(Value: PtrUInt);
 begin
-  if BEnd - B <= 5 then
+  if B >= BEnd then
     FlushToStream;
   if Value > 9999 then
     PCardinal(B + 1)^ := $30303030
@@ -5947,7 +6024,7 @@ procedure TBaseWriter.AddMicroSec(MS: cardinal);
 var
   W: PWordArray;
 begin // in 00.000.000 TSynLog format
-  if BEnd - B <= 17 then
+  if B >= BEnd then
     FlushToStream;
   B[3] := '.';
   B[7] := '.';
@@ -5973,7 +6050,7 @@ begin
   begin
     inc(B); // allow CancelLastChar
     repeat
-      i := BEnd - B + 1; // guess biggest size to be added into buf^ at once
+      i := BEnd - B; // guess biggest size to be added into buf^ at once
       if Len < i then
         i := Len;
       // add UTF-8 bytes
@@ -6004,7 +6081,7 @@ end;
 procedure TBaseWriter.AddRawJSON(const json: RawJSON);
 begin
   if json = '' then
-    AddShort('null')
+    AddNull
   else
     AddNoJSONEscape(pointer(json), length(json));
 end;
@@ -6012,18 +6089,13 @@ end;
 procedure TBaseWriter.AddNoJSONEscapeW(WideChar: PWord; WideCharCount: integer);
 var
   PEnd: PtrUInt;
-  BMax: PUTF8Char;
 begin
   if WideChar = nil then
     exit;
-  BMax := BEnd - 7; // ensure enough space for biggest Unicode glyph as UTF-8
   if WideCharCount = 0 then
     repeat
-      if B >= BMax then
-      begin
+      if B >= BEnd then
         FlushToStream;
-        BMax := BEnd - 7; // B may have been resized -> recompute BMax
-      end;
       if WideChar^ = 0 then
         break;
       if WideChar^ <= 126 then
@@ -6039,11 +6111,8 @@ begin
   begin
     PEnd := PtrUInt(WideChar) + PtrUInt(WideCharCount) * SizeOf(WideChar^);
     repeat
-      if B >= BMax then
-      begin
+      if B >= BEnd then
         FlushToStream;
-        BMax := BEnd - 7;
-      end;
       if WideChar^ = 0 then
         break;
       if WideChar^ <= 126 then
@@ -6069,7 +6138,7 @@ procedure TBaseWriter.AddProp(PropName: PUTF8Char; PropNameLen: PtrInt);
 begin
   if PropNameLen = 0 then
     exit; // paranoid check
-  if BEnd - B <= PropNameLen + 3 then
+  if BEnd - B <= PropNameLen then
     FlushToStream;
   if twoForceJSONExtended in CustomOptions then
   begin
@@ -6107,7 +6176,7 @@ procedure TBaseWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
 begin
   Add('"');
   if Instance = nil then
-    AddShort('void')
+    AddShorter('void')
   else
     AddShort(ClassNameShort(Instance)^);
   Add('(');
@@ -6135,7 +6204,7 @@ var
   L: PtrInt;
 begin
   L := ord(Text[0]);
-  if BEnd - B <= L + 2 then
+  if BEnd - B <= L then
     FlushToStream;
   inc(B);
   if L > 0 then
@@ -6148,41 +6217,55 @@ begin
 end;
 
 procedure TBaseWriter.AddOnSameLine(P: PUTF8Char);
+var
+  D: PUTF8Char;
+  c: AnsiChar;
 begin
   if P <> nil then
-    while P^ <> #0 do
-    begin
-      if B >= BEnd then
-        FlushToStream;
-      if P^ < ' ' then
-        B[1] := ' '
-      else
-        B[1] := P^;
-      inc(P);
-      inc(B);
-    end;
+  begin
+    D := B + 1;
+    if P^ <> #0 then
+      repeat
+        if D >= BEnd then
+          D := FlushToStream + 1;
+        c := P^;
+        if c < ' ' then
+          c := ' ';
+        D^ := c;
+        inc(P);
+        inc(D);
+      until c = #0;
+    B := D - 1;
+  end;
 end;
 
 procedure TBaseWriter.AddOnSameLine(P: PUTF8Char; Len: PtrInt);
 var
-  i: PtrInt;
+  D: PUTF8Char;
+  c: AnsiChar;
 begin
-  if P <> nil then
-    for i := 0 to Len - 1 do
-    begin
-      if B >= BEnd then
-        FlushToStream;
-      if P[i] < ' ' then
-        B[1] := ' '
-      else
-        B[1] := P[i];
-      inc(B);
-    end;
+  if (P <> nil) and (Len > 0) then
+  begin
+    D := B + 1;
+    repeat
+      if D >= BEnd then
+        D := FlushToStream + 1;
+      c := P^;
+      if c < ' ' then
+        c := ' ';
+      D^ := c;
+      inc(D);
+      inc(P);
+      dec(Len);
+    until Len = 0;
+    B := D - 1;
+  end;
 end;
 
 procedure TBaseWriter.AddOnSameLineW(P: PWord; Len: PtrInt);
 var
   PEnd: PtrUInt;
+  c: cardinal;
 begin
   if P = nil then
     exit;
@@ -6192,10 +6275,11 @@ begin
     PEnd := PtrUInt(P) + PtrUInt(Len) * SizeOf(WideChar);
   while (Len = 0) or (PtrUInt(P) < PEnd) do
   begin
-    if BEnd - B <= 7 then
+    if B >= BEnd then
       FlushToStream;
     // escape chars, so that all content will stay on the same text line
-    case P^ of
+    c := P^;
+    case c of
       0:
         break;
       1..32:
@@ -6206,7 +6290,7 @@ begin
         end;
       33..126:
         begin
-          B[1] := AnsiChar(ord(P^)); // direct store 7 bits ASCII
+          B[1] := AnsiChar(c); // direct store 7 bits ASCII
           inc(B);
           inc(P);
         end;
@@ -6267,7 +6351,7 @@ end;
 
 procedure TBaseWriter.AddByteToHex(Value: byte);
 begin
-  if BEnd - B <= 1 then
+  if B >= BEnd then
     FlushToStream;
   ByteToHex(PAnsiChar(B) + 1, Value);
   inc(B, 2);
@@ -6275,7 +6359,7 @@ end;
 
 procedure TBaseWriter.AddInt18ToChars3(Value: cardinal);
 begin
-  if BEnd - B <= 3 then
+  if B >= BEnd then
     FlushToStream;
   PCardinal(B + 1)^ := ((Value shr 12) and $3f) or ((Value shr 6) and $3f) shl 8 or
                         (Value and $3f) shl 16 + $202020;
@@ -6361,27 +6445,30 @@ begin
   inc(B, BinBytes * 2);
 end;
 
-procedure TBaseWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer);
+procedure TBaseWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer;
+  QuotedChar: AnsiChar);
 begin
-  if cardinal(BinBytes * 2 - 1) >= cardinal(fTempBufSize) then
+  if cardinal(BinBytes * 2 + 1) >= cardinal(fTempBufSize) then
     exit;
   if BEnd - B <= BinBytes * 2 then
     FlushToStream;
-  BinToHexDisplayLower(Bin, PAnsiChar(B + 1), BinBytes);
+  inc(B);
+  if QuotedChar <> #0 then
+  begin
+    B^ := QuotedChar;
+    inc(B);
+  end;
+  BinToHexDisplayLower(Bin, pointer(B), BinBytes);
   inc(B, BinBytes * 2);
+  if QuotedChar <> #0 then
+    B^ := QuotedChar
+  else
+    dec(B);
 end;
 
 procedure TBaseWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
 begin
-  if cardinal(BinBytes * 2 + 2) >= cardinal(fTempBufSize) then
-    exit;
-  if BEnd - B <= BinBytes * 2 + 2 then
-    FlushToStream;
-  B[1] := '"';
-  BinToHexDisplayLower(Bin, PAnsiChar(B + 2), BinBytes);
-  inc(B, BinBytes * 2);
-  B[2] := '"';
-  inc(B, 2);
+  AddBinToHexDisplayLower(Bin, BinBytes, '"');
 end;
 
 procedure TBaseWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
@@ -6435,25 +6522,21 @@ end;
 
 procedure TBaseWriter.AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar; TextMaxLen: PtrInt);
 var
-  BMax: PUTF8Char;
   c: AnsiChar;
+  P: PUTF8Char;
 begin
   if TextMaxLen <= 0 then
     TextMaxLen := maxInt
   else if TextMaxLen > 5 then
     dec(TextMaxLen, 5);
-  BMax := BEnd - 3;
-  if B >= BMax then
-  begin
+  if B >= BEnd then
     FlushToStream;
-    BMax := BEnd - 3;
-  end;
-  inc(B);
-  B^ := Quote;
-  inc(B);
+  P := B + 1;
+  P^ := Quote;
+  inc(P);
   if Text <> nil then
     repeat
-      if B < BMax then
+      if P < BEnd then
       begin
         dec(TextMaxLen);
         if TextMaxLen <> 0 then
@@ -6462,27 +6545,25 @@ begin
           inc(Text);
           if c = #0 then
             break;
-          B^ := c;
-          inc(B);
+          P^ := c;
+          inc(P);
           if c <> Quote then
             continue;
-          B^ := c;
-          inc(B);
+          P^ := c;
+          inc(P);
         end
         else
         begin
-          PCardinal(B)^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
-          inc(B, 3);
+          PCardinal(P)^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
+          inc(P, 3);
           break;
         end;
       end
       else
-      begin
-        FlushToStream;
-        BMax := BEnd - 3;
-      end;
+        P := FlushToStream + 1;
     until false;
-  B^ := Quote;
+  P^ := Quote;
+  B := P;
 end;
 
 const
@@ -6515,13 +6596,13 @@ begin
       #0:
         exit;
       '<':
-        AddShort('&lt;');
+        AddShorter('&lt;');
       '>':
-        AddShort('&gt;');
+        AddShorter('&gt;');
       '&':
-        AddShort('&amp;');
+        AddShorter('&amp;');
       '"':
-        AddShort('&quot;');
+        AddShorter('&quot;');
     end;
     inc(Text);
   until Text^ = #0;
@@ -6553,13 +6634,13 @@ begin
       #0:
         exit;
       '<':
-        AddShort('&lt;');
+        AddShorter('&lt;');
       '>':
-        AddShort('&gt;');
+        AddShorter('&gt;');
       '&':
-        AddShort('&amp;');
+        AddShorter('&amp;');
       '"':
-        AddShort('&quot;');
+        AddShorter('&quot;');
     end;
     inc(Text);
   until false;
@@ -6601,20 +6682,20 @@ begin
           ; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
         #9, #10, #13:
           begin // characters below ' ', #9 e.g. -> // '&#x09;'
-            AddShort('&#x');
+            AddShorter('&#x');
             AddByteToHex(ord(Text[i]));
             Add(';');
           end;
         '<':
-          AddShort('&lt;');
+          AddShorter('&lt;');
         '>':
-          AddShort('&gt;');
+          AddShorter('&gt;');
         '&':
-          AddShort('&amp;');
+          AddShorter('&amp;');
         '"':
-          AddShort('&quot;');
+          AddShorter('&quot;');
         '''':
-          AddShort('&apos;');
+          AddShorter('&apos;');
       else
         break; // should match XML_ESC[] constant above
       end;
@@ -6643,7 +6724,7 @@ end;
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions): RawUTF8;
 var
-  i, n: integer;
+  i, n: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
   with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
@@ -9731,7 +9812,7 @@ end;
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
   ConsoleWrite(#13#10'Fatal exception ', cclightRed, true);
-  ConsoleWrite('%', [E.ClassName], ccWhite, true);
+  ConsoleWrite('%', [E.ClassType], ccWhite, true);
   ConsoleWrite(' raised with message ', ccLightRed, true);
   ConsoleWrite('%', [E.Message], ccLightMagenta);
   TextColor(ccLightGray);
@@ -9793,9 +9874,9 @@ var
 {%H-}begin
   tab := @TEXT_CHARS;
   if (P <> nil) and (tcIdentifierFirstChar in tab[P^]) then
-    // first char must be alphabetical
+    // first char must be in ['_', 'a'..'z', 'A'..'Z']
     repeat
-      inc(P); // following chars can be alphanumerical
+      inc(P); // following chars can be ['_', '0'..'9', 'a'..'z', 'A'..'Z']
       if tcIdentifier in tab[P^] then
         continue;
       result := P^ = #0;
@@ -9815,7 +9896,7 @@ begin
   for i := 0 to high(Values) do
     for j := 1 to length(Values[i]) do
       if not (tcIdentifier in tab[Values[i][j]]) then
-        exit;
+        exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z']
   result := true;
 end;
 
@@ -10459,7 +10540,8 @@ begin
     c := GetNextUTF8Upper(U);
     if c = 0 then
       exit;
-  until (c >= 127) or not (tcWord in TEXT_BYTES[c]);
+  until (c >= 127) or
+        not (tcWord in TEXT_BYTES[c]); // not ['0'..'9', 'a'..'z', 'A'..'Z']
   repeat
     V := U;
     c := GetNextUTF8Upper(U);

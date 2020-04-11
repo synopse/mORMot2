@@ -786,7 +786,7 @@ begin
         last := space;
         s[1] := NormToUpper[s[1]];
       end;
-      WR.AddShort(s);
+      WR.AddShorter(s);
       WR.Add(' ');
       dec(WordCount);
     end;
@@ -825,12 +825,12 @@ begin
       question:
         WR.Add('?', ' ');
       paragraph:
-        WR.AddShort('.'#13#10);
+        WR.AddShorter('.'#13#10);
     end;
   end;
   if not (last in endKind) and (LastPunctuation <> ' ') then
   begin
-    WR.AddShort('bla');
+    WR.AddShorter('bla');
     WR.Add(LastPunctuation);
   end;
 end;
@@ -902,7 +902,7 @@ procedure TSynTests.AddCase(const TestCase: array of TSynTestCaseClass);
 var
   i: integer;
 begin
-  for i := low(TestCase) to high(TestCase) do
+  for i := 0 to high(TestCase) do
     fTestCase.Add(TestCase[i]);
 end;
 
