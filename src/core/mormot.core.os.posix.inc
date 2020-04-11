@@ -14,6 +14,7 @@ uses
   sysctl,
   {$else}
   linux,
+  syscall,
   {$endif BSD}
   {$ifdef FPCUSEVERSIONINFO} // to be enabled in mormot.defines.inc
     fileinfo,        // FPC 3.0 and up
@@ -826,6 +827,55 @@ function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 begin
   result := false;
+end;
+
+{$ifdef BSD}
+function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
+  {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
+  {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
+{$endif BSD}
+
+function SynMProtect(addr: pointer; size: size_t; prot: integer): longint;
+begin
+  result := -1;
+  {$ifdef UNIX}
+    {$ifdef BSD}
+    result := mprotect(addr, size, prot);
+    {$else}
+    if Do_SysCall(syscall_nr_mprotect, PtrUInt(addr), size, prot) >= 0 then
+      result := 0;
+    {$endif BSD}
+  {$endif UNIX}
+end;
+
+procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
+  LeaveUnprotected: boolean);
+var
+  PageSize: PtrUInt;
+  AlignedAddr: pointer;
+  i: PtrInt;
+  ProtectedResult: boolean;
+  ProtectedMemory: boolean;
+begin
+  if Backup <> nil then
+    for i := 0 to Size - 1 do // do not use Move() here
+      PByteArray(Backup)^[i] := PByteArray(Old)^[i];
+  PageSize := SystemInfo.dwPageSize;
+  AlignedAddr := Pointer((PtrUInt(Old) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  while PtrUInt(Old) + PtrUInt(Size) >= PtrUInt(AlignedAddr) + PageSize do
+    Inc(PageSize, SystemInfo.dwPageSize);
+  ProtectedResult := SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
+  ProtectedMemory := not ProtectedResult;
+  if ProtectedMemory then
+    ProtectedResult := SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_WRITE) = 0;
+  if ProtectedResult then
+  try
+    for i := 0 to Size - 1 do // do not use Move() here
+      PByteArray(Old)^[i] := PByteArray(New)^[i];
+    if not LeaveUnprotected and ProtectedMemory then
+      SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_EXEC);
+  except
+  end;
 end;
 
 

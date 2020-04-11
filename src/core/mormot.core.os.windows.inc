@@ -228,7 +228,7 @@ begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
     inc(p^.H);  // wrap-up overflow after 49 days
   p^.L := t32;
   result := p^.V;
-end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
+end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(
 
 {$ifdef FPC} // oddly not defined in fpc\rtl\win
 function SwitchToThread: BOOL; stdcall; external kernel32 name 'SwitchToThread';
@@ -609,6 +609,27 @@ begin
     result := IncludeTrailingPathDelimiter(result);
   end;
   _SystemPath[kind] := result;
+end;
+
+procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
+  LeaveUnprotected: boolean);
+var
+  RestoreProtection, Ignore: DWORD;
+  i: PtrInt;
+begin
+  if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, RestoreProtection) then
+  begin
+    if Backup <> nil then
+      for i := 0 to Size - 1 do  // do not use Move() here
+        PByteArray(Backup)^[i] := PByteArray(Old)^[i];
+    for i := 0 to Size - 1 do    // do not use Move() here
+      PByteArray(Old)^[i] := PByteArray(New)^[i];
+    if not LeaveUnprotected then
+      VirtualProtect(Old, Size, RestoreProtection, Ignore);
+    FlushInstructionCache(GetCurrentProcess, Old, Size);
+    if not CompareMemFixed(Old, New, Size) then
+      raise Exception.Create('PatchCode?');
+  end;
 end;
 
 

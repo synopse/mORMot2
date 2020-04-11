@@ -10,6 +10,7 @@ unit mormot.core.os;
   - Gather Operating System Information
   - Operating System Specific Types (e.g. TWinRegistry)
   - Unicode, Time, File, Console process
+  - Per Class Properties O(1) Lookup via vmtAutoTable Slot
 
   Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid using $ifdef/$endif in "uses" clauses.
@@ -544,8 +545,11 @@ function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt
 // to avoid the 32-bit overflow/wrapping issue of GetTickCount
 // - warning: FPC's SysUtils.GetTickCount64 or TThread.GetTickCount64 don't
 // handle properly 49 days wrapping under XP -> always use this safe version
-// - on POSIX, will call (via vDSO) the very fast CLOCK_MONOTONIC_COARSE if available
-// - do not expect extact millisecond resolution - it may rather be within the
+// - on POSIX, will call (via vDSO) the very fast CLOCK_MONOTONIC_COARSE if
+// available, or the low-level mach_absolute_time() monotonic Darwin API
+// - warning: FPC's SysUtils.GetTickCount64 may call fpgettimeofday() e.g.
+// on Darwin, which is not monotonic -> always use this safe version
+// - do not expect exact millisecond resolution - it may rather be within the
 // 10-16 ms range, especially under Windows
 {$ifdef MSWINDOWS}
 var GetTickCount64: function: Int64; stdcall;
@@ -759,17 +763,124 @@ var
   StdOut: THandle;
 
 
+{ *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
+
+/// self-modifying code - change some memory buffer in the code segment
+// - if Backup is not nil, it should point to a Size array of bytes, ready
+// to contain the overridden code buffer, for further hook disabling
+procedure PatchCode(Old,New: pointer; Size: PtrInt; Backup: pointer = nil;
+  LeaveUnprotected: boolean = false);
+
+/// self-modifying code - change one PtrUInt in the code segment
+procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
+  LeaveUnprotected: boolean = false);
+
+
+/// search for a given class stored in an object vmtAutoTable Slot
+// - up to 15 properties could be registered per class
+// - quickly returns the PropertiesClass instance for this class on success
+// - returns nil if no Properties was registered for this class; caller should
+// call ClassPropertiesAdd() to initialize
+function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// try to register a given Properties instance for a given class
+// - returns associated PropertiesInstance otherwise, which may not be the supplied
+// PropertiesInstance, if it has been registered by another thread in between -
+// it will free the supplied PropertiesInstance in this case, and return the existing
+function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject): TObject;
+
+
+
+
 implementation
 
 // those include files hold all OS-specific functions
 // note: the *.inc files start with their own "uses" clause, so both $include
 // should remain here, just after the "implementation" clause
+
 {$ifdef LINUX}
   {$include mormot.core.os.posix.inc}
 {$endif LINUX}
+
 {$ifdef MSWINDOWS}
   {$include mormot.core.os.windows.inc}
 {$endif MSWINDOWS}
+
+
+{ *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
+
+type
+  TAutoSlots = array[0..15] of TObject; // always end with nil
+  PAutoSlots = ^TAutoSlots;
+
+var
+  AutoSlotsLock: TRTLCriticalSection;
+  AutoSlots: array of PAutoSlots; // not "of TAutoSlots" to have static pointers
+
+
+procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt; LeaveUnprotected: boolean);
+begin
+  PatchCode(Code, @Value, SizeOf(Code^), nil, LeaveUnprotected);
+end;
+
+
+function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
+var
+  slots: PObject;
+begin
+  slots := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
+  if slots <> nil then
+  begin
+    ObjectClass := PropertiesClass; // better TClass constant inlining on FPC
+    repeat
+      result := slots^;
+      if (result = nil) or (PClass(result)^ = ObjectClass) then
+        exit; // reached end of list, or found the expected class type
+      inc(slots);
+    until false;
+  end;
+  result := nil;
+end;
+
+function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject): TObject;
+var
+  vmt: PPointer;
+  slots: PAutoSlots;
+  i: PtrInt;
+begin
+  EnterCriticalSection(AutoSlotsLock);
+  try
+    result := ClassPropertiesGet(ObjectClass, PropertiesInstance.ClassType);
+    if result <> nil then
+    begin
+      PropertiesInstance.Free; // some background thread registered its own
+      exit;
+    end;
+    vmt := Pointer(PAnsiChar(ObjectClass) + vmtAutoTable);
+    slots := vmt^;
+    if slots = nil then
+    begin
+      slots := AllocMem(SizeOf(slots^));
+      PtrArrayAdd(AutoSlots, slots);
+      PatchCodePtrUInt(PPtrUInt(vmt), PtrUInt(slots), {leaveunprotected=}true);
+      if vmt^ <> slots then
+        raise Exception.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
+          [ObjectClass.ClassName]);
+    end;
+    for i := 0 to high(slots^) - 1 do
+      if slots^[i] = nil then
+      begin
+        slots^[i] := PropertiesInstance; // use the void slot
+        result := PropertiesInstance;
+        exit;
+      end;
+  finally
+    LeaveCriticalSection(AutoSlotsLock);
+  end;
+  raise Exception.CreateFmt('ClassPropertiesAdd: no slot available on %s',
+    [ObjectClass.ClassName]);
+end;
 
 
 { ****************** Unicode, Time, File, Console process }
@@ -1172,16 +1283,26 @@ begin
   end;
 end;
 
+procedure FinalizeUnit;
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(AutoSlots) do
+    FreeMem(AutoSlots[i]);
+  ExeVersion.Version.Free;
+end;
+
 
 initialization
   {$ifdef ISFPC27}
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
+  InitializeCriticalSection(AutoSlotsLock);
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   SetExecutableVersion(0,0,0,0);
 
 finalization
-  ExeVersion.Version.Free;
+  FinalizeUnit;
 end.
 
