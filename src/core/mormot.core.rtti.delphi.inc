@@ -402,6 +402,11 @@ begin
       result := false;
 end;
 
+function TRttiInfo.IsBoolean: boolean;
+begin
+  result := (@self = TypeInfo(boolean)) or (@self = TypeInfo(wordbool));
+end;
+
 function TRttiInfo.EnumBaseType: PRttiEnumType;
 begin
   result := pointer(GetTypeData(@self));

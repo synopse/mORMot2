@@ -306,13 +306,16 @@ const
 function TRttiInfo.Name: PShortString;
 begin // TypeInfo(Integer/Cardinal)=TypeInfo(LongInt/LongWord)
   result := pointer(@self);
-  if result <> TypeInfo(integer) then
-    if result <> TypeInfo(cardinal) then
-      result := @RawName
+  if result <> nil then
+    if result <> TypeInfo(integer) then
+      if result <> TypeInfo(cardinal) then
+        result := @RawName
+      else
+        result := @CARDINAL_NAME
     else
-      result := @CARDINAL_NAME
+      result := @INTEGER_NAME
   else
-    result := @INTEGER_NAME;
+    result := @NULCHAR;
 end;
 
 function TRttiInfo.RecordSize: PtrInt;
@@ -322,6 +325,13 @@ begin
   else
     result := GetTypeData(@self)^.RecSize;
 end;
+
+{$ifdef ISFPC32}
+function TRttiInfo.SetEnumSize: PtrInt;
+begin
+  result := PTypeData(@self)^.SetSize; // newer FPC have direct size field :)
+end;
+{$endif ISFPC32}
 
 {$ifdef FPC_NEWRTTI}
 
@@ -362,6 +372,11 @@ end;
 function TRttiInfo.IsQWord: boolean;
 begin
   result := (Kind = rkQWord);
+end;
+
+function TRttiInfo.IsBoolean: boolean;
+begin
+  result := (Kind = rkBool);
 end;
 
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
