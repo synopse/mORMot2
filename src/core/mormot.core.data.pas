@@ -1166,8 +1166,8 @@ type
     // - features direct compression from internal buffer, if stream was not used
     // - BufferOffset could be set to reserve some bytes before the compressed buffer
     // - raise an exception if internal Stream is not a TRawByteStringStream
-    function FlushAndCompress(nocompression: boolean = false; algo: TAlgoCompress = nil;
-      BufferOffset: integer = 0): RawByteString;
+    function FlushAndCompress(nocompression: boolean = false;
+      algo: TAlgoCompress = nil; BufferOffset: integer = 0): RawByteString;
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -1701,14 +1701,6 @@ function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds): boolean;
 
 
-/// efficiently compare two (managed) type values
-// - return 0 if the type is not comparable (corresponding RTTI_COMPARE[]=nil)
-// - if you are sure that your type is comparable, you may call directly
-// $ RTTI_COMPARE[true, Info^.Kind](A, B, Info);
-function RttiCompare(Info: PRttiInfo; A, B: pointer; CaseInsensitive: boolean): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-
-
 /// check equality of two records by content
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties
@@ -1815,6 +1807,71 @@ function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec; TypeInfo: poi
 { ************ TDynArray Wrapper }
 
 type
+  /// possible options for a TDocVariant JSON/BSON document storage
+  // - defined in this unit to avoid circular reference with mormot.core.variants
+  // - dvoIsArray and dvoIsObject will store the "Kind: TDocVariantKind" state -
+  // you should never have to define these two options directly
+  // - dvoNameCaseSensitive will be used for every name lookup - here
+  // case-insensitivity is restricted to a-z A-Z 0-9 and _ characters
+  // - dvoCheckForDuplicatedNames will be used for method
+  // TDocVariantData.AddValue(), but not when setting properties at
+  // variant level: for consistency, "aVariant.AB := aValue" will replace
+  // any previous value for the name "AB"
+  // - dvoReturnNullForUnknownProperty will be used when retrieving any value
+  // from its name (for dvObject kind of instance), or index (for dvArray or
+  // dvObject kind of instance)
+  // - by default, internal values will be copied by-value from one variant
+  // instance to another, to ensure proper safety - but it may be too slow:
+  // if you set dvoValueCopiedByReference, the internal
+  // TDocVariantData.VValue/VName instances will be copied by-reference,
+  // to avoid memory allocations, BUT it may break internal process if you change
+  // some values in place (since VValue/VName and VCount won't match) - as such,
+  // if you set this option, ensure that you use the content as read-only
+  // - any registered custom types may have an extended JSON syntax (e.g.
+  // TBSONVariant does for MongoDB types), and will be searched during JSON
+  // parsing, unless dvoJSONParseDoNotTryCustomVariants is set (slightly faster)
+  // - by default, it will only handle direct JSON [array] of {object}: but if
+  // you define dvoJSONObjectParseWithinString, it will also try to un-escape
+  // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
+  // used e.g. when JSON has been retrieved from a database TEXT column) - is
+  // used for instance by VariantLoadJSON()
+  // - JSON serialization will follow the standard layout, unless
+  // dvoSerializeAsExtendedJson is set so that the property names would not
+  // be escaped with double quotes, writing '{name:"John",age:123}' instead of
+  // '{"name":"John","age":123}': this extended json layout is compatible with
+  // http://docs.mongodb.org/manual/reference/mongodb-extended-json and with
+  // TDocVariant JSON unserialization, also our SynCrossPlatformJSON unit, but
+  // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
+  // - by default, only integer/Int64/currency number values are allowed, unless
+  // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
+  // with potential loss of precision during the conversion
+  // - dvoInternNames and dvoInternValues will use shared TRawUTF8Interning
+  // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
+  // so that redundant text content will be allocated only once on heap
+  TDocVariantOption =
+    (dvoIsArray, dvoIsObject,
+     dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
+     dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
+     dvoJSONObjectParseWithinString, dvoSerializeAsExtendedJson,
+     dvoAllowDoubleValue, dvoInternNames, dvoInternValues);
+
+  /// set of options for a TDocVariant storage
+  // - defined in this unit to avoid circular reference with mormot.core.variants
+  // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
+  // local document as with _ObjFast/_ArrFast/_JsonFast - i.e.
+  // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
+  // - when specifying the options, you should not include dvoIsArray nor
+  // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
+  TDocVariantOptions = set of TDocVariantOption;
+
+  /// pointer to a set of options for a TDocVariant storage
+  // - defined in this unit to avoid circular reference with mormot.core.variants
+  // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
+  // @JSON_OPTIONS_FAST_STRICTJSON or @JSON_OPTIONS_FAST_EXTENDED
+  PDocVariantOptions = ^TDocVariantOptions;
+
+type
   /// function prototype to be used for TDynArray Sort and Find method
   // - common functions exist for base types: see e.g. SortDynArrayBoolean,
   // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
@@ -1888,7 +1945,8 @@ var
      SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
      SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
      SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
-     SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord, nil),
+     SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
+     nil, nil, nil, nil, nil, nil),
    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
@@ -1897,7 +1955,8 @@ var
     SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
     SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
     SortDynArrayUnicodeStringI, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariantI,
-    SortDynArrayUnicodeStringI, SortDynArrayAnsiStringI, SortDynArrayWord, nil));
+    SortDynArrayUnicodeStringI, SortDynArrayAnsiStringI, SortDynArrayWord,
+    nil, nil, nil, nil, nil, nil));
 
 type
   TDynArrayObjArray = (oaUnknown, oaFalse, oaTrue);
@@ -1921,7 +1980,8 @@ type
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
   {$ifdef UNDIRECTDYNARRAY} TDynArray = record
-  {$else}TDynArray = object {$endif}
+  {$else}
+  TDynArray = object {$endif}
   private
     fValue: PPointer;
     fArrayType: PRttiInfo;
@@ -1930,7 +1990,6 @@ type
     fCompare: TDynArraySortCompare;
     fElemSize: cardinal;
     fKnownSize: integer;
-    fParser: integer; // -2 = unknown, -1 = none, GlobalJSONCustomParsers.fParsers[0...n]
     fSorted: boolean;
     fKnownType: TRttiParserType;
     fKnownComplexType: TRTTIParserComplexType;
@@ -2068,14 +2127,14 @@ type
     // and must be a reference to a variable (you can't write IndexOf(i+10) e.g.)
     function IndexOf(const Item; CaseInSensitive: boolean = true): PtrInt;
     /// search for an element value inside the dynamic array
-    // - this method will use the Compare property function for the search;
-    // use IndexOf() if you want to use RTTI for the search
+    // - this method will use the Compare property function, or the supplied
+    // aCompare for the search; call IndexOf() if you want to use RTTI search
     // - return the index found (0..Count-1), or -1 if Item was not found
     // - if the array is sorted, it will use fast O(log(n)) binary search
     // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Item must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
-    function Find(const Item): PtrInt; overload;
+    function Find(const Item; aCompare: TDynArraySortCompare = nil): PtrInt; overload;
     /// search for an element value inside the dynamic array, from an external
     // indexed lookup table
     // - return the index found (0..Count-1), or -1 if Item was not found
@@ -2260,10 +2319,6 @@ type
     // - same as LoadFrom, and will check for any buffer overflow since we
     // know the actual end of input buffer
     function LoadFromBinary(const Buffer: RawByteString): boolean;
-(*
-    /// check this dynamic array from the GlobalJSONCustomParsers list
-    // - returns TRUE if this array has a custom JSON parser
-    function HasCustomJSONParser: boolean;
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
@@ -2295,10 +2350,6 @@ type
     // make a local copy if it will be needed later (using e.g. TSynTempBufer)
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil): PUTF8Char;
-    /// load the dynamic array content from a TDocVariant instance
-    // - will convert the TDocVariant into JSON, the call LoadFromJSON
-    function LoadFromVariant(const DocVariant: variant): boolean;
-*)
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal = 0);
     /// add items from a given dynamic array variable
@@ -2369,9 +2420,13 @@ type
     procedure ItemCopyFrom(Source: pointer; index: PtrInt;
       ClearBeforeCopy: boolean = false); {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
-    // - this method compares first using any supplied Compare property,
-    // then by content using the RTTI element description of the whole record
+    // - use the Compare() property function (if set) or using the
+    // ElemType RTTI, if possible - and fallbacks to binary comparison
     function ItemEquals(A, B: pointer; CaseInSensitive: boolean = false): boolean;
+    /// compare the content of two items, returning -1, 0 or +1s
+    // - use the Compare() property function (if set) or using the
+    // ElemType RTTI, if possible - and fallbacks to binary comparison
+    function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
     procedure ItemClear(Item: pointer); {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content
@@ -2483,7 +2538,6 @@ type
     DynArray: PDynArray;
     HashItem: TDynArrayHashOne;
     EventHash: TEventDynArrayHashOne;
-    Hasher: THasher;
     HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
     HashTableSize: integer;
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
@@ -2497,6 +2551,8 @@ type
     Compare: TDynArraySortCompare;
     /// custom method-based comparison function
     EventCompare: TEventDynArraySortCompare;
+    /// associated item hasher
+    Hasher: THasher;
     /// after how many FindBeforeAdd() or Scan() the hashing starts - default 32
     CountTrigger: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -2571,7 +2627,8 @@ type
     InternalDynArray: TDynArray;
     function Value: PPointer; inline;
     function ElemSize: PtrUInt; inline;
-    function ElemType: Pointer; inline;
+    function ElemType: PRttiInfo; inline;
+    function ArrayType: PRttiInfo; inline;
     function KnownType: TRttiParserType; inline;
     procedure Clear; inline;
     procedure ItemCopy(Source, Dest: pointer); inline;
@@ -2583,12 +2640,10 @@ type
     function SaveTo: RawByteString; overload; inline;
     procedure SaveTo(W: TBufferWriter); overload; inline;
     procedure Sort(aCompare: TDynArraySortCompare = nil); inline;
-  {
     function SaveToJSON(EnumSetsAsText: boolean = false;
       reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8; inline;
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil): PUTF8Char; inline;
-  }
     function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; inline;
     function LoadFromBinary(const Buffer: RawByteString): boolean; inline;
     procedure CreateOrderedIndex(var aIndex: TIntegerDynArray;
@@ -2923,8 +2978,8 @@ type
     /// delete all stored RawUTF8 values
     procedure Clear;
     /// reclaim any unique RawUTF8 values
-    // - any string with an usage count <= aMinimumRefCount will be removed
-    function Clean(aMinimumRefCount: TRefCnt): integer;
+    // - any string with an usage count <= aMaxRefCount will be removed
+    function Clean(aMaxRefCount: TRefCnt): integer;
     /// how many items are currently stored in Value[]
     function Count: integer;
   end;
@@ -2994,7 +3049,7 @@ type
     // - returns the number of unique RawUTF8 cleaned from the internal pool
     // - to be executed on a regular basis - but not too often, since the
     // process can be time consumming, and void the benefit of interning
-    function Clean(aMinimumRefCount: TRefCnt = 1): integer;
+    function Clean(aMaxRefCount: TRefCnt = 1): integer;
     /// how many items are currently stored in this instance
     function Count: integer;
   end;
@@ -3755,7 +3810,7 @@ begin
      (Prop^.TypeInfo^.Kind = rkLString) and
      Prop^.GetterIsField and (Prop^.GetterAddr(self) = @fPassWord) then
   begin
-    W.AddShort('"***"');
+    W.AddShorter('"***"');
     result := true;
   end
   else
@@ -6681,7 +6736,7 @@ begin
     c := s^;
     inc(s);
     if tcURIUnreserved in tab[c] then
-    begin
+    begin // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
       p^ := c;
       inc(p);
     end
@@ -6766,7 +6821,7 @@ begin
   tab := @TEXT_CHARS;
   repeat
     if tcURIUnreserved in tab[P^] then
-      inc(P)
+      inc(P) // was  ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
     else
       exit;
   until P^ = #0;
@@ -8240,7 +8295,7 @@ begin
   end;
 end;
 
-function TRawUTF8InterningSlot.Clean(aMinimumRefCount: TRefCnt): integer;
+function TRawUTF8InterningSlot.Clean(aMaxRefCount: TRefCnt): integer;
 var
   i: integer;
   s, d: PPtrUInt; // points to RawUTF8 values
@@ -8254,7 +8309,7 @@ begin
     d := s;
     for i := 1 to Safe.Padding[0].VInteger do
     begin
-      if PRefCnt(PAnsiChar(s) - _STRREFCNT)^ <= aMinimumRefCount then
+      if PRefCnt(PAnsiChar(s^) - _STRREFCNT)^ <= aMaxRefCount then
       begin
         {$ifdef FPC}
         Finalize(PRawUTF8(s)^);
@@ -8323,14 +8378,14 @@ begin
       fPool[i].Clear;
 end;
 
-function TRawUTF8Interning.Clean(aMinimumRefCount: TRefCnt): integer;
+function TRawUTF8Interning.Clean(aMaxRefCount: TRefCnt): integer;
 var
   i: PtrInt;
 begin
   result := 0;
   if self <> nil then
     for i := 0 to fPoolLast do
-      inc(result, fPool[i].Clean(aMinimumRefCount));
+      inc(result, fPool[i].Clean(aMaxRefCount));
 end;
 
 function TRawUTF8Interning.Count: integer;
@@ -9304,17 +9359,6 @@ begin
     result := false;
 end;
 
-function RttiCompare(Info: PRttiInfo; A, B: pointer; CaseInsensitive: boolean): integer;
-var
-  comp: TRttiCompare;
-begin
-  comp := RTTI_COMPARE[CaseInsensitive, Info^.Kind];
-  if Assigned(comp) then
-    comp(A, B, Info, result)
-  else
-    result := 0;
-end;
-
 
 function RecordEquals(const RecA, RecB; TypeInfo: pointer; PRecSize: PInteger;
   CaseInSensitive: boolean): boolean;
@@ -9765,6 +9809,46 @@ begin
   result := BinaryLoad(fValue, Buffer, ArrayType, [rkDynArray]);
 end;
 
+function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
+begin
+  SaveToJSON(result, EnumSetsAsText, reformat);
+end;
+
+procedure TDynArray.SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean;
+  reformat: TTextWriterJSONFormat);
+var
+  W: TBaseWriter;
+  temp: TTextWriterStackBuffer;
+  len, backup: PtrInt;
+  hacklen: PDALen;
+begin
+  len := GetCount;
+  if len = 0 then
+    Result := '[]'
+  else
+  begin
+    hacklen := PDALen(PAnsiChar(fValue^) - _DALEN);
+    backup := hacklen^;
+    W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
+    try
+      if EnumSetsAsText then
+        W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
+      hacklen^ := len - _DAOFF; // use external count
+      W.AddTypedJSON(ArrayType, fValue^); // serialization from mormot.core.json
+      W.SetText(Result, reformat);
+    finally
+      hacklen^ := backup;
+      W.Free;
+    end;
+  end;
+end;
+
+function TDynArray.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char;
+  CustomVariantOptions: PDocVariantOptions): PUTF8Char;
+begin
+
+end;
+
 function TDynArray.GetArrayTypeName: RawUTF8;
 begin
   ShortStringToAnsi7String(ArrayType^.Name^, result);
@@ -9845,10 +9929,8 @@ function TDynArray.FindIndex(const Item; aIndex: PIntegerDynArray;
 begin
   if aIndex <> nil then
     result := Find(Item, aIndex^, aCompare)
-  else if Assigned(aCompare) then
-    result := Find(Item, nil, aCompare)
   else
-    result := Find(Item);
+    result := Find(Item, aCompare);
 end;
 
 function TDynArray.FindAndFill(var Item; aIndex: PIntegerDynArray;
@@ -9883,24 +9965,26 @@ begin
     Add(Item); // -1 will mark success
 end;
 
-function TDynArray.Find(const Item): PtrInt;
+function TDynArray.Find(const Item; aCompare: TDynArraySortCompare): PtrInt;
 var
   n, L: PtrInt;
   cmp: integer;
   P: PAnsiChar;
 begin
   n := GetCount;
-  if (@fCompare <> nil) and (n > 0) then
+  if not Assigned(aCompare) then
+    aCompare := fCompare;
+  if Assigned(aCompare) and (n > 0) then
   begin
     dec(n);
     P := fValue^;
-    if fSorted and (n > 10) then
+    if fSorted and (@aCompare = @fCompare) and (n > 10) then
     begin
       // array is sorted -> use fast O(log(n)) binary search
       L := 0;
       repeat
         result := (L + n) shr 1;
-        cmp := fCompare(P[cardinal(result) * ElemSize], Item);
+        cmp := aCompare(P[cardinal(result) * ElemSize], Item);
         if cmp = 0 then
           exit;
         if cmp < 0 then
@@ -9911,7 +9995,7 @@ begin
     end
     else // array is very small, or not sorted
       for result := 0 to n do
-        if fCompare(P^, Item) = 0 then // O(n) search
+        if aCompare(P^, Item) = 0 then // O(n) search
           exit
         else
           inc(P, ElemSize);
@@ -9946,7 +10030,7 @@ var
 begin
   result := False;
   n := GetCount;
-  if @fCompare <> nil then
+  if Assigned(fCompare) then
     if n = 0 then // a void array is always sorted
       Index := 0
     else if fSorted then
@@ -10311,11 +10395,11 @@ var
 begin
   if aStop <= aStart then
     exit; // nothing to sort
-  if @aCompare = nil then
-    QuickSort.Compare := @fCompare
+  if Assigned(aCompare) then
+    QuickSort.Compare := aCompare
   else
-    QuickSort.Compare := aCompare;
-  if (@QuickSort.Compare <> nil) and (fValue <> nil) and (fValue^ <> nil) then
+    QuickSort.Compare := @fCompare;
+  if Assigned(QuickSort.Compare) and (fValue <> nil) and (fValue^ <> nil) then
     if ElemSize = SizeOf(pointer) then
       QuickSortPtr(aStart, aStop, QuickSort.Compare, fValue^)
     else
@@ -10349,11 +10433,11 @@ var
   QuickSort: TDynArrayQuickSort;
   n: integer;
 begin
-  if @aCompare = nil then
-    QuickSort.Compare := @fCompare
+  if Assigned(aCompare) then
+    QuickSort.Compare := aCompare
   else
-    QuickSort.Compare := aCompare;
-  if (@QuickSort.Compare <> nil) and (fValue <> nil) and (fValue^ <> nil) then
+    QuickSort.Compare := @fCompare;
+  if Assigned(QuickSort.Compare) and (fValue <> nil) and (fValue^ <> nil) then
   begin
     n := GetCount;
     if length(aIndex) < n then
@@ -10374,11 +10458,11 @@ var
   QuickSort: TDynArrayQuickSort;
   n: integer;
 begin
-  if @aCompare = nil then
-    QuickSort.Compare := @fCompare
+  if Assigned(aCompare) then
+    QuickSort.Compare := aCompare
   else
-    QuickSort.Compare := aCompare;
-  if (@QuickSort.Compare <> nil) and (fValue <> nil) and (fValue^ <> nil) then
+    QuickSort.Compare := @fCompare;
+  if Assigned(QuickSort.Compare) and (fValue <> nil) and (fValue^ <> nil) then
   begin
     n := GetCount;
     QuickSort.Value := fValue^;
@@ -10408,13 +10492,47 @@ begin
 end;
 
 function TDynArray.ItemEquals(A, B: pointer; CaseInSensitive: boolean): boolean;
+var
+  comp: TRttiCompare;
+  cmp: integer;
+label
+  bin;
 begin
-  if @fCompare <> nil then
+  if Assigned(fCompare) then
     result := fCompare(A^, B^) = 0
   else if fElemType = nil then
-    result := CompareMemFixed(@A, @B, fElemSize) // binary comparison
+bin:result := CompareMemFixed(@A, @B, fElemSize) // binary comparison
   else
-    result := RttiCompare(fElemType, A, B, CaseInSensitive) = 0;
+  begin
+    comp := RTTI_COMPARE[CaseInsensitive, fElemType^.Kind];
+    if Assigned(comp) then
+    begin
+      comp(A, B, fElemType, cmp);
+      result := cmp = 0;
+    end
+    else
+      goto bin;
+  end;
+end;
+
+function TDynArray.ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
+var
+  comp: TRttiCompare;
+label
+  bin;
+begin
+  if Assigned(fCompare) then
+    result := fCompare(A^, B^)
+  else if fElemType = nil then
+bin:result := StrCompL(A, B, fElemSize) // binary comparison
+  else
+  begin
+    comp := RTTI_COMPARE[CaseInsensitive, fElemType^.Kind];
+    if Assigned(comp) then
+      comp(A, B, fElemType, result)
+    else
+      goto bin;
+  end;
 end;
 
 procedure TDynArray.InitFrom(aAnother: PDynArray; var aValue);
@@ -10438,7 +10556,8 @@ begin
   end;
 end;
 
-function TDynArray.Equals(B: PDynArray; ignorecompare, casesensitive: boolean): boolean;
+function TDynArray.Equals(B: PDynArray; IgnoreCompare: boolean;
+  CaseSensitive: boolean): boolean;
 var
   i, n: integer;
   P1, P2: PAnsiChar;
@@ -10447,7 +10566,7 @@ begin
   n := GetCount;
   if (n <> B.Count) or (ArrayType <> B.ArrayType) or GetIsObjArray then
     exit;
-  if (@fCompare <> nil) and not ignorecompare then
+  if Assigned(fCompare) and not ignorecompare then
   begin // use customized comparison
     P1 := fValue^;
     P2 := B.fValue^;
@@ -10475,7 +10594,7 @@ begin
   if (fValue = nil) or (ArrayType <> Source.ArrayType) then
     exit;
   if (ElemType = nil) and not ObjArrayByRef and GetIsObjArray then
-     //LoadFromJSON(pointer(Source.SaveToJSON))
+     LoadFromJSON(pointer(Source.SaveToJSON))
   else
   begin
     DynArrayCopy(pointer(fValue^), pointer(Source.fValue^), ArrayType, Source.fCountP);
@@ -10529,9 +10648,6 @@ begin
     result := -1;
 end;
 
-const
-  DYNARRAY_PARSERUNKNOWN = -2; // -1 = not found, 0...n = found
-
 procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue;
   aCountPointer: PInteger);
 var
@@ -10548,7 +10664,6 @@ begin
   if fCountP <> nil then
     fCountP^ := 0;
   fCompare := nil;
-  fParser := DYNARRAY_PARSERUNKNOWN;
   fKnownSize := 0;
   fSorted := false;
   fKnownType := ptCustom; // for fKnownType
@@ -10863,10 +10978,10 @@ begin
     data := @tmp;
   end;
   try
-    if @fCompare = nil then
-      result := IndexOf(data^)
+    if Assigned(fCompare) then
+      result := Find(data^) // use specific comparer
     else
-      result := Find(data^);
+      result := IndexOf(data^); // use RTTI
   finally
     if ElemType <> nil then
       ElemType^.Clear(data);
@@ -10892,18 +11007,6 @@ begin
   else
     fIsObjArray := oaFalse;
 end;
-
-(*
-
-function TDynArray.HasCustomJSONParser: boolean;
-begin
-  if fParser = DYNARRAY_PARSERUNKNOWN then
-    fParser := GlobalJSONCustomParsers.DynArraySearch(ArrayType, ElemType);
-
-  result := cardinal(fParser) < cardinal(GlobalJSONCustomParsers.fParsersCount);
-end;
-
-*)
 
 
 { ************ TDynArrayHasher }
@@ -11102,7 +11205,8 @@ const
     {$ifdef UNICODE} @HashSynUnicode {$else} @HashAnsiString {$endif},
     @HashSynUnicode, @HashInt64, @HashInt64, @Hash128, @Hash128, @Hash256, @Hash512,
     @HashInt64, @HashInt64, @HashSynUnicode, @HashInt64, @HashInt64,
-    @HashVariant, @HashWideString, @HashAnsiString, @HashWord, nil),
+    @HashVariant, @HashWideString, @HashAnsiString, @HashWord,
+    nil, nil, nil, nil, nil, nil),
 
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
@@ -11110,7 +11214,8 @@ const
     {$ifdef UNICODE} @HashSynUnicodeI {$else} @HashAnsiStringI {$endif},
     @HashSynUnicodeI, @HashInt64, @HashInt64, @Hash128, @Hash128, @Hash256, @Hash512,
     @HashInt64, @HashInt64, @HashSynUnicodeI, @HashInt64, @HashInt64,
-    @HashVariantI, @HashWideStringI, @HashAnsiStringI, @HashWord, nil));
+    @HashVariantI, @HashWideStringI, @HashAnsiStringI, @HashWord,
+    nil, nil, nil, nil, nil, nil));
 
 
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
@@ -11596,9 +11701,14 @@ begin
   result := InternalDynArray.fElemSize;
 end;
 
-function TDynArrayHashed.ElemType: Pointer;
+function TDynArrayHashed.ElemType: PRttiInfo;
 begin
   result := InternalDynArray.fElemType;
+end;
+
+function TDynArrayHashed.ArrayType: PRttiInfo;
+begin
+  result := InternalDynArray.fArrayType;
 end;
 
 procedure TDynArrayHashed.ItemCopy(Source, Dest: pointer);
@@ -11667,7 +11777,6 @@ begin
   InternalDynArray.CreateOrderedIndex(aIndex, aCompare);
 end;
 
-{
 function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean;
   reformat: TTextWriterJSONFormat): RawUTF8;
 begin
@@ -11679,7 +11788,7 @@ function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char;
 begin
   result := InternalDynArray.LoadFromJSON(P, aEndOfObject, CustomVariantOptions);
 end;
-}
+
 {$endif UNDIRECTDYNARRAY}
 
 procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
@@ -11871,7 +11980,7 @@ var
 begin
   // initialize RTTI binary persistence and comparison
   MoveFast(_PT_HASH, PT_HASH, SizeOf(PT_HASH));
-  for k := low(k) to high(k) do
+  for k := succ(low(k)) to high(k) do
     case k of
       rkInteger, rkEnumeration, rkSet, rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
       begin
