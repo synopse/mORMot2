@@ -3321,7 +3321,7 @@ begin
 end;
 
 const
-  // use pointer to allow any kind of Data^ type in above functions
+  /// use pointer to allow any kind of Data^ type in above functions
   // - typecast to TRttiJsonSave before call
   PT_JSONSAVE: array[TRTTIParserType] of pointer = (
     nil, @_JS_Array, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
@@ -3333,13 +3333,15 @@ const
     @_JS_UnixMSTime, @_JS_Variant, @_JS_Unicode, @_JS_WinAnsi, @_JS_Word,
     @_JS_Enumeration, @_JS_Set, @_JS_Class, @_JS_DynArray, @_JS_Interface, nil);
 
-  // use pointer to allow any complex kind of Data^ type in above functions
+  /// use pointer to allow any complex kind of Data^ type in above functions
   // - typecast to TRttiJsonSave before call
   PTC_JSONSAVE: array[TRTTIParserComplexType] of pointer = (
     nil, nil, nil, nil, @_JS_ID, @_JS_ID, @_JS_QWord, @_JS_QWord, @_JS_QWord);
 
 var
-  // JSON serialization of most complex types for TTextWriter.AddTypedJSON
+  /// JSON serialization of most complex types
+  // - i.e. rkEnumeration, rkSet, rkClass, rkVariant, rkDynArray, rkRecord
+  // - used by TTextWriter.AddTypedJSON
   RTTI_JSONSAVE: array[TRttiKind] of TRttiJsonSave;
 
 
