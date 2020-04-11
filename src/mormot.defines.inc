@@ -108,7 +108,7 @@
     // define this for trunk revisions older than June 2016 - see
     // http://wiki.freepascal.org/User_Changes_Trunk#RTTI_Binary_format_change
   {$endif}
-  {$ifdef VER3_1_1} // if FPC_FULLVERSION>30100 ... ifend is not Delphi 5 compatible :(
+  {$ifdef VER3_1_1}
     {$define ISFPC32}
   {$endif}
   {$ifdef VER3_2}

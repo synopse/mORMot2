@@ -341,10 +341,12 @@ type
 
   PObject = ^TObject;
   PClass = ^TClass;
+  PPByte = ^PByte;
   PByteArray = ^TByteArray;
   TByteArray = array[0 .. MaxInt - 1] of Byte; // redefine here with {$R-}
   PBooleanArray = ^TBooleanArray;
   TBooleanArray = array[0 .. MaxInt - 1] of Boolean;
+  PPWord = ^PWord;
   TWordArray  = array[0 .. MaxInt div SizeOf(word) - 1 ] of word;
   PWordArray = ^TWordArray;
   TIntegerArray = array[0 .. MaxInt div SizeOf(integer) - 1 ] of integer;
@@ -474,6 +476,10 @@ type
   // recommended e.g. when logging small pieces of information
   TShort16 = string[16];
   PShort16 = ^TShort16;
+
+  /// used e.g. for TBaseWriter.AddShorter small text constants
+  TShort8 = string[8];
+  PShort8 = ^TShort8;
 
   /// available console colors (under Windows at least)
   TConsoleColor = (
@@ -740,6 +746,7 @@ type
 
   TSynExtendedDynArray = array of TSynExtended;
   PSynExtendedDynArray = ^TSynExtendedDynArray;
+  PSynExtended = ^TSynExtended;
 
   {$else}
   /// ARM/Delphi 64-bit does not support 80bit extended -> double is enough
@@ -747,6 +754,7 @@ type
 
   TSynExtendedDynArray = TDoubleDynArray;
   PSynExtendedDynArray = PDoubleDynArray;
+  PSynExtended = PDouble;
 
   {$endif TSYNEXTENDED80}
 
@@ -1528,7 +1536,8 @@ function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
 // count, so will be slightly faster: but you should call SetLength() when done,
 // to have an array as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - return the index of the item in the dynamic array
-function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
+function ObjArrayAddCount(var aObjArray; aItem: TObject;
+  var aObjArrayCount: integer): PtrInt;
 
 /// wrapper to add once an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -1950,12 +1959,16 @@ function GetBitsCountPas(value: PtrInt): PtrInt;
 var GetBitsCountPtrInt: function(value: PtrInt): PtrInt = GetBitsCountPas;
 
 const
-  /// could be used to compute the index in a pointer list from its position
+  /// could be used to compute the index in a pointer list from its byte position
   POINTERSHR = {$ifdef CPU64} 3 {$else} 2 {$endif};
   /// could be used to compute the bitmask of a pointer integer
   POINTERAND = {$ifdef CPU64} 7 {$else} 3 {$endif};
   /// could be used to check all bits on a pointer
   POINTERBITS = {$ifdef CPU64} 64 {$else} 32 {$endif};
+  /// could be used to check all bytes on a pointer
+  POINTERBYTES = {$ifdef CPU64} 8 {$else} 4 {$endif};
+  /// could be used to compute the index in a pointer list from its bits position
+  POINTERSHRBITS = {$ifdef CPU64} 6 {$else} 5 {$endif};
 
   /// constant array used by GetAllBits() function (when inlined)
   ALLBITS_CARDINAL: array[1..32] of Cardinal = (
@@ -6710,7 +6723,7 @@ end;
 
 function GetAllBits(Bits, BitCount: Cardinal): boolean;
 begin
-  if BitCount in [low(ALLBITS_CARDINAL)..high(ALLBITS_CARDINAL)] then
+  if (BitCount >= low(ALLBITS_CARDINAL)) and (BitCount <= high(ALLBITS_CARDINAL)) then
   begin
     BitCount := ALLBITS_CARDINAL[BitCount];
     result := (Bits and BitCount) = BitCount;
