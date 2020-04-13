@@ -788,7 +788,8 @@ function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
 // - returns associated PropertiesInstance otherwise, which may not be the supplied
 // PropertiesInstance, if it has been registered by another thread in between -
 // it will free the supplied PropertiesInstance in this case, and return the existing
-function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject): TObject;
+function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
+  FreeExistingPropertiesInstance: boolean = true): TObject;
 
 
 
@@ -843,7 +844,8 @@ begin
   result := nil;
 end;
 
-function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject): TObject;
+function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
+  FreeExistingPropertiesInstance: boolean): TObject;
 var
   vmt: PPointer;
   slots: PAutoSlots;
@@ -854,7 +856,9 @@ begin
     result := ClassPropertiesGet(ObjectClass, PropertiesInstance.ClassType);
     if result <> nil then
     begin
-      PropertiesInstance.Free; // some background thread registered its own
+      // some background thread registered its own
+      if FreeExistingPropertiesInstance then
+        PropertiesInstance.Free;
       exit;
     end;
     vmt := Pointer(PAnsiChar(ObjectClass) + vmtAutoTable);
@@ -871,7 +875,8 @@ begin
     for i := 0 to high(slots^) - 1 do
       if slots^[i] = nil then
       begin
-        slots^[i] := PropertiesInstance; // use the void slot
+        // use the first void slot
+        slots^[i] := PropertiesInstance;
         result := PropertiesInstance;
         exit;
       end;
