@@ -213,6 +213,12 @@ type
   // transmission of TSQLTableJSON result
   RawJSON = type RawUTF8;
 
+  /// a RawUTF8 value which may contain Sensitive Personal Information
+  // (e.g. a bank card number or a plain password)
+  // - identified as a specific type e.g. to be hidden in the logs when the
+  // woHideSensitivePersonalInformation TTextWriterWriteObjectOption is set
+  SPIUTF8 = type RawUTF8;
+
   /// a RawByteString sub-type used to store the BLOB content in our ORM
   // - equals RawByteString for byte storage
   // - TRttiInfo.AnsiStringCodePage will identify this type, and return
@@ -342,6 +348,7 @@ type
   PObject = ^TObject;
   PClass = ^TClass;
   PPByte = ^PByte;
+  PPPointer = ^PPointer;
   PByteArray = ^TByteArray;
   TByteArray = array[0 .. MaxInt - 1] of Byte; // redefine here with {$R-}
   PBooleanArray = ^TBooleanArray;

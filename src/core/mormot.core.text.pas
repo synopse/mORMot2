@@ -103,7 +103,12 @@ procedure FillZero(var secret: RawByteString); overload;
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(secret); end;
 procedure FillZero(var secret: RawUTF8); overload;
-  
+
+/// fill all bytes of this UTF-8 string with zeros, i.e. 'toto' -> #0#0#0#0
+// - SPIUTF8 type has been defined explicitely to store Sensitive Personal
+// Information
+procedure FillZero(var secret: SPIUTF8); overload;
+
 /// actual replacement function called by StringReplaceAll() on first match
 // - not to be called as such, but defined globally for proper inlining
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
@@ -460,7 +465,8 @@ function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar = ','): TSynCurrenc
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-procedure GetNextItemCurrency(var P: PUTF8Char; out result: TSynCurrency; Sep: AnsiChar = ','); overload;
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: TSynCurrency;
+  Sep: AnsiChar = ','); overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
 function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8; overload;
@@ -480,31 +486,38 @@ function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar = ','): RawUTF8;
 /// return the index of a Value in a CSV string
 // - start at Index=0 for first one
 // - return -1 if specified Value was not found in CSV items
-function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar = ','; CaseSensitive: boolean = true; TrimValue: boolean = false): integer;
+function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar = ',';
+  CaseSensitive: boolean = true; TrimValue: boolean = false): integer;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
-procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray; Sep: AnsiChar = ','; TrimItems: boolean = false; AddVoidItems: boolean = false); overload;
+procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
+  Sep: AnsiChar = ','; TrimItems: boolean = false; AddVoidItems: boolean = false); overload;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
-procedure CSVToRawUTF8DynArray(const CSV, Sep, SepEnd: RawUTF8; var Result: TRawUTF8DynArray); overload;
+procedure CSVToRawUTF8DynArray(const CSV, Sep, SepEnd: RawUTF8;
+  var Result: TRawUTF8DynArray); overload;
 
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
-function RawUTF8ArrayToCSV(const Values: array of RawUTF8; const Sep: RawUTF8 = ','): RawUTF8;
+function RawUTF8ArrayToCSV(const Values: array of RawUTF8;
+  const Sep: RawUTF8 = ','): RawUTF8;
 
 /// return the corresponding CSV quoted text from a dynamic array of UTF-8 strings
 // - apply QuoteStr() function to each Values[] item
-function RawUTF8ArrayToQuotedCSV(const Values: array of RawUTF8; const Sep: RawUTF8 = ','; Quote: AnsiChar = ''''): RawUTF8;
+function RawUTF8ArrayToQuotedCSV(const Values: array of RawUTF8;
+  const Sep: RawUTF8 = ','; Quote: AnsiChar = ''''): RawUTF8;
 
 /// append some prefix to all CSV values
 // ! AddPrefixToCSV('One,Two,Three','Pre')='PreOne,PreTwo,PreThree'
-function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8; Sep: AnsiChar = ','): RawUTF8;
+function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8;
+  Sep: AnsiChar = ','): RawUTF8;
 
 /// append a Value to a CSV string
 procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ',');
   {$ifdef HASINLINE} inline;{$endif}
 
 /// change a Value within a CSV string
-function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ','): boolean;
+function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
+  const Sep: RawUTF8 = ','): boolean;
 
 
 { ************ TBaseWriter parent class for Text Generation }
@@ -597,26 +610,28 @@ type
   // woIDAsIDstr to append an additional "ID_str":"##########" field
   // - by default, TSQLRawBlob properties are serialized as null, unless
   // woSQLRawBlobAsBase64 is defined
-  // - if woHideSynPersistentPassword is set, TSynPersistentWithPassword.Password
-  // field will be serialized as "***" to prevent security issues (e.g. in log)
+  // - if woHideSensitivePersonalInformation is set, rcfSPI types (e.g. the
+  // TSynPersistentWithPassword.Password field) will be serialized as "***"
+  // to prevent security issues (e.g. in log)
   // - by default, TObjectList will set the woStoreClassName for its nested
   // objects, unless woObjectListWontStoreClassName is defined
-  // - void strings would be serialized as "", unless woDontStoreEmptyString
-  // is defined so that such properties would not be written
   // - all inherited properties would be serialized, unless woDontStoreInherited
   // is defined, and only the topmost class level properties would be serialized
   // - woInt64AsHex will force Int64/QWord to be written as hexadecimal string -
   // see j2oAllowInt64Hex reverse option fot Json2Object
-  // - woDontStore0 will avoid serializating number properties equal to 0
+  // - woDontStore0 will avoid serializating number properties equal to 0 or
+  // string properties equal to ''
+  // - woPersistentLock paranoid setting will call TSynPersistentLock.Lock/Unlock
+  // during serialization
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix, woTimeLogAsText,
-    woIDAsIDstr, woSQLRawBlobAsBase64, woHideSynPersistentPassword,
-    woObjectListWontStoreClassName, woDontStoreEmptyString,
-    woDontStoreInherited, woInt64AsHex, woDontStore0);
-    
+    woIDAsIDstr, woSQLRawBlobAsBase64, woHideSensitivePersonalInformation,
+    woObjectListWontStoreClassName, woDontStoreInherited, woInt64AsHex,
+    woDontStore0, woPersistentLock);
+
   /// options set for TBaseWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -667,7 +682,6 @@ type
     // internal temporary buffer
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
-    fCustomComment: PRawUTF8; // not RawUTF8 to avoid managed fields
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
@@ -813,7 +827,7 @@ type
     procedure AddCR;
     /// append CR+LF (#13#10) chars and #9 indentation
     // - indentation depth is defined by fHumanReadableLevel protected field
-    procedure AddCRAndIndent;
+    procedure AddCRAndIndent; virtual;
     /// write the same character multiple times
     procedure AddChars(aChar: AnsiChar; aCount: integer);
     /// append an Integer Value as a 2 digits text with comma
@@ -952,9 +966,10 @@ type
     /// append a Value as significant hexadecimal text
     // - append its minimal size, i.e. excluding highest bytes containing 0
     // - use GetNextItemHexa() to decode such a text value
-    procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
+    procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
+      QuotedChar: AnsiChar = #0);
     /// add the pointer into significant hexa chars, ready to be displayed
-    procedure AddPointer(P: PtrUInt);
+    procedure AddPointer(P: PtrUInt; QuotedChar: AnsiChar = #0);
       {$ifdef HASINLINE} inline; {$endif}
     /// write a byte as hexa chars
     procedure AddByteToHex(Value: byte);
@@ -980,10 +995,6 @@ type
     // - is just a wrapper around AddTypeJSON()
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
-    /// used internally by WriteObject() when serializing a published property
-    // - will call AddCRAndIndent and check fCustomComment
-    procedure WriteObjectPropName(const PropName: ShortString;
-      Options: TTextWriterWriteObjectOptions);
     /// return the last char appended
     // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
@@ -3648,10 +3659,12 @@ end;
 
 procedure FillZero(var secret: RawUTF8);
 begin
-  if secret<>'' then
-    with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
-      if refCnt=1 then // avoid GPF if const
-        FillCharFast(pointer(secret)^,length,0);
+  FillZero(RawByteString(secret));
+end;
+
+procedure FillZero(var secret: SPIUTF8);
+begin
+  FillZero(RawByteString(secret));
 end;
 
 function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
@@ -5506,26 +5519,6 @@ begin
     AddNull;
 end;
 
-procedure TBaseWriter.WriteObjectPropName(const PropName: ShortString;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  if woHumanReadable in Options then
-  begin
-    if (fCustomComment <> nil) and (fCustomComment^ <> '') then
-    begin
-      AddShorter(' // ');
-      AddString(fCustomComment^);
-      fCustomComment^ := '';
-    end;
-    AddCRAndIndent; // won't do anything if has already be done
-  end;
-  if PropName = '' then
-    exit;
-  AddPropName(PropName); // handle twoForceJSONExtended in CustomOptions
-  if woHumanReadable in Options then
-    Add(' ');
-end;
-
 function TBaseWriter.GetTextLength: PtrUInt;
 begin
   if self = nil then
@@ -5946,7 +5939,7 @@ begin
     exit; // we most probably just added an indentation level
   ntabs := fHumanReadableLevel;
   if ntabs >= cardinal(fTempBufSize) then
-    exit; // avoid buffer overflow
+    ntabs := 0; // avoid buffer overflow
   if BEnd - B <= PtrInt(ntabs) then
     FlushToStream;
   PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
@@ -6136,7 +6129,7 @@ end;
 
 procedure TBaseWriter.AddProp(PropName: PUTF8Char; PropNameLen: PtrInt);
 begin
-  if PropNameLen = 0 then
+  if PropNameLen <= 0 then
     exit; // paranoid check
   if BEnd - B <= PropNameLen then
     FlushToStream;
@@ -6471,23 +6464,24 @@ begin
   AddBinToHexDisplayLower(Bin, BinBytes, '"');
 end;
 
-procedure TBaseWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
+procedure TBaseWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
+  QuotedChar: AnsiChar);
 begin
-  if (BinBytes <= 0) or (cardinal(BinBytes * 2 - 1) >= cardinal(fTempBufSize)) then
-    exit;
-  repeat // append hexa chars up to the last non zero byte
-    dec(BinBytes);
-  until (BinBytes = 0) or (PByteArray(Bin)[BinBytes] <> 0);
-  inc(BinBytes);
-  if BEnd - B <= BinBytes * 2 then
-    FlushToStream;
-  BinToHexDisplayLower(Bin, PAnsiChar(B + 1), BinBytes);
-  inc(B, BinBytes * 2);
+  if BinBytes <= 0 then
+    BinBytes := 0
+  else
+  begin
+    repeat // append hexa chars up to the last non zero byte
+      dec(BinBytes);
+    until (BinBytes = 0) or (PByteArray(Bin)[BinBytes] <> 0);
+    inc(BinBytes);
+  end;
+  AddBinToHexDisplayLower(Bin, BinBytes, QuotedChar);
 end;
 
-procedure TBaseWriter.AddPointer(P: PtrUInt);
+procedure TBaseWriter.AddPointer(P: PtrUInt; QuotedChar: AnsiChar);
 begin
-  AddBinToHexDisplayMinChars(@P, SizeOf(P));
+  AddBinToHexDisplayMinChars(@P, SizeOf(P), QuotedChar);
 end;
 
 procedure TBaseWriter.AddBinToHex(Bin: Pointer; BinBytes: integer);

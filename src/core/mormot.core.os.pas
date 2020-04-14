@@ -867,7 +867,7 @@ begin
     begin
       slots := AllocMem(SizeOf(slots^));
       PtrArrayAdd(AutoSlots, slots);
-      PatchCodePtrUInt(PPtrUInt(vmt), PtrUInt(slots), {leaveunprotected=}true);
+      PatchCodePtrUInt(pointer(vmt), PtrUInt(slots), {leaveunprotected=}true);
       if vmt^ <> slots then
         raise Exception.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
           [ObjectClass.ClassName]);

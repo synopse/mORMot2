@@ -43,7 +43,9 @@ end;
 
 function TRttiClass.ParentInfo: PRttiInfo;
 begin
-  result := pointer(PTypeData(@self)^.ParentInfo^);
+  result := pointer(PTypeData(@self)^.ParentInfo);
+  if result <> nil then
+    result := PPointer(result)^;
 end;
 
 function TRttiClass.RttiProps: PRttiProps;
@@ -558,7 +560,7 @@ var
     ps := @ps^[ord(ps^[0]) + 1];
     if pp^ = nil then
       {$ifdef HASNOSTATICRTTI} // detect e.g. TGUID/THash128 -> fake TypeInfo()
-      argtypeinfo := PT_INFO[TypeNameToParserType(argtypename^)];
+      argtypeinfo := PT_INFO[TypeNameToStandardParserType(argtypename^)];
       if argtypeinfo = nil then
       {$endif HASNOSTATICRTTI}
         RaiseError('"%: %" parameter has no RTTI', [name^, argtypename^])
