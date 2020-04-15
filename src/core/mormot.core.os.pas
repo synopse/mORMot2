@@ -10,11 +10,11 @@ unit mormot.core.os;
   - Gather Operating System Information
   - Operating System Specific Types (e.g. TWinRegistry)
   - Unicode, Time, File, Console process
-  - Per Class Properties O(1) Lookup via vmtAutoTable Slot
+  - Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
 
-  Aim of this unit is to centralize most used OS-specific API calls, like a
-  SysUtils unit on steroids, to avoid using $ifdef/$endif in "uses" clauses.
-    In practice, no "Windows", nor "Linux/Unix" reference should be needed in
+   Aim of this unit is to centralize most used OS-specific API calls, like a
+  SysUtils unit on steroids, to avoid $ifdef/$endif in "uses" clauses.
+   In practice, no "Windows", nor "Linux/Unix" reference should be needed in
   regular units, once mormot.core.os is included.
 
   This unit only refers to mormot.core.base so could be used almost stand-alone.
@@ -52,7 +52,7 @@ type
     osCloud, osXen, osAmazon, osCoreOS, osAlpine, osAndroid);
 
   /// the recognized Windows versions
-  // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
+  // - defined even outside MSWINDOWS to access e.g. from monitoring tools
   TWindowsVersion = (
     wUnknown, w2000, wXP, wXP_64, wServer2003, wServer2003_R2,
     wVista, wVista_64, wServer2008, wServer2008_64,

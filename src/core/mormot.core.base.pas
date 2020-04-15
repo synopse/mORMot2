@@ -20,10 +20,10 @@ unit mormot.core.base;
     - Faster Alternative to RTL Standard Functions
     - Some Reusable Constant Definitions
 
-  Aim of those types and functions is to be cross-platform and cross-compiler,
+   Aim of those types and functions is to be cross-platform and cross-compiler,
   without any dependency but the main FPC/Delphi RTL. It also detects the
   kind of Intel/AMD it runs on, to adapt to the fastest asm version available.
-  It is the main unit where x86_64 or i386 asm stubs are included.
+   It is the main unit where x86_64 or i386 asm stubs are included.
 
   *****************************************************************************
 }

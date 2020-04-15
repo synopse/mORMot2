@@ -26,10 +26,10 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  Classes,
-  Contnrs,
-  Types,
-  SysUtils,
+  classes,
+  contnrs,
+  types,
+  sysutils,
   mormot.core.base;
 
 
@@ -988,8 +988,8 @@ type
       WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
-    function AddTypedJSON(Value, TypeInfo: pointer;
-      WriteOptions: TTextWriterWriteObjectOptions = []): PtrInt; virtual;
+    procedure AddTypedJSON(Value, TypeInfo: pointer;
+      WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
 
     /// serialize as JSON the given object
     // - is just a wrapper around AddTypeJSON()
@@ -5473,8 +5473,8 @@ begin
   raise ESynException.CreateUTF8('%.AddVariant unimplemented: use TTextWriter', [self]);
 end;
 
-function TBaseWriter.AddTypedJSON(Value, TypeInfo: pointer;
-  WriteOptions: TTextWriterWriteObjectOptions): PtrInt;
+procedure TBaseWriter.AddTypedJSON(Value, TypeInfo: pointer;
+  WriteOptions: TTextWriterWriteObjectOptions);
 begin
   raise ESynException.CreateUTF8('%.AddTypedJSON unimplemented: use TTextWriter', [self]);
 end;
@@ -9823,6 +9823,7 @@ end;
 
 {$I+}
 
+
 { ************ ESynException class }
 
 { ESynException }
@@ -12477,7 +12478,8 @@ begin // fast and Delphi 2009+ ready
   FastSetString(result, P, StrLen(P));
 end;
 
-function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean): PtrInt;
+function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char;
+  MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean): PtrInt;
 // faster than System.Utf8ToUnicode()
 var
   c: cardinal;
@@ -12553,7 +12555,8 @@ NoSource:
     dest^ := #0; // always append a WideChar(0) to the end of the buffer
 end;
 
-function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; sourceBytes: PtrInt; NoTrailingZero: boolean): PtrInt;
+function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; sourceBytes: PtrInt;
+  NoTrailingZero: boolean): PtrInt;
 // faster than System.UTF8Decode()
 var
   c: cardinal;

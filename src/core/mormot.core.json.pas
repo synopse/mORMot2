@@ -25,9 +25,9 @@ uses
   {$ifdef ISDELPHI}
   typinfo,  // circumvent Delphi inlining problem of mormot.core.rtti methods
   {$endif ISDELPHI}
-  Classes,
-  Contnrs,
-  SysUtils,
+  classes,
+  contnrs,
+  sysutils,
   mormot.core.base,
   mormot.core.text,
   mormot.core.rtti,
@@ -613,16 +613,20 @@ type
 
     /// append a variant content as number or string
     // - this overriden version will properly handle JSON escape
-    // - properly handle Value as a TRttiVarData  from TRttiProp.GetValue
+    // - properly handle Value as a TRttiVarData from TRttiProp.GetValue
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape;
       WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
-    /// append complex types as JSON content
+    /// append complex types as JSON content using raw TypeInfo()
     // - handle rkClass as WriteObject, rkEnumeration/rkSet with proper options,
     // rkRecord, rkDynArray or rkVariant using proper JSON serialization
     // - other types will append 'null'
     // - returns the size of the Value, in bytes
-    function AddTypedJSON(Value, TypeInfo: pointer;
-      WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]): PtrInt; override;
+    procedure AddTypedJSON(Value, TypeInfo: pointer;
+      WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
+    /// append complex types as JSON content using TRttiCustom
+    // - called e.g. by TTextWriter.AddVariant() for varAny / TRttiVarData
+    procedure AddRttiCustomJSON(Value: pointer; RttiCustom: TObject;
+      WriteOptions: TTextWriterWriteObjectOptions);
     /// append a JSON value, array or document, in a specified format
     // - this overriden version will properly handle JSON escape
     function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
@@ -787,8 +791,8 @@ type
     fOnAdd: TOnSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
-    function GetStr(const aName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
-    function GetInt(const aName: RawUTF8): Int64; {$ifdef HASINLINE}inline;{$endif}
+    function GetStr(const aName: RawUTF8): RawUTF8;  {$ifdef HASINLINE}inline;{$endif}
+    function GetInt(const aName: RawUTF8): Int64;    {$ifdef HASINLINE}inline;{$endif}
     function GetBool(const aName: RawUTF8): Boolean; {$ifdef HASINLINE}inline;{$endif}
   public
     /// the internal Name/Value storage
@@ -3063,13 +3067,12 @@ type
     procedure AddShort(PS: PShortString);
     procedure AddShortBoolean(PS: PShortString; Value: boolean);
     procedure AddDateTime(Value: PDateTime; WithMS: boolean);
-    function CanStore(Data: pointer): boolean; {$ifdef HASINLINE} inline; {$endif}
   end;
 
   /// internal function handler for JSON persistence of any TRTTIParserType value
   // - i.e. the kind of functions called via PT_JSONSAVE[] lookup table
   // - returns the size of Data^ in bytes
-  TRttiJsonSave = function(Data: pointer; const Ctxt: TRttiJsonSaveContext): PtrInt;
+  TRttiJsonSave = procedure(Data: pointer; const Ctxt: TRttiJsonSaveContext);
 
 procedure TRttiJsonSaveContext.Init(WR: TTextWriter;
   WriteOptions: TTextWriterWriteObjectOptions; TypeInfo: TRttiCustom);
@@ -3124,200 +3127,165 @@ begin
       W.Add('Z');
 end;
 
-function TRttiJsonSaveContext.CanStore(Data: pointer): boolean;
-begin
-  if (woDontStoreDefault in Options) and
-     (Prop.Prop <> nil) and (Prop.PropDefault <> NO_DEFAULT) and
-     (Prop.Prop.GetInt64Value(Data) = Prop.PropDefault) then
-    result := false
-  else if woDontStore0 in Options then
-    if Prop.OffsetGet >= 0 then
-      // direct check value from memory
-      result := not Prop.Value.ValueIsVoid(PAnsiChar(Data) + Prop.OffsetGet)
-    else
-      result := not Prop.Prop.IsVoid(Data)
-  else
-    result := true;
-end;
 
-function _JS_Boolean(Data: PBoolean; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Boolean(Data: PBoolean; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.Add(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Byte(Data: PByte; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Byte(Data: PByte; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddU(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Cardinal(Data: PCardinal; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Cardinal(Data: PCardinal; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddU(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Currency(Data: PInt64; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Currency(Data: PInt64; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddCurr64(Data);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Double(Data: PDouble; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Double(Data: PDouble; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddDouble(unaligned(Data^));
-  result := SizeOf(Data^);
 end;
 
-function _JS_Extended(Data: PSynExtended; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Extended(Data: PSynExtended; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddDouble(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Int64(Data: PInt64; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Int64(Data: PInt64; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.Add64(Data, {unsigned=}false);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Integer(Data: PInteger; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Integer(Data: PInteger; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.Add(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_QWord(Data: PInt64; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_QWord(Data: PInt64; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.Add64(Data, {unsigned=}true);
-  result := SizeOf(Data^);
 end;
 
-function _JS_RawByteString(Data: PRawByteString; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_RawByteString(Data: PRawByteString; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.WrBase64(pointer(Data^), length(Data^), {withmagic=}true);
-  result := SizeOf(Data^);
 end;
 
-function _JS_RawJSON(Data: PRawJSON; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_RawJSON(Data: PRawJSON; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddRawJSON(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_RawUTF8(Data: PPointer; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_RawUTF8(Data: PPointer; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.Add('"');
   Ctxt.W.AddJSONEscape(Data^);
   Ctxt.W.Add('"');
-  result := SizeOf(Data^);
 end;
 
-function _JS_Single(Data: PSingle; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Single(Data: PSingle; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddSingle(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Unicode(Data: PPWord; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Unicode(Data: PPWord; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.Add('"');
   Ctxt.W.AddJSONEscapeW(Data^);
   Ctxt.W.Add('"');
-  result := SizeOf(Data^);
 end;
 
-function _JS_DateTime(Data: PDateTime; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_DateTime(Data: PDateTime; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.AddDateTime(Data, {withms=}false);
-  result := SizeOf(Data^);
 end;
 
-function _JS_DateTimeMS(Data: PDateTime; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_DateTimeMS(Data: PDateTime; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.AddDateTime(Data, {withms=}true);
-  result := SizeOf(Data^);
 end;
 
-function _JS_GUID(Data: PGUID; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_GUID(Data: PGUID; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.Add(Data, '"');
-  result := SizeOf(Data^);
 end;
 
-function _JS_Hash128(Data: PHash128; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Hash128(Data: PHash128; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddBinToHexDisplayLower(Data, SizeOf(Data^), '"');
-  result := SizeOf(Data^);
 end;
 
-function _JS_Hash256(Data: PHash256; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Hash256(Data: PHash256; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddBinToHexDisplayLower(Data, SizeOf(Data^), '"');
-  result := SizeOf(Data^);
 end;
 
-function _JS_Hash512(Data: PHash128; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Hash512(Data: PHash128; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddBinToHexDisplayLower(Data, SizeOf(Data^), '"');
-  result := SizeOf(Data^);
 end;
 
-function _JS_TimeLog(Data: PInt64; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_TimeLog(Data: PInt64; const Ctxt: TRttiJsonSaveContext);
 begin
   if woTimeLogAsText in Ctxt.Options then
     Ctxt.W.AddTimeLog(Data, '"')
   else
     Ctxt.Add64(Data, true);
-  result := SizeOf(Data^);
 end;
 
-function _JS_UnixTime(Data: PInt64; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_UnixTime(Data: PInt64; const Ctxt: TRttiJsonSaveContext);
 begin
   if woTimeLogAsText in Ctxt.Options then
     Ctxt.W.AddUnixTime(Data, '"')
   else
     Ctxt.Add64(Data, true);
-  result := SizeOf(Data^);
 end;
 
-function _JS_UnixMSTime(Data: PInt64; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_UnixMSTime(Data: PInt64; const Ctxt: TRttiJsonSaveContext);
 begin
   if woTimeLogAsText in Ctxt.Options then
     Ctxt.W.AddUnixMSTime(Data, {withms=}true, '"')
   else
     Ctxt.Add64(Data, true);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Variant(Data: PVariant; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Variant(Data: PVariant; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddVariant(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_WinAnsi(Data: PWinAnsiString; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_WinAnsi(Data: PWinAnsiString; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.Add('"');
   Ctxt.W.AddAnyAnsiBuffer(pointer(Data^), length(Data^), twJSONEscape, CODEPAGE_US);
   Ctxt.W.Add('"');
-  result := SizeOf(Data^);
 end;
 
-function _JS_Word(Data: PWord; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Word(Data: PWord; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddU(Data^);
-  result := SizeOf(Data^);
 end;
 
-function _JS_Interface(Data: PInterface; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Interface(Data: PInterface; const Ctxt: TRttiJsonSaveContext);
 begin
   Ctxt.W.AddNull;
-  result := SizeOf(Data^);
 end;
 
-function _JS_ID(Data: PInt64; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure TTextWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
+begin // defined here for proper inlining
+  Add(',');
+  if woHumanReadable in Options then
+    AddCRAndIndent;
+end;
+
+procedure _JS_ID(Data: PInt64; const Ctxt: TRttiJsonSaveContext);
 var
   _str: shortstring;
 begin
@@ -3336,10 +3304,9 @@ begin
     Ctxt.W.Add(Data^);
     Ctxt.W.Add('"');
   end;
-  result := SizeOf(Data^);
 end;
 
-function _JS_Enumeration(Data: PByte; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Enumeration(Data: PByte; const Ctxt: TRttiJsonSaveContext);
 var
   o: TTextWriterOptions;
   PS: PShortString;
@@ -3348,20 +3315,19 @@ begin
   if (Ctxt.Options * [woFullExpand, woHumanReadable, woEnumSetsAsText] <> []) or
      (o * [twoEnumSetsAsBooleanInRecord, twoEnumSetsAsTextInRecord] <> []) then
   begin
-    PS := Ctxt.Info.Rtti.EnumInfo^.GetEnumNameOrd(Data^);
+    PS := Ctxt.Info.Cache.EnumInfo^.GetEnumNameOrd(Data^);
     if twoEnumSetsAsBooleanInRecord in o then
       Ctxt.AddShortBoolean(PS, true)
     else
       Ctxt.AddShort(PS);
     if woHumanReadableEnumSetAsComment in Ctxt.Options then
-      Ctxt.Info.Rtti.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '', true);
+      Ctxt.Info.Cache.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '', true);
   end
   else
     Ctxt.W.AddU(Data^);
-  result := Ctxt.Info.Size;
 end;
 
-function _JS_Set(Data: PCardinal; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_Set(Data: PCardinal; const Ctxt: TRttiJsonSaveContext);
 var
   PS: PShortString;
   i: cardinal;
@@ -3371,12 +3337,12 @@ begin
   if twoEnumSetsAsBooleanInRecord in o then
   begin
     // { "set1": true/false, .... } with proper indentation
-    PS := Ctxt.Info.Rtti.EnumInfo^.NameList;
+    PS := Ctxt.Info.Cache.EnumInfo^.NameList;
     Ctxt.W.BlockBegin('{', Ctxt.Options);
     i := 0;
     repeat
       Ctxt.AddShortBoolean(PS, GetBitPtr(Data, i));
-      if i = Ctxt.Info.Rtti.EnumMax then
+      if i = Ctxt.Info.Cache.EnumMax then
         break;
       inc(i);
       Ctxt.W.BlockAfterItem(Ctxt.Options);
@@ -3391,12 +3357,12 @@ begin
     Ctxt.W.Add('[');
     if ((twoFullSetsAsStar in o) or
         (woHumanReadableFullSetsAsStar in Ctxt.Options)) and
-       GetAllBits(Data^, Ctxt.Info.Rtti.EnumMax + 1) then
+       GetAllBits(Data^, Ctxt.Info.Cache.EnumMax + 1) then
       Ctxt.W.AddShorter('"*"')
     else
     begin
-      PS := Ctxt.Info.Rtti.EnumInfo^.NameList;
-      for i := 0 to Ctxt.Info.Rtti.EnumMax do
+      PS := Ctxt.Info.Cache.EnumInfo^.NameList;
+      for i := 0 to Ctxt.Info.Cache.EnumMax do
       begin
         if GetBitPtr(Data, i) then
         begin
@@ -3409,25 +3375,24 @@ begin
     end;
     Ctxt.W.Add(']');
     if woHumanReadableEnumSetAsComment in Ctxt.Options then
-      Ctxt.Info.Rtti.EnumInfo^.GetEnumNameAll(
+      Ctxt.Info.Cache.EnumInfo^.GetEnumNameAll(
         Ctxt.W.fBlockComment, '"*" or a set of ', true);
   end
   else
-    Ctxt.W.AddU(Data^ and Ctxt.Info.Rtti.EnumMask);
-  result := Ctxt.Info.Size;
+    Ctxt.W.AddU(Data^ and Ctxt.Info.Cache.EnumMask);
 end;
 
-function _JS_DynArray(Data: PPointer; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_DynArray(Data: PPointer; const Ctxt: TRttiJsonSaveContext);
 var
   n: PtrInt;
   jsonsave: TRttiJsonSave;
   P: PAnsiChar;
   c: TRttiJsonSaveContext;
 begin
-  Ctxt.W.BlockBegin('[', Ctxt.Options);
+  {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
+  c.W.BlockBegin('[', c.Options);
   if Data^ <> nil then
   begin
-    {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
     if c.Info <> nil then
     begin
       // efficient JSON serialization from recognized PT_JSONSAVE/PTC_JSONSAVE
@@ -3435,20 +3400,24 @@ begin
       n := PDALen(P - _DALEN)^ + _DAOFF;
       jsonsave := TRttiJson(c.Info).fJsonSave;
       if Assigned(jsonsave) then
-      repeat
-        inc(P, jsonsave(P, c));
-        dec(n);
-        if n = 0 then
-          break;
-        Ctxt.W.BlockAfterItem(c.Options);
-      until false;
+        repeat
+          jsonsave(P, c);
+          dec(n);
+          if n = 0 then
+            break;
+          c.W.BlockAfterItem(c.Options);
+          inc(P, c.Info.Size);
+        until false;
     end
     else
       // fallback to binary serialization with Base64 encoding
-      Ctxt.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkDynArray], {withMagic=}true);
-  end;
-  Ctxt.W.BlockEnd(']', Ctxt.Options);
-  result := SizeOf(Data^);
+      c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkDynArray], {withMagic=}true);
+  end
+  else if (woHumanReadableEnumSetAsComment in Ctxt.Options) and
+          (c.Info <> nil) and (rcfHasNestedProperties in c.Info.Flags) then
+    // void dynarray should include record/T*ObjArray fields as comment
+    c.Info.Props.AsText(c.W.fBlockComment, true, 'array of {', '}');
+  c.W.BlockEnd(']', c.Options);
 end;
 
 const
@@ -3474,7 +3443,7 @@ type
   TSPHook = class(TSynPersistent); // to access its protected methods
   TSPHookClass = class of TSPHook;
 
-function _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TRttiJsonSaveContext);
 var
   c: TRttiJsonSaveContext;
   n: integer;
@@ -3528,13 +3497,16 @@ begin
     if n > 0 then
       // this is the main loop serializing Info.Props[]
       repeat
+        // handle woStoreStoredFalse flag and "stored" attribute in code
         if ((c.Prop^.Prop = nil) or (woStoreStoredFalse in c.Options) or
             (c.Prop^.Prop.IsStored(pointer(Data)))) and
-           ({$ifndef HASINLINE}
-            (c.Options * [woDontStoreDefault, woDontStore0] = []) or
-            {$endif HASINLINE}
-            c.CanStore(Data)) then
+           // handle woDontStoreDefault flag over "default" attribute in code
+           (not (woDontStoreDefault in c.Options) or (c.Prop.PropDefault = NO_DEFAULT) or
+            not c.Prop.ValueIsDefault(Data)) and
+           // handle woDontStore0 flag
+           (not (woDontStore0 in c.Options) or not c.Prop.ValueIsVoid(Data)) then
         begin
+          // if we reached here, we should serialize this property
           c.W.WriteObjectPropName(c.Prop^.Name^, c.Options);
           if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
              not TSPHook(Data).RttiWritePropertyValue(c.W, c.Prop, c.Options) then
@@ -3550,7 +3522,7 @@ begin
           else
           begin
             // need to call a getter method
-            c.Prop^.Prop.GetValue(pointer(Data), rvd);
+            c.Prop^.Prop.GetValue(pointer(Data), c.Prop^.Value, rvd);
             c.W.AddVariant(variant(rvd), twJSONEscape, c.Options);
             if rvd.NeedsClear then
               VarClearProc(rvd.Data);
@@ -3568,7 +3540,6 @@ begin
     if woFullExpand in c.Options then
       c.W.BlockEnd('}', c.Options);
   end;
-  result := Ctxt.Info.Size;
 end;
 
 // most known RTL classes custom serialization
@@ -3605,13 +3576,12 @@ begin
   W.BlockEnd(']', Options);
 end;
 
-function _JS_TList(Data: PPointer; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_TList(Data: PPointer; const Ctxt: TRttiJsonSaveContext);
 begin
   _JS_Objects(Ctxt.W, pointer(TList(Data^).List), TList(Data^).Count, Ctxt.Options);
-  result := SizeOf(Data^);
 end;
 
-function _JS_TObjectList(Data: PPointer; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_TObjectList(Data: PPointer; const Ctxt: TRttiJsonSaveContext);
 var
   o: TTextWriterWriteObjectOptions;
 begin
@@ -3619,10 +3589,9 @@ begin
   if not (woObjectListWontStoreClassName in Ctxt.Options) then
     include(o, woStoreClassName);
   _JS_Objects(Ctxt.W, pointer(TObjectList(Data^).List), TObjectList(Data^).Count, o);
-  result := SizeOf(Data^);
 end;
 
-function _JS_TCollection(Data: PPointer; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_TCollection(Data: PPointer; const Ctxt: TRttiJsonSaveContext);
 var
   coll: TCollection;
   item: TCollectionItem;
@@ -3645,13 +3614,11 @@ begin
       inc(i);
     until false;
   Ctxt.W.BlockEnd(']', Ctxt.Options);
-  result := SizeOf(Data^);
 end;
 
-function _JS_TSynList(Data: PPointer; const Ctxt: TRttiJsonSaveContext): PtrInt;
+procedure _JS_TSynList(Data: PPointer; const Ctxt: TRttiJsonSaveContext);
 begin
   _JS_Objects(Ctxt.W, pointer(TSynList(Data^).List), TSynList(Data^).Count, Ctxt.Options);
-  result := SizeOf(Data^);
 end;
 
 
@@ -3738,13 +3705,6 @@ begin
     inc(fHumanReadableLevel);
   end;
   Add(Starter);
-end;
-
-procedure TTextWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
-begin
-  Add(',');
-  if woHumanReadable in Options then
-    AddCRAndIndent;
 end;
 
 procedure TTextWriter.BlockEnd(Stopper: AnsiChar;
@@ -4212,7 +4172,7 @@ begin
       AddTextW(v.VAny, Escape);
     varAny:
       // Value is a TRttiVarData from TRttiProp.GetValue: V.VAny = GetFieldAddr
-      AddTypedJSON(TRttiVarData(V).Info, V.VAny, WriteOptions);
+      AddRttiCustomJSON(V.VAny, TRttiVarData(V).RttiCustom, WriteOptions);
   else
     if vt = varVariant or varByRef then
       AddVariant(PVariant(v.VPointer)^, Escape)
@@ -4230,8 +4190,8 @@ begin
   end;
 end;
 
-function TTextWriter.AddTypedJSON(Value, TypeInfo: pointer;
-  WriteOptions: TTextWriterWriteObjectOptions): PtrInt;
+procedure TTextWriter.AddTypedJSON(Value, TypeInfo: pointer;
+  WriteOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TRttiJsonSaveContext;
   save: TRttiJsonSave;
@@ -4239,14 +4199,24 @@ begin
   {%H-}ctxt.Init(self, WriteOptions, RttiCustom.RegisterType(TypeInfo));
   save := TRttiJson(ctxt.Info).fJsonSave;
   if Assigned(save) then
-    result := save(Value, ctxt)
+    save(Value, ctxt)
   else
-  begin
     AddNull;
-    result := ctxt.Info.Size;
-  end;
 end;
 
+procedure TTextWriter.AddRttiCustomJSON(Value: pointer; RttiCustom: TObject;
+  WriteOptions: TTextWriterWriteObjectOptions);
+var
+  ctxt: TRttiJsonSaveContext;
+  save: TRttiJsonSave;
+begin
+  {%H-}ctxt.Init(self, WriteOptions, TRttiCustom(RttiCustom));
+  save := TRttiJson(RttiCustom).fJsonSave;
+  if Assigned(save) then
+    save(Value, ctxt)
+  else
+    AddNull;
+end;
 
 procedure TTextWriter.AddText(const Text: RawByteString; Escape: TTextWriterKind);
 begin
@@ -5851,8 +5821,8 @@ begin
   fSafe.Lock;
   try
     try
-      RTTI_BINARYLOAD[rkDynArray](fKeys.Value, rdr, fKeys.Info.Rtti.ItemInfo);
-      RTTI_BINARYLOAD[rkDynArray](fValues.Value, rdr, fValues.Info.Rtti.ItemInfo);
+      RTTI_BINARYLOAD[rkDynArray](fKeys.Value, rdr, fKeys.Info.Cache.ItemInfo);
+      RTTI_BINARYLOAD[rkDynArray](fValues.Value, rdr, fValues.Info.Cache.ItemInfo);
       if fKeys.Count = fValues.Count then
       begin
         SetTimeouts;  // set ComputeNextTimeOut for all items
@@ -5892,8 +5862,8 @@ begin
       exit;
     W := TBufferWriter.Create(tmp);
     try
-      RTTI_BINARYSAVE[rkDynArray](fKeys.Value, W, fKeys.Info.Rtti.ItemInfo);
-      RTTI_BINARYSAVE[rkDynArray](fValues.Value, W, fValues.Info.Rtti.ItemInfo);
+      RTTI_BINARYSAVE[rkDynArray](fKeys.Value, W, fKeys.Info.Cache.ItemInfo);
+      RTTI_BINARYSAVE[rkDynArray](fValues.Value, W, fValues.Info.Cache.ItemInfo);
       result := W.FlushAndCompress(NoCompression, Algo);
     finally
       W.Free;
@@ -5914,7 +5884,7 @@ begin
   with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     CustomOptions := CustomOptions + Options;
-    AddTypedJSON(TypeInfo, @Value);
+    AddTypedJSON(@Value, TypeInfo);
     SetText(result);
   finally
     Free;

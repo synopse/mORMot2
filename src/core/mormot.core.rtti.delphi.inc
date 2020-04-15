@@ -5,7 +5,6 @@
    Delphi specific definitions used by mormot.core.rtti.pas implementation
 }
 
-
 type
   AlignToPtr = Pointer;
 
@@ -220,6 +219,14 @@ begin
 end;
 
 function TRttiProp.IsStored(Instance: TObject): boolean;
+begin
+  if (PtrUInt(PPropInfo(@self)^.StoredProc) and (not PtrUInt($ff))) = 0 then
+    result := boolean(PtrUInt(PPropInfo(@self)^.StoredProc))
+  else
+    result := GetIsStored(Instance);
+end;
+
+function TRttiProp.GetIsStored(Instance: TObject): boolean;
 type
   TGetProc = function: boolean of object;
   TGetIndexed = function(Index: integer): boolean of object;
@@ -519,16 +526,19 @@ const
     Name5: 'TGUID';
     RecSize5: SizeOf(TGUID);
     ManagedCount5: 0);
+
   _THASH128: TFakeTypeInfo = ( // stored in PT_INFO[ptHash128]
     Kind: tkRecord;
     Name8: 'THash128';
     RecSize8: SizeOf(THash128);
     ManagedCount8: 0);
+
   _THASH256: TFakeTypeInfo = ( // stored in PT_INFO[ptHash256]
     Kind: tkRecord;
     Name8: 'THash256';
     RecSize8: SizeOf(THash256);
     ManagedCount8: 0);
+
   _THASH512: TFakeTypeInfo = ( // stored in PT_INFO[ptHash512]
     Kind: tkRecord;
     Name8: 'THash512';

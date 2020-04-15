@@ -207,6 +207,14 @@ begin
 end;
 
 function TRttiProp.IsStored(Instance: TObject): boolean;
+begin
+  if (integer(PPropInfo(@self)^.PropProcs) shr 4) and 3 = ptConst then
+    result := boolean(PtrUInt(PPropInfo(@self)^.StoredProc))
+  else
+    result := GetIsStored(Instance);
+end;
+
+function TRttiProp.GetIsStored(Instance: TObject): boolean;
 type
   TGetProc = function: boolean of object;
   TGetIndexed = function(Index: integer): boolean of object;

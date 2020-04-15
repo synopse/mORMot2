@@ -9432,7 +9432,7 @@ procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue;
 begin
   fInfo := aInfo;
   fValue := @aValue;
-  fElemSize := fInfo.Rtti.ItemSize;
+  fElemSize := fInfo.Cache.ItemSize;
   fCountP := aCountPointer;
   if fCountP <> nil then
     fCountP^ := 0;
@@ -9514,7 +9514,7 @@ begin
 bin:result := CompareMemFixed(@A, @B, fElemSize) // binary comparison
   else
   begin
-    rtti := fInfo.Rtti.ItemInfo;
+    rtti := fInfo.Cache.ItemInfo;
     comp := RTTI_COMPARE[CaseInsensitive, rtti.Kind];
     if Assigned(comp) then
     begin
@@ -9539,7 +9539,7 @@ begin
 bin:result := StrCompL(A, B, fElemSize) // binary comparison
   else
   begin
-    rtti := fInfo.Rtti.ItemInfo;
+    rtti := fInfo.Cache.ItemInfo;
     comp := RTTI_COMPARE[CaseInsensitive, rtti.Kind];
     if Assigned(comp) then
       comp(A, B, rtti, result)
@@ -9824,7 +9824,7 @@ end;
 
 procedure TDynArray.SaveTo(W: TBufferWriter);
 begin
-  DynArraySave(pointer(fValue), fCountP, W, Info.Rtti.ItemInfo);
+  DynArraySave(pointer(fValue), fCountP, W, Info.Cache.ItemInfo);
 end;
 
 procedure TDynArray.SaveToStream(Stream: TStream);
@@ -9858,7 +9858,7 @@ end;
 
 function TDynArray.LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar): PAnsiChar;
 begin
-  result := BinaryLoad(fValue, Source, Info.Rtti.ItemInfo, nil, SourceMax, [rkDynArray]);
+  result := BinaryLoad(fValue, Source, Info.Cache.ItemInfo, nil, SourceMax, [rkDynArray]);
 end;
 
 procedure TDynArray.LoadFromStream(Stream: TCustomMemoryStream);
@@ -9867,13 +9867,13 @@ var
 begin
   S := PAnsiChar(Stream.Memory);
   P := S + Stream.Position;
-  P := BinaryLoad(fValue, P, Info.Rtti.ItemInfo, nil, S + Stream.Size, [rkDynArray]);
+  P := BinaryLoad(fValue, P, Info.Cache.ItemInfo, nil, S + Stream.Size, [rkDynArray]);
   Stream.Seek(P - S, soFromBeginning);
 end;
 
 function TDynArray.LoadFromBinary(const Buffer: RawByteString): boolean;
 begin
-  result := BinaryLoad(fValue, Buffer, Info.Rtti.ItemInfo, [rkDynArray]);
+  result := BinaryLoad(fValue, Buffer, Info.Cache.ItemInfo, [rkDynArray]);
 end;
 
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
@@ -10553,7 +10553,7 @@ var
   SourceCount: integer;
 begin
   if (aSource <> nil) and (aSource^.fValue <> nil) and
-     (fInfo.Rtti.ItemInfo = aSource^.fInfo.Rtti.ItemInfo) then
+     (fInfo.Cache.ItemInfo = aSource^.fInfo.Cache.ItemInfo) then
   begin
     SourceCount := aSource^.Count;
     if (aCount < 0) or (aCount > SourceCount) then
@@ -10570,7 +10570,7 @@ var
 begin
   result := false;
   n := GetCount;
-  if (n <> B.Count) or (fInfo.Rtti.ItemInfo <> B.fInfo.Rtti.ItemInfo) or
+  if (n <> B.Count) or (fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo) or
      (rcfObjArray in fInfo.Flags) then
     exit;
   if Assigned(fCompare) and not ignorecompare then
@@ -10591,21 +10591,21 @@ begin
     result := CompareMem(fValue^, B.fValue^, ElemSize * cardinal(n))
   else
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
-      fCountP, B.fCountP, fInfo.Rtti.ItemInfo, casesensitive) = 0;
+      fCountP, B.fCountP, fInfo.Cache.ItemInfo, casesensitive) = 0;
 end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);
 var
   tdynarraycopy_objarray: integer;
 begin
-  if (fValue = nil) or (fInfo.Rtti.ItemInfo <> Source.fInfo.Rtti.ItemInfo) then
+  if (fValue = nil) or (fInfo.Cache.ItemInfo <> Source.fInfo.Cache.ItemInfo) then
     exit;
   if not ObjArrayByRef and (rcfObjArray in fInfo.Flags) then
      LoadFromJSON(pointer(Source.SaveToJSON))
   else
   begin
     DynArrayCopy(pointer(fValue^), pointer(Source.fValue^),
-      fInfo.Rtti.ItemInfo, Source.fCountP);
+      fInfo.Cache.ItemInfo, Source.fCountP);
     if fCountP <> nil then
       fCountP^ := GetCapacity;
   end;
@@ -10640,7 +10640,7 @@ begin
       result := AnyScanIndex(fValue^, @Item, GetCount, fElemSize)
     else
     begin
-      rtti := fInfo.Rtti.ItemInfo;
+      rtti := fInfo.Cache.ItemInfo;
       cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
       if Assigned(cmp) then
       begin
@@ -10689,7 +10689,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       begin
         if OldLength <> 0 then
           if rcfArrayItemManaged in fInfo.Flags then
-            FastFinalizeArray(fValue^, fInfo.Rtti.ItemInfo, OldLength)
+            FastFinalizeArray(fValue^, fInfo.Cache.ItemInfo, OldLength)
           else if rcfObjArray in fInfo.Flags then
             RawObjectsClear(fValue^, OldLength);
         FreeMem(p);
@@ -10719,7 +10719,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       if NewLength < OldLength then // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
-            fInfo.Rtti.ItemInfo, OldLength - NewLength)
+            fInfo.Cache.ItemInfo, OldLength - NewLength)
         else if rcfObjArray in fInfo.Flags then // FreeAndNil() of resized objects list
           RawObjectsClear(pointer(PAnsiChar(p) + NeededSize), OldLength - NewLength);
       ReallocMem(p, NeededSize);
@@ -10731,7 +10731,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       if minLength > NewLength then
         minLength := NewLength;
       CopySeveral(@PByteArray(p)[SizeOf(TDynArrayRec)], fValue^,
-        minLength, fInfo.Rtti.ItemInfo, ElemSize);
+        minLength, fInfo.Cache.ItemInfo, ElemSize);
     end;
   end;
   // set refCnt=1 and new length to the heap header
@@ -10858,7 +10858,7 @@ begin
   dst.InitRtti(fInfo, Dest);
   dst.SetCapacity(aCount);
   CopySeveral(PPointer(Dest)^, @(PByteArray(fValue^)[aFirstIndex * ElemSize]),
-    aCount, fInfo.Rtti.ItemInfo, ElemSize);
+    aCount, fInfo.Cache.ItemInfo, ElemSize);
 end;
 
 function TDynArray.AddArray(const DynArrayVar; aStartIndex: integer;
@@ -10885,12 +10885,12 @@ begin
   SetCount(n + aCount);
   PS := pointer(PtrUInt(DynArrayVar) + cardinal(aStartIndex) * ElemSize);
   PD := pointer(PtrUInt(fValue^) + cardinal(n) * ElemSize);
-  CopySeveral(PD, PS, aCount, fInfo.Rtti.ItemInfo, ElemSize);
+  CopySeveral(PD, PS, aCount, fInfo.Cache.ItemInfo, ElemSize);
 end;
 
 function TDynArray.ItemLoad(Source: PAnsiChar; SourceMax: PAnsiChar): RawByteString;
 begin
-  if (Source <> nil) and (fInfo.Rtti.ItemInfo = nil) then
+  if (Source <> nil) and (fInfo.Cache.ItemInfo = nil) then
     SetString(result, Source, ElemSize)
   else
   begin
@@ -10909,21 +10909,21 @@ end;
 procedure TDynArray.ItemLoad(Source: PAnsiChar; Item: pointer; SourceMax: PAnsiChar);
 begin
   if Source <> nil then // avoid GPF
-    if fInfo.Rtti.ItemInfo = nil then
+    if fInfo.Cache.ItemInfo = nil then
     begin
       if (SourceMax = nil) or (Source + ElemSize <= SourceMax) then
         MoveFast(Source^, Item^, ElemSize);
     end
     else
-      BinaryLoad(Item, Source, fInfo.Rtti.ItemInfo, nil, SourceMax, rkAllTypes);
+      BinaryLoad(Item, Source, fInfo.Cache.ItemInfo, nil, SourceMax, rkAllTypes);
 end;
 
 function TDynArray.ItemSave(Item: pointer): RawByteString;
 begin
-  if fInfo.Rtti.ItemInfo = nil then
+  if fInfo.Cache.ItemInfo = nil then
     SetString(result, PAnsiChar(Item), ElemSize)
   else
-    result := BinarySave(Item, fInfo.Rtti.ItemInfo, rkAllTypes);
+    result := BinarySave(Item, fInfo.Cache.ItemInfo, rkAllTypes);
 end;
 
 function TDynArray.ItemLoadFind(Source, SourceMax: PAnsiChar): integer;
@@ -10934,12 +10934,12 @@ begin
   result := -1;
   if (Source = nil) or (ElemSize > SizeOf(tmp)) then
     exit;
-  if fInfo.Rtti.ItemInfo = nil then
+  if fInfo.Cache.ItemInfo = nil then
     data := Source
   else
   begin
     FillCharFast(tmp, ElemSize, 0);
-    BinaryLoad(@tmp, Source, fInfo.Rtti.ItemInfo, nil, SourceMax, rkAllTypes);
+    BinaryLoad(@tmp, Source, fInfo.Cache.ItemInfo, nil, SourceMax, rkAllTypes);
     if Source = nil then
       exit;
     data := @tmp;
