@@ -619,7 +619,7 @@ function TimeLogToUnixTime(const Timestamp: TTimeLog): TUnixTime;
 // set according to the layout in P (e.g. TRUE for '2012-05-26')
 // - returns 0 in case of invalid input string
 function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer;
-  ContainsNoTime: PBoolean=nil): TTimeLog;
+  ContainsNoTime: PBoolean = nil): TTimeLog;
 
 /// convert a Iso8601 encoded string into a TTimeLog value
 // - handle TTimeLog bit-encoded Int64 format

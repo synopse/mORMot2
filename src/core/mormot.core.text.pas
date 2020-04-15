@@ -2514,19 +2514,19 @@ function Int64ToHexShort(aInt64: Int64): TShort16; overload;
 // - reverse function of HexDisplayToInt64()
 function Int64ToHexString(aInt64: Int64): string;
 
-/// fast conversion from hexa chars into a binary buffer
+/// fast conversion from hexa chars in reverse order into a binary buffer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 
-/// fast conversion from hexa chars into a cardinal
+/// fast conversion from hexa chars in reverse order into a cardinal
 // - reverse function of CardinalToHex()
 // - returns false and set aValue=0 if Hex is not a valid hexadecimal 32-bit
 // unsigned integer
 // - returns true and set aValue with the decoded number, on success
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
-    {$ifndef FPC}{$ifdef HASINLINE} inline; {$endif}{$endif}
-    // inline gives an error under release conditions with FPC
+  {$ifndef FPC}{$ifdef HASINLINE} inline; {$endif}{$endif}
+  // inline gives an error under release conditions with (old?) FPC
 
-/// fast conversion from hexa chars into a cardinal
+/// fast conversion from hexa chars in reverse order into a cardinal
 // - reverse function of Int64ToHex()
 // - returns false and set aValue=0 if Hex is not a valid hexadecimal 64-bit
 // signed integer
@@ -2535,7 +2535,7 @@ function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload
     {$ifndef FPC}{$ifdef HASINLINE} inline; {$endif}{$endif}
     { inline gives an error under release conditions with FPC }
 
-/// fast conversion from hexa chars into a cardinal
+/// fast conversion from hexa chars in reverse order into a cardinal
 // - reverse function of Int64ToHex()
 // - returns 0 if the supplied text buffer is not a valid hexadecimal 64-bit
 // signed integer
@@ -2587,6 +2587,13 @@ function GUIDToShort(const
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
 procedure GUIDToShort(const
   guid: TGUID; out dest: TGUIDShortString); overload;
+
+/// convert some text into its TGUID binary value
+// - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
+// - return nil if the supplied text buffer is not a valid TGUID
+// - this will be the format used for JSON encoding, e.g.
+// $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
+function TextToGUID(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 
 
 { **************** UTF-8 / Unicode / Ansi Types and Conversion Routines }
@@ -12055,6 +12062,57 @@ begin
 end;
 {$endif UNICODE}
 
+function HexaToByte(P: PUTF8Char; var Dest: byte): boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+var
+  B, C: PtrUInt;
+begin
+  B := ConvertHexToBin[Ord(P[0])];
+  if B <= 15 then
+  begin
+    C := ConvertHexToBin[Ord(P[1])];
+    if C <= 15 then
+    begin
+      Dest := B shl 4 + C;
+      result := true;
+      exit;
+    end;
+  end;
+  result := false; // mark error
+end;
+
+function TextToGUID(P: PUTF8Char; guid: PByteArray): PUTF8Char;
+var
+  i: PtrInt;
+begin // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
+  result := nil;
+  for i := 3 downto 0 do
+  begin
+    if not HexaToByte(P, guid[i]) then
+      exit;
+    inc(P, 2);
+  end;
+  inc(PByte(guid), 4);
+  for i := 1 to 2 do
+  begin
+    if (P^ <> '-') or not HexaToByte(P + 1, guid[1]) or
+       not HexaToByte(P + 3, guid[0]) then
+      exit;
+    inc(P, 5);
+    inc(PByte(guid), 2);
+  end;
+  if (P[0] <> '-') or (P[5] <> '-') or not HexaToByte(P + 1, guid[0]) or
+     not HexaToByte(P + 3, guid[1]) then
+    exit;
+  inc(PByte(guid), 2);
+  inc(P, 6);
+  for i := 0 to 5 do
+    if HexaToByte(P, guid[i]) then
+      inc(P, 2)
+    else
+      exit;
+  result := P;
+end;
 
 
 { **************** UTF-8 / Unicode / Ansi Types and Conversion Routines }
@@ -14200,7 +14258,7 @@ function TSynAnsiFixedWidth.UTF8BufferToAnsi(Dest: PAnsiChar;
 var
   c: cardinal;
   endSource, endSourceBy4: PUTF8Char;
-  i, extra: integer;
+  i, extra: PtrInt;
 label
   By1, By4, Quit; // ugly but faster
 begin

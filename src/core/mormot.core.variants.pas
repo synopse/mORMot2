@@ -1825,6 +1825,47 @@ function JSONToVariant(const JSON: RawUTF8;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty];
   AllowDouble: boolean = false): variant;
 
+/// retrieve a variant value from a JSON number or string
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy or the overloaded functions with RawUTF8 parameter
+// if you need to access it later
+function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
+  EndOfObject: PUTF8Char = nil; TryCustomVariants: PDocVariantOptions = nil;
+  AllowDouble: boolean = false): PUTF8Char; overload;
+
+/// retrieve a variant value from a JSON number or string
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
+// - this overloaded procedure will make a temporary copy before JSON parsing
+// and return the variant as result
+procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
+  TryCustomVariants: PDocVariantOptions = nil; AllowDouble: boolean = false); overload;
+
+/// retrieve a variant value from a JSON number or string
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
+// - will instantiate either an Integer, Int64, currency, double or string value
+// (as RawUTF8), guessing the best numeric type according to the textual content,
+// and string in all other cases, except TryCustomVariants points to some options
+// (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known object or
+// array, either encoded as strict-JSON (i.e. {..} or [..]), or with some
+// extended (e.g. BSON) syntax
+// - this overloaded procedure will make a temporary copy before JSON parsing
+// and return the variant as result
+function VariantLoadJSON(const JSON: RawUTF8; TryCustomVariants: PDocVariantOptions = nil;
+  AllowDouble: boolean = false): variant; overload;
+
 
 implementation
 
@@ -3402,7 +3443,7 @@ function TDocVariantData.InitJSONInPlace(JSON: PUTF8Char;
 var
   EndOfObject: AnsiChar;
   Name: PUTF8Char;
-  NameLen, n: integer;
+  NameLen, cap: integer;
   intnames, intvalues: TRawUTF8Interning;
 begin
   Init(aOptions);
@@ -3423,16 +3464,21 @@ begin
           if JSON^ = #0 then
             exit;
         until JSON^ > ' ';
-        n := JSONArrayCount(JSON); // may be slow if JSON is huge (not very common)
-        if n < 0 then
-          exit; // invalid content
-        include(VOptions, dvoIsArray);
-        if n > 0 then
-        begin
-          SetLength(VValue, n);
+        if JSON^ = ']' then // void but valid input array
           repeat
-            if VCount >= n then
-              exit; // unexpected array size means invalid JSON
+            inc(JSON)
+          until (JSON^ = #0) or (JSON^ > ' ')
+        else
+        begin
+          cap := abs(JSONArrayCount(JSON, JSON + 256 shl 10)); // initial guess
+          include(VOptions, dvoIsArray);
+          repeat
+            if (VCount = 0) or (VCount = cap) then
+            begin
+              if (VCount <> 0) or (cap = 0) then
+                cap := NextGrow(cap);
+              SetLength(VValue, cap);
+            end;
             GetJSONToAnyVariant(VValue[VCount], JSON, @EndOfObject, @VOptions, false);
             if JSON = nil then
               if EndOfObject = ']' then // valid array end
@@ -3443,13 +3489,9 @@ begin
               intvalues.UniqueVariant(VValue[VCount]);
             inc(VCount);
           until EndOfObject = ']';
-        end
-        else if JSON^ = ']' then // n=0
-          repeat
-            inc(JSON)
-          until (JSON^ = #0) or (JSON^ > ' ')
-        else
-          exit;
+          if VCount <> cap then
+            SetLength(VValue, VCount);
+        end;
       end;
     '{':
       begin
@@ -3458,20 +3500,20 @@ begin
           if JSON^ = #0 then
             exit;
         until JSON^ > ' ';
-        n := JSONObjectPropCount(JSON); // may be slow if JSON is huge (not very common)
-        if n < 0 then
+        cap := JSONObjectPropCount(JSON); // may be slow if JSON is huge (not very common)
+        if cap < 0 then
           exit; // invalid content
         include(VOptions, dvoIsObject);
         if dvoInternNames in VOptions then
           intnames := DocVariantType.InternNames
         else
           intnames := nil;
-        if n > 0 then
+        if cap > 0 then
         begin
-          SetLength(VValue, n);
-          SetLength(VName, n);
+          SetLength(VValue, cap);
+          SetLength(VName, cap);
           repeat
-            if VCount >= n then
+            if VCount >= cap then
               exit; // unexpected object size means invalid JSON
             // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
             Name := GetJSONPropName(JSON, @NameLen);
@@ -3491,7 +3533,7 @@ begin
             inc(VCount);
           until EndOfObject = '}';
         end
-        else if JSON^ = '}' then // n=0
+        else if JSON^ = '}' then // cap=0
           repeat
             inc(JSON)
           until (JSON^ = #0) or (JSON^ > ' ')
@@ -5819,6 +5861,68 @@ end;
 procedure _BinaryVariantLoadAsJSON(var Value: variant; JSON: PUTF8Char);
 begin
   GetJSONToAnyVariant(Value, JSON, nil, @JSON_OPTIONS[true], {double=}true);
+end;
+
+function VariantLoadJSON(var Value: variant; JSON, EndOfObject: PUTF8Char;
+  TryCustomVariants: PDocVariantOptions; AllowDouble: boolean): PUTF8Char;
+var
+  wasString: boolean;
+  Val: PUTF8Char;
+begin
+  result := JSON;
+  if JSON = nil then
+    exit;
+  if TryCustomVariants <> nil then
+  begin
+    if dvoAllowDoubleValue in TryCustomVariants^ then
+      AllowDouble := true;
+    if dvoJSONObjectParseWithinString in TryCustomVariants^ then
+    begin
+      JSON := GotoNextNotSpace(JSON);
+      if JSON^ = '"' then
+      begin
+        Val := GetJSONField(result, result, @wasString, EndOfObject);
+        GetJSONToAnyVariant(Value, Val, EndOfObject, TryCustomVariants, AllowDouble);
+      end
+      else
+        GetJSONToAnyVariant(Value, result, EndOfObject, TryCustomVariants, AllowDouble);
+    end
+    else
+      GetJSONToAnyVariant(Value, result, EndOfObject, TryCustomVariants, AllowDouble);
+  end
+  else
+  begin
+    Val := GetJSONField(result, result, @wasString, EndOfObject);
+    GetVariantFromJSON(Val, wasString, Value, nil, AllowDouble);
+  end;
+  if result = nil then
+    result := @NULCHAR; // reached end, but not invalid input
+end;
+
+procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
+  TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON); // temp copy before in-place decoding
+  try
+    VariantLoadJSON(Value, tmp.buf, nil, TryCustomVariants, AllowDouble);
+  finally
+    tmp.Done;
+  end;
+end;
+
+function VariantLoadJSON(const JSON: RawUTF8; TryCustomVariants: PDocVariantOptions;
+  AllowDouble: boolean): variant;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON);
+  try
+    VariantLoadJSON(result, tmp.buf, nil, TryCustomVariants, AllowDouble);
+  finally
+    tmp.Done;
+  end;
 end;
 
 

@@ -1193,7 +1193,7 @@ type
     property Tag: PtrInt read fTag write fTag;
   end;
 
-  {$ifndef PUREMORMOT2}
+{$ifndef PUREMORMOT2}
 
   /// deprecated alias to TBufferWriter binary serializer
   TFileBufferWriter = TBufferWriter;
@@ -1202,7 +1202,7 @@ type
 const
   woHideSynPersistentPassword = woHideSensitivePersonalInformation;
 
-  {$endif PUREMORMOT2}
+{$endif PUREMORMOT2}
 
 
 { ************ Base64, Base64URI, URL and Baudot Encoding / Decoding }
@@ -1701,6 +1701,8 @@ procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
   Info: PRttiInfo; Kinds: TRttiKinds); overload;
 
 /// binary persistence of any value using RTTI, into a Base64-encoded text
+// - contains a trailing crc32c hash before the actual data - so is not
+// the WrBase64() regular format
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
   Kinds: TRttiKinds): RawUTF8;
 
@@ -1713,8 +1715,11 @@ function BinaryLoad(Data: pointer; const Source: RawByteString; Info: PRttiInfo;
   Kinds: TRttiKinds): boolean; overload;
 
 /// unserialize any value from BinarySaveBase64() encoding, using RTTI
+// - contains a trailing crc32c hash before the actual data - so is not
+// the WrBase64() regular format, unless NoCrc32Trailer is true
 function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
-  Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds): boolean;
+  Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
+  NoCrc32Trailer: boolean = false): boolean;
 
 
 /// check equality of two records by content
@@ -9334,9 +9339,11 @@ begin
 end;
 
 function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
-  Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds): boolean;
+  Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
+  NoCrc32Trailer: boolean): boolean;
 var
   temp: TSynTempBuffer;
+  tempend: pointer;
 begin
   if (Len > 6) and (Info^.Kind in Kinds) then
   begin
@@ -9344,10 +9351,15 @@ begin
       result := Base64uriToBin(Source, Len, temp)
     else
       result := Base64ToBin(Source, Len, temp);
-    result := result and (temp.len >= 4) and
-      (crc32c(0, PAnsiChar(temp.buf) + 4, temp.len - 4) = PCardinal(temp.buf)^) and
-      (BinaryLoad(Data, PAnsiChar(temp.buf) + 4, Info, nil,
-       PAnsiChar(temp.buf) + temp.len, Kinds) <> nil);
+    tempend := PAnsiChar(temp.buf) + temp.len;
+    if NoCrc32Trailer then
+      result := result and
+        (BinaryLoad(Data, temp.buf, Info, nil, tempend, Kinds) = tempend)
+    else
+      result := result and (temp.len >= 4) and
+        (crc32c(0, PAnsiChar(temp.buf) + 4, temp.len - 4) = PCardinal(temp.buf)^) and
+        (BinaryLoad(Data, PAnsiChar(temp.buf) + 4,
+          Info, nil, tempend, Kinds) = tempend);
     temp.Done;
   end
   else

@@ -645,6 +645,8 @@ function RandomGUID: TGUID; overload;
 /// compute the new capacity when expanding an array of items
 // - handle tiny, small, medium, large and huge sizes properly to reduce
 // memory usage and maximize performance
+// - initial steps are 4, 8, 12, 28, 40, 56, 72, 88, 104, 120, 136, 170, 212,
+// 265, 331, 413, 516, 645, 806, 1007, 1258, 1572, ...
 function NextGrow(capacity: integer): integer;
 
 /// equivalence to SetString(s,nil,len) function

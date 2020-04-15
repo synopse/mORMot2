@@ -1414,6 +1414,7 @@ type
     fArrayFirstField: TRTTIParserType;
     // used by mormot.core.json.pas
     fBinarySize: integer;
+    fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonRead=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
     // slot used by mormot.orm.base.pas
@@ -1431,7 +1432,8 @@ type
       const TypeName: RawUTF8; DynArrayElemType: TRttiCustom);
     // called by ValueFinalize() for dynamic array defined from text
     procedure NoRttiArrayFinalize(Data: PAnsiChar);
-    /// customize the Parser and Parser Complex kinds
+    /// initialize this Value process for Parser and Parser Complex kinds
+    // - this default method will set Name and Flags according to Props[]
     // - overriden in mormot.core.json for proper JSON process
     // - returns self to allow cascaded calls as a fluent interface
     function SetParserType(aParser: TRTTIParserType;
@@ -1492,6 +1494,8 @@ type
     property ObjArrayClass: TClass read fObjArrayClass;
     /// opaque TORMPropInfoRTTI instance used by mormot.orm.base.pas
     property ORM: TObject read fORM write fORM;
+    /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
+    property JsonLoad: pointer read fJsonLoad write fJsonLoad;
     /// opaque TRttiJsonSave callback used by mormot.core.json.pas
     property JsonSave: pointer read fJsonSave write fJsonSave;
   end;
