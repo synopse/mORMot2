@@ -87,6 +87,23 @@ type
   // - could be used to create instances using its virtual constructor
   TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
 
+  /// any TCollection used between client and server shall inherit from this class
+  // - you should override the GetClass virtual method to provide the
+  // expected collection item class to be used on server side
+  // - another possibility is to register a TCollection/TCollectionItem pair
+  // via a call to RttiCustom.RegisterCollection()
+  TInterfacedCollection = class(TCollection)
+  protected
+    /// you shall override this abstract method
+    class function GetClass: TCollectionItemClass; virtual; abstract;
+  public
+    /// this constructor will call GetClass to initialize the collection
+    constructor Create; reintroduce; virtual;
+  end;
+
+  /// class-reference type (metaclass) of a TInterfacedCollection kind
+  TInterfacedCollectionClass = class of TInterfacedCollection;
+
 
 { ************ TSynPersistent* / TSyn*List / TSynLocker classes }
 
@@ -133,6 +150,15 @@ type
     // - execute just before W.BlockEnd('}')
     procedure RttiAfterWriteObject(W: TBaseWriter;
       Options: TTextWriterWriteObjectOptions); virtual;
+    /// called to unserialize this instance from JSON
+    // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
+    // - you can return true if your method made the unserialization
+    // - this default implementation just returns false, to continue processing
+    // - opaque Ctxt is a PJsonParserContext instance
+    function RttiBeforeReadObject(Ctxt: pointer): boolean; virtual;
+    /// called after this instance as been unserialized from JSON
+    // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
+    procedure RttiAfterReadObject; virtual;
   public
     /// this virtual constructor will be called at instance creation
     // - this constructor register the class type to the RttiCustom list
@@ -198,7 +224,7 @@ type
     fOwnObjects: boolean;
   public
     /// initialize the object list
-    constructor Create(aOwnObjects: boolean=true); reintroduce;
+    constructor Create(aOwnObjects: boolean = true); reintroduce; virtual;
     /// delete one object from the list
     procedure Delete(index: integer); override;
     /// delete all objects of the list
@@ -1892,6 +1918,15 @@ type
   // @JSON_OPTIONS_FAST_STRICTJSON or @JSON_OPTIONS_FAST_EXTENDED
   PDocVariantOptions = ^TDocVariantOptions;
 
+var
+  /// low-level JSON unserialization function
+  // - defined in this unit to avoid circular reference with mormot.core.json,
+  // and be called by TDynArray.LoadFromJSON method
+  // - this unit will just set a wrapper raising an ERttiException
+  // - link mormot.core.json.pas to have a working implementation
+  GetDataFromJSON: procedure(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
+    TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+
 type
   /// function prototype to be used for TDynArray Sort and Find method
   // - common functions exist for base types: see e.g. SortDynArrayBoolean,
@@ -2361,8 +2396,9 @@ type
     // any existing instance before unserializing, to avoid memory leak
     // - warning: the content of P^ will be modified during parsing: please
     // make a local copy if it will be needed later (using e.g. TSynTempBufer)
-    function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char = nil;
-      CustomVariantOptions: PDocVariantOptions = nil): PUTF8Char;
+    function LoadFromJSON(P: PUTF8Char; EndOfObject: PUTF8Char = nil;
+      CustomVariantOptions: PDocVariantOptions = nil;
+      Tolerant: boolean = false): PUTF8Char;
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal = 0);
     /// add items from a given dynamic array variable
@@ -3057,6 +3093,7 @@ type
 
 implementation
 
+
 { ************ RTL TPersistent / TInterfacedObject with Custom Constructor }
 
 { TPersistentWithCustomCreate }
@@ -3078,6 +3115,14 @@ begin
     _Release
   else
     _AddRef;
+end;
+
+
+{ TInterfacedCollection }
+
+constructor TInterfacedCollection.Create;
+begin
+  inherited Create(GetClass);
 end;
 
 
@@ -3136,6 +3181,15 @@ end;
 
 procedure TSynPersistent.RttiAfterWriteObject(W: TBaseWriter;
   Options: TTextWriterWriteObjectOptions);
+begin // nothing to do
+end;
+
+function TSynPersistent.RttiBeforeReadObject(Ctxt: pointer): boolean;
+begin
+  result := false; // default JSON unserialization
+end;
+
+procedure TSynPersistent.RttiAfterReadObject;
 begin // nothing to do
 end;
 
@@ -9900,7 +9954,6 @@ var
   temp: TTextWriterStackBuffer;
   len, backup: PtrInt;
   hacklen: PDALen;
-  todo: integer;
 begin
   len := GetCount;
   if len = 0 then
@@ -9914,7 +9967,7 @@ begin
       if EnumSetsAsText then
         W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
       hacklen^ := len - _DAOFF; // may use ExternalCount
-      W.AddTypedJSON(fValue^, Info.Info); // serialization from mormot.core.json
+      W.AddTypedJSON(fValue, Info.Info); // serialization from mormot.core.json
       W.SetText(Result, reformat);
     finally
       hacklen^ := backup;
@@ -9923,10 +9976,20 @@ begin
   end;
 end;
 
-function TDynArray.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char;
-  CustomVariantOptions: PDocVariantOptions): PUTF8Char;
+procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
+  TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 begin
+  raise ERttiException.Create('GetDataFromJSON() not available - include ' +
+    'mormot.core.json.pas in your uses clause');
+end;
 
+function TDynArray.LoadFromJSON(P: PUTF8Char; EndOfObject: PUTF8Char;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUTF8Char;
+begin
+  SetCount(0); // faster to use our own routine now
+  GetDataFromJSON(fValue, P, EndOfObject, Info.Cache.ItemInfo,
+    CustomVariantOptions, Tolerant);
+  result := P;
 end;
 
 function TDynArray.ItemCopyFirstField(Source, Dest: Pointer): boolean;
@@ -10607,8 +10670,6 @@ begin
 end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);
-var
-  tdynarraycopy_objarray: integer;
 begin
   if (fValue = nil) or (fInfo.Cache.ItemInfo <> Source.fInfo.Cache.ItemInfo) then
     exit;
@@ -12015,13 +12076,15 @@ begin
       Char2Baudot[Baudot2Char[i]] := i;
   for i := ord('a') to ord('z') do
     Char2Baudot[AnsiChar(i - 32)] := Char2Baudot[AnsiChar(i)]; // A-Z -> a-z
+  // setup internal lists and function wrappers
+  SynCompressAlgos := TSynObjectList.Create;
+  AlgoSynLZ := TAlgoSynLZ.Create;
+  GetDataFromJSON := _GetDataFromJSON;
 end;
 
 
 initialization
   InitializeConstants;
-  SynCompressAlgos := TSynObjectList.Create;
-  AlgoSynLZ := TAlgoSynLZ.Create;
 
 finalization
   SynCompressAlgos.Free;

@@ -3481,11 +3481,11 @@ begin
             end;
             GetJSONToAnyVariant(VValue[VCount], JSON, @EndOfObject, @VOptions, false);
             if JSON = nil then
-              if EndOfObject = ']' then // valid array end
-                JSON := @NULCHAR
-              else
-                exit; // invalid input
-             if intvalues <> nil then
+            begin
+              VCount := 0;
+              exit; // invalid input
+            end;
+            if intvalues <> nil then
               intvalues.UniqueVariant(VValue[VCount]);
             inc(VCount);
           until EndOfObject = ']';
@@ -5501,8 +5501,6 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
   begin
     val := GetJSONField(JSON, JSON, @wasString, EndOfObject);
     GetVariantFromJSON(val, wasString, Value, nil, AllowDouble);
-    if JSON = nil then
-      JSON := @NULCHAR;
   end;
 
 var
@@ -5555,7 +5553,8 @@ begin
   if ToBeParsed^ in ['[', '{'] then
   begin
     // default JSON parsing and conversion to TDocVariant instance
-    ToBeParsed := TDocVariantData(Value).InitJSONInPlace(ToBeParsed, Options^, EndOfObject);
+    ToBeParsed := TDocVariantData(Value).
+      InitJSONInPlace(ToBeParsed, Options^, EndOfObject);
     if ToBeParsed = nil then
     begin
       TDocVariantData(Value).Clear;

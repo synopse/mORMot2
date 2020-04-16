@@ -3426,11 +3426,6 @@ const
     $c0, $e0, $f0, $f8, $fc);
 
 
-/// low-level initialization of mormot.core.text unit
-// - is called from mormot.core.os to allow proper setup
-procedure InitializeTextConstants;
-
-
 implementation
 
 uses
@@ -14485,7 +14480,7 @@ end;
 
 
 
-procedure InitializeTextConstants;
+procedure InitializeUnit;
 var
   i: PtrInt;
   v: byte;
@@ -14508,6 +14503,7 @@ const
 begin
   if CurrentAnsiConvert <> nil then
     exit; // could be called several times, e.g. from core.os then core.text
+  // initialize internal lookup tables for various text conversions
   for i := 0 to 255 do
     NormToNormByte[i] := i;
   NormToUpperAnsi7Byte := NormToNormByte;
@@ -14521,6 +14517,10 @@ begin
     if v in [ord('A')..ord('Z')] then
       inc(v, 32);
     NormToLowerByte[i] := v;
+    TwoDigitsHex[i][1] := HexChars[i shr 4];
+    TwoDigitsHex[i][2] := HexChars[i and $f];
+    TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
+    TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;
   {$ifdef DOUBLETOSHORT_USEGRISU}
   MoveFast(TwoDigitLookup[0], TwoDigitByteLookupW[0], SizeOf(TwoDigitLookup));
@@ -14539,16 +14539,6 @@ begin
     ConvertHexToBin[i] := v;
     ConvertHexToBin[i+(ord('a') - ord('A'))] := v;
     inc(v);
-  end;
-  for i := 0 to 255 do
-  begin
-    TwoDigitsHex[i][1] := HexChars[i shr 4];
-    TwoDigitsHex[i][2] := HexChars[i and $f];
-  end;
-  for i := 0 to 255 do
-  begin
-    TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
-    TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;
   for i := 0 to high(SmallUInt32UTF8) do
   begin
@@ -14574,6 +14564,7 @@ begin
     if c in [#1..' ', ';'] then
       include(TEXT_CHARS[c], tcCtrlNot0Comma);
   end;
+  // setup Unicode conversion engines
   SynAnsiConvertList := TObjectList.Create;
   CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);
   WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
@@ -14581,7 +14572,7 @@ begin
 end;
 
 initialization
-  InitializeTextConstants;
+  InitializeUnit;
 
 finalization
   SynAnsiConvertList.Free;

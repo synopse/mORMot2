@@ -2134,6 +2134,11 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 procedure FillZero(var dest; count: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fill first bytes of a memory buffer with zero
+// - Length is expected to be not 0, typically in 1..8 range
+procedure FillZeroSmall(P: pointer; Length: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
@@ -7182,6 +7187,16 @@ end;
 procedure FillZero(var dest; count: PtrInt);
 begin
   FillCharFast(dest, count, 0);
+end;
+
+procedure FillZeroSmall(P: pointer; Length: PtrInt);
+begin
+  dec(PtrUInt(P), PtrUInt(Length));
+  Length := - Length;
+  repeat
+    PByteArray(P)[Length] := 0;
+    inc(Length);
+  until Length = 0;
 end;
 
 threadvar
