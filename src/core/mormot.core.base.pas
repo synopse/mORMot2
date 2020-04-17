@@ -347,6 +347,10 @@ type
 
   PObject = ^TObject;
   PClass = ^TClass;
+  PList = ^TList;
+  PObjectList = ^TObjectList;
+  PCollection = ^TCollection;
+  PStrings = ^TStrings;
   PPByte = ^PByte;
   PPPointer = ^PPointer;
   PByteArray = ^TByteArray;
@@ -2134,11 +2138,6 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 procedure FillZero(var dest; count: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fill first bytes of a memory buffer with zero
-// - Length is expected to be not 0, typically in 1..8 range
-procedure FillZeroSmall(P: pointer; Length: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
@@ -2157,6 +2156,11 @@ var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 // - warning: expects Count>0 and Source/Dest not nil
 // - warning: doesn't support buffers overlapping
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill first bytes of a memory buffer with zero
+// - Length is expected to be not 0, typically in 1..8 range
+procedure FillZeroSmall(P: pointer; Length: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// our fast version of CompareMem() with optimized asm for x86 and tune pascal
@@ -5825,7 +5829,8 @@ begin
     result[i] := Values[i];
 end;
 
-function TIntegerDynArrayFrom64(const Values: TInt64DynArray; raiseExceptionOnOverflow: boolean): TIntegerDynArray;
+function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
+  raiseExceptionOnOverflow: boolean): TIntegerDynArray;
 var
   i: PtrInt;
 const
@@ -5836,12 +5841,14 @@ begin
   for i := 0 to Length(Values) - 1 do
     if Values[i] > MaxInt then
       if raiseExceptionOnOverflow then
-        raise Exception.CreateFmt('TIntegerDynArrayFrom64: Values[%d]=%d>%d', [i, Values[i], MaxInt])
+        raise Exception.CreateFmt('TIntegerDynArrayFrom64: Values[%d]=%d>%d',
+          [i, Values[i], MaxInt])
       else
         result[i] := MaxInt
     else if Values[i] < MinInt then
       if raiseExceptionOnOverflow then
-        raise Exception.CreateFmt('TIntegerDynArrayFrom64: Values[%d]=%d<%d', [i, Values[i], MinInt])
+        raise Exception.CreateFmt('TIntegerDynArrayFrom64: Values[%d]=%d<%d',
+          [i, Values[i], MinInt])
       else
         result[i] := MinInt
     else
@@ -9805,7 +9812,7 @@ begin
 end;
 
 
-procedure InitializeConstants;
+procedure InitializeUnit;
 var
   i, n: integer;
   crc: cardinal;
@@ -9839,7 +9846,7 @@ begin
 end;
 
 initialization
-  InitializeConstants;
+  InitializeUnit;
   {$ifdef CPUINTEL}
   TestIntelCpuFeatures;
   {$endif CPUINTEL}

@@ -288,7 +288,7 @@ type
     procedure GetEnumNameAll(var result: TRawUTF8DynArray;
       TrimLeftLowerCase: boolean); overload;
     /// retrieve all element names as CSV, with optional quotes
-    procedure GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8 = '';
+    procedure GetEnumNameAll(out result: RawUTF8; const Prefix: RawUTF8 = '';
       quotedValues: boolean = false; const Suffix: RawUTF8 = '';
       trimedValues: boolean = false; unCamelCased: boolean = false); overload;
     /// retrieve all trimed element names as CSV
@@ -1433,7 +1433,7 @@ type
     // used by NoRttiSetAndRegister()
     fNoRttiInfo: TByteDynArray;
     // customize class process
-    fClass: TClass;
+    fValueClass: TClass;
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     // called by TRttiCustomList.RegisterObjArray/RegisterBinaryType
@@ -1494,7 +1494,7 @@ type
     property Props: TRttiCustomProps read fProps;
     /// shortcut to the TRttiCustom of the item of a (dynamic) array
     // - only set for rkArray and rkDynArray
-    // - may be set also for unmanaged types - use Rtti.ItemInfo if you want the
+    // - may be set also for unmanaged types - use Cache.ItemInfo if you want the
     // PRttiInfo TypeInfo() pointer for rkManagedTypes only
     property ArrayRtti: TRttiCustom read fArrayRtti;
     /// best guess of first field type for a rkDynArray
@@ -1503,8 +1503,10 @@ type
     /// store the number of bytes for hexadecimal serialization for rcfBinary
     // - used when rcfBinary is defined in Flags; equals 0 if disabled (default)
     property BinarySize: integer read fBinarySize;
+    /// store the class of this type, i.e. contains Cache.Info.RttiClass.RttiClass
+    property ValueClass: TClass read fValueClass;
     /// store the class of a T*ObjArray dynamic array
-    // - shortcut to ArrayRtti.RttiClass.RttiClass
+    // - shortcut to ArrayRtti.Info.RttiClass.RttiClass
     // - used when rcfObjArray is defined in Flags
     property ObjArrayClass: TClass read fObjArrayClass;
     /// store the Item class for a given TCollection
@@ -1526,12 +1528,14 @@ type
   private
     // for DoRegister thread-safety
     Lock: TRTLCriticalSection;
-    // used to release memory used by registered customizations
-    Instances: array of TRttiCustom;
+    // speedup search by name e.g. from a loop
+    LastPair: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustom;
     // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0] for efficiency
     Pairs: array[succ(low(TRttiKind)) .. high(TRttiKind)] of
            array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
-    /// called by FindOrRegister() for proper inlining
+    // used to release memory used by registered customizations
+    Instances: array of TRttiCustom;
+    // called by FindOrRegister() for proper inlining
     function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
     procedure DoRegister(Instance: TRttiCustom); overload;
   public
@@ -1882,7 +1886,7 @@ begin
   end;
 end;
 
-procedure TRttiEnumType.GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8;
+procedure TRttiEnumType.GetEnumNameAll(out result: RawUTF8; const Prefix: RawUTF8;
   quotedValues: boolean; const Suffix: RawUTF8; trimedValues, unCamelCased: boolean);
 var
   i: integer;
@@ -3150,7 +3154,7 @@ end;
 function TRttiProp.GetUnicodeStrValue(Instance: TObject): UnicodeString;
 begin
   if (Instance <> nil) and (@self <> nil) and (TypeInfo^.Kind = rkUString) then
-    GetUnicodeStrProp(Instance, result)
+    GetUnicodeStrProp(Instance, result{%H-})
   else
     result := '';
 end;
@@ -3318,7 +3322,7 @@ end;
 
 function GetEnumTrimmedNames(aTypeInfo: pointer): TRawUTF8DynArray;
 begin
-  PRttiInfo(aTypeInfo)^.EnumBaseType^.GetEnumNameAll(result, {trim=}true);
+  PRttiInfo(aTypeInfo)^.EnumBaseType^.GetEnumNameAll(result{%H-}, {trim=}true);
 end;
 
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char;
@@ -4625,8 +4629,9 @@ end;
 procedure TRttiCustomProps.FinalizeAndClearPublishedProperties(Instance: TObject);
 var
   pp: ^PRttiCustomProp;
-  p: pointer;
+  p: PtrInt;
   n: integer;
+  rtti: TRttiCustom;
   empty: TVarData;
 begin
   PInteger(@empty)^ := 0;
@@ -4634,14 +4639,16 @@ begin
   pp := pointer(List);
   if pp <> nil then
     repeat
-      if pp^.OffsetSet >= 0 then
+      p := pp^.OffsetSet;
+      if p >= 0 then
       begin
-        p := PAnsiChar(Instance) + pp^.OffsetSet;
-        pp^.Value.ValueFinalize(p);
+        inc(P, PtrInt(Instance));
+        rtti := pp^.Value;
+        rtti.ValueFinalize(pointer(p));
         if pp^.PropDefault <> NO_DEFAULT then
-          MoveSmall(@pp^.PropDefault, p, pp^.Value.Size)
+          MoveSmall(@pp^.PropDefault, pointer(p), rtti.Size)
         else
-          FillcharFast(p^, pp^.Value.Size, 0);
+          FillZeroSmall(pointer(p), rtti.Size);
       end
       else
         pp^.Prop^.SetValue(Instance, PVariant(@empty)^);
@@ -4757,10 +4764,10 @@ begin
   case fCache.Kind of
     rkClass:
       begin
-        fClass := aInfo.RttiClass.RttiClass;
+        fValueClass := aInfo.RttiClass.RttiClass;
         fProps.AddFromClass(aInfo, {includeparents=}true);
         if fProps.Count = 0 then
-          if fClass.InheritsFrom(Exception) then
+          if fValueClass.InheritsFrom(Exception) then
             fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
       end;
     rkRecord:
@@ -5188,35 +5195,55 @@ begin
   result := ClassPropertiesGet(ObjectClass, GlobalClass);
 end;
 
-function TRttiCustomList.Find(Name: PUTF8Char; NameLen: PtrInt;
-  Kind: TRttiKind): TRttiCustom;
+function FindNameInPairs(Pairs: PPointerArray; Name: PUTF8Char; NameLen: PtrInt): TRttiCustom;
 var
   PEnd: PAnsiChar;
   s: PRttiInfo;
 begin
-  if (Kind = rkUnknown) or (Name = nil) or (NameLen < 0) then
-  begin
-    result := nil;
-    exit;
-  end;
-  result := pointer(Pairs[Kind, NameLen and RTTICUSTOMTYPEINFOHASH]);
-  if result = nil then
-    exit;
-  PEnd := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF];
+  PEnd := @Pairs[PDALen(PAnsiChar(Pairs) - _DALEN)^ + _DAOFF];
   repeat
-    s := PPointer(result)^;
-    if (ord(s^.RawName[0]) = NameLen) and
-       IdemPropNameUSameLen(Name, @s^.RawName[1], NameLen) then
+    s := Pairs[0];
+    if ord(s^.RawName[0]) <> NameLen then
     begin
-      inc(PPointer(result)); // found
+      Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
+      if PAnsiChar(Pairs) >= PEnd then
+        break;
+    end
+    else if not IdemPropNameUSameLen(Name, @s^.RawName[1], NameLen) then
+    begin
+      Pairs := @Pairs[2];
+      if PAnsiChar(Pairs) >= PEnd then
+        break;
+    end
+    else
+    begin
+      result := Pairs[1];  // found
       exit;
     end;
-    inc(PByte(result), 2 * SizeOf(pointer)); // PRttiInfo/TRttiCustom pairs
-    if PAnsiChar(result) < PEnd then
-      continue;
-    result := nil; // not found
-    exit;
   until false;
+  result := nil; // not found
+end;
+
+function TRttiCustomList.Find(Name: PUTF8Char; NameLen: PtrInt;
+  Kind: TRttiKind): TRttiCustom;
+begin
+  if (Kind <> rkUnknown) and (Name <> nil) and (NameLen > 0) then
+  begin
+    // try latest found value for huge speed up e.g. calling from TObjectList
+    result := LastPair[Kind];
+    if (result <> nil) and IdemPropNameU(result.Name, Name, NameLen) then
+      exit;
+    // use optimized "hash table of the poor" (tm) lists
+    result := pointer(Pairs[Kind, NameLen and RTTICUSTOMTYPEINFOHASH]);
+    if result <> nil then
+    begin
+      result := FindNameInPairs(pointer(result), Name, NameLen);
+      if result <> nil then
+        LastPair[Kind] := result;
+    end;
+  end
+  else
+    result := nil;
 end;
 
 function TRttiCustomList.Find(Name: PUTF8Char; NameLen: PtrInt;
@@ -5227,13 +5254,12 @@ begin
   if Kinds = [] then
     Kinds := rkAllTypes;
   for k := low(Pairs) to high(Pairs) do
-    if (k in Kinds) and
-       (Pairs[k, NameLen and RTTICUSTOMTYPEINFOHASH] <> nil) then
-      begin
-        result := Find(Name, NameLen, k);
-        if result <> nil then
-          exit;
-      end;
+    if k in Kinds then
+    begin
+      result := Find(Name, NameLen);
+      if result <> nil then
+        exit;
+    end;
   result := nil;
 end;
 

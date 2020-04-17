@@ -25,6 +25,7 @@ uses
   Types, 
   SysUtils, 
   mormot.core.base,
+  mormot.core.os,
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.text;
@@ -609,9 +610,6 @@ type
 
 
 implementation
-
-uses
-  mormot.core.os;
 
 
 { ************ Resource and Time Functions }

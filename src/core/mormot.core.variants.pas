@@ -33,6 +33,10 @@ uses
   
 { ************** Low-Level Variant Wrappers }
 
+type
+  /// exception class raised by this unit during raw Variant process
+  ESynVariant = class(ESynException);
+
 /// fastcheck if a variant hold a value
 // - varEmpty, varNull or a '' string would be considered as void
 // - varBoolean=false or varDate=0 would be considered as void
@@ -2084,7 +2088,7 @@ begin
         UTF8DecodeToUnicodeString(pointer(Txt), length(Txt), UnicodeString(Value.VAny));
       {$endif}
     else
-      raise ESynException.CreateUTF8('RawUTF8ToVariant(%)?', [ExpectedValueType]);
+      raise ESynVariant.CreateUTF8('RawUTF8ToVariant(%)?', [ExpectedValueType]);
     end;
 end;
 
@@ -2201,7 +2205,7 @@ begin
       vtObject: // class instance will be serialized as a TDocVariant
         ObjectToVariant(V.VObject, result, [woDontStoreDefault]);
     else
-      raise ESynException.CreateUTF8('Unhandled TVarRec.VType=%', [V.VType]);
+      raise ESynVariant.CreateUTF8('Unhandled TVarRec.VType=%', [V.VType]);
     end;
 end;
 
@@ -2413,13 +2417,13 @@ end;
 
 function TSynInvokeableVariantType.{%H-}IntGet(var Dest: TVarData; const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
 begin
-  raise ESynException.CreateUTF8('Unexpected %.IntGet(%): this kind of ' +
+  raise ESynVariant.CreateUTF8('Unexpected %.IntGet(%): this kind of ' +
     'custom variant does not support sub-fields', [self, Name]);
 end;
 
 function TSynInvokeableVariantType.{%H-}IntSet(const Instance, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
 begin
-  raise ESynException.CreateUTF8('Unexpected %.IntSet(%): this kind of ' +
+  raise ESynVariant.CreateUTF8('Unexpected %.IntSet(%): this kind of ' +
     'custom variant is read-only', [self, Name]);
 end;
 
@@ -2537,7 +2541,7 @@ end;
 procedure TSynInvokeableVariantType.ToJSON(W: TTextWriter; const Value: variant;
   Escape: TTextWriterKind);
 begin
-  raise ESynException.CreateUTF8('%.ToJSON is not implemented', [self]);
+  raise ESynVariant.CreateUTF8('%.ToJSON is not implemented', [self]);
 end;
 
 function TSynInvokeableVariantType.IsOfType(const V: variant): boolean;
@@ -2802,7 +2806,7 @@ end;
 
 procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant; escape: TTextWriterKind);
 var
-  ndx: integer;
+  ndx: PtrInt;
   vt: cardinal;
   forced: TTextWriterOptions;
   checkExtendedPropName: boolean;
@@ -2863,7 +2867,7 @@ begin
             W.CustomOptions := W.CustomOptions - forced;
         end
     else
-      raise ESynException.CreateUTF8('Unexpected variant type %', [vt])
+      raise EDocVariant.CreateUTF8('Unexpected variant type %', [vt])
   else
     W.AddNull;
 end;
@@ -3624,7 +3628,7 @@ begin
     else
       Source := @SourceDocVariant;
   if cardinal(Source^.VType) <> DocVariantVType then
-    raise ESynException.CreateUTF8('No TDocVariant for InitCopy(%)', [ord(Source.VType)]);
+    raise EDocVariant.CreateUTF8('No TDocVariant for InitCopy(%)', [ord(Source.VType)]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source <> @self then
   begin

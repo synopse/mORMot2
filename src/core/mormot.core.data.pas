@@ -12972,7 +12972,7 @@ begin
 end;
 
 
-procedure InitializeConstants;
+procedure InitializeUnit;
 var
   i: PtrInt;
   k: TRttiKind;
@@ -13076,7 +13076,7 @@ end;
 
 
 initialization
-  InitializeConstants;
+  InitializeUnit;
 
 finalization
   ObjArrayClear(SynCompressAlgos);

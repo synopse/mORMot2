@@ -291,7 +291,7 @@ type
   protected
     /// any number not null assigned to this field will display a "../sec" stat
     fRunConsoleOccurenceNumber: cardinal;
-    fTestCase: TSynList; // stores TSynTestCaseClass during Run
+    fTestCaseClass: array of TSynTestCaseClass;
     fAssertions: integer;
     fAssertionsFailed: integer;
     fCurrentMethodInfo: PSynTestMethodInfo;
@@ -900,15 +900,15 @@ end;
 
 procedure TSynTests.AddCase(const TestCase: array of TSynTestCaseClass);
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to high(TestCase) do
-    fTestCase.Add(TestCase[i]);
+    PtrArrayAdd(fTestCaseClass, TestCase[i]);
 end;
 
 procedure TSynTests.AddCase(TestCase: TSynTestCaseClass);
 begin
-  fTestCase.Add(TestCase);
+  PtrArrayAdd(fTestCaseClass, TestCase);
 end;
 
 function TSynTests.BeforeRun: IUnknown;
@@ -919,13 +919,11 @@ end;
 constructor TSynTests.Create(const Ident: string);
 begin
   inherited Create(Ident);
-  fTestCase := TSynList.Create;
   fSafe.Init;
 end;
 
 destructor TSynTests.Destroy;
 begin
-  fTestCase.Free;
   if TTextRec(fSaveToFile).Handle <> 0 then
     Close(fSaveToFile);
   inherited Destroy;
@@ -1009,11 +1007,11 @@ begin
     Color(ccWhite);
     writeln(fSaveToFile, #13#10#13#10, m + 1, '. ', fTests[m].TestName);
     Color(ccLightGray);
-    fTests[m].Method(); // call AddCase() to add instances into fTestCase
+    fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
     try
-      for i := 0 to fTestCase.Count - 1 do
+      for i := 0 to high(fTestCaseClass) - 1 do
       begin
-        C := TSynTestCaseClass(fTestCase[i]).Create(self);
+        C := fTestCaseClass[i].Create(self);
         try
           Color(ccWhite);
           writeln(fSaveToFile, #13#10' ', m + 1, '.', i + 1, '. ', C.Ident, ': ');
@@ -1071,7 +1069,7 @@ begin
         end;
       end;
     finally
-      fTestCase.Clear;
+      fTestCaseClass := nil;
       fCurrentMethodInfo := nil;
     end;
   except

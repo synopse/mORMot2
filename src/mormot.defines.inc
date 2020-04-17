@@ -70,6 +70,8 @@
 
 (********************** FPC Conditionals **********************)
 
+  {$WARN 5093 off : function result variable of a managed type does not seem to be initialized }
+
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
   {$endif}
