@@ -214,6 +214,33 @@ begin
     result := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
 end;
 
+function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
+begin
+  with PInt64Rec(@fFileSize)^ do
+    fMap := CreateFileMapping(fFile, nil, PAGE_READONLY, Hi, Lo, nil);
+  if fMap = 0 then
+    raise EOSException.Create('TMemoryMap.Map: CreateFileMapping()=0');
+  with PInt64Rec(@aCustomOffset)^ do
+    fBuf := MapViewOfFile(fMap, FILE_MAP_READ, Hi, Lo, fBufSize);
+  if fBuf = nil then
+  begin
+    // Windows failed to find a contiguous VA space -> fall back on direct read
+    CloseHandle(fMap);
+    fMap := 0;
+  end;
+  result := fMap <> 0;
+end;
+
+procedure TMemoryMap.DoUnMap;
+begin
+  if fMap <> 0 then
+  begin
+    UnmapViewOfFile(fBuf);
+    CloseHandle(fMap);
+    fMap := 0;
+  end;
+end;
+
 threadvar // mandatory: GetTickCount seems per-thread on XP :(
   LastTickXP: TQWordRec;
 

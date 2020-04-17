@@ -690,6 +690,50 @@ function TemporaryFileName: TFileName;
 // - try to write a small file with a random name
 function IsDirectoryWritable(const Directory: TFileName): boolean;
 
+type
+  /// text file layout, as recognized by TMemoryMap.TextFileKind
+  TTextFileKind = (isUnicode, isUTF8, isAnsi);
+
+  /// cross-platform memory mapping of a file content
+  TMemoryMap = object
+  protected
+    fBuf: PAnsiChar;
+    fBufSize: PtrUInt;
+    fFile: THandle;
+    {$ifdef MSWINDOWS}
+    fMap: THandle;
+    {$endif MSWINDOWS}
+    fFileSize: Int64;
+    fFileLocal: boolean;
+    function DoMap(aCustomOffset: Int64): boolean;
+    procedure DoUnMap;
+  public
+    /// map the corresponding file handle
+    // - if aCustomSize and aCustomOffset are specified, the corresponding
+    // map view if created (by default, will map whole file)
+    function Map(aFile: THandle; aCustomSize: PtrUInt = 0;
+      aCustomOffset: Int64 = 0): boolean; overload;
+    /// map the file specified by its name
+    // - file will be closed when UnMap will be called
+    function Map(const aFileName: TFileName): boolean; overload;
+    /// set a fixed buffer for the content
+    // - emulated a memory-mapping from an existing buffer
+    procedure Map(aBuffer: pointer; aBufferSize: PtrUInt); overload;
+    /// recognize the BOM of a text file - returns isAnsi if no BOM is available
+    function TextFileKind: TTextFileKind;
+    /// unmap the file
+    procedure UnMap;
+    /// retrieve the memory buffer mapped to the file content
+    property Buffer: PAnsiChar read fBuf;
+    /// retrieve the buffer size
+    property Size: PtrUInt read fBufSize;
+    /// retrieve the mapped file size
+    property FileSize: Int64 read fFileSize;
+    /// access to the low-level associated File handle (if any)
+    property FileHandle: THandle read fFile;
+  end;
+
+
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
 // - on Linux, will enumerate /proc/* pseudo-files
@@ -869,7 +913,7 @@ begin
       PtrArrayAdd(AutoSlots, slots);
       PatchCodePtrUInt(pointer(vmt), PtrUInt(slots), {leaveunprotected=}true);
       if vmt^ <> slots then
-        raise Exception.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
+        raise EOSException.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
           [ObjectClass.ClassName]);
     end;
     for i := 0 to high(slots^) - 1 do
@@ -883,7 +927,7 @@ begin
   finally
     LeaveCriticalSection(AutoSlotsLock);
   end;
-  raise Exception.CreateFmt('ClassPropertiesAdd: no slot available on %s',
+  raise EOSException.CreateFmt('ClassPropertiesAdd: no slot available on %s',
     [ObjectClass.ClassName]);
 end;
 
@@ -970,7 +1014,7 @@ var
   F: THandle;
   Read, Size, Chunk: integer;
   P: PUTF8Char;
-  tmp: array[0..$7fff] of AnsiChar;
+  tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
   result := '';
   if FileName = '' then
@@ -1106,6 +1150,95 @@ begin
   result := DeleteFile(fn);
 end;
 
+
+{ TMemoryMap }
+
+function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt; aCustomOffset: Int64): boolean;
+var
+  Available: Int64;
+begin
+  fBuf := nil;
+  fBufSize := 0;
+  {$ifdef MSWINDOWS}
+  fMap := 0;
+  {$endif}
+  fFileLocal := false;
+  fFile := aFile;
+  fFileSize := FileSeek64(fFile, 0, soFromEnd);
+  if fFileSize = 0 then
+  begin
+    result := true; // handle 0 byte file without error (but no memory map)
+    exit;
+  end;
+  result := false;
+  if (fFileSize <= 0) {$ifdef CPU32} or (fFileSize > maxInt){$endif} then
+    /// maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors on CPU32)
+    exit;
+  if aCustomSize = 0 then
+    fBufSize := fFileSize
+  else
+  begin
+    Available := fFileSize - aCustomOffset;
+    if Available < 0 then
+      exit;
+    if aCustomSize > Available then
+      fBufSize := Available;
+    fBufSize := aCustomSize;
+  end;
+  result := DoMap(aCustomOffset); // call actual Windows/POSIX map API
+end;
+
+procedure TMemoryMap.Map(aBuffer: pointer; aBufferSize: PtrUInt);
+begin
+  fBuf := aBuffer;
+  fFileSize := aBufferSize;
+  fBufSize := aBufferSize;
+  {$ifdef MSWINDOWS}
+  fMap := 0;
+  {$endif}
+  fFile := 0;
+  fFileLocal := false;
+end;
+
+function TMemoryMap.Map(const aFileName: TFileName): boolean;
+var
+  F: THandle;
+begin
+  result := false;
+  // Memory-mapped file access does not go through the cache manager so
+  // using FileOpenSequentialRead() is pointless here
+  F := FileOpen(aFileName, fmOpenRead or fmShareDenyNone);
+  if PtrInt(F) < 0 then
+    exit;
+  if Map(F) then
+    result := true
+  else
+    FileClose(F);
+  fFileLocal := result;
+end;
+
+procedure TMemoryMap.UnMap;
+begin
+  DoUnMap; // call actual Windows/POSIX unmap API
+  fBuf := nil;
+  fBufSize := 0;
+  if fFile <> 0 then
+  begin
+    if fFileLocal then
+      FileClose(fFile);
+    fFile := 0;
+  end;
+end;
+
+function TMemoryMap.TextFileKind: TTextFileKind;
+begin
+  result := isAnsi;
+  if (fBuf <> nil) and (fBufSize >= 3) then
+    if PWord(fBuf)^ = $FEFF then
+      result := isUnicode
+    else if (PWord(fBuf)^ = $BBEF) and (PByteArray(fBuf)[2] = $BF) then
+      result := isUTF8;
+end;
 
 function GetDelphiCompilerVersion: RawUTF8;
 begin

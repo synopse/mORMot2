@@ -384,6 +384,30 @@ begin
   FpFsync(hFile);
 end;
 
+function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
+begin
+  if aCustomOffset <> 0 then
+    if aCustomOffset and (SystemInfo.dwPageSize - 1) <> 0 then
+      raise EOSException.CreateFmt('fpmmap(aCustomOffset=%d) with dwPageSize=%d',
+        [aCustomOffset, SystemInfo.dwPageSize])
+    else
+      aCustomOffset := aCustomOffset div SystemInfo.dwPageSize;
+  fBuf := fpmmap(nil, fBufSize, PROT_READ, MAP_SHARED, fFile, aCustomOffset);
+  if fBuf = MAP_FAILED then
+  begin
+    fBuf := nil;
+    result := false;
+  end
+  else
+    result := true;
+end;
+
+procedure TMemoryMap.DoUnMap;
+begin
+  if (fBuf <> nil) and (fBufSize > 0) and (fFile <> 0) then
+    fpmunmap(fBuf, fBufSize);
+end;
+
 procedure SleepHiRes(ms: cardinal);
 var
   timeout: TTimespec;
