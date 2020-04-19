@@ -40,7 +40,7 @@ uses
   typinfo,  // use official RTL for accurate layouts (especially FPC)
   mormot.core.base,
   mormot.core.os,
-  mormot.core.text; // ESynException, and enumerations text process
+  mormot.core.text; // ESynException, and text process (e.g. for enums)
 
 
 { ************* Low-Level Cross-Compiler RTTI Definitions }

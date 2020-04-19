@@ -471,7 +471,6 @@ function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
 // RttiCustom.RegisterClass(), in order to retrieve the class type from it name -
 // or, at least, by the RTL Classes.RegisterClass() function, if AndGlobalFindClass
 // parameter is left to default true so that RTL Classes.FindClass() is called
-
 function JSONRetrieveObjectRttiCustom(var JSON: PUTF8Char;
   AndGlobalFindClass: boolean): TRttiCustom;
 
@@ -1410,6 +1409,125 @@ function ObjectToJSON(Value: TObject;
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
 
+/// fill a record content from a JSON serialization as saved by
+// TTextWriter.AddRecordJSON / RecordSaveJSON
+// - will use default Base64 encoding over RecordSave() binary - or custom true
+// JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
+// enhanced RTTI), if available
+// - returns nil on error, or the end of buffer on success
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy if you need to access it later or if the string comes from
+// a constant (refcount=-1) - see e.g. the overloaded RecordLoadJSON()
+function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUTF8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
+  Tolerant: boolean = true): PUTF8Char; overload;
+
+/// fill a record content from a JSON serialization as saved by
+// TTextWriter.AddRecordJSON / RecordSaveJSON
+// - this overloaded function will make a private copy before parsing it,
+// so is safe with a read/only or shared string - but slightly slower
+// - will use default Base64 encoding over RecordSave() binary - or custom true
+// JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
+// enhanced RTTI), if available
+function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions = nil; Tolerant: boolean = true): boolean; overload;
+
+/// fill a dynamic array content from a JSON serialization as saved by
+// TTextWriter.AddDynArrayJSON
+// - Value shall be set to the target dynamic array field
+// - is just a wrapper around TDynArray.LoadFromJSON(), creating a temporary
+// TDynArray wrapper on the stack
+// - return a pointer at the end of the data read from JSON, nil in case
+// of an invalid input buffer
+// - to be used e.g. for custom record JSON unserialization, within a
+// TDynArrayJSONCustomReader callback
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy if you need to access it later or if the string comes from
+// a constant (refcount=-1) - see e.g. the overloaded DynArrayLoadJSON()
+function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUTF8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
+  Tolerant: boolean = true): PUTF8Char; overload;
+
+/// fill a dynamic array content from a JSON serialization as saved by
+// TTextWriter.AddDynArrayJSON, which won't be modified
+// - this overloaded function will make a private copy before parsing it,
+// so is safe with a read/only or shared string - but slightly slower
+function DynArrayLoadJSON(var Value; const JSON: RawUTF8;
+  TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions = nil;
+  Tolerant: boolean = true): boolean; overload;
+
+/// read an object properties, as saved by ObjectToJSON function
+// - ObjectInstance must be an existing TObject instance
+// - the data inside From^ is modified in-place (unescaped and transformed):
+// calling JSONToObject(pointer(JSONRawUTF8)) will change the JSONRawUTF8
+// variable content, which may not be what you expect - consider using the
+// ObjectLoadJSON() function instead
+// - handle Integer, Int64, enumerate (including boolean), set, floating point,
+// TDateTime, TCollection, TStrings, TRawUTF8List, variant, and string properties
+// (excluding ShortString, but including WideString and UnicodeString under
+// Delphi 2009+)
+// - TList won't be handled since it may leak memory when calling TList.Clear
+// - won't handle TObjectList (even if ObjectToJSON is able to serialize
+// them) since has no way of knowing the object type to add (TCollection.Add
+// is missing), unless: 1. you set the TObjectListItemClass property as expected,
+// and provide a TObjectList object, or 2. woStoreClassName option has been
+// used at ObjectToJSON() call and the corresponding classes have been previously
+// registered by TJSONSerializer.RegisterClassForJSON() (or Classes.RegisterClass)
+// - will clear any previous TCollection objects, and convert any null JSON
+// basic type into nil - e.g. if From='null', will call FreeAndNil(Value)
+// - you can add some custom (un)serializers for ANY Delphi class, via the
+// TJSONSerializer.RegisterCustomSerializer() class method
+// - set Valid=TRUE on success, Valid=FALSE on error, and the main function
+// will point in From at the syntax error place (e.g. on any unknown property name)
+// - caller should explicitely perform a SetDefaultValuesObject(Value) if
+// the default values are expected to be set before JSON parsing
+function JSONToObject(var ObjectInstance; From: PUTF8Char; out Valid: boolean;
+  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): PUTF8Char;
+
+/// parse the supplied JSON with some tolerance about Settings format
+// - will make a TSynTempBuffer copy for parsing, and un-comment it
+// - returns true if the supplied JSON was successfully retrieved
+// - returns false and set InitialJsonContent := '' on error
+function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject): boolean;
+
+/// read an object properties, as saved by ObjectToJSON function
+// - ObjectInstance must be an existing TObject instance
+// - this overloaded version will make a private copy of the supplied JSON
+// content (via TSynTempBuffer), to ensure the original buffer won't be modified
+// during process, before calling safely JSONToObject()
+// - will return TRUE on success, or FALSE if the supplied JSON was invalid
+function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
+  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): boolean;
+
+/// create a new object instance, as saved by ObjectToJSON(...,[...,woStoreClassName,...]);
+// - JSON input should be either 'null', either '{"ClassName":"TMyClass",...}'
+// - woStoreClassName option shall have been used at ObjectToJSON() call
+// - and the corresponding class shall have been previously registered by
+// TJSONSerializer.RegisterClassForJSON(), in order to retrieve the class type
+// from it name - or, at least, by a Classes.RegisterClass() function call
+// - the data inside From^ is modified in-place (unescaped and transformed):
+// don't call JSONToObject(pointer(JSONRawUTF8)) but makes a temporary copy of
+// the JSON text buffer before calling this function, if want to reuse it later
+function JSONToNewObject(var From: PUTF8Char; var Valid: boolean;
+  Options: TJsonParserOptions = []): TObject;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// object contents
+// - ObjectInstance must be an existing TObject instance
+// - will call internaly JSONToObject() function to unserialize its content
+// - UrlDecodeExtended('price=20.45&where=LastName%3D%27M%C3%B4net%27','PRICE=',P,@Next)
+// will return Next^='where=...' and P=20.45
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar;
+  var ObjectInstance; Next: PPUTF8Char = nil; Options: TJsonParserOptions = []): boolean;
+
+/// fill the object properties from a JSON file content
+// - ObjectInstance must be an existing TObject instance
+// - this function will call RemoveCommentsFromJSON() before process
+function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
+  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): boolean;
+
 
 implementation
 
@@ -2218,7 +2336,7 @@ begin // at input, JSON^ = '{'
     exit; // we expect woStoreClassName option to have been used
   P := JSONRetrieveStringField(P, classname, classnamelen, false);
   if P = nil then
-    exit; // invalid (or too complex) JSON string value
+    exit; // invalid (maybe too complex) JSON string value
   JSON := P; // JSON^ is either } or ,
   result := RttiCustom.Find(classname, classnamelen, rkClass);
   if (result = nil) and AndGlobalFindClass then
@@ -5429,7 +5547,7 @@ begin
         v := -1;
     end;
     if v < 0 then
-      if j2oIgnoreUnknownEnum in Ctxt.Options then
+      if jpoIgnoreUnknownEnum in Ctxt.Options then
         v := 0
       else
         Ctxt.Valid := false;
@@ -7184,6 +7302,139 @@ begin
     SetText(result);
   finally
     Free;
+  end;
+end;
+
+function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUTF8Char; CustomVariantOptions: PDocVariantOptions;
+  Tolerant: boolean): PUTF8Char;
+begin
+  if (TypeInfo = nil) or not (TypeInfo.Kind in rkRecordTypes) then
+    raise EJSONException.CreateUTF8('RecordLoadJSON: % is not a record',
+      [TypeInfo.Name]);
+  GetDataFromJSON(@Rec, JSON, EndOfObject, TypeInfo, CustomVariantOptions, Tolerant);
+  result := JSON;
+end;
+
+function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON); // make private copy before in-place decoding
+  try
+    result := RecordLoadJSON(Rec, tmp.buf, TypeInfo, nil,
+      CustomVariantOptions, Tolerant) <> nil;
+  finally
+    tmp.Done;
+  end;
+end;
+
+function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUTF8Char; CustomVariantOptions: PDocVariantOptions;
+  Tolerant: boolean): PUTF8Char;
+begin
+  if (TypeInfo = nil) or (TypeInfo.Kind <> rkDynArray) then
+    raise EJSONException.CreateUTF8('DynArrayLoadJSON: % is not a dynamic array',
+      [TypeInfo.Name]);
+  GetDataFromJSON(@Value, JSON, EndOfObject, TypeInfo, CustomVariantOptions, Tolerant);
+  result := JSON;
+end;
+
+function DynArrayLoadJSON(var Value; const JSON: RawUTF8; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON); // make private copy before in-place decoding
+  try
+    result := DynArrayLoadJSON(Value, tmp.buf, TypeInfo, nil,
+      CustomVariantOptions, Tolerant) <> nil;
+  finally
+    tmp.Done;
+  end;
+end;
+
+function JSONToObject(var ObjectInstance; From: PUTF8Char; out Valid: boolean;
+  TObjectListItemClass: TClass; Options: TJsonParserOptions): PUTF8Char;
+var
+  ctxt: TJsonParserContext;
+begin
+  if pointer(ObjectInstance) = nil then
+    raise ERttiException.Create('JSONToObject(nil)');
+  ctxt.Init(From, RttiCustom.RegisterClass(PPointer(ObjectInstance)^), Options,
+    nil, TObjectListItemClass);
+  _JL_RttiCustom(@ObjectInstance, ctxt);
+  Valid := ctxt.Valid;
+  result := ctxt.JSON;
+end;
+
+function JSONSettingsToObject(var InitialJsonContent: RawUTF8;
+  Instance: TObject): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  if InitialJsonContent = '' then
+    exit;
+  tmp.Init(InitialJsonContent);
+  try
+    RemoveCommentsFromJSON(tmp.buf);
+    JSONToObject(Instance, tmp.buf, result, nil, JSONPARSER_TOLERANTOPTIONS);
+    if not result then
+      InitialJsonContent := '';
+  finally
+    tmp.Done;
+  end;
+end;
+
+function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
+  TObjectListItemClass: TClass; Options: TJsonParserOptions): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON);
+  if tmp.len <> 0 then
+    try
+      JSONToObject(ObjectInstance, tmp.buf, result, TObjectListItemClass, Options);
+    finally
+      tmp.Done;
+    end
+  else
+    result := false;
+end;
+
+function JSONToNewObject(var From: PUTF8Char; var Valid: boolean;
+  Options: TJsonParserOptions): TObject;
+var
+  ctxt: TJsonParserContext;
+begin
+  ctxt.Init(From, nil, Options, nil, nil);
+  result := ctxt.ParseNewObject;
+end;
+
+function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar;
+  var ObjectInstance; Next: PPUTF8Char; Options: TJsonParserOptions): boolean;
+var
+  tmp: RawUTF8;
+begin
+  result := UrlDecodeValue(U, Upper, tmp, Next);
+  if result then
+    JSONToObject(ObjectInstance, Pointer(tmp), result, nil, Options);
+end;
+
+function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
+  TObjectListItemClass: TClass; Options: TJsonParserOptions): boolean;
+var
+  tmp: RawUTF8;
+begin
+  tmp := AnyTextFileToRawUTF8(JSONFile, true);
+  if tmp = '' then
+    result := false
+  else
+  begin
+    RemoveCommentsFromJSON(pointer(tmp));
+    JSONToObject(ObjectInstance, pointer(tmp), result, TObjectListItemClass, Options);
   end;
 end;
 
