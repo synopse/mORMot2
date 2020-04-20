@@ -620,8 +620,9 @@ type
   // is defined, and only the topmost class level properties would be serialized
   // - woInt64AsHex will force Int64/QWord to be written as hexadecimal string -
   // see j2oAllowInt64Hex reverse option fot Json2Object
-  // - woDontStore0 will avoid serializating number properties equal to 0 or
-  // string properties equal to ''
+  // - woDontStoreVoid will avoid serializing numeric properties equal to 0 and
+  // string properties equal to '' (replace both deprecated woDontStore0 and
+  // woDontStoreEmptyString flags)
   // - woPersistentLock paranoid setting will call TSynPersistentLock.Lock/Unlock
   // during serialization
   TTextWriterWriteObjectOption = (
@@ -631,7 +632,7 @@ type
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix, woTimeLogAsText,
     woIDAsIDstr, woSQLRawBlobAsBase64, woHideSensitivePersonalInformation,
     woObjectListWontStoreClassName, woDontStoreInherited, woInt64AsHex,
-    woDontStore0, woPersistentLock);
+    woDontStoreVoid, woPersistentLock);
 
   /// options set for TBaseWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;

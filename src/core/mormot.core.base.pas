@@ -2420,7 +2420,7 @@ type
   THasher = function(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 type
-  TCrc32tab = array[0..7,byte] of cardinal;
+  TCrc32tab = array[0..7, byte] of cardinal;
   PCrc32tab = ^TCrc32tab;
 
 var
@@ -2428,7 +2428,7 @@ var
   // - created with a polynom diverse from zlib's crc32() algorithm, but
   // compatible with SSE 4.2 crc32 instruction
   // - tables content is created from code in initialization section below
-  // - will also be used internally by SymmetricEncrypt, FillRandom and
+  // - will also be used internally by SymmetricEncrypt and
   // TSynUniqueIdentifierGenerator as 1KB master/reference key tables
   crc32ctab: TCrc32tab;
 
@@ -9471,6 +9471,9 @@ begin // caseInsensitive not supported by the RTL
   result := ICMP[VarCompareValue(PVariant(@A)^, PVariant(@B)^)];
 end;
 
+
+{ ************ Sorting/Comparison Functions }
+
 function SortDynArrayVariant(const A, B): integer;
 begin
   result := SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}false);
@@ -9480,9 +9483,6 @@ function SortDynArrayVariantI(const A, B): integer;
 begin
   result := SortDynArrayVariantComp(TVarData(A), TVarData(B), {caseins=}true);
 end;
-
-
-{ ************ Sorting/Comparison Functions }
 
 function SortDynArrayBoolean(const A, B): integer;
 begin
@@ -9538,7 +9538,8 @@ begin // code below is not very fast, but correct ;)
   Aname := GetFileNameWithoutExt(string(A), @Aext);
   Bname := GetFileNameWithoutExt(string(B), @Bext);
   result := AnsiCompareFileName(Aext, Bext);
-  if result = 0 then // if both extensions matches, compare by filename
+  if result = 0 then
+    // if both extensions matches, compare by filename
     result := AnsiCompareFileName(Aname, Bname);
 end;
 
@@ -9610,11 +9611,11 @@ begin // we can't use StrComp() since a RawByteString may contain #0
         result := l1 - l2;
       end
       else
-        result := 1
-    else  // p2=''
-      result := -1
-  else // p1=''
-    result := 0;      // p1=p2
+        result := 1  // p2=''
+    else
+      result := -1   // p1=''
+  else
+    result := 0;     // p1=p2
 end;
 
 function SortDynArrayPUTF8Char(const A, B): integer;
@@ -9806,7 +9807,7 @@ begin
   SetPointer(Data, DataLen);
 end;
 
-function TSynMemoryStream.Write(const Buffer; Count: Integer): Longint;
+function TSynMemoryStream.{%H-}Write(const Buffer; Count: Integer): Longint;
 begin
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
 end;
@@ -9817,6 +9818,7 @@ var
   i, n: integer;
   crc: cardinal;
 begin
+  // initialize internal constants
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   NULL_STR_VAR := 'null';
@@ -9841,14 +9843,17 @@ begin
       crc32ctab[n, i] := crc;
     end;
   end;
+  // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
+  // initialize CPU-specific asm
+  {$ifdef CPUINTEL}
+  TestIntelCpuFeatures;
+  {$endif CPUINTEL}
 end;
 
 initialization
   InitializeUnit;
-  {$ifdef CPUINTEL}
-  TestIntelCpuFeatures;
-  {$endif CPUINTEL}
+
 end.
 

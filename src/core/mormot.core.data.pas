@@ -243,6 +243,9 @@ type
   end;
   PSynObjectList = ^TSynObjectList;
 
+  /// meta-class of TSynObjectList type
+  TSynObjectListClass = class of TSynObjectList;
+
   /// allow to add cross-platform locking methods to any class instance
   // - typical use is to define a Safe: TSynLocker property, call Safe.Init
   // and Safe.Done in constructor/destructor methods, and use Safe.Lock/UnLock
@@ -441,6 +444,10 @@ type
     /// access to the associated instance critical section
     // - call Safe.Lock/UnLock to protect multi-thread access on this storage
     property Safe: PSynLocker read fSafe;
+    /// could be used as a short-cut to Safe.Lock
+    procedure Lock;   {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe.UnLock
+    procedure Unlock; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// used for backward compatibility only with existing code
@@ -3897,6 +3904,18 @@ destructor TSynPersistentLock.Destroy;
 begin
   inherited Destroy;
   fSafe^.DoneAndFreeMem;
+end;
+
+procedure TSynPersistentLock.Lock;
+begin
+  if self <> nil then
+    fSafe^.Lock;
+end;
+
+procedure TSynPersistentLock.Unlock;
+begin
+  if self <> nil then
+    fSafe^.UnLock;
 end;
 
 function TSynPersistentLock.RttiBeforeWriteObject(W: TBaseWriter;

@@ -13,6 +13,7 @@ unit mormot.core.json;
     - JSON-aware TSynDictionary Storage
     - JSON Unserialization for any kind of Values
     - JSON Serialization Wrapper Functions
+    - Abstract Classes with Auto-Create-Fields
 
   *****************************************************************************
 }
@@ -1270,8 +1271,8 @@ var
   JSONPARSER_DEFAULTOPTIONS: TJsonParserOptions = [];
 
   /// some open-minded options for the JSON parser
-  // - won't block JSON unserialization due to some minor class type definitions
   // - as supplied to GetDataFromJSON() global function with Tolerant=true
+  // - won't block JSON unserialization due to some minor unexpected values
   // - used e.g. by TObjArraySerializer.CustomReader and
   // TInterfacedObjectFake.FakeCall/TServiceMethodExecute.ExecuteJson methods
   // - defined as var, not as const, to allow process-wide override
@@ -1324,7 +1325,7 @@ type
   TRttiJson = class(TRttiCustom)
   protected
     fClassNewInstance: TRttiJsonNewInstance;
-    /// called by ClassNewInstance
+    /// called by ClassNewInstance/DoRegisterAutoCreateFields
     procedure SetClassNewInstance;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRTTIParserType;
@@ -1350,6 +1351,27 @@ type
 
 
 { ********** JSON Serialization Wrapper Functions }
+
+var
+  /// the options used by TObjArraySerializer, TInterfacedObjectFake and
+  // TServiceMethodExecute when serializing values as JSON
+  // - used as DEFAULT_WRITEOPTIONS[DontStoreVoidJSON]
+  // - you can modify this global variable to customize the whole process
+  DEFAULT_WRITEOPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
+    [woDontStoreDefault, woSQLRawBlobAsBase64],
+    [woDontStoreDefault, woDontStoreVoid, woSQLRawBlobAsBase64]);
+
+  /// the options used by TSynJsonFileSettings.SaveIfNeeded
+  // - you can modify this global variable to customize the whole process
+  SETTINGS_WRITEOPTIONS: TTextWriterWriteObjectOptions =
+    [woHumanReadable, woStoreStoredFalse, woHumanReadableFullSetsAsStar,
+     woHumanReadableEnumSetAsComment, woInt64AsHex];
+
+  /// the options used by TServiceFactoryServer.OnLogRestExecuteMethod
+  // - you can modify this global variable to customize the whole process
+  SERVICELOG_WRITEOPTIONS: TTextWriterWriteObjectOptions =
+    [woDontStoreDefault, woDontStoreVoid, woHideSensitivePersonalInformation];
+
 
 /// serialize most kind of content as JSON, using its RTTI
 // - is just a wrapper around TTextWriter.AddTypedJSON()
@@ -1527,6 +1549,127 @@ function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar;
 // - this function will call RemoveCommentsFromJSON() before process
 function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
   TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): boolean;
+
+
+
+{ ********************* Abstract Classes with Auto-Create-Fields }
+
+/// should be called by T*AutoCreateFields constructors
+// - will also register this class type, if needed, so RegisterClass() is
+// redundant to this method
+procedure AutoCreateFields(ObjectInstance: TObject);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// should be called by T*AutoCreateFields destructors
+// - constructor should have called AutoCreateFields()
+procedure AutoDestroyFields(ObjectInstance: TObject);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// internal function called by AutoCreateFields() when inlined
+// - do not call this internal function, but always AutoCreateFields()
+function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
+
+
+type
+  /// abstract TPersistent class, which will instantiate all its nested TPersistent
+  // class published properties, then release them (and any T*ObjArray) when freed
+  // - TSynAutoCreateFields is to be preferred in most cases, thanks to its
+  // lower overhead
+  // - note that non published (e.g. public) properties won't be instantiated,
+  // serialized, nor released - but may contain weak references to other classes
+  // - please take care that you will not create any endless recursion: you should
+  // ensure that at one level, nested published properties won't have any class
+  // instance refering to its owner (there is no weak reference - remember!)
+  // - since the destructor will release all nested properties, you should
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
+  TPersistentAutoCreateFields = class(TPersistentWithCustomCreate)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields published properties
+    constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
+  end;
+
+  /// our own empowered TPersistentAutoCreateFields-like parent class
+  // - this class is a perfect parent to store any data by value, e.g. DDD Value
+  // Objects, Entities or Aggregates
+  // - is defined as an abstract class able with a virtual constructor, RTTI
+  // for published properties, and automatic memory management of all nested
+  // class published properties: any class defined as a published property will
+  // be owned by this instance - i.e. with strong reference
+  // - will also release any T*ObjArray dynamic array storage of persistents,
+  // previously registered via TJSONSerializer.RegisterObjArrayForJSON()
+  // - nested published classes (or T*ObjArray) don't need to inherit from
+  // TSynAutoCreateFields: they may be from any TPersistent/TSynPersistent type
+  // - note that non published (e.g. public) properties won't be instantiated,
+  // serialized, nor released - but may contain weak references to other classes
+  // - please take care that you will not create any endless recursion: you should
+  // ensure that at one level, nested published properties won't have any class
+  // instance refering to its owner (there is no weak reference - remember!)
+  // - since the destructor will release all nested properties, you should
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
+  // - TPersistent/TPersistentAutoCreateFields have an unexpected speed overhead
+  // due a giant lock introduced to manage property name fixup resolution
+  // (which we won't use outside the VCL) - this class is definitively faster
+  TSynAutoCreateFields = class(TSynPersistent)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields published properties
+    constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
+  end;
+
+  /// adding locking methods to a TSynAutoCreateFields with virtual constructor
+  TSynAutoCreateFieldsLocked = class(TSynPersistentLock)
+  public
+    /// initialize the object instance, and its associated lock
+    constructor Create; override;
+    /// release the instance (including the locking resource)
+    destructor Destroy; override;
+  end;
+
+  /// abstract TInterfacedObject class, which will instantiate all its nested
+  // TPersistent/TSynPersistent published properties, then release them when freed
+  // - will handle automatic memory management of all nested class and T*ObjArray
+  // published properties: any class or T*ObjArray defined as a published
+  // property will be owned by this instance - i.e. with strong reference
+  // - non published properties (e.g. public) won't be instantiated, so may
+  // store weak class references
+  // - could be used for gathering of TCollectionItem properties, e.g. for
+  // Domain objects in DDD, especially for list of value objects, with some
+  // additional methods defined by an Interface
+  // - since the destructor will release all nested properties, you should
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
+  TInterfacedObjectAutoCreateFields = class(TInterfacedObjectWithCustomCreate)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields class and T*ObjArray
+    // published properties
+    constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
+  end;
+
+  /// abstract parent class able to store settings as JSON file
+  TSynJsonFileSettings = class(TSynAutoCreateFields)
+  protected
+    fInitialJsonContent: RawUTF8;
+    fFileName: TFileName;
+  public
+    /// read existing settings from a JSON content
+    function LoadFromJson(var aJson: RawUTF8): boolean;
+    /// read existing settings from a JSON file
+    function LoadFromFile(const aFileName: TFileName): boolean; virtual;
+    /// persist the settings as a JSON file, named from LoadFromFile() parameter
+    procedure SaveIfNeeded; virtual;
+    /// optional persistence file name, as set by LoadFromFile()
+    property FileName: TFileName read fFileName;
+  end;
 
 
 implementation
@@ -3804,7 +3947,7 @@ begin
     begin
       // efficient JSON serialization from recognized PT_JSONSAVE/PTC_JSONSAVE
       P := Data^;
-      n := PDALen(P - _DALEN)^ + _DAOFF;
+      n := PDALen(P - _DALEN)^ + _DAOFF; // length(Data)
       jsonsave := TRttiJson(c.Info).fJsonSave;
       if Assigned(jsonsave) then
         repeat
@@ -3909,8 +4052,8 @@ begin
            // handle woDontStoreDefault flag over "default" attribute in code
            (not (woDontStoreDefault in c.Options) or (c.Prop.PropDefault = NO_DEFAULT) or
             not c.Prop.ValueIsDefault(Data)) and
-           // handle woDontStore0 flag
-           (not (woDontStore0 in c.Options) or not c.Prop.ValueIsVoid(Data)) then
+           // detect 0 numeric values and empty strings
+           (not (woDontStoreVoid in c.Options) or not c.Prop.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
           c.W.WriteObjectPropName(c.Prop^.Name^, c.Options);
@@ -7076,7 +7219,7 @@ end;
 
 function _New_SynObjectList(Rtti: TRttiCustom): pointer;
 begin
-  result := TSynObjectList(Rtti.ValueClass).Create({ownobjects=}true);
+  result := TSynObjectListClass(Rtti.ValueClass).Create({ownobjects=}true);
 end;
 
 function _New_InterfacedCollection(Rtti: TRttiCustom): pointer;
@@ -7436,6 +7579,170 @@ begin
     RemoveCommentsFromJSON(pointer(tmp));
     JSONToObject(ObjectInstance, pointer(tmp), result, TObjectListItemClass, Options);
   end;
+end;
+
+
+{ ********************* Abstract Classes with Auto-Create-Fields }
+
+function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
+var
+  i: PtrInt;
+begin
+  result := RttiCustom.RegisterType(ObjectInstance.ClassInfo);
+  if PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^ <> result then
+    raise ERttiException.CreateUTF8('AutoCreateFields(%): unexpected vmtAutoTable',
+      [ObjectInstance]); // paranoid check
+  result.Props.SetAutoCreateFields;
+  for i := 0 to high(result.Props.AutoCreateClasses) do
+    with TRttiJson(result.Props.AutoCreateClasses[i].Value) do
+     if not Assigned(fClassNewInstance) then
+       // for AutoCreateFields(): allow direct fClassNewInstance() call
+       SetClassNewInstance;
+  result.Flags := result.Flags + [rcfAutoCreateFields];
+end;
+
+procedure AutoCreateFields(ObjectInstance: TObject);
+var
+  rtti: TRttiCustom;
+  n: integer;
+  p: PRttiCustomProp;
+begin
+  // faster than ClassPropertiesGet: we know it is the first slot
+  rtti := PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^;
+  if (rtti = nil) or not (rcfAutoCreateFields in rtti.Flags) then
+    rtti := DoRegisterAutoCreateFields(ObjectInstance);
+  p := pointer(rtti.Props.AutoCreateClasses);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)
+  repeat
+    PPointer(PAnsiChar(ObjectInstance) + p^.OffsetGet)^ :=
+      TRttiJson(p^.Value).fClassNewInstance(p^.Value);
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
+procedure AutoDestroyFields(ObjectInstance: TObject);
+var
+  props: PRttiCustomProps;
+  n: integer;
+  p: PRttiCustomProp;
+  arr: PPAnsiChar;
+  o: TObject;
+begin
+  props := @TRttiCustom(PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^).Props;
+  p := pointer(props.AutoCreateClasses);
+  if p <> nil then
+  begin
+    n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+    repeat
+      o := PObject(PAnsiChar(ObjectInstance) + p^.OffsetGet)^;
+      if o <> nil then
+        // inlined o.Free
+        o.Destroy;
+      inc(p);
+      dec(n);
+    until n = 0;
+  end;
+  p := pointer(props.AutoCreateObjArrays);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+  repeat
+    arr := pointer(PAnsiChar(ObjectInstance) + p^.OffsetGet);
+    if arr^ <> nil then
+      // inlined ObjArrayClear()
+      RawObjectsClear(pointer(arr^), PDALen(arr^ - _DALEN)^ + _DAOFF);
+    inc(p);
+    dec(n);
+  until n = 0;
+end;
+
+
+{ TPersistentAutoCreateFields }
+
+constructor TPersistentAutoCreateFields.Create;
+begin
+  AutoCreateFields(self);
+  inherited Create;
+end;
+
+destructor TPersistentAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+
+{ TSynAutoCreateFields }
+
+constructor TSynAutoCreateFields.Create;
+begin
+  AutoCreateFields(self);
+end; // no need to call inherited TSynPersistent.Create
+
+destructor TSynAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+
+{ TSynAutoCreateFieldsLocked }
+
+constructor TSynAutoCreateFieldsLocked.Create;
+begin
+  AutoCreateFields(self);
+  inherited Create; // initialize fSafe := NewSynLocker
+end;
+
+destructor TSynAutoCreateFieldsLocked.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+
+{ TInterfacedObjectAutoCreateFields }
+
+constructor TInterfacedObjectAutoCreateFields.Create;
+begin
+  AutoCreateFields(self);
+end; // no need to call TInterfacedObjectWithCustomCreate.Create
+
+destructor TInterfacedObjectAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+
+{ TSynJsonFileSettings }
+
+function TSynJsonFileSettings.LoadFromJson(var aJson: RawUTF8): boolean;
+begin
+  result := JSONSettingsToObject(aJson, self);
+end;
+
+function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
+begin
+  fFileName := aFileName;
+  fInitialJsonContent := StringFromFile(aFileName);
+  result := LoadFromJson(fInitialJsonContent);
+end;
+
+procedure TSynJsonFileSettings.SaveIfNeeded;
+var
+  saved: RawUTF8;
+begin
+  if (self = nil) or (fFileName = '') then
+    exit;
+  saved := ObjectToJSON(self, SETTINGS_WRITEOPTIONS);
+  if saved = fInitialJsonContent then
+    exit;
+  FileFromString(saved, fFileName);
+  fInitialJsonContent := saved;
 end;
 
 

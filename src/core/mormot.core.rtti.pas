@@ -1295,11 +1295,12 @@ type
   // - rcfArrayItemManaged maps rcfIsManaged flag in ArrayRtti.Flags
   // - rcfReadIgnoreUnknownFields will let JSON unserialization ignore unknown
   // fields for this class/record
+  // - rcfAutoCreateFields is defined when AutoCreateFields() has been called
   TRttiCustomFlag = (
     rcfIsManaged, rcfObjArray, rcfBinary, rcfWithoutRtti,
     rcfSPI, rcfSynPersistentHook,
     rcfHasNestedProperties, rcfHasNestedManagedProperties, rcfArrayItemManaged,
-    rcfReadIgnoreUnknownFields);
+    rcfReadIgnoreUnknownFields, rcfAutoCreateFields);
   /// define specific behaviors for a given TypeInfo/PRttIinfo
   TRttiCustomFlags = set of TRttiCustomFlag;
 
@@ -1354,14 +1355,12 @@ type
   public
     /// one List[] item per property/field
     List: TRttiCustomPropDynArray;
-    /// points to List[] items which are managed
-    // - only set when no RTTI is available
-    Managed: array of PRttiCustomProp;
     /// how many properties/fields are in List[]
     Count: integer;
     /// total size, in bytes, of all properties/fields
     // - equals the sum of List[].Value.Size
     Size: integer;
+    AutoCreateClasses, AutoCreateObjArrays: array of PRttiCustomProp;
     /// reset all properties
     procedure Clear;
     /// locate a property/field by name
@@ -1390,8 +1389,12 @@ type
     // - it will individually fill the properties, not the whole memory
     // as TRttiCustom.FinalizeAndClear would on a record
     procedure FinalizeAndClearPublishedProperties(Instance: TObject);
+    // set AutoCreate* internal fields
+    procedure SetAutoCreateFields;
   private
     fFromTextPropNames: TRawUTF8DynArray; // store AddFromText() ShortStrings
+    /// points to List[] items which are managed
+    fManaged: array of PRttiCustomProp;
     /// finalize the managed properties of this instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     procedure FinalizeManaged(Data: PAnsiChar);
@@ -1404,6 +1407,8 @@ type
     // - will copy all published properties one-by-one
     procedure CopyProperties(Dest, Source: PAnsiChar);
   end;
+
+  PRttiCustomProps = ^TRttiCustomProps;
 
   TRttiCustomFromTextExpectedEnd = (eeNothing, eeSquare, eeCurly, eeEndKeyWord);
 
@@ -1456,6 +1461,8 @@ type
   public
     /// initialize the customizer class from known RTTI
     constructor Create(aInfo: PRttiInfo); virtual;
+    /// finalize this instance
+    destructor Destroy; override;
     /// efficiently finalize a stored value of this type
     // - if rcfObjArray is defined in Flags, will release all nested TObject
     procedure ValueFinalize(Data: pointer);
@@ -4490,19 +4497,39 @@ var
   i, n: PtrInt;
   p: PRttiCustomProp;
 begin
-  SetLength(Managed, Count);
+  SetLength(fManaged, Count);
   n := 0;
   p := pointer(List);
   for i := 1 to Count do
   begin
     if (rcfIsManaged in p^.Value.Flags) and (p^.OffsetGet >= 0) then
     begin
-      Managed[n] := p;
+      fManaged[n] := p;
       inc(n);
     end;
     inc(p);
   end;
-  SetLength(Managed, n);
+  SetLength(fManaged, n);
+end;
+
+procedure TRttiCustomProps.SetAutoCreateFields;
+var
+  i: PtrInt;
+  p: PRttiCustomProp;
+begin
+  p := pointer(List);
+  for i := 1 to Count do
+  begin
+    case p^.Value.Kind of
+      rkClass:
+        if (p^.OffsetGet >= 0) and (p^.OffsetSet >= 0) then
+          PtrArrayAdd(AutoCreateClasses, p);
+      rkDynArray:
+        if (rcfObjArray in p^.Value.Flags) and (p^.OffsetGet >= 0) then
+          PtrArrayAdd(AutoCreateObjArrays, p);
+    end;
+    inc(p);
+  end;
 end;
 
 procedure TRttiCustomProps.AsText(out Result: RawUTF8; IncludePropType: boolean;
@@ -4540,6 +4567,7 @@ begin
   Count := 0;
   Size := 0;
   fFromTextPropNames := nil;
+  fManaged := nil;
 end;
 
 procedure TRttiCustomProps.AddFromClass(ClassInfo: PRttiInfo; IncludeParents: boolean);
@@ -4613,7 +4641,7 @@ var
   p: PRttiCustomProp;
   n: integer;
 begin
-  pp := pointer(Managed);
+  pp := pointer(fManaged);
   if pp <> nil then
   begin
     n := PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF;
@@ -4678,7 +4706,7 @@ var
   offset: PtrInt;
 begin
   offset := 0;
-  pp := pointer(Managed);
+  pp := pointer(fManaged);
   if pp <> nil then
   begin
     n := PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF;
@@ -4805,6 +4833,12 @@ begin
   SetParserType(pt, pct);
 end;
 
+destructor TRttiCustom.Destroy;
+begin
+  inherited Destroy;
+  fORM.Free;
+end;
+
 procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRTTIParserType;
   const TypeName: RawUTF8; DynArrayElemType: TRttiCustom);
 begin
@@ -4861,7 +4895,7 @@ begin
   begin
     include(fFlags, rcfHasNestedProperties);
     fProps.SetManagedFromList;
-    if fProps.Managed <> nil then
+    if fProps.fManaged <> nil then
       include(fFlags, rcfHasNestedManagedProperties);
   end;
   if (fArrayRtti <> nil) and (rcfIsManaged in fArrayRtti.Flags) then
@@ -5151,9 +5185,10 @@ begin
     propcount := 0;
   end;
   Props.SetManagedFromList;
-  if Props.Managed <> nil then
+  if Props.fManaged <> nil then
     include(fFlags, rcfHasNestedManagedProperties);
 end;
+
 
 
 { TRttiCustomList }
@@ -5501,7 +5536,6 @@ begin
       else
          RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
 end;
-
 
 
 procedure InitializeUnit;
