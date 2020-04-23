@@ -24,6 +24,7 @@ uses
       elfreader,     // ELF executables
     {$endif DARWIN}
   {$endif FPCUSEVERSIONINFO}
+  errors,
   termio,
   dl;
 
@@ -297,6 +298,64 @@ begin
   result := UnixMSTimeUTC;
 end;
 
+var
+  {%H-}pthread: pointer;
+  {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973
+  pthread_setname_np: function(thread: pointer; name: PAnsiChar): LongInt; cdecl;
+  {$endif LINUXNOTBSD}
+
+procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
+var trunc: array[0..15] of AnsiChar; // truncated to 16 non space chars (including #0)
+    i, L: integer;
+begin
+  if Name = '' then
+    exit;
+  L := 0; // trim unrelevant spaces and prefixes when filling the 16 chars
+  i := 1;
+  if Name[1] = 'T' then
+    if PCardinal(Name)^ = ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24 then
+      i := 5
+    else
+      i := 2;
+  while i <= length(Name) do
+  begin
+    if Name[i] > ' ' then
+    begin
+      trunc[L] := Name[i];
+      inc(L);
+      if L = high(trunc) then
+        break;
+    end;
+    inc(i);
+  end;
+  if L = 0 then
+    exit;
+  trunc[L] := #0;
+  {$ifdef LINUXNOTBSD}
+  if Assigned(pthread_setname_np) then
+    pthread_setname_np(pointer(ThreadID), @trunc[0]);
+  {$endif LINUXNOTBSD}
+end;
+
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+begin
+  if ThreadID <> MainThreadID then // don't change the main process name
+    SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
+end;
+
+function TSynLogExceptionContext.AdditionalInfo(
+  out ExceptionNames: TPUTF8CharDynArray): cardinal;
+begin
+  result := 0; // Windows/CLR specific by now
+end;
+
+var
+  _RawLogException: TOnRawLogException;
+
+// FPC: intercept via the RaiseProc global variable
+{$define WITH_RAISEPROC}
+// RaiseProc redirection is implemented in main mormot.core.os.pas
+
 const
   faInvalidFile = faDirectory;
   faDirectoryMask = faDirectory;
@@ -310,6 +369,11 @@ begin
     result := FileDateToDateTime(Age)
   else
     result := 0;
+end;
+
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+begin
+  result := FileSetDate(Dest, FileGetDate(SourceHandle))=0;
 end;
 
 function FileSize(const FileName: TFileName): Int64;
@@ -374,14 +438,29 @@ begin // SysUtils.FileOpen = fpOpen + fpFlock
   result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
 end;
 
-procedure SetEndOfFile(hFile: cInt);
+procedure SetEndOfFile(F: THandle);
 begin
-  FpFtruncate(hFile, FPLseek(hFile, 0, SEEK_CUR));
+  FpFtruncate(F, FPLseek(F, 0, SEEK_CUR));
 end;
 
-procedure FlushFileBuffers(hFile: cInt);
+procedure FlushFileBuffers(F: THandle);
 begin
-  FpFsync(hFile);
+  FpFsync(F);
+end;
+
+function GetLastError: longint;
+begin
+  result := fpgeterrno;
+end;
+
+procedure SetLastError(error: longint);
+begin
+  fpseterrno(error);
+end;
+
+function GetErrorText(error: longint): RawUTF8;
+begin
+  result := StrError(error);
 end;
 
 function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
@@ -958,6 +1037,14 @@ begin
   with uts do
     OSVersionText := sysname + '-' + release + ' ' + version;
   {$else}
+  {$ifndef ANDROID}
+  pthread := dlopen('libpthread.so.0', RTLD_LAZY);
+  if pthread <> nil then begin
+    {$ifdef LINUXNOTBSD}
+    @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+    {$endif LINUXNOTBSD}
+  end;
+  {$endif ANDROID}
   prod := Trim(StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
   begin

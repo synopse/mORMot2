@@ -42,7 +42,7 @@ const
 function FileTimeToUnixTime(const FT: TFileTime): Int64;
 {$ifdef CPU64}
 var
-  nano100: Int64;
+  nano100: Int64; // TFileTime is in 100 ns unit
 {$endif}
 begin
   {$ifdef CPU64}
@@ -56,7 +56,7 @@ end;
 function FileTimeToUnixMSTime(const FT: TFileTime): Int64;
 {$ifdef CPU64}
 var
-  nano100: Int64;
+  nano100: Int64; // TFileTime is in 100 ns unit
 {$endif}
 begin
   {$ifdef CPU64}
@@ -71,7 +71,7 @@ function UnixTimeUTC: Int64;
 var
   ft: TFileTime;
 begin
-  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  GetSystemTimeAsFileTime(ft); // fast but with HW low resolution
   result := FileTimeToUnixTime(ft);
 end;
 
@@ -102,6 +102,17 @@ procedure LeaveCriticalSection;       external kernel32;
 procedure DeleteCriticalSection;      external kernel32;
 function  TryEnterCriticalSection;    external kernel32;
 procedure AllocConsole;               external kernel32;
+function  GetModuleHandle;            external kernel32;
+function  GetCurrentThreadId;         external kernel32;
+function  GetEnvironmentStringsW;     external kernel32;
+function  FreeEnvironmentStringsW;    external kernel32;
+function  RtlCaptureStackBackTrace;   external kernel32;
+function  IsDebuggerPresent;          external kernel32;
+procedure SetEndOfFile;               external kernel32;
+procedure FlushFileBuffers;           external kernel32;
+function  GetLastError;               external kernel32;
+procedure SetLastError;               external kernel32;
+
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
@@ -199,6 +210,22 @@ begin
   result := SysUtils.DeleteFile(aFileName);
 end;
 
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+var
+  FileTime: TFileTime;
+  D: THandle;
+begin
+  D := FileOpen(Dest, fmOpenWrite);
+  if D<>THandle(-1) then
+  begin
+    result := GetFileTime(SourceHandle, nil, nil, @FileTime) and
+              SetFileTime(D, nil, nil, @FileTime);
+    FileClose(D);
+  end
+  else
+    result := false;
+end;
+
 function RenameFile(const OldName, NewName: TFileName): boolean;
 begin
   result := SysUtils.RenameFile(OldName,NewName);
@@ -206,7 +233,7 @@ end;
 
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin
-  if OSVersion>=wVista then // don't use the flag on XP
+  if OSVersion >= wVista then // don't use the flag on XP
     result := CreateFile(pointer(FileName), GENERIC_READ,
       FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
       OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN, 0)
@@ -266,6 +293,265 @@ begin
   if (ms <> 0) or not SwitchToThread then
     Windows.Sleep(ms);
 end;
+
+{$ifdef FPC}
+  {$define NOSETTHREADNAME} // only tested and supported on Delphi
+{$endif FPC}
+
+{$ifdef NOSETTHREADNAME}
+
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+begin
+end;
+
+{$else}
+
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+var s: AnsiString;
+    {$ifndef ISDELPHIXE2}
+    {$ifdef MSWINDOWS}
+    info: record
+      FType: LongWord;     // must be 0x1000
+      FName: PAnsiChar;    // pointer to name (in user address space)
+      FThreadID: LongWord; // thread ID (-1 indicates caller thread)
+      FFlags: LongWord;    // reserved for future use, must be zero
+    end;
+    {$endif}
+    {$endif}
+begin
+  if not IsDebuggerPresent then
+    exit;
+  s := AnsiString(Name);
+  {$ifdef ISDELPHIXE2}
+  TThread.NameThreadForDebugging(s,ThreadID); // use
+  {$else}
+  info.FType := $1000;
+  info.FName := pointer(s);
+  info.FThreadID := ThreadID;
+  info.FFlags := 0;
+  try
+    RaiseException($406D1388,0,SizeOf(info) div SizeOf(LongWord),@info);
+  except {ignore} end;
+  {$endif ISDELPHIXE2}
+end;
+
+{$endif NOSETTHREADNAME}
+
+{$ifndef NOEXCEPTIONINTERCEPT}
+
+const
+  // see http://msdn.microsoft.com/en-us/library/xcb2z8hs
+  cSetThreadNameException = $406D1388;
+
+  // https://docs.microsoft.com/en-us/archive/blogs/yizhang/interpreting-hresults-returned-from-netclr-0x8013xxxx
+  DOTNET_EXCEPTIONNAME: array[0..83] of PUTF8Char = (
+    'Access', 'AmbiguousMatch', 'appdomainUnloaded', 'Application', 'Argument',
+    'ArgumentNull', 'ArgumentOutOfRange', 'Arithmetic', 'ArrayTypeMismatch',
+    'BadImageFormat', 'CannotUnloadappdomain', 'ContextMarshal', 'Cryptographic',
+    'CryptographicUnexpectedOperation', 'CustomAttributeFormat',
+    'DirectoryNotFound', 'DirectoryNotFound', 'DivideByZero', 'DllNotFound',
+    'DuplicateWaitObject', 'EndOfStream', 'EntryPointNotFound', '',
+    'ExecutionEngine', 'External', 'FieldAccess', 'FileLoad', 'FileLoad',
+    'FileNotFound', 'Format', 'IndexOutOfRange', 'InvalidCast',
+    'InvalidComObject', 'InvalidFilterCriteria', 'InvalidOleVariantType',
+    'InvalidOperation', 'InvalidProgram', 'IO', 'IsolatedStorage',
+    'MarshalDirective', 'MethodAccess', 'MissingField',
+    'MissingManifestResource', 'MissingMember', 'MissingMethod',
+    'MulticastNotSupported', 'NotFiniteNumber', 'NotImplemented',
+    'NotSupported', 'NullReference', 'OutOfMemory', 'Overflow',
+    'PlatformNotSupported', 'Policy', 'Rank', 'ReflectionTypeLoad', 'Remoting',
+    'RemotingTimeout', 'SafeArrayTypeMismatch', 'SafeArrayRankMismatch',
+    'Security', 'SEH', 'Serialization', 'Server', 'StackOverflow',
+    'SUDSGenerator', 'SUDSParser', 'SynchronizationLock', 'System', 'Target',
+    'TargetInvocation', 'TargetParameterCount', 'ThreadAbort',
+    'ThreadInterrupted', 'ThreadState', 'ThreadStop', 'TypeInitialization',
+    'TypeLoad', 'TypeUnloaded', 'UnauthorizedAccess', 'InClassConstructor',
+    'KeyNotFound', 'InsufficientStack', 'InsufficientMemory');
+
+  DOTNET_EXCEPTIONHRESULT: array[0..83] of cardinal = (
+    $8013151A, $8000211D, $80131015, $80131600, $80070057, $80004003, $80131502,
+    $80070216, $80131503, $8007000B, $80131015, $80090020, $80004001, $80131431,
+    $80131537, $80070003, $80030003, $80020012, $80131524, $80131529, $00801338,
+    $80131522, $80131500, $80131506, $80004005, $80131507, $80131621, $80131018,
+    $80070002, $80131537, $80131508, $80004002, $80131527, $80131601, $80131531,
+    $80131509, $8013153A, $80131620, $80131450, $80131535, $80131510, $80131511,
+    $80131532, $80131512, $80131513, $80131514, $80131528, $80004001, $80131515,
+    $80004003, $8007000E, $80131516, $80131539, $80131416, $80131517, $80131602,
+    $8013150B, $8013150B, $80131533, $80131538, $8013150A, $80004005, $8013150C,
+    $8013150E, $800703E9, $80131500, $80131500, $80131518, $80131501, $80131603,
+    $80131604, $80138002, $80131530, $80131519, $80131520, $80131521, $80131534,
+    $80131522, $80131013, $80070005, $80131543, $80131577, $80131578, $8013153D);
+
+type
+  // avoid linking of ComObj.pas just for EOleSysError
+  EOleSysError = class(Exception)
+  public
+    ErrorCode: cardinal;
+  end;
+
+function ExceptionInheritsFrom(E: TClass; const Name: ShortString): boolean;
+begin
+  result := true;
+  while (E <> nil) and (E <> Exception) do
+    if PropNameEquals(PPointer(PtrInt(E) + vmtClassName)^, @Name) then
+      exit
+    else
+      E := GetClassParent(E);
+  result := false;
+end;
+
+function TSynLogExceptionContext.AdditionalInfo(
+  out ExceptionNames: TPUTF8CharDynArray): cardinal;
+var
+  i: PtrInt;
+begin
+  if ExceptionInheritsFrom(EClass, 'EOleSysError') then
+  begin
+    result := EOleSysError(EInstance).ErrorCode;
+    for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
+      if DOTNET_EXCEPTIONHRESULT[i] = result then
+        PtrArrayAdd(ExceptionNames, DOTNET_EXCEPTIONNAME[i]);
+  end
+  else
+    result := 0;
+end;
+
+var
+  _RawLogException: TOnRawLogException;
+
+{$ifdef FPC}
+  {$ifdef WIN64}
+    {$define WITH_VECTOREXCEPT} // use AddVectoredExceptionHandler Win64 API
+  {$else}
+    // Win32, Linux: intercept via the RaiseProc global variable
+    {$define WITH_RAISEPROC} // RaiseProc is set in main mormot.core.os.pas
+  {$endif}
+{$else}
+  {$ifdef CPU64}
+    {$define WITH_VECTOREXCEPT}
+  {$else}
+    {$define WITH_RTLUNWINDPROC} //  use x86_64 asm -> Win32 only
+  {$endif}
+{$endif FPC}
+
+{$ifndef WITH_RAISEPROC}
+
+type
+  PExceptionRecord = ^TExceptionRecord;
+  TExceptionRecord = record
+    ExceptionCode: DWord;
+    ExceptionFlags: DWord;
+    OuterException: PExceptionRecord;
+    ExceptionAddress: PtrUInt;
+    NumberParameters: Longint;
+    case {IsOsException:} Boolean of
+      true:
+        (ExceptionInformation: array[0..14] of PtrUInt);
+      false:
+        (ExceptAddr: PtrUInt;
+         ExceptObject: Exception);
+  end;
+  GetExceptionClass = function(const P: TExceptionRecord): ExceptClass;
+
+const
+  {$ifdef FPC}
+  cDelphiException = $E0465043;
+  {$else}
+  cDelphiException = $0EEDFADE;
+  {$endif FPC}
+
+procedure LogExcept(stack: PPtrUInt; const Exc: TExceptionRecord);
+var
+  ctxt: TSynLogExceptionContext;
+  backuplasterror: DWORD;
+  backuphandler: TOnRawLogException;
+begin
+  if Exc.ExceptionCode = cSetThreadNameException then
+    exit;
+  backuplasterror := GetLastError;
+  backuphandler := _RawLogException;
+  try
+    _RawLogException := nil; // disable nested exception
+    ctxt.ECode := Exc.ExceptionCode;
+    if (Exc.ExceptionCode = cDelphiException) and (Exc.ExceptObject <> nil) then
+    begin
+      if Exc.ExceptObject.InheritsFrom(Exception) then
+        ctxt.EClass := PPointer(Exc.ExceptObject)^
+      else
+        ctxt.EClass := EExternalException;
+      ctxt.EInstance := Exc.ExceptObject;
+      ctxt.ELevel := sllException;
+      ctxt.EAddr := Exc.ExceptAddr;
+    end
+    else
+    begin
+      if Assigned(ExceptClsProc) then
+        ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
+      else
+        ctxt.EClass := EExternal;
+      ctxt.EInstance := nil;
+      ctxt.ELevel := sllExceptionOS;
+      ctxt.EAddr := Exc.ExceptionAddress;
+    end;
+    ctxt.EStack := stack;
+    ctxt.EStackCount := 0;
+    ctxt.ETimestamp := UnixTimeUTC; // fast API call
+    _RawLogException(ctxt);
+  except
+    { ignore any nested exception }
+  end;
+  _RawLogException := backuphandler;
+  SetLastError(backuplasterror); // code above could have changed this
+end;
+
+{$ifdef WITH_VECTOREXCEPT}
+
+type
+  PExceptionInfo = ^TExceptionInfo;
+  TExceptionInfo = packed record
+    ExceptionRecord: PExceptionRecord;
+    ContextRecord: pointer;
+  end;
+
+var
+  AddVectoredExceptionHandler: function(FirstHandler: cardinal;
+    VectoredHandler: pointer): PtrInt; stdcall;
+
+function SynLogVectoredHandler(ExceptionInfo: PExceptionInfo): PtrInt; stdcall;
+const
+  EXCEPTION_CONTINUE_SEARCH = 0;
+begin
+  if Assigned(_RawLogException) then
+    LogExcept(nil, ExceptionInfo^.ExceptionRecord^);
+  result := EXCEPTION_CONTINUE_SEARCH;
+end;
+
+{$endif WITH_VECTOREXCEPT}
+
+{$ifdef WITH_RTLUNWINDPROC}
+
+var
+  oldUnWindProc: pointer;
+
+procedure SynRtlUnwind(TargetFrame, TargetIp: pointer;
+  ExceptionRecord: PExceptionRecord; ReturnValue: Pointer); stdcall;
+asm
+        cmp     dword ptr _RawLogException, 0
+        jz      @old
+        pushad
+        mov     eax, TargetFrame
+        mov     edx, ExceptionRecord
+        call    LogExcept
+        popad
+@old:   pop     ebp // hidden push ebp at asm level
+        jmp     oldUnWindProc
+end;
+
+{$endif WITH_RTLUNWINDPROC}
+
+{$endif WITH_RAISEPROC}
+
+{$endif NOEXCEPTIONINTERCEPT}
 
 type
   TProcessMemoryCounters = record
@@ -329,12 +615,26 @@ procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUTF8);
 var // defined here to avoid linking mormot.core.text.pas
   tmp: TSynTempBuffer;
 begin
+  if Len <= 0 then
+    exit;
   tmp.Init(Len * 3);
   Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // use RTL function
   if Len > 0 then
     dec(Len); // UnicodeToUtf8() result includes the null terminator
   FastSetString(res, tmp.buf, Len);
   tmp.Done;
+end;
+
+function GetErrorText(error: longint): RawUTF8;
+var
+  Len: Integer;
+  Buffer: array[0..511] of WideChar;
+begin
+  Len := FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_ARGUMENT_ARRAY,
+    nil, error, 0, Buffer{%H-}, SizeOf(Buffer), nil);
+  while (Len > 0) and (ord(Buffer[Len - 1]) in [0..32, ord('.')]) do
+    dec(Len);
+  RawUnicodeToUtf8(Buffer, Len, result);
 end;
 
 function EnumProcessName(PID: Cardinal): RawUTF8;
@@ -816,6 +1116,9 @@ begin
   GetSystemTimePreciseAsFileTime := GetProcAddress(h, 'GetSystemTimePreciseAsFileTime');
   if not Assigned(GetSystemTimePreciseAsFileTime) then // Win8+
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
+  {$ifdef WITH_VECTOREXCEPT}
+  AddVectoredExceptionHandler := GetProcAddress(h, 'AddVectoredExceptionHandler');
+  {$endif WITH_VECTOREXCEPT}
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid

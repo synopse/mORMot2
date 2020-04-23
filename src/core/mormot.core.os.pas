@@ -410,6 +410,8 @@ function GetSystemPath(kind: TSystemPath): TFileName;
 {$ifdef MSWINDOWS}
 
 type
+  TThreadID = DWORD;
+
   /// direct access to the Windows Registry
   // - could be used as alternative to TRegistry, which doesn't behave the same on
   // all Delphi versions, and is enhanced on FPC (e.g. which supports REG_MULTI_SZ)
@@ -438,26 +440,29 @@ type
     function ReadEnumEntries: TRawUTF8DynArray;
   end;
 
-{$endif MSWINDOWS}
 
-
-{ ****************** Unicode, Time, File, Console process }
-
-{$ifdef MSWINDOWS}
-type
-  /// redefined as our own mormot.core.os type to avoid dependency to Windows
-  TSystemTime = Windows.TSystemTime;
-
-  {$ifdef ISDELPHI}
-  /// redefined as our own mormot.core.os type to avoid dependency to Windows
-  TRTLCriticalSection = Windows.TRTLCriticalSection;
-  {$endif ISDELPHI}
-
-/// returns the current UTC time as TSystemTime
-// - under Delphi/Windows, directly call the homonymous Win32 API
+/// retrieves the current executable module handle, i.e.  its memory load address
 // - redefined in mormot.core.os to avoid dependency to Windows
-// - you should call directly FPC's version otherwise
-procedure GetLocalTime(out result: TSystemTime); stdcall;
+function GetModuleHandle(lpModuleName: PChar): HMODULE; stdcall;
+
+/// retrieves the current stack trace
+// - only available since Windows XP
+// - FramesToSkip + FramesToCapture should be <= 62
+function RtlCaptureStackBackTrace(FramesToSkip, FramesToCapture: cardinal;
+  BackTrace, BackTraceHash: pointer): byte; stdcall;
+
+/// compatibility function, wrapping Win32 API available since XP
+function IsDebuggerPresent: BOOL; stdcall;
+
+/// retrieves the current thread ID
+// - redefined in mormot.core.os to avoid dependency to Windows
+function GetCurrentThreadId: DWORD; stdcall;
+
+/// redefined in mormot.core.os to avoid dependency to Windows
+function GetEnvironmentStringsW: PWideChar; stdcall;
+
+/// redefined in mormot.core.os to avoid dependency to Windows
+function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
 
 /// try to enter a Critical Section (Lock)
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -481,6 +486,27 @@ function DeleteFile(const aFileName: TFileName): boolean;
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function RenameFile(const OldName, NewName: TFileName): boolean;
+
+{$endif MSWINDOWS}
+
+
+{ ****************** Unicode, Time, File, Console process }
+
+{$ifdef MSWINDOWS}
+type
+  /// redefined as our own mormot.core.os type to avoid dependency to Windows
+  TSystemTime = Windows.TSystemTime;
+
+  {$ifdef ISDELPHI}
+  /// redefined as our own mormot.core.os type to avoid dependency to Windows
+  TRTLCriticalSection = Windows.TRTLCriticalSection;
+  {$endif ISDELPHI}
+
+/// returns the current UTC time as TSystemTime
+// - under Delphi/Windows, directly call the homonymous Win32 API
+// - redefined in mormot.core.os to avoid dependency to Windows
+// - you should call directly FPC's version otherwise
+procedure GetLocalTime(out result: TSystemTime); stdcall;
 
 {$endif MSWINDOWS}
 
@@ -518,6 +544,25 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 procedure GetSystemTime(out result: TSystemTime);
   {$ifdef MSWINDOWS} stdcall; {$endif}
 
+/// compatibility function, wrapping Win32 API file truncate at current position
+procedure SetEndOfFile(F: THandle);
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
+/// compatibility function, wrapping Win32 API file flush to disk
+procedure FlushFileBuffers(F: THandle);
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
+/// compatibility function, wrapping Win32 API last error code
+function GetLastError: longint;
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
+/// compatibility function, wrapping Win32 API last error code
+procedure SetLastError(error: longint);
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
+/// returns a given error code as plain text
+// - calls FormatMessageW on Windows, or StrError() on POSIX
+function GetErrorText(error: longint): RawUTF8;
 
 /// compatibility function, wrapping GetACP() Win32 API function
 // - returns the curent system code page (default WinAnsi)
@@ -605,6 +650,52 @@ var
 // - in respect to RTL's Sleep() function, it will return on ESysEINTR
 procedure SleepHiRes(ms: cardinal);
 
+/// low-level naming of a thread
+// - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+
+{$ifndef NOEXCEPTIONINTERCEPT}
+
+type
+  /// calling context when intercepting exceptions
+  // - used e.g. for TSynLogExceptionToStr or RawExceptionIntercept() handlers
+  TSynLogExceptionContext = object
+    /// the raised exception class
+    EClass: ExceptClass;
+    /// the Delphi Exception instance
+    // - may be nil for external/OS exceptions
+    EInstance: Exception;
+    /// the OS-level exception code
+    // - could be $0EEDFAE0 of $0EEDFADE for Delphi-generated exceptions
+    ECode: DWord;
+    /// the address where the exception occured
+    EAddr: PtrUInt;
+    /// the optional stack trace
+    EStack: PPtrUInt;
+    /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
+    EStackCount: integer;
+    /// timestamp of this exception, as number of seconds since UNIX Epoch (TUnixTime)
+    // - UnixTimeUTC is faster than NowUTC or GetSystemTime
+    // - use UnixTimeToDateTime() to convert it into a regular TDateTime
+    ETimestamp: Int64;
+    /// the logging level corresponding to this exception
+    // - may be either sllException or sllExceptionOS
+    ELevel: TSynLogInfo;
+    /// retrieve some extended information about a given Exception
+    // - on Windows, recognize most DotNet CLR Exception Names
+    function AdditionalInfo(out ExceptionNames: TPUTF8CharDynArray): cardinal;
+  end;
+
+  /// the global function signature expected by RawExceptionIntercept()
+  // - assigned e.g. to SynLogException() in mormot.core.log.pas
+  TOnRawLogException = procedure(const Ctxt: TSynLogExceptionContext);
+
+/// setup Exception interception for the whole process
+// - call RawExceptionIntercept(nil) to disable custom exception handling
+procedure RawExceptionIntercept(const Handler: TOnRawLogException);
+
+{$endif NOEXCEPTIONINTERCEPT}
+
 /// returns a high-resolution system-wide monotonic timestamp as microseconds
 // - under Linux/POSIX, has true microseconds resolution, calling e.g.
 // CLOCK_MONOTONIC on Linux/BSD
@@ -615,6 +706,9 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 // - returns 0 if file doesn't exist
 // - under Windows, will use GetFileAttributesEx fast API
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
+
+/// copy the date of one file to another
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
 
 /// get a file size, from its name
 // - returns 0 if file doesn't exist
@@ -733,6 +827,29 @@ type
     property FileHandle: THandle read fFile;
   end;
 
+  /// a TStream created from a file content, using fast memory mapping
+  TSynMemoryStreamMapped = class(TSynMemoryStream)
+  protected
+    fMap: TMemoryMap;
+    fFileStream: TFileStream;
+    fFileName: TFileName;
+  public
+    /// create a TStream from a file content using fast memory mapping
+    // - if aCustomSize and aCustomOffset are specified, the corresponding
+    // map view if created (by default, will map whole file)
+    constructor Create(const aFileName: TFileName;
+      aCustomSize: PtrUInt = 0; aCustomOffset: Int64 = 0); overload;
+    /// create a TStream from a file content using fast memory mapping
+    // - if aCustomSize and aCustomOffset are specified, the corresponding
+    // map view if created (by default, will map whole file)
+    constructor Create(aFile: THandle;
+      aCustomSize: PtrUInt = 0; aCustomOffset: Int64 = 0); overload;
+    /// release any internal mapped file instance
+    destructor Destroy; override;
+    /// the file name, if created from such Create(aFileName) constructor
+    property FileName: TFileName read fFileName;
+  end;
+
 
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
@@ -754,6 +871,12 @@ function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 
+type
+  /// available console colors
+  TConsoleColor = (
+    ccBlack, ccBlue, ccGreen, ccCyan, ccRed, ccMagenta, ccBrown, ccLightGray,
+    ccDarkGray, ccLightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
+    ccYellow, ccWhite);
 
 {$ifdef LINUX}
 var
@@ -791,8 +914,10 @@ procedure ConsoleWaitForEnterKey;
 function ConsoleReadBody: RawByteString;
 
 {$ifdef MSWINDOWS}
+
 /// low-level access to the keyboard state of a given key
 function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
+
 {$endif MSWINDOWS}
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded String
@@ -1043,10 +1168,6 @@ begin
         P := pointer(result);
         repeat
           Chunk := Size;
-          {$ifdef MSWINDOWS} // FILE_FLAG_SEQUENTIAL_SCAN has limits on XP
-          if Chunk > 32 shl 20 then
-            Chunk := 32 shl 20; // avoid e.g. ERROR_NO_SYSTEM_RESOURCES
-          {$endif}
           Read := FileRead(F, P^, Chunk);
           if Read <= 0 then
           begin
@@ -1150,6 +1271,80 @@ begin
   result := DeleteFile(fn);
 end;
 
+{$ifndef NOEXCEPTIONINTERCEPT}
+
+{$ifdef WITH_RAISEPROC} // for FPC on Win32 + Linux (Win64=WITH_VECTOREXCEPT)
+var
+  OldRaiseProc: TExceptProc;
+
+procedure SynRaiseProc(Obj: TObject; Addr: CodePointer;
+  FrameCount: Longint; Frame: PCodePointer);
+var
+  ctxt: TSynLogExceptionContext;
+  backuplasterror: DWORD;
+  backuphandler: TOnRawLogException;
+begin
+  if Assigned(_RawLogException) then
+    if (Obj <> nil) and (Obj.InheritsFrom(Exception)) then
+    begin
+      backuplasterror := GetLastError;
+      backuphandler := _RawLogException;
+      try
+        _RawLogException := nil; // disable exception
+        ctxt.EClass := PPointer(Obj)^;
+        ctxt.EInstance := Exception(Obj);
+        ctxt.EAddr := PtrUInt(Addr);
+        if Obj.InheritsFrom(EExternal) then
+          ctxt.ELevel := sllExceptionOS
+        else
+          ctxt.ELevel := sllException;
+        ctxt.ETimestamp := UnixTimeUTC;
+        ctxt.EStack := pointer(Frame);
+        ctxt.EStackCount := FrameCount;
+        _RawLogException(ctxt);
+      except
+        { ignore any nested exception }
+      end;
+      _RawLogException := backuphandler;
+      SetLastError(backuplasterror); // may have changed above
+    end;
+  if Assigned(OldRaiseProc) then
+    OldRaiseProc(Obj, Addr, FrameCount, Frame);
+end;
+
+{$endif WITH_RAISEPROC}
+
+procedure RawExceptionIntercept(const Handler: TOnRawLogException);
+begin
+  _RawLogException := Handler;
+  if not Assigned(Handler) then
+    exit;
+  {$ifdef WITH_RAISEPROC} // FPC RTL redirection function
+  if @RaiseProc <> @SynRaiseProc then
+  begin
+    OldRaiseProc := RaiseProc;
+    RaiseProc := @SynRaiseProc; // register once
+  end;
+  {$endif WITH_RAISEPROC}
+  {$ifdef WITH_VECTOREXCEPT} // Win64 official API
+  // RemoveVectoredContinueHandler() is available under 64 bit editions only
+  if Assigned(AddVectoredExceptionHandler) then
+  begin
+    AddVectoredExceptionHandler(0, @SynLogVectoredHandler);
+    AddVectoredExceptionHandler := nil; // register once
+  end;
+  {$endif WITH_VECTOREXCEPT}
+  {$ifdef WITH_RTLUNWINDPROC} // Delphi x86 RTL redirection function
+  if @RTLUnwindProc <> @SynRtlUnwind then
+  begin
+    oldUnWindProc := RTLUnwindProc;
+    RTLUnwindProc := @SynRtlUnwind;
+  end;
+  {$endif WITH_RTLUNWINDPROC}
+end;
+
+{$endif NOEXCEPTIONINTERCEPT}
+
 
 { TMemoryMap }
 
@@ -1239,6 +1434,37 @@ begin
     else if (PWord(fBuf)^ = $BBEF) and (PByteArray(fBuf)[2] = $BF) then
       result := isUTF8;
 end;
+
+
+{ TSynMemoryStreamMapped }
+
+constructor TSynMemoryStreamMapped.Create(const aFileName: TFileName;
+  aCustomSize: PtrUInt; aCustomOffset: Int64);
+begin
+  fFileName := aFileName;
+  // Memory-mapped file access does not go through the cache manager so
+  // using FileOpenSequentialRead() is pointless here
+  fFileStream := TFileStream.Create(aFileName, fmOpenRead or fmShareDenyNone);
+  Create(fFileStream.Handle, aCustomSize, aCustomOffset);
+end;
+
+constructor TSynMemoryStreamMapped.Create(aFile: THandle;
+  aCustomSize: PtrUInt; aCustomOffset: Int64);
+begin
+  if not fMap.Map(aFile, aCustomSize, aCustomOffset) then
+    raise EOSException.CreateFmt('%s.Create(%s) mapping error',
+      [ClassNameShort(self)^, fFileName]);
+  inherited Create(fMap.fBuf, fMap.fBufSize);
+end;
+
+destructor TSynMemoryStreamMapped.Destroy;
+begin
+  fMap.UnMap;
+  fFileStream.Free;
+  inherited;
+end;
+
+
 
 function GetDelphiCompilerVersion: RawUTF8;
 begin
@@ -1428,6 +1654,11 @@ begin
   for i := 0 to high(AutoSlots) do
     FreeMem(AutoSlots[i]);
   ExeVersion.Version.Free;
+  DeleteCriticalSection(AutoSlotsLock);
+  {$ifndef MSWINDOWS}
+  if pthread <> nil then
+    dlclose(pthread);
+  {$endif MSWINDOWS}
 end;
 
 
