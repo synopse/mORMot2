@@ -18,7 +18,7 @@ unit mormot.core.base;
     - Sorting/Comparison Functions
     - Some Convenient TStream descendants and File access functions
     - Faster Alternative to RTL Standard Functions
-    - Some Reusable Constant Definitions
+    - Raw Shared Constants / Types Definitions
 
    Aim of those types and functions is to be cross-platform and cross-compiler,
   without any dependency but the main FPC/Delphi RTL. It also detects the
@@ -408,79 +408,13 @@ type
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
 
-{ some types defined here, but implemented in mormot.core.datetime or
-  mormot.core.base, so that it may be identified by mormot.core.rtti }
-
-type
-  /// fast bit-encoded date and time value
-  // - see TTimeLog helper functions and types in mormot.core.datetime
-  // - faster than Iso-8601 text and TDateTime, e.g. can be used as published
-  // property field in mORMot's TSQLRecord (see also TModTime and TCreateTime)
-  // - use internally for computation an abstract "year" of 16 months of 32 days
-  // of 32 hours of 64 minutes of 64 seconds - same as Iso8601ToTimeLog()
-  // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow functions, or
-  // type-cast any TTimeLog value with the TTimeLogBits memory structure for
-  // direct access to its bit-oriented content (or via PTimeLogBits pointer)
-  // - since TTimeLog type is bit-oriented, you can't just add or substract two
-  // TTimeLog values when doing date/time computation: use a TDateTime temporary
-  // conversion in such case:
-  // ! aTimestamp := TimeLogFromDateTime(IncDay(TimeLogToDateTime(aTimestamp)));
-  TTimeLog = type Int64;
-  /// dynamic array of TTimeLog
-  // - recognized e.g. by TDynArray JSON serialization
-  TTimeLogDynArray = array of TTimeLog;
-
-  /// a type alias, which will be serialized as ISO-8601 with milliseconds
-  // - i.e. 'YYYY-MM-DD hh:mm:ss.sss' or 'YYYYMMDD hhmmss.sss' format
-  TDateTimeMS = type TDateTime;
-  /// a dynamic array of TDateTimeMS values
-  TDateTimeMSDynArray = array of TDateTimeMS;
-  /// pointer to a dynamic array of TDateTimeMS values
-  PDateTimeMSDynArray = ^TDateTimeMSDynArray;
-
-  /// a 64-bit identifier, defined for TSynPersistentWithID
-  // - type used for our ORM primary key, i.e. TSQLRecord.ID
-  // - it maps the SQLite3 64-bit RowID definition
-  TID = type Int64;
-  /// a pointer to TSynPersistentWithID.ID, i.e. our ORM primary key
-  PID = ^TID;
-  /// used to store a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
-  TIDDynArray = array of TID;
-  /// pointer to a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
-  PIDDynArray = ^TIDDynArray;
-
-  /// timestamp stored as second-based Unix Time
-  // - see Unix Time helper functions and types in mormot.core.datetime
-  // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
-  // - is stored as 64-bit value, so that it won't be affected by the
-  // "Year 2038" overflow issue
-  // - see TUnixMSTime for a millisecond resolution Unix Timestamp
-  // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
-  // a regular TDateTime
-  // - use UnixTimeUTC to return the current timestamp, using fast OS API call
-  // - also one of the encodings supported by SQLite3 date/time functions
-  TUnixTime = type Int64;
-  /// pointer to a timestamp stored as second-based Unix Time
-  PUnixTime = ^TUnixTime;
-  /// dynamic array of timestamps stored as second-based Unix Time
-  TUnixTimeDynArray = array of TUnixTime;
-
-  /// timestamp stored as millisecond-based Unix Time
-  // - see Unix Time helper functions and types in mormot.core.datetime
-  // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
-  // - see TUnixTime for a second resolution Unix Timestamp
-  // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
-  // to/from a regular TDateTime
-  // - also one of the JavaScript date encodings
-  TUnixMSTime = type Int64;
-  /// pointer to a timestamp stored as millisecond-based Unix Time
-  PUnixMSTime = ^TUnixMSTime;
-  /// dynamic array of timestamps stored as millisecond-based Unix Time
-  TUnixMSTimeDynArray = array of TUnixMSTime;
-
 type
   /// stack-allocated ASCII string, used by GUIDToShort() function
   TGUIDShortString = string[38];
+
+  /// used e.g. for SetThreadName/GetCurrentThreadName
+  TShort31 = string[31];
+  PShort31 = ^TShort31;
 
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
   // - such result type would avoid a string allocation on heap, so are highly
@@ -491,12 +425,6 @@ type
   /// used e.g. for TBaseWriter.AddShorter small text constants
   TShort8 = string[8];
   PShort8 = ^TShort8;
-
-  /// available console colors (under Windows at least)
-  TConsoleColor = (
-    ccBlack, ccBlue, ccGreen, ccCyan, ccRed, ccMagenta, ccBrown, ccLightGray,
-    ccDarkGray, ccLightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
-    ccYellow, ccWhite);
 
   /// cross-compiler type used for string/dynarray reference counter
   TRefCnt = {$ifdef FPC} SizeInt {$else} longint {$endif};
@@ -512,7 +440,7 @@ type
   PDALen = ^PtrInt;
 
   type
-  {$ifdef FPC}
+    {$ifdef FPC}
 
     TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
     {$ifdef HASCODEPAGE}
@@ -534,11 +462,11 @@ type
       property length: sizeint read GetLength write SetLength; // wrapper
     end;
 
-  {$else FPC}
+    {$else FPC}
 
     /// map the Delphi/FPC string header (stored before each instance)
     TStrRec = packed record
-   {$ifdef HASCODEPAGE}
+    {$ifdef HASCODEPAGE}
       {$ifdef CPU64}
       /// padding bytes for 16 byte alignment of the header
       _Padding: LongInt;
@@ -567,7 +495,7 @@ type
       length: PtrInt;
     end;
 
-  {$endif FPC}
+    {$endif FPC}
 
     PStrRec = ^TStrRec;
     PDynArrayRec = ^TDynArrayRec;
@@ -685,6 +613,11 @@ function ClassNameShort(Instance: TObject): PShortString; overload;
 
 /// just a wrapper around vmtClassName to avoid a string conversion
 procedure ClassToText(C: TClass; var result: RawUTF8);
+
+var
+  /// retrieve the unit name where a given class is implemented
+  // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
+  ClassUnit: function(C: TClass): shortstring;
 
 /// just a wrapper around vmtParent to avoid a function call
 // - slightly faster than TClass.ClassParent thanks to proper inlining
@@ -2322,6 +2255,70 @@ function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
 procedure bswap64array(a,b: PQWordArray; n: PtrInt);
 
 
+/// low-level wrapper to add a callback to a dynamic list of events
+// - by default, you can assign only one callback to an Event: but by storing
+// it as a dynamic array of events, you can use this wrapper to add one callback
+// to this list of events
+// - if the event was already registered, do nothing (i.e. won't call it twice)
+// - since this function uses an unsafe typeless EventList parameter, you should
+// not use it in high-level code, but only as wrapper within dedicated methods
+// - will add Event to EventList[] unless Event is already registered
+// - is used e.g. by TTextWriter as such:
+// ! ...
+// !   fEchos: array of TOnTextWriterEcho;
+// ! ...
+// !   procedure EchoAdd(const aEcho: TOnTextWriterEcho);
+// ! ...
+// ! procedure TEchoWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
+// ! begin
+// !   MultiEventAdd(fEchos,TMethod(aEcho));
+// ! end;
+// then callbacks are then executed as such:
+// ! if fEchos<>nil then
+// !   for i := 0 to length(fEchos)-1 do
+// !     fEchos[i](self,fEchoBuf);
+// - use MultiEventRemove() to un-register a callback from the list
+function MultiEventAdd(var EventList; const Event: TMethod): boolean;
+
+/// low-level wrapper to remove a callback from a dynamic list of events
+// - by default, you can assign only one callback to an Event: but by storing
+// it as a dynamic array of events, you can use this wrapper to remove one
+// callback already registered by MultiEventAdd() to this list of events
+// - since this function uses an unsafe typeless EventList parameter, you should
+// not use it in high-level code, but only as wrapper within dedicated methods
+// - is used e.g. by TTextWriter as such:
+// ! ...
+// !   fEchos: array of TOnTextWriterEcho;
+// ! ...
+// !   procedure EchoRemove(const aEcho: TOnTextWriterEcho);
+// ! ...
+// ! procedure TTextWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
+// ! begin
+// !   MultiEventRemove(fEchos,TMethod(aEcho));
+// ! end;
+procedure MultiEventRemove(var EventList; const Event: TMethod); overload;
+
+/// low-level wrapper to remove a callback from a dynamic list of events
+// - same as the same overloaded procedure, but accepting an EventList[] index
+// to identify the Event to be suppressed
+procedure MultiEventRemove(var EventList; Index: Integer); overload;
+
+/// low-level wrapper to check if a callback is in a dynamic list of events
+// - by default, you can assign only one callback to an Event: but by storing
+// it as a dynamic array of events, you can use this wrapper to check if
+// a callback has already been registered to this list of events
+// - used internally by MultiEventAdd() and MultiEventRemove() functions
+function MultiEventFind(const EventList; const Event: TMethod): PtrInt;
+
+/// low-level wrapper to add one or several callbacks from another list of events
+// - all events of the ToBeAddedList would be added to DestList
+// - the list is not checked for duplicates
+procedure MultiEventMerge(var DestList; const ToBeAddedList);
+
+/// compare two TMethod instances
+function EventEquals(const eventA, eventB): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
 
@@ -2615,6 +2612,13 @@ function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 // - just redirects to SynLZcompress1pas on other CPUs
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
   {$ifndef CPUINTEL} inline; {$endif}
+
+/// compress a data content using the SynLZ algorithm
+// - as expected by THttpSocket.RegisterCompress
+// - will return 'synlz' as ACCEPT-ENCODING: header parameter
+// - will store a hash of both compressed and uncompressed stream: if the
+// data is corrupted during transmission, will instantly return ''
+function CompressSynLZ(var Data: RawByteString; Compress: boolean): AnsiString;
 
 
 /// retrieve the MIME content type from a supplied binary buffer
@@ -2992,7 +2996,7 @@ type
   end;
 
 
-{ ************ Some Reusable Constant Definitions }
+{ ************ Raw Shared Constants / Types Definitions }
 
 const
   NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
@@ -3098,6 +3102,132 @@ var
   // - this global will be initialized with 'false' and 'true' constants, to
   // avoid a memory allocation each time it is assigned to a variable
   BOOL_UTF8: array[boolean] of RawUTF8;
+
+
+  { some types defined here, but implemented in mormot.core.datetime or
+    mormot.core.base, so that they may be used and identified by
+    mormot.core.rtti or mormot.core.os }
+
+type
+  /// the available logging events, as handled by mormot.core.log
+  // - defined in mormot.core.base so that it may be used by the core units,
+  // even if mormot.core.log is not involved
+  // - sllInfo will log general information events
+  // - sllDebug will log detailed debugging information
+  // - sllTrace will log low-level step by step debugging information
+  // - sllWarning will log unexpected values (not an error)
+  // - sllError will log errors
+  // - sllEnter will log every method start
+  // - sllLeave will log every method exit
+  // - sllLastError will log the GetLastError OS message
+  // - sllException will log all exception raised - available since Windows XP
+  // - sllExceptionOS will log all OS low-level exceptions (EDivByZero,
+  // ERangeError, EAccessViolation...)
+  // - sllMemory will log memory statistics (in MB units)
+  // - sllStackTrace will log caller's stack trace (it's by default part of
+  // TSynLogFamily.LevelStackTrace like sllError, sllException, sllExceptionOS,
+  // sllLastError and sllFail)
+  // - sllFail was defined for TSynTestsLogged.Failed method, and can be used
+  // to log some customer-side assertions (may be notifications, not errors)
+  // - sllSQL is dedicated to trace the SQL statements
+  // - sllCache should be used to trace the internal caching mechanism
+  // - sllResult could trace the SQL results, JSON encoded
+  // - sllDB is dedicated to trace low-level database engine features
+  // - sllHTTP could be used to trace HTTP process
+  // - sllClient/sllServer could be used to trace some Client or Server process
+  // - sllServiceCall/sllServiceReturn to trace some remote service or library
+  // - sllUserAuth to trace user authentication (e.g. for individual requests)
+  // - sllCustom* items can be used for any purpose
+  // - sllNewRun will be written when a process opens a rotated log
+  // - sllDDDError will log any DDD-related low-level error information
+  // - sllDDDInfo will log any DDD-related low-level debugging information
+  // - sllMonitoring will log the statistics information (if available),
+  // or may be used for real-time chat among connected people to ToolsAdmin
+  TSynLogInfo = (
+    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
+    sllEnter, sllLeave,
+    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
+    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
+    sllServiceCall, sllServiceReturn, sllUserAuth,
+    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
+    sllDDDError, sllDDDInfo, sllMonitoring);
+
+  /// used to define a set of logging level abilities
+  // - i.e. a combination of none or several logging event
+  // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
+  // to log all errors and exceptions
+  TSynLogInfos = set of TSynLogInfo;
+
+  /// a dynamic array of logging event levels
+  TSynLogInfoDynArray = array of TSynLogInfo;
+
+
+type
+  /// fast bit-encoded date and time value
+  // - see TTimeLog helper functions and types in mormot.core.datetime
+  // - faster than Iso-8601 text and TDateTime, e.g. can be used as published
+  // property field in mORMot's TSQLRecord (see also TModTime and TCreateTime)
+  // - use internally for computation an abstract "year" of 16 months of 32 days
+  // of 32 hours of 64 minutes of 64 seconds - same as Iso8601ToTimeLog()
+  // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow functions, or
+  // type-cast any TTimeLog value with the TTimeLogBits memory structure for
+  // direct access to its bit-oriented content (or via PTimeLogBits pointer)
+  // - since TTimeLog type is bit-oriented, you can't just add or substract two
+  // TTimeLog values when doing date/time computation: use a TDateTime temporary
+  // conversion in such case:
+  // ! aTimestamp := TimeLogFromDateTime(IncDay(TimeLogToDateTime(aTimestamp)));
+  TTimeLog = type Int64;
+  /// dynamic array of TTimeLog
+  // - recognized e.g. by TDynArray JSON serialization
+  TTimeLogDynArray = array of TTimeLog;
+
+  /// a type alias, which will be serialized as ISO-8601 with milliseconds
+  // - i.e. 'YYYY-MM-DD hh:mm:ss.sss' or 'YYYYMMDD hhmmss.sss' format
+  TDateTimeMS = type TDateTime;
+  /// a dynamic array of TDateTimeMS values
+  TDateTimeMSDynArray = array of TDateTimeMS;
+  /// pointer to a dynamic array of TDateTimeMS values
+  PDateTimeMSDynArray = ^TDateTimeMSDynArray;
+
+  /// a 64-bit identifier, defined for TSynPersistentWithID
+  // - type used for our ORM primary key, i.e. TSQLRecord.ID
+  // - it maps the SQLite3 64-bit RowID definition
+  TID = type Int64;
+  /// a pointer to TSynPersistentWithID.ID, i.e. our ORM primary key
+  PID = ^TID;
+  /// used to store a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
+  TIDDynArray = array of TID;
+  /// pointer to a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
+  PIDDynArray = ^TIDDynArray;
+
+  /// timestamp stored as second-based Unix Time
+  // - see Unix Time helper functions and types in mormot.core.datetime
+  // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
+  // - is stored as 64-bit value, so that it won't be affected by the
+  // "Year 2038" overflow issue
+  // - see TUnixMSTime for a millisecond resolution Unix Timestamp
+  // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
+  // a regular TDateTime
+  // - use UnixTimeUTC to return the current timestamp, using fast OS API call
+  // - also one of the encodings supported by SQLite3 date/time functions
+  TUnixTime = type Int64;
+  /// pointer to a timestamp stored as second-based Unix Time
+  PUnixTime = ^TUnixTime;
+  /// dynamic array of timestamps stored as second-based Unix Time
+  TUnixTimeDynArray = array of TUnixTime;
+
+  /// timestamp stored as millisecond-based Unix Time
+  // - see Unix Time helper functions and types in mormot.core.datetime
+  // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
+  // - see TUnixTime for a second resolution Unix Timestamp
+  // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
+  // to/from a regular TDateTime
+  // - also one of the JavaScript date encodings
+  TUnixMSTime = type Int64;
+  /// pointer to a timestamp stored as millisecond-based Unix Time
+  PUnixMSTime = ^TUnixMSTime;
+  /// dynamic array of timestamps stored as millisecond-based Unix Time
+  TUnixMSTimeDynArray = array of TUnixMSTime;
 
 
 
@@ -7333,6 +7463,76 @@ begin
   until CardinalCount = 0;
 end;
 
+{ MultiEvent* functions }
+
+function MultiEventFind(const EventList; const Event: TMethod): PtrInt;
+var
+  Events: TMethodDynArray absolute EventList;
+begin
+  if Event.Code <> nil then // callback assigned
+    for result := 0 to length(Events) - 1 do
+      if (Events[result].Code = Event.Code) and (Events[result].Data = Event.Data) then
+        exit;
+  result := -1;
+end;
+
+function MultiEventAdd(var EventList; const Event: TMethod): boolean;
+var
+  Events: TMethodDynArray absolute EventList;
+  n: integer;
+begin
+  result := false;
+  n := MultiEventFind(EventList, Event);
+  if n >= 0 then
+    exit; // already registered
+  result := true;
+  n := length(Events);
+  SetLength(Events, n + 1);
+  Events[n] := Event;
+end;
+
+procedure MultiEventRemove(var EventList; const Event: TMethod);
+begin
+  MultiEventRemove(EventList, MultiEventFind(EventList, Event));
+end;
+
+procedure MultiEventRemove(var EventList; Index: Integer);
+var
+  Events: TMethodDynArray absolute EventList;
+  max: integer;
+begin
+  max := length(Events);
+  if cardinal(Index) < cardinal(max) then
+  begin
+    dec(max);
+    MoveFast(Events[Index + 1], Events[Index], (max - Index) * SizeOf(Events[Index]));
+    SetLength(Events, max);
+  end;
+end;
+
+procedure MultiEventMerge(var DestList; const ToBeAddedList);
+var
+  Dest: TMethodDynArray absolute DestList;
+  New: TMethodDynArray absolute ToBeAddedList;
+  d, n: integer;
+begin
+  d := length(Dest);
+  n := length(New);
+  if n = 0 then
+    exit;
+  SetLength(Dest, d + n);
+  MoveFast(New[0], Dest[d], n * SizeOf(TMethod));
+end;
+
+function EventEquals(const eventA, eventB): boolean;
+var
+  A: TMethod absolute eventA;
+  B: TMethod absolute eventB;
+begin
+  result := (A.Code = B.Code) and (A.Data = B.Data);
+end;
+
+
 {$ifdef CPUINTEL}
 
 // optimized asm for x86 and x86_64 is located in include files
@@ -8111,6 +8311,45 @@ begin
     result := maxDst;
   if result > 0 then
     SynLZdecompress1partialsub(src, dst, src_end, dst + result, offset);
+end;
+
+function CompressSynLZ(var Data: RawByteString; Compress: boolean): AnsiString;
+var
+  DataLen, len: integer;
+  P: PAnsiChar;
+begin
+  DataLen := length(Data);
+  if DataLen <> 0 then // '' is compressed and uncompressed to ''
+    if Compress then
+    begin
+      len := SynLZcompressdestlen(DataLen) + 8;
+      SetString(result, nil, len);
+      P := pointer(result);
+      PCardinal(P)^ := Hash32(pointer(Data), DataLen);
+      len := SynLZcompress1(pointer(Data), DataLen, P + 8);
+      PCardinal(P + 4)^ := Hash32(pointer(P + 8), len);
+      SetString(Data, P, len + 8);
+    end
+    else
+    begin
+      result := '';
+      P := pointer(Data);
+      if (DataLen <= 8) or
+         (Hash32(pointer(P + 8), DataLen - 8) <> PCardinal(P + 4)^) then
+        exit;
+      len := SynLZdecompressdestlen(P + 8);
+      SetLength(result, len);
+      if (len <> 0) and
+         ((SynLZDecompress1(P + 8, DataLen - 8, pointer(result)) <> len) or
+          (Hash32(pointer(result), len) <> PCardinal(P)^)) then
+      begin
+        result := '';
+        exit;
+      end
+      else
+        SetString(Data, PAnsiChar(pointer(result)), len);
+    end;
+  result := 'synlz';
 end;
 
 
