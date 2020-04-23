@@ -4657,8 +4657,8 @@ begin
         inc(result);
 end;
 
-function TSynLogFile.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer
-  ): boolean;
+function TSynLogFile.LineContains(const aUpperSearch: RawUTF8;
+  aIndex: Integer): boolean;
 begin
   if (self = nil) or (cardinal(aIndex) >= cardinal(fCount)) or
      (aUpperSearch = '') then
@@ -4679,15 +4679,16 @@ begin
     result := 0
   else if fFreq = 0 then
   begin
-    P := fLines[aIndex]; // YYYYMMDD hhmmsszz
+    P := fLines[aIndex];
     hex2bin := @ConvertHexToBin;
     if Char4ToWord(P, Y, hex2bin) or Char2ToByte(P + 4, M, hex2bin) or
        Char2ToByte(P + 6, D, hex2bin) or Char2ToByte(P + 9, HH, hex2bin) or
        Char2ToByte(P + 11, MM, hex2bin) or Char2ToByte(P + 13, SS, hex2bin) or
        Char2ToByte(P + 15, MS, hex2bin) then
+      // not exact YYYYMMDD hhmmsszz layout -> try plain ISO-8601
       Iso8601ToDateTimePUTF8CharVar(P, 17, result)
     else if TryEncodeDate(Y, M, D, result) then
-      // MS shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
+      // MS shl 4 = 16 ms resolution in TBaseWriter.AddCurrentLogTime()
       result := result + EncodeTime(HH, MM, SS, MS shl 4)
     else
       result := 0;
@@ -4745,7 +4746,7 @@ end;
 
 function TSynLogFile.ComputeProperTime(var procndx: PtrInt): cardinal;
 var
-  start, i: integer;
+  start, i: PtrInt;
 begin
   start := procndx;
   with fLogProcNatural[procndx] do
@@ -4775,27 +4776,30 @@ begin
   until false;
 end;
 
+function StrPosILen(P, PEnd: PUTF8Char; SearchUp: PAnsiChar): PUTF8Char;
+var
+  tab: PNormTable;
+begin
+  result := P;
+  tab := @NormToUpperAnsi7;
+  while result < PEnd do
+    if IdemPChar(result, SearchUp, tab) then
+      exit
+    else
+      inc(result);
+  result := nil;
+end;
+
 procedure TSynLogFile.LoadFromMap(AverageLineLength: integer);
 var
   PBeg, P, PEnd: PUTF8Char;
-
-  function StrPosI(P, PEnd: PUTF8Char; SearchUp: PAnsiChar): PUTF8Char;
-  begin
-    result := P;
-    while result < PEnd do
-      if IdemPChar(result, SearchUp) then
-        exit
-      else
-        inc(result);
-    result := nil;
-  end;
 
   function GetOne(const UP: RawUTF8; var S: RawUTF8): boolean;
   var
     LUP: integer;
   begin
     LUP := length(UP);
-    P := StrPosI(PBeg, PEnd - LUP, pointer(UP));
+    P := StrPosILen(PBeg, PEnd - LUP, pointer(UP));
     if P = nil then
       result := false
     else
@@ -4922,7 +4926,7 @@ begin
     SetLength(fLogProcNatural, fLogProcNaturalCount);
     for i := 0 to fLogProcNaturalCount - 1 do
       if fLogProcNatural[i].Time >= 99000000 then
-      begin // overange 99.000.000 -> compute
+      begin // 99.xxx.xxx means over range -> compute
         Level := 0;
         j := fLogProcNatural[i].index;
         repeat

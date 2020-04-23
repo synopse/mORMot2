@@ -1967,6 +1967,7 @@ type
   /// the potential features, retrieved from an Intel CPU
   // - cf https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
   // - is defined on all platforms, so that an ARM desktop may browse Intel logs
+  // using TSynLogFile from mormot.core.log.pas
   TIntelCpuFeature = (
    { CPUID 1 in EDX }
    cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
@@ -1978,7 +1979,7 @@ type
    cfTM2, cfSSSE3, cfCID, cfSDBG, cfFMA, cfCX16, cfXTPR, cfPDCM,
    cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP,
-   { extended features CPUID 7 in EBX, ECX, DL }
+   { extended features CPUID 7 in EBX, ECX, EDX }
    cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
    cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
    cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT, cfCLFLUSH,
@@ -1986,8 +1987,11 @@ type
    cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE, cf_c05, cfAVX512VBMI2, cf_c07,
    cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI, cfAVX512BITALG, cf_c13, cfAVX512VPC, cf_c15,
    cf_cc16, cf_c17, cf_c18, cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23,
-   cf_c24, cf_c25, cf_c26, cf_c27, cf_c28, cf_c29, cfSGXLC, cf_c31,
-   cf_d0, cf_d1, cfAVX512NNIW, cfAVX512MAS, cf_d4, cf_d5, cf_d6, cf_d7);
+   cf_c24, cf_CLDEMOTE, cf_c26, cf_MOVDIRI, cf_MOVDIR64B, cf_ENQCMD, cfSGXLC, cf_c31,
+   cf_d0, cf_d1, cfAVX512NNIW, cfAVX512MAS, cfFSRM, cf_d5, cf_d6, cf_d7,
+   cf_AVX512VP2I, cf_d9, cf_dMDCLR, cf_d11, cf_d12, cf_TSXFA, cf_SER, cf_HYBRID,
+   cf_TSXLDTRK, cf_d17, cf_PCFG, cf_d19, cf_IBT, cf_d21, cf_d22, cf_d34,
+   cf_d24, cf_d25, cf_IBRSPB, cf_STIBP, cf_dL1DFL, cf_ARCAB, cf_d30, cf_SSBD);
 
   /// all features, as retrieved from an Intel CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
@@ -7563,7 +7567,7 @@ begin
   GetCPUID(7, regs);
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
-  PByte(@PIntegerArray(@CpuFeatures)^[4])^ := regs.edx;
+  PIntegerArray(@CpuFeatures)^[4] := regs.edx;
   {$ifdef DISABLE_SSE42} // paranoid execution on Darwin x64 (as reported by alf)
   CpuFeatures := CpuFeatures - [cfSSE42, cfAESNI, cfAVX, cfAVX2, cfFMA];
   {$else}
