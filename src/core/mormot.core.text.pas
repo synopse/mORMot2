@@ -334,6 +334,15 @@ procedure CamelCase(const text: RawUTF8; var s: RawUTF8;
   const isWord: TSynByteSet = [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+var
+  /// these procedure type must be defined if a default system.pas is used
+  // - expect generic "string" type, i.e. UnicodeString for Delphi 2009+
+  LoadResStringTranslate: procedure(var Text: string) = nil;
+
+/// UnCamelCase and translate a char buffer
+// - P is expected to be #0 ended
+// - return "string" type, i.e. UnicodeString for Delphi 2009+
+procedure GetCaptionFromPCharLen(P: PUTF8Char; out result: string);
 
 
 { ************ CSV-like Iterations over Text Buffers }
@@ -524,6 +533,9 @@ function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
 { ************ TBaseWriter parent class for Text Generation }
 
 type
+  /// event signature for TBaseWriter.OnFlushToStream callback
+  TOnTextWriterFlush = procedure(Text: PUTF8Char; Len: PtrInt) of object;
+
   /// defines how text is to be added into TBaseWriter / TTextWriter
   // - twNone will write the supplied text with no escaping
   // - twJSONEscape will properly escape " and \ as expected by JSON
@@ -551,7 +563,7 @@ type
   // the identifiers to be left-trimed for all their lowercase characters
   // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option
   // would default to the global TBaseWriter.SetDefaultEnumTrim setting
-  // - twoEndOfLineCRLF would reflect the TBaseWriter.EndOfLineCRLF property
+  // - twoEndOfLineCRLF would reflect the TEchoWriter.EndOfLineCRLF property
   // - twoBufferIsExternal would be set if the temporary buffer is not handled
   // by the instance, but specified at constructor, maybe from the stack
   // - twoIgnoreDefaultInRecord will force custom record serialization to avoid
@@ -684,6 +696,7 @@ type
     // internal temporary buffer
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
+    fOnFlushToStream: TOnTextWriterFlush;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
@@ -822,11 +835,11 @@ type
     // output, e.g. a database driver
     procedure AddFloatStr(P: PUTF8Char);
     /// append CR+LF (#13#10) chars
-    // - this method won't call EchoAdd() registered events - use AddEndOfLine()
-    // method instead
-    // - AddEndOfLine() will append either CR+LF (#13#10) or LF (#10) depending
-    // on a flag
-    procedure AddCR;
+    // - this method won't call TEchoWriter.EchoAdd() registered events - use
+    // TEchoWriter.AddEndOfLine() method instead
+    // - TEchoWriter.AddEndOfLine() will append either CR+LF (#13#10) or
+    // only LF (#10) depending on its internal options
+    procedure AddCR; {$ifdef HASINLINE} inline; {$endif}
     /// append CR+LF (#13#10) chars and #9 indentation
     // - indentation depth is defined by fHumanReadableLevel protected field
     procedure AddCRAndIndent; virtual;
@@ -838,6 +851,16 @@ type
     procedure Add3(Value: PtrUInt);
     /// append an Integer Value as a 4 digits text with comma
     procedure Add4(Value: PtrUInt);
+    /// append the current UTC date and time, in our log-friendly format
+    // - e.g. append '20110325 19241502' - with no trailing space nor tab
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    // - this method is very fast, and avoid most calculation or API calls
+    procedure AddCurrentLogTime(LocalTime: boolean);
+    /// append the current UTC date and time, in our log-friendly format
+    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    // - this method is very fast, and avoid most calculation or API calls
+    procedure AddCurrentNCSALogTime(LocalTime: boolean);
     /// append a time period, specified in micro seconds, in 00.000.000 TSynLog format
     procedure AddMicroSec(MS: cardinal);
     /// append some UTF-8 chars to the buffer
@@ -851,14 +874,18 @@ type
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJSONEscapeUTF8(const text: RawByteString);
       {$ifdef HASINLINE} inline; {$endif}
-    /// append some UTF-8 chars to the buffer
-    // - if supplied json is '', will write 'null'
-    procedure AddRawJSON(const json: RawJSON);
+    /// append some UTF-8 encoded chars to the buffer, from a generic string type
+    // - don't escapes chars according to the JSON RFC
+    // - if s is a UnicodeString, will convert UTF-16 into UTF-8
+    procedure AddNoJSONEscapeString(const s: string); virtual;
     /// append some unicode chars to the buffer
     // - WideCharCount is the unicode chars count, not the byte size
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
     procedure AddNoJSONEscapeW(WideChar: PWord; WideCharCount: integer);
+    /// append some UTF-8 chars to the buffer
+    // - if supplied json is '', will write 'null'
+    procedure AddRawJSON(const json: RawJSON);
     /// append a line of text with CR+LF at the end
     procedure AddLine(const Text: shortstring);
     /// append some chars to the buffer in one line
@@ -879,7 +906,7 @@ type
     procedure AddStrings(const Text: RawUTF8; count: integer); overload;
     /// append a ShortString
     procedure AddShort(const Text: ShortString);
-    /// append a TShort16 - Text should be not '', and up to 8 chars long
+    /// append a TShort8 - Text should be not '', and up to 8 chars long
     // - this method is aggressively inlined, so may be preferred to AddShort()
     // for appending simple constant UTF-8 text
     procedure AddShorter(const Text: TShort8); {$ifdef HASINLINE} inline; {$endif}
@@ -945,11 +972,13 @@ type
     procedure AddFieldName(const FieldName: RawUTF8);
       {$ifdef HASINLINE} inline; {$endif}
     /// append the class name of an Object instance as text
-    // - aClass must be not nil
     procedure AddClassName(aClass: TClass);
     /// append an Instance name and pointer, as '"TObjectList(00425E68)"'+SepChar
-    // - Instance must be not nil
+    // - append "void" if Instance = nil
     procedure AddInstanceName(Instance: TObject; SepChar: AnsiChar);
+    /// append an Instance name and pointer, as 'TObjectList(00425E68)'+SepChar
+    procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+      IncludeUnitName, IncludePointer: boolean);
     /// append some binary data as hexadecimal text conversion
     procedure AddBinToHex(Bin: Pointer; BinBytes: integer);
     /// fast conversion from binary data into hexa chars, ready to be displayed
@@ -979,7 +1008,33 @@ type
     // - this encoding is faster than Base64, and has spaces on the left side
     // - use function Chars3ToInt18() to decode the textual content
     procedure AddInt18ToChars3(Value: cardinal);
+    /// append a TTimeLog value, expanded as Iso-8601 encoded text
+    procedure AddTimeLog(Value: PInt64; QuoteChar: AnsiChar = #0);
+    /// append a TUnixTime value, expanded as Iso-8601 encoded text
+    procedure AddUnixTime(Value: PInt64; QuoteChar: AnsiChar = #0);
+    /// append a TUnixMSTime value, expanded as Iso-8601 encoded text
+    procedure AddUnixMSTime(Value: PInt64; WithMS: boolean = false;
+      QuoteChar: AnsiChar = #0);
+    /// append a TDateTime value, expanded as Iso-8601 encoded text
+    // - use 'YYYY-MM-DDThh:mm:ss' format (with FirstChar='T')
+    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
+    // - if QuoteChar is not #0, it will be written before and after the date
+    procedure AddDateTime(Value: PDateTime; FirstChar: AnsiChar = 'T';
+      QuoteChar: AnsiChar = #0; WithMS: boolean = false;
+      AlwaysDateAndTime: boolean = false); overload;
+    /// append a TDateTime value, expanded as Iso-8601 encoded text
+    // - use 'YYYY-MM-DDThh:mm:ss' format
+    // - append nothing if Value=0
+    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
+    procedure AddDateTime(const Value: TDateTime; WithMS: boolean = false); overload;
 
+    /// append strings or integers with a specified format
+    // - this class implementation will raise an exception for twJSONEscape,
+    // and simply call FormatUTF8() over a temp RawUTF8 for twNone/twOnSameLine
+    // - use faster and more complete overriden TTextWriter.Add instead!
+    procedure Add(const Format: RawUTF8; const Values: array of const;
+      Escape: TTextWriterKind = twNone;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
     function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
@@ -1042,6 +1097,9 @@ type
     /// global options to customize this TBaseWriter instance process
     // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior
     property CustomOptions: TTextWriterOptions read fCustomOptions write fCustomOptions;
+    /// optional event called before FlushToStream method process
+    // - used e.g. by TEchoWriter to perform proper content echoing
+    property OnFlushToStream: TOnTextWriterFlush read fOnFlushToStream write fOnFlushToStream;
   end;
 
   /// class of our simple TEXT format writer to a Stream
@@ -1076,6 +1134,61 @@ function ObjectToJSON(Value: TObject;
 // - call internaly TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
+
+
+type
+  /// callback used to echo each line of TEchoWriter class
+  // - should return TRUE on success, FALSE if the log was not echoed: but
+  // TSynLog will continue logging, even if this event returned FALSE
+  TOnTextWriterEcho = function(Sender: TBaseWriter; Level: TSynLogInfo;
+    const Text: RawUTF8): boolean of object;
+
+  /// add optional echoing of the lines to TBaseWriter
+  // - as used e.g. by TSynLog writer for log optional redirection
+  // - is defined as a sub-class to reduce plain TBaseWriter scope
+  // - see SynTable.pas for SQL resultset export via TJSONWriter
+  // - see mORMot.pas for proper class serialization via TJSONSerializer.WriteObject
+  TEchoWriter = class
+  protected
+    fWriter: TBaseWriter;
+    fEchoStart: PtrInt;
+    fEchoBuf: RawUTF8;
+    fEchos: array of TOnTextWriterEcho;
+    function EchoFlush: PtrInt;
+    function GetEndOfLineCRLF: boolean; {$ifdef HASINLINE}inline;{$endif}
+    procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
+  public
+    /// prepare for the echoing process
+    constructor Create(Owner: TBaseWriter); reintroduce;
+    /// end the echoing process
+    destructor Destroy; override;
+    /// should be called from TBaseWriter.FlushToStream
+    // - write pending data to the Stream, with automatic buffer resizal and echoing
+    // - this overriden method will handle proper echoing
+    procedure FlushToStream(Text: PUTF8Char; Len: PtrInt);
+    /// mark an end of line, ready to be "echoed" to registered listeners
+    // - append a LF (#10) char or CR+LF (#13#10) chars to the buffer, depending
+    // on the EndOfLineCRLF property value (default is LF, to minimize storage)
+    // - any callback registered via EchoAdd() will monitor this line
+    // - used e.g. by TSynLog for console output, as stated by Level parameter
+    procedure AddEndOfLine(aLevel: TSynLogInfo = sllNone);
+    /// add a callback to echo each line written by this class
+    // - this class expects AddEndOfLine to mark the end of each line
+    procedure EchoAdd(const aEcho: TOnTextWriterEcho);
+    /// remove a callback to echo each line written by this class
+    // - event should have been previously registered by a EchoAdd() call
+    procedure EchoRemove(const aEcho: TOnTextWriterEcho);
+    /// reset the internal buffer used for echoing content
+    procedure EchoReset;
+    /// the associated TBaseWriter instance
+    property Writer: TBaseWriter read fWriter;
+    /// define how AddEndOfLine method stores its line feed characters
+    // - by default (FALSE), it will append a LF (#10) char to the buffer
+    // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
+    // be appended instead
+    // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
+    property EndOfLineCRLF: boolean read GetEndOfLineCRLF write SetEndOfLineCRLF;
+  end;
 
 
 { ************ TRawUTF8DynArray Processing Functions }
@@ -1453,6 +1566,25 @@ procedure DoubleToStr(Value: Double; var result: RawUTF8); overload;
 // output, e.g. a database driver, via TBaseWriter.AddFloatStr
 function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
 
+/// fast conversion of 2 digit characters into a 0..99 value
+// - returns FALSE on success, TRUE if P^ is not correct
+function Char2ToByte(P: PUTF8Char; out Value: Cardinal;
+   ConvertHexToBinTab: PByteArray): Boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+
+/// fast conversion of 3 digit characters into a 0..9999 value
+// - returns FALSE on success, TRUE if P^ is not correct
+function Char3ToWord(P: PUTF8Char; out Value: Cardinal;
+   ConvertHexToBinTab: PByteArray): Boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+
+/// fast conversion of 4 digit characters into a 0..9999 value
+// - returns FALSE on success, TRUE if P^ is not correct
+function Char4ToWord(P: PUTF8Char; out Value: Cardinal;
+   ConvertHexToBinTab: PByteArray): Boolean;
+  {$ifdef HASINLINE} inline;{$endif}
+
+
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
@@ -1674,89 +1806,29 @@ procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean = tru
 
 { ************ ESynException class }
 
+{$ifndef NOEXCEPTIONINTERCEPT}
+
 type
-  /// the available logging events, as handled by mormot.core.log
-  // - defined in mormot.core.text so that it may be used with ESynException
-  // - sllInfo will log general information events
-  // - sllDebug will log detailed debugging information
-  // - sllTrace will log low-level step by step debugging information
-  // - sllWarning will log unexpected values (not an error)
-  // - sllError will log errors
-  // - sllEnter will log every method start
-  // - sllLeave will log every method exit
-  // - sllLastError will log the GetLastError OS message
-  // - sllException will log all exception raised - available since Windows XP
-  // - sllExceptionOS will log all OS low-level exceptions (EDivByZero,
-  // ERangeError, EAccessViolation...)
-  // - sllMemory will log memory statistics
-  // - sllStackTrace will log caller's stack trace (it's by default part of
-  // TSynLogFamily.LevelStackTrace like sllError, sllException, sllExceptionOS,
-  // sllLastError and sllFail)
-  // - sllFail was defined for TSynTestsLogged.Failed method, and can be used
-  // to log some customer-side assertions (may be notifications, not errors)
-  // - sllSQL is dedicated to trace the SQL statements
-  // - sllCache should be used to trace the internal caching mechanism
-  // - sllResult could trace the SQL results, JSON encoded
-  // - sllDB is dedicated to trace low-level database engine features
-  // - sllHTTP could be used to trace HTTP process
-  // - sllClient/sllServer could be used to trace some Client or Server process
-  // - sllServiceCall/sllServiceReturn to trace some remote service or library
-  // - sllUserAuth to trace user authentication (e.g. for individual requests)
-  // - sllCustom* items can be used for any purpose
-  // - sllNewRun will be written when a process opens a rotated log
-  // - sllDDDError will log any DDD-related low-level error information
-  // - sllDDDInfo will log any DDD-related low-level debugging information
-  // - sllMonitoring will log the statistics information (if available),
-  // or may be used for real-time chat among connected people to ToolsAdmin
-  TSynLogInfo = (
-    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
-    sllEnter, sllLeave,
-    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-    sllServiceCall, sllServiceReturn, sllUserAuth,
-    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
-    sllDDDError, sllDDDInfo, sllMonitoring);
-
-  /// used to define a set of logging level abilities
-  // - i.e. a combination of none or several logging event
-  // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
-  // to log all errors and exceptions
-  TSynLogInfos = set of TSynLogInfo;
-
-  /// a dynamic array of logging event levels
-  TSynLogInfoDynArray = array of TSynLogInfo;
-
-  /// calling context of TSynLogExceptionToStr callbacks
-  TSynLogExceptionContext = record
-    /// the raised exception class
-    EClass: ExceptClass;
-    /// the Delphi Exception instance
-    // - may be nil for external/OS exceptions
-    EInstance: Exception;
-    /// the OS-level exception code
-    // - could be $0EEDFAE0 of $0EEDFADE for Delphi-generated exceptions
-    ECode: DWord;
-    /// the address where the exception occured
-    EAddr: PtrUInt;
-    /// the optional stack trace
-    EStack: PPtrUInt;
-    /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
-    EStackCount: integer;
-    /// timestamp of this exception, as number of seconds since UNIX Epoch (TUnixTime)
-    // - UnixTimeUTC is faster than NowUTC or GetSystemTime
-    // - use UnixTimeToDateTime() to convert it into a regular TDateTime
-    ETimestamp: Int64;
-    /// the logging level corresponding to this exception
-    // - may be either sllException or sllExceptionOS
-    ELevel: TSynLogInfo;
-  end;
-
   /// global hook callback to customize exceptions logged by TSynLog
   // - should return TRUE if all needed information has been logged by the
   // event handler
   // - should return FALSE if Context.EAddr and Stack trace is to be appended
-  TSynLogExceptionToStr = function(WR: TBaseWriter; const Context: TSynLogExceptionContext): boolean;
+  TSynLogExceptionToStr = function(WR: TBaseWriter;
+    const Context: TSynLogExceptionContext): boolean;
 
+var
+  /// allow to customize the ESynException logging message
+  TSynLogExceptionToStrCustom: TSynLogExceptionToStr = nil;
+
+/// the default Exception handler for logging
+// - defined here to be called e.g. by ESynException.CustomLog() as default
+function DefaultSynLogExceptionToStr(WR: TBaseWriter;
+  const Context: TSynLogExceptionContext): boolean;
+
+{$endif NOEXCEPTIONINTERCEPT}
+
+
+type
   {$M+}
   /// generic parent class of all custom Exception types of this unit
   // - all our classes inheriting from ESynException are serializable,
@@ -1781,12 +1853,13 @@ type
     constructor CreateLastOSError(const Format: RawUTF8; const Args: array of const);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
-    // - this default implementation will call the DefaultSynLogExceptionToStr()
-    // function or the TSynLogExceptionToStrCustom global callback, if defined
+    // - this default implementation will call the TSynLogExceptionToStrCustom
+    // global callback, if defined, or a default handler internal to this unit
     // - override this method to provide a custom logging content
     // - should return TRUE if Context.EAddr and Stack trace is not to be
     // written (i.e. as for any TSynLogExceptionToStr callback)
-    function CustomLog(WR: TBaseWriter; const Context: TSynLogExceptionContext): boolean; virtual;
+    function CustomLog(WR: TBaseWriter;
+      const Context: TSynLogExceptionContext): boolean; virtual;
     {$endif NOEXCEPTIONINTERCEPT}
     /// the code location when this exception was triggered
     // - populated by SynLog unit, during interception - so may be nil
@@ -1805,17 +1878,6 @@ type
   /// meta-class of the ESynException hierarchy
   ESynExceptionClass = class of ESynException;
 
-var
-  /// allow to customize the ESynException logging message
-  TSynLogExceptionToStrCustom: TSynLogExceptionToStr = nil;
-
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  /// default exception logging callback - will be set by the SynLog unit
-  // - will add the default Exception details, including any Exception.Message
-  // - if the exception inherits from ESynException
-  // - returns TRUE: caller will then append ' at EAddr' and the stack trace
-  DefaultSynLogExceptionToStr: TSynLogExceptionToStr = nil;
-  {$endif NOEXCEPTIONINTERCEPT}
 
 
 { **************** Text Case-(in)sensitive Conversion and Comparison }
@@ -3728,7 +3790,8 @@ begin
   result := Str;
 end;
 
-procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUpperCase: boolean);
+procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8;
+  ToUpperCase: boolean);
 var
   i: integer;
   tmp: RawUTF8; // may be called as Split(Str,SepStr,Str,RightStr)
@@ -4761,6 +4824,21 @@ begin
   CamelCase(pointer(text), length(text), s, isWord);
 end;
 
+procedure GetCaptionFromPCharLen(P: PUTF8Char; out result: string);
+var
+  Temp: array[byte] of AnsiChar;
+begin
+  if P = nil then
+    exit;
+  {$ifdef UNICODE}
+  UTF8DecodeToUnicodeString(Temp, UnCamelCase(@Temp, P), result);
+  {$else}
+  SetString(result, PAnsiChar(@Temp), UnCamelCase(@Temp, P));
+  {$endif UNICODE}
+  if Assigned(LoadResStringTranslate) then
+    LoadResStringTranslate(result);
+end;
+
 
 { ************ CSV-like Iterations over Text Buffers }
 
@@ -5554,7 +5632,6 @@ end;
 
 { ************ TBaseWriter parent class for Text Generation }
 
-
 { TBaseWriter }
 
 constructor TBaseWriter.Create(aStream: TStream; aBufSize: integer);
@@ -5608,6 +5685,23 @@ begin
   if not (twoBufferIsExternal in fCustomOptions) then
     FreeMem(fTempBuf);
   inherited;
+end;
+
+procedure TBaseWriter.Add(const Format: RawUTF8; const Values: array of const;
+  Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
+var
+  tmp: RawUTF8;
+begin
+  // basic implementation: see faster and more complete version in TTextWriter
+  FormatUTF8(Format, Values, tmp);
+  case Escape of
+    twNone:
+      AddString(tmp);
+    twOnSameLine:
+      AddOnSameLine(pointer(tmp)); // minimalistic version for TSynLog
+    twJSONEscape:
+      raise ESynException.CreateUTF8('%.Add(twJSONEscape) unimplemented: use TTextWriter', [self]);
+  end;
 end;
 
 procedure TBaseWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
@@ -5726,6 +5820,8 @@ begin
   i := B - fTempBuf + 1;
   if i > 0 then
   begin
+    if Assigned(fOnFlushToStream) then
+      fOnFlushToStream(fTempBuf, i);
     fStream.WriteBuffer(fTempBuf^, i);
     inc(fTotalFileSize, i);
     if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
@@ -6156,6 +6252,23 @@ begin
   B^ := ',';
 end;
 
+procedure TBaseWriter.AddCurrentLogTime(LocalTime: boolean);
+var
+  time: TSynSystemTime;
+begin
+  time.FromNow(LocalTime);
+  time.AddLogTime(self);
+end;
+
+procedure TBaseWriter.AddCurrentNCSALogTime(LocalTime: boolean);
+var
+  time: TSynSystemTime;
+begin
+  time.FromNow(LocalTime);
+  if BEnd - B <= 21 then
+    FlushToStream;
+  inc(B, time.ToNCSAText(B + 1));
+end;
 procedure TBaseWriter.AddMicroSec(MS: cardinal);
 var
   W: PWordArray;
@@ -6220,6 +6333,20 @@ begin
     AddNull
   else
     AddNoJSONEscape(pointer(json), length(json));
+end;
+
+procedure TBaseWriter.AddNoJSONEscapeString(const s: string);
+begin
+  if s <> '' then
+    {$ifdef UNICODE}
+    AddNoJSONEscapeW(pointer(s), 0);
+    {$else}
+    if CurrentAnsiConvert.CodePage = CP_UTF8 then
+      AddNoJSONEscape(pointer(s), length(s))
+    else
+      // mormot.core.json will override with a faster version
+      AddNoJSONEscape(pointer(CurrentAnsiConvert.AnsiToUTF8(s)));
+    {$endif UNICODE}
 end;
 
 procedure TBaseWriter.AddNoJSONEscapeW(WideChar: PWord; WideCharCount: integer);
@@ -6319,6 +6446,23 @@ begin
   AddBinToHexDisplayMinChars(@Instance, SizeOf(Instance));
   Add(')', '"');
   if SepChar <> #0 then
+    Add(SepChar);
+end;
+
+procedure TBaseWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+  IncludeUnitName, IncludePointer: boolean);
+begin
+  if IncludeUnitName and Assigned(ClassUnit) then begin
+    AddShort(ClassUnit(PClass(Instance)^));
+    Add('.');
+  end;
+  AddShort(PPShortString(PPAnsiChar(Instance)^ + vmtClassName)^^);
+  if IncludePointer then begin
+    Add('(');
+    AddBinToHexDisplayMinChars(@Instance,SizeOf(Instance));
+    Add(')');
+  end;
+  if SepChar<>#0 then
     Add(SepChar);
 end;
 
@@ -6500,6 +6644,81 @@ begin
   PCardinal(B + 1)^ := ((Value shr 12) and $3f) or ((Value shr 6) and $3f) shl 8 or
                         (Value and $3f) shl 16 + $202020;
   inc(B, 3);
+end;
+
+procedure TBaseWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
+begin
+  if BEnd - B <= 31 then
+    FlushToStream;
+  B := PTimeLogBits(Value)^.Text(B + 1, true, 'T', QuoteChar) - 1;
+end;
+
+procedure TBaseWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
+var
+  DT: TDateTime;
+begin // inlined UnixTimeToDateTime()
+  DT := Value^ / SecsPerDay + UnixDateDelta;
+  AddDateTime(@DT, 'T', QuoteChar, {withms=}false, {dateandtime=}true);
+end;
+
+procedure TBaseWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean;
+  QuoteChar: AnsiChar);
+var
+  DT: TDateTime;
+begin // inlined UnixMSTimeToDateTime()
+  DT := Value^ / MSecsPerDay + UnixDateDelta;
+  AddDateTime(@DT, 'T', QuoteChar, WithMS, {dateandtime=}true);
+end;
+
+procedure TBaseWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
+  QuoteChar: AnsiChar; WithMS, AlwaysDateAndTime: boolean);
+var
+  T: TSynSystemTime;
+begin
+  if (Value^ = 0) and (QuoteChar = #0) then
+    exit;
+  if BEnd - B <= 25 then
+    FlushToStream;
+  inc(B);
+  if QuoteChar <> #0 then
+    B^ := QuoteChar
+  else
+    dec(B);
+  if Value^ <> 0 then
+  begin
+    inc(B);
+    if AlwaysDateAndTime or (trunc(Value^) <> 0) then
+    begin
+      T.FromDate(Date);
+      B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
+    end;
+    if AlwaysDateAndTime or (frac(Value^) <> 0) then
+    begin
+      T.FromTime(Value^);
+      B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second, T.MilliSecond,
+        FirstChar, WithMS);
+    end;
+    dec(B);
+  end;
+  if QuoteChar <> #0 then
+  begin
+    inc(B);
+    B^ := QuoteChar;
+  end;
+end;
+
+procedure TBaseWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
+begin
+  if Value = 0 then
+    exit;
+  if BEnd - B <= 23 then
+    FlushToStream;
+  inc(B);
+  if trunc(Value) <> 0 then
+    B := DateToIso8601PChar(Value, B, true);
+  if frac(Value) <> 0 then
+    B := TimeToIso8601PChar(Value, B, true, 'T', WithMS);
+  dec(B);
 end;
 
 procedure TBaseWriter.AddString(const Text: RawUTF8);
@@ -6840,6 +7059,104 @@ begin
     until false;
   until false;
 end;
+
+
+{ TEchoWriter }
+
+constructor TEchoWriter.Create(Owner: TBaseWriter);
+begin
+  fWriter := Owner;
+  if Assigned(fWriter.OnFlushToStream) then
+    raise ESynException.CreateUTF8('Unexpected %.Create', [self]);
+  fWriter.OnFlushToStream := FlushToStream;
+end;
+
+destructor TEchoWriter.Destroy;
+begin
+  if (fWriter <> nil) and (TMethod(fWriter.OnFlushToStream).Data = self) then
+    fWriter.OnFlushToStream := nil;
+  inherited Destroy;
+end;
+
+procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogInfo);
+var
+  i: PtrInt;
+begin
+  if twoEndOfLineCRLF in fWriter.CustomOptions then
+    fWriter.AddCR
+  else
+    fWriter.Add(#10);
+  if fEchos <> nil then
+  begin
+    fEchoStart := EchoFlush;
+    for i := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
+    try
+      fEchos[i](fWriter, aLevel, fEchoBuf);
+    except // remove callback in case of exception during echoing in user code
+      MultiEventRemove(fEchos, i);
+    end;
+    fEchoBuf := '';
+  end;
+end;
+
+procedure TEchoWriter.FlushToStream(Text: PUTF8Char; Len: PtrInt);
+begin
+  if fEchos <> nil then
+  begin
+    EchoFlush;
+    fEchoStart := 0;
+  end;
+end;
+
+procedure TEchoWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
+begin
+  if self <> nil then
+    if MultiEventAdd(fEchos, TMethod(aEcho)) then
+      if fEchos <> nil then
+        fEchoStart := fWriter.B - fWriter.fTempBuf + 1; // ignore any previous buffer
+end;
+
+procedure TEchoWriter.EchoRemove(const aEcho: TOnTextWriterEcho);
+begin
+  if self <> nil then
+    MultiEventRemove(fEchos, TMethod(aEcho));
+end;
+
+function TEchoWriter.EchoFlush: PtrInt;
+var
+  L, LI: PtrInt;
+  P: PUTF8Char;
+begin
+  P := fWriter.fTempBuf;
+  result := fWriter.B - P + 1;
+  L := result - fEchoStart;
+  inc(P, fEchoStart);
+  while (L > 0) and (P[L - 1] in [#10, #13]) do // trim right CR/LF chars
+    dec(L);
+  LI := length(fEchoBuf); // fast append to fEchoBuf
+  SetLength(fEchoBuf, LI + L);
+  MoveFast(P^, PByteArray(fEchoBuf)[LI], L);
+end;
+
+procedure TEchoWriter.EchoReset;
+begin
+  fEchoBuf := '';
+end;
+
+function TEchoWriter.GetEndOfLineCRLF: boolean;
+begin
+  result := twoEndOfLineCRLF in fWriter.CustomOptions;
+end;
+
+procedure TEchoWriter.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
+begin
+  if aEndOfLineCRLF then
+    fWriter.CustomOptions := fWriter.CustomOptions + [twoEndOfLineCRLF]
+  else
+    fWriter.CustomOptions := fWriter.CustomOptions - [twoEndOfLineCRLF];
+end;
+
+
 
 function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
 var
@@ -8436,7 +8753,6 @@ begin
     factor.c := B^.c;
 end;
 
-
 procedure d2a_unpack_float(const f: double; out minus: boolean; out result: TDIY_FP);
   {$ifdef HASINLINE} inline;{$endif}
 type
@@ -8685,7 +9001,6 @@ begin
   n_current := 1;
   result := 1;
 end;
-
 
 // format the number in the fixed-point representation
 procedure d2a_return_fixed(str: PAnsiChar; minus: boolean; var digits: TAsciiDigits;
@@ -9204,6 +9519,83 @@ begin
     until false;
   result := d;
 end;
+
+
+function Char2ToByte(P: PUTF8Char; out Value: Cardinal;
+   ConvertHexToBinTab: PByteArray): Boolean;
+var
+  B: PtrUInt;
+begin
+  B := ConvertHexToBinTab[ord(P[0])];
+  if B <= 9 then
+  begin
+    Value := B;
+    B := ConvertHexToBinTab[ord(P[1])];
+    if B <= 9 then
+    begin
+      Value := Value * 10 + B;
+      result := false;
+      exit;
+    end;
+  end;
+  result := true; // error
+end;
+
+function Char3ToWord(P: PUTF8Char; out Value: Cardinal;
+   ConvertHexToBinTab: PByteArray): Boolean;
+var
+  B: PtrUInt;
+begin
+  B := ConvertHexToBinTab[ord(P[0])];
+  if B <= 9 then
+  begin
+    Value := B;
+    B := ConvertHexToBinTab[ord(P[1])];
+    if B <= 9 then
+    begin
+      Value := Value * 10 + B;
+      B := ConvertHexToBinTab[ord(P[2])];
+      if B <= 9 then
+      begin
+        Value := Value * 10 + B;
+        result := false;
+        exit;
+      end;
+    end;
+  end;
+  result := true; // error
+end;
+
+function Char4ToWord(P: PUTF8Char; out Value: Cardinal;
+   ConvertHexToBinTab: PByteArray): Boolean;
+var
+  B: PtrUInt;
+begin
+  B := ConvertHexToBinTab[ord(P[0])];
+  if B <= 9 then
+  begin
+    Value := B;
+    B := ConvertHexToBinTab[ord(P[1])];
+    if B <= 9 then
+    begin
+      Value := Value * 10 + B;
+      B := ConvertHexToBinTab[ord(P[2])];
+      if B <= 9 then
+      begin
+        Value := Value * 10 + B;
+        B := ConvertHexToBinTab[ord(P[3])];
+        if B <= 9 then
+        begin
+          Value := Value * 10 + B;
+          result := false;
+          exit;
+        end;
+      end;
+    end;
+  end;
+  result := true; // error
+end;
+
 
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8; var wasString: boolean);
 var
@@ -9991,16 +10383,62 @@ begin
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
+
+function DefaultSynLogExceptionToStr(WR: TBaseWriter;
+  const Context: TSynLogExceptionContext): boolean;
+var
+  extcode: cardinal;
+  extnames: TPUTF8CharDynArray;
+  i: PtrInt;
+begin
+  WR.AddClassName(Context.EClass);
+  if (Context.ELevel = sllException) and (Context.EInstance <> nil) and
+     (Context.EClass <> EExternalException) then
+  begin
+    extcode := Context.AdditionalInfo(extnames);
+    if extcode <> 0 then
+    begin
+      WR.AddShorter(' 0x');
+      WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
+      for i := 0 to high(extnames) do
+      begin
+        {$ifdef MSWINDOWS}
+        WR.AddShort(' [.NET/CLR unhandled ');
+        {$else}
+        WR.AddShort(' [unhandled ');
+        {$endif MSWINDOWS}
+        WR.AddNoJSONEScape(extnames[i]);
+        WR.AddShort('Exception]');
+      end;
+    end;
+    WR.Add(' ');
+    if WR.ClassType = TBaseWriter then
+      {$ifdef UNICODE}
+      WR.AddOnSameLineW(pointer(Context.EInstance.Message), 0)
+      {$else}
+      WR.AddOnSameLine(pointer(Context.EInstance.Message))
+      {$endif UNICODE}
+    else
+      WR.WriteObject(Context.EInstance);
+  end
+  else if Context.ECode <> 0 then
+  begin
+    WR.AddShort(' (');
+    WR.AddPointer(Context.ECode);
+    WR.AddShort(')');
+  end;
+  result := false; // caller should append "at EAddr" and the stack trace
+end;
+
 function ESynException.CustomLog(WR: TBaseWriter;
   const Context: TSynLogExceptionContext): boolean;
 begin
   if Assigned(TSynLogExceptionToStrCustom) then
     result := TSynLogExceptionToStrCustom(WR, Context)
-  else if Assigned(DefaultSynLogExceptionToStr) then
-    result := DefaultSynLogExceptionToStr(WR, Context)
   else
-    result := false;
+    result := DefaultSynLogExceptionToStr(WR, Context);
 end;
+
 {$endif NOEXCEPTIONINTERCEPT}
 
 
@@ -12255,7 +12693,7 @@ end;
 
 var
   // internal list of TSynAnsiConvert instances
-  SynAnsiConvertList: TObjectList = nil;
+  SynAnsiConvertList: array of TSynAnsiConvert;
 
 function GetHighUTF8UCS4(var U: PUTF8Char): PtrUInt;
 var
@@ -13889,20 +14327,26 @@ end;
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
 var
-  i: PtrInt;
+  n: integer;
+  p: ^TSynAnsiConvert;
 begin
   if aCodePage <= 0 then
   begin
     result := CurrentAnsiConvert;
     exit;
   end;
-  with SynAnsiConvertList do
-    for i := 0 to Count - 1 do
-    begin
-      result := List[i];
+  p := pointer(SynAnsiConvertList);
+  if p <> nil then
+  begin
+    n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+    repeat
+      result := p^;
       if result.CodePage = aCodePage then
         exit;
-    end;
+      inc(p);
+      dec(n);
+    until n = 0;
+  end;
   if aCodePage = CP_UTF8 then
     result := TSynAnsiUTF8.Create(CP_UTF8)
   else if aCodePage = CP_UTF16 then
@@ -13911,7 +14355,7 @@ begin
     result := TSynAnsiFixedWidth.Create(aCodePage)
   else
     result := TSynAnsiConvert.Create(aCodePage);
-  SynAnsiConvertList.Add(result);
+  ObjArrayAdd(SynAnsiConvertList, result);
 end;
 
 function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar;
@@ -15045,7 +15489,6 @@ begin
       include(TEXT_CHARS[c], tcCtrlNot0Comma);
   end;
   // setup Unicode conversion engines
-  SynAnsiConvertList := TObjectList.Create;
   CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);
   WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
   UTF8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUTF8;
@@ -15055,6 +15498,6 @@ initialization
   InitializeUnit;
 
 finalization
-  SynAnsiConvertList.Free;
+  ObjArrayClear(SynAnsiConvertList);
 end.
 

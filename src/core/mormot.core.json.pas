@@ -583,37 +583,9 @@ type
     // - is a wrapper around BinarySave() and WrBase64()
     procedure BinarySaveBase64(Data: pointer; Info: PRttiInfo;
       Kinds: TRttiKinds; withMagic: boolean);
-    /// append strings or integers with a specified format
-    // - % = #37 marks a string, integer, floating-point, or class parameter
-    // to be appended as text (e.g. class name)
-    // - note that due to a limitation of the "array of const" format, cardinal
-    // values should be type-casted to Int64() - otherwise the integer mapped
-    // value will be transmitted, therefore wrongly
-    procedure Add(const Format: RawUTF8; const Values: array of const;
-      Escape: TTextWriterKind = twNone;
-      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload;
     /// append some values at once
     // - text values (e.g. RawUTF8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
-    /// append a TTimeLog value, expanded as Iso-8601 encoded text
-    procedure AddTimeLog(Value: PInt64; QuoteChar: AnsiChar = #0);
-    /// append a TUnixTime value, expanded as Iso-8601 encoded text
-    procedure AddUnixTime(Value: PInt64; QuoteChar: AnsiChar = #0);
-    /// append a TUnixMSTime value, expanded as Iso-8601 encoded text
-    procedure AddUnixMSTime(Value: PInt64; WithMS: boolean = false;
-      QuoteChar: AnsiChar = #0);
-    /// append a TDateTime value, expanded as Iso-8601 encoded text
-    // - use 'YYYY-MM-DDThh:mm:ss' format (with FirstChar='T')
-    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
-    // - if QuoteChar is not #0, it will be written before and after the date
-    procedure AddDateTime(Value: PDateTime; FirstChar: AnsiChar = 'T';
-      QuoteChar: AnsiChar = #0; WithMS: boolean = false;
-      AlwaysDateAndTime: boolean = false); overload;
-    /// append a TDateTime value, expanded as Iso-8601 encoded text
-    // - use 'YYYY-MM-DDThh:mm:ss' format
-    // - append nothing if Value=0
-    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
-    procedure AddDateTime(const Value: TDateTime; WithMS: boolean = false); overload;
     /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
     // and Time Zone designator
     // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
@@ -621,6 +593,16 @@ type
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUTF8 = 'Z');
 
+    /// append strings or integers with a specified format
+    // - this overriden version will properly handle JSON escape
+    // - % = #37 marks a string, integer, floating-point, or class parameter
+    // to be appended as text (e.g. class name)
+    // - note that due to a limitation of the "array of const" format, cardinal
+    // values should be type-casted to Int64() - otherwise the integer mapped
+    // value will be transmitted, therefore wrongly
+    procedure Add(const Format: RawUTF8; const Values: array of const;
+      Escape: TTextWriterKind = twNone;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
     /// append a variant content as number or string
     // - this overriden version will properly handle JSON escape
     // - properly handle Value as a TRttiVarData from TRttiProp.GetValue
@@ -698,10 +680,10 @@ type
     // - escapes chars according to the JSON RFC
     procedure AddJSONEscapeAnsiString(const s: AnsiString);
     /// append some UTF-8 encoded chars to the buffer, from a generic string type
-    // - faster than AddNoJSONEscape(pointer(StringToUTF8(string))
+    // - faster than TBaseWriter default implementation
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
-    procedure AddNoJSONEscapeString(const s: string);  {$ifdef HASINLINE}inline;{$endif}
+    procedure AddNoJSONEscapeString(const s: string); override;
     /// append an open array constant value to the buffer
     // - "" will be added if necessary
     // - escapes chars according to the JSON RFC
@@ -4581,81 +4563,6 @@ begin
     AddJSONEscape(Values[i]);
 end;
 
-procedure TTextWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
-begin
-  if BEnd - B <= 31 then
-    FlushToStream;
-  B := PTimeLogBits(Value)^.Text(B + 1, true, 'T', QuoteChar) - 1;
-end;
-
-procedure TTextWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
-var
-  DT: TDateTime;
-begin // inlined UnixTimeToDateTime()
-  DT := Value^ / SecsPerDay + UnixDateDelta;
-  AddDateTime(@DT, 'T', QuoteChar, {withms=}false, {dateandtime=}true);
-end;
-
-procedure TTextWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean;
-  QuoteChar: AnsiChar);
-var
-  DT: TDateTime;
-begin // inlined UnixMSTimeToDateTime()
-  DT := Value^ / MSecsPerDay + UnixDateDelta;
-  AddDateTime(@DT, 'T', QuoteChar, WithMS, {dateandtime=}true);
-end;
-
-procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
-  QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
-var
-  T: TSynSystemTime;
-begin
-  if (Value^ = 0) and (QuoteChar = #0) then
-    exit;
-  if BEnd - B <= 25 then
-    FlushToStream;
-  inc(B);
-  if QuoteChar <> #0 then
-    B^ := QuoteChar
-  else
-    dec(B);
-  if Value^ <> 0 then
-  begin
-    inc(B);
-    if AlwaysDateAndTime or (trunc(Value^) <> 0) then
-    begin
-      T.FromDate(Date);
-      B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
-    end;
-    if AlwaysDateAndTime or (frac(Value^) <> 0) then
-    begin
-      T.FromTime(Value^);
-      B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second, T.MilliSecond,
-        FirstChar, WithMS);
-    end;
-    dec(B);
-  end;
-  if QuoteChar <> #0 then
-  begin
-    inc(B);
-    B^ := QuoteChar;
-  end;
-end;
-
-procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
-begin
-  if Value = 0 then
-    exit;
-  if BEnd - B <= 23 then
-    FlushToStream;
-  inc(B);
-  if trunc(Value) <> 0 then
-    B := DateToIso8601PChar(Value, B, true);
-  if frac(Value) <> 0 then
-    B := TimeToIso8601PChar(Value, B, true, 'T', WithMS);
-  dec(B);
-end;
-
 procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8);
 var
@@ -7112,8 +7019,8 @@ begin
 end;
 
 
-{ ********** Custom JSON Serialization }
 
+{ ********** Custom JSON Serialization }
 
 { TRttiJson }
 
