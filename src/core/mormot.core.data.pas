@@ -29,6 +29,7 @@ interface
 uses
   {$ifdef ISDELPHI}
   typinfo,  // circumvent Delphi inlining problem of mormot.core.rtti methods
+  windows,  // for FindResource/LoadResource API
   {$endif ISDELPHI}
   classes,
   contnrs,
@@ -427,7 +428,9 @@ type
 
   /// adding locking methods to a TSynPersistent with virtual constructor
   // - you may use this class instead of the RTL TCriticalSection, since it
-  // would use a TSynLocker which does not suffer from CPU cache line conflit
+  // would use a TSynLocker which does not suffer from CPU cache line conflit,
+  // and is cross-compiler whereas TMonitor is Delphi-specific and buggy (at
+  // least before XE5)
   TSynPersistentLock = class(TSynPersistent)
   protected
     fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
@@ -703,6 +706,64 @@ type
     // PartialLen, but always <= PartialLenMax
     function DecompressPartial(Comp, Partial: PAnsiChar; CompLen,
       PartialLen, PartialLenMax: integer): integer;
+    /// compress a Stream content using this compression algorithm
+    // - source Stream is split into 128 MB blocks for fast in-memory compression of
+    // any Stream size, then SynLZ compressed and including a Hash32 checksum
+    // - it is not compatible with StreamSynLZ format, which has no 128 MB chunking
+    // - you should specify a Magic number to be used to identify the compressed
+    // Stream format
+    // - follow the StreamSynLZ() deprecated function format, if ForceHash32=true
+    // so that Hash32() is used instead of the AlgoHash() of this instance
+    function StreamCompress(Source: TCustomMemoryStream; Dest: TStream;
+      Magic: Cardinal; ForceHash32: boolean = false): integer; overload;
+    /// compress a Stream content using this compression algorithm into a file
+    // - source Stream is split into 128 MB blocks for fast in-memory compression of
+    // any Stream size, then SynLZ compressed and including a Hash32 checksum
+    // - it is not compatible with StreamSynLZ format, which has no 128 MB chunking
+    // - you should specify a Magic number to be used to identify the compressed
+    // Stream format
+    // - follow the StreamSynLZ() deprecated function format, if ForceHash32=true
+    // so that Hash32() is used instead of the AlgoHash() of this instance
+    function StreamCompress(Source: TCustomMemoryStream; const DestFile: TFileName;
+      Magic: Cardinal; ForceHash32: boolean = false): integer; overload;
+    /// uncompress a Stream previoulsy compressed via StreamCompress()
+    // - you should specify a Magic number to be used to identify the compressed
+    // Stream format
+    // - follow the StreamUnSynLZ() deprecated function format, if ForceHash32=true
+    // so that Hash32() is used instead of the AlgoHash() of this instance
+    function StreamUnCompress(Source: TStream; Magic: Cardinal;
+      ForceHash32: boolean = false): TMemoryStream; overload;
+    /// uncompress a File previoulsy compressed via StreamCompress() into a Stream
+    // - you should specify a Magic number to be used to identify the compressed
+    // Stream format
+    // - follow the StreamUnSynLZ() deprecated function format, if ForceHash32=true
+    // so that Hash32() is used instead of the AlgoHash() of this instance
+    function StreamUnCompress(const Source: TFileName; Magic: Cardinal;
+      ForceHash32: boolean = false): TMemoryStream; overload;
+    /// compute the real length of a given StreamCompress() buffer
+    // - allows to replace an existing appended content, for instance
+    function StreamComputeLen(P: PAnsiChar; Len: PtrUInt; Magic: cardinal): integer;
+    /// returns TRUE if the supplied file name is a compressed file,
+    // matching the Magic number as supplied to FileCompress() function
+    // - follow the FileIsSynLZ() deprecated function format
+    function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean;
+    /// compress a file content using this compression algorithm
+    // - source file is split into 128 MB blocks for fast in-memory compression of
+    // any file size, then SynLZ compressed and including a Hash32 checksum
+    // - it is not compatible with StreamSynLZ format, which has no 128 MB chunking
+    // - you should specify a Magic number to be used to identify the compressed
+    // file format
+    // - follow the FileSynLZ() deprecated function format, if ForceHash32=true
+    // so that Hash32() is used instead of the AlgoHash() of this instance
+    function FileCompress(const Source, Dest: TFileName; Magic: Cardinal;
+      ForceHash32: boolean = false): boolean;
+    /// uncompress a file previoulsy compressed via FileCompress()
+    // - you should specify a Magic number to be used to identify the compressed
+    // file format
+    // - follow the FileUnSynLZ() deprecated function format, if ForceHash32=true
+    // so that Hash32() is used instead of the AlgoHash() of this instance
+    function FileUnCompress(const Source, Dest: TFileName; Magic: Cardinal;
+      ForceHash32: boolean = false): boolean;
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
     // - returns nil if no algorithm was identified
@@ -795,6 +856,57 @@ const
   /// used e.g. as when ALGO_SAFE[SafeDecompression] for TAlgoCompress.Decompress
   ALGO_SAFE: array[boolean] of TAlgoCompressLoad = (aclNormal, aclSafeSlow);
 
+
+/// creates a RawByteString memory buffer from an embedded resource
+// - returns '' if the resource is not found
+// - warning: resources size may be rounded up to alignment
+// - you can specify a library (dll) resource instance handle, if needed
+procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
+  out buf: RawByteString; Instance: THandle = 0);
+
+/// creates a RawByteString memory buffer from an SynLZ-compressed embedded resource
+// - returns '' if the resource is not found
+// - this method would use SynLZDecompress() after ResourceToRawByteString(),
+// with a ResType=PChar(10) (i.e. RC_DATA)
+// - you can specify a library (dll) resource instance handle, if needed
+procedure ResourceSynLZToRawByteString(const ResName: string;
+  out buf: RawByteString; Instance: THandle = 0);
+
+{$ifndef PUREMORMOT2}
+
+/// deprecated function - use AlgoSynLZ.StreamComputeLen
+function StreamSynLZComputeLen(P: PAnsiChar;
+  Len, Magic: cardinal): integer; deprecated;
+
+/// deprecated function - use AlgoSynLZ.StreamCompress
+function StreamSynLZ(Source: TCustomMemoryStream; Dest: TStream;
+  Magic: cardinal): integer; overload; deprecated;
+
+/// deprecated function - use AlgoSynLZ.StreamCompress
+function StreamSynLZ(Source: TCustomMemoryStream; const DestFile: TFileName;
+  Magic: cardinal): integer; overload;deprecated;
+
+/// deprecated function - use AlgoSynLZ.FileCompress
+function FileSynLZ(const Source, Dest: TFileName;
+  Magic: Cardinal): boolean; deprecated;
+
+/// deprecated function - use AlgoSynLZ.FileUnCompress
+function FileUnSynLZ(const Source, Dest: TFileName;
+  Magic: Cardinal): boolean; deprecated;
+
+/// deprecated function - use AlgoSynLZ.FileIsCompressed
+function FileIsSynLZ(const Name: TFileName;
+  Magic: Cardinal): boolean; deprecated;
+
+/// deprecated function - use AlgoSynLZ.StreamUnCompress
+function StreamUnSynLZ(const Source: TFileName;
+  Magic: cardinal): TMemoryStream; overload; deprecated;
+
+/// deprecated function - use AlgoSynLZ.StreamUnCompress
+function StreamUnSynLZ(Source: TStream;
+  Magic: cardinal): TMemoryStream; overload; deprecated;
+
+{$endif PUREMORMOT2}
 
 
 { ************ Variable Length Integer Encoding / Decoding }
@@ -2385,16 +2497,20 @@ type
     // know the actual end of input buffer
     function LoadFromBinary(const Buffer: RawByteString): boolean;
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddDynArrayJSON()
+    // - is just a wrapper around TTextWriter.AddTypedJSON()
     // - this method will therefore recognize T*ObjArray types
     function SaveToJSON(EnumSetsAsText: boolean = false;
       reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8; overload;
       {$ifdef HASINLINE} inline;{$endif}
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddDynArrayJSON()
+    // - is just a wrapper around TTextWriter.AddTypedJSON()
     // - this method will therefore recognize T*ObjArray types
     procedure SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean = false;
       reformat: TTextWriterJSONFormat = jsonCompact); overload;
+    /// serialize the dynamic array content as JSON
+    // - is just a wrapper around TTextWriter.AddTypedJSON()
+    // - this method will therefore recognize T*ObjArray types
+    procedure SaveToJSON(W: TBaseWriter); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
     // handling TBooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -2694,7 +2810,10 @@ type
     procedure SaveTo(W: TBufferWriter); overload; inline;
     procedure Sort(aCompare: TDynArraySortCompare = nil); inline;
     function SaveToJSON(EnumSetsAsText: boolean = false;
-      reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8; inline;
+      reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8; overload; inline;
+    procedure SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean = false;
+      reformat: TTextWriterJSONFormat = jsonCompact); overload; inline;
+    procedure SaveToJSON(W: TBaseWriter); overload; inline;
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil): PUTF8Char; inline;
     function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; inline;
@@ -3730,7 +3849,8 @@ end;
 
 function TSynLocker.GetUnLockedInt64(Index: integer): Int64;
 begin
-  if (cardinal(Index) >= cardinal(PaddingUsedCount)) or not VariantToInt64(variant(Padding[Index]), result) then
+  if (cardinal(Index) >= cardinal(PaddingUsedCount)) or
+     not VariantToInt64(variant(Padding[Index]), result) then
     result := 0;
 end;
 
@@ -8431,6 +8551,375 @@ begin
   result := PartialLen;
 end;
 
+type
+  TAlgoCompressHead = packed record
+    Magic: cardinal;
+    CompressedSize: integer;
+    HashCompressed: cardinal;
+    UnCompressedSize: integer;
+    HashUncompressed: cardinal;
+  end;
+  PAlgoCompressHead = ^TAlgoCompressHead;
+
+  TAlgoCompressTrailer = packed record
+    HeaderRelativeOffset: cardinal;
+    Magic: cardinal;
+  end;
+  PAlgoCompressTrailer = ^TAlgoCompressTrailer;
+
+function TAlgoCompress.StreamCompress(Source: TCustomMemoryStream;
+  Dest: TStream; Magic: Cardinal; ForceHash32: boolean): integer;
+var
+  DataLen: integer;
+  S, D: pointer;
+  Head: TAlgoCompressHead;
+  Trailer: TAlgoCompressTrailer;
+  tmp: TSynTempBuffer;
+begin
+  if Dest = nil then
+  begin
+    result := 0;
+    exit;
+  end;
+  if Source <> nil then
+  begin
+    S := Source.Memory;
+    DataLen := Source.Size;
+  end
+  else
+  begin
+    S := nil;
+    DataLen := 0;
+  end;
+  tmp.Init(AlgoCompressDestLen(DataLen));
+  try
+    Head.Magic := Magic;
+    Head.UnCompressedSize := DataLen;
+    Head.HashUncompressed := Hash32(S, DataLen);
+    result := AlgoCompress(S, DataLen, tmp.buf);
+    if result > tmp.len then
+      raise EAlgoCompress.Create('StreamCompress: overflow');
+    if result > DataLen then
+    begin
+      result := DataLen; // compression not worth it
+      D := S;
+    end
+    else
+      D := tmp.buf;
+    Head.CompressedSize := result;
+    if ForceHash32 then
+      Head.HashCompressed := Hash32(D, result)
+    else
+      Head.HashCompressed := AlgoHash(0, D, result);
+    Dest.WriteBuffer(Head, SizeOf(Head));
+    Dest.WriteBuffer(D^, Head.CompressedSize);
+    Trailer.HeaderRelativeOffset := result + (SizeOf(Head) + SizeOf(Trailer));
+    Trailer.Magic := Magic;
+    Dest.WriteBuffer(Trailer, SizeOf(Trailer));
+    result := Head.CompressedSize + (SizeOf(Head) + SizeOf(Trailer));
+  finally
+    tmp.Done;
+  end;
+end;
+
+function TAlgoCompress.StreamCompress(Source: TCustomMemoryStream;
+  const DestFile: TFileName; Magic: Cardinal; ForceHash32: boolean): integer;
+var
+  F: TFileStream;
+begin
+  F := TFileStream.Create(DestFile, fmCreate);
+  try
+    result := StreamCompress(Source, F, Magic, ForceHash32);
+  finally
+    F.Free;
+  end;
+end;
+
+function TAlgoCompress.StreamUnCompress(Source: TStream; Magic: Cardinal;
+  ForceHash32: boolean): TMemoryStream;
+var
+  S, D: PAnsiChar;
+  sourcePosition, resultSize, sourceSize: Int64;
+  Head: TAlgoCompressHead;
+  Trailer: TAlgoCompressTrailer;
+  buf: RawByteString;
+  h: cardinal;
+  stored: boolean;
+begin
+  result := nil;
+  if Source = nil then
+    exit;
+  sourceSize := Source.Size;
+  {$ifndef CPU64}
+  if sourceSize > maxInt then
+    exit; // result TMemoryStream should stay in memory!
+  {$endif CPU64}
+  sourcePosition := Source.Position;
+  if sourceSize - sourcePosition < SizeOf(Head) then
+    exit;
+  resultSize := 0;
+  repeat
+    if (Source.Read(Head, SizeOf(Head)) <> SizeOf(Head)) or
+       (Head.Magic <> Magic) then
+    begin
+      // Source not positioned as expected -> try from the end
+      Source.Position := sourceSize - SizeOf(Trailer);
+      if (Source.Read(Trailer, SizeOf(Trailer)) <> SizeOf(Trailer)) or
+         (Trailer.Magic <> Magic) then
+        exit;
+      sourcePosition := sourceSize - Trailer.HeaderRelativeOffset;
+      Source.Position := sourcePosition;
+      if (Source.Read(Head, SizeOf(Head)) <> SizeOf(Head)) or
+         (Head.Magic <> Magic) then
+        exit;
+    end;
+    inc(sourcePosition, SizeOf(Head));
+    if sourcePosition + Head.CompressedSize > sourceSize then
+      exit;
+    if Source.InheritsFrom(TCustomMemoryStream) then
+    begin
+      S := PAnsiChar(TCustomMemoryStream(Source).Memory) + PtrUInt(sourcePosition);
+      Source.Seek(Head.CompressedSize, soFromCurrent);
+    end
+    else
+    begin
+      if Head.CompressedSize > length({%H-}buf) then
+        SetString(buf, nil, Head.CompressedSize);
+      S := pointer(buf);
+      Source.Read(S^, Head.CompressedSize);
+    end;
+    inc(sourcePosition, Head.CompressedSize);
+    if (Source.Read(Trailer, SizeOf(Trailer)) <> SizeOf(Trailer)) or
+       (Trailer.Magic <> Magic) then
+      // trailer not available in old .synlz layout, or in multiblocks
+      Source.Position := sourcePosition
+    else
+      sourceSize := 0; // should be monoblock
+    // Source stream will now point after all data
+    stored := (Head.CompressedSize = Head.UnCompressedSize) and
+              (Head.HashCompressed = Head.HashUncompressed);
+    if not stored then
+      if AlgoDecompressDestLen(S) <> Head.UnCompressedSize then
+        exit;
+    if ForceHash32 then
+      h := Hash32(pointer(S), Head.CompressedSize)
+    else
+      h := AlgoHash(0, S, Head.CompressedSize);
+    if h <> Head.HashCompressed then
+      exit;
+    if result = nil then
+      result := TMemoryStream.Create
+    else
+    begin
+      {$ifndef CPU64}
+      if resultSize + Head.UnCompressedSize > maxInt then
+      begin
+        FreeAndNil(result); // result TMemoryStream should stay in memory!
+        break;
+      end;
+      {$endif CPU64}
+    end;
+    result.Size := resultSize + Head.UnCompressedSize;
+    D := PAnsiChar(result.Memory) + resultSize;
+    inc(resultSize, Head.UnCompressedSize);
+    if stored then
+      MoveFast(S^, D^, Head.CompressedSize)
+    else if AlgoDecompress(S, Head.CompressedSize, D) <> Head.UnCompressedSize then
+      FreeAndNil(result)
+    else
+    begin
+      if ForceHash32 then
+        h := Hash32(pointer(D), Head.UnCompressedSize)
+      else
+        h := AlgoHash(0, D, Head.UnCompressedSize);
+      if h <> Head.HashUncompressed then
+        FreeAndNil(result);
+    end;
+  until (result = nil) or (sourcePosition >= sourceSize);
+end;
+
+function TAlgoCompress.StreamUnCompress(const Source: TFileName;
+  Magic: Cardinal; ForceHash32: boolean): TMemoryStream;
+var
+  S: TStream;
+begin
+  try
+    S := TSynMemoryStreamMapped.Create(Source);
+    try
+      result := StreamUnCompress(S, Magic, ForceHash32);
+    finally
+      S.Free;
+    end;
+  except
+    on E: Exception do
+      result := nil;
+  end;
+end;
+
+function TAlgoCompress.StreamComputeLen(P: PAnsiChar; Len: PtrUInt;
+  Magic: cardinal): integer;
+var
+  trailer: PAlgoCompressTrailer;
+begin
+  if (P = nil) or (Len <= SizeOf(TAlgoCompressTrailer)) then
+    result := 0
+  else
+  begin
+    trailer := PAlgoCompressTrailer(P + Len - SizeOf(TAlgoCompressTrailer));
+    if (Magic = trailer^.Magic) and (trailer^.HeaderRelativeOffset < Len) and
+       (PAlgoCompressHead(P + Len - trailer^.HeaderRelativeOffset)^.Magic = Magic) then
+      // trim existing content
+      result := Len - trailer^.HeaderRelativeOffset
+    else
+      result := Len;
+  end;
+end;
+
+function TAlgoCompress.FileIsCompressed(const Name: TFileName;
+  Magic: cardinal): boolean;
+var
+  S: TFileStream;
+  Head: TAlgoCompressHead;
+begin
+  result := false;
+  if FileExists(Name) then
+  try
+    S := TFileStream.Create(Name, fmOpenRead or fmShareDenyNone);
+    try
+      if S.Read(Head, SizeOf(Head)) = SizeOf(Head) then
+        if Head.Magic = Magic then
+          result := true; // only check magic, since there may be several chunks
+    finally
+      S.Free;
+    end;
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
+function TAlgoCompress.FileCompress(const Source, Dest: TFileName;
+  Magic: Cardinal; ForceHash32: boolean): boolean;
+var
+  src, dst: RawByteString;
+  S, D: THandleStream;
+  Head: TAlgoCompressHead;
+  Count, Max: Int64;
+begin
+  result := false;
+  if FileExists(Source) then
+  try
+    S := FileStreamSequentialRead(Source);
+    try
+      DeleteFile(Dest);
+      Max := 128 shl 20; // 128 MB default compression chunk
+      D := TFileStream.Create(Dest, fmCreate);
+      try
+        Head.Magic := Magic;
+        Count := S.Size;
+        while Count > 0 do
+        begin
+          if Count > Max then
+            Head.UnCompressedSize := Max
+          else
+            Head.UnCompressedSize := Count;
+          if {%H-}src = '' then
+            SetString(src, nil, Head.UnCompressedSize);
+          if {%H-}dst = '' then
+            SetString(dst, nil, AlgoCompressDestLen(Head.UnCompressedSize));
+          Head.UnCompressedSize := S.Read(pointer(src)^, Head.UnCompressedSize);
+          if Head.UnCompressedSize <= 0 then
+            exit; // read error
+          if ForceHash32 then
+            Head.HashUncompressed := Hash32(pointer(src), Head.UnCompressedSize)
+          else
+            Head.HashUncompressed := AlgoHash(0, pointer(src), Head.UnCompressedSize);
+          Head.CompressedSize := AlgoCompress(pointer(src), Head.UnCompressedSize, pointer(dst));
+          if ForceHash32 then
+            Head.HashCompressed := Hash32(pointer(dst), Head.CompressedSize)
+          else
+            Head.HashCompressed := AlgoHash(0, pointer(dst), Head.CompressedSize);
+          if (D.Write(Head, SizeOf(Head)) <> SizeOf(Head)) or
+             (D.Write(pointer(dst)^, Head.CompressedSize) <> Head.CompressedSize) then
+            exit;
+          dec(Count, Head.UnCompressedSize);
+        end;
+      finally
+        D.Free;
+      end;
+      result := FileSetDateFrom(Dest, S.Handle);
+    finally
+      S.Free;
+    end;
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
+function TAlgoCompress.FileUnCompress(const Source, Dest: TFileName;
+  Magic: Cardinal; ForceHash32: boolean): boolean;
+var
+  src, dst: RawByteString;
+  S, D: THandleStream;
+  Count: Int64;
+  Head: TAlgoCompressHead;
+  h: cardinal;
+begin
+  result := false;
+  if FileExists(Source) then
+  try
+    S := FileStreamSequentialRead(Source);
+    try
+      DeleteFile(Dest);
+      D := TFileStream.Create(Dest, fmCreate);
+      try
+        Count := S.Size;
+        while Count > 0 do
+        begin
+          if S.Read(Head, SizeOf(Head)) <> SizeOf(Head) then
+            exit;
+          dec(Count, SizeOf(Head));
+          if (Head.Magic <> Magic) or (Head.CompressedSize > Count) then
+            exit;
+          if Head.CompressedSize > length({%H-}src) then
+            SetString(src, nil, Head.CompressedSize);
+          if S.Read(pointer(src)^, Head.CompressedSize) <> Head.CompressedSize then
+            exit;
+          dec(Count, Head.CompressedSize);
+          if ForceHash32 then
+            h := Hash32(pointer(src), Head.CompressedSize)
+          else
+            h := AlgoHash(0, pointer(src), Head.CompressedSize);
+          if (h <> Head.HashCompressed) or
+             (AlgoDecompressDestLen(pointer(src)) <> Head.UnCompressedSize) then
+            exit;
+          if Head.UnCompressedSize > length({%H-}dst) then
+            SetString(dst, nil, Head.UnCompressedSize);
+          if AlgoDecompress(pointer(src), Head.CompressedSize, pointer(dst)) <>
+              Head.UnCompressedSize then
+             exit;
+          if ForceHash32 then
+            h := Hash32(pointer(D), Head.UnCompressedSize)
+          else
+            h := AlgoHash(0, D, Head.UnCompressedSize);
+          if (h <> Head.HashUncompressed) or
+             (D.Write(pointer(dst)^, Head.UncompressedSize) <> Head.UncompressedSize) then
+            exit;
+        end;
+      finally
+        D.Free;
+      end;
+      result := FileSetDateFrom(Dest, S.Handle);
+    finally
+      S.Free;
+    end;
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
 function TAlgoCompress.DecompressHeader(Comp: PAnsiChar; CompLen: integer;
   Load: TAlgoCompressLoad): integer;
 begin
@@ -8552,6 +9041,93 @@ begin
     PartialLen, PartialLenMax, doUncompressPartial);
 end;
 
+
+
+procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
+  out buf: RawByteString; Instance: THandle);
+var
+  HResInfo: THandle;
+  HGlobal: THandle;
+begin
+  if Instance = 0 then
+    Instance := HInstance;
+  HResInfo := FindResource(Instance, PChar(ResName), ResType);
+  if HResInfo = 0 then
+    exit;
+  HGlobal := LoadResource(Instance, HResInfo);
+  if HGlobal <> 0 then
+  begin
+    SetString(buf, PAnsiChar(LockResource(HGlobal)), SizeofResource(Instance, HResInfo));
+    UnlockResource(HGlobal); // only needed outside of Windows
+    FreeResource(HGlobal);
+  end;
+end;
+
+procedure ResourceSynLZToRawByteString(const ResName: string;
+  out buf: RawByteString; Instance: THandle);
+var
+  HResInfo: THandle;
+  HGlobal: THandle;
+begin
+  if Instance = 0 then
+    Instance := HInstance;
+  HResInfo := FindResource(Instance, PChar(ResName), PChar(10));
+  if HResInfo = 0 then
+    exit;
+  HGlobal := LoadResource(Instance, HResInfo);
+  if HGlobal <> 0 then // direct decompression from memory mapped .exe content
+  try
+    AlgoSynLZ.Decompress(LockResource(HGlobal), SizeofResource(Instance, HResInfo), buf);
+  finally
+    UnlockResource(HGlobal); // only needed outside of Windows
+    FreeResource(HGlobal);
+  end;
+end;
+
+{$ifndef PUREMORMOT2}
+
+function StreamSynLZComputeLen(P: PAnsiChar; Len, Magic: cardinal): integer;
+begin
+  result := AlgoSynLZ.StreamComputeLen(P, Len, Magic);
+end;
+
+function StreamSynLZ(Source: TCustomMemoryStream; Dest: TStream; Magic: cardinal): integer;
+begin
+  result := AlgoSynLZ.StreamCompress(Source, Dest, Magic, {hash32=}true);
+end;
+
+function StreamSynLZ(Source: TCustomMemoryStream; const DestFile: TFileName;
+  Magic: cardinal): integer;
+begin
+  result := AlgoSynLZ.StreamCompress(Source, DestFile, Magic, {hash32=}true);
+end;
+
+function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
+begin
+  result := AlgoSynLZ.FileCompress(Source, Dest, Magic, {hash32=}true);
+end;
+
+function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
+begin
+  result := AlgoSynLZ.FileUnCompress(Source, Dest, Magic, {hash32=}true);
+end;
+
+function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean;
+begin
+  result := AlgoSynLZ.FileIsCompressed(Name, Magic);
+end;
+
+function StreamUnSynLZ(const Source: TFileName; Magic: cardinal): TMemoryStream;
+begin
+  result := AlgoSynLZ.StreamUnCompress(Source, Magic, {hash32=}true);
+end;
+
+function StreamUnSynLZ(Source: TStream; Magic: cardinal): TMemoryStream;
+begin
+  result := AlgoSynLZ.StreamUnCompress(Source, Magic, {hash32=}true);
+end;
+
+{$endif PUREMORMOT2}
 
 
 { ************ RawUTF8 String Values Interning and TRawUTF8List }
@@ -10964,26 +11540,40 @@ procedure TDynArray.SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean;
 var
   W: TBaseWriter;
   temp: TTextWriterStackBuffer;
+begin
+  if GetCount = 0 then
+    result := '[]'
+  else
+  begin
+    W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
+    try
+      if EnumSetsAsText then
+        W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
+      SaveToJSON(W);
+      W.SetText(result, reformat);
+    finally
+      W.Free;
+    end;
+  end;
+end;
+
+procedure TDynArray.SaveToJSON(W: TBaseWriter);
+var
   len, backup: PtrInt;
   hacklen: PDALen;
 begin
   len := GetCount;
   if len = 0 then
-    Result := '[]'
+    W.Add('[', ']')
   else
   begin
     hacklen := PDALen(PAnsiChar(fValue^) - _DALEN);
     backup := hacklen^;
-    W := DefaultTextWriterSerializer.CreateOwnedStream(temp);
     try
-      if EnumSetsAsText then
-        W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
       hacklen^ := len - _DAOFF; // may use ExternalCount
       W.AddTypedJSON(fValue, Info.Info); // serialization from mormot.core.json
-      W.SetText(Result, reformat);
     finally
       hacklen^ := backup;
-      W.Free;
     end;
   end;
 end;
@@ -12803,6 +13393,17 @@ function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean;
   reformat: TTextWriterJSONFormat): RawUTF8;
 begin
   result := InternalDynArray.SaveToJSON(EnumSetsAsText, reformat);
+end;
+
+procedure TDynArrayHashed.SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean;
+  reformat: TTextWriterJSONFormat);
+begin
+  InternalDynArray.SaveToJSON(result, EnumSetsAsText, reformat);
+end;
+
+procedure TDynArrayHashed.SaveToJSON(W: TBaseWriter);
+begin
+  InternalDynArray.SaveToJSON(W);
 end;
 
 function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char;

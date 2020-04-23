@@ -291,6 +291,8 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
+    /// fill fields with the current UTC or local time, using a 8-16ms thread-safe cache
+    procedure FromNow(localtime: boolean);
     /// fill fields from the given value - but not DayOfWeek
     procedure FromDateTime(const dt: TDateTime);
     /// fill Year/Month/Day fields from the given value - but not DayOfWeek
@@ -1327,6 +1329,11 @@ end;
 procedure TSynSystemTime.FromNowLocal;
 begin
   FromGlobalTime(true, self);
+end;
+
+procedure TSynSystemTime.FromNow(localtime: boolean);
+begin
+  FromGlobalTime(localtime, self);
 end;
 
 procedure TSynSystemTime.FromDateTime(const dt: TDateTime);
