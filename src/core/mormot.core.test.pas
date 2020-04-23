@@ -21,6 +21,7 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.data,
+  mormot.core.os,
   mormot.core.text,
   mormot.core.perf;
 
@@ -410,9 +411,9 @@ const
 implementation
 
 uses
-  mormot.core.os,
   mormot.core.rtti,
   mormot.core.datetime;
+
 
 { ************ Unit-Testing classes and functions }
 

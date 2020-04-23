@@ -237,7 +237,7 @@ type
     /// the name (without .pas extension) of the unit were the class was defined
     // - then the PRttiProps information follows: use the method
     // RttiProps to retrieve its address
-    function UnitName: ShortString; {$ifdef HASINLINE} inline; {$endif}
+    function UnitName: PShortString; {$ifdef HASINLINE} inline; {$endif}
     /// get the information about the published properties of this class
     // - stored after UnitName memory
     function RttiProps: PRttiProps; {$ifdef HASINLINE} inline; {$endif}
@@ -982,6 +982,21 @@ function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
 procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString;
   trimlowercase: boolean = false);
 
+/// helper to retrieve all (translated) caption texts of an enumerate
+// - may be used as cache for overloaded ToCaption() content
+procedure GetEnumCaptions(aTypeInfo: pointer; aDest: PString);
+
+/// UnCamelCase and translate the enumeration item
+function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
+
+/// low-level helper to retrieve a (translated) caption from a PShortString
+// - as used e.g. by GetEnumCaptions or GetCaptionFromEnum
+procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
+
+function ToText(os: TOperatingSystem): PShortString; overload;
+function ToText(const osv: TOperatingSystemVersion): ShortString; overload;
+function ToTextOS(osint32: integer): RawUTF8;
+
 
 { ***************** IInvokable Interface RTTI }
 
@@ -1433,8 +1448,8 @@ type
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonRead=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
-    // slot used by mormot.orm.base.pas
-    fORM: TObject;
+    // slot used e.g. by mormot.orm.base.pas or mormot.core.log.pas
+    fPrivate: TObject;
     // used by NoRttiSetAndRegister()
     fNoRttiInfo: TByteDynArray;
     // customize class process
@@ -1519,8 +1534,10 @@ type
     /// store the Item class for a given TCollection
     // - as previously registered by RttiCustom.RegisterCollection()
     property CollectionItem: TCollectionItemClass read fCollectionItem;
-    /// opaque TORMPropInfoRTTI instance used by mormot.orm.base.pas
-    property ORM: TObject read fORM write fORM;
+    /// opaque private instance used by mormot.orm.base.pas or mormot.core.log.pas
+    // - stores e.g. the ORM information of a TSQLRecord, or the TSynLogFamily
+    // of a TSynLog instance
+    property Private: TObject read fPrivate write fPrivate;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer read fJsonLoad write fJsonLoad;
     /// opaque TRttiJsonSave callback used by mormot.core.json.pas
@@ -1770,9 +1787,20 @@ type
 
 { TRttiClass }
 
-function TRttiClass.UnitName: ShortString;
+function TRttiClass.UnitName: PShortString;
 begin
-  result := PTypeData(@self)^.UnitName;
+  result := @PTypeData(@self)^.UnitName;
+end;
+
+function _ClassUnit(C: TClass): PShortString;
+var
+  P: PRttiInfo;
+begin
+  P := PPointer(PAnsiChar(C) + vmtTypeInfo)^;
+  if P <> nil then
+    result := P^.RttiClass^.UnitName
+  else
+    result := @NULCHAR;
 end;
 
 function TRttiClass.InheritsFrom(AClass: TClass): boolean;
@@ -3405,6 +3433,70 @@ begin
   end;
 end;
 
+procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
+var
+  tmp: array[byte] of AnsiChar;
+  L: integer;
+begin
+  L := ord(PS^[0]);
+  inc(PByte(PS));
+  while (L > 0) and (PS^[0] in ['a'..'z']) do
+  begin
+    inc(PByte(PS));
+    dec(L);
+  end;
+  tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
+  if L > 0 then
+    MoveSmall(PS, @tmp, L);
+  GetCaptionFromPCharLen(tmp, result);
+end;
+
+procedure GetEnumCaptions(aTypeInfo: pointer; aDest: PString);
+var
+  MaxValue, i: integer;
+  res: PShortString;
+begin
+  PRttiInfo(aTypeInfo)^.EnumBaseType(res, MaxValue);
+  if res <> nil then
+    for i := 0 to MaxValue do
+    begin
+      GetCaptionFromTrimmed(res, aDest^);
+      inc(PByte(res), PByte(res)^ + 1); // next
+      inc(aDest);
+    end;
+end;
+
+function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
+begin
+  GetCaptionFromTrimmed(GetEnumName(aTypeInfo, aIndex), result{%H-});
+end;
+
+function ToText(os: TOperatingSystem): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TOperatingSystem), ord(os));
+end;
+
+function ToText(const osv: TOperatingSystemVersion): ShortString;
+begin
+  if osv.os = osWindows then
+    FormatShort('Windows %', [WINDOWS_NAME[osv.win]], result)
+  else
+    TrimLeftLowerCaseToShort(ToText(osv.os), result);
+end;
+
+function ToTextOS(osint32: integer): RawUTF8;
+var
+  osv: TOperatingSystemVersion absolute osint32;
+  ost: ShortString;
+begin
+  ost := ToText(osv);
+  if (osv.os >= osLinux) and (osv.utsrelease[2] <> 0) then
+    result := FormatUTF8('% %.%.%', [ost, osv.utsrelease[2],
+      osv.utsrelease[1], osv.utsrelease[0]])
+  else
+    ShortStringToAnsi7String(ost, result);
+end;
+
 
 { ***************** IInvokable Interface RTTI }
 
@@ -4836,7 +4928,7 @@ end;
 destructor TRttiCustom.Destroy;
 begin
   inherited Destroy;
-  fORM.Free;
+  fPrivate.Free;
 end;
 
 procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRTTIParserType;
@@ -5651,6 +5743,7 @@ begin
   // prepare global thread-safe TRttiCustomList
   InitializeCriticalSection(RttiCustom.Lock);
   RttiCustom.GlobalClass := TRttiCustom;
+  ClassUnit := _ClassUnit;
 end;
 
 procedure FinalizeUnit;

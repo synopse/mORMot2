@@ -98,7 +98,7 @@ end;
 function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
 var CP: PRttiProps;
 begin
-  if C<>nil then
+  if C <> nil then
   begin
     CP := GetRttiProps(C);
     if CP <> nil then

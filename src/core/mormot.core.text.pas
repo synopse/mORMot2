@@ -6452,12 +6452,14 @@ end;
 procedure TBaseWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
   IncludeUnitName, IncludePointer: boolean);
 begin
-  if IncludeUnitName and Assigned(ClassUnit) then begin
-    AddShort(ClassUnit(PClass(Instance)^));
+  if IncludeUnitName and Assigned(ClassUnit) then
+  begin
+    AddShort(ClassUnit(PClass(Instance)^)^);
     Add('.');
   end;
   AddShort(PPShortString(PPAnsiChar(Instance)^ + vmtClassName)^^);
-  if IncludePointer then begin
+  if IncludePointer then
+  begin
     Add('(');
     AddBinToHexDisplayMinChars(@Instance,SizeOf(Instance));
     Add(')');

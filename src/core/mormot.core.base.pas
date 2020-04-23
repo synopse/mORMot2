@@ -617,7 +617,7 @@ procedure ClassToText(C: TClass; var result: RawUTF8);
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
-  ClassUnit: function(C: TClass): shortstring;
+  ClassUnit: function(C: TClass): PShortString;
 
 /// just a wrapper around vmtParent to avoid a function call
 // - slightly faster than TClass.ClassParent thanks to proper inlining
