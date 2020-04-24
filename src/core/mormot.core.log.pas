@@ -2849,7 +2849,7 @@ var
 begin
   id := GetCurrentThreadId;
   if id <> fThreadID then
-    GetThreadContextInternal(id);
+    GetThreadContextInternal(PtrUInt(id));
 end;
 
 procedure TSynLog.LogTrailer(Level: TSynLogInfo);
@@ -2884,7 +2884,7 @@ var
   hash: PtrUInt;
 begin
   // should match TSynLog.ThreadContextRehash
-  fThreadID := id;
+  fThreadID := TThreadID(id);
   if fFamily.fPerThreadLog <> ptNoThreadProcess then
   begin
     secondpass := false;
@@ -5847,9 +5847,4 @@ initialization
 finalization
   FinalizeUnit;
 end.
-
-
-
-
-
 
