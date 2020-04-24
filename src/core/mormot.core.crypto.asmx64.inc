@@ -2770,11 +2770,7 @@ end;
 // optimized asm using SSE4 instructions for x64 64-bit
 
 {$ifdef MSWINDOWS}
-  {$ifdef FPC}
-    {$L sha512-x64sse4.obj}
-  {$else}
-    {$L ..\..\static\delphi\sha512-x64sse4.obj}
-  {$endif FPC}
+  {$L ..\..\static\delphi\sha512-x64sse4.obj}
 {$else}
   {$L sha512-x64sse4.o}
 {$endif MSWINDOWS}
@@ -2815,11 +2811,7 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. }
 
 {$ifdef MSWINDOWS}
-  {$ifdef FPC}
-    {$L crc32c64.obj}
-  {$else}
-    {$L ..\..\static\delphi\crc32c64.obj}
-  {$endif FPC}
+  {$L ..\..\static\delphi\crc32c64.obj}
 {$else}
   {$L crc32c64.o}
 {$endif MSWINDOWS}
@@ -2827,8 +2819,8 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
 // defined in mormot.core.crypto.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base
 // crc32c x86_64 asm is alredy fast enough
-function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal; {$ifdef FPC}cdecl;{$endif} external;
-
+function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal;
+  {$ifdef FPC}cdecl;{$endif} external;
 
 function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm{$else}asm .noframe {$endif}

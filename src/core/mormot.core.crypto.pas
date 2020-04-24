@@ -880,6 +880,7 @@ var
 // using AES-128 and the global AESIVCTR_KEY
 procedure AESIVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
 
+function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 
 var
   /// the AES-256 encoding class used by CompressShaAes() global function
@@ -2023,6 +2024,7 @@ function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
   DigestBits: integer = 0): RawUTF8; overload;
 
 
+
 { ****** IProtocol Safe Communication with Unilateral or Mutual Authentication }
 
 type
@@ -2123,6 +2125,8 @@ type
 
   /// class-reference type (metaclass) of an AES secure protocol
   TProtocolAESClass = class of TProtocolAES;
+
+function ToText(res: TProtocolResult): PShortString; overload;
 
 
 { ****************** Deprecated Weak AES/SHA Process }
@@ -3099,6 +3103,11 @@ begin
     TAESContext(fAES.Context).DoBlock(fAES.Context, BI, BO);
     LeaveCriticalSection(fSafe);
   end;
+end;
+
+function ToText(chk: TAESIVReplayAttackCheck): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TAESIVReplayAttackCheck), ord(chk));
 end;
 
 constructor TAESAbstract.Create(const aKey; aKeySizeBits: cardinal);
@@ -7731,6 +7740,7 @@ begin
 end;
 
 
+
 { ****** IProtocol Safe Communication with Unilateral or Mutual Authentication }
 
 { TProtocolNone }
@@ -7828,6 +7838,13 @@ function TProtocolAES.Clone: IProtocol;
 begin
   result := TProtocolAESClass(ClassType).CreateFrom(self);
 end;
+
+
+function ToText(res: TProtocolResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TProtocolResult), ord(res));
+end;
+
 
 
 { ****************** Deprecated Weak AES/SHA Process }

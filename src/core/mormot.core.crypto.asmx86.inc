@@ -2229,7 +2229,7 @@ end;
 
 {$ifdef MSWINDOWS}
   {$ifdef FPC}
-    {$L sha512-x86.o}
+    {$L ..\..\static\i386-win32\sha512-x86.o}
   {$else}
     {$L ..\..\static\delphi\sha512-x86.obj}
   {$endif FPC}
