@@ -102,6 +102,7 @@ procedure LeaveCriticalSection;       external kernel32;
 procedure DeleteCriticalSection;      external kernel32;
 function  TryEnterCriticalSection;    external kernel32;
 procedure AllocConsole;               external kernel32;
+procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetModuleHandle;            external kernel32;
 function  GetCurrentThreadId;         external kernel32;
 function  GetEnvironmentStringsW;     external kernel32;
@@ -992,7 +993,8 @@ end;
 
 { TWinRegistry }
 
-function TWinRegistry.ReadOpen(root: HKEY; const keyname: RawUTF8; closefirst: boolean): boolean;
+function TWinRegistry.ReadOpen(root: HKEY; const keyname: RawUTF8;
+  closefirst: boolean): boolean;
 var
   tmp: TSynTempBuffer;
   L: integer;
@@ -1070,7 +1072,8 @@ var
   tmp: TSynTempBuffer;
 begin
   result := nil;
-  if (RegQueryInfoKeyW(key, nil, nil, nil, @count, @maxlen, nil, nil, nil, nil, nil, nil) <> 0) or
+  if (RegQueryInfoKeyW(key, nil, nil, nil, @count, @maxlen,
+       nil, nil, nil, nil, nil, nil) <> 0) or
      ({%H-}count = 0) then
     exit;
   SetLength(result, count);

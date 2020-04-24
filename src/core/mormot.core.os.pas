@@ -566,6 +566,10 @@ procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
+procedure FileClose(F: THandle); stdcall;
+
+/// redefined here to avoid warning to include "Windows" in uses clause
+// - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function DeleteFile(const aFileName: TFileName): boolean;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
@@ -867,7 +871,7 @@ function SearchRecValidFolder(const F: TSearchRec): boolean;
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
 function FileOpenSequentialRead(const FileName: string): Integer;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// returns a TFileStream optimized for one pass file reading
 // - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
