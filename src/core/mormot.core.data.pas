@@ -184,6 +184,10 @@ type
   end;
   {$M-}
 
+  /// used to determine the exact class type of a TSynPersistent
+  // - could be used to create instances using its virtual constructor
+  TSynPersistentClass = class of TSynPersistent;
+
   /// simple and efficient TList, without any notification
   // - regular TList has an internal notification mechanism which slows down
   // basic process, and can't be easily inherited
@@ -523,70 +527,9 @@ type
     property IDValue: TID read fID write fID;
   end;
 
-  /// abstract TSynPersistent class allowing safe storage of a password
-  // - the associated Password, e.g. for storage or transmission encryption
-  // will be persisted encrypted with a private key (which can be customized)
-  // - if default simple symmetric encryption is not enough, you may define
-  // a custom TSynPersistentWithPasswordUserCrypt callback, e.g. to
-  // SynCrypto's CryptDataForCurrentUser, for hardened password storage
-  // - a published property should be defined as such in inherited class:
-  // ! property PasswordPropertyName: RawUTF8 read fPassword write fPassword;
-  // - use the PassWordPlain property to access to its uncyphered value
-  TSynPersistentWithPassword = class(TSynPersistent)
-  protected
-    fPassWord: SPIUTF8;
-    fKey: cardinal;
-    function GetKey: cardinal; {$ifdef HASINLINE}inline;{$endif}
-    function GetPassWordPlain: SPIUTF8;
-    function GetPassWordPlainInternal(AppSecret: RawUTF8): SPIUTF8;
-    procedure SetPassWordPlain(const Value: SPIUTF8);
-  public
-    /// finalize the instance
-    destructor Destroy; override;
-    /// this class method could be used to compute the encrypted password,
-    // ready to be stored as JSON, according to a given private key
-    class function ComputePassword(const PlainPassword: SPIUTF8;
-      CustomKey: cardinal = 0): SPIUTF8; overload;
-    /// this class method could be used to compute the encrypted password from
-    // a binary digest, ready to be stored as JSON, according to a given private key
-    // - just a wrapper around ComputePassword(BinToBase64URI())
-    class function ComputePassword(PlainPassword: pointer; PlainPasswordLen: integer;
-      CustomKey: cardinal = 0): SPIUTF8; overload;
-    /// this class method could be used to decrypt a password, stored as JSON,
-    // according to a given private key
-    // - may trigger a ESynException if the password was stored using a custom
-    // TSynPersistentWithPasswordUserCrypt callback, and the current user
-    // doesn't match the expected user stored in the field
-    class function ComputePlainPassword(const CypheredPassword: SPIUTF8;
-      CustomKey: cardinal = 0; const AppSecret: RawUTF8 = ''): SPIUTF8;
-    /// the private key used to cypher the password storage on serialization
-    // - application can override the default 0 value at runtime
-    property Key: cardinal read GetKey write fKey;
-    /// access to the associated unencrypted Password value
-    // - read may trigger a ESynException if the password was stored using a
-    // custom TSynPersistentWithPasswordUserCrypt callback, and the current user
-    // doesn't match the expected user stored in the field
-    property PasswordPlain: SPIUTF8 read GetPassWordPlain write SetPassWordPlain;
-  end;
-
-  /// used to determine the exact class type of a TSynPersistent
-  // - could be used to create instances using its virtual constructor
-  TSynPersistentClass = class of TSynPersistent;
-
-var
-  /// function prototype to customize TSynPersistent class password storage
-  // - is called when 'user1:base64pass1,user2:base64pass2' layout is found,
-  // and the current user logged on the system is user1 or user2
-  // - you should not call this low-level method, but assign e.g. from SynCrypto:
-  // $ TSynPersistentWithPasswordUserCrypt := CryptDataForCurrentUser;
-  TSynPersistentWithPasswordUserCrypt:
-    function(const Data,AppServer: RawByteString; Encrypt: boolean): RawByteString;
-
 /// naive symmetric encryption scheme using a 32-bit key
 // - fast, but not very secure, since uses crc32ctab[] content as master cypher
 // key: consider using SynCrypto proven AES-based algorithms instead
-// - used e.g. by TSynPersistentWithPassword if global
-// TSynPersistentWithPasswordUserCrypt has not been defined
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
 
@@ -4150,123 +4093,6 @@ begin
   Rtti.Props.Add(TypeInfo(TID), PtrInt(@TSynPersistentWithID(nil).fID), 'ID');
 end;
 
-
-{ TSynPersistentWithPassword }
-
-destructor TSynPersistentWithPassword.Destroy;
-begin
-  FillZero(fPassword);
-  inherited Destroy;
-end;
-
-class function TSynPersistentWithPassword.ComputePassword(
-  const PlainPassword: SPIUTF8; CustomKey: cardinal): SPIUTF8;
-var
-  instance: TSynPersistentWithPassword;
-begin
-  instance := TSynPersistentWithPassword.Create;
-  try
-    instance.Key := CustomKey;
-    instance.SetPassWordPlain(PlainPassword);
-    result := instance.fPassWord;
-  finally
-    instance.Free;
-  end;
-end;
-
-class function TSynPersistentWithPassword.ComputePassword(PlainPassword: pointer;
-  PlainPasswordLen: integer; CustomKey: cardinal): SPIUTF8;
-begin
-  result := ComputePassword(BinToBase64uri(PlainPassword, PlainPasswordLen));
-end;
-
-class function TSynPersistentWithPassword.ComputePlainPassword(
-  const CypheredPassword: SPIUTF8; CustomKey: cardinal;
-  const AppSecret: RawUTF8): SPIUTF8;
-var
-  instance: TSynPersistentWithPassword;
-begin
-  instance := TSynPersistentWithPassword.Create;
-  try
-    instance.Key := CustomKey;
-    instance.fPassWord := CypheredPassword;
-    result := instance.GetPassWordPlainInternal(AppSecret);
-  finally
-    instance.Free;
-  end;
-end;
-
-function TSynPersistentWithPassword.GetKey: cardinal;
-begin
-  if self = nil then
-    result := 0
-  else
-    result := fKey xor $A5abba5A;
-end;
-
-function TSynPersistentWithPassword.GetPassWordPlain: SPIUTF8;
-begin
-  result := GetPassWordPlainInternal('');
-end;
-
-function TSynPersistentWithPassword.GetPassWordPlainInternal(
-  AppSecret: RawUTF8): SPIUTF8;
-var
-  value, pass: RawByteString;
-  usr: RawUTF8;
-  i, j: integer;
-begin
-  result := '';
-  if (self = nil) or (fPassWord = '') then
-    exit;
-  if Assigned(TSynPersistentWithPasswordUserCrypt) then
-  begin
-    if AppSecret = '' then
-      ClassToText(ClassType, AppSecret);
-    usr := ExeVersion.User + ':';
-    i := PosEx(usr, fPassword);
-    if (i = 1) or ((i > 0) and (fPassword[i - 1] = ',')) then
-    begin
-      inc(i, length(usr));
-      j := PosEx(',', fPassword, i);
-      if j = 0 then
-        j := length(fPassword) + 1;
-      Base64ToBin(@fPassword[i], j - i, pass);
-      if pass <> '' then
-        result := TSynPersistentWithPasswordUserCrypt(pass, AppSecret, false);
-    end
-    else
-    begin
-      i := PosExChar(':', fPassword);
-      if i > 0 then
-        raise ESynException.CreateUTF8('%.GetPassWordPlain unable to retrieve the ' +
-          'stored value: current user is [%], but password in % was encoded for [%]',
-          [self, ExeVersion.User, AppSecret, copy(fPassword, 1, i - 1)]);
-    end;
-  end;
-  if result = '' then
-  begin
-    value := Base64ToBin(fPassWord);
-    SymmetricEncrypt(GetKey, value);
-    result := value;
-  end;
-end;
-
-procedure TSynPersistentWithPassword.SetPassWordPlain(const Value: SPIUTF8);
-var
-  tmp: RawByteString;
-begin
-  if self = nil then
-    exit;
-  if value = '' then
-  begin
-    fPassWord := '';
-    exit;
-  end;
-  SetString(tmp, PAnsiChar(pointer(value)), Length(value)); // private copy
-  SymmetricEncrypt(GetKey, tmp);
-  fPassWord := BinToBase64(tmp);
-end;
 
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);

@@ -206,7 +206,7 @@ const
      $000000, $000000, $000000, $000000, $000000, $FFFFFF, $000000, $000000));
 
   /// console colors corresponding to each logging level
-  // - SynCommons' TextColor()
+  // - to be used with mormot.core.os TextColor()
   LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor =(
   //  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
     ccLightGray, ccWhite, ccLightGray, ccLightBlue, ccBrown, ccLightRed, ccGreen, ccGreen,
@@ -1142,6 +1142,7 @@ threadvar
 function GetCurrentThreadName: RawUTF8;
   {$ifdef HASINLINE} inline; {$endif}
 
+
 type
   /// a mORMot-compatible calback definition
   // - used to notify a remote mORMot server via interface-based serivces
@@ -1149,7 +1150,7 @@ type
   ISynLogCallback = interface(IInvokable)
     ['{9BC218CD-A7CD-47EC-9893-97B7392C37CF}']
     /// each line of the TBaseWriter internal instance will trigger this method
-    // - the format is similar to TOnTextWriterEcho, as defined in SynCommons
+    // - similar to TOnTextWriterEcho, as defined in mormot.core.text
     // - an initial call with Level=sllNone and the whole previous Text may be
     // transmitted, if ReceiveExistingKB is set for TSynLogCallbacks.Subscribe()
     procedure Log(Level: TSynLogInfo; const Text: RawUTF8);
