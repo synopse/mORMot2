@@ -614,6 +614,10 @@ function ClassNameShort(Instance: TObject): PShortString; overload;
 /// just a wrapper around vmtClassName to avoid a string conversion
 procedure ClassToText(C: TClass; var result: RawUTF8);
 
+/// just a wrapper around vmtClassName to avoid a string conversion
+function ToText(C: TClass): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
@@ -1766,7 +1770,8 @@ function IsEqual(const A,B: THash128): boolean; overload;
 procedure FillZero(out dig: THash128); overload;
 
 /// fast O(n) search of a 128-bit item in an array of such values
-function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
+function Hash128Index(P: PHash128Rec; Count: integer;
+  h: PHash128Rec): integer;
 
 /// returns TRUE if all 20 bytes of this 160-bit buffer equal zero
 // - e.g. a SHA-1 digest
@@ -2241,8 +2246,10 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
 /// retrieve 128-bit of entropy, from system time and current execution state
-// - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs
 // - entropy is gathered using 4 crc32c 32-bit hashes, via crcblock()
+// - calls RTL Now(), Random(), CreateGUID(), GetCurrentThreadID() and
+// current gsl_rng_taus2 Lecuyer state
+// - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs
 procedure XorEntropy(entropy: PBlock128);
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
@@ -3442,7 +3449,8 @@ begin
   pointer(s) := r;
 end;
 
-procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt; out aligned: pointer);
+procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
+  out aligned: pointer);
 begin
   SetString(s, nil, len + 16);
   aligned := pointer(s);
@@ -3482,6 +3490,11 @@ begin
     P := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^;
     FastSetString(result, @P^[1], ord(P^[0]));
   end;
+end;
+
+function ToText(C: TClass): RawUTF8;
+begin
+  ClassToText(C, result);
 end;
 
 function GetClassParent(C: TClass): TClass;
@@ -6574,7 +6587,7 @@ end;
 
 function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
 var
-  _0, _1: PtrInt;
+  _0, _1: PtrInt; // is likely to use CPU registers
 begin
   if P <> nil then
   begin
@@ -6597,7 +6610,8 @@ begin
     _0 := h^.d0;
     _1 := h^.d1;
     for result := 0 to Count - 1 do
-      if (P^.d0 = _0) and (P^.d1 = _1) and (P^.d2 = h^.d2) and (P^.d3 = h^.d3) then
+      if (P^.d0 = _0) and (P^.d1 = _1) and
+         (P^.d2 = h^.d2) and (P^.d3 = h^.d3) then
         exit
       else
         inc(P);
@@ -6611,7 +6625,8 @@ function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
 begin
   if P <> nil then
     for result := 0 to Count - 1 do
-      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and (P^.i2 = h^.i2) and (P^.i3 = h^.i3) then
+      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and
+         (P^.i2 = h^.i2) and (P^.i3 = h^.i3) then
         exit
       else
         inc(P);
@@ -6622,8 +6637,10 @@ function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
 begin
   if P <> nil then
     for result := 0 to Count - 1 do
-      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and (P^.i2 = h^.i2) and (P^.i3 = h^.i3) and
-         (P^.i4 = h^.i4) and (P^.i5 = h^.i5) and (P^.i6 = h^.i6) and (P^.i7 = h^.i7) then
+      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and
+         (P^.i2 = h^.i2) and (P^.i3 = h^.i3) and
+         (P^.i4 = h^.i4) and (P^.i5 = h^.i5) and
+         (P^.i6 = h^.i6) and (P^.i7 = h^.i7) then
         exit
       else
         inc(P);
@@ -7342,11 +7359,12 @@ end;
 
 threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
+
 var
   _EntropyGlobal: THash128Rec; // to avoid replay attacks
 
 procedure XorEntropy(entropy: PBlock128);
-var e: THash128Rec;
+var e, f: THash128Rec;
 begin // xor entropy with its existing (on-stack) values
   e := _EntropyGlobal;
   {$ifdef CPUINTEL}
@@ -7357,31 +7375,33 @@ begin // xor entropy with its existing (on-stack) values
   crcblock(entropy, @e.b);
   crcblock(entropy, @_Lecuyer); // perfect forward security
   unaligned(PDouble(@e.L)^) := Now * 2123923447; // cross-platform time
-  e.c2 := e.c3 xor e.c1 xor PtrUInt(entropy);
-  e.c3 := e.c2 xor e.c0 {$ifdef FPC} xor PtrUInt(GetCurrentThreadID) {$endif};
+  e.c2 := e.c2 xor e.c1 xor PtrUInt(entropy);
+  e.c3 := e.c3 xor e.c0 {$ifdef FPC} xor PtrUInt(GetCurrentThreadID) {$endif};
   crcblock(entropy, @e.b);
   {$ifdef CPUINTEL}
   if cfRAND in CpuFeatures then
   begin // won't hurt
-    e.c0 := e.c3 xor RdRand32;
-    e.c1 := e.c2 xor RdRand32;
-    e.c2 := e.c1 xor RdRand32;
-    e.c3 := e.c0 xor RdRand32;
+    f := e;
+    e.c0 := f.c3 xor RdRand32;
+    e.c1 := f.c2 xor RdRand32;
+    e.c2 := f.c1 xor RdRand32;
+    e.c3 := f.c0 xor RdRand32;
     crcblock(entropy, @e.b);
   end;
   e.Lo := e.Lo xor Rdtsc; // has changed in-between
   {$endif CPUINTEL}
-  e.i0 := e.i3 xor Random(maxInt);
-  e.i1 := e.i2 xor Random(maxInt);
-  e.i2 := e.i1 xor Random(maxInt);
-  e.i3 := e.i0 xor Random(maxInt);
+  f := e;
+  e.i0 := f.i3 xor Random(maxInt); // some randomness from RTL
+  e.i1 := f.i2 xor Random(maxInt);
+  e.i2 := f.i1 xor Random(maxInt);
+  e.i3 := f.i0 xor Random(maxInt);
   crcblock(entropy, @e.b);
   {$ifdef MSWINDOWS}
-  CreateGUID(PGuid(@e)^); // FPC uses Random() on non-Windows
+  CreateGUID(PGuid(@e)^); // FPC uses Random() on non-Windows -> not needed
   crcblock(entropy, @e.b);
   {$endif MSWINDOWS}
   _EntropyGlobal.c := entropy^;
-  e.c0 := e.c0 xor xxHash32(e.c3, @e, SizeOf(e)); // cascade crcblock hashes
+  e.c0 := e.c0 xor xxHash32(e.c3, @e, SizeOf(e)); // cascaded crcblock hashes
   e.c1 := e.c1 xor xxHash32(e.c2, @e, SizeOf(e));
   e.c2 := e.c2 xor xxHash32(e.c1, @e, SizeOf(e));
   e.c3 := e.c3 xor xxHash32(e.c0, @e, SizeOf(e));
