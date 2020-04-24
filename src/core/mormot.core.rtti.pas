@@ -1375,7 +1375,6 @@ type
     /// total size, in bytes, of all properties/fields
     // - equals the sum of List[].Value.Size
     Size: integer;
-    AutoCreateClasses, AutoCreateObjArrays: array of PRttiCustomProp;
     /// reset all properties
     procedure Clear;
     /// locate a property/field by name
@@ -1406,6 +1405,8 @@ type
     procedure FinalizeAndClearPublishedProperties(Instance: TObject);
     // set AutoCreate* internal fields
     procedure SetAutoCreateFields;
+  public
+    AutoCreateClasses, AutoCreateObjArrays: array of PRttiCustomProp;
   private
     fFromTextPropNames: TRawUTF8DynArray; // store AddFromText() ShortStrings
     /// points to List[] items which are managed
@@ -4518,22 +4519,18 @@ function TRttiCustomProps.Find(PropName: PUTF8Char;
   PropNameLen: PtrInt): PRttiCustomProp;
 var
   n: integer;
-  p: ^PRttiCustomProp;
   s: PUTF8Char;
 begin
-  p := pointer(List);
-  if p <> nil then
+  result := pointer(List);
+  if result <> nil then
   begin
     n := Count;
     repeat
-      s := pointer(p^.Name);
+      s := pointer(result.Name);
       if (ord(s[0]) = PropNameLen) and
          IdemPropNameUSameLen(s + 1, PropName, PropNameLen) then
-      begin
-        result := p^;
         exit;
-      end;
-      inc(p);
+      inc(result);
       dec(n);
     until n = 0;
   end;
@@ -5127,19 +5124,16 @@ begin
     else if not GetNextFieldProp(P, propname) then
       // expect regular object pascal identifier (i.e. 0..9,a..z,A..Z,_)
       break;
-    case P^ of
-      ',':
-        begin
-          // a,'b,b',c: integer
-          inc(P);
-          AddInteger(prop{%H-}, propcount, Props.FromTextPrepare(propname));
-          continue; // several properties defined with the same type
-        end;
-      ':':
-        P := GotoNextNotSpace(P + 1);
-      else
-        AddInteger(prop, propcount, Props.FromTextPrepare(propname));
+    if P^ = ',' then
+    begin
+      // a,'b,b',c: integer
+      inc(P);
+      AddInteger(prop{%H-}, propcount, Props.FromTextPrepare(propname));
+      continue; // several properties defined with the same type
     end;
+    AddInteger(prop, propcount, Props.FromTextPrepare(propname));
+    if P^ = ':' then
+      P := GotoNextNotSpace(P + 1);
     // identify type for prop[]
     typname := '';
     atypname := '';
@@ -5276,6 +5270,7 @@ begin
     end;
     propcount := 0;
   end;
+  fProps.Size := fCache.Size;
   Props.SetManagedFromList;
   if Props.fManaged <> nil then
     include(fFlags, rcfHasNestedManagedProperties);
@@ -5308,7 +5303,7 @@ begin
         result := nil; // not found
         exit;
       end;
-      inc(PPointer(result)); // found
+      result := PPointerArray(result)[1]; // found
       exit;
     until false;
   end
@@ -5383,7 +5378,7 @@ begin
   for k := low(Pairs) to high(Pairs) do
     if k in Kinds then
     begin
-      result := Find(Name, NameLen);
+      result := Find(Name, NameLen, k);
       if result <> nil then
         exit;
     end;
@@ -5588,7 +5583,7 @@ begin
     result.SetPropsFromText(P, eeNothing);
     if result.Props.Size <> result.Size then
       raise ERttiException.CreateUTF8('RttiCustom.RegisterFromText(%): text ' +
-        'definition  covers % bytes, but RTTI expectd %',
+        'definition  covers % bytes, but RTTI defined %',
         [DynArrayOrRecord^.Name^, result.Props.Size, result.Size]);
   end;
 end;
