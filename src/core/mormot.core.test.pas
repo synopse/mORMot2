@@ -1003,14 +1003,14 @@ begin
   fFailed := nil;
   fAssertions := 0;
   fAssertionsFailed := 0;
-  for m := 0 to count - 1 do
+  for m := 0 to Count - 1 do
   try
     Color(ccWhite);
     writeln(fSaveToFile, #13#10#13#10, m + 1, '. ', fTests[m].TestName);
     Color(ccLightGray);
     fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
     try
-      for i := 0 to high(fTestCaseClass) - 1 do
+      for i := 0 to high(fTestCaseClass) do
       begin
         C := fTestCaseClass[i].Create(self);
         try

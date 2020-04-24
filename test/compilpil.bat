@@ -13,7 +13,8 @@ if "%bin%"==""    set bin=c:\temp\tempbuild
 if "%target%"=="" set target=win32
 
 set units=%lib2%\src\core;%lib2%\src\db;%lib2%\src\rest
-set sw=-B -Q -GD -R%lib2%\src -I%lib2%\src;%lib2%\src\core -U%units% -O%lib2%\static\delphi-%target% -E%bin%\exe -N%bin%\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
+set sw=-B -Q -GD -R%lib2%\src -I%lib2%\src;%lib2%\src\core -U%units% -E%bin%\exe -N%bin%\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
+rem -O%lib2%\static\delphi 
 
 if "%DelphiVersion%"=="" (
 	rem ** Default compiler is Delphi 7

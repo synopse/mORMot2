@@ -12154,7 +12154,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
     {$endif}
 begin
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexW; {$endif}
+  {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexWLower; {$endif}
   if BinBytes > 0 then
     repeat
       PWord(Hex)^ := tab[Bin^];

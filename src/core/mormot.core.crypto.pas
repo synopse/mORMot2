@@ -8388,6 +8388,19 @@ begin
   assert(sizeof(TSHA512) > sizeof(TSHA256));
   assert(sizeof(TSHA3) > sizeof(TSHA512));
   assert(sizeof(TSHA3) > sizeof(THMAC_SHA512));
+  assert((PtrUInt(@TD0) + $400 = PtrUInt(@TD1)) and
+         (PtrUInt(@TD0) + $800 = PtrUInt(@TD2)) and
+         (PtrUInt(@TD0) + $C00 = PtrUInt(@TD3)) and
+         (PtrUInt(@TD0) + $1000 = PtrUInt(@TE0)) and
+         (PtrUInt(@TD0) + $1400 = PtrUInt(@TE1)) and
+         (PtrUInt(@TD0) + $1800 = PtrUInt(@TE2)) and
+         (PtrUInt(@TD0) + $1C00 = PtrUInt(@TE3)) and
+         (SBox[255] = $16) and (InvSBox[0] = $52) and
+         (Te0[0] = $a56363c6) and (Te0[255] = $3a16162c) and
+         (Te1[0] = $6363c6a5) and (Te1[255] = $16162c3a) and
+         (Te3[0] = $c6a56363) and (Te3[255] = $2c3a1616) and
+         (Td0[0] = $50a7f451) and (Td0[99] = 0) and (Td0[255] = $4257b8d0) and
+         (Td3[0] = $5150a7f4) and (Td3[255] = $d04257b8));
 end;
 
 procedure FinalizeUnit;
@@ -8400,6 +8413,7 @@ begin
      (CryptoAPIAESProvider <> HCRYPTPROV_NOTTESTED) then
     CryptoAPI.ReleaseContext(CryptoAPIAESProvider, 0);
   {$endif USE_PROV_RSA_AES}
+  FillZero(__h);
 end;
 
 
