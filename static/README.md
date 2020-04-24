@@ -12,11 +12,20 @@ Those .o/.obj files were compiled from optimized C/asm, for the best performance
 
 Note that such external files are not mandatory to compile the framework source code. There is always a "pure pascal" fallback code available, or use e.g. the official external sqlite3 library.
 
+## Delphi Setup
+
+The framework source code uses relative paths to include the expected .o/.obj files from the static\delphi sub-folder, so nothing special is needed.
+
+
 ## FPC Cross-Platform Setup
 
 Ensure that "Libraries -fFl" in your FPC project options is defined as:
-  ..\static\$(TargetCPU)-$(TargetOS)
+
+      ..\static\$(TargetCPU)-$(TargetOS)
+
 (replace ..\static by an absolute/relative path to this folder)
+
+It will ensure that when (cross-)compiling your project, FPC will link the expected .o binary files, depending on the target system.
 
 ## Keep In Synch
 

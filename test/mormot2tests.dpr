@@ -23,6 +23,7 @@ uses
   mormot.core.variants in '..\src\core\mormot.core.variants.pas',
   mormot.core.json in '..\src\core\mormot.core.json.pas',
   mormot.core.log in '..\src\core\mormot.core.log.pas',
+  mormot.core.crypto in '..\src\core\mormot.core.crypto.pas',
   test.core.base;
 
 type
