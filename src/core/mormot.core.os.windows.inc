@@ -226,6 +226,15 @@ begin
     result := false;
 end;
 
+procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
+begin
+  if Secret then
+    SetFileAttributes(pointer(FileName),
+      FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY)
+  else
+    SetFileAttributes(pointer(FileName), FILE_ATTRIBUTE_NORMAL);
+end;
+
 function RenameFile(const OldName, NewName: TFileName): boolean;
 begin
   result := SysUtils.RenameFile(OldName,NewName);
@@ -589,6 +598,22 @@ var
   QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWORD;
     lpExeName: PWideChar; lpdwSize: PDWORD): BOOL; stdcall;
 
+function GetNextCardinal(var P: PAnsiChar): cardinal;
+var
+  c: cardinal;
+begin
+  result := 0;
+  repeat
+    c := ord(P^) - 48;
+    if c > 9 then
+      break
+    else
+      result := result * 10 + c;
+    inc(P);
+  until false;
+  while P^ in ['.', '-', ' '] do
+    inc(P);
+end;
 
 function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
 var n: cardinal;
@@ -801,7 +826,8 @@ end;
 
 {$I+}
 
-constructor TFileVersion.Create(const aFileName: TFileName; aMajor, aMinor, aRelease, aBuild: integer);
+constructor TFileVersion.Create(const aFileName: TFileName;
+  aMajor, aMinor, aRelease, aBuild: integer);
 var
   M, D: word;
   Size, Size2: DWord;
@@ -831,8 +857,8 @@ begin
   fFileName := aFileName;
   if aFileName <> '' then
   begin
-    // GetFileVersionInfo modifies the filename parameter data while parsing.
-    // Copy the string const into a local variable to create a writeable copy.
+    // GetFileVersionInfo modifies the filename parameter data while parsing
+    // Copy the string const into a local variable to create a writeable copy
     SetString(tmp, PChar(aFileName), length(aFileName));
     Size := GetFileVersionInfoSize(pointer(tmp), Size2);
     if Size > 0 then
@@ -855,7 +881,8 @@ begin
             FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
             FileTime.dwHighDateTime := dwFileDateMS;
             FileTimeToSystemTime(FileTime, SystemTime);
-            fBuildDateTime := EncodeDate(SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
+            fBuildDateTime := EncodeDate(
+              SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
           end;
         end;
         VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
@@ -926,7 +953,8 @@ begin
     exit;
   if (kind = spLog) and IsDirectoryWritable(ExeVersion.ProgramFilePath) then
     result := EnsureDirectoryExists(ExeVersion.ProgramFilePath + 'log')
-  else if (csidl[kind] <> 0) and (SHGetFolderPath(0, csidl[kind], 0, 0, @tmp) = S_OK) then
+  else if (csidl[kind] <> 0) and
+          (SHGetFolderPath(0, csidl[kind], 0, 0, @tmp) = S_OK) then
     result := IncludeTrailingPathDelimiter(tmp)
   else
   begin
@@ -1057,21 +1085,100 @@ begin
   tmp.Done;
 end;
 
-function GetNextCardinal(var P: PAnsiChar): cardinal;
-var
-  c: cardinal;
+
+{ TWinCryptoAPI }
+
+function TWinCryptoAPI.Available: boolean;
 begin
-  result := 0;
-  repeat
-    c := ord(P^) - 48;
-    if c > 9 then
-      break
-    else
-      result := result * 10 + c;
-    inc(P);
-  until false;
-  while P^ in ['.', '-', ' '] do
-    inc(P);
+  if not Tested then
+    Acquire;
+  result := Assigned(AcquireContextA);
+end;
+
+procedure TWinCryptoAPI.Acquire;
+const
+  NAMES: array[0..7] of PChar = (
+    'CryptAcquireContextA', 'CryptReleaseContext', 'CryptImportKey',
+    'CryptSetKeyParam', 'CryptDestroyKey', 'CryptEncrypt', 'CryptDecrypt',
+    'CryptGenRandom');
+var
+  P: PPointer;
+  i: integer;
+begin
+  Tested := true;
+  Handle := GetModuleHandle('advapi32.dll');
+  if Handle <> 0 then
+  begin
+    P := @@AcquireContextA;
+    for i := 0 to high(NAMES) do
+    begin
+      P^ := GetProcAddress(Handle, NAMES[i]);
+      if P^ = nil then
+      begin
+        PPointer(@@AcquireContextA)^ := nil;
+        break;
+      end;
+      inc(P);
+    end;
+  end;
+end;
+
+type
+  {$ifdef FPC}
+  {$PACKRECORDS C} // mandatory under Win64
+  {$endif}
+  DATA_BLOB = record
+    cbData: DWORD;
+    pbData: PAnsiChar;
+  end;
+
+  PDATA_BLOB = ^DATA_BLOB;
+  {$ifdef FPC}
+  {$PACKRECORDS DEFAULT}
+  {$endif}
+
+const
+  CRYPTDLL = 'Crypt32.dll';
+  CRYPTPROTECT_UI_FORBIDDEN = $1;
+
+function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
+  var DataOut: DATA_BLOB): BOOL; stdcall; external CRYPTDLL name 'CryptProtectData';
+
+function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
+  var DataOut: DATA_BLOB): Bool; stdcall; external CRYPTDLL name 'CryptUnprotectData';
+
+function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
+  Encrypt: boolean): RawByteString;
+var
+  src, dst, ent: DATA_BLOB;
+  e: PDATA_BLOB;
+  ok: boolean;
+begin
+  src.pbData := pointer(Data);
+  src.cbData := length(Data);
+  if AppSecret <> '' then
+  begin
+    ent.pbData := pointer(AppSecret);
+    ent.cbData := length(AppSecret);
+    e := @ent;
+  end
+  else
+    e := nil;
+  if Encrypt then
+    ok := CryptProtectData(
+      src, nil, e, nil, nil, CRYPTPROTECT_UI_FORBIDDEN, dst)
+  else
+    ok := CryptUnprotectData(
+      src, nil, e, nil, nil, CRYPTPROTECT_UI_FORBIDDEN, dst);
+  if ok then
+  begin
+    SetString(result, dst.pbData, dst.cbData);
+    LocalFree(HLOCAL(dst.pbData));
+  end
+  else
+    result := '';
 end;
 
 
@@ -1113,7 +1220,8 @@ begin
   GetTickCount64 := GetProcAddress(h, 'GetTickCount64');
   if not Assigned(GetTickCount64) then // WinXP+
     GetTickCount64 := @GetTickCount64ForXP;
-  GetSystemTimePreciseAsFileTime := GetProcAddress(h, 'GetSystemTimePreciseAsFileTime');
+  GetSystemTimePreciseAsFileTime :=
+    GetProcAddress(h, 'GetSystemTimePreciseAsFileTime');
   if not Assigned(GetSystemTimePreciseAsFileTime) then // Win8+
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
   {$ifdef WITH_VECTOREXCEPT}
@@ -1124,8 +1232,10 @@ begin
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
   Res := false;
-  IsWow64 := Assigned(IsWow64Process) and IsWow64Process(GetCurrentProcess, Res) and Res;
-  if IsWow64 then // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
+  IsWow64 := Assigned(IsWow64Process) and
+             IsWow64Process(GetCurrentProcess, Res) and Res;
+  if IsWow64 then
+    // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
     GetNativeSystemInfo := GetProcAddress(h, 'GetNativeSystemInfo')
   else
     @GetNativeSystemInfo := nil;
@@ -1154,7 +1264,8 @@ begin
   OSVersionInfo.dwOSVersionInfoSize := SizeOf(OSVersionInfo);
   GetVersionEx(OSVersionInfo);
   Vers := wUnknown;
-  with OSVersionInfo do  // see https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833
+  with OSVersionInfo do
+    // see https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833
     case dwMajorVersion of
       5:
         case dwMinorVersion of
@@ -1193,9 +1304,11 @@ begin
     begin // Server edition
       inc(Vers, 2); // e.g. wEight -> wServer2012
       if (Vers = wServer2016) and (OSVersionInfo.dwBuildNumber >= 17763) then
-        Vers := wServer2019_64; // https://stackoverflow.com/q/53393150
+        // https://stackoverflow.com/q/53393150
+        Vers := wServer2019_64;
     end;
-    if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and (Vers < wServer2019_64) then
+    if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and
+       (Vers < wServer2019_64) then
       inc(Vers);   // e.g. wEight -> wEight64
   end;
   OSVersion := Vers;
@@ -1208,8 +1321,9 @@ begin
       OSVersionText := RawUTF8(Format('Windows %s (%d.%d.%d)',
         [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber]))
     else
-      OSVersionText := RawUTF8(Format('Windows %s SP%d (%d.%d.%d)',
-        [WINDOWS_NAME[Vers], wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
+      OSVersionText := RawUTF8(Format(
+        'Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
+         wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
   OSVersionInt32 := (integer(Vers) shl 8) + ord(osWindows);
   h := LoadLibrary('ntdll.dll');
   if h > 0 then
@@ -1225,13 +1339,15 @@ begin
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
   // retrieve Hardware information from Registry
-  if reg.ReadOpen(HKEY_LOCAL_MACHINE, 'Hardware\Description\System\CentralProcessor\0') then
+  if reg.ReadOpen(HKEY_LOCAL_MACHINE,
+    'Hardware\Description\System\CentralProcessor\0') then
   begin
     cpu := reg.ReadString('ProcessorNameString');
     if cpu = '' then
       cpu := reg.ReadString('Identifier');
   end;
-  if reg.ReadOpen(HKEY_LOCAL_MACHINE, 'Hardware\Description\System\BIOS', true) then
+  if reg.ReadOpen(HKEY_LOCAL_MACHINE,
+    'Hardware\Description\System\BIOS', true) then
   begin
     manuf := reg.ReadString('SystemManufacturer');
     if manuf <> '' then
@@ -1261,5 +1377,4 @@ begin
   CpuInfoText := RawUTF8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu]));
 end;
-
 

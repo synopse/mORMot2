@@ -376,6 +376,14 @@ begin
   result := FileSetDate(Dest, FileGetDate(SourceHandle))=0;
 end;
 
+procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
+begin
+  if Secret then
+    fpchmod(pointer(FileName), S_IRUSR)
+  else
+    fpchmod(pointer(FileName), S_IRUSR or S_IWUSR);
+end;
+
 function FileSize(const FileName: TFileName): Int64;
 var
   f: THandle;

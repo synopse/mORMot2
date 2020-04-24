@@ -18,7 +18,7 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  SysUtils,
+  sysutils,
   mormot.core.base,
   mormot.core.data,
   mormot.core.os,

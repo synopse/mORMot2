@@ -185,8 +185,10 @@ const
   {$ifdef CPU64} + ' 64 bit' {$else} + ' 32 bit' {$endif};
 
 {$ifndef PUREMORMOT2}
-// deprecated function: use COMPILER_VERSION constant instead
+
+/// deprecated function: use COMPILER_VERSION constant instead
 function GetDelphiCompilerVersion: RawUTF8; deprecated;
+
 {$endif PUREMORMOT2}
 
 {$ifdef MSWINDOWS}
@@ -441,6 +443,89 @@ type
   end;
 
 
+type
+  HCRYPTPROV = pointer;
+  HCRYPTKEY = pointer;
+  HCRYPTHASH = pointer;
+
+  /// direct access to the Windows CryptoAPI
+  TWinCryptoAPI = object
+  private
+    /// if the presence of this API has been tested
+    Tested: boolean;
+    /// if this API has been loaded
+    Handle: THandle;
+    /// used when inlining Available method
+    procedure Acquire;
+  public
+    /// acquire a handle to a particular key container within a
+    // particular cryptographic service provider (CSP)
+    AcquireContextA: function(var phProv: HCRYPTPROV; pszContainer: PAnsiChar;
+      pszProvider: PAnsiChar; dwProvType: DWORD; dwFlags: DWORD): BOOL; stdcall;
+    /// releases the handle of a cryptographic service provider (CSP) and a
+    // key container
+    ReleaseContext: function(hProv: HCRYPTPROV; dwFlags: PtrUInt): BOOL; stdcall;
+    /// transfers a cryptographic key from a key BLOB into a cryptographic
+    // service provider (CSP)
+    ImportKey: function(hProv: HCRYPTPROV; pbData: pointer; dwDataLen: DWORD;
+      hPubKey: HCRYPTKEY; dwFlags: DWORD; var phKey: HCRYPTKEY): BOOL; stdcall;
+    /// customizes various aspects of a session key's operations
+    SetKeyParam: function(hKey: HCRYPTKEY; dwParam: DWORD; pbData: pointer;
+      dwFlags: DWORD): BOOL; stdcall;
+    /// releases the handle referenced by the hKey parameter
+    DestroyKey: function(hKey: HCRYPTKEY): BOOL; stdcall;
+    /// encrypt the data designated by the key held by the CSP module
+    // referenced by the hKey parameter
+    Encrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; final: BOOL;
+      dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD; dwBufLen: DWORD): BOOL; stdcall;
+    /// decrypts data previously encrypted by using the CryptEncrypt function
+    Decrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; final: BOOL;
+      dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD): BOOL; stdcall;
+    /// fills a buffer with cryptographically random bytes
+    // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
+    // based PRNG specified in NIST Special Publication 800-90 is used
+    GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
+    /// try to load the CryptoAPI on this system
+    function Available: boolean; {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+const
+  PROV_RSA_AES = 24;
+  CRYPT_NEWKEYSET = 8;
+  PLAINTEXTKEYBLOB = 8;
+  CUR_BLOB_VERSION = 2;
+  KP_IV = 1;
+  KP_MODE = 4;
+  CALG_AES_128 = $660E;
+  CALG_AES_192 = $660F;
+  CALG_AES_256 = $6610;
+  CRYPT_MODE_CBC = 1;
+  CRYPT_MODE_ECB = 2;
+  CRYPT_MODE_OFB = 3;
+  CRYPT_MODE_CFB = 4;
+  CRYPT_MODE_CTS = 5;
+  HCRYPTPROV_NOTTESTED = HCRYPTPROV(-1);
+  NTE_BAD_KEYSET = HRESULT($80090016);
+  PROV_RSA_FULL = 1;
+  CRYPT_VERIFYCONTEXT = DWORD($F0000000);
+
+var
+  CryptoAPI: TWinCryptoAPI;
+
+/// protect some data for the current user, using Windows DPAPI
+// - the application can specify a secret salt text, which should reflect the
+// current execution context, to ensure nobody could decrypt the data without
+// knowing this application-specific AppSecret value
+// - will use CryptProtectData DPAPI function call under Windows
+// - see https://msdn.microsoft.com/en-us/library/ms995355
+// - this function is Windows-only, could be slow, and you don't know which
+// algorithm is really used on your system, so using our mormot.core.crypto.pas
+// CryptDataForCurrentUser() is probably a better (and cross-platform) alternative
+// - also note that DPAPI has been closely reverse engineered - see e.g.
+// https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
+function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
+  Encrypt: boolean): RawByteString;
+
 /// retrieves the current executable module handle, i.e.  its memory load address
 // - redefined in mormot.core.os to avoid dependency to Windows
 function GetModuleHandle(lpModuleName: PChar): HMODULE; stdcall;
@@ -537,6 +622,25 @@ procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection)
 // - if the supplied mutex has been initialized, delete it
 // - if the supplied mutex is void (i.e. all filled with 0), do nothing
 procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
+
+/// enter a giant lock for thread-safe shared process
+// - shall be protected as such:
+// ! GlobalLock;
+// ! try
+// !   .... do something thread-safe but as short as possible
+// ! finally
+// !  GlobalUnLock;
+// ! end;
+// - you should better not use such a giant-lock, but an instance-dedicated
+// critical section or TSynLocker - these functions are just here to be
+// convenient, for non time-critical process (e.g. singleton initialization)
+procedure GlobalLock;
+
+/// release the giant lock for thread-safe shared process
+// - you should better not use such a giant-lock, but an instance-dedicated
+// critical section or TSynLocker - these functions are just here to be
+// convenient, for non time-critical process (e.g. singleton initialization)
+procedure GlobalUnLock;
 
 /// returns the current UTC time as TSystemTime
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
@@ -709,6 +813,13 @@ function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 
 /// copy the date of one file to another
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+
+/// modify the attributes of a given file
+// - if Secret=false, will have normal file attributes, with read/write access
+// - if Secret=true, will have hidden and read-only attributes
+// - under POSIX, there is no "hidden" file attribute, but you should define a
+// FileName starting by '.'
+procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
 
 /// get a file size, from its name
 // - returns 0 if file doesn't exist
@@ -1070,6 +1181,19 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 begin
   if IsInitializedCriticalSection(cs) then
     DeleteCriticalSection(cs);
+end;
+
+var
+  GlobalCriticalSection: TRTLCriticalSection;
+
+procedure GlobalLock;
+begin
+  EnterCriticalSection(GlobalCriticalSection);
+end;
+
+procedure GlobalUnLock;
+begin
+  LeaveCriticalSection(GlobalCriticalSection);
 end;
 
 function Unicode_CodePage: integer;
@@ -1655,7 +1779,11 @@ begin
     FreeMem(AutoSlots[i]);
   ExeVersion.Version.Free;
   DeleteCriticalSection(AutoSlotsLock);
-  {$ifndef MSWINDOWS}
+  DeleteCriticalSection(GlobalCriticalSection);
+  {$ifdef MSWINDOWS}
+  if CryptoAPI.Handle <> 0 then
+    FreeLibrary(CryptoAPI.Handle);
+  {$else}
   if pthread <> nil then
     dlclose(pthread);
   {$endif MSWINDOWS}
@@ -1667,6 +1795,7 @@ initialization
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
   {$endif ISFPC27}
+  InitializeCriticalSection(GlobalCriticalSection);
   InitializeCriticalSection(AutoSlotsLock);
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   SetExecutableVersion(0,0,0,0);
