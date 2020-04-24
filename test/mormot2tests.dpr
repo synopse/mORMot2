@@ -24,6 +24,7 @@ uses
   mormot.core.json in '..\src\core\mormot.core.json.pas',
   mormot.core.log in '..\src\core\mormot.core.log.pas',
   mormot.core.crypto in '..\src\core\mormot.core.crypto.pas',
+  mormot.core.jwt in '..\src\core\mormot.core.jwt.pas',
   test.core.base;
 
 type
