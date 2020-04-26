@@ -1,4 +1,4 @@
-/// Framework Core CryptoGraphic Process (Hashing and Cypher)
+/// Framework Core Cryptographic Process (Hashing and Cypher)
 // - this unit is a part of the freeware Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.crypto;
@@ -6,7 +6,7 @@ unit mormot.core.crypto;
 {
   *****************************************************************************
 
-   High-Performance CryptoGraphic features shared by all framework units
+   High-Performance Cryptographic features shared by all framework units
     - Low-Level Memory Buffers Helper Functions
     - AES Encoding/Decoding with optimized asm and AES-NI support
     - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
@@ -133,7 +133,7 @@ procedure XorConst(p: PIntegerArray; Count: integer);
 procedure bswap160(s, d: PIntegerArray);
 
 // little endian fast conversion
-// - 256 bits = 8 integers
+// - 256-bit = 8 integers
 // - use fast bswap asm in x86/x64 mode
 procedure bswap256(s, d: PIntegerArray);
 
@@ -192,11 +192,11 @@ const
   AESKeySize = 256 div 8;
 
 type
-  /// 128 bits memory block for AES data cypher/uncypher
+  /// 128-bit memory block for AES data cypher/uncypher
   TAESBlock = THash128;
   PAESBlock = ^TAESBlock;
 
-  /// 256 bits memory block for maximum AES key storage
+  /// 256-bit memory block for maximum AES key storage
   TAESKey = THash256;
 
 type
@@ -775,6 +775,7 @@ type
   end;
 
 {$ifdef USE_PROV_RSA_AES}
+
 type
   /// handle AES cypher/uncypher using Windows CryptoAPI and the
   // official Microsoft AES Cryptographic Provider (PROV_RSA_AES)
@@ -1185,7 +1186,7 @@ const
   SHA3ContextSize = 412;
 
 type
-  /// 256 bits (32 bytes) memory block for SHA-256 hash digest storage
+  /// 256-bit (32 bytes) memory block for SHA-256 hash digest storage
   TSHA256Digest = THash256;
   PSHA256Digest = ^TSHA256Digest;
 
@@ -1452,7 +1453,7 @@ function ToText(algo: TSHA3Algo): PShortString; overload;
 { ****************** Deprecated MD5 RC4 SHA-1 Algorithms }
 
 type
-  /// 128 bits memory block for MD5 hash digest storage
+  /// 128-bit memory block for MD5 hash digest storage
   TMD5Digest = THash128;
   PMD5Digest = ^TMD5Digest;
 

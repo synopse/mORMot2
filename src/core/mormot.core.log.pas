@@ -2659,9 +2659,9 @@ begin
   if fEchoRemoteClientOwned then
   try
     try
-      fEchoRemoteEvent(nil, sllClient, FormatUTF8(
-        '%00%    Remote Client % Disconnected',
-        [NowToString(false), LOG_LEVEL_TEXT[sllClient], self]));
+      fEchoRemoteEvent(nil, sllClient,
+        FormatUTF8('%00%    Remote Client % Disconnected',
+          [NowToString(false), LOG_LEVEL_TEXT[sllClient], self]));
     finally
       fEchoRemoteClient.Free;
     end;
@@ -2669,6 +2669,7 @@ begin
     on Exception do
       ;
   end;
+  fEchoRemoteClient := nil;
   SynLogFileListEcho(fEchoRemoteEvent, {add=}false); // unsubscribe
   fEchoRemoteEvent := nil;
 end;
@@ -2784,27 +2785,39 @@ begin
   if result <> nil then
   begin
     // faster than ClassPropertiesGet: we know it is the first slot
-    result := PPPointer(PAnsiChar(result) + vmtAutoTable)^^;
+    result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if result <> nil then
-      result := TSynLogFamily({%H-}TRttiCustom(result).Private)
+      // we know TRttiCustom is the first slot, and Private is set
+      result := TSynLogFamily(PRttiCustom(result)^.Private)
     else
       result := FamilyCreate;
   end;
 end;
 
 class function TSynLog.Add: TSynLog;
+var
+  P: pointer;
+label
+  sl;
 begin
+  // inlined TSynLog.Family with direct fGlobalLog check
   result := pointer(Self);
   if result <> nil then
-  begin // inlined TSynLog.Family (Add is already inlined)
-    result := PPPointer(PAnsiChar(result) + vmtAutoTable)^^;
-    if result <> nil then
-      result := pointer(TRttiCustom(pointer(result)).Private)
+  begin
+    P := PPointer(PAnsiChar(result) + vmtAutoTable)^;
+    if P <> nil then begin
+      // we know TRttiCustom is the first slot, and Private is set
+      P := PRttiCustom(P)^.Private;
+      result := TSynLogFamily(P).fGlobalLog;
+      // <>nil for ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
+      if result = nil then
+        goto sl;
+    end
     else
-      result := pointer(FamilyCreate);
-    result := TSynLogFamily(pointer(result)).fGlobalLog;
-    if result = nil then
-      TSynLogFamily(pointer(result)).SynLog;
+    begin
+      P := FamilyCreate;
+sl:   result := TSynLogFamily(P).SynLog;
+    end;
   end;
 end;
 
