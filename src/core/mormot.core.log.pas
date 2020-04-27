@@ -830,7 +830,8 @@ type
       aTypeInfo: pointer; const aValue; Instance: TObject); overload;
     // any call to this method MUST call LeaveCriticalSection(GlobalThreadLock)
     procedure LogHeader(Level: TSynLogInfo);
-    procedure LogTrailer(Level: TSynLogInfo); {$ifdef HASINLINE} inline; {$endif}
+    procedure LogTrailer(Level: TSynLogInfo);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure LogCurrentTime; virtual;
     procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
@@ -841,7 +842,8 @@ type
     function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
-    procedure GetThreadContext; {$ifdef HASINLINE} inline; {$endif}
+    function GetThreadContext: PSynLogThreadContext;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure GetThreadContextInternal(id: PtrUInt);
     procedure ThreadContextRehash;
     function Instance: TSynLog;
@@ -2787,7 +2789,7 @@ begin
     // faster than ClassPropertiesGet: we know it is the first slot
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if result <> nil then
-      // we know TRttiCustom is the first slot, and Private is set
+      // we know TRttiCustom is the first slot, and Private is TSynLogFamily
       result := TSynLogFamily(PRttiCustom(result)^.Private)
     else
       result := FamilyCreate;
@@ -2806,7 +2808,7 @@ begin
   begin
     P := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if P <> nil then begin
-      // we know TRttiCustom is the first slot, and Private is set
+      // we know TRttiCustom is the first slot, and Private is TSynLogFamily
       P := PRttiCustom(P)^.Private;
       result := TSynLogFamily(P).fGlobalLog;
       // <>nil for ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
@@ -2857,13 +2859,16 @@ begin
     result := nil;
 end;
 
-procedure TSynLog.GetThreadContext;
+function TSynLog.GetThreadContext: PSynLogThreadContext;
 var
   id: TThreadID;
 begin
   id := GetCurrentThreadId;
+  // most of the time, the thread didn't change so this method is inlined
   if id <> fThreadID then
+    // quickly switch fThreadContext/fThreadIndex to the new thread
     GetThreadContextInternal(PtrUInt(id));
+  result := fThreadContext;
 end;
 
 procedure TSynLog.LogTrailer(Level: TSynLogInfo);
@@ -3003,8 +3008,7 @@ begin
     exit; // nothing to release
   EnterCriticalSection(GlobalThreadLock);
   try
-    GetThreadContext;
-    Finalize(fThreadContext^);
+    Finalize(GetThreadContext^);
     FillcharFast(fThreadContext^, SizeOf(fThreadContext^), 0);
     ThreadContextRehash; // fThreadHash[fThreadLastHash] := 0 is not enough
     if fThreadIndexReleasedCount >= length(fThreadIndexReleased) then
@@ -3026,8 +3030,7 @@ begin
   begin
     EnterCriticalSection(GlobalThreadLock);
     try
-      GetThreadContext;
-      with fThreadContext^ do
+      with GetThreadContext^ do
         if RecursionCount > 0 then
           with Recursion[RecursionCount - 1] do
           begin
@@ -3074,8 +3077,7 @@ begin
   begin
     EnterCriticalSection(GlobalThreadLock);
     try
-      GetThreadContext;
-      with fThreadContext^ do
+      with GetThreadContext^ do
         if RecursionCount > 0 then
         begin
           with Recursion[RecursionCount - 1] do
@@ -3210,8 +3212,7 @@ begin
   begin
     EnterCriticalSection(GlobalThreadLock);
     try
-      log.GetThreadContext;
-      with log.fThreadContext^ do
+      with log.GetThreadContext^ do
       begin
         if RecursionCount = RecursionCapacity then
         begin
@@ -3267,8 +3268,7 @@ begin
   begin
     EnterCriticalSection(GlobalThreadLock);
     try
-      log.GetThreadContext;
-      with log.fThreadContext^ do
+      with log.GetThreadContext^ do
       begin
         if RecursionCount = RecursionCapacity then
         begin
@@ -3388,8 +3388,7 @@ begin
       n := Name;
     EnterCriticalSection(GlobalThreadLock);
     try
-      GetThreadContext;
-      if fThreadContext^.ThreadName = n then
+      if GetThreadContext^.ThreadName = n then
         exit;
       fThreadContext^.ThreadName := n;
       LogHeader(sllInfo);
@@ -3764,9 +3763,7 @@ var
   i: integer;
   FN: array of TFileName;
 begin
-  fWriter.FlushFinal;
-  FreeAndNil(fWriter);
-  FreeAndNil(fWriterStream);
+  CloseLogFile;
   currentMaxSynLZ := 0;
   if not (assigned(fFamily.fOnRotate) and fFamily.fOnRotate(self, fFileName)) then
   begin
@@ -3980,7 +3977,8 @@ begin
         fFileName := ChangeFileExt(fFileName, '-' + fFamily.fDefaultExtension);
       end;
     end;
-    if fWriterStream = nil then // go on if file creation fails (e.g. RO folder)
+    if fWriterStream = nil then
+      // let's continue if file creation fails (e.g. R/O folder or disk full)
       fWriterStream := TFakeWriterStream.Create;
     if (fFileRotationSize > 0) or (fFamily.FileExistsAction <> acOverwrite) then
       fWriterStream.Seek(0, soFromEnd); // in rotation mode, append at the end
@@ -4305,6 +4303,7 @@ begin
     log.GetThreadContext;
     if Assigned(log.fFamily.OnBeforeException) then
       if log.fFamily.OnBeforeException(Ctxt, log.fThreadContext^.ThreadName) then
+        // intercepted by custom callback
         exit;
     log.LogHeader(Ctxt.ELevel);
     if GlobalLastExceptionIndex = MAX_EXCEPTHISTORY then
