@@ -7,7 +7,8 @@ unit mormot.core.secure;
   *****************************************************************************
 
    Authentication and Security types shared by all framework units.
-    - TSynPersistentWithPassword Parent Class
+    - TSyn***Password and TSynConnectionDefinition Classes
+    - Reusable Authentication Classes
     - High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers
     - 64-bit TSynUniqueIdentifier and its efficient Generator
 
@@ -34,7 +35,7 @@ uses
   mormot.core.crypto;
 
 
-{ ***************** TSynPersistentWithPassword Parent Class }
+{ ***************** TSyn***Password and TSynConnectionDefinition Classes }
 
 type
   /// abstract TSynPersistent class allowing safe storage of a password
@@ -83,6 +84,181 @@ type
     property PasswordPlain: SPIUTF8 read GetPassWordPlain write SetPassWordPlain;
   end;
 
+type
+  /// could be used to store a credential pair, as user name and password
+  // - password will be stored with TSynPersistentWithPassword encryption
+  TSynUserPassword = class(TSynPersistentWithPassword)
+  protected
+    fUserName: RawUTF8;
+  published
+    /// the associated user name
+    property UserName: RawUTF8 read FUserName write FUserName;
+    /// the associated encrypted password
+    // - use the PasswordPlain public property to access to the uncrypted password
+    property Password: RawUTF8 read FPassword write FPassword;
+  end;
+
+  /// handle safe storage of any connection properties
+  // - would be used by SynDB.pas to serialize TSQLDBConnectionProperties, or
+  // by mORMot.pas to serialize TSQLRest instances
+  // - the password will be stored as Base64, after a simple encryption as
+  // defined by TSynPersistentWithPassword
+  // - typical content could be:
+  // $ {
+  // $	"Kind": "TSQLDBSQLite3ConnectionProperties",
+  // $	"ServerName": "server",
+  // $	"DatabaseName": "",
+  // $	"User": "",
+  // $	"Password": "PtvlPA=="
+  // $ }
+  // - the "Kind" value will be used to let the corresponding TSQLRest or
+  // TSQLDBConnectionProperties NewInstance*() class methods create the
+  // actual instance, from its class name
+  TSynConnectionDefinition = class(TSynPersistentWithPassword)
+  protected
+    fKind: string;
+    fServerName: RawUTF8;
+    fDatabaseName: RawUTF8;
+    fUser: RawUTF8;
+  public
+    /// unserialize the database definition from JSON
+    // - as previously serialized with the SaveToJSON method
+    // - you can specify a custom Key used for password encryption, if the
+    // default value is not safe enough for you
+    // - this method won't use JSONToObject() so avoid any dependency to mORMot.pas
+    constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal = 0); virtual;
+    /// serialize the database definition as JSON
+    // - this method won't use ObjectToJSON() so avoid any dependency to mORMot.pas
+    function SaveToJSON: RawUTF8; virtual;
+  published
+    /// the class name implementing the connection or TSQLRest instance
+    // - will be used to instantiate the expected class type
+    property Kind: string read fKind write fKind;
+    /// the associated server name (or file, for SQLite3) to be connected to
+    property ServerName: RawUTF8 read fServerName write fServerName;
+    /// the associated database name (if any), or additional options
+    property DatabaseName: RawUTF8 read fDatabaseName write fDatabaseName;
+    /// the associated User Identifier (if any)
+    property User: RawUTF8 read fUser write fUser;
+    /// the associated Password, e.g. for storage or transmission encryption
+    // - will be persisted encrypted with a private key
+    // - use the PassWordPlain property to access to its uncyphered value
+    property Password: RawUTF8 read fPassword write fPassword;
+  end;
+
+
+{ ***************** Reusable Authentication Classes }
+
+type
+  /// class-reference type (metaclass) of an authentication class
+  TSynAuthenticationClass = class of TSynAuthenticationAbstract;
+
+  /// abstract authentication class, implementing safe token/challenge security
+  // and a list of active sessions
+  // - do not use this class, but plain TSynAuthentication
+  TSynAuthenticationAbstract = class
+  protected
+    fSessions: TIntegerDynArray;
+    fSessionsCount: Integer;
+    fSessionGenerator: integer;
+    fTokenSeed: Int64;
+    fSafe: TSynLocker;
+    function ComputeCredential(previous: boolean;
+      const UserName, PassWord: RawUTF8): cardinal; virtual;
+    function GetPassword(const UserName: RawUTF8;
+      out Password: RawUTF8): boolean; virtual; abstract;
+    function GetUsersCount: integer; virtual; abstract;
+    // check the given Hash challenge, against stored credentials
+    function CheckCredentials(const UserName: RaWUTF8; Hash: cardinal): boolean; virtual;
+  public
+    /// initialize the authentication scheme
+    constructor Create;
+    /// finalize the authentation
+    destructor Destroy; override;
+    /// register one credential for a given user
+    // - this abstract method will raise an exception: inherited classes should
+    // implement them as expected
+    procedure AuthenticateUser(const aName, aPassword: RawUTF8); virtual;
+    /// unregister one credential for a given user
+    // - this abstract method will raise an exception: inherited classes should
+    // implement them as expected
+    procedure DisauthenticateUser(const aName: RawUTF8); virtual;
+    /// create a new session
+    // - should return 0 on authentication error, or an integer session ID
+    // - this method will check the User name and password, and create a new session
+    function CreateSession(const User: RawUTF8; Hash: cardinal): integer; virtual;
+    /// check if the session exists in the internal list
+    function SessionExists(aID: integer): boolean;
+    /// delete a session
+    procedure RemoveSession(aID: integer);
+    /// returns the current identification token
+    // - to be sent to the client for its authentication challenge
+    function CurrentToken: Int64;
+    /// the number of current opened sessions
+    property SessionsCount: integer read fSessionsCount;
+    /// the number of registered users
+    property UsersCount: integer read GetUsersCount;
+    /// to be used to compute a Hash on the client sude, for a given Token
+    // - the token should have been retrieved from the server, and the client
+    // should compute and return this hash value, to perform the authentication
+    // challenge and create the session
+    // - internal algorithm is not cryptographic secure, but fast and safe
+    class function ComputeHash(Token: Int64;
+      const UserName, PassWord: RawUTF8): cardinal; virtual;
+  end;
+
+  /// simple authentication class, implementing safe token/challenge security
+  // - maintain a list of user / name credential pairs, and a list of sessions
+  // - is not meant to handle authorization, just plain user access validation
+  // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
+  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
+  TSynAuthentication = class(TSynAuthenticationAbstract)
+  protected
+    fCredentials: TSynNameValue; // store user/password pairs
+    function GetPassword(const UserName: RawUTF8;
+      out Password: RawUTF8): boolean; override;
+    function GetUsersCount: integer; override;
+  public
+    /// initialize the authentication scheme
+    // - you can optionally register one user credential
+    constructor Create(const aUserName: RawUTF8 = '';
+      const aPassword: RawUTF8 = ''); reintroduce;
+    /// register one credential for a given user
+    procedure AuthenticateUser(const aName, aPassword: RawUTF8); override;
+    /// unregister one credential for a given user
+    procedure DisauthenticateUser(const aName: RawUTF8); override;
+  end;
+
+
+type
+  /// optimized thread-safe storage of a list of IP v4 adresses
+  // - can be used e.g. as white-list or black-list of clients
+  // - will maintain internally a sorted list of 32-bit integers for fast lookup
+  // - with optional binary persistence
+  TIPBan = class(TSynPersistentStore)
+  protected
+    fIP4: TIntegerDynArray;
+    fCount: integer;
+    procedure LoadFromReader; override;
+    procedure SaveToWriter(aWriter: TFileBufferWriter); override;
+  public
+    /// register one IP to the list
+    function Add(const aIP: RawUTF8): boolean;
+    /// unregister one IP to the list
+    function Delete(const aIP: RawUTF8): boolean;
+    /// returns true if the IP is in the list
+    function Exists(const aIP: RawUTF8): boolean;
+    /// creates a TDynArray wrapper around the stored list of values
+    // - could be used e.g. for binary persistence
+    // - warning: caller should make Safe.Unlock when finished
+    function DynArrayLocked: TDynArray;
+    /// low-level access to the internal IPv4 list
+    // - 32-bit unsigned values are sorted, for fast O(log(n)) binary search
+    property IP4: TIntegerDynArray read fIP4;
+  published
+    /// how many IPs are currently banned
+    property Count: integer read fCount;
+  end;
 
 
 { **************** 64-bit TSynUniqueIdentifier and its Efficient Generator }
@@ -784,7 +960,7 @@ begin
 end;
 
 
-{ ***************** TSynPersistentWithPassword Parent Class }
+{ ***************** TSyn***Password and TSynConnectionDefinition Classes }
 
 { TSynPersistentWithPassword }
 
@@ -899,6 +1075,267 @@ begin
   SetString(tmp, PAnsiChar(pointer(value)), Length(value)); // private copy
   SymmetricEncrypt(GetKey, tmp);
   fPassWord := BinToBase64(tmp);
+end;
+
+
+{ TSynConnectionDefinition }
+
+constructor TSynConnectionDefinition.CreateFromJSON(const JSON: RawUTF8; Key: cardinal);
+var
+  privateCopy: RawUTF8;
+  values: array[0..4] of TValuePUTF8Char;
+begin
+  fKey := Key;
+  privateCopy := JSON;
+  JSONDecode(privateCopy,
+    ['Kind', 'ServerName', 'DatabaseName', 'User', 'Password'], @values);
+  fKind := values[0].ToString;
+  values[1].ToUTF8(fServerName);
+  values[2].ToUTF8(fDatabaseName);
+  values[3].ToUTF8(fUser);
+  values[4].ToUTF8(fPassWord);
+end;
+
+function TSynConnectionDefinition.SaveToJSON: RawUTF8;
+begin
+  result := JSONEncode(['Kind', fKind, 'ServerName', fServerName,
+    'DatabaseName', fDatabaseName, 'User', fUser, 'Password', fPassword]);
+end;
+
+
+{ ***************** Reusable Authentication Classes }
+
+{ TSynAuthenticationAbstract }
+
+constructor TSynAuthenticationAbstract.Create;
+begin
+  fSafe.Init;
+  fTokenSeed := Random32;
+  fSessionGenerator := abs(fTokenSeed * PPtrInt(self)^);
+  fTokenSeed := abs(fTokenSeed * Random32);
+end;
+
+destructor TSynAuthenticationAbstract.Destroy;
+begin
+  fSafe.Done;
+  inherited;
+end;
+
+class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;
+  const UserName, PassWord: RawUTF8): cardinal;
+begin // rough authentication - xxHash32 is less reversible than crc32c
+  result := xxHash32( xxHash32( xxHash32(
+    Token, @Token, SizeOf(Token)),
+    pointer(UserName), length(UserName)),
+    pointer(PassWord), length(PassWord));
+end;
+
+function TSynAuthenticationAbstract.ComputeCredential(previous: boolean;
+  const UserName, PassWord: RawUTF8): cardinal;
+var
+  tok: Int64;
+begin
+  tok := GetTickCount64 div 10000;
+  if previous then
+    dec(tok);
+  result := ComputeHash(tok xor fTokenSeed, UserName, PassWord);
+end;
+
+function TSynAuthenticationAbstract.CurrentToken: Int64;
+begin
+  result := (GetTickCount64 div 10000) xor fTokenSeed;
+end;
+
+procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUTF8);
+begin
+  raise ESynException.CreateUTF8('%.AuthenticateUser() is not implemented', [self]);
+end;
+
+procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUTF8);
+begin
+  raise ESynException.CreateUTF8('%.DisauthenticateUser() is not implemented', [self]);
+end;
+
+function TSynAuthenticationAbstract.CheckCredentials(const UserName: RaWUTF8;
+  Hash: cardinal): boolean;
+var
+  password: RawUTF8;
+begin
+  result := GetPassword(UserName, password) and
+    ((ComputeCredential({previous=}false, UserName, password{%H-}) = Hash) or
+     (ComputeCredential({previous=}true,  UserName, password) = Hash));
+end;
+
+function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8;
+  Hash: cardinal): integer;
+begin
+  result := 0;
+  fSafe.Lock;
+  try
+    if not CheckCredentials(User, Hash) then
+      exit;
+    repeat
+      result := fSessionGenerator;
+      inc(fSessionGenerator);
+    until result <> 0;
+    AddSortedInteger(fSessions, fSessionsCount, result);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynAuthenticationAbstract.SessionExists(aID: integer): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := FastFindIntegerSorted(
+      pointer(fSessions), fSessionsCount - 1, aID) >= 0;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynAuthenticationAbstract.RemoveSession(aID: integer);
+var
+  i: integer;
+begin
+  fSafe.Lock;
+  try
+    i := FastFindIntegerSorted(pointer(fSessions), fSessionsCount - 1, aID);
+    if i >= 0 then
+      DeleteInteger(fSessions, fSessionsCount, i);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+
+{ TSynAuthentication }
+
+constructor TSynAuthentication.Create(const aUserName, aPassword: RawUTF8);
+begin
+  inherited Create;
+  fCredentials.Init(true);
+  if aUserName <> '' then
+    AuthenticateUser(aUserName, aPassword);
+end;
+
+function TSynAuthentication.GetPassword(const UserName: RawUTF8;
+  out Password: RawUTF8): boolean;
+var
+  i: integer;
+begin // caller did protect this method via fSafe.Lock
+  i := fCredentials.Find(UserName);
+  if i < 0 then
+  begin
+    result := false;
+    exit;
+  end;
+  Password := fCredentials.List[i].Value;
+  result := true;
+end;
+
+function TSynAuthentication.GetUsersCount: integer;
+begin
+  fSafe.Lock;
+  try
+    result := fCredentials.Count;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
+begin
+  fSafe.Lock;
+  try
+    fCredentials.Add(aName, aPassword);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynAuthentication.DisauthenticateUser(const aName: RawUTF8);
+begin
+  fSafe.Lock;
+  try
+    fCredentials.Delete(aName);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+
+{ TIPBan }
+
+procedure TIPBan.LoadFromReader;
+begin
+  inherited;
+  fReader.ReadVarUInt32Array(fIP4);
+  fCount := length(fIP4);
+end;
+
+procedure TIPBan.SaveToWriter(aWriter: TFileBufferWriter);
+begin // wkSorted not efficient: too big diffs between IPs
+  aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
+end;
+
+function TIPBan.Add(const aIP: RawUTF8): boolean;
+var
+  ip4: cardinal;
+begin
+  result := false;
+  if (self = nil) or not IPToCardinal(aIP, ip4) then
+    exit;
+  fSafe.Lock;
+  try
+    AddSortedInteger(fIP4, fCount, ip4);
+    result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TIPBan.Delete(const aIP: RawUTF8): boolean;
+var
+  ip4: cardinal;
+  i: integer;
+begin
+  result := false;
+  if (self = nil) or not IPToCardinal(aIP, ip4) then
+    exit;
+  fSafe.Lock;
+  try
+    i := FastFindIntegerSorted(pointer(fIP4), fCount - 1, ip4);
+    if i < 0 then
+      exit;
+    DeleteInteger(fIP4, fCount, i);
+    result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TIPBan.Exists(const aIP: RawUTF8): boolean;
+var
+  ip4: cardinal;
+begin
+  result := false;
+  if (self = nil) or (fCount = 0) or not IPToCardinal(aIP, ip4) then
+    exit;
+  fSafe.Lock;
+  try
+    if FastFindIntegerSorted(pointer(fIP4), fCount - 1, ip4) >= 0 then
+      result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TIPBan.DynArrayLocked: TDynArray;
+begin
+  fSafe.Lock;
+  result.InitSpecific(TypeInfo(TCardinalDynArray), fIP4, djCardinal, @fCount);
 end;
 
 

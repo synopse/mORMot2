@@ -1052,6 +1052,10 @@ type
     // - is just a wrapper around AddTypeJSON()
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
+    /// append a T*ObjArray dynamic array as a JSON array
+    // - as expected by RegisterObjArrayForJSON()
+    procedure AddObjArrayJSON(const aObjArray;
+      aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// return the last char appended
     // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
@@ -1939,7 +1943,6 @@ var
   TEXT_CHARS: TTextCharSet;
   TEXT_BYTES: TTextByteSet absolute TEXT_CHARS;
 
-
 /// returns TRUE if the given text buffer contains a..z,A..Z,0..9,_ characters
 // - should match most usual property names values or other identifier names
 // in the business logic source code
@@ -2358,6 +2361,7 @@ var
   ConvertHexToBin: TNormTableByte;
 
 type
+  TAnsiCharToByte = array[AnsiChar] of byte;
   TAnsiCharToWord = array[AnsiChar] of word;
   TByteToWord = array[byte] of word;
 
@@ -2617,6 +2621,37 @@ function Int18ToChars3(Value: cardinal): RawUTF8; overload;
 
 /// compute the value as encoded by TBaseWriter.AddInt18ToChars3() method
 procedure Int18ToChars3(Value: cardinal; var result: RawUTF8); overload;
+
+/// convert a 32-bit integer (storing a IP4 address) into its full notation
+// - returns e.g. '1.2.3.4' for any valid address, or '' if ip4=0
+function IP4Text(ip4: cardinal): shortstring; overload;
+
+/// convert a 128-bit buffer (storing an IP6 address) into its full notation
+// - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
+function IP6Text(ip6: PHash128): shortstring; overload; {$ifdef HASINLINE} inline;{$endif}
+
+/// convert a 128-bit buffer (storing an IP6 address) into its full notation
+// - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
+procedure IP6Text(ip6: PHash128; result: PShortString); overload;
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
+// - returns FALSE on parsing error, also setting aValue=0
+// - '' or '127.0.0.1' will also return false
+function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean; overload;
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
+// - returns FALSE on parsing error, also setting aValue=0
+// - '' or '127.0.0.1' will also return false
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean; overload;
+  {$ifdef HASINLINE} inline;{$endif}
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value, 0 or localhost
+// - returns <> 0 value if the text was a valid IPv4 text, 0 on parsing error
+// - '' or '127.0.0.1' will also return 0
+function IPToCardinal(const aIP: RawUTF8): cardinal; overload;
+  {$ifdef HASINLINE} inline;{$endif}
 
 /// append a TGUID binary content as text
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
@@ -5754,6 +5789,22 @@ begin
     AddTypedJSON(@Value, Value.ClassInfo, Options)
   else
     AddNull;
+end;
+
+procedure TBaseWriter.AddObjArrayJSON(const aObjArray;
+  aOptions: TTextWriterWriteObjectOptions);
+var
+  i: PtrInt;
+  a: TObjectDynArray absolute aObjArray;
+begin
+  Add('[');
+  for i := 0 to length(a) - 1 do
+  begin
+    WriteObject(a[i], aOptions);
+    Add(',');
+  end;
+  CancelLastComma;
+  Add(']');
 end;
 
 function TBaseWriter.GetTextLength: PtrUInt;
@@ -12561,6 +12612,113 @@ begin
   result := PCardinal(P)^ - $202020;
   result := ((result shr 16) and $3f) or ((result shr 8) and $3f) shl 6 or
             (result and $3f) shl 12;
+end;
+
+function IP4Text(ip4: cardinal): shortstring;
+var
+  b: array[0..3] of byte absolute ip4;
+begin
+  if ip4 = 0 then
+    result := ''
+  else
+    FormatShort('%.%.%.%', [b[0], b[1], b[2], b[3]], result);
+end;
+
+procedure IP6Text(ip6: PHash128; result: PShortString);
+var
+  i: integer;
+  p: PByte;
+  tab: ^TByteToWord;
+begin
+  if IsZero(ip6^) then
+    result^ := ''
+  else
+  begin
+    result^[0] := AnsiChar(39);
+    p := @result^[1];
+    tab := @TwoDigitsHexWBLower;
+    for i := 0 to 7 do
+    begin
+      PWord(p)^ := tab[ip6^[0]];
+      inc(p, 2);
+      PWord(p)^ := tab[ip6^[1]];
+      inc(p, 2);
+      inc(PWord(ip6));
+      p^ := ord(':');
+      inc(p);
+    end;
+  end;
+end;
+
+function IP6Text(ip6: PHash128): shortstring;
+begin
+  IP6Text(ip6, @result);
+end;
+
+function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean;
+var
+  i, c: cardinal;
+  b: array[0..3] of byte;
+begin
+  aValue := 0;
+  result := false;
+  if (P = nil) or (IdemPChar(P, '127.0.0.1') and (P[9] = #0)) then
+    exit;
+  for i := 0 to 3 do
+  begin
+    c := GetNextItemCardinal(P, '.');
+    if (c > 255) or ((P = nil) and (i < 3)) then
+      exit;
+    b[i] := c;
+  end;
+  if PCardinal(@b)^ <> $0100007f then
+  begin
+    aValue := PCardinal(@b)^;
+    result := true;
+  end;
+end;
+
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
+begin
+  result := IPToCardinal(pointer(aIP), aValue);
+end;
+
+function IPToCardinal(const aIP: RawUTF8): cardinal;
+begin
+  IPToCardinal(pointer(aIP), result);
+end;
+
+function IsValidIP4Address(P: PUTF8Char): boolean;
+var
+  ndot: PtrInt;
+  V: PtrUInt;
+begin
+  result := false;
+  if (P = nil) or not (P^ in ['0'..'9']) then
+    exit;
+  V := 0;
+  ndot := 0;
+  repeat
+    case P^ of
+      #0:
+        break;
+      '.':
+        if (P[-1] = '.') or (V > 255) then
+          exit
+        else
+        begin
+          inc(ndot);
+          V := 0;
+        end;
+      '0'..'9':
+        V := (V * 10) + ord(P^) - 48;
+    else
+      exit;
+    end;
+    inc(P);
+  until false;
+  if (ndot = 3) and (V <= 255) and (P[-1] <> '.') then
+    result := true;
 end;
 
 function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
