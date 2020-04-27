@@ -9,7 +9,7 @@ unit mormot.core.json;
    JSON functions shared by all framework units
     - Low-Level JSON Processing Functions
     - TTextWriter class with proper JSON escaping and WriteObject() support
-    - JSON-aware TSynNameValue Name/Value RawUTF8 Storage
+    - JSON-aware TSynNameValue TSynPersistentStoreJson TRawByteStringGroup
     - JSON-aware TSynDictionary Storage
     - JSON Unserialization for any kind of Values
     - JSON Serialization Wrapper Functions
@@ -48,7 +48,7 @@ type
   // during the parsing of complex JSON input
   TJsonChar = set of (jcJsonIdentifierFirstChar, jcJsonIdentifier,
     jcEndOfJSONFieldOr0, jcEndOfJSONValueField,
-    jcJSONStringMarker, jcDigitFirstChar, jcDigitFloatChar);
+    jcJSONStringMarker, jcDigitFirstChar, jcDigitFloatChar, jcUTF8Char);
 
   /// defines a lookup table used for branch-less JSON parsing
   TJsonCharSet = array[AnsiChar] of TJsonChar;
@@ -480,14 +480,82 @@ function JSONRetrieveObjectRttiCustom(var JSON: PUTF8Char;
 // - you can omit the leading query delimiter ('?') by setting IncludeQueryDelimiter=false
 // - warning: the ParametersJSON input buffer will be modified in-place
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
-  const PropNamesToIgnore: array of RawUTF8; IncludeQueryDelimiter: Boolean = true): RawUTF8; overload;
+  const PropNamesToIgnore: array of RawUTF8;
+  IncludeQueryDelimiter: Boolean = true): RawUTF8; overload;
 
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
 // - you can omit the leading query delimiter ('?') by setting IncludeQueryDelimiter=false
 // - overloaded function which will make a copy of the input JSON before parsing
 function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
-  const PropNamesToIgnore: array of RawUTF8; IncludeQueryDelimiter: Boolean = true): RawUTF8; overload;
+  const PropNamesToIgnore: array of RawUTF8;
+  IncludeQueryDelimiter: Boolean = true): RawUTF8; overload;
+
+/// wrapper to serialize a T*ObjArray dynamic array as JSON
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+function ObjArrayToJSON(const aObjArray;
+  aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
+
+/// encode the supplied data as an UTF-8 valid JSON object content
+// - data must be supplied two by two, as Name,Value pairs, e.g.
+// ! JSONEncode(['name','John','year',1972]) = '{"name":"John","year":1972}'
+// - or you can specify nested arrays or objects with '['..']' or '{'..'}':
+// ! J := JSONEncode(['doc','{','name','John','abc','[','a','b','c',']','}','id',123]);
+// ! assert(J='{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
+// - you can pass nil as parameter for a null JSON value
+function JSONEncode(const NameValuePairs: array of const): RawUTF8; overload;
+
+/// encode the supplied (extended) JSON content, with parameters,
+// as an UTF-8 valid JSON object content
+// - in addition to the JSON RFC specification strict mode, this method will
+// handle some BSON-like extensions, e.g. unquoted field names:
+// ! aJSON := JSONEncode('{id:?,%:{name:?,birthyear:?}}',['doc'],[10,'John',1982]);
+// - you can use nested _Obj() / _Arr() instances
+// ! aJSON := JSONEncode('{%:{$in:[?,?]}}',['type'],['food','snack']);
+// ! aJSON := JSONEncode('{type:{$in:?}}',[],[_Arr(['food','snack'])]);
+// ! // will both return
+// ! '{"type":{"$in":["food","snack"]}}')
+// - if the SynMongoDB unit is used in the application, the MongoDB Shell
+// syntax will also be recognized to create TBSONVariant, like
+// ! new Date()   ObjectId()   MinKey   MaxKey  /<jRegex>/<jOptions>
+// see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
+// !  aJSON := JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John']))
+// ! // will return
+// ! '{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}'
+// - will call internally _JSONFastFmt() to create a temporary TDocVariant with
+// all its features - so is slightly slower than other JSONEncode* functions
+function JSONEncode(const Format: RawUTF8;
+  const Args, Params: array of const): RawUTF8; overload;
+
+/// encode the supplied RawUTF8 array data as an UTF-8 valid JSON array content
+function JSONEncodeArrayUTF8(const Values: array of RawUTF8): RawUTF8; overload;
+
+/// encode the supplied integer array data as a valid JSON array
+function JSONEncodeArrayInteger(const Values: array of integer): RawUTF8; overload;
+
+/// encode the supplied floating-point array data as a valid JSON array
+function JSONEncodeArrayDouble(const Values: array of double): RawUTF8; overload;
+
+/// encode the supplied array data as a valid JSON array content
+// - if WithoutBraces is TRUE, no [ ] will be generated
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
+function JSONEncodeArrayOfConst(const Values: array of const;
+  WithoutBraces: boolean = false): RawUTF8; overload;
+
+/// encode the supplied array data as a valid JSON array content
+// - if WithoutBraces is TRUE, no [ ] will be generated
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
+procedure JSONEncodeArrayOfConst(const Values: array of const;
+  WithoutBraces: boolean; var result: RawUTF8); overload;
+
+/// encode as JSON {"name":value} object, from a potential SQL quoted value
+// - will unquote the SQLValue using TTextWriter.AddQuotedStringAsJSON()
+procedure JSONEncodeNameSQLValue(const Name, SQLValue: RawUTF8;
+  var result: RawUTF8);
 
 
 /// convert UTF-8 content into a JSON string
@@ -543,6 +611,11 @@ type
     // - will call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropName(const PropName: ShortString;
       Options: TTextWriterWriteObjectOptions);
+    /// append a JSON field name, followed by an escaped UTF-8 JSON String and
+    // a comma (',')
+    procedure AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
+    /// append a JSON field name, followed by a number value and a comma (',')
+    procedure AddPropJSONInt64(const PropName: shortstring; Value: Int64);
     /// append CR+LF (#13#10) chars and #9 indentation
     // - will also flush any fBlockComment
     procedure AddCRAndIndent; override;
@@ -592,6 +665,20 @@ type
     // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUTF8 = 'Z');
+    /// append an array of integers as CSV
+    procedure AddCSVInteger(const Integers: array of Integer); overload;
+    /// append an array of doubles as CSV
+    procedure AddCSVDouble(const Doubles: array of double); overload;
+    /// append an array of RawUTF8 as CSV of JSON strings
+    procedure AddCSVUTF8(const Values: array of RawUTF8); overload;
+    /// append an array of const as CSV of JSON values
+    procedure AddCSVConst(const Values: array of const);
+    /// append a quoted string as JSON, with in-place decoding
+    // - if QuotedString does not start with ' or ", it will written directly
+    // (i.e. expects to be a number, or null/true/false constants)
+    // - as used e.g. by TJSONObjectDecoder.EncodeAsJSON method and
+    // JSONEncodeNameSQLValue() function
+    procedure AddQuotedStringAsJSON(const QuotedString: RawUTF8);
 
     /// append strings or integers with a specified format
     // - this overriden version will properly handle JSON escape
@@ -749,7 +836,7 @@ type
   end;
 
 
-{ ************ JSON-aware TSynNameValue Name/Value RawUTF8 Storage }
+{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson TRawByteStringGroup }
 
 type
   /// store one Name/Value pair, as used by TSynNameValue class
@@ -903,6 +990,112 @@ type
 
   /// a reference pointer to a Name/Value RawUTF8 pairs storage
   PSynNameValue = ^TSynNameValue;
+
+
+type
+  /// implement binary persistence and JSON serialization (not deserialization)
+  TSynPersistentStoreJson = class(TSynPersistentStore)
+  protected
+    // append "name" -> inherited should add properties to the JSON object
+    procedure AddJSON(W: TTextWriter); virtual;
+  public
+    /// serialize this instance as a JSON object
+    function SaveToJSON(reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8;
+  end;
+
+
+type
+  /// item as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValue = record
+    Position: integer;
+    Value: RawByteString;
+  end;
+
+  PRawByteStringGroupValue = ^TRawByteStringGroupValue;
+
+  /// items as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
+
+  /// store several RawByteString content with optional concatenation
+  {$ifdef USERECORDWITHMETHODS} TRawByteStringGroup = record {$else}
+  TRawByteStringGroup = object {$endif}
+  public
+    /// actual list storing the data
+    Values: TRawByteStringGroupValueDynArray;
+    /// how many items are currently stored in Values[]
+    Count: integer;
+    /// the current size of data stored in Values[]
+    Position: integer;
+    /// naive but efficient cache for Find()
+    LastFind: integer;
+    /// add a new item to Values[]
+    procedure Add(const aItem: RawByteString); overload;
+    /// add a new item to Values[]
+    procedure Add(aItem: pointer; aItemLen: integer); overload;
+    /// add another TRawByteStringGroup to Values[]
+    procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// low-level method to abort the latest Add() call
+    // - warning: will work only once, if an Add() has actually been just called:
+    // otherwise, the behavior is unexpected, and may wrongly truncate data
+    procedure RemoveLastAdd;
+    /// compare two TRawByteStringGroup instance stored text
+    function Equals(const aAnother: TRawByteStringGroup): boolean;
+    /// clear any stored information
+    procedure Clear;
+    /// append stored information into another RawByteString, and clear content
+    procedure AppendTextAndClear(var aDest: RawByteString);
+    // compact the Values[] array into a single item
+    // - is also used by AsText to compute a single RawByteString
+    procedure Compact;
+    /// return all content as a single RawByteString
+    // - will also compact the Values[] array into a single item (which is returned)
+    function AsText: RawByteString;
+    /// return all content as a single TByteDynArray
+    function AsBytes: TByteDynArray;
+    /// save all content into a TTextWriter instance
+    procedure Write(W: TTextWriter; Escape: TTextWriterKind = twJSONEscape); overload;
+    /// save all content into a TFileBufferWriter instance
+    procedure WriteBinary(W: TFileBufferWriter); overload;
+    /// save all content as a string into a TFileBufferWriter instance
+    // - storing the length as WriteVarUInt32() prefix
+    procedure WriteString(W: TFileBufferWriter);
+    /// add another TRawByteStringGroup previously serialized via WriteString()
+    procedure AddFromReader(var aReader: TFastReader);
+    /// returns a pointer to Values[] containing a given position
+    // - returns nil if not found
+    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
+    /// returns a pointer to Values[].Value containing a given position and length
+    // - returns nil if not found
+    function Find(aPosition, aLength: integer): pointer; overload;
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
+      {$ifdef HASINLINE} inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
+      {$ifdef HASINLINE} inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    // - explicitly returns null if the supplied text was not found
+    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append the text at a given position in Values[], JSON escaped by default
+    // - text should be in a single Values[] entry
+    procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
+      Escape: TTextWriterKind = twJSONEscape; TrailingCharsToIgnore: integer = 0);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append the blob at a given position in Values[], base-64 encoded
+    // - text should be in a single Values[] entry
+    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
+    withMagic: boolean); {$ifdef HASINLINE}inline;{$endif}
+    /// copy the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindMove(aPosition, aLength: integer; aDest: pointer);
+  end;
+
+  /// pointer reference to a TRawByteStringGroup
+  PRawByteStringGroup = ^TRawByteStringGroup;
 
 
 { *********** JSON-aware TSynDictionary Storage }
@@ -3394,6 +3587,156 @@ begin
   end;
 end;
 
+function ObjArrayToJSON(const aObjArray;
+  aOptions: TTextWriterWriteObjectOptions): RawUTF8;
+var
+  temp: TTextWriterStackBuffer;
+begin
+  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
+  try
+    if woEnumSetsAsText in aOptions then
+      CustomOptions := CustomOptions + [twoEnumSetsAsTextInRecord];
+    AddObjArrayJSON(aObjArray, aOptions);
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
+function JSONEncode(const NameValuePairs: array of const): RawUTF8;
+var
+  temp: TTextWriterStackBuffer;
+begin
+  if high(NameValuePairs) < 1 then
+    // return void JSON object on error
+    result := '{}'
+  else
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      AddJSONEscape(NameValuePairs);
+      SetText(result);
+    finally
+      Free
+    end;
+end;
+
+function JSONEncode(const Format: RawUTF8;
+  const Args, Params: array of const): RawUTF8;
+var
+  temp: TTextWriterStackBuffer;
+begin
+  with TTextWriter.CreateOwnedStream(temp) do
+  try
+    AddJSON(Format, Args, Params);
+    SetText(result);
+  finally
+    Free
+  end;
+end;
+
+function JSONEncodeArrayDouble(const Values: array of double): RawUTF8;
+var
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    W.Add('[');
+    W.AddCSVDouble(Values);
+    W.Add(']');
+    W.SetText(result);
+  finally
+    W.Free
+  end;
+end;
+
+function JSONEncodeArrayUTF8(const Values: array of RawUTF8): RawUTF8;
+var
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    W.Add('[');
+    W.AddCSVUTF8(Values);
+    W.Add(']');
+    W.SetText(result);
+  finally
+    W.Free
+  end;
+end;
+
+function JSONEncodeArrayInteger(const Values: array of integer): RawUTF8;
+var
+  W: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    W.Add('[');
+    W.AddCSVInteger(Values);
+    W.Add(']');
+    W.SetText(result);
+  finally
+    W.Free
+  end;
+end;
+
+function JSONEncodeArrayOfConst(const Values: array of const;
+  WithoutBraces: boolean): RawUTF8;
+begin
+  JSONEncodeArrayOfConst(Values, WithoutBraces, result);
+end;
+
+procedure JSONEncodeArrayOfConst(const Values: array of const;
+  WithoutBraces: boolean; var result: RawUTF8);
+var
+  temp: TTextWriterStackBuffer;
+begin
+  if length(Values) = 0 then
+    if WithoutBraces then
+      result := ''
+    else
+      result := '[]'
+  else
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      if not WithoutBraces then
+        Add('[');
+      AddCSVConst(Values);
+      if not WithoutBraces then
+        Add(']');
+      SetText(result);
+    finally
+      Free
+    end;
+end;
+
+procedure JSONEncodeNameSQLValue(const Name, SQLValue: RawUTF8;
+  var result: RawUTF8);
+var
+  temp: TTextWriterStackBuffer;
+begin
+  if (SQLValue <> '') and (SQLValue[1] in ['''', '"']) then
+    // unescape SQL quoted string value into a valid JSON string
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      Add('{', '"');
+      AddNoJSONEscapeUTF8(Name);
+      Add('"', ':');
+      AddQuotedStringAsJSON(SQLValue);
+      Add('}');
+      SetText(result);
+    finally
+      Free;
+    end
+  else
+    // Value is a number or null/true/false
+    result := '{"' + Name + '":' + SQLValue + '}';
+end;
+
+
+
 procedure QuotedStrJSON(P: PUTF8Char; PLen: PtrInt; var result: RawUTF8;
   const aPrefix, aSuffix: RawUTF8);
 var
@@ -4254,6 +4597,22 @@ begin
   inherited AddCRAndIndent;
 end;
 
+procedure TTextWriter.AddPropJSONString(const PropName: shortstring;
+  const Text: RawUTF8);
+begin
+  AddProp(@PropName[1], ord(PropName[0]));
+  AddJSONString(Text);
+  Add(',');
+end;
+
+procedure TTextWriter.AddPropJSONInt64(const PropName: shortstring;
+  Value: Int64);
+begin
+  AddProp(@PropName[1], ord(PropName[0]));
+  Add(Value);
+  Add(',');
+end;
+
 procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
   AnsiToWide: PWordArray; Escape: TTextWriterKind);
 var
@@ -4555,14 +4914,6 @@ begin
   until false;
 end;
 
-procedure TTextWriter.Add(const Values: array of const);
-var
-  i: PtrInt;
-begin
-  for i := 0 to high(Values) do
-    AddJSONEscape(Values[i]);
-end;
-
 procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8);
 var
@@ -4575,6 +4926,106 @@ begin
     UInt2DigitsToShortFast(T.Day), FirstTimeChar, UInt2DigitsToShortFast(T.Hour),
     UInt2DigitsToShortFast(T.Minute), UInt2DigitsToShortFast(T.Second),
     UInt3DigitsToShort(T.MilliSecond), TZD]);
+end;
+
+
+procedure TTextWriter.AddCSVInteger(const Integers: array of Integer);
+var
+  i: PtrInt;
+begin
+  if length(Integers) = 0 then
+    exit;
+  for i := 0 to high(Integers) do
+  begin
+    Add(Integers[i]);
+    Add(',');
+  end;
+  CancelLastComma;
+end;
+
+procedure TTextWriter.AddCSVDouble(const Doubles: array of double);
+var
+  i: PtrInt;
+begin
+  if length(Doubles) = 0 then
+    exit;
+  for i := 0 to high(Doubles) do
+  begin
+    AddDouble(Doubles[i]);
+    Add(',');
+  end;
+  CancelLastComma;
+end;
+
+procedure TTextWriter.AddCSVUTF8(const Values: array of RawUTF8);
+var
+  i: PtrInt;
+begin
+  if length(Values) = 0 then
+    exit;
+  for i := 0 to high(Values) do
+  begin
+    Add('"');
+    AddJSONEscape(pointer(Values[i]));
+    Add('"', ',');
+  end;
+  CancelLastComma;
+end;
+
+procedure TTextWriter.AddCSVConst(const Values: array of const);
+var
+  i: PtrInt;
+begin
+  if length(Values) = 0 then
+    exit;
+  for i := 0 to high(Values) do
+  begin
+    AddJSONEscape(Values[i]);
+    Add(',');
+  end;
+  CancelLastComma;
+end;
+
+procedure TTextWriter.Add(const Values: array of const);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(Values) do
+    AddJSONEscape(Values[i]);
+end;
+
+procedure TTextWriter.AddQuotedStringAsJSON(const QuotedString: RawUTF8);
+var
+  L: integer;
+  P, B: PUTF8Char;
+  quote: AnsiChar;
+begin
+  L := length(QuotedString);
+  if L > 0 then
+  begin
+    quote := QuotedString[1];
+    if (quote in ['''', '"']) and (QuotedString[L] = quote) then
+    begin
+      Add('"');
+      P := pointer(QuotedString);
+      inc(P);
+      repeat
+        B := P;
+        while P[0] <> quote do
+          inc(P);
+        if P[1] <> quote then
+          break; // end quote
+        inc(P);
+        AddJSONEscape(B, P - B);
+        inc(P); // ignore double quote
+      until false;
+      if P - B <> 0 then
+        AddJSONEscape(B, P - B);
+      Add('"');
+    end
+    else
+      AddNoJSONEscape(pointer(QuotedString), length(QuotedString));
+  end;
 end;
 
 procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
@@ -5950,7 +6401,7 @@ var
     nil, @_JL_DynArray, @_JL_Interface, nil);
 
 
-{ ************ JSON-aware TSynNameValue Name/Value RawUTF8 Storage }
+{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson TRawByteStringGroup }
 
 { TSynNameValue }
 
@@ -6344,6 +6795,352 @@ begin
 end;
 
 
+
+{ TSynPersistentStoreJson }
+
+procedure TSynPersistentStoreJson.AddJSON(W: TTextWriter);
+begin
+  W.AddPropJSONString('name', fName);
+end;
+
+function TSynPersistentStoreJson.SaveToJSON(reformat: TTextWriterJSONFormat): RawUTF8;
+var
+  W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream(65536);
+  try
+    W.Add('{');
+    AddJSON(W);
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result, reformat);
+  finally
+    W.Free;
+  end;
+end;
+
+
+{ TRawByteStringGroup }
+
+procedure TRawByteStringGroup.Add(const aItem: RawByteString);
+begin
+  if Values = nil then
+    Clear; // ensure all fields are initialized, even if on stack
+  if Count = Length(Values) then
+    SetLength(Values, NextGrow(Count));
+  with Values[Count] do
+  begin
+    Position := self.Position;
+    Value := aItem;
+  end;
+  LastFind := Count;
+  inc(Count);
+  inc(Position, Length(aItem));
+end;
+
+procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
+var
+  tmp: RawByteString;
+begin
+  SetString(tmp, PAnsiChar(aItem), aItemLen);
+  Add(tmp);
+end;
+
+procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
+var
+  i: integer;
+  s, d: PRawByteStringGroupValue;
+begin
+  if aAnother.Values = nil then
+    exit;
+  if Values = nil then
+    Clear; // ensure all fields are initialized, even if on stack
+  if Count + aAnother.Count > Length(Values) then
+    SetLength(Values, Count + aAnother.Count);
+  s := pointer(aAnother.Values);
+  d := @Values[Count];
+  for i := 1 to aAnother.Count do
+  begin
+    d^.Position := Position;
+    d^.Value := s^.Value;
+    inc(Position, length(s^.Value));
+    inc(s);
+    inc(d);
+  end;
+  inc(Count, aAnother.Count);
+  LastFind := Count - 1;
+end;
+
+procedure TRawByteStringGroup.RemoveLastAdd;
+begin
+  if Count > 0 then
+  begin
+    dec(Count);
+    dec(Position, Length(Values[Count].Value));
+    Values[Count].Value := ''; // release memory
+    LastFind := Count - 1;
+  end;
+end;
+
+function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
+begin
+  if ((Values = nil) and (aAnother.Values <> nil)) or
+     ((Values <> nil) and (aAnother.Values = nil)) or
+     (Position <> aAnother.Position) then
+    result := false
+  else if (Count <> 1) or (aAnother.Count <> 1) or
+          (Values[0].Value <> aAnother.Values[0].Value) then
+    result := AsText = aAnother.AsText
+  else
+    result := true;
+end;
+
+procedure TRawByteStringGroup.Clear;
+begin
+  Values := nil;
+  Position := 0;
+  Count := 0;
+  LastFind := 0;
+end;
+
+procedure TRawByteStringGroup.AppendTextAndClear(var aDest: RawByteString);
+var
+  d, i: integer;
+  v: PRawByteStringGroupValue;
+begin
+  d := length(aDest);
+  SetLength(aDest, d + Position);
+  v := pointer(Values);
+  for i := 1 to Count do
+  begin
+    MoveFast(pointer(v^.Value)^, PByteArray(aDest)[d + v^.Position], length(v^.Value));
+    inc(v);
+  end;
+  Clear;
+end;
+
+function TRawByteStringGroup.AsText: RawByteString;
+begin
+  if Values = nil then
+    result := ''
+  else
+  begin
+    if Count > 1 then
+      Compact;
+    result := Values[0].Value;
+  end;
+end;
+
+procedure TRawByteStringGroup.Compact;
+var
+  i: integer;
+  v: PRawByteStringGroupValue;
+  tmp: RawByteString;
+begin
+  if (Values <> nil) and (Count > 1) then
+  begin
+    SetString(tmp, nil, Position);
+    v := pointer(Values);
+    for i := 1 to Count do
+    begin
+      MoveFast(pointer(v^.Value)^, PByteArray(tmp)[v^.Position], length(v^.Value));
+      {$ifdef FPC}
+      Finalize(v^.Value);
+      {$else}
+      v^.Value := '';
+      {$endif FPC}
+      inc(v);
+    end;
+    Values[0].Value := tmp; // use result for absolute compaction ;)
+    if Count > 128 then
+      SetLength(Values, 128);
+    Count := 1;
+    LastFind := 0;
+  end;
+end;
+
+function TRawByteStringGroup.AsBytes: TByteDynArray;
+var
+  i: integer;
+begin
+  result := nil;
+  if Values = nil then
+    exit;
+  SetLength(result, Position);
+  for i := 0 to Count - 1 do
+    with Values[i] do
+      MoveFast(pointer(Value)^, PByteArray(result)[Position], length(Value));
+end;
+
+procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
+var
+  i: integer;
+begin
+  if Values <> nil then
+    for i := 0 to Count - 1 do
+      with Values[i] do
+        W.Add(PUTF8Char(pointer(Value)), length(Value), Escape);
+end;
+
+procedure TRawByteStringGroup.WriteBinary(W: TFileBufferWriter);
+var
+  i: integer;
+begin
+  if Values <> nil then
+    for i := 0 to Count - 1 do
+      W.WriteBinary(Values[i].Value);
+end;
+
+procedure TRawByteStringGroup.WriteString(W: TFileBufferWriter);
+begin
+  if Values = nil then
+  begin
+    W.Write1(0);
+    exit;
+  end;
+  W.WriteVarUInt32(Position);
+  WriteBinary(W);
+end;
+
+procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
+var
+  complexsize: integer;
+begin
+  complexsize := aReader.VarUInt32;
+  if complexsize > 0 then
+    // directly create a RawByteString from aReader buffer
+    Add(aReader.Next(complexsize), complexsize);
+end;
+
+function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
+var
+  i: integer;
+begin
+  if (pointer(Values) <> nil) and (cardinal(aPosition) < cardinal(Position)) then
+  begin
+    result := @Values[LastFind]; // this cache is very efficient in practice
+    if (aPosition >= result^.Position) and
+       (aPosition < result^.Position + length(result^.Value)) then
+      exit;
+    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count - 2 do
+      if result^.Position > aPosition then
+      begin
+        dec(result);
+        LastFind := i;
+        exit;
+      end
+      else
+        inc(result);
+    dec(result);
+    LastFind := Count - 1;
+  end
+  else
+    result := nil;
+end;
+
+function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
+var
+  P: PRawByteStringGroupValue;
+  i: integer;
+label
+  found;
+begin
+  if (pointer(Values) <> nil) and
+     (cardinal(aPosition) < cardinal(Position)) then
+  begin
+    P := @Values[LastFind]; // this cache is very efficient in practice
+    i := aPosition - P^.Position;
+    if (i >= 0) and (i + aLength < length(P^.Value)) then
+    begin
+      result := @PByteArray(P^.Value)[i];
+      exit;
+    end;
+    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count - 2 do
+      if P^.Position > aPosition then
+      begin
+        LastFind := i;
+found:  dec(P);
+        dec(aPosition, P^.Position);
+        if aLength - aPosition <= length(P^.Value) then
+          result := @PByteArray(P^.Value)[aPosition]
+        else
+          result := nil;
+        exit;
+      end
+      else
+        inc(P);
+    LastFind := Count - 1;
+    goto found;
+  end
+  else
+    result := nil;
+end;
+
+procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer;
+  out aText: RawByteString);
+var
+  P: PRawByteStringGroupValue;
+begin
+  P := Find(aPosition);
+  if P = nil then
+    exit;
+  dec(aPosition, P^.Position);
+  if (aPosition = 0) and (length(P^.Value) = aLength) then
+    aText := P^.Value
+  else
+  // direct return if not yet compacted
+  if aLength - aPosition <= length(P^.Value) then
+    SetString(aText, PAnsiChar(@PByteArray(P^.Value)[aPosition]), aLength);
+end;
+
+function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+begin
+  FindAsText(aPosition, aLength, result);
+end;
+
+procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer;
+  out aDest: variant);
+var
+  tmp: RawByteString;
+begin
+  tmp := FindAsText(aPosition, aLength);
+  if tmp <> '' then
+    RawUTF8ToVariant(tmp, aDest);
+end;
+
+procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
+  W: TTextWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
+var
+  P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P <> nil then
+    W.Add(PUTF8Char(P) + TrailingCharsToIgnore, aLength - TrailingCharsToIgnore, Escape);
+end;
+
+procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
+  W: TTextWriter; withMagic: boolean);
+var
+  P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P <> nil then
+    W.WrBase64(P, aLength, withMagic);
+end;
+
+procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer;
+  aDest: pointer);
+var
+  P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P <> nil then
+    MoveFast(P^, aDest^, aLength);
+end;
+
+
 { *********** JSON-aware TSynDictionary Storage }
 
 { TSynDictionary }
@@ -6603,7 +7400,8 @@ var
   ndx: integer;
 begin
   result := false;
-  if (fValues.Info.ArrayRtti = nil) or (fValues.Info.ArrayRtti.Kind <> rkDynArray) then
+  if (fValues.Info.ArrayRtti = nil) or
+     (fValues.Info.ArrayRtti.Kind <> rkDynArray) then
     raise ESynDictionary.CreateUTF8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
   fSafe.Lock;

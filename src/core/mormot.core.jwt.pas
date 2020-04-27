@@ -611,7 +611,7 @@ begin
   if JWT.result in [jwtValid, jwtNotBeforeFailed] then
     if CheckAgainstActualTimestamp(JWT) and not fromcache then
       // depending on the algorithm used
-      CheckSignature(headpayload, signature, JWT);
+      CheckSignature(headpayload{%H-}, signature{%H-}, JWT);
   if not fromcache and (self <> nil) and (fCache <> nil) and
      (JWT.result in fCacheResults) then
     fCache.Add(Token, JWT);

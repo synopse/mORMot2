@@ -1545,6 +1545,8 @@ type
     property JsonSave: pointer read fJsonSave write fJsonSave;
   end;
 
+  PRttiCustom = ^TRttiCustom;
+
   /// meta-class of TRttiCustom
   TRttiCustomClass = class of TRttiCustom;
 
