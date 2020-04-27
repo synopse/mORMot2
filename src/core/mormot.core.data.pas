@@ -527,6 +527,8 @@ type
     property IDValue: TID read fID write fID;
   end;
 
+
+
 /// naive symmetric encryption scheme using a 32-bit key
 // - fast, but not very secure, since uses crc32ctab[] content as master cypher
 // key: consider using SynCrypto proven AES-based algorithms instead
@@ -1301,6 +1303,82 @@ const
   woHideSynPersistentPassword = woHideSensitivePersonalInformation;
 
 {$endif PUREMORMOT2}
+
+
+{ ************ TSynPersistentStore with proper Binary Serialization }
+
+type
+  /// abstract high-level handling of (SynLZ-)compressed persisted storage
+  // - LoadFromReader/SaveToWriter abstract methods should be overriden
+  // with proper binary persistence implementation
+  TSynPersistentStore = class(TSynPersistentLock)
+  protected
+    fName: RawUTF8;
+    fReader: TFastReader;
+    fReaderTemp: PRawByteString;
+    fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
+    fLoadFromLastAlgo: TAlgoCompress;
+    /// low-level virtual methods implementing the persistence reading
+    procedure LoadFromReader; virtual;
+    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
+  public
+    /// initialize a void storage with the supplied name
+    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFrom(const aBuffer: RawByteString;
+      aLoad: TAlgoCompressLoad = aclNormal);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer;
+      aLoad: TAlgoCompressLoad = aclNormal);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromFile(const aFileName: TFileName;
+      aLoad: TAlgoCompressLoad = aclNormal);
+    /// fill the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(const aBuffer: RawByteString;
+      aLoad: TAlgoCompressLoad = aclNormal); overload;
+    /// initialize the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer;
+      aLoad: TAlgoCompressLoad = aclNormal); overload; virtual;
+    /// initialize the storage from a SaveToFile content
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - returns false if the file is not found, true if the file was loaded
+    // without any problem, or raise a EFastReader exception on decoding error
+    function LoadFromFile(const aFileName: TFileName;
+      aLoad: TAlgoCompressLoad = aclNormal): boolean;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - to be retrieved later on via LoadFrom method
+    // - actually call the SaveToWriter() protected virtual method for persistence
+    // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
+    // - BufferOffset could be set to reserve some bytes before the compressed buffer
+    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean = false;
+      BufLen: integer = 65536; ForcedAlgo: TAlgoCompress = nil;
+      BufferOffset: integer = 0); overload; virtual;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - just an overloaded wrapper
+    function SaveTo(nocompression: boolean = false; BufLen: integer = 65536;
+      ForcedAlgo: TAlgoCompress = nil; BufferOffset: integer = 0): RawByteString; overload;
+      {$ifdef HASINLINE} inline;{$endif}
+    /// persist the content as a SynLZ-compressed binary file
+    // - to be retrieved later on via LoadFromFile method
+    // - returns the number of bytes of the resulting file
+    // - actually call the SaveTo method for persistence
+    function SaveToFile(const aFileName: TFileName; nocompression: boolean = false;
+      BufLen: integer = 65536; ForcedAlgo: TAlgoCompress = nil): PtrUInt;
+    /// one optional text associated with this storage
+    // - you can define this field as published to serialize its value in log/JSON
+    property Name: RawUTF8 read fName;
+    /// after a LoadFrom(), contains the uncompressed data size read
+    property LoadFromLastUncompressed: integer read fLoadFromLastUncompressed;
+    /// after a SaveTo(), contains the uncompressed data size written
+    property SaveToLastUncompressed: integer read fSaveToLastUncompressed;
+  end;
 
 
 { ************ Base64, Base64URI, URL and Baudot Encoding / Decoding }
@@ -6098,6 +6176,129 @@ begin
   else
     // from temporary allocation in TRawByteStringStream.DataString
     result := algo.Compress(FlushTo, trig, false, BufferOffset);
+end;
+
+
+{ ************ TSynPersistentStore with proper Binary Serialization }
+
+
+{ TSynPersistentStore }
+
+constructor TSynPersistentStore.Create(const aName: RawUTF8);
+begin
+  Create;
+  fName := aName;
+end;
+
+constructor TSynPersistentStore.CreateFrom(const aBuffer: RawByteString;
+  aLoad: TAlgoCompressLoad);
+begin
+  CreateFromBuffer(pointer(aBuffer), length(aBuffer), aLoad);
+end;
+
+constructor TSynPersistentStore.CreateFromBuffer(
+  aBuffer: pointer; aBufferLen: integer; aLoad: TAlgoCompressLoad);
+begin
+  Create('');
+  LoadFrom(aBuffer, aBufferLen, aLoad);
+end;
+
+constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName;
+  aLoad: TAlgoCompressLoad);
+begin
+  Create('');
+  LoadFromFile(aFileName, aLoad);
+end;
+
+procedure TSynPersistentStore.LoadFromReader;
+begin
+  fReader.VarUTF8(fName);
+end;
+
+procedure TSynPersistentStore.SaveToWriter(aWriter: TFileBufferWriter);
+begin
+  aWriter.Write(fName);
+end;
+
+procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString;
+  aLoad: TAlgoCompressLoad);
+begin
+  if aBuffer <> '' then
+    LoadFrom(pointer(aBuffer), length(aBuffer), aLoad);
+end;
+
+procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer;
+  aLoad: TAlgoCompressLoad);
+var
+  localtemp: RawByteString;
+  p: pointer;
+  temp: PRawByteString;
+begin
+  if (aBuffer = nil) or (aBufferLen <= 0) then
+    exit; // nothing to load
+  fLoadFromLastAlgo := TAlgoCompress.Algo(aBuffer, aBufferLen);
+  if fLoadFromLastAlgo = nil then
+    fReader.ErrorData('%.LoadFrom unknown TAlgoCompress AlgoID=%',
+      [self, PByteArray(aBuffer)[4]]);
+  temp := fReaderTemp;
+  if temp = nil then
+    temp := @localtemp;
+  p := fLoadFromLastAlgo.Decompress(aBuffer, aBufferLen,
+    fLoadFromLastUncompressed, temp^, aLoad);
+  if p = nil then
+    fReader.ErrorData('%.LoadFrom %.Decompress failed',
+      [self, fLoadFromLastAlgo]);
+  fReader.Init(p, fLoadFromLastUncompressed);
+  LoadFromReader;
+end;
+
+function TSynPersistentStore.LoadFromFile(const aFileName: TFileName;
+  aLoad: TAlgoCompressLoad): boolean;
+var
+  temp: RawByteString;
+begin
+  temp := StringFromFile(aFileName);
+  result := temp <> '';
+  if result then
+    LoadFrom(temp, aLoad);
+end;
+
+procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString;
+  nocompression: boolean; BufLen: integer; ForcedAlgo: TAlgoCompress;
+  BufferOffset: integer);
+var
+  writer: TFileBufferWriter;
+  temp: array[word] of byte;
+begin
+  if BufLen <= SizeOf(temp) then
+    writer := TFileBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
+  else
+    writer := TFileBufferWriter.Create(TRawByteStringStream, BufLen);
+  try
+    SaveToWriter(writer);
+    fSaveToLastUncompressed := writer.TotalWritten;
+    aBuffer := writer.FlushAndCompress(nocompression, ForcedAlgo, BufferOffset);
+  finally
+    writer.Free;
+  end;
+end;
+
+function TSynPersistentStore.SaveTo(nocompression: boolean; BufLen: integer;
+  ForcedAlgo: TAlgoCompress; BufferOffset: integer): RawByteString;
+begin
+  SaveTo(result, nocompression, BufLen, ForcedAlgo, BufferOffset);
+end;
+
+function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
+  nocompression: boolean; BufLen: integer; ForcedAlgo: TAlgoCompress): PtrUInt;
+var
+  temp: RawByteString;
+begin
+  SaveTo(temp, nocompression, BufLen, ForcedAlgo);
+  if FileFromString(temp, aFileName) then
+    result := length(temp)
+  else
+    result := 0;
 end;
 
 
