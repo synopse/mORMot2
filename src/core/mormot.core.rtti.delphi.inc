@@ -424,7 +424,9 @@ end;
 
 function TRttiInfo.DynArrayItemType: PRttiInfo;
 begin
- result := PPointer(GetTypeData(@self)^.elType)^;
+ result := pointer(GetTypeData(@self)^.elType);
+ if result <> nil then // nil e.g. for TIntegerDynArray
+   result := PPointer(result)^;
 end;
 
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
@@ -432,7 +434,9 @@ begin
   with GetTypeData(@self)^ do
   begin
     aDataSize := elSize;
-    result := PPointer(elType)^;
+    result := pointer(elType);
+    if result <> nil then
+      result := PPointer(result)^;
   end;
 end;
 

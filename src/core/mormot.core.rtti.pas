@@ -444,7 +444,7 @@ type
         RttiFloat: TRttiFloat);
       rkEnumeration, rkSet: (
         EnumInfo: PRttiEnumType;
-        EnumMask: cardinal;
+        EnumMask32: cardinal;
         EnumMax:  cardinal);
       rkDynArray, rkArray: (
         ItemInfo: PRttiInfo;
@@ -515,7 +515,7 @@ type
       out Max: integer): PRttiEnumType;   overload; {$ifdef HASINLINE} inline; {$endif}
     /// for rkSet: in how many bytes this type is stored
     // - is very efficient on latest FPC only - i.e. ifdef ISFPC32
-    function SetEnumSize: PtrInt; {$ifdef HASINLINE} inline; {$endif}
+    function SetEnumSize: PtrInt; {$ifdef HASINLINE2} inline; {$endif}
     /// compute in how many bytes this type is stored
     // - will use Kind (and RttiOrd/RttiFloat) to return the exact value
     function RttiSize: PtrInt;
@@ -1100,7 +1100,7 @@ procedure CopySeveral(Dest, Source: PByte; SourceCount: PtrInt;
 
 /// create a dynamic array from another one
 // - same as RTTI_COPY[rkDynArray] but with an optional external source count
-procedure DynArrayCopy(Dest, Source: PByte; Info: PRttiInfo;
+procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
   SourceExtCount: PInteger);
 
 
@@ -1488,7 +1488,7 @@ type
     procedure ValueFinalizeAndClear(Data: pointer);
       {$ifdef HASINLINE} inline; {$endif}
     /// efficiently copy a stored value of this type
-    procedure ValueCopy(Dest, Source: pointer);
+    function ValueCopy(Dest, Source: pointer): PtrInt;
       {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the Value is 0 / nil / '' / null
     function ValueIsVoid(Data: PAnsiChar): boolean;
@@ -2228,9 +2228,6 @@ begin
 end;
 
 
-const
-  BYTETOBITS: array[1..4] of cardinal = (
-    $ff, $ffff, $ffffff, $ffffffff);
 var
   // conversion from TRttiKind to TRttiVarData.VType
   RTTI_TO_VARTYPE: array[TRttiKind] of cardinal;
@@ -2239,6 +2236,7 @@ procedure TRttiInfo.ComputeCache(out Cache: TRttiCache);
 var
   enum: PRttiEnumType;
   siz, cnt: PtrInt;
+  msk: cardinal;
 begin
   Cache.Info := @self;
   Cache.Size := RttiSize;
@@ -2272,7 +2270,15 @@ begin
       enum := Cache.Info.SetEnumType;
       Cache.EnumInfo := enum;
       Cache.EnumMax := enum.MaxValue;
-      Cache.EnumMask := BYTETOBITS[Cache.Size];
+      case Cache.Size of
+        1:
+          msk := $ff;
+        2:
+          msk := $ffff;
+      else
+        msk := $ffffffff;
+      end;
+      Cache.EnumMask32 := msk; // only used for JSON Serialization
     end;
     rkDynArray:
     begin
@@ -3786,23 +3792,24 @@ begin
     end;
 end;
 
-procedure DynArrayCopy(Dest, Source: PByte; Info: PRttiInfo;
+procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
   SourceExtCount: PInteger);
 var
   n, itemsize: PtrInt;
   iteminfo: PRttiInfo;
 begin
   iteminfo := Info^.DynArrayItemType(itemsize);
-  if PPointer(Dest)^ <> nil then
-    FastDynArrayClear(pointer(Dest), iteminfo);
-  if PPointer(Source)^ <> nil then
+  if Dest^ <> nil then
+    FastDynArrayClear(Dest, iteminfo);
+  Source := Source^;
+  if Source <> nil then
   begin
     if SourceExtCount <> nil then
       n := SourceExtCount^
     else
       n := PDynArrayRec(PAnsiChar(Source) - SizeOf(TDynArrayRec))^.length;
-    DynArraySetLength(pointer(Dest), Info, 1, @n); // allocate memory
-    CopySeveral(PPointer(Dest)^, PPointer(Source)^, n, iteminfo, itemsize);
+    DynArraySetLength(Dest^, Info, 1, @n); // allocate memory
+    CopySeveral(Dest^, pointer(Source), n, iteminfo, itemsize);
   end;
 end;
 
@@ -4008,7 +4015,7 @@ end;
 function _RecordCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
 var
   fields: TRttiRecordManagedFields; // Size/Count/Fields
-  offset, itemsize: PtrUInt;
+  offset: PtrUInt;
   f: PRttiRecordField;
 begin
   Info^.RecordManagedFields(fields);
@@ -4030,9 +4037,9 @@ begin
         inc(Source, offset);
         inc(Dest, offset);
       end;
-      itemsize := PRttiCopiers(fields.Fields)[Info^.Kind](Dest, Source, Info);
-      inc(Source, itemsize);
-      inc(Dest, itemsize);
+      offset := PRttiCopiers(fields.Fields)[Info^.Kind](Dest, Source, Info);
+      inc(Source, offset);
+      inc(Dest, offset);
       inc(offset, f^.Offset);
     end;
     inc(f);
@@ -4043,10 +4050,10 @@ begin
   result := fields.Size;
 end;
 
-function _DynArrayCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
+function _DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo): PtrInt;
 begin
   DynArrayCopy(Dest, Source, Info, {extcount=}nil);
-  result := SizeOf(pointer);
+  result := SizeOf(Source^);
 end;
 
 function _ArrayCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
@@ -4340,14 +4347,16 @@ begin
     {$endif TSYNEXTENDED80}
   end;
   if result = ptNone then
-    repeat // guess from RTTI of nested record(s)
+    repeat
+      // guess from RTTI of nested record(s)
       if ElemInfo = nil then
       begin
         result := SizeToDynArrayKind(ElemSize);
         if result = ptNone then
           FieldSize := ElemSize;
       end
-      else // try to guess from 1st record/object field
+      else
+      // try to guess from 1st record/object field
       if not exactType and (ElemInfo^.Kind in rkRecordTypes) then
       begin
         ElemInfo.RecordManagedFields(fields);
@@ -4697,6 +4706,7 @@ begin
   all := RecordInfo^.RecordAllFields(dummy);
   Clear;
   Count := length(all);
+  SetLength(List, Count);
   f := pointer(all);
   for i := 0 to Count - 1 do
     with List[i] do
@@ -4776,18 +4786,21 @@ begin
     until n = 0;
 end;
 
-procedure TRttiCustom.ValueCopy(Dest, Source: pointer);
+function TRttiCustom.ValueCopy(Dest, Source: pointer): PtrInt;
 begin
   if not Assigned(fCopy) then
+  begin
     if rcfHasNestedProperties in fFlags then
       if fCache.Kind = rkClass then
         fProps.CopyProperties(Dest, Source)
       else
         fProps.CopyRecord(Dest, Source)
     else
-      MoveFast(Source^, Dest^, fCache.Size)
+      MoveFast(Source^, Dest^, fCache.Size);
+    result := fCache.Size;
+  end
   else
-    fCopy(Dest, Source, fCache.Info);
+    result := fCopy(Dest, Source, fCache.Info);
 end;
 
 procedure TRttiCustomProps.CopyRecord(Dest, Source: PAnsiChar);
@@ -4805,11 +4818,14 @@ begin
       offset := pp^.OffsetGet - offset;
       if offset <> 0 then
       begin
-        MoveFast(Source^, Dest^, offset); // fast copy unmanaged properties
+        MoveFast(Source^, Dest^, offset); // fast copy unmanaged field
         inc(Source, offset);
         inc(Dest, offset);
       end;
-      pp^.Value.ValueCopy(Dest, Source);
+      offset := pp^.Value.ValueCopy(Dest, Source); // copy managed field
+      inc(Source, offset);
+      inc(Dest, offset);
+      inc(offset, pp^.OffsetGet);
       inc(pp);
       dec(n);
     until n = 0;
@@ -4825,7 +4841,7 @@ var
   n: integer;
   v: TRttiVarData;
 begin
-  p := pointer(List); // all properties, not only Managed[]
+  p := pointer(List); // all published properties, not only Managed[]
   if p <> nil then
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;

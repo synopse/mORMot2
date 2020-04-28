@@ -340,7 +340,7 @@ end;
 {$ifdef ISFPC32}
 function TRttiInfo.SetEnumSize: PtrInt;
 begin
-  result := PTypeData(@self)^.SetSize; // newer FPC have direct size field :)
+  result := GetTypeData(@self)^.SetSize; // newer FPC have direct size field :)
 end;
 {$endif ISFPC32}
 
