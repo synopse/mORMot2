@@ -247,6 +247,7 @@ type
   PRawUnicode = ^RawUnicode;
   PRawJSON = ^RawJSON;
   PRawUTF8 = ^RawUTF8;
+  PPRawUTF8 = ^PRawUTF8;
   PWinAnsiString = ^WinAnsiString;
   PWinAnsiChar = type PAnsiChar;
   PSynUnicode = ^SynUnicode;
@@ -456,7 +457,7 @@ type
       {$endif}
     {$endif HASCODEPAGE}
       refCnt: TRefCnt; // =SizeInt
-      length: SizeInt;
+      length: TStrLen;
     end;
 
     TDynArrayRec = packed record
@@ -467,7 +468,7 @@ type
       property length: sizeint read GetLength write SetLength; // wrapper
     end;
 
-    {$else FPC}
+    {$else not FPC}
 
     /// map the Delphi/FPC string header (stored before each instance)
     TStrRec = packed record
@@ -484,7 +485,7 @@ type
       /// string reference count (basic garbage memory mechanism)
       refCnt: TRefCnt;
       /// equals length(s) - i.e. size in AnsiChar/WideChar, not bytes
-      length: Longint;
+      length: TStrLen;
     end;
 
     /// map the Delphi/FPC dynamic array header (stored before each instance)
@@ -497,7 +498,7 @@ type
       refCnt: TRefCnt;
       /// length in element count
       // - size in bytes = length*ElemSize
-      length: PtrInt;
+      length: TDALen;
     end;
 
     {$endif FPC}

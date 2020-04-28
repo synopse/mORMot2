@@ -892,7 +892,8 @@ function FromVarUInt32Safe(Source, SourceMax: PByte; out Value: cardinal): PByte
 /// convert a 32-bit variable-length integer buffer into a cardinal
 // - will call FromVarUInt32() if SourceMax=nil, or FromVarUInt32Safe() if set
 // - returns false on error, true if Value has been set properly
-function FromVarUInt32(var Source: PByte; SourceMax: PByte; out Value: cardinal): boolean; overload;
+function FromVarUInt32(var Source: PByte; SourceMax: PByte;
+  out Value: cardinal): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
@@ -1012,9 +1013,7 @@ type
   /// event signature to customize TFastReader.ErrorData notification
   TFastReaderOnErrorData = procedure(const fmt: RawUTF8; const args: array of const) of object;
 
-  /// safe decoding of a TBufferWriter content
-  // - similar to TFileBufferReader, but faster and only for in-memory buffer
-  // - it is also safer, since will check for reaching end of buffer
+  /// safe decoding of a TBufferWriter content from an in-memory buffer
   // - raise a EFastReader exception on decoding error (e.g. if a buffer
   // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
   {$ifdef USERECORDWITHMETHODS}
@@ -1028,7 +1027,7 @@ type
     OnErrorOverflow: TFastReaderOnErrorOverflow;
     /// use this event to customize the ErrorData process
     OnErrorData: TFastReaderOnErrorData;
-    /// some opaque value, which may be a version number to define the binary layout
+    /// some opaque value, e.g. a version number to define the binary layout
     Tag: PtrInt;
     /// initialize the reader from a memory block
     procedure Init(Buffer: pointer; Len: PtrInt); overload;
@@ -1081,13 +1080,13 @@ type
     // - don't raise any exception, so caller could check explicitly for any EOF
     procedure VarNextInt(count: integer); overload;
     /// read the next byte from the buffer
-    function NextByte: byte; {$ifdef HASINLINE}inline;{$endif}
+    function NextByte: byte;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next byte from the buffer, checking
     function NextByteSafe(dest: pointer): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 4 bytes from the buffer as a 32-bit unsigned value
     function Next4: cardinal; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 8 bytes from the buffer as a 64-bit unsigned value
-    function Next8: Qword; {$ifdef HASINLINE}inline;{$endif}
+    function Next8: Qword;    {$ifdef HASINLINE}inline;{$endif}
     /// consumes the next byte from the buffer, if matches a given value
     function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// returns the current position, and move ahead the specified bytes
@@ -1101,8 +1100,13 @@ type
     // - returns true on read success
     function CopySafe(Dest: Pointer; DataLen: PtrInt): boolean;
     /// retrieved cardinal values encoded with TBufferWriter.WriteVarUInt32Array
-    // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding
+    // - Values[] will be resized only if it is not long enough, to spare heap
+    // - returns decoded count in Values[], which may not be length(Values)
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
+    /// retrieved Int64 values encoded with TBufferWriter.WriteVarUInt64DynArray
+    // - Values[] will be resized only if it is not long enough, to spare heap
+    // - returns decoded count in Values[], which may not be length(Values)
+    function ReadVarUInt64Array(var Values: TInt64DynArray): PtrInt;
     /// retrieve some TAlgoCompress buffer, appended via Write()
     // - BufferOffset could be set to reserve some bytes before the uncompressed buffer
     function ReadCompressed(Load: TAlgoCompressLoad = aclNormal;
@@ -1232,20 +1236,22 @@ type
     /// append cardinal values (NONE must be negative!) using 32-bit
     // variable-length integer encoding or other specialized algorithm,
     // depending on the data layout
-    procedure WriteVarUInt32Array(const Values: TIntegerDynArray; ValuesCount: integer;
-      DataLayout: TBufferWriterKind);
+    // - could be decoded later on via TFastReader.ReadVarUInt32Array
+    procedure WriteVarUInt32Array(const Values: TIntegerDynArray;
+      ValuesCount: integer; DataLayout: TBufferWriterKind);
     /// append cardinal values (NONE must be negative!) using 32-bit
-    // variable-length integer encoding or other specialized algorithm,
+    // variable-length integer encoding or other specialized algorithms,
     // depending on the data layout
+    // - could be decoded later on via TFastReader.ReadVarUInt32Array
     procedure WriteVarUInt32Values(Values: PIntegerArray; ValuesCount: integer;
       DataLayout: TBufferWriterKind);
     /// append UInt64 values using 64-bit variable length integer encoding
     // - if Offset is TRUE, then it will store the difference between
     // two values using 64-bit variable-length integer encoding (in this case,
     // a fixed-sized record storage is also handled separately)
-    // - could be decoded later on via TFileBufferReader.ReadVarUInt64Array
-    procedure WriteVarUInt64DynArray(const Values: TInt64DynArray; ValuesCount: integer;
-      Offset: Boolean);
+    // - could be decoded later on via TFastReader.ReadVarUInt64Array
+    procedure WriteVarUInt64DynArray(const Values: TInt64DynArray;
+      ValuesCount: integer; Offset: Boolean);
     /// append the RawUTF8 dynamic array
     // - handled the fixed size strings array case in a very efficient way
     procedure WriteRawUTF8DynArray(const Values: TRawUTF8DynArray; ValuesCount: integer);
@@ -4446,7 +4452,8 @@ begin // Values above 128
   Source := p;
 end;
 
-function FromVarUInt32(var Source: PByte; SourceMax: PByte; out Value: cardinal): boolean;
+function FromVarUInt32(var Source: PByte; SourceMax: PByte;
+  out Value: cardinal): boolean;
 begin
   if SourceMax = nil then
   begin
@@ -5495,30 +5502,213 @@ begin
     result := false;
 end;
 
+function CleverReadInteger(p, e: PAnsiChar; V: PInteger): PtrUInt;
+// Clever = decode Values[i+1]-Values[i] storage (with special diff=1 count)
+var
+  i, n: PtrUInt;
+begin
+  result := PtrUInt(V);
+  i := PInteger(p)^;
+  inc(p, 4); // Integer: firstValue
+  V^ := i;
+  inc(V);
+  if PtrUInt(p) < PtrUInt(e) then
+    repeat
+      case p^ of
+        #0:
+          begin
+            // B:0 W:difference with previous
+            inc(i, PWord(p + 1)^);
+            inc(p, 3);
+            V^ := i;
+            inc(V);
+            if PtrUInt(p) < PtrUInt(e) then
+              continue
+            else
+              break;
+          end;
+        #254:
+          begin
+            // B:254 W:byOne
+            for n := 1 to PWord(p + 1)^ do
+            begin
+              inc(i);
+              V^ := i;
+              inc(V);
+            end;
+            inc(p, 3);
+            if PtrUInt(p) < PtrUInt(e) then
+              continue
+            else
+              break;
+          end;
+        #255:
+          begin
+            // B:255 B:byOne
+            for n := 1 to pByte(p + 1)^ do
+            begin
+              inc(i);
+              V^ := i;
+              inc(V);
+            end;
+            inc(p, 2);
+            if PtrUInt(p) < PtrUInt(e) then
+              continue
+            else
+              break;
+          end
+      else
+        begin
+          // B:1..253 = difference with previous
+          inc(i, ord(p^));
+          inc(p);
+          V^ := i;
+          inc(V);
+          if PtrUInt(p) < PtrUInt(e) then
+            continue
+          else
+            break;
+        end;
+      end; // case p^ of
+    until false;
+  result := (PtrUInt(V) - result) shr 2; // returns count of stored integer
+end;
+
 function TFastReader.ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
 var
   i: PtrInt;
   k: TBufferWriterKind;
+  pi: PInteger;
+  n, diff: integer;
+  chunk, chunkend: PtrUInt;
 begin
-  result := VarUInt32;
-  SetLength(Values, result);
-  k := TBufferWriterKind(NextByte);
-  if k = wkUInt32 then
-  begin
-    Copy(pointer(Values), result * 4);
+  n := VarUInt32;
+  if n > length(Values) then // only set length is not big enough
+    SetLength(Values, n);
+  result := n;
+  if result = 0 then
     exit;
-  end;
-  Next(4); // format: Isize+varUInt32s
+  k := TBufferWriterKind(NextByte);
+  pi := pointer(Values);
   case k of
-    wkVarInt32:
-      for i := 0 to result - 1 do
-        Values[i] := VarInt32;
-    wkVarUInt32:
-      for i := 0 to result - 1 do
-        Values[i] := VarUInt32;
-  else
-    ErrorData('ReadVarUInt32Array got kind=%', [ord(k)]);
+    wkUInt32:
+      begin
+        Copy(pointer(Values), n * 4);
+        exit;
+      end;
+    wkOffsetU, wkOffsetI:
+      begin
+        pi^ := VarUInt32;
+        dec(n);
+        if n = 0 then
+          exit;
+        diff := VarUInt32;
+        if diff <> 0 then
+        begin
+          // all items have a fixed offset
+          for i := 0 to n - 1 do
+            PIntegerArray(pi)[i + 1] := PIntegerArray(pi)[i] + diff;
+          exit;
+        end
+      end
   end;
+  repeat
+    // chunked format: Isize+values
+    chunkend := Next4;
+    chunk := PtrUInt(Next(chunkend));
+    inc(chunkend, chunk);
+    case k of
+      wkVarInt32:
+        repeat
+          pi^ := FromVarInt32(PByte(chunk));
+          inc(pi);
+          dec(n);
+        until (n = 0) or (chunk >= chunkend);
+      wkVarUInt32:
+        repeat
+          pi^ := FromVarUInt32(PByte(chunk));
+          inc(pi);
+          dec(n);
+        until (n = 0) or (chunk >= chunkend);
+      wkSorted:
+        begin
+          diff := CleverReadInteger(pointer(chunk), pointer(chunkend), pi);
+          dec(n, diff);
+          inc(pi, diff);
+        end;
+      wkOffsetU:
+        repeat
+          PIntegerArray(pi)[1] := pi^ + integer(FromVarUInt32(PByte(chunk)));
+          inc(pi);
+          dec(n);
+        until (n = 0) or (chunk >= chunkend);
+      wkOffsetI:
+      repeat
+        PIntegerArray(pi)[1] := pi^ + FromVarInt32(PByte(chunk));
+        inc(pi);
+        dec(n);
+      until (n = 0) or (chunk >= chunkend);
+    else
+      ErrorData('ReadVarUInt32Array got kind=%', [ord(k)]);
+    end;
+  until n = 0;
+end;
+
+type
+  TBufferWriterKind64 = (
+    wkVarUInt64, wkOffset64);
+
+function TFastReader.ReadVarUInt64Array(var Values: TInt64DynArray): PtrInt;
+var
+  i, n: PtrInt;
+  k: TBufferWriterKind64;
+  pi: PQWord;
+  diff: QWord;
+  chunk, chunkend: PtrUInt;
+begin
+  n := VarUInt32;
+  if n > length(Values) then // only set length is not big enough
+    SetLength(Values, n);
+  result := n;
+  if result = 0 then
+    exit;
+  k := TBufferWriterKind64(NextByte);
+  pi := pointer(Values);
+  if k = wkOffset64 then
+  begin
+    pi^ := VarUInt64;
+    dec(n);
+    diff := VarUInt32;
+    if diff <> 0 then
+    begin
+      // all items have a fixed offset
+      for i := 0 to n - 1 do
+        PQwordArray(pi)[i + 1] := PQwordArray(pi)[i] + diff;
+      exit;
+    end
+  end;
+  repeat
+    // chunked format: Isize+values
+    chunkend := Next4;
+    chunk := PtrUInt(Next(chunkend));
+    inc(chunkend, chunk);
+    case k of
+      wkVarUInt64:
+        repeat
+          pi^ := FromVarUInt64(PByte(chunk));
+          inc(pi);
+          dec(n);
+        until (n = 0) or (chunk >= chunkend);
+      wkOffset64:
+        repeat
+          PQwordArray(pi)[1] := pi^ + FromVarUInt64(PByte(chunk));
+          inc(pi);
+          dec(n);
+        until (n = 0) or (chunk >= chunkend);
+      else
+        ErrorData('ReadVarUInt64Array got kind=%', [ord(k)]);
+    end;
+  until n = 0;
 end;
 
 function TFastReader.ReadCompressed(Load: TAlgoCompressLoad;
@@ -6178,7 +6368,7 @@ begin
   PI := pointer(Values);
   if Offset then
   begin
-    fBuffer^[fPos] := 1;
+    fBuffer^[fPos] := ord(wkOffset64);
     fPos := PtrUInt(ToVarUInt64(PI^[0], @fBuffer^[fPos + 1])) - PtrUInt(fBuffer);
     diff := PI^[1] - PI^[0];
     inc(PByte(PI), 8);
@@ -6202,7 +6392,7 @@ begin
   end
   else
   begin
-    fBuffer^[fPos] := 0;
+    fBuffer^[fPos] := ord(wkVarUInt64);
     inc(fPos);
   end;
   repeat
@@ -10607,7 +10797,8 @@ begin
         Dest.Write(Data, offset);
         inc(Data, offset);
       end;
-      inc(Data, PRttiBinarySaves(fields.Fields)[Info^.Kind](Data, Dest, Info));
+      offset := PRttiBinarySaves(fields.Fields)[Info^.Kind](Data, Dest, Info);
+      inc(Data, offset);
       inc(offset, f^.Offset);
     end;
     inc(f);
@@ -10642,7 +10833,8 @@ begin
         Source.Copy(Data, offset);
         inc(Data, offset);
       end;
-      inc(Data, PRttiBinaryLoads(fields.Fields)[Info^.Kind](Data, Source, Info));
+      offset := PRttiBinaryLoads(fields.Fields)[Info^.Kind](Data, Source, Info);
+      inc(Data, offset);
       inc(offset, f^.Offset);
     end;
     inc(f);
@@ -10653,10 +10845,11 @@ begin
   result := fields.Size;
 end;
 
-function _RecordCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseInSensitive: boolean): integer;
+function _RecordCompare(A, B: PUTF8Char; Info: PRttiInfo;
+ CaseInSensitive: boolean): integer;
 var
   fields: TRttiRecordManagedFields; // Size/Count/Fields
-  offset, fieldsize: PtrUInt;
+  offset: PtrUInt;
   f: PRttiRecordField;
 begin
   Info^.RecordManagedFields(fields);
@@ -10680,9 +10873,9 @@ begin
         inc(A, offset);
         inc(B, offset);
       end;
-      fieldsize := PRttiCompares(fields.Fields)[Info^.Kind](A, B, Info, result);
-      inc(A, fieldsize);
-      inc(B, fieldsize);
+      offset := PRttiCompares(fields.Fields)[Info^.Kind](A, B, Info, result);
+      inc(A, offset);
+      inc(B, offset);
       if result <> 0 then
         exit;
       inc(offset, f^.Offset);
@@ -11331,7 +11524,7 @@ begin
   if fValue = nil then
     exit; // avoid GPF if void
   SetCount(result + 1);
-  ItemCopy(@Item, pointer(PtrUInt(fValue^) + PtrUInt(result) * fElemSize));
+  ItemCopy(@Item, PAnsiChar(fValue^) + PtrUInt(result) * fElemSize);
 end;
 
 function TDynArray.New: integer;
@@ -11349,7 +11542,7 @@ begin
   index := GetCount - 1;
   result := index >= 0;
   if result then
-    ItemCopy(pointer(PtrUInt(fValue^) + PtrUInt(index) * fElemSize), @Dest);
+    ItemCopy(PAnsiChar(fValue^) + PtrUInt(index) * fElemSize, @Dest);
 end;
 
 function TDynArray.Pop(var Dest): boolean;
@@ -11368,7 +11561,7 @@ end;
 procedure TDynArray.Insert(Index: PtrInt; const Item);
 var
   n: PtrInt;
-  P: PByteArray;
+  P: PAnsiChar;
 begin
   if fValue = nil then
     exit; // avoid GPF if void
@@ -11377,14 +11570,14 @@ begin
   if PtrUInt(Index) < PtrUInt(n) then
   begin
     // reserve space for the new item
-    P := pointer(PtrUInt(fValue^) + PtrUInt(Index) * ElemSize);
+    P := PAnsiChar(fValue^) + PtrUInt(Index) * ElemSize;
     MoveFast(P[0], P[ElemSize], PtrUInt(n - Index) * ElemSize);
     if rcfArrayItemManaged in fInfo.Flags then // avoid GPF in ItemCopy() below
       FillCharFast(P^, ElemSize, 0);
   end
   else
     // Index>=Count -> add at the end
-    P := pointer(PtrUInt(fValue^) + PtrUInt(n) * ElemSize);
+    P := PAnsiChar(fValue^) + PtrUInt(n) * ElemSize;
   ItemCopy(@Item, P);
 end;
 
@@ -11417,7 +11610,7 @@ begin
   if PRefCnt(PAnsiChar(fValue^) - _DAREFCNT)^ > 1 then
     InternalSetLength(n, n); // unique
   dec(n);
-  P := pointer(PtrUInt(fValue^) + PtrUInt(aIndex) * ElemSize);
+  P := PAnsiChar(fValue^) + PtrUInt(aIndex) * ElemSize;
   if fInfo.ArrayRtti <> nil then
     fInfo.ArrayRtti.ValueFinalize(P);
   if n > aIndex then
@@ -12402,8 +12595,7 @@ begin
      LoadFromJSON(pointer(Source.SaveToJSON))
   else
   begin
-    DynArrayCopy(pointer(fValue^), pointer(Source.fValue^),
-      fInfo.Cache.ItemInfo, Source.fCountP);
+    DynArrayCopy(fValue^, Source.fValue^, fInfo.Cache.ItemInfo, Source.fCountP);
     if fCountP <> nil then
       fCountP^ := GetCapacity;
   end;
@@ -12431,7 +12623,7 @@ var
   rtti: PRttiInfo;
   cmp: TRttiCompare;
   comp: integer;
-  P: PByte;
+  P: PAnsiChar;
 begin
   if (fValue <> nil) and (@Item <> nil) then
     if not(rcfArrayItemManaged in fInfo.Flags) then
@@ -12538,7 +12730,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     refCnt := 1;
     length := NewLength;
   end;
-  inc(PByte(p), SizeOf(p^)); // p^ = start of dynamic aray items
+  inc(p); // start of dynamic aray items
   fValue^ := p;
   // reset new allocated items content to zero
   if NewLength > OldLength then
@@ -12667,8 +12859,7 @@ begin
     aCount, fInfo.Cache.ItemInfo, ElemSize);
 end;
 
-function TDynArray.AddArray(const DynArrayVar; aStartIndex: integer;
-  aCount: integer): integer;
+function TDynArray.AddArray(const DynArrayVar; aStartIndex, aCount: integer): integer;
 var
   c: PtrInt;
   n: integer;
@@ -12689,8 +12880,8 @@ begin
   result := aCount;
   n := GetCount;
   SetCount(n + aCount);
-  PS := pointer(PtrUInt(DynArrayVar) + cardinal(aStartIndex) * ElemSize);
-  PD := pointer(PtrUInt(fValue^) + cardinal(n) * ElemSize);
+  PS := PAnsiChar(DynArrayVar) + cardinal(aStartIndex) * ElemSize;
+  PD := PAnsiChar(fValue^) + cardinal(n) * ElemSize;
   CopySeveral(PD, PS, aCount, fInfo.Cache.ItemInfo, ElemSize);
 end;
 
@@ -12767,6 +12958,7 @@ end;
 
 function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
 begin
+  Item := PPointer(Item)^; // passed by reference
   if Item = nil then
     result := 0
   else
@@ -12777,6 +12969,7 @@ function HashAnsiStringI(Item: PUTF8Char; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
+  Item := PPointer(Item)^;
   if Item = nil then
     result := 0
   else
@@ -13340,13 +13533,17 @@ begin
       else
         inc(P, siz);
   // enable hashing if Scan() called 2*CountTrigger
-  if (hasHasher in State) and (max > 7) then
+  if hasHasher in State then
+    if max > CountTrigger then
+      // e.g. after Init() without explicit ReHash
+      ReHash({forced=}false, {grow=}false) // set HashTable[] and canHash
+  else if max > 7 then      
   begin
     inc(ScanCounter);
     if ScanCounter >= CountTrigger * 2 then
     begin
       CountTrigger := 2; // rather use hashing from now on
-      ReHash({forced=}false, {grow=}false);  // set HashTable[] and canHash
+      ReHash({forced=}false, {grow=}false);
     end;
   end;
 end;
@@ -13613,7 +13810,7 @@ begin
   begin // force unique column name
     aName_ := aName + '_';
     j := 1;
-    repeat
+        repeat
       aName := aName_ + UInt32ToUTF8(j);
       ndx := FindHashedForAdding(aName, added);
       inc(j);
