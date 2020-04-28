@@ -103,7 +103,6 @@ procedure DeleteCriticalSection;      external kernel32;
 function  TryEnterCriticalSection;    external kernel32;
 procedure AllocConsole;               external kernel32;
 procedure FileClose;                  external kernel32 name 'CloseHandle';
-function  GetModuleHandle;            external kernel32;
 function  GetCurrentThreadId;         external kernel32;
 function  GetEnvironmentStringsW;     external kernel32;
 function  FreeEnvironmentStringsW;    external kernel32;
@@ -114,6 +113,10 @@ procedure FlushFileBuffers;           external kernel32;
 function  GetLastError;               external kernel32;
 procedure SetLastError;               external kernel32;
 
+function GetModuleHandle(lpModuleName: PChar): HMODULE;
+begin
+  result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
+end;
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
@@ -125,10 +128,15 @@ var
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
-  cnt: QWord;
+  cnt, freq: QWord;
 begin
   QueryPerformanceCounter(PInt64(@cnt)^);
-  Value := (cnt * 1000000) div _QueryPerformanceFrequency;
+  freq := _QueryPerformanceFrequency;
+  if freq = 10000000 then
+    // from HyperV or if HPET disabled e.g. -> faster division by a constant
+    Value := cnt div 10
+  else
+    Value := (cnt * 1000000) div freq;
 end;
 
 const
@@ -1003,7 +1011,7 @@ begin
     Close;
   L := length(keyname);
   tmp.Init(L * 2);
-  Utf8ToUnicode(tmp.buf, L, pointer(keyname), L); // uses RTL
+  Utf8ToUnicode(tmp.buf, L + 8, pointer(keyname), L); // uses RTL
   key := 0;
   result := RegOpenKeyExW(root, tmp.buf, 0, KEY_READ, key) = 0;
   tmp.Done;

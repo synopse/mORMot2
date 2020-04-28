@@ -528,7 +528,7 @@ function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
 
 /// retrieves the current executable module handle, i.e.  its memory load address
 // - redefined in mormot.core.os to avoid dependency to Windows
-function GetModuleHandle(lpModuleName: PChar): HMODULE; stdcall;
+function GetModuleHandle(lpModuleName: PChar): HMODULE;
 
 /// retrieves the current stack trace
 // - only available since Windows XP

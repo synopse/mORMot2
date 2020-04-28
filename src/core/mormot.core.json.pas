@@ -4254,7 +4254,7 @@ begin
         Ctxt.W.fBlockComment, '"*" or a set of ', true);
   end
   else
-    Ctxt.W.AddU(Data^ and Ctxt.Info.Cache.EnumMask);
+    Ctxt.W.AddU(Data^ and Ctxt.Info.Cache.EnumMask32);
 end;
 
 procedure _JS_DynArray(Data: PPointer; const Ctxt: TJsonSaveContext);
