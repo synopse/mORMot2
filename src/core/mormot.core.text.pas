@@ -5759,15 +5759,12 @@ end;
 
 procedure TBaseWriter.AddShorter(const Text: TShort8);
 var
-  P: PUTF8Char;
-  S: PUTF8Char {$ifndef FPC} absolute Text{$endif};
+  P, S: PUTF8Char;
 begin
   P := B;
   if P >= BEnd then // BEnd is 16 bytes before end of buffer -> 8 chars OK
     P := FlushToStream;
-  {$ifdef FPC}
-  S := @Text; // better code generation when inlined
-  {$endif FPC}
+  S := @Text; // better code generation when inlined on FPC
   inc(B, ord(S[0]));
   PInt64(P + 1)^ := PInt64(S + 1)^;
 end;
@@ -6563,11 +6560,14 @@ begin
           D := FlushToStream + 1;
         c := P^;
         if c < ' ' then
-          c := ' ';
+          if c = #0 then
+            break
+          else
+            c := ' ';
         D^ := c;
         inc(P);
         inc(D);
-      until c = #0;
+      until false;
     B := D - 1;
   end;
 end;
@@ -12200,7 +12200,7 @@ end;
 
 procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer);
 var {$ifdef CPUX86NOTPIC}
-    tab: TAnsiCharToWord absolute TwoDigitsHexW;
+    tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
     {$else}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
     {$endif}

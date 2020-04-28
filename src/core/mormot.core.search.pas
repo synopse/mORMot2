@@ -44,7 +44,7 @@ type
   // are handled with dedicated code, optionally with case-insensitive search
   // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
   // search for several patterns, or even TExprParserMatch for expression search
-  TMatch = record
+  TMatch = object
   private
     Pattern, Text: PUTF8Char;
     P, T, PMax, TMax: PtrInt;
@@ -3404,8 +3404,8 @@ begin
     BufSize := $ffffff; // we store offsets with 2..3 bytes -> max 16MB chunk
   Trailing := 0;
   Getmem(workbuf, BufSize); // compression temporary buffers
-  Getmem(HList, BufSize * SizeOf(HList[0]));
-  Getmem(HTab, SizeOf(HTab^));
+  Getmem(HList, BufSize * SizeOf({%H-}HList[0]));
+  Getmem(HTab, SizeOf({%H-}HTab^));
   Getmem(Delta, Max(NewSize, OldSize) + 4096); // Delta size max evalulation
   try
     d := Delta;
