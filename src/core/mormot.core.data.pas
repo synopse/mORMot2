@@ -11453,9 +11453,9 @@ ok:   inc(PByte(result), PtrUInt(index) * ElemSize)
       result := nil
   end
   else
-    {$ifdef FPC} // high() is stored
+    {$ifdef FPC} // FPC stores high() in TDALen=PtrInt
     if PtrUInt(index) <= PPtrUInt(PAnsiChar(result) - _DALEN)^ then
-    {$else}    // length() is stored
+    {$else}     // Delphi stores length() in TDALen=NativeInt
     if PtrUInt(index) < PPtrUInt(PtrUInt(result) - _DALEN)^ then
     {$endif FPC}
       goto ok
@@ -12712,7 +12712,8 @@ begin
   ItemTemp := '';
 end;
 
-procedure TDynArray.ItemLoad(Source: PAnsiChar; Item: pointer; SourceMax: PAnsiChar);
+procedure TDynArray.ItemLoad(Source: PAnsiChar; Item: pointer;
+  SourceMax: PAnsiChar);
 begin
   if Source <> nil then // avoid GPF
     if fInfo.Cache.ItemInfo = nil then

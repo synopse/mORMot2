@@ -8,8 +8,9 @@ interface
 {$I ..\src\mormot.defines.inc}
 
 uses
-  mormot.core.base,
   mormot.core.test,
+  mormot.core.base,
+  mormot.core.text,
   mormot.core.crypto,
   mormot.core.secure,
   mormot.core.jwt;
@@ -199,7 +200,7 @@ begin
       A.Decrypt(b, p);
       A.Done;
       Check(IsEqual(p, s));
-      st := st + AnsiChar(Random(255));
+      AppendCharToRawUTF8(st, AnsiChar(Random32(255)));
     end;
   end;
 end;

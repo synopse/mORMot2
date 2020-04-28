@@ -25,6 +25,7 @@ uses
   mormot.core.crypto       in '..\src\core\mormot.core.crypto.pas',
   mormot.core.secure       in '..\src\core\mormot.core.secure.pas',
   mormot.core.jwt          in '..\src\core\mormot.core.jwt.pas',
+  mormot.core.search       in '..\src\core\mormot.core.search.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 

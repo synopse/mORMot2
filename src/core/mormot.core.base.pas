@@ -427,17 +427,22 @@ type
   PShort8 = ^TShort8;
 
   /// cross-compiler type used for string/dynarray reference counter
+  // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
   TRefCnt = {$ifdef FPC} SizeInt {$else} longint {$endif};
   /// pointer to cross-compiler type used for string/dynarray reference counter
   PRefCnt = ^TRefCnt;
 
   /// cross-compiler type used for string length
+  // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
   TStrLen = {$ifdef FPC} SizeInt {$else} longint {$endif};
   /// pointer to cross-compiler type used for string length
   PStrLen = ^TStrLen;
   
+  /// cross-compiler type used for dynamic array length
+  // - both FPC and Delphi uses PtrInt/NativeInt for dynamic array high/length
+  TDALen = PtrInt;
   /// pointer to cross-compiler type used for dynamic array length
-  PDALen = ^PtrInt;
+  PDALen = ^TDALen;
 
   type
     {$ifdef FPC}
@@ -517,7 +522,8 @@ const
   /// cross-compiler negative offset to TDynArrayRec.high/length field
   // - to be used inlined e.g. as
   // ! PDALen(PAnsiChar(Values) - _DALEN)^ + _DAOFF
-  _DALEN = SizeOf(PtrInt);
+  // - both FPC and Delphi uses PtrInt/NativeInt for dynamic array high/length
+  _DALEN = SizeOf(TDALen);
 
   /// cross-compiler adjuster to get length from TDynArrayRec.high/length field
   _DAOFF = {$ifdef FPC} 1 {$else} 0 {$endif};

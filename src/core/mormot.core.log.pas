@@ -486,6 +486,7 @@ type
 
     /// retrieve the corresponding log file of this thread and family
     // - creates the TSynLog if not already existing for this current thread
+    // - not worth inlining: TSynLog.Add will directly check fGlobalLog
     function SynLog: TSynLog;
     /// register one object and one echo callback for remote logging
     // - aClient is typically a mORMot's TSQLHttpClient or a TSynLogCallbacks
@@ -1072,6 +1073,8 @@ type
     /// the associated logging family
     property GenericFamily: TSynLogFamily read fFamily;
   end;
+
+  TSynLogDynArray = array of TSynLog;
 
 
 
@@ -1913,7 +1916,7 @@ begin
       fUnits.Init(TypeInfo(TSynMapUnitDynArray), fUnit);
       if MabCreate then
         SaveToFile(MabFile); // if just created from .map -> create .mab file
-      U := 'SynLog';
+      U := 'mormot.core.log';
       fUnitSynLogIndex := fUnits.FindHashed(U);
       U := 'System';
       fUnitSystemIndex := fUnits.FindHashed(U);
@@ -2326,13 +2329,13 @@ var
   /// internal list of registered TSynLogFamily instances
   // - up to MAX_SYNLOGFAMILY+1 families may be defined
   // - protected by GlobalThreadLock
-  SynLogFamily: TSynObjectList = nil;
+  SynLogFamily: array of TSynLogFamily;
 
   /// internal list of created TSynLog instances, one per each log file on disk
   // - do not use directly - necessary for inlining TSynLogFamily.SynLog method
   // - also used by AutoFlushProc() to get a global list of TSynLog instances
-  // - protected by its own lock
-  SynLogFileList: TSynObjectListLocked = nil;
+  // - protected by GlobalThreadLock
+  SynLogFile: TSynLogDynArray;
 
 threadvar
   /// each thread can access to its own TSynLog instance
@@ -2371,31 +2374,34 @@ end;
 procedure TAutoFlushThread.Execute;
 var
   i: PtrInt;
-  files: TSynObjectListLocked;
+  files: TSynLogDynArray;
 begin
-  SetThreadName(GetCurrentThreadID, 'SynLog AutoFlushProc', []);
   repeat
     fEvent.WaitFor(1000);
     if Terminated then
       exit;
-    files := SynLogFileList;
-    if files.Count = 0 then
-      continue; // nothing to flush
-    inc(AutoFlushSecondElapsed);
-    files.Safe.Lock;
+    EnterCriticalSection(GlobalThreadLock);
     try
-      for i := 0 to files.Count - 1 do
-        with TSynLog(files.List[i]) do
-          if Terminated then
-            break
-          else // avoid GPF
-          if (fFamily.fAutoFlush <> 0) and (fWriter <> nil) and
-             (fWriter.PendingBytes > 1) and
-             (AutoFlushSecondElapsed mod fFamily.fAutoFlush = 0) then
-            Flush({forcediskwrite=}false); // write pending data
+      files := copy(SynLogFile); // thread-safe local copy
     finally
-      files.Safe.UnLock;
+      LeaveCriticalSection(GlobalThreadLock);
     end;
+    if files <> nil then
+      try
+        inc(AutoFlushSecondElapsed);
+        for i := 0 to high(files) do
+          with files[i] do
+            if Terminated then
+              break
+            else // avoid GPF
+            if (fFamily.fAutoFlush <> 0) and (fWriter <> nil) and
+               (fWriter.PendingBytes > 1) and
+               (AutoFlushSecondElapsed mod fFamily.fAutoFlush = 0) then
+              Flush({forcediskwrite=}false); // write pending data
+      except
+        SetThreadName(GetCurrentThreadID, 'SynLog AutoFlushProc', []);
+        // on stability issue, identify this thread
+      end;
   until Terminated;
 end;
 
@@ -2460,7 +2466,7 @@ end;
 constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
-  fIdent := SynLogFamily.Add(self);
+  fIdent := ObjArrayAdd(SynLogFamily, self);
   fDestinationPath := ExeVersion.ProgramFilePath; // use .exe path
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
@@ -2490,23 +2496,23 @@ end;
 
 function TSynLogFamily.CreateSynLog: TSynLog;
 begin
-  SynLogFileList.Safe.Lock;
+  EnterCriticalSection(GlobalThreadLock);
   try
     result := fSynLogClass.Create(self);
-    SynLogFileList.Add(result);
+    ObjArrayAdd(SynLogFile, result);
     if fPerThreadLog = ptOneFilePerThread then
       if (fRotateFileCount = 0) and (fRotateFileSize = 0) and
          (fRotateFileAtHour < 0) then
         SynLogLookupThreadVar[fIdent] := result
       else
       begin
-        fPerThreadLog := ptIdentifiedInOnFile; // excluded by rotation
+        fPerThreadLog := ptIdentifiedInOnFile; // rotation requires one file
         fGlobalLog := result;
       end
     else
       fGlobalLog := result;
   finally
-    SynLogFileList.Safe.UnLock;
+    LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
@@ -2589,7 +2595,7 @@ begin
       // ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
       exit
     else if (fPerThreadLog = ptOneFilePerThread) and (fRotateFileCount = 0) and
-       (fRotateFileSize = 0) and (fRotateFileAtHour < 0) then
+            (fRotateFileSize = 0) and (fRotateFileAtHour < 0) then
     begin
       // unrotated ptOneFilePerThread
       result := SynLogLookupThreadVar[fIdent];
@@ -2612,26 +2618,21 @@ end;
 procedure TSynLogFamily.SynLogFileListEcho(const aEvent: TOnTextWriterEcho;
   aEventAdd: boolean);
 var
-  i: integer;
-  files: TSynObjectListLocked;
-  log: TSynLog;
+  i: PtrInt;
 begin
-  if (self = nil) or (SynLogFileList.Count = 0) or not Assigned(aEvent) then
+  if (self = nil) or (SynLogFile = nil) or not Assigned(aEvent) then
     exit;
-  files := SynLogFileList;
-  files.Safe.Lock;
+  EnterCriticalSection(GlobalThreadLock);
   try
-    for i := 0 to files.Count - 1 do
-    begin
-      log := files.List[i];
-      if log.fFamily = self then
-        if aEventAdd then
-          log.fWriterEcho.EchoAdd(aEvent)
-        else
-          log.fWriterEcho.EchoRemove(aEvent);
-    end;
+    for i := 0 to high(SynLogFile) do
+      with SynLogFile[i] do
+        if fFamily = self then
+          if aEventAdd then
+            fWriterEcho.EchoAdd(aEvent)
+          else
+            fWriterEcho.EchoRemove(aEvent);
   finally
-    files.Safe.UnLock;
+    LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
@@ -2689,66 +2690,60 @@ var
   P: PAnsiChar;
 begin
   result := '';
-  if SynLogFileList.Count <> 0 then
-  begin
-    SynLogFileList.Safe.Lock;
-    try
-      for i := 0 to SynLogFileList.Count - 1 do
+  if SynLogFile = nil then
+    exit;
+  EnterCriticalSection(GlobalThreadLock);
+  try
+    for i := 0 to high(SynLogFile) do
+    begin
+      log := SynLogFile[i];
+      if log.fFamily <> self then
+        continue;
+      log.Writer.FlushToStream;
+      if log.Writer.Stream.InheritsFrom(TFileStream) then
       begin
-        log := SynLogFileList.List[i];
-        if log.fFamily <> self then
-          continue;
-        EnterCriticalSection(GlobalThreadLock);
+        stream := TFileStream(log.Writer.Stream);
+        endpos := stream.Position;
         try
-          log.Writer.FlushToStream;
-          if log.Writer.Stream.InheritsFrom(TFileStream) then
+          if endpos > MAXPREVIOUSCONTENTSIZE then
+            len := MAXPREVIOUSCONTENTSIZE
+          else
+            len := MaximumKB shl 10;
+          start := log.fStreamPositionAfterHeader;
+          if (len <> 0) and (endpos - start > len) then
           begin
-            stream := TFileStream(log.Writer.Stream);
-            endpos := stream.Position;
-            try
-              if endpos > MAXPREVIOUSCONTENTSIZE then
-                len := MAXPREVIOUSCONTENTSIZE
-              else
-                len := MaximumKB shl 10;
-              start := log.fStreamPositionAfterHeader;
-              if (len <> 0) and (endpos - start > len) then
-              begin
-                start := endpos - len;
-                stream.Position := start;
-                repeat
-                  inc(start)
-                until (stream.Read(c, 1) = 0) or (ord(c) in [10, 13]);
-              end
-              else
-                stream.Position := start;
-              len := endpos - start;
-              SetLength(result, len);
-              P := pointer(result);
-              total := 0;
-              repeat
-                read := stream.Read(P^, len);
-                if read <= 0 then
-                begin
-                  if total <> len then
-                    SetLength(result, total); // truncate on read error
-                  break;
-                end;
-                inc(P, read);
-                dec(len, read);
-                inc(total, read);
-              until len = 0;
-            finally
-              stream.Position := endpos;
+            start := endpos - len;
+            stream.Position := start;
+            repeat
+              inc(start)
+            until (stream.Read(c, 1) = 0) or (ord(c) in [10, 13]);
+          end
+          else
+            stream.Position := start;
+          len := endpos - start;
+          SetLength(result, len);
+          P := pointer(result);
+          total := 0;
+          repeat
+            read := stream.Read(P^, len);
+            if read <= 0 then
+            begin
+              if total <> len then
+                SetLength(result, total); // truncate on read error
+              break;
             end;
-          end;
+            inc(P, read);
+            dec(len, read);
+            inc(total, read);
+          until len = 0;
         finally
-          LeaveCriticalSection(GlobalThreadLock);
+          stream.Position := endpos;
         end;
-        break;
       end;
-    finally
-      SynLogFileList.Safe.UnLock;
+      break;
     end;
+  finally
+    LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
@@ -2849,8 +2844,8 @@ begin
           raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=%',
             [self, result]);
       // create the properties information from RTTI
-      result := TSynLogFamily.Create(self); // stored in SynLogFamily list
-      rtti.Private := result;
+      result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
+      rtti.Private := result; // will be owned by this TRttiCustom
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end;
@@ -2954,7 +2949,8 @@ begin
   fThreadContext := @fThreadContexts[fThreadIndex - 1];
   fThreadContext^.ID := fThreadID;
   if (fFamily.fPerThreadLog = ptIdentifiedInOnFile) and
-     (fThreadContext^.ThreadName = '') and (CurrentThreadName <> '') then
+     (fThreadContext^.ThreadName = '') and (sllInfo in fFamily.fLevel) and
+     (CurrentThreadName <> '') then
     LogThreadName('');
 end;
 
@@ -3163,14 +3159,14 @@ end;
 
 procedure TSynLog.Release;
 begin
-  SynLogFileList.Safe.Lock;
+  EnterCriticalSection(GlobalThreadLock);
   try
     CloseLogFile;
-    SynLogFileList.Remove(self);
+    ObjArrayDelete(SynLogFile, self);
     if fFamily.fPerThreadLog = ptOneFilePerThread then
       SynLogLookupThreadVar[fFamily.fIdent] := nil;
   finally
-    SynLogFileList.Safe.UnLock;
+    LeaveCriticalSection(GlobalThreadLock);
   end;
   Free;
 end;
@@ -3362,7 +3358,7 @@ procedure TSynLog.LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char;
     s: RawUTF8;
   begin
     repeat
-      s := trim(GetNextLine(LinesToLog, LinesToLog));
+      GetNextItemTrimedCRLF(LinesToLog, s);
       if s <> '' then
         if (IgnoreWhenStartWith = nil) or
            not IdemPChar(pointer(s), IgnoreWhenStartWith) then
@@ -3626,10 +3622,10 @@ begin
     {$else}
     AddTrimLeftLowerCase(ToText(OS_KIND));
     Add('=');
-    AddTrimSpaces(@SystemInfo.uts.sysname);
+    AddTrimSpaces(pointer(SystemInfo.uts.sysname));
     Add('-');
-    AddTrimSpaces(@SystemInfo.uts.release);
-    AddReplace(@SystemInfo.uts.version, ' ', '-');
+    AddTrimSpaces(pointer(SystemInfo.uts.release));
+    AddReplace(pointer(SystemInfo.uts.version), ' ', '-');
     {$endif MSWINDOWS}
     if OSVersionInfoEx <> '' then
     begin
@@ -4227,23 +4223,19 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 
   function GetHandleExceptionSynLog: TSynLog;
   var
-    files: TSynObjectListLocked;
     lookup: ^TSynLog;
     i: PtrInt;
-    n: cardinal;
   begin
     result := nil;
-    files := SynLogFileList;
-    if files.Count = 0 then
+    if SynLogFile = nil then
     begin
       // no log content yet -> check from family
-      for i := 0 to SynLogFamily.Count - 1 do
-        with TSynLogFamily(SynLogFamily.List[i]) do
-          if fHandleExceptions then
-          begin
-            result := SynLog;
-            exit;
-          end;
+      for i := 0 to high(SynLogFamily) do
+        if SynLogFamily[i].fHandleExceptions then
+        begin
+          result := SynLogFamily[i].SynLog;
+          exit;
+        end;
     end
     else
     begin
@@ -4257,19 +4249,18 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
         inc(lookup);
       end;
       // check from global list of TSynLog instances
-      files.Safe.Lock;
+      EnterCriticalSection(GlobalThreadLock);
       try
-        n := files.Count;
-        for i := 0 to n - 1 do
+        for i := 0 to high(SynLogFile) do
         begin
-          result := files.List[i];
+          result := SynLogFile[i];
           if result.fFamily.fHandleExceptions then
             exit;
         end;
-        result := nil;
       finally
-        files.Safe.UnLock;
+        LeaveCriticalSection(GlobalThreadLock);
       end;
+      result := nil;
     end;
   end;
 
@@ -4492,8 +4483,8 @@ begin
   RawSetThreadName(ThreadID, name);
   EnterCriticalSection(GlobalThreadLock);
   try
-    for i := 0 to SynLogFamily.Count - 1 do
-      with TSynLogFamily(SynLogFamily.List[i]) do
+    for i := 0 to high(SynLogFamily) do
+      with SynLogFamily[i] do
         if (sllInfo in Level) and (PerThreadLog = ptIdentifiedInOnFile) and
            (fGlobalLog <> nil) then
           fGlobalLog.LogThreadName(name);
@@ -5842,15 +5833,13 @@ begin
   GetEnumTrimmedNames(TypeInfo(TSynLogInfo), @_LogInfoText);
   GetEnumCaptions(TypeInfo(TSynLogInfo), @_LogInfoCaption);
   _LogInfoCaption[sllNone] := '';
-  SynLogFamily := TSynObjectList.Create;         // TSynLogFamily instances
-  SynLogFileList := TSynObjectListLocked.Create; // TSynLog instances
+  SetThreadName(GetCurrentThreadId, 'MainThread', []);
 end;
 
 procedure FinalizeUnit;
 begin
   ExeInstanceMapFile.Free;
-  SynLogFileList.Free; // release in proper order: TSynLog then TSynLogFamily
-  SynLogFamily.Free;
+  ObjArrayClear(SynLogFile); // TSynLogFamily are freed as TRttiCustom.Private
   DeleteCriticalSection(GlobalThreadLock);
 end;
 

@@ -92,10 +92,10 @@ type
     fUserName: RawUTF8;
   published
     /// the associated user name
-    property UserName: RawUTF8 read FUserName write FUserName;
+    property UserName: RawUTF8 read fUserName write fUserName;
     /// the associated encrypted password
     // - use the PasswordPlain public property to access to the uncrypted password
-    property Password: RawUTF8 read FPassword write FPassword;
+    property Password: SPIUTF8 read fPassword write fPassword;
   end;
 
   /// handle safe storage of any connection properties
@@ -143,7 +143,7 @@ type
     /// the associated Password, e.g. for storage or transmission encryption
     // - will be persisted encrypted with a private key
     // - use the PassWordPlain property to access to its uncyphered value
-    property Password: RawUTF8 read fPassword write fPassword;
+    property Password: SPIUTF8 read fPassword write fPassword;
   end;
 
 
@@ -451,9 +451,12 @@ type
   TSynSigner = object
   private
     ctxt: packed array[1..SHA3ContextSize] of byte; // enough space for all
-    fSignatureSize: integer;
-    fAlgo: TSignAlgo;
   public
+    /// the size, in bytes, of the digital signature of this algorithm
+    // - potential values are 20, 28, 32, 48 and 64
+    SignatureSize: integer;
+    /// the algorithm used for digitial signature
+    Algo: TSignAlgo;
     /// initialize the digital HMAC/SHA-3 signing context with some secret text
     procedure Init(aAlgo: TSignAlgo; const aSecret: RawUTF8); overload;
     /// initialize the digital HMAC/SHA-3 signing context with some secret binary
@@ -504,11 +507,6 @@ type
       out aAES: TAES; aEncrypt: boolean);
     /// fill the intenral context with zeros, for security
     procedure Done;
-    /// the algorithm used for digitial signature
-    property Algo: TSignAlgo read fAlgo;
-    /// the size, in bytes, of the digital signature of this algorithm
-    // - potential values are 20, 28, 32, 48 and 64
-    property SignatureSize: integer read fSignatureSize;
   end;
 
   /// reference to a TSynSigner wrapper object
@@ -719,9 +717,9 @@ const
   SHA3_ALGO: array[saSha3224..saSha3S256] of TSHA3Algo = (
     SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
 begin
-  fAlgo := aAlgo;
-  fSignatureSize := SIGN_SIZE[fAlgo];
-  case fAlgo of
+  Algo := aAlgo;
+  SignatureSize := SIGN_SIZE[Algo];
+  case Algo of
     saSha1:
       PHMAC_SHA1(@ctxt)^.Init(aSecret, aSecretLen);
     saSha256:
@@ -732,7 +730,7 @@ begin
       PHMAC_SHA512(@ctxt)^.Init(aSecret, aSecretLen);
     saSha3224..saSha3S256:
       begin
-        PSHA3(@ctxt)^.Init(SHA3_ALGO[fAlgo]);
+        PSHA3(@ctxt)^.Init(SHA3_ALGO[Algo]);
         PSHA3(@ctxt)^.Update(aSecret, aSecretLen);
       end; // note: the HMAC pattern is included in SHA-3
   end;
@@ -751,7 +749,7 @@ begin
   if aSecretPBKDF2Rounds > 1 then
   begin
     PBKDF2(aAlgo, aSecret, aSalt, aSecretPBKDF2Rounds, temp);
-    Init(aAlgo, @temp, fSignatureSize);
+    Init(aAlgo, @temp, SignatureSize);
     if aPBKDF2Secret <> nil then
       aPBKDF2Secret^ := temp;
     FillZero(temp.b);
@@ -767,7 +765,7 @@ end;
 
 procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
 begin
-  case fAlgo of
+  case Algo of
     saSha1:
       PHMAC_SHA1(@ctxt)^.Update(aBuffer, aLen);
     saSha256:
@@ -783,7 +781,7 @@ end;
 
 procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
 begin
-  case fAlgo of
+  case Algo of
     saSha1:
       PHMAC_SHA1(@ctxt)^.Done(aSignature.b160, aNoInit);
     saSha256:
@@ -793,7 +791,7 @@ begin
     saSha512:
       PHMAC_SHA512(@ctxt)^.Done(aSignature.b, aNoInit);
     saSha3224..saSha3S256:
-      PSHA3(@ctxt)^.Final(@aSignature, fSignatureSize shl 3, aNoInit);
+      PSHA3(@ctxt)^.Final(@aSignature, SignatureSize shl 3, aNoInit);
   end;
 end;
 
@@ -802,7 +800,7 @@ var
   sig: THash512Rec;
 begin
   Final(sig);
-  result := BinToHexLower(@sig, fSignatureSize);
+  result := BinToHexLower(@sig, SignatureSize);
 end;
 
 function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUTF8;
@@ -831,7 +829,7 @@ begin
   Init(aAlgo, aSecret);
   iter := self;
   iter.Update(aSalt);
-  if fAlgo < saSha3224 then
+  if Algo < saSha3224 then
     iter.Update(#0#0#0#1); // padding and XoF mode already part of SHA-3 process
   iter.Final(aDerivatedKey, true);
   if aSecretPBKDF2Rounds < 2 then
@@ -840,9 +838,9 @@ begin
   for i := 2 to aSecretPBKDF2Rounds do
   begin
     iter := self;
-    iter.Update(@temp, fSignatureSize);
+    iter.Update(@temp, SignatureSize);
     iter.Final(temp, true);
-    XorMemory(@aDerivatedKey, @temp, fSignatureSize);
+    XorMemory(@aDerivatedKey, @temp, SignatureSize);
   end;
   FillZero(temp.b);
   FillCharFast(iter.ctxt, SizeOf(iter.ctxt), 0);
@@ -1093,7 +1091,7 @@ begin
   values[1].ToUTF8(fServerName);
   values[2].ToUTF8(fDatabaseName);
   values[3].ToUTF8(fUser);
-  values[4].ToUTF8(fPassWord);
+  fPassWord := values[4].ToUTF8;
 end;
 
 function TSynConnectionDefinition.SaveToJSON: RawUTF8;

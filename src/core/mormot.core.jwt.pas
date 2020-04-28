@@ -330,9 +330,9 @@ type
     /// finalize the instance
     destructor Destroy; override;
     /// the digital signature size, in byte
-    property SignatureSize: integer read fSignPrepared.fSignatureSize;
+    property SignatureSize: integer read fSignPrepared.SignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
-    property SignatureAlgo: TSignAlgo read fSignPrepared.fAlgo;
+    property SignatureAlgo: TSignAlgo read fSignPrepared.Algo;
     /// low-level read access to the internal signature structure
     property SignPrepared: TSynSigner read fSignPrepared;
   end;
