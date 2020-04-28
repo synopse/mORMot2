@@ -30,7 +30,7 @@ uses
   test.core.crypto         in '.\test.core.crypto.pas';
 
 type
-  TIntegrationTests = class(TSynTests)
+  TIntegrationTests = class(TSynTestsLogged)
   published
     procedure CoreUnits;
   end;
@@ -43,6 +43,6 @@ begin
 end;
 
 begin
-  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests');
+  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests', LOG_VERBOSE);
 {%H-}end.
 

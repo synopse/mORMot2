@@ -31,8 +31,7 @@ implementation
 
 { TTestCoreCrypto }
 
-function SingleTest(const s: RawByteString;
- TDig: TSHA1Digest): boolean; overload;
+function SingleTest(const s: RawByteString; TDig: TSHA1Digest): boolean; overload;
 var
   SHA: TSHA1;
   Digest: TSHA1Digest;
@@ -63,6 +62,7 @@ var
   SHA: TSHA1;
   Digest: TSHA1Digest;
 begin
+  //Check(false, 'expected');
   Check(SingleTest('abc', Test1Out));
   Check(SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', Test2Out));
   s := 'Wikipedia, l''encyclopedie libre et gratuite';
@@ -91,8 +91,7 @@ begin
     'd174ab98d277d9f5a5611c2c9f419d9f');
 end;
 
-function SingleTest(const s: RawByteString;
-  const TDig: TSHA256Digest): boolean; overload;
+function SingleTest(const s: RawByteString; const TDig: TSHA256Digest): boolean; overload;
 var
   SHA: TSHA256;
   Digest: TSHA256Digest;
@@ -204,4 +203,5 @@ begin
     end;
   end;
 end;
+
 end.
