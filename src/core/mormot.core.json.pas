@@ -1097,6 +1097,79 @@ type
   /// pointer reference to a TRawByteStringGroup
   PRawByteStringGroup = ^TRawByteStringGroup;
 
+type
+  /// implement a cache of some key/value pairs, e.g. to improve reading speed
+  // - used e.g. by TSQLDataBase for caching the SELECT statements results in an
+  // internal JSON format (which is faster than a query to the SQLite3 engine)
+  // - internally make use of an efficient hashing algorithm for fast response
+  // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)
+  // - this class is thread-safe if you use properly the associated Safe lock
+  TSynCache = class(TSynPersistentLock)
+  protected
+    fFindLastKey: RawUTF8;
+    fNameValue: TSynNameValue;
+    fRamUsed: cardinal;
+    fMaxRamUsed: cardinal;
+    fTimeoutSeconds: cardinal;
+    fTimeoutTix: cardinal;
+    procedure ResetIfNeeded;
+  public
+    /// initialize the internal storage
+    // - aMaxCacheRamUsed can set the maximum RAM to be used for values, in bytes
+    // (default is 16 MB), after which the cache is flushed
+    // - by default, key search is done case-insensitively, but you can specify
+    // another option here
+    // - by default, there is no timeout period, but you may specify a number of
+    // seconds of inactivity (i.e. no Add call) after which the cache is flushed
+    constructor Create(aMaxCacheRamUsed: cardinal = 16 shl 20;
+      aCaseSensitive: boolean = false; aTimeoutSeconds: cardinal = 0); reintroduce;
+    /// find a Key in the cache entries
+    // - return '' if nothing found: you may call Add() just after to insert
+    // the expected value in the cache
+    // - return the associated Value otherwise, and the associated integer tag
+    // if aResultTag address is supplied
+    // - this method is not thread-safe, unless you call Safe.Lock before
+    // calling Find(), and Safe.Unlock after calling Add()
+    function Find(const aKey: RawUTF8; aResultTag: PPtrInt = nil): RawUTF8;
+    /// add a Key and its associated value (and tag) to the cache entries
+    // - you MUST always call Find() with the associated Key first
+    // - this method is not thread-safe, unless you call Safe.Lock before
+    // calling Find(), and Safe.Unlock after calling Add()
+    procedure Add(const aValue: RawUTF8; aTag: PtrInt);
+    /// add a Key/Value pair in the cache entries
+    // - returns true if aKey was not existing yet, and aValue has been stored
+    // - returns false if aKey did already exist in the internal cache, and
+    // its entry has been updated with the supplied aValue/aTag
+    // - this method is thread-safe, using the Safe locker of this instance
+    function AddOrUpdate(const aKey, aValue: RawUTF8; aTag: PtrInt): boolean;
+    /// called after a write access to the database to flush the cache
+    // - set Count to 0
+    // - release all cache memory
+    // - returns TRUE if was flushed, i.e. if there was something in cache
+    // - this method is thread-safe, using the Safe locker of this instance
+    function Reset: boolean;
+    /// number of entries in the cache
+    function Count: integer;
+    /// access to the internal locker, for thread-safe process
+    // - Find/Add methods calls should be protected as such:
+    // ! cache.Safe.Lock;
+    // ! try
+    // !   ... cache.Find/cache.Add ...
+    // ! finally
+    // !   cache.Safe.Unlock;
+    // ! end;
+    property Safe: PSynLocker read fSafe;
+    /// the current global size of Values in RAM cache, in bytes
+    property RamUsed: cardinal read fRamUsed;
+    /// the maximum RAM to be used for values, in bytes
+    // - the cache is flushed when ValueSize reaches this limit
+    // - default is 16 MB (16 shl 20)
+    property MaxRamUsed: cardinal read fMaxRamUsed;
+    /// after how many seconds betwen Add() calls the cache should be flushed
+    // - equals 0 by default, meaning no time out
+    property TimeoutSeconds: cardinal read fTimeoutSeconds;
+  end;
+
 
 { *********** JSON-aware TSynDictionary Storage }
 
@@ -7138,6 +7211,123 @@ begin
   P := Find(aPosition, aLength);
   if P <> nil then
     MoveFast(P^, aDest^, aLength);
+end;
+
+
+{ TSynCache }
+
+constructor TSynCache.Create(aMaxCacheRamUsed: cardinal;
+  aCaseSensitive: boolean; aTimeoutSeconds: cardinal);
+begin
+  inherited Create;
+  fNameValue.Init(aCaseSensitive);
+  fMaxRamUsed := aMaxCacheRamUsed;
+  fTimeoutSeconds := aTimeoutSeconds;
+end;
+
+procedure TSynCache.ResetIfNeeded;
+var
+  tix: cardinal;
+begin
+  if fRamUsed > fMaxRamUsed then
+    Reset;
+  if fTimeoutSeconds > 0 then
+  begin
+    tix := GetTickCount64 shr 10;
+    if fTimeoutTix > tix then
+      Reset;
+    fTimeoutTix := tix + fTimeoutSeconds;
+  end;
+end;
+
+procedure TSynCache.Add(const aValue: RawUTF8; aTag: PtrInt);
+begin
+  if (self = nil) or (fFindLastKey = '') then
+    exit;
+  ResetIfNeeded;
+  inc(fRamUsed, length(aValue));
+  fNameValue.Add(fFindLastKey, aValue, aTag);
+  fFindLastKey := '';
+end;
+
+function TSynCache.Find(const aKey: RawUTF8; aResultTag: PPtrInt): RawUTF8;
+var
+  ndx: integer;
+begin
+  result := '';
+  if self = nil then
+    exit;
+  fFindLastKey := aKey;
+  if aKey = '' then
+    exit;
+  ndx := fNameValue.Find(aKey);
+  if ndx < 0 then
+    exit;
+  with fNameValue.List[ndx] do
+  begin
+    result := Value;
+    if aResultTag <> nil then
+      aResultTag^ := Tag;
+  end;
+end;
+
+function TSynCache.AddOrUpdate(const aKey, aValue: RawUTF8; aTag: PtrInt): boolean;
+var
+  ndx: integer;
+begin
+  result := false;
+  if self = nil then
+    exit; // avoid GPF
+  fSafe.Lock;
+  try
+    ResetIfNeeded;
+    ndx := fNameValue.DynArray.FindHashedForAdding(aKey, result);
+    with fNameValue.List[ndx] do
+    begin
+      Name := aKey;
+      dec(fRamUsed, length(Value));
+      Value := aValue;
+      inc(fRamUsed, length(Value));
+      Tag := aTag;
+    end;
+  finally
+    fSafe.Unlock;
+  end;
+end;
+
+function TSynCache.Reset: boolean;
+begin
+  result := false;
+  if self = nil then
+    exit; // avoid GPF
+  fSafe.Lock;
+  try
+    if Count <> 0 then
+    begin
+      fNameValue.DynArray.Clear;
+      fNameValue.DynArray.ReHash;
+      result := true; // mark something was flushed
+    end;
+    fRamUsed := 0;
+    fTimeoutTix := 0;
+  finally
+    fSafe.Unlock;
+  end;
+end;
+
+function TSynCache.Count: integer;
+begin
+  if self = nil then
+  begin
+    result := 0;
+    exit;
+  end;
+  fSafe.Lock;
+  try
+    result := fNameValue.Count;
+  finally
+    fSafe.Unlock;
+  end;
 end;
 
 
