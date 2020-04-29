@@ -1122,7 +1122,11 @@ procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
 
 /// name the current thread so that it would be easily identified in the IDE debugger
 // - could also be retrieved by CurrentThreadName/GetCurrentThreadName
-procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
+procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const); overload;
+
+/// name the current thread so that it would be easily identified in the IDE debugger
+// - could also be retrieved by CurrentThreadName/GetCurrentThreadName
+procedure SetCurrentThreadName(const Name: RawUTF8); overload;
 
 /// name a thread so that it would be easily identified in the IDE debugger
 // - you can force this function to do nothing by setting the NOSETTHREADNAME
@@ -2332,7 +2336,6 @@ var
   SynLogFamily: array of TSynLogFamily;
 
   /// internal list of created TSynLog instances, one per each log file on disk
-  // - do not use directly - necessary for inlining TSynLogFamily.SynLog method
   // - also used by AutoFlushProc() to get a global list of TSynLog instances
   // - protected by GlobalThreadLock
   SynLogFile: TSynLogDynArray;
@@ -2379,7 +2382,7 @@ begin
   repeat
     fEvent.WaitFor(1000);
     if Terminated then
-      exit;
+      break;
     EnterCriticalSection(GlobalThreadLock);
     try
       files := copy(SynLogFile); // thread-safe local copy
@@ -2392,15 +2395,14 @@ begin
         for i := 0 to high(files) do
           with files[i] do
             if Terminated then
-              break
-            else // avoid GPF
-            if (fFamily.fAutoFlush <> 0) and (fWriter <> nil) and
-               (fWriter.PendingBytes > 1) and
-               (AutoFlushSecondElapsed mod fFamily.fAutoFlush = 0) then
-              Flush({forcediskwrite=}false); // write pending data
+              break // avoid GPF
+            else if (fFamily.fAutoFlush <> 0) and (fWriter <> nil) and
+                    (fWriter.PendingBytes > 1) and
+                    (AutoFlushSecondElapsed mod fFamily.fAutoFlush = 0) then
+                Flush({forcediskwrite=}false); // write pending data
       except
-        SetThreadName(GetCurrentThreadID, 'SynLog AutoFlushProc', []);
         // on stability issue, identify this thread
+        SetCurrentThreadName('log autoflush');
       end;
   until Terminated;
 end;
@@ -2502,7 +2504,7 @@ begin
     ObjArrayAdd(SynLogFile, result);
     if fPerThreadLog = ptOneFilePerThread then
       if (fRotateFileCount = 0) and (fRotateFileSize = 0) and
-         (fRotateFileAtHour < 0) then
+         (fRotateFileAtHour < 0) and (fIdent <= MAX_SYNLOGFAMILY) then
         SynLogLookupThreadVar[fIdent] := result
       else
       begin
@@ -2593,9 +2595,10 @@ begin
     result := fGlobalLog;
     if result <> nil then
       // ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
-      exit
-    else if (fPerThreadLog = ptOneFilePerThread) and (fRotateFileCount = 0) and
-            (fRotateFileSize = 0) and (fRotateFileAtHour < 0) then
+      exit;
+    if (fPerThreadLog = ptOneFilePerThread) and (fRotateFileCount = 0) and
+       (fRotateFileSize = 0) and (fRotateFileAtHour < 0) and
+       (fIdent <= MAX_SYNLOGFAMILY) then
     begin
       // unrotated ptOneFilePerThread
       result := SynLogLookupThreadVar[fIdent];
@@ -3163,7 +3166,8 @@ begin
   try
     CloseLogFile;
     ObjArrayDelete(SynLogFile, self);
-    if fFamily.fPerThreadLog = ptOneFilePerThread then
+    if (fFamily.fPerThreadLog = ptOneFilePerThread) and
+       (fFamily.fIdent <= MAX_SYNLOGFAMILY) then
       SynLogLookupThreadVar[fFamily.fIdent] := nil;
   finally
     LeaveCriticalSection(GlobalThreadLock);
@@ -3699,7 +3703,7 @@ begin // returns values in MB, not bytes
        TotalUncommitted shr 20, TotalCommitted shr 20, TotalAllocated shr 20,
        TotalFree shr 20, FreeSmall shr 20, FreeBig shr 20, Unused shr 20,
        Overhead shr 20], text);
-  {$endif}
+  {$endif FPC}
   fWriter.AddShort(text);
 end;
 {$WARN SYMBOL_DEPRECATED ON}
@@ -3986,7 +3990,7 @@ begin
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize);
     fWriter.CustomOptions := fWriter.CustomOptions +
-      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar];
+      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJSONExtended];
     fWriterEcho := TEchoWriter.Create(fWriter);
   end;
   fWriterEcho.EndOfLineCRLF := fFamily.EndOfLineCRLF;
@@ -4457,11 +4461,17 @@ begin
   SetThreadName(GetCurrentThreadId, Format, Args);
 end;
 
+procedure SetCurrentThreadName(const Name: RawUTF8);
+begin
+  SetThreadName(GetCurrentThreadId, '%', [Name]);
+end;
+
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 var
   name: RawUTF8;
   i, L: integer;
+  n: TShort31;
 begin
   FormatUTF8(Format, Args, name);
   name := StringReplaceAll(name, ['TSQLRest', '', 'TSQL', '', 'TWebSocket', 'WS',
@@ -4470,16 +4480,14 @@ begin
   for i := 1 to length(name) do
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line
-  repeat
-    i := PosEx('  ', name);
-    if i = 0 then
-      break;
-    delete(name, i, 1);
-  until false;
+  name := StringReplaceAll(name, '  ', ' ');
   L := length(name);
   if L > 31 then
     L := 31;
-  SetString(CurrentThreadName, PAnsiChar(pointer(name)), L);
+  SetString(n, PAnsiChar(pointer(name)), L);
+  if CurrentThreadName = n then
+    exit; // already set as such
+  CurrentThreadName := n;
   RawSetThreadName(ThreadID, name);
   EnterCriticalSection(GlobalThreadLock);
   try
@@ -4625,7 +4633,6 @@ end;
 
 
 { ************** Efficient .log File Access via TSynLogFile }
-
 
 { TSynLogFile }
 
@@ -5833,7 +5840,7 @@ begin
   GetEnumTrimmedNames(TypeInfo(TSynLogInfo), @_LogInfoText);
   GetEnumCaptions(TypeInfo(TSynLogInfo), @_LogInfoCaption);
   _LogInfoCaption[sllNone] := '';
-  SetThreadName(GetCurrentThreadId, 'MainThread', []);
+  SetCurrentThreadName('MainThread');
 end;
 
 procedure FinalizeUnit;
