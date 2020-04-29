@@ -811,6 +811,17 @@ procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency); overload;
 procedure Int64ToCurrency(const i: Int64; c: PSynCurrency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// no banker rounding into two digits after the decimal point
+// - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
+// - due to floating point number limitations, some numbers may have inifinite
+// digits encoded (e.g. 1.333333): display should ignore the additional digits
+function SimpleRoundTo2Digits(const d: double): double;
+
+/// no banker rounding into text, with two digits after the decimal point
+// - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
+// - this function will only allow 2 digits in the returned text
+function TwoDigits(const d: double): TShort31;
+
 /// simple wrapper to efficiently compute both division and modulo per 100
 // - compute result.D = Y div 100 and result.M = Y mod 100
 // - under FPC, will use fast multiplication by reciprocal so can be inlined
@@ -3309,6 +3320,54 @@ end;
 procedure CurrencyToInt64(c: PSynCurrency; var i: Int64);
 begin
   i := PInt64(c)^ div CURR_RES;
+end;
+
+function SimpleRoundTo2Digits(const d: double): double;
+var
+  v: Int64;
+  m: PtrInt;
+begin
+  v := trunc(d * CURR_RES);
+  m := v mod 100;
+  if m <> 0 then
+    if m > 50 then
+      inc(v, 100 - m)
+    else if m < -50 then
+      dec(v, 100 + m)
+    else
+      dec(v, m);
+  result := v / CURR_RES;
+end;
+
+function TwoDigits(const d: double): TShort31;
+var
+  v: Int64;
+  m, L: PtrInt;
+  tmp: array[0..23] of AnsiChar;
+  P: PAnsiChar;
+begin
+  v := trunc(d * CURR_RES);
+  m := v mod 100;
+  if m <> 0 then
+    if m > 50 then
+      inc(v, 100 - m)
+    else if m < -50 then
+      dec(v, 100 + m)
+    else
+      dec(v, m);
+  P := StrInt64(@tmp[23], v);
+  L := @tmp[22] - P;
+  m := PWord(@tmp[L - 2])^;
+  if m = ord('0') or ord('0') shl 8 then
+    // '300' -> '3'
+    dec(L, 3)
+  else
+  begin
+    // '301' -> '3.01'
+    PWord(@tmp[L - 1])^ := m;
+    tmp[L - 2] := '.';
+  end;
+  SetString(result, P, L);
 end;
 
 procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency);
