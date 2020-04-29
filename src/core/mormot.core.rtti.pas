@@ -190,7 +190,7 @@ type
   PRttiPropDynArray = array of PRttiProp;
 
   /// pointer to all RTTI class properties definitions
-  // - as returned by PRttiInfo.RttiProps()
+  // - as returned by PRttiInfo.RttiProps() or GetRttiProps()
   PRttiProps = ^TRttiProps;
 
   /// a wrapper to published properties of a class, as defined by compiler RTTI
@@ -220,11 +220,12 @@ type
   end;
 
   /// pointer to TClassType, as returned by PRttiInfo.RttiClass()
+  // - as returned by PRttiInfo.RttiClass() or GetRttiClass()
   // - equivalency to PClassData/PClassType as defined in old mORMot.pas
   PRttiClass = ^TRttiClass;
 
   /// a wrapper to class type information, as defined by the compiler RTTI
-  // - get a PRttiClass with PRttiInfo.RttiClass()
+  // - get a PRttiClass with PRttiInfo.RttiClass() or GetRttiClass()
   TRttiClass = object
   public
     /// the class type
@@ -232,7 +233,8 @@ type
     RttiClass: TClass;
     /// the parent class type information
     function ParentInfo: PRttiInfo; {$ifdef HASINLINE} inline; {$endif}
-    /// the number of published properties
+    /// the number of published properties of this class and all parents
+    // - use RttiProps if you want to properties only published in this class 
     function PropCount: integer; {$ifdef HASINLINE} inline; {$endif}
     /// the name (without .pas extension) of the unit were the class was defined
     // - then the PRttiProps information follows: use the method
@@ -605,7 +607,7 @@ type
   {$A+}
 
   /// how a RTTI property definition access its value
-  // - as returned by TPropInfo.Getter/Setter methods
+  // - as returned by TPropInfo.Getter/Setter/GetterIs/SetterIs methods
   TRttiPropCall = (
     rpcNone, rpcField, rpcMethod, rpcIndexed);
 
@@ -645,9 +647,11 @@ type
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
-    function Getter(Instance: TObject; Call: PMethod): TRttiPropCall; {$ifdef HASINLINE} inline; {$endif}
+    function Getter(Instance: TObject; Call: PMethod): TRttiPropCall;
+      {$ifdef HASINLINE2} inline; {$endif}
     /// raw retrieval of the property access definition
-    function Setter(Instance: TObject; Call: PMethod): TRttiPropCall; {$ifdef HASINLINE} inline; {$endif}
+    function Setter(Instance: TObject; Call: PMethod): TRttiPropCall;
+      {$ifdef HASINLINE} inline; {$endif}
     /// raw retrieval of rkInteger,rkEnumeration,rkSet,rkChar,rkWChar,rkBool
     // - rather call GetOrdValue/GetInt64Value
     // - returns an Int64 to properly support cardinal values
@@ -740,11 +744,23 @@ type
     /// return TRUE if the property is 0/nil/''/null
     function IsVoid(Instance, RttiCustom: TObject): boolean;
     /// compute in how many bytes this property is stored
-    function FieldSize: PtrInt; {$ifdef HASINLINE} inline; {$endif}
+    function FieldSize: PtrInt;      {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has no getter but direct field read
-    function GetterIsField: boolean;    {$ifdef HASINLINE} inline; {$endif}
+    // - returns FALSE if no "read" attribute was specified: use GetterCall
+    // if you want to mimic how Get*() methods could use the "write" field
+    function GetterIsField: boolean; {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property has no setter but direct field write
-    function SetterIsField: boolean;    {$ifdef HASINLINE} inline; {$endif}
+    // - returns FALSE if no "write" attribute is specified: use SetterCall
+    // if you want to mimic how Set*() methods could use the "read" field
+    function SetterIsField: boolean; {$ifdef HASINLINE} inline; {$endif}
+    /// returns how a property should be retrieved
+    // - no "read" attribute specified will return rpcField if "write" is a
+    // direct field access - just like any Get*() method would do
+    function GetterCall: TRttiPropCall;
+    /// returns how a property should be set
+    // - no "write" attribute specified will return rpcField if "read" is a
+    // direct field access - just like any Set*() method would do
+    function SetterCall: TRttiPropCall;
     /// return TRUE if the property has a write setter or direct field
     function WriteIsDefined: boolean;   {$ifdef HASINLINE} inline; {$endif}
     /// returns the low-level field read address, if GetterIsField is TRUE
@@ -825,6 +841,7 @@ function ToText(k: TRttiKind): PShortString; overload;
 // some functions which should be defined here for proper inlining
 
 {$ifdef FPC}
+
 {$ifndef HASDIRECTTYPEINFO}
 function Deref(Info: pointer): pointer; inline;
 {$endif HASDIRECTTYPEINFO}
@@ -832,6 +849,7 @@ function Deref(Info: pointer): pointer; inline;
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
 {$endif FPC}
 
 function GetTypeData(TypeInfo: pointer): PTypeData; inline;
@@ -887,6 +905,10 @@ type
 
 { **************** Published Class Properties and Methods RTTI }
 
+/// retrieve the class RTTI information for a specific class
+function GetRttiClass(RttiClass: TClass): PRttiClass;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// retrieve the class property RTTI information for a specific class
 function GetRttiProps(RttiClass: TClass): PRttiProps;
   {$ifdef HASINLINE}inline;{$endif}
@@ -912,7 +934,8 @@ function GetRttiProps(RttiClass: TClass): PRttiProps;
 function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
 
 /// retrieve the total number of properties for a class, including its parents
-function ClassFieldCountWithParents(C: TClass;  onlyWithoutGetter: boolean = false): integer;
+function ClassFieldCountWithParents(C: TClass;
+  onlyWithoutGetter: boolean = false): integer;
 
 type
   /// information about one method, as returned by GetPublishedMethods
@@ -928,8 +951,8 @@ type
 /// retrieve published methods information about any class instance
 // - will optionaly accept a Class, in this case Instance is ignored
 // - will work with FPC and Delphi RTTI
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
-  aClass: TClass = nil): integer;
+function GetPublishedMethods(Instance: TObject;
+  out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
 
 { *************** Enumerations RTTI }
@@ -1055,7 +1078,8 @@ type
 /// retrieve methods information of a given IInvokable
 // - all methods will be added, also from inherited interface definitions
 // - returns the number of methods detected
-function GetRttiInterface(aTypeInfo: pointer; out aDefinition: TRttiInterface): integer;
+function GetRttiInterface(aTypeInfo: pointer;
+  out aDefinition: TRttiInterface): integer;
 
 
 { ************* Efficient Dynamic Arrays and Records Process }
@@ -1284,6 +1308,7 @@ function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
 function DynArrayItemTypeLen(const DynArrayTypeName: RawUTF8): PtrInt;
 
 
+
 { ************** RTTI-based Registration for Custom JSON Parsing }
 
 const
@@ -1406,6 +1431,7 @@ type
     // set AutoCreate* internal fields
     procedure SetAutoCreateFields;
   public
+    // as set by SetAutoCreateFields
     AutoCreateClasses, AutoCreateObjArrays: array of PRttiCustomProp;
   private
     fFromTextPropNames: TRawUTF8DynArray; // store AddFromText() ShortStrings
@@ -1588,8 +1614,8 @@ type
     function Find(Name: PUTF8Char; NameLen: PtrInt;
       Kinds: TRttiKinds = []): TRttiCustom; overload;
     /// efficient search of TRttiCustom from a given type name
-    function Find(const Name: shortstring; Kinds: TRttiKinds = []): TRttiCustom; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+    function Find(const Name: shortstring; Kinds: TRttiKinds = []): TRttiCustom;
+       overload; {$ifdef HASINLINE} inline; {$endif}
     /// register a given RTTI TypeInfo()
     // - returns a new (or existing if it was already registered) TRttiCustom
     // - will use GlobalClass to instantiate a new TRttiCustom
@@ -2458,10 +2484,26 @@ begin
     if not SetterIsField then
       // both are methods -> returns nil
       result := nil
-    else  // field - Setter is the field offset in the instance data
+    else
+      // field - Setter is the field offset in the instance data
       result := SetterAddr(Instance)
-  else    // field - Getter is the field offset in the instance data
+  else
+    // field - Getter is the field offset in the instance data
     result := GetterAddr(Instance);
+end;
+
+function TRttiProp.GetterCall: TRttiPropCall;
+var
+  call: TMethod;
+begin
+  result := Getter(nil, @call);
+end;
+
+function TRttiProp.SetterCall: TRttiPropCall;
+var
+  call: TMethod;
+begin
+  result := Setter(nil, @call);
 end;
 
 function TRttiProp.DefaultOr0: integer;
@@ -2474,11 +2516,13 @@ end;
 function TRttiProp.IsVoid(Instance, RttiCustom: TObject): boolean;
 var
   rvd: TRttiVarData;
+  v: PVariant;
 begin
   if TypeInfo^.Kind = rkVariant then
   begin
-    if GetterIsField then
-      result := VarIsEmptyOrNull(PVariant(GetterAddr(Instance))^)
+    v := GetFieldAddr(Instance);
+    if v <> nil then
+      result := VarIsEmptyOrNull(v^)
     else
     begin
       rvd.VType := 0;
@@ -2510,6 +2554,7 @@ procedure TRttiProp.GetValue(Instance, RttiCustom: TObject;
   out Value: TRttiVarData);
 var
   rtti: TRttiCustom absolute RttiCustom;
+  addr: pointer;
 label
   clr;
 begin
@@ -2549,9 +2594,12 @@ clr:    Value.VType := varNull;
     begin
       Value.VType := varString;
       Value.Data.VAny := nil; // avoid GPF
-      if GetterIsField then // direct conversion from field address
-        rtti.Cache.Info.StringToUTF8(GetFieldAddr(Instance), RawUTF8(Value.Data.VAny))
-      else // use getter method
+      addr := GetFieldAddr(Instance);
+      if addr <> nil then
+        // direct conversion from field address
+        rtti.Cache.Info.StringToUTF8(addr, RawUTF8(Value.Data.VAny))
+      else
+        // use getter method
         GetAsString(Instance, RawUTF8(Value.Data.VAny));
       Value.NeedsClear := Value.Data.VAny <> nil; // if a RawUTF8 was allocated
     end
@@ -3141,7 +3189,8 @@ begin
   if (Instance <> nil) and (@self <> nil) then
     with TypeInfo^ do
       if Kind = rkFloat then
-        if RttiFloat = rfCurr then // RttiFloat detect TSynCurrency as rfCurr
+        if RttiFloat = rfCurr then
+          // RttiFloat detects TSynCurrency as rfCurr
           GetCurrencyProp(Instance, Value)
         else
           DoubleToCurrency(GetFloatProp(Instance), Value)
@@ -3295,19 +3344,25 @@ end;
 
 { **************** Published Class Properties and Methods RTTI }
 
+function GetRttiClass(RttiClass: TClass): PRttiClass;
+begin
+  result := PRttiInfo(PPointer(PAnsiChar(RttiClass) + vmtTypeInfo)^)^.RttiClass;
+end;
+
 function ClassFieldCountWithParents(C: TClass; onlyWithoutGetter: boolean): integer;
 var CP: PRttiProps;
     P: PRttiProp;
     i: integer;
 begin
-  result := 0;
-  while C <> nil do
+  if onlyWithoutGetter then
   begin
-    CP := GetRttiProps(C);
-    if CP = nil then
-      break; // no RTTI information (e.g. reached TObject level)
-    if onlyWithoutGetter then
+    // we need to browse all inherited properties RTTI
+    result := 0;
+    while C <> nil do
     begin
+      CP := GetRttiProps(C);
+      if CP = nil then
+        break; // no RTTI information (e.g. reached TObject level)
       P := CP^.PropList;
       for i := 1 to CP^.PropCount do
       begin
@@ -3315,11 +3370,11 @@ begin
           inc(result);
         P := P^.Next;
       end;
-    end
-    else
-      inc(result,CP^.PropCount);
-    C := GetClassParent(C);
-  end;
+    end;
+  end
+  else
+    // we can use directly the root RTTI information
+    result := GetRttiClass(C)^.PropCount;
 end;
 
 
@@ -3835,7 +3890,6 @@ end;
 
 { ************* Managed Types Finalization or Copy }
 
-
 { RTTI_FINALIZE[] implementation functions }
 
 function _StringClear(V: PPointer; Info: PRttiInfo): PtrInt;
@@ -4149,7 +4203,6 @@ begin
     Complex^ := c;
 end;
 
-
 function TypeNameToStandardParserType(Name: PShortString;
   Complex: PRTTIParserComplexType): TRTTIParserType;
 begin
@@ -4421,11 +4474,12 @@ begin
     raise ERttiException.CreateUTF8('TRttiCustom: % property has no RTTI',
       [RttiProp^.Name^]);
   addr := PtrInt(RttiProp^.GetFieldAddr(nil));
-  if RttiProp^.GetterIsField then
+  // GetterCall/SetterCall will handle void "read"/"write" attributes
+  if RttiProp^.GetterCall = rpcField then
     OffsetGet := addr
   else
     OffsetGet := -1;
-  if RttiProp^.SetterIsField then
+  if RttiProp^.SetterCall = rpcField then
     OffsetSet := addr
   else
     OffsetSet := -1;
@@ -4670,28 +4724,32 @@ begin
   fManaged := nil;
 end;
 
-procedure TRttiCustomProps.AddFromClass(ClassInfo: PRttiInfo; IncludeParents: boolean);
+procedure TRttiCustomProps.AddFromClass(ClassInfo: PRttiInfo;
+  IncludeParents: boolean);
 var
   rc: PRttiClass;
   rp: PRttiProp;
-  i: PtrInt;
+  rs: PRttiProps;
+  n, p: PtrInt;
 begin
   if (ClassInfo = nil) or (ClassInfo^.Kind <> rkClass) then
     exit;
   rc := ClassInfo^.RttiClass;
   if IncludeParents then
     AddFromClass(rc^.ParentInfo, true); // put parent properties first
-  if rc^.PropCount = 0 then
+  rs := rc^.RttiProps;
+  p := rs^.PropCount;
+  if p = 0 then
     exit;
-  i := Count;
-  inc(Count, rc^.PropCount);
+  n := Count;
+  inc(Count, p);
   SetLength(List, Count);
-  rp := rc^.RttiProps.PropList;
+  rp := rs^.PropList;
   repeat
-    inc(Size, List[i].InitFrom(rp));
+    inc(Size, List[n].InitFrom(rp));
     rp := rp^.Next;
-    inc(i)
-  until i = Count;
+    inc(n)
+  until n = Count;
 end;
 
 procedure TRttiCustomProps.SetFromRecordExtendedRtti(RecordInfo: PRttiInfo);
@@ -5288,6 +5346,7 @@ begin
     end;
     propcount := 0;
   end;
+  // set whole size and managed fields/properties
   fProps.Size := fCache.Size;
   Props.SetManagedFromList;
   if Props.fManaged <> nil then
@@ -5763,7 +5822,7 @@ procedure FinalizeUnit;
 var
   i: PtrInt;
 begin
-  for i := 0 to RttiCustom.Count - 1 do
+  for i := RttiCustom.Count - 1 downto 0 do
     RttiCustom.Instances[i].Free;
 end;
 

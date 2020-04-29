@@ -262,7 +262,8 @@ begin
           exit(rpcField);
         end;
       ptVirtual: // GetProc is an offset to the class VMT
-        Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(GetProc))^;
+        if Instance <> nil then // e.g. from GetterCall()
+          Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(GetProc))^;
       ptConst:
         exit(rpcNone);
     else // ptStatic: GetProc is the method code itself
@@ -296,7 +297,8 @@ begin
           exit(rpcField);
         end;
       ptVirtual: // SetProc is an offset to the class VMT
-        Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(SetProc))^;
+        if Instance <> nil then // e.g. from SetterCall()
+          Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(SetProc))^;
       ptConst:
         exit(rpcNone);
     else // ptStatic: SetProc is the method code itself
