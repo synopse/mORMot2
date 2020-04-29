@@ -989,8 +989,8 @@ begin
   signer.Update(pointer(headpayload), length(headpayload));
   signer.Final(temp);
 {  writeln('payload=',headpayload);
-  writeln('sign=',bintohex(@temp,SignatureSize));
-  writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
+   writeln('sign=',bintohex(@temp,SignatureSize));
+   writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
   if CompareMem(@temp, pointer(signature), SignatureSize) then
     JWT.result := jwtValid;
 end;

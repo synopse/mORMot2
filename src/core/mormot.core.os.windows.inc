@@ -147,7 +147,8 @@ function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   ST, LT: TSystemTime;
-begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+begin
+  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
   if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) and
      FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then

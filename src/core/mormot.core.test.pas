@@ -382,13 +382,14 @@ type
     // !   result := inherited Run;
     // ! end;
     function Run: Boolean; virtual;
+    /// number of failed tests after the last call to the Run method
+    property FailedCount: integer read GetFailedCount;
     /// method information currently running
     // - is set by Run and available within TTestCase methods
     property CurrentMethodInfo: PSynTestMethodInfo read fCurrentMethodInfo;
-    /// number of failed tests after the last call to the Run method
-    property FailedCount: integer read GetFailedCount;
     /// retrieve the information associated with a failure
     property Failed[Index: integer]: TSynTestFailed read GetFailed;
+  published
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
     property Assertions: integer read fAssertions;
@@ -1298,6 +1299,7 @@ destructor TSynTestsLogged.Destroy;
 begin
   if (fLogFile <> nil) and (fConsoleDup <> '') then
     fLogFile.LogLines(sllCustom1, pointer(fConsoleDup), nil, '  ----');
+  fLogFile.Log(sllMemory, '', self);
   inherited Destroy;
 end;
 
