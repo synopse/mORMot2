@@ -437,7 +437,8 @@ type
   // least before XE5)
   TSynPersistentLock = class(TSynPersistent)
   protected
-    fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
+    // TSynLocker would increase inherited fields offset -> managed PSynLocker
+    fSafe: PSynLocker;
     // will lock/unlock the instance during JSON serialization of its properties
     function RttiBeforeWriteObject(W: TBaseWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
@@ -1102,6 +1103,7 @@ type
     /// retrieved cardinal values encoded with TBufferWriter.WriteVarUInt32Array
     // - Values[] will be resized only if it is not long enough, to spare heap
     // - returns decoded count in Values[], which may not be length(Values)
+    // - wkFakeMarker will return -count and the caller should make the decoding
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
     /// retrieved Int64 values encoded with TBufferWriter.WriteVarUInt64DynArray
     // - Values[] will be resized only if it is not long enough, to spare heap
@@ -5571,7 +5573,7 @@ begin
         end;
       end; // case p^ of
     until false;
-  result := (PtrUInt(V) - result) shr 2; // returns count of stored integer
+  result := (PtrUInt(V) - result) shr 2; // returns count of stored integers
 end;
 
 function TFastReader.ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
@@ -5582,14 +5584,14 @@ var
   n, diff: integer;
   chunk, chunkend: PtrUInt;
 begin
-  n := VarUInt32;
-  if n > length(Values) then // only set length is not big enough
-    SetLength(Values, n);
-  result := n;
+  result := VarUInt32;
   if result = 0 then
     exit;
+  if result > length(Values) then // only set length is not big enough
+    SetLength(Values, result);
   k := TBufferWriterKind(NextByte);
   pi := pointer(Values);
+  n := result;
   case k of
     wkUInt32:
       begin
@@ -5610,7 +5612,13 @@ begin
             PIntegerArray(pi)[i + 1] := PIntegerArray(pi)[i] + diff;
           exit;
         end
-      end
+      end;
+    wkFakeMarker:
+      begin
+        // caller should make the decoding: notify by returning the count as <0
+        result := -result;
+        exit;
+      end;
   end;
   repeat
     // chunked format: Isize+values
@@ -5626,7 +5634,7 @@ begin
         until (n = 0) or (chunk >= chunkend);
       wkVarUInt32:
         repeat
-          pi^ := FromVarUInt32(PByte(chunk));
+          pi^ := FromVarUInt32Big(PByte(chunk));
           inc(pi);
           dec(n);
         until (n = 0) or (chunk >= chunkend);
@@ -5643,11 +5651,11 @@ begin
           dec(n);
         until (n = 0) or (chunk >= chunkend);
       wkOffsetI:
-      repeat
-        PIntegerArray(pi)[1] := pi^ + FromVarInt32(PByte(chunk));
-        inc(pi);
-        dec(n);
-      until (n = 0) or (chunk >= chunkend);
+        repeat
+          PIntegerArray(pi)[1] := pi^ + FromVarInt32(PByte(chunk));
+          inc(pi);
+          dec(n);
+        until (n = 0) or (chunk >= chunkend);
     else
       ErrorData('ReadVarUInt32Array got kind=%', [ord(k)]);
     end;
@@ -5666,14 +5674,14 @@ var
   diff: QWord;
   chunk, chunkend: PtrUInt;
 begin
-  n := VarUInt32;
-  if n > length(Values) then // only set length is not big enough
-    SetLength(Values, n);
-  result := n;
+  result := VarUInt32;
   if result = 0 then
     exit;
+  if result > length(Values) then // only set length is not big enough
+    SetLength(Values, result);
   k := TBufferWriterKind64(NextByte);
   pi := pointer(Values);
+  n := result;
   if k = wkOffset64 then
   begin
     pi^ := VarUInt64;
