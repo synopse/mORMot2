@@ -104,6 +104,7 @@ function  TryEnterCriticalSection;    external kernel32;
 procedure AllocConsole;               external kernel32;
 procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetCurrentThreadId;         external kernel32;
+function  GetCurrentProcessId;        external kernel32;
 function  GetEnvironmentStringsW;     external kernel32;
 function  FreeEnvironmentStringsW;    external kernel32;
 function  RtlCaptureStackBackTrace;   external kernel32;
@@ -737,6 +738,227 @@ begin
     end;
   finally
     CloseHandle(h);
+  end;
+end;
+
+function TProcessInfo.Init: boolean;
+begin
+  FillCharFast(self, SizeOf(self), 0);
+  result := Assigned(GetSystemTimes) and Assigned(GetProcessTimes) and
+    Assigned(GetProcessMemoryInfo); // no monitoring API under oldest Windows
+end;
+
+function TProcessInfo.Start: boolean;
+var
+  ftidl, ftkrn, ftusr: TFileTime;
+  sidl, skrn, susr: Int64;
+begin
+  result := Assigned(GetSystemTimes) and GetSystemTimes(ftidl, ftkrn, ftusr);
+  if not result then
+    exit;
+  FileTimeToInt64(ftidl, sidl);
+  FileTimeToInt64(ftkrn, skrn);
+  FileTimeToInt64(ftusr, susr);
+  fDiffIdle := sidl - fSysPrevIdle;
+  fDiffKernel := skrn - fSysPrevKernel;
+  fDiffUser := susr - fSysPrevUser;
+  fDiffTotal := fDiffKernel + fDiffUser; // kernel time also includes idle time
+  dec(fDiffKernel, fDiffIdle);
+  fSysPrevIdle := sidl;
+  fSysPrevKernel := skrn;
+  fSysPrevUser := susr;
+end;
+
+function TProcessInfo.PerProcess(PID: cardinal; Now: PDateTime;
+  out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
+var
+  h: THandle;
+  ftkrn, ftusr, ftp, fte: TFileTime;
+  pkrn, pusr: Int64;
+  mem: TProcessMemoryCounters;
+begin
+  result := false;
+  FillCharFast(Data, SizeOf(Data), 0);
+  h := OpenProcess(OpenProcessAccess, false, PID);
+  if h <> 0 then
+  try
+    if GetProcessTimes(h, ftp, fte, ftkrn, ftusr) then
+    begin
+      if Now <> nil then
+        Data.Timestamp := Now^;
+      FileTimeToInt64(ftkrn, pkrn);
+      FileTimeToInt64(ftusr, pusr);
+      if (PrevKernel <> 0) and (fDiffTotal > 0) then
+      begin
+        Data.Kernel := ((pkrn - PrevKernel) * 100) / fDiffTotal;
+        Data.User := ((pusr - PrevUser) * 100) / fDiffTotal;
+      end;
+      PrevKernel := pkrn;
+      PrevUser := pusr;
+      FillCharFast(mem, SizeOf(mem), 0);
+      mem.cb := SizeOf(mem);
+      if GetProcessMemoryInfo(h, mem, SizeOf(mem)) then
+      begin
+        Data.WorkKB := mem.WorkingSetSize shr 10;
+        Data.VirtualKB := mem.PagefileUsage shr 10;
+      end;
+      result := true;
+    end;
+  finally
+    CloseHandle(h);
+  end;
+end;
+
+function TProcessInfo.PerSystem(out Idle, Kernel, User: single): boolean;
+begin
+  if fDiffTotal <= 0 then
+  begin
+    Idle := 0;
+    Kernel := 0;
+    User := 0;
+    result := false;
+  end
+  else
+  begin
+    Kernel := SimpleRoundTo2Digits((fDiffKernel * 100) / fDiffTotal);
+    User := SimpleRoundTo2Digits((fDiffUser * 100) / fDiffTotal);
+    Idle := 100 - Kernel - User; // ensure sum is always 100%
+    result := true;
+  end;
+end;
+
+{$ifndef UNICODE} // missing API for FPC and oldest Delphi
+type
+  DWORDLONG = QWord;
+  TMemoryStatusEx = record
+    dwLength: DWORD;
+    dwMemoryLoad: DWORD;
+    ullTotalPhys: DWORDLONG;
+    ullAvailPhys: DWORDLONG;
+    ullTotalPageFile: DWORDLONG;
+    ullAvailPageFile: DWORDLONG;
+    ullTotalVirtual: DWORDLONG;
+    ullAvailVirtual: DWORDLONG;
+    ullAvailExtendedVirtual: DWORDLONG;
+  end;
+
+// information about the system's current usage of both physical and virtual memory
+function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL; stdcall; external kernel32;
+{$endif UNICODE}
+
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+{$ifdef WITH_FASTMM4STATS}
+var
+  Heap: TMemoryManagerState;
+  sb: integer;
+{$endif}
+var
+  global: TMemoryStatusEx;
+{$ifdef FPC}
+  mem: TProcessMemoryCounters;
+{$endif FPC}
+begin
+  FillCharFast(global, SizeOf(global), 0);
+  global.dwLength := SizeOf(global);
+  result := GlobalMemoryStatusEx(global);
+  info.percent := global.dwMemoryLoad;
+  info.memtotal := global.ullTotalPhys;
+  info.memfree := global.ullAvailPhys;
+  info.filetotal := global.ullTotalPageFile;
+  info.filefree := global.ullAvailPageFile;
+  info.vmtotal := global.ullTotalVirtual;
+  info.vmfree := global.ullAvailVirtual;
+{$ifdef FPC} // GetHeapStatus is only about current thread -> use WinAPI
+  if withalloc and Assigned(GetProcessMemoryInfo) then
+  begin
+    FillcharFast(mem, SizeOf(mem), 0);
+    mem.cb := SizeOf(mem);
+    GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
+    info.allocreserved := mem.PeakWorkingSetSize;
+    info.allocused := mem.WorkingSetSize;
+  end;
+{$endif FPC}
+{$ifdef WITH_FASTMM4STATS} // override OS information by actual FastMM4
+  if withalloc then
+  begin
+    GetMemoryManagerState(Heap); // direct raw FastMM4 access
+    info.allocused := Heap.TotalAllocatedMediumBlockSize +
+                      Heap.TotalAllocatedLargeBlockSize;
+    info.allocreserved := Heap.ReservedMediumBlockAddressSpace +
+                          Heap.ReservedLargeBlockAddressSpace;
+    for sb := 0 to high(Heap.SmallBlockTypeStates) do
+      with Heap.SmallBlockTypeStates[sb] do
+      begin
+        inc(info.allocused, UseableBlockSize * AllocatedBlockCount);
+        inc(info.allocreserved, ReservedAddressSpace);
+      end;
+  end;
+{$endif WITH_FASTMM4STATS}
+end;
+
+function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
+  var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
+  lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+
+{
+function DeviceIoControl(hDevice: THandle; dwIoControlCode: DWORD;
+  lpInBuffer: Pointer; nInBufferSize: DWORD; lpOutBuffer: Pointer;
+  nOutBufferSize: DWORD; var lpBytesReturned: DWORD;
+  lpOverlapped: POverlapped): BOOL; stdcall; external kernel32;
+ // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root -> not used
+}
+
+function GetDiskInfo(var aDriveFolderOrFile: TFileName;
+  out aAvailableBytes, aFreeBytes, aTotalBytes: QWord;
+  aVolumeName: PSynUnicode): boolean;
+var
+  tmp: array[0..MAX_PATH - 1] of WideChar;
+  dummy, flags: DWORD;
+  dn: SynUnicode;
+begin
+  if aDriveFolderOrFile = '' then
+    aDriveFolderOrFile := SysUtils.UpperCase(
+      ExtractFileDrive(ExeVersion.ProgramFilePath));
+  dn := SynUnicode(aDriveFolderOrFile);
+  if (dn <> '') and (dn[2] = ':') and (dn[3] = #0) then
+    dn := dn + '\';
+  if (aVolumeName <> nil) and (aVolumeName^ = '') then
+  begin
+    tmp[0] := #0;
+    GetVolumeInformationW(pointer(dn), tmp, MAX_PATH, nil, dummy, flags, nil, 0);
+    aVolumeName^ := tmp;
+  end;
+  result := GetDiskFreeSpaceExW(pointer(dn), aAvailableBytes, aTotalBytes, aFreeBytes);
+end;
+
+function GetDiskPartitions: TDiskPartitions;
+var
+  drives, drive, m, n: integer;
+  fn: TFileName;
+  volume: SynUnicode;
+  av, fr, tot: QWord;
+begin
+  result := nil;
+  n := 0;
+  fn := '#:\';
+  drives := GetLogicalDrives;
+  m := 1 shl 2;
+  for drive := 3 to 26 do
+  begin // retrieve partitions mounted as C..Z drives
+    if drives and m <> 0 then
+    begin
+      fn[1] := char(64 + drive);
+      if GetDiskInfo(fn, av, fr, tot, @volume) then
+      begin
+        SetLength(result, n + 1);
+        RawUnicodeToUtf8(pointer(volume), length(volume), result[n].name);
+        volume := '';
+        result[n].mounted := fn;
+        result[n].size := tot;
+        inc(n);
+      end;
+    end;
+    m := m shl 1;
   end;
 end;
 

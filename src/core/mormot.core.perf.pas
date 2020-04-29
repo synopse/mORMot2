@@ -9,7 +9,8 @@ unit mormot.core.perf;
    Performance Monitoring functions shared by all framework units
     - Resource and Time Functions
     - Performance Counters
-    - Monitoring Classes
+    - TSynMonitor Root Classes
+    - Operating System Monitoring
 
   *****************************************************************************
 }
@@ -28,7 +29,9 @@ uses
   mormot.core.os,
   mormot.core.data,
   mormot.core.rtti,
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.variants,
+  mormot.core.json;
 
 
 { ************ Resource and Time Functions }
@@ -296,7 +299,7 @@ type
 
 
 
-{ ************ Monitoring Classes }
+{ ************ TSynMonitor Root Classes }
 
 type
   /// able to serialize any cumulative timing as raw micro-seconds number or text
@@ -607,6 +610,268 @@ type
 
   /// class-reference type (metaclass) of a process statistic information
   TSynMonitorClass = class of TSynMonitor;
+
+
+{ ************ Operating System Monitoring }
+
+type
+  /// event handler which may be executed by TSystemUse.BackgroundExecute
+  // - called just after the measurement of each process CPU and RAM consumption
+  // - run from the background thread, so should not directly make VCL calls,
+  // unless BackgroundExecute is run from a VCL timer
+  TOnSystemUseMeasured = procedure(ProcessID: integer; const Data: TSystemUseData) of object;
+
+  /// internal storage of CPU and RAM usage for one process
+  TSystemUseProcess = record
+    ID: integer;
+    Data: TSystemUseDataDynArray;
+    PrevKernel: Int64;
+    PrevUser: Int64;
+  end;
+
+  /// internal storage of CPU and RAM usage for a set of processes
+  TSystemUseProcessDynArray = array of TSystemUseProcess;
+
+  /// monitor CPU and RAM usage of one or several processes
+  // - you should execute BackgroundExecute on a regular pace (e.g. every second)
+  // to gather low-level CPU and RAM information for the given set of processes
+  // - is able to keep an history of latest sample values
+  // - use Current class function to access a process-wide instance
+  TSystemUse = class(TSynPersistentLock)
+  protected
+    fProcess: TSystemUseProcessDynArray;
+    fProcesses: TDynArray;
+    fDataIndex: integer;
+    fProcessInfo: TProcessInfo;
+    fHistoryDepth: integer;
+    fOnMeasured: TOnSystemUseMeasured;
+    fTimer: TObject;
+    fUnsubscribeProcessOnAccessError: boolean;
+    function ProcessIndex(aProcessID: integer): integer;
+  public
+    /// a VCL's TTimer.OnTimer compatible event
+    // - to be run every few seconds and retrieve the CPU and RAM use:
+    // ! tmrSystemUse.Interval := 10000; // every 10 seconds
+    // ! tmrSystemUse.OnTimer := TSystemUse.Current.OnTimerExecute;
+    /// - could also be run from a TSynBackgroundTimer instance
+    procedure OnTimerExecute(Sender: TObject);
+    /// track the CPU and RAM usage of the supplied set of Process ID
+    // - any aProcessID[]=0 will be replaced by the current process ID
+    // - you can specify the number of sample values for the History() method
+    // - you should then execute the BackgroundExecute method of this instance
+    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
+    constructor Create(const aProcessID: array of integer;
+      aHistoryDepth: integer = 60); reintroduce; overload; virtual;
+    /// track the CPU and RAM usage of the current process
+    // - you can specify the number of sample values for the History() method
+    // - you should then execute the BackgroundExecute method of this instance
+    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
+    constructor Create(aHistoryDepth: integer = 60); reintroduce; overload; virtual;
+    /// add a Process ID to the internal tracking list
+    procedure Subscribe(aProcessID: integer);
+    /// remove a Process ID from the internal tracking list
+    function Unsubscribe(aProcessID: integer): boolean;
+    /// returns the total (Kernel+User) CPU usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function Percent(aProcessID: integer = 0): single; overload;
+    /// returns the Kernel-space CPU usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function PercentKernel(aProcessID: integer = 0): single; overload;
+    /// returns the User-space CPU usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function PercentUser(aProcessID: integer = 0): single; overload;
+    /// returns the total (Work+Paged) RAM use of the supplied process, in KB
+    // - aProcessID=0 will return information from the current process
+    // - returns 0 if the Process ID was not registered via Create/Subscribe
+    function KB(aProcessID: integer = 0): cardinal; overload;
+    /// percent of current Idle/Kernel/User CPU usage for all processes
+    function PercentSystem(out Idle, Kernel, User: single): boolean;
+    /// returns the detailed CPU and RAM usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function Data(out aData: TSystemUseData; aProcessID: integer = 0): boolean; overload;
+    /// returns the detailed CPU and RAM usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns Timestamp=0 if the Process ID was not registered via Create/Subscribe
+    function Data(aProcessID: integer = 0): TSystemUseData; overload;
+    /// returns total (Kernel+User) CPU usage percent history of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns nil if the Process ID was not registered via Create/Subscribe
+    // - returns the sample values as an array, starting from the last to the oldest
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function History(aProcessID: integer = 0; aDepth: integer = 0): TSingleDynArray; overload;
+    /// returns total (Kernel+User) CPU usage percent history of the supplied
+    // process, as a string of two digits values
+    // - aProcessID=0 will return information from the current process
+    // - returns '' if the Process ID was not registered via Create/Subscribe
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    // - the memory history (in MB) can be optionally returned in aDestMemoryMB
+    // - on Linux, will return the /proc/loadavg pseudo-file content
+    function HistoryText(aProcessID: integer = 0; aDepth: integer = 0;
+      aDestMemoryMB: PRawUTF8 = nil): RawUTF8;
+    /// returns total (Kernel+User) CPU usage percent history of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns null if the Process ID was not registered via Create/Subscribe
+    // - returns the sample values as a TDocVariant array, starting from the
+    // last to the oldest, with two digits precision (as currency values)
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function HistoryVariant(aProcessID: integer = 0; aDepth: integer = 0): variant;
+    /// access to a global instance, corresponding to the current process
+    // - its HistoryDepth will be of 60 items
+    class function Current(aCreateIfNone: boolean = true): TSystemUse;
+    /// returns detailed CPU and RAM usage history of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns nil if the Process ID was not registered via Create/Subscribe
+    // - returns the sample values as an array, starting from the last to the oldest
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function HistoryData(aProcessID: integer = 0;
+      aDepth: integer = 0): TSystemUseDataDynArray; overload;
+    /// if any unexisting (e.g. closed/killed) process should be unregistered
+    // - e.g. if OpenProcess() API call fails
+    property UnsubscribeProcessOnAccessError: boolean
+      read fUnsubscribeProcessOnAccessError write fUnsubscribeProcessOnAccessError;
+    /// how many items are stored internally, and returned by the History() method
+    property HistoryDepth: integer read fHistoryDepth;
+    /// executed when TSystemUse.BackgroundExecute finished its measurement
+    property OnMeasured: TOnSystemUseMeasured read fOnMeasured write fOnMeasured;
+    /// low-level access to the associated timer running BackgroundExecute
+    // - equals nil if has been associated to no timer
+    property Timer: TObject read fTimer write fTimer;
+  end;
+
+  /// value object able to gather information about the current system memory
+  TSynMonitorMemory = class(TSynPersistent)
+  protected
+    FAllocatedUsed: TSynMonitorOneSize;
+    FAllocatedReserved: TSynMonitorOneSize;
+    FMemoryLoadPercent: integer;
+    FPhysicalMemoryFree: TSynMonitorOneSize;
+    FVirtualMemoryFree: TSynMonitorOneSize;
+    FPagingFileTotal: TSynMonitorOneSize;
+    FPhysicalMemoryTotal: TSynMonitorOneSize;
+    FVirtualMemoryTotal: TSynMonitorOneSize;
+    FPagingFileFree: TSynMonitorOneSize;
+    fLastMemoryInfoRetrievedTix: cardinal;
+    procedure RetrieveMemoryInfo; virtual;
+    function GetAllocatedUsed: TSynMonitorOneSize;
+    function GetAllocatedReserved: TSynMonitorOneSize;
+    function GetMemoryLoadPercent: integer;
+    function GetPagingFileFree: TSynMonitorOneSize;
+    function GetPagingFileTotal: TSynMonitorOneSize;
+    function GetPhysicalMemoryFree: TSynMonitorOneSize;
+    function GetPhysicalMemoryTotal: TSynMonitorOneSize;
+    function GetVirtualMemoryFree: TSynMonitorOneSize;
+    function GetVirtualMemoryTotal: TSynMonitorOneSize;
+  public
+    /// initialize the class, and its nested TSynMonitorOneSize instances
+    constructor Create(aTextNoSpace: boolean); reintroduce;
+    /// finalize the class, and its nested TSynMonitorOneSize instances
+    destructor Destroy; override;
+    /// some text corresponding to current 'free/total' memory information
+    // - returns e.g. '10.3 GB / 15.6 GB'
+    class function FreeAsText(nospace: boolean = false): ShortString;
+    /// how many physical memory is currently installed, as text (e.g. '32 GB');
+    class function PhysicalAsText(nospace: boolean = false): TShort16;
+    /// returns a JSON object with the current system memory information
+    // - numbers would be given in KB (Bytes shl 10)
+    class function ToJSON: RawUTF8;
+    /// fill a TDocVariant with the current system memory information
+    // - numbers would be given in KB (Bytes shl 10)
+    class function ToVariant: variant;
+  published
+    /// Total of allocated memory used by the program
+    property AllocatedUsed: TSynMonitorOneSize read GetAllocatedUsed;
+    /// Total of allocated memory reserved by the program
+    property AllocatedReserved: TSynMonitorOneSize read GetAllocatedReserved;
+    /// Percent of memory in use for the system
+    property MemoryLoadPercent: integer read GetMemoryLoadPercent;
+    /// Total of physical memory for the system
+    property PhysicalMemoryTotal: TSynMonitorOneSize read GetPhysicalMemoryTotal;
+    /// Free of physical memory for the system
+    property PhysicalMemoryFree: TSynMonitorOneSize read GetPhysicalMemoryFree;
+    /// Total of paging file for the system
+    property PagingFileTotal: TSynMonitorOneSize read GetPagingFileTotal;
+    /// Free of paging file for the system
+    property PagingFileFree: TSynMonitorOneSize read GetPagingFileFree;
+    {$ifdef MSWINDOWS}
+    /// Total of virtual memory for the system
+    // - property not defined under Linux, since not applying to this OS
+    property VirtualMemoryTotal: TSynMonitorOneSize read GetVirtualMemoryTotal;
+    /// Free of virtual memory for the system
+    // - property not defined under Linux, since not applying to this OS
+    property VirtualMemoryFree: TSynMonitorOneSize read GetVirtualMemoryFree;
+    {$endif MSWINDOWS}
+  end;
+
+  /// value object able to gather information about a system drive
+  TSynMonitorDisk = class(TSynPersistent)
+  protected
+    fName: TFileName;
+    {$ifdef MSWINDOWS}
+    fVolumeName: SynUnicode;
+    {$endif MSWINDOWS}
+    fAvailableSize: TSynMonitorOneSize;
+    fFreeSize: TSynMonitorOneSize;
+    fTotalSize: TSynMonitorOneSize;
+    fLastDiskInfoRetrievedTix: cardinal;
+    procedure RetrieveDiskInfo; virtual;
+    function GetName: TFileName;
+    function GetAvailable: TSynMonitorOneSize;
+    function GetFree: TSynMonitorOneSize;
+    function GetTotal: TSynMonitorOneSize;
+  public
+    /// initialize the class, and its nested TSynMonitorOneSize instances
+    constructor Create; override;
+    /// finalize the class, and its nested TSynMonitorOneSize instances
+    destructor Destroy; override;
+    /// some text corresponding to current 'free/total' disk information
+    // - could return e.g. 'D: 64.4 GB / 213.4 GB'
+    class function FreeAsText: RawUTF8;
+  published
+    /// the disk name
+    property Name: TFileName read GetName;
+    {$ifdef MSWINDOWS}
+    /// the volume name (only available on Windows)
+    property VolumeName: SynUnicode read fVolumeName write fVolumeName;
+    /// space currently available on this disk for the current user
+    // - may be less then FreeSize, if user quotas are specified (only taken
+    // into account under Windows: on POSIX, AvailableSize=FreeSize)
+    property AvailableSize: TSynMonitorOneSize read GetAvailable;
+    {$endif MSWINDOWS}
+    /// free space currently available on this disk
+    property FreeSize: TSynMonitorOneSize read GetFree;
+    /// total space
+    property TotalSize: TSynMonitorOneSize read GetTotal;
+  end;
+
+
+/// convert Intel CPU features as plain CSV text
+function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
+  const Sep: RawUTF8 = ','): RawUTF8; overload;
+
+
+/// retrieve low-level information about all mounted disk partitions as text
+// - returns e.g. under Linux
+// '/ /dev/sda3 (19 GB), /boot /dev/sda2 (486.8 MB), /home /dev/sda4 (0.9 TB)'
+// or under Windows 'C:\ System (115 GB), D:\ Data (99.3 GB)'
+// - uses internally a cache unless nocache is true
+// - includes the free space if withfreespace is true - e.g. '(80 GB / 115 GB)'
+function GetDiskPartitionsText(nocache: boolean = false;
+  withfreespace: boolean = false; nospace: boolean = false): RawUTF8;
+
+{$ifdef CPUINTEL}
+/// returns the global Intel/AMD CpuFeatures flags as ready-to-be-displayed text
+function CpuFeaturesText: RawUTF8;
+{$endif CPUINTEL}
+
+/// returns a JSON object containing basic information about the computer
+// - including Host, User, CPU, OS, freemem, freedisk...
+function SystemInfoJson: RawUTF8;
+
+
 
 
 implementation
@@ -944,7 +1209,7 @@ begin
 end;
 
 
-{ ************ Monitoring Classes }
+{ ************ TSynMonitor Root Classes }
 
 { TSynMonitorTime }
 
@@ -1447,6 +1712,621 @@ begin
 end;
 
 
+{ ************ Operating System Monitoring }
+
+function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
+  const Sep: RawUTF8): RawUTF8;
+var
+  f: TIntelCpuFeature;
+  List: PShortString;
+  MaxValue: integer;
+begin
+  result := '';
+  PRttiInfo(TypeInfo(TIntelCpuFeature))^.EnumBaseType(List, MaxValue);
+  for f := low(f) to high(f) do
+  begin
+    if (f in aIntelCPUFeatures) and (List^[3] <> '_') then
+    begin
+      if result <> '' then
+        result := result + Sep;
+      result := result + TrimLeftLowerCaseShort(List);
+    end;
+    inc(PByte(List), PByte(List)^ + 1); // next
+  end;
+end;
+
+{$ifdef CPUINTEL}
+
+var
+  _CpuFeatures: RawUTF8;
+
+function CpuFeaturesText: RawUTF8;
+begin
+  if _CpuFeatures = '' then
+    _CpuFeatures := LowerCase(ToText(CpuFeatures, ' '));
+  result := _CpuFeatures;
+end;
+
+{$endif CPUINTEL}
+
+function SystemInfoJson: RawUTF8;
+var
+  cpu, mem: RawUTF8;
+begin
+  cpu := TSystemUse.Current(false).HistoryText(0, 15, @mem);
+  with SystemInfo do
+    result := JSONEncode(['host', ExeVersion.Host, 'user', ExeVersion.User,
+      'os', OSVersionText, 'cpu', CpuInfoText, 'bios', BiosInfoText,
+      {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64', IsWow64, {$endif}{$endif MSWINDOWS}
+      {$ifdef CPUINTEL}'cpufeatures', CpuFeaturesText, {$endif}
+      'processcpu', cpu, 'processmem', mem, 'freemem', TSynMonitorMemory.FreeAsText,
+      'disk', GetDiskPartitionsText(false, true)]);
+end;
+
+
+{ TSystemUse }
+
+procedure TSystemUse.OnTimerExecute(Sender: TObject);
+var
+  i: PtrInt;
+  now: TDateTime;
+begin
+  if (fProcess = nil) or (fHistoryDepth = 0) or not fProcessInfo.Start then
+    exit;
+  fTimer := Sender;
+  now := NowUTC;
+  fSafe.Lock;
+  try
+    inc(fDataIndex);
+    if fDataIndex >= fHistoryDepth then
+      fDataIndex := 0;
+    for i := high(fProcess) downto 0 do // backwards for fProcesses.Delete(i)
+      with fProcess[i] do
+        if fProcessInfo.PerProcess(ID, @now, Data[fDataIndex], PrevKernel, PrevUser) then
+        begin
+          if Assigned(fOnMeasured) then
+            fOnMeasured(ID, Data[fDataIndex]);
+        end
+        else if UnsubscribeProcessOnAccessError then
+          // if GetLastError=ERROR_INVALID_PARAMETER then
+          fProcesses.Delete(i);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+constructor TSystemUse.Create(const aProcessID: array of integer;
+  aHistoryDepth: integer);
+var
+  i: integer;
+  it, kt, ut: Int64;
+begin
+  inherited Create;
+  fProcesses.Init(TypeInfo(TSystemUseProcessDynArray), fProcess);
+  if not RetrieveSystemTimes(it, kt, ut) then
+    exit; // no system monitoring API on Linux or oldest Windows
+  if aHistoryDepth <= 0 then
+    aHistoryDepth := 1;
+  fHistoryDepth := aHistoryDepth;
+  SetLength(fProcess, length(aProcessID));
+  for i := 0 to high(aProcessID) do
+  begin
+    {$ifdef MSWINDOWS}
+    if aProcessID[i] = 0 then
+      fProcess[i].ID := GetCurrentProcessID
+    else
+    {$endif MSWINDOWS}
+      fProcess[i].ID := aProcessID[i];
+    SetLength(fProcess[i].Data, fHistoryDepth);
+  end;
+end;
+
+constructor TSystemUse.Create(aHistoryDepth: integer);
+begin
+  Create([0], aHistoryDepth);
+end;
+
+procedure TSystemUse.Subscribe(aProcessID: integer);
+var
+  i, n: integer;
+begin
+  if self = nil then
+    exit;
+  {$ifdef MSWINDOWS}
+  if aProcessID = 0 then
+    aProcessID := GetCurrentProcessID;
+  {$endif MSWINDOWS}
+  fSafe.Lock;
+  try
+    n := length(fProcess);
+    for i := 0 to n - 1 do
+      if fProcess[i].ID = aProcessID then
+        exit; // already subscribed
+    SetLength(fProcess, n + 1);
+    fProcess[n].ID := aProcessID;
+    SetLength(fProcess[n].Data, fHistoryDepth);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSystemUse.Unsubscribe(aProcessID: integer): boolean;
+var
+  i: integer;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  fSafe.Lock;
+  try
+    i := ProcessIndex(aProcessID);
+    if i >= 0 then
+    begin
+      fProcesses.Delete(i);
+      result := true;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSystemUse.ProcessIndex(aProcessID: integer): integer;
+begin // caller should have made fSafe.Enter
+  {$ifdef MSWINDOWS}
+  if aProcessID = 0 then
+    aProcessID := GetCurrentProcessID;
+  {$endif MSWINDOWS}
+  if self <> nil then
+    for result := 0 to high(fProcess) do
+      if fProcess[result].ID = aProcessID then
+        exit;
+  result := -1;
+end;
+
+function TSystemUse.Data(out aData: TSystemUseData; aProcessID: integer): boolean;
+var
+  i: integer;
+begin
+  result := false;
+  if self <> nil then
+  begin
+    fSafe.Lock;
+    try
+      i := ProcessIndex(aProcessID);
+      if i >= 0 then
+      begin
+        with fProcess[i] do
+          aData := Data[fDataIndex];
+        result := aData.Timestamp <> 0;
+        if result then
+          exit;
+      end;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+  FillCharFast(aData, SizeOf(aData), 0);
+end;
+
+function TSystemUse.Data(aProcessID: integer): TSystemUseData;
+begin
+  Data(result, aProcessID);
+end;
+
+function TSystemUse.KB(aProcessID: integer): cardinal;
+begin
+  with Data(aProcessID) do
+    result := WorkKB + VirtualKB;
+end;
+
+function TSystemUse.Percent(aProcessID: integer): single;
+begin
+  with Data(aProcessID) do
+    result := Kernel + User;
+end;
+
+function TSystemUse.PercentKernel(aProcessID: integer): single;
+begin
+  result := Data(aProcessID).Kernel;
+end;
+
+function TSystemUse.PercentUser(aProcessID: integer): single;
+begin
+  result := Data(aProcessID).User;
+end;
+
+function TSystemUse.PercentSystem(out Idle, Kernel, User: single): boolean;
+begin
+  result := fProcessInfo.PerSystem(Idle, Kernel, User);
+end;
+
+function TSystemUse.HistoryData(aProcessID, aDepth: integer): TSystemUseDataDynArray;
+var
+  i, n, last: integer;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  fSafe.Lock;
+  try
+    i := ProcessIndex(aProcessID);
+    if i >= 0 then
+      with fProcess[i] do
+      begin
+        n := length(Data);
+        last := n - 1;
+        if (aDepth > 0) and (n > aDepth) then
+          n := aDepth;
+        SetLength(result, n); // make ordered copy
+        for i := 0 to n - 1 do
+        begin
+          if i <= fDataIndex then
+            result[i] := Data[fDataIndex - i]
+          else
+          begin
+            result[i] := Data[last];
+            dec(last);
+          end;
+          if PInt64(@result[i].Timestamp)^ = 0 then
+          begin
+            SetLength(result, i); // truncate to latest available sample
+            break;
+          end;
+        end;
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSystemUse.History(aProcessID, aDepth: integer): TSingleDynArray;
+var
+  i, n: integer;
+  data: TSystemUseDataDynArray;
+begin
+  result := nil;
+  data := HistoryData(aProcessID, aDepth);
+  n := length(data);
+  SetLength(result, n);
+  for i := 0 to n - 1 do
+    result[i] := data[i].Kernel + data[i].User;
+end;
+
+var
+  ProcessSystemUse: TSystemUse;
+
+class function TSystemUse.Current(aCreateIfNone: boolean): TSystemUse;
+begin
+  if (ProcessSystemUse = nil) and aCreateIfNone then
+  begin
+    GlobalLock; // paranoid thread-safety
+    try
+      if ProcessSystemUse = nil then
+        ProcessSystemUse := TSystemUse.Create(60);
+    finally
+      GlobalUnLock;
+    end;
+  end;
+  result := ProcessSystemUse;
+end;
+
+function TSystemUse.HistoryText(aProcessID, aDepth: integer;
+  aDestMemoryMB: PRawUTF8): RawUTF8;
+var
+  data: TSystemUseDataDynArray;
+  mem: RawUTF8;
+  i: integer;
+begin
+  result := '';
+  mem := '';
+  data := HistoryData(aProcessID, aDepth);
+  {$ifdef LINUXNOTBSD}
+  // bsd: see VM_LOADAVG
+  // https://www.retro11.de/ouxr/211bsd/usr/src/lib/libc/gen/getloadavg.c.html
+  if data = nil then
+    result := StringFromFile('/proc/loadavg', {HasNoSize=}true)
+  else
+  {$endif LINUXNOTBSD}
+    for i := 0 to high(data) do
+      with data[i] do
+      begin
+        result := FormatUTF8('%% ', [result, TwoDigits(Kernel + User)]);
+        if aDestMemoryMB <> nil then
+          mem := FormatUTF8('%% ', [mem, TwoDigits(WorkKB / 1024)]);
+      end;
+  result := trim(result);
+  if aDestMemoryMB <> nil then
+    aDestMemoryMB^ := trim(mem);
+end;
+
+function TSystemUse.HistoryVariant(aProcessID, aDepth: integer): variant;
+var
+  res: TDocVariantData absolute result;
+  data: TSystemUseDataDynArray;
+  i: integer;
+begin
+  VarClear(result{%H-});
+  data := HistoryData(aProcessID, aDepth);
+  res.InitFast(length(data), dvArray);
+  for i := 0 to high(data) do
+    res.AddItem(TwoDigits(data[i].Kernel + data[i].User));
+end;
+
+function SortDynArrayDiskPartitions(const A, B): integer;
+begin
+  result := SortDynArrayString(TDiskPartition(A).mounted, TDiskPartition(B).mounted);
+end;
+
+var
+  _DiskPartitions: TDiskPartitions;
+
+function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUTF8;
+const
+  {$ifdef MSWINDOWS}
+  F: array[boolean] of RawUTF8 = ('%: % (% / %)', '%: % (%/%)');
+  {$else}
+  F: array[boolean] of RawUTF8 = ('% % (% / %)', '% % (%/%)');
+  {$endif MSWINDOWS}
+var
+  i: integer;
+  parts: TDiskPartitions;
+
+  function GetInfo(var p: TDiskPartition): shortstring;
+  var
+    av, fr, tot: QWord;
+  begin
+    if not withfreespace or not GetDiskInfo(p.mounted, av, fr, tot) then
+    {$ifdef MSWINDOWS}
+      FormatShort('%: % (%)', [p.mounted[1], p.name, KB(p.size, nospace)], result)
+    else
+      FormatShort(F[nospace], [p.mounted[1], p.name, KB(p.size, nospace)], result);
+    {$else}
+      FormatShort('% % (%)', [p.mounted, p.name, KB(p.size, nospace)], result)
+    else
+      FormatShort(F[nospace], [p.mounted, p.name, KB(fr, nospace), KB(tot, nospace)], result);
+    {$endif MSWINDOWS}
+  end;
+
+begin
+  if (_DiskPartitions = nil) or nocache then
+  begin
+    _DiskPartitions := GetDiskPartitions;
+    {$ifndef MSWINDOWS}
+    DynArray(TypeInfo(TDiskPartitions),result).Sort(SortDynArrayDiskPartitions);
+    {$endif MSWINDOWS}
+  end;
+  parts := _DiskPartitions;
+  if parts = nil then
+    result := ''
+  else
+    ShortStringToAnsi7String(GetInfo(parts[0]), result);
+  for i := 1 to high(parts) do
+    result := FormatUTF8('%, %', [result, GetInfo(parts[i])]);
+end;
+
+
+{ TSynMonitorMemory }
+
+constructor TSynMonitorMemory.Create(aTextNoSpace: boolean);
+begin
+  FAllocatedUsed := TSynMonitorOneSize.Create(aTextNoSpace);
+  FAllocatedReserved := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPhysicalMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
+  FVirtualMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPagingFileTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPhysicalMemoryTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FVirtualMemoryTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPagingFileFree := TSynMonitorOneSize.Create(aTextNoSpace);
+end;
+
+destructor TSynMonitorMemory.Destroy;
+begin
+  FAllocatedReserved.Free;
+  FAllocatedUsed.Free;
+  FPhysicalMemoryFree.Free;
+  FVirtualMemoryFree.Free;
+  FPagingFileTotal.Free;
+  FPhysicalMemoryTotal.Free;
+  FVirtualMemoryTotal.Free;
+  FPagingFileFree.Free;
+  inherited Destroy;
+end;
+
+class function TSynMonitorMemory.FreeAsText(nospace: boolean): ShortString;
+const
+  F: array[boolean] of RawUTF8 = ('% / %', '%/%');
+begin
+  with TSynMonitorMemory.Create(nospace) do
+  try
+    RetrieveMemoryInfo;
+    FormatShort(F[nospace], [fPhysicalMemoryFree.Text, fPhysicalMemoryTotal.Text], result);
+  finally
+    Free;
+  end;
+end;
+
+var
+  PhysicalAsTextCache: TShort16; // this value doesn't change usually
+
+class function TSynMonitorMemory.PhysicalAsText(nospace: boolean): TShort16;
+begin
+  if PhysicalAsTextCache = '' then
+    with TSynMonitorMemory.Create(nospace) do
+    try
+      PhysicalAsTextCache := PhysicalMemoryTotal.Text;
+    finally
+      Free;
+    end;
+  result := PhysicalAsTextCache;
+end;
+
+class function TSynMonitorMemory.ToJSON: RawUTF8;
+begin
+  with TSynMonitorMemory.Create(false) do
+  try
+    RetrieveMemoryInfo;
+    FormatUTF8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%,percent:%},' +
+      {$ifdef MSWINDOWS}'Virtual:{total:%,free:%},' + {$endif}'Paged:{total:%,free:%}}',
+      [fAllocatedReserved.Bytes shr 10, fAllocatedUsed.Bytes shr 10,
+      fPhysicalMemoryTotal.Bytes shr 10, fPhysicalMemoryFree.Bytes shr 10,
+      fMemoryLoadPercent, {$ifdef MSWINDOWS}fVirtualMemoryTotal.Bytes shr 10,
+      fVirtualMemoryFree.Bytes shr 10, {$endif} fPagingFileTotal.Bytes shr 10,
+      fPagingFileFree.Bytes shr 10], result);
+  finally
+    Free;
+  end;
+end;
+
+class function TSynMonitorMemory.ToVariant: variant;
+begin
+  result := _JsonFast(ToJSON);
+end;
+
+function TSynMonitorMemory.GetAllocatedUsed: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FAllocatedUsed;
+end;
+
+function TSynMonitorMemory.GetAllocatedReserved: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FAllocatedReserved;
+end;
+
+function TSynMonitorMemory.GetMemoryLoadPercent: integer;
+begin
+  RetrieveMemoryInfo;
+  result := FMemoryLoadPercent;
+end;
+
+function TSynMonitorMemory.GetPagingFileFree: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPagingFileFree;
+end;
+
+function TSynMonitorMemory.GetPagingFileTotal: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPagingFileTotal;
+end;
+
+function TSynMonitorMemory.GetPhysicalMemoryFree: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPhysicalMemoryFree;
+end;
+
+function TSynMonitorMemory.GetPhysicalMemoryTotal: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPhysicalMemoryTotal;
+end;
+
+function TSynMonitorMemory.GetVirtualMemoryFree: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FVirtualMemoryFree;
+end;
+
+function TSynMonitorMemory.GetVirtualMemoryTotal: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FVirtualMemoryTotal;
+end;
+
+procedure TSynMonitorMemory.RetrieveMemoryInfo;
+var
+  tix: cardinal;
+  info: TMemoryInfo;
+begin
+  tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
+  if fLastMemoryInfoRetrievedTix <> tix then
+  begin
+    fLastMemoryInfoRetrievedTix := tix;
+    if not GetMemoryInfo(info, {withalloc=}true) then
+      exit;
+    FMemoryLoadPercent := info.percent;
+    FPhysicalMemoryTotal.Bytes := info.memtotal;
+    FPhysicalMemoryFree.Bytes := info.memfree;
+    FPagingFileTotal.Bytes := info.filetotal;
+    FPagingFileFree.Bytes := info.filefree;
+    FVirtualMemoryTotal.Bytes := info.vmtotal;
+    FVirtualMemoryFree.Bytes := info.vmfree;
+    FAllocatedReserved.Bytes := info.allocreserved;
+    FAllocatedUsed.Bytes := info.allocused;
+  end;
+end;
+
+
+{ TSynMonitorDisk }
+
+constructor TSynMonitorDisk.Create;
+begin
+  fAvailableSize := TSynMonitorOneSize.Create({nospace=}false);
+  fFreeSize := TSynMonitorOneSize.Create({nospace=}false);
+  fTotalSize := TSynMonitorOneSize.Create({nospace=}false);
+end;
+
+destructor TSynMonitorDisk.Destroy;
+begin
+  fAvailableSize.Free;
+  fFreeSize.Free;
+  fTotalSize.Free;
+  inherited;
+end;
+
+function TSynMonitorDisk.GetName: TFileName;
+begin
+  RetrieveDiskInfo;
+  result := fName;
+end;
+
+function TSynMonitorDisk.GetAvailable: TSynMonitorOneSize;
+begin
+  RetrieveDiskInfo;
+  result := fAvailableSize;
+end;
+
+function TSynMonitorDisk.GetFree: TSynMonitorOneSize;
+begin
+  RetrieveDiskInfo;
+  result := fFreeSize;
+end;
+
+function TSynMonitorDisk.GetTotal: TSynMonitorOneSize;
+begin
+  RetrieveDiskInfo;
+  result := fTotalSize;
+end;
+
+class function TSynMonitorDisk.FreeAsText: RawUTF8;
+var
+  name: TFileName;
+  avail, free, total: QWord;
+begin
+  GetDiskInfo(name, avail, free, total);
+  FormatUTF8('% % / %', [name, KB(free), KB(total)], result);
+end;
+
+procedure TSynMonitorDisk.RetrieveDiskInfo;
+var
+  tix: cardinal;
+begin
+  tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
+  if fLastDiskInfoRetrievedTix <> tix then
+  begin
+    fLastDiskInfoRetrievedTix := tix;
+    GetDiskInfo(fName, PQWord(@fAvailableSize.Bytes)^, PQWord(@fFreeSize.Bytes)^,
+      PQWord(@fTotalSize.Bytes)^ {$ifdef MSWINDOWS}, @fVolumeName{$endif});
+  end;
+end;
+
+
+
+finalization
+  ProcessSystemUse.Free;
 end.
 
 

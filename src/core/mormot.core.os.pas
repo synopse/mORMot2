@@ -543,6 +543,10 @@ function IsDebuggerPresent: BOOL; stdcall;
 // - redefined in mormot.core.os to avoid dependency to Windows
 function GetCurrentThreadId: DWORD; stdcall;
 
+/// retrieves the current process ID
+// - redefined in mormot.core.os to avoid dependency to Windows
+function GetCurrentProcessId: DWORD; stdcall;
+
 /// redefined in mormot.core.os to avoid dependency to Windows
 function GetEnvironmentStringsW: PWideChar; stdcall;
 
@@ -966,6 +970,70 @@ type
   end;
 
 
+type
+  /// store CPU and RAM usage for a given process
+  // - as used by TSystemUse class
+  TSystemUseData = packed record
+    /// when the data has been sampled
+    Timestamp: TDateTime;
+    /// percent of current Kernel-space CPU usage for this process
+    Kernel: single;
+    /// percent of current User-space CPU usage for this process
+    User: single;
+    /// how many KB of working memory are used by this process
+    WorkKB: cardinal;
+    /// how many KB of virtual memory are used by this process
+    VirtualKB: cardinal;
+  end;
+
+  /// store CPU and RAM usage history for a given process
+  // - as returned by TSystemUse.History
+  TSystemUseDataDynArray = array of TSystemUseData;
+
+  /// low-level structure used to compute process memory and CPU usage
+  TProcessInfo = object
+  private
+    {$ifdef MSWINDOWS}
+    fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
+    fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
+    {$endif MSWINDOWS}
+  public
+    /// initialize the system/process resource tracking
+    function Init: boolean;
+    /// to be called before PerSystem() or PerProcess() iteration
+    function Start: boolean;
+    /// percent of current Idle/Kernel/User CPU usage for all processes
+    function PerSystem(out Idle, Kernel, User: single): boolean;
+    /// retrieve CPU and RAM usage for a given process
+    function PerProcess(PID: cardinal; Now: PDateTime;
+      out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
+  end;
+
+  /// hold low-level information about current memory usage
+  // - as filled by GetMemoryInfo()
+  TMemoryInfo = record
+    memtotal, memfree, filetotal, filefree,
+    vmtotal, vmfree, allocreserved, allocused: QWord;
+    percent: integer;
+  end;
+
+  /// stores information about a disk partition
+  TDiskPartition = packed record
+    /// the name of this partition
+    // - is the Volume name under Windows, or the Device name under POSIX
+    name: RawUTF8;
+    /// where this partition has been mounted
+    // - e.g. 'C:' or '/home'
+    // - you can use GetDiskInfo(mounted) to retrieve current space information
+    mounted: TFileName;
+    /// total size (in bytes) of this partition
+    size: QWord;
+  end;
+
+  /// stores information about several disk partitions
+  TDiskPartitions = array of TDiskPartition;
+
+
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
 // - on Linux, will enumerate /proc/* pseudo-files
@@ -985,6 +1053,24 @@ function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean
 // - under Windows, is a wrapper around GetProcessTimes/GetProcessMemoryInfo
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
+
+/// retrieve low-level information about current memory usage
+// - as used by TSynMonitorMemory
+// - under BSD, only memtotal/memfree/percent are properly returned
+// - allocreserved and allocused are set only if withalloc is TRUE
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+
+/// retrieve low-level information about a given disk partition
+// - as used by TSynMonitorDisk and GetDiskPartitionsText()
+// - only under Windows the Quotas are applied separately to aAvailableBytes
+// in respect to global aFreeBytes
+function GetDiskInfo(var aDriveFolderOrFile: TFileName;
+  out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
+  {$ifdef MSWINDOWS}; aVolumeName: PSynUnicode = nil{$endif}): boolean;
+
+/// retrieve low-level information about all mounted disk partitions of the system
+// - returned partitions array is sorted by "mounted" ascending order
+function GetDiskPartitions: TDiskPartitions;
 
 type
   /// available console colors

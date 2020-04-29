@@ -3020,6 +3020,31 @@ type
     property Hasher: TDynArrayHasher read fHash;
   end;
 
+
+/// initialize the structure with a one-dimension dynamic array
+// - the dynamic array must have been defined with its own type
+// (e.g. TIntegerDynArray = array of Integer)
+// - if aCountPointer is set, it will be used instead of length() to store
+// the dynamic array items count - it will be much faster when adding
+// elements to the array, because the dynamic array won't need to be
+// resized each time - but in this case, you should use the Count property
+// instead of length(array) or high(array) when accessing the data: in fact
+// length(array) will store the memory size reserved, not the items count
+// - if aCountPointer is set, its content will be set to 0, whatever the
+// array length is, or the current aCountPointer^ value is
+// - a typical usage could be:
+// !var IntArray: TIntegerDynArray;
+// !begin
+// !  with DynArray(TypeInfo(TIntegerDynArray),IntArray) do
+// !  begin
+// !    (...)
+// !  end;
+// ! (...)
+// ! DynArray(TypeInfo(TIntegerDynArray),IntArrayA).SaveTo
+function DynArray(aTypeInfo: pointer; var aValue;
+  aCountPointer: PInteger = nil): TDynArray;
+  {$ifdef HASINLINE}inline;{$endif}
+
 var
   /// helper array to get the hash function corresponding to a given
   // standard array type
@@ -13928,6 +13953,13 @@ begin
   result := fHash.ReHash(forAdd, forceGrow);
 end;
 
+
+
+function DynArray(aTypeInfo: pointer; var aValue;
+  aCountPointer: PInteger): TDynArray;
+begin
+  result.Init(aTypeInfo, aValue, aCountPointer);
+end;
 
 
 { TSynQueue }

@@ -592,6 +592,17 @@ begin
   result := true;
 end;
 
+function IdemPChars(const s: RawUTF8; const up: array of PUTF8Char): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to high(up) do
+    if IdemPChar(pointer(s), up[i]) then
+      exit;
+  result := false;
+end;
+
 procedure FindNameValue(const s, up: RawUTF8; var res: RawUTF8);
 var
   p: PUTF8Char;
@@ -618,21 +629,41 @@ begin
   res := '';
 end;
 
-function GetNextCardinal(var P: PAnsiChar): cardinal;
+function GetNextCardinal(var P: PAnsiChar): PtrUInt;
 var
   c: cardinal;
 begin
   result := 0;
+  while not (P^ in ['0'..'9']) do
+    if P^ = #0 then
+      exit
+    else
+      inc(P);
   repeat
     c := ord(P^) - 48;
     if c > 9 then
-      break
-    else
-      result := result * 10 + c;
+      break;
+    result := result * 10 + c;
     inc(P);
   until false;
-  while P^ in ['.', '-', ' '] do
+end;
+
+function GetNextItem(var P: PAnsiChar): RawUTF8;
+var
+  c: cardinal;
+  S: PAnsiChar;
+begin
+  result := '';
+  while P^ <= ' ' do
+    if P^ = #0 then
+      exit
+    else
+      inc(P);
+  S := P;
+  repeat
     inc(P);
+  until P^ <= ' ';
+  FastSetString(result, S, P - S);
 end;
 
 
@@ -938,6 +969,145 @@ function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 begin
   result := false;
+end;
+
+function TProcessInfo.Init: boolean;
+begin
+  FillCharFast(self, SizeOf(self), 0);
+  result := false;
+end;
+
+function TProcessInfo.Start: boolean;
+begin
+  result := false;
+end;
+
+function TProcessInfo.PerProcess(PID: cardinal; Now: PDateTime;
+  out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
+begin
+  result := false;
+end;
+
+function TProcessInfo.PerSystem(out Idle, Kernel, User: single): boolean;
+var
+  P: PUTF8Char;
+  U, K, I, S: cardinal;
+begin // see http://www.linuxhowtos.org/System/procstat.htm
+  result := false;
+  P := pointer(StringFromFile('/proc/stat', {nosize=}true));
+  if P = nil then
+    exit;
+  // e.g. 'cpu  3418147 18140 265232 6783435 12184 0 34219 0 0 0'
+  U := GetNextCardinal(P){=user} + GetNextCardinal(P){=nice};
+  K := GetNextCardinal(P){=system};
+  I := GetNextCardinal(P){=idle};
+  S := U + K + I;
+  Kernel := SimpleRoundTo2Digits((K * 100) / S);
+  User := SimpleRoundTo2Digits((U * 100) / S);
+  Idle := 100 - Kernel - User; // ensure sum is always 100%
+  result := S <> 0;
+end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
+
+{$ifdef BSD}
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+begin
+  FillCharFast(info, SizeOf(info), 0);
+  info.memtotal := fpsysctlhwint(
+    {$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
+  info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
+  if info.memtotal <> 0 then
+  begin
+    // avoid div per 0 exception
+    info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
+    result := true;
+  end
+  else
+    result := false;
+end;
+{$else}
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+var
+  si: TSysInfo; // Linuxism
+  P: PUTF8Char;
+  mu: cardinal;
+begin
+  FillCharFast(info, SizeOf(info), 0);
+  result := SysInfo(@si) = 0;
+  mu := si.mem_unit;
+  if si.totalram <> 0 then // avoid div per 0 exception
+    info.percent := ((si.totalram - si.freeram) * 100) div si.totalram;
+  info.memtotal := si.totalram * mu;
+  info.memfree := si.freeram * mu;
+  info.filetotal := si.totalswap * mu;
+  info.filefree := si.freeswap * mu;
+  // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
+  if withalloc then
+  begin
+    // virtual memory information is not available under Linux
+    P := pointer(StringFromFile('/proc/self/statm', {hasnosize=}true));
+    info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
+    info.allocused := GetNextCardinal(P) * SystemInfo.dwPageSize;     // VmRSS
+  end;
+end;
+{$endif BSD}
+
+function GetDiskInfo(var aDriveFolderOrFile: TFileName;
+  out aAvailableBytes, aFreeBytes, aTotalBytes: QWord): boolean;
+var
+  fs: tstatfs;
+begin
+  if aDriveFolderOrFile = '' then
+    aDriveFolderOrFile := '.';
+  result := fpStatFS(aDriveFolderOrFile, @fs) = 0;
+  aAvailableBytes := QWord(fs.bavail) * QWord(fs.bsize);
+  aFreeBytes := aAvailableBytes; // no user Quota involved here
+  aTotalBytes := QWord(fs.blocks) * QWord(fs.bsize);
+end;
+
+const
+  {$ifdef BSD}
+  POSIXMOUNTPOINTS = '/etc/mtab';
+  {$else}
+  POSIXMOUNTPOINTS = '/proc/self/mounts';
+  {$endif}
+
+function GetDiskPartitions: TDiskPartitions;
+var
+  mounts, fs, mnt, typ: RawUTF8;
+  p: PUTF8Char;
+  fn: TFileName;
+  n: integer;
+  av, fr, tot: QWord;
+begin
+  // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
+  mounts := StringFromFile(POSIXMOUNTPOINTS, {hasnosize=}true);
+  n := 0;
+  p := pointer(mounts);
+  repeat
+    fs :=  GetNextItem(p);
+    mnt := GetNextItem(p);
+    typ := GetNextItem(p);
+    if (fs <> '') and (fs <> 'rootfs') and
+       not IdemPChars(fs, ['/DEV/LOOP']) and
+       (mnt <> '') and (mnt <> '/mnt') and (typ <> '') and
+       not IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) and
+       not IdemPChars(typ, ['autofs', 'proc', 'subfs', 'debugfs', 'devpts',
+        'fusectl', 'mqueue', 'rpc-pipefs', 'sysfs', 'devfs', 'kernfs',
+        'ignore', 'none', 'tmpfs', 'securityfs', 'ramfs', 'rootfs', 'devtmpfs',
+        'hugetlbfs', 'iso9660']) then
+    begin
+      fn := mnt;
+      if GetDiskInfo(fn, av, fr, tot) and (tot > 1 shl 20) then
+      begin
+//writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
+        SetLength(result, n + 1);
+        result[n].name := fs;
+        result[n].mounted := fn;
+        result[n].size := tot;
+        inc(n);
+      end;
+    end;
+  until p = nil;
 end;
 
 {$ifdef BSD}
