@@ -107,6 +107,7 @@ type
   TSynMonitorType = (
     smvUndefined, smvOneMicroSec, smvOneBytes, smvOneCount, smvBytesPerSec,
     smvMicroSec, smvBytes, smvCount, smvCount64);
+
   /// value types as stored in TSynMonitor / TSynMonitorUsage
   TSynMonitorTypes = set of TSynMonitorType;
 
@@ -514,6 +515,7 @@ type
   /// references a TSynMonitor instance
   PSynMonitor = ^TSynMonitor;
 
+
   /// handle generic process statistic with a processing data size and bandwitdh
   TSynMonitorWithSize = class(TSynMonitor)
   protected
@@ -535,6 +537,7 @@ type
     /// data processing bandwith, returned as B/KB/MB per second
     property Throughput: TSynMonitorThroughput read fThroughput;
   end;
+
 
   /// handle generic process statistic with a incoming and outgoing processing
   // data size and bandwitdh
@@ -564,6 +567,7 @@ type
     /// outgoing data processing bandwith, returned as B/KB/MB per second
     property OutputThroughput: TSynMonitorThroughput read fOutputThroughput;
   end;
+
 
   /// could monitor a standard Server
   // - including Input/Output statistics and connected Clients count
@@ -1026,11 +1030,14 @@ begin
   else if Micro < 1000 then
     FormatShort16('%us', [Micro], result)
   else if Micro < 1000000 then
-    TwoDigitToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10, 'ms', result)
+    TwoDigitToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
+      div 10, 'ms', result)
   else if Micro < 60000000 then
-    TwoDigitToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10000, 's', result)
+    TwoDigitToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
+      div 10000, 's', result)
   else if Micro < QWord(3600000000) then
-    TimeToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 1000000, 'm', result)
+    TimeToString({$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif}
+      div 1000000, 'm', result)
   else if Micro < QWord(86400000000 * 2) then
     TimeToString(Micro div 60000000, 'h', result)
   else

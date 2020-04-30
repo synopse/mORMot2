@@ -1223,7 +1223,11 @@ end;
 
 { TWinRegistry }
 
-function TWinRegistry.ReadOpen(root: HKEY; const keyname: RawUTF8;
+const
+  _HKEY: array[TWinRegistryRoot] of HKEY = (
+    HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS);
+
+function TWinRegistry.ReadOpen(root: TWinRegistryRoot; const keyname: RawUTF8;
   closefirst: boolean): boolean;
 var
   tmp: TSynTempBuffer;
@@ -1235,7 +1239,7 @@ begin
   tmp.Init(L * 2);
   Utf8ToUnicode(tmp.buf, L + 8, pointer(keyname), L); // uses RTL
   key := 0;
-  result := RegOpenKeyExW(root, tmp.buf, 0, KEY_READ, key) = 0;
+  result := RegOpenKeyExW(_HKEY[root], tmp.buf, 0, KEY_READ, key) = 0;
   tmp.Done;
 end;
 
@@ -1279,21 +1283,20 @@ begin
 end;
 
 function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
-var
-  rsize: DWORD;
 begin
-  rsize := 4;
-  if RegQueryValueExW(key, pointer(entry), nil, nil, @result, @rsize) <> 0 then
+  if not ReadBuffer(entry, @result, SizeOf(result)) then
     result := 0;
 end;
 
 function TWinRegistry.ReadQword(const entry: SynUnicode): QWord;
-var
-  rsize: DWORD;
 begin
-  rsize := 8;
-  if RegQueryValueExW(key, pointer(entry), nil, nil, @result, @rsize) <> 0 then
+  if not ReadBuffer(entry, @result, SizeOf(result)) then
     result := 0;
+end;
+
+function TWinRegistry.ReadBuffer(const entry: SynUnicode; Data: pointer; DataLen: DWORD): boolean;
+begin
+  result := RegQueryValueExW(key, pointer(entry), nil, nil, Data, @DataLen) = 0;
 end;
 
 function TWinRegistry.ReadEnumEntries: TRawUTF8DynArray;
@@ -1585,15 +1588,13 @@ begin
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
   // retrieve Hardware information from Registry
-  if reg.ReadOpen(HKEY_LOCAL_MACHINE,
-    'Hardware\Description\System\CentralProcessor\0') then
+  if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\CentralProcessor\0') then
   begin
     cpu := reg.ReadString('ProcessorNameString');
     if cpu = '' then
       cpu := reg.ReadString('Identifier');
   end;
-  if reg.ReadOpen(HKEY_LOCAL_MACHINE,
-    'Hardware\Description\System\BIOS', true) then
+  if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\BIOS', true) then
   begin
     manuf := reg.ReadString('SystemManufacturer');
     if manuf <> '' then
@@ -1605,7 +1606,7 @@ begin
   end;
   if ({%H-}prod = '') or ({%H-}prodver = '') then
   begin
-    if reg.ReadOpen(HKEY_LOCAL_MACHINE, 'Hardware\Description\System', true) then
+    if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System', true) then
     begin
       if prod = '' then
         prod := reg.ReadString('SystemBiosVersion');

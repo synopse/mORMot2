@@ -26,6 +26,7 @@ uses
   syncobjs,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.text,

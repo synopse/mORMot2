@@ -25,6 +25,7 @@ uses
   mormot.core.os,
   mormot.core.rtti,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.data;
 
 

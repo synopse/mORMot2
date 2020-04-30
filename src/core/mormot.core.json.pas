@@ -32,6 +32,7 @@ uses
   mormot.core.base,
   mormot.core.text,
   mormot.core.rtti,
+  mormot.core.buffers,
   mormot.core.data;
 
 

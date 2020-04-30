@@ -29,6 +29,7 @@ uses
   mormot.core.rtti,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,

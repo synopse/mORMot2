@@ -2767,14 +2767,17 @@ type
     function AnsiToUTF8(const AnsiText: RawByteString): RawUTF8; virtual;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     // - will call AnsiBufferToUnicode() overloaded virtual method
-    function AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8; overload; virtual;
+    function AnsiBufferToRawUTF8(Source: PAnsiChar;
+      SourceChars: Cardinal): RawUTF8; overload; virtual;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this default implementation will rely on the Operating System for
     // all non ASCII-7 chars
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; overload; virtual;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar;
+      Source: PWideChar; SourceChars: Cardinal): PAnsiChar; overload; virtual;
     /// direct conversion of an Unicode buffer into an Ansi Text
-    function UnicodeBufferToAnsi(Source: PWideChar; SourceChars: Cardinal): RawByteString; overload; virtual;
+    function UnicodeBufferToAnsi(Source: PWideChar;
+      SourceChars: Cardinal): RawByteString; overload; virtual;
     /// convert any Unicode-encoded String into Ansi Text
     // - internaly calls UnicodeBufferToAnsi virtual method
     function RawUnicodeToAnsi(const Source: RawUnicode): RawByteString;
@@ -2802,7 +2805,8 @@ type
     /// convert any Ansi Text (providing a From converted) into Ansi Text
     function AnsiToAnsi(From: TSynAnsiConvert; const Source: RawByteString): RawByteString; overload;
     /// convert any Ansi buffer (providing a From converted) into Ansi Text
-    function AnsiToAnsi(From: TSynAnsiConvert; Source: PAnsiChar; SourceChars: cardinal): RawByteString; overload;
+    function AnsiToAnsi(From: TSynAnsiConvert;
+      Source: PAnsiChar; SourceChars: cardinal): RawByteString; overload;
     /// corresponding code page
     property CodePage: Cardinal read fCodePage;
   end;
@@ -2844,7 +2848,8 @@ type
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this overridden version will use internal lookup tables for fast process
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar;
+      Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -3500,28 +3505,6 @@ function StringToAnsi7(const Text: string): RawByteString;
 function StringToWinAnsi(const Text: string): WinAnsiString;
   {$ifdef UNICODE}inline;{$endif}
 
-/// get text File contents (even Unicode or UTF8) and convert it into a
-// Charset-compatible AnsiString (for Delphi 7) or an UnicodeString (for Delphi
-// 2009 and up) according to any BOM marker at the beginning of the file
-// - before Delphi 2009, the current string code page is used (i.e. CurrentAnsiConvert)
-function AnyTextFileToString(const FileName: TFileName;
-  ForceUTF8: boolean = false): string;
-
-/// get text file contents (even Unicode or UTF8) and convert it into an
-// Unicode string according to any BOM marker at the beginning of the file
-// - any file without any BOM marker will be interpreted as plain ASCII: in this
-// case, the current string code page is used (i.e. CurrentAnsiConvert class)
-function AnyTextFileToSynUnicode(const FileName: TFileName;
-  ForceUTF8: boolean = false): SynUnicode;
-
-/// get text file contents (even Unicode or UTF8) and convert it into an
-// UTF-8 string according to any BOM marker at the beginning of the file
-// - if AssumeUTF8IfNoBOM is FALSE, the current string code page is used (i.e.
-// CurrentAnsiConvert class) for conversion from ANSI into UTF-8
-// - if AssumeUTF8IfNoBOM is TRUE, any file without any BOM marker will be
-// interpreted as UTF-8
-function AnyTextFileToRawUTF8(const FileName: TFileName;
-  AssumeUTF8IfNoBOM: boolean = false): RawUTF8;
 
 /// read a TStream content into a String
 // - it will read binary or text content from the current position until the
@@ -3553,91 +3536,6 @@ function ReadStringFromStream(S: TStream;
 // - format is Length(Integer):Text, i.e. the one used by ReadStringFromStream
 function WriteStringToStream(S: TStream; const Text: RawUTF8): boolean;
 
-type
-  {$M+}
-  /// able to read a UTF-8 text file using memory map
-  // - much faster than TStringList.LoadFromFile()
-  // - will ignore any trailing UTF-8 BOM in the file content, but will not
-  // expect one either
-  TMemoryMapText = class
-  protected
-    fLines: PPointerArray;
-    fLinesMax: integer;
-    fCount: integer;
-    fMapEnd: PUTF8Char;
-    fMap: TMemoryMap;
-    fFileName: TFileName;
-    fAppendedLines: TRawUTF8DynArray;
-    fAppendedLinesCount: integer;
-    function GetLine(aIndex: integer): RawUTF8;  {$ifdef HASINLINE}inline;{$endif}
-    function GetString(aIndex: integer): string; {$ifdef HASINLINE}inline;{$endif}
-    /// call once by Create constructors when fMap has been initialized
-    procedure LoadFromMap(AverageLineLength: integer = 32); virtual;
-    /// call once per line, from LoadFromMap method
-    // - default implementation will set  fLines[fCount] := LineBeg;
-    // - override this method to add some per-line process at loading: it will
-    // avoid reading the entire file more than once
-    procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char); virtual;
-  public
-    /// initialize the memory mapped text file
-    // - this default implementation just do nothing but is called by overloaded
-    // constructors so may be overriden to initialize an inherited class
-    constructor Create; overload; virtual;
-    /// read an UTF-8 encoded text file
-    // - every line beginning is stored into LinePointers[]
-    constructor Create(const aFileName: TFileName); overload;
-    /// read an UTF-8 encoded text file content
-    // - every line beginning is stored into LinePointers[]
-    // - this overloaded constructor accept an existing memory buffer (some
-    // uncompressed data e.g.)
-    constructor Create(aFileContent: PUTF8Char; aFileSize: integer); overload;
-    /// release the memory map and internal LinePointers[]
-    destructor Destroy; override;
-    /// save the whole content into a specified stream
-    // - including any runtime appended values via AddInMemoryLine()
-    procedure SaveToStream(Dest: TStream; const Header: RawUTF8);
-    /// save the whole content into a specified file
-    // - including any runtime appended values via AddInMemoryLine()
-    // - an optional header text can be added to the beginning of the file
-    procedure SaveToFile(FileName: TFileName; const Header: RawUTF8 = '');
-    /// add a new line to the already parsed content
-    // - this line won't be stored in the memory mapped file, but stay in memory
-    // and appended to the existing lines, until this instance is released
-    procedure AddInMemoryLine(const aNewLine: RawUTF8); virtual;
-    /// clear all in-memory appended rows
-    procedure AddInMemoryLinesClear; virtual;
-    /// retrieve the number of UTF-8 chars of the given line
-    // - warning: no range check is performed about supplied index
-    function LineSize(aIndex: integer): integer;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// check if there is at least a given number of UTF-8 chars in the given line
-    // - this is faster than LineSize(aIndex)<aMinimalCount for big lines
-    function LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean; virtual;
-    /// retrieve a line content as UTF-8
-    // - a temporary UTF-8 string is created
-    // - will return '' if aIndex is out of range
-    property Lines[aIndex: integer]: RawUTF8 read GetLine;
-    /// retrieve a line content as generic VCL string type
-    // - a temporary VCL string is created (after conversion for UNICODE Delphi)
-    // - will return '' if aIndex is out of range
-    property Strings[aIndex: integer]: string read GetString;
-    /// direct access to each text line
-    // - use LineSize() method to retrieve line length, since end of line will
-    // NOT end with #0, but with #13 or #10
-    // - warning: no range check is performed about supplied index
-    property LinePointers: PPointerArray read fLines;
-    /// the memory map used to access the raw file content
-    property Map: TMemoryMap read fMap;
-  published
-    /// the file name which was opened by this instance
-    property FileName: TFileName read fFileName write fFileName;
-    /// the number of text lines
-    property Count: integer read fCount;
-  end;
-  {$M-}
 
 // some constants used for UTF-8 conversion, including surrogates
 const
@@ -3860,7 +3758,8 @@ begin
   Split(Str, SepStr, LeftStr, result, ToUpperCase);
 end;
 
-function Split(const Str: RawUTF8; const SepStr: array of RawUTF8; const DestPtr: array of PRawUTF8): PtrInt;
+function Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8): PtrInt;
 var
   s, i, j: PtrInt;
 begin
@@ -15229,108 +15128,6 @@ begin
 end;
 
 
-
-type
-  TTextFileKind = (isUnicode, isUTF8, isAnsi);
-
-function TextFileKind(const Map: TMemoryMap): TTextFileKind;
-begin
-  result := isAnsi;
-  if (Map.Buffer <> nil) and (Map.Size > 3) then
-    if PWord(Map.Buffer)^ = $FEFF then
-      result := isUnicode
-    else if (PWord(Map.Buffer)^ = $BBEF) and (PByteArray(Map.Buffer)[2] = $BF) then
-      result := isUTF8;
-end;
-
-function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean): SynUnicode;
-var
-  Map: TMemoryMap;
-begin
-  result := '';
-  if Map.Map(FileName) then
-  try
-    if ForceUTF8 then
-      UTF8ToSynUnicode(PUTF8Char(Map.Buffer), Map.Size, Result)
-    else
-      case TextFileKind(Map) of
-        isUnicode:
-          SetString(result, PWideChar(PtrUInt(Map.Buffer) + 2),
-            (Map.Size - 2) shr 1);
-        isUTF8:
-          UTF8ToSynUnicode(PUTF8Char(pointer(PtrUInt(Map.Buffer) + 3)),
-            Map.Size - 3, Result);
-        isAnsi:
-          result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer,
-            Map.Size);
-      end;
-  finally
-    Map.UnMap;
-  end;
-end;
-
-function AnyTextFileToRawUTF8(const FileName: TFileName; AssumeUTF8IfNoBOM: boolean): RawUTF8;
-var
-  Map: TMemoryMap;
-begin
-  result := '';
-  if Map.Map(FileName) then
-  try
-    case TextFileKind(Map) of
-      isUnicode:
-        RawUnicodeToUtf8(PWideChar(PtrUInt(Map.Buffer) + 2),
-          (Map.Size - 2) shr 1, Result);
-      isUTF8:
-        FastSetString(result, pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
-      isAnsi:
-        if AssumeUTF8IfNoBOM then
-          FastSetString(result, Map.Buffer, Map.Size)
-        else
-          result := CurrentAnsiConvert.AnsiBufferToRawUTF8(Map.Buffer, Map.Size);
-    end;
-  finally
-    Map.UnMap;
-  end;
-end;
-
-function AnyTextFileToString(const FileName: TFileName; ForceUTF8: boolean): string;
-var
-  Map: TMemoryMap;
-begin
-  result := '';
-  if Map.Map(FileName) then
-  try
-    if ForceUTF8 then
-      {$ifdef UNICODE}
-      UTF8DecodeToString(PUTF8Char(Map.Buffer), Map.Size, result)
-      {$else}
-      result := CurrentAnsiConvert.UTF8BufferToAnsi(PUTF8Char(Map.Buffer), Map.Size)
-      {$endif}
-    else
-      case TextFileKind(Map) of
-      {$ifdef UNICODE}
-        isUnicode:
-          SetString(result, PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
-        isUTF8:
-          UTF8DecodeToString(pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3, result);
-        isAnsi:
-          result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer, Map.Size);
-      {$else}
-        isUnicode:
-          result := CurrentAnsiConvert.UnicodeBufferToAnsi(
-            PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
-        isUTF8:
-          result := CurrentAnsiConvert.UTF8BufferToAnsi(
-            pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
-        isAnsi:
-          SetString(result, PAnsiChar(Map.Buffer), Map.Size);
-      {$endif UNICODE}
-      end;
-  finally
-    Map.UnMap;
-  end;
-end;
-
 function StreamToRawByteString(aStream: TStream): RawByteString;
 var
   current, size: Int64;
@@ -15385,183 +15182,6 @@ begin
     {$endif FPC}
 end;
 
-
-{ TMemoryMapText }
-
-constructor TMemoryMapText.Create;
-begin
-end;
-
-constructor TMemoryMapText.Create(aFileContent: PUTF8Char; aFileSize: integer);
-begin
-  Create;
-  fMap.Map(aFileContent, aFileSize);
-  LoadFromMap;
-end;
-
-constructor TMemoryMapText.Create(const aFileName: TFileName);
-begin
-  Create;
-  fFileName := aFileName;
-  if fMap.Map(aFileName) then
-    LoadFromMap;
-end; // invalid file or unable to memory map its content -> Count := 0
-
-destructor TMemoryMapText.Destroy;
-begin
-  Freemem(fLines);
-  fMap.UnMap;
-  inherited;
-end;
-
-procedure TMemoryMapText.SaveToStream(Dest: TStream; const Header: RawUTF8);
-var
-  i: PtrInt;
-  W: TBaseWriter;
-  temp: TTextWriterStackBuffer;
-begin
-  i := length(Header);
-  if i > 0 then
-    Dest.WriteBuffer(pointer(Header)^, i);
-  if fMap.Size > 0 then
-    Dest.WriteBuffer(fMap.Buffer^, fMap.Size);
-  if fAppendedLinesCount = 0 then
-    exit;
-  W := TBaseWriter.Create(Dest, @temp, SizeOf(temp));
-  try
-    if (fMap.Size > 0) and (fMap.Buffer[fMap.Size - 1] >= ' ') then
-      W.Add(#10);
-    for i := 0 to fAppendedLinesCount - 1 do
-    begin
-      W.AddString(fAppendedLines[i]);
-      W.Add(#10);
-    end;
-    W.FlushFinal;
-  finally
-    W.Free;
-  end;
-end;
-
-procedure TMemoryMapText.SaveToFile(FileName: TFileName; const Header: RawUTF8);
-var
-  FS: TFileStream;
-begin
-  FS := TFileStream.Create(FileName, fmCreate);
-  try
-    SaveToStream(FS, Header);
-  finally
-    FS.Free;
-  end;
-end;
-
-function TMemoryMapText.GetLine(aIndex: integer): RawUTF8;
-begin
-  if (self = nil) or (cardinal(aIndex) >= cardinal(fCount)) then
-    result := ''
-  else
-    FastSetString(result, fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd));
-end;
-
-function TMemoryMapText.GetString(aIndex: integer): string;
-begin
-  if (self = nil) or (cardinal(aIndex) >= cardinal(fCount)) then
-    result := ''
-  else
-    UTF8DecodeToString(fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd), result);
-end;
-
-function TMemoryMapText.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean;
-begin
-  if (self = nil) or (cardinal(aIndex) >= cardinal(fCount)) or (aUpperSearch = '') then
-    result := false
-  else
-    result := GetLineContains(fLines[aIndex], fMapEnd, pointer(aUpperSearch));
-end;
-
-function TMemoryMapText.LineSize(aIndex: integer): integer;
-begin
-  result := GetLineSize(fLines[aIndex], fMapEnd);
-end;
-
-function TMemoryMapText.LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
-begin
-  result := GetLineSizeSmallerThan(fLines[aIndex], fMapEnd, aMinimalCount);
-end;
-
-procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
-begin
-  if fCount = fLinesMax then
-  begin
-    fLinesMax := NextGrow(fLinesMax);
-    ReallocMem(fLines, fLinesMax * SizeOf(pointer));
-  end;
-  fLines[fCount] := LineBeg;
-  inc(fCount);
-end;
-
-procedure ParseLines(P, PEnd: PUTF8Char; Map: TMemoryMapText);
-var
-  PBeg: PUTF8Char;
-begin // generated asm is much better with a local proc
-  if P < PEnd then
-  repeat
-    PBeg := P;
-    {$ifdef CPUX64}
-    inc(P, BufferLineLength(P, PEnd)); // use branchless SSE2 on x86_64
-    {$else}
-    while (P < PEnd) and (P^ <> #13) and (P^ <> #10) do
-      inc(P);
-    {$endif CPUX64}
-    Map.ProcessOneLine(PBeg, P);
-    if P + 1 < PEnd then
-      if PWord(P)^ = 13 + 10 shl 8 then
-      begin
-        inc(P, 2); // ignore #13#10
-        if P < PEnd then
-          continue;
-      end
-      else
-      begin
-        inc(P);    // ignore #13 or #10
-        if P < PEnd then
-          continue;
-      end;
-    break;
-  until false;
-end;
-
-procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer = 32);
-var
-  P: PUTF8Char;
-begin
-  fLinesMax := fMap.FileSize div AverageLineLength + 8;
-  GetMem(fLines, fLinesMax * SizeOf(pointer));
-  P := pointer(fMap.Buffer);
-  fMapEnd := P + fMap.Size;
-  if TextFileKind(Map) = isUTF8 then
-    inc(PByte(P), 3); // ignore UTF-8 BOM
-  ParseLines(P, fMapEnd, self);
-  if fLinesMax > fCount + 16384 then
-    Reallocmem(fLines, fCount * SizeOf(pointer)); // size down only if worth it
-end;
-
-procedure TMemoryMapText.AddInMemoryLine(const aNewLine: RawUTF8);
-var
-  P: PUTF8Char;
-begin
-  if aNewLine = '' then
-    exit;
-  AddRawUTF8(fAppendedLines, fAppendedLinesCount, aNewLine);
-  P := pointer(fAppendedLines[fAppendedLinesCount - 1]);
-  ProcessOneLine(P, P + StrLen(P));
-end;
-
-procedure TMemoryMapText.AddInMemoryLinesClear;
-begin
-  dec(fCount, fAppendedLinesCount);
-  fAppendedLinesCount := 0;
-  fAppendedLines := nil;
-end;
 
 
 procedure InitializeUnit;

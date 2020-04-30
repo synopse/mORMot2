@@ -450,7 +450,8 @@ function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16; overload;
 // as time or date elapsed period
 // - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
 // - returns 'Thh:mm:ss' or 'YYYY-MM-DD' format, depending on the supplied value
-function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
+function UnixTimePeriodToString(const UnixTime: TUnixTime;
+  FirstTimeChar: AnsiChar = 'T'): RawUTF8;
 
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
@@ -465,7 +466,8 @@ function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
 // the ISO 8601 text layout, including milliseconds
 // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' or 'YYYYMMDDThhmmss.sssZ' format
 // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
-function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean = true; FirstTimeChar: AnsiChar = 'T'; const TZD: RawUTF8 = ''): RawUTF8;
+function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean = true;
+  FirstTimeChar: AnsiChar = 'T'; const TZD: RawUTF8 = ''): RawUTF8;
 
 /// convert some milllisecond-based c-encoded time (from Unix epoch 1/1/1970) to
 // a small text layout, trimming to the second resolution, perfect e.g. for
@@ -481,6 +483,7 @@ function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
 // - returns 'Thh:mm:ss' or 'YYYY-MM-DD' format, depending on the supplied value
 function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
   FirstTimeChar: AnsiChar = 'T'): RawUTF8;
+
 
 
 { ************ TTimeLog efficient 64-bit custom date/time encoding }
@@ -634,7 +637,9 @@ function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 // - calls internally Iso8601ToTimeLogPUTF8Char() and returns true if contains
 // at least a valid year (YYYY)
 function IsIso8601(P: PUTF8Char; L: integer): boolean;
- {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
+
+
 
 
 implementation
@@ -2226,6 +2231,7 @@ function IsIso8601(P: PUTF8Char; L: integer): boolean;
 begin
   result := Iso8601ToTimeLogPUTF8Char(P, L) <> 0;
 end;
+
 
 end.
 

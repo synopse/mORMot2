@@ -414,6 +414,10 @@ function GetSystemPath(kind: TSystemPath): TFileName;
 type
   TThreadID = DWORD;
 
+  /// the known Windows Registry Root key used by TWinRegistry.Open
+  TWinRegistryRoot = (
+    wrClasses, wrCurrentUser, wrLocalMachine, wrUsers);
+
   /// direct access to the Windows Registry
   // - could be used as alternative to TRegistry, which doesn't behave the same on
   // all Delphi versions, and is enhanced on FPC (e.g. which supports REG_MULTI_SZ)
@@ -424,7 +428,8 @@ type
     key: HKEY;
     /// start low-level read access to a Windows Registry node
     // - on success (returned true), ReadClose() should be called
-    function ReadOpen(root: HKEY; const keyname: RawUTF8; closefirst: boolean = false): boolean;
+    function ReadOpen(root: TWinRegistryRoot; const keyname: RawUTF8;
+      closefirst: boolean = false): boolean;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
     /// low-level read a string from the Windows Registry after ReadOpen()
@@ -438,6 +443,9 @@ type
     function ReadDword(const entry: SynUnicode): cardinal;
     /// low-level read a Windows Registry 64-bit REG_QWORD value after ReadOpen()
     function ReadQword(const entry: SynUnicode): QWord;
+    /// low-level read a Windows Registry content as binary buffer after ReadOpen()
+    // - just a wrapper around RegQueryValueExW() API call
+    function ReadBuffer(const entry: SynUnicode; Data: pointer; DataLen: DWORD): boolean;
     /// low-level enumeration of all sub-entries names of a Windows Registry key
     function ReadEnumEntries: TRawUTF8DynArray;
   end;
@@ -969,6 +977,26 @@ type
     property FileName: TFileName read fFileName;
   end;
 
+  /// low-level access to a resource bound to the executable
+  // - so that Windows is not required by Delphi in your unit uses clause
+  TExecutableResource = object
+  private
+    HResInfo: THandle;
+    HGlobal: THandle;
+  public
+    /// the resource memory pointer, after successful Open()
+    Buffer: pointer;
+    /// the resource memory size in bytes, after successful Open()
+    Size: PtrInt;
+    /// locate and lock a resource
+    // - use the current executable if Instance is left to its 0 default value
+    // - returns TRUE if the resource has been found, and Buffer/Size are set
+    function Open(const ResourceName: string; ResType: PChar;
+      Instance: THandle = 0): boolean;
+    /// unlock and finalize a resource
+    procedure Close;
+  end;
+
 
 type
   /// store CPU and RAM usage for a given process
@@ -1160,6 +1188,7 @@ function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
 // it will free the supplied PropertiesInstance in this case, and return the existing
 function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
   FreeExistingPropertiesInstance: boolean = true): TObject;
+
 
 
 
@@ -1676,6 +1705,32 @@ begin
   fMap.UnMap;
   fFileStream.Free;
   inherited;
+end;
+
+{ TExecutableResource }
+
+function TExecutableResource.Open(const ResourceName: string; ResType: PChar;
+  Instance: THandle): boolean;
+begin
+  result := false;
+  if Instance = 0 then
+    Instance := HInstance;
+  HResInfo := FindResource(Instance, PChar(ResourceName), ResType);
+  if HResInfo = 0 then
+    exit;
+  HGlobal := LoadResource(Instance, HResInfo);
+  if HGlobal = 0 then // direct decompression from memory mapped .exe content
+    exit;
+  Buffer := LockResource(HGlobal);
+  Size := SizeofResource(Instance, HResInfo);
+  result := true;
+end;
+
+procedure TExecutableResource.Close;
+begin
+  UnlockResource(HGlobal); // only needed outside of Windows
+  FreeResource(HGlobal);
+  HGlobal := 0;
 end;
 
 
