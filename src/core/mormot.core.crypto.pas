@@ -500,6 +500,7 @@ type
     // - AEAD associated Data is expected to be small (up to 100 bytes)
     function MACAndCrypt(const Data: RawByteString; Encrypt: boolean): RawByteString;
 
+    {$ifndef PUREMORMOT2}
     /// simple wrapper able to cypher/decypher any in-memory content
     // - here data variables could be text or binary
     // - use StringToUTF8() to define the Key parameter from a VCL string
@@ -520,6 +521,7 @@ type
     class function SimpleEncryptFile(const InputFile, OutputFile: TFileName;
       const Key: RawByteString; Encrypt: boolean; IVAtBeginning: boolean = false;
       RaiseESynCryptoOnError: boolean = true): boolean; overload; deprecated;
+    {$endif PUREMORMOT2}
     /// simple wrapper able to cypher/decypher any in-memory content
     // - here data variables could be text or binary
     // - you could use e.g. THMAC_SHA256 to safely compute the Key/KeySize value
@@ -884,6 +886,9 @@ procedure AESIVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
 
 function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 
+
+{$ifndef PUREMORMOT2}
+
 var
   /// the AES-256 encoding class used by CompressShaAes() global function
   // - use any of the implementation classes, corresponding to the chaining
@@ -909,6 +914,7 @@ procedure CompressShaAesSetKey(const Key: RawByteString;
 // data is corrupted during transmission, will instantly return ''
 function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
 
+{$endif PUREMORMOT2}
 
 
 { ************* AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG) }
@@ -3510,29 +3516,14 @@ begin
   end;
 end;
 
+{$ifndef PUREMORMOT2}
+
 class function TAESAbstract.SimpleEncrypt(const Input, Key: RawByteString;
   Encrypt, IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 var
   instance: TAESAbstract;
 begin
   instance := CreateFromSha256(Key){%H-};
-  try
-    if Encrypt then
-      result := instance.EncryptPKCS7(Input, IVAtBeginning)
-    else
-      result := instance.DecryptPKCS7(Input, IVAtBeginning, RaiseESynCryptoOnError);
-  finally
-    instance.Free;
-  end;
-end;
-
-class function TAESAbstract.SimpleEncrypt(const Input: RawByteString;
-  const Key; KeySize: integer; Encrypt, IVAtBeginning,
-  RaiseESynCryptoOnError: boolean): RawByteString;
-var
-  instance: TAESAbstract;
-begin
-  instance := Create(Key, KeySize);
   try
     if Encrypt then
       result := instance.EncryptPKCS7(Input, IVAtBeginning)
@@ -3558,8 +3549,28 @@ begin
   end;
 end;
 
-class function TAESAbstract.SimpleEncryptFile(const InputFile, Outputfile: TFileName;
-  const Key; KeySize: integer; Encrypt, IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
+{$endif PUREMORMOT2}
+
+class function TAESAbstract.SimpleEncrypt(const Input: RawByteString;
+  const Key; KeySize: integer; Encrypt, IVAtBeginning,
+  RaiseESynCryptoOnError: boolean): RawByteString;
+var
+  instance: TAESAbstract;
+begin
+  instance := Create(Key, KeySize);
+  try
+    if Encrypt then
+      result := instance.EncryptPKCS7(Input, IVAtBeginning)
+    else
+      result := instance.DecryptPKCS7(Input, IVAtBeginning, RaiseESynCryptoOnError);
+  finally
+    instance.Free;
+  end;
+end;
+
+class function TAESAbstract.SimpleEncryptFile(
+  const InputFile, Outputfile: TFileName; const Key; KeySize: integer;
+  Encrypt, IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
 var
   src, dst: RawByteString;
 begin
@@ -4442,6 +4453,9 @@ end;
 
 {$endif USE_PROV_RSA_AES}
 
+
+{$ifndef PUREMORMOT2}
+
 var
   /// the encryption key used by CompressShaAes() global function
   // - the key is global to the whole process
@@ -4491,6 +4505,9 @@ begin
   end;
   result := 'synshaaes'; // mark success
 end;
+
+{$endif PUREMORMOT2}
+
 
 
 { ************* AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG) }
@@ -5031,26 +5048,48 @@ begin
   RawBase64URI(pointer(result), P, len);
 end;
 
+// required by read__h__hmac -> strictly private if PUREMORMOT2 is defined
+procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
+var
+  L: integer;
+  SHA: TSHA256;
+  p: PAnsiChar;
+  tmp: array[0..255] of byte;
+begin
+  L := length(s);
+  p := pointer(s);
+  if L < sizeof(tmp) then
+  begin
+    FillcharFast(tmp, sizeof(tmp), L); // add some salt to unweak password
+    if L > 0 then
+      MoveFast(p^, tmp, L);
+    SHA.Full(@tmp, sizeof(tmp), Digest);
+  end
+  else
+    SHA.Full(p, L, Digest);
+end;
+
 procedure read__h__hmac;
 var
   fn: TFileName;
-  instance: THash256;
+  k256: THash256;
   key, key2, appsec: RawByteString;
 begin
   __hmac.Init(@CryptProtectDataEntropy, 32);
   SetString(appsec, PAnsiChar(@CryptProtectDataEntropy), 32);
-  PBKDF2_HMAC_SHA256(appsec, ExeVersion.User, 100, instance);
+  PBKDF2_HMAC_SHA256(appsec, ExeVersion.User, 100, k256);
   FillZero(appsec);
-  appsec := Base64URI(@instance, 15); // =BinToBase64URI()
+  appsec := Base64URI(@k256, 15); // =BinToBase64URI()
   fn := FormatString({$ifdef MSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
     [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
-  SetString(appsec, PAnsiChar(@instance[15]), 17); // use remaining bytes as key
+  SetString(appsec, PAnsiChar(@k256[15]), 17); // use remaining bytes as key
+  SHA256Weak(appsec, k256);
   try
     key := StringFromFile(fn);
     if key <> '' then
     begin
       try
-        key2 := TAESCFB.SimpleEncrypt(key, appsec, false, true);
+        key2 := TAESCFB.SimpleEncrypt(key, k256, 256, false, true);
       except
         key2 := ''; // handle decryption error
       end;
@@ -5075,7 +5114,7 @@ begin
     // 4KB local chmod 400 hidden .file in $HOME folder under Linux/POSIX
     key2 := key;
     {$endif MSWINDOWS}
-    key := TAESCFB.SimpleEncrypt(key2, appsec, true, true);
+    key := TAESCFB.SimpleEncrypt(key2, k256, 256, true, true);
     if not FileFromString(key, fn) then
       ESynCrypto.CreateUTF8('Unable to write %', [fn]);
     FileSetAttributes(fn, {secret=}true);
@@ -5083,7 +5122,7 @@ begin
     FillZero(key);
     FillZero(key2);
     FillZero(appsec);
-    FillZero(instance);
+    FillZero(k256);
   end;
 end;
 
@@ -7853,26 +7892,6 @@ end;
 
 {$ifndef PUREMORMOT2}
 
-procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
-var
-  L: integer;
-  SHA: TSHA256;
-  p: PAnsiChar;
-  tmp: array[0..255] of byte;
-begin
-  L := length(s);
-  p := pointer(s);
-  if L < sizeof(tmp) then
-  begin
-    FillcharFast(tmp, sizeof(tmp), L); // add some salt to unweak password
-    if L > 0 then
-      MoveFast(p^, tmp, L);
-    SHA.Full(@tmp, sizeof(tmp), Digest);
-  end
-  else
-    SHA.Full(p, L, Digest);
-end;
-
 procedure AES(const Key; KeySize: cardinal; buffer: pointer; Len: Integer;
   Encrypt: boolean);
 begin
@@ -8384,7 +8403,9 @@ begin
   assert(sizeof(TSHAContext) = SHAContextSize);
   assert(sizeof(TSHA3Context) = SHA3ContextSize);
   assert(1 shl AESBlockShift = sizeof(TAESBlock));
+  {$ifndef PUREMORMOT2}
   assert(sizeof(TAESFullHeader) = sizeof(TAESBlock));
+  {$endif PUREMORMOT2}
   assert(sizeof(TAESIVCTR) = sizeof(TAESBlock));
   assert(sizeof(TSHA256) = sizeof(TSHA1));
   assert(sizeof(TSHA512) > sizeof(TSHA256));

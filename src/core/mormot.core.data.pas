@@ -545,7 +545,7 @@ type
     fLoadFromLastAlgo: TAlgoCompress;
     /// low-level virtual methods implementing the persistence reading
     procedure LoadFromReader; virtual;
-    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
+    procedure SaveToWriter(aWriter: TBufferWriter); virtual;
   public
     /// initialize a void storage with the supplied name
     constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
@@ -1923,7 +1923,7 @@ type
     function InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
     /// low-level virtual methods implementing the persistence
     procedure LoadFromReader; override;
-    procedure SaveToWriter(aWriter: TFileBufferWriter); override;
+    procedure SaveToWriter(aWriter: TBufferWriter); override;
   public
     /// initialize the queue storage
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -3337,7 +3337,7 @@ begin
   fReader.VarUTF8(fName);
 end;
 
-procedure TSynPersistentStore.SaveToWriter(aWriter: TFileBufferWriter);
+procedure TSynPersistentStore.SaveToWriter(aWriter: TBufferWriter);
 begin
   aWriter.Write(fName);
 end;
@@ -3389,13 +3389,13 @@ procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString;
   nocompression: boolean; BufLen: integer; ForcedAlgo: TAlgoCompress;
   BufferOffset: integer);
 var
-  writer: TFileBufferWriter;
+  writer: TBufferWriter;
   temp: array[word] of byte;
 begin
   if BufLen <= SizeOf(temp) then
-    writer := TFileBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
+    writer := TBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
   else
-    writer := TFileBufferWriter.Create(TRawByteStringStream, BufLen);
+    writer := TBufferWriter.Create(TRawByteStringStream, BufLen);
   try
     SaveToWriter(writer);
     fSaveToLastUncompressed := writer.TotalWritten;
@@ -4198,7 +4198,7 @@ constructor TRawUTF8List.Create(aFlags: TRawUTF8ListFlags);
 begin
   fNameValueSep := '=';
   fFlags := aFlags;
-  fValues.InitSpecific(TypeInfo(TRawUTF8DynArray), fValue, djRawUTF8, @fCount,
+  fValues.InitSpecific(TypeInfo(TRawUTF8DynArray), fValue, ptRawUTF8, @fCount,
     not (fCaseSensitive in aFlags));
   fSafe.Init;
 end;
@@ -4220,7 +4220,7 @@ begin
       include(fFlags, fCaseSensitive)
     else
       exclude(fFlags, fCaseSensitive);
-    fValues.Hasher.InitSpecific(@fValues, djRawUTF8, not Value, nil);
+    fValues.Hasher.InitSpecific(@fValues, ptRawUTF8, not Value, nil);
     Changed;
   finally
     fSafe.UnLock;
@@ -8348,8 +8348,7 @@ label
 begin
   if canHash in fHash.State then
   begin
-doh:
-    hc := fHash.HashOne(@Item);
+doh:hc := fHash.HashOne(@Item);
     result := fHash.FindOrNew(hc, @Item);
     if (result < 0) and AddIfNotExisting then
     begin
@@ -8719,7 +8718,7 @@ begin
   end;
 end;
 
-procedure TSynQueue.SaveToWriter(aWriter: TFileBufferWriter);
+procedure TSynQueue.SaveToWriter(aWriter: TBufferWriter);
 var
   n: integer;
   info: PRttiInfo;
@@ -8803,7 +8802,7 @@ end;
 
 constructor TSynTimeZone.Create;
 begin
-  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray), fZone, djRawUTF8);
+  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray), fZone, ptRawUTF8);
 end;
 
 constructor TSynTimeZone.CreateDefault;
@@ -8845,7 +8844,7 @@ end;
 
 function TSynTimeZone.SaveToBuffer: RawByteString;
 begin
-  result := SynLZCompress(fZones.SaveTo);
+  result := AlgoSynLZ.Compress(fZones.SaveTo);
 end;
 
 procedure TSynTimeZone.SaveToFile(const FileName: TFileName);

@@ -20,9 +20,6 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  classes,
-  contnrs,
-  types,
   sysutils,
   mormot.core.base,
   mormot.core.unicode,

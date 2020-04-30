@@ -2446,7 +2446,7 @@ begin
   if P >= Last then
 e:begin
     {$ifdef ISDELPHI}
-    result := 0; // avoid hint
+    result := 0; // avoid paranoid compiler hint
     {$endif}
     ErrorOverflow;
   end;
@@ -7193,8 +7193,7 @@ begin
         else
         begin
           P := B;
-none:
-          if lst = twlParagraph then
+none:     if lst = twlParagraph then
           begin
             c := PWord(P)^; // detect blank line to separate paragraphs
             if c = $0a0d then

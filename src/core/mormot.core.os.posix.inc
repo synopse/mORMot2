@@ -343,6 +343,8 @@ begin
     SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
 end;
 
+{$ifndef NOEXCEPTIONINTERCEPT}
+
 function TSynLogExceptionContext.AdditionalInfo(
   out ExceptionNames: TPUTF8CharDynArray): cardinal;
 begin
@@ -355,6 +357,8 @@ var
 // FPC: intercept via the RaiseProc global variable
 {$define WITH_RAISEPROC}
 // RaiseProc redirection is implemented in main mormot.core.os.pas
+
+{$endif NOEXCEPTIONINTERCEPT}
 
 const
   faInvalidFile = faDirectory;

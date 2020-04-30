@@ -20,9 +20,6 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  classes,
-  contnrs,
-  types,
   sysutils,
   variants,
   mormot.core.base,
@@ -2671,19 +2668,23 @@ begin // sub-function to avoid temporary RawUTF8
   end;
 end;
 
-function TDocVariant.IntGet(var Dest: TVarData; const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
+function TDocVariant.IntGet(var Dest: TVarData; const Instance: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt): boolean;
 var
   dv: TDocVariantData absolute Instance;
 begin
   if Name = nil then
     result := false
-  else if (NameLen > 4) and (Name[0] = '_') and IntGetPseudoProp(IdemPCharArray(@Name[1], ['COUNT', 'KIND', 'JSON']), dv, variant(Dest)) then
+  else if (NameLen > 4) and (Name[0] = '_') and IntGetPseudoProp(
+      IdemPCharArray(@Name[1], ['COUNT', 'KIND', 'JSON']), dv, variant(Dest)) then
     result := true
   else
-    result := dv.RetrieveValueOrRaiseException(pointer(Name), NameLen, dvoNameCaseSensitive in dv.VOptions, PVariant(@Dest)^, {byref=}true);
+    result := dv.RetrieveValueOrRaiseException(pointer(Name), NameLen,
+      dvoNameCaseSensitive in dv.VOptions, PVariant(@Dest)^, {byref=}true);
 end;
 
-function TDocVariant.IntSet(const Instance, Value: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
+function TDocVariant.IntSet(const Instance, Value: TVarData;
+  Name: PAnsiChar; NameLen: PtrInt): boolean;
 var
   ndx: Integer;
   aName: RawUTF8;
@@ -2726,7 +2727,8 @@ begin
     Dest.VType := varEmpty;
 end;
 
-function TDocVariant.DoFunction(var Dest: TVarData; const V: TVarData; const Name: string; const Arguments: TVarDataArray): boolean;
+function TDocVariant.DoFunction(var Dest: TVarData; const V: TVarData;
+  const Name: string; const Arguments: TVarDataArray): boolean;
 var
   ndx: integer;
   Data: PDocVariantData;
@@ -2791,7 +2793,8 @@ begin
       else if (Name = '_') or SameText(Name, 'Value') then
       begin
         SetTempFromFirstArgument;
-        Data^.RetrieveValueOrRaiseException(pointer(temp), length(temp), dvoNameCaseSensitive in Data^.VOptions, variant(Dest), true);
+        Data^.RetrieveValueOrRaiseException(pointer(temp), length(temp),
+          dvoNameCaseSensitive in Data^.VOptions, variant(Dest), true);
         exit;
       end;
     2:
@@ -2805,7 +2808,8 @@ begin
   result := false;
 end;
 
-procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant; escape: TTextWriterKind);
+procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant;
+  escape: TTextWriterKind);
 var
   ndx: PtrInt;
   vt: cardinal;
@@ -2923,7 +2927,8 @@ begin
   CastTo(Dest, Source, VarType);
 end;
 
-procedure TDocVariant.CastTo(var Dest: TVarData; const Source: TVarData; const AVarType: TVarType);
+procedure TDocVariant.CastTo(var Dest: TVarData; const Source: TVarData;
+  const AVarType: TVarType);
 var
   Tmp: RawUTF8;
   wasString: boolean;
@@ -2948,7 +2953,8 @@ begin
   end;
 end;
 
-procedure TDocVariant.Compare(const Left, Right: TVarData; var Relationship: TVarCompareResult);
+procedure TDocVariant.Compare(const Left, Right: TVarData;
+  var Relationship: TVarCompareResult);
 var
   res: integer;
   LeftU, RightU: RawUTF8;
@@ -3001,43 +3007,51 @@ begin
   TDocVariantData(result).Init(Options);
 end;
 
-class function TDocVariant.NewObject(const NameValuePairs: array of const; Options: TDocVariantOptions): variant;
+class function TDocVariant.NewObject(const NameValuePairs: array of const;
+  Options: TDocVariantOptions): variant;
 begin
   VarClear(result{%H-});
   TDocVariantData(result).InitObject(NameValuePairs, Options);
 end;
 
-class function TDocVariant.NewArray(const Items: array of const; Options: TDocVariantOptions): variant;
+class function TDocVariant.NewArray(const Items: array of const;
+  Options: TDocVariantOptions): variant;
 begin
   VarClear(result{%H-});
   TDocVariantData(result).InitArray(Items, Options);
 end;
 
-class function TDocVariant.NewArray(const Items: TVariantDynArray; Options: TDocVariantOptions): variant;
+class function TDocVariant.NewArray(const Items: TVariantDynArray;
+  Options: TDocVariantOptions): variant;
 begin
   VarClear(result{%H-});
   TDocVariantData(result).InitArrayFromVariants(Items, Options);
 end;
 
-class function TDocVariant.NewJSON(const JSON: RawUTF8; Options: TDocVariantOptions): variant;
+class function TDocVariant.NewJSON(const JSON: RawUTF8;
+  Options: TDocVariantOptions): variant;
 begin
   _Json(JSON, result, Options);
 end;
 
-class function TDocVariant.NewUnique(const SourceDocVariant: variant; Options: TDocVariantOptions): variant;
+class function TDocVariant.NewUnique(const SourceDocVariant: variant;
+  Options: TDocVariantOptions): variant;
 begin
   VarClear(result{%H-});
   TDocVariantData(result).InitCopy(SourceDocVariant, Options);
 end;
 
-class procedure TDocVariant.GetSingleOrDefault(const docVariantArray, default: variant; var result: variant);
+class procedure TDocVariant.GetSingleOrDefault(const docVariantArray,
+  default: variant; var result: variant);
 var
   vt: cardinal;
 begin
   vt := TVarData(docVariantArray).VType;
   if vt = varByRef or varVariant then
-    GetSingleOrDefault(PVariant(TVarData(docVariantArray).VPointer)^, default, result)
-  else if (vt <> DocVariantVType) or (TDocVariantData(docVariantArray).Count <> 1) or
+    GetSingleOrDefault(
+      PVariant(TVarData(docVariantArray).VPointer)^, default, result)
+  else if (vt <> DocVariantVType) or
+          (TDocVariantData(docVariantArray).Count <> 1) or
           not (dvoIsArray in TDocVariantData(docVariantArray).VOptions) then
     result := default
   else
@@ -3059,7 +3073,8 @@ begin
     if cardinal(result^.VType) = docv then
       exit;
   end;
-  raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)', [ord(result^.VType)]);
+  raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',
+    [ord(result^.VType)]);
 end;
 
 {$ifdef FPC_OR_UNICODE} // Delphi has problems inlining this :(
@@ -3100,7 +3115,8 @@ asm
 end;
 {$endif FPC_OR_UNICODE}
 
-function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
+function _Safe(const DocVariant: variant;
+  ExpectedKind: TDocVariantKind): PDocVariantData;
 var
   o: TDocVariantOptions;
 begin
@@ -3142,7 +3158,8 @@ var
 begin
   VarClear(result{%H-});
   json := ObjectToJSON(Value, Options);
-  if PDocVariantData(@result)^.InitJSONInPlace(pointer(json), JSON_OPTIONS_FAST) = nil then
+  if PDocVariantData(@result)^.InitJSONInPlace(
+      pointer(json), JSON_OPTIONS_FAST) = nil then
     VarClear(result);
 end;
 
@@ -3165,7 +3182,8 @@ end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUTF8): integer;
 begin
-  result := GetValueIndex(Pointer(aName), Length(aName), dvoNameCaseSensitive in VOptions);
+  result := GetValueIndex(Pointer(aName), Length(aName),
+    dvoNameCaseSensitive in VOptions);
 end;
 
 function TDocVariantData.GetCapacity: integer;
@@ -3189,10 +3207,12 @@ end;
 
 procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
 begin
-  VOptions := (opt - [dvoIsArray, dvoIsObject]) + (VOptions * [dvoIsArray, dvoIsObject]);
+  VOptions := (opt - [dvoIsArray, dvoIsObject]) +
+              (VOptions * [dvoIsArray, dvoIsObject]);
 end;
 
-procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantKind);
+procedure TDocVariantData.Init(aOptions: TDocVariantOptions;
+  aKind: TDocVariantKind);
 begin
   aOptions := aOptions - [dvoIsArray, dvoIsObject];
   case aKind of
@@ -3213,7 +3233,8 @@ begin
   VOptions := JSON_OPTIONS_FAST;
 end;
 
-procedure TDocVariantData.InitFast(InitialCapacity: integer; aKind: TDocVariantKind);
+procedure TDocVariantData.InitFast(InitialCapacity: integer;
+  aKind: TDocVariantKind);
 begin
   InitFast;
   case aKind of
@@ -3505,7 +3526,7 @@ begin
           if JSON^ = #0 then
             exit;
         until JSON^ > ' ';
-        cap := JSONObjectPropCount(JSON); // may be slow if JSON is huge (not very common)
+        cap := JSONObjectPropCount(JSON); // slow if object is huge (uncommon)
         if cap < 0 then
           exit; // invalid content
         include(VOptions, dvoIsObject);
@@ -3568,7 +3589,8 @@ begin
   result := JSON; // indicates successfully parsed
 end;
 
-function TDocVariantData.InitJSON(const JSON: RawUTF8; aOptions: TDocVariantOptions): boolean;
+function TDocVariantData.InitJSON(const JSON: RawUTF8;
+  aOptions: TDocVariantOptions): boolean;
 var
   tmp: TSynTempBuffer;
 begin
@@ -3614,7 +3636,8 @@ begin
   InitCSV(pointer(CSV), aOptions, NameValueSep, ItemSep, DoTrim);
 end;
 
-procedure TDocVariantData.InitCopy(const SourceDocVariant: variant; aOptions: TDocVariantOptions);
+procedure TDocVariantData.InitCopy(const SourceDocVariant: variant;
+  aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
   vt: cardinal;
@@ -3823,7 +3846,8 @@ begin
   if result < 0 then
     result := InternalAdd(aName);
   VarClear(VValue[result]);
-  if not GetNumericVariantFromJSON(pointer(aValue), TVarData(VValue[result]), AllowVarDouble) then
+  if not GetNumericVariantFromJSON(pointer(aValue),
+          TVarData(VValue[result]), AllowVarDouble) then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
     else
@@ -3897,7 +3921,8 @@ function TDocVariantData.AddItemFromText(const aValue: RawUTF8;
   AllowVarDouble: boolean): integer;
 begin
   result := InternalAdd('');
-  if not GetNumericVariantFromJSON(pointer(aValue), TVarData(VValue[result]), AllowVarDouble) then
+  if not GetNumericVariantFromJSON(pointer(aValue),
+           TVarData(VValue[result]), AllowVarDouble) then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
     else
@@ -3952,7 +3977,8 @@ begin
 end;
 
 function TDocVariantData.SearchItemByProp(const aPropNameFmt: RawUTF8;
-  const aPropNameArgs: array of const; const aPropValue: RawUTF8; aPropValueCaseSensitive: boolean): integer;
+  const aPropNameArgs: array of const; const aPropValue: RawUTF8;
+  aPropValueCaseSensitive: boolean): integer;
 var
   name: RawUTF8;
 begin
@@ -4174,7 +4200,8 @@ begin
 end;
 
 procedure TDocVariantData.SortArrayByField(const aItemPropName: RawUTF8;
-  aValueCompare: TVariantCompare; aValueCompareReverse: boolean; aNameSortedCompare: TUTF8Compare);
+  aValueCompare: TVariantCompare; aValueCompareReverse: boolean;
+  aNameSortedCompare: TUTF8Compare);
 var
   QS: TQuickSortDocVariantValuesByField;
   p: pointer;
@@ -4852,7 +4879,8 @@ begin
     for ndx := 0 to VCount - 1 do
       if IdemPChar(Pointer(VName[ndx]), Up) then
       begin
-        if (dvoSerializeAsExtendedJson in VOptions) and JsonPropNameValid(pointer(VName[ndx])) then
+        if (dvoSerializeAsExtendedJson in VOptions) and
+           JsonPropNameValid(pointer(VName[ndx])) then
         begin
           W.AddNoJSONEscape(pointer(VName[ndx]), Length(VName[ndx]));
         end

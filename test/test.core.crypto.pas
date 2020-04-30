@@ -11,6 +11,7 @@ uses
   mormot.core.test,
   mormot.core.base,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.crypto,
   mormot.core.secure,
   mormot.core.jwt;
@@ -126,8 +127,10 @@ const
 begin
   Check(SingleTest('abc', D1));
   Check(SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2));
+  {$ifndef PUREMORMOT2}
   {%H-}SHA256Weak('lagrangehommage', Digest); // test with len=256>64
   Check(IsEqual(Digest, D3));
+  {$endif PUREMORMOT2}
   {$ifdef ASMX64}
   if cfSSE41 in CpuFeatures then
   begin
@@ -190,7 +193,7 @@ begin
     ks := 128 + k * 64; // test keysize of 128,192 and 256 bits
     for i := 1 to 100 do
     begin
-      {%H-}SHA256Weak(st, Key);
+      PBKDF2_HMAC_SHA256(st, 'salt', 10, Key);
       MoveFast(Key, s, 16);
       A.EncryptInit(Key, ks);
       A.Encrypt(s, b);

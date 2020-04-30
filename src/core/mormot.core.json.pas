@@ -23,9 +23,6 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  {$ifdef ISDELPHI}
-  typinfo,  // circumvent Delphi inlining problem of mormot.core.rtti methods
-  {$endif ISDELPHI}
   classes,
   contnrs,
   sysutils,
@@ -360,7 +357,7 @@ function RemoveCommentsFromJSON(const s: RawUTF8): RawUTF8; overload;
 // - returns P=nil if reached prematurely the end of content, or returns
 // the value separator (e.g. , or }) in EndOfObject (like GetJsonField)
 function GetSetNameValue(Names: PShortString; MaxValue: integer;
-  var P: PUTF8Char; out EndOfObject: AnsiChar): PtrUInt;
+  var P: PUTF8Char; out EndOfObject: AnsiChar): QWord;
 
 type
   /// points to one value of raw UTF-8 content, decoded from a JSON buffer
@@ -1056,11 +1053,11 @@ type
     function AsBytes: TByteDynArray;
     /// save all content into a TTextWriter instance
     procedure Write(W: TTextWriter; Escape: TTextWriterKind = twJSONEscape); overload;
-    /// save all content into a TFileBufferWriter instance
-    procedure WriteBinary(W: TFileBufferWriter); overload;
-    /// save all content as a string into a TFileBufferWriter instance
+    /// save all content into a TBufferWriter instance
+    procedure WriteBinary(W: TBufferWriter); overload;
+    /// save all content as a string into a TBufferWriter instance
     // - storing the length as WriteVarUInt32() prefix
-    procedure WriteString(W: TFileBufferWriter);
+    procedure WriteString(W: TBufferWriter);
     /// add another TRawByteStringGroup previously serialized via WriteString()
     procedure AddFromReader(var aReader: TFastReader);
     /// returns a pointer to Values[] containing a given position
@@ -3552,7 +3549,7 @@ begin
 end;
 
 function GetSetNameValue(Names: PShortString; MaxValue: integer;
-  var P: PUTF8Char; out EndOfObject: AnsiChar): PtrUInt;
+  var P: PUTF8Char; out EndOfObject: AnsiChar): QWord;
 var
   Text: PUTF8Char;
   WasString: boolean;
@@ -3584,7 +3581,7 @@ begin
           if MaxValue < 32 then
             result := ALLBITS_CARDINAL[MaxValue + 1]
           else
-            result := cardinal(-1);
+            result := QWord(-1);
           break;
         end;
         if Text^ in ['a'..'z'] then
@@ -3603,7 +3600,7 @@ begin
     P := ParseEndOfObject(P, EndOfObject); // mimics GetJSONField()
   end
   else
-    result := GetCardinal(GetJSONField(P, P, nil, @EndOfObject));
+    SetQWord(GetJSONField(P, P, nil, @EndOfObject), result);
 end;
 
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
@@ -3883,10 +3880,7 @@ const
 label
   Txt;
 begin
-  result := '';
-  if Format = '' then
-    exit;
-  if (high(Args) < 0) and (high(Params) < 0) then
+  if (Format = '') or ((high(Args) < 0) and (high(Params) < 0)) then
   begin // no formatting to process, but may be a const -> make unique
     FastSetString(result, pointer(Format), length(Format));
     exit; // e.g. _JsonFmt() will parse it in-place
@@ -4281,13 +4275,14 @@ procedure _JS_Set(Data: PCardinal; const Ctxt: TJsonSaveContext);
 var
   PS: PShortString;
   i: cardinal;
+  v: QWord;
   o: TTextWriterOptions;
 begin
   o := Ctxt.W.CustomOptions;
   if twoEnumSetsAsBooleanInRecord in o then
   begin
     // { "set1": true/false, .... } with proper indentation
-    PS := Ctxt.Info.Cache.EnumInfo^.NameList;
+    PS := Ctxt.Info.Cache.EnumList;
     Ctxt.W.BlockBegin('{', Ctxt.Options);
     i := 0;
     repeat
@@ -4311,7 +4306,7 @@ begin
       Ctxt.W.AddShorter('"*"')
     else
     begin
-      PS := Ctxt.Info.Cache.EnumInfo^.NameList;
+      PS := Ctxt.Info.Cache.EnumList;
       for i := 0 to Ctxt.Info.Cache.EnumMax do
       begin
         if GetBitPtr(Data, i) then
@@ -4329,7 +4324,12 @@ begin
         Ctxt.W.fBlockComment, '"*" or a set of ', true);
   end
   else
-    Ctxt.W.AddU(Data^ and Ctxt.Info.Cache.EnumMask32);
+  begin
+    // standard serialization as unsigned integer (up to 64 items)
+    v := 0;
+    MoveSmall(Data, @v, Ctxt.Info.Cache.Size);
+    Ctxt.W.AddQ(v);
+  end;
 end;
 
 procedure _JS_DynArray(Data: PPointer; const Ctxt: TJsonSaveContext);
@@ -6133,9 +6133,9 @@ end;
 
 procedure _JL_Set(Data: pointer; var Ctxt: TJsonParserContext);
 var
-  v: PtrUInt;
+  v: QWord;
 begin
-  v := GetSetNameValue(Ctxt.Info.Cache.EnumInfo.NameList,
+  v := GetSetNameValue(Ctxt.Info.Cache.EnumList,
     Ctxt.Info.Cache.EnumMax, Ctxt.JSON, Ctxt.EndOfObject);
   Ctxt.Valid := Ctxt.JSON <> nil;
   MoveSmall(@v, Data, Ctxt.Info.Size);
@@ -6591,7 +6591,7 @@ begin
   // initialize hashed storage
   FillCharFast(self, SizeOf(self), 0);
   DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray), List,
-    djRawUTF8, @Count, not aCaseSensitive);
+    ptRawUTF8, @Count, not aCaseSensitive);
 end;
 
 function TSynNameValue.Find(const aName: RawUTF8): integer;
@@ -7057,7 +7057,7 @@ begin
         W.Add(PUTF8Char(pointer(Value)), length(Value), Escape);
 end;
 
-procedure TRawByteStringGroup.WriteBinary(W: TFileBufferWriter);
+procedure TRawByteStringGroup.WriteBinary(W: TBufferWriter);
 var
   i: integer;
 begin
@@ -7066,7 +7066,7 @@ begin
       W.WriteBinary(Values[i].Value);
 end;
 
-procedure TRawByteStringGroup.WriteString(W: TFileBufferWriter);
+procedure TRawByteStringGroup.WriteString(W: TBufferWriter);
 begin
   if Values = nil then
   begin

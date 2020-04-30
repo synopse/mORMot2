@@ -280,7 +280,7 @@ type
     /// get the corresponding enumeration name
     // - return the first one if Value is invalid (>MaxValue)
     function GetEnumNameOrd(Value: cardinal): PShortString;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
     /// get the corresponding enumeration name
     // - return the first one if Value is invalid (>MaxValue)
     // - Value will be converted to the matching ordinal value (byte or word)
@@ -446,9 +446,9 @@ type
       rkFloat: (
         RttiFloat: TRttiFloat);
       rkEnumeration, rkSet: (
+        EnumMax:  cardinal;
         EnumInfo: PRttiEnumType;
-        EnumMask32: cardinal;
-        EnumMax:  cardinal);
+        EnumList: PShortString);
       rkDynArray, rkArray: (
         ItemInfo: PRttiInfo;
         ItemSize: integer;
@@ -741,7 +741,7 @@ type
     // - if Instance=nil, will work only at RTTI level, not with field or method
     // (and will return TRUE if nothing is defined in the RTTI)
     function IsStored(Instance: TObject): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
     /// return TRUE if the property is 0/nil/''/null
     function IsVoid(Instance, RttiCustom: TObject): boolean;
     /// compute in how many bytes this property is stored
@@ -2268,7 +2268,6 @@ procedure TRttiInfo.ComputeCache(out Cache: TRttiCache);
 var
   enum: PRttiEnumType;
   siz, cnt: PtrInt;
-  msk: cardinal;
 begin
   Cache.Info := @self;
   Cache.Size := RttiSize;
@@ -2296,33 +2295,30 @@ begin
           Cache.RttiVarDataVType := varCurrency;
       end;
     rkEnumeration:
-      Cache.EnumInfo := Cache.Info.EnumBaseType;
-    rkSet:
-    begin
-      enum := Cache.Info.SetEnumType;
-      Cache.EnumInfo := enum;
-      Cache.EnumMax := enum.MaxValue;
-      case Cache.Size of
-        1:
-          msk := $ff;
-        2:
-          msk := $ffff;
-      else
-        msk := $ffffffff;
+      begin
+        enum := Cache.Info.EnumBaseType;
+        Cache.EnumInfo := enum;
+        Cache.EnumMax := enum.MaxValue;
+        Cache.EnumList := enum.NameList;
       end;
-      Cache.EnumMask32 := msk; // only used for JSON Serialization
-    end;
+    rkSet:
+      begin
+        enum := Cache.Info.SetEnumType;
+        Cache.EnumInfo := enum;
+        Cache.EnumMax := enum.MaxValue;
+        Cache.EnumList := enum.NameList;
+      end;
     rkDynArray:
-    begin
-      Cache.ItemInfo := DynArrayItemType(siz);
-      Cache.ItemSize := siz;
-    end;
+      begin
+        Cache.ItemInfo := DynArrayItemType(siz);
+        Cache.ItemSize := siz;
+      end;
     rkArray:
-    begin
-      Cache.ItemInfo := ArrayItemType(cnt, siz);
-      Cache.ItemSize := siz;
-      Cache.ItemCount := cnt;
-    end;
+      begin
+        Cache.ItemInfo := ArrayItemType(cnt, siz);
+        Cache.ItemSize := siz;
+        Cache.ItemCount := cnt;
+      end;
   end;
 end;
 

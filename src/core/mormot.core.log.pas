@@ -475,8 +475,10 @@ type
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     function GetExceptionIgnoreCurrentThread: boolean;
     procedure SetExceptionIgnoreCurrentThread(aExceptionIgnoreCurrentThread: boolean);
+    {$endif NOEXCEPTIONINTERCEPT}
   public
     /// intialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
@@ -521,6 +523,7 @@ type
     // - see also ExceptionIgnoreCurrentThread property, if you want a per-thread
     // filtering of all exceptions
     property ExceptionIgnore: TList read fExceptionIgnore;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     /// allow to (temporarly) ignore exceptions in the current thread
     // - this property will affect all TSynLogFamily instances, for the
     // current thread
@@ -530,7 +533,6 @@ type
     // to this flag
     property ExceptionIgnoreCurrentThread: boolean
       read GetExceptionIgnoreCurrentThread write SetExceptionIgnoreCurrentThread;
-    {$ifndef NOEXCEPTIONINTERCEPT}
     /// you can let exceptions be ignored from a callback
     // - if set and returns true, the given exception won't be logged
     // - execution of this event handler is protected via the logs global lock
@@ -1935,7 +1937,7 @@ begin
   end;
 end;
 
-procedure WriteSymbol(var W: TFileBufferWriter; const A: TDynArray);
+procedure WriteSymbol(var W: TBufferWriter; const A: TDynArray);
 var
   i, n: integer;
   Diff: integer;
@@ -1970,12 +1972,12 @@ end;
 
 procedure TSynMapFile.SaveToStream(aStream: TStream);
 var
-  W: TFileBufferWriter;
+  W: TBufferWriter;
   i: integer;
   MS: TMemoryStream;
 begin
   MS := TMemoryStream.Create;
-  W := TFileBufferWriter.Create(MS, 1 shl 20); // 1 MB should be enough at first
+  W := TBufferWriter.Create(MS, 1 shl 20); // 1 MB should be enough at first
   try
     WriteSymbol(W, fSymbols);
     WriteSymbol(W, fUnits{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif});
@@ -2488,6 +2490,8 @@ begin
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS    {$ifndef FPC}, sllError, sllFail, sllLastError, sllDDDError{$endif}];
 end;
 
+{$ifndef NOEXCEPTIONINTERCEPT}
+
 function TSynLogFamily.GetExceptionIgnoreCurrentThread: boolean;
 begin
   result := ExceptionIgnorePerThread;
@@ -2497,6 +2501,8 @@ procedure TSynLogFamily.SetExceptionIgnoreCurrentThread(aExceptionIgnoreCurrentT
 begin
   ExceptionIgnorePerThread := aExceptionIgnoreCurrentThread;
 end;
+
+{$endif NOEXCEPTIONINTERCEPT}
 
 function TSynLogFamily.CreateSynLog: TSynLog;
 begin

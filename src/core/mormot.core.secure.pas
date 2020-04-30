@@ -22,7 +22,6 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  classes,
   sysutils,
   mormot.core.base,
   mormot.core.os,
@@ -242,7 +241,7 @@ type
     fIP4: TIntegerDynArray;
     fCount: integer;
     procedure LoadFromReader; override;
-    procedure SaveToWriter(aWriter: TFileBufferWriter); override;
+    procedure SaveToWriter(aWriter: TBufferWriter); override;
   public
     /// register one IP to the list
     function Add(const aIP: RawUTF8): boolean;
@@ -1275,7 +1274,7 @@ begin
   fCount := length(fIP4);
 end;
 
-procedure TIPBan.SaveToWriter(aWriter: TFileBufferWriter);
+procedure TIPBan.SaveToWriter(aWriter: TBufferWriter);
 begin // wkSorted not efficient: too big diffs between IPs
   aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
 end;
@@ -1335,7 +1334,7 @@ end;
 function TIPBan.DynArrayLocked: TDynArray;
 begin
   fSafe.Lock;
-  result.InitSpecific(TypeInfo(TCardinalDynArray), fIP4, djCardinal, @fCount);
+  result.InitSpecific(TypeInfo(TCardinalDynArray), fIP4, ptCardinal, @fCount);
 end;
 
 

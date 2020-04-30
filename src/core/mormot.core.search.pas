@@ -483,7 +483,7 @@ type
     // - may be used to transmit or store the state of a dataset, avoiding
     // to recompute all Insert() at program startup, or to synchronize
     // networks nodes information and reduce the number of remote requests
-    procedure SaveTo(aDest: TFileBufferWriter;
+    procedure SaveTo(aDest: TBufferWriter;
       aMagic: cardinal = $B1003F11); overload;
     /// read the internal bits array from a binary buffer
     // - as previously serialized by the SaveTo method
@@ -575,7 +575,7 @@ type
 // - use ZeroDecompress() to expand the compressed result
 // - resulting content would be at most 14 bytes bigger than the input
 // - you may use this function before SynLZ compression
-procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
+procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TBufferWriter);
 
 /// RLE uncompression of a memory buffer containing mostly zeros
 // - returns Dest='' if P^ is not a valid ZeroCompress() function result
@@ -589,7 +589,7 @@ procedure ZeroDecompress(P: PByte; Len: integer; var Dest: RawByteString);
 // - is used  e.g. by TSynBloomFilterDiff.SaveToDiff() in incremental mode
 // - will also compute the crc32c of the supplied content
 procedure ZeroCompressXor(New, Old: PAnsiChar; Len: cardinal;
-  Dest: TFileBufferWriter);
+  Dest: TBufferWriter);
 
 /// RLE uncompression and ORing of a memory buffer containing mostly zeros
 // - will perform Dest^ := Dest^ or ZeroDecompress(P^) without any temporary
@@ -952,8 +952,7 @@ begin
       pat := patretry;
       continue;
     end;
-fin:
-    result := false;
+fin:result := false;
     exit;
   until false;
   result := true;
@@ -1028,8 +1027,7 @@ begin
   repeat
     if up[t^] <> first then
     begin
-next:
-      inc(t);
+next: inc(t);
       if t < tend then
         continue
       else
@@ -1889,18 +1887,17 @@ end;
 
 function SoundExComputeFirstCharAnsi(var p: PAnsiChar): cardinal;
 label
-  Err;
+  err;
 begin
   if p = nil then
   begin
-Err:
-    result := 0;
+err:result := 0;
     exit;
   end;
   repeat
     result := NormToUpperByte[ord(p^)]; // also handle 8 bit WinAnsi (CP 1252)
     if result = 0 then
-      goto Err; // end of input text, without a word
+      goto err; // end of input text, without a word
     inc(p);
     // trim initial spaces or 'H'
   until AnsiChar(result) in ['A'..'G', 'I'..'Z'];
@@ -1934,18 +1931,17 @@ end;
 
 function SoundExComputeFirstCharUTF8(var U: PUTF8Char): cardinal;
 label
-  Err;
+  err;
 begin
   if U = nil then
   begin
-Err:
-    result := 0;
+err:result := 0;
     exit;
   end;
   repeat
     result := GetNextUTF8Upper(U);
     if result = 0 then
-      goto Err; // end of input text, without a word
+      goto err; // end of input text, without a word
     // trim initial spaces or 'H'
   until AnsiChar(result) in ['A'..'G', 'I'..'Z'];
 end;
@@ -2648,15 +2644,15 @@ end;
 
 function TSynBloomFilter.SaveTo(aMagic: cardinal): RawByteString;
 var
-  W: TFileBufferWriter;
+  W: TBufferWriter;
   BufLen: integer;
   temp: array[word] of byte;
 begin
   BufLen := length(fStore) + 100;
   if BufLen <= SizeOf(temp) then
-    W := TFileBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
+    W := TBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
   else
-    W := TFileBufferWriter.Create(TRawByteStringStream, BufLen);
+    W := TBufferWriter.Create(TRawByteStringStream, BufLen);
   try
     SaveTo(W, aMagic);
     W.Flush;
@@ -2666,7 +2662,7 @@ begin
   end;
 end;
 
-procedure TSynBloomFilter.SaveTo(aDest: TFileBufferWriter; aMagic: cardinal);
+procedure TSynBloomFilter.SaveTo(aDest: TBufferWriter; aMagic: cardinal);
 begin
   aDest.Write4(aMagic);
   aDest.Write1(BLOOM_VERSION);
@@ -2788,7 +2784,7 @@ end;
 function TSynBloomFilterDiff.SaveToDiff(const aKnownRevision: Int64): RawByteString;
 var
   head: TBloomDiffHeader;
-  W: TFileBufferWriter;
+  W: TBufferWriter;
   temp: array[word] of byte;
 begin
   Safe.Lock;
@@ -2817,9 +2813,9 @@ begin
       exit;
     end;
     if head.size + 100 <= SizeOf(temp) then
-      W := TFileBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
+      W := TBufferWriter.Create(TRawByteStringStream, @temp, SizeOf(temp))
     else
-      W := TFileBufferWriter.Create(TRawByteStringStream, head.size + 100);
+      W := TBufferWriter.Create(TRawByteStringStream, head.size + 100);
     try
       W.Write(@head, SizeOf(head));
       case head.kind of
@@ -2887,7 +2883,7 @@ begin
   end;
 end;
 
-procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
+procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TBufferWriter);
 var
   PEnd, beg, zero: PAnsiChar;
   crc: cardinal;
@@ -2925,7 +2921,7 @@ begin
   Dest.Write4(crc);
 end;
 
-procedure ZeroCompressXor(New, Old: PAnsiChar; Len: cardinal; Dest: TFileBufferWriter);
+procedure ZeroCompressXor(New, Old: PAnsiChar; Len: cardinal; Dest: TBufferWriter);
 var
   beg, same, index, crc, L: cardinal;
 begin
