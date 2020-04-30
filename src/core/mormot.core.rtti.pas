@@ -4763,6 +4763,8 @@ begin
     exit;
   all := RecordInfo^.RecordAllFields(dummy);
   Clear;
+  if all = nil then
+    exit;
   Count := length(all);
   SetLength(List, Count);
   f := pointer(all);

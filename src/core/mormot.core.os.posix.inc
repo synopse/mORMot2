@@ -1029,7 +1029,7 @@ function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
   si: TSysInfo; // Linuxism
   P: PUTF8Char;
-  mu: cardinal;
+  mu: PtrUInt;
 begin
   FillCharFast(info, SizeOf(info), 0);
   result := SysInfo(@si) = 0;
@@ -1091,15 +1091,15 @@ begin
        not IdemPChars(fs, ['/DEV/LOOP']) and
        (mnt <> '') and (mnt <> '/mnt') and (typ <> '') and
        not IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) and
-       not IdemPChars(typ, ['autofs', 'proc', 'subfs', 'debugfs', 'devpts',
-        'fusectl', 'mqueue', 'rpc-pipefs', 'sysfs', 'devfs', 'kernfs',
-        'ignore', 'none', 'tmpfs', 'securityfs', 'ramfs', 'rootfs', 'devtmpfs',
-        'hugetlbfs', 'iso9660']) then
+       not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS', 'DEVPTS',
+        'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
+        'IGNORE', 'NONE', 'TMPFS', 'SECURITYFS', 'RAMFS', 'ROOTFS', 'DEVTMPFS',
+        'HUGETLBFS', 'ISO9660']) then
     begin
       fn := mnt;
       if GetDiskInfo(fn, av, fr, tot) and (tot > 1 shl 20) then
       begin
-//writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
+  //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         SetLength(result, n + 1);
         result[n].name := fs;
         result[n].mounted := fn;
@@ -1107,6 +1107,7 @@ begin
         inc(n);
       end;
     end;
+    p := GotoNextLine(p);
   until p = nil;
 end;
 

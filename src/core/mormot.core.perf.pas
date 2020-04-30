@@ -772,7 +772,8 @@ type
     destructor Destroy; override;
     /// some text corresponding to current 'free/total' memory information
     // - returns e.g. '10.3 GB / 15.6 GB'
-    class function FreeAsText(nospace: boolean = false): ShortString;
+    class function FreeAsText(nospace: boolean = false;
+      processfree: PRawUTF8 = nil): ShortString;
     /// how many physical memory is currently installed, as text (e.g. '32 GB');
     class function PhysicalAsText(nospace: boolean = false): TShort16;
     /// returns a JSON object with the current system memory information
@@ -1751,15 +1752,19 @@ end;
 
 function SystemInfoJson: RawUTF8;
 var
-  cpu, mem: RawUTF8;
+  cpu, mem, free: RawUTF8;
 begin
   cpu := TSystemUse.Current(false).HistoryText(0, 15, @mem);
+  if mem = '' then
+    free := TSynMonitorMemory.FreeAsText(false, @mem)
+  else
+    free := TSynMonitorMemory.FreeAsText;
   with SystemInfo do
     result := JSONEncode(['host', ExeVersion.Host, 'user', ExeVersion.User,
       'os', OSVersionText, 'cpu', CpuInfoText, 'bios', BiosInfoText,
       {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64', IsWow64, {$endif}{$endif MSWINDOWS}
       {$ifdef CPUINTEL}'cpufeatures', CpuFeaturesText, {$endif}
-      'processcpu', cpu, 'processmem', mem, 'freemem', TSynMonitorMemory.FreeAsText,
+      'processcpu', cpu, 'processmem', mem, 'freemem', free,
       'disk', GetDiskPartitionsText(false, true)]);
 end;
 
@@ -2092,7 +2097,7 @@ begin
   begin
     _DiskPartitions := GetDiskPartitions;
     {$ifndef MSWINDOWS}
-    DynArray(TypeInfo(TDiskPartitions),result).Sort(SortDynArrayDiskPartitions);
+    DynArray(TypeInfo(TDiskPartitions), _DiskPartitions).Sort(SortDynArrayDiskPartitions);
     {$endif MSWINDOWS}
   end;
   parts := _DiskPartitions;
@@ -2132,7 +2137,8 @@ begin
   inherited Destroy;
 end;
 
-class function TSynMonitorMemory.FreeAsText(nospace: boolean): ShortString;
+class function TSynMonitorMemory.FreeAsText(nospace: boolean;
+  processfree: PRawUTF8): ShortString;
 const
   F: array[boolean] of RawUTF8 = ('% / %', '%/%');
 begin
@@ -2140,6 +2146,8 @@ begin
   try
     RetrieveMemoryInfo;
     FormatShort(F[nospace], [fPhysicalMemoryFree.Text, fPhysicalMemoryTotal.Text], result);
+    if processfree <> nil then
+      FormatUTF8(F[noSpace], [fAllocatedUsed.Text, FAllocatedReserved.Text], processfree^);
   finally
     Free;
   end;
@@ -2324,6 +2332,7 @@ begin
 end;
 
 
+initialization
 
 finalization
   ProcessSystemUse.Free;
