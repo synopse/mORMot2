@@ -27,6 +27,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.unicode,
   mormot.core.text;
 
 
@@ -1372,6 +1373,89 @@ type
     property Count: integer read fCount;
   end;
   {$M-}
+
+
+/// fast add some characters to a RawUTF8 string
+// - faster than SetString(tmp,Buffer,BufferLen); Text := Text+tmp;
+procedure AppendBufferToRawUTF8(var Text: RawUTF8; Buffer: pointer; BufferLen: PtrInt);
+
+/// fast add one character to a RawUTF8 string
+// - faster than Text := Text + ch;
+procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
+
+/// fast add some characters to a RawUTF8 string
+// - faster than Text := Text+RawUTF8(Buffers[0])+RawUTF8(Buffers[0])+...
+procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
+
+/// fast add some characters from a RawUTF8 string into a given buffer
+// - warning: the Buffer should contain enough space to store the Text, otherwise
+// you may encounter buffer overflows and random memory errors
+function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
+
+/// fast add text conversion of a 32-bit signed integer value into a given buffer
+// - warning: the Buffer should contain enough space to store the text, otherwise
+// you may encounter buffer overflows and random memory errors
+function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+
+const
+  /// can be used to append to most English nouns to form a plural
+  // - as used by the Plural() function
+  PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
+
+/// write count number and append 's' (if needed) to form a plural English noun
+// - for instance, Plural('row',100) returns '100 rows' with no heap allocation
+function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
+
+/// fast conversion from binary data to escaped text
+// - non printable characters will be written as $xx hexadecimal codes
+// - will be #0 terminated, with '...' characters trailing on overflow
+// - ensure the destination buffer contains at least max*3+3 bytes, which is
+// always the case when using LogEscape() and its local TLogEscape variable
+function EscapeBuffer(s,d: PAnsiChar; len,max: integer): PAnsiChar;
+
+const
+  /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
+  LOGESCAPELEN = 200;
+
+type
+  /// buffer to be allocated on stack when using LogEscape()
+  TLogEscape = array[0..LOGESCAPELEN * 3 + 5] of AnsiChar;
+
+/// fill TLogEscape stack buffer with the (hexadecimal) chars of the input binary
+// - up to LOGESCAPELEN (i.e. 200) bytes will be escaped and appended to a
+// Local temp: TLogEscape variable, using the EscapeBuffer() low-level function
+// - you can then log the resulting escaped text by passing the returned
+// PAnsiChar as % parameter to a TSynLog.Log() method
+// - the "enabled" parameter can be assigned from a process option, avoiding to
+// process the escape if verbose logs are disabled
+// - used e.g. to implement logBinaryFrameContent option for WebSockets
+function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
+  enabled: boolean = true): PAnsiChar;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// returns a text buffer with the (hexadecimal) chars of the input binary
+// - is much slower than LogEscape/EscapeToShort, but has no size limitation
+function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUTF8; overload;
+
+/// returns a text buffer with the (hexadecimal) chars of the input binary
+// - is much slower than LogEscape/EscapeToShort, but has no size limitation
+function LogEscapeFull(const source: RawByteString): RawUTF8; overload;
+
+/// fill a shortstring with the (hexadecimal) chars of the input text/binary
+function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; overload;
+
+/// fill a shortstring with the (hexadecimal) chars of the input text/binary
+function EscapeToShort(const source: RawByteString): shortstring; overload;
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached
+// - returns the number of bytes written to Bin^
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+function OctToBin(const Oct: RawUTF8): RawByteString; overload;
 
 
 /// get text File contents (even Unicode or UTF8) and convert it into a
@@ -6436,6 +6520,244 @@ begin
   dec(fCount, fAppendedLinesCount);
   fAppendedLinesCount := 0;
   fAppendedLines := nil;
+end;
+
+
+procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  SetLength(Text, L + 1); // reallocate
+  PByteArray(Text)[L] := ord(Ch);
+end;
+
+procedure AppendBufferToRawUTF8(var Text: RawUTF8; Buffer: pointer; BufferLen: PtrInt);
+var
+  L: PtrInt;
+begin
+  if BufferLen <= 0 then
+    exit;
+  L := length(Text);
+  SetLength(Text, L + BufferLen);
+  MoveFast(Buffer^, pointer(PtrInt(Text) + L)^, BufferLen);
+end;
+
+procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
+var
+  i, len, TextLen: PtrInt;
+  lens: array[0..63] of integer;
+  P: PUTF8Char;
+begin
+  if high(Buffers) > high(lens) then
+    raise ESynException.Create('Too many params in AppendBuffersToRawUTF8()');
+  len := 0;
+  for i := 0 to high(Buffers) do
+  begin
+    lens[i] := StrLen(Buffers[i]);
+    inc(len, lens[i]);
+  end;
+  TextLen := Length(Text);
+  SetLength(Text, TextLen + len);
+  P := pointer(Text);
+  inc(P, TextLen);
+  for i := 0 to high(Buffers) do
+    if Buffers[i] <> nil then
+    begin
+      MoveFast(Buffers[i]^, P^, {%H-}lens[i]);
+      inc(P, lens[i]);
+    end;
+end;
+
+function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  if L <> 0 then
+  begin
+    MoveFast(Pointer(Text)^, Buffer^, L);
+    inc(Buffer, L);
+  end;
+  result := Buffer;
+end;
+
+function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+var
+  L: PtrInt;
+  P: PAnsiChar;
+  tmp: array[0..23] of AnsiChar;
+begin
+  if Value <= high(SmallUInt32UTF8) then
+  begin
+    P := pointer(SmallUInt32UTF8[Value]);
+    L := PStrLen(P - _STRLEN)^;
+  end
+  else
+  begin
+    P := StrUInt32(@tmp[23], Value);
+    L := @tmp[23] - P;
+  end;
+  MoveSmall(P, Buffer, L);
+  result := Buffer + L;
+end;
+
+function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
+var
+  len, L: PtrInt;
+begin
+  len := (AppendUInt32ToBuffer(@result[1], itemcount) - PUTF8Char(@result[1])) + 1;
+  result[len] := ' ';
+  L := ord(itemname[0]);
+  if L in [1..240] then
+  begin // avoid buffer overflow
+    MoveSmall(@itemname[1], @result[len + 1], L);
+    inc(len, L);
+    if itemcount > 1 then
+    begin
+      inc(len);
+      result[len] := 's';
+    end;
+  end;
+  result[0] := AnsiChar(len);
+end;
+
+function EscapeBuffer(s, d: PAnsiChar; len, max: integer): PAnsiChar;
+var
+  c: AnsiChar;
+  tab: PWordArray;
+begin
+  if (len > 0) and (max > 0) then
+  begin
+    if len > max then
+      len := max
+    else
+      max := 0; // indicates not truncated
+    tab := @TwoDigitsHexWBLower;
+    repeat
+      c := s^;
+      inc(s);
+      if (c >= ' ') and (c <= #126) then
+      begin
+        d^ := c;
+        inc(d);
+      end
+      else
+      begin
+        d^ := '$';
+        inc(d);
+        PWord(d)^ := tab[ord(c)];
+        inc(d, 2);
+      end;
+      dec(len);
+    until len = 0;
+    if max <> 0 then // mark truncated
+    begin
+      PCardinal(d)^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
+      inc(d, 3);
+    end;
+  end;
+  d^ := #0;
+  result := d;
+end;
+
+function LogEscape(source: PAnsiChar; sourcelen: integer;
+  var temp: TLogEscape; enabled: boolean): PAnsiChar;
+begin
+  if enabled then
+  begin
+    temp[0] := ' ';
+    EscapeBuffer(source, @temp[1], sourcelen, LOGESCAPELEN);
+  end
+  else
+    temp[0] := #0;
+  result := @temp;
+end;
+
+function LogEscapeFull(const source: RawByteString): RawUTF8;
+begin
+  result := LogEscapeFull(pointer(source), length(source));
+end;
+
+function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUTF8;
+begin
+  FastSetString(result, nil, sourcelen * 3); // worse case
+  if sourcelen = 0 then
+    exit;
+  sourcelen := EscapeBuffer(source, pointer(result), sourcelen, sourcelen * 3) - pointer(result);
+  SetLength(result, sourcelen);
+end;
+
+function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring;
+begin
+  result[0] := AnsiChar(EscapeBuffer(source,
+    @result[1], sourcelen, 80) - @result[1]);
+end;
+
+function EscapeToShort(const source: RawByteString): shortstring;
+begin
+  result[0] := AnsiChar(EscapeBuffer(pointer(source),
+    @result[1], length(source), 80) - @result[1]);
+end;
+
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt;
+var
+  c, v: byte;
+label
+  _nxt;
+begin
+  result := PtrInt(Bin);
+  if Oct <> nil then
+    repeat
+      c := ord(Oct^);
+      inc(Oct);
+      if c <> ord('\') then
+      begin
+        if c = 0 then
+          break;
+_nxt:   Bin^ := c;
+        inc(Bin);
+        continue;
+      end;
+      c := ord(Oct^);
+      inc(Oct);
+      if c = ord('\') then
+        goto _nxt;
+      dec(c, ord('0'));
+      if c > 3 then
+        break; // stop at malformated input (includes #0)
+      c := c shl 6;
+      v := c;
+      c := ord(Oct[0]);
+      dec(c, ord('0'));
+      if c > 7 then
+        break;
+      c := c shl 3;
+      v := v or c;
+      c := ord(Oct[1]);
+      dec(c, ord('0'));
+      if c > 7 then
+        break;
+      c := c or v;
+      Bin^ := c;
+      inc(Bin);
+      inc(Oct, 2);
+    until false;
+  result := PtrUInt(Bin)-PtrUInt(result);
+end;
+
+function OctToBin(const Oct: RawUTF8): RawByteString;
+var
+  tmp: TSynTempBuffer;
+  L: integer;
+begin
+  tmp.Init(length(Oct));
+  try
+    L := OctToBin(pointer(Oct), tmp.buf);
+    SetString(result, PAnsiChar(tmp.buf), L);
+  finally
+    tmp.Done;
+  end;
 end;
 
 

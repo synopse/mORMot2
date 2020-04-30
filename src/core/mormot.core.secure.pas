@@ -27,6 +27,7 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.rtti,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.buffers,

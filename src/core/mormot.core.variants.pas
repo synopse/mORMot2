@@ -26,6 +26,7 @@ uses
   sysutils,
   variants,
   mormot.core.base,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.data, // already included in mormot.core.json
   mormot.core.json;

@@ -39,7 +39,6 @@ uses
   sysutils;
 
 
-
 { ************ Framework Version and Information }
 
 const
@@ -609,6 +608,16 @@ procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
 // - if UTF8 is a constant (refcount=-1), will create a temporary copy in heap
 function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// direct conversion of an ANSI-7 shortstring into an AnsiString
+// - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
+function ShortStringToAnsi7String(const source: shortstring): RawByteString; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// direct conversion of an ANSI-7 shortstring into an AnsiString
+// - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
+procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8); overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// just a wrapper around vmtClassName to avoid a string conversion
 function ClassNameShort(C: TClass): PShortString; overload;
@@ -3495,6 +3504,16 @@ begin
   UniqueString(UTF8); // @UTF8[1] won't call UniqueString() under FPC :(
   {$endif FPC}
   result := @UTF8[1];
+end;
+
+function ShortStringToAnsi7String(const source: shortstring): RawByteString;
+begin
+  FastSetString(RawUTF8(result), @source[1], ord(source[0]));
+end;
+
+procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8);
+begin
+  FastSetString(result, @source[1], ord(source[0]));
 end;
 
 function ClassNameShort(C: TClass): PShortString;

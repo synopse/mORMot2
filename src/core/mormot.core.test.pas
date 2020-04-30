@@ -22,7 +22,9 @@ uses
   mormot.core.base,
   mormot.core.data,
   mormot.core.os,
+  mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.perf,
   mormot.core.log;
 

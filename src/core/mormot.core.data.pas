@@ -31,6 +31,7 @@ uses
   mormot.core.os,
   mormot.core.rtti,
   mormot.core.datetime,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers;
 

@@ -30,6 +30,7 @@ uses
   contnrs,
   sysutils,
   mormot.core.base,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.rtti,
   mormot.core.buffers,

@@ -40,6 +40,7 @@ uses
   typinfo,  // use official RTL for accurate layouts (especially FPC)
   mormot.core.base,
   mormot.core.os,
+  mormot.core.unicode,
   mormot.core.text; // ESynException, and text process (e.g. for enums)
 
 

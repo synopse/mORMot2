@@ -25,6 +25,7 @@ uses
   types,
   sysutils,
   mormot.core.base,
+  mormot.core.unicode,
   mormot.core.text;
 
   

@@ -21,14 +21,12 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  Classes, 
-  Contnrs,
-  Types, 
-  SysUtils, 
+  sysutils,
   mormot.core.base,
   mormot.core.os,
   mormot.core.data,
   mormot.core.rtti,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.variants,
   mormot.core.json;
