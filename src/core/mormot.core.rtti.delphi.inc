@@ -262,7 +262,8 @@ begin
   with PPropInfo(@self)^ do
   begin
     if GetProc = nil then
-    begin // no 'read' was defined -> try from 'write' field
+    begin
+      // no 'read' was defined -> try from 'write' field
       if (SetProc <> nil) and (PropWrap(SetProc).Kind = ptField) then
       begin
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
@@ -275,15 +276,18 @@ begin
     else
     case PropWrap(GetProc).Kind of
       ptField:
-        begin  // GetProc is an offset to the instance fields
+        begin
+          // GetProc is an offset to the instance fields
           Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
           result := rpcField;
           exit;
         end;
-      ptVirtual: // GetProc is an offset to the class VMT
+      ptVirtual:
+        // GetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from GetterCall()
           Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(GetProc) and $00ffffff)^;
-    else // ptStatic: GetProc is the method code itself
+    else
+      // ptStatic: GetProc is the method code itself
       Call.Code := pointer(GetProc);
     end;
     Call.Data := Instance;
@@ -298,7 +302,8 @@ begin
   with PPropInfo(@self)^ do
   begin
     if SetProc = nil then
-    begin // no 'write' was defined -> try from 'read' field
+    begin
+      // no 'write' was defined -> try from 'read' field
       if (GetProc <> nil) and (PropWrap(GetProc).Kind = ptField) then
       begin
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
@@ -310,15 +315,18 @@ begin
     end else
     case PropWrap(SetProc).Kind of
       ptField:
-        begin  // SetProc is an offset to the instance fields
+        begin
+          // SetProc is an offset to the instance fields
           Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
           result := rpcField;
           exit;
         end;
-      ptVirtual: // SetProc is an offset to the class VMT
+      ptVirtual:
+        // SetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from SetterCall()
           Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(SetProc) and $00ffffff)^;
-    else // ptStatic: SetProc is the method code itself
+    else
+      // ptStatic: SetProc is the method code itself
       Call.Code := pointer(SetProc);
     end;
     Call.Data := Instance;

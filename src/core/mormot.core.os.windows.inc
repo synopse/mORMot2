@@ -854,9 +854,7 @@ var
 {$endif}
 var
   global: TMemoryStatusEx;
-{$ifdef FPC}
   mem: TProcessMemoryCounters;
-{$endif FPC}
 begin
   FillCharFast(global, SizeOf(global), 0);
   global.dwLength := SizeOf(global);
@@ -868,16 +866,8 @@ begin
   info.filefree := global.ullAvailPageFile;
   info.vmtotal := global.ullTotalVirtual;
   info.vmfree := global.ullAvailVirtual;
-{$ifdef FPC} // GetHeapStatus is only about current thread -> use WinAPI
-  if withalloc and Assigned(GetProcessMemoryInfo) then
-  begin
-    FillcharFast(mem, SizeOf(mem), 0);
-    mem.cb := SizeOf(mem);
-    GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
-    info.allocreserved := mem.PeakWorkingSetSize;
-    info.allocused := mem.WorkingSetSize;
-  end;
-{$endif FPC}
+  info.allocreserved := 0;
+  info.allocused := 0;
 {$ifdef WITH_FASTMM4STATS} // override OS information by actual FastMM4
   if withalloc then
   begin
@@ -893,6 +883,15 @@ begin
         inc(info.allocreserved, ReservedAddressSpace);
       end;
   end;
+{$else}
+  if withalloc and Assigned(GetProcessMemoryInfo) then
+  begin
+    FillcharFast(mem, SizeOf(mem), 0);
+    mem.cb := SizeOf(mem);
+    GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
+    info.allocreserved := mem.PeakWorkingSetSize;
+    info.allocused := mem.WorkingSetSize;
+  end;
 {$endif WITH_FASTMM4STATS}
 end;
 
@@ -901,11 +900,11 @@ function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
   lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
 
 {
+// DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root -> not used
 function DeviceIoControl(hDevice: THandle; dwIoControlCode: DWORD;
   lpInBuffer: Pointer; nInBufferSize: DWORD; lpOutBuffer: Pointer;
   nOutBufferSize: DWORD; var lpBytesReturned: DWORD;
   lpOverlapped: POverlapped): BOOL; stdcall; external kernel32;
- // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root -> not used
 }
 
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
@@ -940,7 +939,7 @@ var
 begin
   result := nil;
   n := 0;
-  fn := '#:\';
+  fn := '#:';
   drives := GetLogicalDrives;
   m := 1 shl 2;
   for drive := 3 to 26 do
@@ -1437,6 +1436,19 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall
   external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
+procedure TrimSpaces(var s: RawUTF8);
+var
+  i: integer;
+begin
+  repeat
+    i := PosEx('  ', s);
+    if i = 0 then
+      break;
+    delete(s, i, 1);
+  until false;
+  s := Trim(s);
+end;
+
 procedure InitializeUnit;
 var
   h: THandle;
@@ -1610,5 +1622,9 @@ begin
   cpu := Trim(cpu);
   CpuInfoText := RawUTF8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu]));
+  TrimSpaces(OSVersionText);
+  TrimSpaces(OSVersionInfoEx);
+  TrimSpaces(BiosInfoText);
+  TrimSpaces(CpuInfoText);
 end;
 

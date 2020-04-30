@@ -856,7 +856,7 @@ function GetTypeData(TypeInfo: pointer): PTypeData; inline;
 
 {$endif HASINLINE}
 
-{$ifdef ISDELPHI }// Delphi requires those definitions for proper inlining
+{$ifdef ISDELPHI}// Delphi requires those definitions for proper inlining
 
 const
   NO_INDEX = longint($80000000);
@@ -956,6 +956,11 @@ function GetPublishedMethods(Instance: TObject;
 
 
 { *************** Enumerations RTTI }
+
+/// helper to retrieve low-level RTTI information of an enumeration type
+// - just a wrapper around
+// $ PRttiInfo(aTypeInfo)^.EnumBaseType(List, result);
+function GetEnumType(aTypeInfo: pointer; out List: PShortString): integer;
 
 /// helper to retrieve the text of an enumerate item
 // - just a wrapper around
@@ -3380,6 +3385,15 @@ end;
 
 
 { *************** Enumerations RTTI }
+
+function GetEnumType(aTypeInfo: pointer; out List: PShortString): integer;
+begin
+  with PRttiInfo(aTypeInfo)^.EnumBaseType^ do
+  begin
+    List := NameList;
+    result := MaxValue;
+  end;
+end;
 
 procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
 var

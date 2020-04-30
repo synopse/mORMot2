@@ -257,16 +257,19 @@ begin
     else
     case integer(PropProcs) and 3 of // bits 0..1 = GetProc
       ptField:
-        begin  // GetProc is an offset to the instance fields
+        begin
+          // GetProc is an offset to the instance fields
           Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc));
           exit(rpcField);
         end;
-      ptVirtual: // GetProc is an offset to the class VMT
+      ptVirtual:
+        // GetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from GetterCall()
           Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(GetProc))^;
       ptConst:
         exit(rpcNone);
-    else // ptStatic: GetProc is the method code itself
+    else
+      // ptStatic: GetProc is the method code itself
       Call.Code := GetProc;
     end;
     Call.Data := Instance;
@@ -292,16 +295,19 @@ begin
     else
     case (integer(PropProcs) shr 2) and 3 of // bits 2..3 = SetProc
       ptField:
-        begin  // SetProc is an offset to the instance fields
+        begin
+          // SetProc is an offset to the instance fields
           Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc));
           exit(rpcField);
         end;
-      ptVirtual: // SetProc is an offset to the class VMT
+      ptVirtual:
+        // SetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from SetterCall()
           Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(SetProc))^;
       ptConst:
         exit(rpcNone);
-    else // ptStatic: SetProc is the method code itself
+    else
+      // ptStatic: SetProc is the method code itself
       Call.Code := SetProc;
     end;
     Call.Data := Instance;

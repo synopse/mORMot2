@@ -1720,10 +1720,9 @@ function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
 var
   f: TIntelCpuFeature;
   List: PShortString;
-  MaxValue: integer;
 begin
   result := '';
-  PRttiInfo(TypeInfo(TIntelCpuFeature))^.EnumBaseType(List, MaxValue);
+  GetEnumType(TypeInfo(TIntelCpuFeature), List);
   for f := low(f) to high(f) do
   begin
     if (f in aIntelCPUFeatures) and (List^[3] <> '_') then
@@ -2066,30 +2065,21 @@ var
   _DiskPartitions: TDiskPartitions;
 
 function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUTF8;
-const
-  {$ifdef MSWINDOWS}
-  F: array[boolean] of RawUTF8 = ('%: % (% / %)', '%: % (%/%)');
-  {$else}
-  F: array[boolean] of RawUTF8 = ('% % (% / %)', '% % (%/%)');
-  {$endif MSWINDOWS}
 var
   i: integer;
   parts: TDiskPartitions;
 
   function GetInfo(var p: TDiskPartition): shortstring;
+  const
+    F: array[boolean] of RawUTF8 = ('% % (% / %)', '% % (%/%)');
   var
     av, fr, tot: QWord;
   begin
     if not withfreespace or not GetDiskInfo(p.mounted, av, fr, tot) then
-    {$ifdef MSWINDOWS}
-      FormatShort('%: % (%)', [p.mounted[1], p.name, KB(p.size, nospace)], result)
-    else
-      FormatShort(F[nospace], [p.mounted[1], p.name, KB(p.size, nospace)], result);
-    {$else}
       FormatShort('% % (%)', [p.mounted, p.name, KB(p.size, nospace)], result)
     else
-      FormatShort(F[nospace], [p.mounted, p.name, KB(fr, nospace), KB(tot, nospace)], result);
-    {$endif MSWINDOWS}
+      FormatShort(F[nospace],
+        [p.mounted, p.name, KB(fr, nospace), KB(tot, nospace)], result);
   end;
 
 begin
