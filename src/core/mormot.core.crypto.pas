@@ -14,7 +14,6 @@ unit mormot.core.crypto;
     - HMAC Authentication over SHA and CRC32C
     - PBKDF2 Key Derivation over SHA and CRC32C
     - Digest/Hash to Hexadecimal Text Conversion
-    - IProtocol Safe Communication with Unilateral or Mutual Authentication
     - Deprecated MD5 RC4 SHA-1 Algorithms
     - Deprecated Weak AES/SHA Process
 
@@ -2033,110 +2032,6 @@ function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
 
 
 
-{ ****** IProtocol Safe Communication with Unilateral or Mutual Authentication }
-
-type
-  /// possible return codes by IProtocol classes
-  TProtocolResult = (
-    sprSuccess, sprBadRequest, sprUnsupported, sprUnexpectedAlgorithm,
-    sprInvalidCertificate, sprInvalidSignature, sprInvalidEphemeralKey,
-    sprInvalidPublicKey, sprInvalidPrivateKey, sprInvalidMAC);
-
-  /// perform safe communication after unilateral or mutual authentication
-  // - see e.g. TProtocolNone or SynEcc's TECDHEProtocolClient and
-  // TECDHEProtocolServer implementation classes
-  IProtocol = interface
-    ['{91E3CA39-3AE2-44F4-9B8C-673AC37C1D1D}']
-    /// initialize the communication by exchanging some client/server information
-    // - expects the handshaking messages to be supplied as UTF-8 text, may be as
-    // base64-encoded binary - see e.g. TWebSocketProtocolBinary.ProcessHandshake
-    // - should return sprUnsupported if the implemented protocol does not
-    // expect any handshaking mechanism
-    // - returns sprSuccess and set something into OutData, depending on the
-    // current step of the handshake
-    // - returns an error code otherwise
-    function ProcessHandshake(const MsgIn: RawUTF8;
-      out MsgOut: RawUTF8): TProtocolResult;
-    /// encrypt a message on one side, ready to be transmitted to the other side
-    // - this method should be thread-safe in the implementation class
-    procedure Encrypt(const aPlain: RawByteString;
-      out aEncrypted: RawByteString);
-    /// decrypt a message on one side, as transmitted from the other side
-    // - should return sprSuccess if the
-    // - should return sprInvalidMAC in case of wrong aEncrypted input (e.g.
-    // packet corruption, MiM or Replay attacks attempts)
-    // - this method should be thread-safe in the implementation class
-    function Decrypt(const aEncrypted: RawByteString;
-      out aPlain: RawByteString): TProtocolResult;
-    /// will create another instance of this communication protocol
-    function Clone: IProtocol;
-  end;
-
-  /// stores a list of IProtocol instances
-  IProtocolDynArray = array of IProtocol;
-
-  /// implements a fake no-encryption protocol
-  // - may be used for debugging purposes, or when encryption is not needed
-  TProtocolNone = class(TInterfacedObject, IProtocol)
-  public
-    /// initialize the communication by exchanging some client/server information
-    // - this method will return sprUnsupported
-    function ProcessHandshake(const MsgIn: RawUTF8;
-      out MsgOut: RawUTF8): TProtocolResult;
-    /// encrypt a message on one side, ready to be transmitted to the other side
-    // - this method will return the plain text with no actual encryption
-    procedure Encrypt(const aPlain: RawByteString;
-      out aEncrypted: RawByteString);
-    /// decrypt a message on one side, as transmitted from the other side
-    // - this method will return the encrypted text with no actual decryption
-    function Decrypt(const aEncrypted: RawByteString;
-      out aPlain: RawByteString): TProtocolResult;
-    /// will create another instance of this communication protocol
-    function Clone: IProtocol;
-  end;
-
-  /// implements a secure protocol using AES encryption
-  // - as used e.g. by 'synopsebinary' WebSockets protocol
-  // - this class will maintain two TAESAbstract instances, one for encryption
-  // and another one for decryption, with PKCS7 padding and no MAC validation
-  TProtocolAES = class(TInterfacedObject, IProtocol)
-  protected
-    fSafe: TRTLCriticalSection;
-    fAES: array[boolean] of TAESAbstract; // [false]=decrypt [true]=encrypt
-  public
-    /// initialize this encryption protocol with the given AES settings
-    // - warning: aKey is an untyped constant, i.e. expects a raw set of memory
-    // bytes: do NOT use assign it with a string or a TBytes instance: you would
-    // use the pointer to the data as key
-    constructor Create(aClass: TAESAbstractClass; const aKey; aKeySize: cardinal;
-      aIVReplayAttackCheck: TAESIVReplayAttackCheck = repCheckedIfAvailable);
-        reintroduce; virtual;
-    /// will create another instance of this communication protocol
-    constructor CreateFrom(aAnother: TProtocolAES); reintroduce; virtual;
-    /// finalize the encryption
-    destructor Destroy; override;
-    /// initialize the communication by exchanging some client/server information
-    // - this method will return sprUnsupported
-    function ProcessHandshake(const MsgIn: RawUTF8;
-      out MsgOut: RawUTF8): TProtocolResult;
-    /// encrypt a message on one side, ready to be transmitted to the other side
-    // - this method uses AES encryption and PKCS7 padding
-    procedure Encrypt(const aPlain: RawByteString;
-      out aEncrypted: RawByteString);
-    /// decrypt a message on one side, as transmitted from the other side
-    // - this method uses AES decryption and PKCS7 padding
-    function Decrypt(const aEncrypted: RawByteString;
-      out aPlain: RawByteString): TProtocolResult;
-    /// will create another instance of this communication protocol
-    function Clone: IProtocol;
-  end;
-
-  /// class-reference type (metaclass) of an AES secure protocol
-  TProtocolAESClass = class of TProtocolAES;
-
-function ToText(res: TProtocolResult): PShortString; overload;
-
-
 { ****************** Deprecated Weak AES/SHA Process }
 
 {$ifndef PUREMORMOT2}
@@ -2312,6 +2207,7 @@ procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream;
   const Password: RawByteString; Encrypt: boolean); overload; deprecated;
 
 {$endif PUREMORMOT2}
+
 
 implementation
 
@@ -7782,111 +7678,6 @@ end;
 
 
 
-{ ****** IProtocol Safe Communication with Unilateral or Mutual Authentication }
-
-{ TProtocolNone }
-
-function TProtocolNone.ProcessHandshake(const MsgIn: RawUTF8;
-  out MsgOut: RawUTF8): TProtocolResult;
-begin
-  result := sprUnsupported;
-end;
-
-function TProtocolNone.Decrypt(const aEncrypted: RawByteString;
-  out aPlain: RawByteString): TProtocolResult;
-begin
-  aPlain := aEncrypted;
-  result := sprSuccess;
-end;
-
-procedure TProtocolNone.Encrypt(const aPlain: RawByteString;
-  out aEncrypted: RawByteString);
-begin
-  aEncrypted := aPlain;
-end;
-
-function TProtocolNone.Clone: IProtocol;
-begin
-  result := TProtocolNone.Create;
-end;
-
-
-{ TProtocolAES }
-
-constructor TProtocolAES.Create(aClass: TAESAbstractClass;
-  const aKey; aKeySize: cardinal; aIVReplayAttackCheck: TAESIVReplayAttackCheck);
-begin
-  inherited Create;
-  InitializeCriticalSection(fSafe);
-  fAES[false] := aClass.Create(aKey, aKeySize);
-  fAES[false].IVReplayAttackCheck := aIVReplayAttackCheck;
-  fAES[true] := fAES[false].Clone;
-end;
-
-constructor TProtocolAES.CreateFrom(aAnother: TProtocolAES);
-begin
-  inherited Create;
-  InitializeCriticalSection(fSafe);
-  fAES[false] := aAnother.fAES[false].Clone;
-  fAES[true] := fAES[false].Clone;
-end;
-
-destructor TProtocolAES.Destroy;
-begin
-  fAES[false].Free;
-  fAES[true].Free;
-  DeleteCriticalSection(fSafe);
-  inherited Destroy;
-end;
-
-function TProtocolAES.ProcessHandshake(const MsgIn: RawUTF8;
-  out MsgOut: RawUTF8): TProtocolResult;
-begin
-  result := sprUnsupported;
-end;
-
-function TProtocolAES.Decrypt(const aEncrypted: RawByteString;
-  out aPlain: RawByteString): TProtocolResult;
-begin
-  EnterCriticalSection(fSafe);;
-  try
-    try
-      aPlain := fAES[false].DecryptPKCS7(aEncrypted, {iv=}true, {raise=}false);
-      if aPlain = '' then
-        result := sprBadRequest
-      else
-        result := sprSuccess;
-    except
-      result := sprInvalidMAC;
-    end;
-  finally
-    LeaveCriticalSection(fSafe);
-  end;
-end;
-
-procedure TProtocolAES.Encrypt(const aPlain: RawByteString;
-  out aEncrypted: RawByteString);
-begin
-  EnterCriticalSection(fSafe);;
-  try
-    aEncrypted := fAES[true].EncryptPKCS7(aPlain, {iv=}true);
-  finally
-    LeaveCriticalSection(fSafe);
-  end;
-end;
-
-function TProtocolAES.Clone: IProtocol;
-begin
-  result := TProtocolAESClass(ClassType).CreateFrom(self);
-end;
-
-
-function ToText(res: TProtocolResult): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TProtocolResult), ord(res));
-end;
-
-
 
 { ****************** Deprecated Weak AES/SHA Process }
 
@@ -8385,16 +8176,18 @@ procedure InitializeUnit;
 begin
   ComputeAesStaticTables;
   {$ifdef ASMX64}
-  {$ifdef CRC32C_X64} // use SSE4.2+pclmulqdq instructions
+  {$ifdef CRC32C_X64}
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
+    // use SSE4.2+pclmulqdq instructions
     crc32c := @crc32c_sse42_aesni;
   {$endif CRC32C_X64}
   if cfSSE41 in CpuFeatures then
-  begin // optimized Intel's sha256_sse4.asm
+  begin
+    // optimized Intel's sha256_sse4.asm
     if K256AlignedStore = '' then
       GetMemAligned(K256AlignedStore, @K256, SizeOf(K256), K256Aligned);
     if PtrUInt(K256Aligned) and 15 <> 0 then
-      K256AlignedStore := ''; // if not properly aligned -> fallback to pascal
+      K256AlignedStore := ''; // paranoid
   end;
   {$endif ASMX64}
   assert(sizeof(TMD5Buf) = sizeof(TMD5Digest));

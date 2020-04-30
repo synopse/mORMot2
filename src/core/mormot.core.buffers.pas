@@ -1574,7 +1574,6 @@ function EmojiFromText(P: PUTF8Char; len: PtrInt): TEmoji;
 // - will append ':' if no Emoji text is recognized, and return eNone
 // - will try both EMOJI_AFTERDOTS[] and EMOJI_RTTI[] reference set
 // - if W is nil, won't append anything, but just return the recognized TEmoji
-
 function EmojiParseDots(var P: PUTF8Char; W: TBaseWriter = nil): TEmoji;
 
 /// low-level conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
@@ -6958,7 +6957,6 @@ begin
     Map.UnMap;
   end;
 end;
-
 
 
 

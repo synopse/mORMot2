@@ -4995,7 +4995,8 @@ end;
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 begin
   if source <> '' then
-    result := UpperCopy255Buf(dest, pointer(source), PStrLen(PtrUInt(source) - _STRLEN)^)
+    result := UpperCopy255Buf(dest, pointer(source),
+      PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^)
   else
     result := dest;
 end;
@@ -5048,7 +5049,7 @@ begin
     result := dest
   else
   begin
-    L := PStrLen(PtrUInt(source) - _STRLEN)^;
+    L := PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^;
     if L > 250 then
       L := 250; // avoid buffer overflow
     result := dest + L;
