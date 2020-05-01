@@ -2934,9 +2934,15 @@ procedure Exchg(P1, P2: PAnsiChar; count: PtrInt);
 type
   /// a fake TStream, which will just count the number of bytes written
   TFakeWriterStream = class(TStream)
+  protected
+    fWritten: Int64;
+    {$ifdef FPC}
+    function GetPosition: Int64; override;
+    {$endif FPC}
   public
     function Read(var Buffer; Count: Longint): Longint; override;
     function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
 
@@ -2948,8 +2954,8 @@ type
   // in-place, as requested e.g. by TTextWriter or TBufferWriter classes
   TRawByteStringStream = class(TStream)
   protected
+    fPosition: integer;
     fDataString: RawByteString;
-    fPosition: Integer;
     {$ifdef FPC}
     function GetPosition: Int64; override;
     {$endif FPC}
@@ -9744,12 +9750,38 @@ end;
 
 function TFakeWriterStream.Write(const Buffer; Count: Longint): Longint;
 begin // do nothing
+  inc(fWritten, Count);
   result := Count;
 end;
 
+{$ifdef FPC}
+function TFakeWriterStream.GetPosition: Int64;
+begin
+  result := fWritten;
+end;
+{$endif FPC}
+
 function TFakeWriterStream.Seek(Offset: Longint; Origin: Word): Longint;
 begin
-  result := Offset;
+  result := Seek(Offset, TSeekOrigin(Origin));
+end;
+
+function TFakeWriterStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  case Origin of
+    soBeginning:
+      result := Offset;
+    soEnd:
+      result := fWritten - Offset;
+    else
+      result := fWritten + Offset;
+  end;
+  if result > fWritten then
+    result := fWritten
+  else if result < 0 then
+    result := 0
+  else if result < fWritten then
+    fWritten := result;
 end;
 
 
