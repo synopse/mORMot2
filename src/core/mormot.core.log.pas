@@ -3692,29 +3692,18 @@ begin
     LogFileInit;
 end;
 
-{$WARN SYMBOL_DEPRECATED OFF} // for GetHeapStatus
 procedure TSynLog.AddMemoryStats;
 var
-  text: shortstring;
-begin // returns values in MB, not bytes
-  text[0] := #0;
-  {$ifdef FPC}
-  with GetFPCHeapStatus do
-    FormatShort(
-      ' MaxHeapSize=% MaxHeapUsed=% CurrHeapSize=% CurrHeapUsed=% CurrHeapFree=% ',
-      [MaxHeapSize shr 20, MaxHeapUsed shr 20, CurrHeapSize shr 20,
-       CurrHeapUsed shr 20, CurrHeapFree shr 20], text);
-  {$else}
-  with GetHeapStatus do
-    FormatShort(' AddrSpace=% Uncommitted=% Committed=% Allocated=% Free=% ' +
-       'FreeSmall=% FreeBig=% Unused=% Overheap=% ', [TotalAddrSpace shr 20,
-       TotalUncommitted shr 20, TotalCommitted shr 20, TotalAllocated shr 20,
-       TotalFree shr 20, FreeSmall shr 20, FreeBig shr 20, Unused shr 20,
-       Overhead shr 20], text);
-  {$endif FPC}
-  fWriter.AddShort(text);
+  info: TMemoryInfo; // cross-compiler and cross-platform
+begin
+  if GetMemoryInfo(info, {withalloc=}true) then
+  with info do
+    fWriter.Add(
+      ' memtotal=% memfree=% filetotal=% filefree=% allocres=% allocused=% ',
+      [KBNoSpace(memtotal), KBNoSpace(memfree),
+       KBNoSpace(filetotal), KBNoSpace(filefree),
+       KBNoSpace(allocreserved), KBNoSpace(allocused)]);
 end;
-{$WARN SYMBOL_DEPRECATED ON}
 
 procedure TSynLog.AddErrorMessage(Error: Cardinal);
 begin
@@ -4095,7 +4084,7 @@ begin
       n := depth;
     for i := 0 to n - 1 do
       if (i = 0) or (frames[i] <> frames[i - 1]) then
-        // on FPC, calls BacktraceStrFunc() which may be very slow
+        // on FPC, calling BacktraceStrFunc() may be very slow
         TSynMapFile.Log(fWriter, PtrUInt(frames[i]), false);
   except // don't let any unexpected GPF break the logging process
   end;
