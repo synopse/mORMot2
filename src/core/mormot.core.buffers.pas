@@ -203,7 +203,11 @@ type
     function AlgoID: byte; virtual; abstract;
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
-      Data: pointer; DataLen: integer): cardinal; virtual;
+      Data: pointer; DataLen: integer): cardinal; overload; virtual;
+    /// computes the digital signature of the buffer, or Hash32() if defined
+    function AlgoHash(ForceHash32: boolean;
+      Data: pointer; DataLen: integer): cardinal; overload;
+     {$ifdef HASINLINE} inline; {$endif}
     /// get maximum possible (worse) compressed size for the supplied length
     function AlgoCompressDestLen(PlainLen: integer): integer; virtual; abstract;
     /// this method will compress the supplied data
@@ -3881,6 +3885,15 @@ begin
   result := crc32c(Previous, Data, DataLen);
 end;
 
+function TAlgoCompress.AlgoHash(ForceHash32: boolean;
+  Data: pointer; DataLen: integer): cardinal;
+begin
+  if ForceHash32 then
+    result := Hash32(Data, DataLen)
+  else
+    result := AlgoHash(0, Data, DataLen);
+end;
+
 function TAlgoCompress.Compress(const Plain: RawByteString;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean;
   BufferOffset: integer): RawByteString;
@@ -4174,22 +4187,23 @@ begin
   try
     Head.Magic := Magic;
     Head.UnCompressedSize := DataLen;
-    Head.HashUncompressed := Hash32(S, DataLen);
+    Head.HashUncompressed := AlgoHash(ForceHash32, S, DataLen);
     result := AlgoCompress(S, DataLen, tmp.buf);
     if result > tmp.len then
-      raise EAlgoCompress.Create('StreamCompress: overflow');
+      raise EAlgoCompress.Create('StreamCompress: overflow'); // paranoid
     if result > DataLen then
     begin
-      result := DataLen; // compression not worth it
+      // compression is not worth it -> store
+      result := DataLen;
       D := S;
+      Head.HashCompressed := Head.HashUncompressed;
     end
     else
+    begin
       D := tmp.buf;
+      Head.HashCompressed := AlgoHash(ForceHash32, D, result)
+    end;
     Head.CompressedSize := result;
-    if ForceHash32 then
-      Head.HashCompressed := Hash32(D, result)
-    else
-      Head.HashCompressed := AlgoHash(0, D, result);
     Dest.WriteBuffer(Head, SizeOf(Head));
     Dest.WriteBuffer(D^, Head.CompressedSize);
     Trailer.HeaderRelativeOffset := result + (SizeOf(Head) + SizeOf(Trailer));
@@ -4222,7 +4236,6 @@ var
   Head: TAlgoCompressHead;
   Trailer: TAlgoCompressTrailer;
   buf: RawByteString;
-  h: cardinal;
   stored: boolean;
 begin
   result := nil;
@@ -4280,11 +4293,7 @@ begin
     if not stored then
       if AlgoDecompressDestLen(S) <> Head.UnCompressedSize then
         exit;
-    if ForceHash32 then
-      h := Hash32(pointer(S), Head.CompressedSize)
-    else
-      h := AlgoHash(0, S, Head.CompressedSize);
-    if h <> Head.HashCompressed then
+    if AlgoHash(ForceHash32, S, Head.CompressedSize) <> Head.HashCompressed then
       exit;
     if result = nil then
       result := TMemoryStream.Create
@@ -4303,17 +4312,9 @@ begin
     inc(resultSize, Head.UnCompressedSize);
     if stored then
       MoveFast(S^, D^, Head.CompressedSize)
-    else if AlgoDecompress(S, Head.CompressedSize, D) <> Head.UnCompressedSize then
-      FreeAndNil(result)
-    else
-    begin
-      if ForceHash32 then
-        h := Hash32(pointer(D), Head.UnCompressedSize)
-      else
-        h := AlgoHash(0, D, Head.UnCompressedSize);
-      if h <> Head.HashUncompressed then
+    else if (AlgoDecompress(S, Head.CompressedSize, D) <> Head.UnCompressedSize) or
+      (AlgoHash(ForceHash32, D, Head.UnCompressedSize) <> Head.HashUncompressed) then
         FreeAndNil(result);
-    end;
   until (result = nil) or (sourcePosition >= sourceSize);
 end;
 
@@ -4380,7 +4381,7 @@ end;
 function TAlgoCompress.FileCompress(const Source, Dest: TFileName;
   Magic: Cardinal; ForceHash32: boolean): boolean;
 var
-  src, dst: RawByteString;
+  src, dst: RawByteString; // tmp buffers
   S, D: THandleStream;
   Head: TAlgoCompressHead;
   Count, Max: Int64;
@@ -4409,15 +4410,9 @@ begin
           Head.UnCompressedSize := S.Read(pointer(src)^, Head.UnCompressedSize);
           if Head.UnCompressedSize <= 0 then
             exit; // read error
-          if ForceHash32 then
-            Head.HashUncompressed := Hash32(pointer(src), Head.UnCompressedSize)
-          else
-            Head.HashUncompressed := AlgoHash(0, pointer(src), Head.UnCompressedSize);
+          Head.HashUncompressed := AlgoHash(ForceHash32, pointer(src), Head.UnCompressedSize);
           Head.CompressedSize := AlgoCompress(pointer(src), Head.UnCompressedSize, pointer(dst));
-          if ForceHash32 then
-            Head.HashCompressed := Hash32(pointer(dst), Head.CompressedSize)
-          else
-            Head.HashCompressed := AlgoHash(0, pointer(dst), Head.CompressedSize);
+          Head.HashCompressed := AlgoHash(ForceHash32, pointer(dst), Head.CompressedSize);
           if (D.Write(Head, SizeOf(Head)) <> SizeOf(Head)) or
              (D.Write(pointer(dst)^, Head.CompressedSize) <> Head.CompressedSize) then
             exit;
@@ -4443,7 +4438,6 @@ var
   S, D: THandleStream;
   Count: Int64;
   Head: TAlgoCompressHead;
-  h: cardinal;
 begin
   result := false;
   if FileExists(Source) then
@@ -4466,11 +4460,7 @@ begin
           if S.Read(pointer(src)^, Head.CompressedSize) <> Head.CompressedSize then
             exit;
           dec(Count, Head.CompressedSize);
-          if ForceHash32 then
-            h := Hash32(pointer(src), Head.CompressedSize)
-          else
-            h := AlgoHash(0, pointer(src), Head.CompressedSize);
-          if (h <> Head.HashCompressed) or
+          if (AlgoHash(ForceHash32, pointer(src), Head.CompressedSize) <> Head.HashCompressed) or
              (AlgoDecompressDestLen(pointer(src)) <> Head.UnCompressedSize) then
             exit;
           if Head.UnCompressedSize > length({%H-}dst) then
@@ -4478,11 +4468,7 @@ begin
           if AlgoDecompress(pointer(src), Head.CompressedSize, pointer(dst)) <>
               Head.UnCompressedSize then
              exit;
-          if ForceHash32 then
-            h := Hash32(pointer(D), Head.UnCompressedSize)
-          else
-            h := AlgoHash(0, D, Head.UnCompressedSize);
-          if (h <> Head.HashUncompressed) or
+          if (AlgoHash(ForceHash32, pointer(dst), Head.UnCompressedSize) <> Head.HashUncompressed) or
              (D.Write(pointer(dst)^, Head.UncompressedSize) <> Head.UncompressedSize) then
             exit;
         end;
