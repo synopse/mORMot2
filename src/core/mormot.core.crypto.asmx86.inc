@@ -2234,7 +2234,7 @@ end;
     {$L ..\..\static\delphi\sha512-x86.obj}
   {$endif FPC}
 {$else}
-  {$L sha512-x86.o}
+  {$L ..\..\static\i386-linux\sha512-x86.o}
 {$endif MSWINDOWS}
 
 {

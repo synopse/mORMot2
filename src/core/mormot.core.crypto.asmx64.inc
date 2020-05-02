@@ -2772,7 +2772,7 @@ end;
 {$ifdef MSWINDOWS}
   {$L ..\..\static\delphi\sha512-x64sse4.obj}
 {$else}
-  {$L sha512-x64sse4.o}
+  {$L ..\..\static\x86_64-linux\sha512-x64sse4.o}
 {$endif MSWINDOWS}
 
 procedure sha512_sse4(data, hash: pointer; blocks: Int64);
@@ -2813,7 +2813,11 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
 {$ifdef MSWINDOWS}
   {$L ..\..\static\delphi\crc32c64.obj}
 {$else}
+  {$ifdef LINUXNOTBSD}
+  {$L ..\..\static\x86_64-linux\crc32c64.o}
+  {$else}
   {$L crc32c64.o}
+  {$endif LINUXNOTBSD}
 {$endif MSWINDOWS}
 
 // defined in mormot.core.crypto.pas, not in mormot.core.base, to avoid

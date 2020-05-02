@@ -153,7 +153,8 @@ type
 
 /// compute the crc32 checksum of the supplied memory buffer
 function crc32(crc: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC;
-  {$ifdef ZLIBEXT} cdecl; {$else} {$ifdef ZLIBSTATIC} cdecl; {$else} inline; {$endif} {$endif}
+  {$ifdef ZLIBEXT} cdecl; {$else} {$ifdef ZLIBSTATIC} cdecl; {$else}
+    inline; {$endif} {$endif}
 
 const
   ZLIB_VERSION = '1.2.3';
@@ -376,7 +377,7 @@ const
   libz = 'z';
   {$linklib libz}
   {$else}
-  lib = 'libz.so'
+  libz = 'libz.so'
   {$endif FPC}
 {$endif ANDROID}
 

@@ -47,5 +47,5 @@ end;
 
 begin
   TIntegrationTests.RunAsConsole('mORMot2 Regression Tests', LOG_VERBOSE);
-{%H-}end.
+end.
 
