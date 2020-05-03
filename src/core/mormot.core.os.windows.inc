@@ -158,6 +158,16 @@ begin
     result := 0;
 end;
 
+function FileAgeToWindowsTime(const FileName: TFileName): integer;
+begin
+  result := FileAge(FileName);
+end;
+
+function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
+begin
+  result := FileSetDate(Dest, WinTime) = 0;
+end;
+
 function FileInfoByHandle(aFileHandle: THandle;
   out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): Boolean;
 var
@@ -180,6 +190,13 @@ begin
   if lastreadaccess <> 0 then
     if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
       FileCreateDateTime := lastreadaccess;
+end;
+
+function OemToFileName(const OEM: RawByteString): TFileName;
+begin
+  // decode OEM/DOS file name into native encoding
+  SetString(result, nil, length(OEM));
+  OemToChar(pointer(result), pointer(OEM)); // OemToCharW/OemToCharA
 end;
 
 function FileSize(const FileName: TFileName): Int64;
@@ -219,6 +236,11 @@ end;
 function DeleteFile(const aFileName: TFileName): boolean;
 begin
   result := SysUtils.DeleteFile(aFileName);
+end;
+
+function FileCreate(const aFileName: TFileName): THandle;
+begin
+  result := SysUtils.FileCreate(aFileName);
 end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;

@@ -4568,7 +4568,7 @@ end;
 function TAlgoCompressWithNoDestLen.AlgoCompress(Plain: pointer; PlainLen: integer;
   Comp: pointer): integer;
 begin
-  Comp := ToVarUInt32(PlainLen, Comp); // deflate don't store PlainLen
+  Comp := ToVarUInt32(PlainLen, Comp); // e.g. deflate don't store PlainLen
   result := RawProcess(Plain, Comp, PlainLen, AlgoCompressDestLen(PlainLen), 0, doCompress);
   if result > 0 then
     inc(result, ToVarUInt32Length(PlainLen));

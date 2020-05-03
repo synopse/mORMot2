@@ -578,6 +578,10 @@ procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
+function FileCreate(const aFileName: TFileName): THandle;
+
+/// redefined here to avoid warning to include "Windows" in uses clause
+// - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 procedure FileClose(F: THandle); stdcall;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
@@ -827,8 +831,21 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 // - under Windows, will use GetFileAttributesEx fast API
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 
+/// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
+function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
+
+/// get the date and time of one file into a Windows File 32-bit TimeStamp
+// - this cross-system function is used e.g. by mormot.core.zip which expects
+// Windows TimeStamps in its headers
+function FileAgeToWindowsTime(const FileName: TFileName): integer;
+
 /// copy the date of one file to another
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+
+/// copy the date of one file from a Windows File 32-bit TimeStamp
+// - this cross-system function is used e.g. by mormot.core.zip which expects
+// Windows TimeStamps in its headers
+function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
 
 /// modify the attributes of a given file
 // - if Secret=false, will have normal file attributes, with read/write access
@@ -859,6 +876,18 @@ function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int
 // as failover on such systems (probably the latest file metadata writing)
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
   LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+
+/// conversion of Windows OEM charset into a file name
+// - as used e.g. by mormot.core.zip for non UTF-8 file names
+function OemToFileName(const OEM: RawByteString): TFileName;
+
+const
+  /// operating-system dependent wildchar to match all files in a folder
+  {$ifdef MSWINDOWS}
+  FILES_ALL = '*.*';
+  {$else}
+  FILES_ALL = '*';
+  {$endif MSWINDOWS}
 
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
@@ -933,7 +962,7 @@ type
     // - if aCustomSize and aCustomOffset are specified, the corresponding
     // map view if created (by default, will map whole file)
     function Map(aFile: THandle; aCustomSize: PtrUInt = 0;
-      aCustomOffset: Int64 = 0): boolean; overload;
+      aCustomOffset: Int64 = 0; aFileOwned: boolean = false): boolean; overload;
     /// map the file specified by its name
     // - file will be closed when UnMap will be called
     function Map(const aFileName: TFileName): boolean; overload;
@@ -1332,6 +1361,19 @@ begin
   result := UnixMSTimeUTC / MSecsPerDay + UnixDelta;
 end;
 
+function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
+var
+  YY, MM, DD, H, m, s, ms: word;
+begin
+  DecodeDate(DateTime, YY, MM, DD);
+  DecodeTime(DateTime, h, m, s, ms);
+  If (YY < 1980) or (YY > 2099) then
+    result := 0
+  else
+    result := (s shr 1) or (m shl 5) or (h shl 11) or
+              integer((DD shl 16) or (MM shl 21) or (word(YY - 1980) shl 25));
+end;
+
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 begin
   {$ifdef ISDELPHIXE}
@@ -1591,7 +1633,8 @@ end;
 
 { TMemoryMap }
 
-function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt; aCustomOffset: Int64): boolean;
+function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt; aCustomOffset: Int64;
+  aFileOwned: boolean): boolean;
 var
   Available: Int64;
 begin
@@ -1599,8 +1642,8 @@ begin
   fBufSize := 0;
   {$ifdef MSWINDOWS}
   fMap := 0;
-  {$endif}
-  fFileLocal := false;
+  {$endif MSWINDOWS}
+  fFileLocal := aFileOwned;
   fFile := aFile;
   fFileSize := FileSeek64(fFile, 0, soFromEnd);
   if fFileSize = 0 then
@@ -1610,7 +1653,7 @@ begin
   end;
   result := false;
   if (fFileSize <= 0) {$ifdef CPU32} or (fFileSize > maxInt){$endif} then
-    /// maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors on CPU32)
+    // maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors on CPU32)
     exit;
   if aCustomSize = 0 then
     fBufSize := fFileSize
@@ -1633,7 +1676,7 @@ begin
   fBufSize := aBufferSize;
   {$ifdef MSWINDOWS}
   fMap := 0;
-  {$endif}
+  {$endif MSWINDOWS}
   fFile := 0;
   fFileLocal := false;
 end;
@@ -1728,9 +1771,12 @@ end;
 
 procedure TExecutableResource.Close;
 begin
-  UnlockResource(HGlobal); // only needed outside of Windows
-  FreeResource(HGlobal);
-  HGlobal := 0;
+  if HGlobal <> 0 then
+  begin
+    UnlockResource(HGlobal); // only needed outside of Windows
+    FreeResource(HGlobal);
+    HGlobal := 0;
+  end;
 end;
 
 

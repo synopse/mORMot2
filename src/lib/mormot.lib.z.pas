@@ -70,19 +70,21 @@ type
 
   {$ifdef ZLIBRTL}
   TZStream = zlib.z_Stream;
-  TZCRC = PtrUInt; // for both FPC and Delphi Win64
+  TZCRC = PtrUInt;
   {$else}
 
   {$ifdef ZLIBEXT}
   TZLong = PtrUInt;
   TZCRC = PtrUInt;
-  {$else}
+  {$endif ZLIBEXT}
+
+  {$ifdef ZLIBSTATIC}
   // our statically linked library expects 32-bit long/crc even on FPC Win64
   TZLong = cardinal;
   TZCRC = cardinal;
-  {$endif ZLIBEXT}
+  {$endif ZLIBSTATIC}
 
-  /// raw structure used by zlib during its stream process
+  /// raw structure used by external/static zlib during its stream process
   TZStream =  record
     next_in: PAnsiChar;
     avail_in: cardinal;
@@ -118,10 +120,9 @@ type
     FlushSize: integer;
     FlushCheckCRC: PCardinal;
     FlushBufferOwned: boolean;
-    procedure DoFlush;
   public
     /// raw zlib Stream information
-    ZStream: TZStream;
+    Stream: TZStream;
     /// reset the internal Stream structure
     procedure Clear;
     /// reset and prepare the internal Stream structure for two memory buffers
@@ -145,6 +146,8 @@ type
     function Uncompress(Flush: integer): integer;
     /// finalize the Inflate Uncompression
     function UncompressEnd: integer;
+    /// low-level flush of the compressed data pending in the internal buffer
+    procedure DoFlush;
     /// low-level check of the code returned by the ZLib library
     // - raise ESynZipException on error
     function Check(const Code: Integer; const ValidCodes: array of Integer;
@@ -152,9 +155,9 @@ type
   end;
 
 /// compute the crc32 checksum of the supplied memory buffer
-function crc32(crc: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC;
+function crc32(crc: TZCRC; buf: pointer; len: cardinal): TZCRC;
   {$ifdef ZLIBEXT} cdecl; {$else} {$ifdef ZLIBSTATIC} cdecl; {$else}
-    inline; {$endif} {$endif}
+    {$ifdef FPC} inline; {$endif} {$endif} {$endif}
 
 const
   ZLIB_VERSION = '1.2.3';
@@ -352,7 +355,7 @@ function deflateEnd(var strm: TZStream): integer; cdecl; external;
 function inflate(var strm: TZStream; flush: integer): integer; cdecl; external;
 function inflateEnd(var strm: TZStream): integer; cdecl; external;
 function adler32(adler: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC; cdecl; external;
-function crc32(crc: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC; cdecl; external;
+function crc32(crc: TZCRC; buf: pointer; len: cardinal): TZCRC; cdecl; external;
 function deflateInit_(var strm: TZStream; level: integer;
   version: PAnsiChar; stream_size: integer): integer; cdecl; external;
 function inflateInit_(var strm: TZStream;
@@ -386,7 +389,7 @@ function deflateEnd(var strm: TZStream): integer; cdecl; external libz;
 function inflate(var strm: TZStream; flush: integer): integer; cdecl; external libz;
 function inflateEnd(var strm: TZStream): integer; cdecl; external libz;
 function adler32(adler: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC; cdecl; external libz;
-function crc32(crc: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC; cdecl; external libz;
+function crc32(crc: TZCRC; buf: pointer; len: cardinal): TZCRC; cdecl; external libz;
 function deflateInit_(var strm: TZStream; level: integer;
   version: PAnsiChar; stream_size: integer): integer; cdecl; external libz;
 function inflateInit_(var strm: TZStream;
@@ -403,18 +406,18 @@ function get_crc_table: pointer; cdecl; external libz;
 
 {$ifdef ZLIBPAS}
 
-function crc32(crc: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC;
+function crc32(crc: TZCRC; buf: pointer; len: cardinal): TZCRC;
 begin
-  result := paszlib.crc32(crc, pointer(buf), len);
+  result := paszlib.crc32(crc, buf, len);
 end;
 
 {$endif ZLIBPAS}
 
 {$ifdef ZLIBRTL}
 
-function crc32(crc: TZCRC; buf: PAnsiChar; len: cardinal): TZCRC;
+function crc32(crc: TZCRC; buf: pointer; len: cardinal): TZCRC;
 begin
-  result := zlib.crc32(crc, pointer(buf), len);
+  result := zlib.crc32(crc, buf, len);
 end;
 
 {$endif ZLIBRTL}
@@ -424,7 +427,7 @@ end;
 
 procedure TZLib.Clear;
 begin
-  FillCharFast(ZStream, SizeOf(ZStream), 0);
+  FillCharFast(Stream, SizeOf(Stream), 0);
 end;
 
 {$ifndef ZLIBPAS}
@@ -444,13 +447,13 @@ end;
 procedure TZLib.Init(src, dst: pointer; srcLen, dstLen: integer);
 begin
   Clear;
-  ZStream.next_in := src;
-  ZStream.avail_in := srcLen;
-  ZStream.next_out := dst;
-  ZStream.avail_out := dstLen;
+  Stream.next_in := src;
+  Stream.avail_in := srcLen;
+  Stream.next_out := dst;
+  Stream.avail_out := dstLen;
   {$ifndef ZLIBPAS}
-  ZStream.zalloc := @zlibAllocMem; // even under Linux, use program heap
-  ZStream.zfree := @zlibFreeMem;
+  Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
+  Stream.zfree := @zlibFreeMem;
   {$endif ZLIBPAS}
 end;
 
@@ -458,13 +461,13 @@ procedure TZLib.Init(src: pointer; srcLen: integer; dst: TStream;
   checkcrc: PCardinal; temp: pointer; tempsize, expectedsize: integer);
 begin
   Init(src, temp, srcLen, tempsize);
-  if tempsize > expectedsize then
+  if tempsize < expectedsize then
   begin
     GetMem(FlushBuffer, expectedsize);
     FlushBufferOwned := true;
     FlushSize := expectedsize;
-    ZStream.next_out := FlushBuffer;
-    ZStream.avail_out := FlushSize;
+    Stream.next_out := FlushBuffer;
+    Stream.avail_out := FlushSize;
   end
   else
   begin
@@ -481,20 +484,20 @@ begin
     bits := MAX_WBITS
   else
     bits := - MAX_WBITS;
-  result := deflateInit2_(ZStream, CompressionLevel, Z_DEFLATED, bits,
-    DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(ZStream)) >= 0;
+  result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, bits,
+    DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream)) >= 0;
   if FlushBufferOwned and not result then
     FreeMem(FlushBuffer);
 end;
 
 function TZLib.Compress(Flush: integer): integer;
 begin
-  result := deflate(ZStream, Flush);
+  result := deflate(Stream, Flush);
 end;
 
 function TZLib.CompressEnd: integer;
 begin
-  result := deflateEnd(ZStream);
+  result := deflateEnd(Stream);
   if FlushBufferOwned then
     FreeMem(FlushBuffer);
 end;
@@ -507,19 +510,19 @@ begin
     bits := MAX_WBITS
   else
     bits := - MAX_WBITS;
-  result := inflateInit2_(ZStream, bits, ZLIB_VERSION, SizeOf(ZStream)) >= 0;
+  result := inflateInit2_(Stream, bits, ZLIB_VERSION, SizeOf(Stream)) >= 0;
   if FlushBufferOwned and not result then
     FreeMem(FlushBuffer);
 end;
 
 function TZLib.Uncompress(Flush: integer): integer;
 begin
-  result := inflate(ZStream, Flush);
+  result := inflate(Stream, Flush);
 end;
 
 function TZLib.UncompressEnd: integer;
 begin
-  result := inflateEnd(ZStream);
+  result := inflateEnd(Stream);
   if FlushBufferOwned then
     FreeMem(FlushBuffer);
 end;
@@ -528,15 +531,15 @@ procedure TZLib.DoFlush;
 var
   n: integer;
 begin
-  n := FlushSize - integer(ZStream.avail_out);
+  n := FlushSize - integer(Stream.avail_out);
   if n <> 0 then
   begin
     if FlushCheckCRC <> nil then
       FlushCheckCRC^ := crc32(FlushCheckCRC^, FlushBuffer, n);
     FlushStream.WriteBuffer(FlushBuffer^, n);
   end;
-  ZStream.next_out := FlushBuffer;
-  ZStream.avail_out := FlushSize;
+  Stream.next_out := FlushBuffer;
+  Stream.avail_out := FlushSize;
 end;
 
 function TZLib.Check(const Code: Integer; const ValidCodes: array of Integer;
@@ -551,7 +554,7 @@ begin
     if ValidCodes[i] = Code then
       exit;
   raise ESynZip.CreateFmt('Error %d during %s process [%s]',
-    [Code, Context, {$ifndef ZLIBPAS} PAnsiChar {$endif} (ZStream.msg)]);
+    [Code, Context, {$ifndef ZLIBPAS} PAnsiChar {$endif} (Stream.msg)]);
 end;
 
 
@@ -560,73 +563,73 @@ end;
 function CompressMem(src, dst: pointer; srcLen, dstLen: integer;
   CompressionLevel: integer; ZlibFormat: Boolean): integer;
 var
-  str: TZLib;
+  z: TZLib;
 begin
-  str.Init(src, dst, srcLen, dstLen);
-  if str.CompressInit(CompressionLevel, ZlibFormat) then
+  z.Init(src, dst, srcLen, dstLen);
+  if z.CompressInit(CompressionLevel, ZlibFormat) then
     try
-      str.Check(str.Compress(Z_FINISH), [Z_STREAM_END, Z_OK], 'CompressMem');
+      z.Check(z.Compress(Z_FINISH), [Z_STREAM_END, Z_OK], 'CompressMem');
     finally
-      str.CompressEnd;
+      z.CompressEnd;
     end;
-  result := str.ZStream.total_out;
+  result := z.Stream.total_out;
 end;
 
 function UncompressMem(src, dst: pointer; srcLen, dstLen: integer;
   ZlibFormat: Boolean): integer;
 var
-  str: TZLib;
+  z: TZLib;
 begin
-  str.Init(src, dst, srcLen, dstLen);
-  if str.UncompressInit(ZlibFormat) then
+  z.Init(src, dst, srcLen, dstLen);
+  if z.UncompressInit(ZlibFormat) then
     try
-      str.Check(str.Uncompress(Z_FINISH), [Z_STREAM_END, Z_OK], 'UncompressMem');
+      z.Check(z.Uncompress(Z_FINISH), [Z_STREAM_END, Z_OK], 'UncompressMem');
     finally
-      str.UncompressEnd;
+      z.UncompressEnd;
     end;
-  result := str.ZStream.total_out;
+  result := z.Stream.total_out;
 end;
 
 function CompressStream(src: pointer; srcLen: integer; tmp: TStream;
   CompressionLevel: integer; ZlibFormat: Boolean; TempBufSize: integer): cardinal;
 var
-  str: TZLib;
+  z: TZLib;
   code: integer;
   temp: array[word] of word; // 128KB is good enough (fine for IIS e.g.)
 begin
-  str.Init(src, srcLen, tmp, nil, @temp, SizeOf(temp), TempBufSize);
-  if str.CompressInit(CompressionLevel, ZlibFormat) then
+  z.Init(src, srcLen, tmp, nil, @temp, SizeOf(temp), TempBufSize);
+  if z.CompressInit(CompressionLevel, ZlibFormat) then
     try
       repeat
-        code := str.Check(str.Compress(Z_FINISH),
+        code := z.Check(z.Compress(Z_FINISH),
           [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'CompressStream');
-        str.DoFlush;
+        z.DoFlush;
       until code = Z_STREAM_END;
     finally
-      str.CompressEnd;
+      z.CompressEnd;
     end;
-  result := str.ZStream.total_out;
+  result := z.Stream.total_out;
 end;
 
 function UncompressStream(src: pointer; srcLen: integer; tmp: TStream;
   checkCRC: PCardinal; ZlibFormat: Boolean; TempBufSize: integer): cardinal;
 var
-  str: TZLib;
+  z: TZLib;
   code: integer;
   temp: array[word] of word; // 128KB
 begin
-  str.Init(src, srcLen, tmp, checkCRC, @temp, SizeOf(temp), TempBufSize);
-  if str.UncompressInit(ZlibFormat) then
+  z.Init(src, srcLen, tmp, checkCRC, @temp, SizeOf(temp), TempBufSize);
+  if z.UncompressInit(ZlibFormat) then
     try
       repeat
-        code := str.Check(str.Uncompress(Z_FINISH),
+        code := z.Check(z.Uncompress(Z_FINISH),
           [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'UncompressStream');
-        str.DoFlush;
+        z.DoFlush;
       until code = Z_STREAM_END;
     finally
-      str.UncompressEnd;
+      z.UncompressEnd;
     end;
-  result := str.ZStream.total_out;
+  result := z.Stream.total_out;
 end;
 
 function CompressZipString(src: pointer; srcLen: integer; CompressionLevel: integer;

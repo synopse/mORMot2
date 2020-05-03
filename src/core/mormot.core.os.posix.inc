@@ -377,7 +377,22 @@ end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
 begin
-  result := FileSetDate(Dest, FileGetDate(SourceHandle))=0;
+  result := FileSetDate(Dest, FileGetDate(SourceHandle)) = 0;
+end;
+
+function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
+var
+  date, time: TDateTime;
+begin
+  with PLongRec(@WinTime)^ do
+  result := TryEncodeDate(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, date) and
+            TryEncodeTime(Lo shr 11, Lo shr 5 and 63, Lo and 31 shl 1, 0, time) and
+            (FileSetDate(Dest, DateTimeToFileDate(date + time)) = 0);
+end;
+
+function FileAgeToWindowsTime(const FileName: TFileName): integer;
+begin
+  result := DateTimeToWindowsFileTime(FileAgeToDateTime(FileName));
 end;
 
 procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
@@ -445,8 +460,18 @@ begin
       FileCreateDateTime := lastreadaccess;
 end;
 
+function OemToFileName(const OEM: RawByteString): TFileName;
+begin
+  // let's assume UTF-8 under Linux
+  if GetSystemCodepage = CP_UTF8 then
+    result := OEM
+  else
+    result := TFileName(UTF8Decode(OEM));
+end;
+
 function FileOpenSequentialRead(const FileName: string): Integer;
-begin // SysUtils.FileOpen = fpOpen + fpFlock
+begin
+  // SysUtils.FileOpen = fpOpen + fpFlock
   result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
 end;
 

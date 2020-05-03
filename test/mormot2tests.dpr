@@ -30,7 +30,8 @@ uses
   mormot.core.search       in '..\src\core\mormot.core.search.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
   test.core.base           in '.\test.core.base.pas',
-  test.core.crypto         in '.\test.core.crypto.pas';
+  test.core.crypto         in '.\test.core.crypto.pas',
+  mormot.core.zip          in '..\src\core\mormot.core.zip.pas';
 
 type
   TIntegrationTests = class(TSynTestsLogged)

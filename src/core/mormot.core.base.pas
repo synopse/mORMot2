@@ -397,6 +397,7 @@ type
   TPtrIntArray = array[0 .. MaxInt div SizeOf(PtrInt) - 1 ] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
   PInt64Rec = ^Int64Rec;
+  PLongRec = ^LongRec;
   PPShortString = ^PShortString;
 
   PInterface = ^IInterface;
