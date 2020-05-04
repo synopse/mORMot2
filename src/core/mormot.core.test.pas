@@ -290,6 +290,9 @@ type
 
   TSynTestFaileds = array of TSynTestFailed;
 
+  /// event signature for TSynTests.CustomOutput callback
+  TSynTestOutput = procedure(const value: RawUTF8) of object;
+
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
   protected
@@ -307,6 +310,9 @@ type
     function GetFailed(Index: integer): TSynTestFailed;
     procedure CreateSaveToFile; virtual;
     procedure Color(aColor: TConsoleColor);
+    procedure Text(const value: RawUTF8); overload; virtual;
+    procedure Text(const values: array of const); overload;
+    procedure TextLn(const values: array of const); overload;
     /// could be overriden to redirect the content to proper TSynLog.Log()
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUTF8;
       const TextArgs: array of const); virtual;
@@ -326,6 +332,9 @@ type
     // - some internal versions, e.g.
     // - every line of text must explicitly BEGIN with #13#10
     CustomVersions: string;
+    /// allow redirection to any kind of output
+    // - will be called in addition to default console write()
+    CustomOutput: TSynTestOutput;
     /// contains the run elapsed time
     RunTimer, TestTimer, TotalTimer: TPrecisionTimer;
     /// create the test suit
@@ -427,6 +436,8 @@ type
     destructor Destroy; override;
     /// the .log file generator created if any test case failed
     property LogFile: TSynLog read fLogFile;
+
+    property ConsoleDup: RawUTF8 read fConsoleDup;
   end;
 
 
@@ -970,6 +981,31 @@ begin
     TextColor(aColor);
 end;
 
+procedure TSynTests.Text(const value: RawUTF8);
+begin
+  write(fSaveToFile, value);
+  if Assigned(CustomOutput) then
+    CustomOutput(value);
+end;
+
+procedure TSynTests.Text(const values: array of const);
+var
+  i: PtrInt;
+  s: RawUTF8;
+begin
+  for i := 0 to high(values) do
+  begin
+    VarRecToUTF8(values[i], s);
+    Text(s);
+  end;
+end;
+
+procedure TSynTests.TextLn(const values: array of const);
+begin
+  Text(values);
+  Text(#13#10);
+end;
+
 procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUTF8;
   const TextArgs: array of const);
 begin
@@ -1032,7 +1068,7 @@ begin
   if TTextRec(fSaveToFile).Handle = 0 then
     CreateSaveToFile;
   Color(ccLightCyan);
-  Writeln(fSaveToFile, #13#10'   ', Ident, #13#10'  ', StringOfChar('-', length(Ident) + 2));
+  TextLn([#13#10'   ', Ident, #13#10'  ', StringOfChar('-', length(Ident) + 2)]);
   RunTimer.Start;
   Randomize;
   fFailed := nil;
@@ -1041,7 +1077,7 @@ begin
   for m := 0 to Count - 1 do
   try
     Color(ccWhite);
-    writeln(fSaveToFile, #13#10#13#10, m + 1, '. ', fTests[m].TestName);
+    TextLn([#13#10#13#10, m + 1, '. ', fTests[m].TestName]);
     Color(ccLightGray);
     fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
     try
@@ -1050,7 +1086,7 @@ begin
         C := fTestCaseClass[i].Create(self);
         try
           Color(ccWhite);
-          writeln(fSaveToFile, #13#10' ', m + 1, '.', i + 1, '. ', C.Ident, ': ');
+          TextLn([#13#10' ', m + 1, '.', i + 1, '. ', C.Ident, ': ']);
           Color(ccLightGray);
           C.fAssertions := 0; // reset assertions count
           C.fAssertionsFailed := 0;
@@ -1077,11 +1113,11 @@ begin
             begin
               Color(ccLightRed);
               AddFailed(E.ClassName + ': ' + E.Message);
-              write(fSaveToFile, '! ', fCurrentMethodInfo^.IdentTestName);
+              Text(['! ', fCurrentMethodInfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
-              writeln(fSaveToFile, #13#10'! Exception ', E.ClassName,
-                ' raised with messsage:'#13#10'!  ', E.Message);
+              TextLn([#13#10'! Exception ', E.ClassName,
+                ' raised with messsage:'#13#10'!  ', E.Message]);
               Color(ccLightGray);
             end;
           end;
@@ -1090,13 +1126,13 @@ begin
             Color(ccLightGreen)
           else
             Color(ccLightRed);
-          Write(fSaveToFile, '  Total failed: ', IntToThousandString(C.AssertionsFailed),
-            ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident);
+          Text(['  Total failed: ', IntToThousandString(C.AssertionsFailed),
+            ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident]);
           if C.AssertionsFailed = 0 then
-            Write(fSaveToFile, ' PASSED')
+            Text(' PASSED')
           else
-            Write(fSaveToFile, ' FAILED');
-          Writeln(fSaveToFile, '  ', TotalTimer.Stop);
+            Text(' FAILED');
+          TextLn(['  ', TotalTimer.Stop]);
           Color(ccLightGray);
           inc(fAssertions, C.fAssertions); // compute global assertions count
           inc(fAssertionsFailed, C.fAssertionsFailed);
@@ -1115,7 +1151,7 @@ begin
       Color(ccLightRed);
       err := E.ClassName + ': ' + E.Message;
       AddFailed(err);
-      write(fSaveToFile, '! ', err);
+      Text(['! ', err]);
     end;
   end;
   Color(ccLightCyan);
@@ -1125,21 +1161,21 @@ begin
       [ExeVersion.Version.Detailed, ExeVersion.Version.BuildDateTimeString]);
   FormatUTF8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
     [RunTimer.Stop, NowToString, Exeversion.User, Exeversion.Host], Elapsed);
-  Writeln(fSaveToFile, #13#10, Version, CustomVersions, #13#10'Generated with: ',
-    COMPILER_VERSION, ' compiler', Utf8ToConsole(Elapsed));
+  TextLn([#13#10, Version, CustomVersions, #13#10'Generated with: ',
+    COMPILER_VERSION, ' compiler', Elapsed]);
   if result then
     Color(ccWhite)
   else
     Color(ccLightRed);
-  write(fSaveToFile, #13#10'Total assertions failed for all test suits:  ',
-    IntToThousandString(AssertionsFailed), ' / ', IntToThousandString(Assertions));
+  Text([#13#10'Total assertions failed for all test suits:  ',
+    IntToThousandString(AssertionsFailed), ' / ', IntToThousandString(Assertions)]);
   if result then
   begin
     Color(ccLightGreen);
-    Writeln(fSaveToFile, #13#10'! All tests passed successfully.');
+    TextLn([#13#10'! All tests passed successfully.']);
   end
   else
-    Writeln(fSaveToFile, #13#10'! Some tests FAILED: please correct the code.');
+    TextLn([#13#10'! Some tests FAILED: please correct the code.']);
   Color(ccLightGray);
 end;
 
@@ -1156,33 +1192,33 @@ begin
   if Failed = 0 then
   begin
     Color(ccGreen);
-    Write(fSaveToFile, '  - ', fCurrentMethodInfo^.TestName, ': ');
+    Text(['  - ', fCurrentMethodInfo^.TestName, ': ']);
     if Run = 0 then
-      Write(fSaveToFile, 'no assertion')
+      Text('no assertion')
     else if Run = 1 then
-      Write(fSaveToFile, '1 assertion passed')
+      Text('1 assertion passed')
     else
-      Write(fSaveToFile, IntToThousandString(Run), ' assertions passed');
+      Text([IntToThousandString(Run), ' assertions passed']);
   end
   else
   begin
     Color(ccLightRed);   // ! to highlight the line
-    Write(fSaveToFile, '!  - ', fCurrentMethodInfo^.TestName, ': ',
-      IntToThousandString(Failed), ' / ', IntToThousandString(Run), ' FAILED');
+    Text(['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
+      Failed), ' / ', IntToThousandString(Run), ' FAILED']);
   end;
-  Write(fSaveToFile, '  ', TestTimer.Stop);
+  Text(['  ', TestTimer.Stop]);
   if C.fRunConsoleOccurenceNumber > 0 then
-    Write(fSaveToFile, '  ',
-      IntToThousandString(TestTimer.PerSec(C.fRunConsoleOccurenceNumber)), '/s');
+    Text(['  ', IntToThousandString(TestTimer.PerSec(
+      C.fRunConsoleOccurenceNumber)), '/s']);
   if C.fRunConsoleMemoryUsed > 0 then
   begin
-    Write(fSaveToFile, '  ', KB(C.fRunConsoleMemoryUsed));
+    Text(['  ', KB(C.fRunConsoleMemoryUsed)]);
     C.fRunConsoleMemoryUsed := 0; // display only once
   end;
-  Writeln(fSaveToFile);
+  TextLn([]);
   if C.fRunConsole <> '' then
   begin
-    Writeln(fSaveToFile, '     ', C.fRunConsole);
+    TextLn(['     ', C.fRunConsole]);
     C.fRunConsole := '';
   end;
   Color(ccLightGray);
@@ -1232,7 +1268,9 @@ begin
     if ParamCount <> 0 then
     begin
       tests.SaveToFile(paramstr(1)); // DestPath on command line -> export to file
+      {$I-}
       Writeln(tests.Ident, #13#10#13#10' Running tests... please wait');
+      {$I+}
     end;
     tests.Run;
   finally
