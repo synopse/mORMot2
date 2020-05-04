@@ -14,5 +14,7 @@ Note that the mandatory libraries which are meant to be part of the Operating Sy
 
 ## Thin Wrappers
 
-Those `mormot.lib.*.pas` units are just wrappers to the `c` external API of the libraries. They are then encapsulated in higher level units, which are meant to be used by the framework. For instance `mormot.lib.z.pas` contains the raw access to the `zlib` API, whereas `mormot.core.zip.pas` contains the actual deflate and .zip file process. Similarly, `mormot.lib.pq.pas` defines the PostgreSQL client API, whereas `mormot.db.postgresql.pas` will call it to implement `mormot.db` compatible SQL requests.
+Those `mormot.lib.*.pas` units are just wrappers to the `c` external API of the libraries. They are then encapsulated in higher level units, which are meant to be used by the framework.
+
+For instance `mormot.lib.z.pas` contains the raw access to the `zlib` API, whereas `mormot.core.zip.pas` contains the actual deflate and .zip file process. Similarly, `mormot.lib.pq.pas` defines the PostgreSQL client API, whereas `mormot.db.postgresql.pas` will call it to implement `mormot.db` compatible SQL requests.
 

@@ -328,7 +328,7 @@ begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
   t32 := Windows.GetTickCount; // we only have the 32-bit counter
   p := @LastTickXP;
   if t32 < p^.L then
-    inc(p^.H);  // wrap-up overflow after 49 days
+    inc(p^.H); // wrap-up overflow after 49 days
   p^.L := t32;
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap on XP :(

@@ -593,6 +593,9 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 { ********** TTextWriter class with proper JSON escaping and WriteObject() support }
 
 type
+  /// JSON-capable TBaseWriter inherited class
+  // - in addition to TBaseWriter, will handle JSON serialization of any
+  // kind of value, including objects
   TTextWriter = class(TBaseWriter)
   protected
     fBlockComment: RawUTF8;
@@ -8496,9 +8499,9 @@ begin
       [ObjectInstance]); // paranoid check
   result.Props.SetAutoCreateFields;
   for i := 0 to high(result.Props.AutoCreateClasses) do
+    // for AutoCreateFields(): allow direct fClassNewInstance() call
     with TRttiJson(result.Props.AutoCreateClasses[i]^.Value) do
      if not Assigned(fClassNewInstance) then
-       // for AutoCreateFields(): allow direct fClassNewInstance() call
        SetClassNewInstance;
   result.Flags := result.Flags + [rcfAutoCreateFields];
 end;

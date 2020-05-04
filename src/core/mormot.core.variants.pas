@@ -2824,6 +2824,7 @@ begin
           W.AddNull
         else
         begin
+          forced := [];
           if [twoForceJSONExtended, twoForceJSONStandard] * W.CustomOptions = [] then
           begin
             if dvoSerializeAsExtendedJson in VOptions then
@@ -2831,9 +2832,7 @@ begin
             else
               forced := [twoForceJSONStandard];
             W.CustomOptions := W.CustomOptions + forced;
-          end
-          else
-            forced := [];
+          end;
           if dvoIsObject in VOptions then
           begin
             checkExtendedPropName := twoForceJSONExtended in W.CustomOptions;
