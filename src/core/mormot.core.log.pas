@@ -1124,38 +1124,6 @@ procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
-/// name the current thread so that it would be easily identified in the IDE debugger
-// - could also be retrieved by CurrentThreadName/GetCurrentThreadName
-procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const); overload;
-
-/// name the current thread so that it would be easily identified in the IDE debugger
-// - could also be retrieved by CurrentThreadName/GetCurrentThreadName
-procedure SetCurrentThreadName(const Name: RawUTF8); overload;
-
-/// name a thread so that it would be easily identified in the IDE debugger
-// - you can force this function to do nothing by setting the NOSETTHREADNAME
-// conditional, if you have issues with this feature when debugging your app
-// - most meaningless patterns (like 'TSQL') are trimmed to reduce the
-// resulting length - which is convenient e.g. with POSIX truncation to 16 chars
-// - you can retrieve the name later on using CurrentThreadName
-// - this method will register TSynLog.LogThreadName(), so threads calling it
-// should also call TSynLogFamily.OnThreadEnded/TSynLog.NotifyThreadEnded
-procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
-  const Args: array of const);
-
-threadvar
-  /// low-level access to the thread name, as set by SetThreadName()
-  // - since threadvar can't contain managed strings, it is limited to 31 chars,
-  // which is enough since POSIX truncates to 16 chars and SetThreadName does
-  // trim meaningless patterns
-  CurrentThreadName: TShort31;
-
-/// retrieve the thread name, as set by SetThreadName()
-// - if possible, direct CurrentThreadName threadvar access is slightly faster
-function GetCurrentThreadName: RawUTF8;
-  {$ifdef HASINLINE} inline; {$endif}
-
-
 type
   /// a mORMot-compatible calback definition
   // - used to notify a remote mORMot server via interface-based serivces
@@ -1973,7 +1941,7 @@ end;
 procedure TSynMapFile.SaveToStream(aStream: TStream);
 var
   W: TBufferWriter;
-  i: integer;
+  i: PtrInt;
   MS: TMemoryStream;
 begin
   MS := TMemoryStream.Create;
@@ -3561,7 +3529,7 @@ end;
 procedure TSynLog.LogFileHeader;
 var
   WithinEvents: boolean;
-  i: integer;
+  i: PtrInt;
   {$ifdef MSWINDOWS}
   Env: PWideChar;
   P: PWideChar;
@@ -4453,17 +4421,7 @@ end;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
-procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
-begin
-  SetThreadName(GetCurrentThreadId, Format, Args);
-end;
-
-procedure SetCurrentThreadName(const Name: RawUTF8);
-begin
-  SetThreadName(GetCurrentThreadId, '%', [Name]);
-end;
-
-procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
+procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 var
   name: RawUTF8;
@@ -4473,7 +4431,8 @@ begin
   FormatUTF8(Format, Args, name);
   name := StringReplaceAll(name, ['TSQLRest', '', 'TSQL', '', 'TWebSocket', 'WS',
     'TSyn', '', 'Thread', '', 'Process', '', 'Background', 'Bgd', 'Server', 'Svr',
-    'Client', 'Clt', 'WebSocket', 'WS', 'Timer', 'Tmr', 'Thread', 'Thd']);
+    'Client', 'Clt', 'WebSocket', 'WS', 'Parallel', 'Par', 'Timer', 'Tmr',
+    'Thread', 'Thd']);
   for i := 1 to length(name) do
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line
@@ -4498,10 +4457,6 @@ begin
   end;
 end;
 
-function GetCurrentThreadName: RawUTF8;
-begin
-  ShortStringToAnsi7String(CurrentThreadName, result);
-end;
 
 
 { TSynLogCallbacks }
@@ -4656,7 +4611,7 @@ end;
 
 function TSynLogFile.EventCount(const aSet: TSynLogInfos): integer;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := 0;
   if integer(aSet) <> 0 then
@@ -5284,7 +5239,7 @@ end;
 
 function TSynLogFile.ThreadName(ThreadID, CurrentLogIndex: integer): RawUTF8;
 var
-  i: integer;
+  i: PtrInt;
   lineptr: PtrUInt;
   found: pointer;
 begin
@@ -5837,6 +5792,7 @@ begin
   GetEnumTrimmedNames(TypeInfo(TSynLogInfo), @_LogInfoText);
   GetEnumCaptions(TypeInfo(TSynLogInfo), @_LogInfoCaption);
   _LogInfoCaption[sllNone] := '';
+  SetThreadName := _SetThreadName;
   SetCurrentThreadName('MainThread');
 end;
 

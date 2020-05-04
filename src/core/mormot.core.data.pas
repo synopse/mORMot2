@@ -8539,7 +8539,7 @@ end;
 
 function TSynTimeZone.Ids: TStrings;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if fIDs = nil then
   begin
@@ -8552,7 +8552,7 @@ end;
 
 function TSynTimeZone.Displays: TStrings;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if fDisplays = nil then
   begin

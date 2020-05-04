@@ -28,6 +28,7 @@ uses
   mormot.core.secure       in '..\src\core\mormot.core.secure.pas',
   mormot.core.jwt          in '..\src\core\mormot.core.jwt.pas',
   mormot.core.search       in '..\src\core\mormot.core.search.pas',
+  mormot.core.threads      in '..\src\core\mormot.core.threads.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas',

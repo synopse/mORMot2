@@ -1356,11 +1356,11 @@ end;
 function TWinCryptoAPI.Available: boolean;
 begin
   if not Tested then
-    Acquire;
+    Resolve;
   result := Assigned(AcquireContextA);
 end;
 
-procedure TWinCryptoAPI.Acquire;
+procedure TWinCryptoAPI.Resolve;
 const
   NAMES: array[0..7] of PChar = (
     'CryptAcquireContextA', 'CryptReleaseContext', 'CryptImportKey',

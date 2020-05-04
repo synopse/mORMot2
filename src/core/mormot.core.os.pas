@@ -11,7 +11,7 @@ unit mormot.core.os;
   - Operating System Specific Types (e.g. TWinRegistry)
   - Unicode, Time, File, Console process
   - Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
-  - TSynLocker Threading Features
+  - TSynLocker/TSynLocked and Low-Level Threading Features
 
    Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid $ifdef/$endif in "uses" clauses.
@@ -33,6 +33,7 @@ uses
   {$endif MSWINDOWS}
   classes,
   contnrs,
+  syncobjs,
   types,
   sysutils,
   mormot.core.base;
@@ -465,7 +466,7 @@ type
     /// if this API has been loaded
     Handle: THandle;
     /// used when inlining Available method
-    procedure Acquire;
+    procedure Resolve;
   public
     /// acquire a handle to a particular key container within a
     // particular cryptographic service provider (CSP)
@@ -608,6 +609,10 @@ type
   TRTLCriticalSection = Windows.TRTLCriticalSection;
   {$endif ISDELPHI}
 
+const
+  /// redefined here to avoid dependency to Windows
+  INFINITE = cardinal(-1);
+
 /// returns the current UTC time as TSystemTime
 // - under Delphi/Windows, directly call the homonymous Win32 API
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -643,25 +648,6 @@ procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection)
 // - if the supplied mutex has been initialized, delete it
 // - if the supplied mutex is void (i.e. all filled with 0), do nothing
 procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
-
-/// enter a giant lock for thread-safe shared process
-// - shall be protected as such:
-// ! GlobalLock;
-// ! try
-// !   .... do something thread-safe but as short as possible
-// ! finally
-// !  GlobalUnLock;
-// ! end;
-// - you should better not use such a giant-lock, but an instance-dedicated
-// critical section or TSynLocker - these functions are just here to be
-// convenient, for non time-critical process (e.g. singleton initialization)
-procedure GlobalLock;
-
-/// release the giant lock for thread-safe shared process
-// - you should better not use such a giant-lock, but an instance-dedicated
-// critical section or TSynLocker - these functions are just here to be
-// convenient, for non time-critical process (e.g. singleton initialization)
-procedure GlobalUnLock;
 
 /// returns the current UTC time as TSystemTime
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
@@ -755,29 +741,6 @@ function UnixMSTimeUTC: Int64;
 // - prefer it under Windows, if a dozen of ms resolution is enough for your task
 function UnixMSTimeUTCFast: Int64;
   {$ifdef LINUX} inline; {$endif}
-
-{$ifndef MSWINDOWS}
-
-var
-  /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
-  // - in practice, it has been reported as buggy under POSIX systems
-  // - even Linus Torvald himself raged against its usage - see e.g.
-  // https://www.realworldtech.com/forum/?threadid=189711&curpostid=189752
-  // - you may tempt the devil and try it by yourself
-  SleepHiRes0Yield: boolean = false;
-
-{$endif MSWINDOWS}
-
-/// similar to Windows sleep() API call, to be truly cross-platform
-// - using millisecond resolution
-// - SleepHiRes(0) calls ThreadSwitch on Windows, but POSIX version will
-// wait 10 microsecond unless SleepHiRes0Yield is forced to true (bad idea)
-// - in respect to RTL's Sleep() function, it will return on ESysEINTR
-procedure SleepHiRes(ms: cardinal);
-
-/// low-level naming of a thread
-// - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
-procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
@@ -1224,7 +1187,7 @@ function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
 
 
 
-{ **************** TSynLocker Threading Features }
+{ **************** TSynLocker and Low-Level Threading Features }
 
 type
   /// allow to add cross-platform locking methods to any class instance
@@ -1438,6 +1401,84 @@ type
   /// meta-class definition of the TSynLocked hierarchy
   TSynLockedClass = class of TSynLocked;
 
+{$ifndef MSWINDOWS}
+
+var
+  /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
+  // - in practice, it has been reported as buggy under POSIX systems
+  // - even Linus Torvald himself raged against its usage - see e.g.
+  // https://www.realworldtech.com/forum/?threadid=189711&curpostid=189752
+  // - you may tempt the devil and try it by yourself
+  SleepHiRes0Yield: boolean = false;
+
+{$endif MSWINDOWS}
+
+/// similar to Windows sleep() API call, to be truly cross-platform
+// - using millisecond resolution
+// - SleepHiRes(0) calls ThreadSwitch on Windows, but POSIX version will
+// wait 10 microsecond unless SleepHiRes0Yield is forced to true (bad idea)
+// - in respect to RTL's Sleep() function, it will return on ESysEINTR
+procedure SleepHiRes(ms: cardinal);
+
+/// low-level naming of a thread
+// - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+
+/// name the current thread so that it would be easily identified in the IDE debugger
+// - could then be retrieved by CurrentThreadName/GetCurrentThreadName
+// - just a wrapper around SetThreadName(GetCurrentThreadId, ...)
+procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const); overload;
+
+/// name the current thread so that it would be easily identified in the IDE debugger
+// - could also be retrieved by CurrentThreadName/GetCurrentThreadName
+// - just a wrapper around SetThreadName(GetCurrentThreadId, ...)
+procedure SetCurrentThreadName(const Name: RawUTF8); overload;
+
+var
+  /// name a thread so that it would be easily identified in the IDE debugger
+  // - default implementation does nothing, unless mormot.core.log is included
+  // - you can force this function to do nothing by setting the NOSETTHREADNAME
+  // conditional, if you have issues with this feature when debugging your app
+  // - most meaningless patterns (like 'TSQL') are trimmed to reduce the
+  // resulting length - which is convenient e.g. with POSIX truncation to 16 chars
+  // - you can retrieve the name later on using CurrentThreadName
+  // - this method will register TSynLog.LogThreadName(), so threads calling it
+  // should also call TSynLogFamily.OnThreadEnded/TSynLog.NotifyThreadEnded
+  SetThreadName: procedure(ThreadID: TThreadID; const Format: RawUTF8;
+    const Args: array of const);
+
+threadvar
+  /// low-level access to the thread name, as set by SetThreadName()
+  // - since threadvar can't contain managed strings, it is limited to 31 chars,
+  // which is enough since POSIX truncates to 16 chars and SetThreadName does
+  // trim meaningless patterns
+  CurrentThreadName: TShort31;
+
+/// retrieve the thread name, as set by SetThreadName()
+// - if possible, direct CurrentThreadName threadvar access is slightly faster
+function GetCurrentThreadName: RawUTF8;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// enter a giant lock for thread-safe shared process
+// - shall be protected as such:
+// ! GlobalLock;
+// ! try
+// !   .... do something thread-safe but as short as possible
+// ! finally
+// !  GlobalUnLock;
+// ! end;
+// - you should better not use such a giant-lock, but an instance-dedicated
+// critical section or TSynLocker - these functions are just here to be
+// convenient, for non time-critical process (e.g. singleton initialization)
+procedure GlobalLock;
+
+/// release the giant lock for thread-safe shared process
+// - you should better not use such a giant-lock, but an instance-dedicated
+// critical section or TSynLocker - these functions are just here to be
+// convenient, for non time-critical process (e.g. singleton initialization)
+procedure GlobalUnLock;
+
+
 implementation
 
 // those include files hold all OS-specific functions
@@ -1548,19 +1589,6 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 begin
   if IsInitializedCriticalSection(cs) then
     DeleteCriticalSection(cs);
-end;
-
-var
-  GlobalCriticalSection: TRTLCriticalSection;
-
-procedure GlobalLock;
-begin
-  EnterCriticalSection(GlobalCriticalSection);
-end;
-
-procedure GlobalUnLock;
-begin
-  LeaveCriticalSection(GlobalCriticalSection);
 end;
 
 function Unicode_CodePage: integer;
@@ -2184,6 +2212,41 @@ end;
 
 { **************** TSynLocker Threading Features }
 
+var
+  GlobalCriticalSection: TRTLCriticalSection;
+
+procedure GlobalLock;
+begin
+  EnterCriticalSection(GlobalCriticalSection);
+end;
+
+procedure GlobalUnLock;
+begin
+  LeaveCriticalSection(GlobalCriticalSection);
+end;
+
+procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
+  const Args: array of const);
+begin
+  // do nothing - properly implemented in mormot.core.log
+end;
+
+procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
+begin
+  SetThreadName(GetCurrentThreadId, Format, Args);
+end;
+
+procedure SetCurrentThreadName(const Name: RawUTF8);
+begin
+  SetThreadName(GetCurrentThreadId, '%', [Name]);
+end;
+
+function GetCurrentThreadName: RawUTF8;
+begin
+  ShortStringToAnsi7String(CurrentThreadName, result);
+end;
+
+
 function NewSynLocker: PSynLocker;
 begin
   GetMem(result, SizeOf(TSynLocker));
@@ -2554,6 +2617,7 @@ initialization
   InitializeCriticalSection(AutoSlotsLock);
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   SetExecutableVersion(0,0,0,0);
+  SetThreadName := _SetThreadName;
 
 finalization
   FinalizeUnit;
