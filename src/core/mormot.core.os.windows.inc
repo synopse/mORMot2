@@ -196,13 +196,20 @@ function OemToFileName(const OEM: RawByteString): TFileName;
 begin
   // decode OEM/DOS file name into native encoding
   SetString(result, nil, length(OEM));
-  OemToChar(pointer(result), pointer(OEM)); // OemToCharW/OemToCharA
+  OemToChar(pointer(OEM), pointer(result)); // OemToCharW/OemToCharA = TFileName
+end;
+
+function OemToUnicode(const OEM: RawByteString): SynUnicode;
+begin
+  SetString(result, nil, length(OEM));
+  OemToCharW(pointer(OEM), pointer(result));
 end;
 
 function FileSize(const FileName: TFileName): Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
-begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+begin
+  // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
   if GetFileAttributesEx(pointer(FileName), GetFileExInfoStandard, @FA) then
   begin
     PInt64Rec(@result)^.Lo := FA.nFileSizeLow;

@@ -1118,7 +1118,7 @@ begin
       begin // crc+sizes in "data descriptor"
         if (zcrc32 <> 0) or (zzipSize <> 0) or (zfullSize <> 0) then
           raise ESynZip.Create('ZIP extended format');
-      // UnZip() will call RetrieveFileInfo()
+        // UnZip() will call RetrieveFileInfo()
       end
       else if (zzipSize = cardinal(-1)) or (zfullSize = cardinal(-1)) then
         raise ESynZip.Create('ZIP64 format not supported');
@@ -1136,6 +1136,7 @@ begin
         // decode UTF-8 file name into native string/TFileName type
         zipName := TFileName(UTF8Decode(tmp))
       else
+        // legacy Windows-OEM encoding
         zipName := OemToFileName(tmp);
       inc(PByte(H), sizeof(H^) + infoLocal^.NameLen + H^.fileInfo.extraLen + H^.commentLen);
       if not (infoLocal^.zZipMethod in [Z_STORED, Z_DEFLATED]) then

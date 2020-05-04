@@ -877,6 +877,9 @@ function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
   LastWriteAccess, FileCreateDateTime: Int64): Boolean;
 
+/// conversion of Windows OEM charset into a UTF-16 encoded string
+function OemToUnicode(const OEM: RawByteString): SynUnicode;
+
 /// conversion of Windows OEM charset into a file name
 // - as used e.g. by mormot.core.zip for non UTF-8 file names
 function OemToFileName(const OEM: RawByteString): TFileName;
@@ -1217,8 +1220,6 @@ function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
 // it will free the supplied PropertiesInstance in this case, and return the existing
 function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
   FreeExistingPropertiesInstance: boolean = true): TObject;
-
-
 
 
 
@@ -1979,7 +1980,6 @@ begin
     dlclose(pthread);
   {$endif MSWINDOWS}
 end;
-
 
 initialization
   {$ifdef ISFPC27}
