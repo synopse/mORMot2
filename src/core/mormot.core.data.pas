@@ -155,8 +155,8 @@ type
     // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
     procedure RttiAfterReadObject; virtual;
   public
-    /// this virtual constructor will be called at instance creation
-    // - this constructor register the class type to the RttiCustom list
+    /// virtual constructor called at instance creation
+    // - this constructor also registers the class type to the RttiCustom list
     // - is declared as virtual so that inherited classes may have a root
     // constructor to override
     constructor Create; virtual;
@@ -176,7 +176,6 @@ type
     // - warning: under FPC, it won't initialize fields management operators
     class function NewInstance: TObject; override;
   end;
-  {$M-}
 
   /// used to determine the exact class type of a TSynPersistent
   // - could be used to create instances using its virtual constructor
@@ -187,12 +186,14 @@ type
   // basic process, and can't be easily inherited
   // - stateless methods (like Add/Clear/Exists/Remove) are defined as virtual
   // since can be overriden e.g. by TSynObjectListLocked to add a TSynLocker
-  TSynList = class(TSynPersistent)
+  TSynList = class(TObject)
   protected
     fCount: integer;
     fList: TPointerDynArray;
     function Get(index: Integer): pointer; {$ifdef HASINLINE} inline; {$endif}
   public
+    /// virtual constructor called at instance creation
+    constructor Create; virtual;
     /// add one item to the list
     function Add(item: pointer): integer; virtual;
     /// delete all items of the list
@@ -215,6 +216,8 @@ type
     property Items[index: Integer]: pointer read Get; default;
   end;
   PSynList = ^TSynList;
+
+  {$M-}
 
   /// simple and efficient TObjectList, without any notification
   TSynObjectList = class(TSynList)
@@ -2047,7 +2050,7 @@ type
   // - high-level methods of this class are thread-safe
   // - if fNoDuplicate flag is defined, an internal hash table will be
   // maintained to perform IndexOf() lookups in O(1) linear way
-  TRawUTF8List = class
+  TRawUTF8List = class(TSynLocked)
   protected
     fCount: PtrInt;
     fValue: TRawUTF8DynArray;
@@ -2057,7 +2060,6 @@ type
     fNameValueSep: AnsiChar;
     fOnChange, fOnChangeBackupForBeginUpdate: TNotifyEvent;
     fOnChangeLevel: integer;
-    fSafe: TSynLocker;
     function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(const capa: PtrInt);
     function GetCapacity: PtrInt;
@@ -2080,17 +2082,21 @@ type
     procedure InternalDelete(Index: PtrInt);
     procedure OnChangeHidden(Sender: TObject);
   public
+    /// initialize the RawUTF8/Objects storage with [fCaseSensitive] flags
+    constructor Create; overload; override;
     /// initialize the RawUTF8/Objects storage
     // - by default, any associated Objects[] are just weak references;
     // you may supply fOwnObjects flag to force object instance management
     // - if you want the stored text items to be unique, set fNoDuplicate
     // and then an internal hash table will be maintained for fast IndexOf()
     // - you can unset fCaseSensitive to let the UTF-8 lookup be case-insensitive
-    constructor Create(aFlags: TRawUTF8ListFlags = [fCaseSensitive]); overload;
+    constructor Create(aFlags: TRawUTF8ListFlags); reintroduce; overload;
+    {$ifndef PUREMORMOT2}
     /// backward compatiliby overloaded constructor
     // - please rather use the overloaded Create(TRawUTF8ListFlags)
     constructor Create(aOwnObjects: boolean; aNoDuplicate: boolean = false;
-      aCaseSensitive: boolean = true); overload;
+      aCaseSensitive: boolean = true); reintroduce; overload;
+    {$endif PUREMORMOT2}
     /// finalize the internal objects stored
     // - if instance was created with fOwnObjects flag
     destructor Destroy; override;
@@ -2273,9 +2279,6 @@ type
     /// direct access to the TRawUTF8DynArray items dynamic array wrapper
     // - using this property is not thread-safe, since content may change
     property ValuesArray: TDynArrayHashed read fValues;
-    /// access to the locking methods of this instance
-    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker read fSafe;
   end;
 
   PRawUTF8List = ^TRawUTF8List;
@@ -2539,6 +2542,11 @@ end; // no benefit of rewriting FreeInstance/CleanupInstance
 
 
 { TSynList }
+
+constructor TSynList.Create;
+begin
+  // nothing to do
+end;
 
 function TSynList.Add(item: pointer): integer;
 begin
@@ -3675,6 +3683,12 @@ end;
 
 { TRawUTF8List }
 
+constructor TRawUTF8List.Create;
+begin
+  Create([fCaseSensitive]);
+end;
+
+{$ifndef PUREMORMOT2}
 constructor TRawUTF8List.Create(aOwnObjects, aNoDuplicate, aCaseSensitive: boolean);
 begin
   if aOwnObjects then
@@ -3685,21 +3699,21 @@ begin
     include(fFlags, fCaseSensitive);
   Create(fFlags);
 end;
+{$endif PUREMORMOT2}
 
 constructor TRawUTF8List.Create(aFlags: TRawUTF8ListFlags);
 begin
+  inherited Create;
   fNameValueSep := '=';
   fFlags := aFlags;
   fValues.InitSpecific(TypeInfo(TRawUTF8DynArray), fValue, ptRawUTF8, @fCount,
     not (fCaseSensitive in aFlags));
-  fSafe.Init;
 end;
 
 destructor TRawUTF8List.Destroy;
 begin
   SetCapacity(0);
-  inherited;
-  fSafe.Done;
+  inherited Destroy;
 end;
 
 procedure TRawUTF8List.SetCaseSensitive(Value: boolean);

@@ -8026,23 +8026,21 @@ begin
     fJsonSave := @_JS_RttiCustom;
     fJsonLoad := @_JL_RttiCustom;
     // recognize mormot.core.data classes
-    if fValueClass.InheritsFrom(TSynPersistent) then
+    if fValueClass.InheritsFrom(TSynObjectList) then
     begin
-      if fValueClass.InheritsFrom(TSynObjectList) then
-      begin
-        fJsonSave := @_JS_TSynObjectList;
-        fJsonLoad := @_JL_TSynObjectList;
-      end
-      else if fValueClass.InheritsFrom(TSynList) then
-        fJsonSave := @_JS_TSynList;
-      // allow any kind of customization for TSynPersistent children
-      TSPHookClass(fValueClass).RttiCustomSet(self);
+      fJsonSave := @_JS_TSynObjectList;
+      fJsonLoad := @_JL_TSynObjectList;
     end
+    else if fValueClass.InheritsFrom(TSynList) then
+      fJsonSave := @_JS_TSynList
     else if fValueClass.InheritsFrom(TRawUTF8List) then
     begin
       fJsonSave := @_JS_TRawUTF8List;
       fJsonLoad := @_JL_TRawUTF8List;
     end
+    else if fValueClass.InheritsFrom(TSynPersistent) then
+      // allow any kind of customization for TSynPersistent children
+      TSPHookClass(fValueClass).RttiCustomSet(self)
     // recognize most known RTL classes
     else if fValueClass.InheritsFrom(TStrings) then
     begin
@@ -8498,7 +8496,7 @@ begin
       [ObjectInstance]); // paranoid check
   result.Props.SetAutoCreateFields;
   for i := 0 to high(result.Props.AutoCreateClasses) do
-    with TRttiJson(result.Props.AutoCreateClasses[i].Value) do
+    with TRttiJson(result.Props.AutoCreateClasses[i]^.Value) do
      if not Assigned(fClassNewInstance) then
        // for AutoCreateFields(): allow direct fClassNewInstance() call
        SetClassNewInstance;
@@ -8509,7 +8507,7 @@ procedure AutoCreateFields(ObjectInstance: TObject);
 var
   rtti: TRttiCustom;
   n: integer;
-  p: PRttiCustomProp;
+  p: ^PRttiCustomProp;
 begin
   // faster than ClassPropertiesGet: we know it is the first slot
   rtti := PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^;
@@ -8520,8 +8518,9 @@ begin
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)
   repeat
-    PPointer(PAnsiChar(ObjectInstance) + p^.OffsetGet)^ :=
-      TRttiJson(p^.Value).fClassNewInstance(p^.Value);
+    with p^^ do
+      PPointer(PAnsiChar(ObjectInstance) + OffsetGet)^ :=
+        TRttiJson(Value).fClassNewInstance(Value);
     inc(p);
     dec(n);
   until n = 0;
@@ -8531,7 +8530,7 @@ procedure AutoDestroyFields(ObjectInstance: TObject);
 var
   props: PRttiCustomProps;
   n: integer;
-  p: PRttiCustomProp;
+  p: ^PRttiCustomProp;
   arr: PPAnsiChar;
   o: TObject;
 begin
@@ -8541,7 +8540,7 @@ begin
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
     repeat
-      o := PObject(PAnsiChar(ObjectInstance) + p^.OffsetGet)^;
+      o := PObject(PAnsiChar(ObjectInstance) + p^^.OffsetGet)^;
       if o <> nil then
         // inlined o.Free
         o.Destroy;
@@ -8554,7 +8553,7 @@ begin
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   repeat
-    arr := pointer(PAnsiChar(ObjectInstance) + p^.OffsetGet);
+    arr := pointer(PAnsiChar(ObjectInstance) + p^^.OffsetGet);
     if arr^ <> nil then
       // inlined ObjArrayClear()
       RawObjectsClear(pointer(arr^), PDALen(arr^ - _DALEN)^ + _DAOFF);

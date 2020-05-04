@@ -24,6 +24,7 @@ uses
   syncobjs,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.rtti,
   mormot.core.text,
   mormot.core.data,
   mormot.core.perf;
@@ -650,12 +651,12 @@ implementation
 constructor TPendingTaskList.Create;
 begin
   inherited Create;
-  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray), fTask, djInt64, @fCount);
+  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray), fTask, ptInt64, @fCount);
 end;
 
 function TPendingTaskList.GetTimestamp: Int64;
 begin
-  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  result := GetTickCount64;
 end;
 
 procedure TPendingTaskList.AddTask(aMilliSecondsDelayFromNow: integer;

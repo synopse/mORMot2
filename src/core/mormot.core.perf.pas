@@ -165,7 +165,7 @@ type
     // - returns the time elapsed, in micro seconds (i.e. LastTime value)
     // - warning: Start, Stop, Pause and Resume methods are then disallowed
     function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-      {$ifdef FPCLINUX}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
