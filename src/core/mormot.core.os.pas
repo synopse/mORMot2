@@ -1409,12 +1409,34 @@ type
   // - see also NewSynLocker and TSynLocker.DoneAndFreemem functions
   PSynLocker = ^TSynLocker;
 
-
 /// initialize a TSynLocker instance from heap
 // - call DoneandFreeMem to release the associated memory and OS mutex
 // - is used e.g. in TSynPersistentLock to reduce class instance size
 function NewSynLocker: PSynLocker;
 
+type
+  {$M+}
+
+  /// a lighter alternative to TSynPersistentLock
+  // - can be used as base class when custom JSON persistence is not needed
+  TSynLocked = class
+  protected
+    fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
+  public
+    /// initialize the instance, and its associated lock
+    // - is defined as virtual, just like TSynPersistent
+    constructor Create; virtual;
+    /// finalize the instance, and its associated lock
+    destructor Destroy; override;
+    /// access to the associated instance critical section
+    // - call Safe.Lock/UnLock to protect multi-thread access on this storage
+    property Safe: PSynLocker read fSafe;
+  end;
+
+  {$M-}
+
+  /// meta-class definition of the TSynLocked hierarchy
+  TSynLockedClass = class of TSynLocked;
 
 implementation
 
@@ -2490,6 +2512,19 @@ begin
     result := nil;
 end;
 
+
+{ TSynLocked }
+
+constructor TSynLocked.Create;
+begin
+  fSafe := NewSynLocker;
+end;
+
+destructor TSynLocked.Destroy;
+begin
+  inherited Destroy;
+  fSafe^.DoneAndFreeMem;
+end;
 
 
 procedure FinalizeUnit;

@@ -434,7 +434,7 @@ type
   // - internally, several (hardware-accelerated) crc32c hash functions will be
   // used, with some random seed values, to simulate several hashing functions
   // - Insert/MayExist/Reset methods are thread-safe
-  TSynBloomFilter = class(TSynPersistentLock)
+  TSynBloomFilter = class(TSynLocked)
   private
     fSize: cardinal;
     fFalsePositivePercent: double;

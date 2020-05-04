@@ -8,7 +8,7 @@ unit mormot.core.data;
 
    Low-Level Data Processing Functions shared by all framework units
     - RTL TPersistent / TInterfacedObject with Custom Constructor
-    - TSynPersistent* / TSyn*List / TSynLocker classes
+    - TSynPersistent* / TSyn*List classes
     - INI Files and In-memory Access
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray, TDynArrayHashed and TSynQueue Wrappers
@@ -357,7 +357,7 @@ type
   /// abstract high-level handling of (SynLZ-)compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
   // with proper binary persistence implementation
-  TSynPersistentStore = class(TSynPersistentLock)
+  TSynPersistentStore = class(TSynLocked)
   protected
     fName: RawUTF8;
     fReader: TFastReader;

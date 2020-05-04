@@ -1104,7 +1104,7 @@ type
   // - internally make use of an efficient hashing algorithm for fast response
   // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)
   // - this class is thread-safe if you use properly the associated Safe lock
-  TSynCache = class(TSynPersistentLock)
+  TSynCache = class(TSynLocked)
   protected
     fFindLastKey: RawUTF8;
     fNameValue: TSynNameValue;
@@ -1200,7 +1200,7 @@ type
   // - TDynArray is a wrapper which do not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
-  TSynDictionary = class(TSynPersistentLock)
+  TSynDictionary = class(TSynLocked)
   protected
     fKeys: TDynArrayHashed;
     fValues: TDynArray;
@@ -8119,6 +8119,11 @@ begin
   result := TSynObjectListClass(Rtti.ValueClass).Create({ownobjects=}true);
 end;
 
+function _New_SynLocked(Rtti: TRttiCustom): pointer;
+begin
+  result := TSynLockedClass(Rtti.ValueClass).Create;
+end;
+
 function _New_InterfacedCollection(Rtti: TRttiCustom): pointer;
 begin
   result := TInterfacedCollectionClass(Rtti.ValueClass).Create;
@@ -8158,6 +8163,8 @@ begin
       fClassNewInstance := @_New_SynPersistent
     else if C = TSynObjectList then
       fClassNewInstance := @_New_SynObjectList
+    else if C = TSynLocked then
+      fClassNewInstance := @_New_SynLocked
     else if C = TComponent then
       fClassNewInstance := @_New_Component
     else if C = TInterfacedCollection then
