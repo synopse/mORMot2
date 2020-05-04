@@ -27,6 +27,7 @@ uses
   contnrs,
   sysutils,
   mormot.core.base,
+  mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.rtti,
@@ -1923,7 +1924,6 @@ implementation
 
 uses
   mormot.core.datetime,
-  mormot.core.os,
   mormot.core.variants;
 
 

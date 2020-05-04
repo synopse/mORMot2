@@ -633,7 +633,7 @@ type
   // and another one for decryption, with PKCS7 padding and no MAC validation
   TProtocolAES = class(TInterfacedObject, IProtocol)
   protected
-    fSafe: TRTLCriticalSection;
+    fSafe: TRTLCriticalSection; // no need of TSynLocker padding
     fAES: array[boolean] of TAESAbstract; // [false]=decrypt [true]=encrypt
   public
     /// initialize this encryption protocol with the given AES settings

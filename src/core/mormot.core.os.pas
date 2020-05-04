@@ -11,6 +11,7 @@ unit mormot.core.os;
   - Operating System Specific Types (e.g. TWinRegistry)
   - Unicode, Time, File, Console process
   - Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
+  - TSynLocker Threading Features
 
    Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid $ifdef/$endif in "uses" clauses.
@@ -1223,6 +1224,198 @@ function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
 
 
 
+{ **************** TSynLocker Threading Features }
+
+type
+  /// allow to add cross-platform locking methods to any class instance
+  // - typical use is to define a Safe: TSynLocker property, call Safe.Init
+  // and Safe.Done in constructor/destructor methods, and use Safe.Lock/UnLock
+  // methods in a try ... finally section
+  // - in respect to the TCriticalSection class, fix a potential CPU cache line
+  // conflict which may degrade the multi-threading performance, as reported by
+  // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
+  // - internal padding is used to safely store up to 7 values protected
+  // from concurrent access with a mutex, so that SizeOf(TSynLocker)>128
+  // - for object-level locking, see TSynPersistentLock which owns one such
+  // instance, or call low-level fSafe := NewSynLocker in your constructor,
+  // then fSafe^.DoneAndFreemem in your destructor
+  TSynLocker = object
+  protected
+    fSection: TRTLCriticalSection;
+    fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
+    fLocked, fInitialized: boolean;
+    function GetVariant(Index: integer): Variant;
+    procedure SetVariant(Index: integer; const Value: Variant);
+    function GetInt64(Index: integer): Int64;
+    procedure SetInt64(Index: integer; const Value: Int64);
+    function GetBool(Index: integer): boolean;
+    procedure SetBool(Index: integer; const Value: boolean);
+    function GetUnlockedInt64(Index: integer): Int64;
+    procedure SetUnlockedInt64(Index: integer; const Value: Int64);
+    function GetPointer(Index: integer): Pointer;
+    procedure SetPointer(Index: integer; const Value: Pointer);
+    function GetUTF8(Index: integer): RawUTF8;
+    procedure SetUTF8(Index: integer; const Value: RawUTF8);
+  public
+    /// internal padding data, also used to store up to 7 variant values
+    // - this memory buffer will ensure no CPU cache line mixup occurs
+    // - you should not use this field directly, but rather the Locked[],
+    // LockedInt64[], LockedUTF8[] or LockedPointer[] methods
+    // - if you want to access those array values, ensure you protect them
+    // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
+    // and maintain the PaddingUsedCount field accurately
+    Padding: array[0..6] of TVarData;
+    /// number of values stored in the internal Padding[] array
+    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
+    // - you should not have to use this field, but for optimized low-level
+    // direct access to Padding[] values, within a Lock/UnLock safe block
+    PaddingUsedCount: integer;
+    /// initialize the mutex
+    // - calling this method is mandatory (e.g. in the class constructor owning
+    // the TSynLocker instance), otherwise you may encounter unexpected
+    // behavior, like access violations or memory leaks
+    procedure Init;
+    /// finalize the mutex
+    // - calling this method is mandatory (e.g. in the class destructor owning
+    // the TSynLocker instance), otherwise you may encounter unexpected
+    // behavior, like access violations or memory leaks
+    procedure Done;
+    /// finalize the mutex, and call FreeMem() on the pointer of this instance
+    // - should have been initiazed with a NewSynLocker call
+    procedure DoneAndFreeMem;
+    /// lock the instance for exclusive access
+    // - this method is re-entrant from the same thread (you can nest Lock/UnLock
+    // calls in the same thread), but would block any other Lock attempt in
+    // another thread
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! Safe.Lock;
+    // ! try
+    // !   ...
+    // ! finally
+    // !   Safe.Unlock;
+    // ! end;
+    procedure Lock; {$ifdef FPC} inline; {$endif}
+    /// will try to acquire the mutex
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! if Safe.TryLock then
+    // !   try
+    // !     ...
+    // !   finally
+    // !     Safe.Unlock;
+    // !   end;
+    function TryLock: boolean; {$ifdef FPC} inline; {$endif}
+    /// will try to acquire the mutex for a given time
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! if Safe.TryLockMS(100) then
+    // !   try
+    // !     ...
+    // !   finally
+    // !     Safe.Unlock;
+    // !   end;
+    function TryLockMS(retryms: integer): boolean;
+    /// release the instance for exclusive access
+    // - each Lock/TryLock should have its exact UnLock opposite, so a
+    // try..finally block is mandatory for safe code
+    procedure UnLock; {$ifdef FPC} inline; {$endif}
+    /// will enter the mutex until the IUnknown reference is released
+    // - could be used as such under Delphi:
+    // !begin
+    // !  ... // unsafe code
+    // !  Safe.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // local hidden IUnknown will release the lock for the method
+    // - warning: under FPC, you should assign its result to a local variable -
+    // see bug http://bugs.freepascal.org/view.php?id=26602
+    // !var LockFPC: IUnknown;
+    // !begin
+    // !  ... // unsafe code
+    // !  LockFPC := Safe.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // LockFPC will release the lock for the method
+    // or
+    // !begin
+    // !  ... // unsafe code
+    // !  with Safe.ProtectMethod do begin
+    // !    ... // thread-safe code
+    // !  end; // local hidden IUnknown will release the lock for the method
+    // !end;
+    function ProtectMethod: IUnknown;
+    /// returns true if the mutex is currently locked by another thread
+    property IsLocked: boolean read fLocked;
+    /// returns true if the Init method has been called for this mutex
+    // - is only relevant if the whole object has been previously filled with 0,
+    // i.e. as part of a class or as global variable, but won't be accurate
+    // when allocated on stack
+    property IsInitialized: boolean read fInitialized;
+    /// safe locked access to a Variant value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // LockedBool, LockedInt64, LockedPointer and LockedUTF8 array properties
+    // - returns null if the Index is out of range
+    property Locked[Index: integer]: Variant read GetVariant write SetVariant;
+    /// safe locked access to a Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns nil if the Index is out of range, or does not store a Int64
+    property LockedInt64[Index: integer]: Int64 read GetInt64 write SetInt64;
+    /// safe locked access to a boolean value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked, LockedInt64, LockedPointer and LockedUTF8 array properties
+    // - value will be stored internally as a varBoolean variant
+    // - returns nil if the Index is out of range, or does not store a boolean
+    property LockedBool[Index: integer]: boolean read GetBool write SetBool;
+    /// safe locked access to a pointer/TObject value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked, LockedBool, LockedInt64 and LockedUTF8 array properties
+    // - pointers will be stored internally as a varUnknown variant
+    // - returns nil if the Index is out of range, or does not store a pointer
+    property LockedPointer[Index: integer]: Pointer read GetPointer write SetPointer;
+    /// safe locked access to an UTF-8 string value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedPointer array properties
+    // - UTF-8 string will be stored internally as a varString variant
+    // - returns '' if the Index is out of range, or does not store a string
+    property LockedUTF8[Index: integer]: RawUTF8 read GetUTF8 write SetUTF8;
+    /// safe locked in-place increment to an Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns the newly stored value
+    // - if the internal value is not defined yet, would use 0 as default value
+    function LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+    /// safe locked in-place exchange of a Variant value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - returns the previous stored value, or null if the Index is out of range
+    function LockedExchange(Index: integer; const Value: variant): variant;
+    /// safe locked in-place exchange of a pointer/TObject value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - pointers will be stored internally as a varUnknown variant
+    // - returns the previous stored value, nil if the Index is out of range,
+    // or does not store a pointer
+    function LockedPointerExchange(Index: integer; Value: pointer): pointer;
+    /// unsafe access to a Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns nil if the Index is out of range, or does not store a Int64
+    // - you should rather call LockedInt64[] property, or use this property
+    // with a Lock; try ... finally UnLock block
+    property UnlockedInt64[Index: integer]: Int64 read GetUnlockedInt64 write SetUnlockedInt64;
+  end;
+
+  /// a pointer to a TSynLocker mutex instance
+  // - see also NewSynLocker and TSynLocker.DoneAndFreemem functions
+  PSynLocker = ^TSynLocker;
+
+
+/// initialize a TSynLocker instance from heap
+// - call DoneandFreeMem to release the associated memory and OS mutex
+// - is used e.g. in TSynPersistentLock to reduce class instance size
+function NewSynLocker: PSynLocker;
+
+
 implementation
 
 // those include files hold all OS-specific functions
@@ -1240,8 +1433,11 @@ implementation
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
+const
+  MAX_AUTOSLOT = 7;
+
 type
-  TAutoSlots = array[0..15] of TObject; // always end with nil
+  TAutoSlots = array[0..MAX_AUTOSLOT] of TObject; // always end with last=nil
   PAutoSlots = ^TAutoSlots;
 
 var
@@ -1962,6 +2158,339 @@ begin
     Hash.c3 := crc32c(Hash.c2, pointer(InstanceFileName), length(InstanceFileName));
   end;
 end;
+
+
+{ **************** TSynLocker Threading Features }
+
+function NewSynLocker: PSynLocker;
+begin
+  GetMem(result, SizeOf(TSynLocker));
+  result^.Init;
+end;
+
+
+{ TAutoLock }
+
+type
+  /// used by TAutoLocker.ProtectMethod and TSynLocker.ProtectMethod
+  TAutoLock = class(TInterfacedObject)
+  protected
+    fLock: PSynLocker;
+  public
+    constructor Create(aLock: PSynLocker);
+    destructor Destroy; override;
+  end;
+
+constructor TAutoLock.Create(aLock: PSynLocker);
+begin
+  fLock := aLock;
+  fLock^.Lock;
+end;
+
+destructor TAutoLock.Destroy;
+begin
+  fLock^.UnLock;
+end;
+
+
+{ TSynLocker }
+
+procedure TSynLocker.Init;
+begin
+  fSectionPadding := 0;
+  PaddingUsedCount := 0;
+  InitializeCriticalSection(fSection);
+  fLocked := false;
+  fInitialized := true;
+end;
+
+procedure TSynLocker.Done;
+var
+  i: PtrInt;
+begin
+  for i := 0 to PaddingUsedCount - 1 do
+    if not (integer(Padding[i].VType) in VTYPE_SIMPLE) then
+      VarClear(variant(Padding[i]));
+  DeleteCriticalSection(fSection);
+  fInitialized := false;
+end;
+
+procedure TSynLocker.DoneAndFreeMem;
+begin
+  Done;
+  FreeMem(@self);
+end;
+
+procedure TSynLocker.Lock;
+begin
+  EnterCriticalSection(fSection);
+  fLocked := true;
+end;
+
+procedure TSynLocker.UnLock;
+begin
+  fLocked := false;
+  LeaveCriticalSection(fSection);
+end;
+
+function TSynLocker.TryLock: boolean;
+begin
+  result := not fLocked and (TryEnterCriticalSection(fSection) <> 0);
+end;
+
+function TSynLocker.TryLockMS(retryms: integer): boolean;
+begin
+  repeat
+    result := TryLock;
+    if result or (retryms <= 0) then
+      break;
+    SleepHiRes(1);
+    dec(retryms);
+  until false;
+end;
+
+function TSynLocker.ProtectMethod: IUnknown;
+begin
+  result := TAutoLock.Create(@self);
+end;
+
+function TSynLocker.GetVariant(Index: integer): Variant;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    result := variant(Padding[Index]);
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    VarClear(result);
+end;
+
+procedure TSynLocker.SetVariant(Index: integer; const Value: Variant);
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    variant(Padding[Index]) := Value;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end;
+end;
+
+function TSynLocker.GetInt64(Index: integer): Int64;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if not VariantToInt64(variant(Padding[Index]), result) then
+      result := 0;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := 0;
+end;
+
+procedure TSynLocker.SetInt64(Index: integer; const Value: Int64);
+begin
+  SetVariant(Index, Value);
+end;
+
+function TSynLocker.GetBool(Index: integer): boolean;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if not VariantToBoolean(variant(Padding[Index]), result) then
+      result := false;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := false;
+end;
+
+procedure TSynLocker.SetBool(Index: integer; const Value: boolean);
+begin
+  SetVariant(Index, Value);
+end;
+
+function TSynLocker.GetUnLockedInt64(Index: integer): Int64;
+begin
+  if (cardinal(Index) >= cardinal(PaddingUsedCount)) or
+     not VariantToInt64(variant(Padding[Index]), result) then
+    result := 0;
+end;
+
+procedure TSynLocker.SetUnlockedInt64(Index: integer; const Value: Int64);
+begin
+  if cardinal(Index) <= high(Padding) then
+  begin
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    variant(Padding[Index]) := Value;
+  end;
+end;
+
+function TSynLocker.GetPointer(Index: integer): Pointer;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    with Padding[Index] do
+      if VType = varUnknown then
+        result := VUnknown
+      else
+        result := nil;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := nil;
+end;
+
+procedure TSynLocker.SetPointer(Index: integer; const Value: Pointer);
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    with Padding[Index] do
+    begin
+      if not (integer(VType) in VTYPE_SIMPLE) then
+        VarClear(PVariant(@VType)^);
+      VType := varUnknown;
+      VUnknown := Value;
+    end;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end;
+end;
+
+function TSynLocker.GetUTF8(Index: integer): RawUTF8;
+begin
+  if cardinal(Index) < cardinal(PaddingUsedCount) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    VariantStringToUTF8(variant(Padding[Index]), result);
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := '';
+end;
+
+procedure TSynLocker.SetUTF8(Index: integer; const Value: RawUTF8);
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    if Index >= PaddingUsedCount then
+      PaddingUsedCount := Index + 1;
+    RawUTF8ToVariant(Value, variant(Padding[Index]));
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end;
+end;
+
+function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    result := 0;
+    if Index < PaddingUsedCount then
+      VariantToInt64(variant(Padding[Index]), result)
+    else
+      PaddingUsedCount := Index + 1;
+    variant(Padding[Index]) := Int64(result + Increment);
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := 0;
+end;
+
+function TSynLocker.LockedExchange(Index: integer; const Value: Variant): Variant;
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    with Padding[Index] do
+    begin
+      if Index < PaddingUsedCount then
+        result := PVariant(@VType)^
+      else
+      begin
+        PaddingUsedCount := Index + 1;
+        VarClear(result);
+      end;
+      PVariant(@VType)^ := Value;
+    end;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    VarClear(result);
+end;
+
+function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): pointer;
+begin
+  if cardinal(Index) <= high(Padding) then
+  try
+    EnterCriticalSection(fSection);
+    fLocked := true;
+    with Padding[Index] do
+    begin
+      if Index < PaddingUsedCount then
+        if VType = varUnknown then
+          result := VUnknown
+        else
+        begin
+          VarClear(PVariant(@VType)^);
+          result := nil;
+        end
+      else
+      begin
+        PaddingUsedCount := Index + 1;
+        result := nil;
+      end;
+      VType := varUnknown;
+      VUnknown := Value;
+    end;
+  finally
+    fLocked := false;
+    LeaveCriticalSection(fSection);
+  end
+  else
+    result := nil;
+end;
+
+
 
 procedure FinalizeUnit;
 var

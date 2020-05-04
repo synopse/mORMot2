@@ -922,7 +922,7 @@ type
   /// thread-safe class containing a TAES encryption/decryption engine
   TAESLocked = class
   protected
-    fSafe: TRTLCriticalSection;
+    fSafe: TRTLCriticalSection; // no need of TSynLocker padding
     fAES: TAES;
   public
     /// initialize the instance

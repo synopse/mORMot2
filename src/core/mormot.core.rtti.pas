@@ -1585,7 +1585,7 @@ type
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom registration
   TRttiCustomList = object
   private
-    // for DoRegister thread-safety
+    // for DoRegister thread-safety - no need of TSynLocker padding
     Lock: TRTLCriticalSection;
     // speedup search by name e.g. from a loop
     LastPair: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustom;
