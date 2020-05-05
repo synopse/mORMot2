@@ -30,6 +30,7 @@ uses
   mormot.core.search       in '..\src\core\mormot.core.search.pas',
   mormot.core.threads      in '..\src\core\mormot.core.threads.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
+  mormot.lib.sock          in '..\src\lib\mormot.lib.sock.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas',
   mormot.core.zip          in '..\src\core\mormot.core.zip.pas';

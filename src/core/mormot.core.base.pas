@@ -620,6 +620,20 @@ function ShortStringToAnsi7String(const source: shortstring): RawByteString; ove
 procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// simple concatenation of a 32-bit integer as text into a shorstring
+procedure AppendShortInteger(value: integer; var dest: shortstring);
+
+/// simple concatenation of a 64-bit integer as text into a shorstring
+procedure AppendShortInt64(value: Int64; var dest: shortstring);
+
+/// simple concatenation of a character into a shorstring
+procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// simple concatenation of a #0 ending text into a shorstring
+// - if Len is < 0, will use StrLen(buf)
+procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);
+
 /// just a wrapper around vmtClassName to avoid a string conversion
 function ClassNameShort(C: TClass): PShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -651,8 +665,16 @@ function GetClassParent(C: TClass): TClass;
 // - behavior is undefined with UTF-8 encoding (some false positive may occur)
 // - see IdemPropName/IdemPropNameU functions in mormot.core.text for a similar
 // comparison with other kind of input variables
-function PropNameEquals(P1, P2: PShortString): boolean;
+function PropNameEquals(P1, P2: PShortString): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// case-insensitive comparison of two RawUTF8 only containing ASCII 7-bit
+// - use e.g. with RTTI property names values only including A..Z,0..9,_ chars
+// - will make the "XOR AND $DF" trick to quickly test A-Z / a-z characters
+// - behavior is undefined with UTF-8 encoding (some false positive may occur)
+// - see IdemPropName/IdemPropNameU functions in mormot.core.text for a similar
+// comparison with other kind of input variables
+function PropNameEquals(const P1, P2: RawUTF8): boolean; overload;
 
 /// use the RTL to return a date/time as ISO-8601 text
 // - slow function, here to avoid linking mormot.core.datetime
@@ -3523,6 +3545,40 @@ begin
   FastSetString(result, @source[1], ord(source[0]));
 end;
 
+procedure AppendShortInteger(value: integer; var dest: shortstring);
+var
+  temp: shortstring;
+begin
+  str(value, temp);
+  AppendShortBuffer(@temp[1], ord(temp[0]), dest);
+end;
+
+procedure AppendShortInt64(value: Int64; var dest: shortstring);
+var
+  temp: shortstring;
+begin
+  str(value, temp);
+  AppendShortBuffer(@temp[1], ord(temp[0]), dest);
+end;
+
+procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
+begin
+  if dest[0] = #255 then
+    exit;
+  inc(dest[0]);
+  dest[ord(dest[0])] := chr;
+end;
+
+procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);
+begin
+  if len < 0 then
+    len := StrLen(buf);
+  if (len = 0) or (len + ord(dest[0]) > 255) then
+    exit;
+  MoveFast(buf^, dest[ord(dest[0]) + 1], len);
+  inc(dest[0], len);
+end;
+
 function ClassNameShort(C: TClass): PShortString;
 // new TObject.ClassName is UnicodeString (since Delphi 2009) -> inline code
 // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
@@ -3589,6 +3645,39 @@ begin
         goto zero;
       inc(PByte(P1));
     until PtrInt(PtrUInt(P1)) >= P1P2Len;
+  result := true;
+  exit;
+zero:
+  result := false;
+end;
+
+function PropNameEquals(const P1, P2: RawUTF8): boolean;
+var
+  P1P2Len, _1, _2: PtrInt;
+label
+  zero;
+begin
+  P1P2Len := length(P1);
+  if P1P2Len <> length(P2) then
+    goto zero;
+  _1 := PtrUInt(P1);
+  _2 := PtrUInt(P2);
+  P1P2Len := PtrInt(@PByteArray(_1)[P1P2Len - SizeOf(cardinal)]); // 32-bit end
+  if P1P2Len >= _1 then
+    repeat // case-insensitive compare 4 bytes per loop
+      if (PCardinal(_1)^ xor PCardinal(_2)^) and $dfdfdfdf <> 0 then
+        goto zero;
+      inc(PCardinal(_1));
+      inc(PCardinal(_2));
+    until P1P2Len < _1;
+  inc(PCardinal(P1P2Len));
+  dec(_2, _1);
+  if _1 < P1P2Len then
+    repeat
+      if (PByte(_1)^ xor PByteArray(_2)[PtrUInt(_1)]) and $df <> 0 then
+        goto zero;
+      inc(PByte(_1));
+    until _1 >= P1P2Len;
   result := true;
   exit;
 zero:

@@ -879,8 +879,8 @@ function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 {$ifdef WITH_FASTMM4STATS}
 var
   Heap: TMemoryManagerState;
-  sb: integer;
-{$endif}
+  sb: PtrInt;
+{$endif WITH_FASTMM4STATS}
 var
   global: TMemoryStatusEx;
   mem: TProcessMemoryCounters;
@@ -897,7 +897,7 @@ begin
   info.vmfree := global.ullAvailVirtual;
   info.allocreserved := 0;
   info.allocused := 0;
-{$ifdef WITH_FASTMM4STATS} // override OS information by actual FastMM4
+  {$ifdef WITH_FASTMM4STATS} // override OS information by actual FastMM4
   if withalloc then
   begin
     GetMemoryManagerState(Heap); // direct raw FastMM4 access
@@ -912,7 +912,7 @@ begin
         inc(info.allocreserved, ReservedAddressSpace);
       end;
   end;
-{$else}
+  {$else}
   if withalloc and Assigned(GetProcessMemoryInfo) then
   begin
     FillcharFast(mem, SizeOf(mem), 0);
@@ -921,7 +921,7 @@ begin
     info.allocreserved := mem.PeakWorkingSetSize;
     info.allocused := mem.WorkingSetSize;
   end;
-{$endif WITH_FASTMM4STATS}
+  {$endif WITH_FASTMM4STATS}
 end;
 
 function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;

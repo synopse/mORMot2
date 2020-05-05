@@ -33,7 +33,7 @@ uses
 { ************ Thread-Safe Pending Tasks List }
 
 type
-  /// redefined here to avoid explicit link to syncobjs in uses clause
+  /// defined here to avoid explicit link to syncobjs in uses clause
   TWaitResult = syncobjs.TWaitResult;
 
   /// exception class raised by this unit
@@ -51,7 +51,7 @@ type
   /// internal list definition, used by TPendingTaskList storage
   TPendingTaskListItemDynArray = array of TPendingTaskListItem;
 
-  /// handle a list of tasks, stored as RawByteString, with a timestamp
+  /// handle a list of tasks, stored as RawByteString, with a time stamp
   // - internal time stamps would be GetTickCount64 by default, so have a
   // resolution of about 16 ms under Windows
   // - you can add tasks to the internal list, to be executed after a given
@@ -74,7 +74,7 @@ type
       const aTask: RawByteString); virtual;
     /// append several tasks, specifying a delay in milliseconds between tasks
     // - first supplied delay would be computed from the current time, then
-    // it would specify how much time to wait between the next supplied aTasks[]
+    // it would specify how much time to wait between the next supplied task
     procedure AddTasks(const aMilliSecondsDelays: array of integer;
       const aTasks: array of RawByteString);
     /// retrieve the next pending task
@@ -972,7 +972,7 @@ if Assigned(fOnIdle) then
     end;
   finally
     fParam := nil;
-    fCallerThreadID := 0;
+    fCallerThreadID := TThreadID(0);
     FreeAndNil(fBackgroundException);
     SetPendingProcess(flagIdle);
     if Assigned(fOnIdle) then
@@ -1167,7 +1167,7 @@ procedure TSynBackgroundTimer.EverySecond(Sender: TSynBackgroundThreadProcess;
   Event: TWaitResult);
 var
   tix: Int64;
-  i, f, n: PtrInt;
+  i, f, n: integer;
   t: ^TSynBackgroundTimerTask;
   todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
 begin
