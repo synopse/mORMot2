@@ -372,7 +372,7 @@ function shutdown(s: TSocket; how: integer): integer; stdcall;
 function closesocket(s: TSocket): integer; stdcall;
   external ws2 name 'closesocket';
 function getnameinfo(addr: PSockAddr; namelen: integer; host: PAnsiChar;
-   hostlen: DWORD; serv: PAnsiChar; servlen: DWORD; flags: integer): integer; stdcall;
+   hostlen: cardinal; serv: PAnsiChar; servlen: cardinal; flags: integer): integer; stdcall;
   external ws2 name 'getnameinfo';
 function bind(s: TSocket; addr: PSockAddr; namelen: integer): integer; stdcall;
   external ws2 name 'bind';

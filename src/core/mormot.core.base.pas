@@ -628,7 +628,7 @@ procedure AppendShortInt64(value: Int64; var dest: shortstring);
 
 /// simple concatenation of a character into a shorstring
 procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 
 /// simple concatenation of a #0 ending text into a shorstring
 // - if Len is < 0, will use StrLen(buf)
