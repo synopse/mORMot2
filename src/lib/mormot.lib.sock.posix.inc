@@ -411,7 +411,7 @@ end;
 function TPollSocketPoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
-  i: PtrInt;
+  i, new: PtrInt;
   n, e, fd, s: integer;
 begin
   result := false;
@@ -425,6 +425,7 @@ begin
   if pseWrite in events then
     e := e or POLLOUT;
   s := PtrUInt(socket);
+  new := -1;
   if fFDCount = fCount then
   begin
     // no void entry
@@ -441,36 +442,30 @@ begin
         // already subscribed
         exit;
       if fd < 0 then
-      begin
-        // found void entry
-        with fFD[i] do
-        begin
-          fd := TSocket(socket);
-          events := e;
-          revents := 0;
-        end;
-        inc(fCount);
-        result := true;
-        exit;
-      end;
+        // found a void entry
+        new := i;
     end;
-  if fFDCount = length(fFD) then
+  if new < 0 then
   begin
-    // add new entry to the array
-    n := NextGrow(fFDCount);
-    if n > fMaxSockets then
-      n := fMaxSockets;
-    SetLength(fFD, n);
-    SetLength(fTags, n);
+    if fFDCount = length(fFD) then
+    begin
+      // add new entry to the array
+      n := NextGrow(fFDCount);
+      if n > fMaxSockets then
+        n := fMaxSockets;
+      SetLength(fFD, n);
+      SetLength(fTags, n);
+    end;
+    new := fFDCount;
+    inc(fFDCount);
   end;
-  with fFD[fFDCount] do
+  fTags[new] := tag;
+  with fFD[new] do
   begin
     fd := TSocket(socket);
     events := e;
     revents := 0;
   end;
-  fTags[fFDCount] := tag;
-  inc(fFDCount);
   inc(fCount);
   result := true;
 end;
@@ -502,7 +497,11 @@ begin
   for i := 0 to fFDCount - 1 do
     if fFD[i].fd = s then
     begin
-      fFD[i].fd := -1; // mark entry as void
+      with fFD[i] do
+      begin
+        revents := 0; // quickly ignored in WaitForModified()
+        fd := -1; // mark entry as void and reusable
+      end;
       dec(fCount);
       if fCount <= fFDCount shr 1 then
         FDVacuum; // avoid too many void entries
@@ -528,26 +527,25 @@ begin
   SetLength(results, result);
   d := 0;
   for i := 0 to fFDCount - 1 do
-    if fFD[i].fd > 0 then
+  begin
+    ev := fFD[i].revents;
+    if (ev <> 0) and (fFD[i].fd > 0) then
     begin
-      ev := fFD[i].revents;
-      if ev <> 0 then
-      begin
-        byte(e) := 0;
-        if ev and POLLIN <> 0 then
-          include(e, pseRead);
-        if ev and POLLOUT <> 0 then
-          include(e, pseWrite);
-        if ev and POLLERR <> 0 then
-          include(e, pseError);
-        if ev and POLLHUP <> 0 then
-          include(e, pseClosed);
-        results[d].events := e;
-        results[d].tag := fTags[i];
-        inc(d);
-        fFD[i].revents := 0; // reset result flags for reuse
-      end;
+      byte(e) := 0;
+      if ev and POLLIN <> 0 then
+        include(e, pseRead);
+      if ev and POLLOUT <> 0 then
+        include(e, pseWrite);
+      if ev and POLLERR <> 0 then
+        include(e, pseError);
+      if ev and POLLHUP <> 0 then
+        include(e, pseClosed);
+      results[d].events := e;
+      results[d].tag := fTags[i];
+      inc(d);
+      fFD[i].revents := 0; // reset result flags for reuse
     end;
+  end;
   if d <> result then
     raise ENetSock.CreateFmt('TPollSocketPoll: result=%d d=%d', [result, d]);
 end;

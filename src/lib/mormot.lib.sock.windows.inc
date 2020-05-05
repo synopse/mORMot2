@@ -589,8 +589,8 @@ type
     fHighestSocket: TNetSocket;
     fRead: TFDSet;
     fWrite: TFDSet;
-    fTagSocket: array[0..FD_SETSIZE - 1] of TNetSocket;
-    fTagTag: array[0..FD_SETSIZE - 1] of TPollSocketTag;
+    fTagSocket: array of TNetSocket;
+    fTagTag: array of TPollSocketTag;
   public
     constructor Create; override;
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
@@ -604,6 +604,8 @@ constructor TPollSocketSelect.Create;
 begin
   inherited Create;
   fMaxSockets := FD_SETSIZE; // 512 in our unit!
+  SetLength(fTagSocket, FD_SETSIZE);
+  SetLength(fTagTag, FD_SETSIZE);
 end;
 
 function TPollSocketSelect.Subscribe(socket: TNetSocket;
@@ -632,7 +634,7 @@ begin
   result := false;
   if (self <> nil) and (socket <> nil) then
   begin
-    i := PtrUIntScanIndex(@fTagSocket, fCount, PtrUInt(socket));
+    i := PtrUIntScanIndex(pointer(fTagSocket), fCount, PtrUInt(socket));
     if i < 0 then
       exit;
     FD_CLR(socket, fRead);
