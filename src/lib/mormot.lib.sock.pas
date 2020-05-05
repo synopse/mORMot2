@@ -151,10 +151,10 @@ type
 
   /// modifications notified by TPollSocketAbstract.WaitForModified
   TPollSocketResult = record
-    /// the events which are notified
-    events: TPollSocketEvents;
     /// opaque value as defined by TPollSocketAbstract.Subscribe
     tag: TPollSocketTag;
+    /// the events which are notified
+    events: TPollSocketEvents;
   end;
 
   /// all modifications returned by IPollSocket.WaitForModified
@@ -348,7 +348,7 @@ begin
         hostlen := NI_MAXHOST;
         servlen := NI_MAXSERV;
         if getnameinfo(@Addr, SizeOf(sockaddr_in6), host{%H-}, hostlen,
-             serv{%H-}, servlen, NI_NUMERICHOST + NI_NUMERICSERV) = 0 then
+             serv{%H-}, servlen, NI_NUMERICHOST + NI_NUMERICSERV) = NO_ERROR then
         begin
           SetString(result, PAnsiChar(@host), mormot.core.base.StrLen(@host));
           if withport then
@@ -412,8 +412,8 @@ begin
     begin
       // Socket should remain open for 5 seconds after a closesocket() call
       TNetSocket(sock).SetLinger(5);
-      if (bind(sock, @addr, addr.Size) <> 0) or
-         ((layer <> nlUDP) and (listen(sock, DefaultListenBacklog) <> 0)) then
+      if (bind(sock, @addr, addr.Size)  <> NO_ERROR) or
+         ((layer <> nlUDP) and (listen(sock, DefaultListenBacklog)  <> NO_ERROR)) then
         result := NetLastError(WSAEADDRNOTAVAIL);
     end
     else
@@ -424,7 +424,7 @@ begin
         TNetSocket(sock).SetReceiveTimeout(connecttimeout);
         TNetSocket(sock).SetSendTimeout(connecttimeout);
       end;
-      if connect(sock, @addr, addr.Size) <> 0 then
+      if connect(sock, @addr, addr.Size)  <> NO_ERROR then
         result := NetLastError(WSAEADDRNOTAVAIL);
     end;
     if (result = nrOK) or (retry <= 0) then
@@ -448,7 +448,7 @@ procedure TNetSocketWrap.SetOpt(prot, name: integer; value: pointer; valuelen: i
 begin
   if @self = nil then
     raise ENetSock.CreateFmt('SetOptions(%d,%d) with no socket', [prot, name]);
-  if setsockopt(TSocket(@self), prot, name, value, valuelen) <> 0 then
+  if setsockopt(TSocket(@self), prot, name, value, valuelen)  <> NO_ERROR then
     raise ENetSock.CreateFmt('SetOptions(%d,%d) failed', [prot, name]);
 end;
 

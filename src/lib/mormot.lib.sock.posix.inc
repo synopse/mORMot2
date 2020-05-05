@@ -611,7 +611,7 @@ begin
   if pseWrite in events then
     e.events := e.events or EPOLLOUT;
   // EPOLLERR and EPOLLHUP are always implicitly defined
-  result := epoll_ctl(fEPFD,EPOLL_CTL_ADD, TSocket(socket), @e) = 0;
+  result := epoll_ctl(fEPFD,EPOLL_CTL_ADD, TSocket(socket), @e) = NO_ERROR;
   if result then
     inc(fCount);
 end;
@@ -624,7 +624,7 @@ begin
     result := false
   else
   begin
-    result := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e) = 0;
+    result := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e) = NO_ERROR;
     if result then
       dec(fCount);
   end;

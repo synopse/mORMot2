@@ -2,11 +2,8 @@
   This file is a part of the freeware Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-   WinSock2 API calls, as used by mormot.lib.sock.pas
+  Implements WinSock2 API calls, as used by mormot.lib.sock.pas
 }
-
-uses
-  Windows;
 
 
 { ******** WinSock2 Type Definitions }
@@ -18,6 +15,7 @@ const
   // default on Windows is 64, but we grow it to 512 for TPollSocketSelect
   // as stated by Raymond Chen: "you can make FD_SET­SIZE bigger if you need to"
   // https://devblogs.microsoft.com/oldnewthing/20161221-00/?p=94985
+  // -> Xitami uses 1024 since 1996
   // -> safe since our TFDSet is INTERNAl to this unit, and never published :)
   FD_SETSIZE = 512;
 
@@ -98,7 +96,7 @@ const
   INVALID_SOCKET		= TSocket(NOT(0));
   SOCKET_ERROR			= -1;
 
-Const
+const
   IP_OPTIONS          = 1;
   IP_HDRINCL          = 2;
   IP_TOS              = 3;          { set/get IP Type Of Service       }
@@ -233,6 +231,8 @@ const
   MSG_PEEK      = $02;  // Peek at incoming messages
 
 const
+  NO_ERROR = 0;
+
   { All Windows Sockets error constants are biased by WSABASEERR from the "normal" }
   WSABASEERR              = 10000;
 
@@ -413,21 +413,21 @@ begin
   begin
     h.ai_socktype := 0;
     h.ai_protocol := 0;
-    result := getaddrinfo(pointer(ip), nil, @h, res) = 0;
+    result := getaddrinfo(pointer(ip), nil, @h, res) = NO_ERROR;
   end
   else if (ip = cAnyHost) or (ip = c6AnyHost) then
   begin
     // 0.0.0.0
     h.ai_flags := AI_PASSIVE;
-    result := getaddrinfo(nil, pointer(port), @h, res) = 0;
+    result := getaddrinfo(nil, pointer(port), @h, res) = NO_ERROR;
   end
   else if (ip = '') or (ip = cLocalhost) or (ip = c6Localhost) or
           (PropNameEquals(ip, 'localhost')) then
     // 127.0.0.1
-    result := getaddrinfo(nil, pointer(port), @h, res) = 0
+    result := getaddrinfo(nil, pointer(port), @h, res) = NO_ERROR
   else
     // ip or hostname
-    result := getaddrinfo(pointer(ip), pointer(port), @h, res) = 0;
+    result := getaddrinfo(pointer(ip), pointer(port), @h, res) = NO_ERROR;
   if result then
     MoveFast(res^.ai_addr^, a, res^.ai_addrlen);
   if res <> nil then
@@ -512,8 +512,6 @@ begin
     exit;
   rdp := nil;
   wrp := nil;
-  if scope * [neRead, neWrite] = [] then
-    include(scope, neWrite); // at least one to check for neError
   sock := TSocket(@self);
   if neRead in scope then
   begin
@@ -521,7 +519,7 @@ begin
     rd.fd_count := 1;
     rdp := @rd;
   end;
-  if neWrite in scope then
+  if (neWrite in scope) or not (neRead in scope) then // a least one is needed
   begin
     wr.fd_array[0] := sock;
     wr.fd_count := 1;
@@ -533,11 +531,12 @@ begin
     exit;
   result := [];
   if res = 0 then
+    // nothing new detected
     exit;
   if (rdp <> nil) and ({%H-}rd.fd_count = 1) and (rd.fd_array[0] = sock) then
   begin
     // Windows expects to check FIONREAD for graceful disconnection
-    if ioctlsocket(sock, FIONREAD, @pending) <> NOERROR then
+    if ioctlsocket(sock, FIONREAD, @pending) <> NO_ERROR then
       include(result, neError)
     else if pending > 0 then
       include(result, neRead)
@@ -587,10 +586,10 @@ type
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
     fHighestSocket: TNetSocket;
-    fRead: TFDSet;
-    fWrite: TFDSet;
     fTagSocket: array of TNetSocket;
     fTagTag: array of TPollSocketTag;
+    fRead: TFDSet;
+    fWrite: TFDSet;
   public
     constructor Create; override;
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
@@ -613,7 +612,8 @@ function TPollSocketSelect.Subscribe(socket: TNetSocket;
 begin
   result := false;
   if (self = nil) or (socket = nil) or (byte(events) = 0) or
-     (fCount = fMaxSockets) then
+     (fCount = fMaxSockets) or
+     PtrUIntScanExists(pointer(fTagSocket), fCount, PtrUInt(socket)) then
     exit;
   if pseRead in events then
     FD_SET(socket, fRead);
@@ -655,12 +655,12 @@ function TPollSocketSelect.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
 var
   tv: TTimeVal;
-  rd, wr: TFDSet;
   rdp, wrp: PFDSet;
   ev: TPollSocketEvents;
   i: PtrInt;
   pending: cardinal;
   sock: TNetSocket;
+  rd, wr: TFDSet;
   tmp: array[0..FD_SETSIZE - 1] of TPollSocketResult;
 begin
   result := -1; // error
@@ -691,7 +691,7 @@ begin
     sock := fTagSocket[i];
     if (rdp <> nil) and FD_ISSET(sock, rd) then
     begin
-      if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = 0) and
+      if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
          (pending = 0) then
         // socket closed gracefully - see TCrtSocket.SockReceivePending
         include(ev, pseClosed)
@@ -701,11 +701,12 @@ begin
     if (wrp <> nil) and FD_ISSET(sock, wr) then
       include(ev, pseWrite);
     if byte(ev) <> 0 then
-    begin
-      tmp[result].events := ev;
-      tmp[result].tag := fTagTag[i];
-      inc(result);
-    end;
+      with tmp[result] do
+      begin
+        events := ev;
+        tag := fTagTag[i];
+        inc(result);
+      end;
   end;
   SetLength(results, result);
   MoveFast(tmp, results[0], result * sizeof(tmp[0]));
