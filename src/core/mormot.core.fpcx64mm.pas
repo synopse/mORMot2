@@ -939,22 +939,28 @@ asm
   movzx ecx, byte ptr [rbx + rdx + TSmallBlockInfo.AllocSizeIndX4]
   shl ecx, 4
   add rbx, rcx
-  {Grab the block type}
+  {Grab the block type and Spin if needed}
+  mov r8, SpinLockCount
 @LockBlockTypeLoop:
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
   {Try up to two sizes larger}
+  pause
   add rbx, SizeOf(TSmallBlockType)
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
+  pause
   add rbx, SizeOf(TSmallBlockType)
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
-  {Block type and two sizes larger are all locked - give up and sleep}
   sub rbx, 2 * SizeOf(TSmallBlockType)
+  pause
+  dec r8
+  jnz @LockBlockTypeLoop
+  {Block type and two sizes larger are all locked - give up and sleep}
 lock inc dword ptr [rbx].TSmallBlockType.GetmemThreadContention
   call SleepInitial
   mov eax, $100
@@ -1322,7 +1328,7 @@ asm
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
   {Spin to grab the block type}
-  mov r8, SpinLockCount
+  mov r8, SpinLockCount * 2
 @SpinLockBlockType:
   pause
   mov eax, $100
