@@ -224,74 +224,69 @@ function TNetAddr.SetFrom(const address, addrport: RawUTF8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  p: word;
+  ip4: sockaddr absolute Addr;
 begin
   FillCharFast(Addr, SizeOf(Addr), 0);
+  result := nrNotFound;
+  if address = '' then
+    exit;
+  // handle domain socket name
   if layer = nlUNIX then
   begin
-    if address = '' then
-      result := nrNotFound
-    else if length(address) >= SizeOf(psockaddr_un(@Addr)^.sun_path) then
+    if length(address) >= SizeOf(psockaddr_un(@Addr)^.sun_path) then
       // avoid buffer overflow
       result := nrFatalError
     else
       with psockaddr_un(@Addr)^ do
       begin
-        // specify the domain socket name
         sun_family := AF_UNIX;
         MoveFast(pointer(address)^, sun_path, length(address));
         result := nrOK;
       end;
     exit;
   end;
-  p := htons(GetCardinal(pointer(addrport)));
-  if (p = 0) or (address = '') then
-  begin
-    result := nrNotFound;
+  // check supplied port
+  ip4.sin_port := htons(GetCardinal(pointer(addrport)));
+  if ip4.sin_port = 0 then
     exit;
-  end;
+  // handle simple cases
+  result := nrOk;
   if (address = cLocalhost) or (address = c6Localhost) or
      PropNameEquals(address, 'localhost') then
-    with psockaddr(@Addr)^ do
-      begin
-        // very common case
-        sin_family := AF_INET;
-        PCardinal(@sin_addr)^ := cLocalhost32;
-        sin_port := p;
-        result := nrOk;
-        exit;
-      end;
-  // resolve name or IP
+  begin
+    ip4.sin_family := AF_INET;
+    PCardinal(@ip4.sin_addr)^ := cLocalhost32; // 127.0.0.1
+    exit;
+  end
+  else if (address = cAnyHost) or (address = c6AnyHost) then
+  begin
+    ip4.sin_family := AF_INET; // 0.0.0.0
+    exit;
+  end;
+  // resolve name or IP (getaddrinfo is more recent, but addrinfo is not fixed)
   h := gethostbyname(pointer(address));
   if h = nil then
     result := nrNotFound
   else
+  begin
+    ip4.sin_family := h^.h_addrtype;
     case h^.h_addrtype of
       AF_INET:
-        with psockaddr(@Addr)^ do
-          begin
-            sin_family := AF_INET;
-            sin_addr := h^.h_addr^^;
-            sin_port := p;
-            result := nrOk;
-          end;
+         ip4.sin_addr := h^.h_addr^^;
       AF_INET6:
-        with psockaddr6(@Addr)^ do
-          begin
-            sin6_family := AF_INET6;
-            sin6_addr := h^.h_addr6^^;
-            sin6_port := p;
-            result := nrOk;
-          end;
+         psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
       else
         result := nrNotImplemented;
     end;
+  end;
 end;
 
 
 { TNetSocketWrap }
 
-procedure SetTimeVal(ms: cardinal; out tv: TTimeVal);
+procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
+var
+  d: PtrUInt;
 begin
   if ms = 0 then
   begin
@@ -300,14 +295,15 @@ begin
   end
   else
   begin
-    tv.tv_sec := ms div 1000;
-    tv.tv_usec := (ms - (cardinal(tv.tv_sec) * 1000)) * 1000;
+    d := ms div 1000;
+    tv.tv_sec := d;
+    tv.tv_usec := (ms - (d * 1000)) * 1000;
   end;
 end;
 
 procedure TNetSocketWrap.SetSendTimeout(ms: integer);
 var
-  tv: TTimeVal;
+  tv: TTimeVal; // POSIX uses a timeval (not Windows)
 begin
   SetTimeVal(ms, tv);
   SetOpt(SOL_SOCKET, SO_SNDTIMEO, @tv, SizeOf(tv));
@@ -321,9 +317,6 @@ begin
   SetOpt(SOL_SOCKET, SO_RCVTIMEO, @tv, SizeOf(tv));
 end;
 
-const
-  SO_TRUE: integer = ord(true);
-
 procedure TNetSocketWrap.SetLinger(linger: integer);
 var
   v: TLinger;
@@ -333,13 +326,14 @@ begin
   SetOpt(SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
   if linger > 0 then
   begin
+    v.l_onoff := ord(true);
     {$ifdef BSD}
-    SetOpt(SOL_SOCKET, SO_REUSEPORT, @SO_TRUE, SizeOf(SO_TRUE));
+    SetOpt(SOL_SOCKET, SO_REUSEPORT, @v.l_onoff, SizeOf(v.l_onoff));
     {$ifndef OpenBSD}
-    SetOpt(SOL_SOCKET, SO_NOSIGPIPE, @SO_TRUE, SizeOf(SO_TRUE));
+    SetOpt(SOL_SOCKET, SO_NOSIGPIPE, @v.l_onoff, SizeOf(v.l_onoff));
     {$endif OpenBSD}
     {$else}
-    SetOpt(SOL_SOCKET, SO_REUSEADDR, @SO_TRUE, SizeOf(SO_TRUE));
+    SetOpt(SOL_SOCKET, SO_REUSEADDR, @v.l_onoff, SizeOf(v.l_onoff));
     {$endif BSD}
   end;
 end;
@@ -347,12 +341,12 @@ end;
 function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
 var
   res: integer;
-  p: TPollFD; // TFDSet limited to 1024 total sockets in POSIX -> use poll()
+  p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
+  // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
 begin
   result := [neError];
   if @self = nil then
     exit;
-  // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
   p.fd := TSocket(@self);
   p.events := 0;
   if neRead in scope then
@@ -632,10 +626,11 @@ end;
 
 function TPollSocketEpoll.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
-var e: TPollSocketEvents;
-    i: PtrInt;
-    ev: integer;
-    t: TPollSocketTag;
+var
+  e: TPollSocketEvents;
+  i: PtrInt;
+  ev: integer;
+  t: TPollSocketTag;
 begin
   result := -1; // error
   if (self = nil) or (fCount = 0) then

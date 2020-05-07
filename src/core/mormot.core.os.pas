@@ -594,6 +594,22 @@ function DeleteFile(const aFileName: TFileName): boolean;
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function RenameFile(const OldName, NewName: TFileName): boolean;
 
+{$else}
+
+/// returns how many files could be opened at once on this POSIX system
+// - hard=true is for the maximum allowed limit, false for the current process
+// - returns -1 if the getrlimit() API call failed
+function GetFileOpenLimit(hard: boolean = false): integer;
+
+/// changes how many files could be opened at once on this POSIX system
+// - hard=true is for the maximum allowed limit (requires root priviledges),
+// false for the current process
+// - returns the new value set (may not match the expected max value on error)
+// - returns -1 if the getrlimit().setrlimit() API calls failed
+// - for instance, to set the limit of the current process to its highest value:
+// ! SetFileOpenLimit(GetFileOpenLimit(true));
+function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
+
 {$endif MSWINDOWS}
 
 

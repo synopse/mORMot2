@@ -552,10 +552,12 @@ end;
 procedure SleepHiRes(ms: cardinal);
 var
   timeout: TTimespec;
+  d: cardinal;
 begin
   if ms = 0 then // handle SleepHiRes(0) special case
     if SleepHiRes0Yield then
-    begin // reported as buggy by Alan on POSIX
+    begin
+      // warning: reported as buggy by Alan on POSIX, and despited by Linus
       ThreadSwitch; // call e.g. pthread's sched_yield API
       exit;
     end
@@ -566,8 +568,9 @@ begin
     end
   else
   begin
-    timeout.tv_sec := ms div 1000;
-    timeout.tv_nsec := 1000000 * (ms mod 1000);
+    d := ms div 1000;
+    timeout.tv_sec := d;
+    timeout.tv_nsec := 1000000 * (ms - d * 1000);
   end;
   fpnanosleep(@timeout, nil)
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
@@ -621,6 +624,40 @@ begin
 end;
 
 {$endif BSD}
+
+function GetFileOpenLimit(hard: boolean): integer;
+var
+  limit: TRLIMIT;
+begin
+  if fpgetrlimit(RLIMIT_NOFILE, @limit) = 0 then
+    if hard then
+      result := limit.rlim_max
+    else
+      result := limit.rlim_cur
+  else
+    result := -1;
+end;
+
+function SetFileOpenLimit(max: integer; hard: boolean): integer;
+var
+  limit: TRLIMIT;
+begin
+  result := -1;
+  if fpgetrlimit(RLIMIT_NOFILE, @limit) <> 0 then
+    exit;
+  if (hard and (integer(limit.rlim_max) = max)) or
+     (not hard and (integer(limit.rlim_cur) = max)) then
+  begin
+    result := max; // already to the expected value
+    exit;
+  end;
+  if hard then
+    limit.rlim_max := max
+  else
+    limit.rlim_cur := max;
+  if fpsetrlimit(RLIMIT_NOFILE, @limit) = 0 then
+    result := GetFileOpenLimit(hard);
+end;
 
 // define some raw functions, to avoid linking mormot.core.text
 
