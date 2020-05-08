@@ -2347,31 +2347,14 @@ const
 var
   OldMM: TMemoryManager;
 
-procedure BuildBlockTypeLookupTable;
-var
-  i, start, next: PtrUInt;
-begin
-  start := 0;
-  with SmallBlockInfo do
-    for i := 0 to High(Types) do
-    begin
-      next := Types[i].BlockSize;
-      if next and 15 = 0 then
-      begin
-        next := next div SmallBlockGranularity;
-        while start < next do
-        begin
-          GetmemLookup[start] := i;
-          inc(start);
-        end;
-      end;
-    end;
-end;
+const
+  _MOVES: array[1..8] of TMoveProc = (
+    Move8, Move24, Move40, Move56, Move72, Move88, Move104, Move120);
 
 procedure InitializeMemoryManager;
 var
   p: PSmallBlockType;
-  i, min, poolsize, num, perpool, size: PtrInt;
+  i, min, poolsize, num, perpool, size, start, next: PtrInt;
   medium: PMediumFreeBlock;
 begin
   p := @SmallBlockInfo.Types;
@@ -2379,27 +2362,13 @@ begin
   for i := 0 to NumSmallBlockTypes - 1 do
   begin
     size := SmallBlockSizes[i];
+    assert(size and 15 = 0);
     p^.BlockSize := size;
-    case size of
-      16:
-        p^.UpsizeMoveProcedure := Move8;
-      32:
-        p^.UpsizeMoveProcedure := Move24;
-      48:
-        p^.UpsizeMoveProcedure := Move40;
-      64:
-        p^.UpsizeMoveProcedure := Move56;
-      80:
-        p^.UpsizeMoveProcedure := Move72;
-      96:
-        p^.UpsizeMoveProcedure := Move88;
-      112:
-        p^.UpsizeMoveProcedure := Move104;
-      128:
-        p^.UpsizeMoveProcedure := Move120;
+    min := size shr 4;
+    if min <= high(_MOVES) then
+      p^.UpsizeMoveProcedure := _MOVES[min]
     else
       p^.UpsizeMoveProcedure := MoveX16LP;
-    end;
     p^.PreviousPartiallyFreePool := pointer(p);
     p^.NextPartiallyFreePool := pointer(p);
     p^.MaxSequentialFeedBlockAddress := Pointer(0);
@@ -2430,7 +2399,17 @@ begin
         and -MediumBlockGranularity) + MediumBlockSizeOffset;
     inc(p);
   end;
-  BuildBlockTypeLookupTable;
+  start := 0;
+  with SmallBlockInfo do
+    for i := 0 to High(Types) do
+    begin
+      next := Types[i].BlockSize div SmallBlockGranularity;
+      while start < next do
+      begin
+        GetmemLookup[start] := i;
+        inc(start);
+      end;
+    end;
   with MediumBlockInfo do
   begin
     PoolsCircularList.PreviousMediumBlockPoolHeader := @PoolsCircularList;
