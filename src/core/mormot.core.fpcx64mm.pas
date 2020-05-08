@@ -942,16 +942,16 @@ function _FreeMem(P: Pointer): PtrInt;   forward;
 
 function ReallocateLargeBlock(p: Pointer; size: PtrUInt): Pointer;
 var
-  oldavail, olduser, minup, new: PtrUInt;
+  oldavail, minup, new: PtrUInt;
   header, prev, next: PLargeBlockHeader;
 begin
   header := pointer(PByte(p) - LargeBlockHeaderSize);
-  oldavail := (DropMediumAndLargeFlagsMask and header.BlockSizeAndFlags) -
+  oldavail := (DropMediumAndLargeFlagsMask and header^.BlockSizeAndFlags) -
     (LargeBlockHeaderSize + BlockHeaderSize);
   if size > oldavail then
   begin
     // size-up with 1/8 overhead for future increase
-    minup := oldavail + (oldavail shr 3);
+    minup := oldavail + (oldavail shr {$ifdef LINUXNOTBSD} 3 {$else} 2 {$endif});
     if size < minup then
       new := minup
     else
@@ -959,13 +959,13 @@ begin
     {$ifdef LINUXNOTBSD}
     // remove from current chain list
     LockLargeBlocks;
-    prev := header.PreviousLargeBlockHeader;
-    next := header.NextLargeBlockHeader;
+    prev := header^.PreviousLargeBlockHeader;
+    next := header^.NextLargeBlockHeader;
     next.PreviousLargeBlockHeader := prev;
     prev.NextLargeBlockHeader := next;
     LargeBlocksLocked := False;
     // let the Linux Kernel mremap() the memory using its TLB magic
-    size := DropMediumAndLargeFlagsMask and header.BlockSizeAndFlags;
+    size := DropMediumAndLargeFlagsMask and header^.BlockSizeAndFlags;
     result := AllocateLargeBlockFrom(new, header, size);
     {$else}
     // no mremap(): reallocate a new block, copy the existing data, free old
@@ -974,8 +974,7 @@ begin
     begin
       if new > (MaximumMediumBlockSize - BlockHeaderSize) then
         PLargeBlockHeader(PByte(result) - LargeBlockHeaderSize).UserAllocatedSize := size;
-      olduser := PLargeBlockHeader(PByte(p) - LargeBlockHeaderSize).UserAllocatedSize;
-      MoveLarge(p, result, olduser);
+      MoveLarge(p, result, oldavail); // header^.UserAllocatedSize);
       _FreeMem(p);
     end;
     {$endif LINUXNOTBSD}
@@ -985,7 +984,7 @@ begin
   if size >= (oldavail shr 1) then
   begin
     result := p;
-    PLargeBlockHeader(PByte(p) - LargeBlockHeaderSize).UserAllocatedSize := size;
+    header.UserAllocatedSize := size;
   end
   else
   begin
@@ -993,7 +992,7 @@ begin
     if result <> nil then
     begin
       if size > (MaximumMediumBlockSize - BlockHeaderSize) then
-        PLargeBlockHeader(PByte(p) - LargeBlockHeaderSize).UserAllocatedSize := size;
+        PLargeBlockHeader(PByte(result) - LargeBlockHeaderSize)^.UserAllocatedSize := size;
       MoveLarge(p, result, size);
       _FreeMem(p);
     end;
