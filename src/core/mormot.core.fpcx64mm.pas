@@ -62,7 +62,7 @@ type
     CumulativeFree: PtrUInt;
     {$endif FPCMM_DEBUG}
     /// how many times this Arena did wait from been unlocked by another thread
-    ThreadContention: PtrInt;
+    SleepCount: PtrInt;
   end;
 
   /// heap information as returned by CurrentHeapStatus
@@ -71,45 +71,54 @@ type
     Medium: TMMStatusArena;
     /// large blocks > 256KB which are directly handled by the Operating System
     Large: TMMStatusArena;
+    /// how many times the Operating System Sleep/NanoSleep API was called
+    // - in a perfect world, should be as small as possible
+    SleepCount: PtrUInt;
+    /// how much MicroSeconds was spend within Sleep/NanoSleep API calls
+    // - under Windows, is not an exact, but only indicative value
+    SleepTime: PtrUInt;
     {$ifdef FPCMM_DEBUG}
-    /// how many times Getmem() did block for a small block
+    /// how many times Getmem() did block and wait for a small block
     // - see also GetSmallBlockContention()
-    SmallGetmemThreadContention: PtrInt;
-    /// how many times Freemem() did block for a small block
+    SmallGetmemSleepCount: PtrInt;
+    /// how many times Freemem() did block and wait for a small block
     // - see also GetSmallBlockContention()
-    SmallFreememThreadContention: PtrInt;
+    SmallFreememSleepCount: PtrInt;
     {$endif FPCMM_DEBUG}
   end;
   PMMStatus = ^TMMStatus;
 
-  /// one GetSmallBlockContention item thread contention report
-  // - a single GetmemThreadContentionSmallBlockSize or
-  // FreememThreadContentionSmallBlockSize non 0 field is set
-  TFPCMMSmallBlockContention = packed record
+  /// one GetSmallBlockContention info about unexpected multi-thread waiting
+  // - a single GetmemSleepCountSmallBlockSize or
+  // FreememSleepCountSmallBlockSize non 0 field is set
+  TSmallBlockContention = packed record
     /// the small block size on which Getmem() has been blocked - or 0
-    GetmemThreadContentionSmallBlockSize: word;
+    GetmemSleepCountSmallBlockSize: word;
     /// the small block size on which Freemem() has been blocked - or 0
-    FreememThreadContentionSmallBlockSize: word;
-    /// how many times a small block access has been waiting for unlock
-    ThreadContention: cardinal;
+    FreememSleepCountSmallBlockSize: word;
+    /// how many times a small block getmem/freemem has been waiting for unlock
+    SleepCount: cardinal;
   end;
 
   /// small blocks detailed information as returned GetSmallBlockContention
-  TFPCMMSmallBlockContentionDynArray = array of TFPCMMSmallBlockContention;
+  TSmallBlockContentionDynArray = array of TSmallBlockContention;
 
 
 /// retrieve high-level statistics about the current memory manager state
 // - see also GetSmallBlockContention for detailed small blocks information
 function CurrentHeapStatus: TMMStatus;
 
-/// get all small blocks which suffered from blocking during multi-thread
-// - results are sorted by contention occurence
+/// retrieve all small blocks which suffered from blocking during multi-thread
+// - results are sorted by SleepCount occurence
+// - optionally retrive the total contention counters for getmem/freemem
 function GetSmallBlockContention(GetMemTotal: PPtrInt = nil;
-  FreeMemTotal: PPtrInt = nil): TFPCMMSmallBlockContentionDynArray;
+  FreeMemTotal: PPtrInt = nil): TSmallBlockContentionDynArray;
 
 /// convenient debugging function into the console
+// - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
+// up to the smallblockcontentioncount biggest occurences
 procedure WriteHeapStatus(const context: shortstring = '';
-  includesmallblockcontention: integer = 0);
+  smallblockcontentioncount: integer = 0);
 
 {$endif FPC_CPUX64}
 
@@ -119,10 +128,15 @@ implementation
 
 
 {$ifdef FPC_CPUX64}
+// this unit is available only for FPC + X86_64 CPU
+
 
 { ********* Operating System Specific API Calls }
 
 {$ifdef MSWINDOWS}
+
+var
+  HeapStatus: TMMStatus;
 
 const
   kernel32 = 'kernel32.dll';
@@ -149,11 +163,15 @@ procedure SleepMS(dwMilliseconds: Cardinal); stdcall;
 procedure SleepInitial;
 begin
   SwitchToThread;
+  inc(HeapStatus.SleepCount);
+  inc(HeapStatus.SleepTime, 100); // wild guess to have some debug info
 end;
 
 procedure SleepNext;
 begin
   SleepMS(1);
+  inc(HeapStatus.SleepCount);
+  inc(HeapStatus.SleepTime, 1000);
 end;
 
 function AllocMedium(Size: PtrInt): pointer; inline;
@@ -181,6 +199,9 @@ end;
 
 uses
   BaseUnix;
+
+var
+  HeapStatus: TMMStatus;
 
 const
   clib = 'c';
@@ -247,12 +268,11 @@ procedure NSleep(nsec: PtrInt);
 var
   t: Ttimespec;
 begin
+  // note: nanosleep() adds a few dozen of microsecs for context switching
   t.tv_sec := 0;
   t.tv_nsec := nsec;
   nanosleep(@t, nil);
 end;
-
-{$ifdef FPCMM_DEBUG}
 
 {$ifdef DARWIN}
 
@@ -278,26 +298,23 @@ end;
 
 {$endif DARWIN}
 
-var
-  SleepingCount, SleepingTime: PtrUInt;
-
 procedure SleepSetTime(start: QWord); nostackframe; assembler;
 asm
   push start
   call QueryPerformanceMicroSeconds
   pop rcx
+  lea rdx, [rip + HeapStatus]
   sub rax, rcx
-lock xadd qword ptr[rip + SleepingTime], rax
-lock inc qword ptr[rip + SleepingCount]
+lock xadd qword ptr[rdx + TMMStatus.SleepTime], rax
+lock inc qword ptr[rdx + TMMStatus.SleepCount]
 end;
-
 
 procedure SleepInitial;
 var
   start: QWord;
 begin
-  start := QueryPerformanceMicroSeconds;
-  NSleep(10000); // 10us is around timer resolution on modern HW
+  start := QueryPerformanceMicroSeconds; // is part of the wait
+  NSleep(0); // similar to ThreadSwitch()
   SleepSetTime(start);
 end;
 
@@ -306,23 +323,9 @@ var
   start: QWord;
 begin
   start := QueryPerformanceMicroSeconds;
-  NSleep(50000); // 50us was empirically measured
+  NSleep(10000); // 10us was empirically measured
   SleepSetTime(start);
 end;
-
-{$else}
-
-procedure SleepInitial;
-begin
-  NSleep(10000); // 10us is around timer resolution on modern HW
-end;
-
-procedure SleepNext;
-begin
-  NSleep(50000); // 50us was empirically measured
-end;
-
-{$endif FPCMM_DEBUG}
 
 {$endif MSWINDOWS}
 
@@ -395,6 +398,81 @@ asm
       mov [rdx + 48], rax
 end;
 
+procedure Move72; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      mov rax, [rcx + 64]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      mov [rdx + 64], rax
+end;
+
+procedure Move88; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      mov rax, [rcx + 80]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      mov [rdx + 80], rax
+end;
+
+procedure Move104; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      movaps xmm5, oword ptr [rcx + 80]
+      mov rax, [rcx + 96]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      movaps oword ptr [rdx + 80], xmm5
+      mov [rdx + 96], rax
+end;
+
+procedure Move120; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      movaps xmm5, oword ptr [rcx + 80]
+      {$ifndef MSWINDOWS}
+      movaps xmm6, oword ptr [rcx + 96] // xmm6 is non volatile on Windows
+      {$endif MSWINDOWS}
+      mov rax, [rcx + 112]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      movaps oword ptr [rdx + 80], xmm5
+      {$ifdef MSWINDOWS}
+      movaps xmm0, oword ptr [rcx + 96]
+      movaps oword ptr [rdx + 96], xmm0
+      {$else}
+      movaps oword ptr [rdx + 96], xmm6
+      {$endif MSWINDOWS}
+      mov [rdx + 112], rax
+end;
+
 procedure MoveX16LP; nostackframe; assembler;
 asm
       sub r8, 8
@@ -437,15 +515,15 @@ end;
 {$WARN 3175 off : Some fields coming before "$1" were not initialized }
 
 const
-  NumSmallBlockTypes = 46 + 9; // 9 smallest sizes are tripled to avoid spinning
+  NumSmallBlockTypes = 46 + 10; // 10 smallest are triplets to avoid spinning
   MaximumSmallBlockSize = 2608;
   SmallBlockSizes: array[0..NumSmallBlockTypes - 1] of word = (
-   16, 16, 16, 32, 32, 32, 48, 48, 48, 64, 64, 64, 80, 80,
+   16, 16, 16, 32, 32, 32, 48, 48, 48, 64, 64, 64, 80, 80, 80,
    96, 112, 128, 144, 160, 176, 192, 208, 224, 240,
    256, 272, 288, 304, 320, 352, 384, 416, 448, 480, 528, 576, 624, 672,
    736, 800, 880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984,
    2176, 2384, MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
-  SmallBlockGranularity = 8;
+  SmallBlockGranularity = 16;
   TargetSmallBlocksPerPool = 48;
   MinimumSmallBlocksPerPool = 12;
 
@@ -487,6 +565,8 @@ type
   TMoveProc = procedure; // with rcx/rdx/r8 ABI convention
 
   PSmallBlockPoolHeader = ^TSmallBlockPoolHeader;
+
+  // information for each small block size - 64 bytes long = CPU cache line
   TSmallBlockType = record
     BlockTypeLocked: Boolean;
     AllowedGroupsForBlockPoolBitmap: Byte;
@@ -500,8 +580,8 @@ type
     CurrentSequentialFeedPool: PSmallBlockPoolHeader;
     UpsizeMoveProcedure: TMoveProc;
     {$ifdef CPU64}
-    GetmemThreadContention: integer;
-    FreememThreadContention: integer;
+    GetmemSleepCount: integer;
+    FreememSleepCount: integer;
     {$endif}
   end;
   PSmallBlockType = ^TSmallBlockType;
@@ -550,7 +630,7 @@ const
 type
   TSmallBlockInfo = packed record
     Types: array[0..NumSmallBlockTypes - 1] of TSmallBlockType;
-    AllocSizeIndX4: array[0..
+    GetmemLookup: array[0..
       (MaximumSmallBlockSize - 1) div SmallBlockGranularity] of byte;
   end;
 
@@ -571,8 +651,6 @@ var
   LargeBlocksLocked: Boolean;
   LargeBlocksCircularList: TLargeBlockHeader;
 
-  HeapStatus: TMMStatus;
-
 
 { ********* Shared Routines }
 
@@ -582,8 +660,8 @@ var
 
 procedure LockMediumBlocks; nostackframe; assembler;
 asm
+     // on input: rcx=MediumBlockInfo.Locked on output: r10=MediumBlockInfo
      mov  rdx, SpinLockCount
-     lea  rcx, [rip + MediumBlockInfo.Locked]
 @sp: pause
      mov  eax, $100
      dec  rdx
@@ -603,9 +681,9 @@ lock cmpxchg byte ptr [rip + MediumBlockInfo.Locked], ah
      jmp  @s
 @o:  pop  rdi
      pop  rsi
-     lea  r10, [rip + MediumBlockInfo] // as expected by caller asm
+     lea  r10, [rip + MediumBlockInfo]
      lea  rax, [rip + HeapStatus] // simple inc within lock
-     inc  qword ptr [rax].TMMStatus.Medium.ThreadContention
+     inc  qword ptr [rax].TMMStatus.Medium.SleepCount
 @ok:
 end;
 
@@ -780,20 +858,27 @@ end;
 procedure LockLargeBlocks; nostackframe; assembler;
 asm
      mov  eax, $100
-lock cmpxchg byte ptr [rip + LargeBlocksLocked], ah
+     lea  rcx, [rip + LargeBlocksLocked]
+lock cmpxchg byte ptr [rcx], ah
      je   @none
-     pause
+     mov  rdx, SpinLockCount
+@sp: pause
      mov eax, $100
-lock cmpxchg byte ptr [rip + LargeBlocksLocked], ah
-     je   @ok
-     call SleepInitial
+     dec rdx
+     jz  @sl
+     cmp [rcx], ah
+     je  @sp
+lock cmpxchg byte ptr [rcx], ah
+     je   @none
+     jmp  @sp
+@sl: call SleepInitial
 @s:  mov  eax, $100
 lock cmpxchg byte ptr [rip + LargeBlocksLocked], ah
      je   @ok
      call SleepNext
      jmp @s
 @ok: lea rax, [rip + HeapStatus] // simple inc within lock
-     inc qword ptr [rax].TMMStatus.Large.ThreadContention
+     inc qword ptr [rax].TMMStatus.Large.SleepCount
 @none:
 end;
 
@@ -929,15 +1014,15 @@ asm
   push rbx
   {Since most allocations are for small blocks, determine the small block type}
   lea rdx, [size + BlockHeaderSize - 1]
-  shr rdx, 3 // div SmallBlockGranularity
+  shr rdx, 4 // div SmallBlockGranularity
   {Preload the address of small block structures}
   lea rbx, [rip + SmallBlockInfo]
   {Is it a small block?}
   cmp rcx, (MaximumSmallBlockSize - BlockHeaderSize)
   ja @NotASmallBlock
   {Get the small block type pointer in rbx}
-  movzx ecx, byte ptr [rbx + rdx + TSmallBlockInfo.AllocSizeIndX4]
-  shl ecx, 4
+  movzx ecx, byte ptr [rbx + rdx + TSmallBlockInfo.GetmemLookup]
+  shl ecx, 6 // *SizeOf(TSmallBlockType)
   add rbx, rcx
   {Grab the block type and Spin if needed}
   mov r8, SpinLockCount
@@ -945,7 +1030,7 @@ asm
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   je @GotLockOnSmallBlockType
-  {Try up to two sizes larger}
+  {Try up to two next types (same size triplets if < 96 bytes)}
   pause
   add rbx, SizeOf(TSmallBlockType)
   mov eax, $100
@@ -961,7 +1046,7 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   dec r8
   jnz @LockBlockTypeLoop
   {Block type and two sizes larger are all locked - give up and sleep}
-lock inc dword ptr [rbx].TSmallBlockType.GetmemThreadContention
+lock inc dword ptr [rbx].TSmallBlockType.GetmemSleepCount
   call SleepInitial
   mov eax, $100
 lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
@@ -1034,10 +1119,10 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   ret
 @AllocateSmallBlockPool:
   {Access shared information about Medium blocks storage}
-  lea rcx, [rip + MediumBlockInfo]
+  lea r10, [rip + MediumBlockInfo]
   mov eax, $100
-  mov r10, rcx
-lock cmpxchg byte ptr [rcx + TMediumBlockInfo.Locked], ah
+  lea rcx, [r10 + TMediumBlockInfo.Locked]
+lock cmpxchg byte ptr [rcx], ah
   je @MediumLocked1
   call LockMediumBlocks
 @MediumLocked1:
@@ -1180,11 +1265,11 @@ lock cmpxchg byte ptr [rcx + TMediumBlockInfo.Locked], ah
   {Get the bin size for this block size. Block sizes are
    rounded up to the next bin size.}
   lea rbx, [rcx + MediumBlockGranularity - 1 + BlockHeaderSize - MediumBlockSizeOffset]
-  mov rcx, r10
+  lea rcx, [r10 + TMediumBlockInfo.Locked]
   and ebx, -MediumBlockGranularity
   add ebx, MediumBlockSizeOffset
   mov eax, $100
-lock cmpxchg byte ptr [rcx + TMediumBlockInfo.Locked], ah
+lock cmpxchg byte ptr [rcx], ah
   je   @MediumLocked2
   call LockMediumBlocks
 @MediumLocked2:
@@ -1341,7 +1426,7 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   jmp @SpinLockBlockType
 @LockBlockTypeSleep:
   {Couldn't grab the block type - sleep and try again}
-  lock inc dword ptr [rbx].TSmallBlockType.FreeMemThreadContention
+  lock inc dword ptr [rbx].TSmallBlockType.FreeMemSleepCount
   push rcx
   call SleepInitial
   pop rcx
@@ -1370,23 +1455,14 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   lea rax, [rax + IsFreeBlockFlag]
   mov [rcx - BlockHeaderSize], rax
   {Insert the pool back into the linked list if it was full}
-  jz @SmallPoolWasFull
-  {All ok}
-  xor eax, eax
-  {Unlock the block type}
-  mov [rbx].TSmallBlockType.BlockTypeLocked, al
-  pop rbx
-  {$ifdef MSWINDOWS}
-  pop rsi
-  {$endif MSWINDOWS}
-  ret
-@SmallPoolWasFull:
+  jnz @SmallPoolWasNotFull
   {Insert this as the first partially free pool for the block size}
   mov rcx, [rbx].TSmallBlockType.NextPartiallyFreePool
   mov [rdx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rbx
   mov [rdx].TSmallBlockPoolHeader.NextPartiallyFreePool, rcx
   mov [rcx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rdx
   mov [rbx].TSmallBlockType.NextPartiallyFreePool, rdx
+@SmallPoolWasNotFull:
   {All ok}
   xor eax, eax
   {Unlock the block type}
@@ -1437,9 +1513,9 @@ lock cmpxchg [rbx].TSmallBlockType.BlockTypeLocked, ah
   mov rbx, rdx
   {Pointer in rsi}
   mov rsi, rcx
-  mov rcx, r10
+  lea rcx, [r10 + TMediumBlockInfo.Locked]
   mov eax, $100
-lock cmpxchg byte ptr [rcx + TMediumBlockInfo.Locked], ah
+lock cmpxchg byte ptr [rcx], ah
   je   @MediumBlocksLocked
   call LockMediumBlocks
 @MediumBlocksLocked:
@@ -1730,9 +1806,9 @@ asm
   sub ecx, r15d
   mov ebx, ecx
   {Lock the medium blocks}
-  mov rcx, r10
+  lea rcx, [r10 + TMediumBlockInfo.Locked]
   mov eax, $100
-lock cmpxchg byte ptr [rcx + TMediumBlockInfo.Locked], ah
+lock cmpxchg byte ptr [rcx], ah
   je   @MediumBlocksLocked1
   call LockMediumBlocks
 @MediumBlocksLocked1:
@@ -1818,9 +1894,9 @@ lock cmpxchg byte ptr [rcx + TMediumBlockInfo.Locked], ah
    block in place.}
   mov rbx, rcx
   {Lock the medium blocks.}
-  mov rcx, r10
+  lea rcx, [r10 + TMediumBlockInfo.Locked]
   mov eax, $100
-lock cmpxchg byte ptr [rcx + TMediumBlockInfo.Locked], ah
+lock cmpxchg byte ptr [rcx], ah
   je   @MediumBlocksLocked2
   mov r15, rdx
   call LockMediumBlocks
@@ -1988,11 +2064,10 @@ asm
   lea rdx, [rax + rbx]
   {rbx = -1 if no block could be allocated, otherwise size rounded down
    to previous multiple of 8. If rbx = 0 then the block size is 1..8 bytes and
-   the SSE2 based clearing loop should not be used (since it clears 16 bytes per
-   iteration).}
+   the SSE2-based 16 bytes clearing loop should not be used}
   or rbx, rcx
   jz @ClearLastQWord
-  {Large blocks are already zero filled}
+  {Large blocks from mmap/VirtualAlloc are already zero filled}
   cmp rbx, MaximumMediumBlockSize - BlockHeaderSize
   jae @Done
   {Make the counter negative based}
@@ -2002,10 +2077,10 @@ asm
   {Clear groups of 16 bytes. Block sizes are 8 less than a multiple of 16}
   align 16
 @FillLoop:
-  movaps oword ptr [rdx + rbx], xmm0 // non-temporal movntdq not needed (256KB)
+  movaps oword ptr [rdx + rbx], xmm0 // non-temporal movntdq not needed (<256KB)
   add rbx, 16
   js @FillLoop
-  {Clear the last 8 bytes}
+  {Always clear the last 8 bytes}
 @ClearLastQWord:
   xor rcx, rcx
   mov qword ptr [rdx], rcx
@@ -2098,13 +2173,13 @@ begin
     'B current=', K(arena.CumulativeAlloc - arena.CumulativeFree),
     ' alloc=', K(arena.CumulativeAlloc), ' free=', K(arena.CumulativeFree));
   {$endif FPCMM_DEBUG}
-  writeln(' sleep=', K(arena.ThreadContention));
+  writeln(' sleep=', K(arena.SleepCount));
 end;
 
 procedure WriteHeapStatus(const context: shortstring;
-  includesmallblockcontention: integer);
+  smallblockcontentioncount: integer);
 var
-  small: TFPCMMSmallBlockContentionDynArray;
+  small: TSmallBlockContentionDynArray;
   i, G, F: PtrInt;
 begin
   if context <> '' then
@@ -2113,25 +2188,23 @@ begin
   begin
     WriteHeapStatusDetail(Medium, ' Medium: ');
     WriteHeapStatusDetail(Large,  ' Large:  ');
-    {$ifdef FPCMM_DEBUG}
-    writeln(' Sleep:  count=', SleepingCount, ' microsec=', SleepingTime);
-    {$endif FPCMM_DEBUG}
+    writeln(' Sleep:    count=', K(SleepCount), ' microsec=', SleepTime);
   end;
-  if includesmallblockcontention <= 0 then
+  if smallblockcontentioncount <= 0 then
     exit;
   small := GetSmallBlockContention(@G, @F);
   if small <> nil then
   begin
-    writeln(' Small Waits:   Getmem=', K(G), ' Freemem=', K(F));
+    writeln(' Small Waits: getmem=', K(G), ' freemem=', K(F));
     for i := 0 to high(small) do
       with small[i] do
       begin
-        if GetmemThreadContentionSmallBlockSize <> 0 then
-          write(' Getmem(', GetmemThreadContentionSmallBlockSize)
+        if GetmemSleepCountSmallBlockSize <> 0 then
+          write(' getmem(', GetmemSleepCountSmallBlockSize)
         else
-          write(' Freemem(', FreememThreadContentionSmallBlockSize);
-        write(')=' , ThreadContention);
-        if i = includesmallblockcontention then
+          write(' freemem(', FreememSleepCountSmallBlockSize);
+        write(')=' , K(SleepCount));
+        if i = smallblockcontentioncount then
           exit;
       end;
     writeln;
@@ -2152,20 +2225,18 @@ begin
   p := @SmallBlockInfo.Types;
   for i := 1 to NumSmallBlockTypes do
   begin
-    inc(result.SmallGetmemThreadContention,
-      p^.GetmemThreadContention);
-    inc(result.SmallFreememThreadContention,
-      p^.FreememThreadContention);
+    inc(result.SmallGetmemSleepCount,  p^.GetmemSleepCount);
+    inc(result.SmallFreememSleepCount, p^.FreememSleepCount);
     inc(p);
   end;
   {$endif FPCMM_DEBUG}
 end;
 
-procedure QuickSortRes(const Res: TFPCMMSmallBlockContentionDynArray; L, R: PtrInt);
+procedure QuickSortRes(const Res: TSmallBlockContentionDynArray; L, R: PtrInt);
 var
   I, J, P: PtrInt;
   pivot: cardinal;
-  tmp: TFPCMMSmallBlockContention;
+  tmp: TSmallBlockContention;
 begin
   if L < R then
     repeat
@@ -2173,10 +2244,10 @@ begin
       J := R;
       P := (L + R) shr 1;
       repeat
-        pivot := Res[P].ThreadContention;
-        while Res[I].ThreadContention > pivot do
+        pivot := Res[P].SleepCount;
+        while Res[I].SleepCount > pivot do
           inc(I);
-        while Res[J].ThreadContention < pivot do
+        while Res[J].SleepCount < pivot do
           dec(J);
         if I <= J then
         begin
@@ -2207,11 +2278,11 @@ begin
 end;
 
 function GetSmallBlockContention(GetMemTotal,
-  FreeMemTotal: PPtrInt): TFPCMMSmallBlockContentionDynArray;
+  FreeMemTotal: PPtrInt): TSmallBlockContentionDynArray;
 var
   i, n: integer;
   p: PSmallBlockType;
-  d: ^TFPCMMSmallBlockContention;
+  d: ^TSmallBlockContention;
 begin
   if GetMemTotal <> nil then
     GetMemTotal^ := 0;
@@ -2221,9 +2292,9 @@ begin
   p := @SmallBlockInfo.Types;
   for i := 1 to NumSmallBlockTypes do
   begin
-    if p^.GetmemThreadContention <> 0 then
+    if p^.GetmemSleepCount <> 0 then
       inc(n);
-    if p^.FreememThreadContention <> 0 then
+    if p^.FreememSleepCount <> 0 then
       inc(n);
     inc(p);
   end;
@@ -2234,20 +2305,20 @@ begin
   p := @SmallBlockInfo.Types;
   for i := 1 to NumSmallBlockTypes do
   begin
-    if p^.GetmemThreadContention <> 0 then
+    if p^.GetmemSleepCount <> 0 then
     begin
-      d^.ThreadContention := p^.GetmemThreadContention;
+      d^.SleepCount := p^.GetmemSleepCount;
       if GetMemTotal <> nil then
-        inc(GetMemTotal^, p^.GetmemThreadContention);
-      d^.GetmemThreadContentionSmallBlockSize := p^.BlockSize;
+        inc(GetMemTotal^, p^.GetmemSleepCount);
+      d^.GetmemSleepCountSmallBlockSize := p^.BlockSize;
       inc(d);
     end;
-    if p^.FreememThreadContention <> 0 then
+    if p^.FreememSleepCount <> 0 then
     begin
-      d^.ThreadContention := p^.FreememThreadContention;
+      d^.SleepCount := p^.FreememSleepCount;
       if FreeMemTotal <> nil then
-        inc(FreeMemTotal^, p^.FreeMemThreadContention);
-      d^.FreememThreadContentionSmallBlockSize := p^.BlockSize;
+        inc(FreeMemTotal^, p^.FreeMemSleepCount);
+      d^.FreememSleepCountSmallBlockSize := p^.BlockSize;
       inc(d);
     end;
     inc(p);
@@ -2279,7 +2350,6 @@ var
 procedure BuildBlockTypeLookupTable;
 var
   i, start, next: PtrUInt;
-  ndx: Byte;
 begin
   start := 0;
   with SmallBlockInfo do
@@ -2289,13 +2359,11 @@ begin
       if next and 15 = 0 then
       begin
         next := next div SmallBlockGranularity;
-        ndx := i * 4;
         while start < next do
         begin
-          AllocSizeIndX4[start] := ndx;
+          GetmemLookup[start] := i;
           inc(start);
         end;
-        start := next;
       end;
     end;
 end;
@@ -2307,7 +2375,7 @@ var
   medium: PMediumFreeBlock;
 begin
   p := @SmallBlockInfo.Types;
-  assert(SizeOf(p^) = 64); // as expected by the asm above
+  assert(SizeOf(p^) = 64); // as expected by asm above - match CPU cache line
   for i := 0 to NumSmallBlockTypes - 1 do
   begin
     size := SmallBlockSizes[i];
@@ -2321,6 +2389,14 @@ begin
         p^.UpsizeMoveProcedure := Move40;
       64:
         p^.UpsizeMoveProcedure := Move56;
+      80:
+        p^.UpsizeMoveProcedure := Move72;
+      96:
+        p^.UpsizeMoveProcedure := Move88;
+      112:
+        p^.UpsizeMoveProcedure := Move104;
+      128:
+        p^.UpsizeMoveProcedure := Move120;
     else
       p^.UpsizeMoveProcedure := MoveX16LP;
     end;
