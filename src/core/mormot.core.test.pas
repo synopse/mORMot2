@@ -436,7 +436,7 @@ type
     destructor Destroy; override;
     /// the .log file generator created if any test case failed
     property LogFile: TSynLog read fLogFile;
-
+    /// a replicate of the text written to the console
     property ConsoleDup: RawUTF8 read fConsoleDup;
   end;
 

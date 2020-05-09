@@ -12,7 +12,7 @@ unit mormot.core.fpcx64mm;
     - only for FPC on the x86_64 target - use the original heap on Delphi or ARM
     - code has been reduced to the only necessary featureset for production
     - huge asm refactoring for cross-platform, compactness and efficiency
-    - detailed statistics gathering (also about leaks and threads contention)
+    - detailed statistics gathering (also about threads contention)
     - mremap() makes large block ReallocMem a breeze on Linux :)
 
     Usage: include this unit as the very first in your FPC project uses clause
@@ -37,10 +37,8 @@ unit mormot.core.fpcx64mm;
 
 interface
 
-// if set, will report any potential memory leak at shutdown
-// - then use FPC heaptrc or valgrid for further investigation
-// - additional fine-grained counters and sleep timing of small blocks
-// will also be included to WriteHeapStatus
+// if defined, additional fine-grained counters and sleep timing of
+// small blocks will also be included to WriteHeapStatus()
 {$define FPCMM_DEBUG}
 
 // if set, will export libc-like functions, and not change the FPC MM
@@ -2381,7 +2379,7 @@ function CurrentHeapStatus: TMMStatus;
 var
   i: integer;
   p: PSmallBlockType;
-  {$endif FPCMM_DEBUG}
+{$endif FPCMM_DEBUG}
 begin
   result := HeapStatus;
   {$ifdef FPCMM_DEBUG}
@@ -2523,10 +2521,6 @@ begin
   end;
   LargeBlocksCircularList.PreviousLargeBlockHeader := @LargeBlocksCircularList;
   LargeBlocksCircularList.NextLargeBlockHeader := @LargeBlocksCircularList;
-  {$ifdef FPCMM_DEBUG}
-  if (HeapStatus.Large.CurrentBytes <> 0) or (HeapStatus.Medium.CurrentBytes <> 0) then
-    WriteHeapStatus('mormot.core.fpcx64mm: memory leak detected at shutdown');
-  {$endif FPCMM_DEBUG}
 end;
 
 

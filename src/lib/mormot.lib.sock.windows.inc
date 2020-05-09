@@ -689,19 +689,19 @@ begin
   begin
     byte(ev) := 0;
     sock := fTagSocket[i];
-    if (rdp <> nil) and FD_ISSET(sock, rd) then
+    if (rdp <> nil) and FD_ISSET(sock, rd{%H-}) then
     begin
       if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
-         (pending = 0) then
+         ({%H-}pending = 0) then
         // socket closed gracefully - see TCrtSocket.SockReceivePending
         include(ev, pseClosed)
       else
         include(ev, pseRead);
     end;
-    if (wrp <> nil) and FD_ISSET(sock, wr) then
+    if (wrp <> nil) and FD_ISSET(sock, wr{%H-}) then
       include(ev, pseWrite);
     if byte(ev) <> 0 then
-      with tmp[result] do
+      with {%H-}tmp[result] do
       begin
         events := ev;
         tag := fTagTag[i];

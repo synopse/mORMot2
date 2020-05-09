@@ -15,6 +15,7 @@ unit mormot.core.rtti;
     - Managed Types Finalization or Copy
     - RTTI Value Types used for JSON Parsing
     - RTTI-based Registration for Custom JSON Parsing
+    - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
      Purpose of this unit is to avoid any direct use of TypInfo.pas RTL unit,
     which is not exactly compatible between compilers, and lack of direct
@@ -3222,7 +3223,7 @@ begin
      (TypeInfo^.Kind in [{$ifdef FPC}rkLStringOld, {$endif} rkLString]) then
     GetLongStrProp(Instance, Value)
   else
-    Finalize(Value);
+    FastAssignNew(Value, nil);
 end;
 
 procedure TRttiProp.SetOrdValue(Instance: TObject; Value: PtrInt);
@@ -5715,6 +5716,84 @@ begin
 end;
 
 
+{ ********* Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly }
+
+{$ifdef FPC_CPUX64}
+
+procedure RedirectCode(Func, RedirectFunc: Pointer);
+var
+  NewJump: packed record
+    Code: byte;        // $e9 = jmp {relative}
+    Distance: integer; // relative jump is 32-bit even on CPU64
+  end;
+begin
+  if (Func = nil) or (RedirectFunc = nil) or (Func = RedirectFunc) then
+    exit; // nothing to redirect to
+  NewJump.Code := $e9;
+  NewJump.Distance := integer(PtrUInt(RedirectFunc) - PtrUInt(Func) - SizeOf(NewJump));
+  PatchCode(Func, @NewJump, SizeOf(NewJump));
+  assert(PByte(Func)^ = $e9);
+end;
+
+procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
+procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
+procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
+procedure fpc_freemem; external name 'FPC_FREEMEM';
+
+procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[p]
+        test    rax, rax
+        jz      @z
+        mov     qword ptr[p], 0
+        mov     p, rax
+        cmp     qword ptr[rax - 16], 0
+        jl      @z
+lock    dec     qword ptr[rax - 16]
+        jbe     @free
+@z:     ret
+@free:  sub     p, SizeOf(TStrRec)
+        jmp     fpc_freemem
+end;
+
+procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
+asm
+        test    p, p
+        jz      @z
+        cmp     qword ptr[p - 16], 0
+        jl      @z
+lock    inc     qword ptr[p - 16]
+@z:
+end;
+
+procedure _ansistr_assign(var d: pointer; s: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[d]
+        cmp     rax, s
+        jz      @eq
+        test    s, s
+        jz      @ns
+        cmp     qword ptr[s - 16], 0
+        jl      @ns
+lock    inc     qword ptr[s - 16]
+@ns:    mov     qword ptr[d], s
+        test    rax, rax
+        jnz     @z
+@eq:    ret
+@z:     mov     d, rax
+        cmp     qword ptr[rax - 16], 0
+        jl      @n
+ lock   dec     qword ptr[rax - 16]
+        ja      @n
+@free:  sub     d, SizeOf(TStrRec)
+        jmp     fpc_freemem
+@n:
+end;
+
+{$endif FPC_CPUX64}
+
+
+
 procedure InitializeUnit;
 var
   k: TRttiKind;
@@ -5829,6 +5908,14 @@ begin
   InitializeCriticalSection(RttiCustom.Lock);
   RttiCustom.GlobalClass := TRttiCustom;
   ClassUnit := _ClassUnit;
+  // redirect most used FPC RTL functions to optimized x86_64 assembly
+  {$ifdef FPC_CPUX64}
+  RedirectCode(@system.Move, @MoveFast);
+  RedirectCode(@system.FillChar, @FillCharFast);
+  RedirectCode(@fpc_ansistr_decr_ref, @_ansistr_decr_ref);
+  RedirectCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref);
+  RedirectCode(@fpc_ansistr_assign, @_ansistr_assign);
+  {$endif FPC_CPUX64}
 end;
 
 procedure FinalizeUnit;

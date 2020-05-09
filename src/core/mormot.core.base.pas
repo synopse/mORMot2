@@ -598,6 +598,12 @@ procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
+/// assign any constant or already ref-counted AnsiString/RawUTF8
+// - with default s=nil, is an equivalence to Finalize(s) or s := ''
+// - is also called by FastSetString to setup its allocated value
+// - faster especially under FPC
+procedure FastAssignNew(var d; s: pointer = nil);
+
 /// initialize a RawByteString, ensuring returned "aligned" pointer is 16-bytes aligned
 // - to be used e.g. for proper SSE process
 procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
@@ -3454,6 +3460,42 @@ begin // algorithm similar to TFPList.Expand for the increasing ranges
     inc(result, 16 shl 20);
 end;
 
+{$ifdef FPC_CPUX64}
+
+procedure fpc_freemem; external name 'FPC_FREEMEM';
+
+procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[d]
+        mov     qword ptr[d], s
+        test    rax, rax
+        jz      @z
+        mov     d, rax
+        cmp     qword ptr[rax - 16], 0
+        jl      @z
+lock    dec     qword ptr[rax - 16]
+        jbe     @free
+@z:     ret
+@free:  sub     d, SizeOf(TStrRec)
+        jmp     fpc_freemem
+end;
+
+{$else}
+
+procedure FastAssignNew(var d; s: pointer);
+var
+  sr: PStrRec; // local copy to use register
+begin
+  sr := Pointer(d);
+  Pointer(d) := s;
+  if sr = nil then
+    exit;
+  dec(sr);
+  if (sr^.refcnt >= 0) and RefCntDecFree(sr^.refcnt) then
+    FreeMem(sr);
+end;
+
+{$endif FPC_CPUX64}
 
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 var
@@ -3478,12 +3520,7 @@ begin
     if p <> nil then
       MoveFast(p^, sr^, len);
   end;
-  {$ifdef FPC}
-  Finalize(RawByteString(s));
-  {$else}
-  RawByteString(s) := '';
-  {$endif FPC}
-  pointer(s) := r;
+  FastAssignNew(s, r);
 end;
 
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
@@ -3509,12 +3546,7 @@ begin
     if p <> nil then
       MoveFast(p^, sr^, len);
   end;
-  {$ifdef FPC}
-  Finalize(s);
-  {$else}
-  s := '';
-  {$endif FPC}
-  pointer(s) := r;
+  FastAssignNew(s, r);
 end;
 
 procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
@@ -7350,7 +7382,7 @@ begin
   while (I <= L) and (S[I] <= ' ') do
     inc(I);
   if I > L then
-    result := ''
+    FastAssignNew(result)
   else if (I = 1) and (S[L] > ' ') then
     result := S
   else
@@ -9559,7 +9591,7 @@ var
 begin
   v := TVarData(Value).VType;
   if v = varString then
-    Finalize(RawByteString(TVarData(Value).VAny))
+    FastAssignNew(TVarData(Value).VAny)
   else
     begin
       if v >= varOleStr then // bypass for most obvious types

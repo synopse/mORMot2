@@ -1178,7 +1178,7 @@ var
 /// self-modifying code - change some memory buffer in the code segment
 // - if Backup is not nil, it should point to a Size array of bytes, ready
 // to contain the overridden code buffer, for further hook disabling
-procedure PatchCode(Old,New: pointer; Size: PtrInt; Backup: pointer = nil;
+procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer = nil;
   LeaveUnprotected: boolean = false);
 
 /// self-modifying code - change one PtrUInt in the code segment
