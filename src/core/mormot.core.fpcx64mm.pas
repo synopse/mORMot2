@@ -38,10 +38,10 @@ unit mormot.core.fpcx64mm;
 interface
 
 // if defined, additional fine-grained counters and sleep timing of
-// small blocks will also be included to WriteHeapStatus()
+// small blocks will be included to WriteHeapStatus()
 {$define FPCMM_DEBUG}
 
-// if set, will export libc-like functions, and not change the FPC MM
+// if defined, will export libc-like functions, and not replace the FPC MM
 // - e.g. to use this unit as a stand-alone C memory allocator
 {.$define FPCMM_STANDALONE}
 
@@ -525,6 +525,110 @@ asm
       {$endif MSWINDOWS}
       mov [rdx + 112], rax
 end;
+
+{$ifndef MSWINDOWS} // xmm6 and up are non volatile on Windows
+
+procedure Move136; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      movaps xmm5, oword ptr [rcx + 80]
+      movaps xmm6, oword ptr [rcx + 96]
+      movaps xmm7, oword ptr [rcx + 112]
+      mov rax, [rcx + 128]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      movaps oword ptr [rdx + 80], xmm5
+      movaps oword ptr [rdx + 96], xmm6
+      movaps oword ptr [rdx + 112], xmm7
+      mov [rdx + 128], rax
+end;
+
+procedure Move152; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      movaps xmm5, oword ptr [rcx + 80]
+      movaps xmm6, oword ptr [rcx + 96]
+      movaps xmm7, oword ptr [rcx + 112]
+      movaps xmm8, oword ptr [rcx + 128]
+      mov rax, [rcx + 144]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      movaps oword ptr [rdx + 80], xmm5
+      movaps oword ptr [rdx + 96], xmm6
+      movaps oword ptr [rdx + 112], xmm7
+      movaps oword ptr [rdx + 128], xmm8
+      mov [rdx + 144], rax
+end;
+
+procedure Move168; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      movaps xmm5, oword ptr [rcx + 80]
+      movaps xmm6, oword ptr [rcx + 96]
+      movaps xmm7, oword ptr [rcx + 112]
+      movaps xmm8, oword ptr [rcx + 128]
+      movaps xmm9, oword ptr [rcx + 144]
+      mov rax, [rcx + 160]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      movaps oword ptr [rdx + 80], xmm5
+      movaps oword ptr [rdx + 96], xmm6
+      movaps oword ptr [rdx + 112], xmm7
+      movaps oword ptr [rdx + 128], xmm8
+      movaps oword ptr [rdx + 144], xmm9
+      mov [rdx + 160], rax
+end;
+
+procedure Move184; nostackframe; assembler;
+asm
+      movaps xmm0, oword ptr [rcx]
+      movaps xmm1, oword ptr [rcx + 16]
+      movaps xmm2, oword ptr [rcx + 32]
+      movaps xmm3, oword ptr [rcx + 48]
+      movaps xmm4, oword ptr [rcx + 64]
+      movaps xmm5, oword ptr [rcx + 80]
+      movaps xmm6, oword ptr [rcx + 96]
+      movaps xmm7, oword ptr [rcx + 112]
+      movaps xmm8, oword ptr [rcx + 128]
+      movaps xmm9, oword ptr [rcx + 144]
+      movaps xmm10, oword ptr [rcx + 160]
+      mov rax, [rcx + 176]
+      movaps oword ptr [rdx], xmm0
+      movaps oword ptr [rdx + 16], xmm1
+      movaps oword ptr [rdx + 32], xmm2
+      movaps oword ptr [rdx + 48], xmm3
+      movaps oword ptr [rdx + 64], xmm4
+      movaps oword ptr [rdx + 80], xmm5
+      movaps oword ptr [rdx + 96], xmm6
+      movaps oword ptr [rdx + 112], xmm7
+      movaps oword ptr [rdx + 128], xmm8
+      movaps oword ptr [rdx + 144], xmm9
+      movaps oword ptr [rdx + 160], xmm10
+      mov [rdx + 176], rax
+end;
+
+{$endif MSWINDOWS}
 
 procedure MoveX16LP; nostackframe; assembler;
 asm
@@ -2397,8 +2501,9 @@ end;
 { ********* Initialization and Finalization }
 
 const
-  _MOVES: array[1..8] of TMoveProc = (
-    Move8, Move24, Move40, Move56, Move72, Move88, Move104, Move120);
+  _MOVES: array[1..8 {$ifndef MSWINDOWS} + 4 {$endif}] of TMoveProc = (
+    Move8, Move24, Move40, Move56, Move72, Move88, Move104, Move120
+    {$ifndef MSWINDOWS} , Move136, Move152, Move168, Move184 {$endif});
 
 procedure InitializeMemoryManager;
 var
@@ -2510,7 +2615,8 @@ begin
     end;
     BinGroupBitmap := 0;
     SequentialFeedBytesLeft := 0;
-    FillChar(BinBitmaps, SizeOf(BinBitmaps), 0);
+    for i := 0 to MediumBlockBinGroupCount - 1 do
+      BinBitmaps[i] := 0;
   end;
   large := LargeBlocksCircularList.NextLargeBlockHeader;
   while large <> @LargeBlocksCircularList do
