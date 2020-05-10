@@ -544,4 +544,141 @@ begin
 end;
 
 
+{ ********* Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly }
+
+{$ifdef FPC_CPUX64}
+
+procedure RedirectCode(Func, RedirectFunc: Pointer);
+var
+  NewJump: packed record
+    Code: byte;        // $e9 = jmp {relative}
+    Distance: integer; // relative jump is 32-bit even on CPU64
+  end;
+begin
+  if (Func = nil) or (RedirectFunc = nil) or (Func = RedirectFunc) then
+    exit; // nothing to redirect to
+  NewJump.Code := $e9;
+  NewJump.Distance := integer(PtrUInt(RedirectFunc) - PtrUInt(Func) - SizeOf(NewJump));
+  PatchCode(Func, @NewJump, SizeOf(NewJump));
+  assert(PByte(Func)^ = $e9);
+end;
+
+procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
+procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
+procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
+procedure fpc_unicodestr_decr_ref; external name 'FPC_UNICODESTR_DECR_REF';
+procedure fpc_unicodestr_incr_ref; external name 'FPC_UNICODESTR_INCR_REF';
+procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
+procedure fpc_dynarray_incr_ref; external name 'FPC_DYNARRAY_INCR_REF';
+procedure fpc_dynarray_decr_ref; external name 'FPC_DYNARRAY_DECR_REF';
+procedure fpc_dynarray_clear; external name 'FPC_DYNARRAY_CLEAR';
+procedure fpc_freemem; external name 'FPC_FREEMEM';
+
+procedure PatchJmp(old, new: PByteArray; size: PtrUInt; jmp: PtrUInt = 0);
+var
+  rel: PCardinal;
+begin
+  PatchCode(old, new, size, nil, {unprotected=}true);
+  if jmp = 0 then
+    jmp := PtrUInt(@fpc_freemem);
+  repeat // search and fix "jmp rel FPC_FREEMEM"
+    dec(size);
+    if size = 0 then
+      exit;
+    rel := @old[size + 1];
+  until (old[size] = $e9) and
+        (rel^ = cardinal(jmp - PtrUInt(@new[size]) - 5));
+  rel^ := jmp - PtrUInt(rel) - 4;
+end;
+
+procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[p]
+        xor     edx, edx
+        test    rax, rax
+        jz      @z
+        mov     qword ptr[p], rdx
+        mov     p, rax
+        cmp     qword ptr[rax - _STRREFCNT], rdx
+        jl      @z
+lock    dec     qword ptr[rax - _STRREFCNT]
+        jbe     @free
+@z:     ret
+@free:  sub     p, _STRRECSIZE
+        jmp     fpc_freemem
+end;
+
+procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
+asm
+        test    p, p
+        jz      @z
+        cmp     qword ptr[p - _STRREFCNT], 0
+        jl      @z
+lock    inc     qword ptr[p - _STRREFCNT]
+@z:
+end;
+
+procedure _ansistr_assign(var d: pointer; s: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[d]
+        cmp     rax, s
+        jz      @eq
+        test    s, s
+        jz      @ns
+        cmp     qword ptr[s - _STRREFCNT], 0
+        jl      @ns
+lock    inc     qword ptr[s - _STRREFCNT]
+@ns:    mov     qword ptr[d], s
+        test    rax, rax
+        jnz     @z
+@eq:    ret
+@z:     mov     d, rax
+        cmp     qword ptr[rax - _STRREFCNT], 0
+        jl      @n
+ lock   dec     qword ptr[rax - _STRREFCNT]
+        ja      @n
+@free:  sub     d, _STRRECSIZE
+        jmp     fpc_freemem
+@n:
+end;
+
+procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;
+asm
+        test    p, p
+        jz      @z
+        cmp     qword ptr[p - _DAREFCNT], 0
+        jle     @z
+lock    inc     qword ptr[p - _DAREFCNT]
+@z:
+end;
+
+procedure _dynarray_decr_ref_free(p: PDynArrayRec; Info: pointer);
+begin
+  Info := GetTypeData(Info)^.elTypeRef;
+  if Info <> nil then
+  begin
+    Info := PPointer(Info)^;
+    if Info <> nil then
+     FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), Info, p^.high + 1);
+  end;
+  Freemem(p);
+end;
+
+procedure _dynarray_decr_ref(var p: Pointer; info: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[p]
+        test    rax, rax
+        jz      @z
+        mov     qword ptr[p], 0
+        mov     p, rax
+        sub     p, SizeOf(TDynArrayRec)
+        cmp     qword ptr[rax - _DAREFCNT], 0
+        jle     @z
+lock    dec     qword ptr[p]
+        jbe     @free
+@z:     ret
+@free:  jmp     _dynarray_decr_ref_free
+end;
+
+{$endif FPC_CPUX64}
 

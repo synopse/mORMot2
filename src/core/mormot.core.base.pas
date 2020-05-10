@@ -603,6 +603,7 @@ procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 // - is also called by FastSetString to setup its allocated value
 // - faster especially under FPC
 procedure FastAssignNew(var d; s: pointer = nil);
+  {$ifndef FPC_CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// initialize a RawByteString, ensuring returned "aligned" pointer is 16-bytes aligned
 // - to be used e.g. for proper SSE process
@@ -3471,9 +3472,9 @@ asm
         test    rax, rax
         jz      @z
         mov     d, rax
-        cmp     qword ptr[rax - 16], 0
+        cmp     qword ptr[rax - _STRREFCNT], 0
         jl      @z
-lock    dec     qword ptr[rax - 16]
+lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     d, SizeOf(TStrRec)
