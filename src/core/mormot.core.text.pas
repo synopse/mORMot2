@@ -1813,6 +1813,15 @@ function KB(const buffer: RawByteString): TShort16; overload;
 // - for EB, PB, TB, GB, MB and KB, add one fractional digit
 procedure KBU(bytes: Int64; var result: RawUTF8);
 
+/// convert a count to a human readable value power-of-two metric value
+// - append E, P, T, G, M, K symbol, with one fractional digit
+procedure K(value: Int64; out result: TShort16); overload;
+
+  /// convert a count to a human readable value power-of-two metric value
+  // - append E, P, T, G, M, K symbol, with one fractional digit
+function K(value: Int64): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
@@ -8925,6 +8934,18 @@ var
 begin
   KB(bytes, tmp, {nospace=}false);
   FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+procedure K(value: Int64; out result: TShort16);
+begin
+  KB(Value, result, {nospace=}true);
+  if result[0] <> #0 then
+    dec(result[0]); // just trim last 'B'
+end;
+
+function K(value: Int64): TShort16;
+begin
+  K(Value, result);
 end;
 
 function IntToThousandString(Value: integer; const ThousandSep: TShort4): shortstring;

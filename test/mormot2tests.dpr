@@ -51,7 +51,7 @@ end;
 begin
   TIntegrationTests.RunAsConsole('mORMot2 Regression Tests', LOG_VERBOSE);
   {$ifdef FPC_X64MM}
-  WriteHeapStatus(' ', 30);
+  WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}
 end.
 

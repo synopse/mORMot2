@@ -444,7 +444,7 @@ type
     fWithUnitName: boolean;
     fWithInstancePointer: boolean;
     fNoFile: boolean;
-    fAutoFlush: cardinal;
+    fAutoFlushTimeOut: cardinal;
     {$ifdef MSWINDOWS}
     fNoEnvironmentVariable: boolean;
     {$endif MSWINDOWS}
@@ -468,7 +468,7 @@ type
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
     function CreateSynLog: TSynLog;
-    procedure SetAutoFlush(TimeOut: cardinal);
+    procedure StartAutoFlush;
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
@@ -671,7 +671,7 @@ type
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
     property AutoFlushTimeOut: cardinal
-      read fAutoFlush write SetAutoFlush;
+      read fAutoFlushTimeOut write fAutoFlushTimeOut;
     {$ifdef MSWINDOWS}
     /// force no environment variables to be written to the log file
     // - may be usefull if they contain some sensitive information
@@ -1496,6 +1496,12 @@ type
 
 
 implementation
+
+{$ifdef FPC_X64MM}
+uses
+  mormot.core.fpcx64mm; // for sllMemory detailed stats
+{$endif FPC_X64MM}
+
 
 { ************** Executable Symbols Processing }
 
@@ -2368,9 +2374,9 @@ begin
           with files[i] do
             if Terminated then
               break // avoid GPF
-            else if (fFamily.fAutoFlush <> 0) and (fWriter <> nil) and
+            else if (fFamily.fAutoFlushTimeOut <> 0) and (fWriter <> nil) and
                     (fWriter.PendingBytes > 1) and
-                    (AutoFlushSecondElapsed mod fFamily.fAutoFlush = 0) then
+                    (AutoFlushSecondElapsed mod fFamily.fAutoFlushTimeOut = 0) then
                 Flush({forcediskwrite=}false); // write pending data
       except
         // on stability issue, identify this thread
@@ -2494,10 +2500,9 @@ begin
   end;
 end;
 
-procedure TSynLogFamily.SetAutoFlush(TimeOut: cardinal);
+procedure TSynLogFamily.StartAutoFlush;
 begin
-  fAutoFlush := TimeOut;
-  if (AutoFlushThread = nil) and (TimeOut <> 0)
+  if (AutoFlushThread = nil) and (fAutoFlushTimeOut <> 0)
      {$ifndef FPC} and (DebugHook = 0) {$endif} then
   begin
     AutoFlushSecondElapsed := 0;
@@ -3160,6 +3165,7 @@ begin
     fWriter.FlushToStream;
     if ForceDiskWrite and fWriterStream.InheritsFrom(TFileStream) then
       FlushFileBuffers(TFileStream(fWriterStream).Handle);
+    fFamily.StartAutoFlush;
   finally
     LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -3663,14 +3669,65 @@ end;
 procedure TSynLog.AddMemoryStats;
 var
   info: TMemoryInfo; // cross-compiler and cross-platform
+  {$ifdef FPC_X64MM}
+  s: TMMStatus;
+  cont: TSmallBlockContentionDynArray;
+  small: TSmallBlockStatusDynArray;
+  sc, sb: PtrUInt;
+  i: PtrInt;
+  procedure WriteArena(const name: shortstring; const a: TMMStatusArena);
+  begin
+      {$ifdef FPCMM_DEBUG}
+      fWriter.Add('  %: %=%/%=% peak=% sleep=% ',
+        [name, K(a.CumulativeAlloc - a.CumulativeFree), KBNoSpace(a.CurrentBytes),
+         K(a.CumulativeAlloc), KBNoSpace(a.CumulativeBytes),
+         KBNoSpace(a.PeakBytes), K(a.SleepCount)]);
+      {$else}
+      fWriter.Add(' %: %/% sleep=% ' [name, KBNoSpace(a.CurrentBytes),
+        KBNoSpace(a.CumulativeBytes), K(a.SleepCount)]);
+      {$endif}
+  end;
+  {$endif FPC_X64MM}
 begin
   if GetMemoryInfo(info, {withalloc=}true) then
-  with info do
     fWriter.Add(
       ' memtotal=% memfree=% filetotal=% filefree=% allocres=% allocused=% ',
-      [KBNoSpace(memtotal), KBNoSpace(memfree),
-       KBNoSpace(filetotal), KBNoSpace(filefree),
-       KBNoSpace(allocreserved), KBNoSpace(allocused)]);
+      [KBNoSpace(info.memtotal), KBNoSpace(info.memfree),
+       KBNoSpace(info.filetotal), KBNoSpace(info.filefree),
+       KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
+  {$ifdef FPC_X64MM}
+  // include mormot.core.fpcx64mm information
+  s := CurrentHeapStatus;
+  small := GetSmallBlockStatus(10, obTotal, @sc, @sb);
+  fWriter.Add('  Small: %=%/%=%',
+    [K(s.SmallBlocks), KBNoSpace(s.SmallBlocksSize), K(sc), KBNoSpace(sb)]);
+  for i := 0 to high(small) do
+    with small[i] do
+    fWriter.Add(' %:%=%/%=%', [BlockSize, K(Current),
+      KBNoSpace(Current * BlockSize), K(Total), KBNoSpace(Total * BlockSize)]);
+  WriteArena('Medium', s.Medium);
+  WriteArena('Large', s.Large);
+  fWriter.Add('  Sleep: count=% ', [K(s.SleepCount)]);
+  {$ifdef FPCMM_DEBUG}
+  fWriter.AddShort(MicroSecToString(s.SleepTime));
+  {$ifdef FPCMM_LOCKLESSFREE}
+  fWriter.Add(' locklessspin=%', [K(s.SmallFreememLockLessSpin)]);
+  {$endif FPCMM_LOCKLESSFREE}
+  {$endif FPCMM_DEBUG}
+  fWriter.Add(' getmem=% freemem=%',
+    [K(s.SmallGetmemSleepCount), K(s.SmallFreememSleepCount)]);
+  if s.SmallGetmemSleepCount + s.SmallFreememSleepCount > 1000 then
+  begin
+    cont := GetSmallBlockContention(8);
+    for i := 0 to high(cont) do
+      with cont[i] do
+        if GetmemBlockSize > 0 then
+          fWriter.Add(' getmem(%)=%', [GetmemBlockSize, K(SleepCount)])
+        else
+          fWriter.Add(' freemem(%)=%', [FreememBlockSize, K(SleepCount)])
+  end;
+  {$endif FPC_X64MM}
+  fWriter.AddShorter('   ');
 end;
 
 procedure TSynLog.AddErrorMessage(Error: Cardinal);
@@ -3965,6 +4022,7 @@ begin
     fWriterEcho.EchoAdd(fFamily.EchoCustom);
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
+  fFamily.StartAutoFlush;
 end;
 
 function TSynLog.GetFileSize: Int64;
