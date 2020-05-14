@@ -4361,9 +4361,11 @@ var
 label
   e;
 begin
+  byte(flags) := 0;
+  v := 0;
+  frac := 0;
   if P = nil then
     goto e;
-  byte(flags) := 0;
   c := P^;
   if c = ' ' then
     repeat
@@ -4381,8 +4383,6 @@ begin
     c := P^;
     include(flags, fNeg);
   end;
-  v := 0;
-  frac := 0;
   digit := 18; // max Int64 resolution
   repeat
     inc(P);
@@ -4444,22 +4444,17 @@ begin
     else
       inc(frac, exp);
   end;
+  if (fValid in flags) and (c = #0) then
+    err := 0
+  else
+e:  err := 1; // return the (partial) value even if not ended with #0
   if (frac >= -31) and (frac <= 31) then
     result := POW10[frac]
   else
     result := HugePower10(frac);
   if fNeg in flags then
     result := result * POW10[33]; // * -1
-  if (fValid in flags) and (c = #0) then
-  begin
-    err := 0;
-    result := result * v;
-  end
-  else
-  begin
-e:  err := 1;
-    result := POW10[32]; // returns 0 to make the compile happy
-  end;
+  result := result * v;
 end;
 
 {$endif CPU32DELPHI}
