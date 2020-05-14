@@ -3276,6 +3276,14 @@ uses
   Windows; // circumvent unexpected warning about inlining (WTF!)
 {$endif ISDELPHI20062007}
 
+{$ifdef FPC_X64MM}
+{$ifdef CPUX64}
+uses
+  mormot.core.fpcx64mm;
+{$else}
+  {$undef FPC_X64MM}
+{$endif CPUX64}
+{$endif FPC_X64MM}
 
 {$ifdef FPC}
   // globally disable some FPC paranoid warnings - rely on x86_64 as reference
@@ -3463,7 +3471,10 @@ end;
 
 {$ifdef FPC_CPUX64}
 
-procedure fpc_freemem; external name 'FPC_FREEMEM';
+{$ifndef FPC_X64MM}
+procedure _Getmem; external name 'FPC_GETMEM';
+procedure _Freemem; external name 'FPC_FREEMEM';
+{$endif FPC_X64MM}
 
 procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
 asm
@@ -3478,7 +3489,7 @@ lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     d, SizeOf(TStrRec)
-        jmp     fpc_freemem
+        jmp     _Freemem
 end;
 
 {$else}
@@ -3507,7 +3518,11 @@ begin
     r := nil
   else
   begin
+    {$ifdef FPC_X64MM}
+    r := _GetMem(len + (SizeOf(TStrRec) + 2));
+    {$else}
     GetMem(r, len + (SizeOf(TStrRec) + 2));
+    {$endif FPC_X64MM}
     sr := pointer(r);
     {$ifdef HASCODEPAGE}
     sr^.codepage := codepage;
@@ -3533,7 +3548,11 @@ begin
     r := nil
   else
   begin
+    {$ifdef FPC_X64MM}
+    r := _GetMem(len + (SizeOf(TStrRec) + 4));
+    {$else}
     GetMem(r, len + (SizeOf(TStrRec) + 4));
+    {$endif FPC_X64MM}
     sr := pointer(r);
     {$ifdef HASCODEPAGE}
     sr^.codepage := CP_UTF8;

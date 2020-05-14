@@ -572,16 +572,22 @@ procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
 procedure fpc_dynarray_incr_ref; external name 'FPC_DYNARRAY_INCR_REF';
 procedure fpc_dynarray_decr_ref; external name 'FPC_DYNARRAY_DECR_REF';
 procedure fpc_dynarray_clear; external name 'FPC_DYNARRAY_CLEAR';
+{$ifdef FPC_X64MM}
+procedure fpc_getmem; external name 'FPC_GETMEM';
 procedure fpc_freemem; external name 'FPC_FREEMEM';
+{$else}
+procedure _Getmem; external name 'FPC_GETMEM';
+procedure _Freemem; external name 'FPC_FREEMEM';
+{$endif FPC_X64MM}
 
-procedure PatchJmp(old, new: PByteArray; size: PtrUInt; jmp: PtrUInt = 0);
+procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt=0);
 var
   rel: PCardinal;
 begin
   PatchCode(old, new, size, nil, {unprotected=}true);
   if jmp = 0 then
-    jmp := PtrUInt(@fpc_freemem);
-  repeat // search and fix "jmp rel FPC_FREEMEM"
+    jmp := PtrUInt(@_Freemem);
+  repeat // search and fix "jmp rel _Freemem"
     dec(size);
     if size = 0 then
       exit;
@@ -605,7 +611,7 @@ lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     p, _STRRECSIZE
-        jmp     fpc_freemem
+        jmp     _Freemem
 end;
 
 procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
@@ -638,7 +644,7 @@ lock    inc     qword ptr[s - _STRREFCNT]
  lock   dec     qword ptr[rax - _STRREFCNT]
         ja      @n
 @free:  sub     d, _STRRECSIZE
-        jmp     fpc_freemem
+        jmp     _Freemem
 @n:
 end;
 

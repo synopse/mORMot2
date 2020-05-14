@@ -1752,6 +1752,15 @@ var
 
 implementation
 
+{$ifdef FPC_X64MM}
+{$ifdef CPUX64}
+uses
+  mormot.core.fpcx64mm;
+{$else}
+  {$undef FPC_X64MM}
+{$endif CPUX64}
+{$endif FPC_X64MM}
+
 
 { some inlined definitions which should be declared before $include code }
 
@@ -5848,6 +5857,10 @@ begin
   PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
     PtrUInt(@_dynarray_decr_ref_free));
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
+  {$ifdef FPC_X64MM}
+  RedirectCode(@fpc_getmem, @_Getmem);
+  RedirectCode(@fpc_freemem, @_Freemem);
+  {$endif FPC_X64MM}
   {$endif FPC_CPUX64}
 end;
 
