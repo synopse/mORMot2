@@ -855,12 +855,15 @@ type
     /// append some UTF-8 encoded chars to the buffer, from a generic string type
     // - don't escapes chars according to the JSON RFC
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
-    procedure AddNoJSONEscapeString(const s: string); virtual;
+    procedure AddNoJSONEscapeString(const s: string);
     /// append some unicode chars to the buffer
     // - WideCharCount is the unicode chars count, not the byte size
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
     procedure AddNoJSONEscapeW(WideChar: PWord; WideCharCount: integer);
+    /// append some Ansi text as UTF-8 chars to the buffer
+    // - don't escapes chars according to the JSON RFC
+    procedure AddNoJSONEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal); overload;
     /// append some UTF-8 chars to the buffer
     // - if supplied json is '', will write 'null'
     procedure AddRawJSON(const json: RawJSON);
@@ -4237,7 +4240,8 @@ var
   P, S: PUTF8Char;
 begin
   P := B;
-  if P >= BEnd then // BEnd is 16 bytes before end of buffer -> 8 chars OK
+  if P >= BEnd then
+    // BEnd is 16 bytes before end of buffer -> 8 chars OK
     P := FlushToStream;
   S := @Text; // better code generation when inlined on FPC
   inc(B, ord(S[0]));
@@ -4845,6 +4849,51 @@ begin
   end;
 end;
 
+procedure EngineAppendUTF8(W: TBaseWriter; Engine: TSynAnsiConvert;
+  P: PAnsiChar; Len: PtrInt);
+var
+  tmp: TSynTempBuffer;
+begin // explicit conversion using a temporary buffer on stack
+  Len := Engine.AnsiBufferToUTF8(tmp.Init(Len * 3), P, Len) - PUTF8Char({%H-}tmp.buf);
+  W.AddNoJSONEscape(tmp.buf, Len);
+  tmp.Done;
+end;
+
+procedure TBaseWriter.AddNoJSONEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
+var
+  B: PAnsiChar;
+begin
+  if Len > 0 then
+    case CodePage of
+      CP_UTF8, CP_RAWBYTESTRING, CP_SQLRAWBLOB:
+        AddNoJSONEscape(P, Len);
+      CP_UTF16:
+        AddNoJSONEscapeW(PWord(P), 0);
+    else
+      begin
+        // first handle trailing 7 bit ASCII chars, by quad
+        B := P;
+        if Len >= 4 then
+          repeat
+            if PCardinal(P)^ and $80808080 <> 0 then
+              break; // break on first non ASCII quad
+            inc(P, 4);
+            dec(Len, 4);
+          until Len < 4;
+        if (Len > 0) and (P^ < #128) then
+          repeat
+            inc(P);
+            dec(Len);
+          until (Len = 0) or (P^ >= #127);
+        if P <> B then
+          AddNoJSONEscape(B, P - B);
+        if Len > 0 then
+          // rely on explicit conversion for all remaining ASCII characters
+          EngineAppendUTF8(self, TSynAnsiConvert.Engine(CodePage), P, Len);
+      end;
+    end;
+end;
+
 procedure TBaseWriter.AddNoJSONEscapeUTF8(const text: RawByteString);
 begin
   AddNoJSONEscape(pointer(text), length(text));
@@ -4864,11 +4913,7 @@ begin
     {$ifdef UNICODE}
     AddNoJSONEscapeW(pointer(s), 0);
     {$else}
-    if CurrentAnsiConvert.CodePage = CP_UTF8 then
-      AddNoJSONEscape(pointer(s), length(s))
-    else
-      // mormot.core.json will override with a faster version
-      AddNoJSONEscape(pointer(CurrentAnsiConvert.AnsiToUTF8(s)));
+    AddNoJSONEscape(pointer(s), length(s), CurrentAnsiConvert.CodePage);
     {$endif UNICODE}
 end;
 

@@ -2786,7 +2786,8 @@ begin
   if result <> nil then
   begin
     P := PPointer(PAnsiChar(result) + vmtAutoTable)^;
-    if P <> nil then begin
+    if P <> nil then
+    begin
       // we know TRttiCustom is the first slot, and Private is TSynLogFamily
       P := PRttiCustom(P)^.Private;
       result := TSynLogFamily(P).fGlobalLog;
@@ -3666,28 +3667,67 @@ begin
     LogFileInit;
 end;
 
-procedure TSynLog.AddMemoryStats;
+{$ifdef FPC_X64MM}
+// include mormot.core.fpcx64mm information
+
+procedure WriteArena(W: TBaseWriter; const name: shortstring;
+  const a: TMMStatusArena);
+begin
+  {$ifdef FPCMM_DEBUG}
+  W.Add('  %: %=%/%=% peak=% sleep=% ',
+    [name, K(a.CumulativeAlloc - a.CumulativeFree), KBNoSpace(a.CurrentBytes),
+     K(a.CumulativeAlloc), KBNoSpace(a.CumulativeBytes),
+     KBNoSpace(a.PeakBytes), K(a.SleepCount)]);
+  {$else}
+  W.Add(' %: %/% sleep=% ' [name, KBNoSpace(a.CurrentBytes),
+    KBNoSpace(a.CumulativeBytes), K(a.SleepCount)]);
+  {$endif}
+end;
+
+procedure WriteX64MM(W: TBaseWriter);
 var
-  info: TMemoryInfo; // cross-compiler and cross-platform
-  {$ifdef FPC_X64MM}
   s: TMMStatus;
   cont: TSmallBlockContentionDynArray;
   small: TSmallBlockStatusDynArray;
   sc, sb: PtrUInt;
   i: PtrInt;
-  procedure WriteArena(const name: shortstring; const a: TMMStatusArena);
+begin
+  s := CurrentHeapStatus;
+  small := GetSmallBlockStatus(10, obTotal, @sc, @sb);
+  W.Add('  Small: %=%/%=%',
+    [K(s.SmallBlocks), KBNoSpace(s.SmallBlocksSize), K(sc), KBNoSpace(sb)]);
+  for i := 0 to high(small) do
+    with small[i] do
+    W.Add(' %:%=%/%=%', [BlockSize, K(Current),
+      KBNoSpace(Current * BlockSize), K(Total), KBNoSpace(Total * BlockSize)]);
+  WriteArena(W, 'Medium', s.Medium);
+  WriteArena(W, 'Large', s.Large);
+  W.Add('  Sleep: count=% ', [K(s.SleepCount)]);
+  {$ifdef FPCMM_DEBUG}
+  W.AddShort(MicroSecToString(s.SleepTime));
+  {$ifdef FPCMM_LOCKLESSFREE}
+  W.Add(' locklessspin=%', [K(s.SmallFreememLockLessSpin)]);
+  {$endif FPCMM_LOCKLESSFREE}
+  {$endif FPCMM_DEBUG}
+  W.Add(' getmem=% freemem=%',
+    [K(s.SmallGetmemSleepCount), K(s.SmallFreememSleepCount)]);
+  if s.SmallGetmemSleepCount + s.SmallFreememSleepCount > 1000 then
   begin
-      {$ifdef FPCMM_DEBUG}
-      fWriter.Add('  %: %=%/%=% peak=% sleep=% ',
-        [name, K(a.CumulativeAlloc - a.CumulativeFree), KBNoSpace(a.CurrentBytes),
-         K(a.CumulativeAlloc), KBNoSpace(a.CumulativeBytes),
-         KBNoSpace(a.PeakBytes), K(a.SleepCount)]);
-      {$else}
-      fWriter.Add(' %: %/% sleep=% ' [name, KBNoSpace(a.CurrentBytes),
-        KBNoSpace(a.CumulativeBytes), K(a.SleepCount)]);
-      {$endif}
+    cont := GetSmallBlockContention(8);
+    for i := 0 to high(cont) do
+      with cont[i] do
+        if GetmemBlockSize > 0 then
+          W.Add(' getmem(%)=%', [GetmemBlockSize, K(SleepCount)])
+        else
+          W.Add(' freemem(%)=%', [FreememBlockSize, K(SleepCount)])
   end;
-  {$endif FPC_X64MM}
+end;
+
+{$endif FPC_X64MM}
+
+procedure TSynLog.AddMemoryStats;
+var
+  info: TMemoryInfo; // cross-compiler and cross-platform
 begin
   if GetMemoryInfo(info, {withalloc=}true) then
     fWriter.Add(
@@ -3696,36 +3736,7 @@ begin
        KBNoSpace(info.filetotal), KBNoSpace(info.filefree),
        KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
   {$ifdef FPC_X64MM}
-  // include mormot.core.fpcx64mm information
-  s := CurrentHeapStatus;
-  small := GetSmallBlockStatus(10, obTotal, @sc, @sb);
-  fWriter.Add('  Small: %=%/%=%',
-    [K(s.SmallBlocks), KBNoSpace(s.SmallBlocksSize), K(sc), KBNoSpace(sb)]);
-  for i := 0 to high(small) do
-    with small[i] do
-    fWriter.Add(' %:%=%/%=%', [BlockSize, K(Current),
-      KBNoSpace(Current * BlockSize), K(Total), KBNoSpace(Total * BlockSize)]);
-  WriteArena('Medium', s.Medium);
-  WriteArena('Large', s.Large);
-  fWriter.Add('  Sleep: count=% ', [K(s.SleepCount)]);
-  {$ifdef FPCMM_DEBUG}
-  fWriter.AddShort(MicroSecToString(s.SleepTime));
-  {$ifdef FPCMM_LOCKLESSFREE}
-  fWriter.Add(' locklessspin=%', [K(s.SmallFreememLockLessSpin)]);
-  {$endif FPCMM_LOCKLESSFREE}
-  {$endif FPCMM_DEBUG}
-  fWriter.Add(' getmem=% freemem=%',
-    [K(s.SmallGetmemSleepCount), K(s.SmallFreememSleepCount)]);
-  if s.SmallGetmemSleepCount + s.SmallFreememSleepCount > 1000 then
-  begin
-    cont := GetSmallBlockContention(8);
-    for i := 0 to high(cont) do
-      with cont[i] do
-        if GetmemBlockSize > 0 then
-          fWriter.Add(' getmem(%)=%', [GetmemBlockSize, K(SleepCount)])
-        else
-          fWriter.Add(' freemem(%)=%', [FreememBlockSize, K(SleepCount)])
-  end;
+  WriteX64MM(fWriter);
   {$endif FPC_X64MM}
   fWriter.AddShorter('   ');
 end;

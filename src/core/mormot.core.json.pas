@@ -769,11 +769,6 @@ type
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - escapes chars according to the JSON RFC
     procedure AddJSONEscapeAnsiString(const s: AnsiString);
-    /// append some UTF-8 encoded chars to the buffer, from a generic string type
-    // - faster than TBaseWriter default implementation
-    // - don't escapes chars according to the JSON RFC
-    // - will convert the Unicode chars into UTF-8
-    procedure AddNoJSONEscapeString(const s: string); override;
     /// append an open array constant value to the buffer
     // - "" will be added if necessary
     // - escapes chars according to the JSON RFC
@@ -2078,7 +2073,8 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
         result := P;
         D := P;
         repeat
-          if not (jcJSONStringMarker in jsonset[P^]) then begin
+          if not (jcJSONStringMarker in jsonset[P^]) then
+          begin
             inc(P);   // not [#0, '"', '\']
             continue; // very fast parsing of most UTF-8 chars within "string"
           end;
@@ -2267,7 +2263,8 @@ function GotoEndOfJSONString(P: PUTF8Char; tab: PJsonCharSet): PUTF8Char;
 begin
   inc(P); // P^='"' at function call
   repeat
-    if not (jcJSONStringMarker in tab[P^]) then begin
+    if not (jcJSONStringMarker in tab[P^]) then
+    begin
       inc(P);   // not [#0, '"', '\']
       continue; // very fast parsing of most UTF-8 chars
     end;
@@ -4835,8 +4832,8 @@ procedure EngineAppendUTF8(W: TTextWriter; Engine: TSynAnsiConvert;
 var
   tmp: TSynTempBuffer;
 begin // explicit conversion using a temporary buffer on stack
-  Len := Engine.AnsiBufferToUTF8(tmp.Init(Len*3), P, Len) - PUTF8Char({%H-}tmp.buf);
-  W.Add(tmp.buf,Len,Escape);
+  Len := Engine.AnsiBufferToUTF8(tmp.Init(Len * 3), P, Len) - PUTF8Char({%H-}tmp.buf);
+  W.Add(tmp.buf, Len, Escape);
   tmp.Done;
 end;
 
@@ -5414,16 +5411,6 @@ noesc:
     inc(i);
     inc(B, 2);
   until (Len >= 0) and (i >= Len);
-end;
-
-procedure TTextWriter.AddNoJSONEscapeString(const s: string);
-begin
-  if s <> '' then
-    {$ifdef UNICODE}
-    AddNoJSONEscapeW(pointer(s), 0);
-    {$else}
-    AddAnsiString(s, twNone);
-    {$endif}
 end;
 
 procedure TTextWriter.AddJSONEscapeString(const s: string);

@@ -3724,7 +3724,11 @@ begin
       v^ := nil;
       dec(p);
       if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
-        Freemem(p); // works for both rkLString + rkUString
+        {$ifdef FPC_X64MM}
+        _Freemem(p); // works for both rkLString + rkUString
+        {$else}
+        Freemem(p);
+        {$endif FPC_X64MM}
     end;
     inc(v);
     dec(n);
@@ -5857,6 +5861,13 @@ begin
   PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
     PtrUInt(@_dynarray_decr_ref_free));
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
+  {$ifdef LINUX}
+  if DefaultSystemCodePage = CP_UTF8 then
+  begin
+    RedirectRtl(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
+    RedirectRtl(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
+  end;
+  {$endif LINUX}
   {$ifdef FPC_X64MM}
   RedirectCode(@fpc_getmem, @_Getmem);
   RedirectCode(@fpc_freemem, @_Freemem);

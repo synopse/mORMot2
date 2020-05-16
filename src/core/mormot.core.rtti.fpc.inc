@@ -667,7 +667,7 @@ begin
     if Info <> nil then
      FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), Info, p^.high + 1);
   end;
-  Freemem(p);
+  _Freemem(p);
 end;
 
 procedure _dynarray_decr_ref(var p: Pointer; info: pointer); nostackframe; assembler;
@@ -685,6 +685,263 @@ lock    dec     qword ptr[p]
 @z:     ret
 @free:  jmp     _dynarray_decr_ref_free
 end;
+
+
+{$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
+
+function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
+begin
+  if (len = 0) or (cp = CP_UTF8) or (cp >= CP_SQLRAWBLOB) or IsAnsiCompatible(p, len) then
+  begin
+    temp.buf := nil;
+    temp.len := len;
+    result := p;
+  end
+  else
+  begin
+    temp.Init(len * 3);
+    p := TSynAnsiConvert.Engine(cp).AnsiBufferToUTF8(temp.buf, p, len);
+    temp.len := PAnsiChar(p) - PAnsiChar(temp.buf);
+    result := temp.buf;
+  end;
+end;
+
+procedure _ansistr_concat_convert(var dest: RawByteString;
+  const s1, s2: RawByteString; cp, cp1, cp2: cardinal);
+var
+  t1, t2, t: TSynTempBuffer; // avoid most memory allocation
+  p1, p2, p: PAnsiChar;
+  eng: TSynAnsiConvert;
+begin
+  p1 := ToTempUTF8(t1, pointer(s1), length(s1), cp1);
+  p2 := ToTempUTF8(t2, pointer(s2), length(s2), cp2);
+  if (cp = CP_UTF8) or (cp >= CP_SQLRAWBLOB) or
+     ((t1.buf = nil) and (t2.buf = nil)) then
+  begin
+    p := FastNewString(t1.len + t2.len, cp);
+    MoveFast(p1^, p[0], t1.len);
+    MoveFast(p2^, p[t1.len], t2.len);
+    FastAssignNew(dest, p);
+  end
+  else
+  begin
+    eng := TSynAnsiConvert.Engine(cp);
+    t.Init((t1.len + t2.len) shl eng.AnsiCharShift);
+    p := eng.UTF8BufferToAnsi(eng.UTF8BufferToAnsi(t.buf, p1, t1.len), p2, t2.len);
+    FastSetStringCP(dest, t.buf, p - t.buf, cp);
+    t.Done;
+  end;
+  t2.Done;
+  t1.Done;
+end;
+
+function _lstrlen(const s: RawByteString): TStrLen; inline;
+begin
+  result := PStrLen(PtrUInt(s) - _STRLEN)^;
+end;
+
+procedure _ansistr_concat_direct(var dest: RawByteString;
+  const s1, s2: RawByteString; cp: cardinal);
+var
+  new: PAnsiChar;
+  l1: PtrInt;
+begin
+  l1 := _lstrlen(s1);
+  if pointer(s1) = pointer(dest) then
+  begin // dest := dest+s2 -> self-resize dest
+    SetLength(dest, l1 + _lstrlen(s2));
+    PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+    MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
+  end
+  else
+  begin
+    new := FastNewString(l1 + _lstrlen(s2), cp);
+    MoveFast(pointer(s1)^, new[0], l1);
+    MoveFast(pointer(s2)^, new[l1], _lstrlen(s2));
+    FastAssignNew(dest, new);
+  end;
+end;
+
+function _lstrcp(const s: RawByteString; cp: integer): integer; inline;
+begin
+  result := cp;
+  if s <> '' then
+  begin
+    result := PStrRec(PtrUInt(s) - _STRRECSIZE)^.codePage;
+    if result <= CP_OEMCP then
+      result := CP_UTF8;
+  end;
+end;
+
+procedure _ansistr_concat_utf8(var dest: RawByteString;
+  const s1, s2: RawByteString; cp: cardinal);
+var
+  cp1, cp2: cardinal;
+begin
+  if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
+    cp := CP_UTF8;
+  cp1 := _lstrcp(s1, cp);
+  cp2 := _lstrcp(s2, cp1);
+  if (cp1 = cp2) and ((cp >= CP_SQLRAWBLOB) or (cp = cp1)) then
+    cp := cp1
+  else if ((cp1 <> cp) and (cp1 < CP_SQLRAWBLOB)) or
+          ((cp2 <> cp) and (cp2 < CP_SQLRAWBLOB)) then
+  begin
+    _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
+    exit;
+  end;
+  if s1 = '' then
+    dest := s2
+  else if s2 = '' then
+    dest := s1
+  else
+    _ansistr_concat_direct(dest, s1, s2, cp);
+end;
+
+procedure _ansistr_concat_multi_convert(var dest: RawByteString;
+  const s: array of RawByteString; cp: cardinal);
+var
+  t: TBaseWriter;
+  i: PtrInt;
+  p: pointer;
+  u: RawUTF8;
+  tmp: TTextWriterStackBuffer;
+begin
+  t := TBaseWriter.CreateOwnedStream(tmp);
+  try
+    for i := 0 to high(s) do
+    begin
+      p := pointer(s[i]);
+      if p <> nil then
+        // use mormot.core.unicode efficient conversion
+        t.AddNoJSONEscape(p, _lstrlen(RawByteString(p)), _lstrcp(RawByteString(p), cp));
+    end;
+    t.SetText(u);
+  finally
+    t.Free;
+  end;
+  if (cp = CP_UTF8) or (cp >= CP_SQLRAWBLOB) then
+    dest := u
+  else
+    TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u), length(u), dest);
+end;
+
+procedure _ansistr_concat_multi_direct(var dest: RawByteString;
+  const s: array of RawByteString; cp: cardinal; first, len: PtrInt);
+var
+  p: pointer;
+  new: PAnsiChar;
+  l, i: TStrLen;
+begin
+  p := pointer(s[first]);
+  l := _lstrlen(RawByteString(p));
+  if p = pointer(dest) then
+  begin // dest := dest+s... -> self-resize
+    SetLength(dest, len);
+    new := pointer(dest);
+    PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+    cp := 0;
+  end
+  else
+  begin
+    new := FastNewString(len, cp);
+    MoveFast(p^, new[0], l);
+  end;
+  for i := first + 1 to high(s) do
+  begin
+    p := pointer(s[i]);
+    if p <> nil then
+    begin
+      MoveFast(p^, new[l], _lstrlen(RawByteString(p)));
+      inc(l, _lstrlen(RawByteString(p)));
+    end;
+  end;
+  if cp <> 0 then
+    FastAssignNew(dest, new);
+end;
+
+procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
+  const s: array of RawByteString; cp: cardinal);
+var
+  first, len, i: TStrLen;
+  cpf, cpi: cardinal;
+  p: pointer;
+begin
+  if cp <= CP_OEMCP then
+    cp := CP_UTF8;
+  first := 0;
+  repeat
+    if first > high(s) then
+    begin
+      _ansistr_decr_ref(pointer(dest));
+      exit;
+    end;
+    p := pointer(s[first]);
+    if p <> nil then
+      break;
+    inc(first);
+  until false;
+  len := _lstrlen(RawByteString(p));
+  cpf := _lstrcp(RawByteString(p), cp);
+  if (cpf <> cp) and (cpf < CP_SQLRAWBLOB) then
+    cpf := 0
+  else
+    for i := first + 1 to high(s) do
+    begin
+      p := pointer(s[i]);
+      if p <> nil then
+      begin
+        inc(len, _lstrlen(RawByteString(p)));
+        cpi := PStrRec(PtrUInt(p) - _STRRECSIZE)^.codePage;
+        if cpi <= CP_OEMCP then
+          cpi := CP_UTF8;
+        if (cpi <> cpf) and (cpi < CP_SQLRAWBLOB) then
+        begin
+          cpf := 0;
+          break;
+        end;
+      end;
+    end;
+  if cpf = 0 then
+    _ansistr_concat_multi_convert(dest, s, cp)
+  else
+    _ansistr_concat_multi_direct(dest, s, cpf, first, len);
+end;
+
+procedure _fpc_ansistr_concat(var a: RawUTF8);
+begin
+  a := a + a; // to generate "call fpc_ansistr_concat" opcode
+end;
+
+procedure _fpc_ansistr_concat_multi(var a: RawUTF8);
+begin
+  a := a + a + a; // to generate "call fpc_ansistr_concat_multi" opcode
+end;
+
+procedure RedirectRtl(dummy, dest: PByteArray);
+begin
+  repeat
+    if (dummy[0] = $b9) and (PCardinal(@dummy[1])^ = CP_UTF8) then
+      case dummy[5] of
+        $e8:
+          begin
+            // found "mov ecx,65001; call fpc_ansistr_concat" opcodes
+            RedirectCode(@dummy[PInteger(@dummy[6])^ + 10], dest);
+            exit;
+          end;
+        $ba:
+          if (PCardinal(@dummy[6])^ = 2) and (dummy[10] = $e8) then
+          begin
+            // found "mov ecx,65001; mov edx,2; call fpc_ansistr_concat_multi"
+            RedirectCode(@dummy[PInteger(@dummy[11])^ + 15], dest);
+            exit;
+          end;
+      end;
+    inc(PByte(dummy));
+  until PInt64(dummy)^ = 0;
+end;
+
+{$endif FPC_HAS_CPSTRING}
 
 {$endif FPC_CPUX64}
 

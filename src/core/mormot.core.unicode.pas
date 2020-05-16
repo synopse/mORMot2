@@ -305,6 +305,8 @@ type
       Source: PAnsiChar; SourceChars: cardinal): RawByteString; overload;
     /// corresponding code page
     property CodePage: Cardinal read fCodePage;
+    /// corresponding length binary shift used for worst conversion case
+    property AnsiCharShift: byte read fAnsiCharShift;
   end;
 
   /// a class to handle Ansi to/from Unicode translation of fixed width encoding
@@ -507,7 +509,7 @@ function WideCharToWinAnsi(wc: cardinal): integer;
 function IsAnsiCompatible(PC: PAnsiChar): boolean; overload;
 
 /// return TRUE if the supplied buffer only contains 7-bits Ansi characters
-function IsAnsiCompatible(PC: PAnsiChar; Len: PtrInt): boolean; overload;
+function IsAnsiCompatible(PC: PAnsiChar; Len: PtrUInt): boolean; overload;
 
 /// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
 function IsAnsiCompatibleW(PW: PWideChar): boolean; overload;
@@ -2617,8 +2619,8 @@ begin
 end;
 
 const
-  /// used for fast WinAnsi to Unicode conversion
-  // - this table contain all the unicode characters corresponding to
+  /// reference set for WinAnsi to Unicode conversion
+  // - this table contain sall the unicode codepoints corresponding to
   // the Ansi Code page 1252 (i.e. WinAnsi), which unicode value are > 255
   // - values taken from MultiByteToWideChar(1252,0,@Tmp,256,@WinAnsiTable,256)
   // so these values are available outside the Windows platforms (e.g. Linux/BSD)
@@ -3167,21 +3169,25 @@ begin
   result := true;
 end;
 
-function IsAnsiCompatible(PC: PAnsiChar; Len: PtrInt): boolean;
-var
-  i: PtrInt;
+function IsAnsiCompatible(PC: PAnsiChar; Len: PtrUInt): boolean;
 begin
-  result := false;
   if PC <> nil then
   begin
-    for i := 1 to Len shr 2 do
-      if PCardinal(PC)^ and $80808080 <> 0 then
-        exit
-      else
+    result := false;
+    Len := PtrUInt(@PC[Len - 4]);
+    if Len >= PtrUInt(PC) then
+      repeat
+        if PCardinal(PC)^ and $80808080 <> 0 then
+          exit;
         inc(PC, 4);
-    for i := 0 to (Len and 3) - 1 do
-      if PC[i] >= #127 then
-        exit;
+      until Len < PtrUInt(PC);
+    inc(Len, 4);
+    if Len > PtrUInt(PC) then
+      repeat
+        if PC^ >= #127 then
+          exit;
+        inc(PC);
+      until Len <= PtrUInt(PC);
   end;
   result := true;
 end;

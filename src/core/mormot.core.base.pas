@@ -600,10 +600,14 @@ procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 
 /// assign any constant or already ref-counted AnsiString/RawUTF8
 // - with default s=nil, is an equivalence to Finalize(s) or s := ''
-// - is also called by FastSetString to setup its allocated value
+// - is also called by FastSetString/FastSetStringCP to setup its allocated value
 // - faster especially under FPC
 procedure FastAssignNew(var d; s: pointer = nil);
   {$ifndef FPC_CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// internal function used by FastSetString/FastSetStringCP
+function FastNewString(len, codepage: PtrInt): PAnsiChar;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a RawByteString, ensuring returned "aligned" pointer is 16-bytes aligned
 // - to be used e.g. for proper SSE process
@@ -3488,7 +3492,7 @@ asm
 lock    dec     qword ptr[rax - _STRREFCNT]
         jbe     @free
 @z:     ret
-@free:  sub     d, SizeOf(TStrRec)
+@free:  sub     d, _STRRECSIZE
         jmp     _Freemem
 end;
 
@@ -3509,63 +3513,43 @@ end;
 
 {$endif FPC_CPUX64}
 
-procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
-var
-  r: PAnsiChar; // s may = p -> stand-alone variable
-  sr: PStrRec; // local copy of r, to use register
+function FastNewString(len, codepage: PtrInt): PAnsiChar;
 begin
-  if len <= 0 then
-    r := nil
-  else
+  if len > 0 then
   begin
     {$ifdef FPC_X64MM}
-    r := _GetMem(len + (SizeOf(TStrRec) + 2));
+    result := _GetMem(len + (_STRRECSIZE + 4));
     {$else}
-    GetMem(r, len + (SizeOf(TStrRec) + 2));
+    GetMem(result, len + (_STRRECSIZE + 4));
     {$endif FPC_X64MM}
-    sr := pointer(r);
-    {$ifdef HASCODEPAGE}
-    sr^.codepage := codepage;
-    sr^.elemSize := 1;
+    {$ifdef HASCODEPAGE} // also set elemSize := 1
+    PCardinal(@PStrRec(result)^.codePage)^ := codepage or (1 shl 16);
     {$endif HASCODEPAGE}
-    sr^.refCnt := 1;
-    sr^.length := len;
-    inc(PByte(sr), SizeOf(TStrRec));
-    PWord(PAnsiChar(sr) + len)^ := 0; // ensure ends with two #0
-    r := pointer(sr);
-    if p <> nil then
-      MoveFast(p^, sr^, len);
-  end;
+    PStrRec(result)^.refCnt := 1;
+    PStrRec(result)^.length := len;
+    inc(PStrRec(result));
+    PCardinal(result + len)^ := 0; // ensure ends with four #0
+  end else
+    result := nil;
+end;
+
+procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
+var
+  r: pointer;
+begin
+  r := FastNewString(len, codepage);
+  if p <> nil then
+    MoveFast(p^, r^, len);
   FastAssignNew(s, r);
 end;
 
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 var
-  r: PAnsiChar;
-  sr: PStrRec;
+  r: pointer;
 begin
-  if len <= 0 then
-    r := nil
-  else
-  begin
-    {$ifdef FPC_X64MM}
-    r := _GetMem(len + (SizeOf(TStrRec) + 4));
-    {$else}
-    GetMem(r, len + (SizeOf(TStrRec) + 4));
-    {$endif FPC_X64MM}
-    sr := pointer(r);
-    {$ifdef HASCODEPAGE}
-    sr^.codepage := CP_UTF8;
-    sr^.elemSize := 1;
-    {$endif HASCODEPAGE}
-    sr^.refCnt := 1;
-    sr^.length := len;
-    inc(PByte(sr), SizeOf(TStrRec));
-    PCardinal(PAnsiChar(sr) + len)^ := 0; // ensure ends with four #0
-    r := pointer(sr);
-    if p <> nil then
-      MoveFast(p^, sr^, len);
-  end;
+  r := FastNewString(len, CP_UTF8);
+  if p <> nil then
+    MoveFast(p^, r^, len);
   FastAssignNew(s, r);
 end;
 
@@ -4354,10 +4338,11 @@ end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 var
-  digit, frac, exp: PtrInt;
+  digit: byte;
+  frac, exp: PtrInt;
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
-  v: Int64; // allows 64-bit resolution for the digits
+  v: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
 label
   e;
 begin
