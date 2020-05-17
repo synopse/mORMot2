@@ -5861,6 +5861,7 @@ begin
   PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
     PtrUInt(@_dynarray_decr_ref_free));
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
+  {$ifdef FPC_HAS_CPSTRING}
   {$ifdef LINUX}
   if DefaultSystemCodePage = CP_UTF8 then
   begin
@@ -5868,6 +5869,10 @@ begin
     RedirectRtl(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
   end;
   {$endif LINUX}
+  {$ifdef FPC_X64MM}
+  RedirectCode(@fpc_ansistr_setlength, @_ansistr_setlength);
+  {$endif FPC_X64MM}
+  {$endif FPC_HAS_CPSTRING}
   {$ifdef FPC_X64MM}
   RedirectCode(@fpc_getmem, @_Getmem);
   RedirectCode(@fpc_freemem, @_Freemem);

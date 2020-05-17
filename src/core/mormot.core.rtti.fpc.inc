@@ -566,6 +566,7 @@ end;
 procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
+procedure fpc_ansistr_setlength; external name 'FPC_ANSISTR_SETLENGTH';
 procedure fpc_unicodestr_decr_ref; external name 'FPC_UNICODESTR_DECR_REF';
 procedure fpc_unicodestr_incr_ref; external name 'FPC_UNICODESTR_INCR_REF';
 procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
@@ -688,6 +689,49 @@ end;
 
 
 {$ifdef FPC_HAS_CPSTRING} // optimized for systemcodepage=CP_UTF8
+
+{$ifdef FPC_X64MM}
+procedure _ansistr_setlength_new(var s: RawByteString; len: PtrInt; cp: cardinal);
+var
+  p, new: PAnsiChar;
+  l: PtrInt;
+begin
+  if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
+    cp := DefaultSystemCodePage;
+  new := FastNewString(len, cp);
+  p := pointer(s);
+  if p <> nil then
+  begin
+    l := PStrLen(p - _STRLEN)^ + 1;
+    if l > len then
+      l := len;
+    MoveFast(p^, new^, l);
+  end;
+  FastAssignNew(s, new);
+end;
+
+procedure _ansistr_setlength(var s: RawByteString; len: PtrInt; cp: cardinal);
+  nostackframe; assembler;
+asm
+        mov     rax, qword ptr[s]
+        test    len, len
+        jle     _ansistr_decr_ref
+        test    rax, rax
+        jz      _ansistr_setlength_new
+        cmp     qword ptr[rax - _STRREFCNT], 1
+        jne     _ansistr_setlength_new
+        push    len
+        push    s
+        sub     qword ptr[s], _STRRECSIZE
+        add     len, _STRRECSIZE + 1
+        call    _reallocmem // rely on MM in-place detection
+        pop     s
+        pop     len
+        add     qword ptr[s], _STRRECSIZE
+        mov     qword ptr[rax].TStrRec.length, len
+        mov     byte ptr[rax + len + _STRRECSIZE], 0
+end;
+{$endif FPC_X64MM}
 
 function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
 begin

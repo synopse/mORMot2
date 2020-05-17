@@ -704,6 +704,9 @@ type
     PoolsCircularList: TMediumBlockPoolHeader;
     LastSequentiallyFed: pointer;
     SequentialFeedBytesLeft: Cardinal;
+    {$ifndef FPCMM_ASSUMEMULTITHREAD}
+    IsMultiThreadPtr: PBoolean; // safe access to IsMultiThread global variable
+    {$endif FPCMM_ASSUMEMULTITHREAD}
     BinGroupBitmap: Cardinal;
     BinBitmaps: array[0..MediumBlockBinGroupCount - 1] of Cardinal;
     Bins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
@@ -1031,15 +1034,16 @@ begin
       new := minup;
   end
   else
-  if size >= (oldavail shr 1) then
   begin
-    // small size-up within current buffer -> no reallocate
     result := p;
-    exit;
-  end
-  else
-    // size-down and move just the trailing data
-    oldavail := size;
+    oldavail := oldavail shr 1;
+    if size >= oldavail then
+      // small size-up within current buffer -> no reallocate
+      exit
+    else
+      // size-down and move just the trailing data
+      oldavail := size;
+  end;
   {$ifdef FPCMM_NOMREMAP}
   // no mremap(): reallocate a new block, copy the existing data, free old
   result := _GetMem(new);
@@ -1247,8 +1251,13 @@ asm
 @AllocateSmallBlockPool:
   // Access shared information about Medium blocks storage
   lea rcx, [rip + MediumBlockInfo]
-  mov eax, $100
   mov r10, rcx // TMediumBlockInfo.Locked = TMediumBlockInfo
+  {$ifndef FPCMM_ASSUMEMULTITHREAD}
+  mov rax, [rcx + TMediumBlockinfo.IsMultiThreadPtr]
+  cmp byte ptr[rax], false
+  je @MediumLocked1
+  {$endif FPCMM_ASSUMEMULTITHREAD}
+  mov eax, $100
 lock cmpxchg byte ptr [rcx], ah
   je @MediumLocked1
   call LockMediumBlocks
@@ -1383,6 +1392,11 @@ lock cmpxchg byte ptr [rcx], ah
   lea rcx, [r10 + TMediumBlockInfo.Locked]
   and ebx, -MediumBlockGranularity
   add ebx, MediumBlockSizeOffset
+  {$ifndef FPCMM_ASSUMEMULTITHREAD}
+  mov rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
+  cmp byte ptr[rax], false
+  je @MediumLocked2
+  {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
 lock cmpxchg byte ptr [rcx], ah
   je @MediumLocked2
@@ -1528,6 +1542,11 @@ asm
   mov r11, rcx
   // Lock the Medium blocks
   lea rcx, [r10 + TMediumBlockInfo.Locked]
+  {$ifndef FPCMM_ASSUMEMULTITHREAD}
+  mov rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
+  cmp byte ptr[rax], false
+  je @MediumBlocksLocked
+  {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
   lock cmpxchg byte ptr [rcx], ah
   je @MediumBlocksLocked
@@ -1830,6 +1849,7 @@ asm
   // Downsize or small growup with enough space: reallocate only if need
   cmp eax, ecx
   jb @GetMemMoveFreeMem // r14=P rdx=size
+@NoResize:
   mov rax, r14 // keep original pointer
   pop rcx
   pop r14
@@ -1905,6 +1925,7 @@ asm
   jnz @PossibleLargeBlock
   { -------------- MEDIUM block ------------- }
   // rcx = Current Size + Flags, r14 = P, rdx = Requested Size, r10 = MediumBlockInfo
+  lea rsi, [rdx + rdx]
   lea r10, [rip + MediumBlockInfo]
   mov rbx, rcx
   and ecx, DropMediumAndLargeFlagsMask
@@ -1916,14 +1937,9 @@ asm
   ja @MediumBlockUpsize
   // rcx = Current Block Size - BlockHeaderSize, rbx = Current Block Flags,
   // rdi = @Next Block, r14 = P, rdx = Requested Size
-  // Downsize relloacate and move data only if less than half the current size
-  lea rsi, [rdx + rdx]
+  // Downsize reallocate and move data only if less than half the current size
   cmp rsi, rcx
-  jb @MediumMustDownsize
-@MediumNoResize:
-  mov rax, r14
-  jmp @Done
-@MediumMustDownsize:
+  jae @NoResize
   // In-place downsize? Ensure not smaller than MinimumMediumBlockSize
   cmp edx, MinimumMediumBlockSize - BlockHeaderSize
   jae @MediumBlockInPlaceDownsize
@@ -1932,8 +1948,8 @@ asm
   jb @GetMemMoveFreeMem
   // No need to realloc: resize in-place (if not already at the minimum size)
   mov edx, MinimumMediumBlockSize - BlockHeaderSize
-  cmp ecx, edx
-  jna @MediumNoResize
+  cmp ecx, MinimumMediumBlockSize - BlockHeaderSize
+  jna @NoResize
 @MediumBlockInPlaceDownsize:
   // Round up to the next medium block size
   lea rsi, [rdx + BlockHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset]
@@ -1945,6 +1961,11 @@ asm
   mov ebx, ecx
   // Lock the medium blocks
   lea rcx, [r10 + TMediumBlockInfo.Locked]
+  {$ifndef FPCMM_ASSUMEMULTITHREAD}
+  mov rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
+  cmp byte ptr[rax], false
+  je   @MediumBlocksLocked1
+  {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
 lock cmpxchg byte ptr [rcx], ah
   je   @MediumBlocksLocked1
@@ -2006,6 +2027,11 @@ lock cmpxchg byte ptr [rcx], ah
   // Grow into the next block
   mov rbx, rcx
   lea rcx, [r10 + TMediumBlockInfo.Locked]
+  {$ifndef FPCMM_ASSUMEMULTITHREAD}
+  mov rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
+  cmp byte ptr[rax], false
+  je   @MediumBlocksLocked2
+  {$endif FPCMM_ASSUMEMULTITHREAD}
   mov eax, $100
 lock cmpxchg byte ptr [rcx], ah
   je   @MediumBlocksLocked2
@@ -2561,6 +2587,7 @@ begin
   assert(small = @SmallBlockInfo.GetmemLookup);
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
   SmallBlockInfo.IsMultiThreadPtr := @IsMultiThread;
+  MediumBlockInfo.IsMultiThreadPtr := @IsMultiThread;
   {$endif FPCMM_ASSUMEMULTITHREAD}
   start := 0;
   with SmallBlockInfo do
@@ -2623,7 +2650,7 @@ var
       {$ifndef MSWINDOWS}
       // let the GPF happen silently in the kernel
       and (fpaccess(p, F_OK) <> 0) and (fpgeterrno <> ESysEFAULT)
-      {$endif MSWINDOWS};
+      {$endif MSWINDOWS}
   end;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 begin

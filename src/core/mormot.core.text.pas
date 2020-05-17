@@ -4406,7 +4406,8 @@ begin
     fStream.Read(pointer(result)^, Len);
   end;
   if reformat <> jsonCompact then
-  begin // reformat using the very same instance
+  begin
+    // reformat using the very same instance
     CancelAll;
     AddJSONReformat(pointer(result), reformat, nil);
     SetText(result);
