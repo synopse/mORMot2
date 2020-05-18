@@ -3556,7 +3556,7 @@ end;
 procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
   out aligned: pointer);
 begin
-  SetString(s, nil, len + 16);
+  FastSetStringCP(s, nil, len + 12, CP_RAWBYTESTRING);
   aligned := pointer(s);
   inc(PByte(aligned), PtrUInt(aligned) and 15);
   if p <> nil then

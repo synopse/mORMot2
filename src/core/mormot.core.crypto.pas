@@ -5149,7 +5149,7 @@ end;
 procedure RawSha256Compress(var Hash; Data: pointer);
 begin
   {$ifdef ASMX64}
-  if K256AlignedStore <> '' then // use optimized Intel's sha256_sse4.asm
+  if K256Aligned <> nil then // use optimized Intel's sha256_sse4.asm
     sha256_sse4(Data^, Hash, 1)
   else
   {$endif ASMX64}
@@ -8184,10 +8184,13 @@ begin
   if cfSSE41 in CpuFeatures then
   begin
     // optimized Intel's sha256_sse4.asm
-    if K256AlignedStore = '' then
-      GetMemAligned(K256AlignedStore, @K256, SizeOf(K256), K256Aligned);
-    if PtrUInt(K256Aligned) and 15 <> 0 then
-      K256AlignedStore := ''; // paranoid
+    K256Aligned := @K256;
+    if PtrUInt(K256Aligned) and 15 <> 0 then begin
+      if K256AlignedStore = '' then
+        GetMemAligned(K256AlignedStore, @K256, SizeOf(K256), K256Aligned);
+      if PtrUInt(K256Aligned) and 15 <> 0 then
+        K256Aligned := nil; // paranoid
+    end;
   end;
   {$endif ASMX64}
   assert(sizeof(TMD5Buf) = sizeof(TMD5Digest));
