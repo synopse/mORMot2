@@ -194,8 +194,8 @@ type
       {$ifdef HASINLINE} inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
     // - includes some optional precision argument
-    function CheckSame(const Value1, Value2: double; const Precision: double = 1E-12;
-      const msg: string = ''): Boolean;
+    function CheckSame(const Value1, Value2: double;
+      const Precision: double = DOUBLE_SAME; const msg: string = ''): Boolean;
     /// perform a string comparison with several value
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
