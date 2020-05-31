@@ -3679,7 +3679,7 @@ begin
      K(a.CumulativeAlloc), KBNoSpace(a.CumulativeBytes),
      KBNoSpace(a.PeakBytes), K(a.SleepCount)]);
   {$else}
-  W.Add(' %: %/% sleep=% ' [name, KBNoSpace(a.CurrentBytes),
+  W.Add(' %: %/% sleep=% ', [name, KBNoSpace(a.CurrentBytes),
     KBNoSpace(a.CumulativeBytes), K(a.SleepCount)]);
   {$endif}
 end;
