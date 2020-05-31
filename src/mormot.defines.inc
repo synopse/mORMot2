@@ -36,6 +36,10 @@
 {.$define NOEXCEPTIONINTERCEPT}
 // if defined, exceptions shall not be intercepted and logged
 
+{.$define DOPATCHRTL}
+// if defined, FPC RTL will be patched on x86_64 with optimized asm
+// - is disabled by default for safety, but you can try to enable it
+
 {.$define USELOCKERDEBUG}
 // by default, some IAutoLocker instances would use TAutoLocker, unless this
 // conditional is defined to use more verbose TAutoLockerDebug

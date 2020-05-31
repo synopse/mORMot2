@@ -5851,6 +5851,7 @@ begin
   {$ifdef FPC_CPUX64}
   RedirectCode(@system.Move, @MoveFast);
   RedirectCode(@system.FillChar, @FillCharFast);
+  {$ifdef DOPATCHRTL}
   PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
   PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
   PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
@@ -5877,6 +5878,7 @@ begin
   RedirectCode(@fpc_getmem, @_Getmem);
   RedirectCode(@fpc_freemem, @_Freemem);
   {$endif FPC_X64MM}
+  {$endif DOPATCHRTL}
   {$endif FPC_CPUX64}
 end;
 
