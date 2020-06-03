@@ -42,7 +42,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     src, dst
         je      @equal
         cmp     cnt, 32
-        ja      @lrg  // >32
+        ja      @lrg  // >32 or <0
         sub     rax, 8
         jg      @sml  // 9..32
         jmp     qword ptr[r10 + 64 + rax * 8]  // 0..8
@@ -294,8 +294,8 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @05:    mov     byte ptr[dst+4], al
 @04:    mov     dword ptr[dst], eax
         ret
-@abv32: test    rdx, rdx
-        jle     @00  // < 0
+{$ifdef FPC} align 8{$else} .align 8{$endif}
+@abv32: jng     @00  // < 0
         movd    xmm0, eax
         lea     r8, [dst+cnt]  // r8 point to end
         pshufd  xmm0, xmm0, 0  // broadcast value into all bytes of xmm0

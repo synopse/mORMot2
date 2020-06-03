@@ -1487,6 +1487,30 @@ function AnyTextFileToSynUnicode(const FileName: TFileName;
 function AnyTextFileToRawUTF8(const FileName: TFileName;
   AssumeUTF8IfNoBOM: boolean = false): RawUTF8;
 
+/// compute the 32-bit default hash of a file content
+// - you can specify your own hashing function if DefaultHasher is not what you expect
+function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal;
+
+/// generate some pascal source code holding some data binary as constant
+// - can store sensitive information (e.g. certificates) within the executable
+// - generates a source code snippet of the following format:
+// ! const
+// !   // Comment
+// !   ConstName: array[0..2] of byte = (
+// !     $01,$02,$03);
+procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUTF8;
+  Data: pointer; Len: integer; PerLine: integer = 16); overload;
+
+/// generate some pascal source code holding some data binary as constant
+// - can store sensitive information (e.g. certificates) within the executable
+// - generates a source code snippet of the following format:
+// ! const
+// !   // Comment
+// !   ConstName: array[0..2] of byte = (
+// !     $01,$02,$03);
+function BinToSource(const ConstName, Comment: RawUTF8; Data: pointer;
+  Len: integer; PerLine: integer = 16; const Suffix: RawUTF8 = ''): RawUTF8; overload;
+
 
 
 { ************* Markup (e.g. HTML or Emoji) process }
@@ -6944,6 +6968,85 @@ begin
   end;
 end;
 
+function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
+var
+  buf: array[word] of cardinal; // 256KB of buffer
+  read: integer;
+  f: THandle;
+begin
+  if not Assigned(Hasher) then
+    Hasher := DefaultHasher;
+  result := 0;
+  f := FileOpenSequentialRead(FileName);
+  if PtrInt(f) >= 0 then
+  begin
+    repeat
+      read := FileRead(f, buf, SizeOf(buf));
+      if read<=0 then
+        break;
+      result := Hasher(result, @buf, read);
+    until false;
+    FileClose(f);
+  end;
+end;
+
+function BinToSource(const ConstName, Comment: RawUTF8;
+  Data: pointer; Len, PerLine: integer; const Suffix: RawUTF8): RawUTF8;
+var
+  W: TBaseWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  if (Data = nil) or (Len <= 0) or (PerLine <= 0) then
+    result := ''
+  else
+  begin
+    W := TBaseWriter.CreateOwnedStream(temp,
+      Len * 5 + 50 + length(Comment) + length(Suffix));
+    try
+      BinToSource(W, ConstName, Comment, Data, Len, PerLine);
+      if Suffix <> '' then
+      begin
+        W.AddString(Suffix);
+        W.AddCR;
+      end;
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end;
+end;
+
+procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUTF8;
+  Data: pointer; Len, PerLine: integer);
+var
+  line,i: integer;
+  P: PByte;
+begin
+  if (Dest = nil) or (Data = nil) or (Len <= 0) or (PerLine <= 0) then
+    exit;
+  Dest.AddShorter('const');
+  if Comment <> '' then
+    Dest.Add(#13#10'  // %', [Comment]);
+  Dest.Add(#13#10'  %: array[0..%] of byte = (', [ConstName, Len - 1]);
+  P := pointer(Data);
+  repeat
+    if len > PerLine then
+      line := PerLine
+    else
+      line := Len;
+    Dest.AddShorter(#13#10'    ');
+    for i := 0 to line-1 do
+    begin
+      Dest.Add('$');
+      Dest.AddByteToHex(P^);
+      inc(P);
+      Dest.Add(',');
+    end;
+    dec(Len,line);
+  until Len = 0;
+  Dest.CancelLastComma;
+  Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10, [ConstName, ConstName]);
+end;
 
 
 { ************* Markup (e.g. HTML or Emoji) process }
@@ -7027,7 +7130,7 @@ begin
   W.AddHtmlEscape(B, P - B, hfWithinAttributes);
   W.AddShort('" rel="nofollow">');
   W.AddHtmlEscape(B, P - B);
-  W.AddShort('</a>');
+  W.AddShorter('</a>');
 end;
 
 function TTextWriterEscape.ProcessLink: boolean;
@@ -7077,7 +7180,7 @@ begin
   end
   else
     include(st, style);
-  W.AddShort(HTML[style]);
+  W.AddShorter(HTML[style]);
 end;
 
 procedure TTextWriterEscape.EndOfParagraph;
@@ -7105,7 +7208,7 @@ begin
     if (lst < twlCode4) or (lst <> style) then
     begin
       W.Add('<', '/');
-      W.AddShort(HTML[lst]);
+      W.AddShorter(HTML[lst]);
     end;
     if (lst >= low(HTML2)) and (lst <> style) then
     begin
@@ -7123,7 +7226,7 @@ begin
     if (style < twlCode4) or (lst <> style) then
     begin
       W.Add('<');
-      W.AddShort(HTML[style]);
+      W.AddShorter(HTML[style]);
     end;
   end;
   lst := style;
@@ -7316,7 +7419,7 @@ begin
             else
               W.Add('"', '>');
             W.AddHtmlEscape(B2, P2 - B2, fmt);
-            W.AddShort('</a>'); // no continune -> need inc(P) over ending )
+            W.AddShorter('</a>'); // no continune -> need inc(P) over ending )
           end
           else
             // not a true link -> just append
@@ -7330,9 +7433,9 @@ begin
               begin
                 W.AddShort('<img alt="');
                 W.AddHtmlEscape(B2, P2 - B2, hfWithinAttributes);
-                W.AddShort('" src="');
+                W.AddShorter('" src="');
                 W.AddNoJSONEscape(B, P - B);
-                W.AddShort('">');
+                W.AddShorter('">');
                 inc(P);
                 continue;
               end;
