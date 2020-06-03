@@ -557,6 +557,30 @@ procedure JSONEncodeArrayOfConst(const Values: array of const;
 procedure JSONEncodeNameSQLValue(const Name, SQLValue: RawUTF8;
   var result: RawUTF8);
 
+/// formats and indents a JSON array or document to the specified layout
+// - just a wrapper around TTextWriter.AddJSONReformat() method
+// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
+procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
+  Format: TTextWriterJSONFormat = jsonHumanReadable);
+
+/// formats and indents a JSON array or document to the specified layout
+// - just a wrapper around TTextWriter.AddJSONReformat, making a private
+// of the supplied JSON buffer (so that JSON content  would stay untouched)
+function JSONReformat(const JSON: RawUTF8;
+  Format: TTextWriterJSONFormat = jsonHumanReadable): RawUTF8;
+
+/// formats and indents a JSON array or document as a file
+// - just a wrapper around TTextWriter.AddJSONReformat() method
+// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
+function JSONBufferReformatToFile(P: PUTF8Char; const Dest: TFileName;
+  Format: TTextWriterJSONFormat = jsonHumanReadable): boolean;
+
+/// formats and indents a JSON array or document as a file
+// - just a wrapper around TTextWriter.AddJSONReformat, making a private
+// of the supplied JSON buffer (so that JSON content  would stay untouched)
+function JSONReformatToFile(const JSON: RawUTF8; const Dest: TFileName;
+  Format: TTextWriterJSONFormat = jsonHumanReadable): boolean;
+
 
 /// convert UTF-8 content into a JSON string
 // - with proper escaping of the content, and surounding " characters
@@ -3808,7 +3832,6 @@ begin
 end;
 
 
-
 procedure QuotedStrJSON(P: PUTF8Char; PLen: PtrInt; var result: RawUTF8;
   const aPrefix, aSuffix: RawUTF8);
 var
@@ -3861,6 +3884,73 @@ function QuotedStrJSON(const aText: RawUTF8): RawUTF8;
 begin
   QuotedStrJSON(pointer(aText), Length(aText), result, '', '');
 end;
+
+procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
+  Format: TTextWriterJSONFormat);
+var
+  temp: array[word] of byte; // 64KB buffer
+begin
+  if P <> nil then
+    with TTextWriter.CreateOwnedStream(@temp, SizeOf(temp)) do
+    try
+      AddJSONReformat(P, Format, nil);
+      SetText(result);
+    finally
+      Free;
+    end;
+end;
+
+function JSONReformat(const JSON: RawUTF8; Format: TTextWriterJSONFormat): RawUTF8;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON);
+  try
+    JSONBufferReformat(tmp.buf, result, Format);
+  finally
+    tmp.Done;
+  end;
+end;
+
+function JSONBufferReformatToFile(P: PUTF8Char; const Dest: TFileName;
+  Format: TTextWriterJSONFormat): boolean;
+var
+  F: TFileStream;
+  temp: array[word] of word; // 128KB
+begin
+  try
+    F := TFileStream.Create(Dest, fmCreate);
+    try
+      with TTextWriter.Create(F, @temp, SizeOf(temp)) do
+      try
+        AddJSONReformat(P, Format, nil);
+        FlushFinal;
+      finally
+        Free;
+      end;
+      result := true;
+    finally
+      F.Free;
+    end;
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
+function JSONReformatToFile(const JSON: RawUTF8; const Dest: TFileName;
+  Format: TTextWriterJSONFormat): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON);
+  try
+    result := JSONBufferReformatToFile(tmp.buf, Dest, Format);
+  finally
+    tmp.Done;
+  end;
+end;
+
 
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
   JSONFormat: boolean): RawUTF8;

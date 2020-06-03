@@ -7,6 +7,7 @@ unit mormot.core.search;
   *****************************************************************************
 
    Several Indexing and Search Engines, as used by other parts of the framework
+    - Files Search in Folders
     - GLOB and SOUNDEX Text Search
     - Versatile Expression Search Engine
     - Bloom Filter Probabilistic Index
@@ -27,7 +28,59 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.data;
+
+
+{ ****************** Files Search in Folders }
+
+type
+  {$A-}
+  /// file found result item, as returned by FindFiles()
+  // - Delphi "object" is buggy on stack -> also defined as record with methods
+  {$ifdef USERECORDWITHMETHODS}TFindFiles = record
+    {$else}TFindFiles = object{$endif}
+  public
+    /// the matching file name, including its folder name
+    Name: TFileName;
+    /// the matching file attributes
+    Attr: Integer;
+    /// the matching file size
+    Size: Int64;
+    /// the matching file date/time
+    Timestamp: TDateTime;
+    /// fill the item properties from a FindFirst/FindNext's TSearchRec
+    procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);
+    /// returns some ready-to-be-loggued text
+    function ToText: shortstring;
+  end;
+  {$A+}
+
+  /// result list, as returned by FindFiles()
+  TFindFilesDynArray = array of TFindFiles;
+
+  /// a pointer to a TFileName variable
+  PFileName = ^TFileName;
+
+/// search for matching file names
+// - just a wrapper around FindFirst/FindNext
+// - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
+function FindFiles(const Directory,Mask: TFileName;
+  const IgnoreFileName: TFileName = ''; SortByName: boolean = false;
+  IncludesDir: boolean = true; SubFolder: Boolean = false): TFindFilesDynArray;
+
+/// convert a result list, as returned by FindFiles(), into an array of Files[].Name
+function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
+
+/// ensure all files in Dest folder(s) do match the one in Reference
+// - won't copy all files from Reference folders, but only update files already
+// existing in Dest, which did change since last synchronization
+// - will also process recursively nested folders if SubFolder is true
+// - will use file content instead of file date check if ByContent is true
+// - can optionally write the synched file name to the console
+// - returns the number of files copied during the process
+function SynchFolders(const Reference, Dest: TFileName; SubFolder: boolean = false;
+  ByContent: boolean = false; WriteFileNameToConsole: boolean = false): integer;
 
 
 { ****************** GLOB and SOUNDEX Text Search }
@@ -663,6 +716,137 @@ function ToText(err: TDeltaError): PShortString; overload;
 
 
 implementation
+
+
+{ ****************** Files Search in Folders }
+
+
+procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
+begin
+  Name := Directory+F.Name;
+  {$ifdef MSWINDOWS}
+  {$ifdef HASINLINE} // FPC or Delphi 2006+
+  Size := F.Size;
+  {$else} // F.Size was limited to 32-bit on older Delphi
+  PInt64Rec(@Size)^.Lo := F.FindData.nFileSizeLow;
+  PInt64Rec(@Size)^.Hi := F.FindData.nFileSizeHigh;
+  {$endif}
+  {$else}
+  Size := F.Size;
+  {$endif}
+  Attr := F.Attr;
+  Timestamp := SearchRecToDateTime(F);
+end;
+
+function TFindFiles.ToText: shortstring;
+begin
+  FormatShort('% % %',[Name,KB(Size),DateTimeToFileShort(Timestamp)],result);
+end;
+
+function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
+  SortByName,IncludesDir,SubFolder: boolean): TFindFilesDynArray;
+var m,count: integer;
+    dir: TFileName;
+    da: TDynArray;
+    masks: TRawUTF8DynArray;
+    masked: TFindFilesDynArray;
+  procedure SearchFolder(const folder : TFileName);
+  var
+    F: TSearchRec;
+    ff: TFindFiles;
+  begin
+    if FindFirst(dir+folder+Mask,faAnyfile-faDirectory,F)=0 then begin
+      repeat
+        if SearchRecValidFile(F) and ((IgnoreFileName='') or
+            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
+          if IncludesDir then
+            ff.FromSearchRec(dir+folder,F) else
+            ff.FromSearchRec(folder,F);
+          da.Add(ff);
+        end;
+      until FindNext(F)<>0;
+      FindClose(F);
+    end;
+    if SubFolder and (FindFirst(dir+folder+'*',faDirectory,F)=0) then begin
+      repeat
+        if SearchRecValidFolder(F) and ((IgnoreFileName='') or
+           (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then
+          SearchFolder(IncludeTrailingPathDelimiter(folder+F.Name));
+      until FindNext(F)<>0;
+      FindClose(F);
+    end;
+  end;
+begin
+  result := nil;
+  da.Init(TypeInfo(TFindFilesDynArray),result,@count);
+  if Pos(';',Mask)>0 then
+    CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
+  if masks<>nil then begin
+    if SortByName then
+      QuickSortRawUTF8(masks,length(masks),nil,{$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
+    for m := 0 to length(masks)-1 do begin // masks[] recursion
+      masked := FindFiles(Directory,UTF8ToString(masks[m]),
+        IgnoreFileName,SortByName,IncludesDir,SubFolder);
+      da.AddArray(masked);
+    end;
+  end else begin
+    if Directory<>'' then
+      dir := IncludeTrailingPathDelimiter(Directory);
+    SearchFolder('');
+    if SortByName and (da.Count>0) then
+      da.Sort(SortDynArrayFileName);
+  end;
+  da.Capacity := count; // trim result[]
+end;
+
+function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
+var i,n: PtrInt;
+begin
+  Finalize(result);
+  n := length(Files);
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    result[i] := Files[i].Name;
+end;
+
+function SynchFolders(const Reference, Dest: TFileName;
+  SubFolder,ByContent,WriteFileNameToConsole: boolean): integer;
+var ref,dst: TFileName;
+    fref,fdst: TSearchRec;
+    reftime: TDateTime;
+    s: RawByteString;
+begin
+  result := 0;
+  ref := IncludeTrailingPathDelimiter(Reference);
+  dst := IncludeTrailingPathDelimiter(Dest);
+  if DirectoryExists(ref) and (FindFirst(dst+FILES_ALL,faAnyFile,fdst)=0) then begin
+    repeat
+      if SearchRecValidFile(fdst) then begin
+        if ByContent then
+          reftime := FileAgeToDateTime(ref+fdst.Name) else
+          if FindFirst(ref+fdst.Name,faAnyFile,fref)=0 then begin
+            reftime := SearchRecToDateTime(fref);
+            if (fdst.Size=fref.Size) and (SearchRecToDateTime(fdst)=reftime) then
+              reftime := 0;
+            FindClose(fref);
+          end else
+            reftime := 0; // "continue" trigger unexpected warning on Delphi
+        if reftime=0 then
+          continue; // skip if no reference file to copy from
+        s := StringFromFile(ref+fdst.Name);
+        if (s='') or (ByContent and (length(s)=fdst.Size) and
+           (DefaultHasher(0,pointer(s),fdst.Size)=HashFile(dst+fdst.Name))) then
+          continue;
+        FileFromString(s,dst+fdst.Name,false,reftime);
+        inc(result);
+        if WriteFileNameToConsole then
+          {$I-} writeln('synched ',dst,fdst.name); {$I+}
+      end else if SubFolder and SearchRecValidFolder(fdst) then
+        inc(result,SynchFolders(ref+fdst.Name,dst+fdst.Name,SubFolder,ByContent,WriteFileNameToConsole));
+    until FindNext(fdst)<>0;
+    FindClose(fdst);
+  end;
+end;
 
 
 { ****************** GLOB and SOUNDEX Text Search }
@@ -2443,9 +2627,19 @@ end;
 
 { TExprParserMatch }
 
+var
+  // equals 1 for ['0'..'9', 'A'..'Z', 'a'..'z', #$80..#$ff]
+  ROUGH_UTF8: TAnsiCharToByte;
+
 constructor TExprParserMatch.Create(aCaseSensitive: boolean);
+var
+  c: AnsiChar;
 begin
   inherited Create;
+  if ROUGH_UTF8['0'] = 0 then // ensure is initialized for Search()
+    for c := low(c) to high(c) do
+      if c in ['0'..'9', 'A'..'Z', 'a'..'z', #$80..#$ff] then
+        ROUGH_UTF8[c] := 1;
   fCaseSensitive := aCaseSensitive;
 end;
 
@@ -2459,10 +2653,6 @@ function TExprParserMatch.Search(const aText: RawUTF8): boolean;
 begin
   result := Search(pointer(aText), length(aText));
 end;
-
-var
-  // equals 1 for ['0'..'9', 'A'..'Z', 'a'..'z', #$80..#$ff]
-  ROUGH_UTF8: TAnsiCharToByte;
 
 function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
@@ -3622,12 +3812,7 @@ end;
 
 
 procedure InitializeUnit;
-var
-  c: AnsiChar;
 begin
-  for c := low(c) to high(c) do
-    if c in ['0'..'9', 'A'..'Z', 'a'..'z', #$80..#$ff] then
-      ROUGH_UTF8[c] := 1;
 end;
 
 procedure FinalizeUnit;
