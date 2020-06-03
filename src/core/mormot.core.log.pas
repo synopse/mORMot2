@@ -2341,7 +2341,6 @@ var
 
 constructor TAutoFlushThread.Create;
 begin
-  FreeOnTerminate := true;
   fEvent := TEvent.Create(nil, false, false, '');
   inherited Create(false);
 end;
@@ -2524,7 +2523,7 @@ begin
   begin
     AutoFlushThread.Terminate;
     AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
-    AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
+    FreeAndNil(AutoFlushThread); // wait till actually finished
   end;
   ExceptionIgnore.Free;
   try
@@ -2561,10 +2560,7 @@ begin
           FindClose(SR);
         end;
       end;
-  finally    {$ifdef AUTOFLUSHRAWWIN} // release background thread once for all
-    if AutoFlushThread <> nil then
-      CloseHandle(THandle(AutoFlushThread));
-  {$endif}
+  finally
     inherited Destroy;
   end;
 end;

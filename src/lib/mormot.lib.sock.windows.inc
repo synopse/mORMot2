@@ -13,7 +13,7 @@ const
 
 const
   // default on Windows is 64, but we grow it to 512 for TPollSocketSelect
-  // as stated by Raymond Chen: "you can make FD_SETÂ­SIZE bigger if you need to"
+  // as stated by Raymond Chen: "you can make FD_SET­SIZE bigger if you need to"
   // https://devblogs.microsoft.com/oldnewthing/20161221-00/?p=94985
   // -> Xitami uses 1024 since 1996
   // -> safe since our TFDSet is INTERNAl to this unit, and never published :)

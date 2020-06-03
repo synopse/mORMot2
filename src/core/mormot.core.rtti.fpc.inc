@@ -567,6 +567,8 @@ procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
 procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
 procedure fpc_ansistr_setlength; external name 'FPC_ANSISTR_SETLENGTH';
+procedure fpc_ansistr_compare; external name 'FPC_ANSISTR_COMPARE';
+procedure fpc_ansistr_compare_equal; external name 'FPC_ANSISTR_COMPARE_EQUAL';
 procedure fpc_unicodestr_decr_ref; external name 'FPC_UNICODESTR_DECR_REF';
 procedure fpc_unicodestr_incr_ref; external name 'FPC_UNICODESTR_INCR_REF';
 procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
@@ -578,7 +580,7 @@ procedure fpc_getmem; external name 'FPC_GETMEM';
 procedure fpc_freemem; external name 'FPC_FREEMEM';
 {$else}
 procedure _Getmem; external name 'FPC_GETMEM';
-procedure _Freemem; external name 'FPC_FREEMEM';
+procedure _Freemem(p: pointer); external name 'FPC_FREEMEM';
 {$endif FPC_X64MM}
 
 procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt=0);
@@ -647,6 +649,89 @@ lock    inc     qword ptr[s - _STRREFCNT]
 @free:  sub     d, _STRRECSIZE
         jmp     _Freemem
 @n:
+end;
+
+{ note: fpc_ansistr_compare/_equal do check the codepage and make a UTF-8
+  conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
+  involving codepage is safer, but paranoid, and 1. is (much) slower,
+  and 2. is not Delphi compatible -> we rather follow the Delphi's way }
+
+function _ansistr_compare(s1, s2: pointer): SizeInt; nostackframe; assembler;
+asm
+        xor     eax, eax
+        cmp     s1, s2
+        je      @0
+        test    s1, s2
+        jz      @maybe0
+@first: mov     al, byte ptr[s1] // we can check the first char (for quicksort)
+        sub     al, byte ptr[s2]
+        jne     @ne
+        mov     r8, qword ptr[s1 - _STRLEN]
+        mov     r11, r8
+        sub     r8, qword ptr[s2 - _STRLEN] // r8 = length(s1)-length(s2)
+        adc     rax, -1
+        and     rax, r8  // rax = -min(length(s1),length(s2))
+        sub     rax, r11
+        sub     s1, rax
+        sub     s2, rax
+        align   16
+@s:     mov     r10, qword ptr[s1 + rax] // compare by 8 bytes (may include len)
+        xor     r10, qword ptr[s2 + rax]
+        jnz     @d
+        add     rax, 8
+        js      @s
+@e:     mov     rax, r8 // all equal -> return difflen
+@0:     ret
+@ne:    movsx   rax, al
+        ret
+@d:     bsf     r10, r10 // compute s1^-s2^
+        shr     r10, 3
+        add     rax, r10
+        jns     @e
+        movzx   edx, byte ptr[s2 + rax]
+        movzx   eax, byte ptr[s1 + rax]
+        sub     rax, rdx
+        ret
+@maybe0:test    s2, s2
+        jz      @1
+        test    s1, s1
+        jnz     @first
+        dec     rax
+        ret
+@1:     inc     eax
+end;
+
+function _ansistr_compare_equal(s1, s2: pointer): SizeInt; nostackframe; assembler;
+asm
+        xor     eax, eax
+        cmp     s1, s2
+        je      @q
+        test    s1, s2
+        jz      @maybe0
+@ok:    mov     rax, qword ptr[s1 - _STRLEN] // len must match
+        cmp     rax, qword ptr[s2 - _STRLEN]
+        jne     @q
+        lea     s1, qword ptr[s1 + rax - 8]
+        lea     s2, qword ptr[s2 + rax - 8]
+        neg     rax
+        mov     r8, qword ptr[s1] // compare last 8 bytes (may include len)
+        cmp     r8, qword ptr[s2]
+        jne     @q
+        align 16
+@s:     add     rax, 8 // compare remaining 8 bytes per iteration
+        jns     @0
+        mov     r8, qword ptr[s1 + rax]
+        cmp     r8, qword ptr[s2 + rax]
+        je      @s
+        mov     eax, 1
+        ret
+@0:     xor     eax, eax
+@q:     ret
+@maybe0:test    s2, s2
+        jz      @1
+        test    s1, s1
+        jnz     @ok
+@1:     inc     eax // not zero is enough
 end;
 
 procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;
@@ -784,28 +869,6 @@ begin
   result := PStrLen(PtrUInt(s) - _STRLEN)^;
 end;
 
-procedure _ansistr_concat_direct(var dest: RawByteString;
-  const s1, s2: RawByteString; cp: cardinal);
-var
-  new: PAnsiChar;
-  l1: PtrInt;
-begin
-  l1 := _lstrlen(s1);
-  if pointer(s1) = pointer(dest) then
-  begin // dest := dest+s2 -> self-resize dest
-    SetLength(dest, l1 + _lstrlen(s2));
-    PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
-    MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
-  end
-  else
-  begin
-    new := FastNewString(l1 + _lstrlen(s2), cp);
-    MoveFast(pointer(s1)^, new[0], l1);
-    MoveFast(pointer(s2)^, new[l1], _lstrlen(s2));
-    FastAssignNew(dest, new);
-  end;
-end;
-
 function _lstrcp(const s: RawByteString; cp: integer): integer; inline;
 begin
   result := cp;
@@ -821,6 +884,8 @@ procedure _ansistr_concat_utf8(var dest: RawByteString;
   const s1, s2: RawByteString; cp: cardinal);
 var
   cp1, cp2: cardinal;
+  new: PAnsiChar;
+  l1: PtrInt;
 begin
   if cp <= CP_OEMCP then // TranslatePlaceholderCP logic
     cp := CP_UTF8;
@@ -839,7 +904,22 @@ begin
   else if s2 = '' then
     dest := s1
   else
-    _ansistr_concat_direct(dest, s1, s2, cp);
+  begin
+    l1 := _lstrlen(s1);
+    if pointer(s1) = pointer(dest) then
+    begin // dest := dest+s2 -> self-resize dest
+      SetLength(dest, l1 + _lstrlen(s2));
+      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+      MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
+    end
+    else
+    begin
+      new := FastNewString(l1 + _lstrlen(s2), cp);
+      MoveFast(pointer(s1)^, new[0], l1);
+      MoveFast(pointer(s2)^, new[l1], _lstrlen(s2));
+      FastAssignNew(dest, new);
+    end;
+  end;
 end;
 
 procedure _ansistr_concat_multi_convert(var dest: RawByteString;
@@ -870,46 +950,13 @@ begin
     TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u), length(u), dest);
 end;
 
-procedure _ansistr_concat_multi_direct(var dest: RawByteString;
-  const s: array of RawByteString; cp: cardinal; first, len: PtrInt);
-var
-  p: pointer;
-  new: PAnsiChar;
-  l, i: TStrLen;
-begin
-  p := pointer(s[first]);
-  l := _lstrlen(RawByteString(p));
-  if p = pointer(dest) then
-  begin // dest := dest+s... -> self-resize
-    SetLength(dest, len);
-    new := pointer(dest);
-    PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
-    cp := 0;
-  end
-  else
-  begin
-    new := FastNewString(len, cp);
-    MoveFast(p^, new[0], l);
-  end;
-  for i := first + 1 to high(s) do
-  begin
-    p := pointer(s[i]);
-    if p <> nil then
-    begin
-      MoveFast(p^, new[l], _lstrlen(RawByteString(p)));
-      inc(l, _lstrlen(RawByteString(p)));
-    end;
-  end;
-  if cp <> 0 then
-    FastAssignNew(dest, new);
-end;
-
 procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
   const s: array of RawByteString; cp: cardinal);
 var
-  first, len, i: TStrLen;
+  first, len, l, i: TStrLen;
   cpf, cpi: cardinal;
   p: pointer;
+  new: PAnsiChar;
 begin
   if cp <= CP_OEMCP then
     cp := CP_UTF8;
@@ -949,7 +996,33 @@ begin
   if cpf = 0 then
     _ansistr_concat_multi_convert(dest, s, cp)
   else
-    _ansistr_concat_multi_direct(dest, s, cpf, first, len);
+  begin
+    p := pointer(s[first]);
+    l := _lstrlen(RawByteString(p));
+    if p = pointer(dest) then
+    begin // dest := dest+s... -> self-resize
+      SetLength(dest, len);
+      new := pointer(dest);
+      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+      cp := 0; // no FastAssignNew() below
+    end
+    else
+    begin
+      new := FastNewString(len, cp);
+      MoveFast(p^, new[0], l);
+    end;
+    for i := first + 1 to high(s) do
+    begin
+      p := pointer(s[i]);
+      if p <> nil then
+      begin
+        MoveFast(p^, new[l], _lstrlen(RawByteString(p)));
+        inc(l, _lstrlen(RawByteString(p)));
+      end;
+    end;
+    if cp <> 0 then
+      FastAssignNew(dest, new);
+  end;
 end;
 
 procedure _fpc_ansistr_concat(var a: RawUTF8);

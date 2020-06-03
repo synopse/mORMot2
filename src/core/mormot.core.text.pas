@@ -1605,7 +1605,12 @@ function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 // - note that before Delphi 2009, any varString value is expected to be
 // a RawUTF8 instance - which does make sense in the mORMot area
 procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
-  var result: RawUTF8);
+  var result: RawUTF8); overload;
+
+/// save a variant value into a JSON content
+// - just a wrapper around the overloaded procedure
+function VariantSaveJSON(const Value: variant;
+  Escape: TTextWriterKind = twJSONEscape): RawUTF8; overload;
 
 var
   /// unserialize a JSON content into a variant
@@ -8248,6 +8253,12 @@ begin // not very fast, but creates valid JSON
     Free;
   end;
 end;
+
+function VariantSaveJSON(const Value: variant; Escape: TTextWriterKind): RawUTF8;
+begin
+  VariantSaveJSON(Value, Escape, result);
+end;
+
 
 function UInt4DigitsToShort(Value: Cardinal): TShort4;
 begin

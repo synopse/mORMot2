@@ -3,7 +3,6 @@
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.sock;
 
-
 {
   *****************************************************************************
 
