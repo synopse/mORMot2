@@ -59,9 +59,6 @@ type
   /// result list, as returned by FindFiles()
   TFindFilesDynArray = array of TFindFiles;
 
-  /// a pointer to a TFileName variable
-  PFileName = ^TFileName;
-
 /// search for matching file names
 // - just a wrapper around FindFirst/FindNext
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
@@ -720,10 +717,9 @@ implementation
 
 { ****************** Files Search in Folders }
 
-
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
 begin
-  Name := Directory+F.Name;
+  Name := Directory + F.Name;
   {$ifdef MSWINDOWS}
   {$ifdef HASINLINE} // FPC or Delphi 2006+
   Size := F.Size;
@@ -740,114 +736,138 @@ end;
 
 function TFindFiles.ToText: shortstring;
 begin
-  FormatShort('% % %',[Name,KB(Size),DateTimeToFileShort(Timestamp)],result);
+  FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
 end;
 
-function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
-  SortByName,IncludesDir,SubFolder: boolean): TFindFilesDynArray;
-var m,count: integer;
-    dir: TFileName;
-    da: TDynArray;
-    masks: TRawUTF8DynArray;
-    masked: TFindFilesDynArray;
-  procedure SearchFolder(const folder : TFileName);
+function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
+  SortByName, IncludesDir, SubFolder: boolean): TFindFilesDynArray;
+var
+  m, count: integer;
+  dir: TFileName;
+  da: TDynArray;
+  masks: TRawUTF8DynArray;
+  masked: TFindFilesDynArray;
+
+  procedure SearchFolder(const folder: TFileName);
   var
     F: TSearchRec;
     ff: TFindFiles;
   begin
-    if FindFirst(dir+folder+Mask,faAnyfile-faDirectory,F)=0 then begin
+    if FindFirst(dir + folder + Mask, faAnyfile - faDirectory, F) = 0 then
+    begin
       repeat
-        if SearchRecValidFile(F) and ((IgnoreFileName='') or
-            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
+        if SearchRecValidFile(F) and ((IgnoreFileName = '') or
+          (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
+        begin
           if IncludesDir then
-            ff.FromSearchRec(dir+folder,F) else
-            ff.FromSearchRec(folder,F);
+            ff.FromSearchRec(dir + folder, F)
+          else
+            ff.FromSearchRec(folder, F);
           da.Add(ff);
         end;
-      until FindNext(F)<>0;
+      until FindNext(F) <> 0;
       FindClose(F);
     end;
-    if SubFolder and (FindFirst(dir+folder+'*',faDirectory,F)=0) then begin
+    if SubFolder and (FindFirst(dir + folder + '*', faDirectory, F) = 0) then
+    begin
       repeat
-        if SearchRecValidFolder(F) and ((IgnoreFileName='') or
-           (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then
-          SearchFolder(IncludeTrailingPathDelimiter(folder+F.Name));
-      until FindNext(F)<>0;
+        if SearchRecValidFolder(F) and ((IgnoreFileName = '') or
+           (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
+          SearchFolder(IncludeTrailingPathDelimiter(folder + F.Name));
+      until FindNext(F) <> 0;
       FindClose(F);
     end;
   end;
+
 begin
   result := nil;
-  da.Init(TypeInfo(TFindFilesDynArray),result,@count);
-  if Pos(';',Mask)>0 then
-    CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
-  if masks<>nil then begin
+  da.Init(TypeInfo(TFindFilesDynArray), result, @count);
+  if Pos(';', Mask) > 0 then
+    CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)), masks, ';');
+  if masks <> nil then
+  begin
     if SortByName then
-      QuickSortRawUTF8(masks,length(masks),nil,{$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
-    for m := 0 to length(masks)-1 do begin // masks[] recursion
-      masked := FindFiles(Directory,UTF8ToString(masks[m]),
-        IgnoreFileName,SortByName,IncludesDir,SubFolder);
+      QuickSortRawUTF8(masks, length(masks), nil,
+        {$ifdef MSWINDOWS} @StrIComp {$else} @StrComp {$endif});
+    for m := 0 to length(masks) - 1 do
+    begin // masks[] recursion
+      masked := FindFiles(Directory, UTF8ToString(masks[m]), IgnoreFileName,
+        SortByName, IncludesDir, SubFolder);
       da.AddArray(masked);
     end;
-  end else begin
-    if Directory<>'' then
+  end
+  else
+  begin
+    if Directory <> '' then
       dir := IncludeTrailingPathDelimiter(Directory);
     SearchFolder('');
-    if SortByName and (da.Count>0) then
+    if SortByName and (da.Count > 0) then
       da.Sort(SortDynArrayFileName);
   end;
   da.Capacity := count; // trim result[]
 end;
 
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
-var i,n: PtrInt;
+var
+  i, n: PtrInt;
 begin
   Finalize(result);
   n := length(Files);
-  SetLength(result,n);
-  for i := 0 to n-1 do
+  SetLength(result, n);
+  for i := 0 to n - 1 do
     result[i] := Files[i].Name;
 end;
 
-function SynchFolders(const Reference, Dest: TFileName;
-  SubFolder,ByContent,WriteFileNameToConsole: boolean): integer;
-var ref,dst: TFileName;
-    fref,fdst: TSearchRec;
-    reftime: TDateTime;
-    s: RawByteString;
+{$I-}
+function SynchFolders(const Reference, Dest: TFileName; SubFolder, ByContent,
+  WriteFileNameToConsole: boolean): integer;
+var
+  ref, dst: TFileName;
+  fref, fdst: TSearchRec;
+  reftime: TDateTime;
+  s: RawByteString;
 begin
   result := 0;
   ref := IncludeTrailingPathDelimiter(Reference);
   dst := IncludeTrailingPathDelimiter(Dest);
-  if DirectoryExists(ref) and (FindFirst(dst+FILES_ALL,faAnyFile,fdst)=0) then begin
+  if DirectoryExists(ref) and (FindFirst(dst + FILES_ALL, faAnyFile, fdst) = 0) then
+  begin
     repeat
-      if SearchRecValidFile(fdst) then begin
+      if SearchRecValidFile(fdst) then
+      begin
         if ByContent then
-          reftime := FileAgeToDateTime(ref+fdst.Name) else
-          if FindFirst(ref+fdst.Name,faAnyFile,fref)=0 then begin
-            reftime := SearchRecToDateTime(fref);
-            if (fdst.Size=fref.Size) and (SearchRecToDateTime(fdst)=reftime) then
-              reftime := 0;
-            FindClose(fref);
-          end else
-            reftime := 0; // "continue" trigger unexpected warning on Delphi
-        if reftime=0 then
+          reftime := FileAgeToDateTime(ref + fdst.Name)
+        else if FindFirst(ref + fdst.Name, faAnyFile, fref) = 0 then
+        begin
+          reftime := SearchRecToDateTime(fref);
+          if (fdst.Size = fref.Size) and (SearchRecToDateTime(fdst) = reftime) then
+            reftime := 0;
+          FindClose(fref);
+        end
+        else
+          reftime := 0; // "continue" trigger unexpected warning on Delphi
+        if reftime = 0 then
           continue; // skip if no reference file to copy from
-        s := StringFromFile(ref+fdst.Name);
-        if (s='') or (ByContent and (length(s)=fdst.Size) and
-           (DefaultHasher(0,pointer(s),fdst.Size)=HashFile(dst+fdst.Name))) then
+        s := StringFromFile(ref + fdst.Name);
+        if (s = '') or (ByContent and (length(s) = fdst.Size) and
+           (DefaultHasher(0, pointer(s), fdst.Size) = HashFile(dst + fdst.Name))) then
           continue;
-        FileFromString(s,dst+fdst.Name,false,reftime);
+        FileFromString(s, dst + fdst.Name, false, reftime);
         inc(result);
         if WriteFileNameToConsole then
-          {$I-} writeln('synched ',dst,fdst.name); {$I+}
-      end else if SubFolder and SearchRecValidFolder(fdst) then
-        inc(result,SynchFolders(ref+fdst.Name,dst+fdst.Name,SubFolder,ByContent,WriteFileNameToConsole));
-    until FindNext(fdst)<>0;
+          writeln('synched ', dst, fdst.name);
+      end
+      else if SubFolder and SearchRecValidFolder(fdst) then
+        inc(result, SynchFolders(ref + fdst.Name, dst + fdst.Name, SubFolder,
+          ByContent, WriteFileNameToConsole));
+    until FindNext(fdst) <> 0;
     FindClose(fdst);
   end;
+  if WriteFileNameToConsole then
+    IOResult;
 end;
-
+{$I+}
+ 
 
 { ****************** GLOB and SOUNDEX Text Search }
 

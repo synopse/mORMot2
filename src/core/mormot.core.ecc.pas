@@ -474,6 +474,8 @@ type
     // - is used e.g. by PublicToBase64 method to trim the private information
     property StoreOnlyPublicKey: boolean read fStoreOnlyPublicKey write
       fStoreOnlyPublicKey;
+    /// read access to the low-level stored private key 
+    property PrivateKey: TECCPrivateKey read fPrivateKey;
   end;
 
   /// store settings pointing to a local .private file containing a secret key

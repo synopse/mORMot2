@@ -8185,7 +8185,8 @@ begin
   begin
     // optimized Intel's sha256_sse4.asm
     K256Aligned := @K256;
-    if PtrUInt(K256Aligned) and 15 <> 0 then begin
+    if PtrUInt(K256Aligned) and 15 <> 0 then
+    begin
       if K256AlignedStore = '' then
         GetMemAligned(K256AlignedStore, @K256, SizeOf(K256), K256Aligned);
       if PtrUInt(K256Aligned) and 15 <> 0 then

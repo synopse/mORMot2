@@ -7548,7 +7548,8 @@ var
   _EntropyGlobal: THash128Rec; // to avoid replay attacks
 
 procedure XorEntropy(entropy: PBlock128);
-var e, f: THash128Rec;
+var
+  e, f: THash128Rec;
 begin // xor entropy with its existing (on-stack) values
   e := _EntropyGlobal;
   {$ifdef CPUINTEL}
@@ -7593,8 +7594,9 @@ begin // xor entropy with its existing (on-stack) values
 end;
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
-var e: THash128Rec;
-    i, j: PtrInt;
+var
+  e: THash128Rec;
+  i, j: PtrInt;
 begin
   repeat
     if entropy <> nil then
@@ -7649,8 +7651,9 @@ begin
 end;
 
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
-var c: cardinal;
-    gen: ^TLecuyer;
+var
+  c: cardinal;
+  gen: ^TLecuyer;
 begin
   if CardinalCount <= 0 then
     exit;
@@ -7670,6 +7673,7 @@ begin
     dec(CardinalCount);
   until CardinalCount = 0;
 end;
+
 
 { MultiEvent* functions }
 
@@ -7752,10 +7756,11 @@ type
 
 {$ifdef CPUX64}
   {$include mormot.core.base.asmx64.inc}
-{$endif}
+{$endif CPUX64}
+
 {$ifdef CPUX86}
   {$include mormot.core.base.asmx86.inc}
-{$endif}
+{$endif CPUX86}
 
 procedure TestIntelCpuFeatures;
 var
@@ -8092,7 +8097,8 @@ begin // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
         result := result xor PCardinal(buf)^;
         inc(buf, 4);
         dec(len, 4);
-        result := tab[3, ToByte(result)] xor tab[2, ToByte(result shr 8)] xor tab[1, ToByte(result shr 16)] xor tab[0, ToByte(result shr 24)];
+        result := tab[3, ToByte(result)] xor tab[2, ToByte(result shr 8)] xor
+           tab[1, ToByte(result shr 16)] xor tab[0, ToByte(result shr 24)];
       until len < 4;
     while len > 0 do
     begin

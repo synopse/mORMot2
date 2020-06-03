@@ -1061,14 +1061,16 @@ begin
   r01.m_high := 0;
   carry := 0;
   // Compute each digit of Output in sequence, maintaining the carries
-  for k := 0 to 2 * NUM_ECC_DIGITS - 2 do begin
+  for k := 0 to 2 * NUM_ECC_DIGITS - 2 do
+  begin
     if k < NUM_ECC_DIGITS then
       l_min := 0
     else
       l_min := (k + 1) - NUM_ECC_DIGITS;
     l := @Left[l_min];
     r := @Right[k-l_min];
-    for i := l_min to k do begin
+    for i := l_min to k do
+    begin
       if i >= NUM_ECC_DIGITS then
         break;
       mul64x64(l^, r^, THash128Rec(Product));
