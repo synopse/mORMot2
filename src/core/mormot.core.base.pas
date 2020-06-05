@@ -3154,7 +3154,7 @@ var
 
 
   { some types defined here, but implemented in mormot.core.datetime or
-    mormot.core.base, so that they may be used and identified by
+    mormot.core.log, so that they may be used and identified by
     mormot.core.rtti or mormot.core.os }
 
 type

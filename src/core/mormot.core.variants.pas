@@ -2743,8 +2743,9 @@ var
 
 begin
   result := true;
-  Data := @V; // Data=V is const so should not be modified - but we need it
+  Data := @V; // Data=@V is const so should not be modified - works on Delphi
   case length(Arguments) of
+    {$ifndef FPC} // Data=@V is read-only on FPC - to avoid random GPF
     0:
       if SameText(Name, 'Clear') then
       begin
@@ -2752,7 +2753,9 @@ begin
         Data^.VOptions := Data^.VOptions - [dvoIsObject, dvoIsArray];
         exit;
       end;
+    {$endif FPC}
     1:
+    {$ifndef FPC}
       if SameText(Name, 'Add') then
       begin
         Data^.AddItem(variant(Arguments[0]));
@@ -2764,7 +2767,9 @@ begin
         Data^.Delete(Data^.GetValueIndex(temp{%H-}));
         exit;
       end
-      else if SameText(Name, 'Exists') then
+      else
+    {$endif FPC}
+      if SameText(Name, 'Exists') then
       begin
         SetTempFromFirstArgument;
         variant(Dest) := Data^.GetValueIndex(temp) >= 0;
@@ -2797,6 +2802,7 @@ begin
           dvoNameCaseSensitive in Data^.VOptions, variant(Dest), true);
         exit;
       end;
+    {$ifndef FPC}
     2:
       if SameText(Name, 'Add') then
       begin
@@ -2804,6 +2810,7 @@ begin
         Data^.AddValue(temp, variant(Arguments[1]));
         exit;
       end;
+    {$endif FPC}
   end;
   result := false;
 end;
@@ -5961,5 +5968,6 @@ initialization
   BinaryVariantLoadAsJSON := _BinaryVariantLoadAsJSON;
   VariantClearSeveral := _VariantClearSeveral;
   SortDynArrayVariantComp := _SortDynArrayVariantComp;
+
 end.
 

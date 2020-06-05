@@ -3700,7 +3700,7 @@ begin
   WriteArena(W, 'Large', s.Large);
   W.Add('  Sleep: count=% ', [K(s.SleepCount)]);
   {$ifdef FPCMM_DEBUG}
-  W.AddShort(MicroSecToString(s.SleepTime));
+  W.Add(' rdtsc=%', [K(s.SleepCycles)]);
   {$ifdef FPCMM_LOCKLESSFREE}
   W.Add(' locklessspin=%', [K(s.SmallFreememLockLessSpin)]);
   {$endif FPCMM_LOCKLESSFREE}

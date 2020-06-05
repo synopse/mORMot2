@@ -11,7 +11,7 @@ unit mormot.core.jwt;
     - JWT Implementation of HS* and S3* Algorithms
     - JWT Implementation of ES256 Algorithm
 
-   Uses optimized mormot.core.crypto.pas for its process.
+   Uses optimized mormot.core.crypto.pas and mormot.core.ecc for its process.
 
   *****************************************************************************
 }
@@ -31,7 +31,7 @@ uses
   mormot.core.buffers,
   mormot.core.data,
   mormot.core.datetime,
-  mormot.core.variants, // TDocVariant
+  mormot.core.variants,
   mormot.core.json,
   mormot.core.crypto,
   mormot.core.secure,
