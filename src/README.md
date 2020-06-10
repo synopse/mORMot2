@@ -18,8 +18,9 @@ See LICENSE.md file in the root folder of this repository for more information.
 
 The source code tree is split into the following sub-folders:
 
-- `core` for low-level shared components like JSON, compression, crypto, network;
+- `core` for low-level shared components like text, JSON, compression, crypto, network;
 - `lib` for external third-party libraries like zlib or openssl;
+- `net` for the client/server communication layer;
 - `db` for our SQLite3 kernel, and SQL/NoSQL direct access;
 - `rest` for high-level ORM, SOA and MVC features;
 - `app` for hosting REST (micro)services/daemons and applications;
