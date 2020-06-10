@@ -588,6 +588,7 @@ asm // eax=P, edx=Count, Value=ecx
 end;
 
 function StrLenSSE2(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         mov     ecx, eax            // copy pointer
         test    eax, eax
@@ -622,6 +623,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
 end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=P, edx=val
         mov     ecx, edx
         sar     ecx, 31         // 0 if val>=0 or -1 if val<0
@@ -914,6 +916,10 @@ end;
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$ifdef FPC}nostackframe; assembler; {$endif}
 asm // adapted from FPC compiler output, which is much better than Delphi's here
+        {$ifdef FPC}
+        push    ebp
+        mov     ebp, esp
+        {$endif FPC}
         mov     ecx, eax
         mov     eax, dword ptr [ebp+8H]
         mul     dword ptr [ebp+10H]
@@ -939,6 +945,9 @@ asm // adapted from FPC compiler output, which is much better than Delphi's here
         adc     edx, 0
         mov     dword ptr [ecx+8H], eax
         mov     dword ptr [ecx+0CH], edx
+        {$ifdef FPC}
+        pop     ebp
+        {$endif FPC}
 end;
 
 function bswap32(a: cardinal): cardinal;

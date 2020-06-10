@@ -18,6 +18,7 @@
 // those functions use global variables, so are not PIC-compatible
 
 procedure aesencryptasm(const ctxt: TAESContext; bi, bo: PWA4);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // rolled optimized encryption asm version by A. Bouchez
         push    ebx
         push    esi
@@ -192,7 +193,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
 end;
 
 procedure aesdecrypt386(const ctxt: TAESContext; bi, bo: PWA4);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
         push    esi
@@ -361,7 +362,7 @@ asm
 end;
 
 procedure Sha256Compressx86(HW: pointer);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
         push    esi
@@ -433,7 +434,7 @@ end;
    https://www.delphitools.info/2016/04/19/new-sha-3-permutation-kernel }
 
 procedure KeccakPermutationKernel(B, A, C: Pointer);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         add     edx, 128
         add     eax, 128
@@ -779,7 +780,7 @@ end;
 
 
 procedure bswap256(s,d: PIntegerArray);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
         mov     ecx, eax // ecx=s, edx=d
@@ -811,7 +812,7 @@ asm
 end;
 
 procedure bswap160(s,d: PIntegerArray);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
         mov     ecx, eax // ecx=s, edx=d
@@ -834,7 +835,7 @@ asm
 end;
 
 function gf2_multiply(x,y,m: PtrUInt): PtrUInt;
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=x edx=y ecx=m
         push    esi
         push    edi
@@ -865,7 +866,7 @@ asm     // eax=x edx=y ecx=m
 end;
 
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // W=eax Buf=edx
         push    esi
         push    edi
@@ -955,8 +956,8 @@ end;
 
 {$ifdef USEAESNI}
 
-procedure AesNiTrailer; // = TAESAbstractSyn.EncryptTrailer from AES-NI asm
-{$ifdef FPC}nostackframe; assembler;{$endif}
+procedure AesNiTrailer; // = TAESAbstractSyn.EncryptTrailer from AES-NI procs
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
     call   dword ptr [eax].TAESContext.AesNi32 // = AES.Encrypt(fCV,fCV)
     lea    edx, [eax].TAESContext.buf // used as temporary buffer
@@ -971,7 +972,7 @@ asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
 end;
 
 procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=Rounds edx=RK
         sub     eax, 9
         movups  xmm0, [edx + $10]
@@ -1019,7 +1020,7 @@ asm // eax=Rounds edx=RK
 end;
 
 procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=KeySize edx=pk
         movups  xmm1, [edx]
         movups  xmm5, dqword ptr[@mask]
@@ -1118,7 +1119,7 @@ asm // eax=KeySize edx=pk
 end;
 
 procedure AesNiEncryptXmm7_128;
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
@@ -1161,7 +1162,7 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
 end;
 
 procedure aesniencrypt128(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
         call    AesNiEncryptXmm7_128
@@ -1170,7 +1171,7 @@ asm // eax=ctxt edx=source ecx=dest
 end;
 
 procedure AesNiEncryptXmm7_192;
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
@@ -1219,7 +1220,7 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
 end;
 
 procedure aesniencrypt192(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
         call    AesNiEncryptXmm7_192
@@ -1228,7 +1229,7 @@ asm // eax=ctxt edx=source ecx=dest
 end;
 
 procedure AesNiEncryptXmm7_256;
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
@@ -1286,7 +1287,7 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
 end;
 
 procedure aesniencrypt256(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
         call    AesNiEncryptXmm7_256
@@ -1295,7 +1296,7 @@ asm // eax=ctxt edx=source ecx=dest
 end;
 
 procedure aesnidecrypt128(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
         movups  xmm0, [eax + 16 * 10]
@@ -1341,7 +1342,7 @@ asm
 end;
 
 procedure aesnidecrypt192(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
         movups  xmm0, [eax + 16 * 12]
@@ -1393,7 +1394,7 @@ asm
 end;
 
 procedure aesnidecrypt256(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
         movups  xmm0, [eax + 16 * 14]
@@ -1456,7 +1457,7 @@ end;
 {$endif USEAESNI}
 
 function Adler32Asm(Adler: cardinal; p: pointer; Count: Integer): cardinal;
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
         push    esi
@@ -1576,7 +1577,7 @@ end;
    Taken from https://github.com/maximmasiutin/MD5_Transform-x64
 }
 procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
-{$ifdef FPC}nostackframe; assembler;{$endif}
+  {$ifdef FPC}nostackframe; assembler;{$endif}
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
 asm // eax=buf:TMD5Buf edx=in_:TMD5In
         push    ebx

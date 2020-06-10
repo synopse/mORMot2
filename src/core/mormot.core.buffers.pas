@@ -4881,6 +4881,7 @@ end;
 {$ifdef ASMX86}
 
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
 asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         push    ebx
         push    esi
@@ -5228,6 +5229,7 @@ end;
 {$ifdef ASMX86}
 
 function Base64uriEncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
+  {$ifdef FPC}nostackframe; assembler; {$endif}
 asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         push    ebx
         push    esi
