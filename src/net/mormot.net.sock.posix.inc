@@ -2,7 +2,7 @@
   This file is a part of the freeware Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-   POSIX Sockets API calls via the libc, as used by mormot.lib.sock.pas
+   POSIX Sockets API calls via the libc, as used by mormot.net.sock.pas
 }
 
 uses
@@ -144,7 +144,7 @@ type
   PEPollData = ^TEPollData;
 
   /// epoll descriptor data structure
-  TEPollEvent = {$ifdef CPUX64}packed{$endif} record
+  TEPollEvent = packed record
     events: cardinal;
     data: TEpollData;
   end;

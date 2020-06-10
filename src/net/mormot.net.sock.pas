@@ -1,7 +1,7 @@
 /// low-level access to the OperatingSystem Sockets API (e.g. WinSock2)
 // - this unit is a part of the freeware Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.lib.sock;
+unit mormot.net.sock;
 
 {
   *****************************************************************************
@@ -17,7 +17,7 @@ unit mormot.lib.sock;
 
   Notes:
     Oldest Delphis didn't include WinSock2.pas.
-    Under POSIX, will redirect to regular FPC units.
+    Under POSIX, will redirect to the libc or regular FPC units.
 
 }
 
@@ -317,11 +317,11 @@ implementation
   their own private 'uses' clause }
 
 {$ifdef MSWINDOWS}
-  {$I mormot.lib.sock.windows.inc}
+  {$I mormot.net.sock.windows.inc}
 {$endif MSWINDOWS}
 
 {$ifdef LINUX}
-  {$I mormot.lib.sock.posix.inc}
+  {$I mormot.net.sock.posix.inc}
 {$endif LINUX}
 
 
@@ -738,7 +738,7 @@ begin
   else
   begin
     len := SizeOf(addr);
-    sock := mormot.lib.sock.accept(TSocket(@self), @addr, len);
+    sock := mormot.net.sock.accept(TSocket(@self), @addr, len);
     if sock = -1 then
       result := NetLastError
     else
@@ -781,7 +781,7 @@ begin
   if @self = nil then
     result := nrNoSocket
   else
-    result := NetCheck(mormot.lib.sock.send(TSocket(@self), Buf, len, 0));
+    result := NetCheck(mormot.net.sock.send(TSocket(@self), Buf, len, 0));
 end;
 
 function TNetSocketWrap.Recv(Buf: pointer; len: integer): TNetResult;
@@ -789,7 +789,7 @@ begin
   if @self = nil then
     result := nrNoSocket
   else
-    result := NetCheck(mormot.lib.sock.recv(TSocket(@self), Buf, len, 0));
+    result := NetCheck(mormot.net.sock.recv(TSocket(@self), Buf, len, 0));
 end;
 
 function TNetSocketWrap.SendTo(Buf: pointer; len: integer; out addr: TNetAddr): TNetResult;
@@ -797,7 +797,7 @@ begin
   if @self = nil then
     result := nrNoSocket
   else
-    result := NetCheck(mormot.lib.sock.sendto(TSocket(@self),
+    result := NetCheck(mormot.net.sock.sendto(TSocket(@self),
       Buf, len, 0, @addr, SizeOf(addr)));
 end;
 
@@ -810,7 +810,7 @@ begin
   else
   begin
     addrlen := SizeOf(addr);
-    result := NetCheck(mormot.lib.sock.recvfrom(TSocket(@self),
+    result := NetCheck(mormot.net.sock.recvfrom(TSocket(@self),
       Buf, len, 0, @addr, @addrlen));
   end;
 end;
@@ -1088,7 +1088,7 @@ initialization
   assert(SizeOf(TNetAddr) >=
     {$ifdef MSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
   DefaultListenBacklog := SOMAXCONN;
-  InitializeUnit; // in mormot.lib.sock.windows.inc
+  InitializeUnit; // in mormot.net.sock.windows.inc
 
 finalization
   FinalizeUnit;
