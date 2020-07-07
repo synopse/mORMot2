@@ -34,6 +34,8 @@ uses
   mormot.core.zip          in '..\src\core\mormot.core.zip.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
   mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
+  mormot.net.client        in '..\src\net\mormot.net.client.pas',
+  mormot.net.server        in '..\src\net\mormot.net.server.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 
