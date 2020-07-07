@@ -1570,7 +1570,7 @@ var
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
-  if not SockIsDefined then
+  if aSock<=0 then
   begin
     if (aPort = '') and (aLayer <> nlUNIX) then
       fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
@@ -1602,7 +1602,7 @@ begin
       aSock.SetNoDelay(true); // disable Nagle algorithm since we use our own buffers
       aSock.SetKeepAlive(true); // enable TCP keepalive (even if we rely on transport layer)
     end;
-    if aTLS and not SockIsDefined and not doBind then
+    if aTLS and (PtrInt(aSock)<=0) and not doBind then
     try
       if Assigned(NewNetTLS) then
         fSecure := NewNetTLS;
@@ -1874,7 +1874,7 @@ begin
         begin
           if len > Length then
             len := Length;
-          move(BufPtr[BufPos], Content^, len);
+          MoveFast(BufPtr[BufPos], Content^, len);
           inc(BufPos, len);
           inc(Content, len);
           dec(Length, len);
@@ -2201,7 +2201,7 @@ procedure TCrtSocket.SockRecvLn(out Line: RawByteString; CROnly: boolean);
             LP := P - tmp; // append to already read chars
             L := Length(Line);
             Setlength(Line, L + LP);
-            move(tmp, PByteArray(Line)[L], LP);
+            MoveFast(tmp, PByteArray(Line)[L], LP);
           end;
           exit;
         end
@@ -2209,7 +2209,7 @@ procedure TCrtSocket.SockRecvLn(out Line: RawByteString; CROnly: boolean);
         begin // tmp[] buffer full?
           L := Length(Line); // -> append to already read chars
           Setlength(Line, L + 1024);
-          move(tmp, PByteArray(Line)[L], 1024);
+          MoveFast(tmp, PByteArray(Line)[L], 1024);
           P := tmp;
         end
         else
