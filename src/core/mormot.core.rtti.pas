@@ -959,6 +959,16 @@ type
 function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
+/// set any default integer or enumerates (including boolean) published
+// properties values for a TPersistent/TSynPersistent
+// - set only the values set as "property ... default ..." at class type level
+// - will also reset the published properties of the nested classes
+procedure SetDefaultValuesObject(Value: TObject);
+
+/// returns TRUE on a nil instance or if all its published properties are default/0
+// - calls internally TPropInfo.IsDefaultOrVoid()
+function IsObjectDefaultOrVoid(Value: TObject): boolean;
+
 
 { *************** Enumerations RTTI }
 
@@ -1650,6 +1660,7 @@ type
       ParserType: PRTTIParserType = nil): TRttiCustom; overload;
     /// register a given class type, using its RTTI
     // - returns existing or new TRttiCustom
+    // - please call RegisterCollection for TCollection
     // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
     function RegisterClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE} inline; {$endif}
@@ -2533,35 +2544,39 @@ var
   rvd: TRttiVarData;
   v: PVariant;
 begin
-  if TypeInfo^.Kind = rkVariant then
-  begin
-    v := GetFieldAddr(Instance);
-    if v <> nil then
-      result := VarIsEmptyOrNull(v^)
+  case TypeInfo^.Kind of
+    rkVariant:
+      begin
+        v := GetFieldAddr(Instance);
+        if v <> nil then
+          result := VarIsEmptyOrNull(v^)
+        else
+        begin
+          rvd.VType := varEmpty;
+          GetVariantProp(Instance, PVariant(@rvd)^);
+          result := VarIsEmptyOrNull(PVariant(@rvd)^);
+          VarClear(PVariant(@rvd)^);
+        end;
+      end;
+    rkClass:
+      result := IsObjectDefaultOrVoid(GetObjProp(Instance));
     else
-    begin
-      rvd.VType := 0;
-      GetVariantProp(Instance, PVariant(@rvd)^);
-      result := VarIsEmptyOrNull(PVariant(@rvd)^);
-      VarClear(PVariant(@rvd)^);
-    end;
-  end
-  else
-  begin
-    GetValue(Instance, RttiCustom, rvd);
-    case rvd.DataType of
-      varEmpty, varNull:
-        result := true;
-      varAny, varUnknown, varString, varOleStr
-      {$ifdef HASVARUSTRING}, varUString {$endif}:
-        result := rvd.Data.VAny = nil;
-      varInt64, varWord64, varDouble, varCurrency, varBoolean:
-        result := rvd.VInt64 = 0;
-    else
-      result := false;
-    end;
-    if rvd.NeedsClear then
-      VarClearProc(rvd.Data);
+      begin
+        GetValue(Instance, RttiCustom, rvd);
+        case rvd.DataType of
+          varEmpty, varNull:
+            result := true;
+          varAny, varUnknown, varString, varOleStr
+          {$ifdef HASVARUSTRING}, varUString {$endif}:
+            result := rvd.Data.VAny = nil;
+          varInt64, varWord64, varDouble, varCurrency, varBoolean:
+            result := rvd.VInt64 = 0;
+        else
+          result := false;
+        end;
+        if rvd.NeedsClear then
+          VarClearProc(rvd.Data);
+      end;
   end;
 end;
 
@@ -3365,9 +3380,10 @@ begin
 end;
 
 function ClassFieldCountWithParents(C: TClass; onlyWithoutGetter: boolean): integer;
-var CP: PRttiProps;
-    P: PRttiProp;
-    i: integer;
+var
+  cp: PRttiProps;
+  p: PRttiProp;
+  i: integer;
 begin
   if onlyWithoutGetter then
   begin
@@ -3375,23 +3391,23 @@ begin
     result := 0;
     while C <> nil do
     begin
-      CP := GetRttiProps(C);
-      if CP = nil then
+      cp := GetRttiProps(C);
+      if cp = nil then
         break; // no RTTI information (e.g. reached TObject level)
-      P := CP^.PropList;
-      for i := 1 to CP^.PropCount do
+      p := cp^.PropList;
+      for i := 1 to cp^.PropCount do
       begin
-        if P^.GetterIsField then
+        if p^.GetterIsField then
           inc(result);
-        P := P^.Next;
+        p := p^.Next;
       end;
+      C := GetClassParent(C);
     end;
   end
   else
     // we can use directly the root RTTI information
     result := GetRttiClass(C)^.PropCount;
 end;
-
 
 
 { *************** Enumerations RTTI }
@@ -5143,19 +5159,23 @@ function TRttiCustom.ValueIsVoid(Data: PAnsiChar): boolean;
 var
   s: PtrInt;
 begin
-  if Kind <> rkVariant then
-  begin
-    result := false;
-    s := fCache.Size;
-    repeat
-      dec(s);
-      if Data[s] <> #0 then
-        exit;
-    until s = 0;
-    result := true;
-  end
-  else
-    result := cardinal(PVarData(Data).VType) <= varNull;
+  case Kind of
+    rkVariant:
+      result := cardinal(PVarData(Data).VType) <= varNull;
+    rkClass:
+      result := IsObjectDefaultOrVoid(PObject(Data)^);
+    else
+      begin
+        result := false;
+        s := fCache.Size;
+        repeat
+          dec(s);
+          if Data[s] <> #0 then
+            exit;
+        until s = 0;
+        result := true;
+      end;
+  end;
 end;
 
 function TRttiCustom.SetObjArray(Item: TClass): TRttiCustom;
@@ -5595,9 +5615,6 @@ end;
 
 function TRttiCustomList.RegisterClass(ObjectClass: TClass): TRttiCustom;
 begin
-  if ObjectClass.InheritsFrom(TCollection) then
-    raise ERttiException.CreateUTF8(
-      'RegisterClass(%): please call RegisterCollection() instead', [ObjectClass]);
   result := ClassPropertiesGet(ObjectClass, GlobalClass);
   if result = nil then
     result := DoRegister(ObjectClass.ClassInfo);
@@ -5608,7 +5625,12 @@ var
   i: PtrInt;
 begin
   for i := 0 to high(ObjectClass) do
+  begin
+    if ObjectClass[i].InheritsFrom(TCollection) then
+      raise ERttiException.CreateUTF8(
+        'RegisterClasses(%): please call RegisterCollection() instead', [ObjectClass[i]]);
     RegisterClass(ObjectClass[i]);
+  end;
 end;
 
 function TRttiCustomList.RegisterCollection(Collection: TCollectionClass;
@@ -5729,6 +5751,47 @@ begin
         raise ERttiException.Create('RttiCustom.RegisterFromText[?]')
       else
          RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
+end;
+
+
+procedure SetDefaultValuesObject(Value: TObject);
+var
+  rtti: TRttiCustom;
+  p: PRttiCustomProp;
+  i: integer;
+begin
+  if Value = nil then
+    exit;
+  rtti := RttiCustom.RegisterClass(Value.ClassType);
+  p := pointer(rtti.Props.List);
+  for i := 1 to rtti.Props.Count do
+  begin
+    if p^.Value.Kind = rkClass then
+      SetDefaultValuesObject(p^.Prop.GetObjProp(Value))
+    else if p^.PropDefault <> NO_DEFAULT then
+      p^.Prop.SetInt64Value(Value, p^.PropDefault);
+    inc(p);
+  end;
+end;
+
+function IsObjectDefaultOrVoid(Value: TObject): boolean;
+var
+  rtti: TRttiCustom;
+  p: PRttiCustomProp;
+  i: integer;
+begin
+  if Value <> nil then
+  begin
+    result := false;
+    rtti := RttiCustom.RegisterClass(Value.ClassType);
+    p := pointer(rtti.Props.List);
+    for i := 1 to rtti.Props.Count do
+      if p^.ValueIsVoid(Value) then
+        inc(p)
+      else
+        exit;
+  end;
+  result := true;
 end;
 
 
