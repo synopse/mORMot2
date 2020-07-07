@@ -4604,7 +4604,7 @@ begin
         if v <> c then
         begin
           c := v;
-          ctxt.Info := RttiCustom.RegisterClass(v); // fast vmtAutoTable lookup
+          ctxt.Info := RttiCustom.RegisterClass(c);
           save := TRttiJson(ctxt.Info).fJsonSave;
         end;
         save(pointer(Value), ctxt);

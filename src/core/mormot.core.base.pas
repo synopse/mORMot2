@@ -399,6 +399,7 @@ type
   PInt64Rec = ^Int64Rec;
   PLongRec = ^LongRec;
   PPShortString = ^PShortString;
+  PTextFile = ^TextFile;
 
   PInterface = ^IInterface;
   TInterfaceDynArray = array of IInterface;
@@ -2215,6 +2216,10 @@ function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
 
 /// fast dedicated RawUTF8 version of Trim()
 function Trim(const S: RawUTF8): RawUTF8;
+
+// single-allocation (therefore faster) alternative to Trim(copy())
+procedure TrimCopy(const S: RawUTF8; start,count: PtrInt;
+  out result: RawUTF8);
 
 /// returns the left part of a RawUTF8 string, according to SepStr separator
 // - if SepStr is found, returns Str first chars until (and excluding) SepStr
@@ -7398,6 +7403,34 @@ begin
       dec(L);
     result := Copy(S, I, L - I + 1);
   end;
+end;
+
+procedure TrimCopy(const S: RawUTF8; start, count: PtrInt;
+  out result: RawUTF8); // faster alternative to Trim(copy())
+var
+  L: PtrInt;
+begin
+  if count <= 0 then
+    exit;
+  if start <= 0 then
+    start := 1;
+  L := Length(S);
+  while (start <= L) and (S[start] <= ' ') do
+  begin
+    inc(start);
+    dec(count);
+  end;
+  dec(start);
+  dec(L,start);
+  if count < L then
+    L := count;
+  while L>0 do
+    if S[start + L] <= ' ' then
+      dec(L)
+    else
+      break;
+  if L > 0 then
+    SetString(result, PAnsiChar(@PByteArray(S)[start]), L);
 end;
 
 function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;

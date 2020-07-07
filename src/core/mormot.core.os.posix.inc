@@ -659,6 +659,77 @@ begin
     result := GetFileOpenLimit(hard);
 end;
 
+{$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+
+{ TSystemDAPI }
+
+procedure TSystemDAPI.DoLoad;
+var
+  p: PPointer;
+  i, j: integer;
+const
+  NAMES: array[0..4] of PAnsiChar = (
+    'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print',
+    'sd_notify', 'sd_watchdog_enabled');
+begin
+  GlobalLock;
+  if not tested then
+  begin
+    systemd := dlopen(LIBSYSTEMD_PATH, RTLD_LAZY);
+    if systemd <> nil then
+    begin
+      p := @@listen_fds;
+      for i := 0 to high(NAMES) do
+      begin
+        p^ := dlsym(systemd, NAMES[i]);
+        if p^ = nil then
+        begin
+          p := @@listen_fds;
+          for j := 0 to i do
+          begin
+            p^ := nil;
+            inc(p);
+          end;
+          break;
+        end;
+        inc(p);
+      end;
+    end;
+    tested := true;
+  end;
+  GlobalUnLock;
+end;
+
+function TSystemDAPI.IsAvailable: boolean;
+begin
+  if not tested then
+    DoLoad;
+  result := Assigned(listen_fds);
+end;
+
+function TSystemDAPI.ProcessIsStartedBySystemd: boolean;
+begin
+  result := IsAvailable and
+    // note: for example on Ubuntu 20.04 INVOCATION_ID is always defined
+    // from the other side PPID 1 can be in case we run under docker of started
+    // by init.d so let's verify both
+    (fpgetppid() = 1) and (fpGetenv(ENV_INVOCATION_ID) <> nil);
+end;
+
+procedure TSystemDAPI.Done;
+begin
+  if systemd <> nil then
+  begin
+    dlclose(systemd);
+    systemd := nil;
+  end;
+end;
+
+
+
+{$endif LINUXNOTBSD}
+
+
 // define some raw functions, to avoid linking mormot.core.text
 
 function IdemPChar(p, up: PUTF8Char): boolean;
@@ -1276,6 +1347,7 @@ begin
 end;
 
 {$endif BSD}
+
 
 procedure InitializeUnit;
 var

@@ -611,6 +611,63 @@ function GetFileOpenLimit(hard: boolean = false): integer;
 // ! SetFileOpenLimit(GetFileOpenLimit(true));
 function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 
+{$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+
+const
+  /// The first passed file descriptor is fd 3
+  SD_LISTEN_FDS_START = 3;
+
+  /// low-level libcurl library file name, depending on the running OS
+  LIBSYSTEMD_PATH = 'libsystemd.so.0';
+
+  ENV_INVOCATION_ID: PAnsiChar = 'INVOCATION_ID';
+
+type
+  /// implements late-binding of the systemd library
+  // - about systemd: see https://www.freedesktop.org/wiki/Software/systemd
+  // and http://0pointer.de/blog/projects/socket-activation.html - to get headers
+  // on debian: `sudo apt install libsystemd-dev && cd /usr/include/systemd`
+  TSystemDAPI = packed object
+  private
+    systemd: pointer;
+    tested: boolean;
+    procedure DoLoad;
+  public
+    /// returns how many file descriptors have been passed to process
+    // - if result=1 then socket for accepting connection is LISTEN_FDS_START
+    listen_fds: function(unset_environment: integer): integer; cdecl;
+    /// returns 1 if the file descriptor is an AF_UNIX socket of the specified type and path
+    is_socket_unix: function(fd, typr, listening: integer;
+      var path: TFileName; pathLength: PtrUInt): integer; cdecl;
+    /// systemd: submit simple, plain text log entries to the system journal
+    // - priority value can be obtained using longint(LOG_TO_SYSLOG[logLevel])
+    journal_print: function(priority: longint; args: array of const): longint; cdecl;
+    /// sends notification to systemd
+    // - see https://www.freedesktop.org/software/systemd/man/notify.html
+    // status notification sample: sd.notify(0, 'READY=1');
+    // watchdog notification: sd.notify(0, 'WATCHDOG=1');
+    notify: function(unset_environment: longint; state: PUTF8Char): longint; cdecl;
+    /// check whether the service manager expects watchdog keep-alive
+    // notifications from a service
+    // - if result > 0 then usec contains the notification interval (app should
+    // notify every usec/2)
+    watchdog_enabled: function(unset_environment: longint; usec: Puint64): longint; cdecl;
+    /// returns true in case process is started by systemd
+    // - For systemd v232+
+    function ProcessIsStartedBySystemd: boolean;
+    /// returns TRUE if a systemd library is available
+    // - will thread-safely load and initialize it if necessary
+    function IsAvailable: boolean; inline;
+    /// release the systemd library
+    procedure Done;
+  end;
+
+var
+  /// late-binding of the systemd library
+  sd: TSystemDAPI;
+
+{$endif LINUXNOTBSD}
+
 {$endif MSWINDOWS}
 
 
@@ -2622,6 +2679,9 @@ begin
   {$else}
   if pthread <> nil then
     dlclose(pthread);
+  {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+  sd.Done;
+  {$endif LINUXNOTBSD}
   {$endif MSWINDOWS}
 end;
 

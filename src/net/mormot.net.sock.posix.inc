@@ -26,6 +26,8 @@ const
   WSAEINTR = ESysEINTR;
   WSATRY_AGAIN = ESysEAGAIN;
   WSAEADDRNOTAVAIL = ESysEADDRNOTAVAIL;
+  WSAECONNABORTED = ESysECONNABORTED;
+  WSAETIMEDOUT = ESysETIMEDOUT;
 
   {$ifdef FREEBSD}
   NI_NUMERICHOST = 2;
@@ -669,6 +671,7 @@ begin
 end;
 
 {$endif USEPOLL}
+
 
 
 procedure InitializeUnit;

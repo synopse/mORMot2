@@ -719,16 +719,532 @@ begin
 end;
 
 
+{ ******************** TLS / HTTPS Encryption Abstract Layer }
+
+{ SChannel low-level API  }
+
+type
+  TCredHandle = record
+    dwLower: pointer;
+    dwUpper: pointer;
+  end;
+  PCredHandle = ^TCredHandle;
+
+  TCtxtHandle = type TCredHandle;
+  PCtxtHandle = ^TCtxtHandle;
+
+  {$ifdef DELPHI5OROLDER}
+  PCardinal = ^Cardinal;
+  {$endif}
+
+  TSChannelCred = record
+    dwVersion: cardinal;
+    cCreds: cardinal;
+    paCred: pointer;
+    hRootStore: THandle;
+    cMappers: cardinal;
+    aphMappers: pointer;
+    cSupportedAlgs: cardinal;
+    palgSupportedAlgs: PCardinal;
+    grbitEnabledProtocols: cardinal;
+    dwMinimumCipherStrength: cardinal;
+    dwMaximumCipherStrength: cardinal;
+    dwSessionLifespan: cardinal;
+    dwFlags: cardinal;
+    dwCredFormat: cardinal;
+  end;
+  PSChannelCred = ^TSChannelCred;
+
+  TSecBuffer = record
+    cbBuffer: cardinal;
+    BufferType: cardinal;
+    pvBuffer: pointer;
+  end;
+  PSecBuffer = ^TSecBuffer;
+
+  TSecBufferDesc = record
+    ulVersion: cardinal;
+    cBuffers: cardinal;
+    pBuffers: PSecBuffer;
+  end;
+  PSecBufferDesc = ^TSecBufferDesc;
+
+  TTimeStamp = record
+    dwLowDateTime: cardinal;
+    dwHighDateTime: cardinal;
+  end;
+  PTimeStamp = ^TTimeStamp;
+
+  TSecPkgContextStreamSizes = record
+    cbHeader: cardinal;
+    cbTrailer: cardinal;
+    cbMaximumMessage: cardinal;
+    cBuffers: cardinal;
+    cbBlockSize: cardinal;
+  end;
+  PSecPkgContextStreamSizes = ^TSecPkgContextStreamSizes;
+
+  ESChannel = class(Exception);
+
+  TSChannelClient = class(TInterfacedObject, INetTLS)
+  private
+    Cred: TCredHandle;
+    Ctxt: TCtxtHandle;
+    Sizes: TSecPkgContextStreamSizes;
+    Data, Input: AnsiString;
+    InputSize, DataPos, DataCount, InputCount: integer;
+    procedure HandshakeLoop(aSocket: THandle);
+    procedure AppendData(const aBuffer: TSecBuffer);
+  public
+    procedure AfterConnection(aSocket: TNetSocket; const aServerAddress: RawUTF8);
+    procedure BeforeDisconnection(aSocket: TNetSocket);
+    function Receive(aSocket: TNetSocket; aBuffer: pointer; var aLength: integer): TNetResult;
+    function Send(aSocket: TNetSocket; aBuffer: pointer; var aLength: integer): TNetResult;
+  end;
+
+var
+  AcquireCredentialsHandle: function(pszPrincipal: PAnsiChar;
+    pszPackage: PAnsiChar; fCredentialUse: cardinal; pvLogonID: PInt64;
+    pAuthData: PSChannelCred; pGetKeyFn: pointer; pvGetKeyArgument: pointer;
+    phCredential: PCredHandle; ptsExpiry: PTimeStamp): cardinal; stdcall;
+  FreeCredentialsHandle: function(phCredential: PCredHandle): cardinal; stdcall;
+  InitializeSecurityContext: function(phCredential: PCredHandle;
+    phContext: PCtxtHandle; pszTargetName: PAnsiChar; fContextReq: cardinal;
+    Reserved1: cardinal; TargetDataRep: cardinal; pInput: PSecBufferDesc;
+    Reserved2: cardinal; phNewContext: PCtxtHandle; pOutput: PSecBufferDesc;
+    pfContextAttr: PCardinal; ptsExpiry: PTimeStamp): cardinal; stdcall;
+  DeleteSecurityContext: function(phContext: PCtxtHandle): cardinal; stdcall;
+  ApplyControlToken: function(phContext: PCtxtHandle;
+    pInput: PSecBufferDesc): cardinal; stdcall;
+  QueryContextAttributes: function(phContext: PCtxtHandle;
+    ulAttribute: cardinal; pBuffer: pointer): cardinal; stdcall;
+  FreeContextBuffer: function(pvContextBuffer: pointer): cardinal; stdcall;
+  EncryptMessage: function(phContext: PCtxtHandle; fQOP: cardinal;
+    pMessage: PSecBufferDesc; MessageSeqNo: cardinal): cardinal; stdcall;
+  DecryptMessage: function(phContext: PCtxtHandle; pMessage: PSecBufferDesc;
+    MessageSeqNo: cardinal; pfQOP: PCardinal): cardinal; stdcall;
+
+const
+  SP_PROT_TLS1 = $0C0;
+  SP_PROT_TLS1_SERVER = $040;
+  SP_PROT_TLS1_CLIENT = $080;
+  SP_PROT_TLS1_1 = $300;
+  SP_PROT_TLS1_1_SERVER = $100;
+  SP_PROT_TLS1_1_CLIENT = $200;
+  SP_PROT_TLS1_2 = $C00;
+  SP_PROT_TLS1_2_SERVER = $400;
+  SP_PROT_TLS1_2_CLIENT = $800;
+
+  SECPKG_CRED_INBOUND = 1;
+  SECPKG_CRED_OUTBOUND = 2;
+
+  ISC_REQ_DELEGATE = $00000001;
+  ISC_REQ_MUTUAL_AUTH = $00000002;
+  ISC_REQ_REPLAY_DETECT = $00000004;
+  ISC_REQ_SEQUENCE_DETECT = $00000008;
+  ISC_REQ_CONFIDENTIALITY = $00000010;
+  ISC_REQ_USE_SESSION_KEY = $00000020;
+  ISC_REQ_PROMPT_FOR_CREDS = $00000040;
+  ISC_REQ_USE_SUPPLIED_CREDS = $00000080;
+  ISC_REQ_ALLOCATE_MEMORY = $00000100;
+  ISC_REQ_USE_DCE_STYLE = $00000200;
+  ISC_REQ_DATAGRAM = $00000400;
+  ISC_REQ_CONNECTION = $00000800;
+  ISC_REQ_CALL_LEVEL = $00001000;
+  ISC_REQ_FRAGMENT_SUPPLIED = $00002000;
+  ISC_REQ_EXTENDED_ERROR = $00004000;
+  ISC_REQ_STREAM = $00008000;
+  ISC_REQ_INTEGRITY = $00010000;
+  ISC_REQ_IDENTIFY = $00020000;
+  ISC_REQ_NULL_SESSION = $00040000;
+  ISC_REQ_MANUAL_CRED_VALIDATION = $00080000;
+  ISC_REQ_RESERVED1 = $00100000;
+  ISC_REQ_FRAGMENT_TO_FIT = $00200000;
+  ISC_REQ_FLAGS =
+    ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or
+    ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or
+    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
+
+  SECBUFFER_VERSION = 0;
+  SECBUFFER_EMPTY = 0;
+  SECBUFFER_DATA = 1;
+  SECBUFFER_TOKEN = 2;
+  SECBUFFER_EXTRA = 5;
+  SECBUFFER_STREAM_TRAILER = 6;
+  SECBUFFER_STREAM_HEADER = 7;
+
+  SEC_E_OK = 0;
+  SEC_I_CONTINUE_NEEDED = $00090312;
+  SEC_I_RENEGOTIATE = $00090321;
+  SEC_I_CONTEXT_EXPIRED	= $00090317;
+  SEC_E_INCOMPLETE_MESSAGE = $80090318;
+  SEC_E_INVALID_TOKEN = $80090308;
+
+  DLLSecur32: PChar = 'secur32.dll';
+  UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
+  SECPKG_ATTR_STREAM_SIZES = 4;
+  SECURITY_NATIVE_DREP = $10;
+  SCHANNEL_SHUTDOWN = 1;
+
+{ TSChannel }
+
+procedure ESChannelRaiseLastError; // not defined e.g. with Delphi 5
+var
+  LastError: Integer;
+begin
+  LastError := GetLastError;
+  raise ESChannel.CreateFmt('System Error %d [%s]', [LastError, SysErrorMessage(LastError)]);
+end;
+
+function CheckSEC_E_OK(res: integer): cardinal;
+begin
+  if res <> SEC_E_OK then
+    ESChannelRaiseLastError;
+  result := res;
+end;
+
+function CheckSocket(res: integer): cardinal;
+begin
+  if res = SOCKET_ERROR then
+    raise ESChannel.CreateFmt('Socket Error %d', [sockerrno]);
+  if res = 0 then
+    raise ESChannel.Create('Handshake aborted');
+  result := res;
+end;
+
+const
+  TLSRECMAXSIZE = 19000; // stack buffers for TSChannelClient.Receive/Send
+
+type
+  {$ifdef USERECORDWITHMETHODS}THandshakeBuf = record
+    {$else}THandshakeBuf = object{$endif}
+  public
+    buf: array[0..2] of TSecBuffer;
+    input, output: TSecBufferDesc;
+    procedure Init;
+  end;
+
+procedure THandshakeBuf.Init;
+begin
+  input.ulVersion := SECBUFFER_VERSION;
+  input.cBuffers := 2;
+  input.pBuffers := @buf[0];
+  buf[0].cbBuffer := 0;
+  buf[0].BufferType := SECBUFFER_TOKEN;
+  buf[0].pvBuffer := nil;
+  buf[1].cbBuffer := 0;
+  buf[1].BufferType := SECBUFFER_EMPTY;
+  buf[1].pvBuffer := nil;
+  output.ulVersion := SECBUFFER_VERSION;
+  output.cBuffers := 1;
+  output.pBuffers := @buf[2];
+  buf[2].cbBuffer := 0;
+  buf[2].BufferType := SECBUFFER_TOKEN;
+  buf[2].pvBuffer := nil;
+end;
+
+procedure TSChannelClient.AppendData(const aBuffer: TSecBuffer);
+var
+  newlen: integer;
+begin
+  newlen := DataCount + integer(aBuffer.cbBuffer);
+  if newlen > Length(Data) then
+    SetLength(Data, newlen);
+  MoveFast(aBuffer.pvBuffer^, PByteArray(Data)[DataCount], aBuffer.cbBuffer);
+  inc(DataCount, aBuffer.cbBuffer);
+end;
+
+procedure TSChannelClient.AfterConnection(aSocket: TNetSocket; const aServerAddress: RawUTF8);
+var
+  buf: THandshakeBuf;
+  res, f: cardinal;
+begin
+  if not Assigned(AcquireCredentialsHandle) then
+    raise ESChannel.Create('SChannel API not available');
+  CheckSEC_E_OK(AcquireCredentialsHandle(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
+    nil, nil, nil, nil, @Cred, nil));
+  DataPos := 0;
+  DataCount := 0;
+  buf.Init;
+  res := InitializeSecurityContext(@Cred, nil, pointer(aServerAddress), ISC_REQ_FLAGS, 0,
+    SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @buf.output, @f, nil);
+  if res <> SEC_I_CONTINUE_NEEDED then
+    ESChannelRaiseLastError;
+  CheckSocket(mormot.net.sock.Send(aSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+  CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
+  HandshakeLoop(aSocket.Socket);
+  CheckSEC_E_OK(QueryContextAttributes(@Ctxt, SECPKG_ATTR_STREAM_SIZES, @Sizes));
+  SetLength(Data, Sizes.cbMaximumMessage);
+  InputSize := Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer;
+  if InputSize > TLSRECMAXSIZE then
+    raise ESChannel.CreateFmt('InputSize=%d>%d', [InputSize, TLSRECMAXSIZE]);
+  SetLength(Input, InputSize);
+  InputCount := 0;
+end;
+
+procedure TSChannelClient.HandshakeLoop(aSocket: THandle);
+var
+  buf: THandshakeBuf;
+  len: integer;
+  tmp: AnsiString;
+  res, f: cardinal;
+begin
+  len := 0;
+  SetLength(tmp, 65536);
+  res := SEC_I_CONTINUE_NEEDED;
+  while (res = SEC_I_CONTINUE_NEEDED) or (res = SEC_E_INCOMPLETE_MESSAGE) do
+  begin
+    if res <> SEC_E_INCOMPLETE_MESSAGE then
+      len := 0;
+    inc(len, CheckSocket(Recv(aSocket, @PByteArray(tmp)[len], length(tmp) - len, 0)));
+    buf.Init;
+    buf.buf[0].cbBuffer := len;
+    buf.buf[0].BufferType := SECBUFFER_TOKEN;
+    buf.buf[0].pvBuffer := pointer(tmp);
+    res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
+      SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
+    if (res = SEC_E_OK) or (res = SEC_I_CONTINUE_NEEDED) or
+       ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
+    begin
+      if (buf.buf[2].cbBuffer <> 0) and (buf.buf[2].pvBuffer <> nil) then
+      begin
+        CheckSocket(mormot.net.sock.Send(aSocket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+        CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
+      end;
+    end;
+  end;
+  // TODO: handle SEC_I_INCOMPLETE_CREDENTIALS ?
+  // see https://github.com/curl/curl/blob/master/lib/vtls/schannel.c
+  CheckSEC_E_OK(res);
+  if buf.buf[1].BufferType = SECBUFFER_EXTRA then
+    AppendData(buf.buf[1]);
+end;
+
+procedure TSChannelClient.BeforeDisconnection(aSocket: TNetSocket);
+var
+  desc: TSecBufferDesc;
+  buf: TSecBuffer;
+  dt, f: cardinal;
+begin
+  try
+    if {%H-}PtrInt(aSocket) > 0 then
+    begin
+      desc.ulVersion := SECBUFFER_VERSION;
+      desc.cBuffers := 1;
+      desc.pBuffers := @buf;
+      buf.cbBuffer := 4;
+      buf.BufferType := SECBUFFER_TOKEN;
+      dt := SCHANNEL_SHUTDOWN;
+      buf.pvBuffer := @dt;
+      if ApplyControlToken(@Ctxt, @desc) = SEC_E_OK then
+      begin
+        buf.cbBuffer := 0;
+        buf.BufferType := SECBUFFER_TOKEN;
+        buf.pvBuffer := nil;
+        if InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
+           SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @desc, @f, nil) = SEC_E_OK then
+        begin
+          mormot.net.sock.Send(aSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
+          FreeContextBuffer(buf.pvBuffer);
+        end;
+      end;
+    end;
+    DeleteSecurityContext(@Ctxt);
+    FreeCredentialsHandle(@Cred);
+  finally
+    Cred.dwLower := nil;
+    Cred.dwUpper := nil;
+  end;
+end;
+
+function TSChannelClient.Receive(aSocket: TNetSocket;
+  aBuffer: pointer; var aLength: integer): TNetResult;
+var
+  desc: TSecBufferDesc;
+  buf: array[0..3] of TSecBuffer;
+  res: cardinal;
+  read, i: integer;
+  needsRenegotiate: boolean;
+
+  function DecryptInput: cardinal;
+  begin
+    buf[0].cbBuffer := InputCount;
+    buf[0].BufferType := SECBUFFER_DATA;
+    buf[0].pvBuffer := pointer(Input);
+    buf[1].cbBuffer := 0;
+    buf[1].BufferType := SECBUFFER_EMPTY;
+    buf[1].pvBuffer := nil;
+    buf[2].cbBuffer := 0;
+    buf[2].BufferType := SECBUFFER_EMPTY;
+    buf[2].pvBuffer := nil;
+    buf[3].cbBuffer := 0;
+    buf[3].BufferType := SECBUFFER_EMPTY;
+    buf[3].pvBuffer := nil;
+    result := DecryptMessage(@Ctxt, @desc, 0, nil);
+  end;
+
+begin
+  result := nrFatalError;
+  while DataCount = 0 do
+  try
+    DataPos := 0;
+    desc.ulVersion := SECBUFFER_VERSION;
+    desc.cBuffers := 4;
+    desc.pBuffers := @buf[0];
+    repeat
+      read := Recv(aSocket.Socket, @PByteArray(Input)[InputCount],
+        InputSize - InputCount, MSG_NOSIGNAL);
+      if read <= 0 then
+      begin
+        result := NetLastError; // may be nrRetry for WSATRY_AGAIN
+        if result = nrOK then
+          result := nrUnknownError;
+        exit;
+      end;
+      inc(InputCount, read);
+      res := DecryptInput;
+    until res <> SEC_E_INCOMPLETE_MESSAGE;
+    needsRenegotiate := false;
+    repeat
+      case res of
+        SEC_I_RENEGOTIATE:
+          needsRenegotiate := true;
+        SEC_I_CONTEXT_EXPIRED:
+          exit;
+        SEC_E_INCOMPLETE_MESSAGE:
+          break;
+        else
+          CheckSEC_E_OK(res);
+      end;
+      InputCount := 0;
+      for i := 1 to 3 do
+        case buf[i].BufferType of
+          SECBUFFER_DATA:
+            AppendData(buf[i]);
+          SECBUFFER_EXTRA:
+            begin
+              MoveFast(buf[i].pvBuffer^, pointer(Input)^, buf[i].cbBuffer);
+              InputCount := buf[i].cbBuffer;
+            end;
+        end;
+      if InputCount = 0 then
+        break;
+      res := DecryptInput;
+    until false;
+    if needsRenegotiate then
+      HandshakeLoop(aSocket.Socket);
+  except
+    exit; // shutdown the connection on ESChannel fatal error
+  end;
+  read := DataCount;
+  if aLength < read then
+    read := aLength;
+  MoveFast(PByteArray(Data)[DataPos], aBuffer^, read);
+  inc(DataPos, read);
+  dec(DataCount, read);
+  aLength := read;
+  result := nrOK;
+end;
+
+function TSChannelClient.Send(aSocket: TNetSocket; aBuffer: pointer;
+  var aLength: integer): TNetResult;
+var
+  desc: TSecBufferDesc;
+  buf: array[0..3] of TSecBuffer;
+  sent, s, len, trailer, pending, templen: cardinal;
+  temp: array[0..TLSRECMAXSIZE] of byte;
+begin
+  result := nrFatalError;
+  desc.ulVersion := SECBUFFER_VERSION;
+  desc.cBuffers := 4;
+  desc.pBuffers := @buf[0];
+  pending := aLength;
+  while pending > 0 do
+  begin
+    templen := pending;
+    if templen > Sizes.cbMaximumMessage then
+      templen := Sizes.cbMaximumMessage;
+    MoveFast(aBuffer^, temp[Sizes.cbHeader], templen);
+    inc(PByte(aBuffer), templen);
+    dec(pending, templen);
+    trailer := Sizes.cbHeader + templen;
+    buf[0].cbBuffer := Sizes.cbHeader;
+    buf[0].BufferType := SECBUFFER_STREAM_HEADER;
+    buf[0].pvBuffer := @temp;
+    buf[1].cbBuffer := templen;
+    buf[1].BufferType := SECBUFFER_DATA;
+    buf[1].pvBuffer := @temp[Sizes.cbHeader];
+    buf[2].cbBuffer := Sizes.cbTrailer;
+    buf[2].BufferType := SECBUFFER_STREAM_TRAILER;
+    buf[2].pvBuffer := @temp[trailer];
+    buf[3].cbBuffer := 0;
+    buf[3].BufferType := SECBUFFER_EMPTY;
+    buf[3].pvBuffer := nil;
+    if EncryptMessage(@Ctxt, 0, @desc, 0) <> SEC_E_OK then
+      exit; // shutdown the connection on SChannel error
+    len := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
+    sent := 0;
+    repeat
+      s := mormot.net.sock.Send(aSocket.Socket, @temp[sent], len, MSG_NOSIGNAL);
+      if s = len then
+        break; // whole message sent
+      if s = 0 then
+        exit;  // report connection closed
+      if integer(s) < 0 then
+      begin
+        result := NetLastError;
+        if result <> nrRetry then
+          exit; // report socket fatal error
+      end
+      else
+      begin
+        dec(len, s);
+        inc(sent, s);
+      end;
+      Sleep(1); // try again
+    until false;
+  end;
+  result := nrOK;
+end;
+
+
+function SChannelNewNetTLS: INetTLS;
+begin
+  result := TSChannelClient.Create;
+end;
+
 var
   WsaDataOnce: TWSADATA;
+  LibSecurHandle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
 
 procedure InitializeUnit;
 begin
   WSAStartup($0202, WsaDataOnce);
+  LibSecurHandle := LoadLibrary(DLLSecur32);
+  if LibSecurHandle <> 0 then
+  begin
+    AcquireCredentialsHandle := GetProcAddress(LibSecurHandle, 'AcquireCredentialsHandleA');
+    FreeCredentialsHandle := GetProcAddress(LibSecurHandle, 'FreeCredentialsHandle');
+    InitializeSecurityContext := GetProcAddress(LibSecurHandle, 'InitializeSecurityContextA');
+    DeleteSecurityContext := GetProcAddress(LibSecurHandle, 'DeleteSecurityContext');
+    ApplyControlToken := GetProcAddress(LibSecurHandle, 'ApplyControlToken');
+    QueryContextAttributes := GetProcAddress(LibSecurHandle, 'QueryContextAttributesA');
+    FreeContextBuffer := GetProcAddress(LibSecurHandle, 'FreeContextBuffer');
+    EncryptMessage := GetProcAddress(LibSecurHandle, 'EncryptMessage');
+    DecryptMessage := GetProcAddress(LibSecurHandle, 'DecryptMessage');
+    if Assigned(AcquireCredentialsHandle) and
+       Assigned(InitializeSecurityContext) and
+       Assigned(QueryContextAttributes) and
+       Assigned(EncryptMessage) and
+       Assigned(DecryptMessage) then
+     NewNetTLS := SChannelNewNetTLS;
+  end;
 end;
 
 procedure FinalizeUnit;
 begin
   WSACleanup;
+  if LibSecurHandle <> 0 then
+    FreeLibrary(LibSecurHandle);
 end;
 
