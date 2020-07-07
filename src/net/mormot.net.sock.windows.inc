@@ -5,6 +5,10 @@
   Implements WinSock2 API calls, as used by mormot.net.sock.pas
 }
 
+uses
+  Windows;
+  
+function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR}): TNetResult; forward;
 
 { ******** WinSock2 Type Definitions }
 

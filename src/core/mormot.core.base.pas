@@ -589,7 +589,8 @@ function RandomGUID: TGUID; overload;
 // 265, 331, 413, 516, 645, 806, 1007, 1258, 1572, ...
 function NextGrow(capacity: integer): integer;
 
-/// equivalence to SetString(s,nil,len) function
+/// equivalence to SetString(s,nil,len) function but from a raw pointer
+// - so works with both PAnsiChar and PUTF8Char input buffer (or even PByteArray)
 // - faster especially under FPC
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
@@ -2702,7 +2703,7 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 // - will return 'synlz' as ACCEPT-ENCODING: header parameter
 // - will store a hash of both compressed and uncompressed stream: if the
 // data is corrupted during transmission, will instantly return ''
-function CompressSynLZ(var Data: RawByteString; Compress: boolean): AnsiString;
+function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUTF8;
 
 /// internal hash table adjustment as called from TDynArrayHasher.HashDelete
 // - decrement any integer greater or equal to a deleted value
@@ -3120,6 +3121,21 @@ const
 
   /// MIME content type used for a JPEG picture
   JPEG_CONTENT_TYPE = 'image/jpeg';
+
+  /// internal HTTP content-type for efficient static file sending
+  // - detected e.g. by http.sys' THttpApiServer.Request or via the NGINX
+  // X-Accel-Redirect header's THttpServer.Process (see
+  // THttpServer.NginxSendFileFrom) for direct sending with no local bufferring
+  // - the OutCustomHeader should contain the proper 'Content-type: ....'
+  // corresponding to the file (e.g. by calling GetMimeContentType() function)
+  STATICFILE_CONTENT_TYPE = '!STATICFILE';
+
+  /// used to notify e.g. the THttpServerRequest not to wait for any response
+  // from the client
+  // - is not to be used in normal HTTP process, but may be used e.g. by
+  // TWebSocketProtocolRest.ProcessFrame() to avoid to wait for an incoming
+  // response from the other endpoint
+  NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a shortstring
@@ -7430,7 +7446,7 @@ begin
     else
       break;
   if L > 0 then
-    SetString(result, PAnsiChar(@PByteArray(S)[start]), L);
+    FastSetString(result, @PByteArray(S)[start], L);
 end;
 
 function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;
@@ -8560,22 +8576,23 @@ begin
     SynLZdecompress1partialsub(src, dst, src_end, dst + result, offset);
 end;
 
-function CompressSynLZ(var Data: RawByteString; Compress: boolean): AnsiString;
+function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUTF8;
 var
   DataLen, len: integer;
   P: PAnsiChar;
+  tmp: TSynTempBuffer;
 begin
   DataLen := length(Data);
   if DataLen <> 0 then // '' is compressed and uncompressed to ''
     if Compress then
     begin
       len := SynLZcompressdestlen(DataLen) + 8;
-      SetString(result, nil, len);
-      P := pointer(result);
+      P := tmp.Init(len);
       PCardinal(P)^ := Hash32(pointer(Data), DataLen);
       len := SynLZcompress1(pointer(Data), DataLen, P + 8);
       PCardinal(P + 4)^ := Hash32(pointer(P + 8), len);
       SetString(Data, P, len + 8);
+      tmp.Done;
     end
     else
     begin
@@ -8585,16 +8602,12 @@ begin
          (Hash32(pointer(P + 8), DataLen - 8) <> PCardinal(P + 4)^) then
         exit;
       len := SynLZdecompressdestlen(P + 8);
-      SetLength(result, len);
+      tmp.Init(len);
       if (len <> 0) and
-         ((SynLZDecompress1(P + 8, DataLen - 8, pointer(result)) <> len) or
-          (Hash32(pointer(result), len) <> PCardinal(P)^)) then
-      begin
-        result := '';
+         ((SynLZDecompress1(P + 8, DataLen - 8, tmp.buf) <> len) or
+          (Hash32(tmp.buf, len) <> PCardinal(P)^)) then
         exit;
-      end
-      else
-        SetString(Data, PAnsiChar(pointer(result)), len);
+      SetString(Data, PAnsiChar(tmp.buf), len);
     end;
   result := 'synlz';
 end;

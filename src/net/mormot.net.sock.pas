@@ -524,7 +524,7 @@ type
     // - raise ECrtSocket exception on socket error
     // - by default, will handle #10 or #13#10 as line delimiter (as normal text
     // files), but you can delimit lines using #13 if CROnly is TRUE
-    procedure SockRecvLn(out Line: RawByteString; CROnly: boolean = false); overload;
+    procedure SockRecvLn(out Line: RawUTF8; CROnly: boolean = false); overload;
     /// call readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one
     // - use TimeOut milliseconds wait for incoming data
@@ -621,9 +621,8 @@ type
   // - used e.g. by class function THttpRequest.Get()
   // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
   // 'http://unix:/path/to/socket.sock:/url/path'
-//  {$ifdef USERECORDWITHMETHODS}TURI = record
-//    {$else}TURI = object{$endif}
-  TURI = object
+  {$ifdef USERECORDWITHMETHODS}TURI = record
+    {$else}TURI = object{$endif}
   public
     /// if the server is accessible via https:// and not plain http://
     Https: boolean;
@@ -667,8 +666,6 @@ implementation
 { includes are below inserted just after 'implementation' keyword to allow
   their own private 'uses' clause }
 
-function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR}): TNetResult; forward;
-
 {$ifdef MSWINDOWS}
   {$I mormot.net.sock.windows.inc}
 {$endif MSWINDOWS}
@@ -678,7 +675,7 @@ function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR}): TNetResult; forwa
 {$endif LINUX}
 
 
-function NetLastError(AnotherNonFatal: integer): TNetResult;
+function NetLastError(AnotherNonFatal: integer = NO_ERROR): TNetResult;
 var
   err: integer;
 begin
@@ -727,7 +724,7 @@ begin
   else
   begin
     IP4Short(ip4addr, s);
-    SetString(result, PAnsiChar(@s[1]), ord(s[0]));
+    FastSetString(result, @s[1], ord(s[0]));
   end;
 end;
 
@@ -1570,7 +1567,7 @@ var
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
-  if aSock<=0 then
+  if {%H-}PtrInt(aSock)<=0 then
   begin
     if (aPort = '') and (aLayer <> nlUNIX) then
       fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
@@ -1602,7 +1599,7 @@ begin
       aSock.SetNoDelay(true); // disable Nagle algorithm since we use our own buffers
       aSock.SetKeepAlive(true); // enable TCP keepalive (even if we rely on transport layer)
     end;
-    if aTLS and (PtrInt(aSock)<=0) and not doBind then
+    if aTLS and ({%H-}PtrInt(aSock)<=0) and not doBind then
     try
       if Assigned(NewNetTLS) then
         fSecure := NewNetTLS;
@@ -2179,9 +2176,9 @@ begin
   end;
 end;
 
-procedure TCrtSocket.SockRecvLn(out Line: RawByteString; CROnly: boolean);
+procedure TCrtSocket.SockRecvLn(out Line: RawUTF8; CROnly: boolean);
 
-  procedure RecvLn(var Line: RawByteString);
+  procedure RecvLn(var Line: RawUTF8);
   var
     P: PAnsiChar;
     LP, L: PtrInt;
@@ -2195,7 +2192,7 @@ procedure TCrtSocket.SockRecvLn(out Line: RawByteString; CROnly: boolean);
         if P^ = #10 then
         begin
           if Line = '' then // get line
-            SetString(Line, tmp, P - tmp)
+            FastSetString(Line, @tmp, P - tmp)
           else
           begin
             LP := P - tmp; // append to already read chars
@@ -2392,7 +2389,7 @@ begin
     inc(S);
   if PInteger(S)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
   begin
-    SetString(Scheme, P, S - P);
+    FastSetString(Scheme, P, S - P);
     if StartWith(pointer(P), 'HTTPS') then
       Https := true;
     P := S + 3;
@@ -2409,14 +2406,14 @@ begin
   else
     while not (S^ in [#0, ':', '/']) do
       inc(S);
-  SetString(Server, P, S - P);
+  FastSetString(Server, P, S - P);
   if S^ = ':' then
   begin
     inc(S);
     P := S;
     while not (S^ in [#0, '/']) do
       inc(S);
-    SetString(port, P, S - P); // Port='' for nlUNIX
+    FastSetString(Port, P, S - P); // Port='' for nlUNIX
   end
   else if DefaultPort <> '' then
     port := DefaultPort

@@ -3289,8 +3289,8 @@ begin
     end;
 end;
 
-procedure TECDHEProtocol.Encrypt(const aPlain: RawByteString; out aEncrypted:
-  RawByteString);
+procedure TECDHEProtocol.Encrypt(const aPlain: RawByteString;
+  out aEncrypted: RawByteString);
 var
   len: integer;
 begin
