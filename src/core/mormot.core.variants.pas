@@ -2772,7 +2772,7 @@ begin
       if SameText(Name, 'Exists') then
       begin
         SetTempFromFirstArgument;
-        variant(Dest) := Data^.GetValueIndex(temp) >= 0;
+        variant(Dest) := Data^.GetValueIndex(temp{%H-}) >= 0;
         exit;
       end
       else if SameText(Name, 'NameIndex') then

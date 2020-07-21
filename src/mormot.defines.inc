@@ -434,6 +434,9 @@
     {$if CompilerVersion >= 33.0}
       {$define ISDELPHI103}
     {$ifend}
+    {$if CompilerVersion >= 34.0}
+      {$define ISDELPHI104}
+    {$ifend}
   {$ifend CompilerVersion >= 17}
 
 {$endif FPC}

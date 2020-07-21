@@ -715,6 +715,7 @@ function ToText(err: TDeltaError): PShortString; overload;
 implementation
 
 
+
 { ****************** Files Search in Folders }
 
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);

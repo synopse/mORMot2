@@ -2603,7 +2603,11 @@ By1:    c := byte(Source^);
   end;
   if not NoTrailingZero then
     Dest^ := #0;
-  result := Dest;
+  {$ifdef ISDELPHI104}
+  exit(Dest); // circumvent Delphi 10.4 optimizer bug
+  {$else}
+  Result := Dest;
+  {$endif}
 end;
 
 function TSynAnsiFixedWidth.AnsiToRawUnicode(Source: PAnsiChar;
