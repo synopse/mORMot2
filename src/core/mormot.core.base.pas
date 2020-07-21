@@ -42,6 +42,11 @@ uses
 { ************ Framework Version and Information }
 
 const
+  /// the full text of the Synopse mORMot framework
+  // - note: we don't supply full version number with build revision for
+  // HTTP servers, to reduce potential attack surface
+  SYNOPSE_FRAMEWORK_NAME = 'mORMot';
+
   /// the corresponding version of the mORMot framework, as 2.#.#
   // - 2nd digit is minor version, increased at each framework release,
   // when adding functionality in a stable enough manner
@@ -53,13 +58,16 @@ const
   // - usefull for low-level debugging purpose
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
     {$ifdef FPC}
-      {$ifdef FPC_FASTMM4}+' FMM4'{$else}
-        {$ifdef FPC_SYNTBB}+' TBB'{$else}
-          {$ifdef FPC_SYNJEMALLOC}+' JM'{$else}
-            {$ifdef FPC_SYNCMEM}+' GM'{$else}
-              {$ifdef FPC_CMEM}+' CM'{$endif}{$endif}{$endif}{$endif}{$endif}
+      {$ifdef FPC_X64MM} + ' x64MM' {$ifdef FPCMM_BOOST} + 'b' {$endif}
+        {$ifdef FPCMM_SERVER} + 's' {$endif}{$else}
+      {$ifdef FPC_FASTMM4} + ' FMM4' {$else}
+        {$ifdef FPC_SYNTBB} + ' TBB' {$else}
+          {$ifdef FPC_SYNJEMALLOC} + ' JM' {$else}
+            {$ifdef FPC_SYNCMEM} + ' GM' {$else}
+              {$ifdef FPC_CMEM} + ' CM' {$endif}
+      {$endif}{$endif}{$endif}{$endif}{$endif}
     {$else}
-      {$ifdef FullDebugMode}+' FDM'{$endif}
+      {$ifdef FullDebugMode} + ' FDM'{$endif}
     {$endif FPC};
 
 
@@ -2266,6 +2274,12 @@ function GetFileNameWithoutExt(const FileName: TFileName;
 // - returns '' on error, unless RaiseExceptionOnCreationFailure is true
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+
+{$ifdef ISDELPHI20062007}
+/// compatibility function defined to avoid hints on buggy Delphi 2006/2007
+function AnsiCompareFileName(const S1, S2 : TFileName): integer;
+{$endif ISDELPHI20062007}
+
 
 type
   /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
@@ -7574,6 +7588,13 @@ begin
       else
         raise Exception.CreateFmt('Impossible to create folder %s', [result]);
 end;
+
+{$ifdef ISDELPHI20062007} // circumvent Delphi 2007 RTL inlining issue
+function AnsiCompareFileName(const S1, S2 : TFileName): integer;
+begin
+  result := SysUtils.AnsiCompareFileName(S1,S2);
+end;
+{$endif ISDELPHI20062007}
 
 procedure FillZero(var dest; count: PtrInt);
 begin
