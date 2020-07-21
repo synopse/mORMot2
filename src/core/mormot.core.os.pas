@@ -749,6 +749,13 @@ procedure SetLastError(error: longint);
 // - calls FormatMessageW on Windows, or StrError() on POSIX
 function GetErrorText(error: longint): RawUTF8;
 
+/// retrieve the text corresponding to an error message for a given Windows module
+// - use RTL SysErrorMessage() as fallback
+function SysErrorMessagePerModule(Code: cardinal; ModuleName: PChar): string;
+
+/// raise an Exception from the last system error
+procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+
 /// compatibility function, wrapping GetACP() Win32 API function
 // - returns the curent system code page (default WinAnsi)
 function Unicode_CodePage: integer;
@@ -1663,6 +1670,64 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 begin
   if IsInitializedCriticalSection(cs) then
     DeleteCriticalSection(cs);
+end;
+
+const
+  ENGLISH_LANGID = $0409;
+  // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383770
+  ERROR_WINHTTP_CANNOT_CONNECT = 12029;
+  ERROR_WINHTTP_TIMEOUT = 12002;
+  ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
+
+function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
+{$ifdef MSWINDOWS}
+var
+  tmpLen: DWORD;
+  err: PChar;
+{$endif}
+begin
+  result := '';
+  if Code = 0 then
+    exit;
+  {$ifdef MSWINDOWS}
+  tmpLen := FormatMessage(
+    FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
+    pointer(GetModuleHandle(ModuleName)), Code, ENGLISH_LANGID, @err, 0, nil);
+  try
+    while (tmpLen > 0) and (ord(err[tmpLen - 1]) in [0..32, ord('.')]) do
+      dec(tmpLen);
+    SetString(result, err, tmpLen);
+  finally
+    LocalFree(HLOCAL(err));
+  end;
+  {$endif MSWINDOWS}
+  if result = '' then
+  begin
+    result := SysErrorMessage(Code);
+    if result = '' then
+      if Code=ERROR_WINHTTP_CANNOT_CONNECT then
+        result := 'cannot connect'
+      else if Code = ERROR_WINHTTP_TIMEOUT then
+        result := 'timeout'
+      else if Code = ERROR_WINHTTP_INVALID_SERVER_RESPONSE then
+        result := 'invalid server response'
+      else
+        result := IntToHex(Code, 8);
+  end;
+end;
+
+procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
+var
+  LastError: Integer;
+  Error: Exception;
+begin
+  LastError := GetLastError;
+  if LastError <> 0 then
+    Error := ModuleException.CreateFmt('%s error %d (%s)',
+      [ModuleName, LastError, SysErrorMessagePerModule(LastError, ModuleName)])
+  else
+    Error := ModuleException.CreateFmt('Undefined %s error', [ModuleName]);
+  raise Error;
 end;
 
 function Unicode_CodePage: integer;

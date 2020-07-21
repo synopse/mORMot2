@@ -62,6 +62,7 @@ type
   TNetResult = (
     nrOK, nrRetry, nrNoSocket, nrNotFound, nrNotImplemented, nrFatalError, nrUnknownError);
 
+  {$M+}
   /// exception class raise by this unit
   ENetSock = class(Exception)
   public
@@ -71,6 +72,7 @@ type
     class procedure CheckLastError(const Context: shortstring; ForceRaise: boolean = false;
       AnotherNonFatal: integer = 0);
   end;
+  {$M-}
 
   /// one data state on a given socket
   TNetEvent = (
@@ -163,12 +165,6 @@ var
 /// returns the trimmed text of a network result
 // - e.g. ToText(nrNotFound)='NotFound'
 function ToText(res: TNetResult): PShortString;
-
-/// retrieve the HTTP reason text from a code
-// - e.g. StatusCodeToReason(200)='OK'
-// - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-// - mORMot.StatusCodeToErrorMsg() will call this function
-function StatusCodeToReason(Code: cardinal): RawUTF8;
 
 
 
@@ -658,8 +654,18 @@ type
   end;
 
 
-implementation
+const
+  /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
+  // HTTPS = DEFAULT_PORT[true]
+  DEFAULT_PORT: array[boolean] of RawUTF8 = ('80', '443');
 
+
+/// create a TCrtSocket, returning nil on error
+// (useful to easily catch socket error exception ECrtSocket)
+function Open(const aServer, aPort: RawUTF8; aTLS: boolean = false): TCrtSocket;
+
+
+implementation
 
 { ******** System-Specific Raw Sockets API Layer }
 
@@ -735,128 +741,6 @@ const
 function ToText(res: TNetResult): PShortString;
 begin
   result := @_NR[res];
-end;
-
-var
-  ReasonCache: array[1..5, 0..13] of RawUTF8; // avoid memory allocation
-
-function StatusCodeToReasonInternal(Code: cardinal): RawUTF8;
-begin
-  case Code of
-    100:
-      result := 'Continue';
-    101:
-      result := 'Switching Protocols';
-    200:
-      result := 'OK';
-    201:
-      result := 'Created';
-    202:
-      result := 'Accepted';
-    203:
-      result := 'Non-Authoritative Information';
-    204:
-      result := 'No Content';
-    205:
-      result := 'Reset Content';
-    206:
-      result := 'Partial Content';
-    207:
-      result := 'Multi-Status';
-    300:
-      result := 'Multiple Choices';
-    301:
-      result := 'Moved Permanently';
-    302:
-      result := 'Found';
-    303:
-      result := 'See Other';
-    304:
-      result := 'Not Modified';
-    305:
-      result := 'Use Proxy';
-    307:
-      result := 'Temporary Redirect';
-    308:
-      result := 'Permanent Redirect';
-    400:
-      result := 'Bad Request';
-    401:
-      result := 'Unauthorized';
-    403:
-      result := 'Forbidden';
-    404:
-      result := 'Not Found';
-    405:
-      result := 'Method Not Allowed';
-    406:
-      result := 'Not Acceptable';
-    407:
-      result := 'Proxy Authentication Required';
-    408:
-      result := 'Request Timeout';
-    409:
-      result := 'Conflict';
-    410:
-      result := 'Gone';
-    411:
-      result := 'Length Required';
-    412:
-      result := 'Precondition Failed';
-    413:
-      result := 'Payload Too Large';
-    414:
-      result := 'URI Too Long';
-    415:
-      result := 'Unsupported Media Type';
-    416:
-      result := 'Requested Range Not Satisfiable';
-    426:
-      result := 'Upgrade Required';
-    500:
-      result := 'Internal Server Error';
-    501:
-      result := 'Not Implemented';
-    502:
-      result := 'Bad Gateway';
-    503:
-      result := 'Service Unavailable';
-    504:
-      result := 'Gateway Timeout';
-    505:
-      result := 'HTTP Version Not Supported';
-    511:
-      result := 'Network Authentication Required';
-  else
-    result := 'Invalid Request';
-  end;
-end;
-
-function StatusCodeToReason(Code: cardinal): RawUTF8;
-var
-  Hi, Lo: cardinal;
-begin
-  if Code = 200 then
-  begin
-    // optimistic approach :)
-    Hi := 2;
-    Lo := 0;
-  end
-  else
-  begin
-    Hi := Code div 100;
-    Lo := Code - Hi * 100;
-    if not ((Hi in [1..5]) and (Lo in [0..13])) then
-    begin
-      result := StatusCodeToReasonInternal(Code);
-      exit;
-    end;
-  end;
-  result := ReasonCache[Hi, Lo];
-  if result <> '' then
-    exit;
-  result := StatusCodeToReasonInternal(Code);
-  ReasonCache[Hi, Lo] := result;
 end;
 
 
@@ -1454,7 +1338,6 @@ end;
 { ********* TCrtSocket Buffered Socket Read/Write Class }
 
 const
-  DEFAULT_PORT: array[boolean] of RawUTF8 = ('80', '443');
   UNIX_LOW = ord('u') + ord('n') shl 8 + ord('i') shl 16 + ord('x') shl 24;
 
 { TCrtSocket }
@@ -1556,7 +1439,7 @@ begin
     end;
     {$endif MSWINDOWS}
   end;
-  OpenBind(s, p, {dobind=}true, {%H-}TNetSocket(aSock), aLayer); // raise exception on error
+  OpenBind(s{%H-}, p{%H-}, {dobind=}true, {%H-}TNetSocket(aSock), aLayer); // raise exception on error
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawByteString;
@@ -2452,6 +2335,15 @@ begin
     Root := address
   else
     Root := copy(address, 1, i - 1);
+end;
+
+function Open(const aServer, aPort: RawUTF8; aTLS: boolean): TCrtSocket;
+begin
+  try
+    result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS);
+  except
+    result := nil;
+  end;
 end;
 
 
