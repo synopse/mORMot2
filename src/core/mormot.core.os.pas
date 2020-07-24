@@ -501,6 +501,8 @@ type
   end;
 
 const
+  INVALID_HANDLE_VALUE = DWORD(-1);
+  
   PROV_RSA_AES = 24;
   CRYPT_NEWKEYSET = 8;
   PLAINTEXTKEYBLOB = 8;
@@ -536,6 +538,7 @@ var
 // https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
+
 
 /// retrieves the current executable module handle, i.e.  its memory load address
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -578,6 +581,27 @@ procedure EnterCriticalSection(var cs: TRTLCriticalSection); stdcall;
 // - redefined in mormot.core.os to avoid dependency to Windows
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
+
+/// initialize IOCP instance
+// - redefined in mormot.core.os to avoid dependency to Windows
+function CreateIoCompletionPort(FileHandle: THandle; ExistingCompletionPort: THandle;
+  CompletionKey: pointer; NumberOfConcurrentThreads: DWORD): THandle; stdcall;
+
+/// retrieve IOCP instance status
+// - redefined in mormot.core.os to avoid dependency to Windows
+function GetQueuedCompletionStatus(CompletionPort: THandle;
+  var lpNumberOfBytesTransferred: DWORD; var lpCompletionKey: PtrUInt;
+  var lpOverlapped: pointer; dwMilliseconds: DWORD): BOOL; stdcall;
+
+/// trigger a IOCP instance
+// - redefined in mormot.core.os to avoid dependency to Windows
+function PostQueuedCompletionStatus(CompletionPort: THandle;
+  NumberOfBytesTransferred: DWORD; dwCompletionKey: pointer;
+  lpOverlapped: POverlapped): BOOL;
+
+/// finalize a Windows resource (e.g. IOCP instance)
+// - redefined in mormot.core.os to avoid dependency to Windows
+function CloseHandle(hObject: THandle): BOOL;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?

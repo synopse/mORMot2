@@ -562,8 +562,8 @@ var
 begin
   if integer(fCompressAcceptHeader) <> 0 then
   begin
-    OutContentEncoding := CompressDataAndGetHeaders(fCompressAcceptHeader,
-      fCompress, OutContentType, OutContent);
+    OutContentEncoding := CompressDataAndGetHeaders(
+      fCompressAcceptHeader, fCompress, OutContentType, OutContent);
     if OutContentEncoding <> '' then
       SockSend(['Content-Encoding: ', OutContentEncoding]);
   end;

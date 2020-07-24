@@ -102,6 +102,7 @@ procedure LeaveCriticalSection;       external kernel32;
 procedure DeleteCriticalSection;      external kernel32;
 function  TryEnterCriticalSection;    external kernel32;
 procedure AllocConsole;               external kernel32;
+function  CloseHandle;                external kernel32;
 procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetCurrentThreadId;         external kernel32;
 function  GetCurrentProcessId;        external kernel32;
@@ -113,6 +114,9 @@ procedure SetEndOfFile;               external kernel32;
 procedure FlushFileBuffers;           external kernel32;
 function  GetLastError;               external kernel32;
 procedure SetLastError;               external kernel32;
+function  CreateIoCompletionPort;     external kernel32;
+function  GetQueuedCompletionStatus;  external kernel32;
+function  PostQueuedCompletionStatus; external kernel32;
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
