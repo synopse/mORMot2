@@ -213,11 +213,12 @@ function FindNameValue(P: PUTF8Char; UpperName: PAnsiChar): PUTF8Char; overload;
 // - i.e. iterate IdemPChar(source,UpperName) over every line of the source
 // - returns true and the trimmed text just after UpperName into Value
 // if it has been found at line beginning
-// - returns false and set Value := '' if UpperName was not found
+// - returns false and set Value := '' if UpperName was not found (or leave
+// Value untouched if KeepNotFoundValue is true)
 // - could be used e.g. to efficently extract a value from HTTP headers, whereas
 // FindIniNameValue() is tuned for [section]-oriented INI files
 function FindNameValue(const NameValuePairs: RawUTF8; UpperName: PAnsiChar;
-  var Value: RawUTF8): boolean; overload;
+  var Value: RawUTF8; KeepNotFoundValue: boolean = false): boolean; overload;
 
 /// compute the line length from source array of chars
 // - if PEnd = nil, end counting at either #0, #13 or #10
@@ -675,6 +676,7 @@ type
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
     fOnFlushToStream: TOnTextWriterFlush;
+    procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
@@ -961,7 +963,7 @@ type
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName, IncludePointer: boolean);
     /// append some binary data as hexadecimal text conversion
-    procedure AddBinToHex(Bin: Pointer; BinBytes: integer);
+    procedure AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
     /// fast conversion from binary data into hexa chars, ready to be displayed
     // - using this function with Bin^ as an integer value will serialize it
     // in big-endian order (most-significant byte first), as used by humans
@@ -1119,6 +1121,11 @@ function ObjectToJSON(Value: TObject;
 // - call internaly TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
+
+/// escape some UTF-8 text into HTML
+// - just a wrapper around TBaseWriter.AddHtmlEscape() process,
+// replacing < > & " chars depending on the HTML layer
+function HtmlEscape(const text: RawUTF8; fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
 
 
 type
@@ -2948,7 +2955,7 @@ _0:   result := nil; // reached P^=#0 -> not found
 end;
 
 function FindNameValue(const NameValuePairs: RawUTF8; UpperName: PAnsiChar;
-  var Value: RawUTF8): boolean;
+  var Value: RawUTF8; KeepNotFoundValue: boolean): boolean;
 var
   P: PUTF8Char;
   L: PtrInt;
@@ -2968,7 +2975,8 @@ begin
   end
   else
   begin
-    {$ifdef FPC} Finalize(Value); {$else} Value := ''; {$endif}
+    if KeepNotFoundValue then
+      {$ifdef FPC} Finalize(Value); {$else} Value := ''; {$endif}
     result := false;
   end;
 end;
@@ -4290,6 +4298,14 @@ begin
   Add(']');
 end;
 
+procedure TBaseWriter.WriteToStream(data: pointer; len: PtrUInt);
+begin
+  if Assigned(fOnFlushToStream) then
+    fOnFlushToStream(data, len);
+  fStream.WriteBuffer(data^, len);
+  inc(fTotalFileSize, len);
+end;
+
 function TBaseWriter.GetTextLength: PtrUInt;
 begin
   if self = nil then
@@ -4354,10 +4370,7 @@ begin
   i := B - fTempBuf + 1;
   if i > 0 then
   begin
-    if Assigned(fOnFlushToStream) then
-      fOnFlushToStream(fTempBuf, i);
-    fStream.WriteBuffer(fTempBuf^, i);
-    inc(fTotalFileSize, i);
+    WriteToStream(fTempBuf, i);
     if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
     begin
       s := fTotalFileSize - fInitialStreamPosition;
@@ -4848,9 +4861,7 @@ begin
       inc(PByte(P), i);
       dec(Len, i);
       // FlushInc writes B-buf+1 -> special one below:
-      i := B - fTempBuf;
-      fStream.WriteBuffer(fTempBuf^, i);
-      inc(fTotalFileSize, i);
+      WriteToStream(fTempBuf, B - fTempBuf);
       B := fTempBuf;
     until false;
     dec(B); // allow CancelLastChar
@@ -5252,7 +5263,7 @@ begin // inlined UnixMSTimeToDateTime()
 end;
 
 procedure TBaseWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
-  QuoteChar: AnsiChar; WithMS, AlwaysDateAndTime: boolean);
+  QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
 var
   T: TSynSystemTime;
 begin
@@ -5427,7 +5438,7 @@ begin
   AddBinToHexDisplayMinChars(@P, SizeOf(P), QuotedChar);
 end;
 
-procedure TBaseWriter.AddBinToHex(Bin: Pointer; BinBytes: integer);
+procedure TBaseWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
 var
   ChunkBytes: PtrInt;
 begin
@@ -5449,9 +5460,7 @@ begin
     if BinBytes = 0 then
       break;
     // Flush writes B-buf+1 -> special one below:
-    ChunkBytes := B - fTempBuf;
-    fStream.WriteBuffer(fTempBuf^, ChunkBytes);
-    inc(fTotalFileSize, ChunkBytes);
+    WriteToStream(fTempBuf, B - fTempBuf);
     B := fTempBuf;
   until false;
   dec(B); // allow CancelLastChar
@@ -5543,6 +5552,20 @@ begin
     end;
     inc(Text);
   until Text^ = #0;
+end;
+
+function HtmlEscape(const text: RawUTF8; fmt: TTextWriterHTMLFormat): RawUTF8;
+var
+  temp: TTextWriterStackBuffer;
+  W: TBaseWriter;
+begin
+  W := TBaseWriter.CreateOwnedStream(temp);
+  try
+    W.AddHtmlEscape(pointer(text), length(text), fmt);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 procedure TBaseWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt;
