@@ -1036,9 +1036,6 @@ function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
 // - as used e.g. by GetEnumCaptions or GetCaptionFromEnum
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 
-function ToText(os: TOperatingSystem): PShortString; overload;
-function ToText(const osv: TOperatingSystemVersion): ShortString; overload;
-function ToTextOS(osint32: integer): RawUTF8;
 
 
 { ***************** IInvokable Interface RTTI }
@@ -3573,32 +3570,6 @@ end;
 function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
 begin
   GetCaptionFromTrimmed(GetEnumName(aTypeInfo, aIndex), result{%H-});
-end;
-
-function ToText(os: TOperatingSystem): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TOperatingSystem), ord(os));
-end;
-
-function ToText(const osv: TOperatingSystemVersion): ShortString;
-begin
-  if osv.os = osWindows then
-    FormatShort('Windows %', [WINDOWS_NAME[osv.win]], result)
-  else
-    TrimLeftLowerCaseToShort(ToText(osv.os), result);
-end;
-
-function ToTextOS(osint32: integer): RawUTF8;
-var
-  osv: TOperatingSystemVersion absolute osint32;
-  ost: ShortString;
-begin
-  ost := ToText(osv);
-  if (osv.os >= osLinux) and (osv.utsrelease[2] <> 0) then
-    result := FormatUTF8('% %.%.%', [ost, osv.utsrelease[2],
-      osv.utsrelease[1], osv.utsrelease[0]])
-  else
-    ShortStringToAnsi7String(ost, result);
 end;
 
 

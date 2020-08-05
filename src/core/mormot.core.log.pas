@@ -3603,7 +3603,7 @@ begin
       Add(dwBuildNumber);
     end;
     {$else}
-    AddTrimLeftLowerCase(ToText(OS_KIND));
+    AddString(OS_NAME[OS_KIND]);
     Add('=');
     AddTrimSpaces(pointer(SystemInfo.uts.sysname));
     Add('-');
@@ -4853,7 +4853,7 @@ begin
   try
     {  C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-07 11:09:06)
     Host=BW013299 User=G018869 CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
-    TSynLog 1.13 LVCL 2011-04-07 12:04:09 }
+    TSynLog 1.13 2011-04-07 12:04:09 }
     if (fCount <= fLineHeaderCountToIgnore) or LineSizeSmallerThan(0, 24) or
        not IdemPChar(fLines[1], 'HOST=') or (fLevels = nil) or
        (fLineLevelOffset = 0) then

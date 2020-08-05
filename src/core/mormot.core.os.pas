@@ -127,6 +127,7 @@ var
   OS_KIND: TOperatingSystem = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
   {$ifdef BSD}osBSD{$else}{$ifdef Android}osAndroid{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
   {$endif}{$endif}{$endif}{$endif}{$endif};
+
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
@@ -134,14 +135,30 @@ var
   /// some addition system information as text, e.g. 'Wine 1.1.5'
   // - also always appended to OSVersionText high-level description
   OSVersionInfoEx: RawUTF8;
+  /// the current Operating System version, as retrieved for the current process
+  // and computed as ToTextOS(OSVersionInt32)
+  // - returns e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
+  OSVersionShort: RawUTF8;
+
   /// some textual information about the current CPU
   CpuInfoText: RawUTF8;
   /// some textual information about the current computer hardware, from BIOS
   BiosInfoText: RawUTF8;
+
   /// the running Operating System
   OSVersion32: TOperatingSystemVersion;
   /// the running Operating System, encoded as a 32-bit integer
   OSVersionInt32: integer absolute OSVersion32;
+
+/// convert an Operating System type into its text representation
+// - returns e.g. 'Windows Vista' or 'Ubuntu'
+function ToText(const osv: TOperatingSystemVersion): RawUTF8; overload;
+
+/// convert a 32-bit Operating System type into its full text representation
+// including the kernel revision on POSIX systems
+// - returns e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
+function ToTextOS(osint32: integer): RawUTF8;
+
 
 const
   /// contains the Delphi/FPC Compiler Version as text
@@ -799,6 +816,9 @@ function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt
 /// compatibility function, wrapping WideCharToMultiByte() Win32 API call
 // - returns the number of AnsiChar written into A^ destination buffer
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+
+/// conversion of some UTF-16 buffer into a temporary shortstring
+procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
 
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
@@ -1599,6 +1619,27 @@ implementation
 {$endif MSWINDOWS}
 
 
+{ ****************** Gather Operating System Information }
+
+function ToText(const osv: TOperatingSystemVersion): RawUTF8;
+begin
+  if osv.os = osWindows then
+    result := 'Windows ' + WINDOWS_NAME[osv.win]
+  else
+    result := OS_NAME[osv.os];
+end;
+
+function ToTextOS(osint32: integer): RawUTF8;
+var
+  osv: TOperatingSystemVersion absolute osint32;
+begin
+  result := ToText(osv);
+  if (osv.os >= osLinux) and (osv.utsrelease[2] <> 0) then
+    result := RawUTF8(Format('%s %d.%d.%d', [result, osv.utsrelease[2],
+      osv.utsrelease[1], osv.utsrelease[0]]));
+end;
+
+
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
 const
@@ -1764,6 +1805,23 @@ const
   _CASEFLAG: array[boolean] of DWORD = (0, NORM_IGNORECASE);
 begin
   result := CompareStringW(LOCALE_USER_DEFAULT, _CASEFLAG[IgnoreCase], PW1, L1, PW2, L2);
+end;
+
+procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
+begin
+  if LW <= 0 then
+    res[0] := #0
+  else if (LW <= 255) and IsAnsiCompatibleW(W, LW) then
+  begin
+    res[0] := AnsiChar(LW);
+    repeat
+      res[LW + 1] := AnsiChar(ord(W^)); // fast pure English content
+      inc(W);
+      dec(LW);
+    until LW = 0
+  end
+  else
+    res[0] := AnsiChar(Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
 end;
 
 function NowUTC: TDateTime;
@@ -2190,11 +2248,14 @@ begin
 end;
 
 
+{$ifndef PUREMORMOT2}
 
 function GetDelphiCompilerVersion: RawUTF8;
 begin
   result := COMPILER_VERSION;
 end;
+
+{$endif PUREMORMOT2}
 
 {$I-}
 
@@ -2782,6 +2843,7 @@ initialization
   InitializeCriticalSection(GlobalCriticalSection);
   InitializeCriticalSection(AutoSlotsLock);
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
+  OSVersionShort := ToTextOS(OSVersionInt32);
   SetExecutableVersion(0,0,0,0);
   SetThreadName := _SetThreadName;
 
