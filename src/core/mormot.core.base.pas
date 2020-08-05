@@ -2264,6 +2264,23 @@ function StrLenW(S: PWideChar): PtrInt;
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
   {$ifdef HASINLINE} inline;{$endif}
 
+/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
+function IsAnsiCompatible(PC: PAnsiChar): boolean; overload;
+
+/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
+function IsAnsiCompatible(PC: PAnsiChar; Len: PtrUInt): boolean; overload;
+
+/// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
+function IsAnsiCompatibleW(PW: PWideChar): boolean; overload;
+
+/// return TRUE if the supplied text only contains 7-bits Ansi characters
+function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
+function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
+
+
 /// extract file name, without its extension
 // - may optionally return the associated extension, as '.ext'
 function GetFileNameWithoutExt(const FileName: TFileName;
@@ -7552,6 +7569,75 @@ _0: if source[0] = #13 then
     result := source + 1;
     exit;
   until false;
+end;
+
+function IsAnsiCompatible(PC: PAnsiChar): boolean;
+begin
+  result := false;
+  if PC <> nil then
+    while true do
+      if PC^ = #0 then
+        break
+      else if PC^ <= #127 then
+        inc(PC)
+      else // 7 bits chars are always OK, whatever codepage/charset is used
+        exit;
+  result := true;
+end;
+
+function IsAnsiCompatible(PC: PAnsiChar; Len: PtrUInt): boolean;
+begin
+  if PC <> nil then
+  begin
+    result := false;
+    Len := PtrUInt(@PC[Len - 4]);
+    if Len >= PtrUInt(PC) then
+      repeat
+        if PCardinal(PC)^ and $80808080 <> 0 then
+          exit;
+        inc(PC, 4);
+      until Len < PtrUInt(PC);
+    inc(Len, 4);
+    if Len > PtrUInt(PC) then
+      repeat
+        if PC^ >= #127 then
+          exit;
+        inc(PC);
+      until Len <= PtrUInt(PC);
+  end;
+  result := true;
+end;
+
+function IsAnsiCompatible(const Text: RawByteString): boolean;
+begin
+  result := IsAnsiCompatible(PAnsiChar(pointer(Text)), Length(Text));
+end;
+
+function IsAnsiCompatibleW(PW: PWideChar): boolean;
+begin
+  result := false;
+  if PW <> nil then
+    while true do
+      if ord(PW^) = 0 then
+        break
+      else if ord(PW^) <= 127 then
+        inc(PW)
+      else // 7 bits chars are always OK, whatever codepage/charset is used
+        exit;
+  result := true;
+end;
+
+function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean;
+begin
+  result := false;
+  if (PW <> nil) and (Len > 0) then
+    repeat
+      if ord(PW^) > 127 then
+        exit;
+      inc(PW);
+      dec(Len);
+    until Len = 0;
+  result := true;
 end;
 
 function GetFileNameWithoutExt(const FileName: TFileName; Extension: PFileName): TFileName;
