@@ -892,7 +892,7 @@ function GetInteger(P: PUTF8Char): PtrInt; overload;
 /// get the signed 32-bit integer value stored in P^..PEnd^
 // - will end parsing when P^ does not contain any number (e.g. it reaches any
 // ending #0 char), or when P reached PEnd (avoiding any buffer overflow)
-function GetInteger(P,PEnd: PUTF8Char): PtrInt; overload;
+function GetInteger(P, PEnd: PUTF8Char): PtrInt; overload;
 
 /// get the signed 32-bit integer value stored in P^
 // - if P if nil or not start with a valid numerical value, returns Default
@@ -907,7 +907,12 @@ function GetInteger(P: PUTF8Char; var err: integer): PtrInt; overload;
 /// get the unsigned 32-bit integer value stored in P^
 // - we use the PtrUInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
-function GetCardinal(P: PUTF8Char): PtrUInt;
+function GetCardinal(P: PUTF8Char): PtrUInt; overload;
+
+/// get the unsigned 32-bit integer value stored in P^
+// - we use the PtrUInt result type, even if expected to be 32-bit, to use
+// native CPU register size (don't want any 32-bit overflow here)
+function GetCardinal(P, PEnd: PUTF8Char): PtrUInt; overload;
 
 /// get the unsigned 32-bit integer value stored in P^
 // - if P if nil or not start with a valid numerical value, returns Default
@@ -4025,6 +4030,40 @@ begin
   result := c;
   repeat
     inc(P);
+    c := byte(P^);
+    dec(c, 48);
+    if c > 9 then
+      break;
+    result := result * 10 + PtrUInt(c);
+  until false;
+end;
+
+function GetCardinal(P, PEnd: PUTF8Char): PtrUInt;
+var
+  c: byte;
+begin
+  result := 0;
+  if (P = nil) or (P >= PEnd) then
+    exit;
+  c := byte(P^);
+  repeat
+    if c = 0 then
+      exit;
+    if c > ord(' ') then
+      break;
+    inc(P);
+    if P = PEnd then
+      exit;
+    c := byte(P^);
+  until false;
+  dec(c, 48);
+  if c > 9 then
+    exit;
+  result := c;
+  repeat
+    inc(P);
+    if P = PEnd then
+      break;
     c := byte(P^);
     dec(c, 48);
     if c > 9 then

@@ -922,7 +922,7 @@ type
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt;
       Fmt: TTextWriterHTMLFormat = hfAnyWhere); overload;
-    /// append some chars, escaping all HTML special chars as expected
+    /// append some VCL/LCL chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeString(const Text: string;
       Fmt: TTextWriterHTMLFormat = hfAnyWhere);
     /// append some chars, escaping all HTML special chars as expected
@@ -1126,6 +1126,11 @@ function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TOb
 // - just a wrapper around TBaseWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscape(const text: RawUTF8; fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
+
+/// escape some VCL/LCL text into UTF-8 HTML
+// - just a wrapper around TBaseWriter.AddHtmlEscapeString() process,
+// replacing < > & " chars depending on the HTML layer
+function HtmlEscapeString(const text: string; fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
 
 
 type
@@ -5568,6 +5573,20 @@ begin
   end;
 end;
 
+function HtmlEscapeString(const text: string; fmt: TTextWriterHTMLFormat): RawUTF8;
+var
+  temp: TTextWriterStackBuffer;
+  W: TBaseWriter;
+begin
+  W := TBaseWriter.CreateOwnedStream(temp);
+  try
+    W.AddHtmlEscapeString(text, fmt);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
 procedure TBaseWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: PtrInt;
   Fmt: TTextWriterHTMLFormat);
 var
@@ -5607,8 +5626,13 @@ begin
 end;
 
 procedure TBaseWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHTMLFormat);
+var
+  tmp: TSynTempBuffer;
+  len: integer;
 begin
-  AddHtmlEscape(pointer(StringToUTF8(Text)), Fmt);
+  len := StringToUTF8(Text, tmp);
+  AddHtmlEscape(tmp.buf, len, Fmt);
+  tmp.Done;
 end;
 
 procedure TBaseWriter.AddHtmlEscapeUTF8(const Text: RawUTF8; Fmt: TTextWriterHTMLFormat);

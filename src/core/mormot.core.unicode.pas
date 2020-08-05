@@ -710,6 +710,13 @@ procedure StringToUTF8(const Text: string; var result: RawUTF8); overload;
 function ToUTF8(const Text: string): RawUTF8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// convert any generic VCL Text into an UTF-8 encoded String
+// - returns the number of UTF-8 bytes available in result.buf
+// - this overloaded function use a TSynTempBuffer for the result to avoid any
+// memory allocation for the shorter content
+// - caller should call UTF8.Done to release any heap-allocated memory
+function StringToUTF8(const Text: string; var UTF8: TSynTempBuffer): integer; overload;
+
 /// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
 // - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
 // a RTTI type or property name: it won't work with Ansi-encoded strings
@@ -3327,7 +3334,7 @@ begin
   result := Dest + RawUnicodeToUtf8(Dest, SourceChars * 3, PWideChar(Source), SourceChars, []);
 end;
 
-procedure StringBufferToUtf8(Source: PChar; out result: RawUTF8); overload;
+procedure StringBufferToUtf8(Source: PChar; out result: RawUTF8);
 begin
   RawUnicodeToUtf8(Source, StrLenW(Source), result);
 end;
@@ -3347,6 +3354,15 @@ begin
   RawUnicodeToUtf8(pointer(Text), Length(Text), result);
 end;
 
+function StringToUTF8(const Text: string; var UTF8: TSynTempBuffer): integer;
+var
+  len: integer;
+begin
+  len := length(Text);
+  UTF8.Init(len * 3);
+  result := RawUnicodeToUTF8(UTF8.buf, UTF8.len + 1, pointer(Text), len, []);
+end;
+
 function ToUTF8(const Text: string): RawUTF8;
 begin
   RawUnicodeToUtf8(pointer(Text), Length(Text), result);
@@ -3362,7 +3378,7 @@ begin
   result := S;
 end;
 
-procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
+procedure StringToSynUnicode(const S: string; var result: SynUnicode);
 begin
   result := S;
 end;
@@ -3439,7 +3455,7 @@ begin
   result := CurrentAnsiConvert.AnsiBufferToUTF8(Dest, Source, SourceChars);
 end;
 
-procedure StringBufferToUtf8(Source: PChar; out result: RawUTF8); overload;
+procedure StringBufferToUtf8(Source: PChar; out result: RawUTF8);
 begin
   result := CurrentAnsiConvert.AnsiBufferToRawUTF8(Source, StrLen(Source));
 end;
@@ -3459,6 +3475,16 @@ begin
   result := CurrentAnsiConvert.AnsiToUTF8(Text);
 end;
 
+function StringToUTF8(const Text: string; var UTF8: TSynTempBuffer): integer;
+var
+  len: integer;
+begin
+  len := length(Text);
+  UTF8.Init(len * 3);
+  result := CurrentAnsiConvert.AnsiBufferToUTF8(UTF8.buf, pointer(Text), len)
+     - PUTF8Char(UTF8.buf);
+end;
+
 function ToUTF8(const Text: string): RawUTF8;
 begin
   result := CurrentAnsiConvert.AnsiToUTF8(Text);
@@ -3474,7 +3500,7 @@ begin
   result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S), length(S));
 end;
 
-procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
+procedure StringToSynUnicode(const S: string; var result: SynUnicode);
 begin
   result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S), length(S));
 end;

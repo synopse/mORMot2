@@ -38,6 +38,9 @@ uses
 /// retrieve extended error information text after a WinINet API call
 function SysErrorMessageWinInet(error: integer): string;
 
+/// low-level retrieval of a Domain User from a transmitted Token
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
+
 
 { ************  http.sys / HTTP API low-level direct access }
 
@@ -51,7 +54,11 @@ function SysErrorMessageWinInet(error: integer): string;
 type
   {$ifndef UNICODE} // circumvent oldest Delphi limitation
   ULONGLONG = Int64;
+  {$else}
+  ULONGLONG = Windows.ULONGLONG;
   {$endif}
+
+  ULARGE_INTEGER = Windows.ULARGE_INTEGER;
 
   HTTP_OPAQUE_ID = ULONGLONG;
 
@@ -160,8 +167,8 @@ type
   HTTP_UNKNOWN_HEADER = record
     NameLength: word;          // in bytes not including the #0
     RawValueLength: word;      // in bytes not including the n#0
-    pName: PAnsiChar;          // The header name (minus the ':' character)
-    pRawValue: PAnsiChar;      // The header value
+    pName: PUTF8Char;          // The header name (minus the ':' character)
+    pRawValue: PUTF8Char;      // The header value
   end;
 
   PHTTP_UNKNOWN_HEADER = ^HTTP_UNKNOWN_HEADER;
@@ -443,8 +450,9 @@ type
   PHTTP_503_RESPONSE_VERBOSITY = ^THTTP_503_RESPONSE_VERBOSITY;
 
   HTTP_QOS_SETTING_TYPE = (HttpQosSettingTypeBandwidth,
-    HttpQosSettingTypeConnectionLimit, HttpQosSettingTypeFlowRate // Windows Server 2008 R2 and Windows 7 only.
-);
+    HttpQosSettingTypeConnectionLimit,
+    HttpQosSettingTypeFlowRate // Windows Server 2008 R2 and Windows 7 only
+  );
 
   PHTTP_QOS_SETTING_TYPE = ^HTTP_QOS_SETTING_TYPE;
 
@@ -613,30 +621,30 @@ type
   PHTTP_REQUEST_CHANNEL_BIND_STATUS = ^HTTP_REQUEST_CHANNEL_BIND_STATUS;
 
 const
-   // Logging option flags. When used in the logging configuration alters
-   // some default logging behaviour.
+  // Logging option flags. When used in the logging configuration alters
+  // some default logging behaviour.
 
-   // HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER - This flag is used to change
-   //      the log file rollover to happen by local time based. By default
-   //      log file rollovers happen by GMT time.
+  // HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER - This flag is used to change
+  //      the log file rollover to happen by local time based. By default
+  //      log file rollovers happen by GMT time.
   HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER = 1;
 
-   // HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION - When set the unicode fields
-   //      will be converted to UTF8 multibytes when writting to the log
-   //      files. When this flag is not present, the local code page
-   //      conversion happens.
+  // HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION - When set the unicode fields
+  //      will be converted to UTF8 multibytes when writting to the log
+  //      files. When this flag is not present, the local code page
+  //      conversion happens.
   HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION = 2;
 
-   // HTTP_LOGGING_FLAG_LOG_ERRORS_ONLY -
-   // HTTP_LOGGING_FLAG_LOG_SUCCESS_ONLY - These two flags are used to
-   //      to do selective logging. If neither of them are present both
-   //      types of requests will be logged. Only one these flags can be
-   //      set at a time. They are mutually exclusive.
+  // HTTP_LOGGING_FLAG_LOG_ERRORS_ONLY -
+  // HTTP_LOGGING_FLAG_LOG_SUCCESS_ONLY - These two flags are used to
+  //      to do selective logging. If neither of them are present both
+  //      types of requests will be logged. Only one these flags can be
+  //      set at a time. They are mutually exclusive.
   HTTP_LOGGING_FLAG_LOG_ERRORS_ONLY = 4;
   HTTP_LOGGING_FLAG_LOG_SUCCESS_ONLY = 8;
 
-   // The known log fields recognized/supported by HTTPAPI. Following fields
-   // are used for W3C logging. Subset of them are also used for error logging
+  // The known log fields recognized/supported by HTTPAPI. Following fields
+  // are used for W3C logging. Subset of them are also used for error logging
   HTTP_LOG_FIELD_DATE = $00000001;
   HTTP_LOG_FIELD_TIME = $00000002;
   HTTP_LOG_FIELD_CLIENT_IP = $00000004;
@@ -661,7 +669,7 @@ const
   HTTP_LOG_FIELD_SUB_STATUS = $00200000;
   HTTP_ALL_NON_ERROR_LOG_FIELDS = HTTP_LOG_FIELD_SUB_STATUS * 2 - 1;
 
-   // Fields that are used only for error logging
+  // Fields that are used only for error logging
   HTTP_LOG_FIELD_CLIENT_PORT = $00400000;
   HTTP_LOG_FIELD_URI = $00800000;
   HTTP_LOG_FIELD_SITE_ID = $01000000;
@@ -754,6 +762,14 @@ type
   PHTTP_PROTECTION_LEVEL_INFO = ^HTTP_PROTECTION_LEVEL_INFO;
 
 const
+  // some values to avoid including the Windows unit in mormot.net.server
+  NO_ERROR = Windows.NO_ERROR;
+  ERROR_ALREADY_EXISTS = Windows.ERROR_ALREADY_EXISTS;
+  ERROR_HANDLE_EOF = Windows.ERROR_HANDLE_EOF;
+  ERROR_MORE_DATA = Windows.ERROR_MORE_DATA;
+  ERROR_CONNECTION_INVALID = Windows.ERROR_CONNECTION_INVALID;
+  ERROR_OLD_WIN_VERSION = Windows.ERROR_OLD_WIN_VERSION;
+  
   HTTP_VERSION_UNKNOWN: HTTP_VERSION = (
     MajorVersion: 0;
     MinorVersion: 0
@@ -803,6 +819,227 @@ const
     'If-Unmodified-Since', 'Max-Forwards', 'Proxy-Authorization', 'Referer',
     'Range', 'TE', 'Translate', 'User-Agent');
 
+type
+  HTTP_SERVER_PROPERTY = (
+    HttpServerAuthenticationProperty,
+    HttpServerLoggingProperty,
+    HttpServerQosProperty,
+    HttpServerTimeoutsProperty,
+    HttpServerQueueLengthProperty,
+    HttpServerStateProperty,
+    HttpServer503VerbosityProperty,
+    HttpServerBindingProperty,
+    HttpServerExtendedAuthenticationProperty,
+    HttpServerListenEndpointProperty,
+    HttpServerChannelBindProperty,
+    HttpServerProtectionLevelProperty
+    );
+
+  /// direct late-binding access to the HTTP API server 1.0 or 2.0
+  THttpAPI = packed record
+    /// access to the httpapi.dll loaded library
+    Module: THandle;
+    /// will be either 1.0 or 2.0, depending on the published .dll functions
+    Version: HTTP_VERSION;
+    /// The HttpInitialize function initializes the HTTP Server API driver, starts it,
+    // if it has not already been started, and allocates data structures for the
+    // calling application to support response-queue creation and other operations.
+    // Call this function before calling any other functions in the HTTP Server API.
+    Initialize: function(Version: HTTP_VERSION; Flags: cardinal;
+      pReserved: pointer = nil): HRESULT; stdcall;
+    /// The HttpTerminate function cleans up resources used by the HTTP Server API
+    // to process calls by an application. An application should call HttpTerminate
+    // once for every time it called HttpInitialize, with matching flag settings.
+    Terminate: function(Flags: cardinal; Reserved: integer = 0): HRESULT; stdcall;
+    /// The HttpCreateHttpHandle function creates an HTTP request queue for the
+    // calling application and returns a handle to it.
+    CreateHttpHandle: function(var ReqQueueHandle: THandle;
+      Reserved: integer = 0): HRESULT; stdcall;
+    /// The HttpAddUrl function registers a given URL so that requests that match
+    // it are routed to a specified HTTP Server API request queue. An application
+    // can register multiple URLs to a single request queue using repeated calls to
+    // HttpAddUrl
+    // - a typical url prefix is 'http://+:80/vroot/', 'https://+:80/vroot/' or
+    // 'https://adatum.com:443/secure/database/' - here the '+' is called a
+    // Strong wildcard, i.e. will match every IP or server name
+    AddUrl: function(ReqQueueHandle: THandle; UrlPrefix: PWideChar;
+      Reserved: integer = 0): HRESULT; stdcall;
+    /// Unregisters a specified URL, so that requests for it are no longer
+    // routed to a specified queue.
+    RemoveUrl: function(ReqQueueHandle: THandle; UrlPrefix: PWideChar): HRESULT; stdcall;
+    /// retrieves the next available HTTP request from the specified request queue
+    ReceiveHttpRequest: function(ReqQueueHandle: THandle; RequestId:
+      HTTP_REQUEST_ID; Flags: cardinal; var pRequestBuffer: HTTP_REQUEST;
+      RequestBufferLength: ULONG; var pBytesReceived: ULONG;
+      pOverlapped: pointer = nil): HRESULT; stdcall;
+    /// sent the response to a specified HTTP request
+    // - pLogData optional parameter is handled since HTTP API 2.0
+    SendHttpResponse: function(ReqQueueHandle: THandle;
+      RequestId: HTTP_REQUEST_ID; Flags: integer; var pHttpResponse: HTTP_RESPONSE;
+      pReserved1: pointer; var pBytesSent: cardinal; pReserved2: pointer = nil;
+      Reserved3: ULONG = 0; pOverlapped: pointer = nil;
+      pLogData: PHTTP_LOG_DATA = nil): HRESULT; stdcall;
+    /// receives additional entity body data for a specified HTTP request
+    ReceiveRequestEntityBody: function(ReqQueueHandle: THandle; RequestId:
+      HTTP_REQUEST_ID; Flags: ULONG; pBuffer: pointer; BufferLength: cardinal;
+      var pBytesReceived: cardinal; pOverlapped: pointer = nil): HRESULT; stdcall;
+    /// sends entity-body data associated with an HTTP response.
+    SendResponseEntityBody: function(ReqQueueHandle: THandle; RequestId:
+      HTTP_REQUEST_ID; Flags: integer; EntityChunkCount: word;
+      pEntityChunks: pointer; var pBytesSent: Cardinal; pReserved1: Pointer = nil;
+      pReserved2: Pointer = nil; pOverlapped: POverlapped = nil;
+      pLogData: PHTTP_LOG_DATA = nil): HRESULT; stdcall;
+    /// set specified data, such as IP addresses or SSL Certificates, from the
+    // HTTP Server API configuration store
+    SetServiceConfiguration: function(ServiceHandle: THandle;
+      ConfigId: THttpServiceConfigID; pConfigInformation: pointer;
+      ConfigInformationLength: ULONG; pOverlapped: pointer = nil): HRESULT; stdcall;
+    /// deletes specified data, such as IP addresses or SSL Certificates, from the
+    // HTTP Server API configuration store
+    DeleteServiceConfiguration: function(ServiceHandle: THandle; ConfigId:
+      THttpServiceConfigID; pConfigInformation: pointer;
+      ConfigInformationLength: ULONG; pOverlapped: pointer = nil): HRESULT; stdcall;
+    /// removes from the HTTP Server API cache associated with a given request
+    // queue all response fragments that have a name whose site portion matches
+    // a specified UrlPrefix
+    FlushResponseCache: function(ReqQueueHandle: THandle; pUrlPrefix: PWideChar;
+      Flags: ULONG; pOverlapped: POverlapped): ULONG; stdcall;
+    /// cancels a specified request
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    CancelHttpRequest: function(ReqQueueHandle: THandle;
+      RequestId: HTTP_REQUEST_ID; pOverlapped: pointer = nil): HRESULT; stdcall;
+    /// creates a server session for the specified HTTP API version
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    CreateServerSession: function(Version: HTTP_VERSION;
+      var ServerSessionId: HTTP_SERVER_SESSION_ID; Reserved: ULONG = 0): HRESULT; stdcall;
+    /// deletes the server session identified by the server session ID
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    CloseServerSession: function(ServerSessionId: HTTP_SERVER_SESSION_ID): HRESULT; stdcall;
+    ///  creates a new request queue or opens an existing request queue
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    // - replaces the HTTP version 1.0 CreateHttpHandle() function
+    CreateRequestQueue: function(Version: HTTP_VERSION; pName: PWideChar;
+      pSecurityAttributes: Pointer; Flags: ULONG; var ReqQueueHandle: THandle): HRESULT; stdcall;
+    /// sets a new server session property or modifies an existing property
+    // on the specified server session
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    SetServerSessionProperty: function(ServerSessionId: HTTP_SERVER_SESSION_ID;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      PropertyInformationLength: ULONG): HRESULT; stdcall;
+    /// queries a server property on the specified server session
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    QueryServerSessionProperty: function(ServerSessionId: HTTP_SERVER_SESSION_ID;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      PropertyInformationLength: ULONG; pReturnLength: PULONG = nil): HRESULT; stdcall;
+    /// creates a URL Group under the specified server session
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    CreateUrlGroup: function(ServerSessionId: HTTP_SERVER_SESSION_ID;
+      var UrlGroupId: HTTP_URL_GROUP_ID; Reserved: ULONG = 0): HRESULT; stdcall;
+    /// closes the URL Group identified by the URL Group ID
+    // - this call also removes all of the URLs that are associated with
+    // the URL Group
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    CloseUrlGroup: function(UrlGroupId: HTTP_URL_GROUP_ID): HRESULT; stdcall;
+    /// adds the specified URL to the URL Group identified by the URL Group ID
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    // - this function replaces the HTTP version 1.0 AddUrl() function
+    AddUrlToUrlGroup: function(UrlGroupId: HTTP_URL_GROUP_ID;
+      pFullyQualifiedUrl: PWideChar; UrlContext: HTTP_URL_CONTEXT = 0;
+      Reserved: ULONG = 0): HRESULT; stdcall;
+    /// removes the specified URL from the group identified by the URL Group ID
+    // - this function removes one, or all, of the URLs from the group
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    // - it replaces the HTTP version 1.0 RemoveUrl() function
+    RemoveUrlFromUrlGroup: function(UrlGroupId: HTTP_URL_GROUP_ID;
+      pFullyQualifiedUrl: PWideChar; Flags: ULONG): HRESULT; stdcall;
+    /// sets a new property or modifies an existing property on the specified
+    // URL Group
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    SetUrlGroupProperty: function(UrlGroupId: HTTP_URL_GROUP_ID;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      PropertyInformationLength: ULONG): HRESULT; stdcall;
+    /// queries a property on the specified URL Group
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    QueryUrlGroupProperty: function(UrlGroupId: HTTP_URL_GROUP_ID; aProperty:
+      HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      PropertyInformationLength: ULONG; pReturnLength: PULONG = nil): HRESULT; stdcall;
+    /// sets a new property or modifies an existing property on the request
+    // queue identified by the specified handle
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    SetRequestQueueProperty: function(ReqQueueHandle: THandle; aProperty:
+      HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      PropertyInformationLength: ULONG; Reserved: ULONG; pReserved: Pointer): HRESULT; stdcall;
+    ///  queries a property of the request queue identified by the
+    // specified handle
+    // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
+    QueryRequestQueueProperty: function(ReqQueueHandle: THandle;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      PropertyInformationLength: ULONG; Reserved: ULONG; pReturnLength: PULONG;
+      pReserved: Pointer): HRESULT; stdcall;
+  end;
+
+var
+  Http: THttpAPI;
+
+type
+  THttpAPIs = (hInitialize, hTerminate, hCreateHttpHandle, hAddUrl, hRemoveUrl,
+    hReceiveHttpRequest, hSendHttpResponse, hReceiveRequestEntityBody,
+    hResponseEntityBody, hSetServiceConfiguration, hDeleteServiceConfiguration,
+    hFlushResponseCache, hCancelHttpRequest, hCreateServerSession,
+    hCloseServerSession, hCreateRequestQueue, hSetServerSessionProperty,
+    hQueryServerSessionProperty, hCreateUrlGroup, hCloseUrlGroup,
+    hAddUrlToUrlGroup, hRemoveUrlFromUrlGroup, hSetUrlGroupProperty,
+    hQueryUrlGroupProperty, hSetRequestQueueProperty, hQueryRequestQueueProperty);
+
+const
+  hHttpApi2First = hCancelHttpRequest;
+  HttpNames: array[THttpAPIs] of PChar = ('HttpInitialize', 'HttpTerminate',
+    'HttpCreateHttpHandle', 'HttpAddUrl', 'HttpRemoveUrl',
+    'HttpReceiveHttpRequest', 'HttpSendHttpResponse',
+    'HttpReceiveRequestEntityBody', 'HttpSendResponseEntityBody',
+    'HttpSetServiceConfiguration', 'HttpDeleteServiceConfiguration',
+    'HttpFlushResponseCache', 'HttpCancelHttpRequest', 'HttpCreateServerSession',
+    'HttpCloseServerSession', 'HttpCreateRequestQueue',
+    'HttpSetServerSessionProperty', 'HttpQueryServerSessionProperty',
+    'HttpCreateUrlGroup', 'HttpCloseUrlGroup', 'HttpAddUrlToUrlGroup',
+    'HttpRemoveUrlFromUrlGroup', 'HttpSetUrlGroupProperty',
+    'HttpQueryUrlGroupProperty', 'HttpSetRequestQueueProperty',
+    'HttpQueryRequestQueueProperty');
+
+
+type
+  /// exception raised during http.sys process
+  EHttpApiServer = class(ENetSock)
+  protected
+    fLastError: integer;
+    fLastApi: THttpAPIs;
+  public
+    /// raise an EHttpApiServer if the http.sys API result code is an error
+    class procedure RaiseOnError(api: THttpAPIs; Error: integer);
+    /// initialize an EHttpApiServer instance
+    constructor Create(api: THttpAPIs; Error: integer); reintroduce;
+  published
+    /// the error code of this exception
+    property LastError: integer read fLastError;
+    /// the execution context of this exception
+    property LastApi: THttpAPIs read fLastApi;
+  end;
+
+
+const
+  /// the name of the Windows http.sys API library
+  HTTPAPI_DLL = 'httpapi.dll';
+
+/// ensure that the http.sys API has been loaded
+procedure HttpApiInitialize;
+
+/// compute a http.sys compatible URI from https://root:port fields
+function RegURL(aRoot, aPort: RawUTF8; Https: boolean;
+  aDomainName: RawUTF8): SynUnicode;
+
+/// low-level adjustement of the HTTP_REQUEST headers
+function RetrieveHeaders(const Request: HTTP_REQUEST;
+  const RemoteIPHeadUp: RawUTF8; out RemoteIP: RawUTF8): RawUTF8;
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1273,6 +1510,169 @@ implementation
 uses
   mormot.net.http; // shared HTTP constants and functions
 
+{ ************  http.sys / HTTP API low-level direct access }
+
+function RegURL(aRoot, aPort: RawUTF8; Https: boolean;
+  aDomainName: RawUTF8): SynUnicode;
+const Prefix: array[boolean] of RawUTF8 = ('http://','https://');
+begin
+  if aPort='' then
+    aPort := DEFAULT_PORT[Https];
+  aRoot := trim(aRoot);
+  aDomainName := trim(aDomainName);
+  if aDomainName='' then begin
+    result := '';
+    exit;
+  end;
+  if aRoot<>'' then begin
+    if aRoot[1]<>'/' then
+      insert('/',aRoot,1);
+    if aRoot[length(aRoot)]<>'/' then
+      aRoot := aRoot+'/';
+  end else
+    aRoot := '/'; // allow for instance 'http://*:2869/'
+  aRoot := Prefix[Https]+aDomainName+':'+aPort+aRoot;
+  result := UTF8ToSynUnicode(aRoot);
+end;
+
+const
+  REMOTEIP_HEADERLEN = 10;
+  REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
+
+function RetrieveHeaders(const Request: HTTP_REQUEST;
+  const RemoteIPHeadUp: RawUTF8; out RemoteIP: RawUTF8): RawUTF8;
+var i, L, Lip: integer;
+    H: THttpHeader;
+    P: PHTTP_UNKNOWN_HEADER;
+    D: PAnsiChar;
+begin
+  assert(low(HTTP_KNOWNHEADERS)=low(Request.Headers.KnownHeaders));
+  assert(high(HTTP_KNOWNHEADERS)=high(Request.Headers.KnownHeaders));
+  // compute remote IP
+  L := length(RemoteIPHeadUp);
+  if L<>0 then begin
+    P := Request.Headers.pUnknownHeaders;
+    if P<>nil then
+    for i := 1 to Request.Headers.UnknownHeaderCount do
+      if (P^.NameLength=L) and IdemPChar(P^.pName,Pointer(RemoteIPHeadUp)) then begin
+        FastSetString(RemoteIP,p^.pRawValue,p^.RawValueLength);
+        break;
+      end else
+      inc(P);
+  end;
+  if (RemoteIP='') and (Request.Address.pRemoteAddress<>nil) then
+    RemoteIP := Request.Address.pRemoteAddress.IP(RemoteIPLocalHostAsVoidInServers);
+  // compute headers length
+  Lip := length(RemoteIP);
+  if Lip<>0 then
+    L := (REMOTEIP_HEADERLEN+2)+Lip else
+    L := 0;
+  for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
+    if Request.Headers.KnownHeaders[h].RawValueLength<>0 then
+      inc(L,Request.Headers.KnownHeaders[h].RawValueLength+ord(HTTP_KNOWNHEADERS[h][0])+4);
+  P := Request.Headers.pUnknownHeaders;
+  if P<>nil then
+    for i := 1 to Request.Headers.UnknownHeaderCount do begin
+      inc(L,P^.NameLength+P^.RawValueLength+4); // +4 for each ': '+#13#10
+      inc(P);
+    end;
+  // set headers content
+  FastSetString(result,nil,L);
+  D := pointer(result);
+  for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
+    if Request.Headers.KnownHeaders[h].RawValueLength<>0 then begin
+      move(HTTP_KNOWNHEADERS[h][1],D^,ord(HTTP_KNOWNHEADERS[h][0]));
+      inc(D,ord(HTTP_KNOWNHEADERS[h][0]));
+      PWord(D)^ := ord(':')+ord(' ')shl 8;
+      inc(D,2);
+      move(Request.Headers.KnownHeaders[h].pRawValue^,D^,
+        Request.Headers.KnownHeaders[h].RawValueLength);
+      inc(D,Request.Headers.KnownHeaders[h].RawValueLength);
+      PWord(D)^ := 13+10 shl 8;
+      inc(D,2);
+    end;
+  P := Request.Headers.pUnknownHeaders;
+  if P<>nil then
+    for i := 1 to Request.Headers.UnknownHeaderCount do begin
+      move(P^.pName^,D^,P^.NameLength);
+      inc(D,P^.NameLength);
+      PWord(D)^ := ord(':')+ord(' ')shl 8;
+      inc(D,2);
+      move(P^.pRawValue^,D^,P^.RawValueLength);
+      inc(D,P^.RawValueLength);
+      inc(P);
+      PWord(D)^ := 13+10 shl 8;
+      inc(D,2);
+    end;
+  if Lip<>0 then begin
+    move(REMOTEIP_HEADER[1],D^,REMOTEIP_HEADERLEN);
+    inc(D,REMOTEIP_HEADERLEN);
+    move(pointer(RemoteIP)^,D^,Lip);
+    inc(D,Lip);
+    PWord(D)^ := 13+10 shl 8;
+  {$ifopt C+}
+    inc(D,2);
+  end;
+  assert(D-pointer(result)=L);
+  {$else}
+  end;
+  {$endif}
+end;
+
+procedure HttpApiInitialize;
+var api: THttpAPIs;
+    P: PPointer;
+begin
+  if Http.Module<>0 then
+    exit; // already loaded
+  mormot.core.os.GlobalLock;
+  try
+    if Http.Module<>0 then
+    try
+      Http.Module := LoadLibrary(HTTPAPI_DLL);
+      Http.Version.MajorVersion := 2; // API 2.0 if all functions are available
+      if Http.Module<=255 then
+        raise EHttpApiServer.CreateFmt('Unable to find %s',[HTTPAPI_DLL]);
+      P := @@Http.Initialize;
+      for api := low(api) to high(api) do begin
+        P^ := GetProcAddress(Http.Module,HttpNames[api]);
+        if P^=nil then
+          if api<hHttpApi2First then
+            raise EHttpApiServer.CreateFmt('Unable to find %s() in %s',[HttpNames[api],HTTPAPI_DLL]) else
+           Http.Version.MajorVersion := 1; // e.g. Windows XP or Server 2003
+        inc(P);
+      end;
+    except
+      on E: Exception do begin
+        if Http.Module>255 then begin
+          FreeLibrary(Http.Module);
+          Http.Module := 0;
+        end;
+        raise;
+      end;
+    end;
+  finally
+    mormot.core.os.GlobalUnlock;
+  end;
+end;
+
+{ EHttpApiServer }
+
+class procedure EHttpApiServer.RaiseOnError(api: THttpAPIs; Error: integer);
+begin
+  if Error<>NO_ERROR then
+    raise self.Create(api,Error);
+end;
+
+constructor EHttpApiServer.Create(api: THttpAPIs; Error: integer);
+begin
+  fLastError := Error;
+  fLastApi := api;
+  inherited CreateFmt('%s failed: %s (%d)',
+    [HttpNames[api],SysErrorMessagePerModule(Error,HTTPAPI_DLL),Error])
+end;
+
+
 
 { ******************** WinINet API Additional Wrappers }
 
@@ -1292,6 +1692,30 @@ begin
       result := result + ' [' + tmp + ']';
     end;
   end;
+end;
+
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
+var Buffer: array[0..511] of byte;
+    BufferSize, UserSize, DomainSize: DWORD;
+    UserInfo: PSIDAndAttributes;
+    NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
+    tmp: SynUnicode;
+    P: PWideChar;
+begin
+   if not GetTokenInformation(UserToken,TokenUser,@Buffer,SizeOf(Buffer),BufferSize) then
+     exit;
+   UserInfo := @Buffer;
+   UserSize := 0;
+   DomainSize := 0;
+   LookupAccountSidW(nil,UserInfo^.Sid,nil,UserSize,nil,DomainSize,NameUse);
+   if (UserSize=0) or (DomainSize=0) then
+     exit;
+   SetLength(tmp,UserSize+DomainSize-1);
+   P := pointer(tmp);
+   if not LookupAccountSidW(nil,UserInfo^.Sid,P+DomainSize,UserSize,P,DomainSize,NameUse) then
+     exit;
+   P[DomainSize] := '\';
+   result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
 end;
 
 
@@ -1360,13 +1784,14 @@ begin
   pEntityChunks := @DataChunk;
 end;
 
-procedure HTTP_RESPONSE.SetHeaders(P: PUTF8Char; var UnknownHeaders:
-  HTTP_UNKNOWN_HEADERs);
 {$ifndef NOXPOWEREDNAME}
 const
-  XPN: PAnsiChar = XPOWEREDNAME;
-  XPV: PAnsiChar = XPOWEREDVALUE;
-{$endif}
+  XPN: PUTF8Char = XPOWEREDNAME;
+  XPV: PUTF8Char = XPOWEREDVALUE;
+{$endif NOXPOWEREDNAME}
+
+procedure HTTP_RESPONSE.SetHeaders(P: PUTF8Char; var UnknownHeaders:
+  HTTP_UNKNOWN_HEADERs);
 begin
   Headers.pUnknownHeaders := pointer(UnknownHeaders);
   {$ifdef NOXPOWEREDNAME}
@@ -1380,7 +1805,7 @@ begin
     RawValueLength := length(XPOWEREDVALUE);
   end;
   Headers.UnknownHeaderCount := 1;
-  {$endif}
+  {$endif NOXPOWEREDNAME}
   if P <> nil then
     repeat
       while ord(P^) in [10, 13] do
@@ -1403,7 +1828,7 @@ const
     'PROXY-AUTHENTICATE:', 'RETRY-AFTER:', 'SERVER:', 'SET-COOKIE:', 'VARY:',
     'WWW-AUTHENTICATE:');
 var
-  UnknownName: PAnsiChar;
+  UnknownName: PUTF8Char;
   i: integer;
 begin
   if ForceCustomHeader then
