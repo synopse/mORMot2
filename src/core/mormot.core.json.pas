@@ -5018,10 +5018,7 @@ begin
         if n < cardinal(fTempBufSize) - 4 then
           inc(B, n)
         else
-        begin
-          fStream.WriteBuffer(fTempBuf^, n);
-          inc(fTotalFileSize, n);
-        end;
+          WriteToStream(fTempBuf, n);
         n := main * 3;
         inc(P, n);
         dec(Len, n);
