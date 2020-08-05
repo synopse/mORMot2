@@ -148,6 +148,9 @@ function NewSocket(const address, port: RawUTF8; layer: TNetLayer;
 
 
 var
+  /// contains the raw Socket API version, as returned by the Operating System
+  SocketAPIVersion: RawUTF8;
+
   /// Queue length for completely established sockets waiting to be accepted,
   // a backlog parameter for listen() function. If queue overflows client count,
   // ECONNREFUSED error is returned from connect() call
@@ -376,8 +379,8 @@ type
   TCrtSocket = class
   protected
     fSock: TNetSocket;
-    fServer: RawByteString;
-    fPort: RawByteString;
+    fServer: RawUTF8;
+    fPort: RawUTF8;
     fSockIn: PTextFile;
     fSockOut: PTextFile;
     fTimeOut: PtrInt;
@@ -390,7 +393,7 @@ type
     fSndBuf: RawByteString;
     fSndBufLen: integer;
     // set by AcceptRequest() from TVarSin
-    fRemoteIP: RawByteString;
+    fRemoteIP: RawUTF8;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TNetAddr;
     fSecure: INetTLS;
@@ -406,7 +409,7 @@ type
     /// connect to aServer:aPort
     // - you may ask for a TLS secured client connection (only available under
     // Windows by now, using the SChannel API)
-    constructor Open(const aServer, aPort: RawByteString; aLayer: TNetLayer= nlTCP;
+    constructor Open(const aServer, aPort: RawUTF8; aLayer: TNetLayer= nlTCP;
       aTimeOut: cardinal = 10000; aTLS: boolean = false);
     /// bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
@@ -414,12 +417,12 @@ type
     // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
     // - aAddr='' - bind to systemd descriptor on linux. See
     // http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const aAddress: RawByteString; aLayer: TNetLayer = nlTCP);
+    constructor Bind(const aAddress: RawUTF8; aLayer: TNetLayer = nlTCP);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
     // Windows by now, using the SChannel API)
-    procedure OpenBind(const aServer, aPort: RawByteString; doBind: boolean;
+    procedure OpenBind(const aServer, aPort: RawUTF8; doBind: boolean;
       aSock: TNetSocket = TNetSocket(-1); aLayer: TNetLayer = nlTCP; aTLS: boolean = false);
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
@@ -554,7 +557,7 @@ type
     // a custom header value set by a local proxy as retrieved by inherited
     // THttpServerSocket.GetRequest, searching the header named in
     // THttpServerGeneric.RemoteIPHeader (e.g. 'X-Real-IP' for nginx)
-    property RemoteIP: RawByteString read fRemoteIP write fRemoteIP;
+    property RemoteIP: RawUTF8 read fRemoteIP write fRemoteIP;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress(LocalAsVoid: boolean = false): RawByteString;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
@@ -598,16 +601,16 @@ type
     /// low-level socket type, initialized after Open() with socket
     property SocketLayer: TNetLayer read fSocketLayer;
     /// IP address, initialized after Open() with Server name
-    property Server: RawByteString read fServer;
+    property Server: RawUTF8 read fServer;
     /// IP port, initialized after Open() with port number
-    property Port: RawByteString read fPort;
+    property Port: RawUTF8 read fPort;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
     property TimeOut: PtrInt read fTimeOut;
     /// total bytes received
-    property BytesIn: Int64 read fBytesIn;
+    property BytesIn: Int64 read fBytesIn write fBytesIn;
     /// total bytes sent
-    property BytesOut: Int64 read fBytesOut;
+    property BytesOut: Int64 read fBytesOut write fBytesOut;
   end;
   {$M-}
 
@@ -1372,7 +1375,7 @@ begin
   fTimeOut := aTimeOut;
 end;
 
-constructor TCrtSocket.Open(const aServer, aPort: RawByteString; aLayer:
+constructor TCrtSocket.Open(const aServer, aPort: RawUTF8; aLayer:
   TNetLayer; aTimeOut: cardinal; aTLS: boolean);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
@@ -1380,7 +1383,7 @@ begin
   OpenBind(aServer, aPort, {dobind=}false, TNetSocket(-1), aLayer, aTLS);
 end;
 
-function SplitFromRight(const Text: RawByteString; Sep: AnsiChar;
+function SplitFromRight(const Text: RawUTF8; Sep: AnsiChar;
   var Before, After: RawUTF8): boolean;
 var
   i: PtrInt;
@@ -1402,7 +1405,7 @@ const
     'Is a server running on this address:port?',
     'Another process may be currently listening to this port!');
 
-constructor TCrtSocket.Bind(const aAddress: RawByteString; aLayer: TNetLayer);
+constructor TCrtSocket.Bind(const aAddress: RawUTF8; aLayer: TNetLayer);
 var
   s, p: RawUTF8;
   aSock: integer;
@@ -1439,10 +1442,11 @@ begin
     end;
     {$endif MSWINDOWS}
   end;
-  OpenBind(s{%H-}, p{%H-}, {dobind=}true, {%H-}TNetSocket(aSock), aLayer); // raise exception on error
+  // next line will raise exception on error
+  OpenBind(s{%H-}, p{%H-}, {dobind=}true, {%H-}TNetSocket(aSock), aLayer);
 end;
 
-procedure TCrtSocket.OpenBind(const aServer, aPort: RawByteString;
+procedure TCrtSocket.OpenBind(const aServer, aPort: RawUTF8;
   doBind: boolean; aSock: TNetSocket; aLayer: TNetLayer; aTLS: boolean);
 var
   retry: integer;
@@ -1862,10 +1866,11 @@ begin
         {$ifdef HASVARUSTRING}
         vtUnicodeString:
           begin
-            tmp := ShortString(UnicodeString(VUnicodeString)); // convert into ansi
+            Unicode_WideToShort(VUnicodeString,
+              length(UnicodeString(VUnicodeString)), 1252, tmp);
             SockSend(@tmp[1], Length(tmp));
           end;
-        {$endif}
+        {$endif HASVARUSTRING}
         vtPChar:
           SockSend(VPChar, StrLen(VPChar));
         vtChar:

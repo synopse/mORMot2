@@ -1224,6 +1224,7 @@ var
 procedure InitializeUnit;
 begin
   WSAStartup($0202, WsaDataOnce);
+  SocketAPIVersion := RawUTF8(Format('%s.%d', [WsaDataOnce.szDescription,WsaDataOnce.wVersion]));
   LibSecurHandle := LoadLibrary(DLLSecur32);
   if LibSecurHandle <> 0 then
   begin

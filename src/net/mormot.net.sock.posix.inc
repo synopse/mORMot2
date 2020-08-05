@@ -676,6 +676,7 @@ end;
 
 procedure InitializeUnit;
 begin
+  SocketAPIVersion := OSVersionShort;
 end;
 
 procedure FinalizeUnit;

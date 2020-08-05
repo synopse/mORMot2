@@ -123,8 +123,7 @@ type
   TOnIdleSynBackgroundThread = procedure(Sender: TSynBackgroundThreadAbstract;
     ElapsedMS: Integer) of object;
 
-  /// event prototype used e.g. by TSynBackgroundThreadAbstract callbacks
-  // - a similar signature is defined in SynCrtSock and LVCL.Classes
+  /// event prototype used e.g. by TSynBackgroundThreadAbstract and TSynThread callbacks
   TNotifyThreadEvent = procedure(Sender: TThread) of object;
 
   /// abstract TThread with its own execution content
@@ -651,13 +650,6 @@ type
 
 { ************ Server Process Oriented Thread Pool }
 
-{$ifdef MSWINDOWS}
-  // I/O completion ports API is the best option under Windows
-  // under Linux/POSIX, we fallback to a classical event-driven pool
-  {$define USE_WINIOCP}
-{$endif MSWINDOWS}
-
-
 type
   {$M+}
 
@@ -670,15 +662,12 @@ type
   // - also define a Start method for compatibility with older versions of Delphi
   TSynThread = class(TThread)
   protected
-    // ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
     fStartNotified: TObject;
-    {$ifndef LVCL} // already available in LVCL
     // we defined an fOnThreadTerminate event which would be run in the terminated
     // thread context (whereas TThread.OnTerminate is called in the main thread)
     // -> see THttpServerGeneric.OnHttpThreadTerminate event property
     fOnThreadTerminate: TNotifyThreadEvent;
     procedure DoTerminate; override;
-    {$endif}
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean); reintroduce; virtual;
@@ -688,11 +677,13 @@ type
     // do not implement this pause/resume feature
     // - we define here this method for older versions of Delphi
     procedure Start;
-    {$endif}
+    {$endif HASTTHREADSTART}
     /// safe version of Sleep() which won't break the thread process
     // - returns TRUE if the thread was Terminated
     // - returns FALSE if successfully waited up to MS milliseconds
     function SleepOrTerminated(MS: cardinal): boolean;
+    /// ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
+    property StartNotified: TObject read fStartNotified write fStartNotified;
     /// defined as public since may be used to terminate the processing methods
     property Terminated;
   end;
@@ -818,7 +809,20 @@ type
 
   {$M-}
 
-  
+
+const
+  // up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
+  THREADPOOL_MAXSUBTHREADS = 256;
+
+  // kept-alive or big HTTP requests will create a dedicated THttpServerResp
+  // - each thread reserves 2 MB of memory so it may break the server
+  // - keep the value to a decent number, to let resources be constrained up to 1GB
+  THREADPOOL_MAXWORKTHREADS = 512;
+
+  // if HTTP body length is bigger than 16 MB, creates a dedicated THttpServerResp
+  THREADPOOL_BIGBODYSIZE = 16 * 1024 * 1024;
+
+
 implementation
 
 
@@ -945,7 +949,7 @@ procedure TSynBackgroundThreadAbstract.Start;
 begin
   Resume;
 end;
-{$endif}
+{$endif HASTTHREADSTART}
 
 {$ifndef HASTTHREADTERMINATESET}
 procedure TSynBackgroundThreadAbstract.Terminate;
@@ -953,7 +957,7 @@ begin
   inherited Terminate; // FTerminated := True
   TerminatedSet;
 end;
-{$endif}
+{$endif HASTTHREADTERMINATESET}
 
 procedure TSynBackgroundThreadAbstract.TerminatedSet;
 begin
@@ -1038,6 +1042,7 @@ begin
     fExecute := exFinished;
   end;
 end;
+
 
 { TSynBackgroundThreadMethodAbstract }
 
@@ -1901,7 +1906,7 @@ begin
   inherited Create(CreateSuspended, 512 * 1024); // DefaultSizeStack=512KB
   {$else}
   inherited Create(CreateSuspended);
-  {$endif}
+  {$endif FPC}
 end;
 
 function TSynThread.SleepOrTerminated(MS: cardinal): boolean;
@@ -1929,7 +1934,6 @@ begin
   result := false; // abnormal delay expiration
 end;
 
-{$ifndef LVCL}
 procedure TSynThread.DoTerminate;
 begin
   if Assigned(fStartNotified) and Assigned(fOnThreadTerminate) then
@@ -1939,7 +1943,6 @@ begin
   end;
   inherited DoTerminate;
 end;
-{$endif}
 
 {$ifndef HASTTHREADSTART}
 procedure TSynThread.start;
@@ -1950,18 +1953,6 @@ end;
 
 
 { TSynThreadPool }
-
-const
-  // up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
-  THREADPOOL_MAXSUBTHREADS = 256;
-
-  // kept-alive or big HTTP requests will create a dedicated THttpServerResp
-  // - each thread reserves 2 MB of memory so it may break the server
-  // - keep the value to a decent number, to let resources be constrained up to 1GB
-  THREADPOOL_MAXWORKTHREADS = 512;
-
-  // if HTTP body length is bigger than 16 MB, creates a dedicated THttpServerResp
-  THREADPOOL_BIGBODYSIZE = 16 * 1024 * 1024;
 
 {$ifdef USE_WINIOCP}
 constructor TSynThreadPool.Create(NumberOfThreads: Integer; aOverlapHandle: THandle);

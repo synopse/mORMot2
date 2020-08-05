@@ -484,11 +484,18 @@
   {$define NOSQLITE3ENCRYPT}
 {$endif NOSQLITE3STATIC}
 
+
 {$ifdef MSWINDOWS}
+
   {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
   {.$define ONLYUSEHTTPSOCKET} // for testing (no benefit vs http.sys)
   {.$define USELIBCURL}        // for testing (no benefit vs WinHTTP)
+
+  {$define USE_WINIOCP} // I/O completion ports API is the best option under Windows
+  // (under Linux/POSIX, we fallback to a classical event-driven pool)
+
 {$else}
+
   {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
   // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
   {$define USELIBCURL}
@@ -497,6 +504,7 @@
     // static libraries and force USELIBCURL in the project conditionals
     {$define LIBCURLSTATIC}
   {$endif ANDROID}
+
 {$endif MSWINDOWS}
 
 {$ifdef USELIBCURL}
