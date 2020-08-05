@@ -29,7 +29,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -63,13 +63,15 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
+            <OtherDefines Count="8">
               <Define0 Value="FPC_CMEM"/>
               <Define1 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define2 Value="FPC_SYNCMEM"/>
               <Define3 Value="FPC_FASTMM4"/>
               <Define4 Value="FPC_SYNTBB"/>
               <Define5 Value="FPC_SYNJEMALLOC"/>
+              <Define6 Value="PUREMORMOT2"/>
+              <Define7 Value="FPC_X64MM"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -84,7 +86,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -114,13 +116,16 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
+            <CustomOptions Value="-dFPC_X64MM"/>
+            <OtherDefines Count="8">
               <Define0 Value="FPC_CMEM"/>
               <Define1 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define2 Value="FPC_SYNCMEM"/>
               <Define3 Value="FPC_FASTMM4"/>
               <Define4 Value="FPC_SYNTBB"/>
               <Define5 Value="FPC_SYNJEMALLOC"/>
+              <Define6 Value="PUREMORMOT2"/>
+              <Define7 Value="FPC_X64MM"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -135,7 +140,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -191,7 +196,7 @@
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -216,7 +221,6 @@
           <Linking>
             <Debugging>
               <DebugInfoType Value="dsDwarf2Set"/>
-              <UseHeaptrc Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -228,6 +232,10 @@
             <CompilerMessages>
               <IgnoredMessages idx5089="True"/>
             </CompilerMessages>
+            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+-dFPC_X64MM
+-dFPCMM_DEBUG
+-dFPCMM_REPORTMEMORYLEAKS"/>
           </Other>
         </CompilerOptions>
       </Item5>
@@ -241,7 +249,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -289,7 +297,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -337,7 +345,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -372,14 +380,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
-              <Define0 Value="FPC_CMEM"/>
-              <Define1 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-              <Define2 Value="FPC_SYNCMEM"/>
-              <Define3 Value="FPC_FASTMM4"/>
-              <Define4 Value="FPC_SYNTBB"/>
-              <Define5 Value="FPC_SYNJEMALLOC"/>
-            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item8>
@@ -393,7 +393,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="//if TargetOS='darwin' then
@@ -451,7 +451,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -499,7 +499,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -547,7 +547,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="8">
+    <Units Count="30">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -580,6 +580,94 @@
         <Filename Value="..\src\core\mormot.core.datetime.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit7>
+      <Unit8>
+        <Filename Value="..\src\core\mormot.core.rtti.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit8>
+      <Unit9>
+        <Filename Value="..\src\core\mormot.core.test.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit9>
+      <Unit10>
+        <Filename Value="..\src\core\mormot.core.perf.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit10>
+      <Unit11>
+        <Filename Value="..\src\core\mormot.core.log.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit11>
+      <Unit12>
+        <Filename Value="..\src\core\mormot.core.crypto.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit12>
+      <Unit13>
+        <Filename Value="..\src\core\mormot.core.jwt.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit13>
+      <Unit14>
+        <Filename Value="..\src\core\mormot.core.secure.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit14>
+      <Unit15>
+        <Filename Value="test.core.crypto.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit15>
+      <Unit16>
+        <Filename Value="test.core.base.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit16>
+      <Unit17>
+        <Filename Value="..\src\core\mormot.core.search.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit17>
+      <Unit18>
+        <Filename Value="..\src\core\mormot.core.buffers.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit18>
+      <Unit19>
+        <Filename Value="..\src\core\mormot.core.unicode.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit19>
+      <Unit20>
+        <Filename Value="..\src\lib\mormot.lib.z.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit20>
+      <Unit21>
+        <Filename Value="..\src\core\mormot.core.zip.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit21>
+      <Unit22>
+        <Filename Value="..\src\core\mormot.core.threads.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit22>
+      <Unit23>
+        <Filename Value="..\src\net\mormot.net.sock.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit23>
+      <Unit24>
+        <Filename Value="..\src\core\mormot.core.ecc256r1.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit24>
+      <Unit25>
+        <Filename Value="..\src\core\mormot.core.ecc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit25>
+      <Unit26>
+        <Filename Value="..\src\net\mormot.net.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit26>
+      <Unit27>
+        <Filename Value="..\src\net\mormot.net.server.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit27>
+      <Unit28>
+        <Filename Value="..\src\net\mormot.net.http.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit28>
+      <Unit29>
+        <Filename Value="..\src\lib\mormot.lib.winhttp.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit29>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -591,7 +679,7 @@
     <SearchPaths>
       <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
       <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-      <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest"/>
+      <OtherUnitFiles Value="..\src;..\src\lib;..\src\core;..\src\net;..\src\db;..\src\rest"/>
       <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Conditionals Value="if TargetOS='darwin' then
@@ -620,18 +708,10 @@
         <ShowNotes Value="False"/>
         <ShowHints Value="False"/>
       </Verbosity>
-      <OtherDefines Count="6">
-        <Define0 Value="FPC_CMEM"/>
-        <Define1 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-        <Define2 Value="FPC_SYNCMEM"/>
-        <Define3 Value="FPC_FASTMM4"/>
-        <Define4 Value="FPC_SYNTBB"/>
-        <Define5 Value="FPC_SYNJEMALLOC"/>
-      </OtherDefines>
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="5">
+    <Exceptions Count="6">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -647,6 +727,9 @@
       <Item5>
         <Name Value="EAssertionFailed"/>
       </Item5>
+      <Item6>
+        <Name Value="ERttiException"/>
+      </Item6>
     </Exceptions>
   </Debugging>
 </CONFIG>
