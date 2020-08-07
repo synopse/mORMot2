@@ -10,6 +10,7 @@ unit mormot.net.server;
    - Shared Server-Side HTTP Process
    - THttpServerSocket/THttpServer HTTP/1.1 Server
    - THttpApiServer HTTP/1.1 Server Over Windows http.sys Module
+   - THttpApiWebSocketServer Over Windows http.sys Module
 
   *****************************************************************************
 
@@ -24,6 +25,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.data,
   mormot.core.threads,
   mormot.core.unicode,
   mormot.core.text,
@@ -541,7 +543,7 @@ type
     fProcessCS: TRTLCriticalSection;
     fHeaderRetrieveAbortDelay: integer;
     fThreadPool: TSynThreadPoolTHttpServer;
-    fInternalHttpServerRespList: {$ifdef FPC}TFPList{$else}TList{$endif};
+    fInternalHttpServerRespList: TSynList;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
@@ -773,7 +775,7 @@ type
     constructor Create(CreateSuspended: boolean; QueueName: SynUnicode='';
       OnStart: TNotifyThreadEvent=nil; OnStop: TNotifyThreadEvent=nil;
       const ProcessName: RawUTF8=''); reintroduce;
-    /// create a clone
+    /// create a HTTP/1.1 processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); virtual;
     /// release all associated memory and handles
@@ -934,6 +936,252 @@ type
     // - will return 0 if the system does not support HTTP API 2.0 (i.e.
     // under Windows XP or Server 2003)
     property MaxConnections: Cardinal read GetMaxConnections write SetMaxConnections;
+  end;
+
+
+{ ****************** THttpApiWebSocketServer Over Windows http.sys Module }
+
+type
+  TSynThreadPoolHttpApiWebSocketServer = class;
+  TSynWebSocketGuard = class;
+  THttpApiWebSocketServer = class;
+  THttpApiWebSocketServerProtocol = class;
+
+  /// current state of a THttpApiWebSocketConnection
+  TWebSocketState = (wsConnecting, wsOpen,
+    wsClosing, wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown);
+
+  /// structure representing a single WebSocket connection
+  {$ifdef USERECORDWITHMETHODS}
+  THttpApiWebSocketConnection = record
+  {$else}
+  THttpApiWebSocketConnection = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fOverlapped: TOverlapped;
+    fState: TWebSocketState;
+    fProtocol: THttpApiWebSocketServerProtocol;
+    fOpaqueHTTPRequestId: HTTP_REQUEST_ID;
+    fWSHandle: WEB_SOCKET_HANDLE;
+    fLastActionContext: Pointer;
+    fLastReceiveTickCount: Int64;
+    fPrivateData: pointer;
+    fBuffer: RawByteString;
+    fCloseStatus: WEB_SOCKET_CLOSE_STATUS;
+    fIndex: integer;
+    function ProcessActions(ActionQueue: Cardinal): boolean;
+    function ReadData(const WebsocketBufferData): integer;
+    procedure WriteData(const WebsocketBufferData);
+    procedure BeforeRead;
+    procedure DoOnMessage(aBufferType: WEB_SOCKET_BUFFER_TYPE;
+      aBuffer: Pointer; aBufferSize: ULONG);
+    procedure DoOnConnect;
+    procedure DoOnDisconnect;
+    procedure InternalSend(aBufferType: WEB_SOCKET_BUFFER_TYPE; WebsocketBufferData: pointer);
+    procedure Ping;
+    procedure Disconnect;
+    procedure CheckIsActive;
+    // call onAccept Method of protocol, and if protocol not accept connection or
+    // can not be accepted from other reasons return false else return true
+    function TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol; Ctxt: THttpServerRequest; aNeedHeader: boolean): boolean;
+  public
+    /// Index of connection in protocol's connection list
+    property Index: integer read fIndex;
+    /// Protocol of connection
+    property Protocol: THttpApiWebSocketServerProtocol read fProtocol;
+    /// Custom user data
+    property PrivateData: pointer read fPrivateData write fPrivateData;
+    /// Access to the current state of this connection
+    property State: TWebSocketState read fState;
+    /// Send data to client
+    procedure Send(aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG);
+    /// Close connection
+    procedure Close(aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG);
+  end;
+
+  PHttpApiWebSocketConnection = ^THttpApiWebSocketConnection;
+
+  THttpApiWebSocketConnectionVector = array[0..MaxInt div SizeOf(PHttpApiWebSocketConnection) - 1] of PHttpApiWebSocketConnection;
+
+  PHttpApiWebSocketConnectionVector = ^THttpApiWebSocketConnectionVector;
+
+  /// Event handlers for WebSocket
+  THttpApiWebSocketServerOnAcceptEvent = function(Ctxt: THttpServerRequest;
+    var Conn: THttpApiWebSocketConnection): Boolean of object;
+  THttpApiWebSocketServerOnMessageEvent = procedure(const Conn: THttpApiWebSocketConnection;
+    aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG) of object;
+  THttpApiWebSocketServerOnConnectEvent = procedure(const Conn: THttpApiWebSocketConnection) of object;
+  THttpApiWebSocketServerOnDisconnectEvent = procedure(const Conn: THttpApiWebSocketConnection;
+    aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG) of object;
+
+  /// Protocol Handler of websocket endpoints events
+  // - maintains a list of all WebSockets clients for a given protocol
+  THttpApiWebSocketServerProtocol = class
+  private
+    fName: RawUTF8;
+    fManualFragmentManagement: Boolean;
+    fOnAccept: THttpApiWebSocketServerOnAcceptEvent;
+    fOnMessage: THttpApiWebSocketServerOnMessageEvent;
+    fOnFragment: THttpApiWebSocketServerOnMessageEvent;
+    fOnConnect: THttpApiWebSocketServerOnConnectEvent;
+    fOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
+    fConnections: PHttpApiWebSocketConnectionVector;
+    fConnectionsCapacity: Integer;
+    //Count of used connections. Some of them can be nil(if not used more)
+    fConnectionsCount: Integer;
+    fFirstEmptyConnectionIndex: Integer;
+    fServer: THttpApiWebSocketServer;
+    fSafe: TRTLCriticalSection;
+    fPendingForClose: TSynList;
+    fIndex: integer;
+    function AddConnection(aConn: PHttpApiWebSocketConnection): Integer;
+    procedure RemoveConnection(index: integer);
+    procedure doShutdown;
+  public
+    /// initialize the WebSockets process
+    // - if aManualFragmentManagement is true, onMessage will appear only for whole
+    // received messages, otherwise OnFragment handler must be passed (for video
+    // broadcast, for example)
+    constructor Create(const aName: RawUTF8; aManualFragmentManagement: Boolean;
+      aServer: THttpApiWebSocketServer;
+      const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
+      const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
+      const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
+      const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
+      const aOnFragment: THttpApiWebSocketServerOnMessageEvent = nil);
+    /// finalize the process
+    destructor Destroy; override;
+    /// text identifier
+    property Name: RawUTF8 read fName;
+    /// identify the endpoint instance
+    property Index: integer read fIndex;
+    /// OnFragment event will be called for each fragment
+    property ManualFragmentManagement: Boolean read fManualFragmentManagement;
+    /// event triggerred when a WebSockets client is initiated
+    property OnAccept: THttpApiWebSocketServerOnAcceptEvent read fOnAccept;
+    /// event triggerred when a WebSockets message is received
+    property OnMessage: THttpApiWebSocketServerOnMessageEvent read fOnMessage;
+    /// event triggerred when a WebSockets client is connected
+    property OnConnect: THttpApiWebSocketServerOnConnectEvent read fOnConnect;
+    /// event triggerred when a WebSockets client is gracefully disconnected
+    property OnDisconnect: THttpApiWebSocketServerOnDisconnectEvent read fOnDisconnect;
+    /// event triggerred when a non complete frame is received
+    // - required if ManualFragmentManagement is true
+    property OnFragment: THttpApiWebSocketServerOnMessageEvent read fOnFragment;
+
+    /// Send message to the WebSocket connection identified by its index
+    function Send(index: Integer; aBufferType: ULONG; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+    /// Send message to all connections of this protocol
+    function Broadcast(aBufferType: ULONG; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+    /// Close WebSocket connection identified by its index
+    function Close(index: Integer; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer;
+      aBufferSize: ULONG): boolean;
+  end;
+  THttpApiWebSocketServerProtocolDynArray = array of THttpApiWebSocketServerProtocol;
+  PHttpApiWebSocketServerProtocolDynArray = ^THttpApiWebSocketServerProtocolDynArray;
+
+  /// HTTP & WebSocket server using fast http.sys kernel-mode server
+  // - can be used like simple THttpApiServer
+  // - when AddUrlWebSocket is called WebSocket support are added
+  // in this case WebSocket will receiving the frames in asynchronous
+  THttpApiWebSocketServer = class(THttpApiServer)
+  private
+    fThreadPoolServer: TSynThreadPoolHttpApiWebSocketServer;
+    fGuard: TSynWebSocketGuard;
+    fLastConnection: PHttpApiWebSocketConnection;
+    fPingTimeout: integer;
+    fRegisteredProtocols: PHttpApiWebSocketServerProtocolDynArray;
+    fOnWSThreadStart: TNotifyThreadEvent;
+    fOnWSThreadTerminate: TNotifyThreadEvent;
+    fSendOverlaped: TOverlapped;
+    fServiceOverlaped: TOverlapped;
+    fOnServiceMessage: TThreadMethod;
+    procedure SetOnWSThreadTerminate(const Value: TNotifyThreadEvent);
+    function GetProtocol(index: integer): THttpApiWebSocketServerProtocol;
+    function getProtocolsCount: Integer;
+    procedure SetOnWSThreadStart(const Value: TNotifyThreadEvent);
+  protected
+    function UpgradeToWebSocket(Ctxt: THttpServerRequest): cardinal;
+    procedure DoAfterResponse(Ctxt: THttpServerRequest;
+      const Code: cardinal); override;
+    function GetSendResponseFlags(Ctxt: THttpServerRequest): Integer; override;
+    procedure DestroyMainThread; override;
+  public
+    /// initialize the HTTPAPI based Server with WebSocket support
+    // - will raise an exception if http.sys or websocket.dll is not available
+    // (e.g. before Windows 8) or if the request queue creation failed
+    // - for aPingTimeout explanation see PingTimeout property documentation
+    constructor Create(CreateSuspended: Boolean; aSocketThreadsCount: integer = 1;
+      aPingTimeout: integer = 0; const QueueName: SynUnicode = '';
+      const aOnWSThreadStart: TNotifyThreadEvent=nil;
+      const aOnWSThreadTerminate: TNotifyThreadEvent=nil); reintroduce;
+    /// create a WebSockets processing clone from the main thread
+    // - do not use directly - is called during thread pool creation
+    constructor CreateClone(From: THttpApiServer); override;
+    /// prepare the process for a given THttpApiWebSocketServerProtocol
+    procedure RegisterProtocol(const aName: RawUTF8; aManualFragmentManagement: Boolean;
+      const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
+      const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
+      const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
+      const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
+      const aOnFragment: THttpApiWebSocketServerOnMessageEvent = nil);
+    /// register the URLs to Listen on using WebSocket
+    // - aProtocols is an array of a recond with callbacks, server call during
+    // WebSocket activity
+    function AddUrlWebSocket(const aRoot, aPort: RawUTF8; Https: boolean = false;
+      const aDomainName: RawUTF8 = '*'; aRegisterURI: boolean = false): integer;
+    /// handle the HTTP request
+    function Request(Ctxt: THttpServerRequest): cardinal; override;
+    /// Ping timeout in seconds. 0 mean no ping.
+    // - if connection not receive messages longer than this timeout
+    // TSynWebSocketGuard will send ping frame
+    // - if connection not receive any messages longer than double of
+    // this timeout it will be closed
+    property PingTimeout: integer read fPingTimeout;
+    /// access to the associated endpoints
+    property Protocols[index: integer]: THttpApiWebSocketServerProtocol read GetProtocol;
+    /// access to the associated endpoints count
+    property ProtocolsCount: Integer read getProtocolsCount;
+    /// event called when the processing thread starts
+    property OnWSThreadStart: TNotifyThreadEvent read FOnWSThreadStart
+      write SetOnWSThreadStart;
+    /// event called when the processing thread termintes
+    property OnWSThreadTerminate: TNotifyThreadEvent read FOnWSThreadTerminate
+      write SetOnWSThreadTerminate;
+    /// send a "service" message to a WebSocketServer to wake up a WebSocket thread
+    // - can be called from any thread
+    // - when a webSocket thread receives such a message it will call onServiceMessage
+    // in the thread context
+    procedure SendServiceMessage;
+    /// event called when a service message is raised
+    property OnServiceMessage: TThreadMethod read fOnServiceMessage write fOnServiceMessage;
+  end;
+
+  /// a Thread Pool, used for fast handling of WebSocket requests
+  TSynThreadPoolHttpApiWebSocketServer = class(TSynThreadPool)
+  protected
+    fServer: THttpApiWebSocketServer;
+    procedure OnThreadStart(Sender: TThread);
+    procedure OnThreadTerminate(Sender: TThread);
+    function NeedStopOnIOError: Boolean; override;
+    // aContext is a PHttpApiWebSocketConnection, or fServer.fServiceOverlaped
+    // (SendServiceMessage) or fServer.fSendOverlaped (WriteData)
+    procedure Task(aCaller: TSynThread; aContext: Pointer); override;
+  public
+    /// initialize the thread pool
+    constructor Create(Server: THttpApiWebSocketServer; NumberOfThreads: Integer = 1); reintroduce;
+  end;
+
+  /// Thread for closing deprecated WebSocket connections
+  // - i.e. which have not responsed after PingTimeout interval
+  TSynWebSocketGuard = class(TThread)
+  protected
+    fServer: THttpApiWebSocketServer;
+    fSmallWait, fWaitCount: integer;
+    procedure Execute; override;
+  public
+    /// initialize the thread
+    constructor Create(Server: THttpApiWebSocketServer); reintroduce;
   end;
 
 {$endif USEWININET}
@@ -1158,7 +1406,7 @@ constructor THttpServer.Create(const aPort: RawUTF8;
   HeadersUnFiltered, CreateSuspended: boolean);
 begin
   fSockPort := aPort;
-  fInternalHttpServerRespList := {$ifdef FPC}TFPList{$else}TList{$endif}.Create;
+  fInternalHttpServerRespList := TSynList.Create;
   InitializeCriticalSection(fProcessCS);
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 30 seconds by default
   if fThreadPool <> nil then
@@ -2160,8 +2408,8 @@ begin
   SetLength(fLogDataStorage, sizeof(HTTP_LOG_FIELDS_DATA)); // should be done 1st
   inherited Create({suspended=}true, OnStart, OnStop, ProcessName);
   HttpApiInitialize; // will raise an exception in case of failure
-  EHttpApiServer.RaiseOnError(hInitialize, Http.Initialize(Http.Version,
-    HTTP_INITIALIZE_SERVER));
+  EHttpApiServer.RaiseOnError(hInitialize,
+    Http.Initialize(Http.Version, HTTP_INITIALIZE_SERVER));
   if Http.Version.MajorVersion > 1 then
   begin
     EHttpApiServer.RaiseOnError(hCreateServerSession,
@@ -2174,8 +2422,9 @@ begin
       Http.CreateRequestQueue(Http.Version, pointer(QueueName), nil, 0, fReqQueue));
     bindInfo.Flags := 1;
     bindInfo.RequestQueueHandle := FReqQueue;
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty, Http.SetUrlGroupProperty(
-      fUrlGroupID, HttpServerBindingProperty, @bindInfo, SizeOf(bindInfo)));
+    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerBindingProperty,
+        @bindInfo, SizeOf(bindInfo)));
   end
   else
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,
@@ -2716,8 +2965,9 @@ begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetRequestQueueProperty, ERROR_OLD_WIN_VERSION);
   if (self <> nil) and (fReqQueue <> 0) then
-    EHttpApiServer.RaiseOnError(hSetRequestQueueProperty, Http.SetRequestQueueProperty
-      (fReqQueue, HttpServerQueueLengthProperty, @aValue, sizeof(aValue), 0, nil));
+    EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
+      Http.SetRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
+        @aValue, sizeof(aValue), 0, nil));
 end;
 
 function THttpApiServer.GetRegisteredUrl: SynUnicode;
@@ -2755,10 +3005,12 @@ begin
     limitInfo.Flags := 1;
     qosInfo.QosType := HttpQosSettingTypeBandwidth;
     qosInfo.QosSetting := @limitInfo;
-    EHttpApiServer.RaiseOnError(hSetServerSessionProperty, Http.SetServerSessionProperty
-      (fServerSessionID, HttpServerQosProperty, @qosInfo, SizeOf(qosInfo)));
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty, Http.SetUrlGroupProperty(
-      fUrlGroupID, HttpServerQosProperty, @qosInfo, SizeOf(qosInfo)));
+    EHttpApiServer.RaiseOnError(hSetServerSessionProperty,
+      Http.SetServerSessionProperty(fServerSessionID, HttpServerQosProperty,
+        @qosInfo, SizeOf(qosInfo)));
+    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
+        @qosInfo, SizeOf(qosInfo)));
   end;
 end;
 
@@ -2783,8 +3035,9 @@ begin
   end;
   qosInfoGet.qosInfo.QosType := HttpQosSettingTypeBandwidth;
   qosInfoGet.qosInfo.QosSetting := @qosInfoGet.limitInfo;
-  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty, Http.QueryUrlGroupProperty(
-    fUrlGroupID, HttpServerQosProperty, @qosInfoGet, SizeOf(qosInfoGet)));
+  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
+    Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
+      @qosInfoGet, SizeOf(qosInfoGet)));
   Result := qosInfoGet.limitInfo.MaxBandwidth;
 end;
 
@@ -2810,8 +3063,9 @@ begin
   end;
   qosInfoGet.qosInfo.QosType := HttpQosSettingTypeConnectionLimit;
   qosInfoGet.qosInfo.QosSetting := @qosInfoGet.limitInfo;
-  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty, Http.QueryUrlGroupProperty
-    (fUrlGroupID, HttpServerQosProperty, @qosInfoGet, SizeOf(qosInfoGet), @returnLength));
+  EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
+    Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
+      @qosInfoGet, SizeOf(qosInfoGet), @returnLength));
   Result := qosInfoGet.limitInfo.MaxConnections;
 end;
 
@@ -2831,8 +3085,9 @@ begin
     limitInfo.Flags := 1;
     qosInfo.QosType := HttpQosSettingTypeConnectionLimit;
     qosInfo.QosSetting := @limitInfo;
-    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty, Http.SetUrlGroupProperty(fUrlGroupID,
-      HttpServerQosProperty, @qosInfo, SizeOf(qosInfo)));
+    EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+      Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
+        @qosInfo, SizeOf(qosInfo)));
   end;
 end;
 
@@ -2880,8 +3135,9 @@ begin
   logInfo.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
   if aRolloverType = hlrSize then
     logInfo.RolloverSize := aRolloverSize;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty, Http.SetUrlGroupProperty(fUrlGroupID,
-    HttpServerLoggingProperty, @logInfo, SizeOf(logInfo)));
+  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerLoggingProperty,
+      @logInfo, SizeOf(logInfo)));
   // on success, update the actual log memory structure
   fLogData := pointer(fLogDataStorage);
 end;
@@ -3049,8 +3305,9 @@ begin
       RealmLength := Length(Realm);
       Realm := pointer(Realm);
     end;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty, Http.SetUrlGroupProperty(fUrlGroupID,
-    HttpServerAuthenticationProperty, @authInfo, SizeOf(authInfo)));
+  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerAuthenticationProperty,
+      @authInfo, SizeOf(authInfo)));
 end;
 
 procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
@@ -3070,8 +3327,875 @@ begin
   timeoutInfo.IdleConnection := aIdleConnection;
   timeoutInfo.HeaderWait := aHeaderWait;
   timeoutInfo.MinSendRate := aMinSendRate;
-  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty, Http.SetUrlGroupProperty(fUrlGroupID,
-    HttpServerTimeoutsProperty, @timeoutInfo, SizeOf(timeoutInfo)));
+  EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
+    Http.SetUrlGroupProperty(fUrlGroupID, HttpServerTimeoutsProperty,
+      @timeoutInfo, SizeOf(timeoutInfo)));
+end;
+
+
+
+{ ****************** THttpApiWebSocketServer Over Windows http.sys Module }
+
+{ THttpApiWebSocketServerProtocol }
+
+const
+  WebSocketConnectionCapacity = 1000;
+
+function THttpApiWebSocketServerProtocol.AddConnection(
+  aConn: PHttpApiWebSocketConnection): Integer;
+var
+  i: integer;
+begin
+  if fFirstEmptyConnectionIndex >= fConnectionsCapacity - 1 then
+  begin
+    inc(fConnectionsCapacity, WebSocketConnectionCapacity);
+    ReallocMem(fConnections, fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
+    FillcharFast(fConnections^[fConnectionsCapacity - WebSocketConnectionCapacity],
+      WebSocketConnectionCapacity * SizeOf(PHttpApiWebSocketConnection), 0);
+  end;
+  if fFirstEmptyConnectionIndex >= fConnectionsCount then
+    fConnectionsCount := fFirstEmptyConnectionIndex + 1;
+  fConnections[fFirstEmptyConnectionIndex] := aConn;
+  Result := fFirstEmptyConnectionIndex;
+  for i := fFirstEmptyConnectionIndex + 1 to fConnectionsCount do
+  begin
+    if fConnections[i] = nil then
+    begin
+      fFirstEmptyConnectionIndex := i;
+      Break;
+    end;
+  end;
+end;
+
+function THttpApiWebSocketServerProtocol.Broadcast(
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer;
+  aBufferSize: ULONG): boolean;
+var
+  i: integer;
+begin
+  EnterCriticalSection(fSafe);
+  try
+    for i := 0 to fConnectionsCount - 1 do
+      if Assigned(fConnections[i]) then
+        fConnections[i].Send(aBufferType, aBuffer, aBufferSize);
+  finally
+    LeaveCriticalSection(fSafe);
+  end;
+  result := True;
+end;
+
+function THttpApiWebSocketServerProtocol.Close(index: Integer;
+  aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+var
+  conn: PHttpApiWebSocketConnection;
+begin
+  Result := false;
+  if cardinal(index) < cardinal(fConnectionsCount) then
+  begin
+    conn := fConnections^[index];
+    if (conn <> nil) and (conn.fState = wsOpen) then
+    begin
+      conn.Close(aStatus, aBuffer, aBufferSize);
+      result := True;
+    end;
+  end;
+end;
+
+constructor THttpApiWebSocketServerProtocol.Create(const aName: RawUTF8;
+  aManualFragmentManagement: Boolean; aServer: THttpApiWebSocketServer;
+  const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
+  const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
+  const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
+  const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
+  const aOnFragment: THttpApiWebSocketServerOnMessageEvent);
+begin
+  if aManualFragmentManagement and not Assigned(aOnFragment) then
+    raise EWebSocketApi.CreateFmt(
+      'Error register WebSocket protocol. Protocol %s does not use buffer, ' +
+      'but OnFragment handler is not assigned', [aName]);
+  InitializeCriticalSection(fSafe);
+  fPendingForClose := TSynList.Create;
+  fName := aName;
+  fManualFragmentManagement := aManualFragmentManagement;
+  fServer := aServer;
+  fOnAccept := aOnAccept;
+  fOnMessage := aOnMessage;
+  fOnConnect := aOnConnect;
+  fOnDisconnect := aOnDisconnect;
+  fOnFragment := aOnFragment;
+  fConnectionsCapacity := WebSocketConnectionCapacity;
+  fConnectionsCount := 0;
+  fFirstEmptyConnectionIndex := 0;
+  fConnections := AllocMem(fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
+end;
+
+destructor THttpApiWebSocketServerProtocol.Destroy;
+var
+  i: integer;
+  conn: PHttpApiWebSocketConnection;
+begin
+  EnterCriticalSection(fSafe);
+  try
+    for i := 0 to fPendingForClose.Count - 1 do
+    begin
+      conn := fPendingForClose[i];
+      if Assigned(conn) then
+      begin
+        conn.DoOnDisconnect();
+        conn.Disconnect();
+        Dispose(conn);
+      end;
+    end;
+    fPendingForClose.Free;
+  finally
+    LeaveCriticalSection(fSafe);
+  end;
+  DeleteCriticalSection(fSafe);
+  FreeMem(fConnections);
+  fConnections := nil;
+  inherited;
+end;
+
+procedure THttpApiWebSocketServerProtocol.doShutdown;
+var
+  i: Integer;
+  conn: PHttpApiWebSocketConnection;
+const
+  sReason = 'Server shutdown';
+begin
+  EnterCriticalSection(fSafe);
+  try
+    for i := 0 to fConnectionsCount - 1 do
+    begin
+      conn := fConnections[i];
+      if Assigned(conn) then
+      begin
+        RemoveConnection(i);
+        conn.fState := wsClosedByShutdown;
+        conn.fBuffer := sReason;
+        conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+        conn.Close(WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS,
+          Pointer(conn.fBuffer), Length(conn.fBuffer));
+// PostQueuedCompletionStatus(fServer.fThreadPoolServer.FRequestQueue, 0, 0, @conn.fOverlapped);
+      end;
+    end;
+  finally
+    LeaveCriticalSection(fSafe);
+  end;
+end;
+
+procedure THttpApiWebSocketServerProtocol.RemoveConnection(index: integer);
+begin
+  fPendingForClose.Add(fConnections[index]);
+  fConnections[index] := nil;
+  if (fFirstEmptyConnectionIndex > index) then
+    fFirstEmptyConnectionIndex := index;
+end;
+
+function THttpApiWebSocketServerProtocol.Send(index: Integer;
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+var
+  conn: PHttpApiWebSocketConnection;
+begin
+  result := false;
+  if (index >= 0) and (index < fConnectionsCount) then
+  begin
+    conn := fConnections^[index];
+    if (conn <> nil) and (conn.fState = wsOpen) then
+    begin
+      conn.Send(aBufferType, aBuffer, aBufferSize);
+      result := True;
+    end;
+  end;
+end;
+
+
+ { THttpApiWebSocketConnection }
+
+function THttpApiWebSocketConnection.TryAcceptConnection(
+  aProtocol: THttpApiWebSocketServerProtocol;
+  Ctxt: THttpServerRequest; aNeedHeader: boolean): boolean;
+var
+  req: PHTTP_REQUEST;
+  wsRequestHeaders: WEB_SOCKET_HTTP_HEADER_ARR;
+  wsServerHeaders: PWEB_SOCKET_HTTP_HEADER;
+  wsServerHeadersCount: ULONG;
+begin
+  fState := wsConnecting;
+  fBuffer := '';
+  fWSHandle := nil;
+  fLastActionContext := nil;
+  FillcharFast(fOverlapped, SizeOf(fOverlapped), 0);
+  fProtocol := aProtocol;
+  req := PHTTP_REQUEST(Ctxt.HttpApiRequest);
+  fIndex := fProtocol.fFirstEmptyConnectionIndex;
+  fOpaqueHTTPRequestId := req^.RequestId;
+  if (fProtocol = nil) or (Assigned(fProtocol.OnAccept) and
+     not fProtocol.OnAccept(Ctxt, Self)) then
+  begin
+    result := False;
+    exit;
+  end;
+  EWebSocketApi.RaiseOnError(hCreateServerHandle,
+    WebSocketAPI.CreateServerHandle(nil, 0, fWSHandle));
+  wsRequestHeaders := HttpSys2ToWebSocketHeaders(req^.headers);
+  if aNeedHeader then
+    result := WebSocketAPI.BeginServerHandshake(fWSHandle, Pointer(fProtocol.name),
+      nil, 0, @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders,
+      wsServerHeadersCount) = S_OK
+  else
+    result := WebSocketAPI.BeginServerHandshake(fWSHandle, nil, nil, 0,
+      pointer(wsRequestHeaders), Length(wsRequestHeaders),
+      wsServerHeaders, wsServerHeadersCount) = S_OK;
+  if result then
+  try
+    Ctxt.OutCustomHeaders := WebSocketHeadersToText(wsServerHeaders, wsServerHeadersCount);
+  finally
+    result := WebSocketAPI.EndServerHandshake(fWSHandle) = S_OK;
+  end;
+  if not Result then
+    Disconnect
+  else
+    fLastReceiveTickCount := 0;
+end;
+
+procedure THttpApiWebSocketConnection.DoOnMessage(
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG);
+
+  procedure PushFragmentIntoBuffer;
+  var
+    l: Integer;
+  begin
+    l := Length(fBuffer);
+    SetLength(fBuffer, l + Integer(aBufferSize));
+    Move(aBuffer^, fBuffer[l + 1], aBufferSize);
+  end;
+
+begin
+  if fProtocol = nil then
+    exit;
+  if (aBufferType = WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE) or
+     (aBufferType = WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE) then
+  begin
+    // Fragment
+    if not fProtocol.ManualFragmentManagement then
+      PushFragmentIntoBuffer;
+    if Assigned(fProtocol.OnFragment) then
+      fProtocol.OnFragment(self, aBufferType, aBuffer, aBufferSize);
+  end
+  else
+  begin
+    // last Fragment
+    if Assigned(fProtocol.OnMessage) then
+    begin
+      if fProtocol.ManualFragmentManagement then
+        fProtocol.OnMessage(self, aBufferType, aBuffer, aBufferSize)
+      else
+      begin
+        PushFragmentIntoBuffer;
+        fProtocol.OnMessage(self, aBufferType, Pointer(fBuffer), Length(fBuffer));
+        fBuffer := '';
+      end;
+    end;
+  end;
+end;
+
+procedure THttpApiWebSocketConnection.DoOnConnect;
+begin
+  if (fProtocol <> nil) and Assigned(fProtocol.OnConnect) then
+    fProtocol.OnConnect(self);
+end;
+
+procedure THttpApiWebSocketConnection.DoOnDisconnect;
+begin
+  if (fProtocol <> nil) and Assigned(fProtocol.OnDisconnect) then
+    fProtocol.OnDisconnect(self, fCloseStatus, Pointer(fBuffer), length(fBuffer));
+end;
+
+function THttpApiWebSocketConnection.ReadData(const WebsocketBufferData): integer;
+var
+  Err: HRESULT;
+  fBytesRead: cardinal;
+  aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
+begin
+  Result := 0;
+  if fWSHandle = nil then
+    exit;
+  Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.FReqQueue,
+    fOpaqueHTTPRequestId, 0, aBuf.pbBuffer, aBuf.ulBufferLength, fBytesRead,
+    @self.fOverlapped);
+  case Err of
+    // On page reload Safari do not send a WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION
+    // with BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE, instead it send a dummy packet
+    // (WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION) and terminate socket
+    // see forum discussion https://synopse.info/forum/viewtopic.php?pid=27125
+    ERROR_HANDLE_EOF:
+      Result := -1;
+    ERROR_IO_PENDING:
+      ; //
+    NO_ERROR:
+      ; //
+  else
+    // todo: close connection?
+  end;
+end;
+
+procedure THttpApiWebSocketConnection.WriteData(const WebsocketBufferData);
+var
+  Err: HRESULT;
+  httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
+  bytesWrite: Cardinal;
+  aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
+begin
+  if fWSHandle = nil then
+    exit;
+  bytesWrite := 0;
+  httpSendEntity.DataChunkType := hctFromMemory;
+  httpSendEntity.pBuffer := aBuf.pbBuffer;
+  httpSendEntity.BufferLength := aBuf.ulBufferLength;
+  Err := Http.SendResponseEntityBody(fProtocol.fServer.FReqQueue,
+    fOpaqueHTTPRequestId, HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or
+    HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @httpSendEntity, bytesWrite, nil, nil,
+    @fProtocol.fServer.fSendOverlaped);
+  case Err of
+    ERROR_HANDLE_EOF:
+      Disconnect;
+    ERROR_IO_PENDING:
+      ; //
+    NO_ERROR:
+      ; //
+  else
+    // todo: close connection?
+  end;
+end;
+
+procedure THttpApiWebSocketConnection.CheckIsActive;
+var
+  elapsed: Int64;
+const
+  sCloseReason = 'Closed after ping timeout';
+begin
+  if (fLastReceiveTickCount > 0) and (fProtocol.fServer.fPingTimeout > 0) then
+  begin
+    elapsed := GetTickCount64 - fLastReceiveTickCount;
+    if elapsed > 2 * fProtocol.fServer.PingTimeout * 1000 then
+    begin
+      fProtocol.RemoveConnection(fIndex);
+      fState := wsClosedByGuard;
+      fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+      fBuffer := sCloseReason;
+      PostQueuedCompletionStatus(fProtocol.fServer.fThreadPoolServer.FRequestQueue,
+        0, nil, @fOverlapped);
+    end
+    else if elapsed >= fProtocol.fServer.PingTimeout * 1000 then
+      Ping;
+  end;
+end;
+
+procedure THttpApiWebSocketConnection.Disconnect;
+var //Err: HRESULT; //todo: handle error
+  httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
+  bytesWrite: Cardinal;
+begin
+  WebSocketAPI.AbortHandle(fWSHandle);
+  WebSocketAPI.DeleteHandle(fWSHandle);
+  fWSHandle := nil;
+  httpSendEntity.DataChunkType := hctFromMemory;
+  httpSendEntity.pBuffer := nil;
+  httpSendEntity.BufferLength := 0;
+  Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue, fOpaqueHTTPRequestId,
+    HTTP_SEND_RESPONSE_FLAG_DISCONNECT, 1, @httpSendEntity, bytesWrite, nil, nil, nil);
+end;
+
+procedure THttpApiWebSocketConnection.BeforeRead;
+begin
+  // if reading is in progress then try read messages else try receive new messages
+  if fState in [wsOpen, wsClosing] then
+  begin
+    if Assigned(fLastActionContext) then
+    begin
+      EWebSocketApi.RaiseOnError(hCompleteAction,
+        WebSocketAPI.CompleteAction(fWSHandle, fLastActionContext,
+        fOverlapped.InternalHigh));
+      fLastActionContext := nil;
+    end
+    else
+      EWebSocketApi.RaiseOnError(hReceive,
+        WebSocketAPI.Receive(fWSHandle, nil, nil));
+  end
+  else
+    raise EWebSocketApi.Create('THttpApiWebSocketConnection.BeforeRead state is not wsOpen');
+end;
+
+const
+  C_WEB_SOCKET_BUFFER_SIZE = 2;
+
+type
+  TWebSocketBufferDataArr = array[0..C_WEB_SOCKET_BUFFER_SIZE - 1] of WEB_SOCKET_BUFFER_DATA;
+
+function THttpApiWebSocketConnection.ProcessActions(
+  ActionQueue: WEB_SOCKET_ACTION_QUEUE): boolean;
+var
+  ulDataBufferCount: ULONG;
+  Action: WEB_SOCKET_ACTION;
+  BufferType: WEB_SOCKET_BUFFER_TYPE;
+  ApplicationContext: Pointer;
+  ActionContext: Pointer;
+  i: integer;
+  Err: HRESULT;
+  Buffer: TWebSocketBufferDataArr;
+
+  procedure CloseConnection;
+  begin
+    EnterCriticalSection(fProtocol.fSafe);
+    try
+      fProtocol.RemoveConnection(fIndex);
+    finally
+      LeaveCriticalSection(fProtocol.fSafe);
+    end;
+    EWebSocketApi.RaiseOnError(hCompleteAction,
+      WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+  end;
+
+begin
+  result := true;
+  repeat
+    ulDataBufferCount := Length(Buffer);
+    EWebSocketApi.RaiseOnError(hGetAction,
+      WebSocketAPI.GetAction(fWSHandle, ActionQueue, @Buffer[0], ulDataBufferCount,
+      Action, BufferType, ApplicationContext, ActionContext));
+    case Action of
+      WEB_SOCKET_NO_ACTION:
+        ;
+      WEB_SOCKET_SEND_TO_NETWORK_ACTION:
+        begin
+          for i := 0 to ulDataBufferCount - 1 do
+            WriteData(Buffer[i]);
+          if fWSHandle <> nil then
+          begin
+            Err := WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0);
+            EWebSocketApi.RaiseOnError(hCompleteAction, Err);
+          end;
+          result := False;
+          exit;
+        end;
+      WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION:
+        ;
+      WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION:
+        begin
+          for i := 0 to ulDataBufferCount - 1 do
+            if ReadData(Buffer[i]) = -1 then
+            begin
+              fState := wsClosedByClient;
+              fBuffer := '';
+              fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+              CloseConnection;
+            end;
+          fLastActionContext := ActionContext;
+          result := False;
+          exit;
+        end;
+      WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION:
+        begin
+          fLastReceiveTickCount := GetTickCount64;
+          if BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE then
+          begin
+            if fState = wsOpen then
+              fState := wsClosedByClient
+            else
+              fState := wsClosedByServer;
+            SetString(fBuffer, PAnsiChar(Buffer[0].pbBuffer), Buffer[0].ulBufferLength);
+            fCloseStatus := Buffer[0].Reserved1;
+            CloseConnection;
+            result := False;
+            exit;
+          end
+          else if BufferType = WEB_SOCKET_PING_PONG_BUFFER_TYPE then
+          begin
+          // todo: may be answer to client's ping
+            EWebSocketApi.RaiseOnError(hCompleteAction,
+              WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+            exit;
+          end
+          else if BufferType = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then
+          begin
+          // todo: may be handle this situation
+            EWebSocketApi.RaiseOnError(hCompleteAction,
+              WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+            exit;
+          end
+          else
+          begin
+            DoOnMessage(BufferType, Buffer[0].pbBuffer, Buffer[0].ulBufferLength);
+            EWebSocketApi.RaiseOnError(hCompleteAction,
+              WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+            exit;
+          end;
+        end
+    else
+      raise EWebSocketApi.CreateFmt('Invalid WebSocket action %d', [byte(Action)]);
+    end;
+    Err := WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0);
+    if ActionContext <> nil then
+      EWebSocketApi.RaiseOnError(hCompleteAction, Err);
+  until ({%H-}Action = WEB_SOCKET_NO_ACTION);
+end;
+
+procedure THttpApiWebSocketConnection.InternalSend(
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; WebsocketBufferData: pointer);
+begin
+  EWebSocketApi.RaiseOnError(hSend,
+    WebSocketAPI.Send(fWSHandle, aBufferType, WebsocketBufferData, nil));
+  ProcessActions(WEB_SOCKET_SEND_ACTION_QUEUE);
+end;
+
+procedure THttpApiWebSocketConnection.Send(aBufferType: WEB_SOCKET_BUFFER_TYPE;
+  aBuffer: Pointer; aBufferSize: ULONG);
+var
+  wsSendBuf: WEB_SOCKET_BUFFER_DATA;
+begin
+  if fState <> wsOpen then
+    exit;
+  wsSendBuf.pbBuffer := aBuffer;
+  wsSendBuf.ulBufferLength := aBufferSize;
+  InternalSend(aBufferType, @wsSendBuf);
+end;
+
+procedure THttpApiWebSocketConnection.Close(aStatus: WEB_SOCKET_CLOSE_STATUS;
+  aBuffer: Pointer; aBufferSize: ULONG);
+var
+  wsSendBuf: WEB_SOCKET_BUFFER_DATA;
+begin
+  if fState = wsOpen then
+    fState := wsClosing;
+  wsSendBuf.pbBuffer := aBuffer;
+  wsSendBuf.ulBufferLength := aBufferSize;
+  wsSendBuf.Reserved1 := aStatus;
+  InternalSend(WEB_SOCKET_CLOSE_BUFFER_TYPE, @wsSendBuf);
+end;
+
+procedure THttpApiWebSocketConnection.Ping;
+begin
+  InternalSend(WEB_SOCKET_PING_PONG_BUFFER_TYPE, nil);
+end;
+
+
+{ THttpApiWebSocketServer }
+
+constructor THttpApiWebSocketServer.Create(CreateSuspended: Boolean;
+  aSocketThreadsCount, aPingTimeout: integer; const QueueName: SynUnicode;
+  const aOnWSThreadStart, aOnWSThreadTerminate: TNotifyThreadEvent);
+begin
+  inherited Create(CreateSuspended, QueueName);
+  if not (WebSocketAPI.WebSocketEnabled) then
+    raise EWebSocketApi.Create('WebSocket is not supported');
+  fPingTimeout := aPingTimeout;
+  if fPingTimeout > 0 then
+    fGuard := TSynWebSocketGuard.Create(Self);
+  New(fRegisteredProtocols);
+  SetLength(fRegisteredProtocols^, 0);
+  FOnWSThreadStart := aOnWSThreadStart;
+  FOnWSThreadTerminate := aOnWSThreadTerminate;
+  fThreadPoolServer := TSynThreadPoolHttpApiWebSocketServer.Create(Self,
+    aSocketThreadsCount);
+end;
+
+constructor THttpApiWebSocketServer.CreateClone(From: THttpApiServer);
+var
+  wsServer: THttpApiWebSocketServer absolute From;
+begin
+  inherited CreateClone(From);
+  fThreadPoolServer := wsServer.fThreadPoolServer;
+  fPingTimeout := wsServer.fPingTimeout;
+  fRegisteredProtocols := wsServer.fRegisteredProtocols
+end;
+
+procedure THttpApiWebSocketServer.DestroyMainThread;
+var
+  i: PtrInt;
+begin
+  fGuard.Free;
+  for i := 0 to Length(fRegisteredProtocols^) - 1 do
+    fRegisteredProtocols^[i].doShutdown;
+  FreeAndNil(fThreadPoolServer);
+  for i := 0 to Length(fRegisteredProtocols^) - 1 do
+    fRegisteredProtocols^[i].Free;
+  fRegisteredProtocols^ := nil;
+  Dispose(fRegisteredProtocols);
+  fRegisteredProtocols := nil;
+  inherited;
+end;
+
+procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
+  const Code: cardinal);
+begin
+  if Assigned(fLastConnection) then
+    PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil,
+      @fLastConnection.fOverlapped);
+  inherited DoAfterResponse(Ctxt, Code);
+end;
+
+function THttpApiWebSocketServer.GetProtocol(index: integer):
+  THttpApiWebSocketServerProtocol;
+begin
+  if cardinal(index) < cardinal(Length(fRegisteredProtocols^)) then
+    result := fRegisteredProtocols^[index]
+  else
+    result := nil;
+end;
+
+function THttpApiWebSocketServer.getProtocolsCount: Integer;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := Length(fRegisteredProtocols^);
+end;
+
+function THttpApiWebSocketServer.getSendResponseFlags(Ctxt: THttpServerRequest): Integer;
+begin
+  if (PHTTP_REQUEST(Ctxt.HttpApiRequest)^.UrlContext = WEB_SOCKET_URL_CONTEXT) and
+     (fLastConnection <> nil) then
+    result := HTTP_SEND_RESPONSE_FLAG_OPAQUE or
+      HTTP_SEND_RESPONSE_FLAG_MORE_DATA or HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA
+  else
+    result := inherited getSendResponseFlags(Ctxt);
+end;
+
+function THttpApiWebSocketServer.UpgradeToWebSocket(Ctxt: THttpServerRequest): cardinal;
+var
+  Protocol: THttpApiWebSocketServerProtocol;
+  i, j: Integer;
+  p: PHTTP_UNKNOWN_HEADER;
+  ch, chB: PUTF8Char;
+  aName: RawUTF8;
+  ProtocolHeaderFound: Boolean;
+label
+  protocolFound;
+begin
+  result := 404;
+  Protocol := nil;
+  ProtocolHeaderFound := false;
+  p := PHTTP_REQUEST(Ctxt.HttpApiRequest)^.headers.pUnknownHeaders;
+  for j := 1 to PHTTP_REQUEST(Ctxt.HttpApiRequest)^.headers.UnknownHeaderCount do
+  begin
+    if (p.NameLength = Length(sProtocolHeader)) and
+       IdemPChar(p.pName, Pointer(sProtocolHeader)) then
+    begin
+      ProtocolHeaderFound := True;
+      for i := 0 to Length(fRegisteredProtocols^) - 1 do
+      begin
+        ch := p.pRawValue;
+        while (ch - p.pRawValue) < p.RawValueLength do
+        begin
+          while ((ch - p.pRawValue) < p.RawValueLength) and (ch^ in [',', ' ']) do
+            inc(ch);
+          chB := ch;
+          while ((ch - p.pRawValue) < p.RawValueLength) and not (ch^ in [',']) do
+            inc(ch);
+          FastSetString(aName, chB, ch - chB);
+          if aName = fRegisteredProtocols^[i].name then
+          begin
+            Protocol := fRegisteredProtocols^[i];
+            goto protocolFound;
+          end;
+        end;
+      end;
+    end;
+    inc(p);
+  end;
+  if not ProtocolHeaderFound and (Protocol = nil) and
+     (Length(fRegisteredProtocols^) = 1) then
+    Protocol := fRegisteredProtocols^[0];
+protocolFound:
+  if Protocol <> nil then
+  begin
+    EnterCriticalSection(Protocol.fSafe);
+    try
+      New(fLastConnection);
+      if fLastConnection.TryAcceptConnection(Protocol, Ctxt, ProtocolHeaderFound) then
+      begin
+        Protocol.AddConnection(fLastConnection);
+        result := 101
+      end
+      else
+      begin
+        Dispose(fLastConnection);
+        fLastConnection := nil;
+        result := 405;
+      end;
+    finally
+      LeaveCriticalSection(Protocol.fSafe);
+    end;
+  end;
+end;
+
+function THttpApiWebSocketServer.AddUrlWebSocket(const aRoot, aPort: RawUTF8;
+  Https: boolean; const aDomainName: RawUTF8; aRegisterURI: boolean): integer;
+begin
+  result := AddUrl(aRoot, aPort, Https, aDomainName, aRegisterURI, WEB_SOCKET_URL_CONTEXT);
+end;
+
+procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUTF8;
+  aManualFragmentManagement: Boolean;
+  const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
+  const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
+  const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
+  const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
+  const aOnFragment: THttpApiWebSocketServerOnMessageEvent);
+var
+  protocol: THttpApiWebSocketServerProtocol;
+begin
+  if self = nil then
+    exit;
+  protocol := THttpApiWebSocketServerProtocol.Create(aName,
+    aManualFragmentManagement, Self, aOnAccept, aOnMessage, aOnConnect,
+    aOnDisconnect, aOnFragment);
+  protocol.fIndex := length(fRegisteredProtocols^);
+  SetLength(fRegisteredProtocols^, protocol.fIndex + 1);
+  fRegisteredProtocols^[protocol.fIndex] := protocol;
+end;
+
+function THttpApiWebSocketServer.Request(Ctxt: THttpServerRequest): cardinal;
+begin
+  if PHTTP_REQUEST(Ctxt.HttpApiRequest).UrlContext = WEB_SOCKET_URL_CONTEXT then
+    result := UpgradeToWebSocket(Ctxt)
+  else
+  begin
+    result := inherited Request(Ctxt);
+    fLastConnection := nil;
+  end;
+end;
+
+procedure THttpApiWebSocketServer.SendServiceMessage;
+begin
+  PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
+end;
+
+procedure THttpApiWebSocketServer.SetOnWSThreadStart(const Value: TNotifyThreadEvent);
+begin
+  FOnWSThreadStart := Value;
+end;
+
+procedure THttpApiWebSocketServer.SetOnWSThreadTerminate(const Value: TNotifyThreadEvent);
+begin
+  FOnWSThreadTerminate := Value;
+end;
+
+
+{ TSynThreadPoolHttpApiWebSocketServer }
+
+function TSynThreadPoolHttpApiWebSocketServer.NeedStopOnIOError: Boolean;
+begin
+  // If connection closed by guard than ERROR_HANDLE_EOF or ERROR_OPERATION_ABORTED
+  // can be returned - Other connections must work normally
+  result := False;
+end;
+
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadStart(Sender: TThread);
+begin
+  if Assigned(fServer.OnWSThreadStart) then
+    fServer.OnWSThreadStart(Sender);
+end;
+
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadTerminate(Sender: TThread);
+begin
+  if Assigned(fServer.OnWSThreadTerminate) then
+    fServer.OnWSThreadTerminate(Sender);
+end;
+
+procedure TSynThreadPoolHttpApiWebSocketServer.Task(aCaller: TSynThread;
+  aContext: Pointer);
+var
+  conn: PHttpApiWebSocketConnection;
+begin
+  if aContext = @fServer.fSendOverlaped then
+    exit;
+  if (aContext = @fServer.fServiceOverlaped) then
+  begin
+    if Assigned(fServer.onServiceMessage) then
+      fServer.onServiceMessage;
+    exit;
+  end;
+  conn := PHttpApiWebSocketConnection(aContext);
+  if conn.fState = wsConnecting then
+  begin
+    conn.fState := wsOpen;
+    conn.fLastReceiveTickCount := GetTickCount64;
+    conn.DoOnConnect();
+  end;
+  if conn.fState in [wsOpen, wsClosing] then
+    repeat
+      conn.BeforeRead;
+    until not conn.ProcessActions(WEB_SOCKET_RECEIVE_ACTION_QUEUE);
+  if conn.fState in [wsClosedByGuard] then
+    EWebSocketApi.RaiseOnError(hCompleteAction,
+      WebSocketAPI.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0));
+  if conn.fState in [wsClosedByClient, wsClosedByServer, wsClosedByGuard,
+      wsClosedByShutdown] then
+  begin
+    conn.DoOnDisconnect;
+    if conn.fState = wsClosedByClient then
+      conn.Close(conn.fCloseStatus, Pointer(conn.fBuffer), length(conn.fBuffer));
+    conn.Disconnect;
+    EnterCriticalSection(conn.Protocol.fSafe);
+    try
+      conn.Protocol.fPendingForClose.Remove(conn);
+    finally
+      LeaveCriticalSection(conn.Protocol.fSafe);
+    end;
+    Dispose(conn);
+  end;
+end;
+
+constructor TSynThreadPoolHttpApiWebSocketServer.Create(Server:
+  THttpApiWebSocketServer; NumberOfThreads: Integer);
+begin
+  fServer := Server;
+  fOnThreadStart := OnThreadStart;
+  fOnThreadTerminate := OnThreadTerminate;
+  inherited Create(NumberOfThreads, Server.fReqQueue);
+end;
+
+
+{ TSynWebSocketGuard }
+
+procedure TSynWebSocketGuard.Execute;
+var
+  i, j: Integer;
+  prot: THttpApiWebSocketServerProtocol;
+begin
+  if fServer.fPingTimeout > 0 then
+    while not Terminated do
+    begin
+      if fServer <> nil then
+        for i := 0 to Length(fServer.fRegisteredProtocols^) - 1 do
+        begin
+          prot := fServer.fRegisteredProtocols^[i];
+          EnterCriticalSection(prot.fSafe);
+          try
+            for j := 0 to prot.fConnectionsCount - 1 do
+              if Assigned(prot.fConnections[j]) then
+                prot.fConnections[j].CheckIsActive;
+          finally
+            LeaveCriticalSection(prot.fSafe);
+          end;
+        end;
+      i := 0;
+      while not Terminated and (i < fServer.fPingTimeout) do
+      begin
+        Sleep(1000);
+        inc(i);
+      end;
+    end
+  else
+    Terminate;
+end;
+
+constructor TSynWebSocketGuard.Create(Server: THttpApiWebSocketServer);
+begin
+  fServer := Server;
+  inherited Create(false);
 end;
 
 

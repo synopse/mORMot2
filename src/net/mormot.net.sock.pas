@@ -620,8 +620,11 @@ type
   // - used e.g. by class function THttpRequest.Get()
   // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
   // 'http://unix:/path/to/socket.sock:/url/path'
-  {$ifdef USERECORDWITHMETHODS}TURI = record
-    {$else}TURI = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TURI = record
+  {$else}
+  TURI = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// if the server is accessible via https:// and not plain http://
     Https: boolean;

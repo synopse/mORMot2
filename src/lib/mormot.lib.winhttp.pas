@@ -58,6 +58,8 @@ type
   ULONGLONG = Windows.ULONGLONG;
   {$endif}
 
+  TOverlapped = Windows.TOverlapped;
+
   ULARGE_INTEGER = Windows.ULARGE_INTEGER;
 
   HTTP_OPAQUE_ID = ULONGLONG;
@@ -769,6 +771,7 @@ const
   ERROR_MORE_DATA = Windows.ERROR_MORE_DATA;
   ERROR_CONNECTION_INVALID = Windows.ERROR_CONNECTION_INVALID;
   ERROR_OLD_WIN_VERSION = Windows.ERROR_OLD_WIN_VERSION;
+  ERROR_IO_PENDING = Windows.ERROR_IO_PENDING;
   
   HTTP_VERSION_UNKNOWN: HTTP_VERSION = (
     MajorVersion: 0;
@@ -1008,7 +1011,7 @@ const
 
 
 type
-  /// exception raised during http.sys process
+  /// exception raised during http.sys HTTP/1.1 process
   EHttpApiServer = class(ENetSock)
   protected
     fLastError: integer;
@@ -1016,7 +1019,7 @@ type
   public
     /// raise an EHttpApiServer if the http.sys API result code is an error
     class procedure RaiseOnError(api: THttpAPIs; Error: integer);
-    /// initialize an EHttpApiServer instance
+    /// initialize a new EHttpApiServer instance
     constructor Create(api: THttpAPIs; Error: integer); reintroduce;
   published
     /// the error code of this exception
@@ -1024,6 +1027,7 @@ type
     /// the execution context of this exception
     property LastApi: THttpAPIs read fLastApi;
   end;
+
 
 
 const
@@ -1429,6 +1433,23 @@ type
     hEndClientHandshake, hEndServerHandshake, hGetAction, hGetGlobalProperty,
     hReceive, hSend);
 
+  /// exception raised during http.sys WebSockets process
+  EWebSocketApi = class(ENetSock)
+  protected
+    fLastError: integer;
+    fLastApi: TWebSocketAPIs;
+  public
+    /// raise an EWebSocketApi if the http.sys API result code is an error
+    class procedure RaiseOnError(api: TWebSocketAPIs; Error: integer);
+    /// initialize a new EWebSocketApi instance
+    constructor Create(api: TWebSocketAPIs; Error: integer); reintroduce; overload;
+  published
+    /// the error code of this exception
+    property LastError: integer read fLastError;
+    /// the execution context of this exception
+    property LastApi: TWebSocketAPIs read fLastApi;
+  end;
+
 const
   WEBSOCKET_DLL = 'websocket.dll';
   WebSocketNames: array[TWebSocketAPIs] of PChar = ('WebSocketAbortHandle',
@@ -1500,6 +1521,15 @@ function WinHTTP_WebSocketEnabled: boolean;
 /// low-level loading of the WebSockets API
 procedure WebSocketApiInitialize;
 
+const
+  sProtocolHeader: RawUTF8 = 'SEC-WEBSOCKET-PROTOCOL';
+
+/// retrieve an array of headers from WebSockets low-level information
+function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
+
+/// retrieve the linefeed separated text from WebSockets array of headers
+function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
+  const aHeadersCount: Integer): RawUTF8;
 
 {$endif USEWININET}
 
@@ -1581,11 +1611,11 @@ begin
   D := pointer(result);
   for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
     if Request.Headers.KnownHeaders[h].RawValueLength<>0 then begin
-      move(HTTP_KNOWNHEADERS[h][1],D^,ord(HTTP_KNOWNHEADERS[h][0]));
+      MoveFast(HTTP_KNOWNHEADERS[h][1],D^,ord(HTTP_KNOWNHEADERS[h][0]));
       inc(D,ord(HTTP_KNOWNHEADERS[h][0]));
       PWord(D)^ := ord(':')+ord(' ')shl 8;
       inc(D,2);
-      move(Request.Headers.KnownHeaders[h].pRawValue^,D^,
+      MoveFast(Request.Headers.KnownHeaders[h].pRawValue^,D^,
         Request.Headers.KnownHeaders[h].RawValueLength);
       inc(D,Request.Headers.KnownHeaders[h].RawValueLength);
       PWord(D)^ := 13+10 shl 8;
@@ -1594,20 +1624,20 @@ begin
   P := Request.Headers.pUnknownHeaders;
   if P<>nil then
     for i := 1 to Request.Headers.UnknownHeaderCount do begin
-      move(P^.pName^,D^,P^.NameLength);
+      MoveFast(P^.pName^,D^,P^.NameLength);
       inc(D,P^.NameLength);
       PWord(D)^ := ord(':')+ord(' ')shl 8;
       inc(D,2);
-      move(P^.pRawValue^,D^,P^.RawValueLength);
+      MoveFast(P^.pRawValue^,D^,P^.RawValueLength);
       inc(D,P^.RawValueLength);
       inc(P);
       PWord(D)^ := 13+10 shl 8;
       inc(D,2);
     end;
   if Lip<>0 then begin
-    move(REMOTEIP_HEADER[1],D^,REMOTEIP_HEADERLEN);
+    MoveFast(REMOTEIP_HEADER[1],D^,REMOTEIP_HEADERLEN);
     inc(D,REMOTEIP_HEADERLEN);
-    move(pointer(RemoteIP)^,D^,Lip);
+    MoveFast(pointer(RemoteIP)^,D^,Lip);
     inc(D,Lip);
     PWord(D)^ := 13+10 shl 8;
   {$ifopt C+}
@@ -1671,89 +1701,6 @@ begin
   inherited CreateFmt('%s failed: %s (%d)',
     [HttpNames[api],SysErrorMessagePerModule(Error,HTTPAPI_DLL),Error])
 end;
-
-
-
-{ ******************** WinINet API Additional Wrappers }
-
-function SysErrorMessageWinInet(error: integer): string;
-var
-  dwError, tmpLen: DWORD;
-  tmp: string;
-begin
-  result := SysErrorMessagePerModule(error, 'wininet.dll');
-  if error = ERROR_INTERNET_EXTENDED_ERROR then
-  begin
-    InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError, nil, tmpLen);
-    if tmpLen > 0 then
-    begin
-      SetLength(tmp, tmpLen);
-      InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError, PChar(tmp), tmpLen);
-      result := result + ' [' + tmp + ']';
-    end;
-  end;
-end;
-
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
-var Buffer: array[0..511] of byte;
-    BufferSize, UserSize, DomainSize: DWORD;
-    UserInfo: PSIDAndAttributes;
-    NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
-    tmp: SynUnicode;
-    P: PWideChar;
-begin
-   if not GetTokenInformation(UserToken,TokenUser,@Buffer,SizeOf(Buffer),BufferSize) then
-     exit;
-   UserInfo := @Buffer;
-   UserSize := 0;
-   DomainSize := 0;
-   LookupAccountSidW(nil,UserInfo^.Sid,nil,UserSize,nil,DomainSize,NameUse);
-   if (UserSize=0) or (DomainSize=0) then
-     exit;
-   SetLength(tmp,UserSize+DomainSize-1);
-   P := pointer(tmp);
-   if not LookupAccountSidW(nil,UserInfo^.Sid,P+DomainSize,UserSize,P,DomainSize,NameUse) then
-     exit;
-   P[DomainSize] := '\';
-   result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
-end;
-
-
-{ ******************** winhttp.dll Windows API Definitions }
-
-{ ******************** websocket.dll Windows API Definitions }
-
-procedure WebSocketApiInitialize;
-var
-  api: TWebSocketAPIs;
-  P: PPointer;
-begin
-  if WebSocketAPI.LibraryHandle <> 0 then
-    exit; // already loaded
-  WebSocketAPI.WebSocketEnabled := false;
-  WebSocketAPI.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
-  if WebSocketAPI.LibraryHandle = 0 then
-    exit;
-  P := @@WebSocketAPI.AbortHandle;
-  for api := low(api) to high(api) do
-  begin
-    P^ := GetProcAddress(WebSocketAPI.LibraryHandle, WebSocketNames[api]);
-    if P^ = nil then
-    begin
-      FreeLibrary(WebSocketAPI.LibraryHandle);
-      WebSocketAPI.LibraryHandle := 0;
-      exit;
-    end;
-    inc(P);
-  end;
-  WebSocketAPI.WebSocketEnabled := true;
-end;
-
-function WinHTTP_WebSocketEnabled: boolean;
-begin
-  Result := WebSocketAPI.WebSocketEnabled;
-end;
-
 
 
 { HTTP_RESPONSE }
@@ -1880,7 +1827,176 @@ begin
   result := P;
 end;
 
-const // paranoid check of the API against our enumerations
+
+{ ******************** WinINet API Additional Wrappers }
+
+function SysErrorMessageWinInet(error: integer): string;
+var
+  dwError, tmpLen: DWORD;
+  tmp: string;
+begin
+  result := SysErrorMessagePerModule(error, 'wininet.dll');
+  if error = ERROR_INTERNET_EXTENDED_ERROR then
+  begin
+    InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError, nil, tmpLen);
+    if tmpLen > 0 then
+    begin
+      SetLength(tmp, tmpLen);
+      InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError, PChar(tmp), tmpLen);
+      result := result + ' [' + tmp + ']';
+    end;
+  end;
+end;
+
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
+var Buffer: array[0..511] of byte;
+    BufferSize, UserSize, DomainSize: DWORD;
+    UserInfo: PSIDAndAttributes;
+    NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
+    tmp: SynUnicode;
+    P: PWideChar;
+begin
+   if not GetTokenInformation(UserToken,TokenUser,@Buffer,SizeOf(Buffer),BufferSize) then
+     exit;
+   UserInfo := @Buffer;
+   UserSize := 0;
+   DomainSize := 0;
+   LookupAccountSidW(nil,UserInfo^.Sid,nil,UserSize,nil,DomainSize,NameUse);
+   if (UserSize=0) or (DomainSize=0) then
+     exit;
+   SetLength(tmp,UserSize+DomainSize-1);
+   P := pointer(tmp);
+   if not LookupAccountSidW(nil,UserInfo^.Sid,P+DomainSize,UserSize,P,DomainSize,NameUse) then
+     exit;
+   P[DomainSize] := '\';
+   result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
+end;
+
+
+{ ******************** winhttp.dll Windows API Definitions }
+
+{ ******************** websocket.dll Windows API Definitions }
+
+
+procedure WebSocketApiInitialize;
+var
+  api: TWebSocketAPIs;
+  P: PPointer;
+begin
+  if WebSocketAPI.LibraryHandle <> 0 then
+    exit; // already loaded
+  WebSocketAPI.WebSocketEnabled := false;
+  WebSocketAPI.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
+  if WebSocketAPI.LibraryHandle = 0 then
+    exit;
+  P := @@WebSocketAPI.AbortHandle;
+  for api := low(api) to high(api) do
+  begin
+    P^ := GetProcAddress(WebSocketAPI.LibraryHandle, WebSocketNames[api]);
+    if P^ = nil then
+    begin
+      FreeLibrary(WebSocketAPI.LibraryHandle);
+      WebSocketAPI.LibraryHandle := 0;
+      exit;
+    end;
+    inc(P);
+  end;
+  WebSocketAPI.WebSocketEnabled := true;
+end;
+
+function WinHTTP_WebSocketEnabled: boolean;
+begin
+  Result := WebSocketAPI.WebSocketEnabled;
+end;
+
+function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
+var headerCnt: Integer;
+    i, idx: PtrInt;
+    h: THttpHeader;
+    p: PHTTP_UNKNOWN_HEADER;
+begin
+  headerCnt := 0;
+  for h := Low(HTTP_KNOWNHEADERS) to High(HTTP_KNOWNHEADERS) do
+    if aHttpHeaders.KnownHeaders[h].RawValueLength <> 0 then
+      inc(headerCnt);
+  p := aHttpHeaders.pUnknownHeaders;
+  if p<>nil then
+    inc(headerCnt, aHttpHeaders.UnknownHeaderCount);
+  SetLength(Result, headerCnt);
+  idx := 0;
+  for h := Low(HTTP_KNOWNHEADERS) to High(HTTP_KNOWNHEADERS) do
+    if aHttpHeaders.KnownHeaders[h].RawValueLength<>0 then begin
+      Result[idx].pcName := @HTTP_KNOWNHEADERS[h][1];
+      Result[idx].ulNameLength := ord(HTTP_KNOWNHEADERS[h][0]);
+      Result[idx].pcValue := aHttpHeaders.KnownHeaders[h].pRawValue;
+      Result[idx].ulValueLength := aHttpHeaders.KnownHeaders[h].RawValueLength;
+      inc(idx);
+    end;
+  p := aHttpHeaders.pUnknownHeaders;
+  if p<>nil then
+    for i := 1 to aHttpHeaders.UnknownHeaderCount do begin
+      Result[idx].pcName := pointer(p^.pName);
+      Result[idx].ulNameLength := p^.NameLength;
+      Result[idx].pcValue := pointer(p^.pRawValue);
+      Result[idx].ulValueLength := p^.RawValueLength;
+      inc(idx);
+      inc(p);
+    end;
+end;
+
+function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
+  const aHeadersCount: Integer): RawUTF8;
+var i: Integer;
+    h: PWEB_SOCKET_HTTP_HEADER;
+    len: Integer;
+    d : PAnsiChar;
+begin
+  len := 0;
+  h := aHeaders;
+  for i := 1 to aHeadersCount do begin
+    if h^.ulValueLength<>0 then
+      inc(len, h^.ulNameLength + h^.ulValueLength + 4);
+    inc(h);
+  end;
+  FastSetString(Result, nil, len);
+  d := Pointer(Result);
+  h := aHeaders;
+  for i := 1 to aHeadersCount do begin
+    if h^.ulValueLength<>0 then begin
+      MoveFast(h^.pcName^, d^, h^.ulNameLength);
+      inc(d, h^.ulNameLength);
+      PWord(d)^ := Ord(':') + Ord(' ') shl 8;
+      inc(d, 2);
+      MoveFast(h^.pcValue^, d^, h^.ulValueLength);
+      inc(d, h^.ulValueLength);
+      PWord(d)^ := 13 + 10 shl 8;
+      inc(d, 2);
+    end;
+    inc(h);
+  end;
+  Assert(d - Pointer(Result) = len);
+end;
+
+
+{ EWebSocketApi }
+
+class procedure EWebSocketApi.RaiseOnError(api: TWebSocketAPIs; Error: integer);
+begin
+  if Error<>NO_ERROR then
+    raise self.Create(api,Error);
+end;
+
+constructor EWebSocketApi.Create(api: TWebSocketAPIs; Error: integer);
+begin
+  fLastError := Error;
+  fLastApi := api;
+  inherited CreateFmt('%s failed: %s (%d)',
+    [WebSocketNames[api],SysErrorMessagePerModule(Error,WEBSOCKET_DLL),Error])
+end;
+
+
+const
+  // paranoid check of the API mapping against our internal enumerations
   HTTP_LOG_FIELD_TEST_SUB_STATUS: THttpApiLogFields = [hlfSubStatus];
 
 initialization
