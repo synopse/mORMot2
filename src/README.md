@@ -33,3 +33,10 @@ By convention:
 - Unit names are lowercased, to allow simple access on POSIX or Windows file systems;
 - Unit names are dot-separated, and start with the `mormot.` prefix;
 - Unit names follow their location in the `src` sub folder, e.g. `mormot.core.json.pas` is located in the `src/core` folder.
+
+
+## Include Files
+
+To clean the design and enhance source maintainibility, some units have associated `*.inc` source files:
+- To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc`;
+- To regroup CPU-specific (asm) code - e.g. `mormot.core.crypto.asmx64.inc`.
