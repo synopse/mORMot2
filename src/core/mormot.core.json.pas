@@ -887,8 +887,13 @@ type
   // - is defined as an object, not as a class: you can use this in any
   // class, without the need to destroy the content
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TSynNameValue = record private
-  {$else}TSynNameValue = object protected{$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TSynNameValue = record
+  private
+  {$else}
+  TSynNameValue = object
+  protected
+  {$endif USERECORDWITHMETHODS}
     fOnAdd: TOnSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
@@ -1039,8 +1044,11 @@ type
   TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
 
   /// store several RawByteString content with optional concatenation
-  {$ifdef USERECORDWITHMETHODS} TRawByteStringGroup = record {$else}
-  TRawByteStringGroup = object {$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TRawByteStringGroup = record
+  {$else}
+  TRawByteStringGroup = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// actual list storing the data
     Values: TRawByteStringGroupValueDynArray;

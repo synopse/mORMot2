@@ -38,8 +38,11 @@ type
   {$A-}
   /// file found result item, as returned by FindFiles()
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TFindFiles = record
-    {$else}TFindFiles = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TFindFiles = record
+  {$else}
+  TFindFiles = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the matching file name, including its folder name
     Name: TFileName;

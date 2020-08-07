@@ -569,7 +569,10 @@ type
   // - raise a EFastReader exception on decoding error (e.g. if a buffer
   // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
   {$ifdef USERECORDWITHMETHODS}
-  TFastReader = record {$else}TFastReader = object {$endif}
+  TFastReader = record
+  {$else}
+  TFastReader = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// the current position in the memory
     P: PAnsiChar;

@@ -855,9 +855,11 @@ type
   // - is defined as an object or as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNDIRECTDYNARRAY} TDynArray = record
+  {$ifdef UNDIRECTDYNARRAY}
+  TDynArray = record
   {$else}
-  TDynArray = object {$endif}
+  TDynArray = object
+  {$endif UNDIRECTDYNARRAY}
   private
     fValue: PPointer;
     fInfo: TRttiCustom;
@@ -1397,8 +1399,11 @@ type
   // maintain a hash table over an existing dynamic array: several TDynArrayHasher
   // could be applied to a single TDynArray wrapper
   // - TDynArrayHashed will use a TDynArrayHasher on its own storage
-  {$ifdef USERECORDWITHMETHODS}TDynArrayHasher = record
-  {$else}TDynArrayHasher = object {$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TDynArrayHasher = record
+  {$else}
+  TDynArrayHasher = object
+  {$endif USERECORDWITHMETHODS}
   private
     DynArray: PDynArray;
     HashItem: TDynArrayHashOne;
@@ -1945,8 +1950,11 @@ function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValu
 type
   /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TRawUTF8InterningSlot = record
-    {$else}TRawUTF8InterningSlot = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TRawUTF8InterningSlot = record
+  {$else}
+  TRawUTF8InterningSlot = object
+  {$endif USERECORDWITHMETHODS}
   public
     /// actual RawUTF8 storage
     Value: TRawUTF8DynArray;
@@ -2316,8 +2324,11 @@ type
 
   /// used to store Time Zone information for a single area in TSynTimeZone
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}TTimeZoneData = record
-  {$else}TTimeZoneData = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TTimeZoneData = record
+  {$else}
+  TTimeZoneData = object
+  {$endif USERECORDWITHMETHODS}
   public
     id: TTimeZoneID;
     display: RawUTF8;

@@ -13,6 +13,8 @@ unit mormot.core.log;
     - Efficient .log File Access via TSynLogFile
 
   *****************************************************************************
+
+  TODO: support TSynLogFamily.EchoToConsoleUseJournal as in SynLog
 }
 
 

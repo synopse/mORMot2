@@ -578,8 +578,11 @@ type
   // former will handle internal variant redirection (varByRef), e.g. from late
   // binding or assigned another TDocVariant
   // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS} TDocVariantData = record
-  {$else} TDocVariantData = object {$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TDocVariantData = record
+  {$else}
+  TDocVariantData = object
+  {$endif USERECORDWITHMETHODS}
   private
     VType: TVarType;
     VOptions: TDocVariantOptions;
@@ -4136,8 +4139,11 @@ begin
 end;
 
 type
-  {$ifdef USERECORDWITHMETHODS} TQuickSortDocVariantValuesByField = record
-  {$else} TQuickSortDocVariantValuesByField = object {$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  TQuickSortDocVariantValuesByField = record
+  {$else}
+  TQuickSortDocVariantValuesByField = object
+  {$endif USERECORDWITHMETHODS}
     Lookup: array of PVariant;
     Compare: TVariantCompare;
     Doc: PDocVariantData;
