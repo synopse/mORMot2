@@ -220,14 +220,22 @@ function TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
 
 type
   /// a simple way to store a date as Year/Month/Day
-  // - with no needed computation as with TDate/TUnixTime values
+  // - with no intermediate computation needed as with TDate/TUnixTime values
   // - consider using TSynSystemTime if you need to handle both Date and Time
   // - match the first 4 fields of TSynSystemTime - so PSynDate(@aSynSystemTime)^
   // is safe to be used
-  // - DayOfWeek field is not handled by its methods by default, but could be
-  // filled on demand via ComputeDayOfWeek - making this record 64-bit long
   TSynDate = object
-    Year, Month, DayOfWeek, Day: word;
+    /// the Year value of this Date
+    Year: word;
+    /// the Month value of this Date (1..12)
+    Month: word;
+    /// which day of week this Date happend
+    // - sunday is DayOfWeek 1, saturday is 7
+    // - DayOfWeek field is not handled by its methods by default, but could be
+    // filled on demand via ComputeDayOfWeek - making this record 64-bit long
+    DayOfWeek: word;
+    /// the Day value of this Date (1..31)
+    Day: word;
     /// set all fields to 0
     procedure Clear; {$ifdef HASINLINE}inline;{$endif}
     /// set internal date to 9999-12-31
