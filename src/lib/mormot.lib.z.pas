@@ -1,5 +1,5 @@
 /// low-level access to the zlib API
-// - this unit is a part of the freeware Synopse mORMot framework 2,
+// - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.z;
 

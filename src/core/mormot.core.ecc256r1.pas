@@ -1,5 +1,5 @@
 /// Framework Core Public-Key Cryptography with secp256r1/NISTP-256 ECC Curves
-// - this unit is a part of the freeware Synopse mORMot framework 2,
+// - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.ecc256r1;
 

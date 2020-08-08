@@ -1,5 +1,5 @@
 {
-  This file is a part of the freeware Synopse mORMot framework 2,
+  This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
    POSIX API calls for FPC, as used by mormot.core.os.pas

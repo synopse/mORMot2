@@ -1,5 +1,5 @@
 {
-  This file is a part of the freeware Synopse mORMot framework 2,
+  This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
   Content of this file should be part of the .dpr/.lpr main uses clauses,
