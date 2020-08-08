@@ -31,7 +31,9 @@ uses
   mormot.core.text,
   mormot.net.sock,
   mormot.net.http,
+  {$ifdef USEWININET}
   mormot.lib.winhttp,
+  {$endif USEWININET}
   mormot.net.client;
 
 
@@ -180,7 +182,7 @@ type
     property AuthenticatedUser: RawUTF8 read fAuthenticatedUser;
     {$ifdef MSWINDOWS}
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
-    // - not used by now for other servers
+    // - not used by now for other kind of servers
     property HttpApiRequest: Pointer read fHttpApiRequest;
     {$endif MSWINDOWS}
   end;
@@ -772,9 +774,9 @@ type
     // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
-    constructor Create(CreateSuspended: boolean; QueueName: SynUnicode='';
-      OnStart: TNotifyThreadEvent=nil; OnStop: TNotifyThreadEvent=nil;
-      const ProcessName: RawUTF8=''); reintroduce;
+    constructor Create(CreateSuspended: boolean; QueueName: SynUnicode = '';
+      OnStart: TNotifyThreadEvent = nil; OnStop: TNotifyThreadEvent = nil;
+      const ProcessName: RawUTF8 = ''); reintroduce;
     /// create a HTTP/1.1 processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); virtual;
@@ -802,15 +804,15 @@ type
     // Resume method after all Url have been added
     // - if aRegisterURI is TRUE, the URI will be registered (need adminitrator
     // rights) - default is FALSE, as defined by Windows security policy
-    function AddUrl(const aRoot, aPort: RawUTF8; Https: boolean=false;
-      const aDomainName: RawUTF8='*'; aRegisterURI: boolean=false;
-      aContext: Int64=0): integer;
+    function AddUrl(const aRoot, aPort: RawUTF8; Https: boolean = false;
+      const aDomainName: RawUTF8 = '*'; aRegisterURI: boolean = false;
+      aContext: Int64 = 0): integer;
     /// un-register the URLs to Listen On
     // - this method expect the same parameters as specified to AddUrl()
     // - return 0 (NO_ERROR) on success, an error code if failed (e.g.
     // -1 if the corresponding parameters do not match any previous AddUrl)
-    function RemoveUrl(const aRoot, aPort: RawUTF8; Https: boolean=false;
-      const aDomainName: RawUTF8='*'): integer;
+    function RemoveUrl(const aRoot, aPort: RawUTF8; Https: boolean = false;
+      const aDomainName: RawUTF8 = '*'): integer;
     /// will authorize a specified URL prefix
     // - will allow to call AddUrl() later for any user on the computer
     // - if aRoot is left '', it will authorize any root for this port
@@ -822,12 +824,12 @@ type
     // - will first delete any matching rule for this URL prefix
     // - if OnlyDelete is true, will delete but won't add the new authorization;
     // in this case, any error message at deletion will be returned
-    class function AddUrlAuthorize(const aRoot, aPort: RawUTF8; Https: boolean=false;
-      const aDomainName: RawUTF8='*'; OnlyDelete: boolean=false): string;
+    class function AddUrlAuthorize(const aRoot, aPort: RawUTF8; Https: boolean = false;
+      const aDomainName: RawUTF8 = '*'; OnlyDelete: boolean = false): string;
     /// will register a compression algorithm
     // - overridden method which will handle any cloned instances
     procedure RegisterCompress(aFunction: THttpSocketCompress;
-      aCompressMinSize: integer=1024); override;
+      aCompressMinSize: integer = 1024); override;
     /// access to the internal THttpApiServer list cloned by this main instance
     // - as created by Clone() method
     property Clones: THttpApiServers read fClones;
@@ -869,12 +871,12 @@ type
     // - aSoftwareName will set the optional W3C-only software name string
     // - aRolloverSize will be used only when aRolloverType is hlrSize
     procedure LogStart(const aLogFolder: TFileName;
-      aType: THttpApiLoggingType=hltW3C;
-      const aSoftwareName: TFileName='';
-      aRolloverType: THttpApiLoggingRollOver=hlrDaily;
-      aRolloverSize: cardinal=0;
-      aLogFields: THttpApiLogFields=[hlfDate..hlfSubStatus];
-      aFlags: THttpApiLoggingFlags=[hlfUseUTF8Conversion]);
+      aType: THttpApiLoggingType = hltW3C;
+      const aSoftwareName: TFileName = '';
+      aRolloverType: THttpApiLoggingRollOver = hlrDaily;
+      aRolloverSize: cardinal = 0;
+      aLogFields: THttpApiLogFields = [hlfDate..hlfSubStatus];
+      aFlags: THttpApiLoggingFlags = [hlfUseUTF8Conversion]);
     /// disable HTTP API 2.0 logging
     // - this method won't do anything on the cloned instances, but the main
     // instance logging state will be replicated to all cloned instances
@@ -896,7 +898,7 @@ type
     // - optional Realm parameters can be used when haBasic scheme is defined
     // - optional DomainName and Realm parameters can be used for haDigest
     procedure SetAuthenticationSchemes(schemes: THttpApiRequestAuthentications;
-      const DomainName: SynUnicode=''; const Realm: SynUnicode='');
+      const DomainName: SynUnicode = ''; const Realm: SynUnicode = '');
     /// read-only access to HTTP API 2.0 server-side enabled authentication schemes
     property AuthenticationSchemes: THttpApiRequestAuthentications
       read fAuthenticationSchemes;
@@ -1001,7 +1003,8 @@ type
 
   PHttpApiWebSocketConnection = ^THttpApiWebSocketConnection;
 
-  THttpApiWebSocketConnectionVector = array[0..MaxInt div SizeOf(PHttpApiWebSocketConnection) - 1] of PHttpApiWebSocketConnection;
+  THttpApiWebSocketConnectionVector =
+    array[0..MaxInt div SizeOf(PHttpApiWebSocketConnection) - 1] of PHttpApiWebSocketConnection;
 
   PHttpApiWebSocketConnectionVector = ^THttpApiWebSocketConnectionVector;
 
@@ -1077,6 +1080,7 @@ type
     function Close(index: Integer; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer;
       aBufferSize: ULONG): boolean;
   end;
+
   THttpApiWebSocketServerProtocolDynArray = array of THttpApiWebSocketServerProtocol;
   PHttpApiWebSocketServerProtocolDynArray = ^THttpApiWebSocketServerProtocolDynArray;
 

@@ -715,8 +715,12 @@ var
 { ****************** Unicode, Time, File, Console process }
 
 {$ifdef MSWINDOWS}
+
 type
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
+  // - warning: do use this type directly, but rather TSynSystemTime as
+  // defined in mormot.core.datetime which is really cross-platform, and has
+  // consistent field order (FPC POSIX/Windows fields do not match!)
   TSystemTime = Windows.TSystemTime;
 
   {$ifdef ISDELPHI}
@@ -732,6 +736,8 @@ const
 // - under Delphi/Windows, directly call the homonymous Win32 API
 // - redefined in mormot.core.os to avoid dependency to Windows
 // - you should call directly FPC's version otherwise
+// - warning: do not call this function directly, but use TSynSystemTime as
+// defined in mormot.core.datetime which is really cross-platform
 procedure GetLocalTime(out result: TSystemTime); stdcall;
 
 {$endif MSWINDOWS}
@@ -767,6 +773,8 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 /// returns the current UTC time as TSystemTime
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
 // - under Windows, directly call the homonymous Win32 API
+// - warning: do not call this function directly, but use TSynSystemTime as
+// defined in mormot.core.datetime which is really cross-platform
 procedure GetSystemTime(out result: TSystemTime);
   {$ifdef MSWINDOWS} stdcall; {$endif}
 

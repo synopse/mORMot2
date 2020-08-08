@@ -26,12 +26,9 @@ uses
   mormot.core.os,
   mormot.net.sock,
   mormot.net.http,
-  {$ifdef MSWINDOWS}
-  Windows,
   {$ifdef USEWININET}
   mormot.lib.winhttp,
   {$endif USEWININET}
-  {$endif MSWINDOWS}
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
   mormot.core.text;
 
@@ -156,7 +153,7 @@ type
       RawByteString; const header: RawUTF8; aIgnoreSSLCertificateErrors: boolean;
       outHeaders: PRawUTF8 = nil; outStatus: PInteger = nil): RawByteString;
     // inherited class should override those abstract methods
-    procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD); virtual; abstract;
+    procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
     procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); virtual; abstract;
     procedure InternalSendRequest(const aMethod: RawUTF8; const aData:
       RawByteString); virtual; abstract;
@@ -184,13 +181,13 @@ type
     // - *TimeOut parameters are currently ignored by TCurlHttp
     constructor Create(const aServer, aPort: RawUTF8; aHttps: boolean;
       const aProxyName: RawUTF8 = ''; const aProxyByPass: RawUTF8 = '';
-      ConnectionTimeOut: DWORD = 0; SendTimeout: DWORD = 0;
-      ReceiveTimeout: DWORD = 0; aLayer: TNetLayer = nlTCP); overload; virtual;
+      ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
+      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); overload; virtual;
     /// connect to the supplied URI
     // - is just a wrapper around TURI and the overloaded Create() constructor
     constructor Create(const aURI: RawUTF8; const aProxyName: RawUTF8 = '';
-      const aProxyByPass: RawUTF8 = ''; ConnectionTimeOut: DWORD = 0;
-      SendTimeout: DWORD = 0; ReceiveTimeout: DWORD = 0;
+      const aProxyByPass: RawUTF8 = ''; ConnectionTimeOut: cardinal = 0;
+      SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0;
       aIgnoreSSLCertificateErrors: boolean = false); overload;
 
     /// low-level HTTP/1.1 request
@@ -306,9 +303,9 @@ type
   THttpRequestClass = class of THttpRequest;
 
 
-{ ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
-
 {$ifdef USEWININET}
+
+{ ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
 
 type
   TWinHttpAPI = class;
@@ -318,7 +315,7 @@ type
   // - CurrentSize is the current total number of downloaded bytes
   // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
   TWinHttpProgress = procedure(Sender: TWinHttpAPI;
-    CurrentSize, ContentLength: DWORD) of object;
+    CurrentSize, ContentLength: cardinal) of object;
 
   /// event callback to process the download by chunks, not in memory
   // - used in TWinHttpAPI.OnDownload property
@@ -329,7 +326,7 @@ type
   // - implementation should return TRUE to continue the download, or FALSE
   // to abort the download process
   TWinHttpDownload = function(Sender: TWinHttpAPI; CurrentSize, ContentLength,
-    ChunkSize: DWORD; const ChunkData): boolean of object;
+    ChunkSize: cardinal; const ChunkData): boolean of object;
 
   /// event callback to track upload progress, e.g. in the UI
   // - used in TWinHttpAPI.OnUpload property
@@ -338,7 +335,7 @@ type
   // - implementation should return TRUE to continue the upload, or FALSE
   // to abort the upload process
   TWinHttpUpload = function(Sender: TWinHttpAPI;
-    CurrentSize, ContentLength: DWORD): boolean of object;
+    CurrentSize, ContentLength: cardinal): boolean of object;
 
   /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
   // - both APIs have a common logic, which is encapsulated by this parent class
@@ -354,9 +351,9 @@ type
     fSession, fConnection, fRequest: HINTERNET;
     /// do not add "Accept: */*" HTTP header by default
     fNoAllAccept: boolean;
-    function InternalGetInfo(Info: DWORD): RawUTF8; virtual; abstract;
-    function InternalGetInfo32(Info: DWORD): DWORD; virtual; abstract;
-    function InternalQueryDataAvailable: DWORD; virtual; abstract;
+    function InternalGetInfo(Info: cardinal): RawUTF8; virtual; abstract;
+    function InternalGetInfo32(Info: cardinal): cardinal; virtual; abstract;
+    function InternalQueryDataAvailable: cardinal; virtual; abstract;
     function InternalReadData(var Data: RawByteString; Read: integer;
       Size: cardinal): cardinal; virtual; abstract;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
@@ -397,15 +394,15 @@ type
   protected
     // those internal methods will raise an EWinINet exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
-      ReceiveTimeout: DWORD); override;
+      ReceiveTimeout: cardinal); override;
     procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawUTF8); override;
     procedure InternalSendRequest(const aMethod: RawUTF8;
       const aData: RawByteString); override;
-    function InternalGetInfo(Info: DWORD): RawUTF8; override;
-    function InternalGetInfo32(Info: DWORD): DWORD; override;
-    function InternalQueryDataAvailable: DWORD; override;
+    function InternalGetInfo(Info: cardinal): RawUTF8; override;
+    function InternalGetInfo32(Info: cardinal): cardinal; override;
+    function InternalQueryDataAvailable: cardinal; override;
     function InternalReadData(var Data: RawByteString; Read: integer;
       Size: cardinal): cardinal; override;
   public
@@ -448,15 +445,15 @@ type
   protected
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
-      ReceiveTimeout: DWORD); override;
+      ReceiveTimeout: cardinal); override;
     procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawUTF8); override;
     procedure InternalSendRequest(const aMethod: RawUTF8;
       const aData: RawByteString); override;
-    function InternalGetInfo(Info: DWORD): RawUTF8; override;
-    function InternalGetInfo32(Info: DWORD): DWORD; override;
-    function InternalQueryDataAvailable: DWORD; override;
+    function InternalGetInfo(Info: cardinal): RawUTF8; override;
+    function InternalGetInfo32(Info: cardinal): cardinal; override;
+    function InternalQueryDataAvailable: cardinal; override;
     function InternalReadData(var Data: RawByteString; Read: integer;
       Size: cardinal): cardinal; override;
   public
@@ -481,8 +478,8 @@ type
     /// initialize the instance
     constructor Create(const aServer, aPort: RawUTF8; aHttps: boolean;
       const aProxyName: RawUTF8 = ''; const aProxyByPass: RawUTF8 = '';
-      ConnectionTimeOut: DWORD = 0; SendTimeout: DWORD = 0;
-      ReceiveTimeout: DWORD = 0; aLayer: TNetLayer = nlTCP); override;
+      ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
+      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); override;
   end;
 
   /// WebSocket client implementation
@@ -496,16 +493,16 @@ type
     // for sending upgrade request
     constructor Create(const aServer, aPort: RawUTF8; aHttps: boolean;
       const url: RawUTF8; const aSubProtocol: RawUTF8 = ''; const aProxyName: RawUTF8 = '';
-      const aProxyByPass: RawUTF8 = ''; ConnectionTimeOut: DWORD = 0;
-      SendTimeout: DWORD = 0; ReceiveTimeout: DWORD = 0);
+      const aProxyByPass: RawUTF8 = ''; ConnectionTimeOut: cardinal = 0;
+      SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0);
     /// send buffer
     function Send(aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer;
-      aBufferLength: DWORD): DWORD;
+      aBufferLength: cardinal): cardinal;
     /// receive buffer
-    function Receive(aBuffer: pointer; aBufferLength: DWORD;
-      out aBytesRead: DWORD; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): DWORD;
+    function Receive(aBuffer: pointer; aBufferLength: cardinal;
+      out aBytesRead: cardinal; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): cardinal;
     /// close current connection
-    function CloseConnection(const aCloseReason: RawUTF8): DWORD;
+    function CloseConnection(const aCloseReason: RawUTF8): cardinal;
     /// finalize the instance
     destructor Destroy; override;
   end;
@@ -737,7 +734,7 @@ end;
 
 constructor THttpRequest.Create(const aServer, aPort: RawUTF8; aHttps: boolean;
   const aProxyName: RawUTF8; const aProxyByPass: RawUTF8; ConnectionTimeOut,
-  SendTimeout, ReceiveTimeout: DWORD; aLayer: TNetLayer);
+  SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer);
 begin
   fLayer := aLayer;
   if fLayer <> nlUNIX then
@@ -764,8 +761,8 @@ begin
 end;
 
 constructor THttpRequest.Create(const aURI: RawUTF8; const aProxyName: RawUTF8;
-  const aProxyByPass: RawUTF8; ConnectionTimeOut: DWORD; SendTimeout: DWORD;
-  ReceiveTimeout: DWORD; aIgnoreSSLCertificateErrors: boolean);
+  const aProxyByPass: RawUTF8; ConnectionTimeOut: cardinal; SendTimeout: cardinal;
+  ReceiveTimeout: cardinal; aIgnoreSSLCertificateErrors: boolean);
 var
   URI: TURI;
 begin
@@ -878,7 +875,7 @@ end;
 function TWinHttpAPI.InternalRetrieveAnswer(var Header, Encoding,
   AcceptEncoding: RawUTF8; var Data: RawByteString): integer;
 var
-  ChunkSize, Bytes, ContentLength, Read: DWORD;
+  ChunkSize, Bytes, ContentLength, Read: cardinal;
   tmp: RawByteString;
 begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTTP
   result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
@@ -963,57 +960,14 @@ end;
 
 { TWinHTTP }
 
-procedure WinHttpAPIInitialize;
-var
-  api: TWinHttpAPIs;
-  P: PPointer;
-begin
-  if WinHttpAPI.LibraryHandle <> 0 then
-    exit; // already loaded
-  WinHttpAPI.LibraryHandle := SafeLoadLibrary(winhttpdll);
-  WinHttpAPI.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
-  if WinHttpAPI.LibraryHandle = 0 then
-    raise EHttpSocket.CreateFmt('Unable to load library %s', [winhttpdll]);
-  P := @@WinHttpAPI.Open;
-  for api := low(api) to high(api) do
-  begin
-    P^ := GetProcAddress(WinHttpAPI.LibraryHandle, WinHttpNames[api]);
-    if P^ = nil then
-      if api < hWebSocketApiFirst then
-      begin
-        FreeLibrary(WinHttpAPI.LibraryHandle);
-        WinHttpAPI.LibraryHandle := 0;
-        raise EHttpSocket.CreateFmt('Unable to find %s() export in %s',
-          [WinHttpNames[api], winhttpdll]);
-      end
-      else
-        WinHttpAPI.WebSocketEnabled := false; // e.g. version is lower than Windows 8
-    inc(P);
-  end;
-  if WinHttpAPI.WebSocketEnabled then
-    WebSocketApiInitialize
-  else
-    WebSocketAPI.WebSocketEnabled := false;
-end;
-
-procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
-  dwInternetStatus: DWORD; lpvStatusInformation: pointer;
-  dwStatusInformationLength: DWORD); stdcall;
-begin
-  // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
-  // non-https socket wrong port - perhaps must be 443?
-  raise EWinHTTP.CreateFmt('WinHTTP security error. Status %d, statusInfo: %d',
-    [dwInternetStatus, pdword(lpvStatusInformation)^]);
-end;
-
-procedure TWinHTTP.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD);
+procedure TWinHTTP.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
   OpenType: integer;
   Callback: WINHTTP_STATUS_CALLBACK;
   CallbackRes: PtrInt absolute Callback; // for FPC compatibility
-    // MPV - don't know why, but if I pass WINHTTP_FLAG_SECURE_PROTOCOL_SSL2
-    // flag also, TLS1.2 do not work
-  protocols: DWORD;
+  // MPV - don't know why, but if I pass WINHTTP_FLAG_SECURE_PROTOCOL_SSL2
+  // flag also, TLS1.2 does not work
+  protocols: cardinal;
 begin
   if fProxyName = '' then
     if OSVersion >= wEightOne then
@@ -1034,7 +988,7 @@ begin
   if fHTTPS then
   begin
     protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
-     // Windows 7 and newer support TLS 1.1 & 1.2
+    // Windows 7 and newer supports TLS 1.1 & 1.2
     if OSVersion >= wSeven then
       protocols := protocols or
         (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2);
@@ -1057,7 +1011,7 @@ const
   ALL_ACCEPT: array[0..1] of PWideChar = ('*/*', nil);
   ACCEPT_TYPES: array[boolean] of pointer = (@ALL_ACCEPT, nil);
 var
-  Flags: DWORD;
+  Flags: cardinal;
 begin
   Flags := WINHTTP_FLAG_REFRESH; // options for a true RESTful request
   if fHttps then
@@ -1091,12 +1045,12 @@ begin
     RaiseLastModuleError(winhttpdll, EWinHTTP);
 end;
 
-procedure TWinHTTP.InternalSendRequest(const aMethod: RawUTF8; const aData:
-  RawByteString);
+procedure TWinHTTP.InternalSendRequest(const aMethod: RawUTF8;
+  const aData: RawByteString);
 
-  function _SendRequest(L: DWORD): Boolean;
+  function _SendRequest(L: cardinal): Boolean;
   var
-    Bytes, Current, Max, BytesWritten: DWORD;
+    Bytes, Current, Max, BytesWritten: cardinal;
   begin
     if Assigned(fOnUpload) and
        (IdemPropNameU(aMethod, 'POST') or IdemPropNameU(aMethod, 'PUT')) then
@@ -1128,7 +1082,7 @@ procedure TWinHTTP.InternalSendRequest(const aMethod: RawUTF8; const aData:
 
 var
   L: integer;
-  winAuth: DWORD;
+  winAuth: cardinal;
 begin
   with fExtendedOptions do
     if AuthScheme <> wraNone then
@@ -1171,9 +1125,9 @@ begin
   end;
 end;
 
-function TWinHTTP.InternalGetInfo(Info: DWORD): RawUTF8;
+function TWinHTTP.InternalGetInfo(Info: cardinal): RawUTF8;
 var
-  dwSize, dwIndex: DWORD;
+  dwSize, dwIndex: cardinal;
   tmp: TSynTempBuffer;
   i: integer;
 begin
@@ -1181,7 +1135,7 @@ begin
   dwSize := 0;
   dwIndex := 0;
   if not WinHttpAPI.QueryHeaders(fRequest, Info, nil, nil, dwSize, dwIndex) and
-    (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
+     (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
   begin
     tmp.Init(dwSize);
     if WinHttpAPI.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
@@ -1195,9 +1149,9 @@ begin
   end;
 end;
 
-function TWinHTTP.InternalGetInfo32(Info: DWORD): DWORD;
+function TWinHTTP.InternalGetInfo32(Info: cardinal): cardinal;
 var
-  dwSize, dwIndex: DWORD;
+  dwSize, dwIndex: cardinal;
 begin
   dwSize := sizeof(result);
   dwIndex := 0;
@@ -1206,7 +1160,7 @@ begin
     result := 0;
 end;
 
-function TWinHTTP.InternalQueryDataAvailable: DWORD;
+function TWinHTTP.InternalQueryDataAvailable: cardinal;
 begin
   if not WinHttpAPI.QueryDataAvailable(fRequest, result) then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
@@ -1240,7 +1194,7 @@ end;
 
 { TWinINet }
 
-procedure TWinINet.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD);
+procedure TWinINet.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
   OpenType: integer;
 begin
@@ -1269,7 +1223,7 @@ const
   ALL_ACCEPT: array[0..1] of PAnsiChar = ('*/*', nil);
   ACCEPT_TYPES: array[boolean] of pointer = (@ALL_ACCEPT, nil);
 var
-  Flags: DWORD;
+  Flags: cardinal;
 begin
   Flags := INTERNET_FLAG_HYPERLINK or INTERNET_FLAG_PRAGMA_NOCACHE or
     INTERNET_FLAG_RESYNCHRONIZE; // options for a true RESTful request
@@ -1303,7 +1257,7 @@ procedure TWinINet.InternalSendRequest(const aMethod: RawUTF8; const aData:
   RawByteString);
 var
   buff: TInternetBuffersA;
-  datapos, datalen, max, Bytes, BytesWritten: DWORD;
+  datapos, datalen, max, Bytes, BytesWritten: cardinal;
 begin
   datalen := length(aData);
   if (datalen > 0) and Assigned(fOnUpload) then
@@ -1337,9 +1291,9 @@ if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
     raise EWinINet.Create;
 end;
 
-function TWinINet.InternalGetInfo(Info: DWORD): RawUTF8;
+function TWinINet.InternalGetInfo(Info: cardinal): RawUTF8;
 var
-  dwSize, dwIndex: DWORD;
+  dwSize, dwIndex: cardinal;
 begin
   result := '';
   dwSize := 0;
@@ -1353,9 +1307,9 @@ begin
   end;
 end;
 
-function TWinINet.InternalGetInfo32(Info: DWORD): DWORD;
+function TWinINet.InternalGetInfo32(Info: cardinal): cardinal;
 var
-  dwSize, dwIndex: DWORD;
+  dwSize, dwIndex: cardinal;
 begin
   dwSize := sizeof(result);
   dwIndex := 0;
@@ -1364,7 +1318,7 @@ begin
     result := 0;
 end;
 
-function TWinINet.InternalQueryDataAvailable: DWORD;
+function TWinINet.InternalQueryDataAvailable: cardinal;
 begin
   if not InternetQueryDataAvailable(fRequest, Result, 0, 0) then
     raise EWinINet.Create;
@@ -1403,7 +1357,7 @@ end;
 
 constructor TWinHTTPUpgradeable.Create(const aServer, aPort: RawUTF8; aHttps:
   boolean; const aProxyName: RawUTF8; const aProxyByPass: RawUTF8;
-  ConnectionTimeOut: DWORD; SendTimeout: DWORD; ReceiveTimeout: DWORD; aLayer: TNetLayer);
+  ConnectionTimeOut: cardinal; SendTimeout: cardinal; ReceiveTimeout: cardinal; aLayer: TNetLayer);
 begin
   inherited Create(aServer, aPort, aHttps, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, aLayer);
@@ -1419,8 +1373,8 @@ end;
 
 constructor TWinHTTPWebSocketClient.Create(const aServer, aPort: RawUTF8; aHttps:
   boolean; const url: RawUTF8; const aSubProtocol: RawUTF8; const aProxyName:
-  RawUTF8; const aProxyByPass: RawUTF8; ConnectionTimeOut: DWORD; SendTimeout:
-  DWORD; ReceiveTimeout: DWORD);
+  RawUTF8; const aProxyByPass: RawUTF8; ConnectionTimeOut: cardinal; SendTimeout:
+  cardinal; ReceiveTimeout: cardinal);
 var
   _http: TWinHTTPUpgradeable;
   inH, outH: RawUTF8;
@@ -1445,7 +1399,7 @@ begin
 end;
 
 function TWinHTTPWebSocketClient.Send(aBufferType:
-  WINHTTP_WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferLength: DWORD): DWORD;
+  WINHTTP_WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferLength: cardinal): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
@@ -1453,8 +1407,8 @@ begin
     result := WinHttpAPI.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
 end;
 
-function TWinHTTPWebSocketClient.Receive(aBuffer: pointer; aBufferLength: DWORD;
-  out aBytesRead: DWORD; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): DWORD;
+function TWinHTTPWebSocketClient.Receive(aBuffer: pointer; aBufferLength: cardinal;
+  out aBytesRead: cardinal; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
@@ -1463,7 +1417,7 @@ begin
       aBytesRead, aBufferType);
 end;
 
-function TWinHTTPWebSocketClient.CloseConnection(const aCloseReason: RawUTF8): DWORD;
+function TWinHTTPWebSocketClient.CloseConnection(const aCloseReason: RawUTF8): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
@@ -1480,7 +1434,7 @@ const
 var
   status: Word;
   reason: RawUTF8;
-  reasonLength: DWORD;
+  reasonLength: cardinal;
 begin
   if CheckSocket then
   begin // todo: check result

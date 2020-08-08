@@ -1203,9 +1203,9 @@ type
   /// WebSocket close status as defined by http://tools.ietf.org/html/rfc6455#section-7.4
 
   WEB_SOCKET_CLOSE_STATUS = Word;
+
   /// the bit values used to construct the WebSocket frame header for httpapi.dll
   // - not equals to WINHTTP_WEB_SOCKET_BUFFER_TYPE from winhttp.dll
-
   WEB_SOCKET_BUFFER_TYPE = ULONG;
 
 type
@@ -1316,6 +1316,15 @@ const
     'WinHttpSetOption', 'WinHttpSetCredentials', 'WinHttpWebSocketCompleteUpgrade',
     'WinHttpWebSocketClose', 'WinHttpWebSocketQueryCloseStatus',
     'WinHttpWebSocketSend', 'WinHttpWebSocketReceive', 'WinHttpWriteData');
+
+
+/// low-level thread-safe initialization of the WinHtpp API
+procedure WinHttpAPIInitialize;
+
+/// a callback raising a EWinHTTP on error
+procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
+  dwInternetStatus: cardinal; lpvStatusInformation: pointer;
+  dwStatusInformationLength: cardinal); stdcall;
 
 
 { ******************** websocket.dll Windows API Definitions }
@@ -1874,6 +1883,58 @@ end;
 
 
 { ******************** winhttp.dll Windows API Definitions }
+
+procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
+  dwInternetStatus: cardinal; lpvStatusInformation: pointer;
+  dwStatusInformationLength: cardinal); stdcall;
+begin
+  // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
+  // non-https socket wrong port - perhaps must be 443?
+  raise EHttpSocket.CreateFmt('WinHTTP security error. Status %d, statusInfo: %d',
+    [dwInternetStatus, PDWORD(lpvStatusInformation)^]);
+end;
+
+procedure WinHttpAPIInitialize;
+var
+  api: TWinHttpAPIs;
+  P: PPointer;
+begin
+  if WinHttpAPI.LibraryHandle <> 0 then
+    exit; // already loaded
+  mormot.core.os.GlobalLock;
+  try
+    if WinHttpAPI.LibraryHandle <> 0 then
+      exit; // thread-safe test
+    WinHttpAPI.LibraryHandle := SafeLoadLibrary(winhttpdll);
+    WinHttpAPI.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
+    if WinHttpAPI.LibraryHandle = 0 then
+      raise EHttpSocket.CreateFmt('Unable to load library %s', [winhttpdll]);
+    P := @@WinHttpAPI.Open;
+    for api := low(api) to high(api) do
+    begin
+      P^ := GetProcAddress(WinHttpAPI.LibraryHandle, WinHttpNames[api]);
+      if P^ = nil then
+        if api < hWebSocketApiFirst then
+        begin
+          FreeLibrary(WinHttpAPI.LibraryHandle);
+          WinHttpAPI.LibraryHandle := 0;
+          raise EHttpSocket.CreateFmt('Unable to find %s() export in %s',
+            [WinHttpNames[api], winhttpdll]);
+        end
+        else
+          WinHttpAPI.WebSocketEnabled := false; // e.g. version is lower than Windows 8
+      inc(P);
+    end;
+    if WinHttpAPI.WebSocketEnabled then
+      WebSocketApiInitialize
+    else
+      WebSocketAPI.WebSocketEnabled := false;
+  finally
+    mormot.core.os.GlobalUnlock;
+  end;
+end;
+
+
 
 { ******************** websocket.dll Windows API Definitions }
 
