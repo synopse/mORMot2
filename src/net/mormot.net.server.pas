@@ -2006,7 +2006,8 @@ begin
     end;
     if withBody and not (connectionUpgrade in HeaderFlags) then
     begin
-      GetBody;
+      if IdemPCharArray(pointer(fMethod), ['HEAD', 'OPTIONS']) < 0 then
+        GetBody;
       result := grBodyReceived;
     end
     else
@@ -2163,7 +2164,8 @@ begin
       else
       begin
         // call from TSynThreadPoolTHttpServer -> handle first request
-        if not fServerSock.fBodyRetrieved then
+        if not fServerSock.fBodyRetrieved and
+           (IdemPCharArray(pointer(fServerSock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
           fServerSock.GetBody;
         fServer.Process(fServerSock, ConnectionID, self);
         if (fServer <> nil) and fServerSock.KeepAliveClient then
@@ -2246,7 +2248,8 @@ begin
           else
           begin
             // no Keep Alive = multi-connection -> process in the Thread Pool
-            if not (connectionUpgrade in ServerSock.HeaderFlags) then
+            if not (connectionUpgrade in ServerSock.HeaderFlags) and
+               (IdemPCharArray(pointer(ServerSock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
             begin
               ServerSock.GetBody; // we need to get it now
               InterlockedIncrement(fServer.fStats[grBodyReceived]);

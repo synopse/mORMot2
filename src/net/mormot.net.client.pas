@@ -653,8 +653,9 @@ begin
         exit;
       end;
       GetHeader(false); // read all other headers
-      if (result <> HTTP_NOCONTENT) and not IdemPChar(pointer(method), 'HEAD') then
-        GetBody; // get content if necessary (not HEAD method)
+      if (result <> HTTP_NOCONTENT) and
+         (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
+        GetBody; // get content if necessary (not HEAD/OPTIONS methods)
     except
       on Exception do
         DoRetry(HTTP_NOTFOUND, 'Exception');

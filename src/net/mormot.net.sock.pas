@@ -60,7 +60,8 @@ var
 type
   /// the error codes returned by TNetSocket wrapper
   TNetResult = (
-    nrOK, nrRetry, nrNoSocket, nrNotFound, nrNotImplemented, nrFatalError, nrUnknownError);
+    nrOK, nrRetry, nrNoSocket, nrNotFound, nrNotImplemented, nrClosed,
+    nrFatalError, nrUnknownError);
 
   {$M+}
   /// exception class raise by this unit
@@ -742,7 +743,8 @@ end;
 
 const
   _NR: array[TNetResult] of string[15] = (
-    'OK', 'Retry', 'NoSocket', 'NotFound', 'NotImplemented', 'FatalError', 'UnknownError');
+    'OK', 'Retry', 'NoSocket', 'NotFound', 'NotImplemented', 'Closed',
+    'FatalError', 'UnknownError');
 
 function ToText(res: TNetResult): PShortString;
 begin
@@ -1048,8 +1050,11 @@ begin
   else
   begin
     len := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
-    if len < 0 then
-      result := NetLastError
+    if len <= 0 then
+      if len = 0 then
+        result := nrClosed
+      else
+        result := NetLastError
     else
       result := nrOK;
   end;
