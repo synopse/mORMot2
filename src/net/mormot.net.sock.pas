@@ -418,7 +418,8 @@ type
     // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
     // - aAddr='' - bind to systemd descriptor on linux. See
     // http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const aAddress: RawUTF8; aLayer: TNetLayer = nlTCP);
+    constructor Bind(const aAddress: RawUTF8; aLayer: TNetLayer = nlTCP;
+      aTimeOut: integer = 10000);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
@@ -1413,13 +1414,13 @@ const
     'Is a server running on this address:port?',
     'Another process may be currently listening to this port!');
 
-constructor TCrtSocket.Bind(const aAddress: RawUTF8; aLayer: TNetLayer);
+constructor TCrtSocket.Bind(const aAddress: RawUTF8; aLayer: TNetLayer;
+  aTimeOut: integer);
 var
   s, p: RawUTF8;
   aSock: integer;
 begin
-  Create(10000);
-  Create(10000);
+  Create(aTimeOut);
   if aAddress = '' then
   begin
     {$ifdef LINUXNOTBSD} // try systemd activation
