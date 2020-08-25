@@ -792,7 +792,7 @@ type
   TSynCurrency = type double;
 
   /// force to use our TSynCurrency wrapper instead of the plain "currency" type
-  // - this void record type would break compilation each time plain "curerency"
+  // - this void record type would break compilation each time plain "currency"
   // type is used in your code
   currency = record end;
   {$endif CPUX86}
@@ -832,6 +832,11 @@ procedure CurrencyToDouble(c: PSynCurrency; out d: double); overload;
 /// convert a TSynCurrency value into a double
 // - using PInt64() division by CURR_RES (=10000)
 function CurrencyToDouble(c: PSynCurrency): double; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// fill a variant value from a TSynCurrency value
+// - as compatible with VariantToCurrency/VariantToDouble
+procedure CurrencyToVariant(const c: TSynCurrency; var v: variant);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a double value into a TSynCurrency
@@ -3381,6 +3386,14 @@ end;
 function CurrencyToDouble(c: PSynCurrency): double;
 begin
   result := PInt64(c)^ / CURR_RES;
+end;
+
+procedure CurrencyToVariant(const c: TSynCurrency; var v: variant);
+begin
+  if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
+    VarClearProc(PVarData(@v)^);
+  PVarData(@v)^.VType := varCurrency;
+  PSynCurrency(@PVarData(@v)^.VCurrency)^ := c;
 end;
 
 procedure DoubleToCurrency(const d: double; out c: TSynCurrency);

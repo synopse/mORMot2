@@ -39,6 +39,7 @@ uses
   mormot.lib.winhttp       in '..\src\lib\mormot.lib.winhttp.pas',
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
+  mormot.db.core           in '..\src\db\mormot.db.core.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 

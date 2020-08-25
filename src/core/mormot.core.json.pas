@@ -334,9 +334,12 @@ function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
 // - used e.g. by TSynDictionary.LoadFromJSON
 function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
 
-/// remove comments from a text buffer before passing it to JSON parser
+/// remove comments and trailing commas from a text buffer before passing
+// it to a JSON parser
 // - handle two types of comments: starting from // till end of line
 // or /* ..... */ blocks anywhere in the text content
+// - trailing commas is replaced by ' ', so resulting JSON is valid for parsers
+// what not allows trailing commas (browsers for example)
 // - may be used to prepare configuration files before loading;
 // for example we store server configuration in file config.json and
 // put some comments in this file then code for loading is:
@@ -3507,49 +3510,62 @@ begin
 end;
 
 procedure RemoveCommentsFromJSON(P: PUTF8Char);
+var
+  PComma: PUTF8Char;
 begin // replace comments by ' ' characters which will be ignored by parser
   if P <> nil then
     while P^ <> #0 do
-    begin
-      case P^ of
-        '"':
-          begin
-            P := GotoEndOfJSONString(P, @JSON_CHARS);
-            if P^ <> '"' then
-              exit;
-          end;
-        '/':
-          begin
-            inc(P);
-            case P^ of
-              '/':
-                begin // this is // comment - replace by ' '
-                  dec(P);
-                  repeat
+    case P^ of
+      '"':
+        begin // don't search within JSON strings
+          P := GotoEndOfJSONString(P, @JSON_CHARS);
+          if P^ <> '"' then
+            exit;
+          inc(P);
+        end;
+      '/':
+        begin // may be a C or Pascal comment
+          inc(P);
+          case P^ of
+            '/':
+              begin // this is // comment - replace by ' '
+                dec(P);
+                repeat
+                  P^ := ' ';
+                  inc(P)
+                until (P^ = #0) or (P^ = #10) or (P^ = #13);
+                if P^ <> #0 then
+                  inc(P);
+              end;
+            '*':
+              begin // this is /* comment - replace by ' ' but keep CRLF
+                P[-1] := ' ';
+                repeat
+                  if (P^ <> #10) and (P^ <> #13) then
+                    // keep CRLF for correct line numbering (e.g. for error)
                     P^ := ' ';
-                    inc(P)
-                  until (P^ = #0) or (P^ = #10) or (P^ = #13);
-                end;
-              '*':
-                begin // this is /* comment - replace by ' ' but keep CRLF
-                  P[-1] := ' ';
-                  repeat
-                    if (P^ <> #10) and (P^ <> #13) then
-                      // keep CRLF for correct line numbering (e.g. for error)
-                      P^ := ' ';
-                    inc(P);
-                    if PWord(P)^ = ord('*') + ord('/') shl 8 then
-                    begin
-                      PWord(P)^ := $2020;
-                      inc(P, 2);
-                      break;
-                    end;
-                  until P^ = #0;
-                end;
-            end;
+                  inc(P);
+                  if PWord(P)^ = ord('*') + ord('/') shl 8 then
+                  begin
+                    PWord(P)^ := $2020;
+                    inc(P, 2);
+                    break;
+                  end;
+                until P^ = #0;
+              end;
           end;
-      end;
-      inc(P);
+        end;
+      ',':
+        begin // replace trailing comma by space for standard JSON parsers
+          PComma := P;
+          repeat
+            inc(P)
+          until (P^ > ' ') or (P^ = #0);
+          if (P^ = '}') or (P^ = ']') then
+            PComma^ := ' ';
+        end;
+      else
+        inc(P);
     end;
 end;
 
@@ -4097,6 +4113,7 @@ end;
 { ********** Low-Level JSON Serialization for all TRTTIParserType }
 
 type
+  /// internal stack-allocated structure for nested serialization
   TJsonSaveContext = object
     W: TTextWriter;
     Options: TTextWriterWriteObjectOptions;

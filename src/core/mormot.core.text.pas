@@ -570,6 +570,8 @@ type
   // - via the TBaseWriter.CreateOwnedStream overloaded constructor
   TTextWriterStackBuffer = array[0..8191] of AnsiChar;
 
+  PTextWriterStackBuffer = ^TTextWriterStackBuffer;
+
   /// available options for TBaseWriter.WriteObject() method
   // - woHumanReadable will add some line feeds and indentation to the content,
   // to make it more friendly to the human eye
@@ -662,7 +664,7 @@ type
   /// parent to T*Writer text processing classes, with the minimum set of methods
   // - use an internal buffer, so much faster than naive string+string
   // - see TTextWriter in mormot.core.json for proper JSON support
-  // - see TJSONWriter in mormot.rest.orm.table for SQL resultset export
+  // - see TJSONWriter in mormot.db.core for SQL resultset export
   // - see TJSONSerializer in mormot.core.reflection for proper class
   // serialization via WriteObject
   TBaseWriter = class
