@@ -40,6 +40,7 @@ uses
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
+  mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 
