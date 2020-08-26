@@ -2677,7 +2677,7 @@ begin
         aNewSQL := aNewSQL + tmp;
         if i = L then
           break;
-      // store :AA :BA ..
+        // store :AA :BA ..
         j := length(aNewSQL);
         SetLength(aNewSQL, j + 3);
         PCardinal(PtrInt(aNewSQL) + j)^ := PCardinal(@c)^;
@@ -2993,7 +2993,7 @@ begin
   if byte(fBatchSendingAbilities) = 0 then // if not already handled by driver
     case aDBMS of
       dSQlite, dMySQL, dPostgreSQL, dNexusDB, dMSSQL, dDB2, // INSERT with multi VALUES
-    //dFirebird,  EXECUTE BLOCK with params is slower (at least for embedded)
+      //dFirebird,  EXECUTE BLOCK with params is slower (at least for embedded)
       dOracle:
         begin // Oracle expects weird INSERT ALL INTO ... statement
           fBatchSendingAbilities := [cCreate];
@@ -3015,9 +3015,8 @@ begin
   inherited;
 end;
 
-function TSQLDBConnectionProperties.Execute(const aSQL: RawUTF8; const Params:
-  array of const; RowsVariant: PVariant = nil; ForceBlobAsNull: boolean = false):
-  ISQLDBRows;
+function TSQLDBConnectionProperties.Execute(const aSQL: RawUTF8;
+  const Params: array of const; RowsVariant: PVariant; ForceBlobAsNull: boolean): ISQLDBRows;
 var
   Stmt: ISQLDBStatement;
 begin
@@ -3033,8 +3032,8 @@ begin
       RowsVariant^ := result.RowData;
 end;
 
-function TSQLDBConnectionProperties.ExecuteNoResult(const aSQL: RawUTF8; const
-  Params: array of const): integer;
+function TSQLDBConnectionProperties.ExecuteNoResult(const aSQL: RawUTF8;
+  const Params: array of const): integer;
 var
   Stmt: ISQLDBStatement;
 begin
@@ -3200,8 +3199,8 @@ begin
             if InterlockedDecrement(fSharedTransactions[i].RefCount) = 0 then
             begin
               dec(n);
-              MoveFast(fSharedTransactions[i + 1], fSharedTransactions[i], (n -
-                i) * sizeof(fSharedTransactions[0]));
+              MoveFast(fSharedTransactions[i + 1], fSharedTransactions[i],
+                (n - i) * sizeof(fSharedTransactions[0]));
               SetLength(fSharedTransactions, n);
               case action of
                 transCommitWithException, transCommitWithoutException:
@@ -3220,7 +3219,8 @@ begin
           result := ThreadSafeConnection;
           for i := 0 to n - 1 do
             if fSharedTransactions[i].Connection = result then
-              raise ESQLDBException.CreateUTF8('%.SharedTransaction(sessionID=%) already started for sessionID=%',
+              raise ESQLDBException.CreateUTF8(
+                '%.SharedTransaction(sessionID=%) already started for sessionID=%',
                 [self, SessionID, fSharedTransactions[i].SessionID]);
           if not result.Connected then
             result.Connect;
@@ -3231,8 +3231,8 @@ begin
           fSharedTransactions[n].Connection := result;
         end
     else
-      raise ESQLDBException.CreateUTF8('Unexpected %.SharedTransaction(%,%)', [self,
-        SessionID, ord(action)]);
+      raise ESQLDBException.CreateUTF8('Unexpected %.SharedTransaction(%,%)',
+        [self, SessionID, ord(action)]);
     end;
   except
     on Exception do
@@ -3299,16 +3299,16 @@ begin // cachable if with ? parameter or SELECT without WHERE clause
     result := false;
 end;
 
-class function TSQLDBConnectionProperties.GetFieldDefinition(const Column:
-  TSQLDBColumnDefine): RawUTF8;
+class function TSQLDBConnectionProperties.GetFieldDefinition(
+  const Column: TSQLDBColumnDefine): RawUTF8;
 begin
   with Column do
   begin
     FormatUTF8('% [%', [ColumnName, ColumnTypeNative], result);
-    if (ColumnLength <> 0) or (Column.ColumnPrecision <> 0) or (Column.ColumnScale
-      <> 0) then
-      result := FormatUTF8('% % % %]', [result, ColumnLength, ColumnPrecision,
-        ColumnScale])
+    if (ColumnLength <> 0) or (Column.ColumnPrecision <> 0) or
+       (Column.ColumnScale <> 0) then
+      result := FormatUTF8('% % % %]',
+        [result, ColumnLength, ColumnPrecision, ColumnScale])
     else
       result := result + ']';
     if ColumnIndexed then
@@ -3321,8 +3321,8 @@ class function TSQLDBConnectionProperties.GetFieldORMDefinition(const Column:
 begin // 'Name: RawUTF8 index 20 read fName write fName;';
   with Column do
   begin
-    FormatUTF8('property %: %', [ColumnName, SQLDBFIELDTYPE_TO_DELPHITYPE[ColumnType]],
-      result);
+    FormatUTF8('property %: %',
+      [ColumnName, SQLDBFIELDTYPE_TO_DELPHITYPE[ColumnType]], result);
     if (ColumnType = ftUTF8) and (ColumnLength > 0) then
       result := FormatUTF8('% index %', [result, ColumnLength]);
     result := FormatUTF8('% read f% write f%;', [result, ColumnName, ColumnName]);
@@ -3503,8 +3503,8 @@ begin // search using fast binary lookup in the alphabetic ordered arrays
     if aDB <= dDefault then
       result := false
     else
-      result := FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[aDB]), high(DB_KEYWORDS
-        [aDB]), pointer(aWord)) >= 0
+      result := FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[aDB]),
+        high(DB_KEYWORDS[aDB]), pointer(aWord)) >= 0
   else
     result := true;
 end;
@@ -3514,8 +3514,8 @@ begin
   result := IsSQLKeyword(DBMS, aWord);
 end;
 
-procedure TSQLDBConnectionProperties.GetFieldDefinitions(const aTableName:
-  RawUTF8; out Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
+procedure TSQLDBConnectionProperties.GetFieldDefinitions(
+  const aTableName: RawUTF8; out Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
 var
   F: TSQLDBColumnDefineDynArray;
   Ref: RawUTF8;
@@ -3535,8 +3535,8 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.GetFields(const aTableName: RawUTF8; out
-  Fields: TSQLDBColumnDefineDynArray);
+procedure TSQLDBConnectionProperties.GetFields(const aTableName: RawUTF8;
+  out Fields: TSQLDBColumnDefineDynArray);
 var
   SQL: RawUTF8;
   n, i: integer;
@@ -3604,8 +3604,8 @@ begin
   SetLength(Fields, n);
 end;
 
-procedure TSQLDBConnectionProperties.GetIndexes(const aTableName: RawUTF8; out
-  Indexes: TSQLDBIndexDefineDynArray);
+procedure TSQLDBConnectionProperties.GetIndexes(const aTableName: RawUTF8;
+  out Indexes: TSQLDBIndexDefineDynArray);
 var
   SQL: RawUTF8;
   n: integer;
@@ -3653,8 +3653,8 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.GetProcedureParameters(const aProcName:
-  RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray);
+procedure TSQLDBConnectionProperties.GetProcedureParameters(
+  const aProcName: RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray);
 var
   SQL: RawUTF8;
   n: integer;
@@ -3772,8 +3772,8 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.SQLSplitProcedureName(const aProcName:
-  RawUTF8; out Owner, package, ProcName: RawUTF8);
+procedure TSQLDBConnectionProperties.SQLSplitProcedureName(
+  const aProcName: RawUTF8; out Owner, package, ProcName: RawUTF8);
 var
   lOccur, i: Integer;
 begin
@@ -3865,7 +3865,8 @@ begin
     dNexusDB:
       begin
         result :=
-          'select FIELD_NAME, FIELD_TYPE_SQL, FIELD_LENGTH, FIELD_UNITS,' + ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = '''
+          'select FIELD_NAME, FIELD_TYPE_SQL, FIELD_LENGTH, FIELD_UNITS,' +
+          ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = '''
           + aTableName + '''';
         exit;
       end;
@@ -4106,7 +4107,8 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
   const
     DECIMAL = 18; // change it if you update PCHARS[] below before 'DECIMAL'
     NUMERIC = DECIMAL + 1;
-    PCHARS: array[0..55] of PAnsiChar = ('TEXT COLLATE ISO8601', // should be before plain 'TEXT'
+    PCHARS: array[0..55] of PAnsiChar = (
+      'TEXT COLLATE ISO8601', // should be before plain 'TEXT'
       'TEXT', 'CHAR', 'NCHAR', 'VARCHAR', 'NVARCHAR', 'CLOB', 'NCLOB', 'DBCLOB',
       'BIT', 'INT', 'BIGINT', 'DOUBLE', 'NUMBER', 'FLOAT', 'REAL', 'DECFLOAT',
       'CURR', 'DECIMAL', 'NUMERIC', 'BLOB SUB_TYPE 1', 'BLOB', 'DATE',
@@ -4126,7 +4128,7 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
   var
     ndx: integer;
   begin
-  //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
+    //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
     ndx := IdemPCharArray(pointer(aNativeType), PCHARS);
     if (aScale = 0) and (ndx in [DECIMAL, NUMERIC]) then
       result := ftInt64
@@ -4147,11 +4149,12 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       else
         result := ftDouble;
       end
-    else if (PosEx('RAW', aNativeType) > 0) or IdemPropNameU(aNativeType, 'BLOB')
-      or IdemPropNameU(aNativeType, 'BFILE') then
+    else if (PosEx('RAW', aNativeType) > 0) or
+          IdemPropNameU(aNativeType, 'BLOB') or
+          IdemPropNameU(aNativeType, 'BFILE') then
       result := ftBlob
-    else if IdemPChar(pointer(aNativeType), 'BINARY_') or IdemPropNameU(aNativeType,
-      'FLOAT') then
+    else if IdemPChar(pointer(aNativeType), 'BINARY_') or
+            IdemPropNameU(aNativeType, 'FLOAT') then
       result := ftDouble
     else if IdemPropNameU(aNativeType, 'DATE') or IdemPChar(pointer(aNativeType),
       'TIMESTAMP') then
@@ -4202,8 +4205,8 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.GetForeignKey(const aTableName, aColumnName:
-  RawUTF8): RawUTF8;
+function TSQLDBConnectionProperties.GetForeignKey(
+  const aTableName, aColumnName: RawUTF8): RawUTF8;
 begin
   if not fForeignKeys.Initialized then
   begin
@@ -4261,8 +4264,8 @@ begin
   result := DateTimeToIso8601(DateTime, true, DateTimeFirstChar, false, '''');
 end;
 
-function TSQLDBConnectionProperties.SQLCreate(const aTableName: RawUTF8; const
-  aFields: TSQLDBColumnCreateDynArray; aAddID: boolean): RawUTF8;
+function TSQLDBConnectionProperties.SQLCreate(const aTableName: RawUTF8;
+  const aFields: TSQLDBColumnCreateDynArray; aAddID: boolean): RawUTF8;
 var
   i: integer;
   F: RawUTF8;
@@ -4300,7 +4303,8 @@ end;
 function TSQLDBConnectionProperties.SQLFieldCreate(const aField:
   TSQLDBColumnCreate; var aAddPrimaryKey: RawUTF8): RawUTF8;
 begin
-  if (aField.DBType = ftUTF8) and (cardinal(aField.Width - 1) < fSQLCreateFieldMax) then
+  if (aField.DBType = ftUTF8) and
+     (cardinal(aField.Width - 1) < fSQLCreateFieldMax) then
     FormatUTF8(fSQLCreateField[ftNull], [aField.Width], result)
   else
     result := fSQLCreateField[aField.DBType];
@@ -4323,13 +4327,13 @@ function TSQLDBConnectionProperties.SQLAddColumn(const aTableName: RawUTF8;
 var
   AddPrimaryKey: RawUTF8;
 begin
-  FormatUTF8('ALTER TABLE % ADD %', [aTableName, SQLFieldCreate(aField,
-    AddPrimaryKey)], result);
+  FormatUTF8('ALTER TABLE % ADD %', [aTableName,
+    SQLFieldCreate(aField, AddPrimaryKey)], result);
 end;
 
-function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8; const
-  aFieldNames: array of RawUTF8; aUnique, aDescending: boolean; const aIndexName:
-  RawUTF8): RawUTF8;
+function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
+  const aFieldNames: array of RawUTF8; aUnique, aDescending: boolean;
+  const aIndexName: RawUTF8): RawUTF8;
 const
   CREATNDXIFNE: array[boolean] of RawUTF8 = ('', 'IF NOT EXISTS ');
 var
@@ -4343,8 +4347,8 @@ begin
   if aIndexName = '' then
   begin
     SQLSplitTableName(aTableName, Owner, Table);
-    if (Owner <> '') and not (fDBMS in [dMSSQL, dPostgreSQL, dMySQL, dFirebird,
-      dDB2, dInformix]) then
+    if (Owner <> '') and
+       not (fDBMS in [dMSSQL, dPostgreSQL, dMySQL, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
       IndexName := Owner + '.';
     FieldsCSV := RawUTF8ArrayToCSV(aFieldNames, '');
@@ -4366,8 +4370,9 @@ begin
     end;
   if ColsDesc = '' then
     ColsDesc := RawUTF8ArrayToCSV(aFieldNames, ',');
-  result := FormatUTF8('CREATE %INDEX %% ON %(%)', [result, CREATNDXIFNE[DBMS in
-    DB_HANDLECREATEINDEXIFNOTEXISTS], IndexName, aTableName, ColsDesc]);
+  result := FormatUTF8('CREATE %INDEX %% ON %(%)', [result,
+    CREATNDXIFNE[DBMS in DB_HANDLECREATEINDEXIFNOTEXISTS],
+    IndexName, aTableName, ColsDesc]);
 end;
 
 function TSQLDBConnectionProperties.SQLTableName(const aTableName: RawUTF8): RawUTF8;
@@ -4406,8 +4411,8 @@ begin
     result := aTableName;
 end;
 
-procedure TSQLDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed(const
-  aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
+procedure TSQLDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed(
+  const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
 var
   i, j: integer;
   ColName: RawUTF8;
@@ -4429,8 +4434,8 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.ExceptionIsAboutConnection(aClass:
-  ExceptClass; const aMessage: RawUTF8): boolean;
+function TSQLDBConnectionProperties.ExceptionIsAboutConnection(
+  aClass: ExceptClass; const aMessage: RawUTF8): boolean;
 
   function PosErrorNumber(const aMessage: RawUTF8; const aSepChar: AnsiChar): PUTF8Char;
   begin // search aSepChar followed by a number
@@ -4465,10 +4470,10 @@ begin // see more complete list in feature request [f024266c0839]
   end;
 end;
 
-procedure TSQLDBConnectionProperties.MultipleValuesInsert(Props:
-  TSQLDBConnectionProperties; const TableName: RawUTF8; const FieldNames:
-  TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray; RowCount: integer;
-  const FieldValues: TRawUTF8DynArrayDynArray);
+procedure TSQLDBConnectionProperties.MultipleValuesInsert(
+  Props: TSQLDBConnectionProperties; const TableName: RawUTF8;
+  const FieldNames: TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray;
+  RowCount: integer; const FieldValues: TRawUTF8DynArrayDynArray);
 var
   SQL: RawUTF8;
   SQLCached: boolean;
@@ -4508,7 +4513,7 @@ var
                         len := length(FieldValues[f, r]) - 2; // unquoted UTF-8 text length
                         if len < 1 then
                           len := 1;
-                        AddShort(' VARCHAR(');  // inlined Add(fmt...) for Delphi 5
+                        AddShort(' VARCHAR(');
                         AddU(len);
                         AddShort(') CHARACTER SET UTF8');
                       end;
@@ -4617,8 +4622,9 @@ begin
       TableName]);
   batchRowCount := 0;
   paramCountLimit := 0;
-  case Props.fDBMS of  // values below were done empirically, assuring < 667 (maximum :AA..:ZZ)
-  // see http://stackoverflow.com/a/6582902 for theoritical high limits
+  case Props.fDBMS of
+    // values below were done empirically, assuring < 667 (maximum :AA..:ZZ)
+    // see http://stackoverflow.com/a/6582902 for theoritical high limits
     dSQlite:
       paramCountLimit := 200;  // theoritical=999
     dMySQL:
@@ -4697,18 +4703,18 @@ begin
   until currentRow = RowCount;
 end;
 
-procedure TSQLDBConnectionProperties.MultipleValuesInsertFirebird(Props:
-  TSQLDBConnectionProperties; const TableName: RawUTF8; const FieldNames:
-  TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray; RowCount: integer;
-  const FieldValues: TRawUTF8DynArrayDynArray);
+procedure TSQLDBConnectionProperties.MultipleValuesInsertFirebird(
+  Props: TSQLDBConnectionProperties; const TableName: RawUTF8;
+  const FieldNames: TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray;
+  RowCount: integer; const FieldValues: TRawUTF8DynArrayDynArray);
 var
   W: TTextWriter;
   maxf, sqllenwitoutvalues, sqllen, r, f, i: PtrInt;
   v: RawUTF8;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
-  if (Props = nil) or (FieldNames = nil) or (TableName = '') or (length(FieldValues)
-    <> maxf) or (Props.fDBMS <> dFirebird) then
+  if (Props = nil) or (FieldNames = nil) or (TableName = '') or
+     (length(FieldValues) <> maxf) or (Props.fDBMS <> dFirebird) then
     raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsertFirebird(%,%)',
       [self, Props, TableName]);
   sqllenwitoutvalues := 3 * maxf + 24;
@@ -4781,11 +4787,11 @@ begin
       until r = RowCount;
       W.AddShort('end');
       with Props.NewThreadSafeStatement do
-      try
-        Execute(W.Text, false);
-      finally
-        Free;
-      end;
+        try
+          Execute(W.Text, false);
+        finally
+          Free;
+        end;
       if r = RowCount then
         break;
       W.CancelAll;
@@ -4795,8 +4801,8 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.FieldsFromList(const aFields:
-  TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
+function TSQLDBConnectionProperties.FieldsFromList(
+  const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
 var
   i, n: integer;
 begin
@@ -4912,14 +4918,14 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.DefinitionToFile(const aJSONFile: TFileName;
-  Key: cardinal);
+procedure TSQLDBConnectionProperties.DefinitionToFile(
+  const aJSONFile: TFileName; Key: cardinal);
 begin
   FileFromString(JSONReformat(DefinitionToJSON(Key)), aJSONFile);
 end;
 
-class function TSQLDBConnectionProperties.ClassFrom(aDefinition:
-  TSynConnectionDefinition): TSQLDBConnectionPropertiesClass;
+class function TSQLDBConnectionProperties.ClassFrom(
+  aDefinition: TSynConnectionDefinition): TSQLDBConnectionPropertiesClass;
 var
   ndx: integer;
 begin
@@ -4932,8 +4938,8 @@ begin
   result := nil;
 end;
 
-class function TSQLDBConnectionProperties.CreateFrom(aDefinition:
-  TSynConnectionDefinition): TSQLDBConnectionProperties;
+class function TSQLDBConnectionProperties.CreateFrom(
+  aDefinition: TSynConnectionDefinition): TSQLDBConnectionProperties;
 var
   C: TSQLDBConnectionPropertiesClass;
 begin
@@ -4945,8 +4951,8 @@ begin
     aDefinition.User, aDefinition.PassWordPlain);
 end;
 
-class function TSQLDBConnectionProperties.CreateFromJSON(const aJSONDefinition:
-  RawUTF8; aKey: cardinal): TSQLDBConnectionProperties;
+class function TSQLDBConnectionProperties.CreateFromJSON(
+  const aJSONDefinition: RawUTF8; aKey: cardinal): TSQLDBConnectionProperties;
 var
   Definition: TSynConnectionDefinition;
 begin
@@ -4958,16 +4964,17 @@ begin
   end;
 end;
 
-class function TSQLDBConnectionProperties.CreateFromFile(const aJSONFile:
-  TFileName; aKey: cardinal): TSQLDBConnectionProperties;
+class function TSQLDBConnectionProperties.CreateFromFile(
+  const aJSONFile: TFileName; aKey: cardinal): TSQLDBConnectionProperties;
 begin
   result := CreateFromJSON(AnyTextFileToRawUTF8(aJSONFile, true), aKey);
 end;
 
+
 { TSQLDBStatement }
 
-procedure TSQLDBStatement.Bind(Param: Integer; const Data: TSQLVar; IO:
-  TSQLDBParamInOutType);
+procedure TSQLDBStatement.Bind(Param: Integer; const Data: TSQLVar;
+  IO: TSQLDBParamInOutType);
 begin
   with Data do
     case VType of
@@ -4991,8 +4998,8 @@ begin
     end;
 end;
 
-procedure TSQLDBStatement.Bind(Param: Integer; ParamType: TSQLDBFieldType; const
-  Value: RawUTF8; ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType = paramIn);
+procedure TSQLDBStatement.Bind(Param: Integer; ParamType: TSQLDBFieldType;
+  const Value: RawUTF8; ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType);
 var
   tmp: RawUTF8;
 begin
@@ -5020,9 +5027,9 @@ begin
           BindDateTime(Param, Iso8601ToDateTime(tmp), IO);
         end;
       ftUTF8:
-        if (fConnection <> nil) and fConnection.fProperties.StoreVoidStringAsNull
-          and ((Value = '') or // check if '' or '""' should be stored as null
-          ((PInteger(Value)^ and $ffffff = $2727) and not ValueAlreadyUnquoted)) then
+        if (fConnection <> nil) and fConnection.fProperties.StoreVoidStringAsNull and
+          ((Value = '') or // check if '' or '""' should be stored as null
+           ((PInteger(Value)^ and $ffffff = $2727) and not ValueAlreadyUnquoted)) then
           BindNull(Param, IO, ftUTF8)
         else
         begin
@@ -5070,7 +5077,7 @@ begin
           {$ifdef HASCODEPAGE}
               BindTextU(i, AnyAnsiToUTF8(RawByteString(VAnsiString)), IO);
           {$else}
-            BindTextU(i, RawUTF8(VAnsiString), IO);
+              BindTextU(i, RawUTF8(VAnsiString), IO);
           {$endif}
           end;
         vtPChar:
@@ -5161,36 +5168,37 @@ begin
         BindCurrency(Param, VCurrency, IO);
       varOleStr: // handle special case if was bound explicitely as WideString
         BindTextW(Param, WideString(VAny), IO);
-(* fixme
     {$ifdef HASVARUSTRING}
-    varUString:
-      if DataIsBlob then
-        raise ESQLDBException.CreateUTF8('%.BindVariant: BLOB should not be UnicodeString',[self]) else
-        BindTextU(Param,UnicodeStringToUtf8(UnicodeString(VAny)),IO);
+      varUString:
+        if DataIsBlob then
+          raise ESQLDBException.CreateUTF8(
+            '%.BindVariant: BLOB should not be UnicodeString', [self])
+        else
+          BindTextU(Param, UnicodeStringToUtf8(UnicodeString(VAny)), IO);
     {$endif}
-*)
       varString:
         if DataIsBlob then
           if (VAny <> nil) and (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC) then
-          // recognized as Base64 encoded text
-            BindBlob(Param, Base64ToBin(PAnsiChar(VAny) + 3, length(RawByteString
-              (VAny)) - 3))
-          else          // no conversion if was set via TQuery.AsBlob property e.g.
+            // recognized as Base64 encoded text
+            BindBlob(Param, Base64ToBin(PAnsiChar(VAny) + 3,
+              length(RawByteString(VAny)) - 3))
+          else
+            // no conversion if was set via TQuery.AsBlob property e.g.
             BindBlob(Param, RawByteString(VAny), IO)
-        else        // direct bind of AnsiString as UTF-8 value
-          Exit;
-        (* fixme
+        else
+          // direct bind of AnsiString as UTF-8 value
         {$ifdef HASCODEPAGE}
-        BindTextU(Param,AnyAnsiToUTF8(RawByteString(VAny)),IO);
+          BindTextU(Param, AnyAnsiToUTF8(RawByteString(VAny)), IO);
         {$else} // on older Delphi, we assume AnsiString = RawUTF8
-        BindTextU(Param,RawUTF8(VAny),IO);
-        {$endif} *)
+          BindTextU(Param, RawUTF8(VAny), IO);
+        {$endif}
     else
       if VType = varByRef or varVariant then
         BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)
       else if VType = varByRef or varOleStr then
         BindTextW(Param, PWideString(VAny)^, IO)
-      else      // also use TEXT for any non native VType parameter
+      else
+        // also use TEXT for any non native VType parameter
         BindTextU(Param, VariantToUTF8(Data), IO);
     end;
 end;
@@ -5199,8 +5207,8 @@ procedure TSQLDBStatement.BindArray(Param: Integer; ParamType: TSQLDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
   if (Param <= 0) or (ParamType in [ftUnknown, ftNull]) or (ValuesCount <= 0) or
-    (length(Values) < ValuesCount) or (fConnection = nil) or (fConnection.fProperties.BatchSendingAbilities
-    * [cCreate, cUpdate, cDelete] = []) then
+    (length(Values) < ValuesCount) or (fConnection = nil) or
+    (fConnection.fProperties.BatchSendingAbilities * [cCreate, cUpdate, cDelete] = []) then
     raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(ParamType)^]);
 end;
@@ -5220,14 +5228,14 @@ begin
   BindArray(Param, ftDouble, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArrayCurrency(Param: Integer; const Values: array
-  of system.currency);
+procedure TSQLDBStatement.BindArrayCurrency(Param: Integer;
+  const Values: array of system.currency);
 begin
   BindArray(Param, ftCurrency, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArrayDateTime(Param: Integer; const Values: array
-  of TDateTime);
+procedure TSQLDBStatement.BindArrayDateTime(Param: Integer;
+  const Values: array of TDateTime);
 begin
   BindArray(Param, ftDate, nil, 0); // will raise an exception (Values=nil)
 end;
@@ -5351,7 +5359,8 @@ begin
                 CurrentAnsiConvert.UTF8BufferToAnsi(V.VText, V.VBlobLen,
                   RawByteString(VAny));
             end
-            else          {$endif UNICODE}
+            else
+          {$endif UNICODE}
               UTF8ToSynUnicode(V.VText, V.VBlobLen, SynUnicode(VAny));
           end
           else
@@ -5437,8 +5446,8 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar; var
-  Temp: RawByteString);
+procedure TSQLDBStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
+  var Temp: RawByteString);
 begin
   Value.Options := [];
   if ColumnNull(Col) then // will call GetCol() to check Col
@@ -5475,8 +5484,8 @@ begin
   end;
 end;
 
-function TSQLDBStatement.ColumnToTypedValue(Col: integer; DestType:
-  TSQLDBFieldType; var Dest): TSQLDBFieldType;
+function TSQLDBStatement.ColumnToTypedValue(Col: integer;
+  DestType: TSQLDBFieldType; var Dest): TSQLDBFieldType;
 var
   Temp: Variant; // rely on a temporary variant value for the conversion
 begin
@@ -5769,14 +5778,14 @@ begin
       StartPos := W.TotalWritten;
       if (currentRow = 1) or Step then // Step may already be done (e.g. TQuery.Open)
         repeat
-        // save row position in DataRowPosition[] (if any)
+          // save row position in DataRowPosition[] (if any)
           if DataRowPosition <> nil then
           begin
             if Length(DataRowPosition^) <= integer(result) then
               SetLength(DataRowPosition^, NextGrow(result));
             DataRowPosition^[result] := W.TotalWritten - StartPos;
           end;
-        // first write null columns flags
+          // first write null columns flags
           if NullRowSize > 0 then
           begin
             FillCharFast(Null[0], NullRowSize, 0);
@@ -5795,7 +5804,7 @@ begin
           end
           else
             W.Write1(0); // = W.WriteVarUInt32(0)
-        // then write data values
+          // then write data values
           ColumnsToBinary(W, pointer(Null), ColTypes);
           inc(result);
           if (MaxRowCount > 0) and (result >= MaxRowCount) then
@@ -5823,8 +5832,8 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.Execute(const SQLFormat: RawUTF8; ExpectResults:
-  Boolean; const Args, Params: array of const);
+procedure TSQLDBStatement.Execute(const SQLFormat: RawUTF8;
+  ExpectResults: Boolean; const Args, Params: array of const);
 begin
   Execute(FormatUTF8(SQLFormat, Args), ExpectResults, Params);
 end;
@@ -5966,8 +5975,8 @@ begin
         FormatShort16(' wr=%', [UpdateCount], tmp);
       msg := @tmp;
     end;
-    fSQLLogLog.Log(fSQLLogLevel, 'ExecutePrepared %% %', [fSQLLogTimer.Time, msg
-      ^, fSQLWithInlinedParams], self)
+    fSQLLogLog.Log(fSQLLogLevel, 'ExecutePrepared %% %',
+      [fSQLLogTimer.Time, msg^, fSQLWithInlinedParams], self)
   end
   else
   begin
@@ -6142,8 +6151,8 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.RowDocVariant(out aDocument: variant; aOptions:
-  TDocVariantOptions);
+procedure TSQLDBStatement.RowDocVariant(out aDocument: variant;
+  aOptions: TDocVariantOptions);
 var
   n, F: integer;
   names: TRawUTF8DynArray;
@@ -6201,8 +6210,8 @@ begin
   fSQLWithInlinedParams := '';
 end;
 
-function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8; var Fields:
-  TSQLDBColumnCreateDynArray): RawUTF8;
+function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
+  var Fields: TSQLDBColumnCreateDynArray): RawUTF8;
 var
   F, size: integer;
 begin
@@ -6280,8 +6289,8 @@ begin
   if self = nil then
     raise ESQLDBException.Create('TSQLDBConnection not created');
   if not Connected then
-    raise ESQLDBException.CreateUTF8('% on %/% should be connected', [self,
-      Properties.ServerName, Properties.DataBaseName]);
+    raise ESQLDBException.CreateUTF8('% on %/% should be connected',
+      [self, Properties.ServerName, Properties.DataBaseName]);
 end;
 
 procedure TSQLDBConnection.InternalProcess(Event: TOnSQLDBProcessEvent);
@@ -6565,7 +6574,8 @@ begin
       // propagate error not related to connection (e.g. SQL syntax error)
       raise fErrorException.Create(UTF8ToString(fErrorMessage));
   end
-  else    // regular preparation, with no connection error interception
+  else
+    // regular preparation, with no connection error interception
     TryPrepare(RaiseExceptionOnError);
 end;
 
@@ -7121,8 +7131,8 @@ begin
               ftUTF8:
                 begin
                   U := Rows.ColumnUTF8(F);
-                  if (U = '') and (fConnection <> nil) and fConnection.Properties.StoreVoidStringAsNull
-                    then
+                  if (U = '') and (fConnection <> nil) and
+                     fConnection.Properties.StoreVoidStringAsNull then
                     VArray[fParamsArrayCount] := 'null'
                   else
                     VArray[fParamsArrayCount] := QuotedStr(U, '''');
