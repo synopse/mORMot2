@@ -116,9 +116,21 @@ procedure IntervalTextToDateTimeVar(Text: PUTF8Char; var result: TDateTime);
 // - use 'YYYYMMDDThhmmss' format if not Expanded
 // - use 'YYYY-MM-DDThh:mm:ss' format if Expanded
 // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
+// - if QuotedChar is not default #0, will (double) quote the resulted text
 // - you may rather use DateTimeToIso8601Text() to handle 0 or date-only values
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean; FirstChar: AnsiChar = 'T';
-  WithMS: boolean = false): RawUTF8;
+  WithMS: boolean = false; QuotedChar: AnsiChar = #0): RawUTF8; overload;
+
+/// basic Date/Time conversion into ISO-8601
+// - use 'YYYYMMDDThhmmss' format if not Expanded
+// - use 'YYYY-MM-DDThh:mm:ss' format if Expanded
+// - if WithMS is TRUE, will append '.sss' for milliseconds resolution
+// - if QuotedChar is not default #0, will (double) quote the resulted text
+// - you may rather use DateTimeToIso8601Text() to handle 0 or date-only values
+// - returns the number of chars written to P^ buffer
+function DateTimeToIso8601(P: PUTF8Char; D: TDateTime; Expanded: boolean;
+  FirstChar: AnsiChar = 'T'; WithMS: boolean = false;
+  QuotedChar: AnsiChar = #0): integer; overload;
 
 /// basic Date conversion into ISO-8601
 // - use 'YYYYMMDD' format if not Expanded
@@ -519,11 +531,20 @@ type
     Value: Int64;
     /// extract the date and time content in Value into individual values
     procedure Expand(out Date: TSynSystemTime);
-    /// convert to Iso-8601 encoded text
+    /// convert to Iso-8601 encoded text, truncated to date/time only if needed
     function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8; overload;
-    /// convert to Iso-8601 encoded text
+    /// convert to Iso-8601 encoded text, truncated to date/time only if needed
     function Text(Dest: PUTF8Char; Expanded: boolean;
       FirstTimeChar: AnsiChar = 'T'; QuoteChar: AnsiChar = #0): PUTF8Char; overload;
+    /// convert to Iso-8601 encoded text with date and time part
+    // - never truncate to date/time nor return '' as Text() does
+    function FullText(Expanded: boolean; FirstTimeChar: AnsiChar = 'T';
+      QuotedChar: AnsiChar = #0): RawUTF8; overload;
+      {$ifdef FPC}inline;{$endif} //  URW1111 on Delphi 2010 and URW1136 on XE
+    /// convert to Iso-8601 encoded text with date and time part
+    // - never truncate to date/time or return '' as Text() does
+    function FullText(Dest: PUTF8Char; Expanded: boolean;
+      FirstTimeChar: AnsiChar = 'T'; QuotedChar: AnsiChar = #0): PUTF8Char; overload;
     /// convert to a Delphi Time
     function ToTime: TDateTime;
     /// convert to a Delphi Date
@@ -1027,14 +1048,33 @@ begin
     T.MilliSecond, FirstChar, WithMS);
 end;
 
-function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
-  FirstChar: AnsiChar; WithMS: boolean): RawUTF8;
+function DateTimeToIso8601(P: PUTF8Char; D: TDateTime; Expanded: boolean;
+  FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar): integer;
 var
-  P: PUTF8Char;
-  tmp: array[0..31] of AnsiChar;
+    S: PUTF8Char;
+begin
+  S := P;
+  if QuotedChar <> #0 then
+  begin
+    P^ := QuotedChar;
+    inc(P);
+  end;
+  P := DateToIso8601PChar(D, P, Expanded);
+  P := TimeToIso8601PChar(D, P, Expanded, FirstChar, WithMS);
+  if QuotedChar <> #0 then
+  begin
+    P^ := QuotedChar;
+    inc(P);
+  end;
+  result := P - S;
+end;
+
+function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
+  FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar): RawUTF8;
+var tmp: array[0 .. 31] of AnsiChar;
 begin // D=0 is handled in DateTimeToIso8601Text()
-  P := TimeToIso8601PChar(D, DateToIso8601PChar(D, @tmp, Expanded), true, FirstChar, WithMS);
-  FastSetString(result, @tmp, P - PUTF8Char(@tmp));
+  FastSetString(result, @tmp,
+    DateTimeToIso8601(@tmp, D, Expanded, FirstChar, WithMS, QuotedChar));
 end;
 
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUTF8;
@@ -2075,7 +2115,7 @@ begin
   result := Dest;
 end;
 
-function TTimeLogBits.Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
+function TTimeLogBits.Text(Expanded: boolean; FirstTimeChar: AnsiChar): RawUTF8;
 var
   tmp: array[0..31] of AnsiChar;
 begin
@@ -2084,6 +2124,40 @@ begin
   else
     FastSetString(result, @tmp, Text(@tmp, Expanded, FirstTimeChar) - PUTF8Char(@tmp));
 end;
+
+function TTimeLogBits.FullText(Dest: PUTF8Char; Expanded: boolean;
+  FirstTimeChar, QuotedChar: AnsiChar): PUTF8Char;
+var
+  lo: PtrUInt;
+begin // convert full time and date
+  if QuotedChar <> #0 then
+  begin
+    Dest^ := QuotedChar;
+    inc(Dest);
+  end;
+  lo := {$ifdef CPU64}Value{$else}PCardinal(@Value)^{$endif};
+  Dest := DateToIso8601PChar(Dest, Expanded,
+    {$ifdef CPU64}lo{$else}Value{$endif} shr (6 + 6 + 5 + 5 + 4),
+    1 + (lo shr (6 + 6 + 5 + 5)) and 15, 1 + (lo shr (6 + 6 + 5)) and 31);
+  Dest := TimeToIso8601PChar(Dest, Expanded, (lo shr (6 + 6)) and 31,
+    (lo shr 6) and 63, lo and 63, 0, FirstTimeChar);
+  if QuotedChar <> #0 then
+  begin
+    Dest^ := QuotedChar;
+    inc(Dest);
+  end;
+  result := Dest;
+end;
+
+function TTimeLogBits.FullText(Expanded: boolean;
+  FirstTimeChar, QuotedChar: AnsiChar): RawUTF8;
+var
+  tmp: array[0..31] of AnsiChar;
+begin
+  FastSetString(result, @tmp,
+    FullText(tmp{%H-}, Expanded, FirstTimeChar, QuotedChar) - PUTF8Char(@tmp));
+end;
+
 
 function TimeLogNow: TTimeLog;
 begin

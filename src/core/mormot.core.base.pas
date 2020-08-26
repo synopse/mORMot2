@@ -2799,6 +2799,19 @@ procedure VarClear(var v: variant); inline;
 procedure SetVariantNull(var Value: variant);
   {$ifdef HASINLINE} inline;{$endif}
 
+/// convert a raw binary buffer into a variant RawByteString varString
+// - you can then use VariantToRawByteString() to retrieve the binary content
+procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant); overload;
+
+/// convert a RawByteString content into a variant varString
+// - you can then use VariantToRawByteString() to retrieve the binary content
+procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant); overload;
+
+/// convert back a RawByteString from a variant
+// - the supplied variant should have been created via a RawByteStringToVariant()
+// function call
+procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
+
 /// get the root PVarData of a variant, redirecting any varByRef
 // - if result^.VPointer=nil, returns varEmpty
 function VarDataFromVariant(const Value: variant): PVarData;
@@ -9508,6 +9521,36 @@ procedure SetVariantNull(var Value: variant);
 begin
   VarClear(Value);
   PPtrInt(@Value)^ := varNull;
+end;
+
+procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
+begin
+  ClearVariantForString(Value);
+  if (Data = nil) or (DataLen <= 0) then
+    TVarData(Value).VType := varNull
+  else
+    SetString(RawByteString(TVarData(Value).VAny), PAnsiChar(Data), DataLen);
+end;
+
+procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
+begin
+  ClearVariantForString(Value);
+  if Data = '' then
+    TVarData(Value).VType := varNull
+  else
+    RawByteString(TVarData(Value).VAny) := Data;
+end;
+
+procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
+begin
+  case integer(TVarData(Value).VType) of
+    varEmpty, varNull:
+      Dest := '';
+    varString:
+      Dest := RawByteString(TVarData(Value).VAny);
+    else // not from RawByteStringToVariant() -> conversion to string
+      Dest := {$ifdef UNICODE}RawByteString{$else}string{$endif}(Value);
+  end;
 end;
 
 function VarDataFromVariant(const Value: variant): PVarData;

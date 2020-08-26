@@ -2094,6 +2094,10 @@ function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
 // - such result type would avoid a string allocation on heap
 function CardinalToHexShort(aCardinal: Cardinal): TShort16;
 
+/// compute the hexadecimal representation of the crc32 checkum of a given text
+// - wrapper around CardinalToHex(crc32c(...))
+function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
+
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 // - reverse function of HexDisplayToInt64()
@@ -9419,6 +9423,11 @@ function CardinalToHexShort(aCardinal: Cardinal): TShort16;
 begin
   result[0] := AnsiChar(SizeOf(aCardinal) * 2);
   BinToHexDisplay(@aCardinal, @result[1], SizeOf(aCardinal));
+end;
+
+function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
+begin
+  result := CardinalToHex(crc32c(0, pointer(str), length(str)));
 end;
 
 function Int64ToHexShort(aInt64: Int64): TShort16;

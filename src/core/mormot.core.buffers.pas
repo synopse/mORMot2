@@ -452,6 +452,16 @@ const
   ALGO_SAFE: array[boolean] of TAlgoCompressLoad = (aclNormal, aclSafeSlow);
 
 
+/// fast concatenation of several AnsiStrings
+function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
+
+/// creates a TBytes from a RawByteString memory buffer
+procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
+
+/// creates a RawByteString memory buffer from a TBytes content
+procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// creates a RawByteString memory buffer from an embedded resource
 // - returns '' if the resource is not found
 // - warning: resources size may be rounded up to alignment
@@ -1405,6 +1415,12 @@ function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Cha
 // - warning: the Buffer should contain enough space to store the text, otherwise
 // you may encounter buffer overflows and random memory errors
 function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+
+/// fast add text conversion of 0-999 integer value into a given buffer
+// - warning: it won't check that Value is in 0-999 range
+// - up to 4 bytes may be written to the buffer (including trailing #0)
+function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+  {$ifdef HASINLINE}inline;{$endif}
 
 const
   /// can be used to append to most English nouns to form a plural
@@ -4634,6 +4650,40 @@ begin
 end;
 
 
+function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
+var
+  i, L: PtrInt;
+  P: PAnsiChar;
+begin
+  L := 0;
+  for i := 0 to high(Values) do
+    inc(L, length(Values[i]));
+  SetString(Result, nil, L);
+  P := pointer(Result);
+  for i := 0 to high(Values) do
+  begin
+    L := length(Values[i]);
+    MoveFast(pointer(Values[i])^, P^, L);
+    inc(P, L);
+  end;
+end;
+
+procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
+var
+  L: Integer;
+begin
+  L := Length(buf);
+  if L <> 0 then
+  begin
+    SetLength(bytes, L);
+    MoveFast(pointer(buf)^, pointer(bytes)^, L);
+  end;
+end;
+
+procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
+begin
+  SetString(buf, PAnsiChar(pointer(bytes)), Length(bytes));
+end;
 
 procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
   out buf: RawByteString; Instance: THandle);
@@ -6723,6 +6773,30 @@ begin
   end;
   MoveSmall(P, Buffer, L);
   result := Buffer + L;
+end;
+
+function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+var
+  L: PtrInt;
+  P: PAnsiChar;
+  c: cardinal;
+begin
+  P := pointer(SmallUInt32UTF8[Value]);
+  L := PStrLen(P - _STRLEN)^;
+  c := PCardinal(P)^;
+  Buffer[0] := AnsiChar(c); // PCardinal() write = FastMM4 FullDebugMode errors
+  inc(Buffer);
+  if L > 1 then
+  begin
+    Buffer^ := AnsiChar(c shr 8);
+    inc(Buffer);
+    if L > 2 then
+    begin
+      Buffer^ := AnsiChar(c shr 16);
+      inc(Buffer);
+    end;
+  end;
+  result := pointer(Buffer);
 end;
 
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
