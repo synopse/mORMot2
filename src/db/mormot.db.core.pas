@@ -12,6 +12,7 @@ unit mormot.db.core;
     - Date/Time SQL encoding
     - SQL Parameters Inlining and Processing
     - TJSONWriter Specialized for Database Export
+    - TSynTableStatement SQL SELECT Parser
 
   *****************************************************************************
 }
@@ -26,6 +27,7 @@ uses
   variants,
   mormot.core.base,
   mormot.core.buffers,
+  mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.variants,
@@ -118,7 +120,7 @@ type
       ftDate: (
         VDateTime: TDateTime);
       ftCurrency: (
-        VCurrency: Currency);
+        VCurrency: system.currency);
       ftUTF8: (
         VText: PUTF8Char);
       ftBlob: (
@@ -157,6 +159,17 @@ type
   /// array of parameter types, as recognized by SQLParamContent() and
   // ExtractInlineParameters() functions
   TSQLParamTypeDynArray = array of TSQLParamType;
+
+
+const
+  /// TSQLDBFieldType kind of columns which have a fixed width
+  FIXEDLENGTH_SQLDBFIELDTYPE = [ftInt64, ftDouble, ftCurrency, ftDate];
+
+  /// conversion matrix from TSQLDBFieldType into variant type
+  MAP_FIELDTYPE2VARTYPE: array[TSQLDBFieldType] of Word = (
+    varEmpty, varNull, varInt64, varDouble, varCurrency, varDate,
+    varSynUnicode, varString);
+// ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
 
 /// returns TRUE if no bit inside this TSQLFieldBits is set
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
@@ -199,6 +212,19 @@ function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): 
 /// convert an array of field indexes into a TSQLFieldBits set of bits
 function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+
+/// returns TRUE if the specified field name is either 'ID', either 'ROWID'
+function IsRowID(FieldName: PUTF8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// returns TRUE if the specified field name is either 'ID', either 'ROWID'
+function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;
+  {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// returns TRUE if the specified field name is either 'ID', either 'ROWID'
+function IsRowIDShort(const FieldName: shortstring): boolean;
+  {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// returns the stored size of a TSQLVar database value
 // - only returns VBlobLen / StrLen(VText) size, 0 otherwise
@@ -679,6 +705,169 @@ type
   end;
 
 
+{ ************ TSynTableStatement SQL SELECT Parser }
+
+type
+  /// function prototype used to retrieve the index of a specified property name
+  // - 'ID' is handled separately: here must be available only the custom fields
+  TSynTableFieldIndex = function(const PropName: RawUTF8): integer of object;
+
+  /// the recognized operators for a TSynTableStatement where clause
+  TSynTableStatementOperator = (
+     opEqualTo,
+     opNotEqualTo,
+     opLessThan,
+     opLessThanOrEqualTo,
+     opGreaterThan,
+     opGreaterThanOrEqualTo,
+     opIn,
+     opIsNull,
+     opIsNotNull,
+     opLike,
+     opContains,
+     opFunction);
+
+  /// one recognized SELECT expression for TSynTableStatement
+  TSynTableStatementSelect = record
+    /// the column SELECTed for the SQL statement, in the expected order
+    // - contains 0 for ID/RowID, or the RTTI field index + 1
+    Field: integer;
+    /// an optional integer to be added
+    // - recognized from .. +123 .. -123 patterns in the select
+    ToBeAdded: integer;
+    /// the optional column alias, e.g. 'MaxID' for 'max(id) as MaxID'
+    Alias: RawUTF8;
+    /// the optional function applied to the SELECTed column
+    // - e.g. Max(RowID) would store 'Max' and SelectField[0]=0
+    // - but Count( * ) would store 'Count' and SelectField[0]=0, and
+    // set FunctionIsCountStart = TRUE
+    FunctionName: RawUTF8;
+    /// if the function needs a special process
+    // - e.g. funcCountStar for the special Count( * ) expression or
+    // funcDistinct, funcMax for distinct(...)/max(...) aggregation
+    FunctionKnown: (funcNone, funcCountStar, funcDistinct, funcMax);
+    /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
+    // - still identifying 'mainfield' in Field index, and setting
+    // SubField='.subfield1.subfield2'
+    SubField: RawUTF8;
+  end;
+
+  /// the recognized SELECT expressions for TSynTableStatement
+  TSynTableStatementSelectDynArray = array of TSynTableStatementSelect;
+
+  /// one recognized WHERE expression for TSynTableStatement
+  TSynTableStatementWhere = record
+    /// any '(' before the actual expression
+    ParenthesisBefore: RawUTF8;
+    /// any ')' after the actual expression
+    ParenthesisAfter: RawUTF8;
+    /// expressions are evaluated as AND unless this field is set to TRUE
+    JoinedOR: boolean;
+    /// if this expression is preceded by a NOT modifier
+    NotClause: boolean;
+    /// the index of the field used for the WHERE expression
+    // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
+    // and so on... (i.e. WhereField = RTTI field index +1)
+    Field: integer;
+    /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
+    // - still identifying 'mainfield' in Field index, and setting
+    // SubField='.subfield1.subfield2'
+    SubField: RawUTF8;
+    /// the operator of the WHERE expression
+    Operator: TSynTableStatementOperator;
+    /// the SQL function name associated to a Field and Value
+    // - e.g. 'INTEGERDYNARRAYCONTAINS' and Field=0 for
+    // IntegerDynArrayContains(RowID,10) and ValueInteger=10
+    // - Value does not contain anything
+    FunctionName: RawUTF8;
+    /// the value used for the WHERE expression
+    Value: RawUTF8;
+    /// the raw value SQL buffer used for the WHERE expression
+    ValueSQL: PUTF8Char;
+    /// the raw value SQL buffer length used for the WHERE expression
+    ValueSQLLen: integer;
+    /// an integer representation of WhereValue (used for ID check e.g.)
+    ValueInteger: integer;
+    /// the value used for the WHERE expression, encoded as Variant
+    // - may be a TDocVariant for the IN operator
+    ValueVariant: variant;
+  end;
+
+  /// the recognized WHERE expressions for TSynTableStatement
+  TSynTableStatementWhereDynArray = array of TSynTableStatementWhere;
+
+  /// used to parse a SELECT SQL statement, following the SQlite3 syntax
+  // - handle basic REST commands, i.e. a SELECT over a single table (no JOIN)
+  // with its WHERE clause, and result column aliases
+  // - handle also aggregate functions like "SELECT Count( * ) FROM TableName"
+  // - will also parse any LIMIT, OFFSET, ORDER BY, GROUP BY statement clause
+  TSynTableStatement = class
+  protected
+    fSQLStatement: RawUTF8;
+    fSelect: TSynTableStatementSelectDynArray;
+    fSelectFunctionCount: integer;
+    fTableName: RawUTF8;
+    fWhere: TSynTableStatementWhereDynArray;
+    fOrderByField: TSQLFieldIndexDynArray;
+    fGroupByField: TSQLFieldIndexDynArray;
+    fWhereHasParenthesis, fHasSelectSubFields, fWhereHasSubFields: boolean;
+    fOrderByDesc: boolean;
+    fLimit: integer;
+    fOffset: integer;
+    fWriter: TJSONWriter;
+  public
+    /// parse the given SELECT SQL statement and retrieve the corresponding
+    // parameters into this class read-only properties
+    // - the supplied GetFieldIndex() method is used to populate the
+    // SelectedFields and Where[].Field properties
+    // - SimpleFieldsBits is used for '*' field names
+    // - SQLStatement is left '' if the SQL statement is not correct
+    // - if SQLStatement is set, the caller must check for TableName to match
+    // the expected value, then use the Where[] to retrieve the content
+    constructor Create(const SQL: RawUTF8; GetFieldIndex: TSynTableFieldIndex;
+      SimpleFieldsBits: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1]);
+    /// compute the SELECT column bits from the SelectFields array
+    // - optionally set Select[].SubField into SubFields[Select[].Field]
+    // (e.g. to include specific fields from MongoDB embedded document)
+    procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean;
+      SubFields: PRawUTF8Array = nil);
+
+    /// the SELECT SQL statement parsed
+    // - equals '' if the parsing failed
+    property SQLStatement: RawUTF8 read fSQLStatement;
+    /// the column SELECTed for the SQL statement, in the expected order
+    property Select: TSynTableStatementSelectDynArray read fSelect;
+    /// if the SELECTed expression of this SQL statement have any function defined
+    property SelectFunctionCount: integer read fSelectFunctionCount;
+    /// the retrieved table name
+    property TableName: RawUTF8 read fTableName;
+    /// if any Select[].SubField was actually set
+    property HasSelectSubFields: boolean read fHasSelectSubFields;
+    /// the WHERE clause of this SQL statement
+    property Where: TSynTableStatementWhereDynArray read fWhere;
+    /// if the WHERE clause contains any ( ) parenthesis expression
+    property WhereHasParenthesis: boolean read fWhereHasParenthesis;
+    /// if the WHERE clause contains any Where[].SubField
+    property WhereHasSubFields: boolean read fWhereHasSubFields;
+    /// recognize an GROUP BY clause with one or several fields
+    // - here 0 = ID, otherwise RTTI field index +1
+    property GroupByField: TSQLFieldIndexDynArray read fGroupByField;
+    /// recognize an ORDER BY clause with one or several fields
+    // - here 0 = ID, otherwise RTTI field index +1
+    property OrderByField: TSQLFieldIndexDynArray read fOrderByField;
+    /// false for default ASC order, true for DESC attribute
+    property OrderByDesc: boolean read fOrderByDesc;
+    /// the number specified by the optional LIMIT ... clause
+    // - set to 0 by default (meaning no LIMIT clause)
+    property Limit: integer read fLimit;
+    /// the number specified by the optional OFFSET ... clause
+    // - set to 0 by default (meaning no OFFSET clause)
+    property Offset: integer read fOffset;
+    /// optional associated writer
+    property Writer: TJSONWriter read fWriter write fWriter;
+  end;
+
+
 implementation
 
 
@@ -848,6 +1037,56 @@ begin
   else
     result := 0; // simple/ordinal values, or ftNull
   end;
+end;
+
+{$ifdef CPU64}
+function IsRowID(FieldName: PUTF8Char): boolean;
+var
+  f: Int64;
+begin
+  if FieldName <> nil then
+  begin
+    f := PInt64(FieldName)^;
+    result := (f and $ffdfdf = (ord('I') + ord('D') shl 8)) or
+        (f and $ffdfdfdfdfdf = (ord('R') + ord('O') shl 8 + ord('W') shl 16 +
+          ord('I') shl 24 + Int64(ord('D')) shl 32))
+  end
+  else
+    result := false;
+end;
+{$else}
+function IsRowID(FieldName: PUTF8Char): boolean;
+begin
+  if FieldName <> nil then
+    result := (PInteger(FieldName)^ and $ffdfdf = ord('I') + ord('D') shl 8) or
+      ((PIntegerArray(FieldName)^[0] and $dfdfdfdf =
+       ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+       (PIntegerArray(FieldName)^[1] and $ffdf = ord('D')))
+  else
+    result := false;
+end;
+{$endif CPU64}
+
+function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;
+begin
+  case FieldLen of
+    2:
+      result := PWord(FieldName)^ and $dfdf = ord('I') + ord('D') shl 8;
+    5:
+      result := (PInteger(FieldName)^ and $dfdfdfdf =
+                 ord('R') + ord('O') shl 8 + ord('W') shl 16 + ord('I') shl 24) and
+                (ord(FieldName[4]) and $df = ord('D'));
+  else
+    result := false;
+  end;
+end;
+
+function IsRowIDShort(const FieldName: shortstring): boolean;
+begin
+  result := (PInteger(@FieldName)^ and $DFDFFF = 2 + ord('I') shl 8 + ord('D') shl 16) or
+      ((PIntegerArray(@FieldName)^[0] and $dfdfdfff =
+        5 + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
+       (PIntegerArray(@FieldName)^[1] and $dfdf = ord('I') + ord('D') shl 8));
 end;
 
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
@@ -1507,6 +1746,509 @@ begin
   fStream.Seek(PBegin - P, soCurrent); // adjust current stream position
 end;
 
+
+{ ************ TSynTableStatement SQL SELECT Parser }
+
+{ TSynTableStatement }
+
+const
+  NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
+
+constructor TSynTableStatement.Create(const SQL: RawUTF8;
+  GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits);
+var
+  Prop, whereBefore: RawUTF8;
+  P, B: PUTF8Char;
+  ndx, err, len, selectCount, whereCount: integer;
+  whereWithOR, whereNotClause: boolean;
+
+  function GetPropIndex: integer;
+  begin
+    if not GetNextFieldProp(P, Prop) then
+      result := -1
+    else if IsRowID(pointer(Prop)) then
+      result := 0
+    else
+    begin // 0 = ID field
+      result := GetFieldIndex(Prop);
+      if result >= 0 then // -1 = no valid field name
+        inc(result);  // otherwise: PropertyIndex+1
+    end;
+  end;
+
+  function SetFields: boolean;
+  var
+    select: TSynTableStatementSelect;
+    B: PUTF8Char;
+  begin
+    result := false;
+    FillcharFast(select, SizeOf(select), 0);
+    select.Field := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+    if select.Field < 0 then
+    begin
+      if P^ <> '(' then // Field not found -> try function(field)
+        exit;
+      P := GotoNextNotSpace(P + 1);
+      select.FunctionName := Prop;
+      inc(fSelectFunctionCount);
+      if IdemPropNameU(Prop, 'COUNT') and (P^ = '*') then
+      begin
+        select.Field := 0; // count( * ) -> count(ID)
+        select.FunctionKnown := funcCountStar;
+        P := GotoNextNotSpace(P + 1);
+      end
+      else
+      begin
+        if IdemPropNameU(Prop, 'DISTINCT') then
+          select.FunctionKnown := funcDistinct
+        else if IdemPropNameU(Prop, 'MAX') then
+          select.FunctionKnown := funcMax;
+        select.Field := GetPropIndex;
+        if select.Field < 0 then
+          exit;
+      end;
+      if P^ <> ')' then
+        exit;
+      P := GotoNextNotSpace(P + 1);
+    end
+    else if P^ = '.' then
+    begin // MongoDB-like field.subfield1.subfield2
+      B := P;
+      repeat
+        inc(P);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]);
+      FastSetString(select.SubField, B, P - B);
+      fHasSelectSubFields := true;
+    end;
+    if P^ in ['+', '-'] then
+    begin
+      select.ToBeAdded := GetNextItemInteger(P, ' ');
+      if select.ToBeAdded = 0 then
+        exit;
+      P := GotoNextNotSpace(P);
+    end;
+    if IdemPChar(P, 'AS ') then
+    begin
+      inc(P, 3);
+      if not GetNextFieldProp(P, select.Alias) then
+        exit;
+    end;
+    SetLength(fSelect, selectCount + 1);
+    fSelect[selectCount] := select;
+    inc(selectCount);
+    result := true;
+  end;
+
+  function GetWhereValue(var Where: TSynTableStatementWhere): boolean;
+  var
+    B: PUTF8Char;
+  begin
+    result := false;
+    P := GotoNextNotSpace(P);
+    Where.ValueSQL := P;
+    if PWord(P)^ = ord(':') + ord('(') shl 8 then
+      inc(P, 2); // ignore :(...): parameter (no prepared statements here)
+    if P^ in ['''', '"'] then
+    begin
+      // SQL String statement
+      P := UnQuoteSQLStringVar(P, Where.Value);
+      if P = nil then
+        exit; // end of string before end quote -> incorrect
+      RawUTF8ToVariant(Where.Value, Where.ValueVariant);
+    end
+    else if (PInteger(P)^ and $DFDFDFDF = NULL_UPP) and (P[4] in [#0..' ', ';']) then
+    begin
+      // NULL statement
+      Where.Value := NULL_STR_VAR; // not void
+      SetVariantNull(Where.ValueVariant);
+      inc(P, 4);
+    end
+    else
+    begin
+      // numeric statement or 'true' or 'false' (OK for NormalizeValue)
+      B := P;
+      repeat
+        inc(P);
+      until P^ in [#0..' ', ';', ')', ','];
+      SetString(Where.Value, B, P - B);
+      Where.ValueVariant := VariantLoadJSON(Where.Value);
+      Where.ValueInteger := GetInteger(pointer(Where.Value), err);
+    end;
+    if PWord(P)^ = ord(')') + ord(':') shl 8 then
+      inc(P, 2); // ignore :(...): parameter
+    Where.ValueSQLLen := P - Where.ValueSQL;
+    P := GotoNextNotSpace(P);
+    if (P^ = ')') and (Where.FunctionName = '') then
+    begin
+      B := P;
+      repeat
+        inc(P);
+      until not (P^ in [#1..' ', ')']);
+      while P[-1] = ' ' do
+        dec(P); // trim right space
+      SetString(Where.ParenthesisAfter, B, P - B);
+      P := GotoNextNotSpace(P);
+    end;
+    result := true;
+  end;
+
+  function GetWhereValues(var Where: TSynTableStatementWhere): boolean;
+  var
+    v: TSynTableStatementWhereDynArray;
+    n, w: integer;
+    tmp: RawUTF8;
+  begin
+    result := false;
+    if Where.ValueSQLLen <= 2 then
+      exit;
+    SetString(tmp, PAnsiChar(Where.ValueSQL) + 1, Where.ValueSQLLen - 2);
+    P := pointer(tmp); // parse again the IN (...,...,... ) expression
+    n := 0;
+    try
+      repeat
+        if n = length(v) then
+          SetLength(v, NextGrow(n));
+        if not GetWhereValue(v[n]) then
+          exit;
+        inc(n);
+        if P^ = #0 then
+          break;
+        if P^ <> ',' then
+          exit;
+        inc(P);
+      until false;
+    finally
+      P := Where.ValueSQL + Where.ValueSQLLen; // continue parsing as usual
+    end;
+    with TDocVariantData(Where.ValueVariant) do
+    begin
+      InitFast(n, dvArray);
+      for w := 0 to n - 1 do
+        AddItem(v[w].ValueVariant);
+      Where.Value := ToJSON;
+    end;
+    result := true;
+  end;
+
+  function GetWhereExpression(FieldIndex: integer;
+    var Where: TSynTableStatementWhere): boolean;
+  var
+    B: PUTF8Char;
+  begin
+    result := false;
+    Where.ParenthesisBefore := whereBefore;
+    Where.JoinedOR := whereWithOR;
+    Where.NotClause := whereNotClause;
+    Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
+    if P^ = '.' then
+    begin // MongoDB-like field.subfield1.subfield2
+      B := P;
+      repeat
+        inc(P);
+      until not (jcJsonIdentifier in JSON_CHARS[P^]);
+      FastSetString(Where.SubField, B, P - B);
+      fWhereHasSubFields := true;
+      P := GotoNextNotSpace(P);
+    end;
+    case P^ of
+      '=':
+        Where.operator := opEqualTo;
+      '>':
+        if P[1] = '=' then
+        begin
+          inc(P);
+          Where.operator := opGreaterThanOrEqualTo;
+        end
+        else
+          Where.operator := opGreaterThan;
+      '<':
+        case P[1] of
+          '=':
+            begin
+              inc(P);
+              Where.operator := opLessThanOrEqualTo;
+            end;
+          '>':
+            begin
+              inc(P);
+              Where.operator := opNotEqualTo;
+            end;
+        else
+          Where.operator := opLessThan;
+        end;
+      'i', 'I':
+        case P[1] of
+          's', 'S':
+            begin
+              P := GotoNextNotSpace(P + 2);
+              if IdemPChar(P, 'NULL') then
+              begin
+                Where.Value := NULL_STR_VAR;
+                Where.operator := opIsNull;
+                Where.ValueSQL := P;
+                Where.ValueSQLLen := 4;
+                TVarData(Where.ValueVariant).VType := varNull;
+                inc(P, 4);
+                result := true;
+              end
+              else if IdemPChar(P, 'NOT NULL') then
+              begin
+                Where.Value := 'not null';
+                Where.operator := opIsNotNull;
+                Where.ValueSQL := P;
+                Where.ValueSQLLen := 8;
+                TVarData(Where.ValueVariant).VType := varNull;
+                inc(P, 8);
+                result := true; // leave ValueVariant=unassigned
+              end;
+              exit;
+            end;
+          'n', 'N':
+            begin
+              Where.operator := opIn;
+              P := GotoNextNotSpace(P + 2);
+              if P^ <> '(' then
+                exit; // incorrect SQL statement
+              B := P; // get the IN() clause as JSON
+              inc(P);
+              while (P^ <> ')') or (P[1] = ':') do // handle :(...): within the clause
+                if P^ = #0 then
+                  exit
+                else
+                  inc(P);
+              inc(P);
+              SetString(Where.Value, PAnsiChar(B), P - B);
+              Where.ValueSQL := B;
+              Where.ValueSQLLen := P - B;
+              result := GetWhereValues(Where);
+              exit;
+            end;
+        end; // 'i','I':
+      'l', 'L':
+        if IdemPChar(P + 1, 'IKE') then
+        begin
+          inc(P, 3);
+          Where.operator := opLike;
+        end
+        else
+          exit;
+    else
+      exit; // unknown operator
+    end;
+    // we got 'WHERE FieldName operator ' -> handle value
+    inc(P);
+    result := GetWhereValue(Where);
+  end;
+
+label
+  lim, lim2;
+begin
+  P := pointer(SQL);
+  if (P = nil) or (self = nil) then
+    exit; // avoid GPF
+  P := GotoNextNotSpace(P); // trim left
+  if not IdemPChar(P, 'SELECT ') then
+    exit
+  else // handle only SELECT statement
+    inc(P, 7);
+  // 1. get SELECT clause: set bits in Fields from CSV field IDs in SQL
+  selectCount := 0;
+  P := GotoNextNotSpace(P); // trim left
+  if P^ = #0 then
+    exit; // no SQL statement
+  if P^ = '*' then
+  begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
+    inc(P);
+    len := GetBitsCount(SimpleFieldsBits, MAX_SQLFIELDS) + 1;
+    SetLength(fSelect, len);
+    selectCount := 1; // Select[0].Field := 0 -> ID
+    for ndx := 0 to MAX_SQLFIELDS - 1 do
+      if ndx in SimpleFieldsBits then
+      begin
+        fSelect[selectCount].Field := ndx + 1;
+        inc(selectCount);
+        if selectCount = len then
+          break;
+      end;
+    GetNextFieldProp(P, Prop);
+  end
+  else if not SetFields then
+    exit
+  else // we need at least one field name
+  if P^ <> ',' then
+    GetNextFieldProp(P, Prop)
+  else
+    repeat
+      while P^ in [',', #1..' '] do
+        inc(P); // trim left
+    until not SetFields; // add other CSV field names
+  // 2. get FROM clause
+  if not IdemPropNameU(Prop, 'FROM') then
+    exit; // incorrect SQL statement
+  GetNextFieldProp(P, Prop);
+  fTableName := Prop;
+  // 3. get WHERE clause
+  whereCount := 0;
+  whereWithOR := false;
+  whereNotClause := false;
+  whereBefore := '';
+  GetNextFieldProp(P, Prop);
+  if IdemPropNameU(Prop, 'WHERE') then
+  begin
+    repeat
+      B := P;
+      if P^ = '(' then
+      begin
+        fWhereHasParenthesis := true;
+        repeat
+          inc(P);
+        until not (P^ in [#1..' ', '(']);
+        while P[-1] = ' ' do
+          dec(P); // trim right space
+        SetString(whereBefore, B, P - B);
+        B := P;
+      end;
+      ndx := GetPropIndex;
+      if ndx < 0 then
+      begin
+        if IdemPropNameU(Prop, 'NOT') then
+        begin
+          whereNotClause := true;
+          continue;
+        end;
+        if P^ = '(' then
+        begin
+          inc(P);
+          SetLength(fWhere, whereCount + 1);
+          with fWhere[whereCount] do
+          begin
+            ParenthesisBefore := whereBefore;
+            JoinedOR := whereWithOR;
+            NotClause := whereNotClause;
+            FunctionName := UpperCase(Prop);
+            // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
+            len := length(Prop);
+            if (len > 16) and IdemPropName('DynArrayContains',
+                PUTF8Char(@PByteArray(Prop)[len - 16]), 16) then
+              Operator := opContains
+            else
+              Operator := opFunction;
+            B := P;
+            Field := GetPropIndex;
+            if Field < 0 then
+              P := B
+            else if P^ <> ',' then
+              break
+            else
+              P := GotoNextNotSpace(P + 1);
+            if (P^ = ')') or (GetWhereValue(fWhere[whereCount]) and (P^ = ')')) then
+            begin
+              inc(P);
+              break;
+            end;
+          end;
+        end;
+        P := B;
+        break;
+      end;
+      SetLength(fWhere, whereCount + 1);
+      if not GetWhereExpression(ndx, fWhere[whereCount]) then
+        exit; // invalid SQL statement
+      inc(whereCount);
+      GetNextFieldProp(P, Prop);
+      if IdemPropNameU(Prop, 'OR') then
+        whereWithOR := true
+      else if IdemPropNameU(Prop, 'AND') then
+        whereWithOR := false
+      else
+        goto lim2;
+      whereNotClause := false;
+      whereBefore := '';
+    until false;
+    // 4. get optional LIMIT/OFFSET/ORDER clause
+lim:P := GotoNextNotSpace(P);
+    while (P <> nil) and not (P^ in [#0, ';']) do
+    begin
+      GetNextFieldProp(P, Prop);
+lim2: if IdemPropNameU(Prop, 'LIMIT') then
+        fLimit := GetNextItemCardinal(P, ' ')
+      else if IdemPropNameU(Prop, 'OFFSET') then
+        fOffset := GetNextItemCardinal(P, ' ')
+      else if IdemPropNameU(Prop, 'ORDER') then
+      begin
+        GetNextFieldProp(P, Prop);
+        if IdemPropNameU(Prop, 'BY') then
+        begin
+          repeat
+            ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+            if ndx < 0 then
+              exit; // incorrect SQL statement
+            AddFieldIndex(fOrderByField, ndx);
+            if P^ <> ',' then
+            begin // check ORDER BY ... ASC/DESC
+              B := P;
+              if GetNextFieldProp(P, Prop) then
+                if IdemPropNameU(Prop, 'DESC') then
+                  fOrderByDesc := true
+                else if not IdemPropNameU(Prop, 'ASC') then
+                  P := B;
+              break;
+            end;
+            P := GotoNextNotSpace(P + 1);
+          until P^ in [#0, ';'];
+        end
+        else
+          exit; // incorrect SQL statement
+      end
+      else if IdemPropNameU(Prop, 'GROUP') then
+      begin
+        GetNextFieldProp(P, Prop);
+        if IdemPropNameU(Prop, 'BY') then
+        begin
+          repeat
+            ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
+            if ndx < 0 then
+              exit; // incorrect SQL statement
+            AddFieldIndex(fGroupByField, ndx);
+            if P^ <> ',' then
+              break;
+            P := GotoNextNotSpace(P + 1);
+          until P^ in [#0, ';'];
+        end
+        else
+          exit; // incorrect SQL statement
+      end
+      else if Prop <> '' then
+        exit
+      else // incorrect SQL statement
+        break; // reached the end of the statement
+    end;
+  end
+  else if Prop <> '' then
+    goto lim2; // handle LIMIT OFFSET ORDER
+  fSQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
+end;
+
+procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits;
+  var withID: boolean; SubFields: PRawUTF8Array);
+var
+  i: integer;
+  f: ^TSynTableStatementSelect;
+begin
+  FillcharFast(Fields, SizeOf(Fields), 0);
+  withID := false;
+  f := pointer(select);
+  for i := 1 to Length(select) do
+  begin
+    if f^.Field = 0 then
+      withID := true
+    else
+      include(Fields, f^.Field - 1);
+    if (SubFields <> nil) and fHasSelectSubFields then
+      SubFields^[f^.Field] := f^.SubField;
+    inc(f);
+  end;
+end;
 
 
 initialization
