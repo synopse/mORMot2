@@ -41,6 +41,7 @@ uses
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
   mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
+  mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 
