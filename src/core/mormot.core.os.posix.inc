@@ -897,6 +897,7 @@ begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;
 
+
 {$I+}
 
 constructor TFileVersion.Create(const aFileName: TFileName;
@@ -990,9 +991,9 @@ begin
       begin
         if _LogPath = '' then
           if IsDirectoryWritable('/var/log') then
+             // may not be writable by not root on POSIX
             _LogPath := '/var/log/'
-          else // may not be writable by not root on POSIX
-          if IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+          else if IsDirectoryWritable(ExeVersion.ProgramFilePath) then
             _LogPath := ExeVersion.ProgramFilePath
           else
             _LogPath := GetSystemPath(spUserData);

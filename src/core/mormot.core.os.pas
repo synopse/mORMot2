@@ -9,7 +9,7 @@ unit mormot.core.os;
   Cross-platform functions shared by all framework units
   - Gather Operating System Information
   - Operating System Specific Types (e.g. TWinRegistry)
-  - Unicode, Time, File, Console process
+  - Unicode, Time, File, Console, Library process
   - Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
   - TSynLocker/TSynLocked and Low-Level Threading Features
 
@@ -712,7 +712,7 @@ var
 {$endif MSWINDOWS}
 
 
-{ ****************** Unicode, Time, File, Console process }
+{ ****************** Unicode, Time, File, Console, Library process }
 
 {$ifdef MSWINDOWS}
 
@@ -1290,6 +1290,29 @@ var
   StdOut: THandle;
 
 
+type
+  /// cross-platform and cross-compiler raw access to a loaded library handle
+  TSynLibraryHandle = {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
+
+  /// encapsulate cross-platform loading of library files
+  // - this generic class can be used for any external library (.dll/.so)
+  TSynLibrary = class
+  protected
+    fHandle: TSynLibraryHandle;
+    fLibraryPath: TFileName;
+    /// same as SafeLoadLibrary() but setting fLibraryPath and cwd on Windows
+    function TryLoadLibrary(const aLibrary: array of TFileName;
+      aRaiseExceptionOnFailure: ExceptionClass): boolean; virtual;
+  public
+    /// release associated memory and linked library
+    destructor Destroy; override;
+    /// the associated library handle
+    property Handle: TSynLibraryHandle read fHandle write fHandle;
+    /// the loaded library path
+    property LibraryPath: TFileName read fLibraryPath;
+  end;
+
+
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
 /// self-modifying code - change some memory buffer in the code segment
@@ -1730,7 +1753,7 @@ begin
 end;
 
 
-{ ****************** Unicode, Time, File, Console process }
+{ ****************** Unicode, Time, File, Console, Library process }
 
 procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection);
 begin
@@ -2312,6 +2335,59 @@ begin
 end;
 
 {$I+}
+
+
+
+{ TSynLibrary }
+
+function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
+  aRaiseExceptionOnFailure: ExceptionClass): boolean;
+var
+  i: integer;
+  lib, libs {$ifdef MSWINDOWS} , nwd, cwd {$endif}: TFileName;
+begin
+  for i := 0 to high(aLibrary) do
+  begin
+    lib := aLibrary[i];
+    if lib = '' then
+      continue;
+    {$ifdef MSWINDOWS}
+    nwd := ExtractFilePath(lib);
+    if nwd <> '' then
+    begin
+      cwd := GetCurrentDir;
+      SetCurrentDir(nwd); // search for dll dependencies in the same folder
+    end;
+    fHandle := SafeLoadLibrary(lib);
+    if nwd <> '' then
+      SetCurrentDir(cwd{%H-});
+    {$else}
+    fHandle := SafeLoadLibrary(lib);
+    {$endif MSWINDOWS}
+    if fHandle <> 0 then
+    begin
+      fLibraryPath := lib;
+      result := true;
+      exit;
+    end;
+    if {%H-}libs = '' then
+      libs := lib
+    else
+      libs := libs + ', ' + lib;
+  end;
+  result := false;
+  if aRaiseExceptionOnFailure <> nil then
+    raise aRaiseExceptionOnFailure.CreateFmt(
+      '%s.LoadLibray failed - searched in %s', [ClassName, libs]);
+end;
+
+destructor TSynLibrary.Destroy;
+begin
+  if Handle <> 0 then
+    FreeLibrary(Handle);
+  inherited Destroy;
+end;
+
 
 { TFileVersion }
 

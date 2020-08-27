@@ -417,6 +417,7 @@ type
   TInterfacedObjectClass = class of TInterfacedObject;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
+  ExceptionClass = class of Exception;
 
 type
   /// stack-allocated ASCII string, used by GUIDToShort() function
