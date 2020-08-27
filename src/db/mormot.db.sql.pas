@@ -86,7 +86,7 @@ type
     // - used e.g. for numerical values
     // - may be -1 if the metadata SQL statement returned NULL
     ColumnScale: PtrInt;
-    /// the Column type, as recognized by our SynDB classes
+    /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
     ColumnType: TSQLDBFieldType;
     /// specify if column is indexed
@@ -150,7 +150,7 @@ type
     // - used e.g. for numerical values
     // - may be -1 if the metadata SQL statement returned NULL
     ColumnScale: PtrInt;
-    /// the Column type, as recognized by our SynDB classes
+    /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
     ColumnType: TSQLDBFieldType;
     /// defines the procedure column as a parameter or a result set column
@@ -163,8 +163,8 @@ type
 
   /// possible column retrieval patterns
   // - used by TSQLDBColumnProperty.ColumnValueState
-  TSQLDBStatementGetCol = (colNone, colNull, colWrongType, colDataFilled,
-    colDataTruncated);
+  TSQLDBStatementGetCol = (
+    colNone, colNull, colWrongType, colDataFilled, colDataTruncated);
 
   /// used to define a field/column layout
   // - for TSQLDBConnectionProperties.SQLCreate to describe the table
@@ -188,7 +188,7 @@ type
     /// the Column type, used for storage
     // - for SQLCreate: should not be ftUnknown nor ftNull
     // - for TOleDBStatement: should not be ftUnknown
-    // - for SynDBOracle: never ftUnknown, may be ftNull (for SQLT_RSET)
+    // - for mormot.db.sql.oracle: never ftUnknown, may be ftNull (for SQLT_RSET)
     ColumnType: TSQLDBFieldType;
     /// set if the Column must exists (i.e. should not be null)
     ColumnNonNullable: boolean;
@@ -207,7 +207,7 @@ type
     // one column size (in bytes)
     ColumnValueDBSize: cardinal;
     /// optional character set encoding for ftUTF8 columns
-    // - for SQLT_STR/SQLT_CLOB (SynDBOracle): equals to the OCI char set
+    // - for SQLT_STR/SQLT_CLOB (mormot.db.sql.oracle): equals to the OCI char set
     ColumnValueDBCharSet: integer;
     /// internal DB column data type
     // - for TSQLDBOracleStatement: used to store the DefineByPos() TypeCode,
@@ -221,14 +221,14 @@ type
     // 0=TField, 1=TLargeIntField, 2=TWideStringField
     ColumnValueDBType: smallint;
     /// driver-specific encoding information
-    // - for SynDBOracle: used to store the ftUTF8 column encoding, i.e. for
-    // SQLT_CLOB, equals either to SQLCS_NCHAR or SQLCS_IMPLICIT
+    // - for mormot.db.sql.oracle: used to store the ftUTF8 column encoding, i.e.
+    // for SQLT_CLOB, equals either to SQLCS_NCHAR or SQLCS_IMPLICIT
     ColumnValueDBForm: byte;
     /// may contain the current status of the column value
-    // - for SynDBODBC: state of the latest SQLGetData() call
+    // - for mormot.db.sql.odbc: state of the latest SQLGetData() call
     ColumnDataState: TSQLDBStatementGetCol;
     /// may contain the current column size for not FIXEDLENGTH_SQLDBFIELDTYPE
-    // - for SynDBODBC: size (in bytes) in corresponding fColData[]
+    // - for mormot.db.sql.odbc: size (in bytes) in corresponding fColData[]
     // - TSQLDBProxyStatement: the actual maximum column size
     ColumnDataSize: integer;
   end;
@@ -262,7 +262,7 @@ type
   /// identify a CRUD mode of a statement
   // - in addition to CRUD states, cPostgreBulkArray would identify if the ORM
   // should generate unnested/any bound array statements - currently only
-  // supported by SynDBPostgres for bulk insert/update/delete
+  // supported by mormot.db.sql.postgres for bulk insert/update/delete
   TSQLDBStatementCRUD = (cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
 
   /// identify the CRUD modes of a statement
@@ -502,13 +502,20 @@ function BoundArrayToJSONArray(const Values: TRawUTF8DynArray): RawUTF8;
 { ************ Abstract SQL DB Classes and Interfaces }
 
 var
-  /// the TSynLog class used for logging for all our SynDB related units
+  /// the TSynLog class used for logging for all our mormot.db.sql related units
   // - you may override it with TSQLLog, if available from mORMot.pas
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
   SynDBLog: TSynLogClass = TSynLog;
 
 type
+  /// access to a native library
+  // - this generic class is to be used for any native connection using an
+  // external library
+  // - is used e.g. by TSQLDBOracleLib to access the OCI library,
+  // or by mormot.db.sql.odbc to access the ODBC library
+  TSQLDBLib = class(TSynLibrary);
+
   /// a custom variant type used to have direct access to a result row content
   // - use ISQLDBRows.RowData method to retrieve such a Variant
   TSQLDBRowVariantType = class(TSynInvokeableVariantType)
@@ -628,7 +635,7 @@ type
     // since Delphi 2009: you may not loose any data during charset conversion
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; overload;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from stored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -664,7 +671,7 @@ type
     // - since a property getter can't be an overloaded method, we define one
     // for the Column[] property
     function GetColumnVariant(const ColName: RawUTF8): Variant;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -823,14 +830,14 @@ type
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
     procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray; Rows: TSQLDBStatement);
-    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such parameters are mapped as ftUnknown
     // - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
     // execution of the statement
     procedure BindCursor(Param: integer);
-    /// return a special CURSOR parameter content as a SynDB result set
+    /// return a special CURSOR parameter content as a mormot.db.sql result set
     // - this method is not about a column, but a parameter defined with
     // BindCursor() before method execution
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -955,7 +962,8 @@ type
   // some non critical information, which is logged and may be intercepted using
   // the TSQLDBConnectionProperties.OnStatementInfo property
   // - may be used e.g. to track ORA-28001 or ORA-28002 about account expire
-  // - is currently implemented by SynDBOracle, SynDBODBC and SynOleDB units
+  // - is currently implemented by mormot.db.sql.oracle, mormot.db.sql.odbc
+  // and mormot.db.sql.oledb units
   TOnSQLDBInfo = procedure(Sender: TSQLDBStatement; const Msg: RawUTF8) of object;
 
   /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
@@ -1883,7 +1891,7 @@ type
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
     procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray; Rows: TSQLDBStatement);
-    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such parameters are mapped as ftUnknown
@@ -1891,7 +1899,7 @@ type
     // execution of the statement
     // - this default method will raise an exception about unexpected behavior
     procedure BindCursor(Param: integer); virtual;
-    /// return a special CURSOR parameter content as a SynDB result set
+    /// return a special CURSOR parameter content as a mormot.db.sql result set
     // - this method is not about a column, but a parameter defined with
     // BindCursor() before method execution
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -2096,12 +2104,12 @@ type
     function ColumnBlobBytes(Col: integer): TBytes; overload; virtual;
     /// read a blob Column into the Stream parameter
     // - default implementation will just call ColumnBlob(), whereas some
-    // providers (like SynDBOracle) may implement direct support
+    // providers (like mormot.db.sql.oracle) may implement direct support
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual;
     /// write a blob Column into the Stream parameter
     // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
     // - default implementation will through an exception, since it is highly
-    // provider-specific; SynDBOracle e.g. implements it properly
+    // provider-specific; mormot.db.sql.oracle e.g. implements it properly
     procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload; virtual;
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call ColumnToVariant() method
@@ -2122,7 +2130,7 @@ type
     // svtUTF8/svtBlob values
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar; var Temp:
       RawByteString); virtual;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -2174,7 +2182,7 @@ type
     // - will create a "fast" TDocVariant object instance with all fields
     procedure RowDocVariant(out aDocument: variant;
       aOptions: TDocVariantOptions = JSON_OPTIONS_FAST); virtual;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -3141,7 +3149,7 @@ begin
   result := fMainConnection;
 end;
 
-function TSQLDBConnectionProperties.NewConnection: TSQLDBConnection;
+function TSQLDBConnectionProperties.{%H-}NewConnection: TSQLDBConnection;
 begin
   raise ESQLDBException.CreateUTF8('%.NewConnection', [self]);
 end;
@@ -4359,7 +4367,7 @@ begin
     FieldsCSV := RawUTF8ArrayToCSV(aFieldNames, '');
     if length(FieldsCSV) + length(Table) > 27 then
       // sounds like if some DB limit the identifier length to 32 chars
-      IndexName := IndexName + 'INDEX' + crc32cUTF8ToHex(Table) +
+      IndexName := {%H-}IndexName + 'INDEX' + crc32cUTF8ToHex(Table) +
         crc32cUTF8ToHex(FieldsCSV)
     else
       IndexName := IndexName + 'NDX' + Table + FieldsCSV;
@@ -4373,7 +4381,7 @@ begin
       posWithColumn:
         ColsDesc := RawUTF8ArrayToCSV(aFieldNames, ' DESC,') + ' DESC';
     end;
-  if ColsDesc = '' then
+  if {%H-}ColsDesc = '' then
     ColsDesc := RawUTF8ArrayToCSV(aFieldNames, ',');
   result := FormatUTF8('CREATE %INDEX %% ON %(%)', [result,
     CREATNDXIFNE[DBMS in DB_HANDLECREATEINDEXIFNOTEXISTS],
@@ -5923,7 +5931,7 @@ begin
   result := ColumnCursor(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnCursor(Col: integer): ISQLDBRows;
+function TSQLDBStatement.{%H-}ColumnCursor(Col: integer): ISQLDBRows;
 begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR columns', [self]);
 end;
@@ -6279,7 +6287,7 @@ begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
 
-function TSQLDBStatement.BoundCursor(Param: Integer): ISQLDBRows;
+function TSQLDBStatement.{%H-}BoundCursor(Param: Integer): ISQLDBRows;
 begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
@@ -7175,8 +7183,15 @@ end;
 
 { TSQLDBStatementWithParamsAndColumns }
 
-function TSQLDBStatementWithParamsAndColumns.ColumnIndex(const aColumnName:
-  RawUTF8): integer;
+constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
+begin
+  inherited Create(aConnection);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),
+    fColumns, ptRawUTF8, @fColumnCount, True);
+end;
+
+function TSQLDBStatementWithParamsAndColumns.ColumnIndex(
+  const aColumnName: RawUTF8): integer;
 begin
   result := fColumn.FindHashed(aColumnName);
 end;
@@ -7201,12 +7216,6 @@ begin
   end;
 end;
 
-constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
-begin
-  inherited Create(aConnection);
-  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),
-    fColumns, ptRawUTF8, @fColumnCount, True);
-end;
 
 const
   __TSQLDBColumnDefine = 'ColumnName,ColumnTypeNative RawUTF8 ' +
@@ -7214,7 +7223,7 @@ const
     'ColumnType TSQLDBFieldType ColumnIndexed boolean';
 
 initialization
-  assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt) * 2 + 20);
+  assert(SizeOf(TSQLDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
   RttiCustom.RegisterType(TypeInfo(TSQLDBFieldType));
   RttiCustom.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
 end.

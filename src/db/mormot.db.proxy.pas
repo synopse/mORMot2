@@ -123,7 +123,7 @@ function ToText(cmd: TSQLDBProxyConnectionCommand): PShortString; overload;
 { ************ Server-Side Proxy Logic }
 
 type
-    /// server-side implementation of a proxy connection to any SynDB engine
+  /// server-side implementation of a proxy connection to any mormot.db.sql engine
   // - this default implementation will send the data without compression,
   // digital signature, nor encryption
   // - inherit from this class to customize the transmission layer content
@@ -149,7 +149,7 @@ type
     constructor Create(aAuthenticate: TSynAuthenticationAbstract); reintroduce;
     /// release associated authentication class
     destructor Destroy; override;
-    /// server-side implementation of a remote connection to any SynDB engine
+    /// server-side implementation of a remote connection to any mormot.db.sql engine
     // - follow the compressed binary message format expected by the
     // TSQLDBRemoteConnectionPropertiesAbstract.ProcessMessage method
     // - any transmission protocol could call this method to execute the
@@ -162,7 +162,7 @@ type
     property Authenticate: TSynAuthenticationAbstract read GetAuthenticate write fAuthenticate;
   end;
 
-  /// server-side implementation of a remote connection to any SynDB engine
+  /// server-side implementation of a remote connection to any mormot.db.sql engine
   // - implements digitally signed SynLZ-compressed binary message format,
   // with simple symmetric encryption, as expected by SynDBRemote.pas
   TSQLDBRemoteConnectionProtocol = class(TSQLDBProxyConnectionProtocol)
@@ -174,7 +174,7 @@ type
   public
   end;
 
-  /// specify the class of a proxy/remote connection to any SynDB engine
+  /// specify the class of a proxy/remote connection to any mormot.db.sql engine
   TSQLDBProxyConnectionProtocolClass = class of TSQLDBProxyConnectionProtocol;
 
 
@@ -281,7 +281,7 @@ type
     fDataCurrentRowColTypes: array of TSQLDBFieldType;
     function IntColumnType(Col: integer; out Data: PByte): TSQLDBFieldType;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure IntHeaderProcess(Data: PByte; DataLen: integer);
+    procedure IntHeaderProcess(Data: PByte; DataLen: PtrInt);
     procedure IntFillDataCurrent(var Reader: PByte; IgnoreColumnDataSize: boolean);
   public
     /// the Column type of the current Row
@@ -378,7 +378,7 @@ type
     function Step(SeekFirst: boolean = false): boolean; override;
   end;
 
-  /// client-side implementation of a remote connection to any SynDB engine
+  /// client-side implementation of a remote connection to any mormot.db.sql engine
   // - will compute binary compressed messages for the remote processing,
   // ready to be served e.g. over HTTP via our SynDBRemote.pas unit
   // - abstract class which should override its protected ProcessMessage() method
@@ -395,7 +395,7 @@ type
       virtual; abstract;
   end;
 
-  /// fake proxy class for testing the remote connection to any SynDB engine
+  /// fake proxy class for testing the remote connection to any mormot.db.sql engine
   // - resulting overhead due to our binary messaging: unnoticeable :)
   TSQLDBRemoteConnectionPropertiesTest = class(TSQLDBRemoteConnectionPropertiesAbstract)
   protected
@@ -997,7 +997,7 @@ end;
 
 { TSQLDBProxyStatementAbstract }
 
-procedure TSQLDBProxyStatementAbstract.IntHeaderProcess(Data: PByte; DataLen: integer);
+procedure TSQLDBProxyStatementAbstract.IntHeaderProcess(Data: PByte; DataLen: PtrInt);
 var
   Magic, F, colCount: integer;
   p: PSQLDBColumnProperty;
@@ -1010,7 +1010,7 @@ begin
   repeat
     if DataLen <= 5 then
       break; // to raise ESQLDBRemote
-    fDataRowCount := PInteger(PtrUInt(Data) + PtrUInt(DataLen) - sizeof(Integer))^;
+    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - sizeof(Integer)))^;
     Magic := FromVarUInt32(Data);
     if Magic <> FETCHALLTOBINARY_MAGIC then
       break; // corrupted
@@ -1494,7 +1494,7 @@ begin
   raise ESQLDBRemote.CreateUTF8('Unexpected %.ExecutePrepared', [self]);
 end;
 
-function TSQLDBProxyStatementRandomAccess.Step(SeekFirst: boolean): boolean;
+function TSQLDBProxyStatementRandomAccess.{%H-}Step(SeekFirst: boolean): boolean;
 begin
   raise ESQLDBRemote.CreateUTF8('Unexpected %.Step', [self]);
 end;

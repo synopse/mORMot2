@@ -97,7 +97,7 @@ type
   TSQLVarOptions = set of TSQLVarOption;
 
   /// memory structure used for database values by reference storage
-  // - used mainly by SynDB, mORMot, mORMotDB and mORMotSQLite3 units
+  // - used mainly by mormot.db.sql, mORMot, mORMotDB and mORMotSQLite3 units
   // - defines only TSQLDBFieldType data types (similar to those handled by
   // SQLite3, with the addition of ftCurrency and ftDate)
   // - cleaner/lighter dedicated type than TValue or variant/TVarData, strong
@@ -1906,7 +1906,7 @@ var
     n := 0;
     try
       repeat
-        if n = length(v) then
+        if n = length({%H-}v) then
           SetLength(v, NextGrow(n));
         if not GetWhereValue(v[n]) then
           exit;
