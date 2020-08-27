@@ -27,6 +27,8 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.rtti,
+  mormot.core.log,
   mormot.db.core,
   mormot.db.sql;
 
@@ -786,7 +788,6 @@ type
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: Integer; ErrorHandle: POCIError; InfoRaiseException: Boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
-    procedure RetrieveVersion;
     function BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor): ub4;
     function BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
@@ -944,7 +945,20 @@ type
   /// exception type associated to the native Oracle Client Interface (OCI)
   ESQLDBOracle = class(ESQLDBException);
 
+  /// Oracle VARNUM memory structure
+  TSQLT_VNU = array[0..21] of byte;
+  /// points to a Oracle VARNUM memory structure
+  PSQLT_VNU = ^TSQLT_VNU;
+
+  
+/// conversion from a 64-bit integer to a raw VARNUM memory structure
+procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSQLT_VNU);
+
+
 var
+  /// global variable used to access the Oracle Client Library once loaded
+  OCI: TSQLDBOracleLib = nil;
+
   /// optional folder where the Oracle Client Library is to be searched
   // - by default, the oci.dll library is searched in the system PATH, then
   // in %ORACLE_HOME%\bin
@@ -970,6 +984,14 @@ var
   /// how many blob chunks should be handled at once
   SynDBOracleBlobChunksCount: integer = 250;
 
+/// check if two Oracle Charset codes are similar
+function SimilarCharSet(aCharset1, aCharset2: cardinal): Boolean;
+
+/// return the text name from an Oracle Charset code
+function OracleCharSetName(aCharsetID: cardinal): PUTF8Char;
+
+/// return the system code page corresponding to an Oracle Charset code
+function CharSetIDToCodePage(aCharSetID: cardinal): cardinal;
 
 
 implementation
@@ -1116,6 +1138,126 @@ end;
 { ************ OCI Library Loading }
 
 const
+  // http://download.oracle.com/docs/cd/B19306_01/server.102/b14225/applocaledata.htm#i635016
+  // http://www.mydul.net/charsets.html
+  CODEPAGES: array[0..26] of record
+    Num: cardinal;
+    Charset: cardinal;
+    Text: PUTF8Char
+  end = ((
+    Num: 1252;
+    Charset: OCI_WE8MSWIN1252;
+    Text: 'WE8MSWIN1252'
+  ), (
+    Num: 1250;
+    Charset: 170;
+    Text: 'EE8MSWIN1250'
+  ), (
+    Num: 1251;
+    Charset: 171;
+    Text: 'CL8MSWIN1251'
+  ), (
+    Num: 1253;
+    Charset: 174;
+    Text: 'EL8MSWIN1253'
+  ), (
+    Num: 1254;
+    Charset: 177;
+    Text: 'TR8MSWIN1254'
+  ), (
+    Num: 1255;
+    Charset: 175;
+    Text: 'IW8MSWIN1255'
+  ), (
+    Num: 1256;
+    Charset: 560;
+    Text: 'AR8MSWIN1256'
+  ), (
+    Num: 1257;
+    Charset: 179;
+    Text: 'BLT8MSWIN1257'
+  ), (
+    Num: 874;
+    Charset: 41;
+    Text: 'TH8TISASCII'
+  ), (
+    Num: 932;
+    Charset: 832;
+    Text: 'JA16SJIS'
+  ), (
+    Num: 949;
+    Charset: 846;
+    Text: 'KO16MSWIN949'
+  ), (
+    Num: 936;
+    Charset: 852;
+    Text: 'ZHS16GBK'
+  ), (
+    Num: 950;
+    Charset: 867;
+    Text: 'ZHT16MSWIN950'
+  ), (
+    Num: 1258;
+    Charset: 45;
+    Text: 'VN8MSWIN1258'
+  ), (
+    Num: CP_UTF8;
+    CharSet: OCI_UTF8;
+    Text: 'UTF8'
+  ), (
+    Num: CP_UTF16;
+    CharSet: OCI_UTF16ID;
+    Text: 'UTF16'
+  ), (
+    Num: 437;
+    CharSet: 4;
+    Text: 'US8PC437'
+  ), (
+    Num: 850;
+    CharSet: 10;
+    Text: 'WE8PC850'
+  ), (
+    Num: 858;
+    CharSet: 28;
+    Text: 'WE8PC858'
+  ), (
+    Num: 921;
+    Charset: 176;
+    Text: 'LT8MSWIN921'
+  ), (
+    Num: 923;
+    Charset: 172;
+    Text: 'ET8MSWIN923'
+  ),
+    // handle some aliases of code page Num values
+    (
+    Num: CP_UTF8;
+    CharSet: OCI_AL32UTF8;
+    Text: 'AL32UTF8'
+  ), (
+    Num: CP_UTF16;
+    CharSet: 2000;
+    Text: 'AL16UTF16'
+  ), (
+    Num: CP_UTF16;
+    CharSet: 2002;
+    Text: 'AL16UTF16LE'
+  ),
+    // wrong approximation (to be fixed)
+    (
+    Num: 932;
+    Charset: 830;
+    Text: 'JA16EUC'
+  ), (
+    Num: 1252;
+    Charset: 46;
+    Text: 'WE8ISO8859P15'
+  ), (
+    Num: 1252;
+    Charset: 31;
+    Text: 'WE8ISO8859P1'
+  ));
+
   OCI_ENTRIES: array[0..40] of PChar = (
     'OCIClientVersion', 'OCIEnvNlsCreate',
     'OCIHandleAlloc', 'OCIHandleFree', 'OCIServerAttach', 'OCIServerDetach',
@@ -1132,17 +1274,6 @@ const
 
 
 { TSQLDBOracleLib }
-
-procedure TSQLDBOracleLib.RetrieveVersion;
-begin
-  if major_version = 0 then
-  begin
-    ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
-    SupportsInt64Params := (major_version > 11) or
-                           ((major_version = 11) and (minor_version > 1));
-    UseLobChunks := true;
-  end;
-end;
 
 function TSQLDBOracleLib.BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor): ub4;
@@ -1416,176 +1547,8 @@ begin
   if self = nil then
     result := ''
   else
-  begin
-    RetrieveVersion;
     result := FormatUTF8('% rev. %.%.%.%',
       [fLibraryPath, major_version, minor_version, update_num, patch_num]);
-  end;
-end;
-
-const
-  // http://download.oracle.com/docs/cd/B19306_01/server.102/b14225/applocaledata.htm#i635016
-  // http://www.mydul.net/charsets.html
-  CODEPAGES: array[0..26] of record
-    Num: cardinal;
-    Charset: cardinal;
-    Text: PUTF8Char
-  end = ((
-    Num: 1252;
-    Charset: OCI_WE8MSWIN1252;
-    Text: 'WE8MSWIN1252'
-  ), (
-    Num: 1250;
-    Charset: 170;
-    Text: 'EE8MSWIN1250'
-  ), (
-    Num: 1251;
-    Charset: 171;
-    Text: 'CL8MSWIN1251'
-  ), (
-    Num: 1253;
-    Charset: 174;
-    Text: 'EL8MSWIN1253'
-  ), (
-    Num: 1254;
-    Charset: 177;
-    Text: 'TR8MSWIN1254'
-  ), (
-    Num: 1255;
-    Charset: 175;
-    Text: 'IW8MSWIN1255'
-  ), (
-    Num: 1256;
-    Charset: 560;
-    Text: 'AR8MSWIN1256'
-  ), (
-    Num: 1257;
-    Charset: 179;
-    Text: 'BLT8MSWIN1257'
-  ), (
-    Num: 874;
-    Charset: 41;
-    Text: 'TH8TISASCII'
-  ), (
-    Num: 932;
-    Charset: 832;
-    Text: 'JA16SJIS'
-  ), (
-    Num: 949;
-    Charset: 846;
-    Text: 'KO16MSWIN949'
-  ), (
-    Num: 936;
-    Charset: 852;
-    Text: 'ZHS16GBK'
-  ), (
-    Num: 950;
-    Charset: 867;
-    Text: 'ZHT16MSWIN950'
-  ), (
-    Num: 1258;
-    Charset: 45;
-    Text: 'VN8MSWIN1258'
-  ), (
-    Num: CP_UTF8;
-    CharSet: OCI_UTF8;
-    Text: 'UTF8'
-  ), (
-    Num: CP_UTF16;
-    CharSet: OCI_UTF16ID;
-    Text: 'UTF16'
-  ), (
-    Num: 437;
-    CharSet: 4;
-    Text: 'US8PC437'
-  ), (
-    Num: 850;
-    CharSet: 10;
-    Text: 'WE8PC850'
-  ), (
-    Num: 858;
-    CharSet: 28;
-    Text: 'WE8PC858'
-  ), (
-    Num: 921;
-    Charset: 176;
-    Text: 'LT8MSWIN921'
-  ), (
-    Num: 923;
-    Charset: 172;
-    Text: 'ET8MSWIN923'
-  ),
-    // handle some aliases of code page Num values
-    (
-    Num: CP_UTF8;
-    CharSet: OCI_AL32UTF8;
-    Text: 'AL32UTF8'
-  ), (
-    Num: CP_UTF16;
-    CharSet: 2000;
-    Text: 'AL16UTF16'
-  ), (
-    Num: CP_UTF16;
-    CharSet: 2002;
-    Text: 'AL16UTF16LE'
-  ),
-    // wrong approximation (to be fixed)
-    (
-    Num: 932;
-    Charset: 830;
-    Text: 'JA16EUC'
-  ), (
-    Num: 1252;
-    Charset: 46;
-    Text: 'WE8ISO8859P15'
-  ), (
-    Num: 1252;
-    Charset: 31;
-    Text: 'WE8ISO8859P1'
-  ));
-
-function SimilarCharSet(aCharset1, aCharset2: cardinal): Boolean;
-var
-  i1, i2: integer;
-begin
-  result := true;
-  if aCharset1 = aCharset2 then
-    exit;
-  for i1 := 0 to high(CODEPAGES) do
-    if CODEPAGES[i1].Charset = aCharset1 then
-      for i2 := 0 to High(CODEPAGES) do
-        if (CODEPAGES[i2].Charset = aCharset2) and
-           (CODEPAGES[i1].Num = CODEPAGES[i2].Num) then
-          exit; // aliases are allowed
-  result := false;
-end;
-
-function OracleCharSetName(aCharsetID: cardinal): PUTF8Char;
-var
-  i: integer;
-begin
-  for i := 0 to high(CODEPAGES) do
-    with CODEPAGES[i] do
-      if Charset = aCharsetID then
-      begin
-        result := Text;
-        exit;
-      end;
-  result := '?';
-end;
-
-function CharSetIDToCodePage(aCharSetID: cardinal): cardinal;
-var
-  i: integer;
-begin
-  for i := 0 to high(CODEPAGES) do
-    with CODEPAGES[i] do
-      if Charset = aCharSetID then
-      begin
-        result := Num;
-        exit;
-      end;
-  result := Unicode_CodePage; // return the default OS code page if not found
 end;
 
 function TSQLDBOracleLib.CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
@@ -1656,8 +1619,110 @@ begin
   TryLoadLibrary([{%H-}l1, l2, l3, LIBNAME], ESQLDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do
-    GetProc(OCI_ENTRIES[i], @P[i], ESQLDBOracle);
+    GetProc(OCI_ENTRIES[i], @P[i], ESQLDBOracle); // raise an ESQLDBOracle on error
+  ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
+  SupportsInt64Params := (major_version > 11) or
+                         ((major_version = 11) and (minor_version > 1));
+  UseLobChunks := true; // by default
 end;
+
+
+{ *************** Some Global Types and Variables }
+
+procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSQLT_VNU);
+var
+  V, Exp: byte;
+  minus: Boolean; // True, if the sign is positive
+  Size, i: PtrInt;
+  Mant: array[0..19] of byte;
+begin
+  FillcharFast(Mant, sizeof(Mant), 0);
+  Exp := 0;
+  Size := 1;
+  minus := Value >= 0;
+  if not minus then
+    Value := not Value;
+  while Value > 0 do
+  begin
+    if Value >= 100 then
+    begin
+      V := Value mod 100;
+      Value := Value div 100;
+      inc(Exp);
+    end
+    else
+    begin
+      V := Value;
+      Value := 0;
+    end;
+    if (V <> 0) or (Size > 1) then
+    begin
+      if minus then
+        inc(V)
+      else
+        V := (100 + 1) - V;
+      Mant[Size - 1] := V;
+      inc(Size);
+    end;
+  end;
+  if Size > 1 then
+    for i := 0 to Size - 1 do
+      OutData[Size - i] := Mant[i];
+  Exp := (Exp + 65) or $80;
+  if not minus and (Size < high(TSQLT_VNU)) then
+  begin
+    Exp := not Exp;
+    inc(Size);
+    OutData[Size] := (100 + 2);
+  end;
+  OutData[1] := Exp;
+  OutData[0] := Size;
+end;
+
+function SimilarCharSet(aCharset1, aCharset2: cardinal): Boolean;
+var
+  i1, i2: integer;
+begin
+  result := true;
+  if aCharset1 = aCharset2 then
+    exit;
+  for i1 := 0 to high(CODEPAGES) do
+    if CODEPAGES[i1].Charset = aCharset1 then
+      for i2 := 0 to High(CODEPAGES) do
+        if (CODEPAGES[i2].Charset = aCharset2) and
+           (CODEPAGES[i1].Num = CODEPAGES[i2].Num) then
+          exit; // aliases are allowed
+  result := false;
+end;
+
+function OracleCharSetName(aCharsetID: cardinal): PUTF8Char;
+var
+  i: integer;
+begin
+  for i := 0 to high(CODEPAGES) do
+    with CODEPAGES[i] do
+      if Charset = aCharsetID then
+      begin
+        result := Text;
+        exit;
+      end;
+  result := '?';
+end;
+
+function CharSetIDToCodePage(aCharSetID: cardinal): cardinal;
+var
+  i: integer;
+begin
+  for i := 0 to high(CODEPAGES) do
+    with CODEPAGES[i] do
+      if Charset = aCharSetID then
+      begin
+        result := Num;
+        exit;
+      end;
+  result := Unicode_CodePage; // return the default OS code page if not found
+end;
+
 
 
 initialization
