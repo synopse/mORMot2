@@ -815,7 +815,7 @@ function Unicode_CodePage: integer;
 // - will compute StrLen(PW1/PW2) if L1 or L2 < 0
 // - somewhat slow by using two temporary UnicodeString on POSIX - but seldom
 // called, unless our proprietary WIN32CASE collation is used in SynSQLite3
-function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
+function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
 
 /// compatibility function, wrapping MultiByteToWideChar() Win32 API call
 // - returns the number of WideChar written into W^ destination buffer
@@ -972,7 +972,7 @@ function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int
 // by most Linux file systems, so the oldest timestamp available is returned
 // as failover on such systems (probably the latest file metadata writing)
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
-  LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+  LastWriteAccess, FileCreateDateTime: Int64): boolean;
 
 /// conversion of Windows OEM charset into a UTF-16 encoded string
 function OemToUnicode(const OEM: RawByteString): SynUnicode;
@@ -1274,7 +1274,7 @@ function ConsoleReadBody: RawByteString;
 {$ifdef MSWINDOWS}
 
 /// low-level access to the keyboard state of a given key
-function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
+function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
 {$endif MSWINDOWS}
 
@@ -1457,7 +1457,7 @@ type
     /// safe locked access to a boolean value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked, LockedInt64, LockedPointer and LockedUTF8 array properties
-    // - value will be stored internally as a varBoolean variant
+    // - value will be stored internally as a varboolean variant
     // - returns nil if the Index is out of range, or does not store a boolean
     property LockedBool[Index: integer]: boolean read GetBool write SetBool;
     /// safe locked access to a pointer/TObject value
@@ -1808,7 +1808,7 @@ begin
   result := GetACP;
 end;
 
-function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
+function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
 const
   _CASEFLAG: array[boolean] of DWORD = (0, NORM_IGNORECASE);
 begin
@@ -2628,7 +2628,7 @@ begin
   try
     EnterCriticalSection(fSection);
     fLocked := true;
-    if not VariantToBoolean(variant(Padding[Index]), result) then
+    if not VariantToboolean(variant(Padding[Index]), result) then
       result := false;
   finally
     fLocked := false;

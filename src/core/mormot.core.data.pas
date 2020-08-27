@@ -746,7 +746,7 @@ var
 
 type
   /// function prototype to be used for TDynArray Sort and Find method
-  // - common functions exist for base types: see e.g. SortDynArrayBoolean,
+  // - common functions exist for base types: see e.g. SortDynArrayboolean,
   // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
   // SortDynArrayInt64, SortDynArrayQWord, SordDynArraySingle, SortDynArrayDouble,
   // SortDynArrayAnsiString, SortDynArrayAnsiStringI, SortDynArrayUnicodeString,
@@ -772,7 +772,7 @@ const
   /// deprecated TDynArrayKind enumerate mapping
   // - defined only for backward compatible code; use TRttiParserType instead
   djNone = ptNone;
-  djBoolean = ptBoolean;
+  djboolean = ptboolean;
   djByte = ptByte;
   djWord = ptWord;
   djInteger = ptInteger;
@@ -810,7 +810,7 @@ var
   // - e.g. as PT_SORT[CaseInSensitive,ptRawUTF8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
-    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
+    (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
      SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
      SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
      SortDynArrayRawByteString, SortDynArrayAnsiString, SortDynArrayAnsiString,
@@ -820,7 +820,7 @@ var
      SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
      SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
      nil, nil, nil, nil, nil, nil),
-   (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
+   (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
     SortDynArrayRawByteString, SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
@@ -1114,7 +1114,7 @@ type
     // - returns the sorted index of the inserted Item and wasAdded^=true
     // - if the array is not sorted, returns -1 and wasAdded^=false
     // - is just a wrapper around FastLocateSorted+FastAddSorted
-    function FastLocateOrAddSorted(const Item; wasAdded: PBoolean = nil): integer;
+    function FastLocateOrAddSorted(const Item; wasAdded: Pboolean = nil): integer;
     /// delete a sorted element value at the proper place
     // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
     // this method with a FastLocateSorted/FastAddSorted array
@@ -1209,7 +1209,7 @@ type
     procedure SaveToJSON(W: TBaseWriter); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
-    // handling TBooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
+    // handling TbooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
     // TDoubleDynArray, TCurrencyDynArray, TWordDynArray, TByteDynArray,
     // TRawUTF8DynArray, TWinAnsiDynArray, TRawByteStringDynArray,
     // TStringDynArray, TWideStringDynArray, TSynUnicodeDynArray,
@@ -1357,7 +1357,7 @@ type
     property Capacity: PtrInt read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
-    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayBoolean,
+    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayboolean,
     // SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
     // SortDynArrayInt64, SortDynArrayDouble, SortDynArrayAnsiString,
     // SortDynArrayAnsiStringI, SortDynArrayString, SortDynArrayStringI,
@@ -2704,7 +2704,7 @@ end;
 
 { TSynObjectListLocked }
 
-constructor TSynObjectListLocked.Create(AOwnsObjects: Boolean);
+constructor TSynObjectListLocked.Create(AOwnsObjects: boolean);
 begin
   inherited Create(AOwnsObjects);
   fSafe.Init;
@@ -6122,7 +6122,7 @@ begin
   fSorted := true; // Delete -> SetCount -> fSorted := false
 end;
 
-function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: PBoolean): integer;
+function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: Pboolean): integer;
 var
   toInsert: boolean;
 begin
@@ -7081,7 +7081,7 @@ begin
         len := 0; // good enough for void values
       varShortInt, varByte:
         len := 1;
-      varSmallint, varWord, varBoolean:
+      varSmallint, varWord, varboolean:
         len := 2;
       varLongWord, varInteger, varSingle:
         len := 4;

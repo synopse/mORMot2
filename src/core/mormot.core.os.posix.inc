@@ -433,7 +433,7 @@ begin
 end;
 
 function FileInfoByHandle(aFileHandle: THandle;
-  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): boolean;
 var
   lastreadaccess: Int64;
   lp: stat;
@@ -1298,8 +1298,7 @@ var
   PageSize: PtrUInt;
   AlignedAddr: pointer;
   i: PtrInt;
-  ProtectedResult: boolean;
-  ProtectedMemory: boolean;
+  ProtectedResult, ProtectedMemory: boolean;
 begin
   if Backup <> nil then
     for i := 0 to Size - 1 do // do not use Move() here

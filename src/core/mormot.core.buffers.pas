@@ -817,7 +817,7 @@ type
     // a fixed-sized record storage is also handled separately)
     // - could be decoded later on via TFastReader.ReadVarUInt64Array
     procedure WriteVarUInt64DynArray(const Values: TInt64DynArray;
-      ValuesCount: integer; Offset: Boolean);
+      ValuesCount: integer; Offset: boolean);
     /// append the RawUTF8 dynamic array
     // - handled the fixed size strings array case in a very efficient way
     procedure WriteRawUTF8DynArray(const Values: TRawUTF8DynArray; ValuesCount: integer);
@@ -1369,7 +1369,7 @@ type
     function LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean; virtual;
+    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): boolean; virtual;
     /// retrieve a line content as UTF-8
     // - a temporary UTF-8 string is created
     // - will return '' if aIndex is out of range
@@ -3697,7 +3697,7 @@ begin
 end;
 
 procedure TBufferWriter.WriteVarUInt64DynArray(const Values: TInt64DynArray;
-  ValuesCount: integer; Offset: Boolean);
+  ValuesCount: integer; Offset: boolean);
 var
   n: integer;
   i: PtrInt;
@@ -6602,7 +6602,7 @@ begin
     UTF8DecodeToString(fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd), result);
 end;
 
-function TMemoryMapText.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean;
+function TMemoryMapText.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): boolean;
 begin
   if (self = nil) or (cardinal(aIndex) >= cardinal(fCount)) or (aUpperSearch = '') then
     result := false

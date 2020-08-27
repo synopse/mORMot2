@@ -270,6 +270,11 @@ type
   TSQLDBStatementCRUDs = set of TSQLDBStatementCRUD;
 
 
+const
+  /// a magic constant used e.g. by TSQLDBStatement.FetchAllToBinary
+  FETCHALLTOBINARY_MAGIC = 1;
+
+
 { ************ Define Database Engine Specific Behavior }
 
 type
@@ -1226,7 +1231,7 @@ type
     // (if RaiseExceptionOnError is left to default FALSE value, otherwise, it will
     // raise an exception)
     function NewThreadSafeStatementPrepared(const aSQL: RawUTF8;
-      ExpectResults: Boolean; RaiseExceptionOnError: Boolean = false): ISQLDBStatement; overload;
+      ExpectResults: boolean; RaiseExceptionOnError: boolean = false): ISQLDBStatement; overload;
     /// create a new thread-safe statement from an internal cache (if any)
     // - this method will call the overloaded NewThreadSafeStatementPrepared method
     // - here Args[] array does not refer to bound parameters, but to values
@@ -1239,19 +1244,19 @@ type
     // (if RaiseExceptionOnError is left to default FALSE value, otherwise, it will
     // raise an exception)
     function NewThreadSafeStatementPrepared(const SQLFormat: RawUTF8;
-      const Args: array of const; ExpectResults: Boolean;
-      RaiseExceptionOnError: Boolean = false): ISQLDBStatement; overload;
+      const Args: array of const; ExpectResults: boolean;
+      RaiseExceptionOnError: boolean = false): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
     // then bound inlined parameters as :(1234): and return the resulting statement
     // - raise an exception on error
     // - consider using ExecuteInlined() for direct execution
-    function PrepareInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBStatement; overload;
+    function PrepareInlined(const aSQL: RawUTF8; ExpectResults: boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
     // - consider using ExecuteInlined() for direct execution
     function PrepareInlined(const SQLFormat: RawUTF8; const Args: array of const;
-      ExpectResults: Boolean): ISQLDBStatement; overload;
+      ExpectResults: boolean): ISQLDBStatement; overload;
     /// execute a SQL query, returning a statement interface instance to retrieve
     // the result rows corresponding to the supplied SELECT statement
     // - will call NewThreadSafeStatement method to retrieve a thread-safe
@@ -1293,12 +1298,12 @@ type
     // - this implementation will call the NewThreadSafeStatement virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - raise an exception on error
-    function ExecuteInlined(const aSQL: RawUTF8; ExpectResults: Boolean):
+    function ExecuteInlined(const aSQL: RawUTF8; ExpectResults: boolean):
       ISQLDBRows; overload;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
     function ExecuteInlined(const SQLFormat: RawUTF8; const Args: array of const;
-      ExpectResults: Boolean): ISQLDBRows; overload;
+      ExpectResults: boolean): ISQLDBRows; overload;
     /// handle a transaction process common to all associated connections
     // - could be used to share a single transaction among several connections,
     // or to run nested transactions even on DB engines which do not allow them
@@ -1561,13 +1566,13 @@ type
     // do raise an exception: this parameter ensures that any pending transaction
     // is roll-backed before disconnection
     // - is set to TRUE by default
-    property RollbackOnDisconnect: Boolean read fRollbackOnDisconnect write
+    property RollbackOnDisconnect: boolean read fRollbackOnDisconnect write
       fRollbackOnDisconnect;
     /// defines if '' string values are to be stored as SQL null
     // - by default, '' will be stored as ''
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
     // store '' values, but expect NULL to be stored instead
-    property StoreVoidStringAsNull: Boolean read fStoreVoidStringAsNull write
+    property StoreVoidStringAsNull: boolean read fStoreVoidStringAsNull write
       fStoreVoidStringAsNull;
     /// customize the ISO-8601 text format expected by the database provider
     // - is 'T' by default, as expected by the ISO-8601 standard
@@ -1621,7 +1626,7 @@ type
     fOnProcess: TOnSQLDBProcess;
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
-    fRollbackOnDisconnect: Boolean;
+    fRollbackOnDisconnect: boolean;
     fLastAccessTicks: Int64;
     function IsOutdated(tix: Int64): boolean; // do not make virtual
     function GetInTransaction: boolean; virtual;
@@ -1667,9 +1672,9 @@ type
     // - if TSQLDBConnectionProperties.ReconnectAfterConnectionError is set,
     // any connection error will be trapped, unless AllowReconnect is false
     // - on error, if RaiseExceptionOnError=true, an exception is raised
-    function NewStatementPrepared(const aSQL: RawUTF8; ExpectResults: Boolean;
-      RaiseExceptionOnError: Boolean = false;
-      AllowReconnect: Boolean = true): ISQLDBStatement; virtual;
+    function NewStatementPrepared(const aSQL: RawUTF8; ExpectResults: boolean;
+      RaiseExceptionOnError: boolean = false;
+      AllowReconnect: boolean = true): ISQLDBStatement; virtual;
     /// begin a Transaction for this connection
     // - this default implementation will check and set TransactionCount
     procedure StartTransaction; virtual;
@@ -1726,7 +1731,7 @@ type
     // do raise an exception: this parameter ensures that any pending transaction
     // is roll-backed before disconnection
     // - is set to TRUE by default
-    property RollbackOnDisconnect: Boolean read fRollbackOnDisconnect write
+    property RollbackOnDisconnect: boolean read fRollbackOnDisconnect write
       fRollbackOnDisconnect;
     /// some error message, e.g. during execution of NewStatementPrepared
     property LastErrorMessage: RawUTF8 read fErrorMessage write fErrorMessage;
@@ -1944,7 +1949,7 @@ type
     // - this default implementation will just store aSQL content and the
     // ExpectResults parameter, and connect to the remote server is was not
     // already connected
-    procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean); overload; virtual;
+    procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean); overload; virtual;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - should raise an Exception on any error
@@ -1968,7 +1973,7 @@ type
     //  to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will call Prepare then ExecutePrepared methods
-    procedure Execute(const aSQL: RawUTF8; ExpectResults: Boolean); overload;
+    procedure Execute(const aSQL: RawUTF8; ExpectResults: boolean); overload;
     /// Prepare and Execute an UTF-8 encoded SQL statement
     // - parameters marked as ? should be specified as method parameter in Params[]
     // - BLOB parameters could not be bound with this method, but need an explicit
@@ -1977,7 +1982,7 @@ type
     // to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will bind parameters, then call Excecute() virtual method
-    procedure Execute(const aSQL: RawUTF8; ExpectResults: Boolean;
+    procedure Execute(const aSQL: RawUTF8; ExpectResults: boolean;
       const Params: array of const); overload;
     /// Prepare and Execute an UTF-8 encoded SQL statement
     // - parameters marked as % will be replaced by Args[] value in the SQL text
@@ -1990,7 +1995,7 @@ type
     // to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will bind parameters, then call Excecute() virtual method
-    procedure Execute(const SQLFormat: RawUTF8; ExpectResults: Boolean;
+    procedure Execute(const SQLFormat: RawUTF8; ExpectResults: boolean;
       const Args, Params: array of const); overload;
     /// execute a prepared SQL statement and return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
@@ -3048,7 +3053,7 @@ begin
 end;
 
 function TSQLDBConnectionProperties.PrepareInlined(const aSQL: RawUTF8;
-  ExpectResults: Boolean): ISQLDBStatement;
+  ExpectResults: boolean): ISQLDBStatement;
 var
   Query: ISQLDBStatement;
   i, maxParam: integer;
@@ -3091,13 +3096,13 @@ begin
 end;
 
 function TSQLDBConnectionProperties.PrepareInlined(const SQLFormat: RawUTF8;
-  const Args: array of const; ExpectResults: Boolean): ISQLDBStatement;
+  const Args: array of const; ExpectResults: boolean): ISQLDBStatement;
 begin
   result := PrepareInlined(FormatUTF8(SQLFormat, Args), ExpectResults);
 end;
 
 function TSQLDBConnectionProperties.ExecuteInlined(const aSQL: RawUTF8;
-  ExpectResults: Boolean): ISQLDBRows;
+  ExpectResults: boolean): ISQLDBRows;
 var
   Query: ISQLDBStatement;
 begin
@@ -3112,7 +3117,7 @@ begin
 end;
 
 function TSQLDBConnectionProperties.ExecuteInlined(const SQLFormat: RawUTF8;
-  const Args: array of const; ExpectResults: Boolean): ISQLDBRows;
+  const Args: array of const; ExpectResults: boolean): ISQLDBRows;
 begin
   result := ExecuteInlined(FormatUTF8(SQLFormat, Args), ExpectResults);
 end;
@@ -3157,7 +3162,7 @@ begin
 end;
 
 function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(const aSQL:
-  RawUTF8; ExpectResults, RaiseExceptionOnError: Boolean): ISQLDBStatement;
+  RawUTF8; ExpectResults, RaiseExceptionOnError: boolean): ISQLDBStatement;
 begin
   result := ThreadSafeConnection.NewStatementPrepared(aSQL, ExpectResults,
     RaiseExceptionOnError);
@@ -3165,7 +3170,7 @@ end;
 
 function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(const
   SQLFormat: RawUTF8; const Args: array of const; ExpectResults,
-  RaiseExceptionOnError: Boolean): ISQLDBStatement;
+  RaiseExceptionOnError: boolean): ISQLDBStatement;
 begin
   result := NewThreadSafeStatementPrepared(FormatUTF8(SQLFormat, Args),
     ExpectResults, RaiseExceptionOnError);
@@ -3266,7 +3271,7 @@ end;
 
 function TSQLDBConnectionProperties.IsCachable(P: PUTF8Char): boolean;
 var
-  NoWhere: Boolean;
+  NoWhere: boolean;
 begin // cachable if with ? parameter or SELECT without WHERE clause
   if (P <> nil) and fUseCache then
   begin
@@ -5099,8 +5104,8 @@ begin
           BindTextU(i, UnicodeStringToUtf8(UnicodeString(VUnicodeString)), IO);
     {$endif}
     {$endif}
-        vtBoolean:
-          Bind(i, integer(VBoolean), IO);
+        vtboolean:
+          Bind(i, integer(Vboolean), IO);
         vtInteger:
           Bind(i, VInteger, IO);
         vtInt64:
@@ -5135,8 +5140,8 @@ begin
     case VType of
       varNull:
         BindNull(Param, IO);
-      varBoolean:
-        if VBoolean then
+      varboolean:
+        if Vboolean then
           Bind(Param, 1, IO)
         else
           Bind(Param, 0, IO);
@@ -5349,15 +5354,16 @@ begin
             else
               V.VBlobLen := StrLen(V.VText);
           {$ifndef UNICODE}
-            if (fConnection <> nil) and not fConnection.Properties.VariantStringAsWideString
-              then
+            if (fConnection <> nil) and
+               not fConnection.Properties.VariantStringAsWideString then
             begin
               VType := varString;
-              if (CurrentAnsiConvert.CodePage = CP_UTF8) and (V.VText = pointer(tmp)) then
+              if (CurrentAnsiConvert.CodePage = CP_UTF8) and
+                 (V.VText = pointer(tmp)) then
                 RawByteString(VAny) := tmp
               else
-                CurrentAnsiConvert.UTF8BufferToAnsi(V.VText, V.VBlobLen,
-                  RawByteString(VAny));
+                CurrentAnsiConvert.UTF8BufferToAnsi(
+                  V.VText, V.VBlobLen, RawByteString(VAny));
             end
             else
           {$endif UNICODE}
@@ -5519,7 +5525,7 @@ begin
   result := ftUnknown;
 end;
 
-procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: Boolean);
+procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   Connection.InternalProcess(speActive);
   try
@@ -5737,9 +5743,6 @@ begin
     end;
 end;
 
-const
-  FETCHALLTOBINARY_MAGIC = 1;
-
 function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
   DataRowPosition: PCardinalDynArray): cardinal;
 var
@@ -5819,7 +5822,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: Boolean;
+procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean;
   const Params: array of const);
 begin
   Connection.InternalProcess(speActive);
@@ -5833,7 +5836,7 @@ begin
 end;
 
 procedure TSQLDBStatement.Execute(const SQLFormat: RawUTF8;
-  ExpectResults: Boolean; const Args, Params: array of const);
+  ExpectResults: boolean; const Args, Params: array of const);
 begin
   Execute(FormatUTF8(SQLFormat, Args), ExpectResults, Params);
 end;
@@ -6169,7 +6172,7 @@ begin
   TDocVariantData(aDocument).InitObjectFromVariants(names, values, aOptions);
 end;
 
-procedure TSQLDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
+procedure TSQLDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 var
   L: integer;
 begin
@@ -6445,7 +6448,7 @@ begin
 end;
 
 function TSQLDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
-  ExpectResults, RaiseExceptionOnError, AllowReconnect: Boolean): ISQLDBStatement;
+  ExpectResults, RaiseExceptionOnError, AllowReconnect: boolean): ISQLDBStatement;
 var
   Stmt: TSQLDBStatement;
   ToCache: boolean;
@@ -6554,8 +6557,8 @@ begin
       exit; // success
     if LastErrorWasAboutConnection then
     try
-      SynDBLog.Add.Log(sllDB, 'NewStatementPrepared: reconnect after %', [fErrorException],
-        self);
+      SynDBLog.Add.Log(sllDB, 'NewStatementPrepared: reconnect after %',
+        [fErrorException], self);
       Disconnect;
       Connect;
       TryPrepare(RaiseExceptionOnError);
@@ -6700,7 +6703,7 @@ var
   id: TThreadID;
   tix: Int64;
   conn: TSQLDBConnectionThreadSafe;
-begin // caller made EnterCriticalSection(fConnectionCS)
+begin // caller made fConnectionPool.Safe.Lock
   if self <> nil then
   begin
     id := GetCurrentThreadId;
