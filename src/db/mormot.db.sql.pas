@@ -509,13 +509,6 @@ var
   SynDBLog: TSynLogClass = TSynLog;
 
 type
-  /// access to a native library
-  // - this generic class is to be used for any native connection using an
-  // external library
-  // - is used e.g. by TSQLDBOracleLib to access the OCI library,
-  // or by mormot.db.sql.odbc to access the ODBC library
-  TSQLDBLib = class(TSynLibrary);
-
   /// a custom variant type used to have direct access to a result row content
   // - use ISQLDBRows.RowData method to retrieve such a Variant
   TSQLDBRowVariantType = class(TSynInvokeableVariantType)
@@ -1694,6 +1687,10 @@ type
     // - StartTransaction method must have been called before
     // - this default implementation will check and set TransactionCount
     procedure Rollback; virtual;
+    /// allows to change the password of the current connected user
+    // - do nothing method by default, returning false
+    // - properly overriden e.g. by TSQLDBOracleConnection
+    function PasswordChange: Boolean; virtual;
 
     /// direct export of a DB statement rows into a new table of this database
     // - the corresponding table will be created within the current connection,
@@ -6456,7 +6453,8 @@ begin
 end;
 
 function TSQLDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
-  ExpectResults, RaiseExceptionOnError, AllowReconnect: boolean): ISQLDBStatement;
+  ExpectResults: boolean; RaiseExceptionOnError: boolean;
+  AllowReconnect: boolean): ISQLDBStatement;
 var
   Stmt: TSQLDBStatement;
   ToCache: boolean;
@@ -6597,6 +6595,11 @@ begin
     raise ESQLDBException.CreateUTF8('Invalid %.Rollback call', [self]);
   dec(fTransactionCount);
   InternalProcess(speRollback);
+end;
+
+function TSQLDBConnection.PasswordChange: Boolean;
+begin
+  result := false;
 end;
 
 procedure TSQLDBConnection.StartTransaction;

@@ -1300,6 +1300,12 @@ type
   protected
     fHandle: TSynLibraryHandle;
     fLibraryPath: TFileName;
+    /// cross-platform resolution of a function entry in this library
+    // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
+    function GetProc(ProcName: PChar; Entry: PPointer;
+      RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
+    /// cross-platform call to FreeLibrary() + set fHandle := 0
+    procedure FreeLib;
     /// same as SafeLoadLibrary() but setting fLibraryPath and cwd on Windows
     function TryLoadLibrary(const aLibrary: array of TFileName;
       aRaiseExceptionOnFailure: ExceptionClass): boolean; virtual;
@@ -2337,8 +2343,33 @@ end;
 {$I+}
 
 
-
 { TSynLibrary }
+
+function TSynLibrary.GetProc(ProcName: PChar; Entry: PPointer;
+  RaiseExceptionOnFailure: ExceptionClass): boolean;
+begin
+  if (Entry = nil) or (Handle = 0) then
+    result := false // avoid GPF
+  else
+  begin
+    Entry^ := GetProcAddress(Handle, ProcName);
+    result := Entry^ <> nil;
+  end;
+  if (RaiseExceptionOnFailure <> nil) and not result then
+  begin
+    FreeLib;
+    raise RaiseExceptionOnFailure.CreateFmt('Invalid %s: missing %s',
+      [LibraryPath, ProcName]);
+  end;
+end;
+
+procedure TSynLibrary.FreeLib;
+begin
+  if fHandle = 0 then
+    exit; // nothing to free
+  FreeLibrary(fHandle);
+  fHandle := 0;
+end;
 
 function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
   aRaiseExceptionOnFailure: ExceptionClass): boolean;
@@ -2383,8 +2414,7 @@ end;
 
 destructor TSynLibrary.Destroy;
 begin
-  if Handle <> 0 then
-    FreeLibrary(Handle);
+  FreeLib;
   inherited Destroy;
 end;
 
