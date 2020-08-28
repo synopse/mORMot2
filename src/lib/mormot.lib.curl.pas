@@ -595,8 +595,9 @@ procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 var
   P: PPointerArray;
   api: integer;
+
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PAnsiChar = (
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PChar = (
     'curl_global_init', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
@@ -614,6 +615,7 @@ const
 begin
   if curl_initialized {$ifndef LIBCURLSTATIC} and (curl <> nil) {$endif} then
     exit; // set it once, but allow to retry a given dllname
+
   GlobalLock;
   try
     if curl_initialized then
@@ -678,10 +680,12 @@ begin
       for api := low(NAMES) to high(NAMES) do
         curl.GetProc(NAMES[api], @P[api], ECurl);
     except
-      FreeAndNil(curl);
+      FreeAndNil(curl); // ECurl raised during initialization above
       exit;
     end;
+
     {$endif LIBCURLSTATIC}
+
     curl.global_init(engines);
     curl.info := curl.version_info(cvFour)^;
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
@@ -690,7 +694,7 @@ begin
     // api := 0; with curl.info do while protocols[api]<>nil do begin
     // write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally
-    curl_initialized := true;
+    curl_initialized := true; // should be set last
     GlobalUnLock;
   end;
 end;

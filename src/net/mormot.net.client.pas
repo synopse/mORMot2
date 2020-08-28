@@ -9,7 +9,7 @@ unit mormot.net.client;
    HTTP Client Classes
    - THttpClientSocket Implementing HTTP client over plain sockets
    - THttpRequest Abstract HTTP client class
-   - TWinHttp TWinINet TWinHttpWebSocketClient
+   - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP
 
   *****************************************************************************
 
@@ -29,6 +29,9 @@ uses
   {$ifdef USEWININET}
   mormot.lib.winhttp,
   {$endif USEWININET}
+  {$ifdef USELIBCURL}
+  mormot.lib.curl,
+  {$endif USELIBCURL}
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
   mormot.core.text;
 
@@ -507,8 +510,70 @@ type
     destructor Destroy; override;
   end;
 
-
 {$endif USEWININET}
+
+{$ifdef USELIBCURL}
+
+type
+  /// libcurl exception type
+  ECurlHTTP = class(Exception);
+
+  /// a class to handle HTTP/1.1 request using the libcurl library
+  // - libcurl is a free and easy-to-use cross-platform URL transfer library,
+  // able to directly connect via HTTP or HTTPS on most Linux systems
+  // - under a 32 bit Linux system, the libcurl library (and its dependencies,
+  // like OpenSSL) may not be installed - you can add it via your package
+  // manager, e.g. on Ubuntu:
+  // $ sudo apt-get install libcurl3
+  // - under a 64-bit Linux system, if compiled with Kylix, you should install
+  // the 32-bit flavor of libcurl, e.g. on Ubuntu:
+  // $ sudo apt-get install libcurl3:i386
+  // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
+  // depending on the default version available on the system
+  TCurlHTTP = class(THttpRequest)
+  protected
+    fHandle: pointer;
+    fRootURL: RawUTF8;
+    fIn: record
+      Headers: pointer;
+      DataOffset: integer;
+      URL, Method: RawUTF8;
+      Data: RawByteString;
+    end;
+    fOut: record
+      Header, Encoding, AcceptEncoding: RawUTF8;
+      Data: RawByteString;
+    end;
+    fSSL: record
+      CertFile, CACertFile, KeyName, PassPhrase: RawUTF8;
+    end;
+    procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
+    procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); override;
+    procedure InternalSendRequest(const aMethod: RawUTF8;
+      const aData: RawByteString); override;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
+      var Data: RawByteString): integer; override;
+    procedure InternalCloseRequest; override;
+    procedure InternalAddHeader(const hdr: RawUTF8); override;
+    function GetCACertFile: RawUTF8;
+    procedure SetCACertFile(const aCertFile: RawUTF8);
+  public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; override;
+    /// release the connection
+    destructor Destroy; override;
+    /// allow to set a CA certification file without touching the client certification
+    property CACertFile: RawUTF8 read GetCACertFile write SetCACertFile;
+    /// set the client SSL certification details
+    // - see CACertFile if you don't want to change the whole client cert info
+    // - used e.g. as
+    // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
+    procedure UseClientCertificate(
+      const aCertFile, aCACertFile, aKeyName, aPassPhrase: RawUTF8);
+  end;
+
+{$endif USELIBCURL}
+
 
 implementation
 
@@ -1249,8 +1314,8 @@ end;
 
 procedure TWinINet.InternalAddHeader(const hdr: RawUTF8);
 begin
-  if (hdr <> '') and not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr),
-    HTTP_ADDREQ_FLAG_COALESCE) then
+  if (hdr <> '') and
+     not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr), HTTP_ADDREQ_FLAG_COALESCE) then
     raise EWinINet.Create;
 end;
 
@@ -1299,8 +1364,8 @@ begin
   result := '';
   dwSize := 0;
   dwIndex := 0;
-  if not HttpQueryInfoA(fRequest, Info, nil, dwSize, dwIndex) and (GetLastError
-    = ERROR_INSUFFICIENT_BUFFER) then
+  if not HttpQueryInfoA(fRequest, Info, nil, dwSize, dwIndex) and
+     (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
   begin
     SetLength(result, dwSize - 1);
     if not HttpQueryInfoA(fRequest, Info, pointer(result), dwSize, dwIndex) then
@@ -1450,6 +1515,194 @@ begin
 end;
 
 {$endif USEWININET}
+
+
+{$ifdef USELIBCURL}
+
+{ TCurlHTTP }
+
+procedure TCurlHTTP.InternalConnect(ConnectionTimeOut, SendTimeout,
+  ReceiveTimeout: cardinal);
+const
+  HTTPS: array[boolean] of string[1] = ('', 's');
+begin
+  if not IsAvailable then
+    raise ENetSock.CreateFmt('No available %s', [LIBCURL_DLL]);
+  fHandle := curl.easy_init;
+  ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
+  if ConnectionTimeOut = 0 then
+    ConnectionTimeOut := 1;
+  curl.easy_setopt(fHandle, coConnectTimeout, ConnectionTimeOut); // default=300 !
+  // coTimeout=CURLOPT_TIMEOUT is global for the transfer, so shouldn't be used
+  if fLayer = nlUNIX then
+    // see CURLOPT_UNIX_SOCKET_PATH doc
+    fRootURL := 'http://localhost'
+  else
+    FormatUTF8('http%://%:%', [HTTPS[fHttps], fServer, fPort], fRootURL);
+end;
+
+destructor TCurlHTTP.Destroy;
+begin
+  if fHandle <> nil then
+    curl.easy_cleanup(fHandle);
+  inherited;
+end;
+
+function TCurlHTTP.GetCACertFile: RawUTF8;
+begin
+  Result := fSSL.CACertFile;
+end;
+
+procedure TCurlHTTP.SetCACertFile(const aCertFile: RawUTF8);
+begin
+  fSSL.CACertFile := aCertFile;
+end;
+
+procedure TCurlHTTP.UseClientCertificate(const aCertFile, aCACertFile, aKeyName,
+  aPassPhrase: RawUTF8);
+begin
+  fSSL.CertFile := aCertFile;
+  fSSL.CACertFile := aCACertFile;
+  fSSL.KeyName := aKeyName;
+  fSSL.PassPhrase := aPassPhrase;
+end;
+
+procedure TCurlHTTP.InternalCreateRequest(const aMethod, aURL: RawUTF8);
+const
+  CERT_PEM: RawUTF8 = 'PEM';
+begin
+  fIn.URL := fRootURL + aURL;
+  curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHTTP)
+  //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
+  if fLayer = nlUNIX then
+    curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
+  curl.easy_setopt(fHandle, coURL, pointer(fIn.URL));
+  if fProxyName <> '' then
+    curl.easy_setopt(fHandle, coProxy, pointer(fProxyName));
+  if fHttps then
+    if IgnoreSSLCertificateErrors then
+    begin
+      curl.easy_setopt(fHandle, coSSLVerifyPeer, 0);
+      curl.easy_setopt(fHandle, coSSLVerifyHost, 0);
+      //curl.easy_setopt(fHandle,coProxySSLVerifyPeer,0);
+      //curl.easy_setopt(fHandle,coProxySSLVerifyHost,0);
+    end
+    else
+    begin
+      // see https://curl.haxx.se/libcurl/c/simplessl.html
+      if fSSL.CertFile <> '' then
+      begin
+        curl.easy_setopt(fHandle, coSSLCertType, pointer(CERT_PEM));
+        curl.easy_setopt(fHandle, coSSLCert, pointer(fSSL.CertFile));
+        if fSSL.PassPhrase <> '' then
+          curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fSSL.PassPhrase));
+        curl.easy_setopt(fHandle, coSSLKeyType, nil);
+        curl.easy_setopt(fHandle, coSSLKey, pointer(fSSL.KeyName));
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fSSL.CACertFile));
+        curl.easy_setopt(fHandle, coSSLVerifyPeer, 1);
+      end
+      else if fSSL.CACertFile <> '' then
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fSSL.CACertFile));
+    end;
+  curl.easy_setopt(fHandle, coUserAgent, pointer(fExtendedOptions.UserAgent));
+  curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
+  curl.easy_setopt(fHandle, coHeaderFunction, @CurlWriteRawByteString);
+  fIn.Method := UpperCase(aMethod);
+  if fIn.Method = '' then
+    fIn.Method := 'GET';
+  if fIn.Method = 'GET' then
+    fIn.Headers := nil
+  else // disable Expect 100 continue in libcurl
+    fIn.Headers := curl.slist_append(nil, 'Expect:');
+  Finalize(fOut);
+end;
+
+procedure TCurlHTTP.InternalAddHeader(const hdr: RawUTF8);
+var
+  P: PUTF8Char;
+  s: RawUTF8;
+begin
+  P := pointer(hdr);
+  while P <> nil do
+  begin
+    s := GetNextLine(P, P);
+    if s <> '' then // nil would reset the whole list
+      fIn.Headers := curl.slist_append(fIn.Headers, pointer(s));
+  end;
+end;
+
+class function TCurlHTTP.IsAvailable: boolean;
+begin
+  Result := CurlIsAvailable;
+end;
+
+procedure TCurlHTTP.InternalSendRequest(const aMethod: RawUTF8; const aData:
+  RawByteString);
+begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
+  if fIn.Method = 'HEAD' then // the only verb what do not expect body in answer is HEAD
+    curl.easy_setopt(fHandle, coNoBody, 1)
+  else
+    curl.easy_setopt(fHandle, coNoBody, 0);
+  curl.easy_setopt(fHandle, coCustomRequest, pointer(fIn.Method));
+  curl.easy_setopt(fHandle, coPostFields, pointer(aData));
+  curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
+  curl.easy_setopt(fHandle, coHTTPHeader, fIn.Headers);
+  curl.easy_setopt(fHandle, coFile, @fOut.Data);
+  curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
+end;
+
+function TCurlHTTP.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
+  RawUTF8; var Data: RawByteString): integer;
+var
+  res: TCurlResult;
+  P: PUTF8Char;
+  s: RawUTF8;
+  i: integer;
+  rc: longint; // needed on Linux x86-64
+begin
+  res := curl.easy_perform(fHandle);
+  if res <> crOK then
+    raise ECurlHTTP.CreateFmt('libcurl error %d (%s) on %s %s', [ord(res), curl.easy_strerror
+      (res), fIn.Method, fIn.URL]);
+  rc := 0;
+  curl.easy_getinfo(fHandle, ciResponseCode, rc);
+  result := rc;
+  Header := Trim(fOut.Header);
+  if IdemPChar(pointer(Header), 'HTTP/') then
+  begin
+    i := 6;
+    while Header[i] >= ' ' do
+      inc(i);
+    while ord(Header[i]) in [10, 13] do
+      inc(i);
+    system.Delete(Header, 1, i - 1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
+  end;
+  P := pointer(Header);
+  while P <> nil do
+  begin
+    s := GetNextLine(P, P);
+    if IdemPChar(pointer(s), 'ACCEPT-ENCODING:') then
+      trimcopy(s, 17, 100, AcceptEncoding)
+    else if IdemPChar(pointer(s), 'CONTENT-ENCODING:') then
+      trimcopy(s, 18, 100, Encoding);
+  end;
+  Data := fOut.Data;
+end;
+
+procedure TCurlHTTP.InternalCloseRequest;
+begin
+  if fIn.Headers <> nil then
+  begin
+    curl.slist_free_all(fIn.Headers);
+    fIn.Headers := nil;
+  end;
+  Finalize(fIn);
+  fIn.DataOffset := 0;
+  Finalize(fOut);
+end;
+
+
+{$endif USELIBCURL}
 
 initialization
 
