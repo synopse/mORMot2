@@ -8,8 +8,10 @@ unit mormot.db.proxy;
 
    Allow Remote Access of any mormot.db.sql connections via a Proxy
     - Shared Proxy Information
-    - Server-Side Proxy Logic
-    - Client-Side Proxy Logic
+    - Server-Side Proxy Remote Protocol
+    - Client-Side Proxy Remote Protocol
+    - HTTP Server Classes for Remote Access
+    - HTTP Client Classes for Remote Access
 
    This unit contains the communication-abstracted logic to handle a
    remote DB connection using our propertary binary protocol.
@@ -37,7 +39,11 @@ uses
   mormot.core.rtti,
   mormot.core.secure,
   mormot.db.core,
-  mormot.db.sql;
+  mormot.db.sql,
+  mormot.net.sock,
+  mormot.net.http,
+  mormot.net.client,
+  mormot.net.server;
 
 
 { ************ Shared Proxy Information }
@@ -120,7 +126,7 @@ function ToText(cmd: TSQLDBProxyConnectionCommand): PShortString; overload;
 
 
 
-{ ************ Server-Side Proxy Logic }
+{ ************ Server-Side Proxy Remote Protocol }
 
 type
   /// server-side implementation of a proxy connection to any mormot.db.sql engine
@@ -178,7 +184,7 @@ type
   TSQLDBProxyConnectionProtocolClass = class of TSQLDBProxyConnectionProtocol;
 
 
-{ ************ Client-Side Proxy Logic }
+{ ************ Client-Side Proxy Remote Protocol }
 
 type
   /// implements a proxy-like virtual connection statement to a DB engine
@@ -444,6 +450,222 @@ type
 
 
 
+{ ************ HTTP Server Classes for Remote Access }
+
+const
+  /// default HTTP port to be used for SynDB remote access if none is specified
+  SYNDB_DEFAULT_HTTP_PORT = '8092';
+
+type
+  /// used to define the HTTP server class for publishing a SynDB connection
+  TSQLDBServerClass = class of TSQLDBServerAbstract;
+
+  /// implements a generic HTTP server, able to publish any SynDB connection
+  // - do not instantiate this class, but rather use TSQLDBServerHttpApi or
+  // TSQLDBServerSockets - this abstract class won't set any HTTP server
+  TSQLDBServerAbstract = class
+  protected
+    fServer: THttpServerGeneric;
+    fThreadPoolCount: integer;
+    fPort, fDatabaseName: RawUTF8;
+    fHttps: boolean;
+    fProperties: TSQLDBConnectionProperties;
+    fProtocol: TSQLDBProxyConnectionProtocol;
+    fSafe: TSynLocker;
+    fProcessLocked: boolean;
+    // this is where the process would take place
+    function Process(Ctxt: THttpServerRequest): cardinal;
+  public
+    /// publish the SynDB connection on a given HTTP port and URI
+    // - this generic constructor won't initialize the HTTP server itself:
+    // use overriden constructors instead
+    // - URI would follow the supplied aDatabaseName parameter on the given port
+    // e.g. http://serverip:8092/remotedb for
+    // ! Create(aProps,'remotedb');
+    // - you can optionally register one user credential, or change the
+    // transmission Protocol which is TSQLDBRemoteConnectionProtocol by default
+    // - aProperties.ThreadingMode will be set to the optional aThreadMode
+    // parameter tmMainConnection by default, which would also set ProcessLocked
+    // to TRUE - in fact, you should better use a single thread for the process,
+    // but you may define a small thread pool for the process IF the provider
+    // supports it
+    constructor Create(aProperties: TSQLDBConnectionProperties;
+      const aDatabaseName: RawUTF8; const aPort: RawUTF8 = SYNDB_DEFAULT_HTTP_PORT;
+      const aUserName: RawUTF8 = ''; const aPassword: RawUTF8 = '';
+      aHttps: boolean = false; aThreadPoolCount: integer = 1;
+      aProtocol: TSQLDBProxyConnectionProtocolClass = nil;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode = tmMainConnection;
+      aAuthenticate: TSynAuthenticationAbstract = nil); virtual;
+    /// released used memory
+    destructor Destroy; override;
+    /// the associated database connection properties
+    property Properties: TSQLDBConnectionProperties read fProperties write fProperties;
+    /// the associated port number
+    property Port: RawUTF8 read fPort;
+    /// the associated database name
+    property DatabaseName: RawUTF8 read fDatabaseName;
+    /// the associated communication protocol
+    // - to manage user authentication, use AuthenticateUser/DisauthenticateUser
+    // methods of Protocol.Authenticate
+    property Protocol: TSQLDBProxyConnectionProtocol read fProtocol write fProtocol;
+    /// if the internal Process() method would be protected by a critical section
+    // - set to TRUE if constructor's aThreadMode is left to its default
+    // tmMainConnection value
+    property ProcessLocked: boolean read fProcessLocked write fProcessLocked;
+  end;
+
+  /// implements a SynDB HTTP server via the user-land Sockets API
+  TSQLDBServerSockets = class(TSQLDBServerAbstract)
+  protected
+  public
+    /// publish the SynDB connection on a given HTTP port and URI using sockets
+    // - URI would follow the supplied aDatabaseName parameter on the given port
+    // e.g. http://serverip:8092/remotedb for
+    // ! Create(aProps,'remotedb');
+    // - you can optionally register one user credential
+    // - parameter aHttps is ignored by this class
+    constructor Create(aProperties: TSQLDBConnectionProperties;
+      const aDatabaseName: RawUTF8; const aPort: RawUTF8 = SYNDB_DEFAULT_HTTP_PORT;
+      const aUserName: RawUTF8 = ''; const aPassword: RawUTF8 = '';
+      aHttps: boolean = false; aThreadPoolCount: integer = 1;
+      aProtocol: TSQLDBProxyConnectionProtocolClass = nil;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode = tmMainConnection;
+      aAuthenticate: TSynAuthenticationAbstract = nil); override;
+  end;
+
+  {$ifdef ONLYUSEHTTPSOCKET}
+
+  TSQLDBServerRemote = TSQLDBServerSockets;
+
+  {$else}
+
+  /// implements a SynDB HTTP server using fast http.sys kernel-mode server
+  // - under Windows, this class is faster and more stable than TSQLDBServerSockets
+  TSQLDBServerHttpApi = class(TSQLDBServerAbstract)
+  protected
+  public
+    /// publish the SynDB connection on a given HTTP port and URI using http.sys
+    // - URI would follow the supplied aDatabaseName parameter on the given port
+    // e.g. http://serverip:8092/remotedb for
+    // ! Create(aProps,'remotedb');
+    // - you can optionally register one user credential
+    constructor Create(aProperties: TSQLDBConnectionProperties;
+      const aDatabaseName: RawUTF8; const aPort: RawUTF8 = SYNDB_DEFAULT_HTTP_PORT;
+      const aUserName: RawUTF8 = ''; const aPassword: RawUTF8 = '';
+      aHttps: boolean = false; aThreadPoolCount: integer = 1;
+      aProtocol: TSQLDBProxyConnectionProtocolClass = nil;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode = tmMainConnection;
+      aAuthenticate: TSynAuthenticationAbstract = nil); override;
+  end;
+
+  /// the default SynDB HTTP server class on each platform
+  TSQLDBServerRemote = TSQLDBServerHttpApi;
+
+  {$endif ONLYUSEHTTPSOCKET}
+
+
+{ ************ HTTP Client Classes for Remote Access }
+
+type
+  /// implements a generic HTTP client, able to access remotely any SynDB
+  // - do not instantiate this class, but rather use TSQLDBSocketConnectionProperties
+  //  TSQLDBWinHTTPConnectionProperties TSQLDBWinINetConnectionProperties
+  TSQLDBHTTPConnectionPropertiesAbstract = class(TSQLDBRemoteConnectionPropertiesAbstract)
+  protected
+    fKeepAliveMS: cardinal;
+    fURI: TURI;
+    function GetServer: RawByteString; {$ifdef HASINLINE}inline;{$endif}
+    function GetPort: RawByteString;   {$ifdef HASINLINE}inline;{$endif}
+    /// you could inherit from it and set your custom fProtocol instance
+    procedure SetInternalProperties; override;
+    procedure SetServerName(const aServerName: RawUTF8);
+    // this overriden method will just call InternalRequest
+    procedure ProcessMessage(const Input: RawByteString; out Output: RawByteString); override;
+    /// to be overriden to process low-level HTTP/1.1 request
+    function InternalRequest(var Data, DataType: RawByteString): integer; virtual; abstract;
+  published
+    /// the associated server IP address or name
+    property Server: RawByteString read GetServer;
+    /// the associated port number
+    property Port: RawByteString read GetPort;
+    /// time (in milliseconds) to keep the connection alive with the server
+    // - default is 60000, i.e. one minute
+    property KeepAliveMS: cardinal read fKeepAliveMS write fKeepAliveMS;
+  end;
+
+  /// implements a HTTP client via sockets, able to access remotely any SynDB
+  TSQLDBSocketConnectionProperties = class(TSQLDBHTTPConnectionPropertiesAbstract)
+  protected
+    fSocket: THttpClientSocket;
+    function InternalRequest(var Data, DataType: RawByteString): integer; override;
+  public
+    /// initialize the properties for remote access via HTTP using sockets
+    // - aServerName should be the HTTP server address as 'server:port'
+    // - aDatabaseName would be used to compute the URI as in TSQLDBServerAbstract
+    // - the user/password credential should match server-side authentication
+    constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
+    /// released used memory
+    destructor Destroy; override;
+    /// low-level direct access to the Socket implementation instance
+    property Socket: THttpClientSocket read fSocket;
+  end;
+
+
+  /// implements an abstract HTTP client via THttpRequest abstract class,
+  // able to access remotely any SynDB
+  // - never instantiate this class, but rather TSQLDBWinHTTPConnectionProperties
+  // or TSQLDBWinINetConnectionProperties
+  TSQLDBHttpRequestConnectionProperties = class(TSQLDBHTTPConnectionPropertiesAbstract)
+  protected
+    fClient: THttpRequest;
+    function InternalRequest(var Data, DataType: RawByteString): integer; override;
+  public
+    /// released used memory
+    destructor Destroy; override;
+    /// low-level direct access to the WinHTTP implementation instance
+    property Client: THttpRequest read fClient;
+  end;
+
+  {$ifdef USELIBCURL}
+
+  /// implements a HTTP client via the libcurl API, able to access remotely any SynDB
+  TSQLDBCurlConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
+  public
+    /// initialize the properties for remote access via HTTP using libcurl
+    // - aServerName should be the HTTP server address as 'server:port'
+    // - aDatabaseName would be used to compute the URI as in TSQLDBServerAbstract
+    // - the user/password credential should match server-side authentication
+    constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
+  end;
+
+  {$endif USELIBCURL}
+
+  {$ifdef USEWININET}
+
+  /// implements a HTTP client via WinHTTP API, able to access remotely any SynDB
+  TSQLDBWinHTTPConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
+  public
+    /// initialize the properties for remote access via HTTP using WinHTTP
+    // - aServerName should be the HTTP server address as 'server:port'
+    // - aDatabaseName would be used to compute the URI as in TSQLDBServerAbstract
+    // - the user/password credential should match server-side authentication
+    constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
+  end;
+
+  /// implements a HTTP client via WinINet API, able to access remotely any SynDB
+  TSQLDBWinINetConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
+  public
+    /// initialize the properties for remote access via HTTP using WinINet
+    // - aServerName should be the HTTP server address as 'server:port'
+    // - aDatabaseName would be used to compute the URI as in TSQLDBServerAbstract
+    // - the user/password credential should match server-side authentication
+    constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
+  end;
+
+  {$endif USEWININET}
+
+
+
 implementation
 
 
@@ -455,7 +677,7 @@ begin
 end;
 
 
-{ ************ Server-Side Proxy Logic }
+{ ************ Server-Side Proxy Remote Protocol }
 
 const
   REMOTE_MAGIC = 1;
@@ -755,8 +977,7 @@ begin
 end;
 
 
-{ ************ Client-Side Proxy Logic }
-
+{ ************ Client-Side Proxy Remote Protocol }
 
 { TSQLDBProxyConnectionPropertiesAbstract }
 
@@ -772,8 +993,8 @@ begin
     fProtocol := TSQLDBProxyConnectionProtocol.Create(nil);
   Process(cGetToken, self, token);
   SetLength(InputCredential, 4);
-  PCardinal(InputCredential)^ := fProtocol.Authenticate.ComputeHash(token,
-    UserID, PassWord);
+  PCardinal(InputCredential)^ := fProtocol.Authenticate.ComputeHash(
+    token, UserID, PassWord);
   InputCredential := UserID + #1 + InputCredential;
   fCurrentSession := Process(cGetDBMS, InputCredential, fDBMS);
 end;
@@ -798,20 +1019,20 @@ begin
   result := TSQLDBProxyConnection.Create(self);
 end;
 
-procedure TSQLDBProxyConnectionPropertiesAbstract.GetFields(const aTableName:
-  RawUTF8; out Fields: TSQLDBColumnDefineDynArray);
+procedure TSQLDBProxyConnectionPropertiesAbstract.GetFields(
+  const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray);
 begin
   Process(cGetFields, aTableName, Fields);
 end;
 
-procedure TSQLDBProxyConnectionPropertiesAbstract.GetIndexes(const aTableName:
-  RawUTF8; out Indexes: TSQLDBIndexDefineDynArray);
+procedure TSQLDBProxyConnectionPropertiesAbstract.GetIndexes(
+  const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray);
 begin
   Process(cGetIndexes, aTableName, Indexes);
 end;
 
-procedure TSQLDBProxyConnectionPropertiesAbstract.GetTableNames(out Tables:
-  TRawUTF8DynArray);
+procedure TSQLDBProxyConnectionPropertiesAbstract.GetTableNames(
+  out Tables: TRawUTF8DynArray);
 begin
   Process(cGetTableNames, self, Tables);
 end;
@@ -824,8 +1045,8 @@ end;
 
 { TSQLDBRemoteConnectionPropertiesAbstract }
 
-function TSQLDBRemoteConnectionPropertiesAbstract.Process(Command:
-  TSQLDBProxyConnectionCommand; const Input; var Output): integer;
+function TSQLDBRemoteConnectionPropertiesAbstract.Process(
+  Command: TSQLDBProxyConnectionCommand; const Input; var Output): integer;
 var
   msgInput, msgOutput, msgRaw: RawByteString;
   header: TRemoteMessageHeader;
@@ -853,7 +1074,8 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
     cGetDBMS, cGetFields, cGetIndexes:
       msgInput := msgInput + InputText;
     cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON:
-      msgInput := msgInput + RecordSave(InputExecute, TypeInfo(TSQLDBProxyConnectionCommandExecute));
+      msgInput := msgInput +
+        RecordSave(InputExecute, TypeInfo(TSQLDBProxyConnectionCommandExecute));
   else
     raise ESQLDBRemote.CreateUTF8('Unknown %.Process() input command % (%)', [self,
       ToText(Command)^, ord(Command)]);
@@ -1339,8 +1561,8 @@ end;
 
 { TSQLDBProxyStatement }
 
-procedure TSQLDBProxyStatement.ParamsToCommand(var Input:
-  TSQLDBProxyConnectionCommandExecute);
+procedure TSQLDBProxyStatement.ParamsToCommand(
+  var Input: TSQLDBProxyConnectionCommandExecute);
 begin
   if (fColumnCount > 0) or (fDataInternalCopy <> '') then
     raise ESQLDBRemote.CreateUTF8('Invalid %.ExecutePrepared* call', [self]);
@@ -1397,8 +1619,8 @@ begin
     Input, JSON);
 end;
 
-function TSQLDBProxyStatement.FetchAllToBinary(Dest: TStream; MaxRowCount:
-  cardinal; DataRowPosition: PCardinalDynArray): cardinal;
+function TSQLDBProxyStatement.FetchAllToBinary(Dest: TStream;
+  MaxRowCount: cardinal; DataRowPosition: PCardinalDynArray): cardinal;
 begin
   if (MaxRowCount > 0) and (MaxRowCount < cardinal(fDataRowCount)) then
   begin
@@ -1500,6 +1722,274 @@ begin
 end;
 
 
+{ ************ HTTP Server Classes for Remote Access }
+
+{ TSQLDBServerAbstract }
+
+constructor TSQLDBServerAbstract.Create(aProperties: TSQLDBConnectionProperties;
+  const aDatabaseName, aPort, aUserName, aPassword: RawUTF8; aHttps: boolean;
+  aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
+  aAuthenticate: TSynAuthenticationAbstract);
+begin
+  fProperties := aProperties;
+  if fProperties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) then
+  begin
+    TSQLDBConnectionPropertiesThreadSafe(fProperties).ThreadingMode := aThreadMode;
+    if aThreadMode = tmMainConnection then
+      fProcessLocked := true;
+  end;
+  fDatabaseName := aDatabaseName;
+  fSafe.Init;
+  fPort := aPort;
+  fHttps := aHttps;
+  fThreadPoolCount := aThreadPoolCount;
+  if aProtocol = nil then
+    aProtocol := TSQLDBRemoteConnectionProtocol;
+  if aAuthenticate = nil then
+    aAuthenticate := TSynAuthentication.Create(aUserName, aPassword);
+  fProtocol := aProtocol.Create(aAuthenticate);
+end;
+
+destructor TSQLDBServerAbstract.Destroy;
+begin
+  inherited;
+  fServer.Free;
+  fProtocol.Free;
+  fSafe.Done;
+end;
+
+function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequest): cardinal;
+var
+  o: RawByteString;
+begin
+  if (Ctxt.Method <> 'POST') or (Ctxt.InContent = '') or
+     not IdemPropNameU(trim(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
+  begin
+    result := HTTP_NOTFOUND;
+    exit;
+  end;
+  try
+    if fProcessLocked then
+      fSafe.Lock;
+    fProtocol.RemoteProcessMessage(Ctxt.InContent, o, fProperties.ThreadSafeConnection);
+  finally
+    if fProcessLocked then
+      fSafe.UnLock;
+  end;
+  Ctxt.OutContent := o;
+  Ctxt.OutContentType := BINARY_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+
+{$ifndef ONLYUSEHTTPSOCKET}
+
+{ TSQLDBServerHttpApi }
+
+const
+  NO_ERROR = 0; // no need to link the Windows unit
+  ERROR_ACCESS_DENIED = 5;
+
+constructor TSQLDBServerHttpApi.Create(aProperties: TSQLDBConnectionProperties;
+  const aDatabaseName, aPort, aUserName, aPassword: RawUTF8; aHttps: boolean;
+  aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
+  aAuthenticate: TSynAuthenticationAbstract);
+var
+  status: integer;
+begin
+  inherited;
+  fServer := THttpApiServer.Create(false, '');
+  status := THttpApiServer(fServer).AddUrl(fDatabaseName, fPort, fHttps, '+', true);
+  if status <> NO_ERROR then
+    if status = ERROR_ACCESS_DENIED then
+      raise ESQLDBRemote.CreateUTF8(
+        '%.Create: administrator rights needed to register URI % on port %',
+        [self, fDatabaseName, fPort])
+    else
+      raise ESQLDBRemote.CreateUTF8(
+        '%.Create: error registering URI % on port %: is not another server ' +
+        'instance running on this port?', [self, fDatabaseName, fPort]);
+  fServer.OnRequest := Process;
+  if fThreadPoolCount > 1 then
+    THttpApiServer(fServer).Clone(fThreadPoolCount - 1);
+end;
+
+{$endif ONLYUSEHTTPSOCKET}
+
+
+{ TSQLDBServerSockets }
+
+constructor TSQLDBServerSockets.Create(aProperties: TSQLDBConnectionProperties;
+  const aDatabaseName, aPort, aUserName, aPassword: RawUTF8; aHttps: boolean;
+  aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
+  aAuthenticate: TSynAuthenticationAbstract);
+var
+  ident: RawUTF8;
+begin
+  inherited;
+  FormatUTF8('DBRemote %', [aDatabaseName], ident);
+  fServer := THttpServer.Create(aPort, nil, nil, ident, fThreadPoolCount);
+  THttpServer(fServer).WaitStarted;
+  fServer.OnRequest := Process;
+end;
+
+
+
+{ ************ HTTP Client Classes for Remote Access }
+
+{ TSQLDBHTTPConnectionPropertiesAbstract }
+
+function TSQLDBHTTPConnectionPropertiesAbstract.GetServer: RawByteString;
+begin
+  result := fURI.Server;
+end;
+
+function TSQLDBHTTPConnectionPropertiesAbstract.GetPort: RawByteString;
+begin
+  result := fURI.Port;
+end;
+
+procedure TSQLDBHTTPConnectionPropertiesAbstract.SetServerName(
+  const aServerName: RawUTF8);
+begin
+  fKeepAliveMS := 60000;
+  if not fURI.From(aServerName) then
+    raise ESQLDBRemote.CreateUTF8('%.Create: expect a valid URI in aServerName="%"',
+      [self, aServerName]);
+  if fURI.Port = '' then
+    fURI.Port := SYNDB_DEFAULT_HTTP_PORT;
+end;
+
+procedure TSQLDBHTTPConnectionPropertiesAbstract.ProcessMessage(const Input:
+  RawByteString; out Output: RawByteString);
+var
+  Content, ContentType: RawByteString;
+  status: integer;
+begin
+  Content := Input;
+  ContentType := BINARY_CONTENT_TYPE;
+  status := InternalRequest(Content, ContentType);
+  if status <> HTTP_SUCCESS then
+    raise ESQLDBRemote.CreateUTF8('%.ProcessMessage: Error % from %',
+      [self, status, fURI.URI]);
+  if ContentType <> BINARY_CONTENT_TYPE then
+    raise ESQLDBRemote.CreateUTF8('%.ProcessMessage: Invalid content type [%] from %',
+      [self, ContentType, fURI.URI]);
+  Output := Content;
+end;
+
+procedure TSQLDBHTTPConnectionPropertiesAbstract.SetInternalProperties;
+begin
+  if fProtocol = nil then
+    fProtocol := TSQLDBRemoteConnectionProtocol.Create(
+      TSynAuthentication.Create(UserID, PassWord));
+  inherited;
+end;
+
+
+{ TSQLDBSocketConnectionProperties }
+
+constructor TSQLDBSocketConnectionProperties.Create(const aServerName,
+  aDatabaseName, aUserID, aPassWord: RawUTF8);
+begin
+  SetServerName(aServerName);
+  fSocket := THttpClientSocket.Open(Server, Port);
+  inherited;
+end;
+
+destructor TSQLDBSocketConnectionProperties.Destroy;
+begin
+  try
+    inherited;
+  finally
+    fSocket.Free;
+  end;
+end;
+
+function TSQLDBSocketConnectionProperties.InternalRequest(
+  var Data, DataType: RawByteString): integer;
+begin
+  result := fSocket.Request(fDatabaseName, 'POST', fKeepAliveMS, '', Data,
+    DataType, false);
+  Data := fSocket.Content;
+  DataType := fSocket.ContentType;
+end;
+
+
+{ TSQLDBHttpRequestConnectionProperties }
+
+destructor TSQLDBHttpRequestConnectionProperties.Destroy;
+begin
+  try
+    inherited Destroy;
+  finally
+    fClient.Free;
+  end;
+end;
+
+function TSQLDBHttpRequestConnectionProperties.InternalRequest(
+  var Data, DataType: RawByteString): integer;
+var
+  inData: RawByteString;
+  inDataType, head: RawUTF8;
+begin
+  inData := Data;
+  inDataType := DataType;
+  result := fClient.Request(fDatabaseName, 'POST', fKeepAliveMS, '', inData,
+    inDataType, head, Data);
+  FindNameValue(head, HEADER_CONTENT_TYPE_UPPER, RawUTF8(DataType));
+end;
+
+
+{$ifdef USEWININET}
+
+{ TSQLDBWinHTTPConnectionProperties }
+
+constructor TSQLDBWinHTTPConnectionProperties.Create(const aServerName,
+  aDatabaseName, aUserID, aPassWord: RawUTF8);
+begin
+  SetServerName(aServerName);
+  fClient := TWinHTTP.Create(Server, Port, fURI.Https);
+  inherited;
+end;
+
+{ TSQLDBWinINetConnectionProperties }
+
+constructor TSQLDBWinINetConnectionProperties.Create(const aServerName,
+  aDatabaseName, aUserID, aPassWord: RawUTF8);
+begin
+  SetServerName(aServerName);
+  fClient := TWinINet.Create(Server, Port, fURI.Https);
+  inherited;
+end;
+
+{$endif USEWININET}
+
+{$ifdef USELIBCURL}
+
+{ TSQLDBCurlConnectionProperties }
+
+constructor TSQLDBCurlConnectionProperties.Create(const aServerName,
+  aDatabaseName, aUserID, aPassWord: RawUTF8);
+begin
+  SetServerName(aServerName);
+  fClient := TCurlHTTP.Create(Server, Port, fURI.Https);
+  inherited;
+end;
+
+{$endif USELIBCURL}
+
 initialization
+  TSQLDBSocketConnectionProperties.RegisterClassNameForDefinition;
+  {$ifdef USEWININET}
+  TSQLDBWinHTTPConnectionProperties.RegisterClassNameForDefinition;
+  TSQLDBWinINetConnectionProperties.RegisterClassNameForDefinition;
+  {$endif USEWININET}
+  {$ifdef USELIBCURL}
+  TSQLDBCurlConnectionProperties.RegisterClassNameForDefinition;
+  {$endif USELIBCURL}
 end.
 

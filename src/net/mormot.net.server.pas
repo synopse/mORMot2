@@ -76,8 +76,8 @@ type
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client
   // - supplied parameters reflect the current input state
-  // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
-  // error code (e.g. STATUS_FORBIDDEN or STATUS_PAYLOADTOOLARGE) to reject
+  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
+  // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
   // the request
   TOnHttpServerBeforeBody = function(const aURL, aMethod, aInHeaders,
     aInContentType, aRemoteIP: RawUTF8; aContentLength: integer;
@@ -256,7 +256,7 @@ type
     // to the client via http.sys or NGINX's X-Accel-Redirect; the
     // OutCustomHeader should contain the eventual 'Content-type: ....' value
     // - default implementation is to call the OnRequest event (if existing),
-    // and will return STATUS_NOTFOUND if OnRequest was not set
+    // and will return HTTP_NOTFOUND if OnRequest was not set
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously, but with a given Ctxt instance for each)
     function Request(Ctxt: THttpServerRequest): cardinal; virtual;
@@ -267,7 +267,7 @@ type
     // - OutContent/OutContentType/OutCustomHeader are output parameters
     // - CallingThread should be set to the client's Ctxt.CallingThread
     // value, so that the method could know which connnection is to be used -
-    // it will return STATUS_NOTFOUND (404) if the connection is unknown
+    // it will return HTTP_NOTFOUND (404) if the connection is unknown
     // - result of the function is the HTTP error code (200 if OK, e.g.)
     // - warning: this void implementation will raise an ECrtSocket exception -
     // inherited classes should override it, e.g. as in TWebSocketServerRest
@@ -289,17 +289,17 @@ type
     property OnRequest: TOnHttpServerRequest
       read fOnRequest write SetOnRequest;
     /// event handler called just before the body is retrieved from the client
-    // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
+    // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
     // error code to reject the request immediatly, and close the connection
     property OnBeforeBody: TOnHttpServerBeforeBody
       read fOnBeforeBody write SetOnBeforeBody;
     /// event handler called after HTTP body has been retrieved, before OnProcess
-    // - may be used e.g. to return a STATUS_ACCEPTED (202) status to client and
+    // - may be used e.g. to return a HTTP_ACCEPTED (202) status to client and
     // continue a long-term job inside the OnProcess handler in the same thread;
     // or to modify incoming information before passing it to main businnes logic,
     // (header preprocessor, body encoding etc...)
     // - if the handler returns > 0 server will send a response immediately,
-    // unless return code is STATUS_ACCEPTED (202), then OnRequest will be called
+    // unless return code is HTTP_ACCEPTED (202), then OnRequest will be called
     // - warning: this handler must be thread-safe (can be called by several
     // threads simultaneously)
     property OnBeforeRequest: TOnHttpServerRequest
@@ -337,7 +337,7 @@ type
       read fOnThreadTerminate write SetOnTerminate;
     /// reject any incoming request with a body size bigger than this value
     // - default to 0, meaning any input size is allowed
-    // - returns STATUS_PAYLOADTOOLARGE = 413 error if "Content-Length" incoming
+    // - returns HTTP_PAYLOADTOOLARGE = 413 error if "Content-Length" incoming
     // header overflow the supplied number of bytes
     property MaximumAllowedContentLength: cardinal
       read fMaximumAllowedContentLength write SetMaximumAllowedContentLength;
@@ -521,7 +521,7 @@ type
   // - can be defined e.g. to use NGINX X-Accel-Redirect header
   // - should return true if the Context has been modified to serve the file, or
   // false so that the file will be manually read and sent from memory
-  // - any exception during process will be returned as a STATUS_NOTFOUND page
+  // - any exception during process will be returned as a HTTP_NOTFOUND page
   TOnHttpServerSendFile = function(Context: THttpServerRequest;
     const LocalFileName: TFileName): boolean of object;
 
@@ -917,7 +917,7 @@ type
     property UrlGroupID: HTTP_URL_GROUP_ID read fUrlGroupID;
     /// how many bytes are retrieved in a single call to ReceiveRequestEntityBody
     // - set by default to 1048576, i.e. 1 MB - practical limit is around 20 MB
-    // - you may customize this value if you encounter HTTP error STATUS_NOTACCEPTABLE
+    // - you may customize this value if you encounter HTTP error HTTP_NOTACCEPTABLE
     // (406) from client, corresponding to an ERROR_NO_SYSTEM_RESOURCES (1450)
     // exception on server side, when uploading huge data content
     property ReceiveBufferSize: cardinal read fReceiveBufferSize write SetReceiveBufferSize;

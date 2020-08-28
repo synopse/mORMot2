@@ -1817,7 +1817,7 @@ begin
   begin
     result := SysErrorMessage(Code);
     if result = '' then
-      if Code=ERROR_WINHTTP_CANNOT_CONNECT then
+      if Code = ERROR_WINHTTP_CANNOT_CONNECT then
         result := 'cannot connect'
       else if Code = ERROR_WINHTTP_TIMEOUT then
         result := 'timeout'
