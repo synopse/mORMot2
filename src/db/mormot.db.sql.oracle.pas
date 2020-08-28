@@ -38,7 +38,7 @@ uses
 type
   /// event triggered when an expired password is detected
   // - will allow to provide a new password
-  TOnPasswordExpired = function (Sender: TSQLDBConnection; var APassword: RawUTF8): Boolean of object;
+  TOnPasswordExpired = function (Sender: TSQLDBConnection; var APassword: RawUTF8): boolean of object;
 
   /// will implement properties shared by native Oracle Client Interface connections
   TSQLDBOracleConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
@@ -182,7 +182,7 @@ type
     /// allows to change the password of the current connected user
     // - will first launch the OnPasswordExpired event to retrieve the new
     // password, then change it and call OnPasswordChanged event on success
-    function PasswordChange: Boolean; override;
+    function PasswordChange: boolean; override;
   end;
 
   /// implements a statement via the native Oracle Client Interface (OCI)
@@ -247,7 +247,7 @@ type
     // $  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
     // $  ' AS LANGUAGE JAVA' +
     // $  ' NAME ''OraMain.selectTable(java.lang.String, int, int) return java.lang.String'';;', []);
-    procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean = false); overload; override;
+    procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - raise an ESQLDBOracle on any error
@@ -352,7 +352,7 @@ type
 implementation
 
 uses
-  mormot.db.raw.oracle; // defines raw OCI library access
+  mormot.db.raw.oracle; // defines raw OCI library API
 
 
 { ************ TSQLDBOracleConnection* and TSQLDBOracleStatement Classes }
@@ -633,7 +633,7 @@ begin
     TSQLDBOracleStatement(result).fUseServerSideStatementCache := true;
 end;
 
-function TSQLDBOracleConnection.PasswordChange: Boolean;
+function TSQLDBOracleConnection.PasswordChange: boolean;
 var
   password: RawUTF8;
 begin
@@ -1584,8 +1584,7 @@ begin
                       end;
                     ftUTF8:
                       begin
-txt:
-                        VDBType := SQLT_STR; // use STR external data type (SQLT_LVC fails)
+txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT_LVC fails)
                         oLength := Length(VData) + 1; // include #0
                         if oLength = 1 then // '' will just map one #0
                           oData := @VData
@@ -1615,11 +1614,11 @@ txt:
                           // (no patch needed for Delphi, in which len is always longint)
                           if Length(VData) > MaxInt then
                             raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: % ' +
-                            'blob length exceeds max size for parameter #%',
-                            [self, KB(oLength), i + 1]);
+                              'blob length exceeds max size for parameter #%',
+                              [self, KB(oLength), i + 1]);
                           UniqueString(VData); // for thread-safety
                           PInteger(PtrInt(VData) - sizeof(Integer))^ := oLength;
-                          if wasStringHacked = nil then
+                          if {%H-}wasStringHacked = nil then
                             SetLength(wasStringHacked, fParamCount shr 3 + 1);
                           SetBitPtr(pointer(wasStringHacked), i); // for unpatching below
                           {$endif FPC_64}
@@ -2154,7 +2153,7 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
+procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 var
   env: POCIEnv;
   L: PtrInt;

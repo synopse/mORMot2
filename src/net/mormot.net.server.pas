@@ -3575,7 +3575,7 @@ procedure THttpApiWebSocketConnection.DoOnMessage(
   begin
     l := Length(fBuffer);
     SetLength(fBuffer, l + Integer(aBufferSize));
-    Move(aBuffer^, fBuffer[l + 1], aBufferSize);
+    MoveFast(aBuffer^, fBuffer[l + 1], aBufferSize);
   end;
 
 begin

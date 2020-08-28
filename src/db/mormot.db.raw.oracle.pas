@@ -6,7 +6,7 @@ unit mormot.db.raw.oracle;
 {
   *****************************************************************************
 
-   Natice OCI Access
+   Efficient Direct OCI API Access
     - Native OCI Constants
     - Oracle Date/Time Process
     - OCI Library Loading
@@ -703,7 +703,7 @@ const
   //// the following are PL/SQL-only internal. They should not be used
   //  OCI_TYPECODE_ITABLE          = SQLT_TAB;    // PLSQL indexed table
   //  OCI_TYPECODE_RECORD          = SQLT_REC;    // PLSQL record
-  //  OCI_TYPECODE_BOOLEAN         = SQLT_BOL;    // PLSQL boolean
+  //  OCI_TYPECODE_boolean         = SQLT_BOL;    // PLSQL boolean
 
   // NOTE : The following NCHAR related codes are just short forms for saying
   // OCI_TYPECODE_VARCHAR2 with a charset form of SQLCS_NCHAR. These codes are
@@ -786,7 +786,7 @@ type
   TSQLDBOracleLib = class(TSynLibrary)
   protected
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-      Status: Integer; ErrorHandle: POCIError; InfoRaiseException: Boolean = false;
+      Status: Integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
     function BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor): ub4;
@@ -915,11 +915,11 @@ type
     /// raise an exception on error
     procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: Integer; ErrorHandle: POCIError;
-      InfoRaiseException: Boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
+      InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
       {$ifdef HASINLINE} inline; {$endif}
     procedure CheckSession(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: Integer; ErrorHandle: POCIError;
-      InfoRaiseException: Boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
+      InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
     /// retrieve some BLOB content
     procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; out result: RawByteString); overload;
@@ -985,7 +985,7 @@ var
   SynDBOracleBlobChunksCount: integer = 250;
 
 /// check if two Oracle Charset codes are similar
-function SimilarCharSet(aCharset1, aCharset2: cardinal): Boolean;
+function SimilarCharSet(aCharset1, aCharset2: cardinal): boolean;
 
 /// return the text name from an Oracle Charset code
 function OracleCharSetName(aCharsetID: cardinal): PUTF8Char;
@@ -1451,7 +1451,7 @@ end;
 
 procedure TSQLDBOracleLib.HandleError(Conn: TSQLDBConnection;
   Stmt: TSQLDBStatement; Status: Integer; ErrorHandle: POCIError;
-  InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;
   tmp: array[0..3071] of AnsiChar;
@@ -1501,7 +1501,7 @@ begin
 end;
 
 procedure TSQLDBOracleLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-  Status: Integer; ErrorHandle: POCIError; InfoRaiseException: Boolean;
+  Status: Integer; ErrorHandle: POCIError; InfoRaiseException: boolean;
   LogLevelNoRaise: TSynLogInfo);
 begin
   if Status <> OCI_SUCCESS then
@@ -1510,7 +1510,7 @@ end;
 
 procedure TSQLDBOracleLib.CheckSession(Conn: TSQLDBConnection;
   Stmt: TSQLDBStatement; Status: Integer; ErrorHandle: POCIError;
-  InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;
   tmp: array[0..3071] of AnsiChar;
@@ -1632,7 +1632,7 @@ end;
 procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSQLT_VNU);
 var
   V, Exp: byte;
-  minus: Boolean; // True, if the sign is positive
+  minus: boolean; // True, if the sign is positive
   Size, i: PtrInt;
   Mant: array[0..19] of byte;
 begin
@@ -1679,7 +1679,7 @@ begin
   OutData[0] := Size;
 end;
 
-function SimilarCharSet(aCharset1, aCharset2: cardinal): Boolean;
+function SimilarCharSet(aCharset1, aCharset2: cardinal): boolean;
 var
   i1, i2: integer;
 begin
@@ -1726,5 +1726,8 @@ end;
 
 
 initialization
+
+finalization
+  FreeAndNil(OCI);
 end.
 

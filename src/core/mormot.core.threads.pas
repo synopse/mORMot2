@@ -2138,7 +2138,7 @@ begin
     begin
       result := fPendingContext[0];
       dec(fPendingContextCount);
-      Move(fPendingContext[1], fPendingContext[0], fPendingContextCount *
+      MoveFast(fPendingContext[1], fPendingContext[0], fPendingContextCount *
         SizeOf(pointer));
       if fPendingContextCount = 128 then
         SetLength(fPendingContext, 128); // small queue when congestion is resolved

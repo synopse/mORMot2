@@ -1690,7 +1690,7 @@ type
     /// allows to change the password of the current connected user
     // - do nothing method by default, returning false
     // - properly overriden e.g. by TSQLDBOracleConnection
-    function PasswordChange: Boolean; virtual;
+    function PasswordChange: boolean; virtual;
 
     /// direct export of a DB statement rows into a new table of this database
     // - the corresponding table will be created within the current connection,
@@ -1789,8 +1789,8 @@ type
     // from a given column value
     // - internal conversion will use a temporary Variant and ColumnToVariant method
     // - expects Dest to be of the exact type (e.g. Int64, not Integer)
-    function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType; var
-      Dest): TSQLDBFieldType;
+    function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType;
+      var Dest): TSQLDBFieldType;
     /// append the inlined value of a given parameter, mainly for GetSQLWithInlinedParams
     // - optional MaxCharCount will truncate the text to a given number of chars
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
@@ -6597,7 +6597,7 @@ begin
   InternalProcess(speRollback);
 end;
 
-function TSQLDBConnection.PasswordChange: Boolean;
+function TSQLDBConnection.PasswordChange: boolean;
 begin
   result := false;
 end;
