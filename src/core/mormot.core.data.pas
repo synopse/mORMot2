@@ -8599,80 +8599,80 @@ begin
   for k := succ(low(k)) to high(k) do
     case k of
       rkInteger, rkEnumeration, rkSet, rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Ord;
-        RTTI_BINARYLOAD[k] := @_BL_Ord;
-        RTTI_COMPARE[false, k] := @_BC_Ord;
-        RTTI_COMPARE[true, k] := @_BC_Ord;
-      end;
-      {$ifdef FPC} rkQWord, {$endif} rkInt64:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_64;
-        RTTI_BINARYLOAD[k] := @_BL_64;
-        RTTI_COMPARE[false, k] := @_BC_64;
-        RTTI_COMPARE[true, k] := @_BC_64;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Ord;
+          RTTI_BINARYLOAD[k] := @_BL_Ord;
+          RTTI_COMPARE[false, k] := @_BC_Ord;
+          RTTI_COMPARE[true, k] := @_BC_Ord;
+        end;
+        {$ifdef FPC} rkQWord, {$endif} rkInt64:
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_64;
+          RTTI_BINARYLOAD[k] := @_BL_64;
+          RTTI_COMPARE[false, k] := @_BC_64;
+          RTTI_COMPARE[true, k] := @_BC_64;
+        end;
       rkFloat:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Float;
-        RTTI_BINARYLOAD[k] := @_BS_Float;
-        RTTI_COMPARE[false, k] := @_BC_Float;
-        RTTI_COMPARE[true, k] := @_BC_Float;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Float;
+          RTTI_BINARYLOAD[k] := @_BS_Float;
+          RTTI_COMPARE[false, k] := @_BC_Float;
+          RTTI_COMPARE[true, k] := @_BC_Float;
+        end;
       {$ifdef HASVARUSTRING} rkUString, {$endif} rkLString:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_String;
-        if k = rkLString then
         begin
-          RTTI_BINARYLOAD[k] := @_BL_LString;
-          RTTI_COMPARE[false, k] := @_BC_PUTF8Char;
-          RTTI_COMPARE[true, k] := @_BCI_PUTF8Char;
-        end
-        {$ifdef HASVARUSTRING}
-        else if k = rkUString then
+          RTTI_BINARYSAVE[k] := @_BS_String;
+          if k = rkLString then
+          begin
+            RTTI_BINARYLOAD[k] := @_BL_LString;
+            RTTI_COMPARE[false, k] := @_BC_PUTF8Char;
+            RTTI_COMPARE[true, k] := @_BCI_PUTF8Char;
+          end
+          {$ifdef HASVARUSTRING}
+          else if k = rkUString then
+          begin
+            RTTI_BINARYLOAD[k] := @_BL_UString;
+            RTTI_COMPARE[false, k] := @_BC_PWideChar;
+            RTTI_COMPARE[true, k] := @_BCI_PWideChar;
+          end;
+          {$endif HASVARUSTRING}
+        end; // rkLStringOld not generated any more
+      rkWString:
         begin
-          RTTI_BINARYLOAD[k] := @_BL_UString;
+          RTTI_BINARYSAVE[k] := @_BS_WString;
+          RTTI_BINARYLOAD[k] := @_BL_WString;
           RTTI_COMPARE[false, k] := @_BC_PWideChar;
           RTTI_COMPARE[true, k] := @_BCI_PWideChar;
         end;
-        {$endif HASVARUSTRING}
-      end; // rkLStringOld not generated any more
-      rkWString:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_WString;
-        RTTI_BINARYLOAD[k] := @_BL_WString;
-        RTTI_COMPARE[false, k] := @_BC_PWideChar;
-        RTTI_COMPARE[true, k] := @_BCI_PWideChar;
-      end;
       {$ifdef FPC} rkObject, {$endif} rkRecord:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Record;
-        RTTI_BINARYLOAD[k] := @_BL_Record;
-        RTTI_COMPARE[false, k] := @_BC_Record;
-        RTTI_COMPARE[true, k] := @_BCI_Record;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Record;
+          RTTI_BINARYLOAD[k] := @_BL_Record;
+          RTTI_COMPARE[false, k] := @_BC_Record;
+          RTTI_COMPARE[true, k] := @_BCI_Record;
+        end;
       rkDynArray:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_DynArray;
-        RTTI_BINARYLOAD[k] := @_BL_DynArray;
-        RTTI_COMPARE[false, k] := @_BC_DynArray;
-        RTTI_COMPARE[true, k] := @_BCI_DynArray;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_DynArray;
+          RTTI_BINARYLOAD[k] := @_BL_DynArray;
+          RTTI_COMPARE[false, k] := @_BC_DynArray;
+          RTTI_COMPARE[true, k] := @_BCI_DynArray;
+        end;
       rkArray:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Array;
-        RTTI_BINARYLOAD[k] := @_BL_Array;
-        RTTI_COMPARE[false, k] := @_BC_Array;
-        RTTI_COMPARE[true, k] := @_BCI_Array;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Array;
+          RTTI_BINARYLOAD[k] := @_BL_Array;
+          RTTI_COMPARE[false, k] := @_BC_Array;
+          RTTI_COMPARE[true, k] := @_BCI_Array;
+        end;
       rkVariant:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Variant;
-        RTTI_BINARYLOAD[k] := @_BL_Variant;
-        RTTI_COMPARE[false, k] := @_BC_Variant;
-        RTTI_COMPARE[true, k] := @_BCI_Variant;
-      end;
-      // unsupported types will contain nil
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Variant;
+          RTTI_BINARYLOAD[k] := @_BL_Variant;
+          RTTI_COMPARE[false, k] := @_BC_Variant;
+          RTTI_COMPARE[true, k] := @_BCI_Variant;
+        end;
+        // unsupported types will contain nil
     end;
   // setup internal function wrappers
   GetDataFromJSON := _GetDataFromJSON;

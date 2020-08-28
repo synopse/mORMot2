@@ -45,6 +45,8 @@ uses
   mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',
   mormot.db.raw.oracle     in '..\src\db\mormot.db.raw.oracle.pas',
   mormot.db.sql.oracle     in '..\src\db\mormot.db.sql.oracle.pas',
+  mormot.db.raw.postgres   in '..\src\db\mormot.db.raw.postgres.pas',
+  mormot.db.sql.postgres   in '..\src\db\mormot.db.sql.postgres.pas',
   mormot.db.raw.odbc       in '..\src\db\mormot.db.raw.odbc.pas',
   mormot.db.sql.odbc       in '..\src\db\mormot.db.sql.odbc.pas',
   mormot.db.raw.oledb      in '..\src\db\mormot.db.raw.oledb.pas',

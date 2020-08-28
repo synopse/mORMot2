@@ -1472,16 +1472,6 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; over
 /// fill a shortstring with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(const source: RawByteString): shortstring; overload;
 
-/// conversion from octal C-like escape into binary data
-// - \xxx is converted into a single xxx byte from octal, and \\ into \
-// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached
-// - returns the number of bytes written to Bin^
-function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
-
-/// conversion from octal C-like escape into binary data
-// - \xxx is converted into a single xxx byte from octal, and \\ into \
-function OctToBin(const Oct: RawUTF8): RawByteString; overload;
-
 
 /// get text File contents (even Unicode or UTF8) and convert it into a
 // Charset-compatible AnsiString (for Delphi 7) or an UnicodeString (for Delphi
@@ -6896,68 +6886,6 @@ begin
   result[0] := AnsiChar(EscapeBuffer(pointer(source),
     @result[1], length(source), 80) - @result[1]);
 end;
-
-function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt;
-var
-  c, v: byte;
-label
-  _nxt;
-begin
-  result := PtrInt(Bin);
-  if Oct <> nil then
-    repeat
-      c := ord(Oct^);
-      inc(Oct);
-      if c <> ord('\') then
-      begin
-        if c = 0 then
-          break;
-_nxt:   Bin^ := c;
-        inc(Bin);
-        continue;
-      end;
-      c := ord(Oct^);
-      inc(Oct);
-      if c = ord('\') then
-        goto _nxt;
-      dec(c, ord('0'));
-      if c > 3 then
-        break; // stop at malformated input (includes #0)
-      c := c shl 6;
-      v := c;
-      c := ord(Oct[0]);
-      dec(c, ord('0'));
-      if c > 7 then
-        break;
-      c := c shl 3;
-      v := v or c;
-      c := ord(Oct[1]);
-      dec(c, ord('0'));
-      if c > 7 then
-        break;
-      c := c or v;
-      Bin^ := c;
-      inc(Bin);
-      inc(Oct, 2);
-    until false;
-  result := PtrUInt(Bin)-PtrUInt(result);
-end;
-
-function OctToBin(const Oct: RawUTF8): RawByteString;
-var
-  tmp: TSynTempBuffer;
-  L: integer;
-begin
-  tmp.Init(length(Oct));
-  try
-    L := OctToBin(pointer(Oct), tmp.buf);
-    SetString(result, PAnsiChar(tmp.buf), L);
-  finally
-    tmp.Done;
-  end;
-end;
-
-
 
 function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean): SynUnicode;
 var
