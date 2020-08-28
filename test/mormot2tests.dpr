@@ -37,6 +37,7 @@ uses
   mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
   mormot.net.http          in '..\src\net\mormot.net.http.pas',
   mormot.lib.winhttp       in '..\src\lib\mormot.lib.winhttp.pas',
+  mormot.lib.curl          in '..\src\lib\mormot.lib.curl.pas',
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',

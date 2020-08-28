@@ -1310,6 +1310,7 @@ type
   protected
     fHandle: TSynLibraryHandle;
     fLibraryPath: TFileName;
+  public
     /// cross-platform resolution of a function entry in this library
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
     function GetProc(ProcName: PChar; Entry: PPointer;
@@ -1319,7 +1320,6 @@ type
     /// same as SafeLoadLibrary() but setting fLibraryPath and cwd on Windows
     function TryLoadLibrary(const aLibrary: array of TFileName;
       aRaiseExceptionOnFailure: ExceptionClass): boolean; virtual;
-  public
     /// release associated memory and linked library
     destructor Destroy; override;
     /// the associated library handle
