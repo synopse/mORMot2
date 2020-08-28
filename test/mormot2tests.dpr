@@ -46,6 +46,8 @@ uses
   mormot.db.sql.oracle     in '..\src\db\mormot.db.sql.oracle.pas',
   mormot.db.raw.odbc       in '..\src\db\mormot.db.raw.odbc.pas',
   mormot.db.sql.odbc       in '..\src\db\mormot.db.sql.odbc.pas',
+  mormot.db.raw.oledb      in '..\src\db\mormot.db.raw.oledb.pas',
+  mormot.db.sql.oledb      in '..\src\db\mormot.db.sql.oledb.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 

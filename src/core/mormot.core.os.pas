@@ -29,7 +29,7 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  windows, // needed here e.g. for redefinition of standard types
+  Windows, // needed here e.g. for redefinition of standard types
   {$endif MSWINDOWS}
   classes,
   contnrs,
