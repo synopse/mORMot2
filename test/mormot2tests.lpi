@@ -543,7 +543,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="34">
+    <Units Count="36">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -680,6 +680,14 @@
         <Filename Value="..\src\db\mormot.db.raw.oracle.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit33>
+      <Unit34>
+        <Filename Value="..\src\db\mormot.db.sql.oracle.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit34>
+      <Unit35>
+        <Filename Value="..\src\db\mormot.db.raw.odbc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit35>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

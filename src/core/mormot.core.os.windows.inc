@@ -117,10 +117,28 @@ procedure SetLastError;               external kernel32;
 function  CreateIoCompletionPort;     external kernel32;
 function  GetQueuedCompletionStatus;  external kernel32;
 function  PostQueuedCompletionStatus; external kernel32;
+function  GetDesktopWindow;           external user32;
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
+end;
+
+function ExpandEnvVars(const aStr: string): string;
+// adapted from http://delphidabbler.com/articles?article=6
+var
+  size: Integer;
+begin
+  // Get required buffer size
+  size := ExpandEnvironmentStrings(pointer(aStr), nil, 0);
+  if size > 0 then
+  begin
+    // Read expanded string into result string
+    SetString(result, nil, size - 1);
+    ExpandEnvironmentStrings(pointer(aStr), pointer(result), size);
+  end
+  else
+    result := aStr; // return the original file name
 end;
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;

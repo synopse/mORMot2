@@ -452,9 +452,11 @@ type
       closefirst: boolean = false): boolean;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
-    /// low-level read a string from the Windows Registry after ReadOpen()
+    /// low-level read a UTF-8 string from the Windows Registry after ReadOpen()
     // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
     // (return the first value of the multi-list)
+    // - we don't use string here since it would induce a dependency to
+    // mormot.core.unicode
     function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUTF8;
     /// low-level read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
@@ -583,6 +585,9 @@ function GetEnvironmentStringsW: PWideChar; stdcall;
 
 /// redefined in mormot.core.os to avoid dependency to Windows
 function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
+
+/// expand any embedded environment variables, i.e %windir%
+function ExpandEnvVars(const aStr: string): string;
 
 /// try to enter a Critical Section (Lock)
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -808,6 +813,11 @@ procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 /// compatibility function, wrapping GetACP() Win32 API function
 // - returns the curent system code page (default WinAnsi)
 function Unicode_CodePage: integer;
+
+/// compatibility function, wrapping Win32 API function
+// - returns the current main Window handle on Windows, or 0 on POSIX/Linux
+function GetDesktopWindow: PtrInt;
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// compatibility function, wrapping CompareStringW() Win32 API text comparison
 // - returns 1 if PW1>PW2, 2 if PW1=PW2, 3 if PW1<PW2 - so substract 2 to have

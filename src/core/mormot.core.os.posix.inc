@@ -75,6 +75,11 @@ begin
   MoveFast(Pointer(tmp)^, A^, result);
 end;
 
+function GetDesktopWindow: PtrInt;
+begin
+  result := 0; // fixed result
+end;
+
 const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   HoursPerDay = 24;
   MinsPerHour = 60;
