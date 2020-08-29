@@ -319,14 +319,14 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
     procedure ColumnsToJSON(WR: TJSONWriter); override;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but Oracle usually use
     // such structures to get data from strored procedures
     // - such columns are mapped as ftUTF8, with the rows converted to JSON
     // - this overridden method will allow direct access to the data rows
     function ColumnCursor(Col: integer): ISQLDBRows; override;
 
-    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such parameters are mapped as ftUnknown, and is always of paramOut type
@@ -334,7 +334,7 @@ type
     // execution of the statement
     // - this overridden method will prepare direct access to the data rows
     procedure BindCursor(Param: integer); override;
-    /// return a special CURSOR parameter content as a SynDB result set
+    /// return a special CURSOR parameter content as a mormot.db.sql result set
     // - this method is not about a column, but a parameter defined with
     // BindCursor() before method execution
     // - Cursors are not handled internally by mORMot, but some databases (e.g.

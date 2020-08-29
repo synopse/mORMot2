@@ -170,7 +170,7 @@ type
 
   /// server-side implementation of a remote connection to any mormot.db.sql engine
   // - implements digitally signed SynLZ-compressed binary message format,
-  // with simple symmetric encryption, as expected by SynDBRemote.pas
+  // with simple symmetric encryption, as expected by this unit
   TSQLDBRemoteConnectionProtocol = class(TSQLDBProxyConnectionProtocol)
   protected
     /// SynLZ decompression + digital signature + encryption
@@ -386,7 +386,7 @@ type
 
   /// client-side implementation of a remote connection to any mormot.db.sql engine
   // - will compute binary compressed messages for the remote processing,
-  // ready to be served e.g. over HTTP via our SynDBRemote.pas unit
+  // ready to be served e.g. over HTTP
   // - abstract class which should override its protected ProcessMessage() method
   // e.g. by TSQLDBRemoteConnectionPropertiesTest or
   TSQLDBRemoteConnectionPropertiesAbstract = class(TSQLDBProxyConnectionPropertiesAbstract)
@@ -453,14 +453,14 @@ type
 { ************ HTTP Server Classes for Remote Access }
 
 const
-  /// default HTTP port to be used for SynDB remote access if none is specified
+  /// default HTTP port to be used for mormot.db.proxy remote access if none is specified
   SYNDB_DEFAULT_HTTP_PORT = '8092';
 
 type
-  /// used to define the HTTP server class for publishing a SynDB connection
+  /// used to define the HTTP server class for publishing a mormot.db.proxy connection
   TSQLDBServerClass = class of TSQLDBServerAbstract;
 
-  /// implements a generic HTTP server, able to publish any SynDB connection
+  /// implements a generic HTTP server, able to publish any mormot.db.proxy connection
   // - do not instantiate this class, but rather use TSQLDBServerHttpApi or
   // TSQLDBServerSockets - this abstract class won't set any HTTP server
   TSQLDBServerAbstract = class
@@ -476,7 +476,7 @@ type
     // this is where the process would take place
     function Process(Ctxt: THttpServerRequest): cardinal;
   public
-    /// publish the SynDB connection on a given HTTP port and URI
+    /// publish the mormot.db.sql connection on a given HTTP port and URI
     // - this generic constructor won't initialize the HTTP server itself:
     // use overriden constructors instead
     // - URI would follow the supplied aDatabaseName parameter on the given port
@@ -514,11 +514,11 @@ type
     property ProcessLocked: boolean read fProcessLocked write fProcessLocked;
   end;
 
-  /// implements a SynDB HTTP server via the user-land Sockets API
+  /// implements a mormot.db.proxy HTTP server via the user-land Sockets API
   TSQLDBServerSockets = class(TSQLDBServerAbstract)
   protected
   public
-    /// publish the SynDB connection on a given HTTP port and URI using sockets
+    /// publish the mormot.db.sql connection on a given HTTP port and URI using sockets
     // - URI would follow the supplied aDatabaseName parameter on the given port
     // e.g. http://serverip:8092/remotedb for
     // ! Create(aProps,'remotedb');
@@ -539,12 +539,12 @@ type
 
   {$else}
 
-  /// implements a SynDB HTTP server using fast http.sys kernel-mode server
+  /// implements a mormot.db.proxy HTTP server using fast http.sys kernel-mode server
   // - under Windows, this class is faster and more stable than TSQLDBServerSockets
   TSQLDBServerHttpApi = class(TSQLDBServerAbstract)
   protected
   public
-    /// publish the SynDB connection on a given HTTP port and URI using http.sys
+    /// publish the mormot.db.sql connection on a given HTTP port and URI using http.sys
     // - URI would follow the supplied aDatabaseName parameter on the given port
     // e.g. http://serverip:8092/remotedb for
     // ! Create(aProps,'remotedb');
@@ -558,7 +558,7 @@ type
       aAuthenticate: TSynAuthenticationAbstract = nil); override;
   end;
 
-  /// the default SynDB HTTP server class on each platform
+  /// the default mormot.db.proxy HTTP server class on each platform
   TSQLDBServerRemote = TSQLDBServerHttpApi;
 
   {$endif ONLYUSEHTTPSOCKET}
@@ -567,7 +567,7 @@ type
 { ************ HTTP Client Classes for Remote Access }
 
 type
-  /// implements a generic HTTP client, able to access remotely any SynDB
+  /// implements a generic HTTP client, able to access remotely any mormot.db.sql
   // - do not instantiate this class, but rather use TSQLDBSocketConnectionProperties
   //  TSQLDBWinHTTPConnectionProperties TSQLDBWinINetConnectionProperties
   TSQLDBHTTPConnectionPropertiesAbstract = class(TSQLDBRemoteConnectionPropertiesAbstract)
@@ -593,7 +593,7 @@ type
     property KeepAliveMS: cardinal read fKeepAliveMS write fKeepAliveMS;
   end;
 
-  /// implements a HTTP client via sockets, able to access remotely any SynDB
+  /// implements a HTTP client via sockets, able to access remotely any mormot.db.sql
   TSQLDBSocketConnectionProperties = class(TSQLDBHTTPConnectionPropertiesAbstract)
   protected
     fSocket: THttpClientSocket;
@@ -612,7 +612,7 @@ type
 
 
   /// implements an abstract HTTP client via THttpRequest abstract class,
-  // able to access remotely any SynDB
+  // able to access remotely any mormot.db.sql
   // - never instantiate this class, but rather TSQLDBWinHTTPConnectionProperties
   // or TSQLDBWinINetConnectionProperties
   TSQLDBHttpRequestConnectionProperties = class(TSQLDBHTTPConnectionPropertiesAbstract)
@@ -628,7 +628,8 @@ type
 
   {$ifdef USELIBCURL}
 
-  /// implements a HTTP client via the libcurl API, able to access remotely any SynDB
+  /// implements a HTTP client via the libcurl API, able to access remotely
+  // any mormot.db.sql
   TSQLDBCurlConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
   public
     /// initialize the properties for remote access via HTTP using libcurl
@@ -642,7 +643,8 @@ type
 
   {$ifdef USEWININET}
 
-  /// implements a HTTP client via WinHTTP API, able to access remotely any SynDB
+  /// implements a HTTP client via WinHTTP API, able to access remotely
+  // any mormot.db.sql
   TSQLDBWinHTTPConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
   public
     /// initialize the properties for remote access via HTTP using WinHTTP
@@ -652,7 +654,8 @@ type
     constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
   end;
 
-  /// implements a HTTP client via WinINet API, able to access remotely any SynDB
+  /// implements a HTTP client via WinINet API, able to access remotely
+  // any mormot.db.sql
   TSQLDBWinINetConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
   public
     /// initialize the properties for remote access via HTTP using WinINet

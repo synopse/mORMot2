@@ -101,7 +101,7 @@ type
   end;
 
   /// handle safe storage of any connection properties
-  // - would be used by SynDB.pas to serialize TSQLDBConnectionProperties, or
+  // - would be used by mormot.db to serialize TSQLDBConnectionProperties, or
   // by mORMot.pas to serialize TSQLRest instances
   // - the password will be stored as Base64, after a simple encryption as
   // defined by TSynPersistentWithPassword
@@ -213,7 +213,7 @@ type
   // - maintain a list of user / name credential pairs, and a list of sessions
   // - is not meant to handle authorization, just plain user access validation
   // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
-  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
+  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in mormot.db.proxy
   TSynAuthentication = class(TSynAuthenticationAbstract)
   protected
     fCredentials: TSynNameValue; // store user/password pairs
