@@ -1,4 +1,4 @@
-/// Database Framework Remote Access Using Binary Proxy Communication
+/// Database Framework Remote HTTP Access Using Binary Proxy Communication
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.db.proxy;
@@ -6,7 +6,7 @@ unit mormot.db.proxy;
 {
   *****************************************************************************
 
-   Allow Remote Access of any mormot.db.sql connections via a Proxy
+   Allow Remote HTTP Access of any mormot.db.sql connections via a Proxy
     - Shared Proxy Information
     - Server-Side Proxy Remote Protocol
     - Client-Side Proxy Remote Protocol
@@ -14,7 +14,7 @@ unit mormot.db.proxy;
     - HTTP Client Classes for Remote Access
 
    This unit contains the communication-abstracted logic to handle a
-   remote DB connection using our propertary binary protocol.
+   remote DB connection using an efficient proprietary binary protocol.
 
   *****************************************************************************
 }

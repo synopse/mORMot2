@@ -2358,7 +2358,7 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
-// method from the SynCrypto unit
+// method from the mormot.core.crypto unit
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
 /// retrieve 128-bit of entropy, from system time and current execution state
@@ -2621,8 +2621,8 @@ procedure crcblockfast(crc128, data128: PBlock128);
 var
   /// compute CRC32C checksum on the supplied buffer
   // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C is not
-  // the same polynom - but will use the fastest mean available, e.g. SSE 4.2,
-  // to achieve up to 16GB/s with the optimized implementation from SynCrypto.pas
+  // the same polynom - but will use the fastest mean available, e.g. SSE 4.2, to
+  // achieve up to 16GB/s with the optimized implementation from mormot.core.crypto
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher = crc32cfast;
   /// compute CRC32C checksum on one 32-bit unsigned integer
@@ -2637,7 +2637,7 @@ var
   // - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 hardware accelerated instruction, if available
-  // - is used e.g. by SynCrypto's TAESCFBCRC to check for data integrity
+  // - is used e.g. by mormot.core.crypto's TAESCFBCRC to check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
@@ -5049,7 +5049,7 @@ begin
   else
     begin // generic binary comparison (fast with inlined CompareMemSmall)
       for result := 0 to Count - 1 do
-        if (PInt64(P)^ = PInt64(Elem)^) and
+        if (PInt64(P)^ = PInt64(Elem)^) and // not better using a local Int64 var
            CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
           exit
         else
@@ -6905,7 +6905,8 @@ begin
 end;
 
 function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
-var _0, _1: PtrInt;
+var
+  _0, _1: PtrInt;
 begin
   if P<>nil then
   begin

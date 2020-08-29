@@ -348,12 +348,6 @@ type
 
 
 
-/// naive symmetric encryption scheme using a 32-bit key
-// - fast, but not very secure, since uses crc32ctab[] content as master cypher
-// key: consider using SynCrypto proven AES-based algorithms instead
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
-
-
 { ************ TSynPersistentStore with proper Binary Serialization }
 
 type
@@ -2785,35 +2779,7 @@ end;
 
 
 
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
-var
-  i, len: integer;
-  d: PCardinal;
-  tab: PCrc32tab;
-begin
-  if data = '' then
-    exit; // nothing to cypher
-  {$ifdef FPC}
-  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
-  {$endif}
-  d := @data[1];
-  len := length(data);
-  key := key xor cardinal(len);
-  tab := @crc32ctab;
-  for i := 0 to (len shr 2) - 1 do
-  begin
-    key := key xor tab[0, (cardinal(i) xor key) and 1023];
-    d^ := d^ xor key;
-    inc(d);
-  end;
-  for i := 0 to (len and 3) - 1 do
-    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor tab[0, 17 shl i];
-end;
-
-
-
 { ************ TSynPersistentStore with proper Binary Serialization }
-
 
 { TSynPersistentStore }
 

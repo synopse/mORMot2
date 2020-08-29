@@ -149,6 +149,15 @@ type
   end;
 
 
+/// naive symmetric encryption scheme using a 32-bit key
+// - used e.g. by TSynPersistentWithPassword and mormot.db.proxy for password or
+// content obfuscation
+// - fast, but not cryptographically secure, since uses crc32ctab[] content as fixed
+// xor table: consider using mormot.core.crypto proven AES-based algorithms instead
+procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
+
+
+
 { ***************** Reusable Authentication Classes }
 
 type
@@ -1065,6 +1074,32 @@ end;
 
 
 { ***************** TSyn***Password and TSynConnectionDefinition Classes }
+
+procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
+var
+  i, len: integer;
+  d: PCardinal;
+  tab: PCrc32tab;
+begin
+  if data = '' then
+    exit; // nothing to cypher
+  {$ifdef FPC}
+  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
+  {$endif}
+  d := @data[1];
+  len := length(data);
+  key := key xor cardinal(len);
+  tab := @crc32ctab;
+  for i := 0 to (len shr 2) - 1 do
+  begin
+    key := key xor tab[0, (cardinal(i) xor key) and 1023];
+    d^ := d^ xor key;
+    inc(d);
+  end;
+  for i := 0 to (len and 3) - 1 do
+    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor tab[0, 17 shl i];
+end;
+
 
 { TSynPersistentWithPassword }
 
