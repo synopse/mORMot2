@@ -51,6 +51,9 @@ uses
   mormot.db.sql.odbc       in '..\src\db\mormot.db.sql.odbc.pas',
   mormot.db.raw.oledb      in '..\src\db\mormot.db.raw.oledb.pas',
   mormot.db.sql.oledb      in '..\src\db\mormot.db.sql.oledb.pas',
+  {$ifdef USEZEOS}
+  mormot.db.sql.zeos       in '..\src\db\mormot.db.sql.zeos.pas',
+  {$endif USEZEOS}
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 
@@ -67,6 +70,8 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([TTestCoreBase, TTestCoreCrypto]);
 end;
+
+
 
 begin
   TIntegrationTests.RunAsConsole('mORMot2 Regression Tests', LOG_VERBOSE);
