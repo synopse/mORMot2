@@ -54,6 +54,9 @@ uses
   {$ifdef USEZEOS}
   mormot.db.sql.zeos       in '..\src\db\mormot.db.sql.zeos.pas',
   {$endif USEZEOS}
+  {$ifndef FPC}
+  mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
+  {$endif FPC}
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 
@@ -70,7 +73,6 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([TTestCoreBase, TTestCoreCrypto]);
 end;
-
 
 
 begin
