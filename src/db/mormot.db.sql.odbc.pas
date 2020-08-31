@@ -1428,9 +1428,7 @@ begin
       Stmt.BindColumns;
       n := 0;
       while Stmt.Step do
-      begin
         AddSortedRawUTF8(Procedures, n, Trim(Stmt.ColumnUTF8(2))); // PROCEDURE_NAME column
-      end;
       SetLength(Procedures, n);
     finally
       Stmt.Free; // TSQLDBODBCStatement release

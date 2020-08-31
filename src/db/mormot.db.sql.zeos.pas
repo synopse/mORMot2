@@ -445,7 +445,8 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
        row_prefetch_size you allow to execute a query
   }
   {$ifdef ZEOS73UP}
-  if fDBMS = dMSSQL then begin
+  if fDBMS = dMSSQL then
+  begin
     protocol := LowerCase(StringToUTF8(FURL.Protocol));
     //EH: switch off tds support in any kind -> deprecated and our 64bit lib isn't compiled with libiconv support
     //users permanently run into the encoding issues which can't be resolved using the dblib tds-types:

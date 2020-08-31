@@ -1963,7 +1963,8 @@ begin
               AttrGet(oHandle, OCI_DTYPE_PARAM, @oScale, nil, OCI_ATTR_SCALE, fError);
               ColumnValueDBSize := sizeof(Double);
               case oScale of
-                {0: if (major_version>11) or ((major_version=11) and (minor_version>1)) then begin
+               {0: if (major_version>11) or ((major_version=11) and (minor_version>1)) then
+               begin
                  // starting with 11.2, OCI supports NUMBER conversion into Int64
                  ColumnType := ftInt64;
                  ColumnValueDBType := SQLT_INT;

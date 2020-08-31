@@ -401,7 +401,8 @@ type
     // avoid any rounding issue, since currency is a standard OleDB type
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
-    function ColumnType(Col: integer; FieldSize: PInteger = nil): TSQLDBFieldType; override;
+    function ColumnType(Col: integer;
+      FieldSize: PInteger = nil): TSQLDBFieldType; override;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
     /// return a Column integer value of the current Row, first Col is 0
@@ -810,7 +811,7 @@ begin
     Int32ToUtf8(Status, msg);
   {$endif}
   SynDBLog.Add.Log(sllError, 'Invalid [%] status for column [%] at row % for %',
-    [msg, Column^.ColumnName, fCurrentRow, fSQL], self);
+    [{%H-}msg, Column^.ColumnName, fCurrentRow, fSQL], self);
 end;
 
 function TSQLDBOleDBStatement.GetCol(Col: integer;
@@ -2209,7 +2210,7 @@ begin
   if fProviderName <> '' then
     tmp := 'Provider=' + fProviderName + ';';
   if fServerName <> '' then
-    tmp := tmp + 'Data Source=' + fServerName + ';';
+    tmp := {%H-}tmp + 'Data Source=' + fServerName + ';';
   if fDatabaseName <> '' then
     tmp := tmp + 'Initial Catalog=' + fDatabaseName + ';';
   fConnectionString := UTF8ToSynUnicode(tmp + 'User Id=' + fUserID +

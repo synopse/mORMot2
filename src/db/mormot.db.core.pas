@@ -1016,7 +1016,7 @@ procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
 var
   i: integer;
 begin
-  FillCharFast(Fields, SizeOf(Fields), 0);
+  FillZero(Fields);
   for i := 0 to Length(Index) - 1 do
     if Index[i] >= 0 then
       include(Fields, Index[i]);
@@ -1560,7 +1560,7 @@ var
   wasNull: boolean;
 begin
   maxParam := 0;
-  FillCharFast(Nulls, SizeOf(Nulls), 0);
+  FillZero(Nulls);
   ppBeg := PosEx(RawUTF8(':('), SQL, 1);
   if (ppBeg = 0) or (PosEx(RawUTF8('):'), SQL, ppBeg + 2) = 0) then
   begin
@@ -2235,7 +2235,7 @@ var
   i: integer;
   f: ^TSynTableStatementSelect;
 begin
-  FillcharFast(Fields, SizeOf(Fields), 0);
+  FillZero(Fields);
   withID := false;
   f := pointer(select);
   for i := 1 to Length(select) do

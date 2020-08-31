@@ -291,7 +291,8 @@ type
     procedure IntFillDataCurrent(var Reader: PByte; IgnoreColumnDataSize: boolean);
   public
     /// the Column type of the current Row
-    function ColumnType(Col: integer; FieldSize: PInteger = nil): TSQLDBFieldType; override;
+    function ColumnType(Col: integer;
+      FieldSize: PInteger = nil): TSQLDBFieldType; override;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
     /// return a Column integer value of the current Row, first Col is 0
@@ -320,8 +321,8 @@ type
     // - will save one data row in optimized binary format (if not in Null)
     // - virtual method called by FetchAllToBinary()
     // - follows the format expected by TSQLDBProxyStatement
-    procedure ColumnsToBinary(W: TFileBufferWriter;
-      Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray); override;
+    procedure ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
+      const ColTypes: TSQLDBFieldTypeDynArray); override;
 
     /// read-only access to the number of data rows stored
     property DataRowCount: integer read fDataRowCount;

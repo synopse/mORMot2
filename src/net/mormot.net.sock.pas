@@ -2145,17 +2145,19 @@ procedure TCrtSocket.SockRecvLn;
 var c: AnsiChar;
   Error: integer;
 begin
-  if SockIn<>nil then begin
+  if SockIn <> nil then
+  begin
     {$I-}
     readln(SockIn^);
     Error := ioresult;
-    if Error<>0 then
-      raise ENetSock.CreateFmt('SockRecvLn error %d',[Error]);
+    if Error <> 0 then
+      raise ENetSock.CreateFmt('SockRecvLn error %d', [Error]);
     {$I+}
-  end else
+  end
+  else
     repeat
-      SockRecv(@c,1);
-    until c=#10;
+      SockRecv(@c, 1);
+    until c = #10;
 end;
 
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);

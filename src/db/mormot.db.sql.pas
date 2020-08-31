@@ -2050,11 +2050,14 @@ type
     // - typical use may be (see also e.g. the mORMotDB unit):
     // ! var Query: ISQLDBStatement;
     // ! begin
-    // !   Query := Props.NewThreadSafeStatementPrepared('select AccountNumber from Sales.Customer where AccountNumber like ?', ['AW000001%'],true);
-    // !   if Query<>nil then begin
-    // !     assert(SameTextU(Query.ColumnName(0),'AccountNumber'));
+    // !   Query := Props.NewThreadSafeStatementPrepared(
+    // !    'select AccountNumber from Sales.Customer where AccountNumber like ?',
+    // !    ['AW000001%'], true);
+    // !   if Query <> nil then
+    // !   begin
+    // !     assert(SameTextU(Query.ColumnName(0), 'AccountNumber'));
     // !     while Query.Step do //  loop through all matching data rows
-    // !       assert(Copy(Query.ColumnUTF8(0),1,8)='AW000001');
+    // !       assert(Copy(Query.ColumnUTF8(0), 1, 8) = 'AW000001');
     // !     Query.ReleaseRows;
     // !   end;
     // ! end;
@@ -2072,8 +2075,8 @@ type
     /// the Column type of the current Row
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
-    function ColumnType(Col: integer; FieldSize: PInteger = nil):
-      TSQLDBFieldType; virtual; abstract;
+    function ColumnType(Col: integer;
+      FieldSize: PInteger = nil): TSQLDBFieldType; virtual; abstract;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; virtual; abstract;
     /// return a Column integer value of the current Row, first Col is 0
@@ -2592,7 +2595,8 @@ type
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column) - this implementation will store
     // fColumns[Col].ColumnValueDBSize if ColumnValueInlined=true
-    function ColumnType(Col: integer; FieldSize: PInteger = nil): TSQLDBFieldType; override;
+    function ColumnType(Col: integer;
+      FieldSize: PInteger = nil): TSQLDBFieldType; override;
     /// direct access to the columns description
     // - gives more details than the default ColumnType() function
     property Columns: TSQLDBColumnPropertyDynArray read fColumns;

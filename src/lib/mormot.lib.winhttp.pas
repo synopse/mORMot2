@@ -1549,28 +1549,32 @@ implementation
 uses
   mormot.net.http; // shared HTTP constants and functions
 
+
 { ************  http.sys / HTTP API low-level direct access }
 
-function RegURL(aRoot, aPort: RawUTF8; Https: boolean;
-  aDomainName: RawUTF8): SynUnicode;
-const Prefix: array[boolean] of RawUTF8 = ('http://','https://');
+function RegURL(aRoot, aPort: RawUTF8; Https: boolean; aDomainName: RawUTF8): SynUnicode;
+const
+  Prefix: array[boolean] of RawUTF8 = ('http://', 'https://');
 begin
-  if aPort='' then
+  if aPort = '' then
     aPort := DEFAULT_PORT[Https];
   aRoot := trim(aRoot);
   aDomainName := trim(aDomainName);
-  if aDomainName='' then begin
+  if aDomainName = '' then
+  begin
     result := '';
     exit;
   end;
-  if aRoot<>'' then begin
-    if aRoot[1]<>'/' then
-      insert('/',aRoot,1);
-    if aRoot[length(aRoot)]<>'/' then
-      aRoot := aRoot+'/';
-  end else
+  if aRoot <> '' then
+  begin
+    if aRoot[1] <> '/' then
+      insert('/', aRoot, 1);
+    if aRoot[length(aRoot)] <> '/' then
+      aRoot := aRoot + '/';
+  end
+  else
     aRoot := '/'; // allow for instance 'http://*:2869/'
-  aRoot := Prefix[Https]+aDomainName+':'+aPort+aRoot;
+  aRoot := Prefix[Https] + aDomainName + ':' + aPort + aRoot;
   result := UTF8ToSynUnicode(aRoot);
 end;
 
@@ -1580,110 +1584,120 @@ const
 
 function RetrieveHeaders(const Request: HTTP_REQUEST;
   const RemoteIPHeadUp: RawUTF8; out RemoteIP: RawUTF8): RawUTF8;
-var i, L, Lip: integer;
-    H: THttpHeader;
-    P: PHTTP_UNKNOWN_HEADER;
-    D: PAnsiChar;
+var
+  i, L, Lip: integer;
+  H: THttpHeader;
+  P: PHTTP_UNKNOWN_HEADER;
+  D: PAnsiChar;
 begin
-  assert(low(HTTP_KNOWNHEADERS)=low(Request.Headers.KnownHeaders));
-  assert(high(HTTP_KNOWNHEADERS)=high(Request.Headers.KnownHeaders));
+  assert(low(HTTP_KNOWNHEADERS) = low(Request.Headers.KnownHeaders));
+  assert(high(HTTP_KNOWNHEADERS) = high(Request.Headers.KnownHeaders));
   // compute remote IP
   L := length(RemoteIPHeadUp);
-  if L<>0 then begin
+  if L <> 0 then
+  begin
     P := Request.Headers.pUnknownHeaders;
-    if P<>nil then
-    for i := 1 to Request.Headers.UnknownHeaderCount do
-      if (P^.NameLength=L) and IdemPChar(P^.pName,Pointer(RemoteIPHeadUp)) then begin
-        FastSetString(RemoteIP,p^.pRawValue,p^.RawValueLength);
-        break;
-      end else
-      inc(P);
+    if P <> nil then
+      for i := 1 to Request.Headers.UnknownHeaderCount do
+        if (P^.NameLength = L) and IdemPChar(P^.pName, Pointer(RemoteIPHeadUp)) then
+        begin
+          FastSetString(RemoteIP, P^.pRawValue, P^.RawValueLength);
+          break;
+        end
+        else
+          inc(P);
   end;
-  if (RemoteIP='') and (Request.Address.pRemoteAddress<>nil) then
+  if (RemoteIP = '') and (Request.Address.pRemoteAddress <> nil) then
     RemoteIP := Request.Address.pRemoteAddress.IP(RemoteIPLocalHostAsVoidInServers);
   // compute headers length
   Lip := length(RemoteIP);
-  if Lip<>0 then
-    L := (REMOTEIP_HEADERLEN+2)+Lip else
+  if Lip <> 0 then
+    L := (REMOTEIP_HEADERLEN + 2) + Lip
+  else
     L := 0;
   for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
-    if Request.Headers.KnownHeaders[h].RawValueLength<>0 then
-      inc(L,Request.Headers.KnownHeaders[h].RawValueLength+ord(HTTP_KNOWNHEADERS[h][0])+4);
+    if Request.Headers.KnownHeaders[H].RawValueLength <> 0 then
+      inc(L, Request.Headers.KnownHeaders[H].RawValueLength +
+        ord(HTTP_KNOWNHEADERS[H][0]) + 4);
   P := Request.Headers.pUnknownHeaders;
-  if P<>nil then
-    for i := 1 to Request.Headers.UnknownHeaderCount do begin
-      inc(L,P^.NameLength+P^.RawValueLength+4); // +4 for each ': '+#13#10
+  if P <> nil then
+    for i := 1 to Request.Headers.UnknownHeaderCount do
+    begin
+      inc(L, P^.NameLength + P^.RawValueLength + 4); // +4 for each ': '+#13#10
       inc(P);
     end;
   // set headers content
-  FastSetString(result,nil,L);
+  FastSetString(result, nil, L);
   D := pointer(result);
   for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
-    if Request.Headers.KnownHeaders[h].RawValueLength<>0 then begin
-      MoveFast(HTTP_KNOWNHEADERS[h][1],D^,ord(HTTP_KNOWNHEADERS[h][0]));
-      inc(D,ord(HTTP_KNOWNHEADERS[h][0]));
-      PWord(D)^ := ord(':')+ord(' ')shl 8;
-      inc(D,2);
-      MoveFast(Request.Headers.KnownHeaders[h].pRawValue^,D^,
-        Request.Headers.KnownHeaders[h].RawValueLength);
-      inc(D,Request.Headers.KnownHeaders[h].RawValueLength);
-      PWord(D)^ := 13+10 shl 8;
-      inc(D,2);
+    if Request.Headers.KnownHeaders[H].RawValueLength <> 0 then
+    begin
+      MoveFast(HTTP_KNOWNHEADERS[H][1], D^, ord(HTTP_KNOWNHEADERS[H][0]));
+      inc(D, ord(HTTP_KNOWNHEADERS[H][0]));
+      PWord(D)^ := ord(':') + ord(' ') shl 8;
+      inc(D, 2);
+      MoveFast(Request.Headers.KnownHeaders[H].pRawValue^,
+        D^, Request.Headers.KnownHeaders[H].RawValueLength);
+      inc(D, Request.Headers.KnownHeaders[H].RawValueLength);
+      PWord(D)^ := 13 + 10 shl 8;
+      inc(D, 2);
     end;
   P := Request.Headers.pUnknownHeaders;
-  if P<>nil then
-    for i := 1 to Request.Headers.UnknownHeaderCount do begin
-      MoveFast(P^.pName^,D^,P^.NameLength);
-      inc(D,P^.NameLength);
-      PWord(D)^ := ord(':')+ord(' ')shl 8;
-      inc(D,2);
-      MoveFast(P^.pRawValue^,D^,P^.RawValueLength);
-      inc(D,P^.RawValueLength);
+  if P <> nil then
+    for i := 1 to Request.Headers.UnknownHeaderCount do
+    begin
+      MoveFast(P^.pName^, D^, P^.NameLength);
+      inc(D, P^.NameLength);
+      PWord(D)^ := ord(':') + ord(' ') shl 8;
+      inc(D, 2);
+      MoveFast(P^.pRawValue^, D^, P^.RawValueLength);
+      inc(D, P^.RawValueLength);
       inc(P);
-      PWord(D)^ := 13+10 shl 8;
-      inc(D,2);
+      PWord(D)^ := 13 + 10 shl 8;
+      inc(D, 2);
     end;
-  if Lip<>0 then begin
-    MoveFast(REMOTEIP_HEADER[1],D^,REMOTEIP_HEADERLEN);
-    inc(D,REMOTEIP_HEADERLEN);
-    MoveFast(pointer(RemoteIP)^,D^,Lip);
-    inc(D,Lip);
-    PWord(D)^ := 13+10 shl 8;
-  {$ifopt C+}
-    inc(D,2);
+  if Lip <> 0 then
+  begin
+    MoveFast(REMOTEIP_HEADER[1], D^, REMOTEIP_HEADERLEN);
+    inc(D, REMOTEIP_HEADERLEN);
+    MoveFast(pointer(RemoteIP)^, D^, Lip);
+    inc(D, Lip);
+    PWord(D)^ := 13 + 10 shl 8;
   end;
-  assert(D-pointer(result)=L);
-  {$else}
-  end;
-  {$endif}
 end;
 
 procedure HttpApiInitialize;
-var api: THttpAPIs;
-    P: PPointer;
+var
+  api: THttpAPIs;
+  P: PPointer;
 begin
-  if Http.Module<>0 then
+  if Http.Module <> 0 then
     exit; // already loaded
   mormot.core.os.GlobalLock;
   try
-    if Http.Module<>0 then
+    if Http.Module <> 0 then
     try
       Http.Module := LoadLibrary(HTTPAPI_DLL);
       Http.Version.MajorVersion := 2; // API 2.0 if all functions are available
-      if Http.Module<=255 then
-        raise EHttpApiServer.CreateFmt('Unable to find %s',[HTTPAPI_DLL]);
+      if Http.Module <= 255 then
+        raise EHttpApiServer.CreateFmt('Unable to find %s', [HTTPAPI_DLL]);
       P := @@Http.Initialize;
-      for api := low(api) to high(api) do begin
-        P^ := GetProcAddress(Http.Module,HttpNames[api]);
-        if P^=nil then
-          if api<hHttpApi2First then
-            raise EHttpApiServer.CreateFmt('Unable to find %s() in %s',[HttpNames[api],HTTPAPI_DLL]) else
-           Http.Version.MajorVersion := 1; // e.g. Windows XP or Server 2003
+      for api := low(api) to high(api) do
+      begin
+        P^ := GetProcAddress(Http.Module, HttpNames[api]);
+        if P^ = nil then
+          if api < hHttpApi2First then
+            raise EHttpApiServer.CreateFmt('Unable to find %s() in %s',
+              [HttpNames[api], HTTPAPI_DLL])
+          else
+            Http.Version.MajorVersion := 1; // e.g. Windows XP or Server 2003
         inc(P);
       end;
     except
-      on E: Exception do begin
-        if Http.Module>255 then begin
+      on E: Exception do
+      begin
+        if Http.Module > 255 then
+        begin
           FreeLibrary(Http.Module);
           Http.Module := 0;
         end;
@@ -1695,21 +1709,24 @@ begin
   end;
 end;
 
+
+
 { EHttpApiServer }
 
 class procedure EHttpApiServer.RaiseOnError(api: THttpAPIs; Error: integer);
 begin
-  if Error<>NO_ERROR then
-    raise self.Create(api,Error);
+  if Error <> NO_ERROR then
+    raise self.Create(api, Error);
 end;
 
 constructor EHttpApiServer.Create(api: THttpAPIs; Error: integer);
 begin
   fLastError := Error;
   fLastApi := api;
-  inherited CreateFmt('%s failed: %s (%d)',
-    [HttpNames[api],SysErrorMessagePerModule(Error,HTTPAPI_DLL),Error])
+  inherited CreateFmt('%s failed: %s (%d)', [HttpNames[api],
+    SysErrorMessagePerModule(Error, HTTPAPI_DLL), Error])
 end;
+
 
 
 { HTTP_RESPONSE }
@@ -1858,28 +1875,32 @@ begin
 end;
 
 procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
-var Buffer: array[0..511] of byte;
-    BufferSize, UserSize, DomainSize: DWORD;
-    UserInfo: PSIDAndAttributes;
-    NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
-    tmp: SynUnicode;
-    P: PWideChar;
+var
+  Buffer: array[0..511] of byte;
+  BufferSize, UserSize, DomainSize: DWORD;
+  UserInfo: PSIDAndAttributes;
+  NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
+  tmp: SynUnicode;
+  P: PWideChar;
 begin
-   if not GetTokenInformation(UserToken,TokenUser,@Buffer,SizeOf(Buffer),BufferSize) then
-     exit;
-   UserInfo := @Buffer;
-   UserSize := 0;
-   DomainSize := 0;
-   LookupAccountSidW(nil,UserInfo^.Sid,nil,UserSize,nil,DomainSize,NameUse);
-   if (UserSize=0) or (DomainSize=0) then
-     exit;
-   SetLength(tmp,UserSize+DomainSize-1);
-   P := pointer(tmp);
-   if not LookupAccountSidW(nil,UserInfo^.Sid,P+DomainSize,UserSize,P,DomainSize,NameUse) then
-     exit;
-   P[DomainSize] := '\';
-   result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
+  if not GetTokenInformation(UserToken, TokenUser, @Buffer, SizeOf(Buffer),
+    BufferSize) then
+    exit;
+  UserInfo := @Buffer;
+  UserSize := 0;
+  DomainSize := 0;
+  LookupAccountSidW(nil, UserInfo^.Sid, nil, UserSize, nil, DomainSize, NameUse);
+  if (UserSize = 0) or (DomainSize = 0) then
+    exit;
+  SetLength(tmp, UserSize + DomainSize - 1);
+  P := pointer(tmp);
+  if not LookupAccountSidW(
+     nil, UserInfo^.Sid, P + DomainSize, UserSize, P, DomainSize, NameUse) then
+    exit;
+  P[DomainSize] := '\';
+  result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
 end;
+
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1922,7 +1943,8 @@ begin
             [WinHttpNames[api], winhttpdll]);
         end
         else
-          WinHttpAPI.WebSocketEnabled := false; // e.g. version is lower than Windows 8
+          // e.g. system older than Windows 8
+          WinHttpAPI.WebSocketEnabled := false;
       inc(P);
     end;
     if WinHttpAPI.WebSocketEnabled then
@@ -1937,7 +1959,6 @@ end;
 
 
 { ******************** websocket.dll Windows API Definitions }
-
 
 procedure WebSocketApiInitialize;
 var
@@ -1967,63 +1988,71 @@ end;
 
 function WinHTTP_WebSocketEnabled: boolean;
 begin
-  Result := WebSocketAPI.WebSocketEnabled;
+  result := WebSocketAPI.WebSocketEnabled;
 end;
 
-function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
-var headerCnt: Integer;
-    i, idx: PtrInt;
-    h: THttpHeader;
-    p: PHTTP_UNKNOWN_HEADER;
+function HttpSys2ToWebSocketHeaders(
+  const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
+var
+  headerCnt: Integer;
+  i, idx: PtrInt;
+  h: THttpHeader;
+  p: PHTTP_UNKNOWN_HEADER;
 begin
   headerCnt := 0;
   for h := Low(HTTP_KNOWNHEADERS) to High(HTTP_KNOWNHEADERS) do
     if aHttpHeaders.KnownHeaders[h].RawValueLength <> 0 then
       inc(headerCnt);
   p := aHttpHeaders.pUnknownHeaders;
-  if p<>nil then
+  if p <> nil then
     inc(headerCnt, aHttpHeaders.UnknownHeaderCount);
-  SetLength(Result, headerCnt);
+  SetLength(result, headerCnt);
   idx := 0;
   for h := Low(HTTP_KNOWNHEADERS) to High(HTTP_KNOWNHEADERS) do
-    if aHttpHeaders.KnownHeaders[h].RawValueLength<>0 then begin
-      Result[idx].pcName := @HTTP_KNOWNHEADERS[h][1];
-      Result[idx].ulNameLength := ord(HTTP_KNOWNHEADERS[h][0]);
-      Result[idx].pcValue := aHttpHeaders.KnownHeaders[h].pRawValue;
-      Result[idx].ulValueLength := aHttpHeaders.KnownHeaders[h].RawValueLength;
+    if aHttpHeaders.KnownHeaders[h].RawValueLength <> 0 then
+    begin
+      result[idx].pcName := @HTTP_KNOWNHEADERS[h][1];
+      result[idx].ulNameLength := ord(HTTP_KNOWNHEADERS[h][0]);
+      result[idx].pcValue := aHttpHeaders.KnownHeaders[h].pRawValue;
+      result[idx].ulValueLength := aHttpHeaders.KnownHeaders[h].RawValueLength;
       inc(idx);
     end;
   p := aHttpHeaders.pUnknownHeaders;
-  if p<>nil then
-    for i := 1 to aHttpHeaders.UnknownHeaderCount do begin
-      Result[idx].pcName := pointer(p^.pName);
-      Result[idx].ulNameLength := p^.NameLength;
-      Result[idx].pcValue := pointer(p^.pRawValue);
-      Result[idx].ulValueLength := p^.RawValueLength;
+  if p <> nil then
+    for i := 1 to aHttpHeaders.UnknownHeaderCount do
+    begin
+      result[idx].pcName := pointer(p^.pName);
+      result[idx].ulNameLength := p^.NameLength;
+      result[idx].pcValue := pointer(p^.pRawValue);
+      result[idx].ulValueLength := p^.RawValueLength;
       inc(idx);
       inc(p);
     end;
 end;
 
-function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
-  const aHeadersCount: Integer): RawUTF8;
-var i: Integer;
-    h: PWEB_SOCKET_HTTP_HEADER;
-    len: Integer;
-    d : PAnsiChar;
+function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER; const
+  aHeadersCount: Integer): RawUTF8;
+var
+  i: Integer;
+  h: PWEB_SOCKET_HTTP_HEADER;
+  len: Integer;
+  d: PAnsiChar;
 begin
   len := 0;
   h := aHeaders;
-  for i := 1 to aHeadersCount do begin
-    if h^.ulValueLength<>0 then
+  for i := 1 to aHeadersCount do
+  begin
+    if h^.ulValueLength <> 0 then
       inc(len, h^.ulNameLength + h^.ulValueLength + 4);
     inc(h);
   end;
-  FastSetString(Result, nil, len);
-  d := Pointer(Result);
+  FastSetString(result, nil, len);
+  d := Pointer(result);
   h := aHeaders;
-  for i := 1 to aHeadersCount do begin
-    if h^.ulValueLength<>0 then begin
+  for i := 1 to aHeadersCount do
+  begin
+    if h^.ulValueLength <> 0 then
+    begin
       MoveFast(h^.pcName^, d^, h^.ulNameLength);
       inc(d, h^.ulNameLength);
       PWord(d)^ := Ord(':') + Ord(' ') shl 8;
@@ -2035,7 +2064,7 @@ begin
     end;
     inc(h);
   end;
-  Assert(d - Pointer(Result) = len);
+  Assert(d - Pointer(result) = len);
 end;
 
 
@@ -2043,18 +2072,17 @@ end;
 
 class procedure EWebSocketApi.RaiseOnError(api: TWebSocketAPIs; Error: integer);
 begin
-  if Error<>NO_ERROR then
-    raise self.Create(api,Error);
+  if Error <> NO_ERROR then
+    raise self.Create(api, Error);
 end;
 
 constructor EWebSocketApi.Create(api: TWebSocketAPIs; Error: integer);
 begin
   fLastError := Error;
   fLastApi := api;
-  inherited CreateFmt('%s failed: %s (%d)',
-    [WebSocketNames[api],SysErrorMessagePerModule(Error,WEBSOCKET_DLL),Error])
+  inherited CreateFmt('%s failed: %s (%d)', [WebSocketNames[api],
+    SysErrorMessagePerModule(Error, WEBSOCKET_DLL), Error])
 end;
-
 
 const
   // paranoid check of the API mapping against our internal enumerations
