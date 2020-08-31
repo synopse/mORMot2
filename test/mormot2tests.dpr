@@ -56,6 +56,10 @@ uses
   {$endif USEZEOS}
   {$ifndef FPC}
   mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
+  //mormot.db.rad.bde        in '..\src\db\mormot.db.rad.bde.pas',
+  //mormot.db.rad.firedac    in '..\src\db\mormot.db.rad.firedac.pas',
+  //mormot.db.rad.unidac     in '..\src\db\mormot.db.rad.unidac.pas',
+  //mormot.db.rad.nexusdb    in '..\src\db\mormot.db.rad.nexusdb.pas',
   {$endif FPC}
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
