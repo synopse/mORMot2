@@ -543,7 +543,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="42">
+    <Units Count="43">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -712,6 +712,10 @@
         <Filename Value="..\src\db\mormot.db.sql.postgres.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit41>
+      <Unit42>
+        <Filename Value="..\src\db\mormot.db.raw.sqlite3.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit42>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

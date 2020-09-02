@@ -51,11 +51,12 @@ uses
   mormot.db.sql.odbc       in '..\src\db\mormot.db.sql.odbc.pas',
   mormot.db.raw.oledb      in '..\src\db\mormot.db.raw.oledb.pas',
   mormot.db.sql.oledb      in '..\src\db\mormot.db.sql.oledb.pas',
+  mormot.db.raw.sqlite3    in '..\src\db\mormot.db.raw.sqlite3.pas',
   {$ifdef USEZEOS}
   mormot.db.sql.zeos       in '..\src\db\mormot.db.sql.zeos.pas',
   {$endif USEZEOS}
   {$ifndef FPC}
-  mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
+  //mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
   //mormot.db.rad.bde        in '..\src\db\mormot.db.rad.bde.pas',
   //mormot.db.rad.firedac    in '..\src\db\mormot.db.rad.firedac.pas',
   //mormot.db.rad.unidac     in '..\src\db\mormot.db.rad.unidac.pas',
@@ -77,6 +78,7 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([TTestCoreBase, TTestCoreCrypto]);
 end;
+
 
 
 begin
