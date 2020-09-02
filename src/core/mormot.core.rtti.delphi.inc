@@ -11,7 +11,8 @@ type
 {$ifdef HASINLINE} // Delphi RTL TypInfo.GetTypeData() is awful on x86_64
 
 function GetTypeData(TypeInfo: pointer): PTypeData;
-begin // weird code which compiles and inlines best on Delphi Win32 and Win64
+begin
+  // weird code which compiles and inlines best on Delphi Win32 and Win64
   {$ifdef CPU64}
   result := pointer(PtrInt(TypeInfo) + ord(PRttiInfo(TypeInfo)^.RawName[0]) + 2);
   {$else}
@@ -23,7 +24,8 @@ end;
 {$else}
 
 function GetTypeData(TypeInfo: pointer): PTypeData;
-asm // faster code for oldest Delphi
+asm
+        // faster code for oldest Delphi
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
 end;
