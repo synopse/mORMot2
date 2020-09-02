@@ -1931,7 +1931,7 @@ type
   public
     /// initialize the specified external library
     // - raise an ESQLite3Exception on error
-    constructor Create(const LibraryName: TFileName=SQLITE_LIBRARY_DEFAULT_NAME); reintroduce;
+    constructor Create(const LibraryName: TFileName = SQLITE_LIBRARY_DEFAULT_NAME); reintroduce;
     /// unload the external library
     destructor Destroy; override;
   published
@@ -3597,10 +3597,14 @@ constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var
   P: PPointerArray;
   i: PtrInt;
+  l1: TFileName;
   vers: PUTF8Char;
 begin
   fLoader := TSynLibrary.Create;
-  fLoader.TryLoadLibrary([LibraryName], ESQLite3Exception);
+  if LibraryName = SQLITE_LIBRARY_DEFAULT_NAME then
+    // first search for the standard library in the executable folder
+    l1 := ExeVersion.ProgramFilePath + LibraryName;
+  fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESQLite3Exception);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
     fLoader.GetProc(SQLITE3_ENTRIES[i], @P^[i]);
@@ -3625,7 +3629,7 @@ end;
 
 destructor TSQLite3LibraryDynamic.Destroy;
 begin
-  fLoader.Free;
+  FreeAndNil(fLoader);
   inherited;
 end;
 
