@@ -74,13 +74,37 @@ type
   end;
   {$M-}
 
-  /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
-  // - could be used to create instances using its virtual constructor
-  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
-
-  /// used to determine the exact class type of a TPersistentWithCustomCreateClass
-  // - could be used to create instances using its virtual constructor
-  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
+  /// an abstract ancestor, for implementing a custom TInterfacedObject like class
+  // - by default, will do nothing: no instance would be retrieved by
+  // QueryInterface unless the VirtualQueryInterface protected method is
+  // overriden, and _AddRef/_Release methods would call VirtualAddRef and
+  // VirtualRelease pure abstract methods
+  // - using this class will leverage the signature difference between Delphi
+  // and FPC, among all supported platforms
+  // - the class includes a RefCount integer field
+  TSynInterfacedObject = class(TObject,IUnknown)
+  protected
+    fRefCount: integer;
+    // returns E_NOINTERFACE
+    function VirtualQueryInterface(const IID: TGUID; out Obj): HResult; virtual;
+    // always return 1 for a "non allocated" instance (0 triggers release)
+    function VirtualAddRef: Integer; virtual; abstract;
+    function VirtualRelease: Integer; virtual; abstract;
+    {$ifdef FPC}
+    function QueryInterface(
+      {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+      out Obj): longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function _AddRef: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function _Release: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    {$else}
+    function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
+    function _AddRef: Integer; stdcall;
+    function _Release: Integer; stdcall;
+    {$endif FPC}
+  public
+    /// the associated reference count
+    property RefCount: integer read fRefCount write fRefCount;
+  end;
 
   /// any TCollection used between client and server shall inherit from this class
   // - you should override the GetClass virtual method to provide the
@@ -95,6 +119,14 @@ type
     /// this constructor will call GetClass to initialize the collection
     constructor Create; reintroduce; virtual;
   end;
+
+  /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
+  // - could be used to create instances using its virtual constructor
+  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
+
+  /// used to determine the exact class type of a TPersistentWithCustomCreateClass
+  // - could be used to create instances using its virtual constructor
+  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
 
   /// class-reference type (metaclass) of a TInterfacedCollection kind
   TInterfacedCollectionClass = class of TInterfacedCollection;
@@ -2463,6 +2495,35 @@ constructor TInterfacedCollection.Create;
 begin
   inherited Create(GetClass);
 end;
+
+{ TSynInterfacedObject }
+
+function TSynInterfacedObject._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := VirtualAddRef;
+end;
+
+function TSynInterfacedObject._Release: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := VirtualRelease;
+end;
+
+{$ifdef FPC}
+function TSynInterfacedObject.QueryInterface(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+  out Obj): longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+{$else}
+function TSynInterfacedObject.QueryInterface(const IID: TGUID; out Obj): HResult;
+{$endif FPC}
+begin
+  result := VirtualQueryInterface(IID, Obj);
+end;
+
+function TSynInterfacedObject.VirtualQueryInterface(const IID: TGUID; out Obj): HResult;
+begin
+  result := E_NOINTERFACE;
+end;
+
 
 
 { ************ TSynPersistent* / TSyn*List / TSynLocker classes }

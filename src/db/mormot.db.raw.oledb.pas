@@ -656,10 +656,10 @@ type
     function SetupAccessors(pIAccessorTVP: IAccessor): HRESULT; virtual; abstract;
     destructor Destroy; override;
     {$ifdef FPC}
-    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
-      iid : tguid; out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      iid : tguid; out obj) : longint;{$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function _AddRef : longint;{$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function _Release : longint;{$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
     {$else}
     function QueryInterface(const IID: TGUID; out Obj): HRESULT; stdcall;
     function _AddRef: Integer; stdcall;
@@ -806,8 +806,8 @@ end;
 
 {$ifdef FPC}
 function TBaseAggregatingRowset.QueryInterface(
-  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;
-  {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid : tguid;out obj) : longint;
+  {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
 {$else}
 function TBaseAggregatingRowset.QueryInterface(const IID: TGUID; out Obj): HResult;
 {$endif FPC}
@@ -856,7 +856,7 @@ end;
 
 {$ifdef FPC}
 function TBaseAggregatingRowset._AddRef: longint;
-  {$IFNDEF WINDOWS} cdecl {$ELSE} stdcall {$ENDIF};
+  {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
 {$else}
 function TBaseAggregatingRowset._AddRef: Integer;
 {$endif FPC}
@@ -866,7 +866,7 @@ end;
 
 {$ifdef FPC}
 function TBaseAggregatingRowset._Release: longint;
-  {$IFNDEF WINDOWS} cdecl {$ELSE} stdcall {$ENDIF};
+  {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
 {$else}
 function TBaseAggregatingRowset._Release: Integer;
 {$endif FPC}

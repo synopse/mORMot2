@@ -496,12 +496,10 @@ function FileSynLZ(const Source, Dest: TFileName;
   Magic: Cardinal): boolean; deprecated;
 
 /// deprecated function - use AlgoSynLZ.FileUnCompress
-function FileUnSynLZ(const Source, Dest: TFileName;
-  Magic: Cardinal): boolean; deprecated;
+function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean; deprecated;
 
 /// deprecated function - use AlgoSynLZ.FileIsCompressed
-function FileIsSynLZ(const Name: TFileName;
-  Magic: Cardinal): boolean; deprecated;
+function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean; deprecated;
 
 /// deprecated function - use AlgoSynLZ.StreamUnCompress
 function StreamUnSynLZ(const Source: TFileName;

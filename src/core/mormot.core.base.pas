@@ -561,7 +561,7 @@ procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endi
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid1, guid2: TGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
@@ -574,7 +574,7 @@ function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integ
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
-function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
+function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append one TGUID item to a TGUID dynamic array
@@ -3493,7 +3493,7 @@ begin
 end;
 
 
-function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid1, guid2: TGUID): Boolean;
 begin
   result := (PHash128Rec(@guid1).L = PHash128Rec(@guid2).L) and
@@ -3511,7 +3511,7 @@ begin
   result := Hash128Index(@guids[0], length(guids), @guid);
 end;
 
-function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
+function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): Boolean;
 var
   a: TPtrIntArray absolute guid;
 begin

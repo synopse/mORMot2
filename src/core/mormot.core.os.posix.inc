@@ -465,6 +465,35 @@ begin
       FileCreateDateTime := lastreadaccess;
 end;
 
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+var
+  SourceF, DestF: TFileStream;
+begin
+  result := false;
+  if FileExists(Target) then
+    if FailIfExists then
+      exit
+    else
+      DeleteFile(Target);
+  try
+    SourceF := TFileStream.Create(Source, fmOpenRead);
+    try
+      DestF := TFileStream.Create(Target, fmCreate);
+      try
+        DestF.CopyFrom(SourceF, SourceF.Size);
+      finally
+        DestF.Free;
+      end;
+      FileSetDateFrom(Target, SourceF.Handle);
+    finally
+      SourceF.Free;
+    end;
+    result := true;
+  except
+    result := false;
+  end;
+end;
+
 function OemToUnicode(const OEM: RawByteString): SynUnicode;
 const
   OEMTOWIDE: array[128..255] of word = (

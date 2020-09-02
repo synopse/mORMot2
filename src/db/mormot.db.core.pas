@@ -636,6 +636,23 @@ function InlineParameter(ID: Int64): shortstring; overload;
 function InlineParameter(const value: RawUTF8): RawUTF8; overload;
 
 
+/// go to the beginning of the SQL statement, ignoring all blanks and comments
+// - used to check the SQL statement command (e.g. is it a SELECT?)
+function SQLBegin(P: PUTF8Char): PUTF8Char;
+
+/// add a condition to a SQL WHERE clause, with an ' and ' if where is not void
+procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
+
+/// return true if the parameter is void or begin with a 'SELECT' SQL statement
+// - used to avoid code injection and to check if the cache must be flushed
+// - VACUUM, PRAGMA, or EXPLAIN statements also return true, since they won't
+// change the data content
+// - WITH recursive statement expect no INSERT/UPDATE/DELETE pattern in the SQL
+// - if P^ is a SELECT and SelectClause is set to a variable, it would
+// contain the field names, from SELECT ...field names... FROM
+function isSelect(P: PUTF8Char; SelectClause: PRawUTF8 = nil): boolean;
+
+
 { ************ TJSONWriter Specialized for Database Export }
 
 type
@@ -1614,6 +1631,88 @@ function InlineParameter(const value: RawUTF8): RawUTF8;
 begin
   QuotedStrJSON(value, result, ':(', '):');
 end;
+
+
+function isSelect(P: PUTF8Char; SelectClause: PRawUTF8): boolean;
+var
+  from: PUTF8Char;
+begin
+  if P <> nil then
+  begin
+    P := SQLBegin(P);
+    case IdemPCharArray(P, ['SELECT', 'EXPLAIN ', 'VACUUM', 'PRAGMA', 'WITH']) of
+      0:
+        if P[6] <= ' ' then
+        begin
+          if SelectClause <> nil then
+          begin
+            inc(P, 7);
+            from := StrPosI(' FROM ', P);
+            if from = nil then
+              SelectClause^ := ''
+            else
+              FastSetString(SelectClause^, P, from - P);
+          end;
+          result := true;
+        end
+        else
+          result := false;
+      1:
+        result := true;
+      2, 3:
+        result := P[6] in [#0..' ', ';'];
+      4:
+        result := (P[4] <= ' ') and (StrPosI('INSERT', P + 5) = nil) and
+          (StrPosI('UPDATE', P + 5) = nil) and (StrPosI('DELETE', P + 5) = nil);
+    else
+      result := false;
+    end;
+  end
+  else
+    result := true; // assume '' statement is SELECT command
+end;
+
+function SQLBegin(P: PUTF8Char): PUTF8Char;
+begin
+  if P <> nil then
+    repeat
+      if P^ <= ' ' then // ignore blanks
+        repeat
+          if P^ = #0 then
+            break
+          else
+            inc(P)
+        until P^ > ' ';
+      if PWord(P)^ = ord('-') + ord('-') shl 8 then // SQL comments
+        repeat
+          inc(P)
+        until P^ in [#0, #10]
+      else if PWord(P)^ = ord('/') + ord('*') shl 8 then
+      begin // C comments
+        inc(P);
+        repeat
+          inc(P);
+          if PWord(P)^ = ord('*') + ord('/') shl 8 then
+          begin
+            inc(P, 2);
+            break;
+          end;
+        until P^ = #0;
+      end
+      else
+        break;
+    until false;
+  result := P;
+end;
+
+procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
+begin
+  if where = '' then
+    where := condition
+  else
+    where := where + ' and ' + condition;
+end;
+
 
 
 { ************ TJSONWriter Specialized for Database Export }

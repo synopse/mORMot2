@@ -984,6 +984,9 @@ function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
   LastWriteAccess, FileCreateDateTime: Int64): boolean;
 
+/// copy one file to another, similar to the Windows API
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+
 /// conversion of Windows OEM charset into a UTF-16 encoded string
 function OemToUnicode(const OEM: RawByteString): SynUnicode;
 

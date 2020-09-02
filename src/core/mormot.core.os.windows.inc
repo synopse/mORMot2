@@ -302,6 +302,11 @@ begin
   result := SysUtils.RenameFile(OldName,NewName);
 end;
 
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+begin
+  result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
+end;
+
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin
   if OSVersion >= wVista then // don't use the flag on XP
