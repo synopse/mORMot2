@@ -119,6 +119,11 @@ function  GetQueuedCompletionStatus;  external kernel32;
 function  PostQueuedCompletionStatus; external kernel32;
 function  GetDesktopWindow;           external user32;
 
+procedure DisplayFatalError(const title, msg: RawUTF8);
+begin
+  MessageBoxA(0, pointer(msg), pointer(title), MB_OK or MB_ICONWARNING);
+end;
+
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API

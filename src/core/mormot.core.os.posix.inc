@@ -528,6 +528,15 @@ begin
   result := UTF8Encode(OemToUnicode(OEM));
 end;
 
+{$I-}
+procedure DisplayFatalError(const title, msg: RawUTF8);
+begin
+  writeln(StdErr, title);
+  writeln(StdErr, msg);
+  ioresult;
+end;
+{$I+}
+
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin
   // SysUtils.FileOpen = fpOpen + fpFlock

@@ -994,7 +994,20 @@ function OemToUnicode(const OEM: RawByteString): SynUnicode;
 // - as used e.g. by mormot.core.zip for non UTF-8 file names
 function OemToFileName(const OEM: RawByteString): TFileName;
 
+/// prompt the user for an error message
+// - in practice, text encoding is expected to be plain ASCII 
+// - on Windows, will call MessageBoxA()
+// - on POSIX, will use Writeln(StdErr)
+procedure DisplayFatalError(const title, msg: RawUTF8);
+
 const
+  /// operating-system dependent Line Feed characters
+  {$ifdef MSWINDOWS}
+  CRLF = #13#10;
+  {$else}
+  CRLF = #10;
+  {$endif MSWINDOWS}
+
   /// operating-system dependent wildchar to match all files in a folder
   {$ifdef MSWINDOWS}
   FILES_ALL = '*.*';
