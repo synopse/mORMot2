@@ -197,8 +197,16 @@ function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
   external clib name 'sendto';
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; cdecl;
   external clib name 'getpeername';
+
+{$ifdef DARWIN}
 function poll(fds: PPollFD; nfds, timeout: integer): integer;
+begin // circumvent linking issue on Mac OSX
+  result := fppoll(pointer(fds), nfds, timeout);
+end;
+{$else}
+function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll';
+{$endif DARWIN}
 
 {$ifndef USEPOLL}
 // epoll is Linux-Specific
