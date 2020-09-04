@@ -1171,7 +1171,7 @@ begin
     result := VType;
     case VType of
       ftInt64:
-        Value := {$ifdef DELPHI5OROLDER}integer{$endif}(VInt64);
+        Value := VInt64;
       ftDouble:
         Value := unaligned(PDouble(@VInt64)^);
       ftCurrency:

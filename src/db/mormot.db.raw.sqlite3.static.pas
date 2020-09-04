@@ -1103,10 +1103,8 @@ function sqlite3_serialize(DB: TSQLite3DB; Schema: PUTF8Char; Size: PInt64;
   Flags: integer): pointer; cdecl; external;
 function sqlite3_deserialize(DB: TSQLite3DB; Schema: PUTF8Char; Data: pointer;
   DBSize, BufSize: Int64; Flags: integer): pointer; cdecl; external;
-{$ifndef DELPHI5OROLDER}
 function sqlite3_config(operation: integer): integer; cdecl varargs; external;
 function sqlite3_db_config(DB: TSQLite3DB; operation: integer): integer; cdecl varargs; external;
-{$endif}
 function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCallback;
   UserData: Pointer): Pointer; cdecl; external;
 
@@ -1118,8 +1116,8 @@ const
   EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.33.0'{$endif};
 
   // where to download the latest available static binaries, including SQLite3
-  EXPECTED_STATIC_DOWNLOAD =
-    'https://github.com/synopse/mORMot2/releases/download/pre1/mormot2static.7z';
+  EXPECTED_STATIC_DOWNLOAD = 'https://github.com/synopse/mORMot2/releases/' +
+     'download/pre1/mormot2static.7z';
 
 constructor TSQLite3LibraryStatic.Create;
 var
@@ -1214,10 +1212,8 @@ begin
   backup_pagecount       := @sqlite3_backup_pagecount;
   serialize              := @sqlite3_serialize;
   deserialize            := @sqlite3_deserialize;
-  {$ifndef DELPHI5OROLDER} // varargs calls
   config                 := @sqlite3_config;
   db_config              := @sqlite3_db_config;
-  {$endif}
 
   // our static SQLite3 is compiled with SQLITE_OMIT_AUTOINIT defined
   {$ifdef FPC}
@@ -1227,8 +1223,8 @@ begin
   fUseInternalMM := true; // Delphi .obj are using FastMM4
   {$else}
   ForceToUseSharedMemoryManager; // Delphi .o
-  {$endif}
-  {$endif}
+  {$endif CPUX86}
+  {$endif FPC}
   sqlite3_initialize;
   inherited Create; // set fVersionNumber/fVersionText
   if (EXPECTED_SQLITE3_VERSION <> '') and

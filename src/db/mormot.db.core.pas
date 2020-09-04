@@ -140,9 +140,9 @@ type
   /// used to store a field index in a Table
   // - note that -1 is commonly used for the ID/RowID field so the values should
   // be signed
-  // - even if ShortInt (-128..127) may have been enough, we define a 16 bit
-  // safe unsigned integer to let the source compile with Delphi 5
-  TSQLFieldIndex = SmallInt; // -32768..32767
+  // - MAX_SQLFIELDS may be up to 256, so ShortInt (-128..127) would not have
+  // been enough, so we use the SmallInt range (-32768..32767)
+  TSQLFieldIndex = SmallInt;
 
   /// used to store field indexes in a Table
   // - same as TSQLFieldBits, but allowing to store the proper order
@@ -190,7 +190,7 @@ procedure FillZero(var Fields: TSQLFieldBits); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TSQLFieldBits set of bits into an array of integers
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits; out Index: TSQLFieldIndexDynArray;
   MaxLength: integer = MAX_SQLFIELDS; IndexStart: integer = 0); overload;
 
 /// convert a TSQLFieldBits set of bits into an array of integers
@@ -989,8 +989,8 @@ begin
   {$endif MAX_SQLFIELDS_128}
 end;
 
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index:
-  TSQLFieldIndexDynArray; MaxLength, IndexStart: integer);
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
+  out Index: TSQLFieldIndexDynArray; MaxLength, IndexStart: integer);
 var
   i, n: PtrInt;
   sets: array[0..MAX_SQLFIELDS - 1] of TSQLFieldIndex; // to avoid memory reallocation
