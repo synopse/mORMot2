@@ -53,6 +53,8 @@ uses
   mormot.db.sql.oledb      in '..\src\db\mormot.db.sql.oledb.pas',
   mormot.db.raw.sqlite3    in '..\src\db\mormot.db.raw.sqlite3.pas',
   mormot.db.raw.sqlite3.static in '..\src\db\mormot.db.raw.sqlite3.static.pas',
+  mormot.db.nosql.bson     in '..\src\db\mormot.db.nosql.bson.pas',
+  mormot.db.nosql.mongodb  in '..\src\db\mormot.db.nosql.mongodb.pas',
   {$ifdef USEZEOS}
   mormot.db.sql.zeos       in '..\src\db\mormot.db.sql.zeos.pas',
   {$endif USEZEOS}

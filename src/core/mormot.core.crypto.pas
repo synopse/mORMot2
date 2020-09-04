@@ -4551,7 +4551,7 @@ begin
     sha3update;
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, sizeof(SystemInfo));
-    result := sha3.Cypher(fromos); // = XOR entropy using SHA-3 in XOF mode
+    result := sha3.Cypher(fromos); // = XOR OS entropy using SHA-3 in XOF mode
   finally
     sha3.Done;
     FillZero(fromos);
