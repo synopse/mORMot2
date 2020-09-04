@@ -290,6 +290,7 @@ type
   TVariantArray = array[0 .. MaxInt div SizeOf(Variant) - 1 ] of Variant;
   PVariantArray = ^TVariantArray;
   TVariantDynArray = array of variant;
+  PPVariant = ^PVariant;
 
   PIntegerDynArray = ^TIntegerDynArray;
   TIntegerDynArray = array of integer;
