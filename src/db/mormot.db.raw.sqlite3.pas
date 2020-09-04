@@ -35,6 +35,9 @@ uses
   mormot.core.log,
   mormot.db.core;
 
+{$define WITHLOG}
+// if defined, logging will be generated - set by default since it won't hurt
+
 
 { ************ Raw SQLite3 API Constants and Functions }
 
@@ -1816,9 +1819,9 @@ type
     // connection other than the one being used by the backup operation, then the
     // backup will be automatically restarted by the next call to backup_step().
     // If the source database is modified by the using the same database connection
-    // as is used by the backup operation (which is the case in the SynSQLite3 and
-    // mORMotSQLite3 units), then the backup database is automatically updated at
-    // the same time, so you won't loose any data.
+    // as is used by the backup operation (which is the case in the
+    // mormot.db.raw.sqlite3 and  mORMotSQLite3 units), then the backup database
+    // is automatically updated at the same time, so you won't loose any data.
     backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer; cdecl;
     /// finalize a Backup process on a given database
     // - When backup_step() has returned SQLITE_DONE, or when the application
@@ -2585,7 +2588,7 @@ type
     {$ifdef WITHLOG}
     fLogResultMaximumSize: integer;
     fLog: TSynLogClass;
-    {$endif}
+    {$endif WITHLOG}
     /// store TSQLDataBaseSQLFunction instances
     fSQLFunctions: TSynObjectList;
     function GetUseCache: boolean;
@@ -2917,7 +2920,7 @@ type
     // since it does not make sense to log all the JSON content retrieved from
     // the database engine, when a huge SELECT is executed
     property LogResultMaximumSize: integer read fLogResultMaximumSize write fLogResultMaximumSize;
-    {$endif}
+    {$endif WITHLOG}
     /// this integer pointer (if not nil) is incremented when any SQL statement
     // changes the database contents (i.e. any not SELECT statement)
     // - this pointer is thread-safe updated, inside a critical section
@@ -3118,12 +3121,12 @@ const
 
 {$ifdef WITHLOG}
 var
-  /// the TSynLog class used for logging for all our SynSQlite3 related functions
+  /// the TSynLog class used for logging for all our mormot.db.raw.sqlite3 related functions
   // - you may override it with TSQLLog, if available from mORMot.pas
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
   SynSQLite3Log: TSynLogClass = TSynLog;
-{$endif}
+{$endif WITHLOG}
 
 
 /// check from the file beginning if sounds like a valid SQLite3 file
@@ -4183,13 +4186,15 @@ begin
     exit;
   if not IdemPChar(pointer(aSQL), 'PRAGMA ') or (PosEx('=', aSQL) > 0) then
     result := true;
-  {$endif}
+  {$endif WITHLOG}
 end;
 
 procedure TSQLDataBase.ExecuteAll(const aSQL: RawUTF8);
 var
   R: TSQLRequest;
-{$ifdef WITHLOG}   log: ISynLog; {$endif}
+  {$ifdef WITHLOG}
+  log: ISynLog;
+  {$endif WITHLOG}
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
@@ -4224,7 +4229,7 @@ begin
     UnLock;
     {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % %', [Timer.Stop, FileNameWithoutPath, aSQL], self);
-    {$endif}
+    {$endif WITHLOG}
   end;
 end;
 

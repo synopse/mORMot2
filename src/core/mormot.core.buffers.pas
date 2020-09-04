@@ -6438,7 +6438,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
       $a5a5a5a5, // .mab file = MAGIC_MAB in SynLog.pas
       $a5aba5a5, // .data = TSQLRESTSTORAGEINMEMORY_MAGIC in mORMot.pas
       $aba51051, // .log.synlz = LOG_MAGIC in SynLog.pas
-      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in SynSQLite3.pas
+      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
       $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
       $b7010000, $ba010000, // mpeg = 00 00 01 Bx
       $cececece, // jceks = CE CE CE CE

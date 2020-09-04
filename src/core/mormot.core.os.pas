@@ -824,7 +824,7 @@ function GetDesktopWindow: PtrInt;
 // -1,0,1 as regular StrCompW/StrICompW comparison function result
 // - will compute StrLen(PW1/PW2) if L1 or L2 < 0
 // - somewhat slow by using two temporary UnicodeString on POSIX - but seldom
-// called, unless our proprietary WIN32CASE collation is used in SynSQLite3
+// called, unless our proprietary WIN32CASE collation is used in mormot.db.raw.sqlite3
 function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
 
 /// compatibility function, wrapping MultiByteToWideChar() Win32 API call

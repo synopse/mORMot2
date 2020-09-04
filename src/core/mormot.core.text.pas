@@ -1379,7 +1379,7 @@ var
   // - use around 16KB of heap (since each item consumes 16 bytes), but increase
   // overall performance and reduce memory allocation (and fragmentation),
   // especially during multi-threaded execution
-  // - noticeable when strings are used as array indexes (e.g. in SynMongoDB BSON)
+  // - noticeable when strings are used as array indexes (e.g. in mormot.db.nosql.bson)
   // - is defined globally, since may be used from an inlined function
   SmallUInt32UTF8: array[0..999] of RawUTF8;
 

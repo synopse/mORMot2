@@ -8199,7 +8199,7 @@ begin
   {$endif ASMX64}
   assert(sizeof(TMD5Buf) = sizeof(TMD5Digest));
   assert(sizeof(TAESContext) = AESContextSize);
-  assert(AESContextSize <= 300); // see synsqlite3.c KEYLENGTH
+  assert(AESContextSize <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
   assert(sizeof(TSHAContext) = SHAContextSize);
   assert(sizeof(TSHA3Context) = SHA3ContextSize);
   assert(1 shl AESBlockShift = sizeof(TAESBlock));

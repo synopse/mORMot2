@@ -2051,29 +2051,29 @@ var
     end;
     case P^ of
       '=':
-        Where.operator := opEqualTo;
+        Where.Operator := opEqualTo;
       '>':
         if P[1] = '=' then
         begin
           inc(P);
-          Where.operator := opGreaterThanOrEqualTo;
+          Where.Operator := opGreaterThanOrEqualTo;
         end
         else
-          Where.operator := opGreaterThan;
+          Where.Operator := opGreaterThan;
       '<':
         case P[1] of
           '=':
             begin
               inc(P);
-              Where.operator := opLessThanOrEqualTo;
+              Where.Operator := opLessThanOrEqualTo;
             end;
           '>':
             begin
               inc(P);
-              Where.operator := opNotEqualTo;
+              Where.Operator := opNotEqualTo;
             end;
         else
-          Where.operator := opLessThan;
+          Where.Operator := opLessThan;
         end;
       'i', 'I':
         case P[1] of
@@ -2083,7 +2083,7 @@ var
               if IdemPChar(P, 'NULL') then
               begin
                 Where.Value := NULL_STR_VAR;
-                Where.operator := opIsNull;
+                Where.Operator := opIsNull;
                 Where.ValueSQL := P;
                 Where.ValueSQLLen := 4;
                 TVarData(Where.ValueVariant).VType := varNull;
@@ -2093,7 +2093,7 @@ var
               else if IdemPChar(P, 'NOT NULL') then
               begin
                 Where.Value := 'not null';
-                Where.operator := opIsNotNull;
+                Where.Operator := opIsNotNull;
                 Where.ValueSQL := P;
                 Where.ValueSQLLen := 8;
                 TVarData(Where.ValueVariant).VType := varNull;
@@ -2104,7 +2104,7 @@ var
             end;
           'n', 'N':
             begin
-              Where.operator := opIn;
+              Where.Operator := opIn;
               P := GotoNextNotSpace(P + 2);
               if P^ <> '(' then
                 exit; // incorrect SQL statement
@@ -2127,12 +2127,12 @@ var
         if IdemPChar(P + 1, 'IKE') then
         begin
           inc(P, 3);
-          Where.operator := opLike;
+          Where.Operator := opLike;
         end
         else
           exit;
     else
-      exit; // unknown operator
+      exit; // unknown Operator
     end;
     // we got 'WHERE FieldName operator ' -> handle value
     inc(P);
@@ -2353,5 +2353,6 @@ end;
 initialization
   SetLength(JSON_SQLDATE_MAGIC_TEXT, 3);
   PCardinal(pointer(JSON_SQLDATE_MAGIC_TEXT))^ := JSON_SQLDATE_MAGIC;
+
 end.
 

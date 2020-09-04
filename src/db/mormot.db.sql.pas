@@ -717,7 +717,8 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt = nil): RawUTF8;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
@@ -728,7 +729,8 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
     function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     /// append all rows content as binary stream
@@ -2215,7 +2217,8 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
     // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
@@ -2242,7 +2245,8 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt = nil): RawUTF8;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
