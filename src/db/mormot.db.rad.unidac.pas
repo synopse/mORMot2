@@ -214,7 +214,8 @@ begin
         fSpecificOptions.Values['UseUnicode'] := 'true';
         fSpecificOptions.Values['CharLength'] := '2';
         fSpecificOptions.Values['DescribeParams'] := 'true';
-      end; // http://www.devart.com/unidac/docs/index.html?ibprov_article.htm
+        // http://www.devart.com/unidac/docs/index.html?ibprov_article.htm
+      end;
     dOracle:
       begin
         fSpecificOptions.Values['UseUnicode'] := 'true';
@@ -223,7 +224,7 @@ begin
       end;
     dMySQL:
       begin
-      // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
+        // s.d. 30.11.19 Damit der Connect schneller geht ! CRVioTCP.pas WaitForConnect
         fSpecificOptions.Values['MySQL.ConnectionTimeout'] := '0';
       end;
     dMSSQL:
@@ -231,9 +232,10 @@ begin
         if aUserID = '' then
           fSpecificOptions.Values['Authentication'] := 'auWindows';
         fSpecificOptions.Values['SQL Server.Provider'] := cMSSQLProvider;
-      // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
+        // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
         fSpecificOptions.Values['SQL Server.ConnectionTimeout'] := '0';
-      end; // http://www.devart.com/unidac/docs/index.html?sqlprov_article.htm
+        // http://www.devart.com/unidac/docs/index.html?sqlprov_article.htm
+      end;
     dPostgreSQL:
       begin  // thanks delphinium for the trick!
         fSpecificOptions.Values['CharSet'] := 'UTF8';
@@ -284,8 +286,8 @@ begin
       F.ColumnName := StringToUTF8(meta.FieldByName('COLUMN_NAME').AsString);
       F.ColumnTypeNative := StringToUTF8(meta.FieldByName('DATA_TYPE').AsString);
       if hasSubType then
-        F.ColumnTypeNative := F.ColumnTypeNative + StringToUTF8(meta.FieldByName
-          ('DATA_SUBTYPE').AsString);
+        F.ColumnTypeNative := F.ColumnTypeNative +
+          StringToUTF8(meta.FieldByName('DATA_SUBTYPE').AsString);
       F.ColumnLength := meta.FieldByName('DATA_LENGTH').AsInteger;
       F.ColumnScale := meta.FieldByName('DATA_SCALE').AsInteger;
       F.ColumnPrecision := meta.FieldByName('DATA_PRECISION').AsInteger;
@@ -466,8 +468,8 @@ begin
   if (fDatabase.Port = 0) and TryStrToInt(options.Values['Port'], PortNumber) then
     fDatabase.Port := PortNumber;
   for i := 0 to options.Count - 1 do
-    if FindRawUTF8(['Server', 'Database', 'Port'], StringToUTF8(options.Names[i]),
-      false) < 0 then
+    if FindRawUTF8(['Server', 'Database', 'Port'],
+        StringToUTF8(options.Names[i]), false) < 0 then
       fDatabase.SpecificOptions.Add(options[i]);
 end;
 
@@ -478,8 +480,8 @@ begin
   if fDatabase = nil then
     raise ESQLDBUniDAC.CreateUTF8('%.Connect(%): Database=nil', [self,
       fProperties.ServerName]);
-  Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%', [fDatabase.ProviderName,
-    fDatabase.Database, fDatabase.Server], self);
+  Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
+    [fDatabase.ProviderName, fDatabase.Database, fDatabase.Server], self);
   try
     case fProperties.DBMS of
       dFirebird:

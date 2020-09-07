@@ -11,7 +11,7 @@ unit mormot.db.raw.oledb;
     - Native OleDB Memory Structures
     - Native OleDB Interfaces
     - Low-Level OleDB Custom RowSet Processing
-    - OleDB Initialization
+    - OleDB High-Level Access
 
   *****************************************************************************
 }
@@ -707,7 +707,7 @@ type
   end;
 
 
-{ ************ OleDB Initialization }
+{ ************ OleDB High-Level Access }
 
 type
   /// generic Exception type, generated for OleDB connection
@@ -719,22 +719,6 @@ function IsJetFile(const FileName: TFileName): boolean;
 
 /// low-level guess of our SQL Field Type from the OleDB numerical type value
 function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSQLDBFieldType;
-
-/// this global procedure should be called for each thread needing to use OLE
-// - it is already called by TOleDBConnection.Create when an OleDb connection
-// is instantiated for a new thread
-// - every call of CoInit shall be followed by a call to CoUninit
-// - implementation will maintain some global counting, to call the CoInitialize
-// API only once per thread
-// - only made public for user convenience, e.g. when using custom COM objects
-procedure CoInit;
-
-/// this global procedure should be called at thread termination
-// - it is already called by TOleDBConnection.Destroy, e.g. when thread associated
-// to an OleDb connection is terminated
-// - every call of CoInit shall be followed by a call to CoUninit
-// - only made public for user convenience, e.g. when using custom COM objects
-procedure CoUninit;
 
 {$endif MSWINDOWS}
 
@@ -994,7 +978,7 @@ begin
 end;
 
 
-{ ************ OleDB Initialization }
+{ ************ OleDB High-Level Access }
 
 function IsJetFile(const FileName: TFileName): boolean;
 var
@@ -1044,35 +1028,6 @@ begin
   end;
 end;
 
-threadvar
-  OleDBCoinitialized: integer;
-
-procedure CoInit;
-begin
-  inc(OleDBCoinitialized); // threadvar
-  if OleDBCoinitialized = 1 then
-    CoInitialize(nil);
-end;
-
-procedure CoUninit;
-begin
-  if OleDBCoinitialized <= 0 then
-    raise EOleDBException.Create(
-    'You should call TOleDBConnection.Free from the same thread which called ' +
-    'its Create: i.e. call MyProps.EndCurrentThread from an THttpServerGeneric.' +
-    'OnHttpThreadTerminate event - see ticket 213544b2f5');
-  dec(OleDBCoinitialized);
-  if OleDBCoinitialized = 0 then
-    CoUninitialize;
-end;
-
-
-initialization
-
-finalization
-  if OleDBCoinitialized <> 0 then
-    SynDBLog.Add.Log(sllError, 'Missing TOleDBConnection.Destroy call = %',
-      [OleDBCoInitialized]);
 
 {$endif MSWINDOWS}
 
