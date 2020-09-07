@@ -1548,4 +1548,13 @@ begin
   {$endif DARWIN}
 end;
 
+procedure FinalizeSpecificUnit;
+begin
+  if pthread <> nil then
+    dlclose(pthread);
+  {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+  sd.Done;
+  {$endif LINUXNOTBSD}
+end;
+
 

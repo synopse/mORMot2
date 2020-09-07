@@ -109,7 +109,7 @@ const
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
 
-  /// the target Operating System used for compilation, as text
+  /// the target Operating System used for compilation, as short text
   OS_TEXT = {$ifdef MSWINDOWS}'Win'{$else}{$ifdef DARWIN}'OSX'{$else}
   {$ifdef BSD}'BSD'{$else}{$ifdef ANDROID}'Android'{$else}{$ifdef LINUX}'Linux'{$else}'Posix'
   {$endif}{$endif}{$endif}{$endif}{$endif};
@@ -558,6 +558,21 @@ var
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
+/// this global procedure should be called from each thread needing to use OLE
+// - it is called e.g. by TOleDBConnection.Create when an OleDb connection
+// is instantiated for a new thread
+// - every call of CoInit shall be followed by a call to CoUninit
+// - implementation will maintain some global counting, to call the CoInitialize
+// API only once per thread
+// - only made public for user convenience, e.g. when using custom COM objects
+procedure CoInit;
+
+/// this global procedure should be called at thread termination
+// - it is called e.g. by TOleDBConnection.Destroy, when thread associated
+// to an OleDb connection is terminated
+// - every call of CoInit shall be followed by a call to CoUninit
+// - only made public for user convenience, e.g. when using custom COM objects
+procedure CoUninit;
 
 /// retrieves the current executable module handle, i.e.  its memory load address
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -2963,16 +2978,7 @@ begin
   ExeVersion.Version.Free;
   DeleteCriticalSection(AutoSlotsLock);
   DeleteCriticalSection(GlobalCriticalSection);
-  {$ifdef MSWINDOWS}
-  if CryptoAPI.Handle <> 0 then
-    FreeLibrary(CryptoAPI.Handle);
-  {$else}
-  if pthread <> nil then
-    dlclose(pthread);
-  {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
-  sd.Done;
-  {$endif LINUXNOTBSD}
-  {$endif MSWINDOWS}
+  FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
 end;
 
 initialization

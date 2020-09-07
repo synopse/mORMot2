@@ -489,9 +489,10 @@ begin
   if ExceptionInheritsFrom(EClass, 'EOleSysError') then
   begin
     result := EOleSysError(EInstance).ErrorCode;
-    for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
-      if DOTNET_EXCEPTIONHRESULT[i] = result then
-        PtrArrayAdd(ExceptionNames, DOTNET_EXCEPTIONNAME[i]);
+    if result > $80000000 then
+      for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
+        if DOTNET_EXCEPTIONHRESULT[i] = result then
+          PtrArrayAdd(ExceptionNames, DOTNET_EXCEPTIONNAME[i]);
   end
   else
     result := 0;
@@ -1479,6 +1480,32 @@ begin
 end;
 
 
+threadvar
+  OleDBCoinitialized: integer;
+
+// avoid including ActiveX unit
+function CoInitialize(_para1: pointer): HRESULT; stdcall; external 'ole32.dll';
+procedure CoUninitialize; stdcall; external 'ole32.dll';
+
+procedure CoInit;
+begin
+  inc(OleDBCoInitialized);
+  if OleDBCoInitialized = 1 then
+    CoInitialize(nil);
+end;
+
+procedure CoUninit;
+begin
+  if OleDBCoinitialized <= 0 then
+    raise EOleSysError.Create('You should call TOleDBConnection.Free from the same ' +
+      'thread which called its Create: i.e. call MyProps.EndCurrentThread from an ' +
+      'THttpServerGeneric.OnHttpThreadTerminate event - see ticket 213544b2f5');
+  dec(OleDBCoinitialized);
+  if OleDBCoinitialized = 0 then
+    CoUninitialize;
+end;
+
+
 { ****************** Gather Operating System Information }
 
 const
@@ -1689,4 +1716,18 @@ begin
   TrimSpaces(BiosInfoText);
   TrimSpaces(CpuInfoText);
 end;
+
+{$I-}
+procedure FinalizeSpecificUnit;
+begin
+  if CryptoAPI.Handle <> 0 then
+    FreeLibrary(CryptoAPI.Handle);
+  if OleDBCoinitialized <> 0 then
+  begin
+    writeln('Missing ', OleDBCoInitialized, ' TOleDBConnection.Destroy call');
+    ioresult;
+  end;
+end;
+{$I+}
+
 
