@@ -214,6 +214,8 @@ type
   /// points to 24-bit storage, mapped as a 3 bytes buffer
   PBSON24 = ^TBSON24;
 
+  {$A-}
+
   /// BSON ObjectID 12-byte internal binary representation
   // - in MongoDB, documents stored in a collection require a unique _id field
   // that acts as a primary key: by default, it uses such a 12-byte ObjectID
@@ -222,7 +224,6 @@ type
   // - in our ODM, we rather use 64-bit genuine integer identifiers (TID),
   // as computed by an internal sequence or TSynUniqueIdentifierGenerator
   // - match betObjectID TBSONElementType
-  {$A-}
   {$ifdef USERECORDWITHMETHODS}
   TBSONObjectID = record
   {$else}
@@ -280,7 +281,9 @@ type
   /// points to a BSON ObjectID internal binary representation
   PBSONObjectID = ^TBSONObjectID;
 
+  {$A+}
 
+  
 { ************ TBSONVariantData / TBSONVariant Custom Variant Storage }
 
 type
@@ -310,6 +313,8 @@ type
     bbtGeneric, bbtFunction, bbtOldBinary, bbtOldUUID,
     bbtUUID, bbtMD5, bbtUser = $80);
 
+  {$A-}
+
   /// memory structure used for some special BSON storage as variant
   // - betObjectID kind will store a TBSONObjectID
   // - betBinary kind will store a BLOB content as RawByteString
@@ -329,11 +334,11 @@ type
     case VKind: TBSONElementType of
       betObjectID:
         (
-      {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+      {$ifdef fpc} {$push} {$endif} {$hints off}
         // does not complain if Filler is declared but void
         VFiller: array[1..SizeOf(TVarData) - SizeOf(TVarType)
           - SizeOf(TBSONElementType) - SizeOf(TBSONObjectID)] of byte;
-      {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
+      {$ifdef fpc} {$pop} {$else} {$hints on} {$endif}
         VObjectID: TBSONObjectID);
       betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
       betJSScope, betDecimal128:
@@ -349,6 +354,7 @@ type
         // - you have to use RawUF8(VText) when accessing this field
         VText: pointer;);
   end;
+  
   {$A+}
 
   /// points to memory structure used for some special BSON storage as variant
@@ -450,6 +456,8 @@ type
   // - see http://docs.mongodb.org/manual/reference/mongodb-extended-json
   TMongoJSONMode = (
     modNoMongo, modMongoStrict, modMongoShell);
+
+  {$A-}
 
   /// data structure used during BSON binary decoding of one BSON element
   // - will be retrieved by FromVariant() or FromNext()
@@ -656,6 +664,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
+  {$A+}
+  
 
 { ************ TBSONWriter for BSON Encoding }
 
@@ -1435,7 +1445,8 @@ begin
   end;
   sciexp := signdig - 1 + exp;
   if (sciexp < -6) or (exp > 0) then
-  begin // scientific format
+  begin
+    // scientific format
     dest^ := AnsiChar(dig^ + ord('0'));
     inc(dig);
     inc(dest);
@@ -2062,7 +2073,7 @@ end;
 const
   BSON_JSON_NEWDATE: string[8] = 'ew Date('; // circumvent Delphi XE4 Win64 bug
 
-{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
+{$ifdef fpc} {$push} {$endif} {$hints off} // avoid hints with CompareMemFixed() inlining
 
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char; var Value: variant;
   EndOfObject: PUTF8Char): boolean;
@@ -2103,7 +2114,8 @@ var
   end;
 
   procedure ReturnInt(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar);
-  {$ifdef HASINLINE} inline;{$endif} // redirection function to circumvent FPC trunk limitation
+  {$ifdef HASINLINE} inline;{$endif}
+  // redirection function to circumvent FPC trunk limitation
   var
     kind: TBSONElementType absolute kindint;
   begin
@@ -2298,8 +2310,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
               else if CompareMemFixed(P + 1, @BSON_JSON_MAXKEY[false][4], 8) then
                 ReturnInt(betMaxKey, P + 9, '}');
             'o':
-              if PInteger(P + 2)^ = PInteger(@BSON_JSON_OBJECTID[false,
-                modMongoStrict][5])^ then
+              if PInteger(P + 2)^ = PInteger(@BSON_JSON_OBJECTID[false, modMongoStrict][5])^ then
                 TryObjectID(P + 6, '}');
             'd':
               if CompareMemSmall(P + 2, @BSON_JSON_DATE[modMongoStrict, false][5], 5) then
@@ -2327,8 +2338,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
     'N':
       if StrCompIL(JSON + 1, @BSON_JSON_NEWDATE[1], 8) = 0 then
         TryDate(JSON + 9, ')')
-      else if StrCompIL(JSON + 1, @BSON_JSON_DECIMAL[false, modMongoShell][2],
-        13) = 0 then
+      else if StrCompIL(JSON + 1, @BSON_JSON_DECIMAL[false, modMongoShell][2], 13) = 0 then
         TryDecimal(JSON + 14, ')');
     'I':
       if StrCompIL(JSON + 1, @BSON_JSON_DATE[modMongoShell, false][2], 7) = 0 then
@@ -2337,7 +2347,8 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
       TryRegExShell(JSON + 1);
   end;
 end;
-{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
+
+{$ifdef fpc} {$pop} {$else} {$hints on} {$endif}
 
 procedure TBSONVariant.Cast(var Dest: TVarData; const Source: TVarData);
 begin
@@ -2908,20 +2919,23 @@ begin // see http://bsonspec.org/#/specification
   Element := bson;
   case Kind of // handle variable-size storage
     betString, betJS, betDeprecatedSymbol:
-      begin  // "\x02" e_name string
+      begin
+        // "\x02" e_name string
         ElementBytes := PInteger(bson)^ + sizeof(integer); // int32 (byte*) "\x00"
         Data.TextLen := PInteger(bson)^ - 1;
         inc(bson, sizeof(integer));
         Data.Text := pointer(bson);
       end;
     betDoc, betArray:
-      begin  // "\x03" e_name document
+      begin
+        // "\x03" e_name document
         ElementBytes := PInteger(bson)^;
         inc(bson, sizeof(integer)); // points to a "e_list #0"
         Data.DocList := bson;
       end;
     betBinary:
-      begin         // "\x05" e_name int32 subtype (byte*)
+      begin
+        // "\x05" e_name int32 subtype (byte*)
         ElementBytes := PInteger(bson)^ + (sizeof(integer) + 1);
         Data.BlobLen := PInteger(bson)^;
         inc(bson, sizeof(integer));
@@ -2930,7 +2944,8 @@ begin // see http://bsonspec.org/#/specification
         Data.Blob := bson;
       end;
     betRegEx:
-      begin          // "\x0B" e_name cstring cstring
+      begin
+        // "\x0B" e_name cstring cstring
         Data.RegEx := Element;
         Data.RegExLen := StrLen(Data.RegEx);
         Data.RegExOptions := Data.RegEx + Data.RegExLen + 1;
@@ -2938,7 +2953,8 @@ begin // see http://bsonspec.org/#/specification
         ElementBytes := Data.RegExLen + Data.RegExOptionsLen + 2;
       end;
     betJSScope:
-      begin       // "\x0F" e_name  int32 string document
+      begin
+        // "\x0F" e_name  int32 string document
         ElementBytes := PInteger(bson)^;
         inc(bson, sizeof(integer));
         Data.JavaScriptLen := PInteger(bson)^ - 1;
@@ -2974,14 +2990,16 @@ begin
         inc(BSON, NameLen + 1);
         FromBSON(BSON);
         if ElementBytes < 0 then
-          raise EBSONException.CreateUTF8('TBSONElement.FromNext: unexpected size % for type %',
+          raise EBSONException.CreateUTF8(
+            'TBSONElement.FromNext: unexpected size % for type %',
             [ElementBytes, ord(Kind)]);
         inc(BSON, ElementBytes);
         inc(Index);
         result := true;
       end;
   else
-    raise EBSONException.CreateUTF8('TBSONElement.FromNext: unexpected type %',
+    raise EBSONException.CreateUTF8(
+      'TBSONElement.FromNext: unexpected type %',
       [ord(Kind)]);
   end;
 end;
