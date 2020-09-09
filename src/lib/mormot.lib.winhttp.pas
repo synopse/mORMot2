@@ -8,9 +8,9 @@ unit mormot.lib.winhttp;
 
    Windows HTTP and WebSockets API Libraries
    - WinINet API Additional Wrappers
+   - http.sys / HTTP Server API low-level direct access
    - winhttp.dll Windows API Definitions
    - websocket.dll Windows API Definitions
-   - http.sys / HTTP API low-level direct access
 
   *****************************************************************************
 
@@ -20,7 +20,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef USEWININET}
+{$ifdef USEWININET} // compile as a void unit if USEWININET is not defined
 
 uses
   sysutils,
@@ -42,7 +42,7 @@ function SysErrorMessageWinInet(error: integer): string;
 procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
 
 
-{ ************  http.sys / HTTP API low-level direct access }
+{ ************  http.sys / HTTP Server API low-level direct access }
 
 {$MINENUMSIZE 4}
 {$A+}
@@ -1544,13 +1544,13 @@ function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
 
 implementation
 
-{$ifdef USEWININET}
+{$ifdef USEWININET} // compile as a void unit if USEWININET is not defined
 
 uses
   mormot.net.http; // shared HTTP constants and functions
 
 
-{ ************  http.sys / HTTP API low-level direct access }
+{ ************  http.sys / HTTP Server API low-level direct access }
 
 function RegURL(aRoot, aPort: RawUTF8; Https: boolean; aDomainName: RawUTF8): SynUnicode;
 const

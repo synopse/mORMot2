@@ -61,7 +61,7 @@ type
   /// the error codes returned by TNetSocket wrapper
   TNetResult = (
     nrOK, nrRetry, nrNoSocket, nrNotFound, nrNotImplemented, nrClosed,
-    nrFatalError, nrUnknownError);
+    nrFatalError, nrUnknownError, nrTooManyConnections);
 
   {$M+}
   /// exception class raise by this unit
@@ -168,7 +168,7 @@ var
 
 /// returns the trimmed text of a network result
 // - e.g. ToText(nrNotFound)='NotFound'
-function ToText(res: TNetResult): PShortString;
+function ToText(res: TNetResult): PShortString; overload;
 
 
 
@@ -231,8 +231,6 @@ type
   protected
     fCount: integer;
   public
-    /// initialize the instance
-    constructor Create; virtual;
     /// track status modifications on one specified TSocket
     // - you can specify which events are monitored - pseError and pseClosed
     // will always be notified
@@ -263,6 +261,8 @@ type
     // TPollSocketEpoll instance under Linux, or TPollSocketPoll on BSD
     // - just a wrapper around PollSocketClass.Create
     class function New: TPollSocketAbstract;
+    /// initialize the polling (do nothing by default - but can be overriden)
+    constructor Create; virtual;
     /// stop status modifications tracking on one specified TSocket
     // - the socket should have been monitored by a previous call to Subscribe()
     // - on success, returns true and fill tag with the associated opaque value
@@ -310,7 +310,7 @@ type
     // low "ulimit -H -n" value, you may add the following line in your
     // /etc/limits.conf or /etc/security/limits.conf file:
     // $ * hard nofile 65535
-    constructor Create; override;
+    constructor Create(aPollClass: TPollSocketClass = nil);
     /// finalize the sockets polling, and release all used memory
     destructor Destroy; override;
     /// track modifications on one specified TSocket and tag
@@ -698,7 +698,10 @@ begin
     result := nrOK
   else if {$ifdef MSWINDOWS} (err <> WSAETIMEDOUT) and (err <> WSAEWOULDBLOCK) and {$endif}
           (err <> WSATRY_AGAIN) and (err <> WSAEINTR) and (err <> AnotherNonFatal) then
-    result := nrFatalError
+    if err = WSAEMFILE then
+      result := nrTooManyConnections
+    else
+      result := nrFatalError
   else
     result := nrRetry;
 end;
@@ -743,9 +746,10 @@ begin
 end;
 
 const
-  _NR: array[TNetResult] of string[15] = (
+  // we don't use RTTI to avoid linking mormot.core.rtti.pas
+  _NR: array[TNetResult] of string[18] = (
     'OK', 'Retry', 'NoSocket', 'NotFound', 'NotImplemented', 'Closed',
-    'FatalError', 'UnknownError');
+    'FatalError', 'UnknownError','TooManyConnections');
 
 function ToText(res: TNetResult): PShortString;
 begin
@@ -1036,7 +1040,7 @@ begin
     result := nrNoSocket
   else
   begin
-    len := mormot.net.sock.send(TSocket(@self), Buf, len, 0);
+    len := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
     if len < 0 then
       result := NetLastError
     else
@@ -1127,14 +1131,6 @@ end;
 
 { ******************** Efficient Multiple Sockets Polling }
 
-{ TPollAbstract }
-
-constructor TPollAbstract.Create;
-begin
-  // nothing to do
-end;
-
-
 { TPollSocketAbstract }
 
 class function TPollSocketAbstract.New: TPollSocketAbstract;
@@ -1142,14 +1138,23 @@ begin
   result := PollSocketClass.Create;
 end;
 
+constructor TPollSocketAbstract.Create;
+begin
+  // do nothing by default
+end;
+
 
 { TPollSockets }
 
-constructor TPollSockets.Create;
+constructor TPollSockets.Create(aPollClass: TPollSocketClass);
 begin
   inherited Create;
   InitializeCriticalSection(fPendingLock);
   InitializeCriticalSection(fPollLock);
+  if aPollClass = nil then
+    fPollClass := PollSocketClass
+  else
+    fPollClass := aPollClass;
   {$ifndef MSWINDOWS}
   SetFileOpenLimit(GetFileOpenLimit(true)); // set soft limit to hard value
   {$endif MSWINDOWS}

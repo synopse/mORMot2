@@ -40,6 +40,7 @@ uses
   mormot.lib.curl          in '..\src\lib\mormot.lib.curl.pas',
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
+  mormot.net.asynch        in '..\src\net\mormot.net.asynch.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
   mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
   mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',
