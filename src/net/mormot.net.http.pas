@@ -23,9 +23,9 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.net.sock,
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
-  mormot.core.text;
+  mormot.core.text,
+  mormot.net.sock;
 
 
 { ******************** Shared HTTP Constants and Functions }
@@ -128,6 +128,12 @@ const
 // - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 // - mORMot.StatusCodeToErrorMsg() will call this function
 function StatusCodeToReason(Code: cardinal): RawUTF8;
+
+/// compute the 'Authorization: Bearer ####' HTTP header of a given token value
+function AuthorizationBearer(const AuthToken: RawUTF8): RawUTF8;
+
+/// will remove most usual HTTP headers which are to be recomputed on sending
+function PurgeHeaders(P: PUTF8Char): RawUTF8;
 
 
 {$ifndef NOXPOWEREDNAME}
@@ -259,9 +265,6 @@ type
       aCompressMinSize: integer = 1024): boolean;
   end;
 
-
-/// compute the 'Authorization: Bearer ####' HTTP header of a given token value
-function AuthorizationBearer(const AuthToken: RawUTF8): RawUTF8;
 
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
@@ -412,6 +415,36 @@ begin
     result := 'Authorization: Bearer ' + AuthToken;
 end;
 
+function PurgeHeaders(P: PUTF8Char): RawUTF8;
+var
+  tmp: TTextWriterStackBuffer;
+  next: PUTF8Char;
+  W: TBaseWriter;
+begin
+  result := '';
+  W := nil;
+  try
+    while P <> nil do
+    begin
+      next := GotoNextLine(P);
+      if IdemPCharArray(P, ['CONTENT-', 'CONNECTION:', 'KEEP-ALIVE:', 'TRANSFER-',
+         'X-POWERED', 'USER-AGENT', 'REMOTEIP:', 'HOST:', 'ACCEPT:']) < 0 then
+      begin
+        if W = nil then
+          W := TBaseWriter.CreateOwnedStream(tmp);
+        if next = nil then
+          W.AddNoJSONEscape(P)
+        else
+          W.AddNoJSONEscape(P, next - P);
+      end;
+      P := next;
+    end;
+    if W <> nil then
+      W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
 
 function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
   aFunction: THttpSocketCompress; var aAcceptEncoding: RawUTF8;

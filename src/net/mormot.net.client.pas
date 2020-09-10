@@ -10,6 +10,7 @@ unit mormot.net.client;
    - THttpClientSocket Implementing HTTP client over plain sockets
    - THttpRequest Abstract HTTP client class
    - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP
+   - Cached HTTP Connection to a Remote Server
 
   *****************************************************************************
 
@@ -26,14 +27,16 @@ uses
   mormot.core.os,
   mormot.net.sock,
   mormot.net.http,
-  {$ifdef USEWININET}
+  {$ifdef USEWININET}  // as set in mormot.defines.inc
   mormot.lib.winhttp,
   {$endif USEWININET}
-  {$ifdef USELIBCURL}
+  {$ifdef USELIBCURL}  // as set in mormot.defines.inc
   mormot.lib.curl,
   {$endif USELIBCURL}
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.data,
+  mormot.core.json; // TSynDictionary for THttpRequestCached
 
 
 
@@ -160,8 +163,8 @@ type
     procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); virtual; abstract;
     procedure InternalSendRequest(const aMethod: RawUTF8; const aData:
       RawByteString); virtual; abstract;
-    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
-      RawUTF8; var Data: RawByteString): integer; virtual; abstract;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
+      var Data: RawByteString): integer; virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
     procedure InternalAddHeader(const hdr: RawUTF8); virtual; abstract;
   public
@@ -573,6 +576,66 @@ type
   end;
 
 {$endif USELIBCURL}
+
+
+{ ************** Cached HTTP Connection to a Remote Server }
+
+type
+  /// in-memory storage of one THttpRequestCached entry
+  THttpRequestCache = record
+    Tag: RawUTF8;
+    Content: RawByteString;
+  end;
+  /// in-memory storage of all THttpRequestCached entries
+  THttpRequestCacheDynArray = array of THttpRequestCache;
+
+  /// handles cached HTTP connection to a remote server
+  // - use in-memory cached content when HTTP_NOTMODIFIED (304) is returned
+  // for an already known ETAG header value
+  THttpRequestCached = class(TSynPersistent)
+  protected
+    fURI: TURI;
+    fHttp: THttpRequest; // either fHttp or fSocket is used
+    fSocket: THttpClientSocket;
+    fKeepAlive: integer;
+    fTokenHeader: RawUTF8;
+    fCache: TSynDictionary;
+  public
+    /// initialize the cache for a given server
+    // - once set, you can change the request URI using the Address property
+    // - aKeepAliveSeconds = 0 will force "Connection: Close" HTTP/1.0 requests
+    // - an internal cache will be maintained, and entries will be flushed after
+    // aTimeoutSeconds - i.e. 15 minutes per default - setting 0 will disable
+    // the client-side cache content
+    // - aToken is an optional token which will be transmitted as HTTP header:
+    // $ Authorization: Bearer <aToken>
+    // - TWinHttp will be used by default under Windows, unless you specify
+    // another class
+    constructor Create(const aURI: RawUTF8; aKeepAliveSeconds: integer = 30;
+      aTimeoutSeconds: integer = 15*60; const aToken: RawUTF8 = '';
+      aHttpClass: THttpRequestClass = nil); reintroduce;
+    /// finalize the current connnection and flush its in-memory cache
+    // - you may use LoadFromURI() to connect to a new server
+    procedure Clear;
+    /// connect to a new server
+    // - aToken is an optional token which will be transmitted as HTTP header:
+    // $ Authorization: Bearer <aToken>
+    // - TWinHttp will be used by default under Windows, unless you specify
+    // another class
+    function LoadFromURI(const aURI: RawUTF8; const aToken: RawUTF8 = '';
+      aHttpClass: THttpRequestClass = nil): boolean;
+    /// finalize the cache
+    destructor Destroy; override;
+    /// retrieve a resource from the server, or internal cache
+    // - aModified^ = true if server returned a HTTP_SUCCESS (200) with some new
+    // content, or aModified^ = false if HTTP_NOTMODIFIED (304) was returned
+    function Get(const aAddress: RawUTF8; aModified: PBoolean = nil;
+      aStatus: PInteger = nil): RawByteString;
+    /// erase one resource from internal cache
+    function Flush(const aAddress: RawUTF8): boolean;
+    /// read-only access to the connected server
+    property URI: TURI read fURI;
+  end;
 
 
 implementation
@@ -1701,8 +1764,128 @@ begin
   Finalize(fOut);
 end;
 
-
 {$endif USELIBCURL}
+
+
+{ ************** Cached HTTP Connection to a Remote Server }
+
+{ THttpRequestCached }
+
+constructor THttpRequestCached.Create(const aURI: RawUTF8; aKeepAliveSeconds,
+  aTimeoutSeconds: integer; const aToken: RawUTF8; aHttpClass: THttpRequestClass);
+begin
+  inherited Create;
+  fKeepAlive := aKeepAliveSeconds * 1000;
+  if aTimeoutSeconds > 0 then // 0 means no cache
+    fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+      TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
+  if not LoadFromURI(aURI, aToken, aHttpClass) then
+    raise ESynException.CreateUTF8('%.Create: invalid aURI=%', [self, aURI]);
+end;
+
+procedure THttpRequestCached.Clear;
+begin
+  FreeAndNil(fHttp); // either fHttp or fSocket is used
+  FreeAndNil(fSocket);
+  if fCache <> nil then
+    fCache.DeleteAll;
+  fURI.Clear;
+  fTokenHeader := '';
+end;
+
+destructor THttpRequestCached.Destroy;
+begin
+  fCache.Free;
+  fHttp.Free;
+  fSocket.Free;
+  inherited Destroy;
+end;
+
+function THttpRequestCached.Get(const aAddress: RawUTF8; aModified: PBoolean;
+  aStatus: PInteger): RawByteString;
+var
+  cache: THttpRequestCache;
+  headin, headout: RawUTF8;
+  status: integer;
+  modified: boolean;
+begin
+  result := '';
+  if (fHttp = nil) and (fSocket = nil) then // either fHttp or fSocket is used
+    exit;
+  if (fCache <> nil) and fCache.FindAndCopy(aAddress, cache) then
+    FormatUTF8('If-None-Match: %', [cache.Tag], headin);
+  if fTokenHeader <> '' then
+  begin
+    if {%H-}headin <> '' then
+      headin := headin + #13#10;
+    headin := headin + fTokenHeader;
+  end;
+  if fSocket <> nil then
+  begin
+    status := fSocket.Get(aAddress, fKeepAlive, headin);
+    result := fSocket.Content;
+  end
+  else
+    status := fHttp.Request(aAddress, 'GET', fKeepAlive, headin, '', '', headout, result);
+  modified := true;
+  case status of
+    HTTP_SUCCESS:
+      if fCache <> nil then
+      begin
+        if fHttp <> nil then
+          FindNameValue(headout{%H-}, 'ETAG:', cache.Tag)
+        else
+          cache.Tag := fSocket.HeaderGetValue('ETAG');
+        if cache.Tag <> '' then
+        begin
+          cache.Content := result;
+          fCache.AddOrUpdate(aAddress, cache);
+        end;
+      end;
+    HTTP_NOTMODIFIED:
+      begin
+        result := cache.Content;
+        modified := false;
+      end;
+  end;
+  if aModified <> nil then
+    aModified^ := modified;
+  if aStatus <> nil then
+    aStatus^ := status;
+end;
+
+function THttpRequestCached.LoadFromURI(const aURI, aToken: RawUTF8;
+  aHttpClass: THttpRequestClass): boolean;
+begin
+  result := false;
+  if (self = nil) or (fHttp <> nil) or (fSocket <> nil) or not fURI.From(aURI) then
+    exit;
+  fTokenHeader := AuthorizationBearer(aToken);
+  if aHttpClass = nil then
+  begin
+    {$ifdef USEWININET}
+    aHttpClass := TWinHTTP;
+    {$else}
+    {$ifdef USELIBCURL}
+    if fURI.Https then
+      aHttpClass := TCurlHTTP;
+    {$endif USELIBCURL}
+    {$endif USEWININET}
+  end;
+  if aHttpClass = nil then
+    fSocket := THttpClientSocket.Open(fURI.Server, fURI.Port)
+  else
+    fHttp := aHttpClass.Create(fURI.Server, fURI.Port, fURI.Https);
+  result := true;
+end;
+
+function THttpRequestCached.Flush(const aAddress: RawUTF8): boolean;
+begin
+  if fCache <> nil then
+    result := fCache.Delete(aAddress) >= 0
+  else
+    result := true;
+end;
 
 initialization
 
