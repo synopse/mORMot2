@@ -159,8 +159,8 @@ type
     /// a 31-bit sequential number identifying this instance on the server
     property RequestID: integer read fRequestID;
     /// the ID of the connection which called this execution context
-    // - e.g. SynCrtSock's TWebSocketProcess.NotifyCallback method would use
-    // this property to specify the client connection to be notified
+    // - e.g. mormot.net.websocket's TWebSocketProcess.NotifyCallback method
+    // would use this property to specify the client connection to be notified
     // - is set as an Int64 to match http.sys ID type, but will be an
     // increasing 31-bit integer sequence for (web)socket-based servers
     property ConnectionID: THttpServerConnectionID read fConnectionID;
@@ -189,7 +189,7 @@ type
 
   /// abstract class to implement a server thread
   // - do not use this class, but rather the THttpServer, THttpApiServer
-  // or TAsynchFrameServer (as defined in SynBidirSock)
+  // or TWebSocketServer (as defined in mormot.net.websock)
   TServerGeneric = class(TSynThread)
   protected
     fProcessName: RawUTF8;

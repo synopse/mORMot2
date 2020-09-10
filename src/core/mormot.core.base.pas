@@ -3130,7 +3130,8 @@ const
 
   /// HTTP header name for the authorization token, in upper case
   // - could be used e.g. with IdemPChar() to retrieve a JWT value
-  // - will detect header computed e.g. by SynCrtSock.AuthorizationBearer()
+  // - will detect header computed e.g. by motmot.net.http's
+  // AuthorizationBearer()
   HEADER_BEARER_UPPER = 'AUTHORIZATION: BEARER ';
 
   /// MIME content type used for JSON communication (as used by the Microsoft

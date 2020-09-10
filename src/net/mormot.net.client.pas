@@ -70,8 +70,8 @@ type
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     // - retry is false by caller, and will be recursively called with true to retry once
-    function Request(const url, method: RawUTF8; KeepAlive: cardinal; const
-      header: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
+    function Request(const url, method: RawUTF8; KeepAlive: cardinal;
+      const header: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
       retry: boolean): integer; virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
@@ -83,10 +83,12 @@ type
     function GetAuth(const url, AuthToken: RawUTF8; KeepAlive: cardinal = 0): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
     // header is read from server: Content is always '', but Headers are set
-    function Head(const url: RawUTF8; KeepAlive: cardinal = 0; const header: RawUTF8 = ''): integer;
+    function Head(const url: RawUTF8; KeepAlive: cardinal = 0;
+      const header: RawUTF8 = ''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
-    function Post(const url: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
-      KeepAlive: cardinal = 0; const header: RawUTF8 = ''): integer;
+    function Post(const url: RawUTF8; const Data: RawByteString;
+      const DataType: RawUTF8; KeepAlive: cardinal = 0;
+      const header: RawUTF8 = ''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Put(const url: RawUTF8; const Data: RawByteString;
       const DataType: RawUTF8; KeepAlive: cardinal = 0;
@@ -105,7 +107,7 @@ type
 
   /// class-reference type (metaclass) of a HTTP client socket access
   // - may be either THttpClientSocket or THttpClientWebSockets (from
-  // SynBidirSock unit)
+  // mormot.net.websock unit)
   THttpClientSocketClass = class of THttpClientSocket;
 
 
@@ -118,7 +120,7 @@ type
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
-  // the actual SynCrtSock's THttpRequest implementation class
+  // the actual mormot.net.http's THttpRequest implementation class
   THttpRequestExtendedOptions = record
     /// let HTTPS be less paranoid about SSL certificates
     // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP

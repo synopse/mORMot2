@@ -398,11 +398,11 @@ type
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TNetAddr;
     fSecure: INetTLS;
-    procedure SetKeepAlive(aKeepAlive: boolean);
-    procedure SetLinger(aLinger: Integer);
-    procedure SetReceiveTimeout(aReceiveTimeout: Integer);
-    procedure SetSendTimeout(aSendTimeout: Integer);
-    procedure SetTCPNoDelay(aTCPNoDelay: boolean);
+    procedure SetKeepAlive(aKeepAlive: boolean); virtual;
+    procedure SetLinger(aLinger: Integer); virtual;
+    procedure SetReceiveTimeout(aReceiveTimeout: Integer); virtual;
+    procedure SetSendTimeout(aSendTimeout: Integer); virtual;
+    procedure SetTCPNoDelay(aTCPNoDelay: boolean); virtual;
   public
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead

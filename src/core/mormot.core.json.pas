@@ -5512,11 +5512,11 @@ noesc:
       JSON_ESCAPE_ENDINGZERO:
         exit; // #0
       JSON_ESCAPE_UNICODEHEX:
-      begin // characters below ' ', #7 e.g. -> // 'u0007'
-        PCardinal(B + 1)^ := ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
-        inc(B, 4);
-        PWord(B + 1)^ := TwoDigitsHexWB[PByteArray(P)[i]];
-      end;
+        begin // characters below ' ', #7 e.g. -> // 'u0007'
+          PCardinal(B + 1)^ := ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
+          inc(B, 4);
+          PWord(B + 1)^ := TwoDigitsHexWB[PByteArray(P)[i]];
+        end;
     else // escaped as \ + b,t,n,f,r,\,"
       PWord(B + 1)^ := (integer(tab[PByteArray(P)[i]]) shl 8) or ord('\');
     end;
@@ -5532,7 +5532,7 @@ begin
     AddJSONEscapeW(pointer(s), Length(s));
     {$else}
     AddAnyAnsiString(s, twJSONEscape, 0);
-    {$endif}
+    {$endif UNICODE}
 end;
 
 procedure TTextWriter.AddJSONEscapeAnsiString(const s: AnsiString);

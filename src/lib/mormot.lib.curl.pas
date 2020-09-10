@@ -471,7 +471,7 @@ function CurlIsAvailable: boolean;
 // curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
 // curl.easy_setopt(curlHandle,coFile,@curlRespBody);
 // where curlRespBody should be a generic AnsiString/RawByteString, i.e.
-// in practice a SockString or a RawByteString
+// in practice a RawUTF8 or a RawByteString
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
 
