@@ -1544,8 +1544,8 @@ function _Arr(const Items: array of const;
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names:
 // ! aVariant := _Json('{id:10,doc:{name:"John",birthyear:1972}}');
-// - if the SynMongoDB unit is used in the application, the MongoDB Shell
-// syntax will also be recognized to create TBSONVariant, like
+// - if the mormot.db.nosql.bson unit is used in the application, the MongoDB
+// Shell syntax will also be recognized to create TBSONVariant, like
 // ! new Date()   ObjectId()   MinKey   MaxKey  /<jRegex>/<jOptions>
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
 // - by default, every internal value will be copied, so access of nested
@@ -1562,7 +1562,7 @@ function _Json(const JSON: RawUTF8;
 // i.e. every Args[] will be inserted for each % and Params[] for each ?,
 // with proper JSON escaping of string values, and writing nested _Obj() /
 // _Arr() instances as expected JSON objects / arrays
-// - typical use (in the context of SynMongoDB unit) could be:
+// - typical use (in the context of mormot.db.nosql.bson unit) could be:
 // ! aVariant := _JSONFmt('{%:{$in:[?,?]}}',['type'],['food','snack']);
 // ! aVariant := _JSONFmt('{type:{$in:?}}',[],[_Arr(['food','snack'])]);
 // ! // which are the same as:

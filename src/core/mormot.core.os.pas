@@ -9,7 +9,7 @@ unit mormot.core.os;
   Cross-platform functions shared by all framework units
   - Gather Operating System Information
   - Operating System Specific Types (e.g. TWinRegistry)
-  - Unicode, Time, File, Console process
+  - Unicode, Time, File, Console, Library process
   - Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
   - TSynLocker/TSynLocked and Low-Level Threading Features
 
@@ -29,7 +29,7 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  windows, // needed here e.g. for redefinition of standard types
+  Windows, // needed here e.g. for redefinition of standard types
   {$endif MSWINDOWS}
   classes,
   contnrs,
@@ -109,7 +109,7 @@ const
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
 
-  /// the target Operating System used for compilation, as text
+  /// the target Operating System used for compilation, as short text
   OS_TEXT = {$ifdef MSWINDOWS}'Win'{$else}{$ifdef DARWIN}'OSX'{$else}
   {$ifdef BSD}'BSD'{$else}{$ifdef ANDROID}'Android'{$else}{$ifdef LINUX}'Linux'{$else}'Posix'
   {$endif}{$endif}{$endif}{$endif}{$endif};
@@ -452,9 +452,11 @@ type
       closefirst: boolean = false): boolean;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
-    /// low-level read a string from the Windows Registry after ReadOpen()
+    /// low-level read a UTF-8 string from the Windows Registry after ReadOpen()
     // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
     // (return the first value of the multi-list)
+    // - we don't use string here since it would induce a dependency to
+    // mormot.core.unicode
     function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUTF8;
     /// low-level read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
@@ -556,6 +558,21 @@ var
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
 
+/// this global procedure should be called from each thread needing to use OLE
+// - it is called e.g. by TOleDBConnection.Create when an OleDb connection
+// is instantiated for a new thread
+// - every call of CoInit shall be followed by a call to CoUninit
+// - implementation will maintain some global counting, to call the CoInitialize
+// API only once per thread
+// - only made public for user convenience, e.g. when using custom COM objects
+procedure CoInit;
+
+/// this global procedure should be called at thread termination
+// - it is called e.g. by TOleDBConnection.Destroy, when thread associated
+// to an OleDb connection is terminated
+// - every call of CoInit shall be followed by a call to CoUninit
+// - only made public for user convenience, e.g. when using custom COM objects
+procedure CoUninit;
 
 /// retrieves the current executable module handle, i.e.  its memory load address
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -583,6 +600,9 @@ function GetEnvironmentStringsW: PWideChar; stdcall;
 
 /// redefined in mormot.core.os to avoid dependency to Windows
 function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
+
+/// expand any embedded environment variables, i.e %windir%
+function ExpandEnvVars(const aStr: string): string;
 
 /// try to enter a Critical Section (Lock)
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -712,7 +732,7 @@ var
 {$endif MSWINDOWS}
 
 
-{ ****************** Unicode, Time, File, Console process }
+{ ****************** Unicode, Time, File, Console, Library process }
 
 {$ifdef MSWINDOWS}
 
@@ -809,13 +829,18 @@ procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 // - returns the curent system code page (default WinAnsi)
 function Unicode_CodePage: integer;
 
+/// compatibility function, wrapping Win32 API function
+// - returns the current main Window handle on Windows, or 0 on POSIX/Linux
+function GetDesktopWindow: PtrInt;
+  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
 /// compatibility function, wrapping CompareStringW() Win32 API text comparison
 // - returns 1 if PW1>PW2, 2 if PW1=PW2, 3 if PW1<PW2 - so substract 2 to have
 // -1,0,1 as regular StrCompW/StrICompW comparison function result
 // - will compute StrLen(PW1/PW2) if L1 or L2 < 0
 // - somewhat slow by using two temporary UnicodeString on POSIX - but seldom
-// called, unless our proprietary WIN32CASE collation is used in SynSQLite3
-function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
+// called, unless our proprietary WIN32CASE collation is used in mormot.db.raw.sqlite3
+function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
 
 /// compatibility function, wrapping MultiByteToWideChar() Win32 API call
 // - returns the number of WideChar written into W^ destination buffer
@@ -972,7 +997,10 @@ function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int
 // by most Linux file systems, so the oldest timestamp available is returned
 // as failover on such systems (probably the latest file metadata writing)
 function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
-  LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+  LastWriteAccess, FileCreateDateTime: Int64): boolean;
+
+/// copy one file to another, similar to the Windows API
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
 
 /// conversion of Windows OEM charset into a UTF-16 encoded string
 function OemToUnicode(const OEM: RawByteString): SynUnicode;
@@ -981,7 +1009,20 @@ function OemToUnicode(const OEM: RawByteString): SynUnicode;
 // - as used e.g. by mormot.core.zip for non UTF-8 file names
 function OemToFileName(const OEM: RawByteString): TFileName;
 
+/// prompt the user for an error message
+// - in practice, text encoding is expected to be plain ASCII 
+// - on Windows, will call MessageBoxA()
+// - on POSIX, will use Writeln(StdErr)
+procedure DisplayFatalError(const title, msg: RawUTF8);
+
 const
+  /// operating-system dependent Line Feed characters
+  {$ifdef MSWINDOWS}
+  CRLF = #13#10;
+  {$else}
+  CRLF = #10;
+  {$endif MSWINDOWS}
+
   /// operating-system dependent wildchar to match all files in a folder
   {$ifdef MSWINDOWS}
   FILES_ALL = '*.*';
@@ -1274,7 +1315,7 @@ function ConsoleReadBody: RawByteString;
 {$ifdef MSWINDOWS}
 
 /// low-level access to the keyboard state of a given key
-function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
+function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
 {$endif MSWINDOWS}
 
@@ -1288,6 +1329,35 @@ var
   // - may be overriden when console is redirected
   // - is initialized when TextColor() is called
   StdOut: THandle;
+
+
+type
+  /// cross-platform and cross-compiler raw access to a loaded library handle
+  TSynLibraryHandle = {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
+
+  /// encapsulate cross-platform loading of library files
+  // - this generic class can be used for any external library (.dll/.so)
+  TSynLibrary = class
+  protected
+    fHandle: TSynLibraryHandle;
+    fLibraryPath: TFileName;
+  public
+    /// cross-platform resolution of a function entry in this library
+    // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
+    function GetProc(ProcName: PChar; Entry: PPointer;
+      RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
+    /// cross-platform call to FreeLibrary() + set fHandle := 0
+    procedure FreeLib;
+    /// same as SafeLoadLibrary() but setting fLibraryPath and cwd on Windows
+    function TryLoadLibrary(const aLibrary: array of TFileName;
+      aRaiseExceptionOnFailure: ExceptionClass): boolean; virtual;
+    /// release associated memory and linked library
+    destructor Destroy; override;
+    /// the associated library handle
+    property Handle: TSynLibraryHandle read fHandle write fHandle;
+    /// the loaded library path
+    property LibraryPath: TFileName read fLibraryPath;
+  end;
 
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
@@ -1457,7 +1527,7 @@ type
     /// safe locked access to a boolean value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked, LockedInt64, LockedPointer and LockedUTF8 array properties
-    // - value will be stored internally as a varBoolean variant
+    // - value will be stored internally as a varboolean variant
     // - returns nil if the Index is out of range, or does not store a boolean
     property LockedBool[Index: integer]: boolean read GetBool write SetBool;
     /// safe locked access to a pointer/TObject value
@@ -1730,7 +1800,7 @@ begin
 end;
 
 
-{ ****************** Unicode, Time, File, Console process }
+{ ****************** Unicode, Time, File, Console, Library process }
 
 procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection);
 begin
@@ -1778,7 +1848,7 @@ begin
   begin
     result := SysErrorMessage(Code);
     if result = '' then
-      if Code=ERROR_WINHTTP_CANNOT_CONNECT then
+      if Code = ERROR_WINHTTP_CANNOT_CONNECT then
         result := 'cannot connect'
       else if Code = ERROR_WINHTTP_TIMEOUT then
         result := 'timeout'
@@ -1808,7 +1878,7 @@ begin
   result := GetACP;
 end;
 
-function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: Boolean): integer;
+function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
 const
   _CASEFLAG: array[boolean] of DWORD = (0, NORM_IGNORECASE);
 begin
@@ -2313,6 +2383,83 @@ end;
 
 {$I+}
 
+
+{ TSynLibrary }
+
+function TSynLibrary.GetProc(ProcName: PChar; Entry: PPointer;
+  RaiseExceptionOnFailure: ExceptionClass): boolean;
+begin
+  if (Entry = nil) or (Handle = 0) then
+    result := false // avoid GPF
+  else
+  begin
+    Entry^ := GetProcAddress(Handle, ProcName);
+    result := Entry^ <> nil;
+  end;
+  if (RaiseExceptionOnFailure <> nil) and not result then
+  begin
+    FreeLib;
+    raise RaiseExceptionOnFailure.CreateFmt('Invalid %s: missing %s',
+      [LibraryPath, ProcName]);
+  end;
+end;
+
+procedure TSynLibrary.FreeLib;
+begin
+  if fHandle = 0 then
+    exit; // nothing to free
+  FreeLibrary(fHandle);
+  fHandle := 0;
+end;
+
+function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
+  aRaiseExceptionOnFailure: ExceptionClass): boolean;
+var
+  i: integer;
+  lib, libs {$ifdef MSWINDOWS} , nwd, cwd {$endif}: TFileName;
+begin
+  for i := 0 to high(aLibrary) do
+  begin
+    lib := aLibrary[i];
+    if lib = '' then
+      continue;
+    {$ifdef MSWINDOWS}
+    nwd := ExtractFilePath(lib);
+    if nwd <> '' then
+    begin
+      cwd := GetCurrentDir;
+      SetCurrentDir(nwd); // search for dll dependencies in the same folder
+    end;
+    fHandle := SafeLoadLibrary(lib);
+    if nwd <> '' then
+      SetCurrentDir(cwd{%H-});
+    {$else}
+    fHandle := SafeLoadLibrary(lib);
+    {$endif MSWINDOWS}
+    if fHandle <> 0 then
+    begin
+      fLibraryPath := lib;
+      result := true;
+      exit;
+    end;
+    if {%H-}libs = '' then
+      libs := lib
+    else
+      libs := libs + ', ' + lib;
+  end;
+  result := false;
+  if aRaiseExceptionOnFailure <> nil then
+    raise aRaiseExceptionOnFailure.CreateFmt(
+      '%s.LoadLibray failed - searched in %s', [ClassName, libs]);
+end;
+
+destructor TSynLibrary.Destroy;
+begin
+  FreeLib;
+  inherited Destroy;
+end;
+
+
 { TFileVersion }
 
 function TFileVersion.Version32: integer;
@@ -2628,7 +2775,7 @@ begin
   try
     EnterCriticalSection(fSection);
     fLocked := true;
-    if not VariantToBoolean(variant(Padding[Index]), result) then
+    if not VariantToboolean(variant(Padding[Index]), result) then
       result := false;
   finally
     fLocked := false;
@@ -2831,16 +2978,7 @@ begin
   ExeVersion.Version.Free;
   DeleteCriticalSection(AutoSlotsLock);
   DeleteCriticalSection(GlobalCriticalSection);
-  {$ifdef MSWINDOWS}
-  if CryptoAPI.Handle <> 0 then
-    FreeLibrary(CryptoAPI.Handle);
-  {$else}
-  if pthread <> nil then
-    dlclose(pthread);
-  {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
-  sd.Done;
-  {$endif LINUXNOTBSD}
-  {$endif MSWINDOWS}
+  FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
 end;
 
 initialization

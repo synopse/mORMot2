@@ -74,13 +74,37 @@ type
   end;
   {$M-}
 
-  /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
-  // - could be used to create instances using its virtual constructor
-  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
-
-  /// used to determine the exact class type of a TPersistentWithCustomCreateClass
-  // - could be used to create instances using its virtual constructor
-  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
+  /// an abstract ancestor, for implementing a custom TInterfacedObject like class
+  // - by default, will do nothing: no instance would be retrieved by
+  // QueryInterface unless the VirtualQueryInterface protected method is
+  // overriden, and _AddRef/_Release methods would call VirtualAddRef and
+  // VirtualRelease pure abstract methods
+  // - using this class will leverage the signature difference between Delphi
+  // and FPC, among all supported platforms
+  // - the class includes a RefCount integer field
+  TSynInterfacedObject = class(TObject,IUnknown)
+  protected
+    fRefCount: integer;
+    // returns E_NOINTERFACE
+    function VirtualQueryInterface(const IID: TGUID; out Obj): HResult; virtual;
+    // always return 1 for a "non allocated" instance (0 triggers release)
+    function VirtualAddRef: Integer; virtual; abstract;
+    function VirtualRelease: Integer; virtual; abstract;
+    {$ifdef FPC}
+    function QueryInterface(
+      {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+      out Obj): longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function _AddRef: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function _Release: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    {$else}
+    function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
+    function _AddRef: Integer; stdcall;
+    function _Release: Integer; stdcall;
+    {$endif FPC}
+  public
+    /// the associated reference count
+    property RefCount: integer read fRefCount write fRefCount;
+  end;
 
   /// any TCollection used between client and server shall inherit from this class
   // - you should override the GetClass virtual method to provide the
@@ -95,6 +119,14 @@ type
     /// this constructor will call GetClass to initialize the collection
     constructor Create; reintroduce; virtual;
   end;
+
+  /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
+  // - could be used to create instances using its virtual constructor
+  TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
+
+  /// used to determine the exact class type of a TPersistentWithCustomCreateClass
+  // - could be used to create instances using its virtual constructor
+  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
 
   /// class-reference type (metaclass) of a TInterfacedCollection kind
   TInterfacedCollectionClass = class of TInterfacedCollection;
@@ -346,12 +378,6 @@ type
     property IDValue: TID read fID write fID;
   end;
 
-
-
-/// naive symmetric encryption scheme using a 32-bit key
-// - fast, but not very secure, since uses crc32ctab[] content as master cypher
-// key: consider using SynCrypto proven AES-based algorithms instead
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
 
 { ************ TSynPersistentStore with proper Binary Serialization }
@@ -746,7 +772,7 @@ var
 
 type
   /// function prototype to be used for TDynArray Sort and Find method
-  // - common functions exist for base types: see e.g. SortDynArrayBoolean,
+  // - common functions exist for base types: see e.g. SortDynArrayboolean,
   // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
   // SortDynArrayInt64, SortDynArrayQWord, SordDynArraySingle, SortDynArrayDouble,
   // SortDynArrayAnsiString, SortDynArrayAnsiStringI, SortDynArrayUnicodeString,
@@ -772,7 +798,7 @@ const
   /// deprecated TDynArrayKind enumerate mapping
   // - defined only for backward compatible code; use TRttiParserType instead
   djNone = ptNone;
-  djBoolean = ptBoolean;
+  djboolean = ptboolean;
   djByte = ptByte;
   djWord = ptWord;
   djInteger = ptInteger;
@@ -810,7 +836,7 @@ var
   // - e.g. as PT_SORT[CaseInSensitive,ptRawUTF8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
-    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
+    (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
      SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
      SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
      SortDynArrayRawByteString, SortDynArrayAnsiString, SortDynArrayAnsiString,
@@ -820,7 +846,7 @@ var
      SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
      SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
      nil, nil, nil, nil, nil, nil),
-   (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
+   (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
     SortDynArrayRawByteString, SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
@@ -1114,7 +1140,7 @@ type
     // - returns the sorted index of the inserted Item and wasAdded^=true
     // - if the array is not sorted, returns -1 and wasAdded^=false
     // - is just a wrapper around FastLocateSorted+FastAddSorted
-    function FastLocateOrAddSorted(const Item; wasAdded: PBoolean = nil): integer;
+    function FastLocateOrAddSorted(const Item; wasAdded: Pboolean = nil): integer;
     /// delete a sorted element value at the proper place
     // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
     // this method with a FastLocateSorted/FastAddSorted array
@@ -1209,7 +1235,7 @@ type
     procedure SaveToJSON(W: TBaseWriter); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
-    // handling TBooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
+    // handling TbooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
     // TDoubleDynArray, TCurrencyDynArray, TWordDynArray, TByteDynArray,
     // TRawUTF8DynArray, TWinAnsiDynArray, TRawByteStringDynArray,
     // TStringDynArray, TWideStringDynArray, TSynUnicodeDynArray,
@@ -1357,7 +1383,7 @@ type
     property Capacity: PtrInt read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
-    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayBoolean,
+    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayboolean,
     // SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
     // SortDynArrayInt64, SortDynArrayDouble, SortDynArrayAnsiString,
     // SortDynArrayAnsiStringI, SortDynArrayString, SortDynArrayStringI,
@@ -2470,6 +2496,35 @@ begin
   inherited Create(GetClass);
 end;
 
+{ TSynInterfacedObject }
+
+function TSynInterfacedObject._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := VirtualAddRef;
+end;
+
+function TSynInterfacedObject._Release: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := VirtualRelease;
+end;
+
+{$ifdef FPC}
+function TSynInterfacedObject.QueryInterface(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+  out Obj): longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+{$else}
+function TSynInterfacedObject.QueryInterface(const IID: TGUID; out Obj): HResult;
+{$endif FPC}
+begin
+  result := VirtualQueryInterface(IID, Obj);
+end;
+
+function TSynInterfacedObject.VirtualQueryInterface(const IID: TGUID; out Obj): HResult;
+begin
+  result := E_NOINTERFACE;
+end;
+
+
 
 { ************ TSynPersistent* / TSyn*List / TSynLocker classes }
 
@@ -2704,7 +2759,7 @@ end;
 
 { TSynObjectListLocked }
 
-constructor TSynObjectListLocked.Create(AOwnsObjects: Boolean);
+constructor TSynObjectListLocked.Create(AOwnsObjects: boolean);
 begin
   inherited Create(AOwnsObjects);
   fSafe.Init;
@@ -2785,35 +2840,7 @@ end;
 
 
 
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
-var
-  i, len: integer;
-  d: PCardinal;
-  tab: PCrc32tab;
-begin
-  if data = '' then
-    exit; // nothing to cypher
-  {$ifdef FPC}
-  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
-  {$endif}
-  d := @data[1];
-  len := length(data);
-  key := key xor cardinal(len);
-  tab := @crc32ctab;
-  for i := 0 to (len shr 2) - 1 do
-  begin
-    key := key xor tab[0, (cardinal(i) xor key) and 1023];
-    d^ := d^ xor key;
-    inc(d);
-  end;
-  for i := 0 to (len and 3) - 1 do
-    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor tab[0, 17 shl i];
-end;
-
-
-
 { ************ TSynPersistentStore with proper Binary Serialization }
-
 
 { TSynPersistentStore }
 
@@ -6122,7 +6149,7 @@ begin
   fSorted := true; // Delete -> SetCount -> fSorted := false
 end;
 
-function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: PBoolean): integer;
+function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: Pboolean): integer;
 var
   toInsert: boolean;
 begin
@@ -7081,7 +7108,7 @@ begin
         len := 0; // good enough for void values
       varShortInt, varByte:
         len := 1;
-      varSmallint, varWord, varBoolean:
+      varSmallint, varWord, varboolean:
         len := 2;
       varLongWord, varInteger, varSingle:
         len := 4;
@@ -8599,80 +8626,80 @@ begin
   for k := succ(low(k)) to high(k) do
     case k of
       rkInteger, rkEnumeration, rkSet, rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Ord;
-        RTTI_BINARYLOAD[k] := @_BL_Ord;
-        RTTI_COMPARE[false, k] := @_BC_Ord;
-        RTTI_COMPARE[true, k] := @_BC_Ord;
-      end;
-      {$ifdef FPC} rkQWord, {$endif} rkInt64:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_64;
-        RTTI_BINARYLOAD[k] := @_BL_64;
-        RTTI_COMPARE[false, k] := @_BC_64;
-        RTTI_COMPARE[true, k] := @_BC_64;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Ord;
+          RTTI_BINARYLOAD[k] := @_BL_Ord;
+          RTTI_COMPARE[false, k] := @_BC_Ord;
+          RTTI_COMPARE[true, k] := @_BC_Ord;
+        end;
+        {$ifdef FPC} rkQWord, {$endif} rkInt64:
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_64;
+          RTTI_BINARYLOAD[k] := @_BL_64;
+          RTTI_COMPARE[false, k] := @_BC_64;
+          RTTI_COMPARE[true, k] := @_BC_64;
+        end;
       rkFloat:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Float;
-        RTTI_BINARYLOAD[k] := @_BS_Float;
-        RTTI_COMPARE[false, k] := @_BC_Float;
-        RTTI_COMPARE[true, k] := @_BC_Float;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Float;
+          RTTI_BINARYLOAD[k] := @_BS_Float;
+          RTTI_COMPARE[false, k] := @_BC_Float;
+          RTTI_COMPARE[true, k] := @_BC_Float;
+        end;
       {$ifdef HASVARUSTRING} rkUString, {$endif} rkLString:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_String;
-        if k = rkLString then
         begin
-          RTTI_BINARYLOAD[k] := @_BL_LString;
-          RTTI_COMPARE[false, k] := @_BC_PUTF8Char;
-          RTTI_COMPARE[true, k] := @_BCI_PUTF8Char;
-        end
-        {$ifdef HASVARUSTRING}
-        else if k = rkUString then
+          RTTI_BINARYSAVE[k] := @_BS_String;
+          if k = rkLString then
+          begin
+            RTTI_BINARYLOAD[k] := @_BL_LString;
+            RTTI_COMPARE[false, k] := @_BC_PUTF8Char;
+            RTTI_COMPARE[true, k] := @_BCI_PUTF8Char;
+          end
+          {$ifdef HASVARUSTRING}
+          else if k = rkUString then
+          begin
+            RTTI_BINARYLOAD[k] := @_BL_UString;
+            RTTI_COMPARE[false, k] := @_BC_PWideChar;
+            RTTI_COMPARE[true, k] := @_BCI_PWideChar;
+          end;
+          {$endif HASVARUSTRING}
+        end; // rkLStringOld not generated any more
+      rkWString:
         begin
-          RTTI_BINARYLOAD[k] := @_BL_UString;
+          RTTI_BINARYSAVE[k] := @_BS_WString;
+          RTTI_BINARYLOAD[k] := @_BL_WString;
           RTTI_COMPARE[false, k] := @_BC_PWideChar;
           RTTI_COMPARE[true, k] := @_BCI_PWideChar;
         end;
-        {$endif HASVARUSTRING}
-      end; // rkLStringOld not generated any more
-      rkWString:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_WString;
-        RTTI_BINARYLOAD[k] := @_BL_WString;
-        RTTI_COMPARE[false, k] := @_BC_PWideChar;
-        RTTI_COMPARE[true, k] := @_BCI_PWideChar;
-      end;
       {$ifdef FPC} rkObject, {$endif} rkRecord:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Record;
-        RTTI_BINARYLOAD[k] := @_BL_Record;
-        RTTI_COMPARE[false, k] := @_BC_Record;
-        RTTI_COMPARE[true, k] := @_BCI_Record;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Record;
+          RTTI_BINARYLOAD[k] := @_BL_Record;
+          RTTI_COMPARE[false, k] := @_BC_Record;
+          RTTI_COMPARE[true, k] := @_BCI_Record;
+        end;
       rkDynArray:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_DynArray;
-        RTTI_BINARYLOAD[k] := @_BL_DynArray;
-        RTTI_COMPARE[false, k] := @_BC_DynArray;
-        RTTI_COMPARE[true, k] := @_BCI_DynArray;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_DynArray;
+          RTTI_BINARYLOAD[k] := @_BL_DynArray;
+          RTTI_COMPARE[false, k] := @_BC_DynArray;
+          RTTI_COMPARE[true, k] := @_BCI_DynArray;
+        end;
       rkArray:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Array;
-        RTTI_BINARYLOAD[k] := @_BL_Array;
-        RTTI_COMPARE[false, k] := @_BC_Array;
-        RTTI_COMPARE[true, k] := @_BCI_Array;
-      end;
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Array;
+          RTTI_BINARYLOAD[k] := @_BL_Array;
+          RTTI_COMPARE[false, k] := @_BC_Array;
+          RTTI_COMPARE[true, k] := @_BCI_Array;
+        end;
       rkVariant:
-      begin
-        RTTI_BINARYSAVE[k] := @_BS_Variant;
-        RTTI_BINARYLOAD[k] := @_BL_Variant;
-        RTTI_COMPARE[false, k] := @_BC_Variant;
-        RTTI_COMPARE[true, k] := @_BCI_Variant;
-      end;
-      // unsupported types will contain nil
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_Variant;
+          RTTI_BINARYLOAD[k] := @_BL_Variant;
+          RTTI_COMPARE[false, k] := @_BC_Variant;
+          RTTI_COMPARE[true, k] := @_BCI_Variant;
+        end;
+        // unsupported types will contain nil
     end;
   // setup internal function wrappers
   GetDataFromJSON := _GetDataFromJSON;

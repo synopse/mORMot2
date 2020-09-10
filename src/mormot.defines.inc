@@ -82,6 +82,7 @@
 
   {$INLINE ON}
   {$MINENUMSIZE 1}
+  {$PACKRECORDS DEFAULT} // force normal alignment
   {$PACKSET 1}
   {$PACKENUM 1}
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
@@ -294,6 +295,8 @@
   {$ifdef VER140}
   'Delphi 6 is not supported'
   {$endif}
+
+  {$A+} // force normal alignment
 
   {$ifdef UNICODE}
     {$define HASVARUSTRING}

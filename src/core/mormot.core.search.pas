@@ -11,6 +11,7 @@ unit mormot.core.search;
     - GLOB and SOUNDEX Text Search
     - Versatile Expression Search Engine
     - Bloom Filter Probabilistic Index
+    - TDynArray Low-Level Binary Search
 
   *****************************************************************************
 }
@@ -713,6 +714,34 @@ function DeltaExtract(Delta, Old, New: PAnsiChar): TDeltaError; overload;
 function ToText(err: TDeltaError): PShortString; overload;
 
 
+{ ****************** TDynArray Low-Level Binary Search }
+
+/// wrap a simple dynamic array BLOB content as stored by TDynArray.SaveTo
+// - a "simple" dynamic array contains data with no reference count, e.g. byte,
+// word, integer, cardinal, Int64, double or Currency
+// - same as TDynArray.LoadFrom() with no memory allocation nor memory copy: so
+// is much faster than creating a temporary dynamic array to load the data
+// - will return nil if no or invalid data, or a pointer to the data
+// array otherwise, with the items number stored in Count and the individual
+// element size in ElemSize (e.g. 2 for a TWordDynArray)
+function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: PRttiInfo;
+  out Count, ElemSize: PtrInt; NoHash32Check: boolean = false): pointer;
+
+/// wrap an Integer dynamic array BLOB content as stored by TDynArray.SaveTo
+// - same as TDynArray.LoadFrom() with no memory allocation nor memory copy: so
+// is much faster than creating a temporary dynamic array to load the data
+// - will return nil if no or invalid data, or a pointer to the integer
+// array otherwise, with the items number stored in Count
+// - sligtly faster than SimpleDynArrayLoadFrom(Source,TypeInfo(TIntegerDynArray),Count)
+function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
+  NoHash32Check: boolean = false): PIntegerArray;
+
+/// search in a RawUTF8 dynamic array BLOB content as stored by TDynArray.SaveTo
+// - same as search within TDynArray.LoadFrom() with no memory allocation nor
+// memory copy: so is much faster
+// - will return -1 if no match or invalid data, or the matched entry index
+function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
+  Value: PUTF8Char; ValueLen: PtrInt; CaseSensitive: boolean): PtrInt;
 
 
 implementation
@@ -3834,19 +3863,75 @@ begin
 end;
 
 
+{ ****************** TDynArray Low-Level Binary Search }
 
-procedure InitializeUnit;
+function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: PRttiInfo;
+  out Count, ElemSize: PtrInt; NoHash32Check: boolean): pointer;
+var
+  Hash: PCardinalArray absolute Source;
+  iteminfo: PRttiInfo;
 begin
+  result := nil;
+  if (aTypeInfo = nil) or (aTypeInfo^.Kind <> rkDynArray) then
+    exit;
+  iteminfo := aTypeInfo^.DynArrayItemType(ElemSize);
+  if (iteminfo <> nil) or (Source = nil) or
+     (Source[0] <> AnsiChar(ElemSize)) or (Source[1]<>#0) then
+    exit; // invalid type information or Source content
+  inc(Source,2);
+  Count := FromVarUInt32(PByte(Source)); // dynamic array count
+  if (Count <> 0) and
+     (NoHash32Check or (Hash32(@Hash[1], Count * ElemSize) = Hash[0])) then
+    result := @Hash[1]; // returns valid Source content
 end;
 
-procedure FinalizeUnit;
+function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
+  NoHash32Check: boolean): PIntegerArray;
+var
+  Hash: PCardinalArray absolute Source;
 begin
+  result := nil;
+  if (Source = nil) or (Source[0] <> #4) or (Source[1] <> #0) then
+    exit; // invalid Source content
+  inc(Source, 2);
+  Count := FromVarUInt32(PByte(Source)); // dynamic array count
+  if (Count <> 0) and
+     (NoHash32Check or (Hash32(@Hash[1], Count * 4) = Hash[0])) then
+    result := @Hash[1]; // returns valid Source content
+end;
+
+function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
+  Value: PUTF8Char; ValueLen: PtrInt; CaseSensitive: boolean): PtrInt;
+var
+  Count, Len: PtrInt;
+begin
+  if (Value = nil) or (ValueLen = 0) or
+     (Source = nil) or (Source[0] <> AnsiChar(SizeOf(PtrInt)))
+      {$ifndef FPC} or (Source[1] <> AnsiChar(rkLString)){$endif} then
+  begin
+    result := -1;
+    exit; // invalid Source or Value content
+  end;
+  inc(Source, 2);
+  Count := FromVarUInt32(PByte(Source)); // dynamic array count
+  inc(Source, SizeOf(cardinal)); // ignore Hash32 security checksum
+  for result := 0 to Count - 1 do
+  begin
+    Len := FromVarUInt32(PByte(Source));
+    if CaseSensitive then
+    begin
+      if (Len = ValueLen) and CompareMemFixed(Value, Source, Len) then
+        exit;
+    end else
+      if UTF8ILComp(Value, pointer(Source), ValueLen, Len) = 0 then
+        exit;
+   inc(Source, Len);
+  end;
+  result := -1;
 end;
 
 
 initialization
-  InitializeUnit;
 
 finalization
-  FinalizeUnit;
 end.

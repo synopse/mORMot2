@@ -2168,18 +2168,6 @@ function AESFull(const Key; KeySize: cardinal; bIn, bOut: pointer; Len: Integer;
 // - will use unsafe direct AES-ECB chain mode, so is marked as deprecated
 function AESFullKeyOK(const Key; KeySize: cardinal; buff: pointer): boolean; deprecated;
 
-/// direct SHA-256 hash calculation of some data (string-encoded)
-// - result is returned in hexadecimal format
-// - this procedure has a weak password protection: small incoming data
-// is append to some salt, in order to have at least a 256 bytes long hash:
-// such a feature improve security for small passwords, e.g.
-// - note that this algorithm is proprietary, and less secure (and standard)
-// than the PBKDF2 algorithm, so is there only for backward compatibility of
-// existing code: use PBKDF2_HMAC_SHA256 or similar functions for password
-// derivation
-procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
-  deprecated;
-
 /// AES encryption using the TAES format with a supplied SHA-256 password
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 // - will use unsafe direct AES-ECB chain mode and weak direct SHA-256 (HMAC-256
@@ -2210,6 +2198,17 @@ procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream;
   const Password: RawByteString; Encrypt: boolean); overload; deprecated;
 
 {$endif PUREMORMOT2}
+
+/// direct SHA-256 hash calculation of some data (string-encoded)
+// - result is returned in hexadecimal format
+// - this procedure has a weak password protection: small incoming data
+// is append to some salt, in order to have at least a 256 bytes long hash:
+// such a feature improve security for small passwords, e.g.
+// - note that this algorithm is proprietary, and less secure (and standard)
+// than the PBKDF2 algorithm, so it should be considered as deprecated; it
+// is supplied only for backward compatibility of existing code:
+// use PBKDF2_HMAC_SHA256 or similar functions for password derivation
+procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 
 
 implementation
@@ -4551,7 +4550,7 @@ begin
     sha3update;
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, sizeof(SystemInfo));
-    result := sha3.Cypher(fromos); // = XOR entropy using SHA-3 in XOF mode
+    result := sha3.Cypher(fromos); // = XOR OS entropy using SHA-3 in XOF mode
   finally
     sha3.Done;
     FillZero(fromos);
@@ -8199,7 +8198,7 @@ begin
   {$endif ASMX64}
   assert(sizeof(TMD5Buf) = sizeof(TMD5Digest));
   assert(sizeof(TAESContext) = AESContextSize);
-  assert(AESContextSize <= 300); // see synsqlite3.c KEYLENGTH
+  assert(AESContextSize <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
   assert(sizeof(TSHAContext) = SHAContextSize);
   assert(sizeof(TSHA3Context) = SHA3ContextSize);
   assert(1 shl AESBlockShift = sizeof(TAESBlock));

@@ -508,6 +508,43 @@ procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = 
 function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
   const Sep: RawUTF8 = ','): boolean;
 
+/// append the strings in the specified CSV text into a dynamic array of integer
+procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray;
+  Sep: AnsiChar = ',');
+
+/// append the strings in the specified CSV text into a dynamic array of integer
+procedure CSVToInt64DynArray(CSV: PUTF8Char; var Result: TInt64DynArray;
+  Sep: AnsiChar = ','); overload;
+
+/// convert the strings in the specified CSV text into a dynamic array of integer
+function CSVToInt64DynArray(CSV: PUTF8Char; Sep: AnsiChar = ','): TInt64DynArray; overload;
+
+/// return the corresponding CSV text from a dynamic array of 32-bit integer
+// - you can set some custom Prefix and Suffix text
+function IntegerDynArrayToCSV(Values: PIntegerArray; ValuesCount: integer;
+  const Prefix: RawUTF8 = ''; const Suffix: RawUTF8 = '';
+  InlinedValue: boolean = false): RawUTF8; overload;
+
+/// return the corresponding CSV text from a dynamic array of 32-bit integer
+// - you can set some custom Prefix and Suffix text
+function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
+  const Prefix: RawUTF8 = ''; const Suffix: RawUTF8 = '';
+  InlinedValue: boolean = false): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// return the corresponding CSV text from a dynamic array of 64-bit integers
+// - you can set some custom Prefix and Suffix text
+function Int64DynArrayToCSV(Values: PInt64Array; ValuesCount: integer;
+  const Prefix: RawUTF8 = ''; const Suffix: RawUTF8 = '';
+  InlinedValue: boolean = false): RawUTF8; overload;
+
+/// return the corresponding CSV text from a dynamic array of 64-bit integers
+// - you can set some custom Prefix and Suffix text
+function Int64DynArrayToCSV(const Values: TInt64DynArray;
+  const Prefix: RawUTF8 = ''; const Suffix: RawUTF8 = '';
+  InlinedValue: boolean = false): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 { ************ TBaseWriter parent class for Text Generation }
 
@@ -1342,7 +1379,7 @@ var
   // - use around 16KB of heap (since each item consumes 16 bytes), but increase
   // overall performance and reduce memory allocation (and fragmentation),
   // especially during multi-threaded execution
-  // - noticeable when strings are used as array indexes (e.g. in SynMongoDB BSON)
+  // - noticeable when strings are used as array indexes (e.g. in mormot.db.nosql.bson)
   // - is defined globally, since may be used from an inlined function
   SmallUInt32UTF8: array[0..999] of RawUTF8;
 
@@ -2150,6 +2187,16 @@ function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload
 // signed integer
 function HexDisplayToInt64(const Hex: RawByteString): Int64; overload;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached
+// - returns the number of bytes written to Bin^
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
+
+/// conversion from octal C-like escape into binary data
+// - \xxx is converted into a single xxx byte from octal, and \\ into \
+function OctToBin(const Oct: RawUTF8): RawByteString; overload;
 
 /// revert the value as encoded by TBaseWriter.AddInt18ToChars3() or Int18ToChars3()
 // - no range check is performed: you should ensure that the incoming text
@@ -4166,6 +4213,189 @@ begin
   for i := 0 to High(Values) do
     tmp[i] := QuotedStr(Values[i], Quote);
   result := RawUTF8ArrayToCSV(tmp, Sep);
+end;
+
+procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray;
+  Sep: AnsiChar);
+begin
+  while CSV <> nil do
+  begin
+    SetLength(Result, length(Result) + 1);
+    Result[high(Result)] := GetNextItemInteger(CSV, Sep);
+  end;
+end;
+
+procedure CSVToInt64DynArray(CSV: PUTF8Char; var Result: TInt64DynArray;
+  Sep: AnsiChar);
+begin
+  while CSV <> nil do
+  begin
+    SetLength(Result, length(Result) + 1);
+    Result[high(Result)] := GetNextItemInt64(CSV, Sep);
+  end;
+end;
+
+function CSVToInt64DynArray(CSV: PUTF8Char; Sep: AnsiChar): TInt64DynArray;
+begin
+  Finalize(Result);
+  while CSV <> nil do
+  begin
+    SetLength(Result, length(Result) + 1);
+    Result[high(Result)] := GetNextItemInt64(CSV, Sep);
+  end;
+end;
+
+function IntegerDynArrayToCSV(Values: PIntegerArray; ValuesCount: integer;
+  const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
+type
+  TInts16 = packed array[word] of string[15]; // shortstring are faster (no heap allocation)
+var
+  i, L, Len: PtrInt;
+  tmp: array[0..15] of AnsiChar;
+  ints: ^TInts16;
+  P: PAnsiChar;
+  tmpbuf: TSynTempBuffer; // faster than a dynamic array
+begin
+  Result := '';
+  if ValuesCount = 0 then
+    exit;
+  if InlinedValue then
+    Len := 4 * ValuesCount
+  else
+    Len := 0;
+  tmpbuf.Init(ValuesCount * SizeOf({%H-}ints[0]) + Len);
+  try
+    ints := tmpbuf.buf;
+     // compute whole result length at once
+    dec(ValuesCount);
+    inc(Len, length(Prefix) + length(Suffix));
+    tmp[15] := ',';
+    for i := 0 to ValuesCount do
+    begin
+      P := StrInt32(@tmp[15], Values[i]);
+      L := @tmp[15] - P;
+      if i < ValuesCount then
+        inc(L); // append tmp[15]=','
+      inc(Len, L);
+      SetString(ints[i], P, L);
+    end;
+    // create result
+    FastSetString(Result, nil, Len);
+    P := pointer(Result);
+    if Prefix <> '' then
+    begin
+      L := length(Prefix);
+      MoveSmall(pointer(Prefix), P, L);
+      inc(P, L);
+    end;
+    for i := 0 to ValuesCount do
+    begin
+      if InlinedValue then
+      begin
+        PWord(P)^ := ord(':') + ord('(') shl 8;
+        inc(P, 2);
+      end;
+      L := ord(ints[i][0]);
+      MoveSmall(@ints[i][1], P, L);
+      inc(P, L);
+      if InlinedValue then
+      begin
+        PWord(P)^ := ord(')') + ord(':') shl 8;
+        inc(P, 2);
+      end;
+    end;
+    if Suffix <> '' then
+      MoveSmall(pointer(Suffix), P, length(Suffix));
+  finally
+    tmpbuf.Done;
+  end;
+end;
+
+function Int64DynArrayToCSV(Values: PInt64Array; ValuesCount: integer;
+  const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
+type
+  TInt = packed record
+    Len: byte;
+    Val: array[0..19] of AnsiChar; // Int64: 19 digits, then - sign
+  end;
+var
+  i, L, Len: PtrInt;
+  int: ^TInt;
+  P: PAnsiChar;
+  tmp: TSynTempBuffer; // faster than a dynamic array
+begin
+  Result := '';
+  if ValuesCount = 0 then
+    exit;
+  if InlinedValue then
+    Len := 4 * ValuesCount
+  else
+    Len := 0;
+  int := tmp.Init(ValuesCount * SizeOf(TInt) + Len);
+  try
+     // compute whole result length at once
+    dec(ValuesCount);
+    inc(Len, length(Prefix) + length(Suffix));
+    for i := 0 to ValuesCount do
+    begin
+      P := StrInt64(PAnsiChar(int) + 21, Values[i]);
+      L := PAnsiChar(int) + 21 - P;
+      int^.Len := L;
+      if i < ValuesCount then
+        inc(L); // for ,
+      inc(Len, L);
+      inc(int);
+    end;
+    // create result
+    FastSetString(Result, nil, Len);
+    P := pointer(Result);
+    if Prefix <> '' then
+    begin
+      L := length(Prefix);
+      MoveSmall(pointer(Prefix), P, L);
+      inc(P, L);
+    end;
+    int := tmp.buf;
+    repeat
+      if InlinedValue then
+      begin
+        PWord(P)^ := ord(':') + ord('(') shl 8;
+        inc(P, 2);
+      end;
+      L := int^.Len;
+      MoveSmall(PAnsiChar(int) + 21 - L, P, L);
+      inc(P, L);
+      if InlinedValue then
+      begin
+        PWord(P)^ := ord(')') + ord(':') shl 8;
+        inc(P, 2);
+      end;
+      if ValuesCount = 0 then
+        break;
+      inc(int);
+      P^ := ',';
+      inc(P);
+      dec(ValuesCount);
+    until false;
+    if Suffix <> '' then
+      MoveSmall(pointer(Suffix), P, length(Suffix));
+  finally
+    tmp.Done;
+  end;
+end;
+
+function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
+  const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
+begin
+  Result := IntegerDynArrayToCSV(pointer(Values), length(Values),
+    Prefix, Suffix, InlinedValue);
+end;
+
+function Int64DynArrayToCSV(const Values: TInt64DynArray;
+  const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
+begin
+  Result := Int64DynArrayToCSV(pointer(Values), length(Values),
+    Prefix, Suffix, InlinedValue);
 end;
 
 
@@ -9623,6 +9853,67 @@ begin
     end;
   end;
   result := 0;
+end;
+
+
+function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt;
+var
+  c, v: byte;
+label
+  _nxt;
+begin
+  result := PtrInt(Bin);
+  if Oct <> nil then
+    repeat
+      c := ord(Oct^);
+      inc(Oct);
+      if c <> ord('\') then
+      begin
+        if c = 0 then
+          break;
+_nxt:   Bin^ := c;
+        inc(Bin);
+        continue;
+      end;
+      c := ord(Oct^);
+      inc(Oct);
+      if c = ord('\') then
+        goto _nxt;
+      dec(c, ord('0'));
+      if c > 3 then
+        break; // stop at malformated input (includes #0)
+      c := c shl 6;
+      v := c;
+      c := ord(Oct[0]);
+      dec(c, ord('0'));
+      if c > 7 then
+        break;
+      c := c shl 3;
+      v := v or c;
+      c := ord(Oct[1]);
+      dec(c, ord('0'));
+      if c > 7 then
+        break;
+      c := c or v;
+      Bin^ := c;
+      inc(Bin);
+      inc(Oct, 2);
+    until false;
+  result := PAnsiChar(Bin) - PAnsiChar(result);
+end;
+
+function OctToBin(const Oct: RawUTF8): RawByteString;
+var
+  tmp: TSynTempBuffer;
+  L: integer;
+begin
+  tmp.Init(length(Oct));
+  try
+    L := OctToBin(pointer(Oct), tmp.buf);
+    SetString(result, PAnsiChar(tmp.buf), L);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function Int18ToChars3(Value: cardinal): RawUTF8;

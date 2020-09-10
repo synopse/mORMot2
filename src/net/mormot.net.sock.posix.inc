@@ -28,6 +28,7 @@ const
   WSAEADDRNOTAVAIL = ESysEADDRNOTAVAIL;
   WSAECONNABORTED = ESysECONNABORTED;
   WSAETIMEDOUT = ESysETIMEDOUT;
+  WSAEMFILE = ESysEMFILE;
 
   {$ifdef FREEBSD}
   NI_NUMERICHOST = 2;
@@ -41,14 +42,29 @@ const
   FIONBIO  = termio.FIONBIO;
 
   {$ifdef BSD}
+
     {$ifndef OPENBSD}
     {$ifdef DARWIN}
     SO_NOSIGPIPE = $1022;
     {$else}
     SO_NOSIGPIPE = $800;
-    {$endif}
-    {$endif}
-  {$ENDIF}
+    {$endif DARWIN}
+    {$endif OPENBSD}
+
+    {$ifndef OPENBSD}
+    // Works under MAC OS X and FreeBSD, but is undocumented, so FPC doesn't include it
+    MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
+    {$else}
+    MSG_NOSIGNAL  = $400;
+    {$endif OPENBSD}
+    {$else}
+    {$ifdef SUNOS}
+    MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
+    {$else}
+    MSG_NOSIGNAL  = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
+    {$endif SUNOS}
+
+  {$endif BSD}
 
   _ST: array[TNetLayer] of integer = (SOCK_STREAM, SOCK_DGRAM, SOCK_STREAM);
   _IP: array[TNetLayer] of integer = (IPPROTO_TCP, IPPROTO_UDP, 0);
@@ -197,8 +213,16 @@ function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
   external clib name 'sendto';
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; cdecl;
   external clib name 'getpeername';
+
+{$ifdef DARWIN}
 function poll(fds: PPollFD; nfds, timeout: integer): integer;
+begin // circumvent linking issue on Mac OSX
+  result := fppoll(pointer(fds), nfds, timeout);
+end;
+{$else}
+function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll';
+{$endif DARWIN}
 
 {$ifndef USEPOLL}
 // epoll is Linux-Specific

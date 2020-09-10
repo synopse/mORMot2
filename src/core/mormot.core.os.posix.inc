@@ -75,6 +75,11 @@ begin
   MoveFast(Pointer(tmp)^, A^, result);
 end;
 
+function GetDesktopWindow: PtrInt;
+begin
+  result := 0; // fixed result
+end;
+
 const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   HoursPerDay = 24;
   MinsPerHour = 60;
@@ -433,7 +438,7 @@ begin
 end;
 
 function FileInfoByHandle(aFileHandle: THandle;
-  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): boolean;
 var
   lastreadaccess: Int64;
   lp: stat;
@@ -458,6 +463,35 @@ begin
   if lastreadaccess <> 0 then
     if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
       FileCreateDateTime := lastreadaccess;
+end;
+
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+var
+  SourceF, DestF: TFileStream;
+begin
+  result := false;
+  if FileExists(Target) then
+    if FailIfExists then
+      exit
+    else
+      DeleteFile(Target);
+  try
+    SourceF := TFileStream.Create(Source, fmOpenRead);
+    try
+      DestF := TFileStream.Create(Target, fmCreate);
+      try
+        DestF.CopyFrom(SourceF, SourceF.Size);
+      finally
+        DestF.Free;
+      end;
+      FileSetDateFrom(Target, SourceF.Handle);
+    finally
+      SourceF.Free;
+    end;
+    result := true;
+  except
+    result := false;
+  end;
 end;
 
 function OemToUnicode(const OEM: RawByteString): SynUnicode;
@@ -493,6 +527,15 @@ begin
   // let's assume UTF-8 under Linux/POSIX
   result := UTF8Encode(OemToUnicode(OEM));
 end;
+
+{$I-}
+procedure DisplayFatalError(const title, msg: RawUTF8);
+begin
+  writeln(StdErr, title);
+  writeln(StdErr, msg);
+  ioresult;
+end;
+{$I+}
 
 function FileOpenSequentialRead(const FileName: string): Integer;
 begin
@@ -897,6 +940,7 @@ begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;
 
+
 {$I+}
 
 constructor TFileVersion.Create(const aFileName: TFileName;
@@ -990,9 +1034,9 @@ begin
       begin
         if _LogPath = '' then
           if IsDirectoryWritable('/var/log') then
+             // may not be writable by not root on POSIX
             _LogPath := '/var/log/'
-          else // may not be writable by not root on POSIX
-          if IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+          else if IsDirectoryWritable(ExeVersion.ProgramFilePath) then
             _LogPath := ExeVersion.ProgramFilePath
           else
             _LogPath := GetSystemPath(spUserData);
@@ -1298,8 +1342,7 @@ var
   PageSize: PtrUInt;
   AlignedAddr: pointer;
   i: PtrInt;
-  ProtectedResult: boolean;
-  ProtectedMemory: boolean;
+  ProtectedResult, ProtectedMemory: boolean;
 begin
   if Backup <> nil then
     for i := 0 to Size - 1 do // do not use Move() here
@@ -1503,6 +1546,15 @@ begin
       [PAnsiChar(@uts.release), fpgeterrno]);
   {$endif LINUX}
   {$endif DARWIN}
+end;
+
+procedure FinalizeSpecificUnit;
+begin
+  if pthread <> nil then
+    dlclose(pthread);
+  {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+  sd.Done;
+  {$endif LINUXNOTBSD}
 end;
 
 

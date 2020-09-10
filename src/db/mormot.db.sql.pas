@@ -86,7 +86,7 @@ type
     // - used e.g. for numerical values
     // - may be -1 if the metadata SQL statement returned NULL
     ColumnScale: PtrInt;
-    /// the Column type, as recognized by our SynDB classes
+    /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
     ColumnType: TSQLDBFieldType;
     /// specify if column is indexed
@@ -150,7 +150,7 @@ type
     // - used e.g. for numerical values
     // - may be -1 if the metadata SQL statement returned NULL
     ColumnScale: PtrInt;
-    /// the Column type, as recognized by our SynDB classes
+    /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
     ColumnType: TSQLDBFieldType;
     /// defines the procedure column as a parameter or a result set column
@@ -163,8 +163,8 @@ type
 
   /// possible column retrieval patterns
   // - used by TSQLDBColumnProperty.ColumnValueState
-  TSQLDBStatementGetCol = (colNone, colNull, colWrongType, colDataFilled,
-    colDataTruncated);
+  TSQLDBStatementGetCol = (
+    colNone, colNull, colWrongType, colDataFilled, colDataTruncated);
 
   /// used to define a field/column layout
   // - for TSQLDBConnectionProperties.SQLCreate to describe the table
@@ -188,7 +188,7 @@ type
     /// the Column type, used for storage
     // - for SQLCreate: should not be ftUnknown nor ftNull
     // - for TOleDBStatement: should not be ftUnknown
-    // - for SynDBOracle: never ftUnknown, may be ftNull (for SQLT_RSET)
+    // - for mormot.db.sql.oracle: never ftUnknown, may be ftNull (for SQLT_RSET)
     ColumnType: TSQLDBFieldType;
     /// set if the Column must exists (i.e. should not be null)
     ColumnNonNullable: boolean;
@@ -207,7 +207,7 @@ type
     // one column size (in bytes)
     ColumnValueDBSize: cardinal;
     /// optional character set encoding for ftUTF8 columns
-    // - for SQLT_STR/SQLT_CLOB (SynDBOracle): equals to the OCI char set
+    // - for SQLT_STR/SQLT_CLOB (mormot.db.sql.oracle): equals to the OCI char set
     ColumnValueDBCharSet: integer;
     /// internal DB column data type
     // - for TSQLDBOracleStatement: used to store the DefineByPos() TypeCode,
@@ -221,14 +221,14 @@ type
     // 0=TField, 1=TLargeIntField, 2=TWideStringField
     ColumnValueDBType: smallint;
     /// driver-specific encoding information
-    // - for SynDBOracle: used to store the ftUTF8 column encoding, i.e. for
-    // SQLT_CLOB, equals either to SQLCS_NCHAR or SQLCS_IMPLICIT
+    // - for mormot.db.sql.oracle: used to store the ftUTF8 column encoding, i.e.
+    // for SQLT_CLOB, equals either to SQLCS_NCHAR or SQLCS_IMPLICIT
     ColumnValueDBForm: byte;
     /// may contain the current status of the column value
-    // - for SynDBODBC: state of the latest SQLGetData() call
+    // - for mormot.db.sql.odbc: state of the latest SQLGetData() call
     ColumnDataState: TSQLDBStatementGetCol;
     /// may contain the current column size for not FIXEDLENGTH_SQLDBFIELDTYPE
-    // - for SynDBODBC: size (in bytes) in corresponding fColData[]
+    // - for mormot.db.sql.odbc: size (in bytes) in corresponding fColData[]
     // - TSQLDBProxyStatement: the actual maximum column size
     ColumnDataSize: integer;
   end;
@@ -262,12 +262,17 @@ type
   /// identify a CRUD mode of a statement
   // - in addition to CRUD states, cPostgreBulkArray would identify if the ORM
   // should generate unnested/any bound array statements - currently only
-  // supported by SynDBPostgres for bulk insert/update/delete
+  // supported by mormot.db.sql.postgres for bulk insert/update/delete
   TSQLDBStatementCRUD = (cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
 
   /// identify the CRUD modes of a statement
   // - used e.g. for batch send abilities of a DB engine
   TSQLDBStatementCRUDs = set of TSQLDBStatementCRUD;
+
+
+const
+  /// a magic constant used e.g. by TSQLDBStatement.FetchAllToBinary
+  FETCHALLTOBINARY_MAGIC = 1;
 
 
 { ************ Define Database Engine Specific Behavior }
@@ -497,7 +502,7 @@ function BoundArrayToJSONArray(const Values: TRawUTF8DynArray): RawUTF8;
 { ************ Abstract SQL DB Classes and Interfaces }
 
 var
-  /// the TSynLog class used for logging for all our SynDB related units
+  /// the TSynLog class used for logging for all our mormot.db.sql related units
   // - you may override it with TSQLLog, if available from mORMot.pas
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
@@ -623,7 +628,7 @@ type
     // since Delphi 2009: you may not loose any data during charset conversion
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; overload;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from stored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -659,7 +664,7 @@ type
     // - since a property getter can't be an overloaded method, we define one
     // for the Column[] property
     function GetColumnVariant(const ColName: RawUTF8): Variant;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -712,7 +717,8 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt = nil): RawUTF8;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
@@ -723,7 +729,8 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
     function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     /// append all rows content as binary stream
@@ -818,14 +825,14 @@ type
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
     procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray; Rows: TSQLDBStatement);
-    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such parameters are mapped as ftUnknown
     // - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
     // execution of the statement
     procedure BindCursor(Param: integer);
-    /// return a special CURSOR parameter content as a SynDB result set
+    /// return a special CURSOR parameter content as a mormot.db.sql result set
     // - this method is not about a column, but a parameter defined with
     // BindCursor() before method execution
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -950,7 +957,8 @@ type
   // some non critical information, which is logged and may be intercepted using
   // the TSQLDBConnectionProperties.OnStatementInfo property
   // - may be used e.g. to track ORA-28001 or ORA-28002 about account expire
-  // - is currently implemented by SynDBOracle, SynDBODBC and SynOleDB units
+  // - is currently implemented by mormot.db.sql.oracle, mormot.db.sql.odbc
+  // and mormot.db.sql.oledb units
   TOnSQLDBInfo = procedure(Sender: TSQLDBStatement; const Msg: RawUTF8) of object;
 
   /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
@@ -1226,7 +1234,7 @@ type
     // (if RaiseExceptionOnError is left to default FALSE value, otherwise, it will
     // raise an exception)
     function NewThreadSafeStatementPrepared(const aSQL: RawUTF8;
-      ExpectResults: Boolean; RaiseExceptionOnError: Boolean = false): ISQLDBStatement; overload;
+      ExpectResults: boolean; RaiseExceptionOnError: boolean = false): ISQLDBStatement; overload;
     /// create a new thread-safe statement from an internal cache (if any)
     // - this method will call the overloaded NewThreadSafeStatementPrepared method
     // - here Args[] array does not refer to bound parameters, but to values
@@ -1239,19 +1247,19 @@ type
     // (if RaiseExceptionOnError is left to default FALSE value, otherwise, it will
     // raise an exception)
     function NewThreadSafeStatementPrepared(const SQLFormat: RawUTF8;
-      const Args: array of const; ExpectResults: Boolean;
-      RaiseExceptionOnError: Boolean = false): ISQLDBStatement; overload;
+      const Args: array of const; ExpectResults: boolean;
+      RaiseExceptionOnError: boolean = false): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
     // then bound inlined parameters as :(1234): and return the resulting statement
     // - raise an exception on error
     // - consider using ExecuteInlined() for direct execution
-    function PrepareInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBStatement; overload;
+    function PrepareInlined(const aSQL: RawUTF8; ExpectResults: boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
     // - consider using ExecuteInlined() for direct execution
     function PrepareInlined(const SQLFormat: RawUTF8; const Args: array of const;
-      ExpectResults: Boolean): ISQLDBStatement; overload;
+      ExpectResults: boolean): ISQLDBStatement; overload;
     /// execute a SQL query, returning a statement interface instance to retrieve
     // the result rows corresponding to the supplied SELECT statement
     // - will call NewThreadSafeStatement method to retrieve a thread-safe
@@ -1293,12 +1301,12 @@ type
     // - this implementation will call the NewThreadSafeStatement virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - raise an exception on error
-    function ExecuteInlined(const aSQL: RawUTF8; ExpectResults: Boolean):
+    function ExecuteInlined(const aSQL: RawUTF8; ExpectResults: boolean):
       ISQLDBRows; overload;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
     function ExecuteInlined(const SQLFormat: RawUTF8; const Args: array of const;
-      ExpectResults: Boolean): ISQLDBRows; overload;
+      ExpectResults: boolean): ISQLDBRows; overload;
     /// handle a transaction process common to all associated connections
     // - could be used to share a single transaction among several connections,
     // or to run nested transactions even on DB engines which do not allow them
@@ -1561,13 +1569,13 @@ type
     // do raise an exception: this parameter ensures that any pending transaction
     // is roll-backed before disconnection
     // - is set to TRUE by default
-    property RollbackOnDisconnect: Boolean read fRollbackOnDisconnect write
+    property RollbackOnDisconnect: boolean read fRollbackOnDisconnect write
       fRollbackOnDisconnect;
     /// defines if '' string values are to be stored as SQL null
     // - by default, '' will be stored as ''
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
     // store '' values, but expect NULL to be stored instead
-    property StoreVoidStringAsNull: Boolean read fStoreVoidStringAsNull write
+    property StoreVoidStringAsNull: boolean read fStoreVoidStringAsNull write
       fStoreVoidStringAsNull;
     /// customize the ISO-8601 text format expected by the database provider
     // - is 'T' by default, as expected by the ISO-8601 standard
@@ -1621,7 +1629,7 @@ type
     fOnProcess: TOnSQLDBProcess;
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
-    fRollbackOnDisconnect: Boolean;
+    fRollbackOnDisconnect: boolean;
     fLastAccessTicks: Int64;
     function IsOutdated(tix: Int64): boolean; // do not make virtual
     function GetInTransaction: boolean; virtual;
@@ -1667,9 +1675,9 @@ type
     // - if TSQLDBConnectionProperties.ReconnectAfterConnectionError is set,
     // any connection error will be trapped, unless AllowReconnect is false
     // - on error, if RaiseExceptionOnError=true, an exception is raised
-    function NewStatementPrepared(const aSQL: RawUTF8; ExpectResults: Boolean;
-      RaiseExceptionOnError: Boolean = false;
-      AllowReconnect: Boolean = true): ISQLDBStatement; virtual;
+    function NewStatementPrepared(const aSQL: RawUTF8; ExpectResults: boolean;
+      RaiseExceptionOnError: boolean = false;
+      AllowReconnect: boolean = true): ISQLDBStatement; virtual;
     /// begin a Transaction for this connection
     // - this default implementation will check and set TransactionCount
     procedure StartTransaction; virtual;
@@ -1681,6 +1689,10 @@ type
     // - StartTransaction method must have been called before
     // - this default implementation will check and set TransactionCount
     procedure Rollback; virtual;
+    /// allows to change the password of the current connected user
+    // - do nothing method by default, returning false
+    // - properly overriden e.g. by TSQLDBOracleConnection
+    function PasswordChange: boolean; virtual;
 
     /// direct export of a DB statement rows into a new table of this database
     // - the corresponding table will be created within the current connection,
@@ -1726,7 +1738,7 @@ type
     // do raise an exception: this parameter ensures that any pending transaction
     // is roll-backed before disconnection
     // - is set to TRUE by default
-    property RollbackOnDisconnect: Boolean read fRollbackOnDisconnect write
+    property RollbackOnDisconnect: boolean read fRollbackOnDisconnect write
       fRollbackOnDisconnect;
     /// some error message, e.g. during execution of NewStatementPrepared
     property LastErrorMessage: RawUTF8 read fErrorMessage write fErrorMessage;
@@ -1779,8 +1791,8 @@ type
     // from a given column value
     // - internal conversion will use a temporary Variant and ColumnToVariant method
     // - expects Dest to be of the exact type (e.g. Int64, not Integer)
-    function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType; var
-      Dest): TSQLDBFieldType;
+    function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType;
+      var Dest): TSQLDBFieldType;
     /// append the inlined value of a given parameter, mainly for GetSQLWithInlinedParams
     // - optional MaxCharCount will truncate the text to a given number of chars
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
@@ -1878,7 +1890,7 @@ type
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
     procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray; Rows: TSQLDBStatement);
-    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such parameters are mapped as ftUnknown
@@ -1886,7 +1898,7 @@ type
     // execution of the statement
     // - this default method will raise an exception about unexpected behavior
     procedure BindCursor(Param: integer); virtual;
-    /// return a special CURSOR parameter content as a SynDB result set
+    /// return a special CURSOR parameter content as a mormot.db.sql result set
     // - this method is not about a column, but a parameter defined with
     // BindCursor() before method execution
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -1944,7 +1956,7 @@ type
     // - this default implementation will just store aSQL content and the
     // ExpectResults parameter, and connect to the remote server is was not
     // already connected
-    procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean); overload; virtual;
+    procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean); overload; virtual;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - should raise an Exception on any error
@@ -1968,7 +1980,7 @@ type
     //  to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will call Prepare then ExecutePrepared methods
-    procedure Execute(const aSQL: RawUTF8; ExpectResults: Boolean); overload;
+    procedure Execute(const aSQL: RawUTF8; ExpectResults: boolean); overload;
     /// Prepare and Execute an UTF-8 encoded SQL statement
     // - parameters marked as ? should be specified as method parameter in Params[]
     // - BLOB parameters could not be bound with this method, but need an explicit
@@ -1977,7 +1989,7 @@ type
     // to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will bind parameters, then call Excecute() virtual method
-    procedure Execute(const aSQL: RawUTF8; ExpectResults: Boolean;
+    procedure Execute(const aSQL: RawUTF8; ExpectResults: boolean;
       const Params: array of const); overload;
     /// Prepare and Execute an UTF-8 encoded SQL statement
     // - parameters marked as % will be replaced by Args[] value in the SQL text
@@ -1990,7 +2002,7 @@ type
     // to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will bind parameters, then call Excecute() virtual method
-    procedure Execute(const SQLFormat: RawUTF8; ExpectResults: Boolean;
+    procedure Execute(const SQLFormat: RawUTF8; ExpectResults: boolean;
       const Args, Params: array of const); overload;
     /// execute a prepared SQL statement and return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
@@ -2040,11 +2052,14 @@ type
     // - typical use may be (see also e.g. the mORMotDB unit):
     // ! var Query: ISQLDBStatement;
     // ! begin
-    // !   Query := Props.NewThreadSafeStatementPrepared('select AccountNumber from Sales.Customer where AccountNumber like ?', ['AW000001%'],true);
-    // !   if Query<>nil then begin
-    // !     assert(SameTextU(Query.ColumnName(0),'AccountNumber'));
+    // !   Query := Props.NewThreadSafeStatementPrepared(
+    // !    'select AccountNumber from Sales.Customer where AccountNumber like ?',
+    // !    ['AW000001%'], true);
+    // !   if Query <> nil then
+    // !   begin
+    // !     assert(SameTextU(Query.ColumnName(0), 'AccountNumber'));
     // !     while Query.Step do //  loop through all matching data rows
-    // !       assert(Copy(Query.ColumnUTF8(0),1,8)='AW000001');
+    // !       assert(Copy(Query.ColumnUTF8(0), 1, 8) = 'AW000001');
     // !     Query.ReleaseRows;
     // !   end;
     // ! end;
@@ -2062,8 +2077,8 @@ type
     /// the Column type of the current Row
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
-    function ColumnType(Col: integer; FieldSize: PInteger = nil):
-      TSQLDBFieldType; virtual; abstract;
+    function ColumnType(Col: integer;
+      FieldSize: PInteger = nil): TSQLDBFieldType; virtual; abstract;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; virtual; abstract;
     /// return a Column integer value of the current Row, first Col is 0
@@ -2091,12 +2106,12 @@ type
     function ColumnBlobBytes(Col: integer): TBytes; overload; virtual;
     /// read a blob Column into the Stream parameter
     // - default implementation will just call ColumnBlob(), whereas some
-    // providers (like SynDBOracle) may implement direct support
+    // providers (like mormot.db.sql.oracle) may implement direct support
     procedure ColumnBlobToStream(Col: integer; Stream: TStream); overload; virtual;
     /// write a blob Column into the Stream parameter
     // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
     // - default implementation will through an exception, since it is highly
-    // provider-specific; SynDBOracle e.g. implements it properly
+    // provider-specific; mormot.db.sql.oracle e.g. implements it properly
     procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload; virtual;
     /// return a Column as a variant, first Col is 0
     // - this default implementation will call ColumnToVariant() method
@@ -2117,7 +2132,7 @@ type
     // svtUTF8/svtBlob values
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar; var Temp:
       RawByteString); virtual;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -2169,7 +2184,7 @@ type
     // - will create a "fast" TDocVariant object instance with all fields
     procedure RowDocVariant(out aDocument: variant;
       aOptions: TDocVariantOptions = JSON_OPTIONS_FAST); virtual;
-    /// return a special CURSOR Column content as a SynDB result set
+    /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
@@ -2202,7 +2217,8 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
     // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
@@ -2229,7 +2245,8 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - similar to corresponding TSQLRequest.Execute method in SynSQLite3 unit
+    // - similar to corresponding TSQLRequest.Execute method in the
+    // mormot.db.raw.sqlite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt = nil): RawUTF8;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
@@ -2582,7 +2599,8 @@ type
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column) - this implementation will store
     // fColumns[Col].ColumnValueDBSize if ColumnValueInlined=true
-    function ColumnType(Col: integer; FieldSize: PInteger = nil): TSQLDBFieldType; override;
+    function ColumnType(Col: integer;
+      FieldSize: PInteger = nil): TSQLDBFieldType; override;
     /// direct access to the columns description
     // - gives more details than the default ColumnType() function
     property Columns: TSQLDBColumnPropertyDynArray read fColumns;
@@ -3048,7 +3066,7 @@ begin
 end;
 
 function TSQLDBConnectionProperties.PrepareInlined(const aSQL: RawUTF8;
-  ExpectResults: Boolean): ISQLDBStatement;
+  ExpectResults: boolean): ISQLDBStatement;
 var
   Query: ISQLDBStatement;
   i, maxParam: integer;
@@ -3091,13 +3109,13 @@ begin
 end;
 
 function TSQLDBConnectionProperties.PrepareInlined(const SQLFormat: RawUTF8;
-  const Args: array of const; ExpectResults: Boolean): ISQLDBStatement;
+  const Args: array of const; ExpectResults: boolean): ISQLDBStatement;
 begin
   result := PrepareInlined(FormatUTF8(SQLFormat, Args), ExpectResults);
 end;
 
 function TSQLDBConnectionProperties.ExecuteInlined(const aSQL: RawUTF8;
-  ExpectResults: Boolean): ISQLDBRows;
+  ExpectResults: boolean): ISQLDBRows;
 var
   Query: ISQLDBStatement;
 begin
@@ -3112,7 +3130,7 @@ begin
 end;
 
 function TSQLDBConnectionProperties.ExecuteInlined(const SQLFormat: RawUTF8;
-  const Args: array of const; ExpectResults: Boolean): ISQLDBRows;
+  const Args: array of const; ExpectResults: boolean): ISQLDBRows;
 begin
   result := ExecuteInlined(FormatUTF8(SQLFormat, Args), ExpectResults);
 end;
@@ -3136,7 +3154,7 @@ begin
   result := fMainConnection;
 end;
 
-function TSQLDBConnectionProperties.NewConnection: TSQLDBConnection;
+function TSQLDBConnectionProperties.{%H-}NewConnection: TSQLDBConnection;
 begin
   raise ESQLDBException.CreateUTF8('%.NewConnection', [self]);
 end;
@@ -3157,7 +3175,7 @@ begin
 end;
 
 function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(const aSQL:
-  RawUTF8; ExpectResults, RaiseExceptionOnError: Boolean): ISQLDBStatement;
+  RawUTF8; ExpectResults, RaiseExceptionOnError: boolean): ISQLDBStatement;
 begin
   result := ThreadSafeConnection.NewStatementPrepared(aSQL, ExpectResults,
     RaiseExceptionOnError);
@@ -3165,7 +3183,7 @@ end;
 
 function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(const
   SQLFormat: RawUTF8; const Args: array of const; ExpectResults,
-  RaiseExceptionOnError: Boolean): ISQLDBStatement;
+  RaiseExceptionOnError: boolean): ISQLDBStatement;
 begin
   result := NewThreadSafeStatementPrepared(FormatUTF8(SQLFormat, Args),
     ExpectResults, RaiseExceptionOnError);
@@ -3266,7 +3284,7 @@ end;
 
 function TSQLDBConnectionProperties.IsCachable(P: PUTF8Char): boolean;
 var
-  NoWhere: Boolean;
+  NoWhere: boolean;
 begin // cachable if with ? parameter or SELECT without WHERE clause
   if (P <> nil) and fUseCache then
   begin
@@ -4354,7 +4372,7 @@ begin
     FieldsCSV := RawUTF8ArrayToCSV(aFieldNames, '');
     if length(FieldsCSV) + length(Table) > 27 then
       // sounds like if some DB limit the identifier length to 32 chars
-      IndexName := IndexName + 'INDEX' + crc32cUTF8ToHex(Table) +
+      IndexName := {%H-}IndexName + 'INDEX' + crc32cUTF8ToHex(Table) +
         crc32cUTF8ToHex(FieldsCSV)
     else
       IndexName := IndexName + 'NDX' + Table + FieldsCSV;
@@ -4368,7 +4386,7 @@ begin
       posWithColumn:
         ColsDesc := RawUTF8ArrayToCSV(aFieldNames, ' DESC,') + ' DESC';
     end;
-  if ColsDesc = '' then
+  if {%H-}ColsDesc = '' then
     ColsDesc := RawUTF8ArrayToCSV(aFieldNames, ',');
   result := FormatUTF8('CREATE %INDEX %% ON %(%)', [result,
     CREATNDXIFNE[DBMS in DB_HANDLECREATEINDEXIFNOTEXISTS],
@@ -5099,8 +5117,8 @@ begin
           BindTextU(i, UnicodeStringToUtf8(UnicodeString(VUnicodeString)), IO);
     {$endif}
     {$endif}
-        vtBoolean:
-          Bind(i, integer(VBoolean), IO);
+        vtboolean:
+          Bind(i, integer(Vboolean), IO);
         vtInteger:
           Bind(i, VInteger, IO);
         vtInt64:
@@ -5135,8 +5153,8 @@ begin
     case VType of
       varNull:
         BindNull(Param, IO);
-      varBoolean:
-        if VBoolean then
+      varboolean:
+        if Vboolean then
           Bind(Param, 1, IO)
         else
           Bind(Param, 0, IO);
@@ -5349,15 +5367,16 @@ begin
             else
               V.VBlobLen := StrLen(V.VText);
           {$ifndef UNICODE}
-            if (fConnection <> nil) and not fConnection.Properties.VariantStringAsWideString
-              then
+            if (fConnection <> nil) and
+               not fConnection.Properties.VariantStringAsWideString then
             begin
               VType := varString;
-              if (CurrentAnsiConvert.CodePage = CP_UTF8) and (V.VText = pointer(tmp)) then
+              if (CurrentAnsiConvert.CodePage = CP_UTF8) and
+                 (V.VText = pointer(tmp)) then
                 RawByteString(VAny) := tmp
               else
-                CurrentAnsiConvert.UTF8BufferToAnsi(V.VText, V.VBlobLen,
-                  RawByteString(VAny));
+                CurrentAnsiConvert.UTF8BufferToAnsi(
+                  V.VText, V.VBlobLen, RawByteString(VAny));
             end
             else
           {$endif UNICODE}
@@ -5519,7 +5538,7 @@ begin
   result := ftUnknown;
 end;
 
-procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: Boolean);
+procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   Connection.InternalProcess(speActive);
   try
@@ -5737,9 +5756,6 @@ begin
     end;
 end;
 
-const
-  FETCHALLTOBINARY_MAGIC = 1;
-
 function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
   DataRowPosition: PCardinalDynArray): cardinal;
 var
@@ -5819,7 +5835,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: Boolean;
+procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean;
   const Params: array of const);
 begin
   Connection.InternalProcess(speActive);
@@ -5833,7 +5849,7 @@ begin
 end;
 
 procedure TSQLDBStatement.Execute(const SQLFormat: RawUTF8;
-  ExpectResults: Boolean; const Args, Params: array of const);
+  ExpectResults: boolean; const Args, Params: array of const);
 begin
   Execute(FormatUTF8(SQLFormat, Args), ExpectResults, Params);
 end;
@@ -5920,7 +5936,7 @@ begin
   result := ColumnCursor(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnCursor(Col: integer): ISQLDBRows;
+function TSQLDBStatement.{%H-}ColumnCursor(Col: integer): ISQLDBRows;
 begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR columns', [self]);
 end;
@@ -6169,7 +6185,7 @@ begin
   TDocVariantData(aDocument).InitObjectFromVariants(names, values, aOptions);
 end;
 
-procedure TSQLDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
+procedure TSQLDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 var
   L: integer;
 begin
@@ -6276,7 +6292,7 @@ begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
 
-function TSQLDBStatement.BoundCursor(Param: Integer): ISQLDBRows;
+function TSQLDBStatement.{%H-}BoundCursor(Param: Integer): ISQLDBRows;
 begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
@@ -6445,7 +6461,8 @@ begin
 end;
 
 function TSQLDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
-  ExpectResults, RaiseExceptionOnError, AllowReconnect: Boolean): ISQLDBStatement;
+  ExpectResults: boolean; RaiseExceptionOnError: boolean;
+  AllowReconnect: boolean): ISQLDBStatement;
 var
   Stmt: TSQLDBStatement;
   ToCache: boolean;
@@ -6554,8 +6571,8 @@ begin
       exit; // success
     if LastErrorWasAboutConnection then
     try
-      SynDBLog.Add.Log(sllDB, 'NewStatementPrepared: reconnect after %', [fErrorException],
-        self);
+      SynDBLog.Add.Log(sllDB, 'NewStatementPrepared: reconnect after %',
+        [fErrorException], self);
       Disconnect;
       Connect;
       TryPrepare(RaiseExceptionOnError);
@@ -6586,6 +6603,11 @@ begin
     raise ESQLDBException.CreateUTF8('Invalid %.Rollback call', [self]);
   dec(fTransactionCount);
   InternalProcess(speRollback);
+end;
+
+function TSQLDBConnection.PasswordChange: boolean;
+begin
+  result := false;
 end;
 
 procedure TSQLDBConnection.StartTransaction;
@@ -6700,7 +6722,7 @@ var
   id: TThreadID;
   tix: Int64;
   conn: TSQLDBConnectionThreadSafe;
-begin // caller made EnterCriticalSection(fConnectionCS)
+begin // caller made fConnectionPool.Safe.Lock
   if self <> nil then
   begin
     id := GetCurrentThreadId;
@@ -7172,8 +7194,15 @@ end;
 
 { TSQLDBStatementWithParamsAndColumns }
 
-function TSQLDBStatementWithParamsAndColumns.ColumnIndex(const aColumnName:
-  RawUTF8): integer;
+constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
+begin
+  inherited Create(aConnection);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),
+    fColumns, ptRawUTF8, @fColumnCount, True);
+end;
+
+function TSQLDBStatementWithParamsAndColumns.ColumnIndex(
+  const aColumnName: RawUTF8): integer;
 begin
   result := fColumn.FindHashed(aColumnName);
 end;
@@ -7198,12 +7227,6 @@ begin
   end;
 end;
 
-constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
-begin
-  inherited Create(aConnection);
-  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),
-    fColumns, ptRawUTF8, @fColumnCount, True);
-end;
 
 const
   __TSQLDBColumnDefine = 'ColumnName,ColumnTypeNative RawUTF8 ' +
@@ -7211,7 +7234,7 @@ const
     'ColumnType TSQLDBFieldType ColumnIndexed boolean';
 
 initialization
-  assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt) * 2 + 20);
+  assert(SizeOf(TSQLDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
   RttiCustom.RegisterType(TypeInfo(TSQLDBFieldType));
   RttiCustom.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
 end.

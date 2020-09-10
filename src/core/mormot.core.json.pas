@@ -520,8 +520,8 @@ function JSONEncode(const NameValuePairs: array of const): RawUTF8; overload;
 // ! aJSON := JSONEncode('{type:{$in:?}}',[],[_Arr(['food','snack'])]);
 // ! // will both return
 // ! '{"type":{"$in":["food","snack"]}}')
-// - if the SynMongoDB unit is used in the application, the MongoDB Shell
-// syntax will also be recognized to create TBSONVariant, like
+// - if the mormot.db.nosql.bson unit is used in the application, the MongoDB
+// Shell syntax will also be recognized to create TBSONVariant, like
 // ! new Date()   ObjectId()   MinKey   MaxKey  /<jRegex>/<jOptions>
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
 // !  aJSON := JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John']))
@@ -840,8 +840,8 @@ type
     // ! aWriter.AddJSON('{type:{$in:?}}',[],[_Arr(['food','snack'])]);
     // ! // which are the same as:
     // ! aWriter.AddShort('{"type":{"$in":["food","snack"]}}');
-    // - if the SynMongoDB unit is used in the application, the MongoDB Shell
-    // syntax will also be recognized to create TBSONVariant, like
+    // - if the mormot.db.nosql.bson unit is used in the application, the MongoDB
+    // Shell syntax will also be recognized to create TBSONVariant, like
     // ! new Date()   ObjectId()   MinKey   MaxKey  /<jRegex>/<jOptions>
     // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
     // !  aWriter.AddJSON('{name:?,field:/%/i}',['acme.*corp'],['John']))
@@ -5512,11 +5512,11 @@ noesc:
       JSON_ESCAPE_ENDINGZERO:
         exit; // #0
       JSON_ESCAPE_UNICODEHEX:
-      begin // characters below ' ', #7 e.g. -> // 'u0007'
-        PCardinal(B + 1)^ := ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
-        inc(B, 4);
-        PWord(B + 1)^ := TwoDigitsHexWB[PByteArray(P)[i]];
-      end;
+        begin // characters below ' ', #7 e.g. -> // 'u0007'
+          PCardinal(B + 1)^ := ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
+          inc(B, 4);
+          PWord(B + 1)^ := TwoDigitsHexWB[PByteArray(P)[i]];
+        end;
     else // escaped as \ + b,t,n,f,r,\,"
       PWord(B + 1)^ := (integer(tab[PByteArray(P)[i]]) shl 8) or ord('\');
     end;
@@ -5532,7 +5532,7 @@ begin
     AddJSONEscapeW(pointer(s), Length(s));
     {$else}
     AddAnyAnsiString(s, twJSONEscape, 0);
-    {$endif}
+    {$endif UNICODE}
 end;
 
 procedure TTextWriter.AddJSONEscapeAnsiString(const s: AnsiString);

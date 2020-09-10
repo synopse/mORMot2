@@ -9,7 +9,8 @@ unit mormot.net.client;
    HTTP Client Classes
    - THttpClientSocket Implementing HTTP client over plain sockets
    - THttpRequest Abstract HTTP client class
-   - TWinHttp TWinINet TWinHttpWebSocketClient
+   - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP
+   - Cached HTTP Connection to a Remote Server
 
   *****************************************************************************
 
@@ -26,11 +27,16 @@ uses
   mormot.core.os,
   mormot.net.sock,
   mormot.net.http,
-  {$ifdef USEWININET}
+  {$ifdef USEWININET}  // as set in mormot.defines.inc
   mormot.lib.winhttp,
   {$endif USEWININET}
+  {$ifdef USELIBCURL}  // as set in mormot.defines.inc
+  mormot.lib.curl,
+  {$endif USELIBCURL}
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.data,
+  mormot.core.json; // TSynDictionary for THttpRequestCached
 
 
 
@@ -64,8 +70,8 @@ type
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     // - retry is false by caller, and will be recursively called with true to retry once
-    function Request(const url, method: RawUTF8; KeepAlive: cardinal; const
-      header: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
+    function Request(const url, method: RawUTF8; KeepAlive: cardinal;
+      const header: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
       retry: boolean): integer; virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
@@ -77,10 +83,12 @@ type
     function GetAuth(const url, AuthToken: RawUTF8; KeepAlive: cardinal = 0): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
     // header is read from server: Content is always '', but Headers are set
-    function Head(const url: RawUTF8; KeepAlive: cardinal = 0; const header: RawUTF8 = ''): integer;
+    function Head(const url: RawUTF8; KeepAlive: cardinal = 0;
+      const header: RawUTF8 = ''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
-    function Post(const url: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
-      KeepAlive: cardinal = 0; const header: RawUTF8 = ''): integer;
+    function Post(const url: RawUTF8; const Data: RawByteString;
+      const DataType: RawUTF8; KeepAlive: cardinal = 0;
+      const header: RawUTF8 = ''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Put(const url: RawUTF8; const Data: RawByteString;
       const DataType: RawUTF8; KeepAlive: cardinal = 0;
@@ -99,7 +107,7 @@ type
 
   /// class-reference type (metaclass) of a HTTP client socket access
   // - may be either THttpClientSocket or THttpClientWebSockets (from
-  // SynBidirSock unit)
+  // mormot.net.websock unit)
   THttpClientSocketClass = class of THttpClientSocket;
 
 
@@ -112,7 +120,7 @@ type
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
-  // the actual SynCrtSock's THttpRequest implementation class
+  // the actual mormot.net.http's THttpRequest implementation class
   THttpRequestExtendedOptions = record
     /// let HTTPS be less paranoid about SSL certificates
     // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP
@@ -157,8 +165,8 @@ type
     procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); virtual; abstract;
     procedure InternalSendRequest(const aMethod: RawUTF8; const aData:
       RawByteString); virtual; abstract;
-    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
-      RawUTF8; var Data: RawByteString): integer; virtual; abstract;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
+      var Data: RawByteString): integer; virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
     procedure InternalAddHeader(const hdr: RawUTF8); virtual; abstract;
   public
@@ -507,8 +515,130 @@ type
     destructor Destroy; override;
   end;
 
-
 {$endif USEWININET}
+
+{$ifdef USELIBCURL}
+
+type
+  /// libcurl exception type
+  ECurlHTTP = class(Exception);
+
+  /// a class to handle HTTP/1.1 request using the libcurl library
+  // - libcurl is a free and easy-to-use cross-platform URL transfer library,
+  // able to directly connect via HTTP or HTTPS on most Linux systems
+  // - under a 32 bit Linux system, the libcurl library (and its dependencies,
+  // like OpenSSL) may not be installed - you can add it via your package
+  // manager, e.g. on Ubuntu:
+  // $ sudo apt-get install libcurl3
+  // - under a 64-bit Linux system, if compiled with Kylix, you should install
+  // the 32-bit flavor of libcurl, e.g. on Ubuntu:
+  // $ sudo apt-get install libcurl3:i386
+  // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
+  // depending on the default version available on the system
+  TCurlHTTP = class(THttpRequest)
+  protected
+    fHandle: pointer;
+    fRootURL: RawUTF8;
+    fIn: record
+      Headers: pointer;
+      DataOffset: integer;
+      URL, Method: RawUTF8;
+      Data: RawByteString;
+    end;
+    fOut: record
+      Header, Encoding, AcceptEncoding: RawUTF8;
+      Data: RawByteString;
+    end;
+    fSSL: record
+      CertFile, CACertFile, KeyName, PassPhrase: RawUTF8;
+    end;
+    procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
+    procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); override;
+    procedure InternalSendRequest(const aMethod: RawUTF8;
+      const aData: RawByteString); override;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
+      var Data: RawByteString): integer; override;
+    procedure InternalCloseRequest; override;
+    procedure InternalAddHeader(const hdr: RawUTF8); override;
+    function GetCACertFile: RawUTF8;
+    procedure SetCACertFile(const aCertFile: RawUTF8);
+  public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; override;
+    /// release the connection
+    destructor Destroy; override;
+    /// allow to set a CA certification file without touching the client certification
+    property CACertFile: RawUTF8 read GetCACertFile write SetCACertFile;
+    /// set the client SSL certification details
+    // - see CACertFile if you don't want to change the whole client cert info
+    // - used e.g. as
+    // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
+    procedure UseClientCertificate(
+      const aCertFile, aCACertFile, aKeyName, aPassPhrase: RawUTF8);
+  end;
+
+{$endif USELIBCURL}
+
+
+{ ************** Cached HTTP Connection to a Remote Server }
+
+type
+  /// in-memory storage of one THttpRequestCached entry
+  THttpRequestCache = record
+    Tag: RawUTF8;
+    Content: RawByteString;
+  end;
+  /// in-memory storage of all THttpRequestCached entries
+  THttpRequestCacheDynArray = array of THttpRequestCache;
+
+  /// handles cached HTTP connection to a remote server
+  // - use in-memory cached content when HTTP_NOTMODIFIED (304) is returned
+  // for an already known ETAG header value
+  THttpRequestCached = class(TSynPersistent)
+  protected
+    fURI: TURI;
+    fHttp: THttpRequest; // either fHttp or fSocket is used
+    fSocket: THttpClientSocket;
+    fKeepAlive: integer;
+    fTokenHeader: RawUTF8;
+    fCache: TSynDictionary;
+  public
+    /// initialize the cache for a given server
+    // - once set, you can change the request URI using the Address property
+    // - aKeepAliveSeconds = 0 will force "Connection: Close" HTTP/1.0 requests
+    // - an internal cache will be maintained, and entries will be flushed after
+    // aTimeoutSeconds - i.e. 15 minutes per default - setting 0 will disable
+    // the client-side cache content
+    // - aToken is an optional token which will be transmitted as HTTP header:
+    // $ Authorization: Bearer <aToken>
+    // - TWinHttp will be used by default under Windows, unless you specify
+    // another class
+    constructor Create(const aURI: RawUTF8; aKeepAliveSeconds: integer = 30;
+      aTimeoutSeconds: integer = 15*60; const aToken: RawUTF8 = '';
+      aHttpClass: THttpRequestClass = nil); reintroduce;
+    /// finalize the current connnection and flush its in-memory cache
+    // - you may use LoadFromURI() to connect to a new server
+    procedure Clear;
+    /// connect to a new server
+    // - aToken is an optional token which will be transmitted as HTTP header:
+    // $ Authorization: Bearer <aToken>
+    // - TWinHttp will be used by default under Windows, unless you specify
+    // another class
+    function LoadFromURI(const aURI: RawUTF8; const aToken: RawUTF8 = '';
+      aHttpClass: THttpRequestClass = nil): boolean;
+    /// finalize the cache
+    destructor Destroy; override;
+    /// retrieve a resource from the server, or internal cache
+    // - aModified^ = true if server returned a HTTP_SUCCESS (200) with some new
+    // content, or aModified^ = false if HTTP_NOTMODIFIED (304) was returned
+    function Get(const aAddress: RawUTF8; aModified: PBoolean = nil;
+      aStatus: PInteger = nil): RawByteString;
+    /// erase one resource from internal cache
+    function Flush(const aAddress: RawUTF8): boolean;
+    /// read-only access to the connected server
+    property URI: TURI read fURI;
+  end;
+
 
 implementation
 
@@ -1249,8 +1379,8 @@ end;
 
 procedure TWinINet.InternalAddHeader(const hdr: RawUTF8);
 begin
-  if (hdr <> '') and not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr),
-    HTTP_ADDREQ_FLAG_COALESCE) then
+  if (hdr <> '') and
+     not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr), HTTP_ADDREQ_FLAG_COALESCE) then
     raise EWinINet.Create;
 end;
 
@@ -1299,8 +1429,8 @@ begin
   result := '';
   dwSize := 0;
   dwIndex := 0;
-  if not HttpQueryInfoA(fRequest, Info, nil, dwSize, dwIndex) and (GetLastError
-    = ERROR_INSUFFICIENT_BUFFER) then
+  if not HttpQueryInfoA(fRequest, Info, nil, dwSize, dwIndex) and
+     (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
   begin
     SetLength(result, dwSize - 1);
     if not HttpQueryInfoA(fRequest, Info, pointer(result), dwSize, dwIndex) then
@@ -1450,6 +1580,314 @@ begin
 end;
 
 {$endif USEWININET}
+
+
+{$ifdef USELIBCURL}
+
+{ TCurlHTTP }
+
+procedure TCurlHTTP.InternalConnect(ConnectionTimeOut, SendTimeout,
+  ReceiveTimeout: cardinal);
+const
+  HTTPS: array[boolean] of string[1] = ('', 's');
+begin
+  if not IsAvailable then
+    raise ENetSock.CreateFmt('No available %s', [LIBCURL_DLL]);
+  fHandle := curl.easy_init;
+  ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
+  if ConnectionTimeOut = 0 then
+    ConnectionTimeOut := 1;
+  curl.easy_setopt(fHandle, coConnectTimeout, ConnectionTimeOut); // default=300 !
+  // coTimeout=CURLOPT_TIMEOUT is global for the transfer, so shouldn't be used
+  if fLayer = nlUNIX then
+    // see CURLOPT_UNIX_SOCKET_PATH doc
+    fRootURL := 'http://localhost'
+  else
+    FormatUTF8('http%://%:%', [HTTPS[fHttps], fServer, fPort], fRootURL);
+end;
+
+destructor TCurlHTTP.Destroy;
+begin
+  if fHandle <> nil then
+    curl.easy_cleanup(fHandle);
+  inherited;
+end;
+
+function TCurlHTTP.GetCACertFile: RawUTF8;
+begin
+  Result := fSSL.CACertFile;
+end;
+
+procedure TCurlHTTP.SetCACertFile(const aCertFile: RawUTF8);
+begin
+  fSSL.CACertFile := aCertFile;
+end;
+
+procedure TCurlHTTP.UseClientCertificate(const aCertFile, aCACertFile, aKeyName,
+  aPassPhrase: RawUTF8);
+begin
+  fSSL.CertFile := aCertFile;
+  fSSL.CACertFile := aCACertFile;
+  fSSL.KeyName := aKeyName;
+  fSSL.PassPhrase := aPassPhrase;
+end;
+
+procedure TCurlHTTP.InternalCreateRequest(const aMethod, aURL: RawUTF8);
+const
+  CERT_PEM: RawUTF8 = 'PEM';
+begin
+  fIn.URL := fRootURL + aURL;
+  curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHTTP)
+  //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
+  if fLayer = nlUNIX then
+    curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
+  curl.easy_setopt(fHandle, coURL, pointer(fIn.URL));
+  if fProxyName <> '' then
+    curl.easy_setopt(fHandle, coProxy, pointer(fProxyName));
+  if fHttps then
+    if IgnoreSSLCertificateErrors then
+    begin
+      curl.easy_setopt(fHandle, coSSLVerifyPeer, 0);
+      curl.easy_setopt(fHandle, coSSLVerifyHost, 0);
+      //curl.easy_setopt(fHandle,coProxySSLVerifyPeer,0);
+      //curl.easy_setopt(fHandle,coProxySSLVerifyHost,0);
+    end
+    else
+    begin
+      // see https://curl.haxx.se/libcurl/c/simplessl.html
+      if fSSL.CertFile <> '' then
+      begin
+        curl.easy_setopt(fHandle, coSSLCertType, pointer(CERT_PEM));
+        curl.easy_setopt(fHandle, coSSLCert, pointer(fSSL.CertFile));
+        if fSSL.PassPhrase <> '' then
+          curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fSSL.PassPhrase));
+        curl.easy_setopt(fHandle, coSSLKeyType, nil);
+        curl.easy_setopt(fHandle, coSSLKey, pointer(fSSL.KeyName));
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fSSL.CACertFile));
+        curl.easy_setopt(fHandle, coSSLVerifyPeer, 1);
+      end
+      else if fSSL.CACertFile <> '' then
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fSSL.CACertFile));
+    end;
+  curl.easy_setopt(fHandle, coUserAgent, pointer(fExtendedOptions.UserAgent));
+  curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
+  curl.easy_setopt(fHandle, coHeaderFunction, @CurlWriteRawByteString);
+  fIn.Method := UpperCase(aMethod);
+  if fIn.Method = '' then
+    fIn.Method := 'GET';
+  if fIn.Method = 'GET' then
+    fIn.Headers := nil
+  else // disable Expect 100 continue in libcurl
+    fIn.Headers := curl.slist_append(nil, 'Expect:');
+  Finalize(fOut);
+end;
+
+procedure TCurlHTTP.InternalAddHeader(const hdr: RawUTF8);
+var
+  P: PUTF8Char;
+  s: RawUTF8;
+begin
+  P := pointer(hdr);
+  while P <> nil do
+  begin
+    s := GetNextLine(P, P);
+    if s <> '' then // nil would reset the whole list
+      fIn.Headers := curl.slist_append(fIn.Headers, pointer(s));
+  end;
+end;
+
+class function TCurlHTTP.IsAvailable: boolean;
+begin
+  Result := CurlIsAvailable;
+end;
+
+procedure TCurlHTTP.InternalSendRequest(const aMethod: RawUTF8; const aData:
+  RawByteString);
+begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
+  if fIn.Method = 'HEAD' then // the only verb what do not expect body in answer is HEAD
+    curl.easy_setopt(fHandle, coNoBody, 1)
+  else
+    curl.easy_setopt(fHandle, coNoBody, 0);
+  curl.easy_setopt(fHandle, coCustomRequest, pointer(fIn.Method));
+  curl.easy_setopt(fHandle, coPostFields, pointer(aData));
+  curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
+  curl.easy_setopt(fHandle, coHTTPHeader, fIn.Headers);
+  curl.easy_setopt(fHandle, coFile, @fOut.Data);
+  curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
+end;
+
+function TCurlHTTP.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
+  RawUTF8; var Data: RawByteString): integer;
+var
+  res: TCurlResult;
+  P: PUTF8Char;
+  s: RawUTF8;
+  i: integer;
+  rc: longint; // needed on Linux x86-64
+begin
+  res := curl.easy_perform(fHandle);
+  if res <> crOK then
+    raise ECurlHTTP.CreateFmt('libcurl error %d (%s) on %s %s', [ord(res), curl.easy_strerror
+      (res), fIn.Method, fIn.URL]);
+  rc := 0;
+  curl.easy_getinfo(fHandle, ciResponseCode, rc);
+  result := rc;
+  Header := Trim(fOut.Header);
+  if IdemPChar(pointer(Header), 'HTTP/') then
+  begin
+    i := 6;
+    while Header[i] >= ' ' do
+      inc(i);
+    while ord(Header[i]) in [10, 13] do
+      inc(i);
+    system.Delete(Header, 1, i - 1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
+  end;
+  P := pointer(Header);
+  while P <> nil do
+  begin
+    s := GetNextLine(P, P);
+    if IdemPChar(pointer(s), 'ACCEPT-ENCODING:') then
+      trimcopy(s, 17, 100, AcceptEncoding)
+    else if IdemPChar(pointer(s), 'CONTENT-ENCODING:') then
+      trimcopy(s, 18, 100, Encoding);
+  end;
+  Data := fOut.Data;
+end;
+
+procedure TCurlHTTP.InternalCloseRequest;
+begin
+  if fIn.Headers <> nil then
+  begin
+    curl.slist_free_all(fIn.Headers);
+    fIn.Headers := nil;
+  end;
+  Finalize(fIn);
+  fIn.DataOffset := 0;
+  Finalize(fOut);
+end;
+
+{$endif USELIBCURL}
+
+
+{ ************** Cached HTTP Connection to a Remote Server }
+
+{ THttpRequestCached }
+
+constructor THttpRequestCached.Create(const aURI: RawUTF8; aKeepAliveSeconds,
+  aTimeoutSeconds: integer; const aToken: RawUTF8; aHttpClass: THttpRequestClass);
+begin
+  inherited Create;
+  fKeepAlive := aKeepAliveSeconds * 1000;
+  if aTimeoutSeconds > 0 then // 0 means no cache
+    fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+      TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
+  if not LoadFromURI(aURI, aToken, aHttpClass) then
+    raise ESynException.CreateUTF8('%.Create: invalid aURI=%', [self, aURI]);
+end;
+
+procedure THttpRequestCached.Clear;
+begin
+  FreeAndNil(fHttp); // either fHttp or fSocket is used
+  FreeAndNil(fSocket);
+  if fCache <> nil then
+    fCache.DeleteAll;
+  fURI.Clear;
+  fTokenHeader := '';
+end;
+
+destructor THttpRequestCached.Destroy;
+begin
+  fCache.Free;
+  fHttp.Free;
+  fSocket.Free;
+  inherited Destroy;
+end;
+
+function THttpRequestCached.Get(const aAddress: RawUTF8; aModified: PBoolean;
+  aStatus: PInteger): RawByteString;
+var
+  cache: THttpRequestCache;
+  headin, headout: RawUTF8;
+  status: integer;
+  modified: boolean;
+begin
+  result := '';
+  if (fHttp = nil) and (fSocket = nil) then // either fHttp or fSocket is used
+    exit;
+  if (fCache <> nil) and fCache.FindAndCopy(aAddress, cache) then
+    FormatUTF8('If-None-Match: %', [cache.Tag], headin);
+  if fTokenHeader <> '' then
+  begin
+    if {%H-}headin <> '' then
+      headin := headin + #13#10;
+    headin := headin + fTokenHeader;
+  end;
+  if fSocket <> nil then
+  begin
+    status := fSocket.Get(aAddress, fKeepAlive, headin);
+    result := fSocket.Content;
+  end
+  else
+    status := fHttp.Request(aAddress, 'GET', fKeepAlive, headin, '', '', headout, result);
+  modified := true;
+  case status of
+    HTTP_SUCCESS:
+      if fCache <> nil then
+      begin
+        if fHttp <> nil then
+          FindNameValue(headout{%H-}, 'ETAG:', cache.Tag)
+        else
+          cache.Tag := fSocket.HeaderGetValue('ETAG');
+        if cache.Tag <> '' then
+        begin
+          cache.Content := result;
+          fCache.AddOrUpdate(aAddress, cache);
+        end;
+      end;
+    HTTP_NOTMODIFIED:
+      begin
+        result := cache.Content;
+        modified := false;
+      end;
+  end;
+  if aModified <> nil then
+    aModified^ := modified;
+  if aStatus <> nil then
+    aStatus^ := status;
+end;
+
+function THttpRequestCached.LoadFromURI(const aURI, aToken: RawUTF8;
+  aHttpClass: THttpRequestClass): boolean;
+begin
+  result := false;
+  if (self = nil) or (fHttp <> nil) or (fSocket <> nil) or not fURI.From(aURI) then
+    exit;
+  fTokenHeader := AuthorizationBearer(aToken);
+  if aHttpClass = nil then
+  begin
+    {$ifdef USEWININET}
+    aHttpClass := TWinHTTP;
+    {$else}
+    {$ifdef USELIBCURL}
+    if fURI.Https then
+      aHttpClass := TCurlHTTP;
+    {$endif USELIBCURL}
+    {$endif USEWININET}
+  end;
+  if aHttpClass = nil then
+    fSocket := THttpClientSocket.Open(fURI.Server, fURI.Port)
+  else
+    fHttp := aHttpClass.Create(fURI.Server, fURI.Port, fURI.Https);
+  result := true;
+end;
+
+function THttpRequestCached.Flush(const aAddress: RawUTF8): boolean;
+begin
+  if fCache <> nil then
+    result := fCache.Delete(aAddress) >= 0
+  else
+    result := true;
+end;
 
 initialization
 

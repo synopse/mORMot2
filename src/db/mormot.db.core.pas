@@ -97,7 +97,7 @@ type
   TSQLVarOptions = set of TSQLVarOption;
 
   /// memory structure used for database values by reference storage
-  // - used mainly by SynDB, mORMot, mORMotDB and mORMotSQLite3 units
+  // - used mainly by mormot.db.sql, mORMot, mORMotDB and mORMotSQLite3 units
   // - defines only TSQLDBFieldType data types (similar to those handled by
   // SQLite3, with the addition of ftCurrency and ftDate)
   // - cleaner/lighter dedicated type than TValue or variant/TVarData, strong
@@ -140,9 +140,9 @@ type
   /// used to store a field index in a Table
   // - note that -1 is commonly used for the ID/RowID field so the values should
   // be signed
-  // - even if ShortInt (-128..127) may have been enough, we define a 16 bit
-  // safe unsigned integer to let the source compile with Delphi 5
-  TSQLFieldIndex = SmallInt; // -32768..32767
+  // - MAX_SQLFIELDS may be up to 256, so ShortInt (-128..127) would not have
+  // been enough, so we use the SmallInt range (-32768..32767)
+  TSQLFieldIndex = SmallInt;
 
   /// used to store field indexes in a Table
   // - same as TSQLFieldBits, but allowing to store the proper order
@@ -190,7 +190,7 @@ procedure FillZero(var Fields: TSQLFieldBits); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TSQLFieldBits set of bits into an array of integers
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits; out Index: TSQLFieldIndexDynArray;
   MaxLength: integer = MAX_SQLFIELDS; IndexStart: integer = 0); overload;
 
 /// convert a TSQLFieldBits set of bits into an array of integers
@@ -636,6 +636,23 @@ function InlineParameter(ID: Int64): shortstring; overload;
 function InlineParameter(const value: RawUTF8): RawUTF8; overload;
 
 
+/// go to the beginning of the SQL statement, ignoring all blanks and comments
+// - used to check the SQL statement command (e.g. is it a SELECT?)
+function SQLBegin(P: PUTF8Char): PUTF8Char;
+
+/// add a condition to a SQL WHERE clause, with an ' and ' if where is not void
+procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
+
+/// return true if the parameter is void or begin with a 'SELECT' SQL statement
+// - used to avoid code injection and to check if the cache must be flushed
+// - VACUUM, PRAGMA, or EXPLAIN statements also return true, since they won't
+// change the data content
+// - WITH recursive statement expect no INSERT/UPDATE/DELETE pattern in the SQL
+// - if P^ is a SELECT and SelectClause is set to a variable, it would
+// contain the field names, from SELECT ...field names... FROM
+function isSelect(P: PUTF8Char; SelectClause: PRawUTF8 = nil): boolean;
+
+
 { ************ TJSONWriter Specialized for Database Export }
 
 type
@@ -972,8 +989,8 @@ begin
   {$endif MAX_SQLFIELDS_128}
 end;
 
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index:
-  TSQLFieldIndexDynArray; MaxLength, IndexStart: integer);
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
+  out Index: TSQLFieldIndexDynArray; MaxLength, IndexStart: integer);
 var
   i, n: PtrInt;
   sets: array[0..MAX_SQLFIELDS - 1] of TSQLFieldIndex; // to avoid memory reallocation
@@ -1016,7 +1033,7 @@ procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
 var
   i: integer;
 begin
-  FillCharFast(Fields, SizeOf(Fields), 0);
+  FillZero(Fields);
   for i := 0 to Length(Index) - 1 do
     if Index[i] >= 0 then
       include(Fields, Index[i]);
@@ -1560,7 +1577,7 @@ var
   wasNull: boolean;
 begin
   maxParam := 0;
-  FillCharFast(Nulls, SizeOf(Nulls), 0);
+  FillZero(Nulls);
   ppBeg := PosEx(RawUTF8(':('), SQL, 1);
   if (ppBeg = 0) or (PosEx(RawUTF8('):'), SQL, ppBeg + 2) = 0) then
   begin
@@ -1614,6 +1631,88 @@ function InlineParameter(const value: RawUTF8): RawUTF8;
 begin
   QuotedStrJSON(value, result, ':(', '):');
 end;
+
+
+function isSelect(P: PUTF8Char; SelectClause: PRawUTF8): boolean;
+var
+  from: PUTF8Char;
+begin
+  if P <> nil then
+  begin
+    P := SQLBegin(P);
+    case IdemPCharArray(P, ['SELECT', 'EXPLAIN ', 'VACUUM', 'PRAGMA', 'WITH']) of
+      0:
+        if P[6] <= ' ' then
+        begin
+          if SelectClause <> nil then
+          begin
+            inc(P, 7);
+            from := StrPosI(' FROM ', P);
+            if from = nil then
+              SelectClause^ := ''
+            else
+              FastSetString(SelectClause^, P, from - P);
+          end;
+          result := true;
+        end
+        else
+          result := false;
+      1:
+        result := true;
+      2, 3:
+        result := P[6] in [#0..' ', ';'];
+      4:
+        result := (P[4] <= ' ') and (StrPosI('INSERT', P + 5) = nil) and
+          (StrPosI('UPDATE', P + 5) = nil) and (StrPosI('DELETE', P + 5) = nil);
+    else
+      result := false;
+    end;
+  end
+  else
+    result := true; // assume '' statement is SELECT command
+end;
+
+function SQLBegin(P: PUTF8Char): PUTF8Char;
+begin
+  if P <> nil then
+    repeat
+      if P^ <= ' ' then // ignore blanks
+        repeat
+          if P^ = #0 then
+            break
+          else
+            inc(P)
+        until P^ > ' ';
+      if PWord(P)^ = ord('-') + ord('-') shl 8 then // SQL comments
+        repeat
+          inc(P)
+        until P^ in [#0, #10]
+      else if PWord(P)^ = ord('/') + ord('*') shl 8 then
+      begin // C comments
+        inc(P);
+        repeat
+          inc(P);
+          if PWord(P)^ = ord('*') + ord('/') shl 8 then
+          begin
+            inc(P, 2);
+            break;
+          end;
+        until P^ = #0;
+      end
+      else
+        break;
+    until false;
+  result := P;
+end;
+
+procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
+begin
+  if where = '' then
+    where := condition
+  else
+    where := where + ' and ' + condition;
+end;
+
 
 
 { ************ TJSONWriter Specialized for Database Export }
@@ -1906,7 +2005,7 @@ var
     n := 0;
     try
       repeat
-        if n = length(v) then
+        if n = length({%H-}v) then
           SetLength(v, NextGrow(n));
         if not GetWhereValue(v[n]) then
           exit;
@@ -1952,29 +2051,29 @@ var
     end;
     case P^ of
       '=':
-        Where.operator := opEqualTo;
+        Where.Operator := opEqualTo;
       '>':
         if P[1] = '=' then
         begin
           inc(P);
-          Where.operator := opGreaterThanOrEqualTo;
+          Where.Operator := opGreaterThanOrEqualTo;
         end
         else
-          Where.operator := opGreaterThan;
+          Where.Operator := opGreaterThan;
       '<':
         case P[1] of
           '=':
             begin
               inc(P);
-              Where.operator := opLessThanOrEqualTo;
+              Where.Operator := opLessThanOrEqualTo;
             end;
           '>':
             begin
               inc(P);
-              Where.operator := opNotEqualTo;
+              Where.Operator := opNotEqualTo;
             end;
         else
-          Where.operator := opLessThan;
+          Where.Operator := opLessThan;
         end;
       'i', 'I':
         case P[1] of
@@ -1984,7 +2083,7 @@ var
               if IdemPChar(P, 'NULL') then
               begin
                 Where.Value := NULL_STR_VAR;
-                Where.operator := opIsNull;
+                Where.Operator := opIsNull;
                 Where.ValueSQL := P;
                 Where.ValueSQLLen := 4;
                 TVarData(Where.ValueVariant).VType := varNull;
@@ -1994,7 +2093,7 @@ var
               else if IdemPChar(P, 'NOT NULL') then
               begin
                 Where.Value := 'not null';
-                Where.operator := opIsNotNull;
+                Where.Operator := opIsNotNull;
                 Where.ValueSQL := P;
                 Where.ValueSQLLen := 8;
                 TVarData(Where.ValueVariant).VType := varNull;
@@ -2005,7 +2104,7 @@ var
             end;
           'n', 'N':
             begin
-              Where.operator := opIn;
+              Where.Operator := opIn;
               P := GotoNextNotSpace(P + 2);
               if P^ <> '(' then
                 exit; // incorrect SQL statement
@@ -2028,12 +2127,12 @@ var
         if IdemPChar(P + 1, 'IKE') then
         begin
           inc(P, 3);
-          Where.operator := opLike;
+          Where.Operator := opLike;
         end
         else
           exit;
     else
-      exit; // unknown operator
+      exit; // unknown Operator
     end;
     // we got 'WHERE FieldName operator ' -> handle value
     inc(P);
@@ -2235,7 +2334,7 @@ var
   i: integer;
   f: ^TSynTableStatementSelect;
 begin
-  FillcharFast(Fields, SizeOf(Fields), 0);
+  FillZero(Fields);
   withID := false;
   f := pointer(select);
   for i := 1 to Length(select) do
@@ -2254,5 +2353,6 @@ end;
 initialization
   SetLength(JSON_SQLDATE_MAGIC_TEXT, 3);
   PCardinal(pointer(JSON_SQLDATE_MAGIC_TEXT))^ := JSON_SQLDATE_MAGIC;
+
 end.
 

@@ -496,12 +496,10 @@ function FileSynLZ(const Source, Dest: TFileName;
   Magic: Cardinal): boolean; deprecated;
 
 /// deprecated function - use AlgoSynLZ.FileUnCompress
-function FileUnSynLZ(const Source, Dest: TFileName;
-  Magic: Cardinal): boolean; deprecated;
+function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean; deprecated;
 
 /// deprecated function - use AlgoSynLZ.FileIsCompressed
-function FileIsSynLZ(const Name: TFileName;
-  Magic: Cardinal): boolean; deprecated;
+function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean; deprecated;
 
 /// deprecated function - use AlgoSynLZ.StreamUnCompress
 function StreamUnSynLZ(const Source: TFileName;
@@ -817,7 +815,7 @@ type
     // a fixed-sized record storage is also handled separately)
     // - could be decoded later on via TFastReader.ReadVarUInt64Array
     procedure WriteVarUInt64DynArray(const Values: TInt64DynArray;
-      ValuesCount: integer; Offset: Boolean);
+      ValuesCount: integer; Offset: boolean);
     /// append the RawUTF8 dynamic array
     // - handled the fixed size strings array case in a very efficient way
     procedure WriteRawUTF8DynArray(const Values: TRawUTF8DynArray; ValuesCount: integer);
@@ -1369,7 +1367,7 @@ type
     function LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean; virtual;
+    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): boolean; virtual;
     /// retrieve a line content as UTF-8
     // - a temporary UTF-8 string is created
     // - will return '' if aIndex is out of range
@@ -1471,16 +1469,6 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; over
 
 /// fill a shortstring with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(const source: RawByteString): shortstring; overload;
-
-/// conversion from octal C-like escape into binary data
-// - \xxx is converted into a single xxx byte from octal, and \\ into \
-// - will stop the conversion when Oct^=#0 or when invalid \xxx is reached
-// - returns the number of bytes written to Bin^
-function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
-
-/// conversion from octal C-like escape into binary data
-// - \xxx is converted into a single xxx byte from octal, and \\ into \
-function OctToBin(const Oct: RawUTF8): RawByteString; overload;
 
 
 /// get text File contents (even Unicode or UTF8) and convert it into a
@@ -3697,7 +3685,7 @@ begin
 end;
 
 procedure TBufferWriter.WriteVarUInt64DynArray(const Values: TInt64DynArray;
-  ValuesCount: integer; Offset: Boolean);
+  ValuesCount: integer; Offset: boolean);
 var
   n: integer;
   i: PtrInt;
@@ -6450,7 +6438,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
       $a5a5a5a5, // .mab file = MAGIC_MAB in SynLog.pas
       $a5aba5a5, // .data = TSQLRESTSTORAGEINMEMORY_MAGIC in mORMot.pas
       $aba51051, // .log.synlz = LOG_MAGIC in SynLog.pas
-      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in SynSQLite3.pas
+      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
       $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
       $b7010000, $ba010000, // mpeg = 00 00 01 Bx
       $cececece, // jceks = CE CE CE CE
@@ -6602,7 +6590,7 @@ begin
     UTF8DecodeToString(fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd), result);
 end;
 
-function TMemoryMapText.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean;
+function TMemoryMapText.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): boolean;
 begin
   if (self = nil) or (cardinal(aIndex) >= cardinal(fCount)) or (aUpperSearch = '') then
     result := false
@@ -6896,68 +6884,6 @@ begin
   result[0] := AnsiChar(EscapeBuffer(pointer(source),
     @result[1], length(source), 80) - @result[1]);
 end;
-
-function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt;
-var
-  c, v: byte;
-label
-  _nxt;
-begin
-  result := PtrInt(Bin);
-  if Oct <> nil then
-    repeat
-      c := ord(Oct^);
-      inc(Oct);
-      if c <> ord('\') then
-      begin
-        if c = 0 then
-          break;
-_nxt:   Bin^ := c;
-        inc(Bin);
-        continue;
-      end;
-      c := ord(Oct^);
-      inc(Oct);
-      if c = ord('\') then
-        goto _nxt;
-      dec(c, ord('0'));
-      if c > 3 then
-        break; // stop at malformated input (includes #0)
-      c := c shl 6;
-      v := c;
-      c := ord(Oct[0]);
-      dec(c, ord('0'));
-      if c > 7 then
-        break;
-      c := c shl 3;
-      v := v or c;
-      c := ord(Oct[1]);
-      dec(c, ord('0'));
-      if c > 7 then
-        break;
-      c := c or v;
-      Bin^ := c;
-      inc(Bin);
-      inc(Oct, 2);
-    until false;
-  result := PtrUInt(Bin)-PtrUInt(result);
-end;
-
-function OctToBin(const Oct: RawUTF8): RawByteString;
-var
-  tmp: TSynTempBuffer;
-  L: integer;
-begin
-  tmp.Init(length(Oct));
-  try
-    L := OctToBin(pointer(Oct), tmp.buf);
-    SetString(result, PAnsiChar(tmp.buf), L);
-  finally
-    tmp.Done;
-  end;
-end;
-
-
 
 function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean): SynUnicode;
 var

@@ -117,10 +117,33 @@ procedure SetLastError;               external kernel32;
 function  CreateIoCompletionPort;     external kernel32;
 function  GetQueuedCompletionStatus;  external kernel32;
 function  PostQueuedCompletionStatus; external kernel32;
+function  GetDesktopWindow;           external user32;
+
+procedure DisplayFatalError(const title, msg: RawUTF8);
+begin
+  MessageBoxA(0, pointer(msg), pointer(title), MB_OK or MB_ICONWARNING);
+end;
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
+end;
+
+function ExpandEnvVars(const aStr: string): string;
+// adapted from http://delphidabbler.com/articles?article=6
+var
+  size: Integer;
+begin
+  // Get required buffer size
+  size := ExpandEnvironmentStrings(pointer(aStr), nil, 0);
+  if size > 0 then
+  begin
+    // Read expanded string into result string
+    SetString(result, nil, size - 1);
+    ExpandEnvironmentStrings(pointer(aStr), pointer(result), size);
+  end
+  else
+    result := aStr; // return the original file name
 end;
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
@@ -282,6 +305,11 @@ end;
 function RenameFile(const OldName, NewName: TFileName): boolean;
 begin
   result := SysUtils.RenameFile(OldName,NewName);
+end;
+
+function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+begin
+  result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
 end;
 
 function FileOpenSequentialRead(const FileName: string): Integer;
@@ -461,9 +489,10 @@ begin
   if ExceptionInheritsFrom(EClass, 'EOleSysError') then
   begin
     result := EOleSysError(EInstance).ErrorCode;
-    for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
-      if DOTNET_EXCEPTIONHRESULT[i] = result then
-        PtrArrayAdd(ExceptionNames, DOTNET_EXCEPTIONNAME[i]);
+    if result > $80000000 then
+      for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
+        if DOTNET_EXCEPTIONHRESULT[i] = result then
+          PtrArrayAdd(ExceptionNames, DOTNET_EXCEPTIONNAME[i]);
   end
   else
     result := 0;
@@ -1451,6 +1480,32 @@ begin
 end;
 
 
+threadvar
+  OleDBCoinitialized: integer;
+
+// avoid including ActiveX unit
+function CoInitialize(_para1: pointer): HRESULT; stdcall; external 'ole32.dll';
+procedure CoUninitialize; stdcall; external 'ole32.dll';
+
+procedure CoInit;
+begin
+  inc(OleDBCoInitialized);
+  if OleDBCoInitialized = 1 then
+    CoInitialize(nil);
+end;
+
+procedure CoUninit;
+begin
+  if OleDBCoinitialized <= 0 then
+    raise EOleSysError.Create('You should call TOleDBConnection.Free from the same ' +
+      'thread which called its Create: i.e. call MyProps.EndCurrentThread from an ' +
+      'THttpServerGeneric.OnHttpThreadTerminate event - see ticket 213544b2f5');
+  dec(OleDBCoinitialized);
+  if OleDBCoinitialized = 0 then
+    CoUninitialize;
+end;
+
+
 { ****************** Gather Operating System Information }
 
 const
@@ -1661,4 +1716,18 @@ begin
   TrimSpaces(BiosInfoText);
   TrimSpaces(CpuInfoText);
 end;
+
+{$I-}
+procedure FinalizeSpecificUnit;
+begin
+  if CryptoAPI.Handle <> 0 then
+    FreeLibrary(CryptoAPI.Handle);
+  if OleDBCoinitialized <> 0 then
+  begin
+    writeln('Missing ', OleDBCoInitialized, ' TOleDBConnection.Destroy call');
+    ioresult;
+  end;
+end;
+{$I+}
+
 

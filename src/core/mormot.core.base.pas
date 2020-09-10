@@ -290,6 +290,7 @@ type
   TVariantArray = array[0 .. MaxInt div SizeOf(Variant) - 1 ] of Variant;
   PVariantArray = ^TVariantArray;
   TVariantDynArray = array of variant;
+  PPVariant = ^PVariant;
 
   PIntegerDynArray = ^TIntegerDynArray;
   TIntegerDynArray = array of integer;
@@ -417,6 +418,7 @@ type
   TInterfacedObjectClass = class of TInterfacedObject;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
+  ExceptionClass = class of Exception;
 
 type
   /// stack-allocated ASCII string, used by GUIDToShort() function
@@ -560,7 +562,7 @@ procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endi
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid1, guid2: TGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
@@ -573,7 +575,7 @@ function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integ
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
-function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
+function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append one TGUID item to a TGUID dynamic array
@@ -2357,7 +2359,7 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
-// method from the SynCrypto unit
+// method from the mormot.core.crypto unit
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
 /// retrieve 128-bit of entropy, from system time and current execution state
@@ -2620,8 +2622,8 @@ procedure crcblockfast(crc128, data128: PBlock128);
 var
   /// compute CRC32C checksum on the supplied buffer
   // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C is not
-  // the same polynom - but will use the fastest mean available, e.g. SSE 4.2,
-  // to achieve up to 16GB/s with the optimized implementation from SynCrypto.pas
+  // the same polynom - but will use the fastest mean available, e.g. SSE 4.2, to
+  // achieve up to 16GB/s with the optimized implementation from mormot.core.crypto
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher = crc32cfast;
   /// compute CRC32C checksum on one 32-bit unsigned integer
@@ -2636,7 +2638,7 @@ var
   // - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 hardware accelerated instruction, if available
-  // - is used e.g. by SynCrypto's TAESCFBCRC to check for data integrity
+  // - is used e.g. by mormot.core.crypto's TAESCFBCRC to check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
@@ -3128,7 +3130,8 @@ const
 
   /// HTTP header name for the authorization token, in upper case
   // - could be used e.g. with IdemPChar() to retrieve a JWT value
-  // - will detect header computed e.g. by SynCrtSock.AuthorizationBearer()
+  // - will detect header computed e.g. by motmot.net.http's
+  // AuthorizationBearer()
   HEADER_BEARER_UPPER = 'AUTHORIZATION: BEARER ';
 
   /// MIME content type used for JSON communication (as used by the Microsoft
@@ -3492,7 +3495,7 @@ begin
 end;
 
 
-function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid1, guid2: TGUID): Boolean;
 begin
   result := (PHash128Rec(@guid1).L = PHash128Rec(@guid2).L) and
@@ -3510,7 +3513,7 @@ begin
   result := Hash128Index(@guids[0], length(guids), @guid);
 end;
 
-function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
+function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): Boolean;
 var
   a: TPtrIntArray absolute guid;
 begin
@@ -5048,7 +5051,7 @@ begin
   else
     begin // generic binary comparison (fast with inlined CompareMemSmall)
       for result := 0 to Count - 1 do
-        if (PInt64(P)^ = PInt64(Elem)^) and
+        if (PInt64(P)^ = PInt64(Elem)^) and // not better using a local Int64 var
            CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
           exit
         else
@@ -6904,7 +6907,8 @@ begin
 end;
 
 function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
-var _0, _1: PtrInt;
+var
+  _0, _1: PtrInt;
 begin
   if P<>nil then
   begin

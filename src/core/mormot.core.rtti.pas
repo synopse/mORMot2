@@ -41,7 +41,7 @@ interface
 uses
   sysutils,
   classes,
-  typinfo,  // use official RTL for accurate layouts (especially FPC)
+  typinfo,  // use official RTL for accurate layouts (especially FPC unaligned)
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
@@ -857,6 +857,11 @@ function AlignToPtr(p: pointer): pointer; inline;
 
 {$endif FPC}
 
+type
+  // redefined here for proper Delphi inlining
+  PTypeData = type typinfo.PTypeData;
+
+/// efficiently inlined low-level function to retrieve raw RTTI structure
 function GetTypeData(TypeInfo: pointer): PTypeData; inline;
 
 {$endif HASINLINE}

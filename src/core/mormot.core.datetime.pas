@@ -370,7 +370,7 @@ type
   PSynSystemTime = ^TSynSystemTime;
 
 /// our own faster version of the corresponding RTL function
-function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
+function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
 
 /// our own faster version of the corresponding RTL function
 function IsLeapYear(Year: cardinal): boolean;
@@ -561,7 +561,7 @@ type
     /// fill Value from specified Date and Time
     procedure From(Y, M, D, HH, MM, SS: cardinal); overload;
      /// fill Value from specified TDateTime
-    procedure From(DateTime: TDateTime; DateOnly: Boolean=false); overload;
+    procedure From(DateTime: TDateTime; DateOnly: boolean=false); overload;
     /// fill Value from specified File Date
     procedure From(FileDate: integer); overload;
     /// fill Value from Iso-8601 encoded text
@@ -651,7 +651,7 @@ function TimeLogToUnixTime(const Timestamp: TTimeLog): TUnixTime;
 // set according to the layout in P (e.g. TRUE for '2012-05-26')
 // - returns 0 in case of invalid input string
 function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer;
-  ContainsNoTime: PBoolean = nil): TTimeLog;
+  ContainsNoTime: Pboolean = nil): TTimeLog;
 
 /// convert a Iso8601 encoded string into a TTimeLog value
 // - handle TTimeLog bit-encoded Int64 format
@@ -1310,7 +1310,7 @@ end;
 { TSynSystemTime }
 
 function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: integer;
-  out AValue: TDateTime): Boolean;
+  out AValue: TDateTime): boolean;
 var
   LStartOfMonth, LDay: integer;
 begin // adapted from DateUtils
@@ -1664,7 +1664,7 @@ begin
   MilliSecond := ms;
 end;
 
-function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
+function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
 var
   d100: TDiv100Rec;
 begin 
@@ -1916,7 +1916,7 @@ begin
   {$endif MSWINDOWS}
 end;
 
-procedure TTimeLogBits.From(DateTime: TDateTime; DateOnly: Boolean);
+procedure TTimeLogBits.From(DateTime: TDateTime; DateOnly: boolean);
 var
   T: TSynSystemTime;
   V: PtrInt;
@@ -2200,7 +2200,7 @@ begin
   result := PTimeLogBits(@Timestamp)^.ToUnixTime;
 end;
 
-function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBoolean): TTimeLog;
+function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: Pboolean): TTimeLog;
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
 // i.e. S<64 M<64 H<32 D<32 M<16 Y<9999: power of 2 -> use fast shl/shr
 var
