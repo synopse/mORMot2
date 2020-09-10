@@ -543,7 +543,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="47">
+    <Units Count="48">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -732,6 +732,10 @@
         <Filename Value="..\src\net\mormot.net.asynch.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit46>
+      <Unit47>
+        <Filename Value="..\src\net\mormot.net.websock.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit47>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
