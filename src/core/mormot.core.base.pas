@@ -3110,6 +3110,73 @@ type
 { ************ Raw Shared Constants / Types Definitions }
 
 const
+  /// void HTTP Status Code (not a standard value, for internal use only)
+  HTTP_NONE = 0;
+  /// HTTP Status Code for "Continue"
+  HTTP_CONTINUE = 100;
+  /// HTTP Status Code for "Switching Protocols"
+  HTTP_SWITCHINGPROTOCOLS = 101;
+  /// HTTP Status Code for "Success"
+  HTTP_SUCCESS = 200;
+  /// HTTP Status Code for "Created"
+  HTTP_CREATED = 201;
+  /// HTTP Status Code for "Accepted"
+  HTTP_ACCEPTED = 202;
+  /// HTTP Status Code for "Non-Authoritative Information"
+  HTTP_NONAUTHORIZEDINFO = 203;
+  /// HTTP Status Code for "No Content"
+  HTTP_NOCONTENT = 204;
+  /// HTTP Status Code for "Reset Content"
+  HTTP_RESETCONTENT = 205;
+  /// HTTP Status Code for "Partial Content"
+  HTTP_PARTIALCONTENT = 206;
+  /// HTTP Status Code for "Multiple Choices"
+  HTTP_MULTIPLECHOICES = 300;
+  /// HTTP Status Code for "Moved Permanently"
+  HTTP_MOVEDPERMANENTLY = 301;
+  /// HTTP Status Code for "Found"
+  HTTP_FOUND = 302;
+  /// HTTP Status Code for "See Other"
+  HTTP_SEEOTHER = 303;
+  /// HTTP Status Code for "Not Modified"
+  HTTP_NOTMODIFIED = 304;
+  /// HTTP Status Code for "Use Proxy"
+  HTTP_USEPROXY = 305;
+  /// HTTP Status Code for "Temporary Redirect"
+  HTTP_TEMPORARYREDIRECT = 307;
+  /// HTTP Status Code for "Bad Request"
+  HTTP_BADREQUEST = 400;
+  /// HTTP Status Code for "Unauthorized"
+  HTTP_UNAUTHORIZED = 401;
+  /// HTTP Status Code for "Forbidden"
+  HTTP_FORBIDDEN = 403;
+  /// HTTP Status Code for "Not Found"
+  HTTP_NOTFOUND = 404;
+  // HTTP Status Code for "Method Not Allowed"
+  HTTP_NOTALLOWED = 405;
+  // HTTP Status Code for "Not Acceptable"
+  HTTP_NOTACCEPTABLE = 406;
+  // HTTP Status Code for "Proxy Authentication Required"
+  HTTP_PROXYAUTHREQUIRED = 407;
+  /// HTTP Status Code for "Request Time-out"
+  HTTP_TIMEOUT = 408;
+  /// HTTP Status Code for "Conflict"
+  HTTP_CONFLICT = 409;
+  /// HTTP Status Code for "Payload Too Large"
+  HTTP_PAYLOADTOOLARGE = 413;
+  /// HTTP Status Code for "Internal Server Error"
+  HTTP_SERVERERROR = 500;
+  /// HTTP Status Code for "Not Implemented"
+  HTTP_NOTIMPLEMENTED = 501;
+  /// HTTP Status Code for "Bad Gateway"
+  HTTP_BADGATEWAY = 502;
+  /// HTTP Status Code for "Service Unavailable"
+  HTTP_UNAVAILABLE = 503;
+  /// HTTP Status Code for "Gateway Timeout"
+  HTTP_GATEWAYTIMEOUT = 504;
+  /// HTTP Status Code for "HTTP Version Not Supported"
+  HTTP_HTTPVERSIONNONSUPPORTED = 505;
+
   NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
   FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
   FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
@@ -3355,6 +3422,11 @@ type
   PUnixMSTime = ^TUnixMSTime;
   /// dynamic array of timestamps stored as millisecond-based Unix Time
   TUnixMSTimeDynArray = array of TUnixMSTime;
+
+/// retrieve the HTTP reason text from a code
+// - e.g. StatusCodeToReason(200)='OK'
+// - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+function StatusCodeToReason(Code: cardinal): RawUTF8;
 
 
 
@@ -10285,6 +10357,131 @@ end;
 function TSynMemoryStream.{%H-}Write(const Buffer; Count: Integer): Longint;
 begin
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
+end;
+
+
+{ ************ Raw Shared Constants / Types Definitions }
+
+var
+  ReasonCache: array[1..5, 0..13] of RawUTF8; // avoid memory allocation
+
+function StatusCodeToReasonInternal(Code: cardinal): RawUTF8;
+begin
+  case Code of
+    100:
+      result := 'Continue';
+    101:
+      result := 'Switching Protocols';
+    200:
+      result := 'OK';
+    201:
+      result := 'Created';
+    202:
+      result := 'Accepted';
+    203:
+      result := 'Non-Authoritative Information';
+    204:
+      result := 'No Content';
+    205:
+      result := 'Reset Content';
+    206:
+      result := 'Partial Content';
+    207:
+      result := 'Multi-Status';
+    300:
+      result := 'Multiple Choices';
+    301:
+      result := 'Moved Permanently';
+    302:
+      result := 'Found';
+    303:
+      result := 'See Other';
+    304:
+      result := 'Not Modified';
+    305:
+      result := 'Use Proxy';
+    307:
+      result := 'Temporary Redirect';
+    308:
+      result := 'Permanent Redirect';
+    400:
+      result := 'Bad Request';
+    401:
+      result := 'Unauthorized';
+    403:
+      result := 'Forbidden';
+    404:
+      result := 'Not Found';
+    405:
+      result := 'Method Not Allowed';
+    406:
+      result := 'Not Acceptable';
+    407:
+      result := 'Proxy Authentication Required';
+    408:
+      result := 'Request Timeout';
+    409:
+      result := 'Conflict';
+    410:
+      result := 'Gone';
+    411:
+      result := 'Length Required';
+    412:
+      result := 'Precondition Failed';
+    413:
+      result := 'Payload Too Large';
+    414:
+      result := 'URI Too Long';
+    415:
+      result := 'Unsupported Media Type';
+    416:
+      result := 'Requested Range Not Satisfiable';
+    426:
+      result := 'Upgrade Required';
+    500:
+      result := 'Internal Server Error';
+    501:
+      result := 'Not Implemented';
+    502:
+      result := 'Bad Gateway';
+    503:
+      result := 'Service Unavailable';
+    504:
+      result := 'Gateway Timeout';
+    505:
+      result := 'HTTP Version Not Supported';
+    511:
+      result := 'Network Authentication Required';
+  else
+    result := 'Invalid Request';
+  end;
+end;
+
+function StatusCodeToReason(Code: cardinal): RawUTF8;
+var
+  Hi, Lo: cardinal;
+begin
+  if Code = 200 then
+  begin
+    // optimistic approach :)
+    Hi := 2;
+    Lo := 0;
+  end
+  else
+  begin
+    Hi := Code div 100;
+    Lo := Code - Hi * 100;
+    if not ((Hi in [1..5]) and (Lo in [0..13])) then
+    begin
+      result := StatusCodeToReasonInternal(Code);
+      exit;
+    end;
+  end;
+  result := ReasonCache[Hi, Lo];
+  if result <> '' then
+    exit;
+  result := StatusCodeToReasonInternal(Code);
+  ReasonCache[Hi, Lo] := result;
 end;
 
 
