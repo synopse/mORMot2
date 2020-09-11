@@ -14,6 +14,8 @@ unit mormot.db.core;
     - TJSONWriter Specialized for Database Export
     - TSynTableStatement SQL SELECT Parser
 
+    This unit is used by both mormot.db.* units and mormot.orm.* units.
+
   *****************************************************************************
 }
 

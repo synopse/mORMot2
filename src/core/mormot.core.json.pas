@@ -1605,9 +1605,8 @@ type
   /// JSON-aware TRttiCustom class - used for global RttiCustom: TRttiCustomList
   TRttiJson = class(TRttiCustom)
   protected
+    // mormot.core.rtti has no dependency of TSynPersistent and such
     fClassNewInstance: TRttiJsonNewInstance;
-    /// called by ClassNewInstance/DoRegisterAutoCreateFields
-    procedure SetClassNewInstance;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRTTIParserType;
       aParserComplex: TRTTIParserComplexType): TRttiCustom; override;
@@ -1932,6 +1931,31 @@ type
     // TPersistent/TSynPersistent/TSynAutoCreateFields class and T*ObjArray
     // published properties
     constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
+  end;
+
+  /// abstract TCollectionItem class, which will instantiate all its nested class
+  // published properties, then release them (and any T*ObjArray) when freed
+  // - could be used for gathering of TCollectionItem properties, e.g. for
+  // Domain objects in DDD, especially for list of value objects
+  // - consider using T*ObjArray dynamic array published properties in your
+  // value types instead of TCollection storage: T*ObjArray have a lower overhead
+  // and are easier to work with, once TJSONSerializer.RegisterObjArrayForJSON
+  // is called to register the T*ObjArray type
+  // - note that non published (e.g. public) properties won't be instantiated,
+  // serialized, nor released - but may contain weak references to other classes
+  // - please take care that you will not create any endless recursion: you should
+  // ensure that at one level, nested published properties won't have any class
+  // instance refering to its owner (there is no weak reference - remember!)
+  // - since the destructor will release all nested properties, you should
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
+  TCollectionItemAutoCreateFields = class(TCollectionItem)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields published properties
+    constructor Create(Collection: TCollection); override;
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
   end;
@@ -8116,6 +8140,102 @@ end;
 
 { TRttiJson }
 
+function _New_ObjectList(Rtti: TRttiCustom): pointer;
+begin
+  result := TObjectList(Rtti.ValueClass).Create;
+end;
+
+function _New_InterfacedObjectWithCustomCreate(Rtti: TRttiCustom): pointer;
+begin
+  result := TInterfacedObjectWithCustomCreateClass(Rtti.ValueClass).Create;
+end;
+
+function _New_PersistentWithCustomCreate(Rtti: TRttiCustom): pointer;
+begin
+  result := TPersistentWithCustomCreateClass(Rtti.ValueClass).Create;
+end;
+
+function _New_Component(Rtti: TRttiCustom): pointer;
+begin
+  result := TComponentClass(Rtti.ValueClass).Create(nil);
+end;
+
+function _New_SynPersistent(Rtti: TRttiCustom): pointer;
+begin
+  result := TSynPersistentClass(Rtti.ValueClass).Create;
+end;
+
+function _New_SynObjectList(Rtti: TRttiCustom): pointer;
+begin
+  result := TSynObjectListClass(Rtti.ValueClass).Create({ownobjects=}true);
+end;
+
+function _New_SynLocked(Rtti: TRttiCustom): pointer;
+begin
+  result := TSynLockedClass(Rtti.ValueClass).Create;
+end;
+
+function _New_InterfacedCollection(Rtti: TRttiCustom): pointer;
+begin
+  result := TInterfacedCollectionClass(Rtti.ValueClass).Create;
+end;
+
+function _New_Collection(Rtti: TRttiCustom): pointer;
+begin
+  result := TCollectionClass(Rtti.ValueClass).Create(Rtti.CollectionItem);
+end;
+
+function _New_CollectionItem(Rtti: TRttiCustom): pointer;
+begin
+  result := TCollectionItemClass(Rtti.ValueClass).Create(nil);
+end;
+
+function _New_Object(Rtti: TRttiCustom): pointer;
+begin
+  result := Rtti.ValueClass.Create;
+end;
+
+function ComputeClassNewInstance(Rtti: TRttiJson): TRttiJsonNewInstance;
+var
+  C: TClass;
+begin
+  C := Rtti.fValueClass;
+  repeat
+    if C = TObjectList then
+      result := @_New_ObjectList
+    else if C = TInterfacedObjectWithCustomCreate then
+      result := @_New_InterfacedObjectWithCustomCreate
+    else if C = TPersistentWithCustomCreate then
+      result := @_New_PersistentWithCustomCreate
+    else if C = TSynPersistent then
+      result := @_New_SynPersistent
+    else if C = TSynObjectList then
+      result := @_New_SynObjectList
+    else if C = TSynLocked then
+      result := @_New_SynLocked
+    else if C = TComponent then
+      result := @_New_Component
+    else if C = TInterfacedCollection then
+      result := @_New_InterfacedCollection
+    else if C = TCollection then
+      if Rtti.CollectionItem = nil then
+        raise EJSONException.CreateUTF8(
+          '%.ClassNewInstance: % has no CollectionItem', [Rtti, Rtti.Name])
+      else
+        result := @_New_Collection
+    else if C = TCollectionItem then
+      result := @_New_CollectionItem
+    else if C = TObject then
+      result := @_New_Object
+    else
+    begin
+      C := C.ClassParent;
+      continue;
+    end;
+    break;
+  until false;
+end;
+
 function TRttiJson.SetParserType(aParser: TRTTIParserType;
   aParserComplex: TRTTIParserComplexType): TRttiCustom;
 begin
@@ -8124,6 +8244,8 @@ begin
   // handle default JSON serialization/unserialization
   if aParser = ptClass then
   begin
+    // prepare for ClassNewInstance
+    fClassNewInstance := ComputeClassNewInstance(self);
     // default serialization of published props
     fJsonSave := @_JS_RttiCustom;
     fJsonLoad := @_JL_RttiCustom;
@@ -8188,117 +8310,13 @@ begin
   result := self;
 end;
 
-
-function _New_ObjectList(Rtti: TRttiCustom): pointer;
-begin
-  result := TObjectList(Rtti.ValueClass).Create;
-end;
-
-function _New_InterfacedObjectWithCustomCreate(Rtti: TRttiCustom): pointer;
-begin
-  result := TInterfacedObjectWithCustomCreateClass(Rtti.ValueClass).Create;
-end;
-
-function _New_PersistentWithCustomCreate(Rtti: TRttiCustom): pointer;
-begin
-  result := TPersistentWithCustomCreateClass(Rtti.ValueClass).Create;
-end;
-
-function _New_Component(Rtti: TRttiCustom): pointer;
-begin
-  result := TComponentClass(Rtti.ValueClass).Create(nil);
-end;
-
-function _New_SynPersistent(Rtti: TRttiCustom): pointer;
-begin
-  result := TSynPersistentClass(Rtti.ValueClass).Create;
-end;
-
-function _New_SynObjectList(Rtti: TRttiCustom): pointer;
-begin
-  result := TSynObjectListClass(Rtti.ValueClass).Create({ownobjects=}true);
-end;
-
-function _New_SynLocked(Rtti: TRttiCustom): pointer;
-begin
-  result := TSynLockedClass(Rtti.ValueClass).Create;
-end;
-
-function _New_InterfacedCollection(Rtti: TRttiCustom): pointer;
-begin
-  result := TInterfacedCollectionClass(Rtti.ValueClass).Create;
-end;
-
-function _New_Collection(Rtti: TRttiCustom): pointer;
-begin
-  result := TCollectionClass(Rtti.ValueClass).Create(Rtti.CollectionItem);
-end;
-
-function _New_CollectionItem(Rtti: TRttiCustom): pointer;
-begin
-  result := TCollectionItemClass(Rtti.ValueClass).Create(nil);
-end;
-
-function _New_Object(Rtti: TRttiCustom): pointer;
-begin
-  result := Rtti.ValueClass.Create;
-end;
-
-procedure TRttiJson.SetClassNewInstance;
-var
-  C: TClass;
-begin
-  C := fValueClass;
-  if Kind <> rkClass then
-    raise EJSONException.CreateUTF8('%.ClassNewInstance: % is not a class',
-      [self, Name]);
-  repeat
-    if C = TObjectList then
-      fClassNewInstance := @_New_ObjectList
-    else if C = TInterfacedObjectWithCustomCreate then
-      fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
-    else if C = TPersistentWithCustomCreate then
-      fClassNewInstance := @_New_PersistentWithCustomCreate
-    else if C = TSynPersistent then
-      fClassNewInstance := @_New_SynPersistent
-    else if C = TSynObjectList then
-      fClassNewInstance := @_New_SynObjectList
-    else if C = TSynLocked then
-      fClassNewInstance := @_New_SynLocked
-    else if C = TComponent then
-      fClassNewInstance := @_New_Component
-    else if C = TInterfacedCollection then
-      fClassNewInstance := @_New_InterfacedCollection
-    else if C = TCollection then
-      if CollectionItem = nil then
-        raise EJSONException.CreateUTF8(
-          '%.ClassNewInstance: % has no CollectionItem', [self, Name])
-      else
-        fClassNewInstance := @_New_Collection
-    else if C = TCollectionItem then
-      fClassNewInstance := @_New_CollectionItem
-    else if C = TObject then
-      fClassNewInstance := @_New_Object
-    else
-    begin
-      C := C.ClassParent;
-      continue;
-    end;
-    break;
-  until false;
-end;
-
 function TRttiJson.ClassNewInstance: pointer;
 begin
-  if not Assigned(fClassNewInstance) then
-    SetClassNewInstance;
   result := fClassNewInstance(self);
 end;
 
 function TRttiJson.ParseNewInstance(var Context: TJsonParserContext): TObject;
 begin
-  if not Assigned(fClassNewInstance) then
-    SetClassNewInstance;
   result := fClassNewInstance(self);
   TRttiJsonLoad(fJsonLoad)(@result, Context);
   if not Context.Valid then
@@ -8589,19 +8607,12 @@ end;
 { ********************* Abstract Classes with Auto-Create-Fields }
 
 function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
-var
-  i: PtrInt;
 begin
   result := RttiCustom.RegisterType(ObjectInstance.ClassInfo);
   if PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^ <> result then
     raise ERttiException.CreateUTF8('AutoCreateFields(%): unexpected vmtAutoTable',
       [ObjectInstance]); // paranoid check
   result.Props.SetAutoCreateFields;
-  for i := 0 to high(result.Props.AutoCreateClasses) do
-    // for AutoCreateFields(): allow direct fClassNewInstance() call
-    with TRttiJson(result.Props.AutoCreateClasses[i]^.Value) do
-     if not Assigned(fClassNewInstance) then
-       SetClassNewInstance;
   result.Flags := result.Flags + [rcfAutoCreateFields];
 end;
 
@@ -8717,6 +8728,21 @@ begin
 end; // no need to call TInterfacedObjectWithCustomCreate.Create
 
 destructor TInterfacedObjectAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+
+{ TCollectionItemAutoCreateFields }
+
+constructor TCollectionItemAutoCreateFields.Create(Collection: TCollection);
+begin
+  AutoCreateFields(self);
+  inherited Create(Collection);
+end;
+
+destructor TCollectionItemAutoCreateFields.Destroy;
 begin
   AutoDestroyFields(self);
   inherited Destroy;
