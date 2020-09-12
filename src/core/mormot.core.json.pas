@@ -8195,57 +8195,52 @@ begin
   result := Rtti.ValueClass.Create;
 end;
 
-function ComputeClassNewInstance(Rtti: TRttiJson): TRttiJsonNewInstance;
-var
-  C: TClass;
-begin
-  C := Rtti.fValueClass;
-  repeat
-    if C = TObjectList then
-      result := @_New_ObjectList
-    else if C = TInterfacedObjectWithCustomCreate then
-      result := @_New_InterfacedObjectWithCustomCreate
-    else if C = TPersistentWithCustomCreate then
-      result := @_New_PersistentWithCustomCreate
-    else if C = TSynPersistent then
-      result := @_New_SynPersistent
-    else if C = TSynObjectList then
-      result := @_New_SynObjectList
-    else if C = TSynLocked then
-      result := @_New_SynLocked
-    else if C = TComponent then
-      result := @_New_Component
-    else if C = TInterfacedCollection then
-      result := @_New_InterfacedCollection
-    else if C = TCollection then
-      if Rtti.CollectionItem = nil then
-        raise EJSONException.CreateUTF8(
-          '%.ClassNewInstance: % has no CollectionItem', [Rtti, Rtti.Name])
-      else
-        result := @_New_Collection
-    else if C = TCollectionItem then
-      result := @_New_CollectionItem
-    else if C = TObject then
-      result := @_New_Object
-    else
-    begin
-      C := C.ClassParent;
-      continue;
-    end;
-    break;
-  until false;
-end;
-
 function TRttiJson.SetParserType(aParser: TRTTIParserType;
   aParserComplex: TRTTIParserComplexType): TRttiCustom;
+var
+  C: TClass;
 begin
   // set Name and Flags from Props[]
   inherited SetParserType(aParser, aParserComplex);
   // handle default JSON serialization/unserialization
   if aParser = ptClass then
   begin
-    // prepare for ClassNewInstance
-    fClassNewInstance := ComputeClassNewInstance(self);
+    // prepare efficient ClassNewInstance() wrapper function
+    C := fValueClass;
+    repeat
+      if C = TObjectList then
+        fClassNewInstance := @_New_ObjectList
+      else if C = TInterfacedObjectWithCustomCreate then
+        fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
+      else if C = TPersistentWithCustomCreate then
+        fClassNewInstance := @_New_PersistentWithCustomCreate
+      else if C = TSynPersistent then
+        fClassNewInstance := @_New_SynPersistent
+      else if C = TSynObjectList then
+        fClassNewInstance := @_New_SynObjectList
+      else if C = TSynLocked then
+        fClassNewInstance := @_New_SynLocked
+      else if C = TComponent then
+        fClassNewInstance := @_New_Component
+      else if C = TInterfacedCollection then
+        fClassNewInstance := @_New_InterfacedCollection
+      else if C = TCollection then
+        if CollectionItem = nil then
+          raise EJSONException.CreateUTF8(
+            '%.SetParserType: % has no CollectionItem', [self, Name])
+        else
+          fClassNewInstance := @_New_Collection
+      else if C = TCollectionItem then
+        fClassNewInstance := @_New_CollectionItem
+      else if C = TObject then
+        fClassNewInstance := @_New_Object
+      else
+      begin
+        C := C.ClassParent;
+        continue;
+      end;
+      break;
+    until false;
     // default serialization of published props
     fJsonSave := @_JS_RttiCustom;
     fJsonLoad := @_JL_RttiCustom;
