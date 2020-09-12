@@ -3277,17 +3277,17 @@ var
   digest1, digest2: TSHA1Digest;
 begin
   try
+    if fProcess <> nil then
+    begin
+      result := 'Already upgraded to WebSockets';
+      if IdemPropNameU(fProcess.Protocol.URI, aWebSocketsURI) then
+        result := result + ' on this URI'
+      else
+        result := FormatUTF8('% with URI=[%] but requested [%]',
+          [result, fProcess.Protocol.URI, aWebSocketsURI]);
+      exit;
+    end;
     try
-      if fProcess <> nil then
-      begin
-        result := 'Already upgraded to WebSockets';
-        if IdemPropNameU(fProcess.Protocol.URI, aWebSocketsURI) then
-          result := result + ' on this URI'
-        else
-          result := FormatUTF8('% with URI=[%] but requested [%]',
-            [result, fProcess.Protocol.URI, aWebSocketsURI]);
-        exit;
-      end;
       if aProtocol = nil then
         if aWebSocketsAJAX then
           aProtocol := TWebSocketProtocolJSON.Create(aWebSocketsURI)
@@ -3345,15 +3345,15 @@ begin
       result := ''; // no error message = success
       fProcess := TWebSocketProcessClient.Create(self, aProtocol, fProcessName);
       aProtocol := nil; // protocol instance is owned by fProcess now
-    finally
-      aProtocol.Free;
+    except
+      on E: Exception do
+      begin
+        FreeAndNil(fProcess);
+        FormatUTF8('%: %', [E, E.Message], result);
+      end;
     end;
-  except
-    on E: Exception do
-    begin
-      FreeAndNil(fProcess);
-      FormatUTF8('%: %', [E, E.Message], result);
-    end;
+  finally
+    aProtocol.Free;
   end;
 end;
 

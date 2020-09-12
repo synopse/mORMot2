@@ -654,6 +654,46 @@ procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
 // contain the field names, from SELECT ...field names... FROM
 function isSelect(P: PUTF8Char; SelectClause: PRawUTF8 = nil): boolean;
 
+/// compute the SQL corresponding to a WHERE clause
+// - returns directly the Where value if it starts with one the
+// ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
+// - otherwise, append ' WHERE '+Where
+function SQLFromWhere(const Where: RawUTF8): RawUTF8;
+
+/// find out if the supplied WHERE clause starts with one of the
+// ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
+function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
+
+/// compute 'PropName in (...)' where clause for a SQL statement
+// - if Values has no value, returns ''
+// - if Values has a single value, returns 'PropName="Values0"' or inlined
+// 'PropName=:("Values0"):' if ValuesInlined is true
+// - if Values has more than one value, returns 'PropName in ("Values0","Values1",...)'
+// or 'PropName in (:("Values0"):,:("Values1"):,...)' if length(Values)<ValuesInlinedMax
+// - PropName can be used as a prefix to the 'in ()' clause, in conjunction
+// with optional Suffix value
+function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
+  const Suffix: RawUTF8 = ''; ValuesInlinedMax: integer = 0): RawUTF8; overload;
+
+/// compute 'PropName in (...)' where clause for a SQL statement
+// - if Values has no value, returns ''
+// - if Values has a single value, returns 'PropName=Values0' or inlined
+// 'PropName=:(Values0):' if ValuesInlined is bigger than 1
+// - if Values has more than one value, returns 'PropName in (Values0,Values1,...)'
+// or 'PropName in (:(Values0):,:(Values1):,...)' if length(Values)<ValuesInlinedMax
+// - PropName can be used as a prefix to the 'in ()' clause, in conjunction
+// with optional Suffix value
+function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
+  const Suffix: RawUTF8 = ''; ValuesInlinedMax: integer = 0): RawUTF8; overload;
+
+/// naive search of '... FROM TableName ...' pattern in the supplied SQL
+function GetTableNameFromSQLSelect(const SQL: RawUTF8;
+  EnsureUniqueTableInFrom: boolean): RawUTF8;
+
+/// naive search of '... FROM Table1,Table2 ...' pattern in the supplied SQL
+function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
+
+
 
 { ************ TJSONWriter Specialized for Database Export }
 
@@ -1714,6 +1754,189 @@ begin
   else
     where := where + ' and ' + condition;
 end;
+
+function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
+begin
+  result := IdemPCharArray(pointer(Where), [
+    'ORDER BY ', 'GROUP BY ', 'LIMIT ', 'OFFSET ',
+    'LEFT ', 'RIGHT ', 'INNER ', 'OUTER ', 'JOIN ']) >= 0;
+end;
+
+function SQLFromWhere(const Where: RawUTF8): RawUTF8;
+begin
+  if Where = '' then
+    result := ''
+  else if SQLWhereIsEndClause(Where) then
+    result := ' ' + Where
+  else
+    result := ' WHERE ' + Where;
+end;
+
+function SQLFromSelect(const TableName, Select, Where, SimpleFields: RawUTF8): RawUTF8;
+begin
+  if Select = '*' then
+    // don't send BLOB values to query: retrieve simple = all non-blob fields
+    result := SimpleFields
+  else
+    result := Select;
+  result := 'SELECT ' + result + ' FROM ' + TableName + SQLFromWhere(Where);
+end;
+
+function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
+  const Suffix: RawUTF8; ValuesInlinedMax: integer): RawUTF8;
+var
+  n, i: integer;
+  temp: TTextWriterStackBuffer;
+begin
+  n := length(Values);
+  if n > 0 then
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      AddString(PropName);
+      if n = 1 then
+      begin
+        if ValuesInlinedMax > 1 then
+          AddShort('=:(')
+        else
+          Add('=');
+        AddQuotedStr(pointer(Values[0]), '''');
+        if ValuesInlinedMax > 1 then
+          AddShort('):');
+      end
+      else
+      begin
+        AddShort(' in (');
+        for i := 0 to n - 1 do
+        begin
+          if ValuesInlinedMax > n then
+            Add(':', '(');
+          AddQuotedStr(pointer(Values[i]), '''');
+          if ValuesInlinedMax > n then
+            AddShort('):,')
+          else
+            Add(',');
+        end;
+        CancelLastComma;
+        Add(')');
+      end;
+      AddString(Suffix);
+      SetText(result);
+    finally
+      Free;
+    end
+  else
+    result := '';
+end;
+
+function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
+  const Suffix: RawUTF8; ValuesInlinedMax: integer): RawUTF8;
+var
+  n, i: integer;
+  temp: TTextWriterStackBuffer;
+begin
+  n := length(Values);
+  if n > 0 then
+    with TBaseWriter.CreateOwnedStream(temp) do
+    try
+      AddString(PropName);
+      if n = 1 then
+      begin
+        if ValuesInlinedMax > 1 then
+          AddShort('=:(')
+        else
+          Add('=');
+        Add(Values[0]);
+        if ValuesInlinedMax > 1 then
+          AddShort('):');
+      end
+      else
+      begin
+        AddShort(' in (');
+        for i := 0 to n - 1 do
+        begin
+          if ValuesInlinedMax > n then
+            Add(':', '(');
+          Add(Values[i]);
+          if ValuesInlinedMax > n then
+            AddShort('):,')
+          else
+            Add(',');
+        end;
+        CancelLastComma;
+        Add(')');
+      end;
+      AddString(Suffix);
+      SetText(result);
+    finally
+      Free;
+    end
+  else
+    result := '';
+end;
+
+function GetTableNameFromSQLSelect(const SQL: RawUTF8;
+  EnsureUniqueTableInFrom: boolean): RawUTF8;
+var
+  i, j, k: integer;
+begin
+  i := PosI(' FROM ', SQL);
+  if i > 0 then
+  begin
+    inc(i, 6);
+    while SQL[i] in [#1..' '] do
+      inc(i);
+    j := 0;
+    while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
+      inc(j);
+    if cardinal(j - 1) < 64 then
+    begin
+      k := i + j;
+      while SQL[k] in [#1..' '] do
+        inc(k);
+      if not EnsureUniqueTableInFrom or (SQL[k] <> ',') then
+      begin
+        FastSetString(result, PAnsiChar(PtrInt(SQL) + i - 1), j);
+        exit;
+      end;
+    end;
+  end;
+  result := '';
+end;
+
+function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
+var
+  i, j, k, n: integer;
+begin
+  result := nil;
+  n := 0;
+  i := PosI(' FROM ', SQL);
+  if i > 0 then
+  begin
+    inc(i, 6);
+    repeat
+      while SQL[i] in [#1..' '] do
+        inc(i);
+      j := 0;
+      while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
+        inc(j);
+      if cardinal(j - 1) > 64 then
+      begin
+        result := nil;
+        exit; // seems too big
+      end;
+      k := i + j;
+      while SQL[k] in [#1..' '] do
+        inc(k);
+      SetLength(result, n + 1);
+      FastSetString(result[n], PAnsiChar(PtrInt(SQL) + i - 1), j);
+      inc(n);
+      if SQL[k] <> ',' then
+        break;
+      i := k + 1;
+    until false;
+  end;
+end;
+
 
 
 

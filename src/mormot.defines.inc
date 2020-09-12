@@ -348,7 +348,6 @@
       {$define HASNEWFILEAGE}
       {$define HASINLINE}
       {$define HASINLINEDELPHI}
-      {$define HASINLINENOTX86}
       {$define HASREGION}
       {$define HASFASTMM4}
       // you can define this so that GetMemoryInfo/TSynMonitorMemory returns
@@ -430,7 +429,6 @@
       {$ifdef VER320withoutAprilUpdate}
         // circumvent early Delphi 10.2 Tokyo Win64 compiler bug
         {$undef HASINLINE}
-        {$define HASINLINENOTX86}
       {$endif}
       {$endif}
     {$ifend}
