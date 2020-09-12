@@ -10011,39 +10011,6 @@ begin
   IPToCardinal(pointer(aIP), result);
 end;
 
-function IsValidIP4Address(P: PUTF8Char): boolean;
-var
-  ndot: PtrInt;
-  V: PtrUInt;
-begin
-  result := false;
-  if (P = nil) or not (P^ in ['0'..'9']) then
-    exit;
-  V := 0;
-  ndot := 0;
-  repeat
-    case P^ of
-      #0:
-        break;
-      '.':
-        if (P[-1] = '.') or (V > 255) then
-          exit
-        else
-        begin
-          inc(ndot);
-          V := 0;
-        end;
-      '0'..'9':
-        V := (V * 10) + ord(P^) - 48;
-    else
-      exit;
-    end;
-    inc(P);
-  until false;
-  if (ndot = 3) and (V <= 255) and (P[-1] <> '.') then
-    result := true;
-end;
-
 function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 var
   i: integer;
