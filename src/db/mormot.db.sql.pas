@@ -457,14 +457,6 @@ const
 // - see also TSQLDBConnectionProperties.GetDBMSName() method
 function ToText(DBMS: TSQLDBDefinition): PShortString; overload;
 
-/// retrieve the text of a given Database field type enumeration
-// - see also TSQLDBFieldTypeToString() function
-function ToText(Field: TSQLDBFieldType): PShortString; overload;
-
-/// retrieve the ready-to-be displayed text of a given Database field
-// type enumeration
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
-
 
 { ************ General SQL Processing Functions }
 
@@ -2609,22 +2601,6 @@ type
 
 
 implementation
-
-
-{ ************ SQL Fields and Columns Definitions }
-
-function ToText(Field: TSQLDBFieldType): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TSQLDBFieldType), ord(Field));
-end;
-
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
-begin
-  if aType <= high(aType) then
-    result := TrimLeftLowerCaseToShort(ToText(aType))
-  else
-    FormatShort16('#%', [ord(aType)], result);
-end;
 
 
 { ************ General SQL Processing Functions }
@@ -7235,7 +7211,7 @@ const
 
 initialization
   assert(SizeOf(TSQLDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
-  RttiCustom.RegisterType(TypeInfo(TSQLDBFieldType));
-  RttiCustom.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
+  Rtti.RegisterType(TypeInfo(TSQLDBFieldType));
+  Rtti.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
 end.
 

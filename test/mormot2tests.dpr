@@ -13,18 +13,18 @@ program mormot2tests;
 uses
   {$I ..\src\mormot.uses.inc}
   mormot.core.base         in '..\src\core\mormot.core.base.pas',
-  mormot.core.rtti         in '..\src\core\mormot.core.rtti.pas',
   mormot.core.os           in '..\src\core\mormot.core.os.pas',
   mormot.core.unicode      in '..\src\core\mormot.core.unicode.pas',
   mormot.core.text         in '..\src\core\mormot.core.text.pas',
+  mormot.core.rtti         in '..\src\core\mormot.core.rtti.pas',
   mormot.core.datetime     in '..\src\core\mormot.core.datetime.pas',
   mormot.core.perf         in '..\src\core\mormot.core.perf.pas',
-  mormot.core.test         in '..\src\core\mormot.core.test.pas',
   mormot.core.buffers      in '..\src\core\mormot.core.buffers.pas',
   mormot.core.data         in '..\src\core\mormot.core.data.pas',
   mormot.core.variants     in '..\src\core\mormot.core.variants.pas',
   mormot.core.json         in '..\src\core\mormot.core.json.pas',
   mormot.core.log          in '..\src\core\mormot.core.log.pas',
+  mormot.core.test         in '..\src\core\mormot.core.test.pas',
   mormot.core.crypto       in '..\src\core\mormot.core.crypto.pas',
   mormot.core.secure       in '..\src\core\mormot.core.secure.pas',
   mormot.core.ecc256r1     in '..\src\core\mormot.core.ecc256r1.pas',
@@ -42,6 +42,7 @@ uses
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
   mormot.net.asynch        in '..\src\net\mormot.net.asynch.pas',
   mormot.net.websock       in '..\src\net\mormot.net.websock.pas',
+  mormot.orm.core          in '..\src\orm\mormot.orm.core.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
   mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
   mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',
@@ -84,7 +85,6 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([TTestCoreBase, TTestCoreCrypto]);
 end;
-
 
 
 begin

@@ -163,7 +163,7 @@ type
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; virtual; abstract;
     /// set the fEncryption: IProtocol according to the supplied key
-    // - any asymetric algorithm need to know which side (client/server) to work on
+    // - any asymmetric algorithm needs to know which side (client/server) to work on
     // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESCFB)
     // using SHA256Weak(aKey)
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
@@ -3264,6 +3264,10 @@ begin
   result := @fSettings;
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$warnings off} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
+
 function THttpClientWebSockets.WebSocketsUpgrade(
   const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
   aWebSocketsCompression: boolean; aProtocol: TWebSocketProtocol;
@@ -3356,6 +3360,10 @@ begin
     aProtocol.Free;
   end;
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings on} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
 
 
 { TWebSocketProcessClient }
