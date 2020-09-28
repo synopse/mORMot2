@@ -1821,8 +1821,8 @@ end;
 
 procedure InitializeUnit;
 begin
-  RttiCustom.RegisterType(TypeInfo(TSignAlgo));
-  RttiCustom.RegisterFromText(TypeInfo(TSynSignerParams),
+  Rtti.RegisterType(TypeInfo(TSignAlgo));
+  Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUTF8 rounds:integer');
 end;
 

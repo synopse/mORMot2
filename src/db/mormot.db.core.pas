@@ -33,6 +33,7 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.variants,
+  mormot.core.rtti,
   mormot.core.json;
 
 
@@ -122,7 +123,7 @@ type
       ftDate: (
         VDateTime: TDateTime);
       ftCurrency: (
-        VCurrency: system.currency);
+        VCurrency: TSynCurrency);
       ftUTF8: (
         VText: PUTF8Char);
       ftBlob: (
@@ -173,6 +174,16 @@ const
     varSynUnicode, varString);
 // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
 
+
+/// retrieve the text of a given Database field type enumeration
+// - see also TSQLDBFieldTypeToString() function
+function ToText(Field: TSQLDBFieldType): PShortString; overload;
+
+/// retrieve the ready-to-be displayed text of a given Database field
+// type enumeration
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
+
+
 /// returns TRUE if no bit inside this TSQLFieldBits is set
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
@@ -205,7 +216,8 @@ function FieldBitsToIndex(const Fields: TSQLFieldBits;
 function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
 
 /// convert an array of field indexes into a TSQLFieldBits set of bits
-procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits); overload;
+procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
+  out Fields: TSQLFieldBits); overload;
 
 // search a field index in an array of field indexes
 // - returns the index in Indexes[] of the given Field value, -1 if not found
@@ -660,6 +672,9 @@ function isSelect(P: PUTF8Char; SelectClause: PRawUTF8 = nil): boolean;
 // - otherwise, append ' WHERE '+Where
 function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 
+/// compute a SQL SELECT statement from its parameters
+function SQLFromSelect(const TableName, Select, Where, SimpleFields: RawUTF8): RawUTF8;
+
 /// find out if the supplied WHERE clause starts with one of the
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
@@ -883,8 +898,8 @@ type
     // - SQLStatement is left '' if the SQL statement is not correct
     // - if SQLStatement is set, the caller must check for TableName to match
     // the expected value, then use the Where[] to retrieve the content
-    constructor Create(const SQL: RawUTF8; GetFieldIndex: TSynTableFieldIndex;
-      SimpleFieldsBits: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1]);
+    constructor Create(const SQL: RawUTF8; const GetFieldIndex: TSynTableFieldIndex;
+      const SimpleFieldsBits: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1]);
     /// compute the SELECT column bits from the SelectFields array
     // - optionally set Select[].SubField into SubFields[Select[].Field]
     // (e.g. to include specific fields from MongoDB embedded document)
@@ -931,6 +946,19 @@ implementation
 
 
 { ************ Shared Database Fields and Values Definitions }
+
+function ToText(Field: TSQLDBFieldType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLDBFieldType), ord(Field));
+end;
+
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
+begin
+  if aType <= high(aType) then
+    result := TrimLeftLowerCaseToShort(ToText(aType))
+  else
+    FormatShort16('#%', [ord(aType)], result);
+end;
 
 function IsZero(const Fields: TSQLFieldBits): boolean;
 var
@@ -1071,11 +1099,11 @@ begin
 end;
 
 procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
-  var Fields: TSQLFieldBits);
+  out Fields: TSQLFieldBits);
 var
   i: integer;
 begin
-  FillZero(Fields);
+  FillZero(Fields{%H-});
   for i := 0 to Length(Index) - 1 do
     if Index[i] >= 0 then
       include(Fields, Index[i]);
@@ -1142,10 +1170,11 @@ end;
 
 function IsRowIDShort(const FieldName: shortstring): boolean;
 begin
-  result := (PInteger(@FieldName)^ and $DFDFFF = 2 + ord('I') shl 8 + ord('D') shl 16) or
-      ((PIntegerArray(@FieldName)^[0] and $dfdfdfff =
-        5 + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
-       (PIntegerArray(@FieldName)^[1] and $dfdf = ord('I') + ord('D') shl 8));
+  result := ((PIntegerArray(@FieldName)^[0] and $dfdfff =
+             2 + ord('I') shl 8 + ord('D') shl 16) or
+            ((PIntegerArray(@FieldName)^[0] and $dfdfdfff =
+              5 + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
+             (PIntegerArray(@FieldName)^[1] and $dfdf = ord('I') + ord('D') shl 8)));
 end;
 
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
@@ -1545,15 +1574,15 @@ begin
             ParamType := sptBlob;
           end
           else if (c = JSON_SQLDATE_MAGIC) and
-            IsIso8601(PUTF8Char(pointer(ParamValue)) + 3, L) then
+                  IsIso8601(PUTF8Char(pointer(ParamValue)) + 3, L) then
           begin // handle ':("\uFFF112012-05-04"):' format
             Delete(ParamValue, 1, 3);   // return only ISO-8601 text
             ParamType := sptDateTime;   // identified as Date/Time
           end;
         end;
       end;
-    '-', '+', '0'..'9':
-      begin // allow 0 or + in SQL
+    '-', '+', '0'..'9': // allow 0 or + in SQL
+      begin
         // check if P^ is a true numerical value
         PBeg := pointer(P);
         ParamType := sptInteger;
@@ -1939,7 +1968,6 @@ end;
 
 
 
-
 { ************ TJSONWriter Specialized for Database Export }
 
 { TJSONWriter }
@@ -2079,7 +2107,7 @@ const
   NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
 
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
-  GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits);
+  const GetFieldIndex: TSynTableFieldIndex; const SimpleFieldsBits: TSQLFieldBits);
 var
   Prop, whereBefore: RawUTF8;
   P, B: PUTF8Char;
@@ -2093,7 +2121,8 @@ var
     else if IsRowID(pointer(Prop)) then
       result := 0
     else
-    begin // 0 = ID field
+    begin
+      // 0 = ID field
       result := GetFieldIndex(Prop);
       if result >= 0 then // -1 = no valid field name
         inc(result);  // otherwise: PropertyIndex+1
@@ -2136,7 +2165,8 @@ var
       P := GotoNextNotSpace(P + 1);
     end
     else if P^ = '.' then
-    begin // MongoDB-like field.subfield1.subfield2
+    begin
+      // MongoDB-like field.subfield1.subfield2
       B := P;
       repeat
         inc(P);

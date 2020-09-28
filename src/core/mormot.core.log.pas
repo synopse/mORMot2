@@ -2804,21 +2804,21 @@ end;
 
 class function TSynLog.FamilyCreate: TSynLogFamily;
 var
-  rtti: TRttiCustom;
+  rtticustom: TRttiCustom;
   vmt: TObject;
 begin
   // private sub function called from inlined TSynLog.Family / TSynLog.Add
   if (self <> nil) and InheritsFrom(TSynLog) then // paranoid
   begin
-    rtti := RttiCustom.RegisterClass(self);
+    rtticustom := Rtti.RegisterClass(self);
     vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
-    if (rtti = nil) or (vmt <> rtti) then
-      // TSynLog.Family / TSynLog.Add expects rtti in the first slot
+    if (rtticustom = nil) or (vmt <> rtticustom) then
+      // TSynLog.Family / TSynLog.Add expect rtticustom in the first slot
       raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=% not %',
-        [self, vmt, rtti]);
+        [self, vmt, rtticustom]);
     EnterCriticalSection(GlobalThreadLock);
     try
-      result := pointer(rtti.Private);
+      result := TSynLogFamily(rtticustom.Private);
       if Assigned(result) then
         if result.InheritsFrom(TSynLogFamily) then
           // registered by a background thread
@@ -2827,9 +2827,9 @@ begin
           // paranoid
           raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=%',
             [self, result]);
-      // create the properties information from RTTI
+      // create the properties information from rtticustom
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
-      rtti.Private := result; // will be owned by this TRttiCustom
+      rtticustom.Private := result; // will be owned by this TRttiCustom
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end;

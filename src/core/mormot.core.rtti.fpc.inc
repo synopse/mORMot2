@@ -133,26 +133,26 @@ end;
 
 function TRttiEnumType.GetEnumNameOrd(Value: cardinal): PShortString;
 var
-  by4: integer;
+  n: integer;
 begin // this code is very aggressively inlined on FPC
   if Value <= cardinal(PTypeData(@self).MaxValue) then
   begin
     result := @PTypeData(@self).NameList;
-    by4 := Value shr 2;
-    if by4 <> 0 then
+    n := Value shr 2; // move forward by four items at once
+    if n <> 0 then
       repeat
         result := @PByteArray(result)^[ord(result^[0]) + 1];
         result := @PByteArray(result)^[ord(result^[0]) + 1];
         result := @PByteArray(result)^[ord(result^[0]) + 1];
         result := @PByteArray(result)^[ord(result^[0]) + 1];
-        dec(by4);
-      until by4 = 0;
-    Value := Value and 3;
-    if Value <> 0 then
+        dec(n);
+      until n = 0;
+    n := Value and 3; // last 1..3 moves
+    if n <> 0 then
       repeat
         result := @PByteArray(result)^[ord(result^[0]) + 1];
-        dec(Value);
-      until Value = 0;
+        dec(n);
+      until n = 0;
   end
   else
     result := @NULCHAR;
