@@ -38,5 +38,5 @@ By convention:
 ## Include Files
 
 To clean the design and enhance source maintainibility, some units have associated `*.inc` source files:
-- To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc`;
-- To regroup CPU-specific (asm) code - e.g. `mormot.core.crypto.asmx64.inc`.
+- To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc` to include non-Windows OS calls;
+- To regroup CPU-specific (asm) code - e.g. `mormot.core.crypto.asmx64.inc` to include `x86_64` assembly.

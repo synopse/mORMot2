@@ -969,11 +969,12 @@ function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
 // Windows TimeStamps in its headers
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
 
-/// modify the attributes of a given file
+/// reduce the visibility of a given file by setting its read/write attributes
+// - on POSIX, change attributes for the the owner, and reset group/world flags
 // - if Secret=false, will have normal file attributes, with read/write access
-// - if Secret=true, will have hidden and read-only attributes
-// - under POSIX, there is no "hidden" file attribute, but you should define a
-// FileName starting by '.'
+// - if Secret=true, will have read-only attributes (and hidden on Windows -
+// under POSIX, there is no "hidden" file attribute, but you should define a
+// FileName starting by '.')
 procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
 
 /// get a file size, from its name

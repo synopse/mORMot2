@@ -425,7 +425,7 @@ end;
 
 procedure ReleaseCore; nostackframe; assembler;
 asm
-        rdtsc
+        rdtsc // returns the TSC in EDX:EAX
         shl     rdx, 32
         or      rax, rdx
         push    rax

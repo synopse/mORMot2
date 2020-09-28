@@ -8,8 +8,8 @@ unit mormot.core.jwt;
 
    JSON Web Tokens (JWT) Implementation - see RFC 7797
     - Abstract JWT Parsing and Computation
-    - JWT Implementation of HS* and S3* Algorithms
-    - JWT Implementation of ES256 Algorithm
+    - JWT Implementation of HS* and S3* Symmetric Algorithms
+    - JWT Implementation of ES256 Asymmetric Algorithm
 
    Uses optimized mormot.core.crypto.pas and mormot.core.ecc for its process.
 
@@ -1182,9 +1182,6 @@ procedure InitializeUnit;
 begin
   GetEnumNames(TypeInfo(TJWTResult), @_TJWTResult);
   GetEnumNames(TypeInfo(TJWTClaim), @_TJWTClaim);
-  RttiCustom.RegisterType(TypeInfo(TSignAlgo));
-  RttiCustom.RegisterFromText(TypeInfo(TSynSignerParams),
-    'algo:TSignAlgo secret,salt:RawUTF8 rounds:integer');
 end;
 
 procedure FinalizeUnit;

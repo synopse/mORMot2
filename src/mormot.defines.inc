@@ -17,6 +17,8 @@
 // - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
 // to access 'VarCopyProc'
 // - shall be set at the package options level, and left untouched by default
+// - note: you should probably also set "Generate DCUs only" in Project Options
+// -> Delphi Compiler -> Output C/C++ -> C/C++ output file generation
 
 {.$define PUREMORMOT2}
 // if defined, no mORMot 1.18 compatilibity types nor functions would be enabled

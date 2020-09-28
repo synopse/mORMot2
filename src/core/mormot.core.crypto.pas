@@ -473,26 +473,29 @@ type
     // - default implementation, for a non AEAD protocol, returns false
     function MACCheckError(aEncrypted: pointer; Count: cardinal): boolean; virtual;
     /// perform one step PKCS7 encryption/decryption and authentication from
-    // a given 256-bit key
+    // a given 256-bit key over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
-    // - as used e.g. by CryptDataForCurrentUser()
+    // - supplied Data is expected to be small (<128 bytes), as used e.g. by
+    // CryptDataForCurrentUser()
     // - do not use this abstract class method, but inherited TAESCFBCRC/TAESOFBCRC
     // - will store a header with its own CRC, so detection of most invalid
     // formats (e.g. from fuzzing input) will occur before any AES/MAC process
     class function MACEncrypt(const Data: RawByteString; const Key: THash256;
       Encrypt: boolean): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication from
-    // a given 128-bit key
+    // a given 128-bit key over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
+    // - supplied Data is expected to be small (<128 bytes), as used e.g. by
+    // CryptDataForCurrentUser()
     // - do not use this abstract class method, but inherited TAESCFBCRC/TAESOFBCRC
     // - will store a header with its own CRC, so detection of most invalid
     // formats (e.g. from fuzzing input) will occur before any AES/MAC process
     class function MACEncrypt(const Data: RawByteString; const Key: THash128;
       Encrypt: boolean): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication with
-    // the curent AES instance
+    // the curent AES instance over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
     // - as used e.g. by CryptDataForCurrentUser()
@@ -5015,7 +5018,7 @@ begin
     key := TAESCFB.SimpleEncrypt(key2, k256, 256, true, true);
     if not FileFromString(key, fn) then
       ESynCrypto.CreateUTF8('Unable to write %', [fn]);
-    FileSetAttributes(fn, {secret=}true);
+    FileSetAttributes(fn, {secret=}true); // chmod 400
   finally
     FillZero(key);
     FillZero(key2);
