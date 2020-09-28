@@ -715,6 +715,7 @@ type
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
     fOnFlushToStream: TOnTextWriterFlush;
+    fInternalJSONWriter: TBaseWriter;
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
@@ -860,7 +861,7 @@ type
     // only LF (#10) depending on its internal options
     procedure AddCR; {$ifdef HASINLINE} inline; {$endif}
     /// append CR+LF (#13#10) chars and #9 indentation
-    // - indentation depth is defined by fHumanReadableLevel protected field
+    // - indentation depth is defined by the HumanReadableLevel value
     procedure AddCRAndIndent; virtual;
     /// write the same character multiple times
     procedure AddChars(aChar: AnsiChar; aCount: integer);
@@ -1089,6 +1090,9 @@ type
     // - excluding the bytes in the internal buffer (see PendingBytes)
     // - see TextLength for the total number of bytes, on both stream and memory
     property WrittenBytes: PtrUInt read fTotalFileSize;
+    /// low-level access to the current indentation level
+    property HumanReadableLevel: integer
+      read fHumanReadableLevel write fHumanReadableLevel;
     /// the last char appended is canceled
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
@@ -1668,7 +1672,8 @@ var
   // - is properly implemented by mormot.core.json.pas: if this unit is not
   // included in the project, this function is nil
   // - used by mormot.core.data.pas RTTI_BINARYLOAD[tkVariant]() for complex types
-  BinaryVariantLoadAsJSON: procedure(var Value: variant; JSON: PUTF8Char);
+  BinaryVariantLoadAsJSON: procedure(var Value: variant; JSON: PUTF8Char;
+    TryCustomVariant: pointer);
 
 
 type
@@ -2907,13 +2912,15 @@ begin
     P := PBeg;
     PS := Pointer(Value);
     repeat
-      if P^ = quote then
+      if P[0] = quote then
         if P[1] = quote then
+          // allow double quotes inside string
           inc(P)
-        else // allow double quotes inside string
-          break; // end quote
-      PS^ := P^;
-      inc(PByte(PS));
+        else
+          // end quote
+          break;
+      PS^ := P[0];
+      inc(PS);
       inc(P);
     until false;
   end;

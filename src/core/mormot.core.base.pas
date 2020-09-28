@@ -1062,6 +1062,19 @@ function SameValue(const A, B: Double; DoublePrec: double = DOUBLE_SAME): Boolea
 function SameValueFloat(const A, B: TSynExtended;
   DoublePrec: TSynExtended = DOUBLE_SAME): Boolean;
 
+/// a comparison function for sorting IEEE 754 double precision values
+function CompareFloat(const A, B: double): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute the sum of values, using a running compensation for lost low-order bits
+// - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
+// so will eventually result in an incorrect number
+// - Kahan algorithm keeps track of the accumulated error in integer operations,
+// to achieve a precision of more than 100 bits
+// - see https://en.wikipedia.org/wiki/Kahan_summation_algorithm
+procedure KahanSum(const Data: double; var Sum, Carry: double);
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 { ************ Integer Arrays Manipulation }
 
@@ -1088,6 +1101,14 @@ function CompareCardinal(const A, B: cardinal): integer;
 /// a comparison function for sorting 64-bit signed integer values
 function CompareInt64(const A, B: Int64): integer;
   {$ifdef FPC_OR_UNICODE}inline;{$endif}
+
+/// a comparison function for sorting 32/64-bit signed integer values
+function ComparePtrInt(const A, B: PtrInt): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a comparison function for sorting 32/64-bit pointers as unsigned values
+function ComparePointer(const A, B: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// a comparison function for sorting 64-bit unsigned integer values
 // - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
@@ -1207,6 +1228,14 @@ procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 /// sort a 64-bit Integer array, low values first
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
 
+/// sort a PtrInt array, low values first
+procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// sort a pointer array, low values first
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
 type
   /// event handler called by NotifySortedIntegerChanges()
   // - Sender is an opaque const value, maybe a TObject or any pointer
@@ -1255,16 +1284,8 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
 // older compilers will fast and exact SortDynArrayQWord()
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt; overload;
 
-/// sort a PtrInt array, low values first
-procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// fast O(log(n)) binary search of a PtrInt value in a sorted array
 function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// sort a pointer array, low values first
-procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast O(log(n)) binary search of a Pointer value in a sorted array
@@ -2918,7 +2939,7 @@ var
   VariantClearSeveral: procedure(V: PVarData; n: integer);
 
   /// compare two "array of variant" elements, with or without case sensitivity
-  // - this unit registeres a basic case-sensitive version calling VarCompareValue()
+  // - this unit registers a basic case-sensitive version calling VarCompareValue()
   // - mormot.core.variants will assign a (much) more efficient implementation,
   // also properly handling case insensitive comparison in text
   SortDynArrayVariantComp: function(const A, B: TVarData; caseInsensitive: boolean): integer;
@@ -4825,6 +4846,16 @@ begin
   result := ord(A > B) - ord(A < B);
 end;
 
+function ComparePtrInt(const A, B: PtrInt): integer;
+begin
+  result := ord(A > B) - ord(A < B);
+end;
+
+function ComparePointer(const A, B: pointer): integer;
+begin
+  result := ord(PtrUInt(A) > PtrUInt(B)) - ord(PtrUInt(A) < PtrUInt(B));
+end;
+
 {$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
 
 function CompareInt64(const A, B: Int64): integer;
@@ -6030,7 +6061,16 @@ begin
   QuickSortInt64(PInt64Array(P), L, R);
   {$else}
   QuickSortInteger(PIntegerArray(P), L, R);
-  {$endif}
+  {$endif CPU64}
+end;
+
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+begin
+  {$ifdef CPU64}
+  QuickSortInt64(PInt64Array(P), L, R);
+  {$else}
+  QuickSortInteger(PIntegerArray(P), L, R);
+  {$endif CPU64}
 end;
 
 function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt;
@@ -6042,22 +6082,13 @@ begin
   {$endif}
 end;
 
-procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
-begin
-  {$ifdef CPU64}
-  QuickSortInt64(PInt64Array(P), L, R);
-  {$else}
-  QuickSortInteger(PIntegerArray(P), L, R);
-  {$endif}
-end;
-
 function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
 begin
   {$ifdef CPU64}
   result := FastFindInt64Sorted(PInt64Array(P), R, Int64(Value));
   {$else}
   result := FastFindIntegerSorted(PIntegerArray(P), R, integer(Value));
-  {$endif}
+  {$endif CPU64}
 end;
 
 procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
@@ -6199,9 +6230,9 @@ end;
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt;
 var
   L: PtrInt;
-    {$ifdef CPUX86}
+  {$ifdef CPUX86}
   cmp: Integer;
-    {$endif}
+  {$endif CPUX86}
 begin
   L := 0;
   if 0 <= R then
@@ -6228,7 +6259,7 @@ begin
           continue;
         break;
       end;
-      {$endif}
+      {$endif CPUX86}
       R := result - 1;
       if L <= R then
         continue;
@@ -9531,6 +9562,21 @@ begin
     result := (A - B) <= DoublePrec;
 end;
 
+function CompareFloat(const A, B: double): integer;
+begin
+  result := ord(A > B) - ord(A < B);
+end;
+
+procedure KahanSum(const Data: double; var Sum, Carry: double);
+var
+  y, t: double;
+begin
+  y := Data - Carry;
+  t := Sum + y;
+  Carry := (t - Sum) - y;
+  Sum := t;
+end;
+
 
 {$ifndef CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
 
@@ -9766,6 +9812,8 @@ begin
   vd := VarDataFromVariant(V);
   result := true;
   case cardinal(vd^.VType) of
+    varEmpty, varNull:
+      Value := 0;
     varDouble, varDate:
       Value := vd^.VDouble;
     varSingle:
@@ -9780,7 +9828,7 @@ begin
       CurrencyToDouble(vd^.VAny, Value);
   else
     if VariantToInt64(PVariant(vd)^, tmp.VInt64) then
-      Value := tmp.VInt64 // also handle varEmpty,varNull
+      Value := tmp.VInt64
     else
       result := false;
   end;
@@ -10197,6 +10245,7 @@ begin
       P2[i] := u;
     until i = 0;
 end;
+
 
 { ************ Some Convenient TStream descendants }
 

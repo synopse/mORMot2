@@ -25,7 +25,7 @@ const
   -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
   -> Delphi RTL is slower than FPC's, and it doesn't support AVX assembly yet
   -> cpuERMS - of little benefit - is disabled, unless WITH_ERMS is defined
-  http://blog.synopse.info/post/2020/02/17/New-move/fillchar-optimized-sse2/avx-asm-version
+  https://blog.synopse.info?post/2020/02/17/New-move/fillchar-optimized-sse2/avx-asm-version
 }
 
 // these stand-alone functions will use CPUIDX64 global to adjust the algorithm

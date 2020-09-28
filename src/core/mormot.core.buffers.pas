@@ -590,6 +590,10 @@ type
     OnErrorOverflow: TFastReaderOnErrorOverflow;
     /// use this event to customize the ErrorData process
     OnErrorData: TFastReaderOnErrorData;
+    /// when used to unserialize variants, stores options for TDocVariant creation
+    // - contains a PDocVariantOptions reference pointer as defined in the
+    // mormot.core.data unit
+    CustomVariants: pointer;
     /// some opaque value, e.g. a version number to define the binary layout
     Tag: PtrInt;
     /// initialize the reader from a memory block
@@ -671,6 +675,9 @@ type
     // - Values[] will be resized only if it is not long enough, to spare heap
     // - returns decoded count in Values[], which may not be length(Values)
     function ReadVarUInt64Array(var Values: TInt64DynArray): PtrInt;
+    /// retrieved RawUTF8 values encoded with TFileBufferWriter.WriteRawUTF8DynArray
+    // - returns the number of items read into Values[] (may differ from length(Values))
+    function ReadVarRawUTF8DynArray(var Values: TRawUTF8DynArray): PtrInt;
     /// retrieve some TAlgoCompress buffer, appended via Write()
     // - BufferOffset could be set to reserve some bytes before the uncompressed buffer
     function ReadCompressed(Load: TAlgoCompressLoad = aclNormal;
@@ -2300,6 +2307,7 @@ begin
   Last := PAnsiChar(Buffer) + Len;
   OnErrorOverflow := nil;
   OnErrorData := nil;
+  CustomVariants := nil;
 end;
 
 procedure TFastReader.Init(const Buffer: RawByteString);
@@ -2361,7 +2369,7 @@ begin
   inc(P, 4);
 end;
 
-function TFastReader.Next8: QWord;
+function TFastReader.Next8: Qword;
 begin
   if P + 7 >= Last then
     ErrorOverflow;
@@ -2402,7 +2410,7 @@ begin
   end;
 end;
 
-procedure TFastReader.Copy(Dest: pointer; DataLen: PtrInt);
+procedure TFastReader.Copy(Dest: Pointer; DataLen: PtrInt);
 begin
   if P + DataLen > Last then
     ErrorOverflow;
@@ -2410,7 +2418,7 @@ begin
   inc(P, DataLen);
 end;
 
-function TFastReader.CopySafe(Dest: pointer; DataLen: PtrInt): boolean;
+function TFastReader.CopySafe(Dest: Pointer; DataLen: PtrInt): boolean;
 begin
   if P + DataLen > Last then
     result := false
@@ -3041,6 +3049,54 @@ begin
         ErrorData('ReadVarUInt64Array got kind=%', [ord(k)]);
     end;
   until n = 0;
+end;
+
+function TFastReader.ReadVarRawUTF8DynArray(var Values: TRawUTF8DynArray): PtrInt;
+var
+  count, len: integer;
+  fixedsize, chunk, chunkend: PtrUInt;
+  PI: PRawUTF8;
+begin
+  result := VarUInt32;
+  if result = 0 then
+    exit;
+  count := result;
+  if count > length(Values) then // change Values[] length only if not big enough
+    SetLength(Values, count);
+  PI := pointer(Values);
+  fixedsize := VarUInt32;
+  repeat
+    // chunked format: Isize+values
+    chunkend := Next4;
+    chunk := PtrUInt(Next(chunkend));
+    inc(chunkend, chunk);
+    if fixedsize = 0 then
+      // variable size strings
+      while (count > 0) and (chunk < chunkend) do
+      begin
+        len := FromVarUInt32(PByte(chunk));
+        if len > 0 then
+        begin
+          FastSetString(PI^, pointer(chunk), len);
+          inc(chunk, len);
+        end
+        else if PI^<>'' then
+          PI^ := '';
+        dec(count);
+        inc(PI);
+      end
+    else
+      // fixed size strings
+      while (count > 0) and (chunk < chunkend) do
+      begin
+        FastSetString(PI^, pointer(chunk), fixedsize);
+        inc(chunk, fixedsize);
+        dec(count);
+        inc(PI);
+      end;
+  until count <= 0;
+  if PI <> @Values[result] then
+    ErrorOverflow; // paranoid check
 end;
 
 function TFastReader.ReadCompressed(Load: TAlgoCompressLoad;

@@ -5902,9 +5902,12 @@ begin
   end;
 end;
 
-procedure _BinaryVariantLoadAsJSON(var Value: variant; JSON: PUTF8Char);
+procedure _BinaryVariantLoadAsJSON(var Value: variant; JSON: PUTF8Char;
+  TryCustomVariant: pointer);
 begin
-  GetJSONToAnyVariant(Value, JSON, nil, @JSON_OPTIONS[true], {double=}true);
+  if TryCustomVariant = nil then
+    TryCustomVariant := @JSON_OPTIONS[true];
+  GetJSONToAnyVariant(Value, JSON, nil, TryCustomVariant, {double=}true);
 end;
 
 function VariantLoadJSON(var Value: variant; JSON, EndOfObject: PUTF8Char;
