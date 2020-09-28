@@ -429,20 +429,20 @@ procedure AddID(var Values: TIDDynArray; Value: TID); overload;
 /// set the TID (=64-bit integer) value from the numerical text stored in P^
 // - just a redirection to SynCommons.SetInt64()
 procedure SetID(P: PUTF8Char; var result: TID); overload;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// set the TID (=64-bit integer) value from the numerical text stored in U
 // - just a redirection to SynCommons.SetInt64()
 
 procedure SetID(const U: RawByteString; var result: TID); overload;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 
 function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob; overload;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -469,7 +469,7 @@ function BlobToStream(P: PUTF8Char): TStream;
 /// creates a TEXT-encoded version of blob data from a TSQLRawBlob
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
 function TSQLRawBlobToBlob(const RawBlob: TSQLRawBlob): RawUTF8; overload;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// creates a TEXT-encoded version of blob data from a memory data
 // - same as TSQLRawBlob, but with direct memory access via a pointer/byte size pair
@@ -482,7 +482,7 @@ procedure Base64MagicToBlob(Base64: PUTF8Char; var result: RawUTF8);
 
 /// return true if the TEXT is encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
 function isBlobHex(P: PUTF8Char): boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
 // - if P if nil or 'null', return sftUnknown
@@ -503,7 +503,7 @@ function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 // - will return sftInteger or sftFloat if the supplied text is a number
 // - will return sftUTF8Text for any non numerical content
 function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// special comparison function for sorting ftRecord (TRecordReference/RecordRef)
 // UTF-8 encoded values in the SQLite3 database or JSON content
@@ -885,7 +885,7 @@ type
     // for JSON ("\uFFF0base64encodedbinary")
     // - handle TPersistent, TCollection, TRawUTF8List or TStrings with ObjectToJSON
     function GetValue(Instance: TObject; ToSQL: boolean; wasSQLString: PBoolean = nil): RawUTF8;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// convert the property value into an UTF-8 encoded text
     // - this method is the same as GetValue(), but avoid assigning the result
     // string variable (some speed up on multi-core CPUs, since avoid a CPU LOCK)
@@ -1302,9 +1302,9 @@ type
     fObjArray: TRttiJson;
     fWrapper: TDynArray;
     procedure GetDynArray(Instance: TObject; var result: TDynArray);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     function GetDynArrayElemType: TRttiCustom;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
     procedure Serialize(Instance: TObject; var data: RawByteString;
       ExtendedJson: boolean); virtual;
@@ -1621,15 +1621,15 @@ type
     /// find an item in the list
     // - returns nil if not found
     function ByRawUTF8Name(const aName: RawUTF8): TSQLPropInfo; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// find an item in the list
     // - returns nil if not found
     function ByName(aName: PUTF8Char): TSQLPropInfo; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// find an item in the list
     // - returns -1 if not found
     function IndexByName(const aName: RawUTF8): integer; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// find an item in the list
     // - returns -1 if not found
     function IndexByName(aName: PUTF8Char): integer; overload;
@@ -1677,10 +1677,10 @@ type
       aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     /// direct access to the property class instance
     function GetInstance(Instance: TObject): TObject;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// direct access to the property class instance
     procedure SetInstance(Instance, Value: TObject);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// direct access to the property class
     // - can be used e.g. for TSQLRecordMany properties
     property ObjectClass: TClass read fObjectClass;
@@ -2736,7 +2736,7 @@ type
     fJoinedFields: boolean;
     /// return fJoinedFields or false if self=nil
     function GetJoinedFields: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// add a property to the fTableMap[] array
     // - aIndex is the column index in TSQLTable
     procedure AddMap(aRecord: TSQLRecord; aField: TSQLPropInfo;
@@ -2765,7 +2765,7 @@ type
     /// fill a TSQLRecord published properties from a TSQLTable row
     // - use the mapping prepared with Map() method
     function Fill(aRow: integer): boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// fill a TSQLRecord published properties from a TSQLTable row
     // - use the mapping prepared with Map() method
     // - aTableRow will point to the first column of the matching row
@@ -2781,7 +2781,7 @@ type
     // - won't work with cross-reference mapping (FillPrepareMany)
     // - use the mapping prepared with Map() method
     function Fill(aRow: integer; aDest: TSQLRecord): boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// used to compute the updated field bits during a fill
     // - will return Props.SimpleFieldsBits[soUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
@@ -2876,10 +2876,10 @@ type
     class procedure InternalDefineModel(Props: TSQLRecordProperties); virtual;
     /// trick to get the ID even in case of a sftID published property
     function GetID: TID;
-      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifdef MSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
     /// trick to typecast the ID on 64-bit platform
     function GetIDAsPointer: pointer;
-      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifdef MSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
   public
     /// direct access to the TSQLRecord properties from RTTI
     // - TSQLRecordProperties is faster than e.g. the class function FieldProp()
@@ -2890,13 +2890,13 @@ type
     // vmtAutoTable trick if very fast, and works with all versions of Delphi -
     // including 64-bit target)
     class function RecordProps: TSQLRecordProperties;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// the Table name in the database, associated with this TSQLRecord class
     // - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
     // - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
     // - is just a wrapper around RecordProps.SQLTableName
     class function SQLTableName: RawUTF8;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// register a custom filter (transformation) or validate to the
     // TSQLRecord class for a specified field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
@@ -3356,7 +3356,7 @@ type
     class function GetSQLCreate(aModel: TSQLModel): RawUTF8; virtual;
     /// return the Class Type of the current TSQLRecord
     function RecordClass: TSQLRecordClass;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// return the RTTI property information for this record
     function ClassProp: TRttiJson;
     /// return the TRecordReference Int64 value pointing to this record
@@ -3492,7 +3492,7 @@ type
     /// retrieve the record content as a TDocVariant custom variant object
     function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
       options: PDocVariantOptions = nil; replaceRowIDWithID: boolean = false): variant; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve the record content as a TDocVariant custom variant object
     procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
       var result: variant; options: PDocVariantOptions = nil;
@@ -3935,12 +3935,12 @@ type
     Value: TID;
     /// return the index of the content Table in the TSQLModel
     function TableIndex: integer;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// return the class of the content in a specified TSQLModel
     function Table(Model: TSQLModel): TSQLRecordClass;
     /// return the ID of the content
     function ID: TID;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// fill Value with the corresponding parameters
     // - since 6 bits are used for the table index, aTable MUST appear in the
     // first 64 items of the associated TSQLModel.Tables[] array
@@ -4031,7 +4031,7 @@ type
     fFieldParsedAsString: set of 0..255;
     fOnExportValue: TOnSQLTableGetValue;
     /// avoid GPF when TSQLTable is nil
-    function GetRowCount: integer; {$ifdef HASINLINE}inline;{$endif}
+    function GetRowCount: integer; {$ifdef HASINLINE} inline; {$endif}
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
     procedure InitFieldTypes;
     /// fill the internal fFieldNames[] array
@@ -4061,7 +4061,7 @@ type
     // or nil if the corresponding JSON was null or ""
     // - if Row and Fields are not correct, returns nil
     function Get(Row, Field: integer): PUTF8Char; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as RawUTF8 text
     function GetU(Row, Field: integer): RawUTF8; overload;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
@@ -4110,22 +4110,22 @@ type
     function GetW(Row, Field: integer): RawUnicode;
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row, Field: integer): integer; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row: integer; const FieldName: RawUTF8): integer; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as Int64 value
     function GetAsInt64(Row, Field: integer): Int64; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as Int64 value
     function GetAsInt64(Row: integer; const FieldName: RawUTF8): Int64; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as extended value
     function GetAsFloat(Row, Field: integer): TSynExtended; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as extended value
     function GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as TDateTime value
     // - sftDateTime/sftDateTimeMS will be converted from ISO-8601 text
     // - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
@@ -4143,10 +4143,10 @@ type
     function GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime; overload;
     /// read-only access to a particular field value, as currency value
     function GetAsCurrency(Row, Field: integer): system.currency; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as currency value
     function GetAsCurrency(Row: integer; const FieldName: RawUTF8): system.currency; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, ready to be displayed
     // - mostly used with Row=0, i.e. to get a display value from a field name
     // - use "string" type, i.e. UnicodeString for Delphi 2009+
@@ -4262,7 +4262,7 @@ type
     // may be slightly slower to access than readonly=FALSE, if all values are
     // likely be accessed later in the process
     procedure ToDocVariant(out docarray: variant; readonly: boolean); overload;
-      // {$ifdef HASINLINE}inline;{$endif} won't reset docarray as required
+      // {$ifdef HASINLINE} inline; {$endif} won't reset docarray as required
 
     /// save the table values in JSON format
     // - JSON data is added to TJSONWriter, with UTF-8 encoding, and not flushed
@@ -4323,7 +4323,7 @@ type
     /// get the Field index of a FieldName
     // - return -1 if not found, index (0..FieldCount-1) if found
     function FieldIndex(const FieldName: RawUTF8): integer; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// get the Field index of a FieldName
     // - raise an ESQLTableException if not found, index (0..FieldCount-1) if found
     function FieldIndexExisting(const FieldName: RawUTF8): integer; overload;
@@ -4354,7 +4354,7 @@ type
     /// get the Field content (encoded as UTF-8 text) from a property name
     // - return nil if not found
     function FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// sort result Rows, according to a specific field
     // - default is sorting by ascending order (Asc=true)
     // - you can specify a Row index to be updated during the sort in PCurrentRow
@@ -4624,42 +4624,42 @@ type
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
     function FieldAsInteger(FieldIndex: Integer): Int64; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as Integer
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
     function FieldAsInteger(const FieldName: RawUTF8): Int64; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as floating-point value
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
     function FieldAsFloat(FieldIndex: Integer): TSynExtended; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as floating-point value
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
     function FieldAsFloat(const FieldName: RawUTF8): TSynExtended; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as RawUTF8
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetU() method, but for the current Step
     function FieldAsRawUTF8(FieldIndex: Integer): RawUTF8; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as RawUTF8
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetU() method, but for the current Step
     function FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as VCL String
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
     function FieldAsString(FieldIndex: Integer): string; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as VCL String
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
     function FieldAsString(const FieldName: RawUTF8): string; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as a variant
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - will call GetVariant() method for appropriate data conversion
@@ -6824,7 +6824,7 @@ type
   /// thread-safe class to store a BATCH sequence of writing operations
   TSQLRestBatchLocked = class(TSQLRestBatch)
   protected
-    fTix: Int64;
+    fResetTix: Int64;
     fSafe: TSynLocker;
     fThreshold: integer;
   public
@@ -6841,7 +6841,7 @@ type
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
     /// property set to the current GetTickCount64 value when Reset is called
-    property ResetTix: Int64 read fTix write fTix;
+    property ResetTix: Int64 read fResetTix write fResetTix;
     /// may be used to store a number of rows to flush the content
     property Threshold: integer read fThreshold write fThreshold;
   end;
@@ -7071,7 +7071,7 @@ function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass;
 
 /// create a TRecordReference with the corresponding parameters
 function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference; overload;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a dynamic array of TRecordReference into its corresponding IDs
 
@@ -8249,7 +8249,7 @@ begin
 end;
 
 function Expect(var P: PUTF8Char; Value: PUTF8Char; ValueLen: PtrInt): boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 var
   i: PtrInt;
 begin // ValueLen is at least 8 bytes long
@@ -8652,7 +8652,7 @@ const
 
 function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType;
   aTypeInfo: PRttiInfo): TSQLDBFieldType;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if aSQLFieldType = sftNullable then
     aSQLFieldType := NullableTypeToSQLFieldType(aTypeInfo);
@@ -8786,9 +8786,9 @@ begin
 end;
 
 const
-  NULL_LOW = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
+  NULL_LOW  = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
   FALSE_LOW = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
-  TRUE_LOW = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
+  TRUE_LOW  = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
 
 procedure ValueVarToVariant(Value: PUTF8Char; ValueLen: integer;
   fieldType: TSQLFieldType; var result: TVarData; createValueTempCopy: boolean;
@@ -8796,7 +8796,7 @@ procedure ValueVarToVariant(Value: PUTF8Char; ValueLen: integer;
 const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
-  SQL_ELEMENTTYPES: array[TSQLFieldType] of word =(
+  SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
     varEmpty, varString, varString, varInteger, varInt64, varInt64,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime,
@@ -8919,7 +8919,7 @@ procedure TSQLPropInfo.CopyProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: T
   end;
 
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (Source = nil) or (DestInfo = nil) or (Dest = nil) then
     exit; // avoid GPF
@@ -8942,8 +8942,8 @@ begin
   CopySameClassProp(Source, self, Dest);
 end;
 
-procedure TSQLPropInfo.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
-  Dest: TObject);
+procedure TSQLPropInfo.CopySameClassProp(Source: TObject;
+  DestInfo: TSQLPropInfo; Dest: TObject);
 var
   tmp: RawUTF8;
   wasString: boolean;
@@ -12920,7 +12920,7 @@ procedure TSQLTable.InitFieldTypes;
 var
   f, i, len: integer;
   sft: TSQLFieldType;
-  info: pointer;
+  info: PRttiInfo;
   prop: TSQLPropInfo;
   size, tableindex: integer;
   U: PPUTF8Char;
@@ -12996,7 +12996,8 @@ begin
             else if sft = sftInteger then // may be a floating point with no decimal
               if FieldTypeIntegerDetectionOnAllRows then
                 continue
-              else                // we only checked the first field -> best guess...
+              else
+                // we only checked the first field -> best guess...
                 sft := sftCurrency;
             break; // found a non-integer content (e.g. sftFloat/sftUtf8Text)
           end;
@@ -13482,7 +13483,7 @@ end;
 
 procedure TSQLTable.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: integer);
 const
-  FIELDTYPE_TOXML: array[TSQLDBFieldType] of RawUTF8 =(
+  FIELDTYPE_TOXML: array[TSQLDBFieldType] of RawUTF8 = (
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency,
     '', '', ' dt:type="i8"', ' dt:type="float"',
     ' dt:type="number" rs:dbtype="currency"',
@@ -13812,10 +13813,10 @@ type
     procedure Sort(L, R: Integer);
     /// compare value at index I with pivot value
     // - sort by ID if values are identical
-    function CompI: integer; {$ifdef HASINLINE}inline;{$endif}
+    function CompI: integer; {$ifdef HASINLINE} inline; {$endif}
     /// compare value at index J with pivot value
     // - sort by ID if values are identical
-    function CompJ: integer; {$ifdef HASINLINE}inline;{$endif}
+    function CompJ: integer; {$ifdef HASINLINE} inline; {$endif}
     /// set the pivot value
     procedure SetPP(aPP: PPUTF8Char; aP: PtrInt);
   end;
@@ -13900,7 +13901,7 @@ begin
 end;
 {$endif CPUX86}
 
-procedure ExchgPointer(p1, p2: PPointer); {$ifdef HASINLINE} inline;{$endif}
+procedure ExchgPointer(p1, p2: PPointer); {$ifdef HASINLINE} inline; {$endif}
 var
   p: pointer;
 begin
@@ -16957,6 +16958,10 @@ begin
       '%.CreateAndFillPrepareMany(): FillPrepareMany() failure', [self]);
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$warnings off} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
+
 function TSQLRecord.EnginePrepareMany(const aClient: IRestORM;
   const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const;
   out ObjectsClass: TSQLRecordClassDynArray; out SQL: RawUTF8): RawUTF8;
@@ -17199,6 +17204,10 @@ begin
       with SQLFields[i] do
         fFill.AddMap(Instance, prop, i);
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings on} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
 
 function TSQLRecord.FillPrepareMany(const aClient: IRestORM;
   const aFormatSQLJoin: RawUTF8;
@@ -21271,7 +21280,7 @@ procedure TSQLRestBatchLocked.Reset(aTable: TSQLRecordClass;
   AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
 begin
   inherited;
-  fTix := GetTickCount64;
+  fResetTix := GetTickCount64;
 end;
 
 
@@ -21453,7 +21462,7 @@ begin
 end;
 
 
-// yes, I know, this is a huge unit, but we there are a lot of comments and
+// yes, I know, this is a huge unit, but there are a lot of comments and
 // the core ORM classes are coupled together by design :)
 
 initialization
