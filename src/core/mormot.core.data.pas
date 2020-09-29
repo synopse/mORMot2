@@ -261,7 +261,7 @@ type
     procedure RttiAfterReadObject; virtual;
   public
     /// virtual constructor called at instance creation
-    // - this constructor also registers the class type to the RttiCustom list
+    // - this constructor also registers the class type to the Rtti global list
     // - is declared as virtual so that inherited classes may have a root
     // constructor to override
     constructor Create; virtual;

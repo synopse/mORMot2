@@ -2839,7 +2839,7 @@ type
   // - consider inherit from TSQLRecordNoCase and TSQLRecordNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence
-  TSQLRecord = class(TObject)
+  TSQLRecord = class(TSynPersistentWithID)
   { note that every TSQLRecord has an Instance size of 20 bytes (on 32-bit)
     for private and protected fields (such as fID or fFill e.g.) }
   protected
@@ -2852,7 +2852,6 @@ type
     function GetFillReachedEnd: boolean;
     function GetTable: TSQLTable;
   protected
-    fID: TID;
     fInternalState: cardinal;
     /// defined here for proper RecordProps inlining
     class function PropsCreate: TSQLRecordProperties;
@@ -3060,7 +3059,7 @@ type
     // - auto-instanciate any TSQLRecordMany instance defined in published properties
     // - override this method if you want to use some internal objects (e.g.
     // TStringList or TCollection as published property)
-    constructor Create; overload; virtual;
+    constructor Create; overload; override;
     /// this constructor initializes the record and set the simple fields
     // with the supplied values
     // - the aSimpleFields parameters must follow explicitely the order of
@@ -3800,13 +3799,10 @@ type
     // - notice: the Setter should not be used usualy; you should not have to write
     //  aRecord.ID := someID in your code, since the ID is set during Retrieve or
     //  Add of the record
-    // - use IDValue property for direct read/write access to the record's ID
-    // field, if you know that this TSQLRecord is a true allocated class instance
+    // - use parent TSynPersistentID.IDValue property for direct read/write
+    // access to the record's ID field, if you know that this TSQLRecord is a
+    // true allocated class instance
     property ID: TID read GetID;
-    /// this property gives direct access to the record's integer ID
-    // - using IDValue expects this TSQLRecord to be a true instance, not a
-    // transtyped sftID (i.e. TSQLRecord(aID))
-    property IDValue: TID read fID write fID;
     /// this read-only property can be used to retrieve the ID as a TSQLRecord object
     // - published properties of type TSQLRecord (one-to-many relationship) do not
     // store real class instances (only exception is if they inherit from
@@ -5342,6 +5338,7 @@ type
   // and allows faster access to most wanted RTTI properties
   TSQLRecordProperties = class
   protected
+    fLock: TRTLCriticalSection;
     fTable: TSQLRecordClass;
     fTableRtti: TRttiJson;
     fHasNotSimpleFields: boolean;
@@ -5378,7 +5375,6 @@ type
       /// associated ORM parameters
       Properties: TSQLModelRecordProperties;
     end;
-    fLock: TRTLCriticalSection;
     fModelMax: integer;
     fCustomCollation: TRawUTF8DynArray;
     /// add an entry in fModel[] / fModelMax
@@ -11779,6 +11775,8 @@ begin
   inherited;
 end;
 
+// we don't use TRttiCustom.Props but the raw RTTI which doesn't include fID
+
 procedure TSQLPropInfoList.InternalAddParentsFirst(aClassType: TClass;
   aFlattenedProps: PRttiPropDynArray);
 var
@@ -15750,6 +15748,8 @@ constructor TSQLRecord.Create;
 var
   i: PtrInt;
 begin
+  // no TSynPersistent.Create call since vmtAutoTable is set by RecordProps
+  // inherited Create;
   // auto-instanciate any TSQLRecordMany instance
   with RecordProps do
     if pointer(ManyFields) <> nil then
