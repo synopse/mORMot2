@@ -1489,7 +1489,7 @@ procedure CoUninitialize; stdcall; external 'ole32.dll';
 
 procedure CoInit;
 begin
-  inc(OleDBCoInitialized);
+  inc(OleDBCoInitialized); // is a threadvar: no InterlockedIncrrement() needed
   if OleDBCoInitialized = 1 then
     CoInitialize(nil);
 end;

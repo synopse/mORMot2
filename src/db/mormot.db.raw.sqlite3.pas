@@ -2127,7 +2127,8 @@ type
   // corrupted if the operating system crashes or the computer loses power
   // before that data has been written to the disk surface. On the other hand,
   // some operations are as much as 50 or more times faster with synchronous OFF.
-  TSQLSynchronousMode = (smOff, smNormal, smFull);
+  TSQLSynchronousMode = (
+    smOff, smNormal, smFull);
 
   /// available file-level database connection locking-mode
   // - lmNormal locking-mode (the default unless overridden at compile-time using
@@ -2144,7 +2145,8 @@ type
   // are not released until the next time the database file is accessed.
   // - lmExclusive gives much better write performance, and could be used when
   // needed, in case of a heavy loaded mORMot server
-  TSQLLockingMode = (lmNormal, lmExclusive);
+  TSQLLockingMode = (
+    lmNormal, lmExclusive);
 
   /// available Run-Time limit categories
   // - as expected by sqlite3.limit() function and TSQLDatabase.Limit property
@@ -2164,8 +2166,9 @@ type
   // LIKE or GLOB operators.
   // - lcVariableNumber The maximum number of parameters in an SQL statement.
   // - lcTriggerDepth The maximum depth of recursion for triggers.
-  TSQLLimitCategory = (lcLength, lcSQLLength, lcColumn, lcExprDepth,
-    lcCompoundSelect, lcVDBEop, lcFunctionArg, lcAttached, lcLikePatternLength,
+  TSQLLimitCategory = (
+    lcLength, lcSQLLength, lcColumn, lcExprDepth, lcCompoundSelect,
+    lcVDBEop, lcFunctionArg, lcAttached, lcLikePatternLength,
     lcVariableNumber, lcTriggerDepth);
 
   {$M+}
@@ -3555,9 +3558,10 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..91] of PChar = ('sqlite3_initialize',
-    'sqlite3_shutdown', 'sqlite3_open', 'sqlite3_open_v2', 'sqlite3_key',
-    'sqlite3_rekey', 'sqlite3_close', 'sqlite3_libversion', 'sqlite3_errmsg',
+  SQLITE3_ENTRIES: array[0..91] of PChar = (
+    'sqlite3_initialize', 'sqlite3_shutdown',
+    'sqlite3_open', 'sqlite3_open_v2', 'sqlite3_key', 'sqlite3_rekey',
+    'sqlite3_close', 'sqlite3_libversion', 'sqlite3_errmsg',
     'sqlite3_extended_errcode', 'sqlite3_create_function',
     'sqlite3_create_function_v2', 'create_window_function',
     'sqlite3_create_collation', 'sqlite3_last_insert_rowid',
@@ -4968,7 +4972,8 @@ end;
 
 procedure TSQLDataBase.SetLockingMode(const Value: TSQLLockingMode);
 const
-  CMD: array[TSQLLockingMode] of RawUTF8 = ('NORMAL;', 'EXCLUSIVE;');
+  CMD: array[TSQLLockingMode] of RawUTF8 = (
+    'NORMAL;', 'EXCLUSIVE;');
 begin
   ExecuteNoException('PRAGMA locking_mode=' + CMD[Value]);
 end;
@@ -4986,7 +4991,8 @@ end;
 
 procedure TSQLDataBase.SetWALMode(Value: Boolean);
 const
-  CMD: array[boolean] of RawUTF8 = ('DELETE;', 'WAL;');
+  CMD: array[boolean] of RawUTF8 = (
+    'DELETE;', 'WAL;');
 begin
   ExecuteNoException('PRAGMA journal_mode=' + CMD[Value]);
 end;

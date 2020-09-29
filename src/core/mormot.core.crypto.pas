@@ -296,7 +296,8 @@ type
   // - repNoCheck and repCheckedIfAvailable will be compatible with older
   // versions of the protocol, but repMandatory will reject any encryption
   // without the TAESIVCTR algorithm
-  TAESIVReplayAttackCheck = (repNoCheck, repCheckedIfAvailable, repMandatory);
+  TAESIVReplayAttackCheck = (
+    repNoCheck, repCheckedIfAvailable, repMandatory);
 
   {$M+}
 
@@ -883,7 +884,8 @@ var
   // - as used internally by AESIVCtrEncryptDecrypt() function
   // - you may customize this secret for your own project, but be aware that
   // it will affect all TAESAbstract instances, so should match on all ends
-  AESIVCTR_KEY: TBlock128 = ($ce5d5e3e, $26506c65, $568e0092, $12cce480);
+  AESIVCTR_KEY: TBlock128 = (
+    $ce5d5e3e, $26506c65, $568e0092, $12cce480);
 
 /// global shared function which may encrypt or decrypt any 128-bit block
 // using AES-128 and the global AESIVCTR_KEY
@@ -1336,7 +1338,8 @@ type
 
 type
   /// SHA-3 instances, as defined by NIST Standard for Keccak sponge construction
-  TSHA3Algo = (SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
+  TSHA3Algo = (
+    SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
 
   /// implements SHA-3 (Keccak) hashing
   // - Keccak was the winner of the NIST hashing competition for a new hashing

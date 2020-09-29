@@ -3284,7 +3284,8 @@ const
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a shortstring
-  BOOL_STR: array[boolean] of string[7] = ('false','true');
+  BOOL_STR: array[boolean] of string[7] = (
+    'false','true');
 
   /// the JavaScript-like values of non-number IEEE constants
   // - as recognized by FloatToShortNan, and used by TBaseWriter.Add()
@@ -3406,7 +3407,7 @@ type
 
   /// a 64-bit identifier, defined for TSynPersistentWithID
   // - type used for our ORM primary key, i.e. TSQLRecord.ID
-  // - it maps the SQLite3 64-bit RowID definition
+  // - also maps the SQLite3 64-bit RowID definition
   TID = type Int64;
   /// a pointer to TSynPersistentWithID.ID, i.e. our ORM primary key
   PID = ^TID;

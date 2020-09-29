@@ -2813,7 +2813,7 @@ begin
     rtticustom := Rtti.RegisterClass(self);
     vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
     if (rtticustom = nil) or (vmt <> rtticustom) then
-      // TSynLog.Family / TSynLog.Add expect rtticustom in the first slot
+      // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
       raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=% not %',
         [self, vmt, rtticustom]);
     EnterCriticalSection(GlobalThreadLock);
@@ -2827,7 +2827,7 @@ begin
           // paranoid
           raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=%',
             [self, result]);
-      // create the properties information from rtticustom
+      // create the TSynLogFamily instance associated with this TSynLog class
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
       rtticustom.Private := result; // will be owned by this TRttiCustom
     finally

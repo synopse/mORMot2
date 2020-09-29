@@ -276,14 +276,14 @@ const
   DBMS_TYPES: array[-1..high(DBMS_NAMES)] of TSQLDBDefinition = (
     dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
     dFirebird, dFirebird, dPostgreSql, dInformix);
-  DRIVER_NAMES: array[0..21] of PAnsiChar = ('SQLSRV', 'LIBTDSODBC', 'IVSS',
-    'IVMSSS', 'PBSS', 'DB2CLI', 'LIBDB2', 'IVDB2', 'PBDB2', 'MSDB2', 'CWBODBC',
-    'MYODBC', 'SQORA', 'MSORCL', 'PBOR', 'IVOR', 'ODBCFB', 'IB', 'SQLITE',
-    'PSQLODBC', 'NXODBCDRIVER', 'ICLIT09B');
-  DRIVER_TYPES: array[-1..high(DRIVER_NAMES)] of TSQLDBDefinition = (dDefault,
-    dMSSQL, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dDB2, dDB2, dDB2, dDB2, dDB2, dDB2,
-    dMySQL, dOracle, dOracle, dOracle, dOracle, dFirebird, dFirebird, dSQLite,
-    dPostgreSQL, dNexusDB, dInformix);
+  DRIVER_NAMES: array[0..21] of PAnsiChar = (
+    'SQLSRV', 'LIBTDSODBC', 'IVSS', 'IVMSSS', 'PBSS', 'DB2CLI', 'LIBDB2',
+    'IVDB2', 'PBDB2', 'MSDB2', 'CWBODBC', 'MYODBC', 'SQORA', 'MSORCL', 'PBOR',
+    'IVOR', 'ODBCFB', 'IB', 'SQLITE', 'PSQLODBC', 'NXODBCDRIVER', 'ICLIT09B');
+  DRIVER_TYPES: array[-1..high(DRIVER_NAMES)] of TSQLDBDefinition = (
+    dDefault, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dDB2, dDB2, dDB2, dDB2,
+    dDB2, dDB2, dMySQL, dOracle, dOracle, dOracle, dOracle, dFirebird,
+    dFirebird, dSQLite, dPostgreSQL, dNexusDB, dInformix);
   DRIVERCOMPLETION: array[boolean] of SqlUSmallint = (
     SQL_DRIVER_NOPROMPT, SQL_DRIVER_PROMPT);
 var
@@ -1170,7 +1170,8 @@ end;
 
 function TSQLDBODBCStatement.Step(SeekFirst: boolean): boolean;
 const
-  CMD: array[boolean] of smallint = (SQL_FETCH_NEXT, SQL_FETCH_FIRST);
+  CMD: array[boolean] of smallint = (
+    SQL_FETCH_NEXT, SQL_FETCH_FIRST);
 var
   status: SqlReturn;
   i, sav: integer;

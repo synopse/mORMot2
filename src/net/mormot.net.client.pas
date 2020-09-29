@@ -116,7 +116,8 @@ type
 type
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHTTP class yet
-  THttpRequestAuthentication = (wraNone, wraBasic, wraDigest, wraNegotiate);
+  THttpRequestAuthentication = (
+    wraNone, wraBasic, wraDigest, wraNegotiate);
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
@@ -1139,8 +1140,10 @@ end;
 
 procedure TWinHTTP.InternalCreateRequest(const aMethod, aURL: RawUTF8);
 const
-  ALL_ACCEPT: array[0..1] of PWideChar = ('*/*', nil);
-  ACCEPT_TYPES: array[boolean] of pointer = (@ALL_ACCEPT, nil);
+  ALL_ACCEPT: array[0..1] of PWideChar = (
+    '*/*', nil);
+  ACCEPT_TYPES: array[boolean] of pointer = (
+    @ALL_ACCEPT, nil);
 var
   Flags: cardinal;
 begin
@@ -1351,8 +1354,10 @@ end;
 
 procedure TWinINet.InternalCreateRequest(const aMethod, aURL: RawUTF8);
 const
-  ALL_ACCEPT: array[0..1] of PAnsiChar = ('*/*', nil);
-  ACCEPT_TYPES: array[boolean] of pointer = (@ALL_ACCEPT, nil);
+  ALL_ACCEPT: array[0..1] of PAnsiChar = (
+    '*/*', nil);
+  ACCEPT_TYPES: array[boolean] of pointer = (
+    @ALL_ACCEPT, nil);
 var
   Flags: cardinal;
 begin
@@ -1589,7 +1594,8 @@ end;
 procedure TCurlHTTP.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
 const
-  HTTPS: array[boolean] of string[1] = ('', 's');
+  HTTPS: array[boolean] of string[1] = (
+    '', 's');
 begin
   if not IsAvailable then
     raise ENetSock.CreateFmt('No available %s', [LIBCURL_DLL]);

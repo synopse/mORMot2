@@ -94,7 +94,8 @@ type
 
   /// how TSQLVar may be processed
   // - by default, ftDate will use seconds resolution unless svoDateWithMS is set
-  TSQLVarOption = (svoDateWithMS);
+  TSQLVarOption = (
+    svoDateWithMS);
 
   /// defines how TSQLVar may be processed
   TSQLVarOptions = set of TSQLVarOption;

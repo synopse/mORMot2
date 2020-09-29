@@ -468,7 +468,8 @@ const
   type_owner_name: RawUTF8 = 'SYS';
   type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
   type_Varchar2ListName: RawUTF8 = 'ODCIVARCHAR2LIST';
-  type_Credential: array[boolean] of integer = (OCI_CRED_RDBMS, OCI_CRED_EXT);
+  type_Credential: array[boolean] of integer = (
+    OCI_CRED_RDBMS, OCI_CRED_EXT);
 begin
   log := SynDBLog.Enter(self, 'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
@@ -1776,7 +1777,8 @@ end;
 
 procedure TSQLDBOracleStatement.FreeHandles(AfterError: boolean);
 const // see http://gcov.php.net/PHP_5_3/lcov_html/ext/oci8/oci8_statement.c.gcov.php
-  RELEASE_MODE: array[boolean] of integer = (OCI_DEFAULT, OCI_STMTCACHE_DELETE);
+  RELEASE_MODE: array[boolean] of integer = (
+    OCI_DEFAULT, OCI_STMTCACHE_DELETE);
 var
   i, j: integer;
   P: PPointer;

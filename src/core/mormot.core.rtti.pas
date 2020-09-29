@@ -1539,7 +1539,8 @@ type
 
   PRttiCustomProps = ^TRttiCustomProps;
 
-  TRttiCustomFromTextExpectedEnd = (eeNothing, eeSquare, eeCurly, eeEndKeyWord);
+  TRttiCustomFromTextExpectedEnd = (
+    eeNothing, eeSquare, eeCurly, eeEndKeyWord);
 
   /// allow to customize the process of a given TypeInfo/PRttiInfo
   // - a global list of TRttiCustom instances mapping TypeInfo() is maintained
@@ -1551,6 +1552,7 @@ type
     fParser: TRTTIParserType;
     fParserComplex: TRTTIParserComplexType;
     fFlags: TRttiCustomFlags;
+    fPrivate: TObject; // used e.g. by mormot.orm.base.pas or mormot.core.log.pas
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
     fCopy: TRttiCopier;
@@ -1562,8 +1564,6 @@ type
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
-    // slot used e.g. by mormot.orm.base.pas or mormot.core.log.pas
-    fPrivate: TObject;
     // used by NoRttiSetAndRegister()
     fNoRttiInfo: TByteDynArray;
     // customize class process
@@ -1672,7 +1672,7 @@ type
   // - is usually a TRttiCustom or a TRttiJson class type
   TRttiCustomClass = class of TRttiCustom;
 
-  /// maintain a thread-safe list of PRttiInfo/TRttiCustom registration
+  /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = object
   private
     // for DoRegister thread-safety - no need of TSynLocker padding
@@ -1839,7 +1839,7 @@ type
 
 
 var
-  /// low-level access to the list of registered PRttiInfo/TRttiCustom
+  /// low-level access to the list of registered PRttiInfo/TRttiCustom/TRttiJson
   Rtti: TRttiCustomList;
 
 
@@ -5859,10 +5859,10 @@ begin
     for i := 0 to (n shr 1) - 1 do
       if (InfoBinarySize[i * 2].VType <> vtPointer) or
          not(InfoBinarySize[i * 2 + 1].VType in [vtInteger, vtInt64]) then
-        raise ERttiException.Create('RttiCustom.RegisterBinaryTypes(?)')
+        raise ERttiException.Create('Rtti.RegisterBinaryTypes(?)')
       else if RegisterType(InfoBinarySize[i * 2].VPointer).
          SetBinaryType(InfoBinarySize[i * 2 + 1].VInteger) = nil then
-        raise ERttiException.CreateUTF8('RttiCustom.RegisterBinaryTypes: %?',
+        raise ERttiException.CreateUTF8('Rtti.RegisterBinaryTypes: %?',
            [PRttiInfo(InfoBinarySize[i * 2].VPointer)^.Name]);
 end;
 
@@ -5884,7 +5884,7 @@ begin
     for i := 0 to (n shr 1) - 1 do
       if (DynArrayItem[i * 2].VType <> vtPointer) or
          (DynArrayItem[i * 2 + 1].VType <> vtClass) then
-        raise ERttiException.Create('RttiCustom.RegisterObjArrays[?]')
+        raise ERttiException.Create('Rtti.RegisterObjArrays[?]')
       else
         RegisterObjArray(DynArrayItem[i * 2].VPointer,
           DynArrayItem[i * 2 + 1].VClass);
@@ -5897,7 +5897,7 @@ var
 begin
   if (DynArrayOrRecord = nil) or
      not (DynArrayOrRecord^.Kind in rkRecordOrDynArrayTypes) then
-    raise ERttiException.Create('RttiCustom.RegisterFromText(DynArrayOrRecord?)');
+    raise ERttiException.Create('Rtti.RegisterFromText(DynArrayOrRecord?)');
   result := RegisterType(DynArrayOrRecord);
   if result.Kind = rkDynArray then
     if result.ArrayRtti = nil then
@@ -5914,7 +5914,7 @@ begin
   begin
     result.SetPropsFromText(P, eeNothing);
     if result.Props.Size <> result.Size then
-      raise ERttiException.CreateUTF8('RttiCustom.RegisterFromText(%): text ' +
+      raise ERttiException.CreateUTF8('Rtti.RegisterFromText(%): text ' +
         'definition  covers % bytes, but RTTI defined %',
         [DynArrayOrRecord^.Name^, result.Props.Size, result.Size]);
   end;
@@ -5931,7 +5931,7 @@ begin
   if new then
     result := GlobalClass.Create(nil)
   else if not (result.Kind in rkRecordTypes) then
-    raise ERttiException.CreateUTF8('RttiCustom.RegisterFromText: existing % is a %',
+    raise ERttiException.CreateUTF8('Rtti.RegisterFromText: existing % is a %',
       [TypeName, ToText(result.Kind)^]);
   result.Props.Clear;
   P := pointer(RTTIDefinition);
@@ -5951,7 +5951,7 @@ begin
     for i := 0 to (n shr 1) - 1 do
       if (TypeInfoTextDefinitionPairs[i * 2].VType <> vtPointer) or
          not VarRecToUTF8IsString(TypeInfoTextDefinitionPairs[i * 2 + 1], d) then
-        raise ERttiException.Create('RttiCustom.RegisterFromText[?]')
+        raise ERttiException.Create('Rtti.RegisterFromText[?]')
       else
          RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
 end;

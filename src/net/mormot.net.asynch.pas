@@ -75,10 +75,12 @@ type
   // - by default, TPollAsynchSockets.Write will first try to send the data
   // using Send() in non-blocking mode, unless paoWritePollOnly is defined,
   // and fWrite will be used to poll output state and send it asynchronously
-  TPollAsynchSocketsOptions = set of (paoWritePollOnly);
+  TPollAsynchSocketsOptions = set of (
+    paoWritePollOnly);
 
   /// let TPollAsynchSockets.OnRead shutdown the socket if needed
-  TPollAsynchSocketOnRead = (sorContinue, sorClose);
+  TPollAsynchSocketOnRead = (
+    sorContinue, sorClose);
 
   {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections

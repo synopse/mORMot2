@@ -62,7 +62,8 @@ type
   // - will be paramIn by default, which is the case 90% of time
   // - could be set to paramOut or paramInOut if must be refereshed after
   // execution (for calling a stored procedure expecting such parameters)
-  TSQLDBParamInOutType = (paramIn, paramOut, paramInOut);
+  TSQLDBParamInOutType = (
+    paramIn, paramOut, paramInOut);
 
   /// used to define a field/column layout in a table schema
   // - for TSQLDBConnectionProperties.SQLCreate to describe the new table
@@ -263,7 +264,8 @@ type
   // - in addition to CRUD states, cPostgreBulkArray would identify if the ORM
   // should generate unnested/any bound array statements - currently only
   // supported by mormot.db.sql.postgres for bulk insert/update/delete
-  TSQLDBStatementCRUD = (cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
+  TSQLDBStatementCRUD = (
+    cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
 
   /// identify the CRUD modes of a statement
   // - used e.g. for batch send abilities of a DB engine
@@ -281,7 +283,8 @@ type
   /// the known database definitions
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate(), or
   // for OleDB/ODBC/ZDBC tuning according to the connected database engine
-  TSQLDBDefinition = (dUnknown, dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
+  TSQLDBDefinition = (
+    dUnknown, dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
     dFirebird, dNexusDB, dPostgreSQL, dDB2, dInformix);
 
   /// set of the available database definitions
@@ -289,7 +292,8 @@ type
 
   /// where the LIMIT clause should be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
-  TSQLDBDefinitionLimitPosition = (posNone, posWhere, posSelect, posAfter, posOuter);
+  TSQLDBDefinitionLimitPosition = (
+    posNone, posWhere, posSelect, posAfter, posOuter);
 
   /// defines the LIMIT clause to be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
@@ -369,7 +373,8 @@ const
     4000, 255, 4000, 0, 32760, 32767, 0, 32700, 32700);
 
   /// the known SQL statement to retrieve the server date and time
-  DB_SERVERTIME: array[TSQLDBDefinition] of RawUTF8 = ('', '', // return local server time by default
+  DB_SERVERTIME: array[TSQLDBDefinition] of RawUTF8 = (
+    '', '', // return local server time by default
     'select sysdate from dual', 'select GETDATE()', '', // Jet is local -> return local time
     'SELECT NOW()', '', // SQlite is local -> return local time
     'select current_timestamp from rdb$database', 'SELECT CURRENT_TIMESTAMP',
@@ -935,8 +940,9 @@ type
   // - speStartTransaction / speCommit / speRollback will notify the
   // corresponding TSQLDBConnection.StartTransaction, TSQLDBConnection.Commit
   // and TSQLDBConnection.Rollback methods
-  TOnSQLDBProcessEvent = (speConnected, speDisconnected, speNonActive, speActive,
-    speConnectionLost, speReconnected, speStartTransaction, speCommit, speRollback);
+  TOnSQLDBProcessEvent = (
+    speConnected, speDisconnected, speNonActive, speActive, speConnectionLost,
+    speReconnected, speStartTransaction, speCommit, speRollback);
 
   /// event handler called during all external DB process
   // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
@@ -954,8 +960,9 @@ type
   TOnSQLDBInfo = procedure(Sender: TSQLDBStatement; const Msg: RawUTF8) of object;
 
   /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
-  TSQLDBSharedTransactionAction = (transBegin, transCommitWithoutException,
-    transCommitWithException, transRollback);
+  TSQLDBSharedTransactionAction = (
+    transBegin, transCommitWithoutException, transCommitWithException,
+    transRollback);
 
   /// defines a callback signature able to handle multiple INSERT
   // - may execute e.g. for 2 fields and 3 data rows on a database engine
@@ -4111,7 +4118,8 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       'UNIQUEIDENTIFIER', 'MONEY', 'SMALLMONEY', 'NUM', 'VARRAW', 'RAW',
       'LONG RAW', 'LONG VARRAW', 'TINYBLOB', 'MEDIUMBLOB', 'BYTEA', 'VARBIN',
       'IMAGE', 'LONGBLOB', 'BINARY', 'VARBINARY', 'GRAPHIC', 'VARGRAPHIC', 'NULL');
-    Types: array[-1..high(PCHARS)] of TSQLDBFieldType = (ftUnknown, ftDate,
+    Types: array[-1..high(PCHARS)] of TSQLDBFieldType = (
+      ftUnknown, ftDate,
       ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftInt64,
       ftInt64, ftInt64, ftDouble, ftDouble, ftDouble, ftDouble, ftDouble,
       ftCurrency, ftCurrency, ftCurrency, ftUTF8, ftBlob, ftDate, ftDate, ftDate,
@@ -4329,7 +4337,8 @@ function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
   const aFieldNames: array of RawUTF8; aUnique, aDescending: boolean;
   const aIndexName: RawUTF8): RawUTF8;
 const
-  CREATNDXIFNE: array[boolean] of RawUTF8 = ('', 'IF NOT EXISTS ');
+  CREATNDXIFNE: array[boolean] of RawUTF8 = (
+    '', 'IF NOT EXISTS ');
 var
   IndexName, FieldsCSV, ColsDesc, Owner, Table: RawUTF8;
 begin
@@ -4431,7 +4440,7 @@ end;
 function TSQLDBConnectionProperties.ExceptionIsAboutConnection(
   aClass: ExceptClass; const aMessage: RawUTF8): boolean;
 
-  function PosErrorNumber(const aMessage: RawUTF8; const aSepChar: AnsiChar): PUTF8Char;
+  function PosErrorNumber(const aMessage: RawUTF8; aSepChar: AnsiChar): PUTF8Char;
   begin // search aSepChar followed by a number
     result := pointer(aMessage);
     repeat
@@ -4448,17 +4457,20 @@ begin // see more complete list in feature request [f024266c0839]
       result := IdemPCharArray(PosErrorNumber(aMessage, '-'), ['00028', '01012',
         '01017', '01033', '01089', '02396', '03113', '03114', '03135', '12152',
         '12154', '12157', '12514', '12520', '12537', '12545', '12560', '12571']) >= 0;
-    dInformix: // error codes based on {IBM INFORMIX ODBC DRIVER} tested with wrong data connection
+    dInformix:
+      // error codes based on {IBM INFORMIX ODBC DRIVER} tested with wrong data connection
       result := IdemPCharArray(PosErrorNumber(aMessage, '-'), ['329', '761',
         '902', '908', '930', '931', '951', '11017', '23101', '23104', '25567',
         '25582', '27002']) >= 0;
-    dMSSQL: // error codes based on {SQL Server Native Client 11.0} tested with wrong data connection
-    // using general error codes because MS SQL SERVER has multiple error codes in the error message
-      result := IdemPCharArray(PosErrorNumber(aMessage, '['), ['08001', '08S01',
-        '08007', '28000', '42000']) >= 0;
+    dMSSQL:
+      // error codes based on {SQL Server Native Client 11.0} tested with wrong
+      // data connection using general error codes because MS SQL SERVER has
+      // multiple error codes in the error message
+      result := IdemPCharArray(PosErrorNumber(aMessage, '['),
+        ['08001', '08S01', '08007', '28000', '42000']) >= 0;
     dMySQL:
-      result := (PosEx('Lost connection to MySQL server', aMessage) > 0) or (PosEx
-        ('MySQL server has gone away', aMessage) > 0);
+      result := (PosEx('Lost connection to MySQL server', aMessage) > 0) or
+                (PosEx('MySQL server has gone away', aMessage) > 0);
   else
     result := PosI(' CONNE', aMessage) > 0;
   end;
@@ -5576,8 +5588,10 @@ end;
 function TSQLDBStatement.FetchAllToCSVValues(Dest: TStream; Tab: boolean;
   CommaSep: AnsiChar; AddBOM: boolean): PtrInt;
 const
-  NULL: array[boolean] of string[7] = ('"null"', 'null');
-  blob: array[boolean] of string[7] = ('"blob"', 'blob');
+  NULL: array[boolean] of string[7] = (
+    '"null"', 'null');
+  blob: array[boolean] of string[7] = (
+    '"blob"', 'blob');
 var
   F, FMax: integer;
   W: TTextWriter;

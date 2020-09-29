@@ -78,23 +78,6 @@ type
   /// generic parent class of all custom Exception types of this unit
   EORMException = class(ESynException);
 
-  /// this is the type to be used for our ORM primary key, i.e. TSQLRecord.ID
-  // - it maps the SQLite3 RowID definition
-  // - when converted to plain TSQLRecord published properties, you may loose
-  // some information under Win32 when stored as a 32-bit pointer
-  // - could be defined as value in a TSQLRecord property as such:
-  // ! property AnotherRecord: TID read fAnotherRecord write fAnotherRecord;
-  TID = type Int64;
-
-  /// a pointer to a ORM primary key, i.e. TSQLRecord.ID: TID
-  PID = ^TID;
-
-  /// used to store a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
-  TIDDynArray = array of TID;
-
-  /// pointer to a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
-  PIDDynArray = ^TIDDynArray;
-
   /// used to store bit set for all available Tables in a Database Model
   TSQLFieldTables = set of 0..MAX_SQLTABLES - 1;
 
@@ -319,11 +302,12 @@ type
   // defined as TUnixMSTime=Int64 TSQLRecord property
   // - WARNING: do not change the order of items below, otherwise some methods
   // (like TSQLRecordProperties.CheckBinaryHeader) may be broken and fail
-  TSQLFieldType = (sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,
-    sftInteger, sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog,
-    sftCurrency, sftObject, sftVariant, sftNullable, sftBlob, sftBlobDynArray,
-    sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
-    sftRecordVersion, sftSessionUserID, sftDateTimeMS, sftUnixTime, sftUnixMSTime);
+  TSQLFieldType = (
+    sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
+    sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
+    sftObject, sftVariant, sftNullable, sftBlob, sftBlobDynArray, sftBlobCustom,
+    sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID, sftRecordVersion,
+    sftSessionUserID, sftDateTimeMS, sftUnixTime, sftUnixMSTime);
 
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
@@ -350,18 +334,21 @@ type
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TSQLRestClientURI.UpdateFromServer)
   // - is used also by TSQLRecord.ComputeFieldsBeforeWrite virtual method
-  TSQLEvent = (seAdd, seUpdate, seDelete, seUpdateBlob);
+  TSQLEvent = (
+    seAdd, seUpdate, seDelete, seUpdateBlob);
 
   /// used to define the triggered Event types for TSQLRecordHistory
   // - TSQLRecordHistory.History will be used for heArchiveBlob
   // - TSQLRecordHistory.SentDataJSON will be used for other kind of events
-  TSQLHistoryEvent = (heAdd, heUpdate, heDelete, heArchiveBlob);
+  TSQLHistoryEvent = (
+    heAdd, heUpdate, heDelete, heArchiveBlob);
 
   /// used to defined the CRUD associated SQL statement of a command
   // - used e.g. by TSQLRecord.GetJSONValues methods and SimpleFieldsBits[] array
   // (in this case, soDelete is never used, since deletion is global for all fields)
   // - also used for cache content notification
-  TSQLOccasion = (soSelect, soInsert, soUpdate, soDelete);
+  TSQLOccasion = (
+    soSelect, soInsert, soUpdate, soDelete);
 
   /// used to defined a set of CRUD associated SQL statement of a command
   TSQLOccasions = set of TSQLOccasion;
@@ -550,7 +537,8 @@ type
   // - boRollbackOnError will raise an exception and Rollback any transaction
   // if any step failed - default if to continue batch processs, but setting
   // a value <> 200/HTTP_SUCCESS in Results[]
-  TSQLRestBatchOption = (boInsertOrIgnore, boInsertOrReplace, boExtendedJSON,
+  TSQLRestBatchOption = (
+    boInsertOrIgnore, boInsertOrReplace, boExtendedJSON,
     boPostNoSimpleFields, boPutNoCacheFlush, boRollbackOnError);
 
   /// a set of options for TSQLRest.BatchStart() process
@@ -2702,7 +2690,8 @@ type
   { -------------------- TSQLRecord Definitions }
 
   /// the possible options for handling table names
-  TSQLCheckTableName = (ctnNoCheck, ctnMustExist, ctnTrimExisting);
+  TSQLCheckTableName = (
+    ctnNoCheck, ctnMustExist, ctnTrimExisting);
 
   /// internal data used by TSQLRecord.FillPrepare()/FillPrepareMany() methods
   // - using a dedicated class will reduce memory usage for each TSQLRecord
@@ -2816,10 +2805,10 @@ type
   // - itoNoIndex4TID won't create indexes for TID fields
   // - itoNoIndex4RecordVersion won't create indexes for TRecordVersion fields
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
-  TSQLInitializeTableOption = (itoNoAutoCreateGroups, itoNoAutoCreateUsers,
-    itoNoCreateMissingField, itoNoIndex4ID, itoNoIndex4UniqueField,
-    itoNoIndex4NestedRecord, itoNoIndex4RecordReference, itoNoIndex4TID,
-    itoNoIndex4RecordVersion);
+  TSQLInitializeTableOption = (
+    itoNoAutoCreateGroups, itoNoAutoCreateUsers, itoNoCreateMissingField,
+    itoNoIndex4ID, itoNoIndex4UniqueField, itoNoIndex4NestedRecord,
+    itoNoIndex4RecordReference, itoNoIndex4TID, itoNoIndex4RecordVersion);
 
   /// the options to be specified for TSQLRestServer.CreateMissingTables and
   // TSQLRecord.InitializeTable methods
@@ -3069,14 +3058,14 @@ type
     // - the aSimpleFields must have exactly the same count of parameters as
     // there are "simple fields" in the published properties
     // - will raise an EORMException in case of wrong supplied values
-    constructor Create(const aSimpleFields: array of const; aID: TID); overload;
+    constructor Create(const aSimpleFields: array of const; aID: TID); reintroduce; overload;
     /// this constructor initializes the object as above, and fills its content
     // from a client or server connection
     // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
     constructor Create(const aClient: IRestORM; aID: TID;
-      ForUpdate: boolean = false); overload;
+      ForUpdate: boolean = false); reintroduce; overload;
     /// this constructor initializes the object and fills its content from a client
     // or server connection, from a TSQLRecord published property content
     // - is just a wrapper around Create(aClient,PtrInt(aPublishedRecord))
@@ -3087,14 +3076,15 @@ type
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
     constructor Create(const aClient: IRestORM; aPublishedRecord: TSQLRecord;
-      ForUpdate: boolean = false); overload;
+      ForUpdate: boolean = false); reintroduce; overload;
     /// this constructor initializes the object as above, and fills its content
     //  from a client or server connection, using a specified WHERE clause
     //  - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
     //  for better server speed - note that you can use FormatUTF8() as such:
     //  ! aRec := TSQLMyRec.Create(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
     //  or call the overloaded contructor with BoundsSQLWhere array of parameters
-    constructor Create(const aClient: IRestORM; const aSQLWhere: RawUTF8); overload;
+    constructor Create(const aClient: IRestORM; const aSQLWhere: RawUTF8);
+      reintroduce; overload;
     /// this constructor initializes the object as above, and fills its content
     // from a client or server connection, using a specified WHERE clause
     // with parameters
@@ -3107,7 +3097,7 @@ type
     // framework: array of const used to be ParamsSQLWhere and '%' in the
     // FormatSQLWhere statement, whereas it now expects bound parameters as '?'
     constructor Create(const aClient: IRestORM; const FormatSQLWhere: RawUTF8;
-      const BoundsSQLWhere: array of const); overload;
+      const BoundsSQLWhere: array of const); reintroduce; overload;
     /// this constructor initializes the object as above, and fills its content
     // from a client or server connection, using a specified WHERE clause
     // with parameters
@@ -3123,7 +3113,7 @@ type
     // will in all case create a request with :(..): inline parameters, with
     // automatic RawUTF8 quoting if necessary
     constructor Create(const aClient: IRestORM; const FormatSQLWhere: RawUTF8;
-      const ParamsSQLWhere, BoundsSQLWhere: array of const); overload;
+      const ParamsSQLWhere, BoundsSQLWhere: array of const); reintroduce; overload;
     /// this constructor initializes the object as above, and fills its content
     // from a supplied JSON content
     // - is a wrapper around Create + FillFrom() methods
@@ -15699,7 +15689,7 @@ begin
   rtticustom := Rtti.RegisterClass(self);
   vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
   if (rtticustom = nil) or (vmt <> rtticustom) then
-    // TSQLRecord.RecordProps expects rtticustom in the first slot
+    // TSQLRecord.RecordProps expects TRttiCustom in the first slot
     raise EModelException.CreateUTF8('%.RecordProps: vmtAutoTable=% not %',
       [self, vmt, rtticustom]);
   EnterCriticalSection(vmtAutoTableLock);
@@ -15724,16 +15714,12 @@ end;
 
 class function TSQLRecord.RecordProps: TSQLRecordProperties;
 begin
-  result := pointer(self);
+  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if result <> nil then
-  begin
-    result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
-    if result <> nil then
-      // we know TRttiCustom is the first slot, and Private is TSQLRecordProperties
-      result := TSQLRecordProperties(PRttiCustom(result)^.Private)
-    else
-      result := PropsCreate;
-  end;
+    // we know TRttiCustom is the first slot, and Private is TSQLRecordProperties
+    result := TSQLRecordProperties(PRttiCustom(result)^.Private)
+  else
+    result := PropsCreate;
 end;
 
 function TSQLRecord.RecordClass: TSQLRecordClass;
@@ -15749,7 +15735,7 @@ var
   i: PtrInt;
 begin
   // no TSynPersistent.Create call since vmtAutoTable is set by RecordProps
-  // inherited Create;
+  // no inherited Create;
   // auto-instanciate any TSQLRecordMany instance
   with RecordProps do
     if pointer(ManyFields) <> nil then
@@ -16234,7 +16220,7 @@ end;
 
 procedure TSQLRecord.GetBinaryValues(W: TFileBufferWriter);
 var
-  f: integer;
+  f: PtrInt;
 begin
   with RecordProps do
     for f := 0 to Fields.Count - 1 do
@@ -16243,7 +16229,7 @@ end;
 
 procedure TSQLRecord.GetBinaryValuesSimpleFields(W: TFileBufferWriter);
 var
-  f: integer;
+  f: PtrInt;
 begin
   with RecordProps do
     for f := 0 to SimpleFieldCount - 1 do
@@ -16253,7 +16239,7 @@ end;
 procedure TSQLRecord.GetBinaryValues(W: TFileBufferWriter;
   const aFields: TSQLFieldBits);
 var
-  f: integer;
+  f: PtrInt;
 begin
   with RecordProps do
     for f := 0 to Fields.Count - 1 do
@@ -16289,7 +16275,7 @@ end;
 
 function TSQLRecord.SetBinaryValues(var P: PAnsiChar; PEnd: PAnsiChar): boolean;
 var
-  f: integer;
+  f: PtrInt;
 begin
   result := false;
   if P = nil then
@@ -16370,6 +16356,7 @@ end;
 procedure TSQLRecord.AppendAsJsonObject(W: TJSONSerializer; Fields: TSQLFieldBits);
 var // Fields are not "const" since are modified if zero
   i: PtrInt;
+  P: TSQLRecordProperties;
   Props: TSQLPropInfoList;
 begin
   if Self = nil then
@@ -16379,9 +16366,10 @@ begin
   end;
   W.AddShort('{"ID":');
   W.Add(fID);
+  P := RecordProps;
   if IsZero(Fields) then
-    Fields := RecordProps.SimpleFieldsBits[soSelect];
-  Props := RecordProps.Fields;
+    Fields := P.SimpleFieldsBits[soSelect];
+  Props := P.Fields;
   for i := 0 to Props.Count - 1 do
     if i in Fields then
     begin
@@ -17297,7 +17285,7 @@ end;
 
 function TSQLRecord.GetHasBlob: boolean;
 begin
-  if Self = nil then
+  if self = nil then
     result := false
   else
     result := RecordProps.BlobFields <> nil;
@@ -17305,7 +17293,7 @@ end;
 
 function TSQLRecord.GetSimpleFieldCount: integer;
 begin
-  if Self = nil then
+  if self = nil then
     result := 0
   else
     result := length(RecordProps.SimpleFields);
@@ -19437,7 +19425,7 @@ var
 begin
   if (self <> nil) and (aTable <> nil) then
   begin
-    Props := PPointer(PtrInt(PtrUInt(aTable)) + vmtAutoTable)^;
+    Props := aTable.RecordProps;
     if (Props <> nil) and (Props.fModelMax < fTablesMax) then
       // fastest O(1) search in all registered models (if worth it)
       for i := 0 to Props.fModelMax do
@@ -21412,22 +21400,8 @@ end;
 
 procedure TSQLAccessRights.Edit(aTableIndex: integer; aRights: TSQLOccasions);
 begin
-  if soInsert in aRights then
-    Include(POST, aTableIndex)
-  else
-    Exclude(POST, aTableIndex);
-  if soSelect in aRights then
-    Include(GET, aTableIndex)
-  else
-    Exclude(GET, aTableIndex);
-  if soUpdate in aRights then
-    Include(PUT, aTableIndex)
-  else
-    Exclude(PUT, aTableIndex);
-  if soDelete in aRights then
-    Include(DELETE, aTableIndex)
-  else
-    Exclude(DELETE, aTableIndex);
+  Edit(aTableIndex, soInsert in aRights, soSelect in aRights,
+    soUpdate in aRights, soDelete in aRights);
 end;
 
 procedure TSQLAccessRights.Edit(aModel: TSQLModel; aTable: TSQLRecordClass;

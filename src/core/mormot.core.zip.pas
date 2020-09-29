@@ -30,7 +30,8 @@ uses
 
 type
   /// the format used for storing data
-  TSynZipCompressorFormat = (szcfRaw, szcfZip, szcfGZ);
+  TSynZipCompressorFormat = (
+    szcfRaw, szcfZip, szcfGZ);
 
   /// a TStream descendant for compressing data into a stream using Zip/Deflate
   TSynZipCompressor = class(TStream)
@@ -371,7 +372,9 @@ function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): bo
 implementation
 
 const
-  GZHEAD: array[0..2] of cardinal = ($088B1F, 0, 0);
+  GZHEAD: array[0..2] of cardinal = (
+    $088B1F, 0, 0);
+
   GZHEAD_SIZE = 10;
 
 

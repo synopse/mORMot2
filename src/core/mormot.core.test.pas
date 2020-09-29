@@ -807,8 +807,9 @@ class procedure TSynTestCase.AddRandomTextParagraph(WR: TBaseWriter;
 type
   TKind = (space, comma, dot, question, paragraph);
 const
-  bla: array[0..7] of string[3] = ('bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
-  endKind =[dot, paragraph, question];
+  bla: array[0..7] of string[3] = (
+    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
+  endKind = [dot, paragraph, question];
 var
   n: integer;
   s: string[3];

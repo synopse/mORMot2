@@ -950,8 +950,9 @@ type
   THttpApiWebSocketServerProtocol = class;
 
   /// current state of a THttpApiWebSocketConnection
-  TWebSocketState = (wsConnecting, wsOpen,
-    wsClosing, wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown);
+  TWebSocketState = (
+    wsConnecting, wsOpen, wsClosing, wsClosedByClient, wsClosedByServer,
+    wsClosedByGuard, wsClosedByShutdown);
 
   /// structure representing a single WebSocket connection
   {$ifdef USERECORDWITHMETHODS}
@@ -2546,7 +2547,8 @@ procedure THttpApiServer.Execute;
 type
   TVerbText = array[hvOPTIONS..pred(hvMaximum)] of RawUTF8;
 const
-  VERB_TEXT: TVerbText = ('OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE',
+  VERB_TEXT: TVerbText = (
+    'OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE',
     'TRACE', 'CONNECT', 'TRACK', 'MOVE', 'COPY', 'PROPFIND', 'PROPPATCH',
     'MKCOL', 'LOCK', 'UNLOCK', 'SEARCH');
 var

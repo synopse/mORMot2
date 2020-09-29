@@ -59,7 +59,8 @@ type
   TWebSocketFrameOpCodes = set of TWebSocketFrameOpCode;
 
   /// define one attribute of a WebSockets frame data
-  TWebSocketFramePayload = (fopAlreadyCompressed);
+  TWebSocketFramePayload = (
+    fopAlreadyCompressed);
   /// define the attributes of a WebSockets frame data
 
   TWebSocketFramePayloads = set of TWebSocketFramePayload;
@@ -840,7 +841,8 @@ type
   end;
 
   /// the current state of the client side processing thread
-  TWebSocketProcessClientThreadState = (sCreate, sRun, sFinished, sClosed);
+  TWebSocketProcessClientThreadState = (
+    sCreate, sRun, sFinished, sClosed);
 
   /// WebSockets processing thread used on client side
   // - will handle any incoming callback

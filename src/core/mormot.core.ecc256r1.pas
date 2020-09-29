@@ -287,15 +287,17 @@ type
   // TECCSignatureCertified.Verify, TECCCertificateChain.IsValid or
   // TECCCertificateChain.IsSigned methods
   // - see also ECC_VALIDSIGN constant
-  TECCValidity = (ecvUnknown, ecvValidSigned, ecvValidSelfSigned,
-    ecvNotSupported, ecvBadParameter, ecvCorrupted, ecvInvalidDate,
-    ecvUnknownAuthority, ecvDeprecatedAuthority, ecvInvalidSignature);
+  TECCValidity = (
+    ecvUnknown, ecvValidSigned, ecvValidSelfSigned, ecvNotSupported,
+    ecvBadParameter, ecvCorrupted, ecvInvalidDate, ecvUnknownAuthority,
+    ecvDeprecatedAuthority, ecvInvalidSignature);
 
   /// the error codes returned by TECCCertificateSecret.Decrypt()
   // - see also ECC_VALIDDECRYPT constant
-  TECCDecrypt = (ecdDecrypted, ecdDecryptedWithSignature, ecdNoContent,
-    ecdCorrupted, ecdInvalidSerial, ecdNoPrivateKey, ecdInvalidMAC,
-    ecdDecryptError, ecdWriteFileError);
+  TECCDecrypt = (
+    ecdDecrypted, ecdDecryptedWithSignature, ecdNoContent, ecdCorrupted,
+    ecdInvalidSerial, ecdNoPrivateKey, ecdInvalidMAC, ecdDecryptError,
+    ecdWriteFileError);
 
 const
   /// TECCValidity results indicating a valid digital signature

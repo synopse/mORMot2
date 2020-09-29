@@ -1430,7 +1430,8 @@ function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
 const
   /// can be used to append to most English nouns to form a plural
   // - as used by the Plural() function
-  PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
+  PLURAL_FORM: array[boolean] of RawUTF8 = (
+    '','s');
 
 /// write count number and append 's' (if needed) to form a plural English noun
 // - for instance, Plural('row',100) returns '100 rows' with no heap allocation

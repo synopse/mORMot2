@@ -422,7 +422,8 @@ function TimeToString: RawUTF8;
 
 const
   /// used e.g. by DateTimeMSToString and TTextWriter.AddDateTimeMS
-  DTMS_FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%%:%:%.%%');
+  DTMS_FMT: array[boolean] of RawUTF8 = (
+    '%%%%%%%%%', '%-%-%%%:%:%.%%');
 
 
 

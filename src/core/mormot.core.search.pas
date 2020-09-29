@@ -343,7 +343,8 @@ type
   EExprParser = class(ESynException);
 
   /// identify an expression search engine node type, as used by TExprParser
-  TExprNodeType = (entWord, entNot, entOr, entAnd);
+  TExprNodeType = (
+    entWord, entNot, entOr, entAnd);
 
   /// results returned by TExprParserAbstract.Parse method
   TExprParserResult = (

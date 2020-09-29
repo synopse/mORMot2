@@ -869,8 +869,8 @@ const
   /// special JSON string content which will be used to store a betDeprecatedDbptr
   // - *[false,*] is for strict JSON, *[true,*] for MongoDB Extended JSON
   // - (not used by now for this deprecated content)
-  BSON_JSON_DBREF: array[boolean, 0..2] of string[15] = (('{"$ref":"',
-    '","$id":"', '"}'), ('DBRef("', '","', '")'));
+  BSON_JSON_DBREF: array[boolean, 0..2] of string[15] = (
+    ('{"$ref":"', '","$id":"', '"}'), ('DBRef("', '","', '")'));
   /// special JSON string content which will be used to store a betRegEx
   BSON_JSON_REGEX: array[0..2] of string[15] = (
     '{"$regex":"', '","$options":"', '"}');
@@ -1198,7 +1198,7 @@ end;
 
 const
   D128: array[TDecimal128SpecialValue] of TDecimal128Bits = (
-  // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
+    // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
     (
     lo: 0;
     hi: BSON_DECIMAL128_HI_NAN

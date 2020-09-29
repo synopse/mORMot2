@@ -7474,7 +7474,6 @@ end;
 
 const
   _PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
-
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
     @HashAnsiString, @HashAnsiString, nil, @HashInteger,
@@ -7483,7 +7482,6 @@ const
     @HashInt64, @HashInt64, @HashSynUnicode, @HashInt64, @HashInt64,
     @HashVariant, @HashWideString, @HashAnsiString, @HashWord,
     nil, nil, nil, nil, nil, nil),
-
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
     @HashAnsiStringI, @HashAnsiString, nil, @HashInteger,
@@ -7492,7 +7490,6 @@ const
     @HashInt64, @HashInt64, @HashSynUnicodeI, @HashInt64, @HashInt64,
     @HashVariantI, @HashWideStringI, @HashAnsiStringI, @HashWord,
     nil, nil, nil, nil, nil, nil));
-
 
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
   aEventHash: TEventDynArrayHashOne; aHasher: THasher;

@@ -77,8 +77,8 @@ type
 
   /// http.sys API 2.0 logging file rollover types
   // - match low-level HTTP_LOGGING_ROLLOVER_TYPE as defined in HTTP 2.0 API
-  THttpApiLoggingRollOver = (hlrSize,
-    hlrDaily, hlrWeekly, hlrMonthly, hlrHourly);
+  THttpApiLoggingRollOver = (
+    hlrSize, hlrDaily, hlrWeekly, hlrMonthly, hlrHourly);
 
   /// http.sys API 2.0 logging option flags
   // - used to alter the default logging behavior
@@ -115,7 +115,8 @@ type
   end;
 
   // the req* values identify Request Headers, and resp* Response Headers
-  THttpHeader = (reqCacheControl, reqConnection, reqDate, reqKeepAlive,
+  THttpHeader = (
+    reqCacheControl, reqConnection, reqDate, reqKeepAlive,
     reqPragma, reqTrailer, reqTransferEncoding, reqUpgrade, reqVia, reqWarning,
     reqAllow, reqContentLength, reqContentType, reqContentEncoding,
     reqContentLanguage, reqContentLocation, reqContentMd5, reqContentRange,
@@ -282,19 +283,21 @@ type
     dwToken: DWORD;
   end;
 
-  HTTP_REQUEST_INFO_TYPE = (HttpRequestInfoTypeAuth,
-    HttpRequestInfoTypeChannelBind, HttpRequestInfoTypeSslProtocol,
-    HttpRequestInfoTypeSslTokenBindingDraft, HttpRequestInfoTypeSslTokenBinding,
-    HttpRequestInfoTypeRequestTiming, HttpRequestInfoTypeTcpInfoV0,
-    HttpRequestInfoTypeRequestSizing, HttpRequestInfoTypeQuicStats,
-    HttpRequestInfoTypeTcpInfoV1);
+  HTTP_REQUEST_INFO_TYPE = (
+    HttpRequestInfoTypeAuth, HttpRequestInfoTypeChannelBind,
+    HttpRequestInfoTypeSslProtocol, HttpRequestInfoTypeSslTokenBindingDraft,
+    HttpRequestInfoTypeSslTokenBinding, HttpRequestInfoTypeRequestTiming,
+    HttpRequestInfoTypeTcpInfoV0, HttpRequestInfoTypeRequestSizing,
+    HttpRequestInfoTypeQuicStats, HttpRequestInfoTypeTcpInfoV1);
 
   // about Authentication in HTTP Version 2.0
   // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
-  HTTP_AUTH_STATUS = (HttpAuthStatusSuccess, HttpAuthStatusNotAuthenticated,
+  HTTP_AUTH_STATUS = (
+    HttpAuthStatusSuccess, HttpAuthStatusNotAuthenticated,
     HttpAuthStatusFailure);
 
-  HTTP_REQUEST_AUTH_TYPE = (HttpRequestAuthTypeNone, HttpRequestAuthTypeBasic,
+  HTTP_REQUEST_AUTH_TYPE = (
+    HttpRequestAuthTypeNone, HttpRequestAuthTypeBasic,
     HttpRequestAuthTypeDigest, HttpRequestAuthTypeNTLM,
     HttpRequestAuthTypeNegotiate, HttpRequestAuthTypeKerberos);
 
@@ -378,7 +381,8 @@ type
 
   PHTTP_REQUEST = ^HTTP_REQUEST;
 
-  HTTP_RESPONSE_INFO_TYPE = (HttpResponseInfoTypeMultipleKnownHeaders,
+  HTTP_RESPONSE_INFO_TYPE = (
+    HttpResponseInfoTypeMultipleKnownHeaders,
     HttpResponseInfoTypeAuthenticationProperty, HttpResponseInfoTypeQosProperty,
     HttpResponseInfoTypeChannelBind);
 
@@ -435,7 +439,8 @@ type
 
   HTTP_PROPERTY_FLAGS = ULONG;
 
-  HTTP_ENABLED_STATE = (HttpEnabledStateActive, HttpEnabledStateInactive);
+  HTTP_ENABLED_STATE = (
+    HttpEnabledStateActive, HttpEnabledStateInactive);
 
   PHTTP_ENABLED_STATE = ^HTTP_ENABLED_STATE;
 
@@ -446,13 +451,14 @@ type
 
   PHTTP_STATE_INFO = ^HTTP_STATE_INFO;
 
-  THTTP_503_RESPONSE_VERBOSITY = (Http503ResponseVerbosityBasic,
-    Http503ResponseVerbosityLimited, Http503ResponseVerbosityFull);
+  THTTP_503_RESPONSE_VERBOSITY = (
+    Http503ResponseVerbosityBasic, Http503ResponseVerbosityLimited,
+    Http503ResponseVerbosityFull);
 
   PHTTP_503_RESPONSE_VERBOSITY = ^THTTP_503_RESPONSE_VERBOSITY;
 
-  HTTP_QOS_SETTING_TYPE = (HttpQosSettingTypeBandwidth,
-    HttpQosSettingTypeConnectionLimit,
+  HTTP_QOS_SETTING_TYPE = (
+    HttpQosSettingTypeBandwidth, HttpQosSettingTypeConnectionLimit,
     HttpQosSettingTypeFlowRate // Windows Server 2008 R2 and Windows 7 only
   );
 
@@ -493,7 +499,8 @@ const
   HTTP_LIMIT_INFINITE {:ULONG}  = ULONG(-1);
 
 type
-  HTTP_SERVICE_CONFIG_TIMEOUT_KEY = (IdleConnectionTimeout, HeaderWaitTimeout);
+  HTTP_SERVICE_CONFIG_TIMEOUT_KEY = (
+    IdleConnectionTimeout, HeaderWaitTimeout);
 
   PHTTP_SERVICE_CONFIG_TIMEOUT_KEY = ^HTTP_SERVICE_CONFIG_TIMEOUT_KEY;
 
@@ -567,7 +574,8 @@ type
 
   PHTTP_SERVER_AUTHENTICATION_INFO = ^HTTP_SERVER_AUTHENTICATION_INFO;
 
-  HTTP_SERVICE_BINDING_TYPE = (HttpServiceBindingTypeNone,
+  HTTP_SERVICE_BINDING_TYPE = (
+    HttpServiceBindingTypeNone,
     HttpServiceBindingTypeW, HttpServiceBindingTypeA);
 
   HTTP_SERVICE_BINDING_BASE = record
@@ -592,7 +600,8 @@ type
 
   PHTTP_SERVICE_BINDING_W = ^HTTP_SERVICE_BINDING_W;
 
-  HTTP_AUTHENTICATION_HARDENING_LEVELS = (HttpAuthenticationHardeningLegacy,
+  HTTP_AUTHENTICATION_HARDENING_LEVELS = (
+    HttpAuthenticationHardeningLegacy,
     HttpAuthenticationHardeningMedium, HttpAuthenticationHardeningStrict);
 
 const
@@ -679,11 +688,12 @@ const
   HTTP_LOG_FIELD_QUEUE_NAME = $04000000;
 
 type
-  HTTP_LOGGING_TYPE = (HttpLoggingTypeW3C, HttpLoggingTypeIIS,
+  HTTP_LOGGING_TYPE = (
+    HttpLoggingTypeW3C, HttpLoggingTypeIIS,
     HttpLoggingTypeNCSA, HttpLoggingTypeRaw);
 
-  HTTP_LOGGING_ROLLOVER_TYPE = (HttpLoggingRolloverSize,
-    HttpLoggingRolloverDaily, HttpLoggingRolloverWeekly,
+  HTTP_LOGGING_ROLLOVER_TYPE = (
+    HttpLoggingRolloverSize, HttpLoggingRolloverDaily, HttpLoggingRolloverWeekly,
     HttpLoggingRolloverMonthly, HttpLoggingRolloverHourly);
 
   HTTP_LOGGING_INFO = record
@@ -705,7 +715,8 @@ type
 
   PHTTP_LOGGING_INFO = ^HTTP_LOGGING_INFO;
 
-  HTTP_LOG_DATA_TYPE = (HttpLogDataTypeFields);
+  HTTP_LOG_DATA_TYPE = (
+    HttpLogDataTypeFields);
 
   HTTP_LOG_DATA = record
     Typ: HTTP_LOG_DATA_TYPE
@@ -753,7 +764,8 @@ type
     RequestQueueHandle: THandle;
   end;
 
-  HTTP_PROTECTION_LEVEL_TYPE = (HttpProtectionLevelUnrestricted,
+  HTTP_PROTECTION_LEVEL_TYPE = (
+    HttpProtectionLevelUnrestricted,
     HttpProtectionLevelEdgeRestricted, HttpProtectionLevelRestricted);
 
   HTTP_PROTECTION_LEVEL_INFO = record
@@ -985,7 +997,8 @@ var
   Http: THttpAPI;
 
 type
-  THttpAPIs = (hInitialize, hTerminate, hCreateHttpHandle, hAddUrl, hRemoveUrl,
+  THttpAPIs = (
+    hInitialize, hTerminate, hCreateHttpHandle, hAddUrl, hRemoveUrl,
     hReceiveHttpRequest, hSendHttpResponse, hReceiveRequestEntityBody,
     hResponseEntityBody, hSetServiceConfiguration, hDeleteServiceConfiguration,
     hFlushResponseCache, hCancelHttpRequest, hCreateServerSession,
@@ -996,7 +1009,8 @@ type
 
 const
   hHttpApi2First = hCancelHttpRequest;
-  HttpNames: array[THttpAPIs] of PChar = ('HttpInitialize', 'HttpTerminate',
+  HttpNames: array[THttpAPIs] of PChar = (
+    'HttpInitialize', 'HttpTerminate',
     'HttpCreateHttpHandle', 'HttpAddUrl', 'HttpRemoveUrl',
     'HttpReceiveHttpRequest', 'HttpSendHttpResponse',
     'HttpReceiveRequestEntityBody', 'HttpSendResponseEntityBody',
@@ -1298,11 +1312,12 @@ var
   WinHttpAPI: TWinHTTPBinding;
 
 type
-  TWinHttpAPIs = (hOpen, hSetStatusCallback, hConnect, hOpenRequest,
-    hCloseHandle, hAddRequestHeaders, hSendRequest, hReceiveResponse,
-    hQueryHeaders, hQueryDataAvailable, hReadData, hSetTimeouts, hSetOption,
-    hSetCredentials, hWebSocketCompleteUpgrade, hWebSocketClose,
-    hWebSocketQueryCloseStatus, hWebSocketSend, hWebSocketReceive, hWriteData);
+  TWinHttpAPIs = (
+    hOpen, hSetStatusCallback, hConnect, hOpenRequest, hCloseHandle,
+    hAddRequestHeaders, hSendRequest, hReceiveResponse, hQueryHeaders,
+    hQueryDataAvailable, hReadData, hSetTimeouts, hSetOption, hSetCredentials,
+    hWebSocketCompleteUpgrade, hWebSocketClose, hWebSocketQueryCloseStatus,
+    hWebSocketSend, hWebSocketReceive, hWriteData);
 
 const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
@@ -1330,18 +1345,23 @@ procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
 { ******************** websocket.dll Windows API Definitions }
 
 type
-  WEB_SOCKET_PROPERTY_TYPE = (WEB_SOCKET_RECEIVE_BUFFER_SIZE_PROPERTY_TYPE, //0
+  WEB_SOCKET_PROPERTY_TYPE = (
+    WEB_SOCKET_RECEIVE_BUFFER_SIZE_PROPERTY_TYPE, //0
     WEB_SOCKET_SEND_BUFFER_SIZE_PROPERTY_TYPE,
-    WEB_SOCKET_DISABLE_MASKING_PROPERTY_TYPE, WEB_SOCKET_ALLOCATED_BUFFER_PROPERTY_TYPE,
+    WEB_SOCKET_DISABLE_MASKING_PROPERTY_TYPE,
+    WEB_SOCKET_ALLOCATED_BUFFER_PROPERTY_TYPE,
     WEB_SOCKET_DISABLE_UTF8_VERIFICATION_PROPERTY_TYPE,
     WEB_SOCKET_KEEPALIVE_INTERVAL_PROPERTY_TYPE,
     WEB_SOCKET_SUPPORTED_VERSIONS_PROPERTY_TYPE);
 
   WEB_SOCKET_ACTION_QUEUE = Cardinal;
 
-  WEB_SOCKET_ACTION = (WEB_SOCKET_NO_ACTION, //0
-    WEB_SOCKET_SEND_TO_NETWORK_ACTION, WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION,
-    WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION, WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION);
+  WEB_SOCKET_ACTION = (
+    WEB_SOCKET_NO_ACTION, //0
+    WEB_SOCKET_SEND_TO_NETWORK_ACTION,
+    WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION,
+    WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION,
+    WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION);
 
   PWEB_SOCKET_ACTION = ^WEB_SOCKET_ACTION;
 
@@ -1437,7 +1457,8 @@ type
   end;
 
   /// identify each TWebSocketAPI late-binding API function
-  TWebSocketAPIs = (hAbortHandle, hBeginClientHandshake, hBeginServerHandshake,
+  TWebSocketAPIs = (
+    hAbortHandle, hBeginClientHandshake, hBeginServerHandshake,
     hCompleteAction, hCreateClientHandle, hCreateServerHandle, hDeleteHandle,
     hEndClientHandshake, hEndServerHandshake, hGetAction, hGetGlobalProperty,
     hReceive, hSend);
@@ -1461,13 +1482,13 @@ type
 
 const
   WEBSOCKET_DLL = 'websocket.dll';
-  WebSocketNames: array[TWebSocketAPIs] of PChar = ('WebSocketAbortHandle',
-    'WebSocketBeginClientHandshake', 'WebSocketBeginServerHandshake',
-    'WebSocketCompleteAction', 'WebSocketCreateClientHandle',
-    'WebSocketCreateServerHandle', 'WebSocketDeleteHandle',
-    'WebSocketEndClientHandshake', 'WebSocketEndServerHandshake',
-    'WebSocketGetAction', 'WebSocketGetGlobalProperty', 'WebSocketReceive',
-    'WebSocketSend');
+  WebSocketNames: array[TWebSocketAPIs] of PChar = (
+    'WebSocketAbortHandle', 'WebSocketBeginClientHandshake',
+    'WebSocketBeginServerHandshake', 'WebSocketCompleteAction',
+    'WebSocketCreateClientHandle', 'WebSocketCreateServerHandle',
+    'WebSocketDeleteHandle', 'WebSocketEndClientHandshake',
+    'WebSocketEndServerHandshake', 'WebSocketGetAction',
+    'WebSocketGetGlobalProperty', 'WebSocketReceive', 'WebSocketSend');
   WEB_SOCKET_SEND_ACTION_QUEUE = $1;
   WEB_SOCKET_RECEIVE_ACTION_QUEUE = $2;
   WEB_SOCKET_ALL_ACTION_QUEUE = WEB_SOCKET_SEND_ACTION_QUEUE or
@@ -1554,7 +1575,8 @@ uses
 
 function RegURL(aRoot, aPort: RawUTF8; Https: boolean; aDomainName: RawUTF8): SynUnicode;
 const
-  Prefix: array[boolean] of RawUTF8 = ('http://', 'https://');
+  Prefix: array[boolean] of RawUTF8 = (
+    'http://', 'https://');
 begin
   if aPort = '' then
     aPort := DEFAULT_PORT[Https];
