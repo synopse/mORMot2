@@ -594,7 +594,7 @@ type
     /// return a column date and time value of the current Row, first Col is 0
     function ColumnTimestamp(Col: integer): TTimeLog; overload;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: integer): system.currency; overload;
+    function ColumnCurrency(Col: integer): TSystemCurrency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; overload;
     /// return a Column text value as generic VCL string of the current Row, first Col is 0
@@ -642,7 +642,7 @@ type
     /// return a column date and time value of the current Row, from a supplied column name
     function ColumnTimestamp(const ColName: RawUTF8): TTimeLog; overload;
     /// return a Column currency value of the current Row, from a supplied column name
-    function ColumnCurrency(const ColName: RawUTF8): system.currency; overload;
+    function ColumnCurrency(const ColName: RawUTF8): TSystemCurrency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUTF8(const ColName: RawUTF8): RawUTF8; overload;
     /// return a Column text value as generic VCL string of the current Row, from a supplied column name
@@ -767,7 +767,7 @@ type
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: TSystemCurrency;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -865,7 +865,7 @@ type
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArrayCurrency(Param: Integer; const Values: array of system.currency);
+    procedure BindArrayCurrency(Param: Integer; const Values: array of TSystemCurrency);
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'quoted string')
@@ -1828,7 +1828,7 @@ type
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: TSystemCurrency;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -1938,7 +1938,7 @@ type
     // - this default implementation will raise an exception if the engine
     // does not support array binding
     procedure BindArrayCurrency(Param: Integer;
-      const Values: array of system.currency); virtual;
+      const Values: array of TSystemCurrency); virtual;
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'quoted string')
@@ -2091,7 +2091,7 @@ type
     // stamp from a TDateTime or text
     function ColumnTimestamp(Col: integer): TTimeLog; overload;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: integer): system.currency; overload; virtual; abstract;
+    function ColumnCurrency(Col: integer): TSystemCurrency; overload; virtual; abstract;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; overload; virtual; abstract;
     /// return a Column text value as generic VCL string of the current Row, first Col is 0
@@ -2149,7 +2149,7 @@ type
     // stamp from a TDateTime or text
     function ColumnTimestamp(const ColName: RawUTF8): TTimeLog; overload;
     /// return a Column currency value of the current Row, from a supplied column name
-    function ColumnCurrency(const ColName: RawUTF8): system.currency; overload;
+    function ColumnCurrency(const ColName: RawUTF8): TSystemCurrency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUTF8(const ColName: RawUTF8): RawUTF8; overload;
     /// return a Column text value as generic VCL string of the current Row, from a supplied column name
@@ -2456,7 +2456,7 @@ type
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: TSystemCurrency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -2525,7 +2525,7 @@ type
     // - this default implementation will call BindArray() after conversion into
     // RawUTF8 items, stored in TSQLDBParam.VArray
     procedure BindArrayCurrency(Param: Integer;
-      const Values: array of system.currency); override;
+      const Values: array of TSystemCurrency); override;
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as 'quoted string'
@@ -5235,7 +5235,7 @@ begin
 end;
 
 procedure TSQLDBStatement.BindArrayCurrency(Param: Integer;
-  const Values: array of system.currency);
+  const Values: array of TSystemCurrency);
 begin
   BindArray(Param, ftCurrency, nil, 0); // will raise an exception (Values=nil)
 end;
@@ -5503,7 +5503,7 @@ begin
     ftDouble:
       Double(Dest) := Temp;
     ftCurrency:
-      system.Currency(Dest) := Temp;
+      TSystemCurrency(Dest) := Temp;
     ftDate:
       TDateTime(Dest) := Temp;
     ftUTF8:
@@ -5704,7 +5704,7 @@ procedure TSQLDBStatement.ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
 var
   F: integer;
   VDouble: double;
-  VCurrency: system.currency absolute VDouble;
+  VCurrency: TSystemCurrency absolute VDouble;
   VDateTime: TDateTime absolute VDouble;
   ft: TSQLDBFieldType;
 begin
@@ -5886,7 +5886,7 @@ begin
   ColumnBlobFromStream(ColumnIndex(ColName), Stream);
 end;
 
-function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): system.currency;
+function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): TSystemCurrency;
 begin
   result := ColumnCurrency(ColumnIndex(ColName));
 end;
@@ -6861,7 +6861,7 @@ begin
 end;
 
 procedure TSQLDBStatementWithParams.BindCurrency(Param: Integer;
-  Value: system.currency; IO: TSQLDBParamInOutType);
+  Value: TSystemCurrency; IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftCurrency, IO)^.VInt64 := PInt64(@Value)^;
 end;
@@ -7048,7 +7048,7 @@ begin
 end;
 
 procedure TSQLDBStatementWithParams.BindArrayCurrency(Param: Integer;
-  const Values: array of system.currency);
+  const Values: array of TSystemCurrency);
 var
   i: PtrInt;
 begin

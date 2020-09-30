@@ -229,7 +229,7 @@ type
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
     // any rounding/conversion error from floating-point types
-    function ColumnCurrency(Col: integer): system.currency; override;
+    function ColumnCurrency(Col: integer): TSystemCurrency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -712,7 +712,7 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnCurrency(Col: integer): system.currency;
+function TSQLDBODBCStatement.ColumnCurrency(Col: integer): TSystemCurrency;
 begin
   case GetCol(Col, ftCurrency) of
     colNull:

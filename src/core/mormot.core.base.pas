@@ -773,7 +773,7 @@ type
   /// compiler native currency type
   // - we may redefine a fake "currency" type below, so you may use this
   // type alias in existing (third-party) code requiring regular currency values
-  TSystemCurrency = currency;
+  TSystemCurrency = system.currency;
 
   {$ifdef CPUX86}
   /// the floating-point type to be used for 64-bit currency

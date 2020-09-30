@@ -171,7 +171,7 @@ type
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: TSystemCurrency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -250,7 +250,7 @@ type
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
     // any rounding/conversion error from floating-point types
-    function ColumnCurrency(Col: integer): system.currency; override;
+    function ColumnCurrency(Col: integer): TSystemCurrency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -489,7 +489,7 @@ begin
   fStatement.BindBlob(Param, Data);
 end;
 
-procedure TSQLDBSQLite3Statement.BindCurrency(Param: Integer; Value: system.currency;
+procedure TSQLDBSQLite3Statement.BindCurrency(Param: Integer; Value: TSystemCurrency;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -548,7 +548,7 @@ begin
   result := fStatement.FieldBlob(Col);
 end;
 
-function TSQLDBSQLite3Statement.ColumnCurrency(Col: integer): system.currency;
+function TSQLDBSQLite3Statement.ColumnCurrency(Col: integer): TSystemCurrency;
 begin
   result := fStatement.FieldDouble(Col);
 end;

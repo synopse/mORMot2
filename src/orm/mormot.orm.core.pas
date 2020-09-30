@@ -4128,10 +4128,10 @@ type
     /// read-only access to a particular field value, as TDateTime value
     function GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime; overload;
     /// read-only access to a particular field value, as currency value
-    function GetAsCurrency(Row, Field: integer): system.currency; overload;
+    function GetAsCurrency(Row, Field: integer): TSystemCurrency; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as currency value
-    function GetAsCurrency(Row: integer; const FieldName: RawUTF8): system.currency; overload;
+    function GetAsCurrency(Row: integer; const FieldName: RawUTF8): TSystemCurrency; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, ready to be displayed
     // - mostly used with Row=0, i.e. to get a display value from a field name
@@ -7187,7 +7187,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end;
     rkFloat:
-      if Info = TypeInfo(Currency) then
+      if (Info = TypeInfo(TSynCurrency)) or (Info = TypeInfo(TSystemCurrency)) then
       begin
         result := sftCurrency;
         exit;
@@ -9810,7 +9810,7 @@ end;
 function TSQLPropInfoRTTICurrency.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
-  V: system.Currency;
+  V: TSystemCurrency;
 begin
   case aValue.VType of
     ftDouble, ftDate:
@@ -13096,12 +13096,12 @@ begin
   result := GetExtended(Get(Row, FieldIndex(FieldName)));
 end;
 
-function TSQLTable.GetAsCurrency(Row, Field: integer): system.currency;
+function TSQLTable.GetAsCurrency(Row, Field: integer): TSystemCurrency;
 begin
   PInt64(@result)^ := StrToCurr64(Get(Row, Field), nil);
 end;
 
-function TSQLTable.GetAsCurrency(Row: integer; const FieldName: RawUTF8): system.currency;
+function TSQLTable.GetAsCurrency(Row: integer; const FieldName: RawUTF8): TSystemCurrency;
 begin
   result := GetAsCurrency(Row, FieldIndex(FieldName));
 end;

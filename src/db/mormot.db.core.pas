@@ -437,7 +437,7 @@ var
 // variable: use this function to circumvent it
 // - use NullableCurrency() if you want to create a nullable Currency not from
 // a constant, but from a TSynCurrency safe type
-function NullableCurrencyConstant(const Value: system.currency): TNullableCurrency;
+function NullableCurrencyConstant(const Value: TSystemCurrency): TNullableCurrency;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a nullable Currency value from a supplied TSynCurrency value
@@ -1372,7 +1372,7 @@ end;
 
 // TNullableCurrency
 
-function NullableCurrencyConstant(const Value: system.currency): TNullableCurrency;
+function NullableCurrencyConstant(const Value: TSystemCurrency): TNullableCurrency;
 begin
   PVariant(@result)^ := Value;
 end;

@@ -116,7 +116,7 @@ type
     /// fills with a fixed decimal value, as stored in currency
     // - will store the content with explictly four decimals, as in currency
     // - by design, this method is very fast and accurate
-    procedure FromCurr(const value: system.Currency);
+    procedure FromCurr(const value: TSystemCurrency);
     /// fills from the text representation of a decimal value
     // - returns dsvValue or one of the dsvNan, dsvZero, dsvPosInf, dsvNegInf
     // special value indicator otherwise on succes
@@ -166,13 +166,13 @@ type
     // - by design, some information may be lost during conversion, unless the
     // value has been stored previously via the FromCurr() method - in this
     // case, conversion is immediate and accurate
-    function ToCurr: system.currency; overload;
+    function ToCurr: TSystemCurrency; overload;
       {$ifdef HASINLINE} inline;{$endif}
     /// converts this Decimal128 value to a fixed decimal value
     // - by design, some information may be lost during conversion, unless the
     // value has been stored previously via the FromCurr() method - in this
     // case, conversion is immediate and accurate
-    procedure ToCurr(out result: system.currency); overload;
+    procedure ToCurr(out result: TSystemCurrency); overload;
     /// converts this Decimal128 value to its string representation
     procedure AddText(W: TTextWriter);
   end;
@@ -923,7 +923,7 @@ function NumberDecimal(const Value: RawUTF8): variant; overload;
 /// create a TBSONVariant Decimal128 from a currency fixed decimal
 // - will store internally a TDecimal128 storage, with explictly 4 decimals
 // - if you want to store some floating-point value, use plain BSON double format
-function NumberDecimal(const Value: system.currency): variant; overload;
+function NumberDecimal(const Value: TSystemCurrency): variant; overload;
 
 /// store some object content into BSON encoded binary
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -1299,7 +1299,7 @@ begin
   end;
 end;
 
-procedure TDecimal128.FromCurr(const value: system.Currency);
+procedure TDecimal128.FromCurr(const value: TSystemCurrency);
 begin // force exactly 4 decimals
   if value < 0 then
   begin
@@ -1539,12 +1539,12 @@ begin
   result := GetExtended(@tmp);
 end;
 
-function TDecimal128.ToCurr: system.currency;
+function TDecimal128.ToCurr: TSystemCurrency;
 begin
   ToCurr(result);
 end;
 
-procedure TDecimal128.ToCurr(out result: system.currency);
+procedure TDecimal128.ToCurr(out result: TSystemCurrency);
 var
   tmp: TDecimal128Str;
   res64: Int64 absolute result;
@@ -3958,7 +3958,7 @@ begin
   dec.ToVariant(result);
 end;
 
-function NumberDecimal(const Value: system.currency): variant;
+function NumberDecimal(const Value: TSystemCurrency): variant;
 var
   dec: TDecimal128;
 begin

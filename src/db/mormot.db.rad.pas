@@ -95,7 +95,7 @@ function InternalBCDToBuffer(const AValue: TBcd; out ADest: TBCDBuffer; var PBeg
 
 /// convert a TBcd value into a currency
 // - purepascal version included in latest Delphi versions is slower than this
-function BCDToCurr(const AValue: TBcd; var Curr: system.Currency): boolean;
+function BCDToCurr(const AValue: TBcd; var Curr: TSystemCurrency): boolean;
 
 /// convert a TBcd value into a RawUTF8 text
 // - will call fast InternalBCDToBuffer function
@@ -374,7 +374,7 @@ type
     /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: Integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: Integer): system.currency; override;
+    function ColumnCurrency(Col: Integer): TSystemCurrency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: Integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -485,7 +485,7 @@ begin
   end;
 end;
 
-function BCDToCurr(const AValue: TBcd; var Curr: system.Currency): boolean;
+function BCDToCurr(const AValue: TBcd; var Curr: TSystemCurrency): boolean;
 var
   len: integer;
   PBeg: PAnsiChar;
@@ -1252,7 +1252,7 @@ begin
     end;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnCurrency(Col: Integer): system.currency;
+function TSQLDBDatasetStatementAbstract.ColumnCurrency(Col: Integer): TSystemCurrency;
 begin
   CheckCol(Col);
   with fColumns[Col] do
