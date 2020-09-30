@@ -116,7 +116,7 @@ type
     /// fills with a fixed decimal value, as stored in currency
     // - will store the content with explictly four decimals, as in currency
     // - by design, this method is very fast and accurate
-    procedure FromCurr(const value: TSystemCurrency);
+    procedure FromCurr(const value: currency);
     /// fills from the text representation of a decimal value
     // - returns dsvValue or one of the dsvNan, dsvZero, dsvPosInf, dsvNegInf
     // special value indicator otherwise on succes
@@ -166,13 +166,13 @@ type
     // - by design, some information may be lost during conversion, unless the
     // value has been stored previously via the FromCurr() method - in this
     // case, conversion is immediate and accurate
-    function ToCurr: TSystemCurrency; overload;
+    function ToCurr: currency; overload;
       {$ifdef HASINLINE} inline;{$endif}
     /// converts this Decimal128 value to a fixed decimal value
     // - by design, some information may be lost during conversion, unless the
     // value has been stored previously via the FromCurr() method - in this
     // case, conversion is immediate and accurate
-    procedure ToCurr(out result: TSystemCurrency); overload;
+    procedure ToCurr(out result: currency); overload;
     /// converts this Decimal128 value to its string representation
     procedure AddText(W: TTextWriter);
   end;
@@ -923,7 +923,7 @@ function NumberDecimal(const Value: RawUTF8): variant; overload;
 /// create a TBSONVariant Decimal128 from a currency fixed decimal
 // - will store internally a TDecimal128 storage, with explictly 4 decimals
 // - if you want to store some floating-point value, use plain BSON double format
-function NumberDecimal(const Value: TSystemCurrency): variant; overload;
+function NumberDecimal(const Value: currency): variant; overload;
 
 /// store some object content into BSON encoded binary
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -1299,7 +1299,7 @@ begin
   end;
 end;
 
-procedure TDecimal128.FromCurr(const value: TSystemCurrency);
+procedure TDecimal128.FromCurr(const value: currency);
 begin // force exactly 4 decimals
   if value < 0 then
   begin
@@ -1539,12 +1539,12 @@ begin
   result := GetExtended(@tmp);
 end;
 
-function TDecimal128.ToCurr: TSystemCurrency;
+function TDecimal128.ToCurr: currency;
 begin
   ToCurr(result);
 end;
 
-procedure TDecimal128.ToCurr(out result: TSystemCurrency);
+procedure TDecimal128.ToCurr(out result: currency);
 var
   tmp: TDecimal128Str;
   res64: Int64 absolute result;
@@ -3938,12 +3938,12 @@ begin
   begin
     VType := BSONVariantType.VarType;
     VKind := betJSScope;
-    JSLen := Length(JS) + 1;                        // string = int32 text#0
+    JSLen := Length(JS) + 1;                            // string = int32 text#0
     Len := SizeOf(integer) * 2 + JSLen + length(Scope); // int32 string document
     VBlob := nil; // avoid GPF
     SetLength(RawByteString(VBlob), Len);
-    PIntegerArray(VBlob)^[0] := Len;              // length:int32
-    PIntegerArray(VBlob)^[1] := JSLen;            // string:int32
+    PIntegerArray(VBlob)^[0] := Len;                    // length:int32
+    PIntegerArray(VBlob)^[1] := JSLen;                  // string:int32
     MoveFast(pointer(JS)^, PAnsiChar(VBlob)[8], JSLen); // string:text#0
     MoveFast(pointer(Scope)^, PAnsiChar(VBlob)[8 + JSLen], Length(Scope)); // document
   end;
@@ -3958,7 +3958,7 @@ begin
   dec.ToVariant(result);
 end;
 
-function NumberDecimal(const Value: TSystemCurrency): variant;
+function NumberDecimal(const Value: currency): variant;
 var
   dec: TDecimal128;
 begin

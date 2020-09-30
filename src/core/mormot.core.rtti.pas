@@ -56,11 +56,13 @@ type
 
   /// map TOrdType, to specify ordinal (rkInteger and rkEnumeration) storage size and sign
   // - note: on FPC, Int64 is stored as its own TRttiKind, not as rkInteger
-  TRttiOrd = (roSByte, roUByte, roSWord, roUWord, roSLong, roULong
+  TRttiOrd = (
+    roSByte, roUByte, roSWord, roUWord, roSLong, roULong
     {$ifdef FPC_NEWRTTI} ,roSQWord, roUQWord {$endif});
 
   /// map TFloatType, to specify floating point (ftFloat) storage size and precision
-  TRttiFloat = (rfSingle, rfDouble, rfExtended, rfComp, rfCurr);
+  TRttiFloat = (
+    rfSingle, rfDouble, rfExtended, rfComp, rfCurr);
 
 {$ifdef FPC}
 
@@ -70,7 +72,8 @@ type
   // see https://lists.freepascal.org/pipermail/fpc-devel/2013-June/032360.html
   // "Compiler uses internally some LongStrings which is not possible to use
   // for variable declarations" so rkLStringOld seems never used in practice
-  TRttiKind = (rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat, rkSet,
+  TRttiKind = (
+    rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat, rkSet,
     rkMethod, rkSString, rkLStringOld {=rkLString}, rkLString {=rkAString},
     rkWString, rkVariant, rkArray, rkRecord, rkInterface,
     rkClass, rkObject, rkWChar, rkBool, rkInt64, rkQWord,
@@ -89,7 +92,8 @@ const
 type
   ///  TTypeKind enumerate as defined in Delphi 6 and up
   // - dkUString and following appear only since Delphi 2009
-  TDelphiType = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
+  TDelphiType = (
+    dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
     dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
     dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
     dkUString, dkClassRef, dkPointer, dkProcedure);
@@ -116,7 +120,8 @@ const
 
   /// available type families for Delphi 6 and up, similar to typinfo.pas
   // - redefined here to leverage FPC and Delphi compatibility as much as possible
-  TRttiKind = (rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat,
+  TRttiKind = (
+    rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat,
     rkSString, rkSet, rkClass, rkMethod, rkWChar, rkLString, rkWString,
     rkVariant, rkArray, rkRecord, rkInterface, rkInt64, rkDynArray
     {$ifdef UNICODE}, rkUString, rkClassRef, rkPointer, rkProcedure {$endif});
@@ -388,8 +393,8 @@ type
   PRttiRecordField = ^TRttiRecordField;
 
   /// define the interface abilities
-  TRttiIntfFlag = (ifHasGuid, ifDispInterface, ifDispatch
-    {$ifdef FPC} , ifHasStrGUID {$endif});
+  TRttiIntfFlag = (
+    ifHasGuid, ifDispInterface, ifDispatch {$ifdef FPC} , ifHasStrGUID {$endif});
   /// define the set of interface abilities
   TRttiIntfFlags = set of TRttiIntfFlag;
 
@@ -513,10 +518,10 @@ type
     function IsQWord: boolean;            {$ifdef HASINLINE} inline; {$endif}
     /// return TRUE if the property is a boolean field
     function IsBoolean: boolean;          {$ifdef HASINLINE} inline; {$endif}
-    /// return TRUE if the property is a TSynCurrency field
-    function IsSynCurrency: boolean;      {$ifdef HASINLINE} inline; {$endif}
+    /// return TRUE if the property is a currency field
+    function IsCurrency: boolean;         {$ifdef HASINLINE} inline; {$endif}
     /// for rkFloat: get the storage size and precision
-    // - will also properly detect our TSynCurrency internal type as rfCurr
+    // - will also properly detect our currency internal type as rfCurr
     function RttiFloat: TRttiFloat;       {$ifdef HASINLINE} inline; {$endif}
     /// for rkEnumeration: get the enumeration type information
     function EnumBaseType: PRttiEnumType; overload; {$ifdef HASINLINE} inline; {$endif}
@@ -701,9 +706,9 @@ type
     {$endif HASVARUSTRING}
     /// raw retrieval of rkFloat/currency
     // - use instead GetCurrencyValue
-    procedure GetCurrencyProp(Instance: TObject; var Value: TSynCurrency);
+    procedure GetCurrencyProp(Instance: TObject; var Value: currency);
     /// raw assignment of rkFloat/currency
-    procedure SetCurrencyProp(Instance: TObject; const Value: TSynCurrency);
+    procedure SetCurrencyProp(Instance: TObject; const Value: currency);
     /// raw retrieval of rkFloat/double
     function GetDoubleProp(Instance: TObject): double;
     /// raw assignment of rkFloat/double
@@ -800,7 +805,7 @@ type
     /// low-level getter of the currency property value of a given instance
     // - this method will check if the corresponding property is exactly currency
     // - return 0 on any error
-    procedure GetCurrencyValue(Instance: TObject; var Value: TSynCurrency);
+    procedure GetCurrencyValue(Instance: TObject; var Value: currency);
     /// low-level getter of the floating-point property value of a given instance
     // - this method will check if the corresponding property is floating-point
     // - return 0 on any error
@@ -2271,23 +2276,14 @@ begin
   result := TRttiOrd(GetTypeData(@self)^.OrdType);
 end;
 
-function TRttiInfo.IsSynCurrency: boolean;
+function TRttiInfo.IsCurrency: boolean;
 begin
-  {$ifndef CPUX86}
-  result := @self = TypeInfo(TSynCurrency);
-  {$else}
   result := TRttiFloat(GetTypeData(@self)^.FloatType) = rfCurr;
-  {$endif CPUX86}
 end;
 
 function TRttiInfo.RttiFloat: TRttiFloat;
 begin
-  {$ifndef CPUX86}
-  if @self = TypeInfo(TSynCurrency) then
-    result := rfCurr // RTTI identifies TSynCurrency as rfDouble
-  else
-  {$endif CPUX86}
-    result := TRttiFloat(GetTypeData(@self)^.FloatType);
+  result := TRttiFloat(GetTypeData(@self)^.FloatType);
 end;
 
 {$ifndef ISFPC32}
@@ -2697,7 +2693,7 @@ begin
       Value.VInt64 := GetInt64Prop(Instance);
     end;
   varCurrency:
-    GetCurrencyProp(Instance, PSynCurrency(@Value.VInt64)^);
+    GetCurrencyProp(Instance, PCurrency(@Value.VInt64)^);
   varDouble:
     // rkFloat
     Value.Data.VDouble := GetFloatProp(Instance);
@@ -3055,16 +3051,16 @@ end;
 
 {$endif HASVARUSTRING}
 
-procedure TRttiProp.GetCurrencyProp(Instance: TObject; var Value: TSynCurrency);
+procedure TRttiProp.GetCurrencyProp(Instance: TObject; var Value: currency);
 type
-  TGetProc = function: TSynCurrency of object;
-  TGetIndexed = function(Index: Integer): TSynCurrency of object;
+  TGetProc = function: currency of object;
+  TGetIndexed = function(Index: Integer): currency of object;
 var
   call: TMethod;
 begin
   case Getter(Instance, @call) of
     rpcField:
-      Value := PSynCurrency({%H-}call.Data)^;
+      Value := PCurrency({%H-}call.Data)^;
     rpcMethod:
       Value := TGetProc(call);
     rpcIndexed:
@@ -3074,16 +3070,16 @@ begin
   end;
 end;
 
-procedure TRttiProp.SetCurrencyProp(Instance: TObject; const Value: TSynCurrency);
+procedure TRttiProp.SetCurrencyProp(Instance: TObject; const Value: currency);
 type
-  TSetProc = procedure(const Value: TSynCurrency) of object;
-  TSetIndexed = procedure(Index: integer; const Value: TSynCurrency) of object;
+  TSetProc = procedure(const Value: currency) of object;
+  TSetIndexed = procedure(Index: integer; const Value: currency) of object;
 var
   call: TMethod;
 begin
   case Setter(Instance, @call) of
     rpcField:
-      PSynCurrency({%H-}call.Data)^ := Value;
+      PCurrency({%H-}call.Data)^ := Value;
     rpcMethod:
       TSetProc(call)(Value);
     rpcIndexed:
@@ -3135,15 +3131,14 @@ type
   TDoubleIndexed = function(Index: Integer): Double of object;
   TExtendedProc = function: Extended of object;
   TExtendedIndexed = function(Index: Integer): Extended of object;
-  // warning: TSynCurrency getters are very likely to fail
-  TCurrencyProc = function: TSynCurrency of object;
-  TCurrencyIndexed = function(Index: Integer): TSynCurrency of object;
+  TCurrencyProc = function: currency of object;
+  TCurrencyIndexed = function(Index: Integer): currency of object;
 var
   call: TMethod;
   rf: TRttiFloat;
 begin
   result := 0;
-  rf := TypeInfo^.RttiFloat; // detect TSynCurrency as rfCurr
+  rf := TypeInfo^.RttiFloat;
   case Getter(Instance, @call) of
     rpcField:
       case rf of
@@ -3154,7 +3149,7 @@ begin
         rfExtended:
           result := PExtended(call.Data)^;
         rfCurr:
-          CurrencyToDouble(PSynCurrency(call.Data), result);
+          CurrencyToDouble(PCurrency(call.Data), result);
       end;
     rpcMethod:
       case rf of
@@ -3189,15 +3184,14 @@ type
   TDoubleIndexed = procedure(Index: integer; const Value: double) of object;
   TExtendedProc = procedure(const Value: Extended) of object;
   TExtendedIndexed = procedure(Index: integer; const Value: Extended) of object;
-  // warning: TSynCurrency setters are very likely to fail
-  TCurrencyProc = procedure(const Value: TSynCurrency) of object;
-  TCurrencyIndexed = procedure(Index: integer; const Value: TSynCurrency) of object;
+  TCurrencyProc = procedure(const Value: currency) of object;
+  TCurrencyIndexed = procedure(Index: integer; const Value: currency) of object;
 var
   call: TMethod;
   rf: TRttiFloat;
 begin
   Value := 0;
-  rf := TypeInfo^.RttiFloat; // detect TSynCurrency as rfCurr
+  rf := TypeInfo^.RttiFloat;
   case Setter(Instance, @call) of
     rpcField:
       case rf of
@@ -3208,7 +3202,7 @@ begin
         rfExtended:
           PExtended(call.Data)^ := Value;
         rfCurr:
-          DoubleToCurrency(Value, PSynCurrency(call.Data));
+          DoubleToCurrency(Value, PCurrency(call.Data));
       end;
     rpcMethod:
       case rf of
@@ -3313,13 +3307,12 @@ begin
     result := 0;
 end;
 
-procedure TRttiProp.GetCurrencyValue(Instance: TObject; var Value: TSynCurrency);
+procedure TRttiProp.GetCurrencyValue(Instance: TObject; var Value: currency);
 begin
   if (Instance <> nil) and (@self <> nil) then
     with TypeInfo^ do
       if Kind = rkFloat then
         if RttiFloat = rfCurr then
-          // RttiFloat detects TSynCurrency as rfCurr
           GetCurrencyProp(Instance, Value)
         else
           DoubleToCurrency(GetFloatProp(Instance), Value)

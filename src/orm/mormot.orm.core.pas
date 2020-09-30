@@ -4128,10 +4128,10 @@ type
     /// read-only access to a particular field value, as TDateTime value
     function GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime; overload;
     /// read-only access to a particular field value, as currency value
-    function GetAsCurrency(Row, Field: integer): TSystemCurrency; overload;
+    function GetAsCurrency(Row, Field: integer): currency; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, as currency value
-    function GetAsCurrency(Row: integer; const FieldName: RawUTF8): TSystemCurrency; overload;
+    function GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// read-only access to a particular field value, ready to be displayed
     // - mostly used with Row=0, i.e. to get a display value from a field name
@@ -7187,7 +7187,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end;
     rkFloat:
-      if (Info = TypeInfo(TSynCurrency)) or (Info = TypeInfo(TSystemCurrency)) then
+      if Info.IsCurrency then
       begin
         result := sftCurrency;
         exit;
@@ -9731,7 +9731,7 @@ end;
 procedure TSQLPropInfoRTTICurrency.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
 var
-  curr: TSynCurrency;
+  curr: currency;
 begin
   fPropInfo.GetCurrencyProp(Source, curr);
   TSQLPropInfoRTTICurrency(DestInfo).fPropInfo.SetCurrencyProp(Dest, curr);
@@ -9739,7 +9739,7 @@ end;
 
 procedure TSQLPropInfoRTTICurrency.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
-  curr: TSynCurrency;
+  curr: currency;
 begin
   fPropInfo.GetCurrencyProp(Instance, curr);
   W.AddCurr64(curr);
@@ -9748,7 +9748,7 @@ end;
 procedure TSQLPropInfoRTTICurrency.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
-  curr: TSynCurrency;
+  curr: currency;
 begin
   if wasSQLString <> nil then
     wasSQLString^ := false;
@@ -9773,7 +9773,7 @@ end;
 function TSQLPropInfoRTTICurrency.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
-  V1, V2: TSynCurrency;
+  V1, V2: currency;
 begin
   if Item1 = Item2 then
     result := 0
@@ -9792,7 +9792,7 @@ end;
 function TSQLPropInfoRTTICurrency.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  V: TSynCurrency;
+  V: currency;
 begin
   fPropInfo.GetCurrencyProp(Instance, V);
   with PQWordRec(@V)^ do
@@ -9810,7 +9810,7 @@ end;
 function TSQLPropInfoRTTICurrency.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
-  V: TSystemCurrency;
+  V: currency;
 begin
   case aValue.VType of
     ftDouble, ftDate:
@@ -9825,13 +9825,13 @@ begin
       exit;
     end;
   end;
-  fPropInfo.SetCurrencyProp(Instance, PSynCurrency(@V)^);
+  fPropInfo.SetCurrencyProp(Instance, PCurrency(@V)^);
   result := true;
 end;
 
 procedure TSQLPropInfoRTTICurrency.GetBinary(Instance: TObject; W: TBufferWriter);
 var
-  V: TSynCurrency;
+  V: currency;
 begin
   fPropInfo.GetCurrencyProp(Instance, V);
   W.Write(@V, SizeOf(V));
@@ -13096,12 +13096,12 @@ begin
   result := GetExtended(Get(Row, FieldIndex(FieldName)));
 end;
 
-function TSQLTable.GetAsCurrency(Row, Field: integer): TSystemCurrency;
+function TSQLTable.GetAsCurrency(Row, Field: integer): currency;
 begin
   PInt64(@result)^ := StrToCurr64(Get(Row, Field), nil);
 end;
 
-function TSQLTable.GetAsCurrency(Row: integer; const FieldName: RawUTF8): TSystemCurrency;
+function TSQLTable.GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency;
 begin
   result := GetAsCurrency(Row, FieldIndex(FieldName));
 end;
@@ -13240,7 +13240,7 @@ begin
     exit;
   end;
   U := @fResults[FieldCount + Field]; // start reading after first Row (= Field Names)
-  len := LenStore.Init(fRowCount * SizeOf(len^{%H-}));
+  len := LenStore.Init(fRowCount * SizeOf({%H-}len^));
   for i := 1 to fRowCount do
   begin
     len^ := StrLen(U^);

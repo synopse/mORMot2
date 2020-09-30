@@ -14,7 +14,7 @@
 
 {$ifdef ASMX86}
 
-// fast x87 versions by John O'Harrow - SSE2 are not faster
+// fast x87 versions by John O'Harrow - SSE2 is not really faster
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=Dest edx=Count cl=Value
@@ -71,7 +71,7 @@ asm     // eax=Dest edx=Count cl=Value
 @done:  db      $f3 // rep ret AMD trick here
 end;
 
-// fast x87 versions by John O'Harrow - SSE2 are not faster
+// fast x87 versions by John O'Harrow - SSE2 is not really faster
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=source edx=dest ecx=count

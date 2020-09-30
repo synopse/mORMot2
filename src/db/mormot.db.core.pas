@@ -124,7 +124,7 @@ type
       ftDate: (
         VDateTime: TDateTime);
       ftCurrency: (
-        VCurrency: TSynCurrency);
+        VCurrency: currency);
       ftUTF8: (
         VText: PUTF8Char);
       ftBlob: (
@@ -432,18 +432,12 @@ var
   /// a nullable currency value containing null
   NullableCurrencyNull: TNullableCurrency absolute NullVarData;
 
-/// creates a nullable Currency value from a supplied currency constant
-// - FPC does not allow direct assignment to a TNullableCurrency = type variant
-// variable: use this function to circumvent it
-// - use NullableCurrency() if you want to create a nullable Currency not from
-// a constant, but from a TSynCurrency safe type
-function NullableCurrencyConstant(const Value: TSystemCurrency): TNullableCurrency;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable Currency value from a supplied TSynCurrency value
-// - we defined the TSynCurrency type to circumvent FPC cross-platform issues
+/// creates a nullable Currency value from a supplied currency value
+// - we defined the currency type to circumvent FPC cross-platform issues
 // with currency values;
-function NullableCurrency(const Value: TSynCurrency): TNullableCurrency;
+// - warning: FPC does not support assignment to a TNullableCurrency = type variant
+// variable: use this function to circumvent it
+function NullableCurrency(const Value: currency): TNullableCurrency;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
@@ -455,16 +449,16 @@ function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
 
 /// check if a TNullableCurrency is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the Currency value
-// - we defined the TSynCurrency type to circumvent FPC cross-platform issues
+// - we defined the currency type to circumvent FPC cross-platform issues
 // with currency values;
-function NullableCurrencyToValue(const V: TNullableCurrency; out Value: TSynCurrency): boolean;
+function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableCurrency is null, or return its value
 // - returns 0 if V is null or empty, or the stored Currency value
-// - we defined the TSynCurrency type to circumvent FPC cross-platform issues
+// - we defined the currency type to circumvent FPC cross-platform issues
 // with currency values;
-function NullableCurrencyToValue(const V: TNullableCurrency): TSynCurrency;
+function NullableCurrencyToValue(const V: TNullableCurrency): currency;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -1372,12 +1366,7 @@ end;
 
 // TNullableCurrency
 
-function NullableCurrencyConstant(const Value: TSystemCurrency): TNullableCurrency;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableCurrency(const Value: TSynCurrency): TNullableCurrency;
+function NullableCurrency(const Value: currency): TNullableCurrency;
 begin
   CurrencyToVariant(Value, PVariant(@result)^);
 end;
@@ -1387,14 +1376,14 @@ begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
-function NullableCurrencyToValue(const V: TNullableCurrency; out Value:
-  TSynCurrency): Boolean;
+function NullableCurrencyToValue(const V: TNullableCurrency;
+  out Value: currency): Boolean;
 begin
   PInt64(@Value)^ := 0;
   result := not VarDataIsEmptyOrNull(@V) and VariantToCurrency(PVariant(@V)^, Value);
 end;
 
-function NullableCurrencyToValue(const V: TNullableCurrency): TSynCurrency;
+function NullableCurrencyToValue(const V: TNullableCurrency): currency;
 begin
   VariantToCurrency(PVariant(@V)^, result);
 end;
@@ -1414,8 +1403,8 @@ end;
 function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): Boolean;
 begin
   Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^,
-    Double(Value));
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToDouble(PVariant(@V)^, Double(Value));
 end;
 
 function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
@@ -1438,8 +1427,8 @@ end;
 function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): Boolean;
 begin
   Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^,
-    PInt64(@Value)^);
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToInt64(PVariant(@V)^, PInt64(@Value)^);
 end;
 
 function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;

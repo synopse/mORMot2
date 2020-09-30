@@ -179,7 +179,7 @@ type
     /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: integer): TSystemCurrency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -677,7 +677,7 @@ begin
     PQ.GetLength(fRes, fCurrentRow, Col), result);
 end;
 
-function TSQLDBPostgresStatement.ColumnCurrency(Col: integer): TSystemCurrency;
+function TSQLDBPostgresStatement.ColumnCurrency(Col: integer): currency;
 begin
   CheckColAndRowset(Col);
   PInt64(@result)^ := StrToCurr64(PQ.GetValue(fRes, fCurrentRow, Col));

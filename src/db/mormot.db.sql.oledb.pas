@@ -316,7 +316,7 @@ type
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindCurrency(Param: Integer; Value: TSystemCurrency;
+    procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -414,7 +414,7 @@ type
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
     // any rounding/conversion error from floating-point types
-    function ColumnCurrency(Col: integer): TSystemCurrency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column text generic VCL string value of the current Row, first Col is 0
@@ -717,7 +717,7 @@ begin
   CheckParam(Param, ftInt64, IO)^.VInt64 := Value;
 end;
 
-procedure TSQLDBOleDBStatement.BindCurrency(Param: Integer; Value: TSystemCurrency;
+procedure TSQLDBOleDBStatement.BindCurrency(Param: Integer; Value: currency;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftCurrency, IO)^.VInt64 := PInt64(@Value)^;
@@ -891,7 +891,7 @@ begin
     end;
 end;
 
-function TSQLDBOleDBStatement.ColumnCurrency(Col: integer): TSystemCurrency;
+function TSQLDBOleDBStatement.ColumnCurrency(Col: integer): currency;
 begin
   GetCol64(Col, ftCurrency, Result);
 end;
