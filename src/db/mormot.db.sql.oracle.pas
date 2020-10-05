@@ -186,7 +186,7 @@ type
   end;
 
   /// implements a statement via the native Oracle Client Interface (OCI)
-  // - those statements can be prepared on the Delphi side, but by default we
+  // - those statements can be prepared on the client side, but by default we
   // enabled the OCI-side statement cache, not to reinvent the wheel this time
   // - note that bound OUT ftUTF8 parameters will need to be pre-allocated
   // before calling - e.g. via BindTextU(StringOfChar(3000),paramOut)

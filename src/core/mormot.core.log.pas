@@ -1581,7 +1581,7 @@ begin
 end;
 
 const
-  /// Delphi linker starts the code section at this fixed offset
+  // Delphi linker starts the code section at this fixed offset
   CODE_SECTION = $1000;
 
 constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolean = true);

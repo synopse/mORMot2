@@ -5174,14 +5174,14 @@ begin
         BindCurrency(Param, VCurrency, IO);
       varOleStr: // handle special case if was bound explicitely as WideString
         BindTextW(Param, WideString(VAny), IO);
-    {$ifdef HASVARUSTRING}
+      {$ifdef HASVARUSTRING}
       varUString:
         if DataIsBlob then
           raise ESQLDBException.CreateUTF8(
             '%.BindVariant: BLOB should not be UnicodeString', [self])
         else
           BindTextU(Param, UnicodeStringToUtf8(UnicodeString(VAny)), IO);
-    {$endif}
+      {$endif}
       varString:
         if DataIsBlob then
           if (VAny <> nil) and (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC) then
@@ -5193,11 +5193,11 @@ begin
             BindBlob(Param, RawByteString(VAny), IO)
         else
           // direct bind of AnsiString as UTF-8 value
-        {$ifdef HASCODEPAGE}
+          {$ifdef HASCODEPAGE}
           BindTextU(Param, AnyAnsiToUTF8(RawByteString(VAny)), IO);
-        {$else} // on older Delphi, we assume AnsiString = RawUTF8
+          {$else} // on older Delphi, we assume AnsiString = RawUTF8
           BindTextU(Param, RawUTF8(VAny), IO);
-        {$endif}
+          {$endif}
     else
       if VType = varByRef or varVariant then
         BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)

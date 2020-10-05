@@ -1152,7 +1152,7 @@ var
 // - will write also the properties published in the parent classes
 // - nested properties are serialized as nested JSON objects
 // - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY Delphi class, via
+// - you can add some custom serializers for ANY class, via
 // TJSONSerializer.RegisterCustomSerializer() class method
 // - call internaly TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectToJSON(Value: TObject;
@@ -1425,7 +1425,7 @@ procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUTF8); overload;
 procedure UInt64ToUtf8(Value: QWord; var result: RawUTF8);
 
 /// convert a string into its INTEGER Curr64 (value*10000) representation
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - if NoDecimal is defined, will be set to TRUE if there is no decimal, AND
 // the returned value will be an Int64 (not a PInt64(@Curr)^)
@@ -1443,20 +1443,20 @@ function CurrencyToStr(const Value: currency): RawUTF8;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 function Curr64ToStr(const Value: Int64): RawUTF8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 procedure Curr64ToStr(const Value: Int64; var result: RawUTF8); overload;
 
 /// convert an INTEGER Curr64 (value*10000) into a string
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 // - return the number of chars written to Dest^

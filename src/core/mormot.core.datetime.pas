@@ -273,7 +273,7 @@ type
     // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
     procedure ComputeDayOfWeek;
-    /// convert the stored date into a Delphi TDate floating-point value
+    /// convert the stored date into a TDate floating-point value
     function ToDate: TDate; {$ifdef HASINLINE}inline;{$endif}
     /// encode the stored date as ISO-8601 text
     // - returns '' if the stored date is 0 (i.e. after Clear)
@@ -546,12 +546,12 @@ type
     // - never truncate to date/time or return '' as Text() does
     function FullText(Dest: PUTF8Char; Expanded: boolean;
       FirstTimeChar: AnsiChar = 'T'; QuotedChar: AnsiChar = #0): PUTF8Char; overload;
-    /// convert to a Delphi Time
-    function ToTime: TDateTime;
-    /// convert to a Delphi Date
+    /// extract the Time value of this date/time as floating-point TTime
+    function ToTime: TTime;
+    /// extract the Date value of this date/time as floating-point TDate
     // - will return 0 if the stored value is not a valid date
-    function ToDate: TDateTime;
-    /// convert to a Delphi Date and Time
+    function ToDate: TDate;
+    /// convert to a floating-point TDateTime
     // - will return 0 if the stored value is not a valid date
     function ToDateTime: TDateTime;
     /// convert to a second-based c-encoded time (from Unix epoch 1/1/1970)
@@ -616,7 +616,7 @@ function TimeLogNowUTC: TTimeLog;
 // - handle TTimeLog bit-encoded Int64 format
 function TimeLogFromFile(const FileName: TFileName): TTimeLog;
 
-/// get TTimeLog value from a given Delphi date and time
+/// get TTimeLog value from a given floating-point TDateTime
 // - handle TTimeLog bit-encoded Int64 format
 // - just a wrapper around PTimeLogBits(@aTime)^.From()
 // - we defined such a function since TTimeLogBits(aTimeLog).From() won't change
@@ -1976,7 +1976,7 @@ begin
   From(@now);
 end;
 
-function TTimeLogBits.ToTime: TDateTime;
+function TTimeLogBits.ToTime: TTime;
 var
   lo: PtrUInt;
 begin
@@ -1984,14 +1984,14 @@ begin
   lo := Value;
   {$else}
   lo := PCardinal(@Value)^;
-  {$endif}
+  {$endif CPU64}
   if lo and (1 shl (6 + 6 + 5) - 1) = 0 then
     result := 0
   else
     result := EncodeTime((lo shr (6 + 6)) and 31, (lo shr 6) and 63, lo and 63, 0);
 end;
 
-function TTimeLogBits.ToDate: TDateTime;
+function TTimeLogBits.ToDate: TDate;
 var
   Y, lo: PtrUInt;
 begin
@@ -2001,10 +2001,10 @@ begin
   {$else}
   Y := Value shr (6 + 6 + 5 + 5 + 4);
   lo := PCardinal(@Value)^;
-  {$endif}
+  {$endif CPU64}
   if (Y = 0) or
      not TryEncodeDate(Y, 1 + (lo shr (6 + 6 + 5 + 5)) and 15,
-                       1 + (lo shr (6 + 6 + 5)) and 31, result) then
+                       1 + (lo shr (6 + 6 + 5)) and 31, TDateTime(result)) then
     result := 0;
 end;
 
@@ -2019,7 +2019,7 @@ begin
   {$else}
   Y := Value shr (6 + 6 + 5 + 5 + 4);
   lo := PCardinal(@Value)^;
-  {$endif}
+  {$endif CPU64}
   if (Y = 0) or
       not TryEncodeDate(Y, 1 + (lo shr (6 + 6 + 5 + 5)) and 15,
                         1 + (lo shr (6 + 6 + 5)) and 31, result) then

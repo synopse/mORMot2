@@ -447,7 +447,7 @@ type
     Minute:   SqlUSmallint;
     Second:   SqlUSmallint;
     Fraction: SqlUInteger;
-    /// convert an ODBC date and time into Delphi TDateTime
+    /// convert an ODBC date and time into TDateTime
     // - depending on the original column data type specified, it will return
     // either a TDate (for SQL_TYPE_DATE), either a TTime (for SQL_TYPE_TIME),
     // either a TDateTime content (for SQL_TYPE_TIMESTAMP)

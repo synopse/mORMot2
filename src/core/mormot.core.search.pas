@@ -4785,8 +4785,9 @@ var
   i: integer;
   tmp: TSynTempBuffer;
 const
-  DEFAULT: TSynValidateTextProps = (1, maxInt, 0, 0, 0, 0, 0, 0, maxInt, maxInt,
-    maxInt, maxInt, maxInt, maxInt, maxInt, maxInt);
+  DEFAULT: TSynValidateTextProps = (
+    1, maxInt, 0, 0, 0, 0, 0, 0, maxInt, maxInt, maxInt, maxInt, maxInt,
+    maxInt, maxInt, maxInt);
 begin
   if (MinLength = 0) and (MaxLength = 0) then  // if not previously set
     fProps := DEFAULT;
@@ -4814,8 +4815,9 @@ end;
 
 procedure TSynValidatePassWord.SetParameters(const value: RawUTF8);
 const
-  DEFAULT: TSynValidateTextProps = (5, 20, 1, 1, 1, 1, 1, 0, maxInt, maxInt,
-    maxInt, maxInt, maxInt, maxInt, maxInt, 0);
+  DEFAULT: TSynValidateTextProps = (
+    5, 20, 1, 1, 1, 1, 1, 0, maxInt, maxInt, maxInt, maxInt,
+    maxInt, maxInt, maxInt, 0);
 begin
   // set default values for validating a strong password
   fProps := DEFAULT;

@@ -77,7 +77,7 @@ type
   // BSON Decimal128 format, i.e. betDecimal128 TBSONElementType
   // - the betFloat BSON format stores a 64-bit floating point value, which
   // doesn't have exact decimals, so may suffer from rounding or approximation
-  // - for instance, if you work with Delphi currency values, you may store
+  // - for instance, if you work with some currency values, you may store
   // betDecimal128 values in MongoDB - the easiest way is to include it as a
   // TBSONVariant instance, via the NumberDecimal() function
   // - there is no mathematical operator/methods for Decimal128 Value Objects,
@@ -266,7 +266,7 @@ type
     function ToVariant: variant; overload;
     /// convert this ObjectID to its TBSONVariant custom variant value
     procedure ToVariant(var result: variant); overload;
-    /// returns the timestamp portion of the ObjectId() object as a Delphi date
+    /// returns the timestamp portion of the ObjectId() object as a TDateTime
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     // so you can compare it to NowUTC returned time
     function CreateDateTime: TDateTime;

@@ -539,7 +539,7 @@ type
   // implementation. The purpose of this superclass is to define certain fields
   // that are common to all module implementations. This structure therefore
   // contains a pInstance field, which will be used to store a class instance
-  // handling the virtual table as a pure Delphi class: the TSQLVirtualTableModule
+  // handling the virtual table as a pure class: the TSQLVirtualTableModule
   // class will use it internaly
   TSQLite3VTab = record
     /// The module for this virtual table
@@ -555,7 +555,7 @@ type
     // the string will be automatically freed by sqlite3.free() and the zErrMsg
     // field will be zeroed.
     zErrMsg: PUTF8Char;
-    /// this will be used to store a Delphi class instance handling the Virtual Table
+    /// this will be used to store a class instance handling the Virtual Table
     pInstance: TObject;
   end;
 
@@ -571,12 +571,12 @@ type
   // - This superclass exists in order to define fields of the cursor that are
   // common to all implementationsThis structure therefore contains a pInstance
   // field, which will be used to store a class instance handling the virtual
-  // table as a pure Delphi class: the TSQLVirtualTableModule class will use
+  // table as a pure class: the TSQLVirtualTableModule class will use
   // it internaly
   TSQLite3VTabCursor = record
     /// Virtual table of this cursor
     pVtab: PSQLite3VTab;
-    /// this will be used to store a Delphi class instance handling the cursor
+    /// this will be used to store a class instance handling the cursor
     pInstance: TObject;
   end;
 
@@ -1943,15 +1943,15 @@ type
 
 
 /// an internal function which calls Freemem(p)
-// - can be used to free some PUTF8Char pointer allocated by Delphi Getmem()
+// - can be used to free some PUTF8Char pointer allocated by the RTL Getmem()
 procedure sqlite3InternalFree(p: pointer); cdecl;
 
 /// an internal function which calls TObject(p).Free
-// - can be used to free some Delphi class instance
+// - can be used to free some class instance
 procedure sqlite3InternalFreeObject(p: pointer); cdecl;
 
 /// an internal function which calls RawByteString(p) := ''
-// - can be used to free some Delphi class instance
+// - can be used to free some class instance
 // - use a local tmp: pointer variable to prepare the reference count, e.g.
 // !  tmp := nil;
 // !  RawUTF8(tmp) := Text; // fast COW assignment
@@ -1965,7 +1965,7 @@ procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
 function CheckNumberOfArgs(Context: TSQLite3FunctionContext; expected,sent: integer): boolean;
 
 /// create a TSQLite3Module.pzErr UTF-8 text buffer according to the given
-// Delphi exception
+// Exception class
 procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUTF8Char);
 
 /// set a TSQLVar into a SQlite3 result context

@@ -16,7 +16,7 @@ unit mormot.db.rad;
 
 interface
 
-{$ifdef FPC} // currently only supports Delphi DB.pas unit
+{$ifdef FPC} // currently only tested and supported with Delphi DB.pas unit
 
 implementation // to compile a void unit on FPC
 

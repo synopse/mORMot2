@@ -69,7 +69,7 @@ const
 type
   /// handled field/parameter/column types for abstract database access
   // - this will map JSON-compatible low-level database-level access types, not
-  // high-level Delphi types as TSQLFieldType defined in mORMot.pas
+  // high-level object pascal types as TSQLFieldType defined in mORMot.pas
   // - it does not map either all potential types as defined in DB.pas (which
   // are there for compatibility with old RDBMS, and are not abstract enough)
   // - those types can be mapped to standard SQLite3 generic types, i.e.

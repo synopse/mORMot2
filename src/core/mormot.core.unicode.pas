@@ -474,7 +474,7 @@ var
   WinAnsiConvert: TSynAnsiFixedWidth;
 
   /// global TSynAnsiConvert instance to handle current system encoding
-  // - this is the encoding as used by the AnsiString Delphi, so will be used
+  // - this is the encoding as used by the AnsiString type, so will be used
   // before Delphi 2009 to speed-up VCL string handling (especially for UTF-8)
   // - this instance is global and instantied during the whole program life time
   CurrentAnsiConvert: TSynAnsiConvert;
@@ -660,24 +660,24 @@ function UnicodeStringToUtf8(const S: UnicodeString): RawUTF8; inline;
 // but is faster, since it uses no Win32 API call
 function UTF8DecodeToUnicodeString(const S: RawUTF8): UnicodeString; overload; inline;
 
-/// convert our UTF-8 encoded buffer into a Delphi 2009+ Unicode string
+/// convert our UTF-8 encoded buffer into a Delphi 2009+ or FPC Unicode string
 // - this function is the same as direct assignment, since RawUTF8=AnsiString(CP_UTF8),
 // but is faster, since use no Win32 API call
 procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString); overload;
 
-/// convert a Delphi 2009+ Unicode string into a WinAnsi (code page 1252) string
+/// convert a Delphi 2009+ or FPC Unicode string into a WinAnsi (code page 1252) string
 function UnicodeStringToWinAnsi(const S: UnicodeString): WinAnsiString; inline;
 
-/// convert our UTF-8 encoded buffer into a Delphi 2009+ Unicode string
+/// convert our UTF-8 encoded buffer into a Delphi 2009+ or FPC Unicode string
 // - this function is the same as direct assignment, since RawUTF8=AnsiString(CP_UTF8),
 // but is faster, since use no Win32 API call
 function UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer): UnicodeString; overload; inline;
 
-/// convert a Win-Ansi encoded buffer into a Delphi 2009+ Unicode string
+/// convert a Win-Ansi encoded buffer into a Delphi 2009+ or FPC Unicode string
 // - this function is faster than default RTL, since use no Win32 API call
 function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): UnicodeString; overload;
 
-/// convert a Win-Ansi string into a Delphi 2009+ Unicode string
+/// convert a Win-Ansi string into a Delphi 2009+ or FPC Unicode string
 // - this function is faster than default RTL, since use no Win32 API call
 function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; inline; overload;
 
