@@ -26,6 +26,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.data, // already included in mormot.core.json
+  mormot.core.rtti,
   mormot.core.json;
 
   
@@ -1738,6 +1739,173 @@ procedure ObjectToVariant(Value: TObject; var result: variant;
 // - convenient overloaded function to include woEnumSetsAsText option
 function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant; overload;
 
+/// get the enumeration names corresponding to a set value, as a JSON array
+function SetNameToVariant(Value: cardinal; Info: TRttiCustom;
+  FullSetsAsStar: boolean = false): variant;
+
+/// fill a class instance from a TDocVariant object document properties
+// - returns FALSE if the variant is not a dvObject, TRUE otherwise
+function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
+
+/// fill a T*ObjArray variable from a TDocVariant array document values
+// - will always erase the T*ObjArray instance, and fill it from arr values
+procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
+  objClass: TClass);
+
+/// will convert a blank TObject into a TDocVariant document instance
+function ObjectDefaultToVariant(aClass: TClass;
+  aOptions: TDocVariantOptions): variant; overload;
+
+
+type
+  /// ref-counted interface for thread-safe access to a TDocVariant document
+  // - is implemented e.g. by TLockedDocVariant, for IoC/DI resolution
+  // - fast and safe storage of any JSON-like object, as property/value pairs,
+  // or a JSON-like array, as values
+  ILockedDocVariant = interface
+    ['{CADC2C20-3F5D-4539-9D23-275E833A86F3}']
+    function GetValue(const Name: RawUTF8): Variant;
+    procedure SetValue(const Name: RawUTF8; const Value: Variant);
+    /// check and return a given property by name
+    // - returns TRUE and fill Value with the value associated with the supplied
+    // Name, using an internal lock for thread-safety
+    // - returns FALSE if the Name was not found, releasing the internal lock:
+    // use ExistsOrLock() if you want to add the missing value
+    function Exists(const Name: RawUTF8; out Value: Variant): boolean;
+    /// check and return a given property by name
+    // - returns TRUE and fill Value with the value associated with the supplied
+    // Name, using an internal lock for thread-safety
+    // - returns FALSE and set the internal lock if Name does not exist:
+    // caller should then release the lock via ReplaceAndUnlock()
+    function ExistsOrLock(const Name: RawUTF8; out Value: Variant): boolean;
+    /// set a value by property name, and set a local copy
+    // - could be used as such, for implementing a thread-safe cache:
+    // ! if not cache.ExistsOrLock('prop',local) then
+    // !   cache.ReplaceAndUnlock('prop',newValue,local);
+    // - call of this method should have been precedeed by ExistsOrLock()
+    // returning false, i.e. be executed on a locked instance
+    procedure ReplaceAndUnlock(const Name: RawUTF8; const Value: Variant;
+      out LocalValue: Variant);
+    /// add an existing property value to the given TDocVariant document object
+    // - returns TRUE and add the Name/Value pair to Obj if Name is existing,
+    // using an internal lock for thread-safety
+    // - returns FALSE if Name is not existing in the stored document, and
+    // lock the internal storage: caller should eventually release the lock
+    // via AddNewPropAndUnlock()
+    // - could be used as such, for implementing a thread-safe cache:
+    // ! if not cache.AddExistingPropOrLock('Articles',Scope) then
+    // !   cache.AddNewPropAndUnlock('Articles',GetArticlesFromDB,Scope);
+    // here GetArticlesFromDB would occur inside the main lock
+    function AddExistingPropOrLock(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object and
+    // to the internal stored document, then release a previous lock
+    // - call of this method should have been precedeed by AddExistingPropOrLock()
+    // returning false, i.e. be executed on a locked instance
+    procedure AddNewPropAndUnlock(const Name: RawUTF8; const Value: variant;
+      var Obj: variant);
+    /// add an existing property value to the given TDocVariant document object
+    // - returns TRUE and add the Name/Value pair to Obj if Name is existing
+    // - returns FALSE if Name is not existing in the stored document
+    // - this method would use a lock during the Name lookup, but would always
+    // release the lock, even if returning FALSE (see AddExistingPropOrLock)
+    function AddExistingProp(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object
+    // - this method would not expect the resource to be locked when called,
+    // as with AddNewPropAndUnlock
+    // - will use the internal lock for thread-safety
+    // - if the Name is already existing, would update/change the existing value
+    // - could be used as such, for implementing a thread-safe cache:
+    // ! if not cache.AddExistingProp('Articles',Scope) then
+    // !   cache.AddNewProp('Articles',GetArticlesFromDB,Scope);
+    // here GetArticlesFromDB would occur outside the main lock
+    procedure AddNewProp(const Name: RawUTF8; const Value: variant;
+      var Obj: variant);
+    /// append a value to the internal TDocVariant document array
+    // - you should not use this method in conjunction with other document-based
+    // alternatives, like Exists/AddExistingPropOrLock or AddExistingProp
+    procedure AddItem(const Value: variant);
+    /// makes a thread-safe copy of the internal TDocVariant document object or array
+    function Copy: variant;
+    /// delete all stored properties
+    procedure Clear;
+    /// save the stored values as UTF-8 encoded JSON Object
+    function ToJSON(HumanReadable: boolean = false): RawUTF8;
+    /// the document fields would be safely accessed via this property
+    // - this is the main entry point of this storage
+    // - will raise an EDocVariant exception if Name does not exist at reading
+    // - implementation class would make a thread-safe copy of the variant value
+    property Value[const Name: RawUTF8]: Variant
+      read GetValue write SetValue; default;
+  end;
+
+  /// allows thread-safe access to a TDocVariant document
+  // - this class inherits from TInterfacedObjectWithCustomCreate so you
+  // could define one published property of a mORMot.pas' TInjectableObject
+  // as ILockedDocVariant so that this class may be automatically injected
+  TLockedDocVariant = class(TInterfacedObjectWithCustomCreate, ILockedDocVariant)
+  protected
+    fValue: TDocVariantData;
+    fLock: TAutoLocker;
+    function GetValue(const Name: RawUTF8): Variant;
+    procedure SetValue(const Name: RawUTF8; const Value: Variant);
+  public
+    /// initialize the thread-safe document with a fast TDocVariant
+    // - i.e. call Create(true) aka Create(JSON_OPTIONS[true])
+    // - will be the TInterfacedObjectWithCustomCreate default constructor,
+    // called e.g. during IoC/DI resolution
+    constructor Create; overload; override;
+    /// initialize the thread-safe document storage
+    constructor Create(FastStorage: boolean); reintroduce; overload;
+    /// initialize the thread-safe document storage with the corresponding options
+    constructor Create(options: TDocVariantOptions); reintroduce; overload;
+    /// finalize the storage
+    destructor Destroy; override;
+    /// check and return a given property by name
+    function Exists(const Name: RawUTF8; out Value: Variant): boolean;
+    /// check and return a given property by name
+    // - this version
+    function ExistsOrLock(const Name: RawUTF8; out Value: Variant): boolean;
+    /// set a value by property name, and set a local copy
+    procedure ReplaceAndUnlock(const Name: RawUTF8; const Value: Variant;
+      out LocalValue: Variant);
+    /// add an existing property value to the given TDocVariant document object
+    // - returns TRUE and add the Name/Value pair to Obj if Name is existing
+    // - returns FALSE if Name is not existing in the stored document
+    function AddExistingPropOrLock(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object and
+    // to the internal stored document
+    procedure AddNewPropAndUnlock(const Name: RawUTF8; const Value: variant;
+      var Obj: variant);
+    /// add an existing property value to the given TDocVariant document object
+    // - returns TRUE and add the Name/Value pair to Obj if Name is existing
+    // - returns FALSE if Name is not existing in the stored document
+    // - this method would use a lock during the Name lookup, but would always
+    // release the lock, even if returning FALSE (see AddExistingPropOrLock)
+    function AddExistingProp(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object
+    // - this method would not expect the resource to be locked when called,
+    // as with AddNewPropAndUnlock
+    // - will use the internal lock for thread-safety
+    // - if the Name is already existing, would update/change the existing value
+    procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
+    /// append a value to the internal TDocVariant document array
+    procedure AddItem(const Value: variant);
+    /// makes a thread-safe copy of the internal TDocVariant document object or array
+    function Copy: variant;
+    /// delete all stored properties
+    procedure Clear;
+    /// save the stored value as UTF-8 encoded JSON Object
+    // - implemented as just a wrapper around VariantSaveJSON()
+    function ToJSON(HumanReadable: boolean = false): RawUTF8;
+    /// the document fields would be safely accessed via this property
+    // - will raise an EDocVariant exception if Name does not exist
+    // - result variant is returned as a copy, not as varByRef, since a copy
+    // will definitively be more thread safe
+    property Value[const Name: RawUTF8]: variant
+      read GetValue write SetValue; default;
+  end;
+
+
 
 { ************** JSON Parsing into Variant }
 
@@ -1874,8 +2042,6 @@ function VariantLoadJSON(const JSON: RawUTF8; TryCustomVariants: PDocVariantOpti
 
 implementation
 
-uses
-  mormot.core.rtti; // e.g. for VariantDynArrayClear
 
 { ************** Low-Level Variant Wrappers }
 
@@ -3119,7 +3285,6 @@ asm
 @by:    cmp     edx, varByRef OR varVariant
         je      @ptr
         lea     eax, [DocVariantDataFake]
-
 @ok:
 end;
 {$endif FPC_OR_UNICODE}
@@ -3172,6 +3337,85 @@ begin
     VarClear(result);
 end;
 
+function SetNameToVariant(Value: cardinal; Info: TRttiCustom;
+  FullSetsAsStar: boolean): variant;
+var
+  j: integer;
+  PS: PShortString;
+  arr: TDocVariantData;
+begin
+  arr.InitFast;
+  if FullSetsAsStar and GetAllBits(Value, Info.Cache.EnumMax + 1) then
+    arr.AddItem('*')
+  else
+    with Info.Cache do
+    begin
+      PS := @EnumList;
+      for j := EnumInfo.MinValue to EnumMax do begin
+        if GetBitPtr(@Value, j) then
+          arr.AddItem(PS^);
+        inc(PByte(PS), ord(PS^[0]) + 1); // next item
+      end;
+    end;
+  result := variant(arr);
+end;
+
+function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
+var
+  p: integer;
+  props: PRttiCustomProps;
+  prop: PRttiCustomProp;
+begin
+  if (doc.Kind = dvObject) and (doc.Count > 0) and (obj <> nil) then
+  begin
+    props := @Rtti.RegisterClass(PClass(obj)^).Props;
+    for p := 0 to doc.Count - 1 do
+    begin
+      prop := props.Find(pointer(doc.Names[p]),length(doc.Names[p]));
+      if prop <> nil then
+        prop^.Prop.SetValue(obj, doc.Values[p]);
+    end;
+    result := true;
+  end
+  else
+    result := false;
+end;
+
+procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
+  objClass: TClass);
+var
+  info: TRttiCustom;
+  i: integer;
+  obj: TObjectDynArray absolute objArray;
+begin
+  if objClass = nil then
+    exit;
+  ObjArrayClear(obj);
+  if not (dvoIsArray in arr.Options) or (arr.Count = 0) then
+    exit;
+  info := Rtti.RegisterClass(objClass);
+  SetLength(obj, arr.Count);
+  for i := 0 to arr.Count - 1 do
+  begin
+    obj[i] := info.ClassNewInstance;
+    DocVariantToObject(_Safe(arr.Values[i])^, obj[i]);
+  end;
+end;
+
+function ObjectDefaultToVariant(aClass: TClass; aOptions: TDocVariantOptions): variant;
+var
+  tempvoid: TObject;
+  json: RawUTF8;
+begin
+  VarClear(result);
+  tempvoid := Rtti.RegisterClass(aClass).ClassNewInstance;
+  try
+    json := ObjectToJSON(tempvoid, [woDontStoreDefault]);
+    PDocVariantData(@result)^.InitJSONInPlace(pointer(json), aOptions);
+  finally
+    tempvoid.Free;
+  end;
+end;
 
 
 { TDocVariantData }
@@ -5529,6 +5773,213 @@ procedure _ByRef(const DocVariant: variant; out Dest: variant; Options: TDocVari
 begin
   TDocVariantData(Dest) := _Safe(DocVariant)^; // fast byref copy
   TDocVariantData(Dest).SetOptions(Options);
+end;
+
+
+
+{ TLockedDocVariant }
+
+constructor TLockedDocVariant.Create;
+begin
+  Create(JSON_OPTIONS_FAST);
+end;
+
+constructor TLockedDocVariant.Create(FastStorage: boolean);
+begin
+  Create(JSON_OPTIONS[FastStorage]);
+end;
+
+constructor TLockedDocVariant.Create(options: TDocVariantOptions);
+begin
+  fLock := TAutoLocker.Create;
+  fValue.Init(options);
+end;
+
+destructor TLockedDocVariant.Destroy;
+begin
+  inherited;
+  fLock.Free;
+end;
+
+function TLockedDocVariant.Exists(const Name: RawUTF8; out Value: Variant): boolean;
+var
+  i: integer;
+begin
+  fLock.Enter;
+  try
+    i := fValue.GetValueIndex(Name);
+    if i < 0 then
+      result := false
+    else
+    begin
+      Value := fValue.Values[i];
+      result := true;
+    end;
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.ExistsOrLock(const Name: RawUTF8;
+  out Value: Variant): boolean;
+var
+  i: integer;
+begin
+  result := true;
+  fLock.Enter;
+  try
+    i := fValue.GetValueIndex(Name);
+    if i < 0 then
+      result := false
+    else
+      Value := fValue.Values[i];
+  finally
+    if result then
+      fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.ReplaceAndUnlock(
+  const Name: RawUTF8; const Value: Variant; out LocalValue: Variant);
+begin // caller made fLock.Enter
+  try
+    SetValue(Name, Value);
+    LocalValue := Value;
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.AddExistingPropOrLock(const Name: RawUTF8;
+  var Obj: variant): boolean;
+var i: integer;
+begin
+  result := true;
+  fLock.Enter;
+  try
+    i := fValue.GetValueIndex(Name);
+    if i < 0 then
+      result := false
+    else
+      _ObjAddProps([Name,fValue.Values[i]], Obj);
+  finally
+    if result then
+      fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.AddNewPropAndUnlock(const Name: RawUTF8;
+  const Value: variant; var Obj: variant);
+begin // caller made fLock.Enter
+  try
+    SetValue(Name,Value);
+    _ObjAddProps([Name,Value], Obj);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.AddExistingProp(const Name: RawUTF8;
+  var Obj: variant): boolean;
+var
+  i: integer;
+begin
+  result := true;
+  fLock.Enter;
+  try
+    i := fValue.GetValueIndex(Name);
+    if i < 0 then
+      result := false
+    else
+      _ObjAddProps([Name,fValue.Values[i]], Obj);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.AddNewProp(const Name: RawUTF8;
+  const Value: variant; var Obj: variant);
+begin
+  fLock.Enter;
+  try
+    SetValue(Name, Value);
+    _ObjAddProps([Name, Value], Obj);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.GetValue(const Name: RawUTF8): Variant;
+begin
+  fLock.Enter;
+  try
+    fValue.RetrieveValueOrRaiseException(pointer(Name), length(Name),
+      dvoNameCaseSensitive in fValue.Options, result, false);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.SetValue(const Name: RawUTF8;
+  const Value: Variant);
+begin
+  fLock.Enter;
+  try
+    fValue.AddOrUpdateValue(Name, Value);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.AddItem(const Value: variant);
+begin
+  fLock.Enter;
+  try
+    fValue.AddItem(Value);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.Copy: variant;
+begin
+  VarClear(result);
+  fLock.Enter;
+  try
+    TDocVariantData(result).InitCopy(variant(fValue), JSON_OPTIONS_FAST);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.Clear;
+var
+  opt: TDocVariantOptions;
+begin
+  fLock.Enter;
+  try
+    opt := fValue.Options;
+    fValue.Clear;
+    fValue.Init(opt);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.ToJSON(HumanReadable: boolean): RawUTF8;
+var
+  tmp: RawUTF8;
+begin
+  fLock.Enter;
+  try
+    VariantSaveJSON(variant(fValue), twJSONEscape, tmp);
+  finally
+    fLock.Leave;
+  end;
+  if HumanReadable then
+    JSONBufferReformat(pointer(tmp), result)
+  else
+    result := tmp;
 end;
 
 
