@@ -948,7 +948,7 @@ function GetRttiProps(RttiClass: TClass): PRttiProps;
 //  !  begin
 //  !    CT := ..;
 //  !    repeat
-//  !      for i := 1 to GetRttiProps(CT,P) do begin
+//  !      for i := 1 to GetRttiProp(CT,P) do begin
 //  !        // use P^
 //  !        P := P^.Next;
 //  !      end;
@@ -986,7 +986,7 @@ function GetPublishedMethods(Instance: TObject;
 // - object properties instances are created in aTo if the objects are not
 // TSQLRecord children (in this case, these are not class instances, but
 // INTEGER reference to records, so only the integer value is copied), that is
-// for regular Delphi classes
+// for regular classes
 procedure CopyObject(aFrom, aTo: TObject); overload;
 
 /// create a new object instance, from an existing one
@@ -1160,8 +1160,15 @@ type
 /// retrieve methods information of a given IInvokable
 // - all methods will be added, also from inherited interface definitions
 // - returns the number of methods detected
-function GetRttiInterface(aTypeInfo: pointer;
+function GetRttiInterface(aTypeInfo: PRttiInfo;
   out aDefinition: TRttiInterface): integer;
+
+/// execute an instance method from its RTTI per-interface information
+// - calling this function with a pre-computed PInterfaceEntry value is faster
+// than calling the TObject.GetInterface() method, especially when the class
+// implements several interfaces, since it avoid a slow GUID lookup
+function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry;
+  out Obj): boolean;
 
 
 { ************* Efficient Dynamic Arrays and Records Process }
@@ -1575,6 +1582,7 @@ type
     fValueClass: TClass;
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
+    fCollectionItemRtti: TRttiCustom;
     // called by TRttiCustomList.RegisterObjArray/RegisterBinaryType
     function SetObjArray(Item: TClass): TRttiCustom;
     function SetBinaryType(BinarySize: integer): TRttiCustom;
@@ -1759,6 +1767,12 @@ type
     // - we need to know the CollectionItem to propertly initialize a TCollection
     function RegisterCollection(Collection: TCollectionClass;
       CollectionItem: TCollectionItemClass): TRttiCustom;
+    /// register some TypeInfo() containing unsafe parameter values
+    // - i.e. any RTTI type containing Sensitive Personal Information, e.g.
+    // a bank card number or a plain password
+    // - such values will force associated values to be ignored during loging,
+    // as a more tuned alternative to optNoLogInput or optNoLogOutput
+    procedure RegisterUnsafeSPIType(const Types: array of PRttiInfo);
     /// register one RTTI TypeInfo() to be serialized as hexadecimal
     // - data will be serialized as BinToHexDisplayLower() JSON hexadecimal
     // string, using BinarySize bytes of the value, i.e. BinarySize*2 hexa chars
@@ -3794,19 +3808,61 @@ begin
     [Definition.Name, {%H-}m, FormatUTF8(Format, Args)]);
 end;
 
-function GetRttiInterface(aTypeInfo: pointer; out aDefinition: TRttiInterface): integer;
+function GetRttiInterface(aTypeInfo: PRttiInfo;
+  out aDefinition: TRttiInterface): integer;
 var
   getter: TGetRttiInterface;
 begin
   getter := TGetRttiInterface.Create;
   try
-    getter.AddMethodsFromTypeInfo(aTypeInfo);
+    getter.AddMethodsFromTypeInfo(pointer(aTypeInfo));
     aDefinition := getter.Definition;
   finally
     getter.Free;
   end;
   result := length(aDefinition.Methods);
 end;
+
+
+function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry;
+  out Obj): boolean;
+
+  {$ifndef FPC}
+  procedure UseImplGetter(Instance: TObject; ImplGetter: PtrInt;
+    var result: IInterface);
+  type // function(Instance: TObject) trick does not work with CPU64 :(
+    TGetProc = function: IInterface of object;
+  var
+    Call: TMethod;
+  begin // sub-procedure to avoid try..finally for TGetProc(): Interface result
+    if PropWrap(ImplGetter).Kind = ptVirtual then
+      Call.Code := PPointer(PPtrInt(Instance)^ + SmallInt(ImplGetter))^
+    else
+      Call.Code := Pointer(ImplGetter);
+    Call.Data := Instance;
+    result := TGetProc(Call);
+  end;
+  {$endif FPC}
+
+begin
+  Pointer(Obj) := nil;
+  if Entry <> nil then
+    if Entry^.IOffset <> 0 then
+    begin
+      Pointer(Obj) := Pointer(PAnsiChar(Instance) + Entry^.IOffset);
+      if Pointer(Obj) <> nil then
+        IInterface(Obj)._AddRef;
+    end
+  {$ifndef FPC}
+  else if PropWrap(Entry^.ImplGetter).Kind = ptField then
+    IInterface(Obj) := IInterface(PPointer(PtrUInt(Instance) +
+      PtrUInt(Entry^.ImplGetter and $00ffffff))^)
+  else
+    UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj))
+  {$endif};
+  result := Pointer(Obj) <> nil;
+end;
+
 
 
 { ************* Efficient Dynamic Arrays and Records Process }
@@ -5832,9 +5888,19 @@ end;
 function TRttiCustomList.RegisterCollection(Collection: TCollectionClass;
   CollectionItem: TCollectionItemClass): TRttiCustom;
 begin
-  result := RegisterType(Collection.ClassInfo);
-  if result <> nil then
+  result := RegisterClass(Collection);
+  if result <> nil then begin
     result.fCollectionItem := CollectionItem;
+    result.fCollectionItemRtti := RegisterClass(CollectionItem);
+  end;
+end;
+
+procedure TRttiCustomList.RegisterUnsafeSPIType(const Types: array of PRttiInfo);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(Types) do
+    include(RegisterType(Types[i]).fFlags, rcfSPI);
 end;
 
 function TRttiCustomList.RegisterBinaryType(Info: PRttiInfo;
