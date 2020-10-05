@@ -1156,7 +1156,7 @@ end;
 
 procedure TDocVariantArrayDataSet.InternalInitFieldDefs;
 const
-  TYPES: array[TSQLDBFieldType] of TFieldType =(
+  TYPES: array[TSQLDBFieldType] of TFieldType = (
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
     ftWideString, ftWideString, ftLargeint, ftFloat, ftFloat, ftDate,
     ftWideString, ftBlob);

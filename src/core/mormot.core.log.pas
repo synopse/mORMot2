@@ -211,7 +211,7 @@ const
 
   /// console colors corresponding to each logging level
   // - to be used with mormot.core.os TextColor()
-  LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor =(
+  LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor = (
   //  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
     ccLightGray, ccWhite, ccLightGray, ccLightBlue, ccBrown, ccLightRed, ccGreen, ccGreen,
   //  sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,

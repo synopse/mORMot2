@@ -3368,11 +3368,13 @@ end;
 
 procedure TECDHEProtocol.SharedSecret(sA, sB: PHash256);
 const
-  AES_CLASS: array[TECDHEEF] of TAESAbstractClass =(  // efAesCrc, efAesCfb, efAesOfb, efAesCtr, efAesCbc
-    TAESCFBCRC, TAESCFB, TAESOFB, TAESCTR, TAESCBC, TAESCFBCRC, TAESCFB, TAESOFB,
-    TAESCTR, TAESCBC);
-  AES_BITS: array[TECDHEEF] of integer = (128, 128, 128, 128, 128, 256, 256, 256,
-    256, 256);
+  AES_CLASS: array[TECDHEEF] of TAESAbstractClass = (
+  // efAesCrc, efAesCfb, efAesOfb, efAesCtr, efAesCbc (128-bit then 256-bit)
+    TAESCFBCRC, TAESCFB, TAESOFB, TAESCTR, TAESCBC,
+    TAESCFBCRC, TAESCFB, TAESOFB, TAESCTR, TAESCBC);
+  AES_BITS: array[TECDHEEF] of integer = (
+    128, 128, 128, 128, 128,
+    256, 256, 256, 256, 256);
 var
   secret: THash256;
 

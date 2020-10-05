@@ -1112,9 +1112,9 @@ type
   private
     fValue: PPointer;
     fInfo: TRttiCustom;
-    fElemSize: cardinal; // equals fInfo.Cache.ItemSize
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
+    fElemSize: cardinal; // equals fInfo.Cache.ItemSize
     fSorted: boolean;
     function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
@@ -1166,6 +1166,7 @@ type
       aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false);
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
+    // - can be called directly for a very fast TDynArray initialization
     procedure InitRtti(aInfo: TRttiCustom; var aValue; aCountPointer: PInteger = nil);
       {$ifdef HASINLINE}inline;{$endif}
     /// fast initialize a wrapper for an existing dynamic array of the same type
@@ -1682,7 +1683,7 @@ type
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     /// low-level access to an hash collisions counter
     FindCollisions: cardinal;
-    {$endif}
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
     /// initialize the hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
@@ -1739,6 +1740,8 @@ type
   // - in order to have the better performance, you should use an external Count
   // variable, AND set the Capacity property to the expected maximum count (this
   // will avoid most ReHash calls for FindHashedForAdding+FindHashedAndUpdate)
+  // - consider using TSynDictionary from mormot.core.json for a thread-safe
+  // stand-alone storage of key/value pairs
   {$ifdef UNDIRECTDYNARRAY}
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
@@ -7188,6 +7191,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     dec(PtrUInt(p), SizeOf(TDynArrayRec)); // p^ = start of heap object
     if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
     begin
+      // we own the dynamic array instance -> direct reallocation
       if NewLength < OldLength then // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
@@ -7197,7 +7201,8 @@ begin // this method is faster than default System.DynArraySetLength() function
       ReallocMem(p, NeededSize);
     end
     else
-    begin // create copy
+    begin
+      // dynamic array already referenced elsewhere -> create copy
       GetMem(p, NeededSize);
       minLength := OldLength;
       if minLength > NewLength then
@@ -7700,12 +7705,13 @@ begin
     result := 0; // will be ignored afterwards for sure
 end;
 
-const // primes reduce memory consumption and enhance distribution
-  _PRIMES: array[0..38 {$ifndef CPU32DELPHI} + 15 {$endif}] of integer =(
+const
+  // reduces memory consumption and enhances distribution at hash table growing
+  _PRIMES: array[0..38 {$ifndef CPU32DELPHI} + 15 {$endif}] of integer = (
     {$ifndef CPU32DELPHI}
     31, 127, 251, 499, 797, 1259, 2011, 3203, 5087,
     8089, 12853, 20399, 81649, 129607, 205759,
-    {$endif}
+    {$endif CPU32DELPHI}
     // start after HASH_PO2=2^18=262144 for Delphi Win32 (poor 64-bit mul)
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
@@ -7714,6 +7720,7 @@ const // primes reduce memory consumption and enhance distribution
     334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
     1337987929, 1685759167, 2123923447);
 
+// as used internally by TDynArrayHasher.ReHash()
 function NextPrime(v: integer): integer; {$ifdef HASINLINE} inline;{$endif}
 var
   i: PtrInt;
@@ -7731,12 +7738,14 @@ end;
 function TDynArrayHasher.HashTableIndex(aHashCode: PtrUInt): PtrUInt;
 begin
   result := HashTableSize;
-  {$ifdef CPU32DELPHI} // Delphi Win32 is not efficient with 64-bit multiplication
+  {$ifdef CPU32DELPHI}
+  // Delphi Win32 is not efficient with 64-bit multiplication
   if result > HASH_PO2 then
     result := aHashCode mod result
   else
     result := aHashCode and (result - 1);
-  {$else} // FPC or dcc64 compile next line as very optimized asm
+  {$else}
+  // FPC or dcc64 compile next line as very optimized asm
   result := (QWord(aHashCode) * result) shr 32;
   // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
   {$endif CPU32DELPHI}
@@ -7751,9 +7760,11 @@ begin
   P := DynArray^.Value^;
   siz := DynArray^.ElemSize;
   if not (canHash in State) then
-  begin // Count=0 or Count<CountTrigger
+  begin
+    // Count=0 or Count<CountTrigger
     if hasHasher in State then
-      for result := 0 to DynArray^.Count - 1 do // O(n) linear search via hashing
+      // O(n) linear search via hashing
+      for result := 0 to DynArray^.Count - 1 do
         if HashOne(P) = aHashCode then
           exit
         else
@@ -7768,7 +7779,8 @@ begin
     ndx := HashTable[result] - 1; // index+1 was stored
     if ndx < 0 then
     begin
-      result := -(result + 1); // found void entry
+      // found void entry
+      result := -(result + 1);
       exit;
     end
     else if not aForAdd and (HashOne(P + ndx * siz) = aHashCode) then
@@ -7820,7 +7832,8 @@ begin
     else
       cmp := 1;
     if cmp = 0 then
-    begin // faster than hash e.g. for huge strings
+    begin
+      // faster than hash e.g. for huge strings
       if aHashTableIndex <> nil then
         aHashTableIndex^ := result;
       result := ndx;
@@ -7829,8 +7842,7 @@ begin
     // hash or slot collision -> search next item
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     inc(FindCollisions);
-    {$endif}
-    //inc(TDynArrayHashedCollisionCount);
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
     inc(result);
     if result = last then
       // reached the end -> search once from HashTable[0] to HashTable[first-1]
@@ -7853,7 +7865,8 @@ begin // on input: HashTable[result] slot is already computed
   if HashTableSize < n then
     RaiseFatalCollision('HashAdd HashTableSize', aHashCode);
   if HashTableSize - n < n shr 2 then
-  begin // grow hash table when 25% void
+  begin
+    // grow hash table when 25% void
     ReHash({forced=}true, {grow=}true);
     result := Find(aHashCode, {foradd=}true); // recompute position
     if result >= 0 then
@@ -8054,7 +8067,8 @@ begin
   n := DynArray^.count;
   if not forced and ((n = 0) or (n < CountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if forceGrow and (siz > 0) then // next power of two or next prime
+  if forceGrow and (siz > 0) then
+    // next power of two or next prime
     {$ifdef CPU32DELPHI}
     if siz < HASH_PO2 then
       siz := siz shl 1

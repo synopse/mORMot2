@@ -4581,7 +4581,7 @@ var
   TLD, DOM: RawUTF8;
   i: integer;
 const
-  TopLevelTLD: array[0..20] of PUTF8Char =(
+  TopLevelTLD: array[0..20] of PUTF8Char = (
     // see http://en.wikipedia.org/wiki/List_of_Internet_top-level_domains
     'aero', 'asia', 'biz', 'cat', 'com', 'coop', 'edu', 'gov', 'info', 'int',
     'jobs', 'mil', 'mobi', 'museum', 'name', 'net', 'org', 'pro', 'site', 'tel',

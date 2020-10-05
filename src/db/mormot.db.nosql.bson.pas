@@ -182,7 +182,7 @@ type
 
 const
   /// the textual representation of the TDecimal128 special values
-  DECIMAL128_SPECIAL_TEXT: array[TDecimal128SpecialValue] of RawUTF8 =(
+  DECIMAL128_SPECIAL_TEXT: array[TDecimal128SpecialValue] of RawUTF8 = (
   // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
     '', '', 'NaN', '0', 'Infinity', '-Infinity',
     '-9.999999999999999999999999999999999E+6144',

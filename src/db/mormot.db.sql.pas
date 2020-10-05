@@ -306,7 +306,7 @@ const
   /// the known column data types corresponding to our TSQLDBFieldType types
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate()
   // - see TSQLDBFieldTypeDefinition documentation to find out the mapping
-  DB_FIELDS: array[TSQLDBDefinition] of TSQLDBFieldTypeDefinition =(
+  DB_FIELDS: array[TSQLDBDefinition] of TSQLDBFieldTypeDefinition = (
   // ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
   // dUnknown
     (' INT', ' NVARCHAR(%)', ' BIGINT', ' DOUBLE', ' NUMERIC(19,4)',
@@ -3337,14 +3337,14 @@ class function TSQLDBConnectionProperties.IsSQLKeyword(aDB: TSQLDBDefinition;
   aWord: RawUTF8): boolean;
 const
   /// CSV of the known reserved keywords per database engine, in alphabetic order
-  DB_KEYWORDS_CSV: array[TSQLDBDefinition] of PUTF8Char =(  // dUnknown
-    '',
-  // dDefault = ODBC / SQL-92 keywords (always checked first)
-    'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,'
-    + 'avg,begin,between,bit,bit_length,both,by,cascade,cascaded,case,cast,catalog,char,'
-    + 'char_length,character,character_length,check,close,coalesce,collate,collation,'
-    + 'column,commit,connect,connection,constraint,constraints,continue,convert,'
-    + 'corresponding,count,create,cross,current,current_date,current_time,' +
+  DB_KEYWORDS_CSV: array[TSQLDBDefinition] of PUTF8Char = (
+    '',  // dUnknown
+    // dDefault = ODBC / SQL-92 keywords (always checked first)
+    'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,' +
+    'avg,begin,between,bit,bit_length,both,by,cascade,cascaded,case,cast,catalog,char,' +
+    'char_length,character,character_length,check,close,coalesce,collate,collation,' +
+    'column,commit,connect,connection,constraint,constraints,continue,convert,' +
+    'corresponding,count,create,cross,current,current_date,current_time,' +
     'current_timestamp,current_user,cursor,date,day,deallocate,dec,decimal,declare,' +
     'default,deferrable,deferred,delete,desc,describe,descriptor,diagnostics,disconnect,' +
     'distinct,domain,double,drop,else,end,end-exec,escape,except,exception,exec,execute,' +
@@ -3362,14 +3362,14 @@ const
     'translation,trim,true,union,unique,unknown,update,upper,usage,user,using,value,values,' +
     'varchar,varying,view,when,whenever,where,with,work,write,year,zone',
   // dOracle specific keywords (in addition to dDefault)
-    'access,audit,cluster,comment,compress,exclusive,file,identified,increment,initial,'
-    + 'lock,long,maxextents,minus,mode,noaudit,nocompress,nowait,number,offline,online,'
-    + 'pctfree',
+    'access,audit,cluster,comment,compress,exclusive,file,identified,increment,initial,' +
+    'lock,long,maxextents,minus,mode,noaudit,nocompress,nowait,number,offline,online,' +
+    'pctfree',
   // dMSSQL specific keywords (in addition to dDefault)
-    'admin,after,aggregate,alias,array,asensitive,asymmetric,atomic,backup,before,binary,'
-    + 'blob,boolean,breadth,break,browse,bulk,call,called,cardinality,checkpoint,class,clob,'
-    + 'clustered,collect,completion,compute,condition,constructor,contains,containstable,'
-    + 'corr,covar_pop,covar_samp,cube,cume_dist,current_catalog,' +
+    'admin,after,aggregate,alias,array,asensitive,asymmetric,atomic,backup,before,binary,' +
+    'blob,boolean,breadth,break,browse,bulk,call,called,cardinality,checkpoint,class,clob,' +
+    'clustered,collect,completion,compute,condition,constructor,contains,containstable,' +
+    'corr,covar_pop,covar_samp,cube,cume_dist,current_catalog,' +
     'current_default_transform_group,current_path,current_role,current_schema,' +
     'current_transform_group_for_type,cycle,data,database,dbcc,deny,depth,deref,destroy,' +
     'destructor,deterministic,dictionary,disk,distributed,dump,dynamic,each,element,' +
@@ -3396,17 +3396,17 @@ const
     'xmlexists,xmlforest,xmliterate,xmlnamespaces,xmlparse,xmlpi,xmlquery,xmlserialize,' +
     'xmltable,xmltext,xmlvalidate',
   // dJet specific keywords (in addition to dDefault)
-    'longtext,memo,money,note,number,oleobject,owneraccess,parameters,percent,pivot,short,'
-    + 'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,'
-    + 'varbinary,varp,yesno',
+    'longtext,memo,money,note,number,oleobject,owneraccess,parameters,percent,pivot,short,' +
+    'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,' +
+    'varbinary,varp,yesno',
   // dMySQL specific keywords (in addition to dDefault)
-    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,'
-    + 'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,'
-    + 'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,'
-    + 'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,'
-    + 'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,'
-    + 'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,'
-    + 'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
+    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,' +
+    'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,' +
+    'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,' +
+    'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,' +
+    'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,' +
+    'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,' +
+    'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
     'master_ssl_verify_server_cert,master_ssl_verify_server_cert,maxvalue,' +
     'mediumblob,mediumint,mediumtext,middleint,minute_microsecond,minute_second,mod,' +
     'modifies,no_write_to_binlog,optimize,optionally,out,outfile,purge,range,range,' +
@@ -3417,13 +3417,13 @@ const
     'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,' +
     'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible',
   // dSQLite keywords (dDefault is not added to this list)
-    'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,'
-    + 'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,'
-    + 'pragma,raise,replace,row,select,statement,temp,trigger,vacuum,where',
+    'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,' +
+    'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,' +
+    'pragma,raise,replace,row,select,statement,temp,trigger,vacuum,where',
   // dFirebird specific keywords (in addition to dDefault)
-    'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,'
-    + 'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,'
-    + 'entry_point,exit,file,filter,function,gdscode,gen_id,generator,' +
+    'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,' +
+    'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,' +
+    'entry_point,exit,file,filter,function,gdscode,gen_id,generator,' +
     'group_commit_wait_time,if,inactive,input_type,log_buffer_size,logfile,manual,' +
     'maximum_segment,merge,message,module_name,num_log_buffers,output_type,over,' +
     'overflow,page,page_size,pages,parameter,parent,password,plan,post_event,protected,' +
@@ -3431,46 +3431,46 @@ const
     'returning_values,returns,segment,shadow,shared,singular,snapshot,sort,stability,' +
     'start,starting,starts,statistics,sub_type,suspend,trigger,type,variable,wait,while',
   // dNexusDB specific keywords (in addition to dDefault)
-    'abs,achar,assert,astring,autoinc,blob,block,blocksize,bool,boolean,byte,bytearray,'
-    + 'ceiling,chr,datetime,dword,empty,exp,floor,grow,growsize,ignore,image,initial,'
-    + 'initialsize,kana,largeint,locale,log,money,nullstring,nvarchar,percent,power,rand,'
-    + 'round,shortint,sort,string,symbols,text,tinyint,top,type,use,width,word',
+    'abs,achar,assert,astring,autoinc,blob,block,blocksize,bool,boolean,byte,bytearray,' +
+    'ceiling,chr,datetime,dword,empty,exp,floor,grow,growsize,ignore,image,initial,' +
+    'initialsize,kana,largeint,locale,log,money,nullstring,nvarchar,percent,power,rand,' +
+    'round,shortint,sort,string,symbols,text,tinyint,top,type,use,width,word',
   // dPostgreSQL specific keywords (in addition to dDefault)
-    'abort,access,admin,after,aggregate,also,always,analyse,analyze,array,assignment,'
-    + 'asymmetric,backward,before,bigint,binary,boolean,cache,called,chain,characteristics,'
-    + 'checkpoint,class,cluster,comment,committed,concurrently,configuration,content,'
-    + 'conversion,copy,cost,createdb,createrole,createuser,csv,current_role,cycle,database,'
-    + 'defaults,definer,delimiter,delimiters,dictionary,disable,discard,do,document,each,'
-    + 'enable,encoding,encrypted,enum,excluding,exclusive,explain,family,force,forward,'
-    + 'freeze,function,granted,greatest,handler,header,hold,if,ilike,immutable,implicit,'
-    + 'including,increment,indexes,inherit,inherits,inout,instead,invoker,isnull,'
-    + 'lancompiler,large,least,limit,listen,load,localtime,localtimestamp,location,lock,'
-    + 'login,mapping,maxvalue,minvalue,mode,move,new,nocreatedb,nocreaterole,nocreateuser,'
-    + 'noinherit,nologin,nosuperuser,nothing,notify,notnull,nowait,nulls,object,off,offset,'
-    + 'oids,old,operator,out,overlay,owned,owner,parser,password,placing,plans,prepared,'
-    + 'procedural,quote,reassign,recheck,reindex,release,rename,repeatable,replace,replica,'
-    + 'reset,restart,returning,returns,role,row,rule,savepoint,search,security,sequence,'
-    + 'serializable,setof,share,show,similar,simple,stable,standalone,start,statement,'
-    + 'statistics,stdin,stdout,storage,strict,strip,superuser,symmetric,sysid,system,'
-    + 'tablespace,temp,template,text,treat,trigger,truncate,trusted,type,uncommitted,'
-    + 'unencrypted,unlisten,until,vacuum,valid,validator,verbose,version,volatile,'
-    + 'whitespace,without,xml,xmlattributes,xmlconcat,xmlelement,xmlforest,xmlparse,xmlpi,'
-    + 'xmlroot,xmlserialize,yes',
+    'abort,access,admin,after,aggregate,also,always,analyse,analyze,array,assignment,' +
+    'asymmetric,backward,before,bigint,binary,boolean,cache,called,chain,characteristics,' +
+    'checkpoint,class,cluster,comment,committed,concurrently,configuration,content,' +
+    'conversion,copy,cost,createdb,createrole,createuser,csv,current_role,cycle,database,' +
+    'defaults,definer,delimiter,delimiters,dictionary,disable,discard,do,document,each,' +
+    'enable,encoding,encrypted,enum,excluding,exclusive,explain,family,force,forward,' +
+    'freeze,function,granted,greatest,handler,header,hold,if,ilike,immutable,implicit,' +
+    'including,increment,indexes,inherit,inherits,inout,instead,invoker,isnull,' +
+    'lancompiler,large,least,limit,listen,load,localtime,localtimestamp,location,lock,' +
+    'login,mapping,maxvalue,minvalue,mode,move,new,nocreatedb,nocreaterole,nocreateuser,' +
+    'noinherit,nologin,nosuperuser,nothing,notify,notnull,nowait,nulls,object,off,offset,' +
+    'oids,old,operator,out,overlay,owned,owner,parser,password,placing,plans,prepared,' +
+    'procedural,quote,reassign,recheck,reindex,release,rename,repeatable,replace,replica,' +
+    'reset,restart,returning,returns,role,row,rule,savepoint,search,security,sequence,' +
+    'serializable,setof,share,show,similar,simple,stable,standalone,start,statement,' +
+    'statistics,stdin,stdout,storage,strict,strip,superuser,symmetric,sysid,system,' +
+    'tablespace,temp,template,text,treat,trigger,truncate,trusted,type,uncommitted,' +
+    'unencrypted,unlisten,until,vacuum,valid,validator,verbose,version,volatile,' +
+    'whitespace,without,xml,xmlattributes,xmlconcat,xmlelement,xmlforest,xmlparse,xmlpi,' +
+    'xmlroot,xmlserialize,yes',
   // dDB2 specific keywords (in addition to dDefault)
-    'activate,document,dssize,dynamic,each,editproc,elseif,enable,encoding,encryption,'
-    + 'ending,erase,every,excluding,exclusive,exit,explain,fenced,fieldproc,file,final,free,'
-    + 'function,general,generated,graphic,handler,hash,hashed_value,hint,hold,hours,if,'
-    + 'including,inclusive,increment,inf,infinity,inherit,inout,integrity,isobid,iterate,jar,'
-    + 'java,keep,label,lateral,lc_ctype,leave,linktype,localdate,locale,localtime,'
-    + 'localtimestamp,locator,locators,lock,lockmax,locksize,long,loop,maintained,'
-    + 'materialized,maxvalue,microsecond,microseconds,minutes,minvalue,mode,modifies,'
-    + 'months,nan,new,new_table,nextval,nocache,nocycle,nodename,nodenumber,nomaxvalue,'
-    + 'nominvalue,noorder,normalized,nulls,numparts,obid,old,old_table,optimization,'
-    + 'optimize,out,over,overriding,package,padded,pagesize,parameter,part,partition,'
-    + 'partitioned,partitioning,partitions,password,path,piecesize,plan,prevval,priqty,'
-    + 'program,psid,query,queryno,range,rank,reads,recovery,referencing,refresh,release,'
-    + 'rename,repeat,reset,resignal,restart,result,result_set_locator,return,returns,role,'
-    + 'round_ceilingadd,round_downafter,round_flooralias,round_half_downall,' +
+    'activate,document,dssize,dynamic,each,editproc,elseif,enable,encoding,encryption,' +
+    'ending,erase,every,excluding,exclusive,exit,explain,fenced,fieldproc,file,final,free,' +
+    'function,general,generated,graphic,handler,hash,hashed_value,hint,hold,hours,if,' +
+    'including,inclusive,increment,inf,infinity,inherit,inout,integrity,isobid,iterate,jar,' +
+    'java,keep,label,lateral,lc_ctype,leave,linktype,localdate,locale,localtime,' +
+    'localtimestamp,locator,locators,lock,lockmax,locksize,long,loop,maintained,' +
+    'materialized,maxvalue,microsecond,microseconds,minutes,minvalue,mode,modifies,' +
+    'months,nan,new,new_table,nextval,nocache,nocycle,nodename,nodenumber,nomaxvalue,' +
+    'nominvalue,noorder,normalized,nulls,numparts,obid,old,old_table,optimization,' +
+    'optimize,out,over,overriding,package,padded,pagesize,parameter,part,partition,' +
+    'partitioned,partitioning,partitions,password,path,piecesize,plan,prevval,priqty,' +
+    'program,psid,query,queryno,range,rank,reads,recovery,referencing,refresh,release,' +
+    'rename,repeat,reset,resignal,restart,result,result_set_locator,return,returns,role,' +
+    'round_ceilingadd,round_downafter,round_flooralias,round_half_downall,' +
     'round_half_evenallocate,round_half_upallow,round_upalter,routineand,' +
     'row_numberas,rowany,rownumberasensitive,rowsassociate,rowsetasutime,rrnat,' +
     'runattributes,savepointaudit,schemaauthorization,scratchpadaux,scrollauxiliary,' +
@@ -3494,13 +3494,15 @@ const
     '');
 var
   db: TSQLDBDefinition;
-begin // search using fast binary lookup in the alphabetic ordered arrays
+begin
+  // search using fast binary lookup in the alphabetic ordered arrays
   if DB_KEYWORDS[dDefault] = nil then
     for db := Low(DB_KEYWORDS) to high(DB_KEYWORDS) do
       CSVToRawUTF8DynArray(DB_KEYWORDS_CSV[db], DB_KEYWORDS[db]);
   aWord := Trim(LowerCase(aWord));
-  if (aDB = dSQLite) or (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
-    high(DB_KEYWORDS[dDefault]), pointer(aWord)) < 0) then
+  if (aDB = dSQLite) or
+     (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
+       high(DB_KEYWORDS[dDefault]), pointer(aWord)) < 0) then
     if aDB <= dDefault then
       result := false
     else
