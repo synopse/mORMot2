@@ -2661,9 +2661,9 @@ function crc16(Data: PAnsiChar; Len: integer): cardinal;
 // heavily e.g. for TDynArray binary serialization, TSQLRestStorageInMemory
 // binary persistence, or CompressSynLZ/StreamSynLZ/FileSynLZ
 // - some numbers on Linux x86_64:
-// $ 2500 hash32 in 707us i.e. 3536067/s or 7.3 GB/s
 // $ 2500 xxhash32 in 1.34ms i.e. 1861504/s or 3.8 GB/s
 // $ 2500 crc32c in 943us i.e. 2651113/s or 5.5 GB/s  (SSE4.2 disabled)
+// $ 2500 hash32 in 707us i.e. 3536067/s or 7.3 GB/s
 // $ 2500 crc32c in 387us i.e. 6459948/s or 13.4 GB/s (SSE4.2 enabled)
 function Hash32(Data: PCardinalArray; Len: integer): cardinal; overload;
 

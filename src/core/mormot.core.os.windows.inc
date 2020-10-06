@@ -397,8 +397,8 @@ var s: AnsiString;
       FThreadID: LongWord; // thread ID (-1 indicates caller thread)
       FFlags: LongWord;    // reserved for future use, must be zero
     end;
-    {$endif}
-    {$endif}
+    {$endif MSWINDOWS}
+    {$endif ISDELPHIXE2}
 begin
   if not IsDebuggerPresent then
     exit;
