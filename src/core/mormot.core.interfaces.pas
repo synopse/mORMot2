@@ -432,6 +432,9 @@ const
   // ease method calls
   MAX_METHOD_ARGS = 32;
 
+  // QueryInterface, _AddRef and _Release methods are hard-coded
+  RESERVED_VTABLE_SLOTS = 3;
+
 type
   /// internal pseudo methods when an interface is used as remote service
   // - match TInterfaceFactory MethodIndex 0..3
@@ -457,8 +460,8 @@ type
 
   /// may be used to store the Methods[] indexes of a TInterfaceFactory
   // - current implementation handles up to 128 methods, a limit above
-  // which "Interface Segregation" principles is obviously broken
-  TInterfaceFactoryMethodBits = set of 0..MAX_METHOD_COUNT - 1;
+  // which "Interface Segregation" principle is obviously broken
+  TInterfaceFactoryMethodBits = set of 0 .. MAX_METHOD_COUNT - 1;
 
   /// a dynamic array of TInterfaceFactory instances
   TInterfaceFactoryObjArray = array of TInterfaceFactory;
@@ -625,7 +628,6 @@ type
     property InterfaceName: RawUTF8 read fInterfaceName;
   end;
 
-
   {$ifdef HASINTERFACERTTI}
 
   /// class handling interface RTTI and fake implementation class
@@ -660,7 +662,6 @@ type
     class procedure RegisterInterface(aInterface: PRttiInfo); virtual;
   end;
 
-
   /// a record type to be used as result for a function method for custom content
   // for interface-based services
   // - all answers are pure JSON object by default: using this kind of record
@@ -689,63 +690,6 @@ type
 
   PServiceCustomAnswer = ^TServiceCustomAnswer;
 
-  /// event used by TInterfaceFactory and TServiceMethodExecute to run
-  // a method from a fake instance
-  // - aMethod will specify which method is to be executed
-  // - aParams will contain the input parameters, encoded as a JSON array,
-  // without the [ ] characters (e.g. '1,"arg2",3')
-  // - shall return TRUE on success, or FALSE in case of failure, with
-  // a corresponding explanation in aErrorMsg
-  // - method results shall be serialized as JSON in aResult;  if
-  // aServiceCustomAnswer is not nil, the result shall use this record
-  // to set HTTP custom content and headers, and ignore aResult content
-  // - aClientDrivenID can be set optionally to specify e.g. an URI-level session
-  TOnFakeInstanceInvoke = function(const aMethod: TInterfaceMethod;
-    const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
-    aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
-
-  /// event called when destroying a TInterfaceFactory's fake instance
-  /// - this method will be run when the fake class instance is destroyed
-  // (e.g. if aInstanceCreation is sicClientDriven, to notify the server
-  // than the client life time just finished)
-  TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
-
-  /// how TInterfacedObjectFromFactory will perform its execution
-  // - by default, fInvoke() will receive standard JSON content, unless
-  // ifoJsonAsExtended is set, and extended JSON is used
-  // - ifoDontStoreVoidJSON will ensure objects and records won't include
-  // default void fields in JSON serialization
-  TInterfacedObjectFromFactoryOption = (
-    ifoJsonAsExtended, ifoDontStoreVoidJSON);
-
-  /// defines how TInterfacedObjectFromFactory will perform its execution
-  TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;
-
-  {$M+}
-  /// abstract class handling a generic interface implementation class
-  TInterfacedObjectFromFactory = class(TInterfacedObject)
-  protected
-    fFactory: TInterfaceFactory;
-    fOptions: TInterfacedObjectFromFactoryOptions;
-    fInvoke: TOnFakeInstanceInvoke;
-    fNotifyDestroy: TOnFakeInstanceDestroy;
-    fClientDrivenID: Cardinal;
-  public
-    /// create an instance, using the specified interface
-    constructor Create(aFactory: TInterfaceFactory;
-      aOptions: TInterfacedObjectFromFactoryOptions;
-      const aInvoke: TOnFakeInstanceInvoke;
-      const aNotifyDestroy: TOnFakeInstanceDestroy);
-    /// release the remote server instance (in sicClientDriven mode);
-    destructor Destroy; override;
-  published
-    /// the associated interface factory class
-    property Factory: TInterfaceFactory read fFactory;
-    /// the ID used in sicClientDriven mode
-    property ClientDrivenID: Cardinal read fClientDrivenID;
-  end;
-  {$M-}
-
 
 /// returns the interface name of a registered GUID, or its hexadecimal value
 function ToText({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
@@ -765,6 +709,7 @@ function ObjectFromInterface(const aValue: IInterface): TObject;
 // TInterfaceFactory.CreateFakeInstance kind of classes
 function ObjectFromInterfaceImplements(const aValue: IInterface;
   const aInterface: TGUID): boolean;
+
 
 
 { ************ TInterfaceResolver TInjectableObject for IoC / Dependency Injection  }
@@ -1945,6 +1890,118 @@ type
     function TempTextWriter: TTextWriter;
   end;
 
+  /// event used by TInterfaceFactory and TServiceMethodExecute to run
+  // a method from a fake instance
+  // - aMethod will specify which method is to be executed
+  // - aParams will contain the input parameters, encoded as a JSON array,
+  // without the [ ] characters (e.g. '1,"arg2",3')
+  // - shall return TRUE on success, or FALSE in case of failure, with
+  // a corresponding explanation in aErrorMsg
+  // - method results shall be serialized as JSON in aResult;  if
+  // aServiceCustomAnswer is not nil, the result shall use this record
+  // to set HTTP custom content and headers, and ignore aResult content
+  // - aClientDrivenID can be set optionally to specify e.g. an URI-level session
+  TOnFakeInstanceInvoke = function(const aMethod: TInterfaceMethod;
+    const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+    aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
+
+  /// event called when destroying a TInterfaceFactory's fake instance
+  /// - this method will be run when the fake class instance is destroyed
+  // (e.g. if aInstanceCreation is sicClientDriven, to notify the server
+  // than the client life time just finished)
+  TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
+
+  /// how TInterfacedObjectFromFactory will perform its execution
+  // - by default, fInvoke() will receive standard JSON content, unless
+  // ifoJsonAsExtended is set, and extended JSON is used
+  // - ifoDontStoreVoidJSON will ensure objects and records won't include
+  // default void fields in JSON serialization
+  TInterfacedObjectFromFactoryOption = (
+    ifoJsonAsExtended, ifoDontStoreVoidJSON);
+
+  /// defines how TInterfacedObjectFromFactory will perform its execution
+  TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;
+
+  {$M+}
+  /// abstract class handling a generic interface implementation class
+  TInterfacedObjectFromFactory = class(TInterfacedObject)
+  protected
+    fFactory: TInterfaceFactory;
+    fOptions: TInterfacedObjectFromFactoryOptions;
+    fInvoke: TOnFakeInstanceInvoke;
+    fNotifyDestroy: TOnFakeInstanceDestroy;
+    fClientDrivenID: Cardinal;
+  public
+    /// create an instance, using the specified interface
+    constructor Create(aFactory: TInterfaceFactory;
+      aOptions: TInterfacedObjectFromFactoryOptions;
+      const aInvoke: TOnFakeInstanceInvoke;
+      const aNotifyDestroy: TOnFakeInstanceDestroy);
+    /// release the remote server instance (in sicClientDriven mode);
+    destructor Destroy; override;
+  published
+    /// the associated interface factory class
+    property Factory: TInterfaceFactory read fFactory;
+    /// the ID used in sicClientDriven mode
+    property ClientDrivenID: Cardinal read fClientDrivenID;
+  end;
+  {$M-}
+
+  /// instances of this class will emulate a given interface
+  // - as used e.g. by TInterfaceFactoryClient.CreateFakeInstance
+  // - has a simple cross-CPU JIT engine to redirect to a FakeCall() method
+  TInterfacedObjectFake = class(TInterfacedObjectFromFactory)
+  protected
+    fVTable: PPointerArray;
+    fServiceFactory: TObject; // holds a TServiceFactory instance
+    // the JITed asm stubs will redirect to this low-level function
+    function FakeCall(var aCall): Int64;
+    // used internally to compute the actual instance from the FakeCall()
+    function SelfFromInterface: TInterfacedObjectFake;
+      {$ifdef HASINLINE}inline;{$endif}
+    // should be overriden to support interface parameters (i.e. callbacks)
+    procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
+      const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); virtual;
+    {$ifdef FPC}
+    {$ifdef CPUARM}
+    // on ARM, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
+    procedure ArmFakeStub;
+    {$endif CPUARM}
+    {$ifdef CPUAARCH64}
+    // on Aarch64, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
+    procedure AArch64FakeStub;
+    {$endif CPUAARCH64}
+    function FakeQueryInterface(
+      {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+      out Obj): longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function Fake_AddRef: longint;  {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    function Fake_Release: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
+    {$else}
+    function FakeQueryInterface(const IID: TGUID; out obj): HResult; stdcall;
+    function Fake_AddRef: Integer; stdcall;
+    function Fake_Release: Integer; stdcall;
+    {$endif FPC}
+  public
+    /// create an instance, using the specified interface and factory
+    constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TObject;
+      aOptions: TInterfacedObjectFromFactoryOptions;
+      const aInvoke: TOnFakeInstanceInvoke;
+      const aNotifyDestroy: TOnFakeInstanceDestroy);
+    /// retrieve one instance of this interface, increasing its RefCount
+    procedure Get(out obj);
+  end;
+
+  /// abstract class defining a FakeInvoke() virtual method via a
+  // TOnFakeInstanceInvoke signature
+  TInterfacedObjectFakeCallback = class(TInterfacedObjectFake)
+  protected
+    fLogClass: TSynLogClass;
+    fName: RawUTF8;
+    function FakeInvoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
+      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+      aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
+  end;
+
 
 /// low-level internal function returning the TServiceRunningContext threadvar
 function PerThreadRunningContextAddress: pointer;
@@ -2597,12 +2654,9 @@ end;
 
 { TInterfacedObjectFake }
 
-const
-  // QueryInterface, _AddRef and _Release methods are hard-coded
-  RESERVED_VTABLE_SLOTS = 3;
-
 // see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
 
+const
 {$ifdef CPU64}
   // maximum stack size at method execution must match .PARAMS 64 (minus 4 regs)
   MAX_EXECSTACK = 60 * 8;
@@ -2778,45 +2832,6 @@ type
     Stack: packed array[word] of byte;
   end;
 
-  /// instances of this class will emulate a given interface
-  // - as used by TInterfaceFactory.CreateFakeInstance
-  TInterfacedObjectFake = class(TInterfacedObjectFromFactory)
-  protected
-    fVTable: PPointerArray;
-    fServiceFactory: TObject; // holds a TServiceFactory instance
-    function FakeCall(var aCall: TFakeCallStack): Int64;
-    {$ifdef FPC}
-    {$ifdef CPUARM}
-    // on ARM, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
-    procedure ArmFakeStub;
-    {$endif CPUARM}
-    {$ifdef CPUAARCH64}
-    // on Aarch64, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
-    procedure AArch64FakeStub;
-    {$endif CPUAARCH64}
-    function FakeQueryInterface(
-      {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
-      out Obj): longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    function Fake_AddRef: longint;  {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    function Fake_Release: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    {$else}
-    function FakeQueryInterface(const IID: TGUID; out obj): HResult; stdcall;
-    function Fake_AddRef: Integer; stdcall;
-    function Fake_Release: Integer; stdcall;
-    {$endif FPC}
-    function SelfFromInterface: TInterfacedObjectFake;
-      {$ifdef HASINLINE}inline;{$endif}
-    procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
-      const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); virtual;
-  public
-    /// create an instance, using the specified interface
-    constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TObject;
-      aOptions: TInterfacedObjectFromFactoryOptions;
-      const aInvoke: TOnFakeInstanceInvoke;
-      const aNotifyDestroy: TOnFakeInstanceDestroy);
-    /// retrieve one local instance of this interface
-    procedure Get(out obj);
-  end;
 
 constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory;
   aServiceFactory: TObject; aOptions: TInterfacedObjectFromFactoryOptions;
@@ -2876,10 +2891,11 @@ begin
   _AddRef;
 end;
 
-function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
+function TInterfacedObjectFake.FakeCall(var aCall): Int64;
 var
   method: PInterfaceMethod;
   resultType: TInterfaceMethodValueType; // type of value stored into result
+  ctxt: TFakeCallStack absolute aCall;
 
   procedure RaiseError(const Format: RawUTF8; const Args: array of const);
   var
@@ -2927,9 +2943,9 @@ var
           begin
             {$ifdef HAS_FPREG} // x64, arm, aarch64
             if FPRegisterIdent > 0 then
-              V := @aCall.FPRegs[FPREG_FIRST + FPRegisterIdent - 1]
+              V := @ctxt.FPRegs[FPREG_FIRST + FPRegisterIdent - 1]
             else if RegisterIdent > 0 then
-              V := @aCall.ParamRegs[PARAMREG_FIRST + RegisterIdent - 1]
+              V := @ctxt.ParamRegs[PARAMREG_FIRST + RegisterIdent - 1]
             else
             {$endif HAS_FPREG}
               V := nil;
@@ -2940,14 +2956,14 @@ var
               REGEAX:
                 RaiseError('unexpected self', []);
               REGEDX:
-                V := @aCall.EDX;
+                V := @ctxt.EDX;
               REGECX:
-                V := @aCall.ECX;
+                V := @ctxt.ECX;
             else
             {$endif CPUX86}
               if V = nil then
                 if (SizeInStack > 0) and (InStackOffset <> STACKOFFSET_NONE) then
-                  V := @aCall.Stack[InStackOffset]
+                  V := @ctxt.Stack[InStackOffset]
                 else
                   V := @I64s[IndexVar]; // for results in CPU
             {$ifdef CPUX86}
@@ -3067,10 +3083,10 @@ begin
      forged to call a remote SOA server or mock/stub an interface
   *)
   self := SelfFromInterface;
-  if aCall.MethodIndex >= fFactory.fMethodsCount then
+  if ctxt.MethodIndex >= fFactory.MethodsCount then
     raise EInterfaceFactory.CreateUTF8('%.FakeCall(%.%) failed: out of range method %>=%',
-      [self, fFactory.fInterfaceName, aCall.MethodIndex, fFactory.fMethodsCount]);
-  method := @fFactory.fMethods[aCall.MethodIndex];
+      [self, fFactory.fInterfaceName, ctxt.MethodIndex, fFactory.MethodsCount]);
+  method := @fFactory.fMethods[ctxt.MethodIndex];
   if not Assigned(fInvoke) then
     RaiseError('fInvoke=nil', []);
   result := 0;
@@ -3079,7 +3095,7 @@ begin
   case resultType of // al/ax/eax/eax:edx/rax already in result
   {$ifdef HAS_FPREG}
     imvDouble, imvDateTime:
-      aCall.FPRegs[FPREG_FIRST] := unaligned(PDouble(@result)^);
+      ctxt.FPRegs[FPREG_FIRST] := unaligned(PDouble(@result)^);
   {$else}
     imvDouble, imvDateTime:
       asm
@@ -3350,15 +3366,15 @@ begin
   if fMethodsCount = 0 then
     raise EInterfaceFactory.CreateUTF8('%.Create(%): interface has ' +
       'no RTTI - should inherit from IInvokable', [self, fInterfaceName]);
-  if fMethodsCount > MAX_METHOD_COUNT then
+  if MethodsCount > MAX_METHOD_COUNT then
     raise EInterfaceFactory.CreateUTF8(
       '%.Create(%): interface has too many methods (%), so breaks the ' +
-      'Interface Segregation Principle', [self, fInterfaceName, fMethodsCount]);
+      'Interface Segregation Principle', [self, fInterfaceName, MethodsCount]);
   fMethodIndexCurrentFrameCallback := -1;
   fMethodIndexCallbackReleased := -1;
-  SetLength(fMethods,fMethodsCount);
+  SetLength(fMethods, MethodsCount);
   // compute additional information for each method
-  for m := 0 to fMethodsCount - 1 do
+  for m := 0 to MethodsCount - 1 do
   with fMethods[m] do
   begin
     InterfaceDotMethodName := fInterfaceURI + '.' + URI;
@@ -3477,7 +3493,7 @@ begin
       ArgsInputIsOctetStream := true;
   end;
   // compute asm low-level layout of the parameters for each method
-  for m := 0 to fMethodsCount - 1 do
+  for m := 0 to MethodsCount - 1 do
   with fMethods[m] do
   begin
     // prepare stack and register layout
@@ -3672,7 +3688,7 @@ begin
   WR := TTextWriter.CreateOwnedStream;
   try
     // compute the default results JSON array for all methods
-    for m := 0 to fMethodsCount - 1 do
+    for m := 0 to MethodsCount - 1 do
     with fMethods[m] do
     begin
       WR.CancelAll;
@@ -3688,7 +3704,7 @@ begin
     // compute the service contract as a JSON array
     WR.CancelAll;
     WR.Add('[');
-    for m := 0 to fMethodsCount - 1 do
+    for m := 0 to MethodsCount - 1 do
     with fMethods[m] do
     begin
       WR.Add('{"method":"%","arguments":[',[URI]);
@@ -3715,9 +3731,9 @@ begin
     result := -1
   else
   begin
-    if fMethodsCount < 10 then
+    if MethodsCount < 10 then
     begin
-      for result := 0 to fMethodsCount - 1 do
+      for result := 0 to MethodsCount - 1 do
         if IdemPropNameU(fMethods[result].URI, aMethodName) then
           exit;
       result := -1;
@@ -3744,7 +3760,7 @@ function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
   alsoSearchExactMethodName: boolean): integer;
 begin
   if PosExChar('.', aFullMethodName) <> 0 then
-    for result := 0 to fMethodsCount - 1 do
+    for result := 0 to MethodsCount - 1 do
       if IdemPropNameU(fMethods[result].InterfaceDotMethodName, aFullMethodName) then
         exit;
   if alsoSearchExactMethodName then
@@ -3793,7 +3809,7 @@ begin
   else
   begin
     dec(MethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
-    if cardinal(MethodIndex) < fMethodsCount then
+    if cardinal(MethodIndex) < MethodsCount then
       result := fMethods[MethodIndex].URI
     else
       result := '';
@@ -4006,28 +4022,28 @@ begin
     try
       if fFakeVTable = nil then // avoid race condition error
       begin
-        SetLength(fFakeVTable, fMethodsCount + RESERVED_VTABLE_SLOTS);
+        SetLength(fFakeVTable, MethodsCount + RESERVED_VTABLE_SLOTS);
         // set IInterface required methods
         fFakeVTable[0] := @TInterfacedObjectFake.FakeQueryInterface;
         fFakeVTable[1] := @TInterfacedObjectFake.Fake_AddRef;
         fFakeVTable[2] := @TInterfacedObjectFake.Fake_Release;
-        if fMethodsCount = 0 then
+        if MethodsCount = 0 then
         begin
           result := pointer(fFakeVTable);
           exit;
         end;
         // reserve executable memory for JIT of all defined methods
         {$ifdef CPUX86}
-        tmp := fMethodsCount * 24;
+        tmp := MethodsCount * 24;
         {$endif CPUX86}
         {$ifdef CPUX64}
-        tmp := fMethodsCount * 16;
+        tmp := MethodsCount * 16;
         {$endif CPUX64}
         {$ifdef CPUARM}
-        tmp := fMethodsCount * 12;
+        tmp := MethodsCount * 12;
         {$endif CPUARM}
         {$ifdef CPUAARCH64}
-        tmp := ($120 shr 2) + fMethodsCount * 28;
+        tmp := ($120 shr 2) + MethodsCount * 28;
         {$endif CPUAARCH64}
         fFakeStub := ReserveExecutableMemory(tmp);
         P := pointer(fFakeStub);
@@ -4037,7 +4053,7 @@ begin
         // disable execution permission of memory to be able to write into memory
         ReserveExecutableMemoryPageAccess(P, {exec=}false);
         // create VMT entry for each method
-        for i := 0 to fMethodsCount - 1 do
+        for i := 0 to MethodsCount - 1 do
         begin
           fFakeVTable[i + RESERVED_VTABLE_SLOTS] := P;
           {$ifdef CPUX64}
@@ -4350,6 +4366,7 @@ begin
   else
     result := obj.GetInterfaceEntry(aInterface) <> nil;
 end;
+
 
 
 { ************ TInterfaceResolver TInjectableObject for Dependency Injection  }
@@ -6896,6 +6913,27 @@ begin
   finally
     AfterExecute;
   end;
+end;
+
+
+{ TInterfacedObjectFakeCallback }
+
+function TInterfacedObjectFakeCallback.FakeInvoke(const aMethod: TServiceMethod;
+  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
+  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+begin
+  if fLogClass <> nil then
+    fLogClass.Add.Log(sllTrace, '%.FakeInvoke %(%)',
+      [ClassType, aMethod.InterfaceDotMethodName, aParams], self);
+  if aMethod.ArgsOutputValuesCount > 0 then
+  begin
+    if aErrorMsg <> nil then
+      FormatUTF8('%.FakeInvoke [%]: % has out parameters',
+        [self, fName, aMethod.InterfaceDotMethodName], aErrorMsg^);
+    result := false;
+  end
+  else
+    result := true;
 end;
 
 
