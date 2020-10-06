@@ -1809,6 +1809,22 @@ function ObjectToJSON(Value: TObject;
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
 
+/// persist a class instance into a JSON file
+// - returns TRUE on success, false on error (e.g. the file name is invalid
+// or the file is existing and could not be overwritten)
+function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
+  Options: TTextWriterWriteObjectOptions = [woHumanReadable]): boolean;
+
+/// will serialize any TObject into its expanded UTF-8 JSON representation
+// - includes debugger-friendly information, similar to TSynLog, i.e.
+// class name and sets/enumerates as text
+// - could be used to create a TDocVariant object with full information
+// - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
+// also able to serialize plain Exception as a simple '{"Exception":"Message"}',
+// and append .map/.mab source code line number for ESynException
+function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions =
+  [woDontStoreDefault, woHumanReadable, woStoreClassName, woStorePointer]): RawUTF8;
+
 /// fill a record content from a JSON serialization as saved by
 // TTextWriter.AddRecordJSON / RecordSaveJSON
 // - will use default Base64 encoding over RecordSave() binary - or custom true
@@ -8889,6 +8905,33 @@ begin
   finally
     Free;
   end;
+end;
+
+function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
+  Options: TTextWriterWriteObjectOptions): boolean;
+var
+  humanread: boolean;
+  json: RawUTF8;
+begin
+  humanread := woHumanReadable in Options;
+  if humanread and (woHumanReadableEnumSetAsComment in Options) then
+    humanread := false
+  else
+    // JsonReformat() erases comments
+    exclude(Options, woHumanReadable);
+  json := ObjectToJSON(Value, Options);
+  if humanread then
+    // woHumanReadable not working with custom JSON serializers, e.g. T*ObjArray
+    // TODO: check if this is always the case with our mORMot2 new serialization
+    result := JSONBufferReformatToFile(pointer(json), JSONFile)
+  else
+    result := FileFromString(json, JSONFile);
+end;
+
+function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
+begin
+  // our JSON serialization detects and serialize Exception.Message
+  result := ObjectToJSON(Value, Options);
 end;
 
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: PRttiInfo;
