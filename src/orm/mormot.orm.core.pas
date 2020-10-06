@@ -2631,6 +2631,14 @@ type
     // - just a wrapper around the overloaded BatchSend() method without the
     // Results: TIDDynArray parameter
     function BatchSend(Batch: TSQLRestBatch): integer; overload;
+    /// raw send/execute the supplied JSON BATCH content, and return the expected array
+    // - this method will be implemented for TSQLRestClient and TSQLRestServer only
+    // - default implementation will trigger an EORMException
+    // - warning: supplied JSON Data can be parsed in-place, so modified
+    // - you should not use this low-level method in your code, but rather the
+    // overloaded BatchSend() functions; is defined for raw asynchronous call
+    function BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
+       var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
     // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
