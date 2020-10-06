@@ -11,20 +11,19 @@ unit mormot.orm.core;
     - JSON Object Decoder and SQL Generation
     - TJSONSerializer Class for TSQLRecord Serialization
     - TSQLPropInfo Classes for Efficient ORM Processing
-    - TSQLRecord TSQLModel TSQLTable IRestORM Core Definitions
-      (defined as a single "type" statement due to classes coupling)
-        * IRestORM IRestORMServer Definitions
-        * TSQLRecord Definition
-        * RecordRef Wrapper Definition
-        * TSQLTable TSQLTableJSON Definitions
-        * TSQLRecordMany Definition
-        * Virtual TSQLRecord Definitions
-        * TSQLRecordProperties Definitions
-        * TSQLModel TSQLModelRecordProperties Definitions
-        * TSQLRestCache Definition
-        * TSQLRestBatch TSQLRestBatchLocked Definitions
-        * TSynValidateRest TSynValidateUniqueField Definitions
-        * TSQLAccessRights Definition
+    - IRestORM IRestORMServer Definitions
+    - TSQLRecord Definition
+    - RecordRef Wrapper Definition
+    - TSQLTable TSQLTableJSON Definitions
+    - TSQLRecordMany Definition
+    - Virtual TSQLRecord Definitions
+    - TSQLRecordProperties Definitions
+    - TSQLModel TSQLModelRecordProperties Definitions
+    - TSQLRestCache Definition
+    - TSQLRestBatch TSQLRestBatchLocked Definitions
+    - TSynValidateRest TSynValidateUniqueField Definitions
+    - TSQLAccessRights Definition
+    - TSQLRecord High-Level Parents
 
    This unit is not depending from mormot.rest.core so can be used as a pure
    ORM layer for your projects. IRestORM is the main abstract entry point.
@@ -414,27 +413,24 @@ procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID); 
 procedure AddID(var Values: TIDDynArray; Value: TID); overload;
 
 /// set the TID (=64-bit integer) value from the numerical text stored in P^
-// - just a redirection to SynCommons.SetInt64()
+// - just a redirection to SetInt64()
 procedure SetID(P: PUTF8Char; var result: TID); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// set the TID (=64-bit integer) value from the numerical text stored in U
-// - just a redirection to SynCommons.SetInt64()
-
+// - just a redirection to SetInt64()
 procedure SetID(const U: RawByteString; var result: TID); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-
 function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-
 procedure BlobToTSQLRawBlob(P: PUTF8Char; var result: TSQLRawBlob); overload;
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
@@ -1752,6 +1748,7 @@ const
   // - this value is the one used by SQLite3 R-Tree virtual table
   RTREE_MAX_DIMENSION = 5;
 
+// most types are defined as a single "type" statement due to classes coupling
 type
   {$M+}
   { we expect RTTI information for the published properties of these
@@ -1812,7 +1809,7 @@ type
   // reference to the current TSQLRest instance, without the REST/communication
   // particularities
   IRestORM = interface
-
+    ['{E3C24375-0E44-4C9F-B72C-89DBA8A8A9BD}']
     /// get the row count of a specified table
     // - returns -1 on error
     // - returns the row count of the table on success
@@ -2664,6 +2661,7 @@ type
 
   /// Server-Specific Object-Relational-Mapping calls for CRUD access to a database
   IRestORMServer = interface(IRestORM)
+    ['{F8FB2109-5629-4DFB-A74C-7A0F86F91362}']
     /// create an index for the specific FieldName
     // - will call CreateSQLMultiIndex() internaly
     function CreateSQLIndex(Table: TSQLRecordClass; const FieldName: RawUTF8;
@@ -7063,6 +7061,72 @@ function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference; ove
 
 procedure RecordRefToID(var aArray: TInt64DynArray);
 
+
+
+{ ************** TSQLRecord High-Level Parents }
+
+type
+  /// root class for defining and mapping database records with case-insensitive
+  // NOCASE collation
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
+  // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
+  // UTF8ILComp() to handle most western languages, but is not standard
+  // - you may inherit from this class to ensure any text field will use the
+  // faster and SQLite3 built-in NOCASE collation, handling only 7-bit A-Z chars
+  // - inherit from TSQLRecordNoCase or TSQLRecordCaseSensitive if you expect
+  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // SynSQLite3.pas/SynDBExplorer)
+  TSQLRecordNoCase = class(TSQLRecord)
+  protected
+    /// will call Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE')
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
+  /// root class for defining and mapping database records with case-sensitive
+  // BINARY collation
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
+  // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
+  // UTF8ILComp() to handle most western languages, but is not standard
+  // - you may inherit from this class to ensure any text field will use the
+  // faster and SQLite3 built-in BINARY collation, which is case-sensitive
+  // - inherit from TSQLRecordNoCase or TSQLRecordCaseSensitive if you expect
+  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // SynSQLite3.pas/SynDBExplorer)
+  TSQLRecordCaseSensitive = class(TSQLRecord)
+  protected
+    /// will call Props.SetCustomCollationForAll(sftUTF8Text,'BINARY')
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
+  /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED variants
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  TSQLRecordNoCaseExtended = class(TSQLRecordNoCase)
+  protected
+    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
+  /// database records with BINARY collation and JSON_OPTIONS_FAST_EXTENDED variants
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  TSQLRecordCaseSensitiveExtended = class(TSQLRecordCaseSensitive)
+  protected
+    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
+  /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED
+  // variants, and itoNoIndex4TID option to avoid indexes on TID/T*ID properties
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  TSQLRecordNoCaseExtendedNoID = class(TSQLRecordNoCaseExtended)
+  public
+    /// overriden method forcing no index creation on TID/T*ID properties
+    class procedure InitializeTable(const Server: IRestORMServer;
+     const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
+  end;
 
 
 implementation
@@ -21433,6 +21497,49 @@ begin
   FormatUTF8('%,%,%,%,%', [Byte(AllowRemoteExecute),
     GetBitCSV(GET, MAX_SQLTABLES), GetBitCSV(POST, MAX_SQLTABLES),
     GetBitCSV(PUT, MAX_SQLTABLES), GetBitCSV(DELETE, MAX_SQLTABLES)], result);
+end;
+
+
+{ ************** TSQLRecord High-Level Parents }
+
+{ TSQLRecordNoCase }
+
+class procedure TSQLRecordNoCase.InternalDefineModel(Props: TSQLRecordProperties);
+begin
+  Props.SetCustomCollationForAll(sftUTF8Text, 'NOCASE');
+end;
+
+{ TSQLRecordCaseSensitive }
+
+class procedure TSQLRecordCaseSensitive.InternalDefineModel(Props: TSQLRecordProperties);
+begin
+  Props.SetCustomCollationForAll(sftUTF8Text, 'BINARY');
+end;
+
+{ TSQLRecordNoCaseExtended }
+
+class procedure TSQLRecordNoCaseExtended.InternalDefineModel(Props: TSQLRecordProperties);
+begin
+  inherited InternalDefineModel(Props); // set NOCASE collation
+  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+end;
+
+{ TSQLRecordCaseSensitiveExtended }
+
+class procedure TSQLRecordCaseSensitiveExtended.InternalDefineModel(
+  Props: TSQLRecordProperties);
+begin
+  inherited InternalDefineModel(Props); // set BINARY collation
+  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+end;
+
+{ TSQLRecordNoCaseExtendedNoID }
+
+class procedure TSQLRecordNoCaseExtendedNoID.InitializeTable(
+  const Server: IRestORMServer; const FieldName: RawUTF8;
+  Options: TSQLInitializeTableOptions);
+begin
+  inherited InitializeTable(Server, FieldName, Options + [itoNoIndex4TID]);
 end;
 
 
