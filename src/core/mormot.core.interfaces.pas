@@ -9,7 +9,7 @@ unit mormot.core.interfaces;
    Implements SOLID Process via Interface types
     - IInvokable Interface Methods and Parameters RTTI Extraction
     - TInterfaceFactory Generating Runtime Implementation Class
-    - TInterfaceResolver TInjectableObject for Dependency Injection
+    - TInterfaceResolver TInjectableObject for IoC / Dependency Injection
     - TInterfaceStub TInterfaceMock for Dependency Mocking
 
   *****************************************************************************
@@ -48,38 +48,38 @@ type
   // low-level format by default, or as true JSON objects since Delphi 2010 or
   // after registration via a TTextWriter.RegisterCustomJSONSerializer call
   // - smvRawJSON will transmit the raw JSON content, without serialization
-  TServiceMethodValueType = (
-    smvNone, smvSelf, smvBoolean, smvEnum, smvSet, smvInteger, smvCardinal,
-    smvInt64, smvDouble, smvDateTime, smvCurrency,
-    smvRawUTF8, smvString, smvRawByteString, smvWideString, smvBinary,
-    smvRecord, smvVariant, smvObject, smvRawJSON, smvDynArray, smvInterface);
+  TInterfaceMethodValueType = (
+    imvNone, imvSelf, imvBoolean, imvEnum, imvSet, imvInteger, imvCardinal,
+    imvInt64, imvDouble, imvDateTime, imvCurrency,
+    imvRawUTF8, imvString, imvRawByteString, imvWideString, imvBinary,
+    imvRecord, imvVariant, imvObject, imvRawJSON, imvDynArray, imvInterface);
 
   /// handled kind of parameters internal variables for an interface-based method
   // - reference-counted variables will have their own storage
   // - all non referenced-counted variables are stored within some 64-bit content
-  // - smvVariant kind of parameter will be handled as a special smvvRecord
-  TServiceMethodValueVar = (
-    smvvNone, smvvSelf, smvv64, smvvRawUTF8, smvvString, smvvWideString,
-    smvvRecord, smvvObject, smvvDynArray, smvvInterface);
+  // - imvVariant kind of parameter will be handled as a special imvvRecord
+  TInterfaceMethodValueVar = (
+    imvvNone, imvvSelf, imvv64, imvvRawUTF8, imvvString, imvvWideString,
+    imvvRecord, imvvObject, imvvDynArray, imvvInterface);
 
   /// set of parameters for an interface-based service provider method
-  TServiceMethodValueTypes = set of TServiceMethodValueType;
+  TInterfaceMethodValueTypes = set of TInterfaceMethodValueType;
 
   /// handled kind of parameters direction for an interface-based service method
   // - IN, IN/OUT, OUT directions can be applied to arguments, and will
   // be available through our JSON-serialized remote access: smdVar and smdOut
   // kind of parameters will be returned within the "result": JSON array
   // - smdResult is used for a function method, to handle the returned value
-  TServiceMethodValueDirection = (
-    smdConst, smdVar, smdOut, smdResult);
+  TInterfaceMethodValueDirection = (
+    imdConst, imdVar, imdOut, imdResult);
 
   /// set of parameters direction for an interface-based service method
-  TServiceMethodValueDirections = set of TServiceMethodValueDirection;
+  TInterfaceMethodValueDirections = set of TInterfaceMethodValueDirection;
 
   /// set of low-level processing options at assembly level
-  // - vIsString is included for smvRawUTF8, smvString, smvRawByteString and
-  // smvWideString kind of parameter (smvRecord has it to false, even if they
-  // are Base-64 encoded within the JSON content, and also smvVariant/smvRawJSON)
+  // - vIsString is included for imvRawUTF8, imvString, imvRawByteString and
+  // imvWideString kind of parameter (imvRecord has it to false, even if they
+  // are Base-64 encoded within the JSON content, and also imvVariant/imvRawJSON)
   // - vPassedByReference is included if the parameter is passed as reference
   // (i.e. defined as var/out, or is a record or a reference-counted type result)
   // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
@@ -88,18 +88,18 @@ type
   // Information (e.g. a bank card number or a plain password), which type has
   // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
   // so that low-level logging won't include such values
-  // - vIsQword is set for ValueType=smvInt64 over a QWord unsigned 64-bit value
-  // - vIsDynArrayString is set for ValueType=smvDynArray of string values
-  // - vIsDateTimeMS is set for ValueType=smvDateTime and TDateTimeMS value
-  TServiceMethodValueAsm = set of (
+  // - vIsQword is set for ValueType=imvInt64 over a QWord unsigned 64-bit value
+  // - vIsDynArrayString is set for ValueType=imvDynArray of string values
+  // - vIsDateTimeMS is set for ValueType=imvDateTime and TDateTimeMS value
+  TInterfaceMethodValueAsm = set of (
     vIsString, vPassedByReference, vIsObjArray, vIsSPI, vIsQword,
     vIsDynArrayString, vIsDateTimeMS);
 
   /// describe a service provider method argument
   {$ifdef USERECORDWITHMETHODS}
-  TServiceMethodArgument = record
+  TInterfaceMethodArgument = record
   {$else}
-  TServiceMethodArgument = object
+  TInterfaceMethodArgument = object
   {$endif USERECORDWITHMETHODS}
   public
     /// the argument name, as declared in object pascal
@@ -109,13 +109,13 @@ type
     /// the low-level RTTI information of this argument
     ArgRtti: TRttiJson;
     /// we do not handle all kind of object pascal variables
-    ValueType: TServiceMethodValueType;
+    ValueType: TInterfaceMethodValueType;
     /// the variable direction as defined at code level
-    ValueDirection: TServiceMethodValueDirection;
+    ValueDirection: TInterfaceMethodValueDirection;
     /// how the variable may be stored
-    ValueVar: TServiceMethodValueVar;
+    ValueVar: TInterfaceMethodValueVar;
     /// how the variable is to be passed at asm level
-    ValueKindAsm: TServiceMethodValueAsm;
+    ValueKindAsm: TInterfaceMethodValueAsm;
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
@@ -135,14 +135,14 @@ type
     FPRegisterIdent: integer;
     /// size (in bytes) of this argument on the stack
     SizeInStack: integer;
-    /// size (in bytes) of this smvv64 ordinal value
+    /// size (in bytes) of this imvv64 ordinal value
     // - e.g. depending of the associated kind of enumeration
     SizeInStorage: integer;
-    /// hexadecimal binary size (in bytes) of this smvv64 ordinal value
-    // - set only if ValueType=smvBinary
+    /// hexadecimal binary size (in bytes) of this imvv64 ordinal value
+    // - set only if ValueType=imvBinary
     SizeInBinary: integer;
     /// index of the associated variable in the local array[ArgsUsedCount[]]
-    // - for smdConst argument, contains -1 (no need to a local var: the value
+    // - for imdConst argument, contains -1 (no need to a local var: the value
     // will be on the stack only)
     IndexVar: integer;
     /// serialize the argument into the TServiceContainer.Contract JSON format
@@ -192,31 +192,31 @@ type
   end;
 
   /// pointer to a service provider method argument
-  PServiceMethodArgument = ^TServiceMethodArgument;
+  PInterfaceMethodArgument = ^TInterfaceMethodArgument;
 
   /// describe a service provider method arguments
-  TServiceMethodArgumentDynArray = array of TServiceMethodArgument;
+  TInterfaceMethodArgumentDynArray = array of TInterfaceMethodArgument;
 
-  /// callback called by TServiceMethodExecute to process an interface
+  /// callback called by TInterfaceMethodExecute to process an interface
   // callback parameter
   // - implementation should set the Obj local variable to an instance of
   // a fake class implementing the aParamInfo interface
-  TServiceMethodExecuteCallback = procedure(var Par: PUTF8Char;
+  TInterfaceMethodExecuteCallback = procedure(var Par: PUTF8Char;
     ParamInterfaceInfo: TRttiJson; out Obj) of object;
 
-  /// how TServiceMethod.TServiceMethod method will return the generated document
+  /// how TInterfaceMethod.TInterfaceMethod method will return the generated document
   // - will return either a dvObject or dvArray TDocVariantData, depending on
   // the expected returned document layout
   // - returned content could be "normalized" (for any set or enumerate) if
   // Kind is pdvObjectFixed
-  TServiceMethodParamsDocVariantKind = (
+  TInterfaceMethodParamsDocVariantKind = (
     pdvArray, pdvObject, pdvObjectFixed);
 
   /// describe an interface-based service provider method
   {$ifdef USERECORDWITHMETHODS}
-  TServiceMethod = record
+  TInterfaceMethod = record
   {$else}
-  TServiceMethod = object
+  TInterfaceMethod = object
   {$endif USERECORDWITHMETHODS}
   public
     /// the method URI, i.e. the method name
@@ -242,13 +242,13 @@ type
     /// TRUE if the method is inherited from another parent interface
     IsInherited: boolean;
     /// the directions of arguments with vIsSPI defined in Args[].ValueKindAsm
-    HasSPIParams: TServiceMethodValueDirections;
+    HasSPIParams: TInterfaceMethodValueDirections;
     /// is 0 for the root interface, 1..n for all inherited interfaces
     HierarchyLevel: byte;
     /// describe expected method arguments
-    // - Args[0] always is smvSelf
-    // - if method is a function, an additional smdResult argument is appended
-    Args: TServiceMethodArgumentDynArray;
+    // - Args[0] always is imvSelf
+    // - if method is a function, an additional imdResult argument is appended
+    Args: TInterfaceMethodArgumentDynArray;
     /// the index of the result pseudo-argument in Args[]
     // - is -1 if the method is defined as a (not a function)
     ArgsResultIndex: shortint;
@@ -278,17 +278,17 @@ type
     // with mime-type 'application/octet-stream' as expected
     ArgsInputIsOctetStream: boolean;
     /// the index of the first argument expecting manual stack initialization
-    // - set if there is any smvObject,smvDynArray,smvRecord,smvInterface or
-    // smvVariant
+    // - set if there is any imvObject,imvDynArray,imvRecord,imvInterface or
+    // imvVariant
     ArgsManagedFirst: shortint;
     /// the index of the last argument expecting manual stack initialization
-    // - set if there is any smvObject, smvDynArray, smvRecord, smvInterface or
-    // smvVariant
+    // - set if there is any imvObject, imvDynArray, imvRecord, imvInterface or
+    // imvVariant
     ArgsManagedLast: shortint;
     /// contains all used kind of arguments
-    ArgsUsed: TServiceMethodValueTypes;
+    ArgsUsed: TInterfaceMethodValueTypes;
     /// contains the count of variables for all used kind of arguments
-    ArgsUsedCount: array[TServiceMethodValueVar] of byte;
+    ArgsUsedCount: array[TInterfaceMethodValueVar] of byte;
     /// needed CPU stack size (in bytes) for all arguments
     // - under x64, does not include the backup space for the four registers
     ArgsSizeInStack: cardinal;
@@ -322,7 +322,7 @@ type
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should contain the input/output raw values as variant
     // - Kind will specify the expected returned document layout
-    procedure ArgsValuesAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
+    procedure ArgsValuesAsDocVariant(Kind: TInterfaceMethodParamsDocVariantKind;
       out Dest: TDocVariantData; const Values: TVariantDynArray; Input: boolean;
       Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty,
         dvoValueCopiedByReference]);
@@ -340,19 +340,77 @@ type
       var ArgsObject: TDocVariantData; Input: boolean);
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should point to the input/output raw binary values, as stored
-    // in TServiceMethodExecute.Values during execution
+    // in TInterfaceMethodExecute.Values during execution
     procedure ArgsStackAsDocVariant(const Values: TPPointerDynArray;
       out Dest: TDocVariantData; Input: Boolean);
   end;
 
   /// describe all mtehods of an interface-based service provider
-  TServiceMethodDynArray = array of TServiceMethod;
+  TInterfaceMethodDynArray = array of TInterfaceMethod;
 
   /// a pointer to an interface-based service provider method description
   // - since TInterfaceFactory instances are shared in a global list, we
   // can safely use such pointers in our code to refer to a particular method
-  PServiceMethod = ^TServiceMethod;
+  PInterfaceMethod = ^TInterfaceMethod;
 
+{$ifndef PUREMORMOT2}
+
+type
+  TServiceMethodValueType = TInterfaceMethodValueType;
+  TServiceMethodValueTypes = TInterfaceMethodValueTypes;
+  TServiceMethodValueVar = TInterfaceMethodValueVar;
+  TServiceMethodValueDirection = TInterfaceMethodValueDirection;
+  TServiceMethodValueDirections = TInterfaceMethodValueDirections;
+  TServiceMethodArgument = TInterfaceMethodArgument;
+  PServiceMethodArgument = PInterfaceMethodArgument;
+  TServiceMethodArgumentDynArray = TInterfaceMethodArgumentDynArray;
+  TServiceMethodParamsDocVariantKind = TInterfaceMethodParamsDocVariantKind;
+  TServiceMethod = TInterfaceMethod;
+  TServiceMethodDynArray = TInterfaceMethodDynArray;
+  PServiceMethod = PInterfaceMethod;
+
+const
+  // TServiceMethodValueType = TInterfaceMethodValueType items
+  smvNone          = imvNone;
+  smvSelf          = imvSelf;
+  smvBoolean       = imvBoolean;
+  smvEnum          = imvEnum;
+  smvSet           = imvSet;
+  smvInteger       = imvInteger;
+  smvCardinal      = imvCardinal;
+  smvInt64         = imvInt64;
+  smvDouble        = imvDouble;
+  smvDateTime      = imvDateTime;
+  smvCurrency      = imvCurrency;
+  smvRawUTF8       = imvRawUTF8;
+  smvString        = imvString;
+  smvRawByteString = imvRawByteString;
+  smvWideString    = imvWideString;
+  smvBinary        = imvBinary;
+  smvRecord        = imvRecord;
+  smvVariant       = imvVariant;
+  smvObject        = imvObject;
+  smvRawJSON       = imvRawJSON;
+  smvDynArray      = imvDynArray;
+  smvInterface     = imvInterface;
+  // TServiceMethodValueVar = TInterfaceMethodValueVar items
+  smvvNone       = imvvNone;
+  smvvSelf       = imvvSelf;
+  smvv64         = imvv64;
+  smvvRawUTF8    = imvvRawUTF8;
+  smvvString     = imvvString;
+  smvvWideString = imvvWideString;
+  smvvRecord     = imvvRecord;
+  smvvObject     = imvvObject;
+  smvvDynArray   = imvvDynArray;
+  smvvInterface  = imvvInterface;
+  // TServiceMethodValueDirection = TInterfaceMethodValueDirection items
+  smdConst  = imdConst;
+  smdVar    = imdVar;
+  smdOut    = imdOut;
+  smdResult = imdResult;
+
+{$endif PUREMORMOT2}
 
 
 { ************  TInterfaceFactory Generating Runtime Implementation Class }
@@ -373,13 +431,18 @@ const
   MAX_METHOD_ARGS = 32;
 
 type
+  /// internal pseudo methods when an interface is used as remote service
+  // - match TInterfaceFactory MethodIndex 0..3
   TServiceInternalMethod = (
     imFree, imContract, imSignature, imInstance);
 
 const
+  /// URI of some pseudo methods when an interface is used as remote service
+  // - match TInterfaceFactory MethodIndex 0..3
   SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
     '_free_', '_contract_', '_signature_', '_instance_');
 
+  /// how many pseudo methods are assigned to TInterfaceFactory
   SERVICE_PSEUDO_METHOD_COUNT = Length(SERVICE_PSEUDO_METHOD);
 
 type
@@ -414,7 +477,7 @@ type
     fInterfaceRTTI: TRttiJson;
     fMethodsCount: cardinal;
     fAddMethodsLevel: integer;
-    fMethods: TServiceMethodDynArray;
+    fMethods: TInterfaceMethodDynArray;
     fMethod: TDynArrayHashed;
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
     fContract: RawUTF8;
@@ -437,7 +500,11 @@ type
     // - you shall have registered the interface by a previous call to the
     // overloaded Get(TypeInfo(IMyInterface)) method or RegisterInterfaces()
     // - if the supplied TGUID has not been previously registered, returns nil
+    {$ifdef FPC_HAS_CONSTREF}
+    class function Get(constref aGUID: TGUID): TInterfaceFactory; overload;
+    {$else}
     class function Get(const aGUID: TGUID): TInterfaceFactory; overload;
+    {$endif FPC_HAS_CONSTREF}
     /// retrieve an interface factory from cache, from its name (e.g. 'IMyInterface')
     // - access to this method is thread-safe
     // - you shall have registered the interface by a previous call to the
@@ -477,9 +544,9 @@ type
     // trailing underscore, so that e.g. /service/start will match IService._Start()
     function FindMethodIndex(const aMethodName: RawUTF8): integer;
     /// find a particular method in internal Methods[] list
-    // - just a wrapper around FindMethodIndex() returing a PServiceMethod
+    // - just a wrapper around FindMethodIndex() returing a PInterfaceMethod
     // - will return nil if the method is not known
-    function FindMethod(const aMethodName: RawUTF8): PServiceMethod;
+    function FindMethod(const aMethodName: RawUTF8): PInterfaceMethod;
     /// find the index of a particular interface.method in internal Methods[] list
     // - will search for a match against Methods[].InterfaceDotMethodName property
     // - won't find the default AddRef/Release/QueryInterface methods
@@ -511,7 +578,7 @@ type
     /// the declared internal methods
     // - list does not contain default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
-    property Methods: TServiceMethodDynArray read fMethods;
+    property Methods: TInterfaceMethodDynArray read fMethods;
     /// the number of internal methods
     // - does not include the default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
@@ -543,6 +610,8 @@ type
     property InterfaceURI: RawUTF8 read fInterfaceURI write fInterfaceURI;
     /// the registered Interface high-level compiler RTTI type
     property InterfaceRTTI: TRttiJson read fInterfaceRTTI;
+    /// the service contract as a JSON array
+    property Contract: RawUTF8 read fContract;
     /// how this interface will work with variants (including TDocVariant)
     // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
@@ -565,10 +634,6 @@ type
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); override;
   end;
 
-  {$else}
-
-  oldest FPC revisions are not yet supported!
-
   {$endif HASINTERFACERTTI}
 
   /// class handling interface implementation generated from source
@@ -584,7 +649,7 @@ type
     // !   0,'n1',TypeInfo(Integer),
     // !   0,'n2',TypeInfo(Integer),
     // !   3,'Result',TypeInfo(Integer)]);
-    // with 0=ord(smdConst) and 3=ord(smdResult)
+    // with 0=ord(imdConst) and 3=ord(imdResult)
     procedure AddMethod(const aName: RawUTF8; const aParams: array of const); virtual;
   public
     /// register one interface type definition from the current class
@@ -632,7 +697,7 @@ type
   // aServiceCustomAnswer is not nil, the result shall use this record
   // to set HTTP custom content and headers, and ignore aResult content
   // - aClientDrivenID can be set optionally to specify e.g. an URI-level session
-  TOnFakeInstanceInvoke = function(const aMethod: TServiceMethod;
+  TOnFakeInstanceInvoke = function(const aMethod: TInterfaceMethod;
     const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
     aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
 
@@ -699,7 +764,7 @@ function ObjectFromInterfaceImplements(const aValue: IInterface;
   const aInterface: TGUID): boolean;
 
 
-{ ************ TInterfaceResolver TInjectableObject for Dependency Injection  }
+{ ************ TInterfaceResolver TInjectableObject for IoC / Dependency Injection  }
 
 type
   /// exception raised in case of Dependency Injection (aka IoC) issue
@@ -935,9 +1000,9 @@ type
   /// Exception class raised during dependency stubing/mocking process
   EInterfaceStub = class(EInterfaceFactory)
   public
-    constructor Create(Sender: TInterfaceStub; const Method: TServiceMethod;
+    constructor Create(Sender: TInterfaceStub; const Method: TInterfaceMethod;
       const Error: RawUTF8); overload;
-    constructor Create(Sender: TInterfaceStub; const Method: TServiceMethod;
+    constructor Create(Sender: TInterfaceStub; const Method: TInterfaceMethod;
       const Format: RawUTF8; const Args: array of const); overload;
   end;
 
@@ -946,7 +1011,7 @@ type
   TOnInterfaceStubExecuteParamsAbstract = class
   protected
     fSender: TInterfaceStub;
-    fMethod: PServiceMethod;
+    fMethod: PInterfaceMethod;
     fParams: RawUTF8;
     fEventParams: RawUTF8;
     fResult: RawUTF8;
@@ -954,7 +1019,7 @@ type
     function GetSenderAsMockTestCase: TSynTestCase;
   public
     /// constructor of one parameters marshalling instance
-    constructor Create(aSender: TInterfaceStub; aMethod: PServiceMethod;
+    constructor Create(aSender: TInterfaceStub; aMethod: PInterfaceMethod;
       const aParams, aEventParams: RawUTF8); virtual;
     /// call this method if the callback implementation failed
     procedure Error(const aErrorMessage: RawUTF8); overload;
@@ -967,7 +1032,7 @@ type
     // a TInterfaceMock
     property TestCase: TSynTestCase read GetSenderAsMockTestCase;
     /// pointer to the method which is to be executed
-    property Method: PServiceMethod read fMethod;
+    property Method: PInterfaceMethod read fMethod;
     /// a custom message, defined at TInterfaceStub.Executes() definition
     property EventParams: RawUTF8 read fEventParams;
     /// outgoing values array encoded as JSON
@@ -997,14 +1062,14 @@ type
     procedure SetResultFromOutput;
   public
     /// constructor of one parameters marshalling instance
-    constructor Create(aSender: TInterfaceStub; aMethod: PServiceMethod;
+    constructor Create(aSender: TInterfaceStub; aMethod: PInterfaceMethod;
       const aParams, aEventParams: RawUTF8); override;
     /// returns the input parameters as a TDocVariant object or array
-    function InputAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
+    function InputAsDocVariant(Kind: TInterfaceMethodParamsDocVariantKind;
       Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty,
         dvoValueCopiedByReference]): variant;
     /// returns the output parameters as a TDocVariant object or array
-    function OutputAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
+    function OutputAsDocVariant(Kind: TInterfaceMethodParamsDocVariantKind;
       Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty,
         dvoValueCopiedByReference]): variant;
     /// log the input or output parameters to a log instance
@@ -1236,7 +1301,7 @@ type
     WasError: boolean;
     /// the method called
     // - a pointer to the existing information in shared TInterfaceFactory
-    Method: PServiceMethod;
+    Method: PInterfaceMethod;
     /// the parameters at execution call, as JSON CSV (i.e. array without [ ])
     Params: RawUTF8;
     /// any non default result returned after execution
@@ -1286,7 +1351,7 @@ type
     function InternalCheck(aValid, aExpectationFailed: boolean;
       const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean; virtual;
     // match TOnFakeInstanceInvoke callback signature
-    function Invoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
+    function Invoke(const aMethod: TInterfaceMethod; const aParams: RawUTF8;
       aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean;
     // will launch InternalCheck() process if some expectations defined by
@@ -1404,7 +1469,7 @@ type
     /// will add execution rules for all methods to log the input parameters
     // - aKind will define how the input parameters are serialized in JSON
     function Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
-      aKind: TServiceMethodParamsDocVariantKind): TInterfaceStub; overload;
+      aKind: TInterfaceMethodParamsDocVariantKind): TInterfaceStub; overload;
 
     /// add an exception rule for a given method
     // - will create and raise the specified exception for this method
@@ -1712,13 +1777,13 @@ implementation
 
 { ************ IInvokable Interface Methods and Parameters RTTI Extraction }
 
-procedure TServiceMethodArgument.SerializeToContract(WR: TTextWriter);
+procedure TInterfaceMethodArgument.SerializeToContract(WR: TTextWriter);
 const
-  ARGDIRTOJSON: array[TServiceMethodValueDirection] of string[4] = (
+  ARGDIRTOJSON: array[TInterfaceMethodValueDirection] of string[4] = (
   // convert into generic in/out direction (assume result is out)
     'in', 'both', 'out', 'out');
   // AnsiString (Delphi <2009) may loose data depending on the client
-  ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
+  ARGTYPETOJSON: array[TInterfaceMethodValueType] of string[8] = (
     '??', 'self', 'boolean', '', '', 'integer', 'cardinal', 'int64',
     'double', 'datetime', 'currency', 'utf8', 'utf8', 'utf8', 'utf8', 'utf8',
     '', 'variant', '', 'json', '', '');
@@ -1735,28 +1800,28 @@ begin
 {$ifdef SOA_DEBUG}
   WR.Add('"', ',');
   WR.AddPropJSONInt64('index', IndexVar);
-  WR.AddPropJSONString('var', GetEnumNameTrimed(TypeInfo(TServiceMethodValueVar),
+  WR.AddPropJSONString('var', GetEnumNameTrimed(TypeInfo(TInterfaceMethodValueVar),
     ValueVar));
   WR.AddPropJSONInt64('stackoffset', InStackOffset);
   WR.AddPropJSONInt64('reg', RegisterIdent);
   WR.AddPropJSONInt64('fpreg', FPRegisterIdent);
   WR.AddPropJSONInt64('stacksize', SizeInStack);
   WR.AddPropJSONInt64('storsize', SizeInStorage);
-  if ValueType = smvBinary then
+  if ValueType = imvBinary then
     WR.AddPropJSONInt64('binsize', SizeInBinary);
   WR.AddPropName('asm');
-  WR.AddString(GetSetNameCSV(TypeInfo(TServiceMethodValueAsm), ValueKindAsm));
+  WR.AddString(GetSetNameCSV(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.AddShort('},');
 {$else}
   WR.AddShort('"},');
 {$endif SOA_DEBUG}
 end;
 
-function TServiceMethodArgument.IsDefault(V: pointer): boolean;
+function TInterfaceMethodArgument.IsDefault(V: pointer): boolean;
 begin
   result := false;
   case ValueType of
-    smvBoolean..smvCurrency:
+    imvBoolean..imvCurrency:
       case SizeInStorage of
         1:
           result := PByte(V)^ = 0;
@@ -1767,11 +1832,11 @@ begin
         8:
           result := PInt64(V)^ = 0;
       end;
-    smvRawUTF8..smvWideString, smvObject..smvInterface:
+    imvRawUTF8..imvWideString, imvObject..imvInterface:
       result := PPointer(V)^ = nil;
-    smvBinary, smvRecord:
+    imvBinary, imvRecord:
       result := IsZeroSmall(V, SizeInStorage);
-    smvVariant:
+    imvVariant:
       result := PVarData(V)^.vtype <= varNull;
   end;
 end;
@@ -1781,7 +1846,7 @@ const
    [jpoHandleCustomVariants, jpoIgnoreUnknownEnum, jpoIgnoreUnknownProperty,
     jpoIgnoreStringType, jpoAllowInt64Hex, jpoNullDontReleaseObjectInstance];
 
-function TServiceMethodArgument.FromJSON(const MethodName: RawUTF8;
+function TInterfaceMethodArgument.FromJSON(const MethodName: RawUTF8;
   var R: PUTF8Char; V: pointer; Error: PShortString;
   DVO: TDocVariantOptions): boolean;
 var
@@ -1804,7 +1869,7 @@ begin
     result := true;
 end;
 
-procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer;
+procedure TInterfaceMethodArgument.AddJSON(WR: TTextWriter; V: pointer;
   ObjectOptions: TTextWriterWriteObjectOptions);
 var
   ctxt: TJsonSaveContext;
@@ -1814,22 +1879,22 @@ begin
   TRttiJsonSave(ArgRtti.JsonSave)(V, ctxt);
 end;
 
-procedure TServiceMethodArgument.AsJson(var DestValue: RawUTF8; V: pointer);
+procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUTF8; V: pointer);
 var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
   case ValueType of  // some direct conversion of simple types into RawUTF8
-    smvBoolean:
+    imvBoolean:
       DestValue := BOOL_UTF8[PBoolean(V)^];
-    smvEnum..smvInt64:
+    imvEnum..imvInt64:
       case SizeInStorage of
         1:
           UInt32ToUtf8(PByte(V)^, DestValue);
         2:
           UInt32ToUtf8(PWord(V)^, DestValue);
         4:
-          if ValueType = smvInteger then
+          if ValueType = imvInteger then
             Int32ToUtf8(PInteger(V)^, DestValue)
           else
             UInt32ToUtf8(PCardinal(V)^, DestValue);
@@ -1839,11 +1904,11 @@ begin
           else
             Int64ToUtf8(PInt64(V)^, DestValue);
       end;
-    smvDouble:
+    imvDouble:
       DoubleToStr(unaligned(PDouble(V)^), DestValue);
-    smvCurrency:
+    imvCurrency:
       Curr64ToStr(PInt64(V)^, DestValue);
-    smvRawJSON:
+    imvRawJSON:
       DestValue := PRawUTF8(V)^;
   else
     begin
@@ -1859,11 +1924,11 @@ begin
   end;
 end;
 
-procedure TServiceMethodArgument.AddJSONEscaped(WR: TTextWriter; V: pointer);
+procedure TInterfaceMethodArgument.AddJSONEscaped(WR: TTextWriter; V: pointer);
 var
   W: TTextWriter;
 begin
-  if ValueType in [smvBoolean..smvCurrency, smvInterface] then
+  if ValueType in [imvBoolean..imvCurrency, imvInterface] then
     // no need to escape those
     AddJSON(WR, V)
   else
@@ -1874,7 +1939,7 @@ begin
   end;
 end;
 
-procedure TServiceMethodArgument.AddValueJSON(WR: TTextWriter; const Value: RawUTF8);
+procedure TInterfaceMethodArgument.AddValueJSON(WR: TTextWriter; const Value: RawUTF8);
 begin
   if vIsString in ValueKindAsm then
   begin
@@ -1889,23 +1954,23 @@ begin
   end;
 end;
 
-procedure TServiceMethodArgument.AddDefaultJSON(WR: TTextWriter);
+procedure TInterfaceMethodArgument.AddDefaultJSON(WR: TTextWriter);
 begin
   case ValueType of
-    smvBoolean:
+    imvBoolean:
       WR.AddShort('false,');
-    smvObject:
+    imvObject:
       WR.AddShort('null,'); // may raise an error on the client side
-    smvInterface:
+    imvInterface:
       WR.AddShort('0,');
-    smvDynArray:
+    imvDynArray:
       WR.AddShort('[],');
-    smvRecord:
+    imvRecord:
       begin
         WR.AddVoidRecordJSON(ArgRtti);
         WR.Add(',');
       end;
-    smvVariant:
+    imvVariant:
       WR.AddShort('null,');
   else
     if vIsString in ValueKindAsm then
@@ -1915,22 +1980,22 @@ begin
   end;
 end;
 
-procedure TServiceMethodArgument.AsVariant(var DestValue: variant; V: pointer;
+procedure TInterfaceMethodArgument.AsVariant(var DestValue: variant; V: pointer;
   Options: TDocVariantOptions);
 var
   tmp: RawUTF8;
 begin
   case ValueType of // some direct conversion of simple types
-    smvBoolean:
+    imvBoolean:
       DestValue := PBoolean(V)^;
-    smvEnum..smvInt64:
+    imvEnum..imvInt64:
       case SizeInStorage of
         1:
           DestValue := PByte(V)^;
         2:
           DestValue := PWord(V)^;
         4:
-          if ValueType = smvInteger then
+          if ValueType = imvInteger then
             DestValue := PInteger(V)^
           else
             DestValue := PCardinal(V)^;
@@ -1940,23 +2005,23 @@ begin
           else
             DestValue := PInt64(V)^;
       end;
-    smvDouble, smvDateTime:
+    imvDouble, imvDateTime:
       DestValue := unaligned(PDouble(V)^);
-    smvCurrency:
+    imvCurrency:
       DestValue := PCurrency(V)^;
-    smvRawUTF8:
+    imvRawUTF8:
       RawUTF8ToVariant(PRawUTF8(V)^, DestValue);
-    smvString:
+    imvString:
       begin
         StringToUTF8(PString(V)^, tmp);
         RawUTF8ToVariant(tmp, DestValue);
       end;
-    smvWideString:
+    imvWideString:
       begin
         RawUnicodeToUtf8(PPointer(V)^, length(PWideString(V)^), tmp);
         RawUTF8ToVariant(tmp, DestValue);
       end;
-    smvVariant:
+    imvVariant:
       DestValue := PVariant(V)^;
   else
     begin // use generic AddJSON() method
@@ -1966,7 +2031,7 @@ begin
   end;
 end;
 
-procedure TServiceMethodArgument.AddAsVariant(var Dest: TDocVariantData; V: pointer);
+procedure TInterfaceMethodArgument.AddAsVariant(var Dest: TDocVariantData; V: pointer);
 var
   tmp: variant;
 begin
@@ -1977,7 +2042,7 @@ begin
     Dest.AddValue(ShortStringToAnsi7String(ParamName^), tmp);
 end;
 
-procedure TServiceMethodArgument.FixValueAndAddToObject(const Value: variant;
+procedure TInterfaceMethodArgument.FixValueAndAddToObject(const Value: variant;
   var DestDoc: TDocVariantData);
 var
   tempCopy: variant;
@@ -1987,7 +2052,7 @@ begin
   DestDoc.AddValue(ShortStringToAnsi7String(ParamName^), tempCopy);
 end;
 
-procedure TServiceMethodArgument.FixValue(var Value: variant);
+procedure TInterfaceMethodArgument.FixValue(var Value: variant);
 var
   enum: Int64;
   obj: TObject;
@@ -1997,13 +2062,13 @@ var
   json: RawUTF8;
 begin
   case ValueType of
-    smvEnum:
+    imvEnum:
       if VariantToInt64(Value, enum) then
         Value := ArgRtti.Cache.EnumInfo.GetEnumNameOrd(enum)^;
-    smvSet:
+    imvSet:
       if VariantToInt64(Value, enum) then
         Value := SetNameToVariant(enum, ArgRtti);
-    smvObject:
+    imvObject:
       begin
         obj := ArgRtti.ClassNewInstance;
         try
@@ -2013,7 +2078,7 @@ begin
           obj.Free;
         end;
       end;
-    smvDynArray:
+    imvDynArray:
       if _Safe(Value)^.Kind = dvArray then
       begin
         arr := nil; // recreate using a proper dynamic array
@@ -2027,7 +2092,7 @@ begin
           dyn.Clear;
         end;
       end;
-    smvRecord:
+    imvRecord:
       if _Safe(Value)^.Kind = dvObject then
       begin
         SetLength(rec, ArgRtti.Size);
@@ -2044,9 +2109,9 @@ begin
 end;
 
 
-{ TServiceMethod }
+{ TInterfaceMethod }
 
-function TServiceMethod.ArgIndex(ArgName: PUTF8Char; ArgNameLen: integer; Input:
+function TInterfaceMethod.ArgIndex(ArgName: PUTF8Char; ArgNameLen: integer; Input:
   boolean): integer;
 begin
   if ArgNameLen > 0 then
@@ -2055,7 +2120,7 @@ begin
       for result := ArgsInFirst to ArgsInLast do
         with Args[result] do
           if IdemPropName(ParamName^, ArgName, ArgNameLen) then
-            if ValueDirection in [smdConst, smdVar] then
+            if ValueDirection in [imdConst, imdVar] then
               exit
             else // found
               break; // right name, but wrong direction
@@ -2064,33 +2129,33 @@ begin
       for result := ArgsOutFirst to ArgsOutLast do
         with Args[result] do
           if IdemPropName(ParamName^, ArgName, ArgNameLen) then
-            if ValueDirection in [smdVar, smdOut, smdResult] then
+            if ValueDirection in [imdVar, imdOut, imdResult] then
               exit
             else // found
               break; // right name, but wrong direction
   result := -1;
 end;
 
-function TServiceMethod.ArgNext(var arg: integer; Input: boolean): boolean;
+function TInterfaceMethod.ArgNext(var arg: integer; Input: boolean): boolean;
 begin
   result := true;
   inc(arg);
   if Input then
     while arg <= ArgsInLast do
-      if Args[arg].ValueDirection in [smdConst, smdVar] then
+      if Args[arg].ValueDirection in [imdConst, imdVar] then
         exit
       else
         inc(arg)
   else
     while arg <= ArgsOutLast do
-      if Args[arg].ValueDirection in [smdVar, smdOut, smdResult] then
+      if Args[arg].ValueDirection in [imdVar, imdOut, imdResult] then
         exit
       else
         inc(arg);
   result := false;
 end;
 
-function TServiceMethod.ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8;
+function TInterfaceMethod.ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8;
 var
   i: integer;
   W: TTextWriter;
@@ -2112,10 +2177,10 @@ begin
         begin
           if Input then
           begin
-            if ValueDirection in [smdOut, smdResult] then
+            if ValueDirection in [imdOut, imdResult] then
               continue;
           end
-          else if ValueDirection = smdConst then
+          else if ValueDirection = imdConst then
             continue;
           W.AddPropName(ParamName^);
           P := GotoNextNotSpace(P);
@@ -2133,13 +2198,13 @@ begin
   end;
 end;
 
-function TServiceMethod.ArgsCommandLineToObject(P: PUTF8Char;
+function TInterfaceMethod.ArgsCommandLineToObject(P: PUTF8Char;
   Input, RaiseExceptionOnUnknownParam: boolean): RawUTF8;
 var
   i: integer;
   W: TTextWriter;
   B: PUTF8Char;
-  arginfo: PServiceMethodArgument;
+  arginfo: PInterfaceMethodArgument;
   arg, value: RawUTF8;
   ok: boolean;
   temp: TTextWriterStackBuffer;
@@ -2183,14 +2248,14 @@ begin
         GetNextItem(P, ' ', value);
         if not ok then
           continue;
-        if arginfo^.ValueType = smvDynArray then
+        if arginfo^.ValueType = imvDynArray then
           // write [value] or ["value"]
           W.Add('[');
         if arginfo^.ValueKindAsm * [vIsString, vIsDynArrayString] <> [] then
           W.AddJSONString(value)
         else
           W.AddNoJSONEscape(pointer(value), length(value));
-        if arginfo^.ValueType = smvDynArray then
+        if arginfo^.ValueType = imvDynArray then
           W.Add(']');
       end;
       W.Add(',');
@@ -2203,7 +2268,7 @@ begin
   end;
 end;
 
-function TServiceMethod.ArgsNames(Input: Boolean): TRawUTF8DynArray;
+function TInterfaceMethod.ArgsNames(Input: Boolean): TRawUTF8DynArray;
 var
   a, n: PtrInt;
 begin
@@ -2213,7 +2278,7 @@ begin
     SetLength(result, ArgsInputValuesCount);
     n := 0;
     for a := ArgsInFirst to ArgsInLast do
-      if Args[a].ValueDirection in [smdConst, smdVar] then
+      if Args[a].ValueDirection in [imdConst, imdVar] then
       begin
         ShortStringToAnsi7String(Args[a].ParamName^, result[n]);
         inc(n);
@@ -2224,7 +2289,7 @@ begin
     SetLength(result, ArgsOutputValuesCount);
     n := 0;
     for a := ArgsOutFirst to ArgsOutLast do
-      if Args[a].ValueDirection in [smdVar, smdOut, smdResult] then
+      if Args[a].ValueDirection in [imdVar, imdOut, imdResult] then
       begin
         ShortStringToAnsi7String(Args[a].ParamName^, result[n]);
         inc(n);
@@ -2232,7 +2297,7 @@ begin
   end;
 end;
 
-procedure TServiceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
+procedure TInterfaceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
   out Dest: TDocVariantData; Input: Boolean);
 var
   a: PtrInt;
@@ -2241,20 +2306,20 @@ begin
   begin
     Dest.InitFast(ArgsInputValuesCount, dvObject);
     for a := ArgsInFirst to ArgsInLast do
-      if Args[a].ValueDirection in [smdConst, smdVar] then
+      if Args[a].ValueDirection in [imdConst, imdVar] then
         Args[a].AddAsVariant(Dest, Values[a]);
   end
   else
   begin
     Dest.InitFast(ArgsOutputValuesCount, dvObject);
     for a := ArgsOutFirst to ArgsOutLast do
-      if Args[a].ValueDirection in [smdVar, smdOut, smdResult] then
+      if Args[a].ValueDirection in [imdVar, imdOut, imdResult] then
         Args[a].AddAsVariant(Dest, Values[a]);
   end;
 end;
 
-procedure TServiceMethod.ArgsValuesAsDocVariant(
-  Kind: TServiceMethodParamsDocVariantKind; out Dest: TDocVariantData;
+procedure TInterfaceMethod.ArgsValuesAsDocVariant(
+  Kind: TInterfaceMethodParamsDocVariantKind; out Dest: TDocVariantData;
   const Values: TVariantDynArray; Input: boolean; Options: TDocVariantOptions);
 begin
   case Kind of
@@ -2271,7 +2336,7 @@ begin
   end;
 end;
 
-procedure TServiceMethod.ArgsAsDocVariantObject(const ArgsParams: TDocVariantData;
+procedure TInterfaceMethod.ArgsAsDocVariantObject(const ArgsParams: TDocVariantData;
   var ArgsObject: TDocVariantData; Input: boolean);
 var
   a, n: PtrInt;
@@ -2286,7 +2351,7 @@ begin
   begin
     if ArgsParams.Count = integer(ArgsInputValuesCount) then
       for a := ArgsInFirst to ArgsInLast do
-        if Args[a].ValueDirection in [smdConst, smdVar] then
+        if Args[a].ValueDirection in [imdConst, imdVar] then
         begin
           ArgsObject.AddValue(
             ShortStringToAnsi7String(Args[a].ParamName^),
@@ -2298,7 +2363,7 @@ begin
   begin
     if ArgsParams.Count = integer(ArgsOutputValuesCount) then
       for a := ArgsOutFirst to ArgsOutLast do
-        if Args[a].ValueDirection in [smdVar, smdOut, smdResult] then
+        if Args[a].ValueDirection in [imdVar, imdOut, imdResult] then
         begin
           ArgsObject.AddValue(
             ShortStringToAnsi7String(Args[a].ParamName^),
@@ -2308,7 +2373,7 @@ begin
   end;
 end;
 
-procedure TServiceMethod.ArgsAsDocVariantFix(var ArgsObject: TDocVariantData;
+procedure TInterfaceMethod.ArgsAsDocVariantFix(var ArgsObject: TDocVariantData;
   Input: boolean);
 var
   a, ndx: PtrInt;
@@ -2330,7 +2395,7 @@ begin
             exit;
           doc.Init(ArgsObject.Options);
           for a := ArgsInFirst to ArgsInLast do
-            if Args[a].ValueDirection in [smdConst, smdVar] then
+            if Args[a].ValueDirection in [imdConst, imdVar] then
               Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
           ArgsObject := doc;
         end
@@ -2340,7 +2405,7 @@ begin
             exit;
           doc.Init(ArgsObject.Options);
           for a := ArgsOutFirst to ArgsOutLast do
-            if Args[a].ValueDirection in [smdVar, smdOut, smdResult] then
+            if Args[a].ValueDirection in [imdVar, imdOut, imdResult] then
               Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count], doc);
           ArgsObject := doc;
         end;
@@ -2480,14 +2545,14 @@ const
   STACKOFFSET_NONE = -1;
 
   // ordinal values are stored within 64-bit buffer, and records in a RawUTF8
-  ARGS_TO_VAR: array[TServiceMethodValueType] of TServiceMethodValueVar = (
-    smvvNone, smvvSelf, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64,
-    smvv64, smvv64, smvvRawUTF8, smvvString, smvvRawUTF8, smvvWideString, smvv64,
-    smvvRecord, smvvRecord, smvvObject, smvvRawUTF8, smvvDynArray, smvvInterface);
+  ARGS_TO_VAR: array[TInterfaceMethodValueType] of TInterfaceMethodValueVar = (
+    imvvNone, imvvSelf, imvv64, imvv64, imvv64, imvv64, imvv64, imvv64, imvv64,
+    imvv64, imvv64, imvvRawUTF8, imvvString, imvvRawUTF8, imvvWideString, imvv64,
+    imvvRecord, imvvRecord, imvvObject, imvvRawUTF8, imvvDynArray, imvvInterface);
 
   {$ifdef CPU32}
   // always aligned to 8 bytes boundaries for 64-bit
-  ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
+  ARGS_IN_STACK_SIZE: array[TInterfaceMethodValueType] of Cardinal = (
     0, PTRSIZ, PTRSIZ, PTRSIZ, PTRSIZ, PTRSIZ, PTRSIZ, 8, 8, 8,
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
     8, PTRSIZ, PTRSIZ, PTRSIZ, PTRSIZ, 0, PTRSIZ,
@@ -2496,9 +2561,9 @@ const
  // Object, RawJSON, DynArray, Interface
   {$endif CPU32}
 
-  ARGS_RESULT_BY_REF: TServiceMethodValueTypes =
-    [smvRawUTF8, smvRawJSON, smvString, smvRawByteString, smvWideString,
-     smvRecord, smvVariant, smvDynArray];
+  ARGS_RESULT_BY_REF: TInterfaceMethodValueTypes =
+    [imvRawUTF8, imvRawJSON, imvString, imvRawByteString, imvWideString,
+     imvRecord, imvVariant, imvDynArray];
 
   PSEUDO_RESULT_NAME: string[6] = 'Result';
   PSEUDO_SELF_NAME:   string[4] = 'Self';
@@ -2561,8 +2626,8 @@ type
     {$endif FPC}
     function SelfFromInterface: TInterfacedObjectFake;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure InterfaceWrite(W: TTextWriter; const aMethod: TServiceMethod;
-      const aParamInfo: TServiceMethodArgument; aParamValue: Pointer); virtual;
+    procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
+      const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); virtual;
   public
     /// create an instance, using the specified interface
     constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TObject;
@@ -2633,8 +2698,8 @@ end;
 
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
 var
-  method: PServiceMethod;
-  resultType: TServiceMethodValueType; // type of value stored into result
+  method: PInterfaceMethod;
+  resultType: TInterfaceMethodValueType; // type of value stored into result
 
   procedure RaiseError(const Format: RawUTF8; const Args: array of const);
   var
@@ -2675,10 +2740,10 @@ var
       end
       else
         opt := DEFAULT_WRITEOPTIONS[false];
-      FillCharFast(I64s, method^.ArgsUsedCount[smvv64] * SizeOf(Int64), 0);
+      FillCharFast(I64s, method^.ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
       for arg := 1 to high(method^.Args) do
         with method^.Args[arg] do
-          if ValueType > smvSelf then
+          if ValueType > imvSelf then
           begin
             {$ifdef HAS_FPREG} // x64, arm, aarch64
             if FPRegisterIdent > 0 then
@@ -2710,14 +2775,14 @@ var
             {$endif CPUX86}
             if vPassedByReference in ValueKindAsm then
               V := PPointer(V)^;
-            if ValueType = smvDynArray then
+            if ValueType = imvDynArray then
               {%H-}DynArrays[IndexVar].InitRtti(ArgRtti, V^);
             Value[arg] := V;
-            if ValueDirection in [smdConst, smdVar] then
+            if ValueDirection in [imdConst, imdVar] then
               case ValueType of
-                smvInterface:
+                imvInterface:
                   InterfaceWrite(Params, method^, method^.Args[arg], V^);
-                smvDynArray:
+                imvDynArray:
                   begin
                     if vIsObjArray in ValueKindAsm then
                       Params.AddObjArrayJSON(V^, opt)
@@ -2779,13 +2844,13 @@ var
             end;
             with method^.Args[arg] do
             begin
-              //assert(ValueDirection in [smdVar,smdOut,smdResult]);
+              //assert(ValueDirection in [imdVar,imdOut,imdResult]);
               V := Value[arg];
               FromJSON(method^.InterfaceDotMethodName, R, V, nil, fFactory.DocVariantOptions);
-              if ValueDirection = smdResult then
+              if ValueDirection = imdResult then
               begin
                 resultType := ValueType;
-                if ValueType in [smvBoolean..smvCurrency] then
+                if ValueType in [imvBoolean..imvCurrency] then
                   // ordinal/real result values to CPU/FPU registers
                   MoveFast(V^, Result, SizeInStorage);
               end;
@@ -2829,18 +2894,18 @@ begin
   if not Assigned(fInvoke) then
     RaiseError('fInvoke=nil', []);
   result := 0;
-  resultType := smvNone;
+  resultType := imvNone;
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
   case resultType of // al/ax/eax/eax:edx/rax already in result
   {$ifdef HAS_FPREG}
-    smvDouble, smvDateTime:
+    imvDouble, imvDateTime:
       aCall.FPRegs[FPREG_FIRST] := unaligned(PDouble(@result)^);
   {$else}
-    smvDouble, smvDateTime:
+    imvDouble, imvDateTime:
       asm
         fld     qword ptr[result]
       end;  // in st(0)
-    smvCurrency:
+    imvCurrency:
       asm
         fild    qword ptr[result]
       end;  // in st(0)
@@ -2849,7 +2914,7 @@ begin
 end;
 
 procedure TInterfacedObjectFake.InterfaceWrite(W: TTextWriter;
-  const aMethod: TServiceMethod; const aParamInfo: TServiceMethodArgument;
+  const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
   aParamValue: Pointer);
 begin
   raise EInterfaceFactory.CreateUTF8('%: unhandled %.%(%: %) argument', [self,
@@ -2861,30 +2926,30 @@ end;
 
 const
   {$ifdef UNICODE}
-  smvSynUnicode = smvNone;
-  smvUnicodeString = smvString;
+  imvSynUnicode = imvNone;
+  imvUnicodeString = imvString;
   {$else}
-  smvSynUnicode = smvWideString;
-  smvUnicodeString = smvNone;
+  imvSynUnicode = imvWideString;
+  imvUnicodeString = imvNone;
   {$endif UNICODE}
 
   /// which TRTTIParserType are actually serialized as JSON Strings
   _SMV_STRING =
-    [smvRawUTF8..smvBinary, smvDateTime];
+    [imvRawUTF8..imvBinary, imvDateTime];
 
-  _FROM_RTTI: array[TRTTIParserType] of TServiceMethodValueType = (
+  _FROM_RTTI: array[TRTTIParserType] of TInterfaceMethodValueType = (
   // ptNone, ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
-    smvNone, smvNone, smvBoolean, smvNone, smvCardinal, smvCurrency, smvDouble, smvNone,
+    imvNone, imvNone, imvBoolean, imvNone, imvCardinal, imvCurrency, imvDouble, imvNone,
   // ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJSON, ptRawUTF8,
-    smvInt64, smvInteger, smvInt64, smvRawByteString, smvRawJSON, smvRawUTF8,
+    imvInt64, imvInteger, imvInt64, imvRawByteString, imvRawJSON, imvRawUTF8,
   // ptRecord, ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
-    smvRecord, smvDouble, smvString, smvSynUnicode, smvDateTime, smvDateTime,
+    imvRecord, imvDouble, imvString, imvSynUnicode, imvDateTime, imvDateTime,
   // ptGUID, ptHash128, ptHash256, ptHash512, ptORM, ptTimeLog, ptUnicodeString,
-    smvBinary, smvBinary, smvBinary, smvBinary, smvObject, smvInt64, smvUnicodeString,
+    imvBinary, imvBinary, imvBinary, imvBinary, imvObject, imvInt64, imvUnicodeString,
   // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi, ptWord,
-    smvInt64, smvInt64, smvVariant, smvWideString, smvRawUTF8, smvNone,
+    imvInt64, imvInt64, imvVariant, imvWideString, imvRawUTF8, imvNone,
   // ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom);
-    smvEnum, smvSet, smvObject, smvDynArray, smvInterface, smvNone);
+    imvEnum, imvSet, imvObject, imvDynArray, imvInterface, imvNone);
 
 var
   InterfaceFactoryCache: TSynObjectListLocked;
@@ -2936,8 +3001,8 @@ begin
 end;
 
 {$ifdef HASINTERFACERTTI}
-class procedure TInterfaceFactory.RegisterInterfaces(const aInterfaces: array of
-  PRttiInfo);
+class procedure TInterfaceFactory.RegisterInterfaces(
+  const aInterfaces: array of PRttiInfo);
 var
   i: PtrInt;
 begin
@@ -2946,43 +3011,48 @@ begin
 end;
 {$else}
 
-class procedure TInterfaceFactory.RegisterInterfaces(const aInterfaces: array of
-  PRttiInfo);
+class procedure TInterfaceFactory.RegisterInterfaces(
+  const aInterfaces: array of PRttiInfo);
 begin // in fact, TInterfaceFactoryGenerated.RegisterInterface() should do it
 end;
 {$endif HASINTERFACERTTI}
 
+{$ifdef FPC_HAS_CONSTREF}
+class function TInterfaceFactory.Get(constref aGUID: TGUID): TInterfaceFactory;
+{$else}
 class function TInterfaceFactory.Get(const aGUID: TGUID): TInterfaceFactory;
-type
-  TGUID32 = packed record // brute force search optimization
-    a, b {$ifdef CPU32}, c, d{$endif}: PtrInt;
-  end;
+{$endif FPC_HAS_CONSTREF}
 var
-  n, ga: PtrInt;
-  p: ^TGUID32;
+  n: PtrInt;
   F: ^TInterfaceFactory;
-  GUID32: TGUID32 absolute aGUID;
+  g: THash128Rec absolute aGUID;
+  {$ifdef CPUX86NOTPIC}
+  cache: TSynObjectListLocked absolute InterfaceFactoryCache;
+  {$else}
+  cache: TSynObjectListLocked;
+  {$endif CPUX86NOTPIC}
 begin
-  if InterfaceFactoryCache <> nil then
+  {$ifndef CPUX86NOTPIC}
+  cache := InterfaceFactoryCache;
+  {$endif CPUX86NOTPIC}
+  if cache <> nil then
   begin
-    InterfaceFactoryCache.Safe.Lock;
-    F := pointer(InterfaceFactoryCache.List);
-    ga := GUID32.a;
-    n := InterfaceFactoryCache.Count;
+    cache.Safe.Lock;
+    F := pointer(cache.List);
+    n := cache.Count;
     if n > 0 then
       repeat
-        p := @F^.fInterfaceIID;
-        if (p^.a = ga) and (p^.b = GUID32.b)
-          {$ifdef CPU32} and (p^.c = GUID32.c) and (p^.d = GUID32.d) {$endif} then
-        begin
-          result := F^;
-          InterfaceFactoryCache.Safe.UnLock;
-          exit;
-        end;
+        with PHash128Rec(@F^.fInterfaceIID)^ do
+          if (g.L = L) and (g.H = H) then
+          begin
+            result := F^;
+            cache.Safe.UnLock;
+            exit;
+          end;
         inc(F);
         dec(n);
       until n = 0;
-    InterfaceFactoryCache.Safe.UnLock;
+    cache.Safe.UnLock;
   end;
   result := nil;
 end;
@@ -3094,7 +3164,7 @@ begin
     // as in TServiceFactory.Create
     delete(fInterfaceURI, 1, 1);
   // retrieve all interface methods (recursively including ancestors)
-  fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray), fMethods, djRawUTF8,
+  fMethod.InitSpecific(TypeInfo(TInterfaceMethodDynArray), fMethods, djRawUTF8,
     @fMethodsCount, true);
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount = 0 then
@@ -3123,14 +3193,14 @@ begin
     ArgsResultIndex := -1;
     ArgsManagedFirst := -1;
     ArgsManagedLast := -2;
-    Args[0].ValueType := smvSelf;
+    Args[0].ValueType := imvSelf;
     for a := 1 to high(Args) do
     with Args[a] do
     begin
       ValueType := _FROM_RTTI[ArgRtti.Parser];
       ErrorMsg := ''; // seems supported
       case ValueType of
-      smvNone:
+      imvNone:
         case ArgRtti.Info^.Kind of
           rkInteger:
             ErrorMsg := ' - use integer/cardinal instead';
@@ -3139,46 +3209,46 @@ begin
         else
           FormatUTF8(' (%)', [ToText(ArgRtti.Info^.Kind)], ErrorMsg);
         end;
-      smvObject:
+      imvObject:
         if ArgRtti.ValueClass = TList then
           ErrorMsg := ' - use TObjectList instead'
         else if ArgRtti.ValueClass.InheritsFrom(TCollection) and
                 (ArgRtti.CollectionItem = nil) then
           ErrorMsg :=
             ' - inherit from TInterfacedCollection or call Rtti.RegisterCollection() first'
-        else if ValueDirection = smdResult then
+        else if ValueDirection = imdResult then
           ErrorMsg := ' - class not allowed as function result: use a var/out parameter';
-      smvInterface:
-        if ValueDirection in [smdVar, smdOut, smdResult] then
+      imvInterface:
+        if ValueDirection in [imdVar, imdOut, imdResult] then
           ErrorMsg := ' - interface not allowed as output: use a const parameter';
       end;
       if ErrorMsg <> '' then
         raise EInterfaceFactory.CreateUTF8(
           '%.Create: %.% [%] parameter has unexpected type %%',
           [self, aInterface^.RawName, URI, ParamName^, ArgRtti.Name, ErrorMsg]);
-      if ValueDirection = smdResult then
+      if ValueDirection = imdResult then
         ArgsResultIndex := a
       else
       begin
         ArgsNotResultLast := a;
-        if ValueDirection <> smdOut then
+        if ValueDirection <> imdOut then
         begin
           inc(ArgsInputValuesCount);
           if ArgsInFirst < 0 then
             ArgsInFirst := a;
           ArgsInLast := a;
         end;
-        if ValueDirection <> smdConst then
+        if ValueDirection <> imdConst then
           ArgsOutNotResultLast := a;
       end;
-      if ValueDirection <> smdConst then
+      if ValueDirection <> imdConst then
       begin
         if ArgsOutFirst < 0 then
           ArgsOutFirst := a;
         ArgsOutLast := a;
         inc(ArgsOutputValuesCount);
       end;
-      if ValueType in [smvObject, smvDynArray, smvRecord, smvInterface, smvVariant] then
+      if ValueType in [imvObject, imvDynArray, imvRecord, imvInterface, imvVariant] then
       begin
         if ArgsManagedFirst < 0 then
           ArgsManagedFirst := a;
@@ -3195,35 +3265,35 @@ begin
       // plain procedure with no out param -> recognize some known signatures
       case ArgsInputValuesCount of
         1:
-          if Args[1].ValueType = smvBoolean then
+          if Args[1].ValueType = imvBoolean then
             if IdemPropNameU(URI, 'CurrentFrame') then
               fMethodIndexCurrentFrameCallback := m;
         2:
-          if (Args[1].ValueType = smvInterface) and
+          if (Args[1].ValueType = imvInterface) and
              (Args[1].ArgRtti.Info = TypeInfo(IInvokable)) and
-             (Args[2].ValueType = smvRawUTF8) and
+             (Args[2].ValueType = imvRawUTF8) and
              IdemPropNameU(URI, 'CallbackReleased') then
             fMethodIndexCallbackReleased := m;
       end;
     if ArgsResultIndex >= 0 then
       with Args[ArgsResultIndex] do
       case ValueType of
-        smvNone, smvObject, smvInterface:
+        imvNone, imvObject, imvInterface:
           raise EInterfaceFactory.CreateUTF8(
             '%.Create: I% unexpected result type %',
             [self, InterfaceDotMethodName, ArgTypeName^]);
-        smvRecord:
+        imvRecord:
           if ArgRtti.Info = TypeInfo(TServiceCustomAnswer) then
           begin
             for a := ArgsOutFirst to ArgsOutLast do
-              if Args[a].ValueDirection in [smdVar, smdOut] then
+              if Args[a].ValueDirection in [imdVar, imdOut] then
                 raise EInterfaceFactory.CreateUTF8('%.Create: I% '+
                   'var/out parameter [%] not allowed with TServiceCustomAnswer result',
                   [self, InterfaceDotMethodName, Args[a].ParamName^]);
             ArgsResultIsServiceCustomAnswer := true;
           end;
       end;
-    if (ArgsInputValuesCount = 1) and (Args[1].ValueType = smvRawByteString) then
+    if (ArgsInputValuesCount = 1) and (Args[1].ValueType = imvRawByteString) then
       ArgsInputIsOctetStream := true;
   end;
   // compute asm low-level layout of the parameters for each method
@@ -3249,29 +3319,29 @@ begin
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
       include(ArgsUsed, ValueType);
-      if (ValueType in [smvRecord, smvVariant]) or
-         (ValueDirection in [smdVar, smdOut]) or
-         ((ValueDirection = smdResult) and (ValueType in ARGS_RESULT_BY_REF)) then
+      if (ValueType in [imvRecord, imvVariant]) or
+         (ValueDirection in [imdVar, imdOut]) or
+         ((ValueDirection = imdResult) and (ValueType in ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm, vPassedByReference);
       if ValueType in _SMV_STRING then
         Include(ValueKindAsm, vIsString);
       case ValueType of
-        smvInteger, smvCardinal, smvInt64:
+        imvInteger, imvCardinal, imvInt64:
           if rcfQWord in ArgRtti.Cache.Flags then
             Include(ValueKindAsm,vIsQword);
-        smvDouble,smvDateTime:
+        imvDouble,imvDateTime:
           begin
             {$ifdef HAS_FPREG}
             ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
             {$endif HAS_FPREG}
-            if ValueType = smvDateTime then
+            if ValueType = imvDateTime then
             begin
               include(ValueKindAsm, vIsString);
               if ArgRtti.Parser = ptDateTimeMS then
                 include(ValueKindAsm, vIsDateTimeMS);
             end;
           end;
-        smvDynArray:
+        imvDynArray:
           if rcfObjArray in ArgRtti.Flags then
             Include(ValueKindAsm, vIsObjArray)
           else if (ArgRtti.ArrayRtti<>nil) and
@@ -3279,15 +3349,15 @@ begin
             Include(ValueKindAsm, vIsDynArrayString);
       end;
       case ValueType of
-        smvBoolean:
+        imvBoolean:
           SizeInStorage := 1;
-        smvInteger, smvCardinal:
+        imvInteger, imvCardinal:
           SizeInStorage := 4;
-        smvInt64, smvDouble, smvDateTime, smvCurrency:
+        imvInt64, imvDouble, imvDateTime, imvCurrency:
           SizeInStorage := 8;
-        smvEnum:
+        imvEnum:
           SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsEnum;
-        smvSet:
+        imvSet:
           begin
             SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsSet;
             if SizeInStorage = 0 then
@@ -3295,19 +3365,19 @@ begin
                 '%.Create: % set invalid SizeInStorage=% in %.% method % parameter',
                 [self, ArgTypeName^, SizeInStorage, fInterfaceName, URI, ParamName^]);
           end;
-        smvRecord:
+        imvRecord:
           if ArgRtti.Size <= PTRSIZ then
             raise EInterfaceFactory.CreateUTF8(
               '%.Create: % record too small in %.% method % parameter',
               [self, ArgTypeName^, fInterfaceName, URI, ParamName^])
           else
             SizeInStorage := PTRSIZ; // handle only records when passed by ref
-        smvBinary:
+        imvBinary:
           ; // already set SizeInStorage
       else
         SizeInStorage := PTRSIZ;
       end;
-      if ValueDirection = smdResult then
+      if ValueDirection = imdResult then
       begin
         if not (ValueType in ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
@@ -3319,8 +3389,8 @@ begin
         // CPUX86 will add an additional by-ref parameter
       end;
       {$ifdef CPU32}
-      if ValueDirection = smdConst then
-        if ValueType = smvBinary then
+      if ValueDirection = imdConst then
+        if ValueType = imvBinary then
           SizeInStack := SizeInBinary
         else
           SizeInStack := ARGS_IN_STACK_SIZE[ValueType]
@@ -3343,7 +3413,7 @@ begin
         {$endif LINUX}
         {$endif CPUX86}
         {$ifdef FPC}
-        or ((ValueType in [smvRecord]) and
+        or ((ValueType in [imvRecord]) and
           // trunk i386/x86_64\cpupara.pas: DynArray const is passed as register
           not (vPassedByReference in ValueKindAsm))
         {$endif FPC}
@@ -3429,7 +3499,7 @@ begin
       WR.Add('[');
       for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
-        if ValueDirection in [smdVar, smdOut, smdResult] then
+        if ValueDirection in [imdVar, imdOut, imdResult] then
           AddDefaultJSON(WR);
       WR.CancelLastComma;
       WR.Add(']');
@@ -3479,7 +3549,7 @@ begin
   end;
 end;
 
-function TInterfaceFactory.FindMethod(const aMethodName: RawUTF8): PServiceMethod;
+function TInterfaceFactory.FindMethod(const aMethodName: RawUTF8): PInterfaceMethod;
 var
   i: integer;
 begin
@@ -3874,6 +3944,8 @@ begin
 end;
 
 
+{$ifdef HASINTERFACERTTI}
+
 { TInterfaceFactoryRTTI }
 
 procedure TInterfaceFactoryRTTI.AddMethodsFromTypeInfo(aInterface: PRttiInfo);
@@ -3881,9 +3953,9 @@ var
   info: TRttiInterface;
   nm, na: integer;
   m: PRttiMethod;
-  sm: PServiceMethod;
+  sm: PInterfaceMethod;
   a: PRttiMethodArg;
-  sa: PServiceMethodArgument;
+  sa: PInterfaceMethodArgument;
 begin
   nm := GetRttiInterface(aInterface, info); // call mormot.core.rtti logic
   fMethod.Capacity := nm;
@@ -3902,7 +3974,7 @@ begin
       sa^.ParamName := a^.ParamName;
       sa^.ArgTypeName := a^.TypeName;
       sa^.ArgRtti := rtti.RegisterType(a^.TypeInfo) as TRttiJson;
-      sa^.ValueDirection := TServiceMethodValueDirection(a^.Direction);
+      sa^.ValueDirection := TInterfaceMethodValueDirection(a^.Direction);
       inc(sa);
       inc(a);
       dec(na);
@@ -3912,6 +3984,8 @@ begin
   end;
 end;
 
+{$endif HASINTERFACERTTI}
+
 
 { TInterfaceFactoryGenerated }
 
@@ -3920,8 +3994,8 @@ procedure TInterfaceFactoryGenerated.AddMethod(const aName: RawUTF8;
 const
   ARGPERARG = 3; // aParams = [ 0,'n1',TypeInfo(Integer), ... ]
 var
-  meth: PServiceMethod;
-  arg: ^TServiceMethodArgument;
+  meth: PInterfaceMethod;
+  arg: ^TInterfaceMethodArgument;
   na, ns, a: PtrInt;
   u: RawUTF8;
 begin
@@ -3948,7 +4022,7 @@ begin
         '%: invalid param type #% for %.AddMethod("%")',
         [fInterfaceName, a, self, aName]);
     arg^.ValueDirection :=
-      TServiceMethodValueDirection(aParams[a * ARGPERARG].VInteger);
+      TInterfaceMethodValueDirection(aParams[a * ARGPERARG].VInteger);
     VarRecToUTF8(aParams[a * ARGPERARG + 1], u);
     if u = '' then
       raise EInterfaceFactory.CreateUTF8(
@@ -4610,14 +4684,14 @@ end;
 { EInterfaceStub }
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
-  const Method: TServiceMethod; const Error: RawUTF8);
+  const Method: TInterfaceMethod; const Error: RawUTF8);
 begin
   inherited CreateUTF8('Error in % for %.% - %', [Sender, Sender.fInterface.fInterfaceName,
     Method.URI, Error]);
 end;
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
-  const Method: TServiceMethod; const Format: RawUTF8; const Args: array of const);
+  const Method: TInterfaceMethod; const Format: RawUTF8; const Args: array of const);
 begin
   Create(Sender, Method, FormatUTF8(Format, Args));
 end;
@@ -4730,7 +4804,7 @@ end;
 { TOnInterfaceStubExecuteParamsAbstract }
 
 constructor TOnInterfaceStubExecuteParamsAbstract.Create(aSender: TInterfaceStub;
-  aMethod: PServiceMethod; const aParams, aEventParams: RawUTF8);
+  aMethod: PInterfaceMethod; const aParams, aEventParams: RawUTF8);
 begin
   fSender := aSender;
   fMethod := aMethod;
@@ -4770,7 +4844,7 @@ end;
 { TOnInterfaceStubExecuteParamsVariant }
 
 constructor TOnInterfaceStubExecuteParamsVariant.Create(aSender: TInterfaceStub;
-  aMethod: PServiceMethod; const aParams, aEventParams: RawUTF8);
+  aMethod: PInterfaceMethod; const aParams, aEventParams: RawUTF8);
 var
   i: PtrInt;
   P: PUTF8Char;
@@ -4818,7 +4892,7 @@ begin
   if (L > 0) and (fInput <> nil) then
     for a := fMethod^.ArgsInFirst to fMethod^.ArgsInLast do
       with fMethod^.Args[a] do
-        if ValueDirection in [smdConst, smdVar] then
+        if ValueDirection in [imdConst, imdVar] then
         begin
           if IdemPropName(ParamName^, pointer(aParamName), L) then
           begin
@@ -4852,7 +4926,7 @@ begin
   if (L > 0) and (fOutput <> nil) then
     for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
       with fMethod^.Args[a] do
-        if ValueDirection <> smdConst then
+        if ValueDirection <> imdConst then
         begin
           if IdemPropName(ParamName^, pointer(aParamName), L) then
           begin
@@ -4882,7 +4956,7 @@ begin
     ndx := 0;
     for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
       with fMethod^.Args[a] do
-        if ValueDirection <> smdConst then
+        if ValueDirection <> imdConst then
         begin
           if TVarData(fOutput[ndx]).VType = varEmpty then
             AddDefaultJSON(W)
@@ -4904,14 +4978,14 @@ begin
 end;
 
 function TOnInterfaceStubExecuteParamsVariant.InputAsDocVariant(
-  Kind: TServiceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
+  Kind: TInterfaceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
 begin
   VarClear(result);
   fMethod^.ArgsValuesAsDocVariant(Kind, TDocVariantData(Result), fInput, true, Options);
 end;
 
 function TOnInterfaceStubExecuteParamsVariant.OutputAsDocVariant(
-  Kind: TServiceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
+  Kind: TInterfaceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
 begin
   VarClear(result);
   fMethod^.ArgsValuesAsDocVariant(Kind, TDocVariantData(Result), fOutput, false, Options);
@@ -5144,7 +5218,7 @@ type
   TInterfaceStubExecutesToLog = packed record
     Log: TSynLogClass;
     LogLevel: TSynLogInfo;
-    Kind: TServiceMethodParamsDocVariantKind;
+    Kind: TInterfaceMethodParamsDocVariantKind;
   end;
   PInterfaceStubExecutesToLog = ^TInterfaceStubExecutesToLog;
 
@@ -5157,7 +5231,7 @@ begin
 end;
 
 function TInterfaceStub.Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
-  aKind: TServiceMethodParamsDocVariantKind): TInterfaceStub;
+  aKind: TInterfaceMethodParamsDocVariantKind): TInterfaceStub;
 var
   tmp: RawUTF8;
 begin
@@ -5321,7 +5395,7 @@ begin
   result := Returns(aMethodName, '', JSONEncodeArrayOfConst(aExpectedResults, true));
 end;
 
-function TInterfaceStub.Invoke(const aMethod: TServiceMethod;
+function TInterfaceStub.Invoke(const aMethod: TInterfaceMethod;
   const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
