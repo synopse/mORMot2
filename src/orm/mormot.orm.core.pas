@@ -2604,6 +2604,13 @@ type
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     procedure RollBack(SessionID: cardinal);
+    /// enter the Mutex associated with the write operations of this instance
+    // - just a wrapper around TSQLRest.AcquireExecution[execORMWrite].Safe.Lock
+    procedure WriteLock;
+    /// leave the Mutex associated with the write operations of this instance
+    // - just a wrapper around TSQLRest.AcquireExecution[execORMWrite].Safe.UnLock
+    procedure WriteUnLock;
+
     /// execute a BATCH sequence prepared in a TSQLRestBatch instance
     // - implements the "Unit Of Work" pattern, i.e. safe transactional process
     // even on multi-thread environments
@@ -2624,6 +2631,57 @@ type
     // - just a wrapper around the overloaded BatchSend() method without the
     // Results: TIDDynArray parameter
     function BatchSend(Batch: TSQLRestBatch): integer; overload;
+    /// prepare an asynchronous ORM BATCH process, executed in a background thread
+    // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
+    // background thread, following the given processing period (in seconds),
+    // or the TSQLRestBatch.Count threshold to call BatchSend
+    // - actual REST/CRUD commands will take place via AsynchBatchAdd,
+    // AsynchBatchUpdate and AsynchBatchDelete methods
+    // - only a single AsynchBatch() call per Table is allowed at a time, unless
+    // AsynchBatchStop method is used to flush the current asynchronous BATCH
+    // - using a BATCH in a dedicated thread will allow very fast background
+    // asynchronous process of ORM methods, sufficient for most use cases
+    // - is a wrapper around BackgroundTimer.AsynchBatchStart()
+    function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
+      PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
+      Options: TSQLRestBatchOptions = [boExtendedJSON]): boolean;
+    /// finalize asynchronous ORM BATCH process, executed in a background thread
+    // - should have been preceded by a call to AsynchBatch(), or returns false
+    // - Table=nil will release all existing batch instances
+    // - is a wrapper around BackgroundTimer.AsynchBatchStop()
+    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
+    /// create a new ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around BackgroundTimer.AsynchBatchAdd(),
+    // so will return the index in the BATCH rows, not the created TID
+    // - this method is thread-safe
+    function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
+      ForceID: boolean = false; const CustomFields: TSQLFieldBits = [];
+      DoNotAutoComputeFields: boolean = false): integer;
+    /// append some JSON content in a BATCH to be written in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object
+    // - is a wrapper around BackgroundTimer.AsynchBatchRawAdd(),
+    // so will return the index in the BATCH rows, not the created TID
+    // - this method is thread-safe
+    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+    /// append some JSON content in a BATCH to be writen in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object, as stored in a TTextWriter instance
+    // - is a wrapper around BackgroundTimer.AsynchBatchRawAppend()
+    // - this method is thread-safe
+    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+    /// update an ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around BackgroundTimer.AsynchBatchUpdate()
+    // - this method is thread-safe
+    function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+      DoNotAutoComputeFields: boolean = false): integer;
+    /// delete an ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
+    // - this method is thread-safe
+    function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
 
     /// access the Database Model associated with REST Client or Server instance
     function Model: TSQLModel;
@@ -2649,6 +2707,11 @@ type
     function CacheOrNil: TSQLRestCache;
     /// returns TRUE if this table is worth caching (e.g. not in memory)
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
+    /// log the corresponding text (if logging is enabled)
+    procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
+    /// log the corresponding text (if logging is enabled)
+    procedure InternalLog(const Format: RawUTF8; const Args: array of const;
+      Level: TSynLogInfo = sllTrace); overload;
     /// retrieve the current server time stamp as a TTimeLog
     // - used e.g. by TSQLRecord.ComputeFieldsBeforeWrite for sftModTime/sftCreateTime
     // - is safe on both client and server sides
