@@ -235,7 +235,6 @@ type
     function Retrieve(const WhereClauseFmt: RawUTF8;
       const Args, Bounds: array of const; Value: TSQLRecord;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
-    // handles locking and use fast EngineRetrieve() method
     function Retrieve(aID: TID; Value: TSQLRecord;
       ForUpdate: boolean = false): boolean; overload; virtual;
     function Retrieve(Reference: TRecordReference;
@@ -560,10 +559,10 @@ end;
 function TRestORM.OneFieldValue(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8): RawUTF8;
 var
-  Res: array[0..0] of RawUTF8;
+  res: array[0..0] of RawUTF8;
 begin
-  if MultiFieldValue(Table, [FieldName], Res, WhereClause) then
-    result := Res[0]
+  if MultiFieldValue(Table, [FieldName], res, WhereClause) then
+    result := res[0]
   else
     result := '';
 end;
@@ -571,10 +570,10 @@ end;
 function TRestORM.OneFieldValueInt64(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8; Default: Int64): Int64;
 var
-  Res: array[0..0] of RawUTF8;
+  res: array[0..0] of RawUTF8;
 begin
-  if not MultiFieldValue(Table, [FieldName], Res, WhereClause) or
-     not ToInt64(Res[0], result) then
+  if not MultiFieldValue(Table, [FieldName], res, WhereClause) or
+     not ToInt64(res[0], result) then
     result := Default;
 end;
 
@@ -595,16 +594,16 @@ function TRestORM.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8
   const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
   out Data: Int64): boolean;
 var
-  Res: array[0..0] of RawUTF8;
+  res: array[0..0] of RawUTF8;
   err: integer;
   where: RawUTF8;
 begin
   result := false;
   where := FormatUTF8(WhereClauseFmt, Args, Bounds);
-  if MultiFieldValue(Table, [FieldName], Res, where) then
-    if Res[0] <> '' then
+  if MultiFieldValue(Table, [FieldName], res, where) then
+    if res[0] <> '' then
     begin
-      Data := GetInt64(pointer(Res[0]), err);
+      Data := GetInt64(pointer(res[0]), err);
       if err = 0 then
         result := true;
     end;
@@ -613,12 +612,12 @@ end;
 function TRestORM.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
   WhereID: TID): RawUTF8;
 var
-  Res: array[0..0] of RawUTF8;
+  res: array[0..0] of RawUTF8;
 begin
   if (WhereID > 0) and
-     MultiFieldValue(Table, [FieldName], Res,
+     MultiFieldValue(Table, [FieldName], res,
        'RowID=:(' + Int64ToUtf8(WhereID) + '):') then
-    result := Res[0]
+    result := res[0]
   else
     result := '';
 end;
@@ -699,7 +698,7 @@ function TRestORM.OneFieldValues(Table: TSQLRecordClass;
 var
   T: TSQLTable;
   V: Int64;
-  Prop: RawUTF8;
+  prop: RawUTF8;
   P: PUTF8Char;
 begin
   Data := nil;
@@ -707,9 +706,9 @@ begin
   if IsRowID(pointer(FieldName)) and (length(WhereClause) > 2) then
   begin
     P := pointer(WhereClause);
-    GetNextFieldProp(P, Prop);
-    if IsRowIDShort(Prop) and (StrPosI('AND', P) = nil) and
-       (StrPosI('OR', P) = nil) then
+    GetNextFieldProp(P, prop);
+    if IsRowIDShort(prop) and
+       (StrPosI('AND', P) = nil) and (StrPosI('OR', P) = nil) then
       case P^ of
         '=':
           begin
@@ -881,7 +880,8 @@ end;
 
 function TRestORM.FTSMatch(Table: TSQLRecordFTS3Class;
   const WhereClause: RawUTF8; var DocID: TIDDynArray): boolean;
-begin // FTS3 tables don't have any ID, but RowID or DocID
+begin
+  // FTS3 tables don't have any ID, but RowID or DocID
   result := OneFieldValues(Table, 'RowID', WhereClause, TInt64DynArray(DocID));
 end;
 
@@ -1107,15 +1107,15 @@ function TRestORM.RetrieveDocVariantArray(Table: TSQLRecordClass;
   FirstRecordID, LastRecordID: PID): variant;
 var
   T: TSQLTable;
-  res: variant;
+  v: variant;
 begin
-  TVarData(res).VType := varNull;
+  TVarData(v).VType := varNull;
   if (self <> nil) and (Table <> nil) then
   begin
     T := MultiFieldValues(Table, CustomFieldsCSV, FormatSQLWhere, BoundsSQLWhere);
     if T <> nil then
     try
-      T.ToDocVariant(res, {readonly=}false); // not readonly -> TDocVariant dvArray
+      T.ToDocVariant(v, {readonly=}false); // not readonly -> TDocVariant dvArray
       if FirstRecordID <> nil then
         FirstRecordID^ := T.IDColumnHiddenValue(1);
       if LastRecordID <> nil then
@@ -1125,9 +1125,9 @@ begin
     end;
   end;
   if ObjectName <> '' then
-    result := _ObjFast([ObjectName, res])
+    result := _ObjFast([ObjectName, v])
   else
-    result := res;
+    result := v;
 end;
 
 function TRestORM.RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
@@ -1136,7 +1136,7 @@ function TRestORM.RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
 var
   T: TSQLTable;
   row: Integer;
-  res: TDocVariantData absolute result;
+  doc: TDocVariantData absolute result;
 begin
   VarClear(result);
   if (self <> nil) and (Table <> nil) then
@@ -1144,10 +1144,10 @@ begin
     T := MultiFieldValues(Table, FieldName, FormatSQLWhere, BoundsSQLWhere);
     if T <> nil then
     try
-      res.InitFast(T.RowCount, dvArray);
-      res.SetCount(T.RowCount);
+      doc.InitFast(T.RowCount, dvArray);
+      doc.SetCount(T.RowCount);
       for row := 1 to T.RowCount do
-        T.GetAsVariant(row, 0, res.Values[row - 1], false, false, false,
+        T.GetAsVariant(row, 0, doc.Values[row - 1], false, false, false,
           JSON_OPTIONS_FAST);
     finally
       T.Free;
@@ -1238,7 +1238,7 @@ function TRestORM.RTreeMatch(DataTable: TSQLRecordClass;
   const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
 var
   Blob: PRttiProp;
-  Res: TSQLTable;
+  T: TSQLTable;
   BDouble: TSQLRecordTreeCoords;
   BInteger: TSQLRecordTreeCoordsInteger absolute BDouble;
   Where, SQL: RawUTF8;
@@ -1284,15 +1284,15 @@ begin
     [RTree.SQLTableName, Data.SQLTableName, RTree.SQLTableName,
      Data.SQLTableName, Where, RTreeTable.RTreeSQLFunctionName,
      Data.SQLTableName, BinToBase64WithMagic(DataTableBlobField)], SQL);
-  Res := ExecuteList([DataTable, RTreeTable], SQL);
-  if Res <> nil then
+  T := ExecuteList([DataTable, RTreeTable], SQL);
+  if T <> nil then
   try
-    if (Res.FieldCount <> 1) or (Res.RowCount <= 0) then
+    if (T.FieldCount <> 1) or (T.RowCount <= 0) then
       exit;
-    Res.GetRowValues(0, TInt64DynArray(DataID));
+    T.GetRowValues(0, TInt64DynArray(DataID));
     result := true;
   finally
-    Res.Free;
+    T.Free;
   end;
 end;
 

@@ -533,7 +533,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="53">
+    <Units Count="54">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -746,6 +746,10 @@
         <Filename Value="..\src\core\mormot.core.interfaces.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit52>
+      <Unit53>
+        <Filename Value="..\src\orm\mormot.orm.rest.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit53>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
