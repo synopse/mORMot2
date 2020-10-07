@@ -44,6 +44,7 @@ uses
   mormot.net.asynch        in '..\src\net\mormot.net.asynch.pas',
   mormot.net.websock       in '..\src\net\mormot.net.websock.pas',
   mormot.orm.core          in '..\src\orm\mormot.orm.core.pas',
+  mormot.orm.rest          in '..\src\orm\mormot.orm.rest.pas',
   mormot.soa.core          in '..\src\soa\mormot.soa.core.pas',
   mormot.rest.core         in '..\src\rest\mormot.rest.core.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',

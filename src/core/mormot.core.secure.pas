@@ -435,6 +435,9 @@ type
     property ComputedCount: Int64 read GetComputedCount;
   end;
 
+  /// hold a dynamic array of TSynUniqueIdentifierGenerator instances
+  TSynUniqueIdentifierGenerators = array of TSynUniqueIdentifierGenerator;
+
 
 
 { **************** High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers }

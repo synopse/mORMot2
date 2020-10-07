@@ -73,6 +73,9 @@ const
   // database (e.g. as expected by TSQLAccessRights or such)
   MAX_SQLTABLES = 256;
 
+  /// after how many parameters inlining is not worth it
+  INLINED_MAX = 10;
+
 type
   /// generic parent class of all custom Exception types of this unit
   EORMException = class(ESynException);
@@ -2844,8 +2847,6 @@ type
     // - will return Props.SimpleFieldsBits[soUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
       out Bits: TSQLFieldBits);
-    /// return all mapped fields, or [] if nil
-    function TableMapFields: TSQLFieldBits;
     /// the TSQLTable stated as FillPrepare() parameter
     // - the internal temporary table is stored here for TSQLRecordMany
     // - this instance is freed by TSQLRecord.Destroy if fTable.OwnerMustFree=true
@@ -2857,6 +2858,11 @@ type
     // - it means that all nested TSQLRecord are pre-allocated instances,
     // not trans-typed pointer(IDs)
     property JoinedFields: boolean read GetJoinedFields;
+    /// set by TSQLRecord.FillPrepareMany() to release M.fDestID^ instances
+    property TableMapRecordManyInstances: TSQLRecordManyObjArray
+      read fTableMapRecordManyInstances;
+    /// return all mapped fields, or [] if nil
+    function TableMapFields: TSQLFieldBits;
   end;
 
 
@@ -4051,7 +4057,7 @@ type
   protected
     fRowCount: integer;
     fFieldCount: integer;
-    /// contains the data, as returned by sqlite3_get_table()
+    /// contains the data, e.g. as returned by sqlite3_get_table()
     fResults: PPUTF8CharArray;
     fFieldType: array of TSQLTableFieldType;
     fFieldTypeAllRows: boolean;
@@ -4514,8 +4520,8 @@ type
     procedure FieldLengthMeanIncrease(aField, aIncrease: integer);
 
     /// copy the parameters of a TSQLTable into this instance
-    // - the fResults remain in the source TSQLTable: source TSQLTable has not to
-    // be destroyed before this TSQLTable
+    // - the Results[] remain in the source TSQLTable: source TSQLTable has not
+    // to be destroyed before this TSQLTable
     procedure Assign(source: TSQLTable);
 
     /// search a text value inside the table data in a specified field
@@ -4582,7 +4588,7 @@ type
     function SearchFieldSorted(Value: PUTF8Char; FieldIndex: integer;
       CustomCompare: TUTF8Compare = nil): integer; overload;
 
-    /// if the ID column is available, hides it from fResults[]
+    /// if the ID column is available, hides it from Results[]
     // - useful for simplier UI, with a hidden ID field
     // - use IDColumnHiddenValue() to get the ID of a specific row
     // - return true is ID was succesfully hidden, false if not possible
@@ -4604,7 +4610,7 @@ type
     function RowFromID(aID: TID; aNotFoundMinusOne: boolean = false): integer;
 
     /// delete the specified data Row from the Table
-    // - only overwrite the internal fResults[] pointers, don't free any memory,
+    // - only overwrite the internal Results[] pointers, don't free any memory,
     // nor modify the internal DataSet
     function DeleteRow(Row: integer): boolean;
     /// delete the specified Column text from the Table
@@ -4737,6 +4743,9 @@ type
     property RowCount: integer read GetRowCount;
     /// read-only access to the number of fields for each Row in this table
     property FieldCount: integer read fFieldCount;
+    /// raw access to the data values memory pointers
+    // - you should rather use the Get*() methods
+    property Results: PPUTF8CharArray read fResults;
     /// read-only access to the ID/RowID field index
     // - do not use this property if the ID column has been hidden, but
     // use IDColumnHiddenValue() method instead
@@ -4824,7 +4833,7 @@ type
     /// fill the result table content from a JSON-formated Data message
     // - returns TRUE on parsing success
     // - returns FALSE if no valid JSON data was found
-    // - update all content fields (fResults[], fRowCount, fFieldCount, etc...)
+    // - update all content fields (Results[], RowCount, FieldCount, etc...)
     // - expect the UTF-8 Buffer in either TSQLRequest.EngineExecute(DB,SQL,JSON)
     // format (i.e. expanded) or either in a not expanded format (as an
     // AJAX-ready array of objects)
@@ -4842,7 +4851,7 @@ type
     // - please note that the supplied JSON buffer content will be changed:
     // if you want to reuse this JSON content, you shall make a private copy
     // before calling this constructor and you shall NOT release the corresponding
-    // variable (fResults/JSONResults[] will point inside this memory buffer):
+    // variable (Results/JSONResults[] will point inside this memory buffer):
     // use instead the overloaded Create constructor expecting a const
     // aJSON: RawUTF8 parameter to allocate and hold a private copy of the data
     constructor Create(const aSQL: RawUTF8;
@@ -4882,7 +4891,7 @@ type
     /// update the result table content from a JSON-formated Data message
     // - return true on parsing success, false if no valid JSON data was found
     // - set Refreshed to true if the content changed
-    // - update all content fields (fResults[], fRowCount, fFieldCount, etc...)
+    // - update all content fields (Results[], RowCount, FieldCount, etc...)
     // - call SortFields() or IDColumnHide if was already done for this TSQLTable
     // - the conversion into PPUTF8CharArray is made inplace and is very fast
     // (only one memory buffer is allocated for the whole data)
@@ -6221,7 +6230,7 @@ type
     fCustomCollationForAll: array[TSQLFieldType] of RawUTF8;
     fOnClientIdle: TOnIdleSynBackgroundThread;
     /// contains the TSQLRest caller of CreateOwnedStream()
-    fRestOwner: TObject;
+    fOwner: TObject;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use of a dynamic array with one entry by table
     fLocks: TSQLLocksDynArray;
@@ -6232,7 +6241,7 @@ type
     fVirtualTableModule: array of TClass;
     /// all TRecordReference and TSQLRecord properties of the model
     fRecordReferences: TSQLModelRecordReferenceDynArray;
-    fIDGenerator: array of TSynUniqueIdentifierGenerator;
+    fIDGenerator: TSynUniqueIdentifierGenerators;
     procedure SetRoot(const aRoot: RawUTF8);
     procedure SetTableProps(aIndex: integer);
     function GetTableIndexSafe(aTable: TSQLRecordClass;
@@ -6385,6 +6394,8 @@ type
       const aSharedObfuscationKey: RawUTF8 = ''): TSynUniqueIdentifierGenerator;
     /// returns the TSynUniqueIdentifierGenerator associated to a table, if any
     function GetIDGenerator(aTable: TSQLRecordClass): TSynUniqueIdentifierGenerator;
+    /// low-level access to the TSynUniqueIdentifierGenerator instances, if any
+    property IDGenerator: TSynUniqueIdentifierGenerators read fIDGenerator;
 
     /// register a Virtual Table module for a specified class
     // - to be called server-side only (Client don't need to know the virtual
@@ -6472,7 +6483,7 @@ type
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
     // Owner.Destroy autofreeing this (TSQLRest) instance
-    property Owner: TObject read fRestOwner write fRestOwner;
+    property Owner: TObject read fOwner write fOwner;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TSQLLocks entry by table
     property Locks: TSQLLocksDynArray read fLocks;
@@ -6538,7 +6549,7 @@ type
     CacheAll: boolean;
     /// time out value (in ms)
     // - if 0, caching will never expire
-    TimeOutMS: Cardinal;
+    TimeOutMS: cardinal;
     /// the number of entries stored in Values[]
     Count: integer;
     /// all cached IDs and JSON content
@@ -6599,14 +6610,6 @@ type
     fModel: TSQLModel;
     /// fCache[] follows fRest.Model.Tables[] array: one entry per TSQLRecord
     fCache: TSQLRestCacheEntryDynArray;
-    /// retrieve a record specified by its ID from cache into JSON content
-    // - return '' if the item is not in cache
-    function Retrieve(aTableIndex: integer; aID: TID): RawUTF8; overload;
-    /// fill a record specified by its ID from cache into a new TSQLRecord instance
-    // - return false if the item is not in cache
-    // - this method will call RetrieveJSON method, unserializing the cached
-    // JSON content into the supplied aValue instance
-    function Retrieve(aID: TID; aValue: TSQLRecord): boolean; overload;
   public
     /// create a cache instance
     // - the associated TSQLModel will be used internaly
@@ -6676,6 +6679,14 @@ type
     /// read-only access to the associated TSQLModel instance
     property Model: TSQLModel read fModel;
   public { TSQLRest low level methods which are not to be called usualy: }
+    /// retrieve a record specified by its ID from cache into JSON content
+    // - return '' if the item is not in cache
+    function Retrieve(aTableIndex: integer; aID: TID): RawUTF8; overload;
+    /// fill a record specified by its ID from cache into a new TSQLRecord instance
+    // - return false if the item is not in cache
+    // - this method will call RetrieveJSON method, unserializing the cached
+    // JSON content into the supplied aValue instance
+    function Retrieve(aID: TID; aValue: TSQLRecord): boolean; overload;
     /// TSQLRest instance shall call this method when a record is added or updated
     // - this overloaded method expects the content to be specified as JSON object
     procedure Notify(aTable: TSQLRecordClass; aID: TID; const aJSON: RawUTF8;
@@ -6900,6 +6911,8 @@ type
     /// may be used to store a number of rows to flush the content
     property Threshold: integer read fThreshold write fThreshold;
   end;
+
+  TSQLRestBatchLockedDynArray = array of TSQLRestBatchLocked;
 
 
   { -------------------- TSynValidateRest TSynValidateUniqueField Definitions }
@@ -11974,7 +11987,7 @@ end;
 
 function TSQLPropInfoList.GetItem(aIndex: integer): TSQLPropInfo;
 begin
-  if cardinal(aIndex) >= Cardinal(fCount) then
+  if cardinal(aIndex) >= cardinal(fCount) then
     raise EORMException.Create('Invalid TSQLPropInfoList index');
   result := fList[aIndex];
 end;
@@ -14128,7 +14141,7 @@ procedure TSQLTable.SortFields(Field: integer; Asc: boolean;
 var
   quicksort: TUTF8QuickSort; // fast static object for sorting
 begin
-  if (FieldCount = 0) or (Cardinal(Field) >= cardinal(FieldCount)) then
+  if (FieldCount = 0) or (cardinal(Field) >= cardinal(FieldCount)) then
     exit;
   if FieldType = sftUnknown then // guess the field type from first row
     FieldType := self.FieldType(Field);
@@ -16239,9 +16252,6 @@ begin
   sqlwhere := FormatUTF8(FormatSQLWhere, ParamsSQLWhere, BoundsSQLWhere);
   result := FillPrepare(aClient, sqlwhere, aCustomFieldsCSV);
 end;
-
-const
-  INLINED_MAX = 10;
 
 function TSQLRecord.FillPrepare(const aClient: IRestORM;
   const aIDs: array of Int64; const aCustomFieldsCSV: RawUTF8): boolean;
@@ -19339,7 +19349,7 @@ begin
   if fTablesMax <> High(fTables) then
     raise EModelException.CreateUTF8('%.Create: incorrect CloneFrom.TableMax', [self]);
   SetRoot(CloneFrom.fRoot);
-  fRestOwner := CloneFrom.fRestOwner;
+  fOwner := CloneFrom.fOwner;
   fSortedTablesNameUpper := CloneFrom.fSortedTablesNameUpper;
   fSortedTablesNameIndex := CloneFrom.fSortedTablesNameIndex;
   fRecordReferences := CloneFrom.fRecordReferences;
@@ -19413,7 +19423,7 @@ var
   i: PtrInt;
 begin
   i := GetTableIndex(aTable);
-  if (i < 0) or (Cardinal(aFieldIndex) >= MAX_SQLFIELDS) then
+  if (i < 0) or (cardinal(aFieldIndex) >= MAX_SQLFIELDS) then
     result := false
   else
     result := aFieldIndex in TableProps[i].Props.IsUniqueFieldsBits;
@@ -19840,7 +19850,7 @@ end;
 
 function TSQLModel.Lock(aTableIndex: integer; aID: TID): boolean;
 begin
-  if (self = nil) or (Cardinal(aTableIndex) > cardinal(fTablesMax)) then
+  if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := false
   else
   begin
@@ -20641,7 +20651,8 @@ begin
     if i >= 0 then
       with Values[i] do
         if Timestamp512 <> 0 then // 0 when there is no JSON value cached
-          if (TimeOutMS <> 0) and ((GetTickCount64 - TimeOutMS) shr 9 > Timestamp512) then
+          if (TimeOutMS <> 0) and
+             ((GetTickCount64 - TimeOutMS) shr 9 > Timestamp512) then
             FlushCacheEntry(i)
           else
           begin
@@ -20755,7 +20766,7 @@ begin
       inc(result, fCache[i].CachedMemory(FlushedEntriesCount));
 end;
 
-function TSQLRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: Cardinal): boolean;
+function TSQLRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: cardinal): boolean;
 var
   i: PtrInt;
 begin
@@ -20952,7 +20963,7 @@ begin
      not (aAction in [soInsert, soUpdate]) then
     exit;
   aTableIndex := fRest.Model.GetTableIndex(PSQLRecordClass(aRecord)^);
-  if aTableIndex < Cardinal(Length(fCache)) then
+  if aTableIndex < cardinal(Length(fCache)) then
     with fCache[aTableIndex] do
       if CacheEnable then
         SetJSON(aRecord);
@@ -20963,7 +20974,7 @@ procedure TSQLRestCache.Notify(aTableIndex: integer; aID: TID;
 begin
   if (self <> nil) and (aID > 0) and
      (aAction in [soSelect, soInsert, soUpdate]) and
-     (aJSON <> '') and (Cardinal(aTableIndex) < Cardinal(Length(fCache))) then
+     (aJSON <> '') and (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
         SetJSON(aID, aJSON);
@@ -20972,7 +20983,7 @@ end;
 procedure TSQLRestCache.NotifyDeletion(aTableIndex: integer; aID: TID);
 begin
   if (self <> nil) and (aID > 0) and
-     (Cardinal(aTableIndex) < Cardinal(Length(fCache)))
+     (cardinal(aTableIndex) < cardinal(Length(fCache)))
     then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -20991,7 +21002,7 @@ var
   i: PtrInt;
 begin
   if (self <> nil) and (high(aIDs) >= 0) and
-     (Cardinal(aTableIndex) < Cardinal(Length(fCache))) then
+     (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
       begin
@@ -21029,7 +21040,7 @@ function TSQLRestCache.Retrieve(aTableIndex: integer; aID: TID): RawUTF8;
 begin
   result := '';
   if (self <> nil) and (aID > 0) and
-     (Cardinal(aTableIndex) < Cardinal(Length(fCache))) then
+     (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
         RetrieveJSON(aID, result);
@@ -21237,7 +21248,7 @@ begin
     else
       Value.GetJSONValues(fBatch);
     if fCalledWithinRest and ForceID then
-      fRest.Cache.Notify(Value, soInsert);
+      fRest.CacheOrNil.Notify(Value, soInsert);
   end
   else
     fBatch.Add('{', '}'); // '{"Table":[...,"POST",{},...]}'
@@ -21302,7 +21313,7 @@ begin
     begin // if something to send
       for i := 0 to fDeletedCount - 1 do
         if fDeletedRecordRef[i] <> 0 then
-          fRest.Cache.NotifyDeletion(fDeletedRecordRef[i] and 63,
+          fRest.CacheOrNil.NotifyDeletion(fDeletedRecordRef[i] and 63,
             fDeletedRecordRef[i] shr 6);
       fBatch.CancelLastComma;
       fBatch.Add(']');
@@ -21361,7 +21372,7 @@ begin
   if fCalledWithinRest and (FieldBits - Props.SimpleFieldsBits[soUpdate] = []) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
-    fRest.Cache.Notify(Value, soUpdate)
+    fRest.CacheOrNil.Notify(Value, soUpdate)
   else
     // may not contain all cached fields -> delete from cache
     AddID(fDeletedRecordRef, fDeletedCount, RecordReference(tableIndex, ID));
