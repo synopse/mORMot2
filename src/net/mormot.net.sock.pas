@@ -2235,7 +2235,7 @@ begin
     exit;
   if ResultClass = nil then
     ResultClass := TCrtSocket;
-  result := ResultClass.Create;
+  result := ResultClass.Create(Timeout);
   result.AcceptRequest(client, @addr);
   result.CreateSockIn; // use SockIn with 1KB input buffer: 2x faster
 end;
