@@ -2638,7 +2638,7 @@ type
     // - you should not use this low-level method in your code, but rather the
     // overloaded BatchSend() functions; is defined for raw asynchronous call
     function BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
-       var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
+       var Results: TIDDynArray; ExpectedResultsCount: integer): integer; overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
     // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
