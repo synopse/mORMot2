@@ -251,6 +251,11 @@ function SQLVarLength(const Value: TSQLVar): integer;
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
   var Output: TSQLVar);
 
+/// convert any Variant into a value encoded as with :(..:) inlined parameters
+// in FormatUTF8(Format,Args,Params)
+// - will transform into a UTF-8, between double quotes for string values
+procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
+
 /// guess the correct TSQLDBFieldType from a variant type
 function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
 
@@ -1166,7 +1171,7 @@ end;
 function IsRowIDShort(const FieldName: shortstring): boolean;
 begin
   result := ((PIntegerArray(@FieldName)^[0] and $dfdfff =
-             2 + ord('I') shl 8 + ord('D') shl 16) or
+              2 + ord('I') shl 8 + ord('D') shl 16) or
             ((PIntegerArray(@FieldName)^[0] and $dfdfdfff =
               5 + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
              (PIntegerArray(@FieldName)^[1] and $dfdf = ord('I') + ord('D') shl 8)));
@@ -1225,7 +1230,8 @@ begin
             Output.VType := ftUTF8;
             Output.VText := VPointer;
           end;
-      else // handle less current cases
+      else
+        // handle less current cases
         if VariantToInt64(Input, Output.VInt64) then
           Output.VType := ftInt64
         else
@@ -1240,6 +1246,18 @@ begin
             Output.VType := ftNull;
         end;
       end;
+end;
+
+procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
+var
+  tmp: RawUTF8;
+  wasString: boolean;
+begin
+  VariantToUTF8(V, tmp, wasString);
+  if wasString then
+    QuotedStr(tmp, '"', result)
+  else
+    result := tmp;
 end;
 
 function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
@@ -1523,8 +1541,8 @@ end;
 
 function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
 begin
-  result := Iso8601ToDateTimePUTF8Char(PUTF8Char(
-    pointer(ParamValueWithMagic)) + 3, length(ParamValueWithMagic) - 3);
+  result := Iso8601ToDateTimePUTF8Char(PUTF8Char(pointer(ParamValueWithMagic)) + 3,
+    length(ParamValueWithMagic) - 3);
 end;
 
 
@@ -1552,20 +1570,23 @@ begin
       begin
         P := UnQuoteSQLStringVar(P, ParamValue);
         if P = nil then
-          exit; // not a valid quoted string (e.g. unexpected end in middle of it)
+          // not a valid quoted string (e.g. unexpected end in middle of it)
+          exit;
         ParamType := sptText;
         L := length(ParamValue) - 3;
         if L > 0 then
         begin
           c := PInteger(ParamValue)^ and $00ffffff;
           if c = JSON_BASE64_MAGIC then
-          begin // ':("\uFFF0base64encodedbinary"):' format -> decode
+          begin
+            // ':("\uFFF0base64encodedbinary"):' format -> decode
             Base64MagicDecode(ParamValue); // wrapper function to avoid temp. string
             ParamType := sptBlob;
           end
           else if (c = JSON_SQLDATE_MAGIC) and
                   IsIso8601(PUTF8Char(pointer(ParamValue)) + 3, L) then
-          begin // handle ':("\uFFF112012-05-04"):' format
+          begin
+            // handle ':("\uFFF112012-05-04"):' format
             Delete(ParamValue, 1, 3);   // return only ISO-8601 text
             ParamType := sptDateTime;   // identified as Date/Time
           end;
@@ -1650,7 +1671,7 @@ begin
   FastSetString(result, pointer(SQL), length(SQL)); // private copy for unescape
   P := pointer(result); // in-place string unescape (keep SQL untouched)
   Gen := P + ppBeg - 1; // Gen^ just before :(
-  inc(P, ppBeg + 1);   // P^ just after :(
+  inc(P, ppBeg + 1);    // P^ just after :(
   repeat
     Gen^ := '?'; // replace :(...): by ?
     inc(Gen);
@@ -1674,7 +1695,7 @@ begin
       inc(P);
     end;
     if P^ = #0 then
-      Break;
+      break;
     inc(P, 2);
     inc(maxParam);
   until false;

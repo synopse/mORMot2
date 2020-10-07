@@ -791,6 +791,7 @@ type
   // - can use available debugging information via the TSynMapFile class, for
   // stack trace logging for exceptions, sllStackTrace, and Enter/Leave labelling
   TSynLog = class(TObject, ISynLog)
+  // note: don't inherit from TSynInterfacedObject to avoid a method call
   protected
     fFamily: TSynLogFamily;
     fWriter: TBaseWriter;
@@ -816,7 +817,6 @@ type
     fCurrentLevel: TSynLogInfo;
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     fDisableRemoteLog: boolean;
-    // note: don't inherit from TSynInterfacedObject to avoid a virtual method call
     {$ifdef FPC}
     function QueryInterface(
       {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID; out Obj): longint;

@@ -2084,7 +2084,7 @@ type
     // - if outStream is TMemoryStream -> auto-reserve space (no Realloc:)
     // - for normal usage, you just have to Assign one In and one Out
     // - if outStream AND bOut are both nil, an outStream is created via
-    // THeapMemoryStream.Create
+    // TMemoryStream.Create
     // - if Encrypt -> OriginalLen can be used to store unCompressed Len
     function EncodeDecode(const Key; KeySize, inLen: cardinal; Encrypt: boolean;
       inStream, outStream: TStream; bIn, bOut: pointer; OriginalLen: cardinal = 0): integer;

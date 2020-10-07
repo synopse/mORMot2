@@ -1951,6 +1951,7 @@ type
   // - as used e.g. by TInterfaceFactoryClient.CreateFakeInstance
   // - has a simple cross-CPU JIT engine to redirect to a FakeCall() method
   TInterfacedObjectFake = class(TInterfacedObjectFromFactory)
+  // note: inheriting from TSynInterfacedObject is not possible: we need raw API
   protected
     fVTable: PPointerArray;
     fServiceFactory: TObject; // holds a TServiceFactory instance
