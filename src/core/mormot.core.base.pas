@@ -4753,7 +4753,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if PCardinalArray(@val)^[1] = 0 then
     P := StrUInt32(P, PCardinal(@val)^)

@@ -3200,6 +3200,7 @@ begin
 end;
 
 {$ifdef HASINTERFACERTTI}
+
 class procedure TInterfaceFactory.RegisterInterfaces(
   const aInterfaces: array of PRttiInfo);
 var
@@ -3208,12 +3209,16 @@ begin
   for i := 0 to high(aInterfaces) do
     Get(aInterfaces[i]);
 end;
+
 {$else}
 
 class procedure TInterfaceFactory.RegisterInterfaces(
   const aInterfaces: array of PRttiInfo);
-begin // in fact, TInterfaceFactoryGenerated.RegisterInterface() should do it
+begin
+  // no-op if not RTTI is available -> will be checked later when resolved
+  // in fact, TInterfaceFactoryGenerated.RegisterInterface() should be done
 end;
+
 {$endif HASINTERFACERTTI}
 
 {$ifdef FPC_HAS_CONSTREF}
@@ -3236,7 +3241,7 @@ begin
   {$endif CPUX86NOTPIC}
   if cache <> nil then
   begin
-    cache.Safe.Lock;
+    cache.Safe.Lock; // no GPF is expected within the loop -> no try...finally
     F := pointer(cache.List);
     n := cache.Count;
     if n > 0 then

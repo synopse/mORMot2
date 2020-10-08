@@ -12084,7 +12084,7 @@ end;
 
 procedure TSQLPropInfoList.QuickSortByName(L, R: PtrInt);
 var
-  I, J, P, Tmp: PtrInt;
+  I, J, P, tmp: PtrInt;
   pivot: PUTF8Char;
 begin
   if L < R then
@@ -12100,9 +12100,9 @@ begin
           dec(J);
         if I <= J then
         begin
-          Tmp := fOrderedByName[J];
+          tmp := fOrderedByName[J];
           fOrderedByName[J] := fOrderedByName[I];
-          fOrderedByName[I] := Tmp;
+          fOrderedByName[I] := tmp;
           if P = I then
             P := J
           else if P = J then
@@ -12170,7 +12170,8 @@ begin
       end;
       L := 0;
       R := fCount - 1;
-      repeat // fast O(log(n)) binary search
+      repeat
+        // fast O(log(n)) binary search
         result := (L + R) shr 1;
         cmp := StrIComp(pointer(fList[fOrderedByName[result]].fName), aName);
         if cmp = 0 then
@@ -12208,7 +12209,7 @@ end;
 procedure TSQLPropInfoList.IndexesByNamesOrExcept(const aNames: array of RawUTF8;
   const aIndexes: array of PInteger);
 var
-  i: integer;
+  i: PtrInt;
 begin
   if high(aNames) <> high(aIndexes) then
     raise EORMException.CreateUTF8('%.IndexesByNamesOrExcept(?)', [self]);
@@ -12222,7 +12223,7 @@ end;
 
 procedure TSQLPropInfoList.NamesToRawUTF8DynArray(var Names: TRawUTF8DynArray);
 var
-  i: integer;
+  i: PtrInt;
 begin
   SetLength(Names, Count);
   for i := 0 to Count - 1 do
@@ -12233,13 +12234,15 @@ function TSQLPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUTF8): 
 begin
   if pilSubClassesFlattening in fOptions then
   begin
+    // O(n) iteration
     for result := 0 to Count - 1 do
-      if IdemPropNameU(List[result].NameUnflattened, aName) then // O(n) iteration
+      if IdemPropNameU(List[result].NameUnflattened, aName) then
         exit;
   end
   else
   begin
-    result := IndexByName(pointer(aName)); // faster O(log(n)) binary search
+    // faster O(log(n)) binary search
+    result := IndexByName(pointer(aName));
     if result >= 0 then
       exit;
   end;
@@ -12250,7 +12253,9 @@ end;
 
 { ************ TSQLRecord TSQLModel TSQLTable IRestORM Core Definitions }
 
-{$ifdef CPUX64}  // very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
+{$ifdef CPUX64}
+
+// very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
 function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr[Item1]
@@ -12262,11 +12267,14 @@ function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
         seta    al
         sbb     eax, 0
 end;
+
 {$else}
+
 function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
 begin // we assume Item1<>nil and Item2<>nil
   result := CompareQWord(TSQLRecord(Item1).fID, TSQLRecord(Item2).fID);
 end;
+
 {$endif CPUX64}
 
 function TSQLRecordDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
@@ -16230,13 +16238,17 @@ begin
 end;
 
 procedure TSQLRecord.FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits);
-(* two possible formats = first not expanded, 2nd is expanded (most useful)
+(*
+ NOT EXPANDED - optimized format with a JSON array of JSON values, fields first
  {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
-  "ValDate","Next",0,0,"abcde+?ef+?+?","abcde+?ef+?+?","abcde+?ef+?+?",
-  3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0]}
+   "ValDate","Next",0,0,"abcde+?ef+?+?","abcde+?ef+?+?","abcde+?ef+?+?",
+   3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0]}
+
+ EXPANDED FORMAT - standard format with a JSON array of JSON objects
  {"ID":0,"Int":0,"Test":"abcde+?ef+?+?","Unicode":"abcde+?ef+?+?","Ansi":
- "abcde+?ef+?+?","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
- "ValDate":"2009-03-10T21:19:36","Next":0} *)
+  "abcde+?ef+?+?","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
+  "ValDate":"2009-03-10T21:19:36","Next":0}
+*)
 var
   F: array[0..MAX_SQLFIELDS - 1] of PUTF8Char; // store field/property names
   wasString: boolean;

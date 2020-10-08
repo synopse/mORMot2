@@ -3373,7 +3373,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin // expect UpperName as 'NAME='
   if (P <> nil) and (P^ <> '[') and (UpperName <> nil) then
   begin

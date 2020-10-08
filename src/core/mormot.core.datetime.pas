@@ -711,7 +711,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
   unaligned(result) := 0;
@@ -983,7 +983,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TWordArray absolute TwoDigitLookupW;
     {$else}
     tab: PWordArray;
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin // use Thhmmss[.sss] format
   if FirstChar <> #0 then
   begin
@@ -1013,7 +1013,7 @@ begin // use Thhmmss[.sss] format
     YearToPChar(MS, P);
     {$else}
     YearToPChar2(tab, MS, P);
-    {$endif}
+    {$endif CPUX86NOTPIC}
     P^ := '.'; // override first digit
     inc(P, 4);
   end;
@@ -1488,7 +1488,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   P := WR.B + 1;
   if WR.BEnd - P <= 4 then
@@ -1523,7 +1523,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
   PWord(P)^ := tab[Day];
@@ -1762,7 +1762,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin // use 'YYMMDDHHMMSS' format
   if DateTime <= 0 then
   begin
@@ -2212,7 +2212,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC/x86_64/ARM
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := 0;
   if P = nil then

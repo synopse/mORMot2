@@ -3785,7 +3785,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable; // faster on PIC/ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := false;
   if p = nil then
@@ -3885,7 +3885,7 @@ var
   tab: TNormTableByte absolute NormToUpperAnsi7;
   {$else}
   tab: PNormTableByte; // faster on PIC/ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if p <> nil then
   begin
@@ -3961,7 +3961,7 @@ var
   tab: TNormTableByte absolute NormToUpperAnsi7;
   {$else}
   tab: PNormTableByte; // faster on PIC/ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   t := length(text);
   if t > 0 then
@@ -4084,7 +4084,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if uppersubstr <> nil then
   begin
@@ -4106,7 +4106,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if (uppersubstr <> nil) and (str <> nil) then
   begin
@@ -4249,7 +4249,7 @@ var
   tab: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
   tab: PNormTableByte; // faster on PIC/ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   i := 0;
   {$ifndef CPUX86NOTPIC} tab := @NormToUpperAnsi7Byte; {$endif}
@@ -4275,7 +4275,7 @@ var
   table: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
   table: PNormTableByte;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := PtrInt(PtrUInt(Str2)) - PtrInt(PtrUInt(Str1));
   if result <> 0 then
@@ -4291,9 +4291,11 @@ begin
         result := C1 - C2;
       end
       else
+        // Str2=''
         result := 1
-    else  // Str2=''
-      result := -1;     // Str1=''
+    else
+      // Str1=''
+      result := -1;
 end;
 
 function GetLineContains(p, pEnd, up: PUTF8Char): boolean;
@@ -4303,7 +4305,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7Byte;
   {$else}
   table: PNormTable;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 label
   Fnd1, LF1, Fnd2, LF2, Ok; // ugly but fast
 begin
@@ -4433,7 +4435,7 @@ var
   table: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
   table: PNormTableByte;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if u1 <> u2 then
     if u1 <> nil then
@@ -4596,7 +4598,7 @@ var
   table: TNormTableByte absolute NormToUpperByte;
   {$else}
   table: PNormTableByte;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
   {$ifndef CPUX86NOTPIC} table := @NormToUpperByte; {$endif}
   if u1 <> u2 then
@@ -4670,7 +4672,7 @@ var
   table: TNormTableByte absolute NormToUpperByte;
   {$else}
   table: PNormTableByte;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 label
   neg, pos;
 begin // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
@@ -5009,7 +5011,7 @@ var
   tab: TNormTableByte absolute NormToUpperByte;
   {$else}
   tab: PNormTableByte; // faster on PIC/ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if source = '' then
     result := dest

@@ -1979,18 +1979,18 @@ end;
 
 function TRestORM.BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer;
 var
-  Data: RawUTF8;
+  json: RawUTF8; // layout is '{"Table":["cmd":values,...]}'
 begin
   result := HTTP_BADREQUEST;
   if (self = nil) or (Batch = nil) then // no opened BATCH sequence
     exit;
   InternalLog('BatchSend %', [Batch]);
-  if Batch.PrepareForSending(Data) then
-    if Data = '' then // i.e. Batch.Count=0
+  if Batch.PrepareForSending(json) then
+    if json = '' then // i.e. Batch.Count=0
       result := HTTP_SUCCESS
     else
     try
-      result := BatchSend(Batch.Table, Data, Results, Batch.Count);
+      result := BatchSend(Batch.Table, json, Results, Batch.Count);
     except
       on Exception do // e.g. from TSQLRestServer.BatchSend()
         result := HTTP_SERVERERROR;
@@ -1999,9 +1999,9 @@ end;
 
 function TRestORM.BatchSend(Batch: TSQLRestBatch): integer;
 var
-  DummyRes: TIDDynArray;
+  dummyRes: TIDDynArray;
 begin
-  result := BatchSend(Batch, DummyRes);
+  result := BatchSend(Batch, dummyRes);
 end;
 
 function TRestORM.BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;

@@ -2958,7 +2958,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable;
-  {$endif}
+  {$endif CPUX86NOTPIC}
   c: AnsiChar;
   u: PAnsiChar;
 label
@@ -9450,7 +9450,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexW;
     {$else}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexW; {$endif}
   if BinBytes > 0 then
@@ -9503,7 +9503,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexW;
     {$else}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexW; {$endif}
   inc(Hex, BinBytes * 2);
@@ -9527,7 +9527,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
     {$else}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexWLower; {$endif}
   if BinBytes > 0 then
@@ -9560,7 +9560,7 @@ var {$ifdef CPUX86NOTPIC}
      tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
     {$else}
      tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   if (Bin = nil) or (Hex = nil) or (BinBytes <= 0) then
     exit;
@@ -9694,7 +9694,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
   if (Hex = nil) or (Bin = nil) then
@@ -9746,7 +9746,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
   if Hex = nil then
@@ -9782,7 +9782,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
   c: byte;
 begin
   {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
@@ -9817,7 +9817,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if Hex <> nil then
   begin
