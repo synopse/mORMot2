@@ -983,7 +983,7 @@ type
     // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
     // - dynamic array field is returned as a variant array
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
-    /// generic way of implementing it
+    /// retrieve the property field offset from RTTI
     function GetFieldAddr(Instance: TObject): pointer; override;
     /// for pilSubClassesFlattening properties, compute the actual instance
     // containing the property value
@@ -1715,8 +1715,8 @@ type
   // object, including custom serialization
   TSQLPropInfoRTTIObject = class(TSQLPropInfoRTTIInstance)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest:
-      TObject); override;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+      Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
@@ -1806,6 +1806,10 @@ type
 
   { -------------------- IRestORM IRestORMServer Definitions }
 
+  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+  TRestORMGenerics = class;
+  {$endif ISDELPHI2010}
+
   /// Object-Relational-Mapping calls for CRUD access to a database
   // - as implemented in TSQLRest.ORM
   // - this is the main abstract entry point to all ORM process, to be used as
@@ -1831,11 +1835,11 @@ type
     function MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - example of use - including inlined parameters via :(...):
-    // ! aClient.OneFieldValue(TSQLRecord,'Name','ID=:(23):')
+    // ! aClient.OneFieldValue(TSQLRecord, 'Name', 'ID=:(23):')
     // you should better call the corresponding overloaded method as such:
-    // ! aClient.OneFieldValue(TSQLRecord,'Name','ID=?',[aID])
+    // ! aClient.OneFieldValue(TSQLRecord, 'Name', 'ID=?', [aID])
     // which is the same as calling:
-    // ! aClient.OneFieldValue(TSQLRecord,'Name',FormatUTF8('ID=?',[],[23]))
+    // ! aClient.OneFieldValue(TSQLRecord, 'Name', FormatUTF8('ID=?', [], [23]))
     // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass;
       const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
@@ -1847,7 +1851,7 @@ type
     // - this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, binding all '?' chars with Args[] values
     // - example of use:
-    // ! aClient.OneFieldValue(TSQLRecord,'Name','ID=?',[aID])
+    // ! aClient.OneFieldValue(TSQLRecord, 'Name', 'ID=?', [aID])
     // - call internaly ExecuteList() to get the value
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be Args and '%' in the FormatSQLWhere
@@ -1859,7 +1863,7 @@ type
     // from supplied parameters, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
-    // ! OneFieldValue(TSQLRecord,'Name','%=?',['ID'],[aID])
+    // ! OneFieldValue(TSQLRecord,'Name', '%=?', ['ID'], [aID])
     // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
       const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8; overload;
@@ -1941,7 +1945,8 @@ type
     // - this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, binding all '?' chars with Args[] values
     // - example of use:
-    // ! aList := aClient.MultiFieldValues(TSQLRecord,'Name,FirstName','Salary>=?',[aMinSalary]);
+    // ! aList := aClient.MultiFieldValues(
+    // !   TSQLRecord, 'Name,FirstName', 'Salary>=?', [aMinSalary]);
     // - call overloaded MultiFieldValues() / ExecuteList() to get the list
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be Args and '%' in the WhereClauseFormat
@@ -1957,7 +1962,7 @@ type
     // as FormatUTF8() function, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
-    // ! Table := MultiFieldValues(TSQLRecord,'Name','%=?',['ID'],[aID]);
+    // ! Table := MultiFieldValues(TSQLRecord, 'Name', '%=?', ['ID'], [aID]);
     // - call overloaded MultiFieldValues() / ExecuteList() to get the list
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
       const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
@@ -2090,6 +2095,12 @@ type
     function RetrieveList(Table: TSQLRecordClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList; overload;
+    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+    /// access to ORM parametrized/generics methods
+    // - since Delphi interface cannot have parametrized methods, we need
+    // to return a TRestORMGenerics abstract class to use generics signature
+    function Generics: TRestORMGenerics;
+    {$endif ISDELPHI2010}
     /// get a list of members from a SQL statement as RawJSON
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -2238,8 +2249,8 @@ type
     // $  AND minX>=:(-81.0): AND maxX<=:(-79.6): AND minY>=:(35.0): AND :(maxY<=36.2):
     // $  AND MapBox_in(MapData.BlobField,:('\uFFF0base64encoded-81,-79.6,35,36.2'):);
     // when the following Delphi code is executed:
-    // ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
-    // !   aMapData.BlobField,ResultID);
+    // ! aClient.RTreeMatch(TSQLRecordMapData, 'BlobField', TSQLRecordMapBox,
+    // !   aMapData.BlobField, ResultID);
     function RTreeMatch(DataTable: TSQLRecordClass;
       const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
       const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
@@ -2472,7 +2483,7 @@ type
     // DateToSQL/DateTimeToSQL for TDateTime, or directly any integer / double /
     // currency / RawUTF8 values to be bound to the request as parameters
     // - is a simple wrapper around:
-    // ! Delete(Table,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere))
+    // ! Delete(Table, FormatUTF8(FormatSQLWhere, [], BoundsSQLWhere))
     function Delete(Table: TSQLRecordClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): boolean; overload;
 
@@ -2988,7 +2999,7 @@ type
     // !     comment: TSQLComment;
     // ! begin
     // !   TSQLRecord.AutoFree([ // avoid several try..finally
-    // !     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment]);
+    // !     @info, TSQLBlogInfo, @article, TSQLArticle, @comment, TSQLComment]);
     // !   .... now you can use info, article or comment
     // ! end; // will call info.Free article.Free and comment.Free
     // - warning: under FPC, you should assign the result of this method to
@@ -3179,7 +3190,7 @@ type
     // - the FormatSQLWhere clause will replace all '%' chars with the supplied
     // ParamsSQLWhere[] values, and all '?' chars with BoundsSQLWhere[] values,
     // as :(...): inlined parameters - you should either call:
-    // ! Rec := TSQLMyRecord.Create(aClient,'Count=:(%):'[aCount],[]);
+    // ! Rec := TSQLMyRecord.Create(aClient, 'Count=:(%):', [aCount],[]);
     // or (letting the inlined parameters being computed by FormatUTF8)
     // !  Rec := TSQLMyRecord.Create(aClient,'Count=?',[],[aCount]);
     // or even better, using the other Create overloaded constructor:
@@ -3352,13 +3363,14 @@ type
     // their nested properties)
     // - a typical use could be the following:
     // ! aProd := TSQLProduct.CreateAndFillPrepareMany(Database,
-    // !   'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',[],
-    // !   ['mark','for boy','small','medium']);
-    // ! if aProd<>nil then
+    // !   'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',
+    // !   [], ['mark', 'for boy', 'small', 'medium']);
+    // ! if aProd <> nil then
     // ! try
     // !   while aProd.FillOne do
     // !     //  here e.g. aProd.Categories.Dest are instantied (and Categories.Source=aProd)
-    // !     writeln(aProd.Name,' ',aProd.Owner,' ',aProd.Categories.Dest.Name,' ',aProd.Sizes.Dest.Name);
+    // !     writeln(aProd.Name, ' ', aProd.Owner, ' ', aProd.Categories.Dest.Name,
+    // !       ' ', aProd.Sizes.Dest.Name);
     // !   //  you may also use aProd.FillTable to fill a grid, e.g.
     // !   //  (do not forget to set aProd.FillTable.OwnerMustFree := false)
     // ! finally
@@ -3461,9 +3473,9 @@ type
     // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
     //   BLOB fields are ignored (use direct access via dedicated methods instead)
     // - if Expand is true, JSON data is an object, for direct use with any Ajax or .NET client:
-    // ! {"col1":val11,"col2":"val12"}
+    // $ {"col1":val11,"col2":"val12"}
     // - if Expand is false, JSON data is serialized (as used in TSQLTableJSON)
-    // ! { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
+    // $ { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - if withID is true, then the first ID field value is included
     // - you can customize SQLRecordOptions, e.g. if sftObject/sftBlobDynArray
     // property instance will be serialized as a JSON object or array, not a
@@ -3599,7 +3611,7 @@ type
     // (e.g. by-passing SQLite3 virtual table modules for external databases)
     // - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
     // for better server speed - note that you can use FormatUTF8() as such:
-    // ! aRec.FillPrepare(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
+    // ! aRec.FillPrepare(Client, FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000]));
     // or call the overloaded FillPrepare() method directly with  BoundsSQLWhere
     // array of parameters
     // - aCustomFieldsCSV can be used to specify which fields must be retrieved
@@ -3694,8 +3706,8 @@ type
     // - returns true in case of success, false in case of an error during SQL request
     // - a typical use could be the following:
     // ! if aProd.FillPrepareMany(Database,
-    // !    'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',[],
-    // !    ['mark','for boy','small','medium']) then
+    // !    'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',
+    // !    [], ['mark', 'for boy', 'small', 'medium']) then
     // !   while aProd.FillOne do
     // !     //  here e.g. aProd.Categories.Dest are instantied (and Categories.Source=aProd)
     // !     writeln(aProd.Name,' ',aProd.Owner,' ',aProd.Categories.Dest.Name,' ',aProd.Sizes.Dest.Name);
@@ -3966,6 +3978,78 @@ type
     property CascadeDelete: boolean read fCascadeDelete;
   end;
 
+  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+
+  /// since Delphi interface cannot have parametrized methods, we need
+  // to use this abstract class to use generics signature
+  TRestORMGenerics = class(TInterfacedObject)
+  protected
+    // needed to implement RetrieveList<T> actual data retrieval
+    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTable;
+      overload; virtual; abstract;
+  public
+    /// access to ORM parametrized/generic methods
+    // - since Delphi interface cannot have parametrized methods, we need
+    // to return this abstract class to use generics signature
+    function Generics: TRestORMGenerics;
+    /// get a list of members from a SQL statement
+    // - implements REST GET collection
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - return a TObjectList<T> on success (possibly with Count=0) - caller is
+    // responsible of freeing the instance
+    // - return nil on error
+    // - since Delphi interface cannot have parametrized methods, we need to
+    // call this overloaded TRestORMGenerics method to use generics signature
+    // - you can write for instance:
+    // !var list: TObjectList<TSQLRecordTest>;
+    // !    R: TSQLRecordTest;
+    // !    orm: IRestORM
+    // ! ...
+    // !    list := orm.Generics.RetrieveList<TSQLRecordTest>('ID,Test');
+    // !    if list <> nil then
+    // !    try
+    // !      for R in list do
+    // !        writeln(R.ID, '=', R.Test);
+    // !    finally
+    // !      list.Free;
+    // !    end;
+    function RetrieveList<T: TSQLRecord>(
+      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
+       {$ifdef HASINLINE}inline;{$endif}
+    /// get a list of members from a SQL statement
+    // - implements REST GET collection with a WHERE clause
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - return a TObjectList<T> on success (possibly with Count=0) - caller is
+    // responsible of freeing the instance
+    // - return nil on error
+    // - since Delphi interface cannot have parametrized methods, we need to
+    // call this overloaded TRestORMGenerics method to use generics signature
+    function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
+  end;
+
+  TRestORMParent = TRestORMGenerics;
+
+  {$else}
+
+  /// parent class of TRestORM, to implement IRestORM methods
+  // - since Delphi interface cannot have parametrized methods, we need
+  // to define a TRestORMGenerics abstract class to use generics signature
+  TRestORMParent = TInterfacedObject;
+
+  {$endif ISDELPHI2010}
+
 
   { -------------------- RecordRef Wrapper Definition }
 
@@ -4196,7 +4280,7 @@ type
     // - for sftTimeLog, sftModTime, sftCreateTime or sftUnixTime fields, you
     // may have to force the column type, since it may be identified as sftInteger
     // or sftCurrency by default from its JSON number content, e.g. via:
-    // ! aTable.SetFieldType('FieldName',sftModTime);
+    // ! aTable.SetFieldType('FieldName', sftModTime);
     // - sftCurrency,sftFloat will return the corresponding double value
     // - any other types will try to convert ISO-8601 text }
     function GetAsDateTime(Row, Field: integer): TDateTime; overload;
@@ -4496,8 +4580,8 @@ type
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
     // - FieldTypeInfo can be specified for sets or enumerations, as such:
-    // ! aTable.SetFieldType(0,sftEnumerate,TypeInfo(TEnumSample));
-    // ! aTable.SetFieldType(1,sftSet,TypeInfo(TSetSamples));
+    // ! aTable.SetFieldType(0, sftEnumerate, TypeInfo(TEnumSample));
+    // ! aTable.SetFieldType(1, sftSet, TypeInfo(TSetSamples));
     // or for dynamic arrays
     procedure SetFieldType(Field: integer; FieldType: TSQLFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1;
@@ -4508,8 +4592,8 @@ type
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
     // - FieldTypeInfo can be specified for sets or enumerations, as such:
-    // ! aTable.SetFieldType('Sample',sftEnumerate,TypeInfo(TEnumSample));
-    // ! aTable.SetFieldType('Samples',sftSet,TypeInfo(TSetSamples));
+    // ! aTable.SetFieldType('Sample', sftEnumerate, TypeInfo(TEnumSample));
+    // ! aTable.SetFieldType('Samples', sftSet, TypeInfo(TSetSamples));
     procedure SetFieldType(const FieldName: RawUTF8; FieldType: TSQLFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1); overload;
     /// set the exact type of all fields, from the DB-like information
@@ -4670,7 +4754,7 @@ type
     // - or, when using a variant and late-binding:
     // ! var customer: variant;
     // ! ...
-    // !   while TableCustomers.Step(false,@customer) do
+    // !   while TableCustomers.Step(false, @customer) do
     // !     writeln(customer.Name);
     function Step(SeekFirst: boolean = false; RowVariant: PVariant = nil): boolean;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
@@ -5002,7 +5086,7 @@ type
     // condition to the WHERE statement (e.g. 'Salary>:(1000): AND Salary<:(2000):')
     // according to TSQLRecordMany properties - note that you should better use
     // inlined parameters for faster processing on server, so you may call e.g.
-    // ! aRec.FillMany(Client,0,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
+    // ! aRec.FillMany(Client, 0, FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000]));
     function FillMany(const aClient: IRestORM; aSourceID: TID = 0;
       const aAndWhereSQL: RawUTF8 = ''): integer;
     /// retrieve all records associated to a particular Dest record, which
@@ -5014,7 +5098,7 @@ type
     // condition to the WHERE statement (e.g. 'Salary>:(1000): AND Salary<:(2000):')
     // according to TSQLRecordMany properties - note that you should better use
     // inlined parameters for faster processing on server, so you may call e.g.
-    // ! aRec.FillManyFromDest(Client,DestID,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
+    // ! aRec.FillManyFromDest(Client, DestID, FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000]));
     function FillManyFromDest(const aClient: IRestORM; aDestID: TID;
       const aAndWhereSQL: RawUTF8 = ''): integer;
     /// retrieve all Dest items IDs associated to the specified Source
@@ -5037,7 +5121,7 @@ type
     //  'Salary>:(1000): AND Salary<:(2000):' - note that you should better use
     // inlined parameters for faster processing on server, so you may use the
     // more convenient function
-    // ! FormatUTF8('Salary>? AND Salary<?',[],[1000,2000])
+    // ! FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000])
     // - this is faster than a manual FillMany() then loading each Dest,
     // because the condition is executed in the SQL statement by the server
     function DestGetJoined(const aClient: IRestORM; const aDestWhereSQL: RawUTF8;
@@ -5050,7 +5134,7 @@ type
     // - aDestWhereSQL can specify the Dest table name in the statement, e.g.
     // 'Salary>:(1000): AND Salary<:(2000):') according to TSQLRecordMany
     // properties - note that you should better use such inlined parameters as
-    // ! FormatUTF8('Salary>? AND Salary<?',[],[1000,2000])
+    // ! FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000])
     function DestGetJoined(const aClient: IRestORM; const aDestWhereSQL: RawUTF8;
       aSourceID: TID): TSQLRecord; overload;
     /// create a TSQLTable, containing all specified Fields, after a JOIN
@@ -5063,7 +5147,7 @@ type
     // - aDestWhereSQL can specify the Dest table name in the statement, e.g.
     // 'Salary>:(1000): AND Salary<:(2000):') according to TSQLRecordMany
     // properties - note that you should better use such inlined parameters as
-    // ! FormatUTF8('Salary>? AND Salary<?',[],[1000,2000])
+    // ! FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000])
     function DestGetJoinedTable(const aClient: IRestORM;
       const aDestWhereSQL: RawUTF8; aSourceID: TID; JoinKind: TSQLRecordManyJoinKind;
       const aCustomFieldsCSV: RawUTF8 = ''): TSQLTable;
@@ -5115,7 +5199,7 @@ type
     // condition to the WHERE statement (e.g. 'Salary>:(1000): AND Salary<:(2000):')
     // according to TSQLRecordMany properties - note that you should better use
     // such inlined parameters e.g. calling
-    // ! FormatUTF8('Salary>? AND Salary<?',[],[1000,2000])
+    // ! FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000])
     function IDWhereSQL(const aClient: IRestORM; aID: TID; isDest: boolean;
       const aAndWhereSQL: RawUTF8 = ''): RawUTF8;
   end;
@@ -5136,7 +5220,7 @@ type
   // - call Model.VirtualTableRegister() before TSQLRestServer.Create on the
   // Server side (not needed for Client) to associate such a record with a
   // particular Virtual Table module, otherwise an exception will be raised:
-  // ! Model.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
+  // ! Model.VirtualTableRegister(TSQLRecordDali1, TSQLVirtualTableJSON);
   TSQLRecordVirtualTableForcedID = class(TSQLRecordVirtual);
 
   /// an abstract base class, corresponding to an R-Tree table of values
@@ -5310,7 +5394,7 @@ type
   // specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
   // table specificity):
   // ! var IDs: TIDDynArray;
-  // ! if FTSMatch(TSQLMyFTS3Table,'text MATCH "linu*"',IDs) then
+  // ! if FTSMatch(TSQLMyFTS3Table, 'text MATCH "linu*"', IDs) then
   // !  //  you have all matching IDs in IDs[]
   // - by convention, inherited class name could specify a custom stemming
   // algorithm by starting with "TSQLRecordFTS3", and adding the algorithm name as
@@ -5649,8 +5733,8 @@ type
     // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
     // !  Props: TSQLRecordProperties);
     // !begin
-    // !  Props.RegisterCustomFixedSizeRecordProperty(self,SizeOf(TMyRec),'RecField',
-    // !    @TSQLMyRecord(nil).fRecField, [], SizeOf(TMyRec));
+    // !  Props.RegisterCustomFixedSizeRecordProperty(self, SizeOf(TMyRec),
+    // !    'RecField', @TSQLMyRecord(nil).fRecField, [], SizeOf(TMyRec));
     // !end;
     procedure RegisterCustomFixedSizeRecordProperty(aTable: TClass;
       aRecordSize: cardinal; const aName: RawUTF8; aPropertyPointer: pointer;
@@ -5667,8 +5751,8 @@ type
     // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
     // !  Props: TSQLRecordProperties);
     // !begin
-    // !  Props.RegisterCustomRTTIRecordProperty(self,TypeInfo(TMyRec),'RecField',
-    // !    @TSQLMyRecord(nil).fRecField);
+    // !  Props.RegisterCustomRTTIRecordProperty(self, TypeInfo(TMyRec),
+    // !    'RecField', @TSQLMyRecord(nil).fRecField);
     // !end;
     procedure RegisterCustomRTTIRecordProperty(aTable: TClass;
       aRecordInfo: PRttiInfo; const aName: RawUTF8; aPropertyPointer: pointer;
@@ -5685,8 +5769,8 @@ type
     // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
     // !  Props: TSQLRecordProperties);
     // !begin
-    // !  Props.RegisterCustomPropertyFromRTTI(self,TypeInfo(TMyRec),'RecField',
-    // !    @TSQLMyRecord(nil).fRecField);
+    // !  Props.RegisterCustomPropertyFromRTTI(self, TypeInfo(TMyRec),
+    // !    'RecField', @TSQLMyRecord(nil).fRecField);
     // !end;
     procedure RegisterCustomPropertyFromRTTI(aTable: TClass;
       aTypeInfo: PRttiInfo; const aName: RawUTF8; aPropertyPointer: pointer;
@@ -5701,8 +5785,8 @@ type
     // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
     // !  Props: TSQLRecordProperties);
     // !begin
-    // !  Props.RegisterCustomPropertyFromTypeName(self,'TGUID','GUID',
-    // !    @TSQLMyRecord(nil).fGUID,[aIsUnique],38);
+    // !  Props.RegisterCustomPropertyFromTypeName(self, 'TGUID', 'GUID',
+    // !    @TSQLMyRecord(nil).fGUID, [aIsUnique], 38);
     // !end;
     procedure RegisterCustomPropertyFromTypeName(aTable: TClass;
       const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
@@ -5944,7 +6028,7 @@ type
     // - will re-compute all needed SQL statements as needed, and initialize
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - can be used e.g. as
-    // ! aModel.Props[TSQLMyExternal].ExternalDB.MapField('IntField','ExtField');
+    // ! aModel.Props[TSQLMyExternal].ExternalDB.MapField('IntField', 'ExtField');
     // - since it returns a PSQLRecordPropertiesMapping instance, you can
     // chain MapField().MapField().MapField(); calls to map several fields
     function MapField(
@@ -5956,7 +6040,7 @@ type
     // fields will be identified and automatically mapped as fieldname_
     // - can be used e.g. as
     // ! aModel.Props[TSQLMyExternal].ExternalDB.
-    // !   MapField('IntField','ExtField').
+    // !   MapField('IntField', 'ExtField').
     // !   MapAutoKeywordFields;
     // - will in fact include the rpmAutoMapKeywordFields flag in Options
     // - since it returns a PSQLRecordPropertiesMapping instance, you can
@@ -5966,8 +6050,8 @@ type
     // - see TSQLRecordPropertiesMappingOptions for all possibilities
     // - can be used e.g. as
     // ! aModel.Props[TSQLMyExternal].ExternalDB.
-    // !   MapField('IntField','ExtField').
-    // !   SetOptions([rpmNoCreateMissingTable,rpmNoCreateMissingField]);
+    // !   MapField('IntField', 'ExtField').
+    // !   SetOptions([rpmNoCreateMissingTable, rpmNoCreateMissingField]);
     // - since it returns a PSQLRecordPropertiesMapping instance, you can
     // chain MapField().SetOptions().MapField(); calls to map several fields
     function SetOptions(
@@ -5975,7 +6059,7 @@ type
     /// add several custom field mappings
     // - can be used e.g. as
     // ! aModel.Props[TSQLMyExternal].ExternalDB.
-    // !   MapFields(['IntField1','ExtField1', 'IntField2','ExtField2']);
+    // !   MapFields(['IntField1', 'ExtField1', 'IntField2', 'ExtField2']);
     // - will re-compute all needed SQL statements as needed, and initialize
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - is slightly faster than several chained MapField() calls, since SQL
@@ -6001,7 +6085,7 @@ type
     // - to be used for a simple CSV (e.g. for INSERT/SELECT statements):
     // ! ExtCSV := InternalCSVToExternalCSV('ID,Name');
     // - or for a more complex CSV (e.g. for UPDATE statements);
-    // ! ExtCSV := InternalCSVToExternalCSV('ID=?,Name=?','=?,'=?');
+    // ! ExtCSV := InternalCSVToExternalCSV('ID=?,Name=?', '=?, '=?');
     function InternalCSVToExternalCSV(const CSVFieldNames: RawUTF8;
       const Sep: RawUTF8 = ','; const SepEnd: RawUTF8 = ''): RawUTF8;
     /// create a list of external field names, from the internal field names
@@ -6038,7 +6122,7 @@ type
     // StaticMongoDBRegister() to a TMongoCollection instance, or by
     // TDDDRepositoryRestObjectMapping.Create to its associated TSQLRest
     // - in ORM context, equals nil if the table is internal to SQLite3:
-    // ! if Server.Model.Props[TSQLArticle].ExternalDB.ConnectionProperties=nil then
+    // ! if Server.Model.Props[TSQLArticle].ExternalDB.ConnectionProperties = nil then
     // !   // this is not an external table, since Init() was not called
     property ConnectionProperties: TObject read fConnectionProperties;
     /// the associated TSQLRecordProperties
@@ -6057,7 +6141,7 @@ type
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
     // database engines (e.g. Oracle)
     // - can be customized e.g. via
-    // ! aModel.Props[TSQLMyExternal].ExternalDB.MapField('ID','ExternalID');
+    // ! aModel.Props[TSQLMyExternal].ExternalDB.MapField('ID', 'ExternalID');
     property RowIDFieldName: RawUTF8 read fRowIDFieldName;
     /// the external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
@@ -6352,7 +6436,7 @@ type
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE: if
     // you want to use the slow but Unicode ready Windows API, set for each model:
-    // ! SetCustomCollationForAll(sftUTF8Text,'WIN32CASE');
+    // ! SetCustomCollationForAll(sftUTF8Text, 'WIN32CASE');
     // - shall be set on both Client and Server sides, otherwise some issues
     // may occur
     procedure SetCustomCollationForAll(aFieldType: TSQLFieldType;
@@ -14421,6 +14505,7 @@ begin
 end;
 
 {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
+
 function TSQLTable.ToObjectList<T>: TObjectList<T>;
 var
   R, Item: TSQLRecord;
@@ -14458,6 +14543,7 @@ begin
     R.Free;
   end;
 end;
+
 {$endif ISDELPHI2010}
 
 procedure TSQLTable.ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass);
@@ -17622,7 +17708,7 @@ end;
 
 class function TSQLRecord.AutoFree(varClassPairs: array of pointer): IAutoFree;
 var
-  n, i: integer;
+  n, i: PtrInt;
 begin
   n := length(varClassPairs);
   if (n = 0) or (n and 1 = 1) then
@@ -17855,6 +17941,40 @@ begin
       end;
     end;
 end;
+
+
+{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+
+{ TRestORMGenerics }
+
+function TRestORMGenerics.Generics: TRestORMGenerics;
+begin
+  result := self; // circumvent limitation of non parametrized interface definition
+end;
+
+function TRestORMGenerics.RetrieveList<T>(const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+begin
+  result := RetrieveList<T>('', [], aCustomFieldsCSV);
+end;
+
+function TRestORMGenerics.RetrieveList<T>(const FormatSQLWhere: RawUTF8;
+  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+var table: TSQLTable;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  table := MultiFieldValues(TSQLRecordClass(T), aCustomFieldsCSV,
+    FormatSQLWhere, BoundsSQLWhere);
+  if table <> nil then
+  try
+    result := table.ToObjectList<T>;
+  finally
+    table.Free;
+  end;
+end;
+
+{$endif ISDELPHI2010}
 
 
 { ------------ TSQLRecordMany Definition }

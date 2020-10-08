@@ -7,7 +7,8 @@ unit mormot.orm.rest;
   *****************************************************************************
 
    IRestORM Implementation as used by TSQLRest
-    -  TRestORM Parent Class for abstract REST client/server
+    - Some definitions Used by TRestORM Implementation
+    - TRestORM Parent Class for abstract REST client/server
    
   *****************************************************************************
 }
@@ -21,11 +22,6 @@ uses
   classes,
   variants,
   contnrs,
-  {$ifndef FPC}
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-  Generics.Collections,
-  {$endif ISDELPHI2010}
-  {$endif FPC}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -42,11 +38,35 @@ uses
   mormot.db.core;
 
 
+{ ************ Some definitions Used by TRestORM Implementation }
+
+type
+  /// the available HTTP methods transmitted between client and server
+  // - some custom verbs are available in addition to standard REST commands
+  // - most of iana verbs are available
+  // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
+  // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
+  // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
+  TSQLURIMethod = (
+    mNone, mGET, mPOST, mPUT, mDELETE, mHEAD, mBEGIN, mEND, mABORT,
+    mLOCK, mUNLOCK, mSTATE, mOPTIONS, mPROPFIND, mPROPPATCH, mTRACE,
+    mCOPY, mMKCOL, mMOVE, mPURGE, mREPORT, mMKACTIVITY, mMKCALENDAR,
+    mCHECKOUT, mMERGE, mNOTIFY, mPATCH, mSEARCH, mCONNECT);
+
+  /// set of available HTTP methods transmitted between client and server
+  TSQLURIMethods = set of TSQLURIMethod;
+
+/// convert a string HTTP verb into its TSQLURIMethod enumerate
+function ToMethod(const method: RawUTF8): TSQLURIMethod;
+
+function ToText(m: TSQLURIMethod): PShortString; overload;
+
+
 { ************ TRestORM Parent Class for abstract REST client/server }
 
 type
   /// implements TSQLRest.ORM process for abstract REST client/server
-  TRestORM = class(TInterfacedObject, IRestORM)
+  TRestORM = class(TRestORMParent, IRestORM)
   protected
     fRest: TSQLRest;
     fModel: TSQLModel;
@@ -63,16 +83,32 @@ type
     /// compute SELECT ... FROM TABLE WHERE ...
     function SQLComputeForSelect(Table: TSQLRecordClass;
       const FieldNames, WhereClause: RawUTF8): RawUTF8;
-    /// used by Add() and AddWithBlobs() before EngineAdd()
+    /// used by all overloaded Add/Delete methods
     procedure GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
       ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
       CustomFields: PSQLFieldBits; var result: RawUTF8);
-    /// used by all overloaded Add/Delete methods
     function InternalAdd(Value: TSQLRecord; SendData: boolean;
       CustomFields: PSQLFieldBits;
       ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass;
       const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
+    /// internal method called by TSQLRestServer.Batch() to process fast sending
+    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
+    // - returns TRUE if this method is handled by the engine, or FALSE if
+    // individual calls to Engine*() are expected
+    // - this default implementation returns FALSE
+    // - an overridden method returning TRUE shall ensure that calls to
+    // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
+    // will properly handle operations until InternalBatchStop() is called
+    function InternalBatchStart(Method: TSQLURIMethod;
+      BatchOptions: TSQLRestBatchOptions): boolean; virtual;
+    /// internal method called by TSQLRestServer.Batch() to process fast sending
+    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
+    // - this default implementation will raise an EORMException (since
+    // InternalBatchStart returns always FALSE at this TSQLRest level)
+    // - InternalBatchStart/Stop may safely use a lock for multithreading:
+    // implementation in TSQLRestServer.Batch use a try..finally block
+    procedure InternalBatchStop; virtual;
   protected
     // ------- abstract methods to be overriden by the real database engine
     /// retrieve a list of members as JSON encoded data
@@ -168,6 +204,12 @@ type
     // UpdateField methods
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUTF8; Increment: Int64): boolean; virtual;
+    /// send/execute the supplied JSON BATCH content, and return the expected array
+    // - this method will be implemented for TSQLRestClient and TSQLRestServer only
+    // - this default implementation will trigger an EORMException
+    // - warning: supplied JSON Data can be parsed in-place, so modified
+    function EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
+       var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
   public
     // ------- TRestORM main methods
     /// initialize the class, and associated to a TSQLRest and its TSQLModel
@@ -217,7 +259,8 @@ type
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
       const WhereClause: RawUTF8 = ''): TSQLTable; overload;
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTable; overload;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTable;
+      overload; {$ifdef ISDELPHI2010} override; {$else} virtual; {$endif}
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
       const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
     function FTSMatch(Table: TSQLRecordFTS3Class; const WhereClause: RawUTF8;
@@ -368,6 +411,38 @@ type
 
 
 implementation
+
+{ ************ Some definitions Used by TRestORM Implementation }
+
+function ToMethod(const method: RawUTF8): TSQLURIMethod;
+const
+  NAME: array[mGET..high(TSQLURIMethod)] of string[10] = ( // sorted by occurence
+    'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT',
+    'LOCK','UNLOCK','STATE', 'OPTIONS','PROPFIND','PROPPATCH','TRACE',
+    'COPY','MKCOL','MOVE','PURGE','REPORT', 'MKACTIVITY','MKCALENDAR',
+    'CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
+var
+  L: PtrInt;
+  N: PShortString;
+begin
+  L := Length(method);
+  if L < 11 then
+  begin
+    N := @NAME;
+    for result := low(NAME) to high(NAME) do
+      if (L = ord(N^[0])) and
+         IdemPropNameUSameLen(@N^[1], pointer(method), L) then
+        exit
+      else
+        inc(PByte(N), 11);
+  end;
+  result := mNone;
+end;
+
+function ToText(m: TSQLURIMethod): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLURIMethod), ord(m));
+end;
 
 
 { ************ TRestORM Parent Class for abstract REST client/server }
@@ -759,7 +834,8 @@ begin
 end;
 
 function TRestORM.OneFieldValues(Table: TSQLRecordClass;
-  const FieldName: RawUTF8; const WhereClause,  Separator: RawUTF8): RawUTF8;
+  const FieldName: RawUTF8; const WhereClause: RawUTF8; const Separator: RawUTF8
+  ): RawUTF8;
 var
   i, Len, SepLen, L: PtrInt;
   Lens: TIntegerDynArray;
@@ -887,7 +963,8 @@ end;
 
 function TRestORM.FTSMatch(Table: TSQLRecordFTS3Class;
   const MatchClause: RawUTF8; var DocID: TIDDynArray;
-  const PerFieldWeight: array of double; limit, offset: integer): boolean;
+  const PerFieldWeight: array of double; limit: integer; offset: integer
+  ): boolean;
 var
   WhereClause: RawUTF8;
   i: PtrInt;
@@ -1104,7 +1181,7 @@ end;
 function TRestORM.RetrieveDocVariantArray(Table: TSQLRecordClass;
   const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
-  FirstRecordID, LastRecordID: PID): variant;
+  FirstRecordID: PID; LastRecordID: PID): variant;
 var
   T: TSQLTable;
   v: variant;
@@ -1593,54 +1670,62 @@ end;
 function TRestORM.EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
   const FieldName: RawUTF8; Increment: Int64): boolean;
 var
-  Value: Int64;
-  Table: TSQLRecordClass;
+  v: Int64;
+  t: TSQLRecordClass;
 begin
   if (TableModelIndex < 0) or (ID < 0) then
     result := false
+  else if Increment = 0 then
+    result := true
   else
   begin
-    Table := fModel.Tables[TableModelIndex];
-    result := OneFieldValue(Table, FieldName, 'ID=?', [], [ID], Value) and
-              UpdateField(Table, ID, FieldName, [Value + Increment]);
+    t := fModel.Tables[TableModelIndex];
+    result := OneFieldValue(t, FieldName, 'ID=?', [], [ID], v) and
+              UpdateField(t, ID, FieldName, [v + Increment]);
   end;
 end;
 
-function TRestORM.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID; const
-  FieldName: RawUTF8; Increment: Int64): boolean;
+function TRestORM.EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
+  var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
+begin
+  raise EORMException.CreateUTF8('BATCH not supported by %', [self]);
+end;
+
+function TRestORM.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+  const FieldName: RawUTF8; Increment: Int64): boolean;
 var
-  tableIndex: integer;
+  t: integer;
 begin
   if ID <> 0 then
   begin
-    tableIndex := Model.GetTableIndexExisting(Table);
-    result := EngineUpdateFieldIncrement(tableIndex, ID, FieldName, Increment);
+    t := Model.GetTableIndexExisting(Table);
+    result := EngineUpdateFieldIncrement(t, ID, FieldName, Increment);
     if fCache <> nil then
-      fCache.NotifyDeletion(tableIndex, ID);
+      fCache.NotifyDeletion(t, ID);
   end
   else
     result := false;
 end;
 
-function TRestORM.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID; Action:
-  TSQLEvent; ErrorMsg: PRawUTF8): boolean;
+function TRestORM.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
+  Action: TSQLEvent; ErrorMsg: PRawUTF8): boolean;
 begin
   result := true; // accept by default -> override this method to customize this
 end;
 
 function TRestORM.Delete(Table: TSQLRecordClass; ID: TID): boolean;
 var
-  tableIndex: integer;
+  t: integer;
 begin
-  tableIndex := Model.GetTableIndexExisting(Table);
+  t := Model.GetTableIndexExisting(Table);
   if not RecordCanBeUpdated(Table, ID, seDelete) then
     result := false
   else
   begin
-    fCache.NotifyDeletion(tableIndex, ID);
+    fCache.NotifyDeletion(t, ID);
     WriteLock;
     try // may be within a batch in another thread
-      result := EngineDelete(tableIndex, ID);
+      result := EngineDelete(t, ID);
     finally
       WriteUnLock;
     end;
@@ -1663,6 +1748,17 @@ begin
     fCache.NotifyDeletions(tableIndex, TInt64DynArray(IDs));
   end;
   result := true;
+end;
+
+function TRestORM.InternalBatchStart(Method: TSQLURIMethod;
+  BatchOptions: TSQLRestBatchOptions): boolean;
+begin
+  result := false;
+end;
+
+procedure TRestORM.InternalBatchStop;
+begin
+  raise EORMException.CreateUTF8('Unexpected %.InternalBatchStop',[self]);
 end;
 
 function TRestORM.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean;
@@ -1913,8 +2009,8 @@ begin
 end;
 
 function TRestORM.AsynchBatchStart(Table: TSQLRecordClass;
-  SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
-  Options: TSQLRestBatchOptions): boolean;
+  SendSeconds: integer; PendingRowThreshold: integer;
+  AutomaticTransactionPerRow: integer; Options: TSQLRestBatchOptions): boolean;
 begin
   if self = nil then
     result := false
@@ -2017,7 +2113,7 @@ function TRestORM.GetServerTimestamp: TTimeLog;
 var
   tix: cardinal;
 begin
-  tix := GetTickCount64 shr 9; // resolution change 1 ms -> 512 ms
+  tix := GetTickCount64 shr 9; // resolution change from 1 ms to 512 ms
   with fServerTimestamp do
     if CacheTix = tix then
       result := CacheValue.Value
@@ -2035,6 +2131,8 @@ begin
   if fServerTimestamp.Offset = 0 then
     fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
 end;
+
+
 
 initialization
 
