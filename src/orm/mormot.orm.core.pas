@@ -6951,7 +6951,8 @@ type
     // - returns the corresponding index in the current BATCH sequence, -1 on error
     function RawUpdate(const SentData: RawUTF8; ID: TID): integer;
     /// close a BATCH sequence started by Start method
-    // - Data is ready to be supplied to TSQLRest.BatchSend() overloaded method
+    // - Data is the JSON content, ready to be supplied to TSQLRest.BatchSend()
+    // overloaded method - its layout is '{"Table":["cmd":values,...]}'
     // - will also notify the TSQLRest.Cache for all deleted IDs
     // - you should not have to call it in normal use cases
     function PrepareForSending(out Data: RawUTF8): boolean; virtual;
@@ -8887,7 +8888,7 @@ constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType:
   aFieldWidth, aPropertyIndex: integer);
 begin
   if aName = '' then
-    raise EORMException.CreateUTF8('Void name for %.Create', [self]);
+    raise EModelException.CreateUTF8('Void name for %.Create', [self]);
   if aAuxiliaryRTreeField in aAttributes then
     fName := copy(aName, 2, MaxInt)
   else
@@ -9221,7 +9222,7 @@ var
 
 begin
   if aPropInfo = nil then
-    raise EORMException.CreateUTF8('Invalid %.CreateFrom(nil) call', [self]);
+    raise EModelException.CreateUTF8('Invalid %.CreateFrom(nil) call', [self]);
   result := nil;
   aSQLFieldType := sftUnknown;
   aType := aPropInfo^.typeInfo;
@@ -9319,7 +9320,7 @@ begin
       FlattenedPropNameSet;
   end
   else if pilRaiseEORMExceptionIfNotHandled in aOptions then
-    raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
+    raise EModelException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
       [self, ToText(aSQLFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name]);
 end;
 
@@ -9370,10 +9371,10 @@ begin
   fPropType := aPropInfo^.typeInfo;
   fPropRtti := Rtti.RegisterType(fPropType) as TRttiJson;
   if fPropRtti = nil then
-    raise EORMException.CreateUTF8('%.Create(%): unknown type', [self, aPropInfo^.Name^]);
+    raise EModelException.CreateUTF8('%.Create(%): unknown type', [self, aPropInfo^.Name^]);
   fPropRttiProp := fPropRtti.Props.Find(aPropInfo^.Name^);
   if (fPropRttiProp <> nil) and (fPropRttiProp.Prop <> fPropInfo) then
-    raise EORMException.CreateUTF8('%.Create(%): invalid prop', [self, aPropInfo^.Name^]);
+    raise EModelException.CreateUTF8('%.Create(%): invalid prop', [self, aPropInfo^.Name^]);
   if aPropInfo.GetterIsField then
   begin
     fGetterIsFieldPropOffset := PtrUInt(fPropInfo.GetterAddr(nil));
@@ -10252,7 +10253,7 @@ procedure TSQLPropInfoRTTIID.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
   if TSQLRecord(Instance).fFill.JoinedFields then
-    raise EORMException.CreateUTF8('%(%).SetValue after Create*Joined', [self, Name]);
+    raise EModelException.CreateUTF8('%(%).SetValue after Create*Joined', [self, Name]);
   inherited SetValue(Instance, Value, wasString);
 end;
 
@@ -11130,7 +11131,7 @@ begin
     fSQLDBFieldType := ftUTF8; // matches GetFieldSQLVar() below
   end;
   if fGetterIsFieldPropOffset = 0 then
-    raise EORMException.CreateUTF8('%.Create(%) should be a field, not with getter!',
+    raise EModelException.CreateUTF8('%.Create(%) should be a field, not with getter!',
       [self, fPropType^.Name]);
   dummy := nil;
   fWrapper.InitRtti(fPropRtti, dummy);
@@ -11555,7 +11556,7 @@ begin
   fOffset := PtrUInt(aProperty);
   if (Assigned(aData2Text) and not Assigned(aText2Data)) or
      (Assigned(aText2Data) and not Assigned(aData2Text)) then
-    raise EORMException.CreateUTF8(
+    raise EModelException.CreateUTF8(
       'Invalid %.Create: expecting both Data2Text/Text2Data', [self]);
   fData2Text := aData2Text;
   fText2Data := aText2Data;
@@ -11605,7 +11606,7 @@ constructor TSQLPropInfoRecordRTTI.Create(aRecordInfo: PRttiInfo;
   TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   if (aRecordInfo = nil) or not (aRecordInfo^.Kind in rkRecordTypes) then
-    raise EORMException.CreateUTF8(
+    raise EModelException.CreateUTF8(
       '%.Create: Invalid type information for %', [self, aName]);
   inherited Create(aName, sftBlobCustom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
@@ -11724,7 +11725,7 @@ constructor TSQLPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   if integer(aRecordSize) <= 0 then
-    raise EORMException.CreateUTF8('%.Create: invalid % record size',
+    raise EModelException.CreateUTF8('%.Create: invalid % record size',
       [self, aRecordSize]);
   fRecordSize := aRecordSize;
   inherited Create(aName, sftBlobCustom, aAttributes, aFieldWidth,
@@ -11886,7 +11887,7 @@ end;
 procedure TSQLPropInfoCustomJSON.SetCustomParser(aCustomParser: TRttiJson);
 begin
   if aCustomParser = nil then
-    raise EORMException.CreateUTF8('%.SetCustomParser: Invalid type information for %',
+    raise EModelException.CreateUTF8('%.SetCustomParser: Invalid type information for %',
       [self, Name]);
   fCustomParser := aCustomParser;
 end;
@@ -17138,7 +17139,7 @@ begin
   Create;
   props := aClient.Model.Props[PSQLRecordClass(Self)^];
   if props.props.JoinedFields = nil then
-    raise EORMException.CreateUTF8('No nested TSQLRecord to JOIN in %', [self]);
+    raise EModelException.CreateUTF8('No nested TSQLRecord to JOIN in %', [self]);
   SQL := props.SQL.SelectAllJoined;
   if aFormatSQLJoin <> '' then
     SQL := SQL + FormatUTF8(SQLFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
