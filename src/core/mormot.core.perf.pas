@@ -688,6 +688,7 @@ type
     property OnMeasured: TOnSystemUseMeasured read fOnMeasured write fOnMeasured;
     /// low-level access to the associated timer running BackgroundExecute
     // - equals nil if has been associated to no timer
+    // - holds e.g. a TSQLRestBackgroundTimer from TSQLRest.SystemUseTrack
     property Timer: TObject read fTimer write fTimer;
   end;
 
@@ -1616,7 +1617,8 @@ var
   i: PtrInt;
   now: TDateTime;
 begin
-  if (fProcess = nil) or (fHistoryDepth = 0) or not fProcessInfo.Start then
+  if (self = nil) or (fProcess = nil) or (fHistoryDepth = 0) or
+     not fProcessInfo.Start then
     exit;
   fTimer := Sender;
   now := NowUTC;

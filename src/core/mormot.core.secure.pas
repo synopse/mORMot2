@@ -486,7 +486,7 @@ type
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE} inline;{$endif}
     /// returns the computed digital signature as lowercase hexadecimal text
-    function final: RawUTF8; overload;
+    function Final: RawUTF8; overload;
     /// returns the raw computed digital signature
     // - SignatureSize bytes will be written: use Signature.Lo/h0/b3/b accessors
     procedure Final(out aSignature: THash512Rec;
@@ -553,7 +553,7 @@ type
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE} inline;{$endif}
     /// returns the resulting hash as lowercase hexadecimal string
-    function final: RawUTF8;
+    function Final: RawUTF8;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
     /// the hash algorithm used by this instance
@@ -739,7 +739,7 @@ begin
   Update(pointer(aBuffer), length(aBuffer));
 end;
 
-function TSynHasher.final: RawUTF8;
+function TSynHasher.Final: RawUTF8;
 begin
   case fAlgo of
     hfMD5:
@@ -913,7 +913,7 @@ begin
   end;
 end;
 
-function TSynSigner.final: RawUTF8;
+function TSynSigner.Final: RawUTF8;
 var
   sig: THash512Rec;
 begin

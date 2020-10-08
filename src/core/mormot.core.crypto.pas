@@ -2207,9 +2207,6 @@ procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream;
 
 /// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
-// - this procedure has a weak password protection: small incoming data
-// is append to some salt, in order to have at least a 256 bytes long hash:
-// such a feature improve security for small passwords, e.g.
 // - note that this algorithm is proprietary, and less secure (and standard)
 // than the PBKDF2 algorithm, so it should be considered as deprecated; it
 // is supplied only for backward compatibility of existing code:

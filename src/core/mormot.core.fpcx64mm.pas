@@ -2383,15 +2383,16 @@ begin
   if context[0] <> #0 then
     writeln(context);
   if compilationflags then
-    writeln(' Flags: ' {$ifdef FPCMM_BOOSTER} + 'BOOSTER ' {$else}
-      {$ifdef FPCMM_BOOST} + 'BOOST ' {$endif}{$endif}
-      {$ifdef FPCMM_SERVER} + 'SERVER ' {$endif}
+    writeln(' Flags: '
+      {$ifdef FPCMM_BOOSTER}           + 'BOOSTER '     {$else}
+        {$ifdef FPCMM_BOOST}           + 'BOOST '       {$endif} {$endif}
+      {$ifdef FPCMM_SERVER}            + 'SERVER '      {$endif}
       {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
-      {$ifdef FPCMM_LOCKLESSFREE} + ' lockless' {$endif}
-      {$ifdef FPCMM_PAUSE}  + ' pause' {$endif}
-      {$ifdef FPCMM_NOMREMAP} + ' nomremap' {$endif}
-      {$ifdef FPCMM_DEBUG} + ' debug' {$endif}
-      {$ifdef FPCMM_REPORTMEMORYLEAKS}  + ' repmemleak' {$endif});
+      {$ifdef FPCMM_LOCKLESSFREE}      + ' lockless'    {$endif}
+      {$ifdef FPCMM_PAUSE}             + ' pause'       {$endif}
+      {$ifdef FPCMM_NOMREMAP}          + ' nomremap'    {$endif}
+      {$ifdef FPCMM_DEBUG}             + ' debug'       {$endif}
+      {$ifdef FPCMM_REPORTMEMORYLEAKS} + ' repmemleak'  {$endif});
   with CurrentHeapStatus do
   begin
     writeln(' Small:  blocks=', K(SmallBlocks), ' size=', K(SmallBlocksSize),
@@ -2593,6 +2594,7 @@ end;
 {$I-}
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS}
+
 var
   MemoryLeakReported: boolean;
 
@@ -2789,17 +2791,17 @@ end;
 
 const
   NewMM: TMemoryManager = (
-    NeedLock: false;
-    GetMem: @_Getmem;
-    FreeMem: @_FreeMem;
-    FreememSize: @_FreememSize;
-    AllocMem: @_AllocMem;
-    ReallocMem: @_ReAllocMem;
-    MemSize: @_MemSize;
-    InitThread: nil;
-    DoneThread: nil;
-    RelocateHeap: nil;
-    GetHeapStatus: @_GetHeapStatus;
+    NeedLock:         false;
+    GetMem:           @_Getmem;
+    FreeMem:          @_FreeMem;
+    FreememSize:      @_FreememSize;
+    AllocMem:         @_AllocMem;
+    ReallocMem:       @_ReAllocMem;
+    MemSize:          @_MemSize;
+    InitThread:       nil;
+    DoneThread:       nil;
+    RelocateHeap:     nil;
+    GetHeapStatus:    @_GetHeapStatus;
     GetFPCHeapStatus: @_GetFPCHeapStatus);
 
 var
