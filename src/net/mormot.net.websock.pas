@@ -1642,10 +1642,10 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
 var
   item: RawUTF8;
   i: PtrInt;
-  W: TFileBufferWriter;
+  W: TBufferWriter;
 begin
   FrameInit(focBinary, Content, ContentType, frame);
-  W := TFileBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(TRawByteStringStream);
   try
     W.WriteBinary(Head);
     W.Write1(byte(FRAME_HEAD_SEP));

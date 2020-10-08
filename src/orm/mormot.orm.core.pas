@@ -3517,13 +3517,13 @@ type
     procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions = JSON_OPTIONS_FAST);
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
-    procedure GetBinaryValues(W: TFileBufferWriter); overload;
+    procedure GetBinaryValues(W: TBufferWriter); overload;
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
-    procedure GetBinaryValues(W: TFileBufferWriter; const aFields: TSQLFieldBits);
+    procedure GetBinaryValues(W: TBufferWriter; const aFields: TSQLFieldBits);
       overload;
     /// write the simple field values (excluding ID) into the binary buffer
-    procedure GetBinaryValuesSimpleFields(W: TFileBufferWriter);
+    procedure GetBinaryValuesSimpleFields(W: TBufferWriter);
     /// set the field values from a binary buffer
     // - won't read the ID field (should be read before, with the Count e.g.)
     // - PEnd should point just after the P input buffer, to avoid buffer overflow
@@ -5696,7 +5696,7 @@ type
     procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
     /// save the TSQLRecord RTTI into a binary header
     // - used e.g. by TSQLRestStorageInMemory.SaveToBinary()
-    procedure SaveBinaryHeader(W: TFileBufferWriter);
+    procedure SaveBinaryHeader(W: TBufferWriter);
     /// ensure that the TSQLRecord RTTI matches the supplied binary header
     // - used e.g. by TSQLRestStorageInMemory.LoadFromBinary()
     function CheckBinaryHeader(var R: TFastReader): boolean;
@@ -10292,7 +10292,7 @@ begin
   tmp.Init(Value); // private copy since the buffer will be modified
   try
     PropertyFromJSON(fPropRttiProp, Instance, tmp.buf, valid,
-      JSONTOOBJECT_TOLERANTOPTIONS);
+      JSONPARSER_TOLERANTOPTIONS);
   finally
     tmp.Done;
   end;
@@ -10322,7 +10322,7 @@ begin
   FromVarString(PByte(P), PByte(PEnd), tmp);
   try
     PropertyFromJSON(fPropRttiProp, Instance, tmp.buf, valid,
-      JSONTOOBJECT_TOLERANTOPTIONS);
+      JSONPARSER_TOLERANTOPTIONS);
   finally
     tmp.Done;
   end;
@@ -16449,7 +16449,7 @@ begin
   result := true;
 end;
 
-procedure TSQLRecord.GetBinaryValues(W: TFileBufferWriter);
+procedure TSQLRecord.GetBinaryValues(W: TBufferWriter);
 var
   f: PtrInt;
 begin
@@ -16458,7 +16458,7 @@ begin
       Fields.List[f].GetBinary(self, W);
 end;
 
-procedure TSQLRecord.GetBinaryValuesSimpleFields(W: TFileBufferWriter);
+procedure TSQLRecord.GetBinaryValuesSimpleFields(W: TBufferWriter);
 var
   f: PtrInt;
 begin
@@ -16467,7 +16467,7 @@ begin
       SimpleFields[f].GetBinary(self, W);
 end;
 
-procedure TSQLRecord.GetBinaryValues(W: TFileBufferWriter;
+procedure TSQLRecord.GetBinaryValues(W: TBufferWriter;
   const aFields: TSQLFieldBits);
 var
   f: PtrInt;
@@ -16480,9 +16480,9 @@ end;
 
 function TSQLRecord.GetBinary: RawByteString;
 var
-  W: TFileBufferWriter;
+  W: TBufferWriter;
 begin
-  W := TFileBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(TRawByteStringStream);
   try
     W.WriteVarUInt64(fID);
     GetBinaryValues(W);
@@ -18901,7 +18901,7 @@ begin
     until (P^ > ' ') or (P^ = #0);
 end;
 
-procedure TSQLRecordProperties.SaveBinaryHeader(W: TFileBufferWriter);
+procedure TSQLRecordProperties.SaveBinaryHeader(W: TBufferWriter);
 var
   i: PtrInt;
   FieldNames: TRawUTF8DynArray;
@@ -20655,7 +20655,7 @@ end;
 procedure TSQLRestCacheEntry.Init;
 begin
   Value.InitSpecific(TypeInfo(TSQLRestCacheEntryValueDynArray),
-    Values, djInt64, @Count); // will search/sort by first ID: TID field
+    Values, ptInt64, @Count); // will search/sort by first ID: TID field
   Mutex.Init;
 end;
 

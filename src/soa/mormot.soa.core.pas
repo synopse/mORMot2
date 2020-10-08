@@ -186,7 +186,7 @@ type
     // - void by default, i.e. no denial = all groups allowed for this method
     Denied: set of 0..255;
     /// execution options for this method (about thread safety or logging)
-    Options: TServiceMethodOptions;
+    Options: TInterfaceMethodOptions;
     /// where execution information should be written as TSQLRecordServiceLog
     LogRest: TObject; // TSQLRest
     /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
@@ -231,9 +231,9 @@ type
     // per-method execution rights
     fExecution: array of TServiceFactoryExecution;
     /// union of all fExecution[].Options
-    fAnyOptions: TServiceMethodOptions;
+    fAnyOptions: TInterfaceMethodOptions;
     procedure ExecutionAction(const aMethod: array of RawUTF8; aOptions:
-      TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
+      TInterfaceMethodOptions; aAction: TServiceMethodOptionsAction);
     function GetInterfaceTypeInfo: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}
     function GetInterfaceIID: TGUID;
@@ -605,7 +605,7 @@ begin
 end;
 
 procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUTF8;
-  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
+  aOptions: TInterfaceMethodOptions; aAction: TServiceMethodOptionsAction);
 
   procedure SetAction(var exec: TServiceFactoryExecution);
   begin
@@ -647,9 +647,9 @@ constructor TServiceContainer.Create(aOwner: TInterfaceResolver);
 begin
   fOwner := aOwner;
   fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, djRawUTF8, nil, {caseinsensitive=}true);
+    fInterface, ptRawUTF8, nil, {caseinsensitive=}true);
   fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, djRawUTF8, nil, {caseinsensitive=}true);
+    fInterfaceMethod, ptRawUTF8, nil, {caseinsensitive=}true);
 end;
 
 destructor TServiceContainer.Destroy;
@@ -734,10 +734,10 @@ begin
   toregisteragain := fInterface; // same services, but other URIs
   fInterface := nil;
   fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, djRawUTF8, nil, {caseinsensitive=}not aValue);
+    fInterface, ptRawUTF8, nil, {caseinsensitive=}not aValue);
   fInterfaceMethod := nil;
   fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, djRawUTF8, nil, not aValue);
+    fInterfaceMethod, ptRawUTF8, nil, not aValue);
   for i := 0 to high(toregisteragain) do
     AddServiceInternal(toregisteragain[i].Service);
 end;

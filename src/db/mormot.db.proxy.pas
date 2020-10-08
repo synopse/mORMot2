@@ -321,7 +321,7 @@ type
     // - will save one data row in optimized binary format (if not in Null)
     // - virtual method called by FetchAllToBinary()
     // - follows the format expected by TSQLDBProxyStatement
-    procedure ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
+    procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
       const ColTypes: TSQLDBFieldTypeDynArray); override;
 
     /// read-only access to the number of data rows stored
@@ -793,13 +793,13 @@ function TSQLDBRemoteConnectionProtocol.HandleInput(const input: RawByteString):
 begin
   result := input;
   SymmetricEncrypt(REMOTE_MAGIC, result);
-  result := SynLZDecompress(result);
+  result := AlgoSynLZ.Decompress(result);
 end;
 
 function TSQLDBRemoteConnectionProtocol.HandleOutput(const output: RawByteString):
   RawByteString;
 begin
-  result := SynLZCompress(output);
+  result := AlgoSynLZ.Compress(output);
   SymmetricEncrypt(REMOTE_MAGIC, result);
 end;
 
@@ -1371,7 +1371,7 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBProxyStatementAbstract.ColumnsToBinary(W: TFileBufferWriter;
+procedure TSQLDBProxyStatementAbstract.ColumnsToBinary(W: TBufferWriter;
   Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray);
 begin
   W.Write(fDataCurrentRowValuesStart, fDataCurrentRowValuesSize);

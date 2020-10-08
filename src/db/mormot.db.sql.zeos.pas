@@ -662,7 +662,7 @@ begin
     sTableName := meta.GetIdentifierConvertor.ExtractQuote(UTF8ToString(TableName));
     sTableName := meta.AddEscapeCharToWildcards(sTableName); //do not use "like" search patterns ['_','%'] so they need to be escaped
     res := meta.GetColumns('', sSchema, sTableName, '');
-    FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray), Fields, djRawUTF8, @n, true);
+    FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray), Fields, ptRawUTF8, @n, true);
     FillCharFast(F, sizeof(F), 0);
     while res.Next do
     begin

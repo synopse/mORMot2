@@ -1679,7 +1679,7 @@ begin
     PBKDF2_HMAC_SHA256(secret, KDFSalt, KDFRounds, aeskey, 'salt');
     if Algo in [low(ECIES_NOSYNLZ)..high(ECIES_NOSYNLZ)] then
     begin
-      dec := SynLZCompress(content);
+      dec := AlgoSynLZ.Compress(content);
       if length(dec) > length(content) then
       begin // SynLZ was inefficient
         FillZero(dec);
@@ -2207,7 +2207,7 @@ begin
     dec := ECIES_AES[head.Algo].SimpleEncrypt(enc, aeskey, ECIES_AESSIZE[head.Algo],
       false, true);
     if head.Algo in [low(ECIES_NOSYNLZ)..high(ECIES_NOSYNLZ)] then
-      SynLZDecompress(pointer(dec), length(dec), Decrypted)
+      AlgoSynLZ.Decompress(pointer(dec), length(dec), Decrypted)
     else
       Decrypted := dec;
     result := ecdDecryptError;

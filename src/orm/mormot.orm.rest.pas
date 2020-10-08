@@ -448,10 +448,12 @@ end;
 { ************ TRestORM Parent Class for abstract REST client/server }
 
 { TRestORM }
+
 // ------- TRestORM main methods
 
 constructor TRestORM.Create(aRest: TSQLRest; aModel: TSQLModel);
 begin
+  inherited Create;
   fRest := aRest;
   fModel := aModel;
 end;
@@ -459,9 +461,6 @@ end;
 destructor TRestORM.Destroy;
 begin
   FreeAndNil(fCache);
-  if (fModel <> nil) and (fModel.Owner = fRest) then
-    // make sure we are the Owner (TSQLRestStorage has fModel<>nil e.g.)
-    FreeAndNil(fModel);
   inherited Destroy;
 end;
 

@@ -2258,7 +2258,7 @@ type
     // - will save one data row in optimized binary format (if not in Null)
     // - virtual method called by FetchAllToBinary()
     // - follows the format expected by TSQLDBProxyStatement
-    procedure ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
+    procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
       const ColTypes: TSQLDBFieldTypeDynArray); virtual;
     /// low-level access to the Timer used for last DB operation
     property SQLLogTimer: TPrecisionTimer read fSQLLogTimer;
@@ -5701,7 +5701,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
+procedure TSQLDBStatement.ColumnsToBinary(W: TBufferWriter; Null: pointer;
   const ColTypes: TSQLDBFieldTypeDynArray);
 var
   F: integer;
@@ -5753,13 +5753,13 @@ function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
 var
   F, FMax, FieldSize, NullRowSize: integer;
   StartPos: Int64;
-  W: TFileBufferWriter;
+  W: TBufferWriter;
   ft: TSQLDBFieldType;
   ColTypes: TSQLDBFieldTypeDynArray;
   Null: TByteDynArray;
 begin
   result := 0;
-  W := TFileBufferWriter.Create(Dest);
+  W := TBufferWriter.Create(Dest);
   try
     W.WriteVarUInt32(FETCHALLTOBINARY_MAGIC);
     FMax := ColumnCount;

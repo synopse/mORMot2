@@ -671,7 +671,7 @@ type
 
 type
     /// used to write the BSON context
-  TBSONWriter = class(TFileBufferWriter)
+  TBSONWriter = class(TBufferWriter)
   { note: inlining methods generates 70% SLOWER code due to inefficient compiler :( }
   protected
     fDocumentCount: integer;

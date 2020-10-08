@@ -11,7 +11,7 @@ unit mormot.core.interfaces;
     - TInterfaceFactory Generating Runtime Implementation Class
     - TInterfaceResolver TInjectableObject for IoC / Dependency Injection
     - TInterfaceStub TInterfaceMock for Dependency Mocking
-    - TServiceMethodExecute for Method Execution from JSON
+    - TInterfaceMethodExecute for Method Execution from JSON
 
   *****************************************************************************
 }
@@ -729,7 +729,9 @@ type
     /// override this method to resolve an interface from this instance
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; virtual; abstract;
     /// override this method check if this instance implements aInterface
-    function Implements(aInterface: PRttiInfo): boolean; virtual; abstract;
+    // - this default implementation will call TryResolve() on a local IInterface
+    // which is somewhat slow, and should better be overriden
+    function Implements(aInterface: PRttiInfo): boolean; virtual;
   end;
   {$M-}
 
@@ -1718,14 +1720,14 @@ function ToText(c: TInterfaceMockSpyCheck): PShortString; overload;
 function ToText(op: TInterfaceStubRuleOperator): PShortString; overload;
 
 
-{ ************ TServiceMethodExecute for Method Execution from JSON }
+{ ************ TInterfaceMethodExecute for Method Execution from JSON }
 
 type
-  TServiceMethodExecute = class;
+  TInterfaceMethodExecute = class;
 
   /// possible service provider method options, e.g. about logging or execution
   // - see TServiceMethodOptions for a description of each available option
-  TServiceMethodOption = (
+  TInterfaceMethodOption = (
     optExecLockedPerInterface, optExecInPerInterfaceThread,
     optFreeInPerInterfaceThread, optExecInMainThread, optFreeInMainThread,
     optVariantCopiedByReference, optInterceptInputOutput, optNoLogInput,
@@ -1768,27 +1770,27 @@ type
   // - any exceptions will be propagated during execution, unless
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
-  TServiceMethodOptions = set of TServiceMethodOption;
+  TInterfaceMethodOptions = set of TInterfaceMethodOption;
 
-  /// callback called by TServiceMethodExecute to process an interface
+  /// callback called by TInterfaceMethodExecute to process an interface
   // callback parameter
   // - implementation should set the Obj local variable to an instance of
   // a fake class implementing the aParamInfo interface
   TServiceMethodExecuteCallback =
     procedure(var Par: PUTF8Char; ParamInterfaceInfo: TRttiCustom; out Obj) of object;
 
-  /// the current step of a TServiceMethodExecute.OnExecute call
-  TServiceMethodExecuteEventStep = (
+  /// the current step of a TInterfaceMethodExecute.OnExecute call
+  TInterfaceMethodExecuteEventStep = (
     smsUndefined, smsBefore, smsAfter, smsError);
 
-  /// the TServiceMethodExecute.OnExecute signature
-  TServiceMethodExecuteEvent = procedure(Sender: TServiceMethodExecute;
-    Step: TServiceMethodExecuteEventStep) of object;
+  /// the TInterfaceMethodExecute.OnExecute signature
+  TInterfaceMethodExecuteEvent = procedure(Sender: TInterfaceMethodExecute;
+    Step: TInterfaceMethodExecuteEventStep) of object;
 
   /// execute a method of a TInterfacedObject instance, from/to JSON
-  TServiceMethodExecute = class
+  TInterfaceMethodExecute = class
   protected
-    fMethod: PServiceMethod;
+    fMethod: PInterfaceMethod;
     fRawUTF8s: TRawUTF8DynArray;
     fStrings: TStringDynArray;
     fWideStrings: TWideStringDynArray;
@@ -1803,29 +1805,29 @@ type
     fValues: TPPointerDynArray;
     fAlreadyExecuted: boolean;
     fTempTextWriter: TTextWriter;
-    fOnExecute: array of TServiceMethodExecuteEvent;
+    fOnExecute: array of TInterfaceMethodExecuteEvent;
     fBackgroundExecutionThread: TSynBackgroundThreadMethod;
-    fOnCallback: TServiceMethodExecuteCallback;
-    fOptions: TServiceMethodOptions;
+    fOnCallback: TInterfaceMethodExecuteCallback;
+    fOptions: TInterfaceMethodOptions;
     fServiceCustomAnswerHead: RawUTF8;
     fServiceCustomAnswerStatus: cardinal;
     fLastException: Exception;
     fInput: TDocVariantData;
     fOutput: TDocVariantData;
-    fCurrentStep: TServiceMethodExecuteEventStep;
+    fCurrentStep: TInterfaceMethodExecuteEventStep;
     fExecutedInstancesFailed: TRawUTF8DynArray;
     procedure BeforeExecute;
     procedure RawExecute(const Instances: PPointerArray; InstancesLast: integer); virtual;
     procedure AfterExecute;
   public
     /// initialize the execution instance
-    constructor Create(aMethod: PServiceMethod);
+    constructor Create(aMethod: PInterfaceMethod);
     /// finalize the execution instance
     destructor Destroy; override;
     /// allow to hook method execution
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
     // fields will contain the execution data context when Hook is called
-    procedure AddInterceptor(const Hook: TServiceMethodExecuteEvent);
+    procedure AddInterceptor(const Hook: TInterfaceMethodExecuteEvent);
     /// execute the corresponding method of weak IInvokable references
     // - will retrieve a JSON array of parameters from Par (as [1,"par2",3])
     // - will append a JSON array of results in Res, or set an Error message, or
@@ -1847,15 +1849,15 @@ type
     // - expect params value to be with [ ], just like ExecuteJson
     function ExecuteJsonFake(Instance: pointer; params: PUTF8Char): boolean;
     /// low-level direct access to the associated method information
-    property Method: PServiceMethod read fMethod;
+    property Method: PInterfaceMethod read fMethod;
     /// low-level direct access to the current input/output parameter values
     // - you should not need to access this, but rather set
     // optInterceptInputOutput in Options, and read Input/Output content
     property Values: TPPointerDynArray read fValues;
     /// associated settings, as copied from TServiceFactoryServer.Options
-    property Options: TServiceMethodOptions read fOptions write fOptions;
+    property Options: TInterfaceMethodOptions read fOptions write fOptions;
     /// the current state of the execution
-    property CurrentStep: TServiceMethodExecuteEventStep
+    property CurrentStep: TInterfaceMethodExecuteEventStep
       read fCurrentStep write fCurrentStep;
     /// set from output TServiceCustomAnswer.Header result parameter
     property ServiceCustomAnswerHead: RawUTF8
@@ -1877,7 +1879,7 @@ type
     property BackgroundExecutionThread: TSynBackgroundThreadMethod
       read fBackgroundExecutionThread;
     /// points e.g. to TSQLRestServerURIContext.ExecuteCallback
-    property OnCallback: TServiceMethodExecuteCallback read fOnCallback;
+    property OnCallback: TInterfaceMethodExecuteCallback read fOnCallback;
     /// contains exception serialization after ExecuteJson of multiple instances
     // - follows the Instances[] order as supplied to RawExecute/ExecuteJson
     // - if only a single Instances[] is supplied, the exception will be
@@ -1890,7 +1892,7 @@ type
     function TempTextWriter: TTextWriter;
   end;
 
-  /// event used by TInterfaceFactory and TServiceMethodExecute to run
+  /// event used by TInterfaceFactory and TInterfaceMethodExecute to run
   // a method from a fake instance
   // - aMethod will specify which method is to be executed
   // - aParams will contain the input parameters, encoded as a JSON array,
@@ -1998,7 +2000,7 @@ type
   protected
     fLogClass: TSynLogClass;
     fName: RawUTF8;
-    function FakeInvoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
+    function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUTF8;
       aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   end;
@@ -2009,6 +2011,7 @@ function PerThreadRunningContextAddress: pointer;
 
 
 implementation
+
 
 {.$define SOA_DEBUG} // write the low-level interface info as json
 
@@ -3360,7 +3363,7 @@ begin
     // as in TServiceFactory.Create
     delete(fInterfaceURI, 1, 1);
   // retrieve all interface methods (recursively including ancestors)
-  fMethod.InitSpecific(TypeInfo(TInterfaceMethodDynArray), fMethods, djRawUTF8,
+  fMethod.InitSpecific(TypeInfo(TInterfaceMethodDynArray), fMethods, ptRawUTF8,
     @fMethodsCount, true);
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount = 0 then
@@ -4370,6 +4373,16 @@ end;
 
 
 { ************ TInterfaceResolver TInjectableObject for Dependency Injection  }
+
+{ TInterfaceResolver }
+
+function TInterfaceResolver.Implements(aInterface: PRttiInfo): boolean;
+var
+  dummy: IInterface;
+begin
+  result := TryResolve(aInterface, dummy);
+end;
+
 
 { TInterfaceResolverForSingleInterface }
 
@@ -5934,7 +5947,7 @@ begin
 end;
 
 
-{ ************ TServiceMethodExecute for Method Execution from JSON }
+{ ************ TInterfaceMethodExecute for Method Execution from JSON }
 
 type
   // map TServiceRunningContext
@@ -6026,7 +6039,7 @@ type
     FPRegs: array[FPREG_FIRST..FPREG_LAST] of Double;
     {$endif HAS_FPREG}
     res64: Int64Rec;
-    resKind: TServiceMethodValueType;
+    resKind: TInterfaceMethodValueType;
   end;
   {$ifdef FPC}
   {$pop}
@@ -6277,11 +6290,11 @@ asm
         // retrieve result
         mov     [r12].TCallMethodArgs.res64, rax
         mov     cl, [r12].TCallMethodArgs.resKind
-        cmp     cl, smvDouble
+        cmp     cl, imvDouble
         je      @d
-        cmp     cl, smvDateTime
+        cmp     cl, imvDateTime
         je      @d
-        cmp     cl, smvCurrency
+        cmp     cl, imvCurrency
         jne     @e
 @d:     movlpd  qword ptr[r12].TCallMethodArgs.res64, xmm0
         // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
@@ -6369,100 +6382,100 @@ begin
 end;
 
 
-{ TServiceMethodExecute }
+{ TInterfaceMethodExecute }
 
-constructor TServiceMethodExecute.Create(aMethod: PServiceMethod);
+constructor TInterfaceMethodExecute.Create(aMethod: PInterfaceMethod);
 var
   a: PtrInt;
 begin
   with aMethod^ do
   begin
-    if ArgsUsedCount[smvv64] > 0 then
-      SetLength(fInt64s, ArgsUsedCount[smvv64]);
-    if ArgsUsedCount[smvvObject] > 0 then
-      SetLength(fObjects, ArgsUsedCount[smvvObject]);
-    if ArgsUsedCount[smvvInterface] > 0 then
-      SetLength(fInterfaces, ArgsUsedCount[smvvInterface]);
-    if ArgsUsedCount[smvvRecord] > 0 then
-      SetLength(fRecords, ArgsUsedCount[smvvRecord]);
-    if ArgsUsedCount[smvvDynArray] > 0 then
-      SetLength(fDynArrays, ArgsUsedCount[smvvDynArray]);
+    if ArgsUsedCount[imvv64] > 0 then
+      SetLength(fInt64s, ArgsUsedCount[imvv64]);
+    if ArgsUsedCount[imvvObject] > 0 then
+      SetLength(fObjects, ArgsUsedCount[imvvObject]);
+    if ArgsUsedCount[imvvInterface] > 0 then
+      SetLength(fInterfaces, ArgsUsedCount[imvvInterface]);
+    if ArgsUsedCount[imvvRecord] > 0 then
+      SetLength(fRecords, ArgsUsedCount[imvvRecord]);
+    if ArgsUsedCount[imvvDynArray] > 0 then
+      SetLength(fDynArrays, ArgsUsedCount[imvvDynArray]);
     SetLength(fValues, length(Args));
     for a := ArgsManagedFirst to ArgsManagedLast do
     with Args[a] do
       case ValueType of
-        smvDynArray:
+        imvDynArray:
           with fDynArrays[IndexVar] do
             Wrapper.InitRtti(ArgRtti, Value);
-        smvRecord:
+        imvRecord:
           SetLength(fRecords[IndexVar], ArgRtti.Size);
-        smvVariant:
+        imvVariant:
           SetLength(fRecords[IndexVar], SizeOf(Variant));
       end;
   end;
   fMethod := aMethod;
 end;
 
-destructor TServiceMethodExecute.Destroy;
+destructor TInterfaceMethodExecute.Destroy;
 begin
   fTempTextWriter.Free;
   inherited Destroy;
 end;
 
-procedure TServiceMethodExecute.AddInterceptor(const Hook: TServiceMethodExecuteEvent);
+procedure TInterfaceMethodExecute.AddInterceptor(const Hook: TInterfaceMethodExecuteEvent);
 begin
   MultiEventAdd(fOnExecute, TMethod(Hook));
 end;
 
-procedure TServiceMethodExecute.BeforeExecute;
+procedure TInterfaceMethodExecute.BeforeExecute;
 var
   a: PtrInt;
   Value: PPointer;
 begin
   with fMethod^ do
   begin
-    if ArgsUsedCount[smvvRawUTF8] > 0 then
-      SetLength(fRawUTF8s, ArgsUsedCount[smvvRawUTF8]);
-    if ArgsUsedCount[smvvString] > 0 then
-      SetLength(fStrings, ArgsUsedCount[smvvString]);
-    if ArgsUsedCount[smvvWideString] > 0 then
-      SetLength(fWideStrings, ArgsUsedCount[smvvWideString]);
+    if ArgsUsedCount[imvvRawUTF8] > 0 then
+      SetLength(fRawUTF8s, ArgsUsedCount[imvvRawUTF8]);
+    if ArgsUsedCount[imvvString] > 0 then
+      SetLength(fStrings, ArgsUsedCount[imvvString]);
+    if ArgsUsedCount[imvvWideString] > 0 then
+      SetLength(fWideStrings, ArgsUsedCount[imvvWideString]);
     if fAlreadyExecuted then
     begin
-      if ArgsUsedCount[smvvObject] > 0 then
-        FillCharFast(fObjects,ArgsUsedCount[smvvObject] * SizeOf(TObject), 0);
-      if ArgsUsedCount[smvv64] > 0 then
-        FillCharFast(fInt64s, ArgsUsedCount[smvv64] * SizeOf(Int64), 0);
-      if ArgsUsedCount[smvvInterface] > 0 then
-        FillCharFast(fInterfaces, ArgsUsedCount[smvvInterface] * SizeOf(pointer), 0);
+      if ArgsUsedCount[imvvObject] > 0 then
+        FillCharFast(fObjects,ArgsUsedCount[imvvObject] * SizeOf(TObject), 0);
+      if ArgsUsedCount[imvv64] > 0 then
+        FillCharFast(fInt64s, ArgsUsedCount[imvv64] * SizeOf(Int64), 0);
+      if ArgsUsedCount[imvvInterface] > 0 then
+        FillCharFast(fInterfaces, ArgsUsedCount[imvvInterface] * SizeOf(pointer), 0);
     end;
     Value := @fValues[1];
     for a := 1 to high(Args) do
     with Args[a] do
     begin
       case ValueVar of
-        smvv64:
+        imvv64:
           Value^ := @fInt64s[IndexVar];
-        smvvRawUTF8:
+        imvvRawUTF8:
           Value^ := @fRawUTF8s[IndexVar];
-        smvvString:
+        imvvString:
           Value^ := @fStrings[IndexVar];
-        smvvWideString:
+        imvvWideString:
           Value^ := @fWideStrings[IndexVar];
-        smvvObject:
+        imvvObject:
           begin
             Value^ := @fObjects[IndexVar];
             PPointer(Value^)^ := ArgRtti.ClassNewInstance;
           end;
-        smvvInterface:
+        imvvInterface:
           Value^ := @fInterfaces[IndexVar];
-        smvvRecord:
+        imvvRecord:
           begin
             Value^ := pointer(fRecords[IndexVar]);
             if fAlreadyExecuted then
               FillCharFast(Value^^, ArgRtti.Size, 0);
           end;
-        smvvDynArray:
+        imvvDynArray:
           Value^ := @fDynArrays[IndexVar].Value;
       else
         raise EInterfaceFactory.CreateUTF8('I%.%:% ValueType=%',
@@ -6479,7 +6492,7 @@ begin
   fAlreadyExecuted := true;
 end;
 
-procedure TServiceMethodExecute.RawExecute(const Instances: PPointerArray;
+procedure TInterfaceMethodExecute.RawExecute(const Instances: PPointerArray;
   InstancesLast: integer);
 var
   Value: pointer;
@@ -6523,8 +6536,8 @@ begin
     with Args[a] do
     begin
       Value := fValues[a];
-      if (ValueDirection <> smdConst) or
-         (ValueType in [smvRecord, smvVariant]) then
+      if (ValueDirection <> imdConst) or
+         (ValueType in [imvRecord, imvVariant]) then
        begin
         // pass by reference
         if (RegisterIdent = 0) and (FPRegisterIdent = 0) and (SizeInStack > 0) then
@@ -6585,7 +6598,7 @@ begin
       if ArgsResultIndex >= 0 then
         call.resKind := Args[ArgsResultIndex].ValueType
       else
-        call.resKind := smvNone;
+        call.resKind := imvNone;
       // launch the asm stub in the expected execution context
       try
         if (optExecInMainThread in Options) and
@@ -6599,7 +6612,7 @@ begin
               ' with BackgroundExecutionThread=nil')
         else
           CallMethod(call);
-        if (ArgsResultIndex >= 0) and (Args[ArgsResultIndex].ValueVar = smvv64) then
+        if (ArgsResultIndex >= 0) and (Args[ArgsResultIndex].ValueVar = imvv64) then
           PInt64Rec(fValues[ArgsResultIndex])^ := call.res64;
         // handle method execution interception
         fCurrentStep := smsAfter;
@@ -6638,7 +6651,7 @@ begin
   end;
 end;
 
-function TServiceMethodExecute.TempTextWriter: TTextWriter;
+function TInterfaceMethodExecute.TempTextWriter: TTextWriter;
 begin
   if fTempTextWriter = nil then
   begin
@@ -6649,7 +6662,7 @@ begin
   result := fTempTextWriter;
 end;
 
-procedure TServiceMethodExecute.AfterExecute;
+procedure TInterfaceMethodExecute.AfterExecute;
 var
   i, a: PtrInt;
 begin
@@ -6659,11 +6672,11 @@ begin
   with fMethod^ do
   if ArgsManagedFirst >= 0 then
   begin
-    for i := 0 to ArgsUsedCount[smvvObject] - 1 do
+    for i := 0 to ArgsUsedCount[imvvObject] - 1 do
       fObjects[i].Free;
-    for i := 0 to ArgsUsedCount[smvvInterface] - 1 do
+    for i := 0 to ArgsUsedCount[imvvInterface] - 1 do
       IUnknown(fInterfaces[i]) := nil;
-    for i := 0 to ArgsUsedCount[smvvDynArray] - 1 do
+    for i := 0 to ArgsUsedCount[imvvDynArray] - 1 do
       fDynArrays[i].Wrapper.Clear; // will handle T*ObjArray, and set Value^=nil
     if fRecords <> nil then
     begin
@@ -6671,12 +6684,12 @@ begin
       for a := ArgsManagedFirst to ArgsManagedLast do
         with Args[a] do
         case ValueType of
-          smvRecord:
+          imvRecord:
             begin
               FastRecordClear(pointer(fRecords[i]), ArgRtti.Info);
               inc(i);
             end;
-          smvVariant:
+          imvVariant:
             begin
               VarClear(PVariant(fRecords[i])^); // fast, even for simple types
               inc(i);
@@ -6686,7 +6699,7 @@ begin
   end;
 end;
 
-function TServiceMethodExecute.ExecuteJsonCallback(Instance: pointer;
+function TInterfaceMethodExecute.ExecuteJsonCallback(Instance: pointer;
   const params: RawUTF8; output: PRawUTF8): boolean;
 var
   fake: TInterfacedObjectFake;
@@ -6734,7 +6747,7 @@ begin
   end;
 end;
 
-function TServiceMethodExecute.ExecuteJsonFake(
+function TInterfaceMethodExecute.ExecuteJsonFake(
   Instance: pointer; params: PUTF8Char): boolean;
 var
   tmp: RawUTF8;
@@ -6757,7 +6770,7 @@ begin
     fMethod^, tmp, nil, nil, nil, nil);
 end;
 
-function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer;
+function TInterfaceMethodExecute.ExecuteJson(const Instances: array of pointer;
   Par: PUTF8Char; Res: TTextWriter; Error: PShortString; ResAsJSONObject: boolean): boolean;
 var
   a, a1: integer;
@@ -6803,7 +6816,7 @@ begin
                 Par := GotoNextJSONItem(Par, 1, @EndOfObject);
                 for a := a1 to ArgsInLast do
                 with Args[a] do
-                  if ValueDirection <> smdOut then
+                  if ValueDirection <> imdOut then
                     if IdemPropName(ParamName^,Name,NameLen) then
                     begin
                       ParObjValues[a] := Val; // fast redirection, without allocation
@@ -6831,7 +6844,7 @@ begin
     else
       for a := ArgsInFirst to ArgsInLast do
       with Args[a] do
-      if ValueDirection <> smdOut then
+      if ValueDirection <> imdOut then
       begin
         if ParObjValuesUsed then
           if ParObjValues[a] = nil then // missing parameter in input JSON
@@ -6846,13 +6859,13 @@ begin
         else if Par = nil then
           break; // premature end of ..] (ParObjValuesUsed=false)
         case ValueType of
-          smvInterface:
+          imvInterface:
             if Assigned(OnCallback) then
               OnCallback(Par, ArgRtti, fInterfaces[IndexVar])
             else
               raise EInterfaceFactory.CreateUTF8('OnCallback=nil for %(%: %)',
                 [InterfaceDotMethodName, ParamName^, ArgTypeName^]);
-          smvDynArray:
+          imvDynArray:
             begin
               Par := fDynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
               if Par = nil then
@@ -6890,21 +6903,21 @@ begin
       opt[{smdVar=}true] := []; // let var params override void/default values
       for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
-        if ValueDirection in [smdVar, smdOut, smdResult] then
+        if ValueDirection in [imdVar, imdOut, imdResult] then
         begin
           if ResAsJSONObject then
             Res.AddPropName(ParamName^);
           case ValueType of
-            smvDynArray:
+            imvDynArray:
               begin
                 if vIsObjArray in ValueKindAsm then
-                  Res.AddObjArrayJSON(fValues[a]^, opt[ValueDirection = smdVar])
+                  Res.AddObjArrayJSON(fValues[a]^, opt[ValueDirection = imdVar])
                 else
                   Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
                 Res.Add(',');
               end;
           else
-            AddJSON(Res, fValues[a], opt[ValueDirection = smdVar]);
+            AddJSON(Res, fValues[a], opt[ValueDirection = imdVar]);
           end;
         end;
       Res.CancelLastComma;
@@ -6918,7 +6931,7 @@ end;
 
 { TInterfacedObjectFakeCallback }
 
-function TInterfacedObjectFakeCallback.FakeInvoke(const aMethod: TServiceMethod;
+function TInterfacedObjectFakeCallback.FakeInvoke(const aMethod: TInterfaceMethod;
   const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin

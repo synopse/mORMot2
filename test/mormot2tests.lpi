@@ -222,6 +222,13 @@
 -dFPC_X64MM
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS"/>
+            <OtherDefines Count="5">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item5>
