@@ -32,6 +32,7 @@ uses
   mormot.core.secure,
   mormot.core.data,
   mormot.core.rtti,
+  mormot.core.log,
   mormot.core.json,
   mormot.orm.core,
   mormot.rest.core,
@@ -402,6 +403,8 @@ type
     function Cache: TSQLRestCache;
     function CacheOrNil: TSQLRestCache;
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
+    function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+      aInstance: TObject = nil): ISynLog;
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
     procedure InternalLog(const Format: RawUTF8; const Args: array of const;
       Level: TSynLogInfo = sllTrace); overload;
@@ -474,8 +477,8 @@ begin
   fRest.AcquireExecution[execORMWrite].Safe.UnLock;
 end;
 
-function TRestORM.SQLComputeForSelect(Table: TSQLRecordClass; const FieldNames,
-  WhereClause: RawUTF8): RawUTF8;
+function TRestORM.SQLComputeForSelect(Table: TSQLRecordClass;
+  const FieldNames, WhereClause: RawUTF8): RawUTF8;
 begin
   result := '';
   if (self = nil) or (Table = nil) then
@@ -2095,6 +2098,12 @@ end;
 function TRestORM.CacheWorthItForTable(aTableIndex: cardinal): boolean;
 begin
   result := true; // always worth caching by default
+end;
+
+function TRestORM.Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+  aInstance: TObject): ISynLog;
+begin
+  result := fRest.Enter(TextFmt, TextArgs, aInstance);
 end;
 
 procedure TRestORM.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);

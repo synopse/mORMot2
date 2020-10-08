@@ -865,7 +865,8 @@ procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: short
 // - do not expect exact millisecond resolution - it may rather be within the
 // 10-16 ms range, especially under Windows
 {$ifdef MSWINDOWS}
-var GetTickCount64: function: Int64; stdcall;
+var
+  GetTickCount64: function: Int64; stdcall;
 {$else}
 function GetTickCount64: Int64;
 {$endif MSWINDOWS}

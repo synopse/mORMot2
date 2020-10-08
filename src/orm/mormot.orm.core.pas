@@ -55,6 +55,7 @@ uses
   mormot.core.variants,
   mormot.core.data,
   mormot.core.rtti,
+  mormot.core.log,
   mormot.core.json,
   mormot.core.threads,
   mormot.core.search,
@@ -2734,6 +2735,10 @@ type
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Format: RawUTF8; const Args: array of const;
       Level: TSynLogInfo = sllTrace); overload;
+    /// log method enter / auto-leave tracing, with some custom text
+    // - under FPC, "with ORM.Enter" or a local ISynLog variable should be used
+    function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+      aInstance: TObject = nil): ISynLog;
     /// retrieve the current server time stamp as a TTimeLog
     // - used e.g. by TSQLRecord.ComputeFieldsBeforeWrite for sftModTime/sftCreateTime
     // - is safe on both client and server sides
