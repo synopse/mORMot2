@@ -4703,8 +4703,8 @@ begin
   L := 0;
   for i := 0 to high(Values) do
     inc(L, length(Values[i]));
-  SetString(Result, nil, L);
-  P := pointer(Result);
+  SetString(result, nil, L);
+  P := pointer(result);
   for i := 0 to high(Values) do
   begin
     L := length(Values[i]);
@@ -4814,30 +4814,30 @@ end;
 function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
 begin
-  Result := AlgoSynLZ.Compress(P, Dest, PLen, DestLen,
+  result := AlgoSynLZ.Compress(P, Dest, PLen, DestLen,
     CompressionSizeTrigger, CheckMagicForCompressed);
 end;
 
 function SynLZDecompress(const Data: RawByteString): RawByteString;
 begin
-  AlgoSynLZ.Decompress(pointer(Data), Length(Data), Result);
+  AlgoSynLZ.Decompress(pointer(Data), Length(Data), result);
 end;
 
 function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
 begin
-  Result := AlgoSynLZ.DecompressHeader(P, PLen);
+  result := AlgoSynLZ.DecompressHeader(P, PLen);
 end;
 
 function SynLZDecompressBody(P, Body: PAnsiChar; PLen, BodyLen: integer;
   SafeDecompression: boolean): boolean;
 begin
-  Result := AlgoSynLZ.DecompressBody(P, Body, PLen, BodyLen,
+  result := AlgoSynLZ.DecompressBody(P, Body, PLen, BodyLen,
     ALGO_SAFE[SafeDecompression]);
 end;
 
 function SynLZDecompressPartial(P, Partial: PAnsiChar; PLen, PartialLen: integer): integer;
 begin
-  Result := AlgoSynLZ.DecompressPartial(P, Partial, PLen, PartialLen, PartialLen);
+  result := AlgoSynLZ.DecompressPartial(P, Partial, PLen, PartialLen, PartialLen);
 end;
 
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
@@ -4849,31 +4849,31 @@ end;
 function SynLZDecompress(const Data: RawByteString; out Len: integer;
   var tmp: RawByteString): pointer;
 begin
-  Result := AlgoSynLZ.Decompress(pointer(Data), length(Data), Len, tmp);
+  result := AlgoSynLZ.Decompress(pointer(Data), length(Data), Len, tmp);
 end;
 
 function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
   var tmp: RawByteString): pointer;
 begin
-  Result := AlgoSynLZ.Decompress(P, PLen, Len, tmp);
+  result := AlgoSynLZ.Decompress(P, PLen, Len, tmp);
 end;
 
 function SynLZCompressToBytes(const Data: RawByteString;
   CompressionSizeTrigger: integer): TByteDynArray;
 begin
-  Result := AlgoSynLZ.CompressToBytes(pointer(Data), length(Data),
+  result := AlgoSynLZ.CompressToBytes(pointer(Data), length(Data),
     CompressionSizeTrigger);
 end;
 
 function SynLZCompressToBytes(P: PAnsiChar;
   PLen, CompressionSizeTrigger: integer): TByteDynArray;
 begin
-  Result := AlgoSynLZ.CompressToBytes(P, PLen, CompressionSizeTrigger);
+  result := AlgoSynLZ.CompressToBytes(P, PLen, CompressionSizeTrigger);
 end;
 
 function SynLZDecompress(const Data: TByteDynArray): RawByteString;
 begin
-  AlgoSynLZ.Decompress(pointer(Data), length(Data), Result);
+  AlgoSynLZ.Decompress(pointer(Data), length(Data), result);
 end;
 
 {$endif PUREMORMOT2}
@@ -6950,7 +6950,7 @@ begin
   if Map.Map(FileName) then
   try
     if ForceUTF8 then
-      UTF8ToSynUnicode(PUTF8Char(Map.Buffer), Map.Size, Result)
+      UTF8ToSynUnicode(PUTF8Char(Map.Buffer), Map.Size, result)
     else
       case Map.TextFileKind of
         isUnicode:
@@ -6958,7 +6958,7 @@ begin
             (Map.Size - 2) shr 1);
         isUTF8:
           UTF8ToSynUnicode(PUTF8Char(pointer(PtrUInt(Map.Buffer) + 3)),
-            Map.Size - 3, Result);
+            Map.Size - 3, result);
         isAnsi:
           result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer,
             Map.Size);
@@ -6978,7 +6978,7 @@ begin
     case Map.TextFileKind of
       isUnicode:
         RawUnicodeToUtf8(PWideChar(PtrUInt(Map.Buffer) + 2),
-          (Map.Size - 2) shr 1, Result);
+          (Map.Size - 2) shr 1, result);
       isUTF8:
         FastSetString(result, pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
       isAnsi:
@@ -7004,7 +7004,7 @@ begin
       UTF8DecodeToString(PUTF8Char(Map.Buffer), Map.Size, result)
       {$else}
       result := CurrentAnsiConvert.UTF8BufferToAnsi(PUTF8Char(Map.Buffer), Map.Size)
-      {$endif}
+      {$endif UNICODE}
     else
       case Map.TextFileKind of
       {$ifdef UNICODE}
@@ -7081,7 +7081,7 @@ end;
 procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUTF8;
   Data: pointer; Len, PerLine: integer);
 var
-  line,i: integer;
+  line, i: integer;
   P: PByte;
 begin
   if (Dest = nil) or (Data = nil) or (Len <= 0) or (PerLine <= 0) then
@@ -7097,7 +7097,7 @@ begin
     else
       line := Len;
     Dest.AddShorter(#13#10'    ');
-    for i := 0 to line-1 do
+    for i := 1 to line do
     begin
       Dest.Add('$');
       Dest.AddByteToHex(P^);

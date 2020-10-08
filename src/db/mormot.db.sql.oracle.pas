@@ -638,7 +638,7 @@ function TSQLDBOracleConnection.PasswordChange: boolean;
 var
   password: RawUTF8;
 begin
-  Result := False;
+  result := False;
   if Properties is TSQLDBOracleConnectionProperties then
     if Assigned(TSQLDBOracleConnectionProperties(Properties).OnPasswordExpired) then
     begin
@@ -649,7 +649,7 @@ begin
           Length(Properties.UserID), Pointer(Properties.PassWord), Length(Properties.PassWord),
           Pointer(password), Length(password), OCI_DEFAULT or OCI_AUTH), fError);
       TSQLDBOracleConnectionProperties(Properties).PasswordChanged(password);
-      Result := True;
+      result := True;
     end;
 end;
 

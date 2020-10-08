@@ -2401,7 +2401,7 @@ begin
   i := 1;
   while (i <= l) and (S[i] <= ' ') do
     Inc(i);
-  Result := Copy(S, i, Maxint);
+  result := Copy(S, i, Maxint);
 end;
 
 function TrimRight(const S: RawUTF8): RawUTF8;
@@ -4263,7 +4263,7 @@ var
   P: PAnsiChar;
   tmpbuf: TSynTempBuffer; // faster than a dynamic array
 begin
-  Result := '';
+  result := '';
   if ValuesCount = 0 then
     exit;
   if InlinedValue then
@@ -4287,8 +4287,8 @@ begin
       SetString(ints[i], P, L);
     end;
     // create result
-    FastSetString(Result, nil, Len);
-    P := pointer(Result);
+    FastSetString(result, nil, Len);
+    P := pointer(result);
     if Prefix <> '' then
     begin
       L := length(Prefix);
@@ -4331,7 +4331,7 @@ var
   P: PAnsiChar;
   tmp: TSynTempBuffer; // faster than a dynamic array
 begin
-  Result := '';
+  result := '';
   if ValuesCount = 0 then
     exit;
   if InlinedValue then
@@ -4354,8 +4354,8 @@ begin
       inc(int);
     end;
     // create result
-    FastSetString(Result, nil, Len);
-    P := pointer(Result);
+    FastSetString(result, nil, Len);
+    P := pointer(result);
     if Prefix <> '' then
     begin
       L := length(Prefix);
@@ -4394,14 +4394,14 @@ end;
 function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
   const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  Result := IntegerDynArrayToCSV(pointer(Values), length(Values),
+  result := IntegerDynArrayToCSV(pointer(Values), length(Values),
     Prefix, Suffix, InlinedValue);
 end;
 
 function Int64DynArrayToCSV(const Values: TInt64DynArray;
   const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  Result := Int64DynArrayToCSV(pointer(Values), length(Values),
+  result := Int64DynArrayToCSV(pointer(Values), length(Values),
     Prefix, Suffix, InlinedValue);
 end;
 
@@ -6254,7 +6254,7 @@ end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
 begin
-  Result := FastLocatePUTF8CharSorted(P, R, Value, TUTF8Compare(@StrComp));
+  result := FastLocatePUTF8CharSorted(P, R, Value, TUTF8Compare(@StrComp));
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
@@ -6263,13 +6263,13 @@ var
   L, i, cmp: PtrInt;
 begin // fast O(log(n)) binary search
   if not Assigned(Compare) or (R < 0) then
-    Result := 0
+    result := 0
   else if Compare(P^[R], Value) < 0 then // quick return if already sorted
-    Result := R + 1
+    result := R + 1
   else
   begin
     L := 0;
-    Result := -1; // return -1 if found
+    result := -1; // return -1 if found
     repeat
       i := (L + R) shr 1;
       cmp := Compare(P^[i], Value);
@@ -6282,7 +6282,7 @@ begin // fast O(log(n)) binary search
     until (L > R);
     while (i >= 0) and (Compare(P^[i], Value) >= 0) do
       dec(i);
-    Result := i + 1; // return the index where to insert
+    result := i + 1; // return the index where to insert
   end;
 end;
 
@@ -6294,23 +6294,23 @@ begin // fast O(log(n)) binary search
   L := 0;
   if Assigned(Compare) and (R >= 0) then
     repeat
-      Result := (L + R) shr 1;
-      cmp := Compare(P^[Result], Value);
+      result := (L + R) shr 1;
+      cmp := Compare(P^[result], Value);
       if cmp = 0 then
         exit;
       if cmp < 0 then
       begin
-        L := Result + 1;
+        L := result + 1;
         if L <= R then
           continue;
         break;
       end;
-      R := Result - 1;
+      R := result - 1;
       if L <= R then
         continue;
       break;
     until false;
-  Result := -1;
+  result := -1;
 end;
 
 {$ifdef CPUX64}
@@ -6385,8 +6385,8 @@ begin // fast O(log(n)) binary search using inlined StrCompFast()
     begin
       L := 0;
       repeat
-        Result := (L + R) shr 1;
-        piv := pointer(P^[Result]);
+        result := (L + R) shr 1;
+        piv := pointer(P^[result]);
         if piv <> nil then
         begin
           val := pointer(Value);
@@ -6401,13 +6401,13 @@ begin // fast O(log(n)) binary search using inlined StrCompFast()
             until c <> val^;
           if c > val^ then
           begin
-            R := Result - 1;  // StrComp(P^[result],Value)>0
+            R := result - 1;  // StrComp(P^[result],Value)>0
             if L <= R then
               continue;
             break;
           end;
         end;
-        L := Result + 1;  // StrComp(P^[result],Value)<0
+        L := result + 1;  // StrComp(P^[result],Value)<0
         if L <= R then
           continue;
         break;
@@ -6415,10 +6415,10 @@ begin // fast O(log(n)) binary search using inlined StrCompFast()
     end
     else if P^[0] = nil then
     begin // '' should be in lowest P[] slot
-      Result := 0;
+      result := 0;
       exit;
     end;
-  Result := -1;
+  result := -1;
 end;
 
 {$endif CPUX64}
@@ -6429,7 +6429,7 @@ var
   tmp: array[byte] of AnsiChar;
 begin
   UpperCopy255Buf(@tmp, Value, ValueLen);
-  Result := FastFindPUTF8CharSorted(P, R, @tmp);
+  result := FastFindPUTF8CharSorted(P, R, @tmp);
 end;
 
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
@@ -6440,26 +6440,26 @@ begin // fast O(log(n)) binary search
   L := 0;
   if 0 <= R then
     repeat
-      Result := (L + R) shr 1;
-      cmp := ItemComp(P^[SortedIndexes[Result]], Value);
+      result := (L + R) shr 1;
+      cmp := ItemComp(P^[SortedIndexes[result]], Value);
       if cmp = 0 then
       begin
-        Result := SortedIndexes[Result];
+        result := SortedIndexes[result];
         exit;
       end;
       if cmp < 0 then
       begin
-        L := Result + 1;
+        L := result + 1;
         if L <= R then
           continue;
         break;
       end;
-      R := Result - 1;
+      R := result - 1;
       if L <= R then
         continue;
       break;
     until false;
-  Result := -1;
+  result := -1;
 end;
 
 function AddSortedRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
@@ -6469,14 +6469,14 @@ var
   n: PtrInt;
 begin
   if ForcedIndex >= 0 then
-    Result := ForcedIndex
+    result := ForcedIndex
   else
   begin
     if not Assigned(Compare) then
       Compare := @StrComp;
-    Result := FastLocatePUTF8CharSorted(pointer(Values), ValuesCount - 1,
+    result := FastLocatePUTF8CharSorted(pointer(Values), ValuesCount - 1,
       pointer(Value), Compare);
-    if Result < 0 then
+    if result < 0 then
       exit; // Value exists -> fails
   end;
   n := Length(Values);
@@ -6488,20 +6488,20 @@ begin
       SetLength(CoValues^, n);
   end;
   n := ValuesCount;
-  if Result < n then
+  if result < n then
   begin
-    n := (n - Result) * SizeOf(pointer);
-    MoveFast(Pointer(Values[Result]), Pointer(Values[Result + 1]), n);
-    PtrInt(Values[Result]) := 0; // avoid GPF
+    n := (n - result) * SizeOf(pointer);
+    MoveFast(Pointer(Values[result]), Pointer(Values[result + 1]), n);
+    PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues <> nil then
     begin
       {$ifdef CPU64} n := n shr 1; {$endif} // 64-bit pointer to 32-bit integer
-      MoveFast(CoValues^[Result], CoValues^[Result + 1], n);
+      MoveFast(CoValues^[result], CoValues^[result + 1], n);
     end;
   end
   else
-    Result := n;
-  Values[Result] := Value;
+    result := n;
+  Values[result] := Value;
   inc(ValuesCount);
 end;
 
@@ -6589,7 +6589,7 @@ var
 begin
   n := length(Values);
   if cardinal(Index) >= cardinal(n) then
-    Result := false
+    result := false
   else
   begin
     dec(n);
@@ -6603,7 +6603,7 @@ begin
       PtrUInt(Values[n]) := 0; // avoid GPF
     end;
     SetLength(Values, n);
-    Result := true;
+    result := true;
   end;
 end;
 
@@ -6614,7 +6614,7 @@ var
 begin
   n := ValuesCount;
   if cardinal(Index) >= cardinal(n) then
-    Result := false
+    result := false
   else
   begin
     dec(n);
@@ -6630,7 +6630,7 @@ begin
       MoveFast(pointer(Values[Index + 1]), pointer(Values[Index]), n * SizeOf(pointer));
       PtrUInt(Values[ValuesCount]) := 0; // avoid GPF
     end;
-    Result := true;
+    result := true;
   end;
 end;
 
@@ -9468,13 +9468,13 @@ var
 begin
   L := length(Bin);
   FastSetString(result, nil, L * 2);
-  mormot.core.text.BinToHex(pointer(Bin), pointer(Result), L);
+  mormot.core.text.BinToHex(pointer(Bin), pointer(result), L);
 end;
 
 function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
   FastSetString(result, nil, BinBytes * 2);
-  mormot.core.text.BinToHex(Bin, pointer(Result), BinBytes);
+  mormot.core.text.BinToHex(Bin, pointer(result), BinBytes);
 end;
 
 function HexToBin(const Hex: RawUTF8): RawByteString;

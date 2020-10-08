@@ -5748,7 +5748,7 @@ begin
   end;
   if fPosition > fSize then
     fPosition := fSize;
-  Result := fPosition;
+  result := fPosition;
 end;
 
 procedure TSQLBlobStream.ChangeRow(RowID: Int64);

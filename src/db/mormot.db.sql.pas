@@ -5860,7 +5860,7 @@ end;
 
 function TSQLDBStatement.ColumnString(Col: integer): string;
 begin
-  Result := UTF8ToString(ColumnUTF8(Col));
+  result := UTF8ToString(ColumnUTF8(Col));
 end;
 
 function TSQLDBStatement.ColumnString(const ColName: RawUTF8): string;
@@ -5935,7 +5935,7 @@ end;
 
 function TSQLDBStatement.Instance: TSQLDBStatement;
 begin
-  Result := Self;
+  result := Self;
 end;
 
 function TSQLDBStatement.SQLLogBegin(level: TSynLogInfo): TSynLog;
@@ -6015,9 +6015,9 @@ end;
 function TSQLDBStatement.GetSQLCurrent: RawUTF8;
 begin
   if fSQLPrepared <> '' then
-    Result := fSQLPrepared
+    result := fSQLPrepared
   else
-    Result := fSQL;
+    result := fSQL;
 end;
 
 function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
@@ -6223,13 +6223,13 @@ function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
 var
   F, size: integer;
 begin
-  Result := '';
+  result := '';
   if (self = nil) or (TableName = '') then
     exit;
   SetLength(Fields, ColumnCount);
   if Fields = nil then
     exit;
-  Result := 'insert into ' + TableName + ' (';
+  result := 'insert into ' + TableName + ' (';
   for F := 0 to high(Fields) do
   begin
     Fields[F].Name := ColumnName(F);
@@ -6242,13 +6242,13 @@ begin
         raise ESQLDBException.CreateUTF8('%.ColumnsToSQLInsert: Invalid column %',
           [self, Fields[F].Name]);
     end;
-    Result := Result + Fields[F].Name + ',';
+    result := result + Fields[F].Name + ',';
   end;
-  Result[length(Result)] := ')';
-  Result := Result + ' values (';
+  result[length(result)] := ')';
+  result := result + ' values (';
   for F := 0 to high(Fields) do
-    Result := Result + '?,'; // MUCH faster with a prepared statement
-  Result[length(Result)] := ')';
+    result := result + '?,'; // MUCH faster with a prepared statement
+  result[length(result)] := ')';
 end;
 
 procedure TSQLDBStatement.BindFromRows(const Fields: TSQLDBFieldTypeDynArray;

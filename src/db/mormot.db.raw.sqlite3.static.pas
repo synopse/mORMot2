@@ -311,7 +311,7 @@ end;
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
 begin
-  GetMem(Result, size);
+  GetMem(result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }

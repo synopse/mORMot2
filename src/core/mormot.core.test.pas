@@ -1313,13 +1313,13 @@ end;
 function SynTestsTextOut(var t: TTextRec): Integer;
 begin
   if t.BufPos = 0 then
-    Result := 0
+    result := 0
   else
   begin
     if FileWrite(t.Handle, t.BufPtr^, t.BufPos) <> integer(t.BufPos) then
-      Result := GetLastError
+      result := GetLastError
     else
-      Result := 0;
+      result := 0;
     AppendBufferToRawUTF8(PPRawUTF8(@t.UserData)^^, t.BufPtr, t.Bufpos);
     t.BufPos := 0;
   end;

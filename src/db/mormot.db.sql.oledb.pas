@@ -872,7 +872,7 @@ begin
             P := @V^.VData
           else
             P := V^.VAnsiChar;
-          SetString(Result, P, V^.Length);
+          SetString(result, P, V^.Length);
         end;
       ftUTF8:
         if V^.Length = 0 then
@@ -884,7 +884,7 @@ begin
           else
             P := V^.VAnsiChar;
           // +1 below for trailing WideChar(#0) in the resulting RawUnicode
-          SetString(Result, P, V^.Length + 1);
+          SetString(result, P, V^.Length + 1);
         end;
     else
       SetString(result, PAnsiChar(@V^.Int64), sizeof(Int64));
@@ -893,17 +893,17 @@ end;
 
 function TSQLDBOleDBStatement.ColumnCurrency(Col: integer): currency;
 begin
-  GetCol64(Col, ftCurrency, Result);
+  GetCol64(Col, ftCurrency, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
-  GetCol64(Col, ftDate, Result);
+  GetCol64(Col, ftDate, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnDouble(Col: integer): double;
 begin
-  GetCol64(Col, ftDouble, Result);
+  GetCol64(Col, ftDouble, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnIndex(const aColumnName: RawUTF8): integer;
@@ -920,7 +920,7 @@ end;
 
 function TSQLDBOleDBStatement.ColumnInt(Col: integer): Int64;
 begin
-  GetCol64(Col, ftInt64, Result);
+  GetCol64(Col, ftInt64, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnName(Col: integer): RawUTF8;

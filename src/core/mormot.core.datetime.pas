@@ -1336,13 +1336,13 @@ begin
     dow := DayOfWeek;
   // Encoding the day of change
   d := Day;
-  while not TryEncodeDayOfWeekInMonth(aYear, Month, d, dow, Result) do
+  while not TryEncodeDayOfWeekInMonth(aYear, Month, d, dow, result) do
   begin
     // if Day = 5 then try it and if needed decrement to find the last
     // occurence of the day in this month
     if d = 0 then
     begin
-      TryEncodeDayOfWeekInMonth(aYear, Month, 1, 7, Result);
+      TryEncodeDayOfWeekInMonth(aYear, Month, 1, 7, result);
       break;
     end;
     dec(d);

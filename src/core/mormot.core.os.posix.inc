@@ -294,7 +294,7 @@ var
   tp: timespec;
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
-  Result := (Int64(tp.tv_sec) * THOUSAND) + (tp.tv_nsec div MILLION); // in ms
+  result := (Int64(tp.tv_sec) * THOUSAND) + (tp.tv_nsec div MILLION); // in ms
 end;
 
 {$endif DARWIN}
@@ -1306,7 +1306,7 @@ begin
       fn := mnt;
       if GetDiskInfo(fn, av, fr, tot) and (tot > 1 shl 20) then
       begin
-  //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
+//writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         SetLength(result, n + 1);
         result[n].name := fs;
         result[n].mounted := fn;

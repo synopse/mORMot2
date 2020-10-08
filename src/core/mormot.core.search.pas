@@ -4143,7 +4143,7 @@ var
   db: PByte absolute Delta;
   Upd: PAnsiChar;
 begin
-  Result := dsSuccess;
+  result := dsSuccess;
   Len := FromVarUInt32(db);
   Upd := New;
   repeat
@@ -4200,7 +4200,7 @@ begin
         begin
           // block idem end flag
           if crc32c(0, Old, OldRead) <> PCardinal(Delta)^ then
-            Result := dsCrcEnd;
+            result := dsCrcEnd;
           MoveFast(Old^, New^, OldRead);
           inc(New, OldRead);
           break;

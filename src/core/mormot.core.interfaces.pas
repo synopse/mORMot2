@@ -2800,7 +2800,6 @@ const
     [imvRawUTF8, imvRawJSON, imvString, imvRawByteString, imvWideString,
      imvRecord, imvVariant, imvDynArray];
 
-  PSEUDO_RESULT_NAME: string[6] = 'result';
   PSEUDO_SELF_NAME:   string[4] = 'Self';
 
 type
@@ -4203,7 +4202,7 @@ begin
   meth := fMethod.AddUniqueName(aName, '%.% method: duplicated generated name for %',
     [fInterfaceName, aName, self]);
   na := length(aParams) div ARGPERARG;
-  SetLength(meth^.Args, na + 1); // leave Args[0]=self
+  SetLength(meth^.Args, na + 1); // always include Args[0]=self
   with meth^.Args[0] do
   begin
     ParamName := @PSEUDO_SELF_NAME;
