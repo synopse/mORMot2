@@ -16,9 +16,8 @@ unit mormot.core.os;
    Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid $ifdef/$endif in "uses" clauses.
    In practice, no "Windows", nor "Linux/Unix" reference should be needed in
-  regular units, once mormot.core.os is included.
-
-  This unit only refers to mormot.core.base so could be used almost stand-alone.
+  regular units, once mormot.core.os is included. :)
+   This unit only refers to mormot.core.base so can be used almost stand-alone.
 
   *****************************************************************************
 }
@@ -866,7 +865,8 @@ procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: short
 // - do not expect exact millisecond resolution - it may rather be within the
 // 10-16 ms range, especially under Windows
 {$ifdef MSWINDOWS}
-var GetTickCount64: function: Int64; stdcall;
+var
+  GetTickCount64: function: Int64; stdcall;
 {$else}
 function GetTickCount64: Int64;
 {$endif MSWINDOWS}
@@ -969,11 +969,12 @@ function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
 // Windows TimeStamps in its headers
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
 
-/// modify the attributes of a given file
+/// reduce the visibility of a given file by setting its read/write attributes
+// - on POSIX, change attributes for the the owner, and reset group/world flags
 // - if Secret=false, will have normal file attributes, with read/write access
-// - if Secret=true, will have hidden and read-only attributes
-// - under POSIX, there is no "hidden" file attribute, but you should define a
-// FileName starting by '.'
+// - if Secret=true, will have read-only attributes (and hidden on Windows -
+// under POSIX, there is no "hidden" file attribute, but you should define a
+// FileName starting by '.')
 procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
 
 /// get a file size, from its name
@@ -1148,7 +1149,7 @@ type
   end;
 
   /// low-level access to a resource bound to the executable
-  // - so that Windows is not required by Delphi in your unit uses clause
+  // - so that Windows is not required in your unit uses clause
   TExecutableResource = object
   private
     HResInfo: THandle;
@@ -1231,6 +1232,29 @@ type
   /// stores information about several disk partitions
   TDiskPartitions = array of TDiskPartition;
 
+
+{$ifdef CPUARM}
+var
+  /// internal wrapper address for ReserveExecutableMemory()
+  // - set to @TInterfacedObjectFake.ArmFakeStub by mormot.core.interfaces.pas
+  ArmFakeStubAddr: pointer;
+{$endif CPUARM}
+
+
+/// cross-platform reserve some executable memory
+// - using PAGE_EXECUTE_READWRITE flags on Windows, and PROT_READ or PROT_WRITE
+// or PROT_EXEC on POSIX
+// - this function maintain an internal set of 64KB memory pages for efficiency
+// - memory blocks can not be released (don't try to use fremeem on them) and
+// will be returned to the system at process finalization
+function ReserveExecutableMemory(size: cardinal): pointer;
+
+/// to be called after ReserveExecutableMemory() when you want to actually write
+// the memory blocks
+// - affect the mapping flags of the first memory page (4KB) of the Reserved
+// buffer, so its size should be < 4KB
+// - do nothing on Windows and Linux, but may be needed on OpenBSD
+procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
@@ -1575,6 +1599,17 @@ type
   // - see also NewSynLocker and TSynLocker.DoneAndFreemem functions
   PSynLocker = ^TSynLocker;
 
+  /// raw class used by TAutoLocker.ProtectMethod and TSynLocker.ProtectMethod
+  // - defined here for use by TAutoLocker in mormot.core.data.pas
+  TAutoLock = class(TInterfacedObject)
+  protected
+    fLock: PSynLocker;
+  public
+    constructor Create(aLock: PSynLocker);
+    destructor Destroy; override;
+  end;
+
+
 /// initialize a TSynLocker instance from heap
 // - call DoneandFreeMem to release the associated memory and OS mutex
 // - is used e.g. in TSynPersistentLock to reduce class instance size
@@ -1662,7 +1697,7 @@ threadvar
 function GetCurrentThreadName: RawUTF8;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// enter a giant lock for thread-safe shared process
+/// enter a process-wide giant lock for thread-safe shared process
 // - shall be protected as such:
 // ! GlobalLock;
 // ! try
@@ -2296,6 +2331,7 @@ begin
   inherited;
 end;
 
+
 { TExecutableResource }
 
 function TExecutableResource.Open(const ResourceName: string; ResType: PChar;
@@ -2326,6 +2362,163 @@ begin
 end;
 
 
+{ ReserveExecutableMemory() / TFakeStubBuffer }
+
+const
+  STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
+
+{$ifdef FPC} // alf: multi platforms support
+{$ifndef MSWINDOWS}
+var
+  StubCallAllocMemLastStart: PtrUInt; // avoid unneeded fpmmap() calls
+
+function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
+{$ifdef CPUARM}
+const
+  STUB_RELJMP = {$ifdef CPUARM} $7fffff {$else} $7fffffff {$endif}; // relative jmp
+  STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
+  STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
+var
+  start, stop, stub, dist: PtrUInt;
+begin
+  stub := PtrUInt(ArmFakeStubAddr); // = @TInterfacedObjectFake.ArmFakeStub
+  if StubCallAllocMemLastStart <> 0 then
+    start := StubCallAllocMemLastStart
+  else
+  begin
+    start := stub - STUB_INTERV;
+    if start > stub then
+      start := 0; // avoid range overflow
+    start := start and STUB_ALIGN;
+  end;
+  stop := stub + STUB_INTERV;
+  if stop < stub then
+    stop := high(PtrUInt);
+  stop := stop and STUB_ALIGN;
+  while start < stop do
+  begin
+    // try whole -STUB_INTERV..+STUB_INTERV range
+    inc(start, STUB_SIZE);
+    result := fpmmap(pointer(start), STUB_SIZE, flProtect, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+    if result <> MAP_FAILED then
+    begin
+      // close enough for a 24/32-bit relative jump?
+      dist := abs(stub - PtrUInt(result));
+      if dist < STUB_RELJMP then
+      begin
+        StubCallAllocMemLastStart := start;
+        exit;
+      end else
+        fpmunmap(result, STUB_SIZE);
+    end;
+  end;
+  result := MAP_FAILED; // error
+end;
+{$else} // other platforms (Intel+Arm64) use absolute call
+begin
+  result := fpmmap(nil, STUB_SIZE, flProtect, MAP_PRIVATE OR MAP_ANONYMOUS, -1, 0);
+end;
+{$endif CPUARM}
+{$endif MSWINDOWS}
+{$endif FPC}
+
+type
+  // internal memory buffer created with PAGE_EXECUTE_READWRITE flags
+  TFakeStubBuffer = class
+  protected
+    fStub: PByteArray;
+    fStubUsed: cardinal;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+var
+  CurrentFakeStubBuffer: TFakeStubBuffer;
+  CurrentFakeStubBuffers: array of TFakeStubBuffer;
+  {$ifdef UNIX}
+  MemoryProtection: boolean = false; // set to true if PROT_EXEC seems to fail
+  {$endif UNIX}
+
+constructor TFakeStubBuffer.Create;
+begin
+  {$ifdef MSWINDOWS}
+  fStub := VirtualAlloc(nil, STUB_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+  if fStub = nil then
+  {$else MSWINDOWS}
+  if not MemoryProtection then
+    fStub := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
+  if (fStub = MAP_FAILED) or MemoryProtection then
+  begin
+    // i.e. on OpenBSD, we can have w^x protection
+    fStub := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
+    if fStub <> MAP_FAILED then
+      MemoryProtection := True;
+  end;
+  if fStub = MAP_FAILED then
+  {$endif MSWINDOWS}
+    raise EOSException.Create('ReserveExecutableMemory(): OS memory allocation failed');
+end;
+
+destructor TFakeStubBuffer.Destroy;
+begin
+  {$ifdef MSWINDOWS}
+  VirtualFree(fStub, 0, MEM_RELEASE);
+  {$else}
+  fpmunmap(fStub, STUB_SIZE);
+  {$endif MSWINDOWS}
+  inherited;
+end;
+
+function ReserveExecutableMemory(size: cardinal): pointer;
+begin
+  if size > STUB_SIZE then
+    raise EOSException.CreateFmt('ReserveExecutableMemory(size=%d>%d)',
+      [size, STUB_SIZE]);
+  GlobalLock;
+  try
+    if (CurrentFakeStubBuffer <> nil) and
+       (CurrentFakeStubBuffer.fStubUsed + size > STUB_SIZE) then
+      CurrentFakeStubBuffer := nil;
+    if CurrentFakeStubBuffer = nil then
+    begin
+      CurrentFakeStubBuffer := TFakeStubBuffer.Create;
+      ObjArrayAdd(CurrentFakeStubBuffers, CurrentFakeStubBuffer);
+    end;
+    with CurrentFakeStubBuffer do
+    begin
+      result := @fStub[fStubUsed];
+      inc(fStubUsed, size);
+    end;
+  finally
+    GlobalUnLock;
+  end;
+end;
+
+{$ifdef UNIX}
+procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
+var
+  PageAlignedFakeStub: pointer;
+  flags: cardinal;
+begin
+  if not MemoryProtection then
+    // nothing to be done on this platform
+    exit;
+  // toggle execution permission of memory to be able to write into memory
+  PageAlignedFakeStub := Pointer(
+    (PtrUInt(Reserved) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  if Exec then
+    flags := PROT_READ OR PROT_EXEC
+  else
+    flags := PROT_READ or PROT_WRITE;
+  if SynMProtect(PageAlignedFakeStub, SystemInfo.dwPageSize shl 1, flags) < 0 then
+     raise EOSException.Create('ReserveExecutableMemoryPageAccess(: SynMProtect write failure');
+end;
+{$else}
+procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
+begin // nothing to be done
+end;
+{$endif UNIX}
 {$ifndef PUREMORMOT2}
 
 function GetDelphiCompilerVersion: RawUTF8;
@@ -2634,16 +2827,6 @@ end;
 
 
 { TAutoLock }
-
-type
-  /// used by TAutoLocker.ProtectMethod and TSynLocker.ProtectMethod
-  TAutoLock = class(TInterfacedObject)
-  protected
-    fLock: PSynLocker;
-  public
-    constructor Create(aLock: PSynLocker);
-    destructor Destroy; override;
-  end;
 
 constructor TAutoLock.Create(aLock: PSynLocker);
 begin
@@ -2975,6 +3158,7 @@ var
 begin
   for i := 0 to high(AutoSlots) do
     FreeMem(AutoSlots[i]);
+  ObjArrayClear(CurrentFakeStubBuffers);
   ExeVersion.Version.Free;
   DeleteCriticalSection(AutoSlotsLock);
   DeleteCriticalSection(GlobalCriticalSection);

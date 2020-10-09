@@ -62,7 +62,8 @@ type
   // - will be paramIn by default, which is the case 90% of time
   // - could be set to paramOut or paramInOut if must be refereshed after
   // execution (for calling a stored procedure expecting such parameters)
-  TSQLDBParamInOutType = (paramIn, paramOut, paramInOut);
+  TSQLDBParamInOutType = (
+    paramIn, paramOut, paramInOut);
 
   /// used to define a field/column layout in a table schema
   // - for TSQLDBConnectionProperties.SQLCreate to describe the new table
@@ -263,7 +264,8 @@ type
   // - in addition to CRUD states, cPostgreBulkArray would identify if the ORM
   // should generate unnested/any bound array statements - currently only
   // supported by mormot.db.sql.postgres for bulk insert/update/delete
-  TSQLDBStatementCRUD = (cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
+  TSQLDBStatementCRUD = (
+    cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
 
   /// identify the CRUD modes of a statement
   // - used e.g. for batch send abilities of a DB engine
@@ -281,7 +283,8 @@ type
   /// the known database definitions
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate(), or
   // for OleDB/ODBC/ZDBC tuning according to the connected database engine
-  TSQLDBDefinition = (dUnknown, dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
+  TSQLDBDefinition = (
+    dUnknown, dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
     dFirebird, dNexusDB, dPostgreSQL, dDB2, dInformix);
 
   /// set of the available database definitions
@@ -289,7 +292,8 @@ type
 
   /// where the LIMIT clause should be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
-  TSQLDBDefinitionLimitPosition = (posNone, posWhere, posSelect, posAfter, posOuter);
+  TSQLDBDefinitionLimitPosition = (
+    posNone, posWhere, posSelect, posAfter, posOuter);
 
   /// defines the LIMIT clause to be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
@@ -302,7 +306,7 @@ const
   /// the known column data types corresponding to our TSQLDBFieldType types
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate()
   // - see TSQLDBFieldTypeDefinition documentation to find out the mapping
-  DB_FIELDS: array[TSQLDBDefinition] of TSQLDBFieldTypeDefinition =(
+  DB_FIELDS: array[TSQLDBDefinition] of TSQLDBFieldTypeDefinition = (
   // ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
   // dUnknown
     (' INT', ' NVARCHAR(%)', ' BIGINT', ' DOUBLE', ' NUMERIC(19,4)',
@@ -369,7 +373,8 @@ const
     4000, 255, 4000, 0, 32760, 32767, 0, 32700, 32700);
 
   /// the known SQL statement to retrieve the server date and time
-  DB_SERVERTIME: array[TSQLDBDefinition] of RawUTF8 = ('', '', // return local server time by default
+  DB_SERVERTIME: array[TSQLDBDefinition] of RawUTF8 = (
+    '', '', // return local server time by default
     'select sysdate from dual', 'select GETDATE()', '', // Jet is local -> return local time
     'SELECT NOW()', '', // SQlite is local -> return local time
     'select current_timestamp from rdb$database', 'SELECT CURRENT_TIMESTAMP',
@@ -456,14 +461,6 @@ const
 /// retrieve the text of a given Database SQL dialect enumeration
 // - see also TSQLDBConnectionProperties.GetDBMSName() method
 function ToText(DBMS: TSQLDBDefinition): PShortString; overload;
-
-/// retrieve the text of a given Database field type enumeration
-// - see also TSQLDBFieldTypeToString() function
-function ToText(Field: TSQLDBFieldType): PShortString; overload;
-
-/// retrieve the ready-to-be displayed text of a given Database field
-// type enumeration
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
 
 
 { ************ General SQL Processing Functions }
@@ -597,7 +594,7 @@ type
     /// return a column date and time value of the current Row, first Col is 0
     function ColumnTimestamp(Col: integer): TTimeLog; overload;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: integer): system.currency; overload;
+    function ColumnCurrency(Col: integer): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; overload;
     /// return a Column text value as generic VCL string of the current Row, first Col is 0
@@ -645,7 +642,7 @@ type
     /// return a column date and time value of the current Row, from a supplied column name
     function ColumnTimestamp(const ColName: RawUTF8): TTimeLog; overload;
     /// return a Column currency value of the current Row, from a supplied column name
-    function ColumnCurrency(const ColName: RawUTF8): system.currency; overload;
+    function ColumnCurrency(const ColName: RawUTF8): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUTF8(const ColName: RawUTF8): RawUTF8; overload;
     /// return a Column text value as generic VCL string of the current Row, from a supplied column name
@@ -770,7 +767,7 @@ type
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -868,7 +865,7 @@ type
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArrayCurrency(Param: Integer; const Values: array of system.currency);
+    procedure BindArrayCurrency(Param: Integer; const Values: array of currency);
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'quoted string')
@@ -943,8 +940,9 @@ type
   // - speStartTransaction / speCommit / speRollback will notify the
   // corresponding TSQLDBConnection.StartTransaction, TSQLDBConnection.Commit
   // and TSQLDBConnection.Rollback methods
-  TOnSQLDBProcessEvent = (speConnected, speDisconnected, speNonActive, speActive,
-    speConnectionLost, speReconnected, speStartTransaction, speCommit, speRollback);
+  TOnSQLDBProcessEvent = (
+    speConnected, speDisconnected, speNonActive, speActive, speConnectionLost,
+    speReconnected, speStartTransaction, speCommit, speRollback);
 
   /// event handler called during all external DB process
   // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
@@ -962,8 +960,9 @@ type
   TOnSQLDBInfo = procedure(Sender: TSQLDBStatement; const Msg: RawUTF8) of object;
 
   /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
-  TSQLDBSharedTransactionAction = (transBegin, transCommitWithoutException,
-    transCommitWithException, transRollback);
+  TSQLDBSharedTransactionAction = (
+    transBegin, transCommitWithoutException, transCommitWithException,
+    transRollback);
 
   /// defines a callback signature able to handle multiple INSERT
   // - may execute e.g. for 2 fields and 3 data rows on a database engine
@@ -1829,7 +1828,7 @@ type
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -1939,7 +1938,7 @@ type
     // - this default implementation will raise an exception if the engine
     // does not support array binding
     procedure BindArrayCurrency(Param: Integer;
-      const Values: array of system.currency); virtual;
+      const Values: array of currency); virtual;
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'quoted string')
@@ -2092,7 +2091,7 @@ type
     // stamp from a TDateTime or text
     function ColumnTimestamp(Col: integer): TTimeLog; overload;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: integer): system.currency; overload; virtual; abstract;
+    function ColumnCurrency(Col: integer): currency; overload; virtual; abstract;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; overload; virtual; abstract;
     /// return a Column text value as generic VCL string of the current Row, first Col is 0
@@ -2150,7 +2149,7 @@ type
     // stamp from a TDateTime or text
     function ColumnTimestamp(const ColName: RawUTF8): TTimeLog; overload;
     /// return a Column currency value of the current Row, from a supplied column name
-    function ColumnCurrency(const ColName: RawUTF8): system.currency; overload;
+    function ColumnCurrency(const ColName: RawUTF8): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUTF8(const ColName: RawUTF8): RawUTF8; overload;
     /// return a Column text value as generic VCL string of the current Row, from a supplied column name
@@ -2259,7 +2258,7 @@ type
     // - will save one data row in optimized binary format (if not in Null)
     // - virtual method called by FetchAllToBinary()
     // - follows the format expected by TSQLDBProxyStatement
-    procedure ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
+    procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
       const ColTypes: TSQLDBFieldTypeDynArray); virtual;
     /// low-level access to the Timer used for last DB operation
     property SQLLogTimer: TPrecisionTimer read fSQLLogTimer;
@@ -2457,7 +2456,7 @@ type
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -2526,7 +2525,7 @@ type
     // - this default implementation will call BindArray() after conversion into
     // RawUTF8 items, stored in TSQLDBParam.VArray
     procedure BindArrayCurrency(Param: Integer;
-      const Values: array of system.currency); override;
+      const Values: array of currency); override;
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as 'quoted string'
@@ -2609,22 +2608,6 @@ type
 
 
 implementation
-
-
-{ ************ SQL Fields and Columns Definitions }
-
-function ToText(Field: TSQLDBFieldType): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TSQLDBFieldType), ord(Field));
-end;
-
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
-begin
-  if aType <= high(aType) then
-    result := TrimLeftLowerCaseToShort(ToText(aType))
-  else
-    FormatShort16('#%', [ord(aType)], result);
-end;
 
 
 { ************ General SQL Processing Functions }
@@ -3354,14 +3337,14 @@ class function TSQLDBConnectionProperties.IsSQLKeyword(aDB: TSQLDBDefinition;
   aWord: RawUTF8): boolean;
 const
   /// CSV of the known reserved keywords per database engine, in alphabetic order
-  DB_KEYWORDS_CSV: array[TSQLDBDefinition] of PUTF8Char =(  // dUnknown
-    '',
-  // dDefault = ODBC / SQL-92 keywords (always checked first)
-    'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,'
-    + 'avg,begin,between,bit,bit_length,both,by,cascade,cascaded,case,cast,catalog,char,'
-    + 'char_length,character,character_length,check,close,coalesce,collate,collation,'
-    + 'column,commit,connect,connection,constraint,constraints,continue,convert,'
-    + 'corresponding,count,create,cross,current,current_date,current_time,' +
+  DB_KEYWORDS_CSV: array[TSQLDBDefinition] of PUTF8Char = (
+    '',  // dUnknown
+    // dDefault = ODBC / SQL-92 keywords (always checked first)
+    'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,' +
+    'avg,begin,between,bit,bit_length,both,by,cascade,cascaded,case,cast,catalog,char,' +
+    'char_length,character,character_length,check,close,coalesce,collate,collation,' +
+    'column,commit,connect,connection,constraint,constraints,continue,convert,' +
+    'corresponding,count,create,cross,current,current_date,current_time,' +
     'current_timestamp,current_user,cursor,date,day,deallocate,dec,decimal,declare,' +
     'default,deferrable,deferred,delete,desc,describe,descriptor,diagnostics,disconnect,' +
     'distinct,domain,double,drop,else,end,end-exec,escape,except,exception,exec,execute,' +
@@ -3379,14 +3362,14 @@ const
     'translation,trim,true,union,unique,unknown,update,upper,usage,user,using,value,values,' +
     'varchar,varying,view,when,whenever,where,with,work,write,year,zone',
   // dOracle specific keywords (in addition to dDefault)
-    'access,audit,cluster,comment,compress,exclusive,file,identified,increment,initial,'
-    + 'lock,long,maxextents,minus,mode,noaudit,nocompress,nowait,number,offline,online,'
-    + 'pctfree',
+    'access,audit,cluster,comment,compress,exclusive,file,identified,increment,initial,' +
+    'lock,long,maxextents,minus,mode,noaudit,nocompress,nowait,number,offline,online,' +
+    'pctfree',
   // dMSSQL specific keywords (in addition to dDefault)
-    'admin,after,aggregate,alias,array,asensitive,asymmetric,atomic,backup,before,binary,'
-    + 'blob,boolean,breadth,break,browse,bulk,call,called,cardinality,checkpoint,class,clob,'
-    + 'clustered,collect,completion,compute,condition,constructor,contains,containstable,'
-    + 'corr,covar_pop,covar_samp,cube,cume_dist,current_catalog,' +
+    'admin,after,aggregate,alias,array,asensitive,asymmetric,atomic,backup,before,binary,' +
+    'blob,boolean,breadth,break,browse,bulk,call,called,cardinality,checkpoint,class,clob,' +
+    'clustered,collect,completion,compute,condition,constructor,contains,containstable,' +
+    'corr,covar_pop,covar_samp,cube,cume_dist,current_catalog,' +
     'current_default_transform_group,current_path,current_role,current_schema,' +
     'current_transform_group_for_type,cycle,data,database,dbcc,deny,depth,deref,destroy,' +
     'destructor,deterministic,dictionary,disk,distributed,dump,dynamic,each,element,' +
@@ -3413,17 +3396,17 @@ const
     'xmlexists,xmlforest,xmliterate,xmlnamespaces,xmlparse,xmlpi,xmlquery,xmlserialize,' +
     'xmltable,xmltext,xmlvalidate',
   // dJet specific keywords (in addition to dDefault)
-    'longtext,memo,money,note,number,oleobject,owneraccess,parameters,percent,pivot,short,'
-    + 'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,'
-    + 'varbinary,varp,yesno',
+    'longtext,memo,money,note,number,oleobject,owneraccess,parameters,percent,pivot,short,' +
+    'single,singlefloat,stdev,stdevp,string,tableid,text,top,transform,unsignedbyte,var,' +
+    'varbinary,varp,yesno',
   // dMySQL specific keywords (in addition to dDefault)
-    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,'
-    + 'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,'
-    + 'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,'
-    + 'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,'
-    + 'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,'
-    + 'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,'
-    + 'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
+    'accessible,analyze,asensitive,auto_increment,before,bigint,binary,blob,call,change,' +
+    'condition,database,databases,day_hour,day_microsecond,day_minute,day_second,' +
+    'delayed,deterministic,distinctrow,div,dual,each,elseif,enclosed,enum,escaped,exit,' +
+    'explain,float4,float8,force,fulltext,general,high_priority,hour_microsecond,' +
+    'hour_minute,hour_second,if,ignore,ignore_server_ids,infile,inout,int1,int2,int3,int4,' +
+    'int8,iterate,keys,kill,leave,limit,linear,linear,lines,load,localtime,localtimestamp,' +
+    'lock,long,longblob,longtext,loop,low_priority,master_heartbeat_period,' +
     'master_ssl_verify_server_cert,master_ssl_verify_server_cert,maxvalue,' +
     'mediumblob,mediumint,mediumtext,middleint,minute_microsecond,minute_second,mod,' +
     'modifies,no_write_to_binlog,optimize,optionally,out,outfile,purge,range,range,' +
@@ -3434,13 +3417,13 @@ const
     'tinyint,tinytext,trigger,undo,unlock,unsigned,use,utc_date,utc_time,utc_timestamp,' +
     'varbinary,varcharacter,while,x509,xor,year_month,zerofillaccessible',
   // dSQLite keywords (dDefault is not added to this list)
-    'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,'
-    + 'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,'
-    + 'pragma,raise,replace,row,select,statement,temp,trigger,vacuum,where',
+    'abort,after,and,attach,before,cluster,conflict,copy,database,delete,delimiters,detach,' +
+    'each,explain,fail,from,glob,ignore,insert,instead,isnull,limit,not,notnull,offset,or,' +
+    'pragma,raise,replace,row,select,statement,temp,trigger,vacuum,where',
   // dFirebird specific keywords (in addition to dDefault)
-    'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,'
-    + 'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,'
-    + 'entry_point,exit,file,filter,function,gdscode,gen_id,generator,' +
+    'active,after,ascending,base_name,before,blob,cache,check_point_length,computed,' +
+    'conditional,containing,cstring,currency,database,debug,descending,deterministic,do,' +
+    'entry_point,exit,file,filter,function,gdscode,gen_id,generator,' +
     'group_commit_wait_time,if,inactive,input_type,log_buffer_size,logfile,manual,' +
     'maximum_segment,merge,message,module_name,num_log_buffers,output_type,over,' +
     'overflow,page,page_size,pages,parameter,parent,password,plan,post_event,protected,' +
@@ -3448,46 +3431,46 @@ const
     'returning_values,returns,segment,shadow,shared,singular,snapshot,sort,stability,' +
     'start,starting,starts,statistics,sub_type,suspend,trigger,type,variable,wait,while',
   // dNexusDB specific keywords (in addition to dDefault)
-    'abs,achar,assert,astring,autoinc,blob,block,blocksize,bool,boolean,byte,bytearray,'
-    + 'ceiling,chr,datetime,dword,empty,exp,floor,grow,growsize,ignore,image,initial,'
-    + 'initialsize,kana,largeint,locale,log,money,nullstring,nvarchar,percent,power,rand,'
-    + 'round,shortint,sort,string,symbols,text,tinyint,top,type,use,width,word',
+    'abs,achar,assert,astring,autoinc,blob,block,blocksize,bool,boolean,byte,bytearray,' +
+    'ceiling,chr,datetime,dword,empty,exp,floor,grow,growsize,ignore,image,initial,' +
+    'initialsize,kana,largeint,locale,log,money,nullstring,nvarchar,percent,power,rand,' +
+    'round,shortint,sort,string,symbols,text,tinyint,top,type,use,width,word',
   // dPostgreSQL specific keywords (in addition to dDefault)
-    'abort,access,admin,after,aggregate,also,always,analyse,analyze,array,assignment,'
-    + 'asymmetric,backward,before,bigint,binary,boolean,cache,called,chain,characteristics,'
-    + 'checkpoint,class,cluster,comment,committed,concurrently,configuration,content,'
-    + 'conversion,copy,cost,createdb,createrole,createuser,csv,current_role,cycle,database,'
-    + 'defaults,definer,delimiter,delimiters,dictionary,disable,discard,do,document,each,'
-    + 'enable,encoding,encrypted,enum,excluding,exclusive,explain,family,force,forward,'
-    + 'freeze,function,granted,greatest,handler,header,hold,if,ilike,immutable,implicit,'
-    + 'including,increment,indexes,inherit,inherits,inout,instead,invoker,isnull,'
-    + 'lancompiler,large,least,limit,listen,load,localtime,localtimestamp,location,lock,'
-    + 'login,mapping,maxvalue,minvalue,mode,move,new,nocreatedb,nocreaterole,nocreateuser,'
-    + 'noinherit,nologin,nosuperuser,nothing,notify,notnull,nowait,nulls,object,off,offset,'
-    + 'oids,old,operator,out,overlay,owned,owner,parser,password,placing,plans,prepared,'
-    + 'procedural,quote,reassign,recheck,reindex,release,rename,repeatable,replace,replica,'
-    + 'reset,restart,returning,returns,role,row,rule,savepoint,search,security,sequence,'
-    + 'serializable,setof,share,show,similar,simple,stable,standalone,start,statement,'
-    + 'statistics,stdin,stdout,storage,strict,strip,superuser,symmetric,sysid,system,'
-    + 'tablespace,temp,template,text,treat,trigger,truncate,trusted,type,uncommitted,'
-    + 'unencrypted,unlisten,until,vacuum,valid,validator,verbose,version,volatile,'
-    + 'whitespace,without,xml,xmlattributes,xmlconcat,xmlelement,xmlforest,xmlparse,xmlpi,'
-    + 'xmlroot,xmlserialize,yes',
+    'abort,access,admin,after,aggregate,also,always,analyse,analyze,array,assignment,' +
+    'asymmetric,backward,before,bigint,binary,boolean,cache,called,chain,characteristics,' +
+    'checkpoint,class,cluster,comment,committed,concurrently,configuration,content,' +
+    'conversion,copy,cost,createdb,createrole,createuser,csv,current_role,cycle,database,' +
+    'defaults,definer,delimiter,delimiters,dictionary,disable,discard,do,document,each,' +
+    'enable,encoding,encrypted,enum,excluding,exclusive,explain,family,force,forward,' +
+    'freeze,function,granted,greatest,handler,header,hold,if,ilike,immutable,implicit,' +
+    'including,increment,indexes,inherit,inherits,inout,instead,invoker,isnull,' +
+    'lancompiler,large,least,limit,listen,load,localtime,localtimestamp,location,lock,' +
+    'login,mapping,maxvalue,minvalue,mode,move,new,nocreatedb,nocreaterole,nocreateuser,' +
+    'noinherit,nologin,nosuperuser,nothing,notify,notnull,nowait,nulls,object,off,offset,' +
+    'oids,old,operator,out,overlay,owned,owner,parser,password,placing,plans,prepared,' +
+    'procedural,quote,reassign,recheck,reindex,release,rename,repeatable,replace,replica,' +
+    'reset,restart,returning,returns,role,row,rule,savepoint,search,security,sequence,' +
+    'serializable,setof,share,show,similar,simple,stable,standalone,start,statement,' +
+    'statistics,stdin,stdout,storage,strict,strip,superuser,symmetric,sysid,system,' +
+    'tablespace,temp,template,text,treat,trigger,truncate,trusted,type,uncommitted,' +
+    'unencrypted,unlisten,until,vacuum,valid,validator,verbose,version,volatile,' +
+    'whitespace,without,xml,xmlattributes,xmlconcat,xmlelement,xmlforest,xmlparse,xmlpi,' +
+    'xmlroot,xmlserialize,yes',
   // dDB2 specific keywords (in addition to dDefault)
-    'activate,document,dssize,dynamic,each,editproc,elseif,enable,encoding,encryption,'
-    + 'ending,erase,every,excluding,exclusive,exit,explain,fenced,fieldproc,file,final,free,'
-    + 'function,general,generated,graphic,handler,hash,hashed_value,hint,hold,hours,if,'
-    + 'including,inclusive,increment,inf,infinity,inherit,inout,integrity,isobid,iterate,jar,'
-    + 'java,keep,label,lateral,lc_ctype,leave,linktype,localdate,locale,localtime,'
-    + 'localtimestamp,locator,locators,lock,lockmax,locksize,long,loop,maintained,'
-    + 'materialized,maxvalue,microsecond,microseconds,minutes,minvalue,mode,modifies,'
-    + 'months,nan,new,new_table,nextval,nocache,nocycle,nodename,nodenumber,nomaxvalue,'
-    + 'nominvalue,noorder,normalized,nulls,numparts,obid,old,old_table,optimization,'
-    + 'optimize,out,over,overriding,package,padded,pagesize,parameter,part,partition,'
-    + 'partitioned,partitioning,partitions,password,path,piecesize,plan,prevval,priqty,'
-    + 'program,psid,query,queryno,range,rank,reads,recovery,referencing,refresh,release,'
-    + 'rename,repeat,reset,resignal,restart,result,result_set_locator,return,returns,role,'
-    + 'round_ceilingadd,round_downafter,round_flooralias,round_half_downall,' +
+    'activate,document,dssize,dynamic,each,editproc,elseif,enable,encoding,encryption,' +
+    'ending,erase,every,excluding,exclusive,exit,explain,fenced,fieldproc,file,final,free,' +
+    'function,general,generated,graphic,handler,hash,hashed_value,hint,hold,hours,if,' +
+    'including,inclusive,increment,inf,infinity,inherit,inout,integrity,isobid,iterate,jar,' +
+    'java,keep,label,lateral,lc_ctype,leave,linktype,localdate,locale,localtime,' +
+    'localtimestamp,locator,locators,lock,lockmax,locksize,long,loop,maintained,' +
+    'materialized,maxvalue,microsecond,microseconds,minutes,minvalue,mode,modifies,' +
+    'months,nan,new,new_table,nextval,nocache,nocycle,nodename,nodenumber,nomaxvalue,' +
+    'nominvalue,noorder,normalized,nulls,numparts,obid,old,old_table,optimization,' +
+    'optimize,out,over,overriding,package,padded,pagesize,parameter,part,partition,' +
+    'partitioned,partitioning,partitions,password,path,piecesize,plan,prevval,priqty,' +
+    'program,psid,query,queryno,range,rank,reads,recovery,referencing,refresh,release,' +
+    'rename,repeat,reset,resignal,restart,result,result_set_locator,return,returns,role,' +
+    'round_ceilingadd,round_downafter,round_flooralias,round_half_downall,' +
     'round_half_evenallocate,round_half_upallow,round_upalter,routineand,' +
     'row_numberas,rowany,rownumberasensitive,rowsassociate,rowsetasutime,rrnat,' +
     'runattributes,savepointaudit,schemaauthorization,scratchpadaux,scrollauxiliary,' +
@@ -3511,13 +3494,15 @@ const
     '');
 var
   db: TSQLDBDefinition;
-begin // search using fast binary lookup in the alphabetic ordered arrays
+begin
+  // search using fast binary lookup in the alphabetic ordered arrays
   if DB_KEYWORDS[dDefault] = nil then
     for db := Low(DB_KEYWORDS) to high(DB_KEYWORDS) do
       CSVToRawUTF8DynArray(DB_KEYWORDS_CSV[db], DB_KEYWORDS[db]);
   aWord := Trim(LowerCase(aWord));
-  if (aDB = dSQLite) or (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
-    high(DB_KEYWORDS[dDefault]), pointer(aWord)) < 0) then
+  if (aDB = dSQLite) or
+     (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
+       high(DB_KEYWORDS[dDefault]), pointer(aWord)) < 0) then
     if aDB <= dDefault then
       result := false
     else
@@ -4135,7 +4120,8 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       'UNIQUEIDENTIFIER', 'MONEY', 'SMALLMONEY', 'NUM', 'VARRAW', 'RAW',
       'LONG RAW', 'LONG VARRAW', 'TINYBLOB', 'MEDIUMBLOB', 'BYTEA', 'VARBIN',
       'IMAGE', 'LONGBLOB', 'BINARY', 'VARBINARY', 'GRAPHIC', 'VARGRAPHIC', 'NULL');
-    Types: array[-1..high(PCHARS)] of TSQLDBFieldType = (ftUnknown, ftDate,
+    Types: array[-1..high(PCHARS)] of TSQLDBFieldType = (
+      ftUnknown, ftDate,
       ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftInt64,
       ftInt64, ftInt64, ftDouble, ftDouble, ftDouble, ftDouble, ftDouble,
       ftCurrency, ftCurrency, ftCurrency, ftUTF8, ftBlob, ftDate, ftDate, ftDate,
@@ -4353,7 +4339,8 @@ function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
   const aFieldNames: array of RawUTF8; aUnique, aDescending: boolean;
   const aIndexName: RawUTF8): RawUTF8;
 const
-  CREATNDXIFNE: array[boolean] of RawUTF8 = ('', 'IF NOT EXISTS ');
+  CREATNDXIFNE: array[boolean] of RawUTF8 = (
+    '', 'IF NOT EXISTS ');
 var
   IndexName, FieldsCSV, ColsDesc, Owner, Table: RawUTF8;
 begin
@@ -4455,7 +4442,7 @@ end;
 function TSQLDBConnectionProperties.ExceptionIsAboutConnection(
   aClass: ExceptClass; const aMessage: RawUTF8): boolean;
 
-  function PosErrorNumber(const aMessage: RawUTF8; const aSepChar: AnsiChar): PUTF8Char;
+  function PosErrorNumber(const aMessage: RawUTF8; aSepChar: AnsiChar): PUTF8Char;
   begin // search aSepChar followed by a number
     result := pointer(aMessage);
     repeat
@@ -4472,17 +4459,20 @@ begin // see more complete list in feature request [f024266c0839]
       result := IdemPCharArray(PosErrorNumber(aMessage, '-'), ['00028', '01012',
         '01017', '01033', '01089', '02396', '03113', '03114', '03135', '12152',
         '12154', '12157', '12514', '12520', '12537', '12545', '12560', '12571']) >= 0;
-    dInformix: // error codes based on {IBM INFORMIX ODBC DRIVER} tested with wrong data connection
+    dInformix:
+      // error codes based on {IBM INFORMIX ODBC DRIVER} tested with wrong data connection
       result := IdemPCharArray(PosErrorNumber(aMessage, '-'), ['329', '761',
         '902', '908', '930', '931', '951', '11017', '23101', '23104', '25567',
         '25582', '27002']) >= 0;
-    dMSSQL: // error codes based on {SQL Server Native Client 11.0} tested with wrong data connection
-    // using general error codes because MS SQL SERVER has multiple error codes in the error message
-      result := IdemPCharArray(PosErrorNumber(aMessage, '['), ['08001', '08S01',
-        '08007', '28000', '42000']) >= 0;
+    dMSSQL:
+      // error codes based on {SQL Server Native Client 11.0} tested with wrong
+      // data connection using general error codes because MS SQL SERVER has
+      // multiple error codes in the error message
+      result := IdemPCharArray(PosErrorNumber(aMessage, '['),
+        ['08001', '08S01', '08007', '28000', '42000']) >= 0;
     dMySQL:
-      result := (PosEx('Lost connection to MySQL server', aMessage) > 0) or (PosEx
-        ('MySQL server has gone away', aMessage) > 0);
+      result := (PosEx('Lost connection to MySQL server', aMessage) > 0) or
+                (PosEx('MySQL server has gone away', aMessage) > 0);
   else
     result := PosI(' CONNE', aMessage) > 0;
   end;
@@ -5186,14 +5176,14 @@ begin
         BindCurrency(Param, VCurrency, IO);
       varOleStr: // handle special case if was bound explicitely as WideString
         BindTextW(Param, WideString(VAny), IO);
-    {$ifdef HASVARUSTRING}
+      {$ifdef HASVARUSTRING}
       varUString:
         if DataIsBlob then
           raise ESQLDBException.CreateUTF8(
             '%.BindVariant: BLOB should not be UnicodeString', [self])
         else
           BindTextU(Param, UnicodeStringToUtf8(UnicodeString(VAny)), IO);
-    {$endif}
+      {$endif}
       varString:
         if DataIsBlob then
           if (VAny <> nil) and (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC) then
@@ -5205,11 +5195,11 @@ begin
             BindBlob(Param, RawByteString(VAny), IO)
         else
           // direct bind of AnsiString as UTF-8 value
-        {$ifdef HASCODEPAGE}
+          {$ifdef HASCODEPAGE}
           BindTextU(Param, AnyAnsiToUTF8(RawByteString(VAny)), IO);
-        {$else} // on older Delphi, we assume AnsiString = RawUTF8
+          {$else} // on older Delphi, we assume AnsiString = RawUTF8
           BindTextU(Param, RawUTF8(VAny), IO);
-        {$endif}
+          {$endif}
     else
       if VType = varByRef or varVariant then
         BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)
@@ -5247,7 +5237,7 @@ begin
 end;
 
 procedure TSQLDBStatement.BindArrayCurrency(Param: Integer;
-  const Values: array of system.currency);
+  const Values: array of currency);
 begin
   BindArray(Param, ftCurrency, nil, 0); // will raise an exception (Values=nil)
 end;
@@ -5515,7 +5505,7 @@ begin
     ftDouble:
       Double(Dest) := Temp;
     ftCurrency:
-      system.Currency(Dest) := Temp;
+      currency(Dest) := Temp;
     ftDate:
       TDateTime(Dest) := Temp;
     ftUTF8:
@@ -5600,8 +5590,10 @@ end;
 function TSQLDBStatement.FetchAllToCSVValues(Dest: TStream; Tab: boolean;
   CommaSep: AnsiChar; AddBOM: boolean): PtrInt;
 const
-  NULL: array[boolean] of string[7] = ('"null"', 'null');
-  blob: array[boolean] of string[7] = ('"blob"', 'blob');
+  NULL: array[boolean] of string[7] = (
+    '"null"', 'null');
+  blob: array[boolean] of string[7] = (
+    '"blob"', 'blob');
 var
   F, FMax: integer;
   W: TTextWriter;
@@ -5709,12 +5701,12 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
+procedure TSQLDBStatement.ColumnsToBinary(W: TBufferWriter; Null: pointer;
   const ColTypes: TSQLDBFieldTypeDynArray);
 var
   F: integer;
   VDouble: double;
-  VCurrency: system.currency absolute VDouble;
+  VCurrency: currency absolute VDouble;
   VDateTime: TDateTime absolute VDouble;
   ft: TSQLDBFieldType;
 begin
@@ -5761,13 +5753,13 @@ function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
 var
   F, FMax, FieldSize, NullRowSize: integer;
   StartPos: Int64;
-  W: TFileBufferWriter;
+  W: TBufferWriter;
   ft: TSQLDBFieldType;
   ColTypes: TSQLDBFieldTypeDynArray;
   Null: TByteDynArray;
 begin
   result := 0;
-  W := TFileBufferWriter.Create(Dest);
+  W := TBufferWriter.Create(Dest);
   try
     W.WriteVarUInt32(FETCHALLTOBINARY_MAGIC);
     FMax := ColumnCount;
@@ -5868,7 +5860,7 @@ end;
 
 function TSQLDBStatement.ColumnString(Col: integer): string;
 begin
-  Result := UTF8ToString(ColumnUTF8(Col));
+  result := UTF8ToString(ColumnUTF8(Col));
 end;
 
 function TSQLDBStatement.ColumnString(const ColName: RawUTF8): string;
@@ -5896,7 +5888,7 @@ begin
   ColumnBlobFromStream(ColumnIndex(ColName), Stream);
 end;
 
-function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): system.currency;
+function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): currency;
 begin
   result := ColumnCurrency(ColumnIndex(ColName));
 end;
@@ -5943,7 +5935,7 @@ end;
 
 function TSQLDBStatement.Instance: TSQLDBStatement;
 begin
-  Result := Self;
+  result := Self;
 end;
 
 function TSQLDBStatement.SQLLogBegin(level: TSynLogInfo): TSynLog;
@@ -6023,9 +6015,9 @@ end;
 function TSQLDBStatement.GetSQLCurrent: RawUTF8;
 begin
   if fSQLPrepared <> '' then
-    Result := fSQLPrepared
+    result := fSQLPrepared
   else
-    Result := fSQL;
+    result := fSQL;
 end;
 
 function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
@@ -6231,13 +6223,13 @@ function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
 var
   F, size: integer;
 begin
-  Result := '';
+  result := '';
   if (self = nil) or (TableName = '') then
     exit;
   SetLength(Fields, ColumnCount);
   if Fields = nil then
     exit;
-  Result := 'insert into ' + TableName + ' (';
+  result := 'insert into ' + TableName + ' (';
   for F := 0 to high(Fields) do
   begin
     Fields[F].Name := ColumnName(F);
@@ -6250,13 +6242,13 @@ begin
         raise ESQLDBException.CreateUTF8('%.ColumnsToSQLInsert: Invalid column %',
           [self, Fields[F].Name]);
     end;
-    Result := Result + Fields[F].Name + ',';
+    result := result + Fields[F].Name + ',';
   end;
-  Result[length(Result)] := ')';
-  Result := Result + ' values (';
+  result[length(result)] := ')';
+  result := result + ' values (';
   for F := 0 to high(Fields) do
-    Result := Result + '?,'; // MUCH faster with a prepared statement
-  Result[length(Result)] := ')';
+    result := result + '?,'; // MUCH faster with a prepared statement
+  result[length(result)] := ')';
 end;
 
 procedure TSQLDBStatement.BindFromRows(const Fields: TSQLDBFieldTypeDynArray;
@@ -6871,7 +6863,7 @@ begin
 end;
 
 procedure TSQLDBStatementWithParams.BindCurrency(Param: Integer;
-  Value: system.currency; IO: TSQLDBParamInOutType);
+  Value: currency; IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftCurrency, IO)^.VInt64 := PInt64(@Value)^;
 end;
@@ -7058,7 +7050,7 @@ begin
 end;
 
 procedure TSQLDBStatementWithParams.BindArrayCurrency(Param: Integer;
-  const Values: array of system.currency);
+  const Values: array of currency);
 var
   i: PtrInt;
 begin
@@ -7235,7 +7227,7 @@ const
 
 initialization
   assert(SizeOf(TSQLDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
-  RttiCustom.RegisterType(TypeInfo(TSQLDBFieldType));
-  RttiCustom.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
+  Rtti.RegisterType(TypeInfo(TSQLDBFieldType));
+  Rtti.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
 end.
 

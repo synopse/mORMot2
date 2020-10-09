@@ -211,7 +211,7 @@ const
 
   /// console colors corresponding to each logging level
   // - to be used with mormot.core.os TextColor()
-  LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor =(
+  LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor = (
   //  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
     ccLightGray, ccWhite, ccLightGray, ccLightBlue, ccBrown, ccLightRed, ccGreen, ccGreen,
   //  sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
@@ -791,6 +791,7 @@ type
   // - can use available debugging information via the TSynMapFile class, for
   // stack trace logging for exceptions, sllStackTrace, and Enter/Leave labelling
   TSynLog = class(TObject, ISynLog)
+  // note: don't inherit from TSynInterfacedObject to avoid a method call
   protected
     fFamily: TSynLogFamily;
     fWriter: TBaseWriter;
@@ -816,7 +817,6 @@ type
     fCurrentLevel: TSynLogInfo;
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     fDisableRemoteLog: boolean;
-    // note: don't inherit from TSynInterfacedObject to avoid a virtual method call
     {$ifdef FPC}
     function QueryInterface(
       {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID; out Obj): longint;
@@ -1581,7 +1581,7 @@ begin
 end;
 
 const
-  /// Delphi linker starts the code section at this fixed offset
+  // Delphi linker starts the code section at this fixed offset
   CODE_SECTION = $1000;
 
 constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolean = true);
@@ -2804,21 +2804,21 @@ end;
 
 class function TSynLog.FamilyCreate: TSynLogFamily;
 var
-  rtti: TRttiCustom;
+  rtticustom: TRttiCustom;
   vmt: TObject;
 begin
   // private sub function called from inlined TSynLog.Family / TSynLog.Add
   if (self <> nil) and InheritsFrom(TSynLog) then // paranoid
   begin
-    rtti := RttiCustom.RegisterClass(self);
+    rtticustom := Rtti.RegisterClass(self);
     vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
-    if (rtti = nil) or (vmt <> rtti) then
-      // TSynLog.Family / TSynLog.Add expects rtti in the first slot
+    if (rtticustom = nil) or (vmt <> rtticustom) then
+      // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
       raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=% not %',
-        [self, vmt, rtti]);
+        [self, vmt, rtticustom]);
     EnterCriticalSection(GlobalThreadLock);
     try
-      result := pointer(rtti.Private);
+      result := TSynLogFamily(rtticustom.Private);
       if Assigned(result) then
         if result.InheritsFrom(TSynLogFamily) then
           // registered by a background thread
@@ -2827,9 +2827,9 @@ begin
           // paranoid
           raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=%',
             [self, result]);
-      // create the properties information from RTTI
+      // create the TSynLogFamily instance associated with this TSynLog class
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
-      rtti.Private := result; // will be owned by this TRttiCustom
+      rtticustom.Private := result; // will be owned by this TRttiCustom
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end;

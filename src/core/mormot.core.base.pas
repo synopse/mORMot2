@@ -306,6 +306,8 @@ type
   TPtrUIntDynArray = array of PtrUInt;
   PDoubleDynArray = ^TDoubleDynArray;
   TDoubleDynArray = array of double;
+  PCurrencyDynArray = ^TCurrencyDynArray;
+  TCurrencyDynArray = array of currency;
   TWordDynArray = array of word;
   PWordDynArray = ^TWordDynArray;
   TByteDynArray = array of byte;
@@ -770,43 +772,6 @@ type
 
   {$endif TSYNEXTENDED80}
 
-  /// compiler native currency type
-  // - we may redefine a fake "currency" type below, so you may use this
-  // type alias in existing (third-party) code requiring regular currency values
-  TSystemCurrency = currency;
-
-  {$ifdef CPUX86}
-  /// the floating-point type to be used for 64-bit currency
-  // - on 32-bit Intel/AMD, currency is a native x87 FPU type
-  // - will allow to fallback to Int64 (*10000) e.g. on x64 and ARM CPUs
-  TSynCurrency = type currency;
-  {$else}
-  /// the floating-point type to be used for 64-bit currency
-  // - our framework fallbacks to Int64 (*CURR_RES=10000) e.g. on x64 and ARM
-  // - this type does NOT store double values, but Int64*CURR_RES - we only
-  // define it as double so that RTTI identifies it as a rfDouble floating-point
-  // and let our mormot.core.rtti unit handle it as TSynCurrency = Int64*CURR_RES
-  // - we discovered some weird incompatibilities, e.g. when cross-compiling
-  // from FPC Win64 into the Win32 platform, or when the generated code is
-  // very inefficient (e.g. with Delphi Win64) - any feedback is welcome!
-  // - so don't use directly this type, but call CurrencyToDouble DoubleToCurrency
-  // CurrencyToInt64 Int64ToCurrency dedicated functions
-  TSynCurrency = type double;
-
-  /// force to use our TSynCurrency wrapper instead of the plain "currency" type
-  // - this void record type would break compilation each time plain "currency"
-  // type is used in your code
-  currency = record end;
-  {$endif CPUX86}
-
-  PSynCurrency = ^TSynCurrency;
-
-  PSynCurrencyDynArray = ^TSynCurrencyDynArray;
-  TSynCurrencyDynArray = array of TSynCurrency;
-
-  PCurrencyDynArray = PSynCurrencyDynArray;
-  TCurrencyDynArray = TSynCurrencyDynArray;
-
   /// the non-number values potentially stored in an IEEE floating point
   TFloatNan = (fnNumber, fnNan, fnInf, fnNegInf);
 
@@ -816,59 +781,79 @@ type
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 const
-  /// used e.g. to convert a TSynCurrency (via PInt64) into a double
+  /// used e.g. to convert a currency (via PInt64) into a double
+  // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+  // values properly -> use FPC Win32 compiler only on Windows
   CURR_RES = 10000;
 
-{ TODO : define operators for TSynCurrency on FPC and latest Delphi }
-
-/// convert a TSynCurrency value into a double
+/// convert a currency value into a double
 // - using PInt64() division by CURR_RES (=10000)
-procedure CurrencyToDouble(const c: TSynCurrency; out d: double); overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure CurrencyToDouble(const c: currency; out d: double); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a TSynCurrency value into a double
+/// convert a currency value pointer into a double
 // - using PInt64() division by CURR_RES (=10000)
-procedure CurrencyToDouble(c: PSynCurrency; out d: double); overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure CurrencyToDouble(c: PCurrency; out d: double); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a TSynCurrency value into a double
+/// convert a currency value pointer into a double
 // - using PInt64() division by CURR_RES (=10000)
-function CurrencyToDouble(c: PSynCurrency): double; overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+function CurrencyToDouble(c: PCurrency): double; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// fill a variant value from a TSynCurrency value
+/// fill a variant value from a currency value
 // - as compatible with VariantToCurrency/VariantToDouble
-procedure CurrencyToVariant(const c: TSynCurrency; var v: variant);
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure CurrencyToVariant(const c: currency; var v: variant);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a double value into a TSynCurrency
+/// convert a double value into a currency
 // - using truncated multiplication by CURR_RES (=10000)
-procedure DoubleToCurrency(const d: double; out c: TSynCurrency); overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure DoubleToCurrency(const d: double; out c: currency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a double value into a TSynCurrency
+/// convert a double value into a currency
 // - using truncated multiplication by CURR_RES (=10000)
-procedure DoubleToCurrency(const d: double; c: PSynCurrency); overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure DoubleToCurrency(const d: double; c: PCurrency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a double value into a TSynCurrency
+/// convert a double value into a currency
 // - using truncated multiplication by CURR_RES (=10000)
-function DoubleToCurrency(const d: double): TSynCurrency; overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+function DoubleToCurrency(const d: double): currency; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a TSynCurrency value into a Int64
+/// convert a currency value into a Int64
 // - using PInt64() division by CURR_RES (=10000)
-procedure CurrencyToInt64(c: PSynCurrency; var i: Int64); overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure CurrencyToInt64(c: PCurrency; var i: Int64); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a Int64 value into a TSynCurrency
+/// convert a Int64 value into a currency
 // - using multiplication by CURR_RES (=10000)
-procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency); overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure Int64ToCurrency(const i: Int64; out c: currency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a Int64 value into a TSynCurrency
+/// convert a Int64 value into a currency
 // - using multiplication by CURR_RES (=10000)
-procedure Int64ToCurrency(const i: Int64; c: PSynCurrency); overload;
+// - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
+// values properly -> use FPC Win32 compiler only on Windows
+procedure Int64ToCurrency(const i: Int64; c: PCurrency); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// no banker rounding into two digits after the decimal point
@@ -1062,6 +1047,19 @@ function SameValue(const A, B: Double; DoublePrec: double = DOUBLE_SAME): Boolea
 function SameValueFloat(const A, B: TSynExtended;
   DoublePrec: TSynExtended = DOUBLE_SAME): Boolean;
 
+/// a comparison function for sorting IEEE 754 double precision values
+function CompareFloat(const A, B: double): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compute the sum of values, using a running compensation for lost low-order bits
+// - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
+// so will eventually result in an incorrect number
+// - Kahan algorithm keeps track of the accumulated error in integer operations,
+// to achieve a precision of more than 100 bits
+// - see https://en.wikipedia.org/wiki/Kahan_summation_algorithm
+procedure KahanSum(const Data: double; var Sum, Carry: double);
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 { ************ Integer Arrays Manipulation }
 
@@ -1088,6 +1086,14 @@ function CompareCardinal(const A, B: cardinal): integer;
 /// a comparison function for sorting 64-bit signed integer values
 function CompareInt64(const A, B: Int64): integer;
   {$ifdef FPC_OR_UNICODE}inline;{$endif}
+
+/// a comparison function for sorting 32/64-bit signed integer values
+function ComparePtrInt(const A, B: PtrInt): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a comparison function for sorting 32/64-bit pointers as unsigned values
+function ComparePointer(const A, B: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// a comparison function for sorting 64-bit unsigned integer values
 // - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
@@ -1207,6 +1213,14 @@ procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 /// sort a 64-bit Integer array, low values first
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
 
+/// sort a PtrInt array, low values first
+procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// sort a pointer array, low values first
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
 type
   /// event handler called by NotifySortedIntegerChanges()
   // - Sender is an opaque const value, maybe a TObject or any pointer
@@ -1255,16 +1269,8 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
 // older compilers will fast and exact SortDynArrayQWord()
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt; overload;
 
-/// sort a PtrInt array, low values first
-procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// fast O(log(n)) binary search of a PtrInt value in a sorted array
 function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// sort a pointer array, low values first
-procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast O(log(n)) binary search of a Pointer value in a sorted array
@@ -2655,9 +2661,9 @@ function crc16(Data: PAnsiChar; Len: integer): cardinal;
 // heavily e.g. for TDynArray binary serialization, TSQLRestStorageInMemory
 // binary persistence, or CompressSynLZ/StreamSynLZ/FileSynLZ
 // - some numbers on Linux x86_64:
-// $ 2500 hash32 in 707us i.e. 3536067/s or 7.3 GB/s
 // $ 2500 xxhash32 in 1.34ms i.e. 1861504/s or 3.8 GB/s
 // $ 2500 crc32c in 943us i.e. 2651113/s or 5.5 GB/s  (SSE4.2 disabled)
+// $ 2500 hash32 in 707us i.e. 3536067/s or 7.3 GB/s
 // $ 2500 crc32c in 387us i.e. 6459948/s or 13.4 GB/s (SSE4.2 enabled)
 function Hash32(Data: PCardinalArray; Len: integer): cardinal; overload;
 
@@ -2862,7 +2868,7 @@ function VariantToDouble(const V: Variant; var Value: double): boolean;
 function VariantToDoubleDef(const V: Variant; const default: double = 0): double;
 
 /// convert any numerical Variant into a fixed decimals floating point value
-function VariantToCurrency(const V: Variant; var Value: TSynCurrency): boolean;
+function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 
 /// convert any numerical Variant into a boolean value
 // - text content will return true after case-sensitive 'true' comparison
@@ -2918,7 +2924,7 @@ var
   VariantClearSeveral: procedure(V: PVarData; n: integer);
 
   /// compare two "array of variant" elements, with or without case sensitivity
-  // - this unit registeres a basic case-sensitive version calling VarCompareValue()
+  // - this unit registers a basic case-sensitive version calling VarCompareValue()
   // - mormot.core.variants will assign a (much) more efficient implementation,
   // also properly handling case insensitive comparison in text
   SortDynArrayVariantComp: function(const A, B: TVarData; caseInsensitive: boolean): integer;
@@ -3110,6 +3116,73 @@ type
 { ************ Raw Shared Constants / Types Definitions }
 
 const
+  /// void HTTP Status Code (not a standard value, for internal use only)
+  HTTP_NONE = 0;
+  /// HTTP Status Code for "Continue"
+  HTTP_CONTINUE = 100;
+  /// HTTP Status Code for "Switching Protocols"
+  HTTP_SWITCHINGPROTOCOLS = 101;
+  /// HTTP Status Code for "Success"
+  HTTP_SUCCESS = 200;
+  /// HTTP Status Code for "Created"
+  HTTP_CREATED = 201;
+  /// HTTP Status Code for "Accepted"
+  HTTP_ACCEPTED = 202;
+  /// HTTP Status Code for "Non-Authoritative Information"
+  HTTP_NONAUTHORIZEDINFO = 203;
+  /// HTTP Status Code for "No Content"
+  HTTP_NOCONTENT = 204;
+  /// HTTP Status Code for "Reset Content"
+  HTTP_RESETCONTENT = 205;
+  /// HTTP Status Code for "Partial Content"
+  HTTP_PARTIALCONTENT = 206;
+  /// HTTP Status Code for "Multiple Choices"
+  HTTP_MULTIPLECHOICES = 300;
+  /// HTTP Status Code for "Moved Permanently"
+  HTTP_MOVEDPERMANENTLY = 301;
+  /// HTTP Status Code for "Found"
+  HTTP_FOUND = 302;
+  /// HTTP Status Code for "See Other"
+  HTTP_SEEOTHER = 303;
+  /// HTTP Status Code for "Not Modified"
+  HTTP_NOTMODIFIED = 304;
+  /// HTTP Status Code for "Use Proxy"
+  HTTP_USEPROXY = 305;
+  /// HTTP Status Code for "Temporary Redirect"
+  HTTP_TEMPORARYREDIRECT = 307;
+  /// HTTP Status Code for "Bad Request"
+  HTTP_BADREQUEST = 400;
+  /// HTTP Status Code for "Unauthorized"
+  HTTP_UNAUTHORIZED = 401;
+  /// HTTP Status Code for "Forbidden"
+  HTTP_FORBIDDEN = 403;
+  /// HTTP Status Code for "Not Found"
+  HTTP_NOTFOUND = 404;
+  // HTTP Status Code for "Method Not Allowed"
+  HTTP_NOTALLOWED = 405;
+  // HTTP Status Code for "Not Acceptable"
+  HTTP_NOTACCEPTABLE = 406;
+  // HTTP Status Code for "Proxy Authentication Required"
+  HTTP_PROXYAUTHREQUIRED = 407;
+  /// HTTP Status Code for "Request Time-out"
+  HTTP_TIMEOUT = 408;
+  /// HTTP Status Code for "Conflict"
+  HTTP_CONFLICT = 409;
+  /// HTTP Status Code for "Payload Too Large"
+  HTTP_PAYLOADTOOLARGE = 413;
+  /// HTTP Status Code for "Internal Server Error"
+  HTTP_SERVERERROR = 500;
+  /// HTTP Status Code for "Not Implemented"
+  HTTP_NOTIMPLEMENTED = 501;
+  /// HTTP Status Code for "Bad Gateway"
+  HTTP_BADGATEWAY = 502;
+  /// HTTP Status Code for "Service Unavailable"
+  HTTP_UNAVAILABLE = 503;
+  /// HTTP Status Code for "Gateway Timeout"
+  HTTP_GATEWAYTIMEOUT = 504;
+  /// HTTP Status Code for "HTTP Version Not Supported"
+  HTTP_HTTPVERSIONNONSUPPORTED = 505;
+
   NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
   FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
   FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
@@ -3196,7 +3269,8 @@ const
 
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a shortstring
-  BOOL_STR: array[boolean] of string[7] = ('false','true');
+  BOOL_STR: array[boolean] of string[7] = (
+    'false','true');
 
   /// the JavaScript-like values of non-number IEEE constants
   // - as recognized by FloatToShortNan, and used by TBaseWriter.Add()
@@ -3318,7 +3392,7 @@ type
 
   /// a 64-bit identifier, defined for TSynPersistentWithID
   // - type used for our ORM primary key, i.e. TSQLRecord.ID
-  // - it maps the SQLite3 64-bit RowID definition
+  // - also maps the SQLite3 64-bit RowID definition
   TID = type Int64;
   /// a pointer to TSynPersistentWithID.ID, i.e. our ORM primary key
   PID = ^TID;
@@ -3356,6 +3430,11 @@ type
   /// dynamic array of timestamps stored as millisecond-based Unix Time
   TUnixMSTimeDynArray = array of TUnixMSTime;
 
+/// retrieve the HTTP reason text from a code
+// - e.g. StatusCodeToReason(200)='OK'
+// - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+function StatusCodeToReason(Code: cardinal): RawUTF8;
+
 
 
 implementation
@@ -3389,51 +3468,83 @@ begin
 end;
 {$endif CPUARM}
 
-procedure CurrencyToDouble(const c: TSynCurrency; out d: double);
+{$ifdef CPUX86} // directly use the x87 FPU stack
+
+procedure CurrencyToDouble(const c: currency; out d: double);
+begin
+  d := c;
+end;
+
+procedure CurrencyToDouble(c: PCurrency; out d: double);
+begin
+  d := c^;
+end;
+
+function CurrencyToDouble(c: PCurrency): double;
+begin
+  result := c^;
+end;
+
+procedure DoubleToCurrency(const d: double; out c: currency);
+begin
+  c := d;
+end;
+
+procedure DoubleToCurrency(const d: double; c: PCurrency);
+begin
+  c^ := d;
+end;
+
+function DoubleToCurrency(const d: double): currency;
+begin
+  result := d;
+end;
+
+{$else} // efficient inlined 64-bit integer version
+
+procedure CurrencyToDouble(const c: currency; out d: double);
 begin
   unaligned(d{%H-}) := PInt64(@c)^ / CURR_RES;
 end;
 
-procedure CurrencyToDouble(c: PSynCurrency; out d: double);
+procedure CurrencyToDouble(c: PCurrency; out d: double);
 begin
   unaligned(d{%H-}) := PInt64(c)^ / CURR_RES;
 end;
 
-function CurrencyToDouble(c: PSynCurrency): double;
+function CurrencyToDouble(c: PCurrency): double;
 begin
   result := PInt64(c)^ / CURR_RES;
 end;
 
-procedure CurrencyToVariant(const c: TSynCurrency; var v: variant);
-begin
-  if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
-    VarClearProc(PVarData(@v)^);
-  PVarData(@v)^.VType := varCurrency;
-  PSynCurrency(@PVarData(@v)^.VCurrency)^ := c;
-end;
-
-procedure DoubleToCurrency(const d: double; out c: TSynCurrency);
+procedure DoubleToCurrency(const d: double; out c: currency);
 begin
   PInt64(@c)^ := trunc(d * CURR_RES);
 end;
 
-procedure DoubleToCurrency(const d: double; c: PSynCurrency);
+procedure DoubleToCurrency(const d: double; c: PCurrency);
 begin
   PInt64(c)^ := trunc(d * CURR_RES);
 end;
 
-function DoubleToCurrency(const d: double): TSynCurrency;
+function DoubleToCurrency(const d: double): currency;
 begin
-  {$ifdef CPUX86}
-  result := d; // directly use the x87 FPU stack
-  {$else}
   result := trunc(d * CURR_RES);
-  {$endif CPUX86}
 end;
 
-procedure CurrencyToInt64(c: PSynCurrency; var i: Int64);
+{$endif CPUX86}
+
+procedure CurrencyToInt64(c: PCurrency; var i: Int64);
 begin
   i := PInt64(c)^ div CURR_RES;
+end;
+
+procedure CurrencyToVariant(const c: currency; var v: variant);
+begin
+  if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
+    VarClearProc(PVarData(@v)^);
+  PVarData(@v)^.VType := varCurrency;
+  PVarData(@v).VCurrency := c;
 end;
 
 function SimpleRoundTo2Digits(const d: double): double;
@@ -3484,12 +3595,12 @@ begin
   SetString(result, P, L);
 end;
 
-procedure Int64ToCurrency(const i: Int64; out c: TSynCurrency);
+procedure Int64ToCurrency(const i: Int64; out c: currency);
 begin
   PInt64(@c)^ := i * CURR_RES;
 end;
 
-procedure Int64ToCurrency(const i: Int64; c: PSynCurrency);
+procedure Int64ToCurrency(const i: Int64; c: PCurrency);
 begin
   PInt64(c)^ := i * CURR_RES;
 end;
@@ -4642,7 +4753,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if PCardinalArray(@val)^[1] = 0 then
     P := StrUInt32(P, PCardinal(@val)^)
@@ -4751,6 +4862,16 @@ end;
 function CompareCardinal(const A, B: cardinal): integer;
 begin
   result := ord(A > B) - ord(A < B);
+end;
+
+function ComparePtrInt(const A, B: PtrInt): integer;
+begin
+  result := ord(A > B) - ord(A < B);
+end;
+
+function ComparePointer(const A, B: pointer): integer;
+begin
+  result := ord(PtrUInt(A) > PtrUInt(B)) - ord(PtrUInt(A) < PtrUInt(B));
 end;
 
 {$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
@@ -5958,7 +6079,16 @@ begin
   QuickSortInt64(PInt64Array(P), L, R);
   {$else}
   QuickSortInteger(PIntegerArray(P), L, R);
-  {$endif}
+  {$endif CPU64}
+end;
+
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+begin
+  {$ifdef CPU64}
+  QuickSortInt64(PInt64Array(P), L, R);
+  {$else}
+  QuickSortInteger(PIntegerArray(P), L, R);
+  {$endif CPU64}
 end;
 
 function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt;
@@ -5970,22 +6100,13 @@ begin
   {$endif}
 end;
 
-procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
-begin
-  {$ifdef CPU64}
-  QuickSortInt64(PInt64Array(P), L, R);
-  {$else}
-  QuickSortInteger(PIntegerArray(P), L, R);
-  {$endif}
-end;
-
 function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
 begin
   {$ifdef CPU64}
   result := FastFindInt64Sorted(PInt64Array(P), R, Int64(Value));
   {$else}
   result := FastFindIntegerSorted(PIntegerArray(P), R, integer(Value));
-  {$endif}
+  {$endif CPU64}
 end;
 
 procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
@@ -6127,9 +6248,9 @@ end;
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt;
 var
   L: PtrInt;
-    {$ifdef CPUX86}
+  {$ifdef CPUX86}
   cmp: Integer;
-    {$endif}
+  {$endif CPUX86}
 begin
   L := 0;
   if 0 <= R then
@@ -6156,7 +6277,7 @@ begin
           continue;
         break;
       end;
-      {$endif}
+      {$endif CPUX86}
       R := result - 1;
       if L <= R then
         continue;
@@ -9459,6 +9580,21 @@ begin
     result := (A - B) <= DoublePrec;
 end;
 
+function CompareFloat(const A, B: double): integer;
+begin
+  result := ord(A > B) - ord(A < B);
+end;
+
+procedure KahanSum(const Data: double; var Sum, Carry: double);
+var
+  y, t: double;
+begin
+  y := Data - Carry;
+  t := Sum + y;
+  Carry := (t - Sum) - y;
+  Sum := t;
+end;
+
 
 {$ifndef CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
 
@@ -9694,6 +9830,8 @@ begin
   vd := VarDataFromVariant(V);
   result := true;
   case cardinal(vd^.VType) of
+    varEmpty, varNull:
+      Value := 0;
     varDouble, varDate:
       Value := vd^.VDouble;
     varSingle:
@@ -9708,7 +9846,7 @@ begin
       CurrencyToDouble(vd^.VAny, Value);
   else
     if VariantToInt64(PVariant(vd)^, tmp.VInt64) then
-      Value := tmp.VInt64 // also handle varEmpty,varNull
+      Value := tmp.VInt64
     else
       result := false;
   end;
@@ -9720,7 +9858,7 @@ begin
     result := default;
 end;
 
-function VariantToCurrency(const V: Variant; var Value: TSynCurrency): boolean;
+function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 var
   vd: PVarData;
   tmp: TVarData;
@@ -9733,13 +9871,13 @@ begin
     varSingle:
       DoubleToCurrency(vd^.VSingle, Value);
     varCurrency:
-      Value := PSynCurrency(@vd^.VCurrency)^;
+      Value := PCurrency(@vd^.VCurrency)^;
     varDouble or varByRef, varDate or varByRef:
       DoubleToCurrency(PDouble(vd^.VAny)^, Value);
     varSingle or varByRef:
       DoubleToCurrency(PSingle(vd^.VAny)^, Value);
     varCurrency or varByRef:
-      Value := PSynCurrency(vd^.VAny)^;
+      Value := PCurrency(vd^.VAny)^;
   else
     if VariantToInt64(PVariant(vd)^, tmp.VInt64) then
       Int64ToCurrency(tmp.VInt64, Value) // also handle varEmpty,varNull
@@ -10126,6 +10264,7 @@ begin
     until i = 0;
 end;
 
+
 { ************ Some Convenient TStream descendants }
 
 { TFakeWriterStream }
@@ -10285,6 +10424,131 @@ end;
 function TSynMemoryStream.{%H-}Write(const Buffer; Count: Integer): Longint;
 begin
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
+end;
+
+
+{ ************ Raw Shared Constants / Types Definitions }
+
+var
+  ReasonCache: array[1..5, 0..13] of RawUTF8; // avoid memory allocation
+
+function StatusCodeToReasonInternal(Code: cardinal): RawUTF8;
+begin
+  case Code of
+    100:
+      result := 'Continue';
+    101:
+      result := 'Switching Protocols';
+    200:
+      result := 'OK';
+    201:
+      result := 'Created';
+    202:
+      result := 'Accepted';
+    203:
+      result := 'Non-Authoritative Information';
+    204:
+      result := 'No Content';
+    205:
+      result := 'Reset Content';
+    206:
+      result := 'Partial Content';
+    207:
+      result := 'Multi-Status';
+    300:
+      result := 'Multiple Choices';
+    301:
+      result := 'Moved Permanently';
+    302:
+      result := 'Found';
+    303:
+      result := 'See Other';
+    304:
+      result := 'Not Modified';
+    305:
+      result := 'Use Proxy';
+    307:
+      result := 'Temporary Redirect';
+    308:
+      result := 'Permanent Redirect';
+    400:
+      result := 'Bad Request';
+    401:
+      result := 'Unauthorized';
+    403:
+      result := 'Forbidden';
+    404:
+      result := 'Not Found';
+    405:
+      result := 'Method Not Allowed';
+    406:
+      result := 'Not Acceptable';
+    407:
+      result := 'Proxy Authentication Required';
+    408:
+      result := 'Request Timeout';
+    409:
+      result := 'Conflict';
+    410:
+      result := 'Gone';
+    411:
+      result := 'Length Required';
+    412:
+      result := 'Precondition Failed';
+    413:
+      result := 'Payload Too Large';
+    414:
+      result := 'URI Too Long';
+    415:
+      result := 'Unsupported Media Type';
+    416:
+      result := 'Requested Range Not Satisfiable';
+    426:
+      result := 'Upgrade Required';
+    500:
+      result := 'Internal Server Error';
+    501:
+      result := 'Not Implemented';
+    502:
+      result := 'Bad Gateway';
+    503:
+      result := 'Service Unavailable';
+    504:
+      result := 'Gateway Timeout';
+    505:
+      result := 'HTTP Version Not Supported';
+    511:
+      result := 'Network Authentication Required';
+  else
+    result := 'Invalid Request';
+  end;
+end;
+
+function StatusCodeToReason(Code: cardinal): RawUTF8;
+var
+  Hi, Lo: cardinal;
+begin
+  if Code = 200 then
+  begin
+    // optimistic approach :)
+    Hi := 2;
+    Lo := 0;
+  end
+  else
+  begin
+    Hi := Code div 100;
+    Lo := Code - Hi * 100;
+    if not ((Hi in [1..5]) and (Lo in [0..13])) then
+    begin
+      result := StatusCodeToReasonInternal(Code);
+      exit;
+    end;
+  end;
+  result := ReasonCache[Hi, Lo];
+  if result <> '' then
+    exit;
+  result := StatusCodeToReasonInternal(Code);
+  ReasonCache[Hi, Lo] := result;
 end;
 
 

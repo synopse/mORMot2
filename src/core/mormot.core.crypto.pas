@@ -296,7 +296,8 @@ type
   // - repNoCheck and repCheckedIfAvailable will be compatible with older
   // versions of the protocol, but repMandatory will reject any encryption
   // without the TAESIVCTR algorithm
-  TAESIVReplayAttackCheck = (repNoCheck, repCheckedIfAvailable, repMandatory);
+  TAESIVReplayAttackCheck = (
+    repNoCheck, repCheckedIfAvailable, repMandatory);
 
   {$M+}
 
@@ -473,26 +474,29 @@ type
     // - default implementation, for a non AEAD protocol, returns false
     function MACCheckError(aEncrypted: pointer; Count: cardinal): boolean; virtual;
     /// perform one step PKCS7 encryption/decryption and authentication from
-    // a given 256-bit key
+    // a given 256-bit key over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
-    // - as used e.g. by CryptDataForCurrentUser()
+    // - supplied Data is expected to be small (<128 bytes), as used e.g. by
+    // CryptDataForCurrentUser()
     // - do not use this abstract class method, but inherited TAESCFBCRC/TAESOFBCRC
     // - will store a header with its own CRC, so detection of most invalid
     // formats (e.g. from fuzzing input) will occur before any AES/MAC process
     class function MACEncrypt(const Data: RawByteString; const Key: THash256;
       Encrypt: boolean): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication from
-    // a given 128-bit key
+    // a given 128-bit key over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
+    // - supplied Data is expected to be small (<128 bytes), as used e.g. by
+    // CryptDataForCurrentUser()
     // - do not use this abstract class method, but inherited TAESCFBCRC/TAESOFBCRC
     // - will store a header with its own CRC, so detection of most invalid
     // formats (e.g. from fuzzing input) will occur before any AES/MAC process
     class function MACEncrypt(const Data: RawByteString; const Key: THash128;
       Encrypt: boolean): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication with
-    // the curent AES instance
+    // the curent AES instance over a small memory block
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
     // - as used e.g. by CryptDataForCurrentUser()
@@ -880,7 +884,8 @@ var
   // - as used internally by AESIVCtrEncryptDecrypt() function
   // - you may customize this secret for your own project, but be aware that
   // it will affect all TAESAbstract instances, so should match on all ends
-  AESIVCTR_KEY: TBlock128 = ($ce5d5e3e, $26506c65, $568e0092, $12cce480);
+  AESIVCTR_KEY: TBlock128 = (
+    $ce5d5e3e, $26506c65, $568e0092, $12cce480);
 
 /// global shared function which may encrypt or decrypt any 128-bit block
 // using AES-128 and the global AESIVCTR_KEY
@@ -1333,7 +1338,8 @@ type
 
 type
   /// SHA-3 instances, as defined by NIST Standard for Keccak sponge construction
-  TSHA3Algo = (SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
+  TSHA3Algo = (
+    SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
 
   /// implements SHA-3 (Keccak) hashing
   // - Keccak was the winner of the NIST hashing competition for a new hashing
@@ -2078,7 +2084,7 @@ type
     // - if outStream is TMemoryStream -> auto-reserve space (no Realloc:)
     // - for normal usage, you just have to Assign one In and one Out
     // - if outStream AND bOut are both nil, an outStream is created via
-    // THeapMemoryStream.Create
+    // TMemoryStream.Create
     // - if Encrypt -> OriginalLen can be used to store unCompressed Len
     function EncodeDecode(const Key; KeySize, inLen: cardinal; Encrypt: boolean;
       inStream, outStream: TStream; bIn, bOut: pointer; OriginalLen: cardinal = 0): integer;
@@ -2201,9 +2207,6 @@ procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream;
 
 /// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
-// - this procedure has a weak password protection: small incoming data
-// is append to some salt, in order to have at least a 256 bytes long hash:
-// such a feature improve security for small passwords, e.g.
 // - note that this algorithm is proprietary, and less secure (and standard)
 // than the PBKDF2 algorithm, so it should be considered as deprecated; it
 // is supplied only for backward compatibility of existing code:
@@ -5015,7 +5018,7 @@ begin
     key := TAESCFB.SimpleEncrypt(key2, k256, 256, true, true);
     if not FileFromString(key, fn) then
       ESynCrypto.CreateUTF8('Unable to write %', [fn]);
-    FileSetAttributes(fn, {secret=}true);
+    FileSetAttributes(fn, {secret=}true); // chmod 400
   finally
     FillZero(key);
     FillZero(key2);

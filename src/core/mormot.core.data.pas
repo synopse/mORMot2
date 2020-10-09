@@ -9,6 +9,7 @@ unit mormot.core.data;
    Low-Level Data Processing Functions shared by all framework units
     - RTL TPersistent / TInterfacedObject with Custom Constructor
     - TSynPersistent* / TSyn*List classes
+    - TSynPersistentStore with proper Binary Serialization
     - INI Files and In-memory Access
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray, TDynArrayHashed and TSynQueue Wrappers
@@ -110,7 +111,7 @@ type
   // - you should override the GetClass virtual method to provide the
   // expected collection item class to be used on server side
   // - another possibility is to register a TCollection/TCollectionItem pair
-  // via a call to RttiCustom.RegisterCollection()
+  // via a call to Rtti.RegisterCollection()
   TInterfacedCollection = class(TCollection)
   protected
     /// you shall override this abstract method
@@ -130,6 +131,197 @@ type
 
   /// class-reference type (metaclass) of a TInterfacedCollection kind
   TInterfacedCollectionClass = class of TInterfacedCollection;
+
+
+  /// interface for TAutoFree to register another TObject instance
+  // to an existing IAutoFree local variable
+  IAutoFree = interface
+    procedure Another(var objVar; obj: TObject);
+  end;
+
+  /// simple reference-counted storage for local objects
+  // - be aware that it won't implement a full ARC memory model, but may be
+  // just used to avoid writing some try ... finally blocks on local variables
+  // - use with caution, only on well defined local scope
+  TAutoFree = class(TInterfacedObject, IAutoFree)
+  protected
+    fObject: TObject;
+    fObjectList: array of TObject;
+  public
+    /// initialize the TAutoFree class for one local variable
+    // - do not call this constructor, but class function One() instead
+    constructor Create(var localVariable; obj: TObject); reintroduce; overload;
+    /// initialize the TAutoFree class for several local variables
+    // - do not call this constructor, but class function Several() instead
+    constructor Create(const varObjPairs: array of pointer); reintroduce; overload;
+    /// protect one local TObject variable instance life time
+    // - for instance, instead of writing:
+    // !var myVar: TMyClass;
+    // !begin
+    // !  myVar := TMyClass.Create;
+    // !  try
+    // !    ... use myVar
+    // !  finally
+    // !    myVar.Free;
+    // !  end;
+    // !end;
+    // - you may write:
+    // !var myVar: TMyClass;
+    // !begin
+    // !  TAutoFree.One(myVar,TMyClass.Create);
+    // !  ... use myVar
+    // !end; // here myVar will be released
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    class function One(var localVariable; obj: TObject): IAutoFree;
+    /// protect several local TObject variable instances life time
+    // - specified as localVariable/objectInstance pairs
+    // - you may write:
+    // !var var1,var2: TMyClass;
+    // !begin
+    // !  TAutoFree.Several([
+    // !    @var1,TMyClass.Create,
+    // !    @var2,TMyClass.Create]);
+    // !  ... use var1 and var2
+    // !end; // here var1 and var2 will be released
+    // - warning: under FPC, you should assign the result of this method to a local
+    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+     class function Several(const varObjPairs: array of pointer): IAutoFree;
+    /// protect another TObject variable to an existing IAutoFree instance life time
+    // - you may write:
+    // !var var1,var2: TMyClass;
+    // !    auto: IAutoFree;
+    // !begin
+    // !  auto := TAutoFree.One(var1,TMyClass.Create);,
+    // !  .... do something
+    // !  auto.Another(var2,TMyClass.Create);
+    // !  ... use var1 and var2
+    // !end; // here var1 and var2 will be released
+    procedure Another(var localVariable; obj: TObject);
+    /// will finalize the associated TObject instances
+    // - note that releasing the TObject instances won't be protected, so
+    // any exception here may induce a memory leak: use only with "safe"
+    // simple objects, e.g. mORMot's TSQLRecord
+    destructor Destroy; override;
+  end;
+
+
+  /// an interface used by TAutoLocker to protect multi-thread execution
+  IAutoLocker = interface
+    ['{97559643-6474-4AD3-AF72-B9BB84B4955D}']
+    /// enter the mutex
+    // - any call to Enter should be ended with a call to Leave, and
+    // protected by a try..finally block, as such:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.Enter;
+    // !  try
+    // !    ... // thread-safe code
+    // !  finally
+    // !    fSharedAutoLocker.Leave;
+    // !  end;
+    // !end;
+    procedure Enter;
+    /// leave the mutex
+    // - any call to Leave should be preceded with a call to Enter
+    procedure Leave;
+    /// will enter the mutex until the IUnknown reference is released
+    // - using an IUnknown interface to let the compiler auto-generate a
+    // try..finally block statement to release the lock for the code block
+    // - could be used as such under Delphi:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // local hidden IUnknown will release the lock for the method
+    // - warning: under FPC, you should assign its result to a local variable -
+    // see bug http://bugs.freepascal.org/view.php?id=26602
+    // !var LockFPC: IUnknown;
+    // !begin
+    // !  ... // unsafe code
+    // !  LockFPC := fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // LockFPC will release the lock for the method
+    // or
+    // !begin
+    // !  ... // unsafe code
+    // !  with fSharedAutoLocker.ProtectMethod do begin
+    // !    ... // thread-safe code
+    // !  end; // local hidden IUnknown will release the lock for the method
+    // !end;
+    function ProtectMethod: IUnknown;
+    /// gives an access to the internal low-level TSynLocker instance used
+    function Safe: PSynLocker;
+  end;
+
+  /// reference-counted block code critical section
+  // - you can use one instance of this to protect multi-threaded execution
+  // - the main class may initialize a IAutoLocker property in Create, then call
+  // IAutoLocker.ProtectMethod in any method to make its execution thread safe
+  // - this class inherits from TInterfacedObjectWithCustomCreate so you
+  // could define one published property of a mORMot.pas' TInjectableObject
+  // as IAutoLocker so that this class may be automatically injected
+  // - you may use the inherited TAutoLockerDebug class, as defined in SynLog.pas,
+  // to debug unexpected race conditions due to such critical sections
+  // - consider inherit from high-level TSynPersistentLock or call low-level
+  // fSafe := NewSynLocker / fSafe^.DoneAndFreemem instead
+  TAutoLocker = class(TInterfacedObjectWithCustomCreate, IAutoLocker)
+  protected
+    fSafe: TSynLocker;
+  public
+    /// initialize the mutex
+    constructor Create; override;
+    /// finalize the mutex
+    destructor Destroy; override;
+    /// will enter the mutex until the IUnknown reference is released
+    // - as expected by IAutoLocker interface
+    // - could be used as such under Delphi:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // local hidden IUnknown will release the lock for the method
+    // - warning: under FPC, you should assign its result to a local variable -
+    // see bug http://bugs.freepascal.org/view.php?id=26602
+    // !var LockFPC: IUnknown;
+    // !begin
+    // !  ... // unsafe code
+    // !  LockFPC := fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // LockFPC will release the lock for the method
+    // or
+    // !begin
+    // !  ... // unsafe code
+    // !  with fSharedAutoLocker.ProtectMethod do begin
+    // !    ... // thread-safe code
+    // !  end; // local hidden IUnknown will release the lock for the method
+    // !end;
+    function ProtectMethod: IUnknown;
+    /// enter the mutex
+    // - as expected by IAutoLocker interface
+    // - any call to Enter should be ended with a call to Leave, and
+    // protected by a try..finally block, as such:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.Enter;
+    // !  try
+    // !    ... // thread-safe code
+    // !  finally
+    // !    fSharedAutoLocker.Leave;
+    // !  end;
+    // !end;
+    procedure Enter; virtual;
+    /// leave the mutex
+    // - as expected by IAutoLocker interface
+    procedure Leave; virtual;
+    /// access to the locking methods of this instance
+    // - as expected by IAutoLocker interface
+    function Safe: PSynLocker;
+    /// direct access to the locking methods of this instance
+    // - faster than IAutoLocker.Safe function
+    property Locker: TSynLocker read fSafe;
+  end;
+
 
 
 { ************ TSynPersistent* / TSyn*List / TSynLocker classes }
@@ -188,7 +380,7 @@ type
     procedure RttiAfterReadObject; virtual;
   public
     /// virtual constructor called at instance creation
-    // - this constructor also registers the class type to the RttiCustom list
+    // - this constructor also registers the class type to the Rtti global list
     // - is declared as virtual so that inherited classes may have a root
     // constructor to override
     constructor Create; virtual;
@@ -459,6 +651,72 @@ type
 
 { ********** RTTI Values Binary Serialization and Comparison }
 
+  type
+    /// possible options for a TDocVariant JSON/BSON document storage
+    // - defined in this unit to avoid circular reference with mormot.core.variants
+    // - dvoIsArray and dvoIsObject will store the "Kind: TDocVariantKind" state -
+    // you should never have to define these two options directly
+    // - dvoNameCaseSensitive will be used for every name lookup - here
+    // case-insensitivity is restricted to a-z A-Z 0-9 and _ characters
+    // - dvoCheckForDuplicatedNames will be used for method
+    // TDocVariantData.AddValue(), but not when setting properties at
+    // variant level: for consistency, "aVariant.AB := aValue" will replace
+    // any previous value for the name "AB"
+    // - dvoReturnNullForUnknownProperty will be used when retrieving any value
+    // from its name (for dvObject kind of instance), or index (for dvArray or
+    // dvObject kind of instance)
+    // - by default, internal values will be copied by-value from one variant
+    // instance to another, to ensure proper safety - but it may be too slow:
+    // if you set dvoValueCopiedByReference, the internal
+    // TDocVariantData.VValue/VName instances will be copied by-reference,
+    // to avoid memory allocations, BUT it may break internal process if you change
+    // some values in place (since VValue/VName and VCount won't match) - as such,
+    // if you set this option, ensure that you use the content as read-only
+    // - any registered custom types may have an extended JSON syntax (e.g.
+    // TBSONVariant does for MongoDB types), and will be searched during JSON
+    // parsing, unless dvoJSONParseDoNotTryCustomVariants is set (slightly faster)
+    // - by default, it will only handle direct JSON [array] of {object}: but if
+    // you define dvoJSONObjectParseWithinString, it will also try to un-escape
+    // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
+    // used e.g. when JSON has been retrieved from a database TEXT column) - is
+    // used for instance by VariantLoadJSON()
+    // - JSON serialization will follow the standard layout, unless
+    // dvoSerializeAsExtendedJson is set so that the property names would not
+    // be escaped with double quotes, writing '{name:"John",age:123}' instead of
+    // '{"name":"John","age":123}': this extended json layout is compatible with
+    // http://docs.mongodb.org/manual/reference/mongodb-extended-json and with
+    // TDocVariant JSON unserialization, also our SynCrossPlatformJSON unit, but
+    // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
+    // - by default, only integer/Int64/currency number values are allowed, unless
+    // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
+    // with potential loss of precision during the conversion
+    // - dvoInternNames and dvoInternValues will use shared TRawUTF8Interning
+    // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
+    // so that redundant text content will be allocated only once on heap
+    TDocVariantOption =
+      (dvoIsArray, dvoIsObject,
+       dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
+       dvoReturnNullForUnknownProperty,
+       dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
+       dvoJSONObjectParseWithinString, dvoSerializeAsExtendedJson,
+       dvoAllowDoubleValue, dvoInternNames, dvoInternValues);
+
+    /// set of options for a TDocVariant storage
+    // - defined in this unit to avoid circular reference with mormot.core.variants
+    // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
+    // local document as with _ObjFast/_ArrFast/_JsonFast - i.e.
+    // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
+    // - when specifying the options, you should not include dvoIsArray nor
+    // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
+    TDocVariantOptions = set of TDocVariantOption;
+
+    /// pointer to a set of options for a TDocVariant storage
+    // - defined in this unit to avoid circular reference with mormot.core.variants
+    // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
+    // @JSON_OPTIONS_FAST_STRICTJSON or @JSON_OPTIONS_FAST_EXTENDED
+    PDocVariantOptions = ^TDocVariantOptions;
+
+
 type
   /// internal function handler for binary persistence of any RTTI type value
   // - i.e. the kind of functions called via RTTI_BINARYSAVE[] lookup table
@@ -493,6 +751,8 @@ type
   TRttiCompares = array[TRttiKind] of TRttiCompare;
   PRttiCompares = ^TRttiCompares;
 
+  TRttiComparers = array[{CaseInSensitive=}boolean] of TRttiCompares;
+
 var
   /// lookup table for binary persistence of any RTTI type value
   // - for efficient persistence into binary of managed and unmanaged types
@@ -506,7 +766,7 @@ var
   // - for efficient search or sorting of managed and unmanaged types
   // - RTTI_COMPARE[false] for case-sensitive comparison
   // - RTTI_COMPARE[true] for case-insensitive comparison
-  RTTI_COMPARE: array[{CaseInSensitive=}boolean] of TRttiCompares;
+  RTTI_COMPARE: TRttiComparers;
 
 
 /// raw binary serialization of a dynamic array
@@ -526,7 +786,8 @@ function DynArraySave(var Value; TypeInfo: pointer): RawByteString; overload;
 // DynArraySave() / TDynArray.Save()
 // - Value shall be set to the target dynamic array field
 // - is a wrapper around BinaryLoad(rkDynArray)
-function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer;
+  TryCustomVariants: PDocVariantOptions = nil): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// raw comparison of two dynamic arrays
@@ -541,9 +802,24 @@ function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
   {$ifdef HASINLINE}inline;{$endif}
 
 
-/// check case-sensitive equality of two values by content, using RTTI
+/// check equality of two values by content, using RTTI
+// - optionally returns the known in-memory PSize of the value
 function BinaryEquals(A, B: pointer; Info: PRttiInfo; PSize: PInteger;
   Kinds: TRttiKinds; CaseInSensitive: boolean): boolean;
+
+/// comparison of two values by content, using RTTI
+function BinaryCompare(A, B: pointer; Info: PRttiInfo; CaseInSensitive: boolean): integer;
+
+/// comparison of two TObject published properties, using RTTI
+function ObjectCompare(A, B: TObject; CaseInSensitive: boolean): integer;
+
+/// case-sensitive comparison of two TObject published properties, using RTTI
+function ObjectEquals(A, B: TObject): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// case-insensitive comparison of two TObject published properties, using RTTI
+function ObjectEqualsI(A, B: TObject): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef PUREMORMOT2}
 
@@ -565,30 +841,35 @@ function BinarySave(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): RawByteS
 /// binary persistence of any value using RTTI, into a TBytes buffer
 function BinarySaveBytes(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): TBytes;
 
+/// binary persistence of any value using RTTI, into a TBufferWriter stream
+procedure BinarySave(Data: pointer; Info: PRttiInfo; Dest: TBufferWriter); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// binary persistence of any value using RTTI, into a TSynTempBuffer buffer
 procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
   Info: PRttiInfo; Kinds: TRttiKinds); overload;
 
 /// binary persistence of any value using RTTI, into a Base64-encoded text
 // - contains a trailing crc32c hash before the actual data - so is not
-// the WrBase64() regular format
+// the WrBase64() regular format - unless NoCrc32Trailer is set to true
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
-  Kinds: TRttiKinds): RawUTF8;
+  Kinds: TRttiKinds; NoCrc32Trailer: boolean = false): RawUTF8;
 
 /// unserialize any value from BinarySave() memory buffer, using RTTI
 function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
-  Len: PInteger; SourceMax: PAnsiChar; Kinds: TRttiKinds): PAnsiChar; overload;
+  Len: PInteger; SourceMax: PAnsiChar; Kinds: TRttiKinds;
+  TryCustomVariants: PDocVariantOptions = nil): PAnsiChar; overload;
 
 /// unserialize any value from BinarySave() RawByteString, using RTTI
 function BinaryLoad(Data: pointer; const Source: RawByteString; Info: PRttiInfo;
-  Kinds: TRttiKinds): boolean; overload;
+  Kinds: TRttiKinds; TryCustomVariants: PDocVariantOptions = nil): boolean; overload;
 
 /// unserialize any value from BinarySaveBase64() encoding, using RTTI
 // - contains a trailing crc32c hash before the actual data - so is not
 // the WrBase64() regular format, unless NoCrc32Trailer is true
 function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
-  NoCrc32Trailer: boolean = false): boolean;
+  NoCrc32Trailer: boolean = false; TryCustomVariants: PDocVariantOptions = nil): boolean;
 
 
 /// check equality of two records by content
@@ -674,7 +955,8 @@ function RecordSaveBase64(const Rec; TypeInfo: pointer;
 // (e.g. a maybe-forged client) - only with slightly performance penalty
 // - is a wrapper around BinaryLoad(rkRecordTypes)
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
-  Len: PInteger = nil; SourceMax: PAnsiChar = nil): PAnsiChar; overload;
+  Len: PInteger = nil; SourceMax: PAnsiChar = nil;
+  TryCustomVariants: PDocVariantOptions = nil): PAnsiChar; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a record content from a memory buffer as saved by RecordSave()
@@ -682,84 +964,25 @@ function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
 // - returns false if the Source buffer was incorrect, true on success
 // - is a wrapper around BinaryLoad(rkRecordTypes)
 function RecordLoad(var Rec; const Source: RawByteString;
-  TypeInfo: pointer): boolean; overload;
+  TypeInfo: pointer; TryCustomVariants: PDocVariantOptions = nil): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// read a record content from a Base-64 encoded content
 // - expects RecordSaveBase64() format, with a left-sided binary CRC32C
 // - is a wrapper around BinaryLoadBase64(rkRecordTypes)
 function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec; TypeInfo: pointer;
-  UriCompatible: boolean = false): boolean;
+  UriCompatible: boolean = false; TryCustomVariants: PDocVariantOptions = nil): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// crc32c-based hash of a variant value
+// - complex string types will make up to 255 uppercase characters conversion
+// if CaseInsensitive is true
+// - you can specify your own hashing function if crc32c is not what you expect
+function VariantHash(const value: variant; CaseInsensitive: boolean;
+  Hasher: THasher = nil): cardinal;
 
 
 { ************ TDynArray, TDynArrayHashed and TSynQueue Wrappers }
-
-type
-  /// possible options for a TDocVariant JSON/BSON document storage
-  // - defined in this unit to avoid circular reference with mormot.core.variants
-  // - dvoIsArray and dvoIsObject will store the "Kind: TDocVariantKind" state -
-  // you should never have to define these two options directly
-  // - dvoNameCaseSensitive will be used for every name lookup - here
-  // case-insensitivity is restricted to a-z A-Z 0-9 and _ characters
-  // - dvoCheckForDuplicatedNames will be used for method
-  // TDocVariantData.AddValue(), but not when setting properties at
-  // variant level: for consistency, "aVariant.AB := aValue" will replace
-  // any previous value for the name "AB"
-  // - dvoReturnNullForUnknownProperty will be used when retrieving any value
-  // from its name (for dvObject kind of instance), or index (for dvArray or
-  // dvObject kind of instance)
-  // - by default, internal values will be copied by-value from one variant
-  // instance to another, to ensure proper safety - but it may be too slow:
-  // if you set dvoValueCopiedByReference, the internal
-  // TDocVariantData.VValue/VName instances will be copied by-reference,
-  // to avoid memory allocations, BUT it may break internal process if you change
-  // some values in place (since VValue/VName and VCount won't match) - as such,
-  // if you set this option, ensure that you use the content as read-only
-  // - any registered custom types may have an extended JSON syntax (e.g.
-  // TBSONVariant does for MongoDB types), and will be searched during JSON
-  // parsing, unless dvoJSONParseDoNotTryCustomVariants is set (slightly faster)
-  // - by default, it will only handle direct JSON [array] of {object}: but if
-  // you define dvoJSONObjectParseWithinString, it will also try to un-escape
-  // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
-  // used e.g. when JSON has been retrieved from a database TEXT column) - is
-  // used for instance by VariantLoadJSON()
-  // - JSON serialization will follow the standard layout, unless
-  // dvoSerializeAsExtendedJson is set so that the property names would not
-  // be escaped with double quotes, writing '{name:"John",age:123}' instead of
-  // '{"name":"John","age":123}': this extended json layout is compatible with
-  // http://docs.mongodb.org/manual/reference/mongodb-extended-json and with
-  // TDocVariant JSON unserialization, also our SynCrossPlatformJSON unit, but
-  // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
-  // - by default, only integer/Int64/currency number values are allowed, unless
-  // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
-  // with potential loss of precision during the conversion
-  // - dvoInternNames and dvoInternValues will use shared TRawUTF8Interning
-  // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
-  // so that redundant text content will be allocated only once on heap
-  TDocVariantOption =
-    (dvoIsArray, dvoIsObject,
-     dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
-     dvoReturnNullForUnknownProperty,
-     dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
-     dvoJSONObjectParseWithinString, dvoSerializeAsExtendedJson,
-     dvoAllowDoubleValue, dvoInternNames, dvoInternValues);
-
-  /// set of options for a TDocVariant storage
-  // - defined in this unit to avoid circular reference with mormot.core.variants
-  // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
-  // local document as with _ObjFast/_ArrFast/_JsonFast - i.e.
-  // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
-  // - when specifying the options, you should not include dvoIsArray nor
-  // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
-  TDocVariantOptions = set of TDocVariantOption;
-
-  /// pointer to a set of options for a TDocVariant storage
-  // - defined in this unit to avoid circular reference with mormot.core.variants
-  // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
-  // @JSON_OPTIONS_FAST_STRICTJSON or @JSON_OPTIONS_FAST_EXTENDED
-  PDocVariantOptions = ^TDocVariantOptions;
 
 var
   /// low-level JSON unserialization function
@@ -788,7 +1011,7 @@ type
 {$ifndef PUREMORMOT2}
 
 type
-  /// internal enumeration used to specify some standard Delphi arrays
+  /// internal enumeration used to specify some standard arrays
   // - mORMot 1.18 did have two serialization engines - we unified it
   // - defined only for backward compatible code; use TRttiParserType instead
   TDynArrayKind = TRttiParserType;
@@ -889,9 +1112,9 @@ type
   private
     fValue: PPointer;
     fInfo: TRttiCustom;
-    fElemSize: cardinal; // equals fInfo.Cache.ItemSize
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
+    fElemSize: cardinal; // equals fInfo.Cache.ItemSize
     fSorted: boolean;
     function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
@@ -943,7 +1166,13 @@ type
       aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false);
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
+    // - can be called directly for a very fast TDynArray initialization
     procedure InitRtti(aInfo: TRttiCustom; var aValue; aCountPointer: PInteger = nil);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// fast initialize a wrapper for an existing dynamic array of the same type
+    // - is slightly faster than
+    // ! Init(aAnother.ArrayType,aValue,nil);
+    procedure InitFrom(aAnother: PDynArray; var aValue);
       {$ifdef HASINLINE}inline;{$endif}
     /// define the reference to an external count integer variable
     // - Init and InitSpecific methods will reset the aCountPointer to 0: you
@@ -1266,11 +1495,6 @@ type
     // - returns the number of items added to the array
     function AddArray(const DynArrayVar; aStartIndex: integer = 0;
       aCount: integer = -1): integer;
-    /// fast initialize a wrapper for an existing dynamic array of the same type
-    // - is slightly faster than
-    // ! Init(aAnother.ArrayType,aValue,nil);
-    procedure InitFrom(aAnother: PDynArray; var aValue);
-      {$ifdef HASINLINE}inline;{$endif}
     /// add items from a given TDynArray
     // - the supplied source TDynArray MUST be of the same exact type as the
     // current used for this TDynArray, otherwise it won't do anything
@@ -1279,12 +1503,17 @@ type
     procedure AddDynArray(aSource: PDynArray; aStartIndex: integer = 0;
       aCount: integer = -1);
     /// compare the content of the two arrays, returning TRUE if both match
-    // - this method compares using any supplied Compare property (unless
-    // ignorecompare=true), or by content using the RTTI element description
-    // of the whole array items
-    // - T*ObjArray kind of arrays will return false
+    // - use any supplied Compare property (unless ignorecompare=true), or
+    // following the RTTI element description on all array items
+    // - T*ObjArray kind of arrays will properly compare their properties
     function Equals(B: PDynArray; IgnoreCompare: boolean = false;
       CaseSensitive: boolean = true): boolean;
+    /// compare the content of the two arrays
+    // - use any supplied Compare property (unless ignorecompare=true), or
+    // following the RTTI element description on all array items
+    // - T*ObjArray kind of arrays will properly compare their properties
+    function Compares(B: PDynArray; IgnoreCompare: boolean = false;
+      CaseSensitive: boolean = true): integer;
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
     // - T*ObjArray will be reallocated and copied by content (using a temporary
@@ -1454,7 +1683,7 @@ type
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     /// low-level access to an hash collisions counter
     FindCollisions: cardinal;
-    {$endif}
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
     /// initialize the hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
@@ -1511,6 +1740,8 @@ type
   // - in order to have the better performance, you should use an external Count
   // variable, AND set the Capacity property to the expected maximum count (this
   // will avoid most ReHash calls for FindHashedForAdding+FindHashedAndUpdate)
+  // - consider using TSynDictionary from mormot.core.json for a thread-safe
+  // stand-alone storage of key/value pairs
   {$ifdef UNDIRECTDYNARRAY}
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
@@ -1740,6 +1971,13 @@ type
 function DynArray(aTypeInfo: pointer; var aValue;
   aCountPointer: PInteger = nil): TDynArray;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// sort any dynamic array, via an external array of indexes
+// - this function will use the supplied TSynTempBuffer for index storage,
+// so use PIntegerArray(Indexes.buf) to access the values
+// - caller should always make Indexes.Done once done
+procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
+  out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
 
 var
   /// helper array to get the hash function corresponding to a given
@@ -2328,6 +2566,11 @@ type
 
 {$endif PUREMORMOT2}
 
+/// sort a dynamic array of PUTF8Char items, via an external array of indexes
+// - you can use FastFindIndexedPUTF8Char() for fast O(log(n)) binary search
+procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
+  var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean = false);
+
 
 { ***************** Cross-Platform Time Zones }
 
@@ -2496,6 +2739,7 @@ begin
   inherited Create(GetClass);
 end;
 
+
 { TSynInterfacedObject }
 
 function TSynInterfacedObject._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
@@ -2525,6 +2769,96 @@ begin
 end;
 
 
+{ TAutoFree }
+
+constructor TAutoFree.Create(var localVariable; obj: TObject);
+begin
+  fObject := obj;
+  TObject(localVariable) := obj;
+end;
+
+class function TAutoFree.One(var localVariable; obj: TObject): IAutoFree;
+begin
+  result := Create(localVariable,obj);
+end;
+
+class function TAutoFree.Several(const varObjPairs: array of pointer): IAutoFree;
+begin
+  result := Create(varObjPairs);
+end;
+
+constructor TAutoFree.Create(const varObjPairs: array of pointer);
+var
+  n, i: integer;
+begin
+  n := length(varObjPairs);
+  if (n = 0) or (n and 1 = 1) then
+    exit;
+  n := n shr 1;
+  if n = 0 then
+    exit;
+  SetLength(fObjectList, n);
+  for i := 0 to n - 1 do begin
+    fObjectList[i] := varObjPairs[i * 2 + 1];
+    PPointer(varObjPairs[i * 2])^ := fObjectList[i];
+  end;
+end;
+
+procedure TAutoFree.Another(var localVariable; obj: TObject);
+var
+  n: integer;
+begin
+  n := length(fObjectList);
+  SetLength(fObjectList, n + 1);
+  fObjectList[n] := obj;
+  TObject(localVariable) := obj;
+end;
+
+destructor TAutoFree.Destroy;
+var
+  i: integer;
+begin
+  if fObjectList <> nil then
+    for i := high(fObjectList) downto 0 do // release FILO
+      fObjectList[i].Free;
+  fObject.Free;
+  inherited;
+end;
+
+
+{ TAutoLocker }
+
+constructor TAutoLocker.Create;
+begin
+  fSafe.Init;
+end;
+
+destructor TAutoLocker.Destroy;
+begin
+  fSafe.Done;
+  inherited;
+end;
+
+function TAutoLocker.ProtectMethod: IUnknown;
+begin
+  result := TAutoLock.Create(@fSafe);
+end;
+
+procedure TAutoLocker.Enter;
+begin
+  fSafe.Lock;
+end;
+
+procedure TAutoLocker.Leave;
+begin
+  fSafe.UnLock;
+end;
+
+function TAutoLocker.Safe: PSynLocker;
+begin
+  result := @fSafe;
+end;
+
 
 { ************ TSynPersistent* / TSyn*List / TSynLocker classes }
 
@@ -2535,7 +2869,7 @@ begin
   // quick check if this class type is already registered
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
     // use RegisterClasses() since we don't need to inline RegisterClass()
-    mormot.core.rtti.RttiCustom.RegisterClasses([PClass(self)^]);
+    Rtti.RegisterClasses([PClass(self)^]);
 end;
 
 class function TSynPersistent.RttiCustom: TRttiCustom;
@@ -3039,7 +3373,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin // expect UpperName as 'NAME='
   if (P <> nil) and (P^ <> '[') and (UpperName <> nil) then
   begin
@@ -4688,9 +5022,10 @@ begin
   result := SizeOf(pointer);
 end;
 
-function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer;
+  TryCustomVariants: PDocVariantOptions): PAnsiChar;
 begin
-  result := BinaryLoad(@Value, source, TypeInfo, nil, nil, [rkDynArray]);
+  result := BinaryLoad(@Value, source, TypeInfo, nil, nil, [rkDynArray], TryCustomVariants);
 end;
 
 function DynArraySave(var Value; TypeInfo: pointer): RawByteString;
@@ -4773,7 +5108,7 @@ begin
         exit;
       dec(n1); // both items are equal -> continue to next items
       dec(n2);
-    until (n1 = 0) or (n2 = 0);
+    until (n2 = 0) or (n1 = 0);
   result := n1 - n2;
 end;
 
@@ -4907,7 +5242,7 @@ begin
   end;
   offset := PtrUInt(fields.Size) - offset;
   if offset > 0 then
-    result := StrCompL(A, B, offset);
+    result := StrCompL(A, B, offset); // compare trailing binary
 end;
 
 function _BC_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
@@ -5022,7 +5357,7 @@ var
 begin
   Source.VarBlob(temp); // load into a private copy for in-place JSON parsing
   try
-    BinaryVariantLoadAsJSON(Data^, temp.buf);
+    BinaryVariantLoadAsJSON(Data^, temp.buf, Source.CustomVariants);
   finally
     temp.Done;
   end;
@@ -5044,7 +5379,7 @@ begin
   begin
     vt := VARIANT_SIZE[vt];
     if vt <> 0 then
-      if vt = 255 then
+      if vt = 255 then // valOleStr
         Dest.WriteVar(Data^.vAny, length(PWideString(Data^.vAny)^) * 2)
       else
         Dest.Write(@Data^.VInt64, vt); // simple types
@@ -5053,7 +5388,7 @@ begin
     Dest.WriteVar(Data^.vAny, length(PRawByteString(Data^.vAny)^))
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
-    Dest.WriteVar(Data^.vAny, length(PUnicodeString(Data^.vAny)^))
+    Dest.WriteVar(Data^.vAny, length(PUnicodeString(Data^.vAny)^) * 2)
   {$endif HASVARUSTRING}
   else
     _BS_VariantComplex(pointer(Data), Dest);
@@ -5073,7 +5408,7 @@ begin
     vt := VARIANT_SIZE[vt];
     if vt <> 0 then
       if vt = 255 then
-        with Source.VarBlob do
+        with Source.VarBlob do // valOleStr
           SetString(PWideString(Data^.vAny)^, PWideChar(Ptr), Len shr 1)
       else
         Source.Copy(@Data^.VInt64, vt); // simple types
@@ -5105,6 +5440,69 @@ begin
   result := SizeOf(variant);
 end;
 
+function ObjectCompare(A, B: TObject; CaseInSensitive: boolean): integer;
+var
+  rA, rB: TRttiCustom;
+  pA, pB: PRttiCustomProp;
+  i: integer;
+begin
+  if (A = nil) or (B = nil) or (A = B) then
+  begin
+    result := ComparePointer(A, B);
+    exit;
+  end;
+  result := 0;
+  rA := Rtti.RegisterClass(PClass(A)^); // faster than RegisterType(Info)
+  pA := pointer(rA.Props.List);
+  if PClass(B)^.InheritsFrom(PClass(A)^) then
+    // same (or similar/inherited) class -> compare per exact properties
+    for i := 1 to rA.Props.Count do
+    begin
+      result := pA^.CompareValue(A, B, pA^, CaseInSensitive);
+      if result <> 0 then
+        exit;
+      inc(pA);
+    end
+  else
+  begin
+    // compare properties by name
+    rB := Rtti.RegisterClass(PPointer(B)^);
+    for i := 1 to rA.Props.Count do
+    begin
+      pB := rB.Props.Find(pA^.Name^);
+      if pB <> nil then
+      begin
+        result := pA^.CompareValue(A, B, pB^, CaseInSensitive);
+        if result <> 0 then
+          exit;
+      end;
+      inc(pA);
+    end;
+  end;
+end;
+
+function _BC_Object(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ObjectCompare(PPointer(A)^, PPointer(B)^, {caseinsens=}false);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_Object(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := ObjectCompare(PPointer(A)^, PPointer(B)^, {caseinsens=}true);
+  result := SizeOf(pointer);
+end;
+
+function ObjectEquals(A, B: TObject): integer;
+begin
+  result := ObjectCompare(A, B, {caseinsensitive=}false);
+end;
+
+function ObjectEqualsI(A, B: TObject): integer;
+begin
+  result := ObjectCompare(A, B, {caseinsensitive=}true);
+end;
+
 
 function BinaryEquals(A, B: pointer; Info: PRttiInfo; PSize: PInteger;
   Kinds: TRttiKinds; CaseInSensitive: boolean): boolean;
@@ -5119,14 +5517,27 @@ begin
     begin
       size := cmp(A, B, Info, comp);
       if PSize <> nil then
-        PSize^ := size;
+        PSize^ := size; // warning: PSize not set if RTTI_COMPARE[] not available
       result := comp = 0;
     end
     else
-      result := false;
+      result := false; // no fair comparison possible
   end
   else
-    result := true;
+    result := true; // A=B at pointer level
+end;
+
+function BinaryCompare(A, B: pointer; Info: PRttiInfo;
+  CaseInSensitive: boolean): integer;
+var
+  cmp: TRttiCompare;
+begin
+  result := 0; // A=B at pointer level, or no fair comparison possible
+  if (A = B) or (Info = nil) then
+    exit;
+  cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
+  if Assigned(cmp) then
+    cmp(A, B, Info, result);
 end;
 
 {$ifndef PUREMORMOT2}
@@ -5200,6 +5611,15 @@ begin
     result := '';
 end;
 
+procedure BinarySave(Data: pointer; Info: PRttiInfo; Dest: TBufferWriter);
+var
+  save: TRttiBinarySave;
+begin
+  save := RTTI_BINARYSAVE[Info^.Kind];
+  if Assigned(save) then
+    save(Data, Dest, Info);
+end;
+
 function BinarySaveBytes(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): TBytes;
 var
   W: TBufferWriter;
@@ -5247,7 +5667,7 @@ begin
 end;
 
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
-  Kinds: TRttiKinds): RawUTF8;
+  Kinds: TRttiKinds; NoCrc32Trailer: boolean): RawUTF8;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
@@ -5261,7 +5681,8 @@ begin
   begin
     W := TBufferWriter.Create(temp{%H-});
     try
-      W.Write4(0); // placeholder for the trailing crc32c
+      if not NoCrc32Trailer then
+        W.Write4(0); // placeholder for the trailing crc32c
       save(Data, W, Info);
       len := W.TotalWritten;
       if W.Stream.Position = 0 then
@@ -5271,7 +5692,8 @@ begin
         tmp := W.FlushTo; // more than 8KB -> temporary allocation
         P := pointer(tmp);
       end;
-      PCardinal(P)^ := crc32c(0, P + 4, len - 4);
+      if not NoCrc32Trailer then
+        PCardinal(P)^ := crc32c(0, P + 4, len - 4);
       if UriCompatible then
         result := BinToBase64uri(P, len)
       else
@@ -5285,7 +5707,8 @@ begin
 end;
 
 function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
-  Len: PInteger; SourceMax: PAnsiChar; Kinds: TRttiKinds): PAnsiChar;
+  Len: PInteger; SourceMax: PAnsiChar; Kinds: TRttiKinds;
+  TryCustomVariants: PDocVariantOptions): PAnsiChar;
 var
   size: integer;
   read: TFastReader;
@@ -5295,6 +5718,7 @@ begin
   if Assigned(load) and (Info^.Kind in Kinds) then
   begin
     read.Init(Source, SourceMax - Source);
+    read.CustomVariants := TryCustomVariants;
     size := load(Data, read, Info);
     if Len <> nil then
       Len^ := size;
@@ -5305,14 +5729,14 @@ begin
 end;
 
 function BinaryLoad(Data: pointer; const Source: RawByteString; Info: PRttiInfo;
-  Kinds: TRttiKinds): boolean;
+  Kinds: TRttiKinds; TryCustomVariants: PDocVariantOptions): boolean;
 var
   P: PAnsiChar;
 begin
   if Info^.Kind in Kinds then
   begin
     P := pointer(Source);
-    P := BinaryLoad(Data, P, Info, nil, P + length(Source), Kinds);
+    P := BinaryLoad(Data, P, Info, nil, P + length(Source), Kinds, TryCustomVariants);
     result := (P <> nil) and (P - pointer(Source) = length(Source));
   end
   else
@@ -5321,7 +5745,7 @@ end;
 
 function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
-  NoCrc32Trailer: boolean): boolean;
+  NoCrc32Trailer: boolean; TryCustomVariants: PDocVariantOptions): boolean;
 var
   temp: TSynTempBuffer;
   tempend: pointer;
@@ -5333,14 +5757,15 @@ begin
     else
       result := Base64ToBin(Source, Len, temp);
     tempend := PAnsiChar(temp.buf) + temp.len;
-    if NoCrc32Trailer then
-      result := result and
-        (BinaryLoad(Data, temp.buf, Info, nil, tempend, Kinds) = tempend)
-    else
-      result := result and (temp.len >= 4) and
-        (crc32c(0, PAnsiChar(temp.buf) + 4, temp.len - 4) = PCardinal(temp.buf)^) and
-        (BinaryLoad(Data, PAnsiChar(temp.buf) + 4,
-          Info, nil, tempend, Kinds) = tempend);
+    if result then
+      if NoCrc32Trailer then
+        result := (BinaryLoad(Data, temp.buf, Info, nil, tempend,
+            Kinds, TryCustomVariants) = tempend)
+      else
+        result := (temp.len >= 4) and
+          (crc32c(0, PAnsiChar(temp.buf) + 4, temp.len - 4) = PCardinal(temp.buf)^) and
+          (BinaryLoad(Data, PAnsiChar(temp.buf) + 4, Info, nil, tempend,
+            Kinds, TryCustomVariants) = tempend);
     temp.Done;
   end
   else
@@ -5398,20 +5823,23 @@ begin
 end;
 
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
-  Len: PInteger; SourceMax: PAnsiChar): PAnsiChar;
+  Len: PInteger; SourceMax: PAnsiChar; TryCustomVariants: PDocVariantOptions): PAnsiChar;
 begin
-  result := BinaryLoad(@Rec, Source, TypeInfo, Len, SourceMax, rkRecordTypes);
+  result := BinaryLoad(@Rec, Source, TypeInfo, Len, SourceMax,
+    rkRecordTypes, TryCustomVariants);
 end;
 
-function RecordLoad(var Rec; const Source: RawByteString; TypeInfo: pointer): boolean;
+function RecordLoad(var Rec; const Source: RawByteString; TypeInfo: pointer;
+  TryCustomVariants: PDocVariantOptions): boolean;
 begin
-  result := BinaryLoad(@Rec, Source, TypeInfo, rkRecordTypes);
+  result := BinaryLoad(@Rec, Source, TypeInfo, rkRecordTypes, TryCustomVariants);
 end;
 
 function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec;
-  TypeInfo: pointer; UriCompatible: boolean): boolean;
+  TypeInfo: pointer; UriCompatible: boolean; TryCustomVariants: PDocVariantOptions): boolean;
 begin
-  result := BinaryLoadBase64(Source, Len, @Rec, TypeInfo, UriCompatible, rkRecordTypes);
+  result := BinaryLoadBase64(Source, Len, @Rec, TypeInfo, UriCompatible,
+    rkRecordTypes, {notrailer=}false, TryCustomVariants);
 end;
 
 
@@ -5439,7 +5867,7 @@ begin
   if aTypeInfo^.Kind <> rkDynArray then
     raise EDynArray.CreateUTF8('TDynArray.Init: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
-  InitRtti(RttiCustom.RegisterType(aTypeInfo), aValue, aCountPointer);
+  InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
 end;
 
 procedure TDynArray.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
@@ -5448,7 +5876,7 @@ begin
   if aTypeInfo^.Kind <> rkDynArray then
     raise EDynArray.CreateUTF8('TDynArray.InitSpecific: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
-  InitRtti(RttiCustom.RegisterType(aTypeInfo), aValue, aCountPointer);
+  InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
   fCompare := PT_SORT[aCaseInsensitive, aKind];
   if not Assigned(fCompare) then
     if aKind = ptVariant then
@@ -6467,9 +6895,11 @@ begin
     QuickSort.Compare := @fCompare;
   if Assigned(QuickSort.Compare) and (fValue <> nil) and (fValue^ <> nil) then
     if ElemSize = SizeOf(pointer) then
+      // dedicated function for pointers - e.g. T*ObjArray
       QuickSortPtr(aStart, aStop, QuickSort.Compare, fValue^)
     else
     begin
+      // generic process for any size of array items
       QuickSort.Value := fValue^;
       QuickSort.ElemSize := ElemSize;
       QuickSort.QuickSort(aStart, aStop);
@@ -6578,16 +7008,14 @@ begin
   end;
 end;
 
-function TDynArray.Equals(B: PDynArray; IgnoreCompare: boolean;
-  CaseSensitive: boolean): boolean;
+function TDynArray.Equals(B: PDynArray; IgnoreCompare, CaseSensitive: boolean): boolean;
 var
   i, n: integer;
   P1, P2: PAnsiChar;
 begin
   result := false;
   n := GetCount;
-  if (n <> B.Count) or (fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo) or
-     (rcfObjArray in fInfo.Flags) then
+  if (n <> B.Count) or (fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo) then
     exit;
   if Assigned(fCompare) and not ignorecompare then
   begin // use customized comparison
@@ -6608,6 +7036,40 @@ begin
   else
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
       fCountP, B.fCountP, fInfo.Cache.ItemInfo, casesensitive) = 0;
+end;
+
+function TDynArray.Compares(B: PDynArray; IgnoreCompare, CaseSensitive: boolean): integer;
+var
+  i, n: integer;
+  P1, P2: PAnsiChar;
+begin
+  n := GetCount;
+  result := n - B.Count;
+  if result <> 0 then
+    exit;
+  if fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo then
+  begin
+    result := ComparePointer(fValue^, B.fValue^);
+    exit;
+  end;
+  if Assigned(fCompare) and not ignorecompare then
+  begin // use customized comparison
+    P1 := fValue^;
+    P2 := B.fValue^;
+    for i := 1 to n do
+    begin
+      result := fCompare(P1^, P2^);
+      if result <> 0 then
+        exit;
+      inc(P1, ElemSize);
+      inc(P2, ElemSize);
+    end;
+  end
+  else if not(rcfArrayItemManaged in fInfo.Flags) then
+    result := StrCompL(fValue^, B.fValue^, ElemSize * cardinal(n))
+  else
+    result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
+      fCountP, B.fCountP, fInfo.Cache.ItemInfo, casesensitive);
 end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);
@@ -6729,6 +7191,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     dec(PtrUInt(p), SizeOf(TDynArrayRec)); // p^ = start of heap object
     if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
     begin
+      // we own the dynamic array instance -> direct reallocation
       if NewLength < OldLength then // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
@@ -6738,7 +7201,8 @@ begin // this method is faster than default System.DynArraySetLength() function
       ReallocMem(p, NeededSize);
     end
     else
-    begin // create copy
+    begin
+      // dynamic array already referenced elsewhere -> create copy
       GetMem(p, NeededSize);
       minLength := OldLength;
       if minLength > NewLength then
@@ -7168,7 +7632,6 @@ end;
 
 const
   _PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of pointer = (
-
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
     @HashAnsiString, @HashAnsiString, nil, @HashInteger,
@@ -7177,7 +7640,6 @@ const
     @HashInt64, @HashInt64, @HashSynUnicode, @HashInt64, @HashInt64,
     @HashVariant, @HashWideString, @HashAnsiString, @HashWord,
     nil, nil, nil, nil, nil, nil),
-
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
     @HashAnsiStringI, @HashAnsiString, nil, @HashInteger,
@@ -7186,7 +7648,6 @@ const
     @HashInt64, @HashInt64, @HashSynUnicodeI, @HashInt64, @HashInt64,
     @HashVariantI, @HashWideStringI, @HashAnsiStringI, @HashWord,
     nil, nil, nil, nil, nil, nil));
-
 
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
   aEventHash: TEventDynArrayHashOne; aHasher: THasher;
@@ -7244,12 +7705,13 @@ begin
     result := 0; // will be ignored afterwards for sure
 end;
 
-const // primes reduce memory consumption and enhance distribution
-  _PRIMES: array[0..38 {$ifndef CPU32DELPHI} + 15 {$endif}] of integer =(
+const
+  // reduces memory consumption and enhances distribution at hash table growing
+  _PRIMES: array[0..38 {$ifndef CPU32DELPHI} + 15 {$endif}] of integer = (
     {$ifndef CPU32DELPHI}
     31, 127, 251, 499, 797, 1259, 2011, 3203, 5087,
     8089, 12853, 20399, 81649, 129607, 205759,
-    {$endif}
+    {$endif CPU32DELPHI}
     // start after HASH_PO2=2^18=262144 for Delphi Win32 (poor 64-bit mul)
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
@@ -7258,6 +7720,7 @@ const // primes reduce memory consumption and enhance distribution
     334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
     1337987929, 1685759167, 2123923447);
 
+// as used internally by TDynArrayHasher.ReHash()
 function NextPrime(v: integer): integer; {$ifdef HASINLINE} inline;{$endif}
 var
   i: PtrInt;
@@ -7275,12 +7738,14 @@ end;
 function TDynArrayHasher.HashTableIndex(aHashCode: PtrUInt): PtrUInt;
 begin
   result := HashTableSize;
-  {$ifdef CPU32DELPHI} // Delphi Win32 is not efficient with 64-bit multiplication
+  {$ifdef CPU32DELPHI}
+  // Delphi Win32 is not efficient with 64-bit multiplication
   if result > HASH_PO2 then
     result := aHashCode mod result
   else
     result := aHashCode and (result - 1);
-  {$else} // FPC or dcc64 compile next line as very optimized asm
+  {$else}
+  // FPC or dcc64 compile next line as very optimized asm
   result := (QWord(aHashCode) * result) shr 32;
   // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
   {$endif CPU32DELPHI}
@@ -7295,9 +7760,11 @@ begin
   P := DynArray^.Value^;
   siz := DynArray^.ElemSize;
   if not (canHash in State) then
-  begin // Count=0 or Count<CountTrigger
+  begin
+    // Count=0 or Count<CountTrigger
     if hasHasher in State then
-      for result := 0 to DynArray^.Count - 1 do // O(n) linear search via hashing
+      // O(n) linear search via hashing
+      for result := 0 to DynArray^.Count - 1 do
         if HashOne(P) = aHashCode then
           exit
         else
@@ -7312,7 +7779,8 @@ begin
     ndx := HashTable[result] - 1; // index+1 was stored
     if ndx < 0 then
     begin
-      result := -(result + 1); // found void entry
+      // found void entry
+      result := -(result + 1);
       exit;
     end
     else if not aForAdd and (HashOne(P + ndx * siz) = aHashCode) then
@@ -7364,7 +7832,8 @@ begin
     else
       cmp := 1;
     if cmp = 0 then
-    begin // faster than hash e.g. for huge strings
+    begin
+      // faster than hash e.g. for huge strings
       if aHashTableIndex <> nil then
         aHashTableIndex^ := result;
       result := ndx;
@@ -7373,8 +7842,7 @@ begin
     // hash or slot collision -> search next item
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     inc(FindCollisions);
-    {$endif}
-    //inc(TDynArrayHashedCollisionCount);
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
     inc(result);
     if result = last then
       // reached the end -> search once from HashTable[0] to HashTable[first-1]
@@ -7397,7 +7865,8 @@ begin // on input: HashTable[result] slot is already computed
   if HashTableSize < n then
     RaiseFatalCollision('HashAdd HashTableSize', aHashCode);
   if HashTableSize - n < n shr 2 then
-  begin // grow hash table when 25% void
+  begin
+    // grow hash table when 25% void
     ReHash({forced=}true, {grow=}true);
     result := Find(aHashCode, {foradd=}true); // recompute position
     if result >= 0 then
@@ -7598,7 +8067,8 @@ begin
   n := DynArray^.count;
   if not forced and ((n = 0) or (n < CountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if forceGrow and (siz > 0) then // next power of two or next prime
+  if forceGrow and (siz > 0) then
+    // next power of two or next prime
     {$ifdef CPU32DELPHI}
     if siz < HASH_PO2 then
       siz := siz shl 1
@@ -8698,6 +9168,11 @@ begin
           RTTI_BINARYLOAD[k] := @_BL_Variant;
           RTTI_COMPARE[false, k] := @_BC_Variant;
           RTTI_COMPARE[true, k] := @_BCI_Variant;
+        end;
+      rkClass:
+        begin
+          RTTI_COMPARE[false, k] := @_BC_Object;
+          RTTI_COMPARE[true, k] := @_BCI_Object;
         end;
         // unsupported types will contain nil
     end;

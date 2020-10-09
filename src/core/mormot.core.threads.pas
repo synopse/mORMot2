@@ -474,7 +474,8 @@ type
 
 type
   /// the current state of a TBlockingProcess instance
-  TBlockingEvent = (evNone, evWaiting, evTimeOut, evRaised);
+  TBlockingEvent = (
+    evNone, evWaiting, evTimeOut, evRaised);
 
   {$M+}
   /// a semaphore used to wait for some process to be finished

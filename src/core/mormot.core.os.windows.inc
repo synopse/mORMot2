@@ -397,8 +397,8 @@ var s: AnsiString;
       FThreadID: LongWord; // thread ID (-1 indicates caller thread)
       FFlags: LongWord;    // reserved for future use, must be zero
     end;
-    {$endif}
-    {$endif}
+    {$endif MSWINDOWS}
+    {$endif ISDELPHIXE2}
 begin
   if not IsDebuggerPresent then
     exit;
@@ -1231,7 +1231,7 @@ const
   CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
   CSIDL_COMMON_APPDATA = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
-  csidl: array[TSystemPath] of integer =(
+  csidl: array[TSystemPath] of integer = (
     // spCommonData,       spUserData,          spCommonDocuments
     CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_DOCUMENTS,
     // spUserDocuments, spTempFolder, spLog
@@ -1489,7 +1489,7 @@ procedure CoUninitialize; stdcall; external 'ole32.dll';
 
 procedure CoInit;
 begin
-  inc(OleDBCoInitialized);
+  inc(OleDBCoInitialized); // is a threadvar: no InterlockedIncrrement() needed
   if OleDBCoInitialized = 1 then
     CoInitialize(nil);
 end;

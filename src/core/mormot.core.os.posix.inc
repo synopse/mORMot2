@@ -47,7 +47,8 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD;
   lpString1: PWideChar; cchCount1: longint; lpString2: PWideChar; cchCount2: longint): longint;
 var
   U1, U2: UnicodeString; // faster than WideString on Windows
-begin // not inlined to avoid try..finally UnicodeString protection
+begin
+  // not inlined to avoid try..finally UnicodeString protection
   if cchCount1 < 0 then
     cchCount1 := StrLenW(lpString1);
   SetString(U1, lpString1, cchCount1);
@@ -293,7 +294,7 @@ var
   tp: timespec;
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
-  Result := (Int64(tp.tv_sec) * THOUSAND) + (tp.tv_nsec div MILLION); // in ms
+  result := (Int64(tp.tv_sec) * THOUSAND) + (tp.tv_nsec div MILLION); // in ms
 end;
 
 {$endif DARWIN}
@@ -1124,8 +1125,8 @@ begin
     e := FpReaddir(d^);
     if e = nil then
       break;
-    if (e.d_type <> DT_UNKNOWN) and (e.d_type <> DT_DIR) and
-       (e.d_name[0] in ['1'..'9']) then
+    if (e.d_type = DT_UNKNOWN) or (e.d_type = DT_DIR) or
+       not (e.d_name[0] in ['1'..'9']) then
       continue;
     pid := GetCardinal(@e.d_name[0]);
     if pid = 0 then
@@ -1275,7 +1276,7 @@ const
   POSIXMOUNTPOINTS = '/etc/mtab';
   {$else}
   POSIXMOUNTPOINTS = '/proc/self/mounts';
-  {$endif}
+  {$endif BSD}
 
 function GetDiskPartitions: TDiskPartitions;
 var
@@ -1294,7 +1295,7 @@ begin
     mnt := GetNextItem(p);
     typ := GetNextItem(p);
     if (fs <> '') and (fs <> 'rootfs') and
-       not IdemPChars(fs, ['/DEV/LOOP']) and
+       not IdemPChar(pointer(fs), '/DEV/LOOP') and
        (mnt <> '') and (mnt <> '/mnt') and (typ <> '') and
        not IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) and
        not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS', 'DEVPTS',
@@ -1305,7 +1306,7 @@ begin
       fn := mnt;
       if GetDiskInfo(fn, av, fr, tot) and (tot > 1 shl 20) then
       begin
-  //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
+//writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         SetLength(result, n + 1);
         result[n].name := fs;
         result[n].mounted := fn;
@@ -1491,7 +1492,8 @@ begin
       SetLinuxDistrib(dist);
       release := dist;
     end;
-    if (OS_KIND = osLinux) and ((PosEx('RH', release) > 0) or (PosEx('Red Hat', release) > 0)) then
+    if (OS_KIND = osLinux) and
+       ((PosEx('RH', release) > 0) or (PosEx('Red Hat', release) > 0)) then
       OS_KIND := osRedHat;
   end;
   SystemInfo.release := release;

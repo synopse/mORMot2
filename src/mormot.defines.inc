@@ -17,6 +17,8 @@
 // - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
 // to access 'VarCopyProc'
 // - shall be set at the package options level, and left untouched by default
+// - note: you should probably also set "Generate DCUs only" in Project Options
+// -> Delphi Compiler -> Output C/C++ -> C/C++ output file generation
 
 {.$define PUREMORMOT2}
 // if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
@@ -348,7 +350,6 @@
       {$define HASNEWFILEAGE}
       {$define HASINLINE}
       {$define HASINLINEDELPHI}
-      {$define HASINLINENOTX86}
       {$define HASREGION}
       {$define HASFASTMM4}
       // you can define this so that GetMemoryInfo/TSynMonitorMemory returns
@@ -430,7 +431,6 @@
       {$ifdef VER320withoutAprilUpdate}
         // circumvent early Delphi 10.2 Tokyo Win64 compiler bug
         {$undef HASINLINE}
-        {$define HASINLINENOTX86}
       {$endif}
       {$endif}
     {$ifend}

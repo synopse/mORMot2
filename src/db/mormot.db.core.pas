@@ -14,6 +14,8 @@ unit mormot.db.core;
     - TJSONWriter Specialized for Database Export
     - TSynTableStatement SQL SELECT Parser
 
+    This unit is used by both mormot.db.* units and mormot.orm.* units.
+
   *****************************************************************************
 }
 
@@ -31,6 +33,7 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.variants,
+  mormot.core.rtti,
   mormot.core.json;
 
 
@@ -66,7 +69,7 @@ const
 type
   /// handled field/parameter/column types for abstract database access
   // - this will map JSON-compatible low-level database-level access types, not
-  // high-level Delphi types as TSQLFieldType defined in mORMot.pas
+  // high-level object pascal types as TSQLFieldType defined in mORMot.pas
   // - it does not map either all potential types as defined in DB.pas (which
   // are there for compatibility with old RDBMS, and are not abstract enough)
   // - those types can be mapped to standard SQLite3 generic types, i.e.
@@ -91,7 +94,8 @@ type
 
   /// how TSQLVar may be processed
   // - by default, ftDate will use seconds resolution unless svoDateWithMS is set
-  TSQLVarOption = (svoDateWithMS);
+  TSQLVarOption = (
+    svoDateWithMS);
 
   /// defines how TSQLVar may be processed
   TSQLVarOptions = set of TSQLVarOption;
@@ -120,7 +124,7 @@ type
       ftDate: (
         VDateTime: TDateTime);
       ftCurrency: (
-        VCurrency: system.currency);
+        VCurrency: currency);
       ftUTF8: (
         VText: PUTF8Char);
       ftBlob: (
@@ -171,6 +175,16 @@ const
     varSynUnicode, varString);
 // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
 
+
+/// retrieve the text of a given Database field type enumeration
+// - see also TSQLDBFieldTypeToString() function
+function ToText(Field: TSQLDBFieldType): PShortString; overload;
+
+/// retrieve the ready-to-be displayed text of a given Database field
+// type enumeration
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
+
+
 /// returns TRUE if no bit inside this TSQLFieldBits is set
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
@@ -203,7 +217,8 @@ function FieldBitsToIndex(const Fields: TSQLFieldBits;
 function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
 
 /// convert an array of field indexes into a TSQLFieldBits set of bits
-procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits); overload;
+procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
+  out Fields: TSQLFieldBits); overload;
 
 // search a field index in an array of field indexes
 // - returns the index in Indexes[] of the given Field value, -1 if not found
@@ -235,6 +250,11 @@ function SQLVarLength(const Value: TSQLVar): integer;
 // - complex variant types would be converted into ftUTF8 JSON object/array
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
   var Output: TSQLVar);
+
+/// convert any Variant into a value encoded as with :(..:) inlined parameters
+// in FormatUTF8(Format,Args,Params)
+// - will transform into a UTF-8, between double quotes for string values
+procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
 
 /// guess the correct TSQLDBFieldType from a variant type
 function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
@@ -417,18 +437,12 @@ var
   /// a nullable currency value containing null
   NullableCurrencyNull: TNullableCurrency absolute NullVarData;
 
-/// creates a nullable Currency value from a supplied currency constant
-// - FPC does not allow direct assignment to a TNullableCurrency = type variant
-// variable: use this function to circumvent it
-// - use NullableCurrency() if you want to create a nullable Currency not from
-// a constant, but from a TSynCurrency safe type
-function NullableCurrencyConstant(const Value: system.currency): TNullableCurrency;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a nullable Currency value from a supplied TSynCurrency value
-// - we defined the TSynCurrency type to circumvent FPC cross-platform issues
+/// creates a nullable Currency value from a supplied currency value
+// - we defined the currency type to circumvent FPC cross-platform issues
 // with currency values;
-function NullableCurrency(const Value: TSynCurrency): TNullableCurrency;
+// - warning: FPC does not support assignment to a TNullableCurrency = type variant
+// variable: use this function to circumvent it
+function NullableCurrency(const Value: currency): TNullableCurrency;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
@@ -440,16 +454,16 @@ function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
 
 /// check if a TNullableCurrency is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the Currency value
-// - we defined the TSynCurrency type to circumvent FPC cross-platform issues
+// - we defined the currency type to circumvent FPC cross-platform issues
 // with currency values;
-function NullableCurrencyToValue(const V: TNullableCurrency; out Value: TSynCurrency): boolean;
+function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableCurrency is null, or return its value
 // - returns 0 if V is null or empty, or the stored Currency value
-// - we defined the TSynCurrency type to circumvent FPC cross-platform issues
+// - we defined the currency type to circumvent FPC cross-platform issues
 // with currency values;
-function NullableCurrencyToValue(const V: TNullableCurrency): TSynCurrency;
+function NullableCurrencyToValue(const V: TNullableCurrency): currency;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -652,6 +666,49 @@ procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
 // contain the field names, from SELECT ...field names... FROM
 function isSelect(P: PUTF8Char; SelectClause: PRawUTF8 = nil): boolean;
 
+/// compute the SQL corresponding to a WHERE clause
+// - returns directly the Where value if it starts with one the
+// ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
+// - otherwise, append ' WHERE '+Where
+function SQLFromWhere(const Where: RawUTF8): RawUTF8;
+
+/// compute a SQL SELECT statement from its parameters
+function SQLFromSelect(const TableName, Select, Where, SimpleFields: RawUTF8): RawUTF8;
+
+/// find out if the supplied WHERE clause starts with one of the
+// ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
+function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
+
+/// compute 'PropName in (...)' where clause for a SQL statement
+// - if Values has no value, returns ''
+// - if Values has a single value, returns 'PropName="Values0"' or inlined
+// 'PropName=:("Values0"):' if ValuesInlined is true
+// - if Values has more than one value, returns 'PropName in ("Values0","Values1",...)'
+// or 'PropName in (:("Values0"):,:("Values1"):,...)' if length(Values)<ValuesInlinedMax
+// - PropName can be used as a prefix to the 'in ()' clause, in conjunction
+// with optional Suffix value
+function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
+  const Suffix: RawUTF8 = ''; ValuesInlinedMax: integer = 0): RawUTF8; overload;
+
+/// compute 'PropName in (...)' where clause for a SQL statement
+// - if Values has no value, returns ''
+// - if Values has a single value, returns 'PropName=Values0' or inlined
+// 'PropName=:(Values0):' if ValuesInlined is bigger than 1
+// - if Values has more than one value, returns 'PropName in (Values0,Values1,...)'
+// or 'PropName in (:(Values0):,:(Values1):,...)' if length(Values)<ValuesInlinedMax
+// - PropName can be used as a prefix to the 'in ()' clause, in conjunction
+// with optional Suffix value
+function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
+  const Suffix: RawUTF8 = ''; ValuesInlinedMax: integer = 0): RawUTF8; overload;
+
+/// naive search of '... FROM TableName ...' pattern in the supplied SQL
+function GetTableNameFromSQLSelect(const SQL: RawUTF8;
+  EnsureUniqueTableInFrom: boolean): RawUTF8;
+
+/// naive search of '... FROM Table1,Table2 ...' pattern in the supplied SQL
+function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
+
+
 
 { ************ TJSONWriter Specialized for Database Export }
 
@@ -841,8 +898,8 @@ type
     // - SQLStatement is left '' if the SQL statement is not correct
     // - if SQLStatement is set, the caller must check for TableName to match
     // the expected value, then use the Where[] to retrieve the content
-    constructor Create(const SQL: RawUTF8; GetFieldIndex: TSynTableFieldIndex;
-      SimpleFieldsBits: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1]);
+    constructor Create(const SQL: RawUTF8; const GetFieldIndex: TSynTableFieldIndex;
+      const SimpleFieldsBits: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1]);
     /// compute the SELECT column bits from the SelectFields array
     // - optionally set Select[].SubField into SubFields[Select[].Field]
     // (e.g. to include specific fields from MongoDB embedded document)
@@ -889,6 +946,19 @@ implementation
 
 
 { ************ Shared Database Fields and Values Definitions }
+
+function ToText(Field: TSQLDBFieldType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLDBFieldType), ord(Field));
+end;
+
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
+begin
+  if aType <= high(aType) then
+    result := TrimLeftLowerCaseToShort(ToText(aType))
+  else
+    FormatShort16('#%', [ord(aType)], result);
+end;
 
 function IsZero(const Fields: TSQLFieldBits): boolean;
 var
@@ -1029,11 +1099,11 @@ begin
 end;
 
 procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
-  var Fields: TSQLFieldBits);
+  out Fields: TSQLFieldBits);
 var
   i: integer;
 begin
-  FillZero(Fields);
+  FillZero(Fields{%H-});
   for i := 0 to Length(Index) - 1 do
     if Index[i] >= 0 then
       include(Fields, Index[i]);
@@ -1100,10 +1170,11 @@ end;
 
 function IsRowIDShort(const FieldName: shortstring): boolean;
 begin
-  result := (PInteger(@FieldName)^ and $DFDFFF = 2 + ord('I') shl 8 + ord('D') shl 16) or
-      ((PIntegerArray(@FieldName)^[0] and $dfdfdfff =
-        5 + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
-       (PIntegerArray(@FieldName)^[1] and $dfdf = ord('I') + ord('D') shl 8));
+  result := ((PIntegerArray(@FieldName)^[0] and $dfdfff =
+              2 + ord('I') shl 8 + ord('D') shl 16) or
+            ((PIntegerArray(@FieldName)^[0] and $dfdfdfff =
+              5 + ord('R') shl 8 + ord('O') shl 16 + ord('W') shl 24) and
+             (PIntegerArray(@FieldName)^[1] and $dfdf = ord('I') + ord('D') shl 8)));
 end;
 
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
@@ -1159,7 +1230,8 @@ begin
             Output.VType := ftUTF8;
             Output.VText := VPointer;
           end;
-      else // handle less current cases
+      else
+        // handle less current cases
         if VariantToInt64(Input, Output.VInt64) then
           Output.VType := ftInt64
         else
@@ -1174,6 +1246,18 @@ begin
             Output.VType := ftNull;
         end;
       end;
+end;
+
+procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
+var
+  tmp: RawUTF8;
+  wasString: boolean;
+begin
+  VariantToUTF8(V, tmp, wasString);
+  if wasString then
+    QuotedStr(tmp, '"', result)
+  else
+    result := tmp;
 end;
 
 function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
@@ -1300,12 +1384,7 @@ end;
 
 // TNullableCurrency
 
-function NullableCurrencyConstant(const Value: system.currency): TNullableCurrency;
-begin
-  PVariant(@result)^ := Value;
-end;
-
-function NullableCurrency(const Value: TSynCurrency): TNullableCurrency;
+function NullableCurrency(const Value: currency): TNullableCurrency;
 begin
   CurrencyToVariant(Value, PVariant(@result)^);
 end;
@@ -1315,14 +1394,14 @@ begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
-function NullableCurrencyToValue(const V: TNullableCurrency; out Value:
-  TSynCurrency): Boolean;
+function NullableCurrencyToValue(const V: TNullableCurrency;
+  out Value: currency): Boolean;
 begin
   PInt64(@Value)^ := 0;
   result := not VarDataIsEmptyOrNull(@V) and VariantToCurrency(PVariant(@V)^, Value);
 end;
 
-function NullableCurrencyToValue(const V: TNullableCurrency): TSynCurrency;
+function NullableCurrencyToValue(const V: TNullableCurrency): currency;
 begin
   VariantToCurrency(PVariant(@V)^, result);
 end;
@@ -1342,8 +1421,8 @@ end;
 function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): Boolean;
 begin
   Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^,
-    Double(Value));
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToDouble(PVariant(@V)^, Double(Value));
 end;
 
 function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
@@ -1366,8 +1445,8 @@ end;
 function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): Boolean;
 begin
   Value := 0;
-  result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^,
-    PInt64(@Value)^);
+  result := not VarDataIsEmptyOrNull(@V) and
+            VariantToInt64(PVariant(@V)^, PInt64(@Value)^);
 end;
 
 function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
@@ -1462,8 +1541,8 @@ end;
 
 function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
 begin
-  result := Iso8601ToDateTimePUTF8Char(PUTF8Char(
-    pointer(ParamValueWithMagic)) + 3, length(ParamValueWithMagic) - 3);
+  result := Iso8601ToDateTimePUTF8Char(PUTF8Char(pointer(ParamValueWithMagic)) + 3,
+    length(ParamValueWithMagic) - 3);
 end;
 
 
@@ -1491,27 +1570,30 @@ begin
       begin
         P := UnQuoteSQLStringVar(P, ParamValue);
         if P = nil then
-          exit; // not a valid quoted string (e.g. unexpected end in middle of it)
+          // not a valid quoted string (e.g. unexpected end in middle of it)
+          exit;
         ParamType := sptText;
         L := length(ParamValue) - 3;
         if L > 0 then
         begin
           c := PInteger(ParamValue)^ and $00ffffff;
           if c = JSON_BASE64_MAGIC then
-          begin // ':("\uFFF0base64encodedbinary"):' format -> decode
+          begin
+            // ':("\uFFF0base64encodedbinary"):' format -> decode
             Base64MagicDecode(ParamValue); // wrapper function to avoid temp. string
             ParamType := sptBlob;
           end
           else if (c = JSON_SQLDATE_MAGIC) and
-            IsIso8601(PUTF8Char(pointer(ParamValue)) + 3, L) then
-          begin // handle ':("\uFFF112012-05-04"):' format
+                  IsIso8601(PUTF8Char(pointer(ParamValue)) + 3, L) then
+          begin
+            // handle ':("\uFFF112012-05-04"):' format
             Delete(ParamValue, 1, 3);   // return only ISO-8601 text
             ParamType := sptDateTime;   // identified as Date/Time
           end;
         end;
       end;
-    '-', '+', '0'..'9':
-      begin // allow 0 or + in SQL
+    '-', '+', '0'..'9': // allow 0 or + in SQL
+      begin
         // check if P^ is a true numerical value
         PBeg := pointer(P);
         ParamType := sptInteger;
@@ -1589,7 +1671,7 @@ begin
   FastSetString(result, pointer(SQL), length(SQL)); // private copy for unescape
   P := pointer(result); // in-place string unescape (keep SQL untouched)
   Gen := P + ppBeg - 1; // Gen^ just before :(
-  inc(P, ppBeg + 1);   // P^ just after :(
+  inc(P, ppBeg + 1);    // P^ just after :(
   repeat
     Gen^ := '?'; // replace :(...): by ?
     inc(Gen);
@@ -1613,7 +1695,7 @@ begin
       inc(P);
     end;
     if P^ = #0 then
-      Break;
+      break;
     inc(P, 2);
     inc(maxParam);
   until false;
@@ -1711,6 +1793,188 @@ begin
     where := condition
   else
     where := where + ' and ' + condition;
+end;
+
+function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
+begin
+  result := IdemPCharArray(pointer(Where), [
+    'ORDER BY ', 'GROUP BY ', 'LIMIT ', 'OFFSET ',
+    'LEFT ', 'RIGHT ', 'INNER ', 'OUTER ', 'JOIN ']) >= 0;
+end;
+
+function SQLFromWhere(const Where: RawUTF8): RawUTF8;
+begin
+  if Where = '' then
+    result := ''
+  else if SQLWhereIsEndClause(Where) then
+    result := ' ' + Where
+  else
+    result := ' WHERE ' + Where;
+end;
+
+function SQLFromSelect(const TableName, Select, Where, SimpleFields: RawUTF8): RawUTF8;
+begin
+  if Select = '*' then
+    // don't send BLOB values to query: retrieve simple = all non-blob fields
+    result := SimpleFields
+  else
+    result := Select;
+  result := 'SELECT ' + result + ' FROM ' + TableName + SQLFromWhere(Where);
+end;
+
+function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
+  const Suffix: RawUTF8; ValuesInlinedMax: integer): RawUTF8;
+var
+  n, i: integer;
+  temp: TTextWriterStackBuffer;
+begin
+  n := length(Values);
+  if n > 0 then
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      AddString(PropName);
+      if n = 1 then
+      begin
+        if ValuesInlinedMax > 1 then
+          AddShort('=:(')
+        else
+          Add('=');
+        AddQuotedStr(pointer(Values[0]), '''');
+        if ValuesInlinedMax > 1 then
+          AddShort('):');
+      end
+      else
+      begin
+        AddShort(' in (');
+        for i := 0 to n - 1 do
+        begin
+          if ValuesInlinedMax > n then
+            Add(':', '(');
+          AddQuotedStr(pointer(Values[i]), '''');
+          if ValuesInlinedMax > n then
+            AddShort('):,')
+          else
+            Add(',');
+        end;
+        CancelLastComma;
+        Add(')');
+      end;
+      AddString(Suffix);
+      SetText(result);
+    finally
+      Free;
+    end
+  else
+    result := '';
+end;
+
+function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
+  const Suffix: RawUTF8; ValuesInlinedMax: integer): RawUTF8;
+var
+  n, i: integer;
+  temp: TTextWriterStackBuffer;
+begin
+  n := length(Values);
+  if n > 0 then
+    with TBaseWriter.CreateOwnedStream(temp) do
+    try
+      AddString(PropName);
+      if n = 1 then
+      begin
+        if ValuesInlinedMax > 1 then
+          AddShort('=:(')
+        else
+          Add('=');
+        Add(Values[0]);
+        if ValuesInlinedMax > 1 then
+          AddShort('):');
+      end
+      else
+      begin
+        AddShort(' in (');
+        for i := 0 to n - 1 do
+        begin
+          if ValuesInlinedMax > n then
+            Add(':', '(');
+          Add(Values[i]);
+          if ValuesInlinedMax > n then
+            AddShort('):,')
+          else
+            Add(',');
+        end;
+        CancelLastComma;
+        Add(')');
+      end;
+      AddString(Suffix);
+      SetText(result);
+    finally
+      Free;
+    end
+  else
+    result := '';
+end;
+
+function GetTableNameFromSQLSelect(const SQL: RawUTF8;
+  EnsureUniqueTableInFrom: boolean): RawUTF8;
+var
+  i, j, k: integer;
+begin
+  i := PosI(' FROM ', SQL);
+  if i > 0 then
+  begin
+    inc(i, 6);
+    while SQL[i] in [#1..' '] do
+      inc(i);
+    j := 0;
+    while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
+      inc(j);
+    if cardinal(j - 1) < 64 then
+    begin
+      k := i + j;
+      while SQL[k] in [#1..' '] do
+        inc(k);
+      if not EnsureUniqueTableInFrom or (SQL[k] <> ',') then
+      begin
+        FastSetString(result, PAnsiChar(PtrInt(SQL) + i - 1), j);
+        exit;
+      end;
+    end;
+  end;
+  result := '';
+end;
+
+function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
+var
+  i, j, k, n: integer;
+begin
+  result := nil;
+  n := 0;
+  i := PosI(' FROM ', SQL);
+  if i > 0 then
+  begin
+    inc(i, 6);
+    repeat
+      while SQL[i] in [#1..' '] do
+        inc(i);
+      j := 0;
+      while tcIdentifier in TEXT_CHARS[SQL[i + j]] do
+        inc(j);
+      if cardinal(j - 1) > 64 then
+      begin
+        result := nil;
+        exit; // seems too big
+      end;
+      k := i + j;
+      while SQL[k] in [#1..' '] do
+        inc(k);
+      SetLength(result, n + 1);
+      FastSetString(result[n], PAnsiChar(PtrInt(SQL) + i - 1), j);
+      inc(n);
+      if SQL[k] <> ',' then
+        break;
+      i := k + 1;
+    until false;
+  end;
 end;
 
 
@@ -1854,7 +2118,7 @@ const
   NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
 
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
-  GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits);
+  const GetFieldIndex: TSynTableFieldIndex; const SimpleFieldsBits: TSQLFieldBits);
 var
   Prop, whereBefore: RawUTF8;
   P, B: PUTF8Char;
@@ -1868,7 +2132,8 @@ var
     else if IsRowID(pointer(Prop)) then
       result := 0
     else
-    begin // 0 = ID field
+    begin
+      // 0 = ID field
       result := GetFieldIndex(Prop);
       if result >= 0 then // -1 = no valid field name
         inc(result);  // otherwise: PropertyIndex+1
@@ -1911,7 +2176,8 @@ var
       P := GotoNextNotSpace(P + 1);
     end
     else if P^ = '.' then
-    begin // MongoDB-like field.subfield1.subfield2
+    begin
+      // MongoDB-like field.subfield1.subfield2
       B := P;
       repeat
         inc(P);

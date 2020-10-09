@@ -59,7 +59,8 @@ type
   TWebSocketFrameOpCodes = set of TWebSocketFrameOpCode;
 
   /// define one attribute of a WebSockets frame data
-  TWebSocketFramePayload = (fopAlreadyCompressed);
+  TWebSocketFramePayload = (
+    fopAlreadyCompressed);
   /// define the attributes of a WebSockets frame data
 
   TWebSocketFramePayloads = set of TWebSocketFramePayload;
@@ -163,7 +164,7 @@ type
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; virtual; abstract;
     /// set the fEncryption: IProtocol according to the supplied key
-    // - any asymetric algorithm need to know which side (client/server) to work on
+    // - any asymmetric algorithm needs to know which side (client/server) to work on
     // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESCFB)
     // using SHA256Weak(aKey)
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
@@ -840,7 +841,8 @@ type
   end;
 
   /// the current state of the client side processing thread
-  TWebSocketProcessClientThreadState = (sCreate, sRun, sFinished, sClosed);
+  TWebSocketProcessClientThreadState = (
+    sCreate, sRun, sFinished, sClosed);
 
   /// WebSockets processing thread used on client side
   // - will handle any incoming callback
@@ -1640,10 +1642,10 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
 var
   item: RawUTF8;
   i: PtrInt;
-  W: TFileBufferWriter;
+  W: TBufferWriter;
 begin
   FrameInit(focBinary, Content, ContentType, frame);
-  W := TFileBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(TRawByteStringStream);
   try
     W.WriteBinary(Head);
     W.Write1(byte(FRAME_HEAD_SEP));
@@ -3264,6 +3266,10 @@ begin
   result := @fSettings;
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$warnings off} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
+
 function THttpClientWebSockets.WebSocketsUpgrade(
   const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
   aWebSocketsCompression: boolean; aProtocol: TWebSocketProtocol;
@@ -3277,17 +3283,17 @@ var
   digest1, digest2: TSHA1Digest;
 begin
   try
+    if fProcess <> nil then
+    begin
+      result := 'Already upgraded to WebSockets';
+      if IdemPropNameU(fProcess.Protocol.URI, aWebSocketsURI) then
+        result := result + ' on this URI'
+      else
+        result := FormatUTF8('% with URI=[%] but requested [%]',
+          [result, fProcess.Protocol.URI, aWebSocketsURI]);
+      exit;
+    end;
     try
-      if fProcess <> nil then
-      begin
-        result := 'Already upgraded to WebSockets';
-        if IdemPropNameU(fProcess.Protocol.URI, aWebSocketsURI) then
-          result := result + ' on this URI'
-        else
-          result := FormatUTF8('% with URI=[%] but requested [%]',
-            [result, fProcess.Protocol.URI, aWebSocketsURI]);
-        exit;
-      end;
       if aProtocol = nil then
         if aWebSocketsAJAX then
           aProtocol := TWebSocketProtocolJSON.Create(aWebSocketsURI)
@@ -3345,17 +3351,21 @@ begin
       result := ''; // no error message = success
       fProcess := TWebSocketProcessClient.Create(self, aProtocol, fProcessName);
       aProtocol := nil; // protocol instance is owned by fProcess now
-    finally
-      aProtocol.Free;
+    except
+      on E: Exception do
+      begin
+        FreeAndNil(fProcess);
+        FormatUTF8('%: %', [E, E.Message], result);
+      end;
     end;
-  except
-    on E: Exception do
-    begin
-      FreeAndNil(fProcess);
-      FormatUTF8('%: %', [E, E.Message], result);
-    end;
+  finally
+    aProtocol.Free;
   end;
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings on} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
 
 
 { TWebSocketProcessClient }

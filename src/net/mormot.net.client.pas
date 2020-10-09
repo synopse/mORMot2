@@ -116,7 +116,8 @@ type
 type
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHTTP class yet
-  THttpRequestAuthentication = (wraNone, wraBasic, wraDigest, wraNegotiate);
+  THttpRequestAuthentication = (
+    wraNone, wraBasic, wraDigest, wraNegotiate);
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
@@ -1139,8 +1140,10 @@ end;
 
 procedure TWinHTTP.InternalCreateRequest(const aMethod, aURL: RawUTF8);
 const
-  ALL_ACCEPT: array[0..1] of PWideChar = ('*/*', nil);
-  ACCEPT_TYPES: array[boolean] of pointer = (@ALL_ACCEPT, nil);
+  ALL_ACCEPT: array[0..1] of PWideChar = (
+    '*/*', nil);
+  ACCEPT_TYPES: array[boolean] of pointer = (
+    @ALL_ACCEPT, nil);
 var
   Flags: cardinal;
 begin
@@ -1351,8 +1354,10 @@ end;
 
 procedure TWinINet.InternalCreateRequest(const aMethod, aURL: RawUTF8);
 const
-  ALL_ACCEPT: array[0..1] of PAnsiChar = ('*/*', nil);
-  ACCEPT_TYPES: array[boolean] of pointer = (@ALL_ACCEPT, nil);
+  ALL_ACCEPT: array[0..1] of PAnsiChar = (
+    '*/*', nil);
+  ACCEPT_TYPES: array[boolean] of pointer = (
+    @ALL_ACCEPT, nil);
 var
   Flags: cardinal;
 begin
@@ -1451,7 +1456,7 @@ end;
 
 function TWinINet.InternalQueryDataAvailable: cardinal;
 begin
-  if not InternetQueryDataAvailable(fRequest, Result, 0, 0) then
+  if not InternetQueryDataAvailable(fRequest, result, 0, 0) then
     raise EWinINet.Create;
 end;
 
@@ -1477,7 +1482,7 @@ end;
 function TWinHTTPUpgradeable.InternalRetrieveAnswer(var Header, Encoding,
   AcceptEncoding: RawUTF8; var Data: RawByteString): integer;
 begin
-  Result := inherited InternalRetrieveAnswer(Header, Encoding, AcceptEncoding, Data);
+  result := inherited InternalRetrieveAnswer(Header, Encoding, AcceptEncoding, Data);
 end;
 
 procedure TWinHTTPUpgradeable.InternalSendRequest(const aMethod: RawUTF8; const
@@ -1589,7 +1594,8 @@ end;
 procedure TCurlHTTP.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
 const
-  HTTPS: array[boolean] of string[1] = ('', 's');
+  HTTPS: array[boolean] of string[1] = (
+    '', 's');
 begin
   if not IsAvailable then
     raise ENetSock.CreateFmt('No available %s', [LIBCURL_DLL]);
@@ -1615,7 +1621,7 @@ end;
 
 function TCurlHTTP.GetCACertFile: RawUTF8;
 begin
-  Result := fSSL.CACertFile;
+  result := fSSL.CACertFile;
 end;
 
 procedure TCurlHTTP.SetCACertFile(const aCertFile: RawUTF8);
@@ -1698,7 +1704,7 @@ end;
 
 class function TCurlHTTP.IsAvailable: boolean;
 begin
-  Result := CurlIsAvailable;
+  result := CurlIsAvailable;
 end;
 
 procedure TCurlHTTP.InternalSendRequest(const aMethod: RawUTF8; const aData:

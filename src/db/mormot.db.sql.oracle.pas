@@ -186,7 +186,7 @@ type
   end;
 
   /// implements a statement via the native Oracle Client Interface (OCI)
-  // - those statements can be prepared on the Delphi side, but by default we
+  // - those statements can be prepared on the client side, but by default we
   // enabled the OCI-side statement cache, not to reinvent the wheel this time
   // - note that bound OUT ftUTF8 parameters will need to be pre-allocated
   // before calling - e.g. via BindTextU(StringOfChar(3000),paramOut)
@@ -277,7 +277,7 @@ type
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
     // any rounding/conversion error from floating-point types
-    function ColumnCurrency(Col: integer): system.currency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -468,7 +468,8 @@ const
   type_owner_name: RawUTF8 = 'SYS';
   type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
   type_Varchar2ListName: RawUTF8 = 'ODCIVARCHAR2LIST';
-  type_Credential: array[boolean] of integer = (OCI_CRED_RDBMS, OCI_CRED_EXT);
+  type_Credential: array[boolean] of integer = (
+    OCI_CRED_RDBMS, OCI_CRED_EXT);
 begin
   log := SynDBLog.Enter(self, 'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
@@ -637,7 +638,7 @@ function TSQLDBOracleConnection.PasswordChange: boolean;
 var
   password: RawUTF8;
 begin
-  Result := False;
+  result := False;
   if Properties is TSQLDBOracleConnectionProperties then
     if Assigned(TSQLDBOracleConnectionProperties(Properties).OnPasswordExpired) then
     begin
@@ -648,7 +649,7 @@ begin
           Length(Properties.UserID), Pointer(Properties.PassWord), Length(Properties.PassWord),
           Pointer(password), Length(password), OCI_DEFAULT or OCI_AUTH), fError);
       TSQLDBOracleConnectionProperties(Properties).PasswordChanged(password);
-      Result := True;
+      result := True;
     end;
 end;
 
@@ -803,7 +804,7 @@ begin
       'use EMPTY_BLOB() to initialize it', [self]);
 end;
 
-function TSQLDBOracleStatement.ColumnCurrency(Col: integer): system.currency;
+function TSQLDBOracleStatement.ColumnCurrency(Col: integer): currency;
 var
   C: PSQLDBColumnProperty;
   V: PUTF8Char;
@@ -841,7 +842,7 @@ function TSQLDBOracleStatement.ColumnDouble(Col: integer): double;
 var
   C: PSQLDBColumnProperty;
   V: pointer;
-  Curr: system.currency;
+  Curr: currency;
 begin
   V := GetCol(Col, C);
   if V = nil then // column is NULL
@@ -1776,7 +1777,8 @@ end;
 
 procedure TSQLDBOracleStatement.FreeHandles(AfterError: boolean);
 const // see http://gcov.php.net/PHP_5_3/lcov_html/ext/oci8/oci8_statement.c.gcov.php
-  RELEASE_MODE: array[boolean] of integer = (OCI_DEFAULT, OCI_STMTCACHE_DELETE);
+  RELEASE_MODE: array[boolean] of integer = (
+    OCI_DEFAULT, OCI_STMTCACHE_DELETE);
 var
   i, j: integer;
   P: PPointer;

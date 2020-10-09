@@ -304,7 +304,7 @@ type
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
     // any rounding/conversion error from floating-point types
-    function ColumnCurrency(Col: integer): system.currency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column text value as generic VCL string of the current Row, first Col is 0
@@ -321,7 +321,7 @@ type
     // - will save one data row in optimized binary format (if not in Null)
     // - virtual method called by FetchAllToBinary()
     // - follows the format expected by TSQLDBProxyStatement
-    procedure ColumnsToBinary(W: TFileBufferWriter; Null: pointer;
+    procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
       const ColTypes: TSQLDBFieldTypeDynArray); override;
 
     /// read-only access to the number of data rows stored
@@ -793,13 +793,13 @@ function TSQLDBRemoteConnectionProtocol.HandleInput(const input: RawByteString):
 begin
   result := input;
   SymmetricEncrypt(REMOTE_MAGIC, result);
-  result := SynLZDecompress(result);
+  result := AlgoSynLZ.Decompress(result);
 end;
 
 function TSQLDBRemoteConnectionProtocol.HandleOutput(const output: RawByteString):
   RawByteString;
 begin
-  result := SynLZCompress(output);
+  result := AlgoSynLZ.Compress(output);
   SymmetricEncrypt(REMOTE_MAGIC, result);
 end;
 
@@ -1371,7 +1371,7 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBProxyStatementAbstract.ColumnsToBinary(W: TFileBufferWriter;
+procedure TSQLDBProxyStatementAbstract.ColumnsToBinary(W: TBufferWriter;
   Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray);
 begin
   W.Write(fDataCurrentRowValuesStart, fDataCurrentRowValuesSize);
@@ -1417,7 +1417,7 @@ begin
   end;
 end;
 
-function TSQLDBProxyStatementAbstract.ColumnCurrency(Col: integer): system.currency;
+function TSQLDBProxyStatementAbstract.ColumnCurrency(Col: integer): currency;
 var
   Data: PByte;
 begin

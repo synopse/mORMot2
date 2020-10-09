@@ -449,12 +449,12 @@ function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar = ','): double;
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar = ','): TSynCurrency; overload;
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar = ','): currency; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-procedure GetNextItemCurrency(var P: PUTF8Char; out result: TSynCurrency;
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency;
   Sep: AnsiChar = ','); overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
@@ -715,6 +715,7 @@ type
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
     fOnFlushToStream: TOnTextWriterFlush;
+    fInternalJSONWriter: TBaseWriter;
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
@@ -819,7 +820,7 @@ type
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(Value: PInt64); overload;
     /// append a Currency from its Int64 in-memory representation
-    procedure AddCurr64(const Value: TSynCurrency); overload;
+    procedure AddCurr64(const Value: currency); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// append an Unsigned 32-bit Integer Value as a String
     procedure AddU(Value: cardinal);
@@ -860,7 +861,7 @@ type
     // only LF (#10) depending on its internal options
     procedure AddCR; {$ifdef HASINLINE} inline; {$endif}
     /// append CR+LF (#13#10) chars and #9 indentation
-    // - indentation depth is defined by fHumanReadableLevel protected field
+    // - indentation depth is defined by the HumanReadableLevel value
     procedure AddCRAndIndent; virtual;
     /// write the same character multiple times
     procedure AddChars(aChar: AnsiChar; aCount: integer);
@@ -1089,6 +1090,9 @@ type
     // - excluding the bytes in the internal buffer (see PendingBytes)
     // - see TextLength for the total number of bytes, on both stream and memory
     property WrittenBytes: PtrUInt read fTotalFileSize;
+    /// low-level access to the current indentation level
+    property HumanReadableLevel: integer
+      read fHumanReadableLevel write fHumanReadableLevel;
     /// the last char appended is canceled
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
@@ -1148,7 +1152,7 @@ var
 // - will write also the properties published in the parent classes
 // - nested properties are serialized as nested JSON objects
 // - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY Delphi class, via
+// - you can add some custom serializers for ANY class, via
 // TJSONSerializer.RegisterCustomSerializer() class method
 // - call internaly TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectToJSON(Value: TObject;
@@ -1421,7 +1425,7 @@ procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUTF8); overload;
 procedure UInt64ToUtf8(Value: QWord; var result: RawUTF8);
 
 /// convert a string into its INTEGER Curr64 (value*10000) representation
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - if NoDecimal is defined, will be set to TRUE if there is no decimal, AND
 // the returned value will be an Int64 (not a PInt64(@Curr)^)
@@ -1429,30 +1433,30 @@ function StrToCurr64(P: PUTF8Char; NoDecimal: PBoolean = nil): Int64;
 
 /// convert a string into its currency representation
 // - will call StrToCurr64()
-function StrToCurrency(P: PUTF8Char): TSynCurrency;
+function StrToCurrency(P: PUTF8Char): currency;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a currency value into a string
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
-function CurrencyToStr(const Value: TSynCurrency): RawUTF8;
+function CurrencyToStr(const Value: currency): RawUTF8;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 function Curr64ToStr(const Value: Int64): RawUTF8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an INTEGER Curr64 (value*10000) into a string
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 procedure Curr64ToStr(const Value: Int64; var result: RawUTF8); overload;
 
 /// convert an INTEGER Curr64 (value*10000) into a string
-// - this type is compatible with Delphi currency memory map with PInt64(@Curr)^
+// - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 // - return the number of chars written to Dest^
@@ -1668,7 +1672,8 @@ var
   // - is properly implemented by mormot.core.json.pas: if this unit is not
   // included in the project, this function is nil
   // - used by mormot.core.data.pas RTTI_BINARYLOAD[tkVariant]() for complex types
-  BinaryVariantLoadAsJSON: procedure(var Value: variant; JSON: PUTF8Char);
+  BinaryVariantLoadAsJSON: procedure(var Value: variant; JSON: PUTF8Char;
+    TryCustomVariant: pointer);
 
 
 type
@@ -2396,7 +2401,7 @@ begin
   i := 1;
   while (i <= l) and (S[i] <= ' ') do
     Inc(i);
-  Result := Copy(S, i, Maxint);
+  result := Copy(S, i, Maxint);
 end;
 
 function TrimRight(const S: RawUTF8): RawUTF8;
@@ -2907,13 +2912,15 @@ begin
     P := PBeg;
     PS := Pointer(Value);
     repeat
-      if P^ = quote then
+      if P[0] = quote then
         if P[1] = quote then
+          // allow double quotes inside string
           inc(P)
-        else // allow double quotes inside string
-          break; // end quote
-      PS^ := P^;
-      inc(PByte(PS));
+        else
+          // end quote
+          break;
+      PS^ := P[0];
+      inc(PS);
       inc(P);
     until false;
   end;
@@ -2951,7 +2958,7 @@ var
   table: TNormTable absolute NormToUpperAnsi7;
   {$else}
   table: PNormTable;
-  {$endif}
+  {$endif CPUX86NOTPIC}
   c: AnsiChar;
   u: PAnsiChar;
 label
@@ -3987,12 +3994,12 @@ begin
     result := 0;
 end;
 
-function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar): TSynCurrency;
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar): currency;
 begin
   GetNextItemCurrency(P, result, Sep);
 end;
 
-procedure GetNextItemCurrency(var P: PUTF8Char; out result: TSynCurrency; Sep: AnsiChar);
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar);
 var
   tmp: TChar64;
 begin
@@ -4256,7 +4263,7 @@ var
   P: PAnsiChar;
   tmpbuf: TSynTempBuffer; // faster than a dynamic array
 begin
-  Result := '';
+  result := '';
   if ValuesCount = 0 then
     exit;
   if InlinedValue then
@@ -4280,8 +4287,8 @@ begin
       SetString(ints[i], P, L);
     end;
     // create result
-    FastSetString(Result, nil, Len);
-    P := pointer(Result);
+    FastSetString(result, nil, Len);
+    P := pointer(result);
     if Prefix <> '' then
     begin
       L := length(Prefix);
@@ -4324,7 +4331,7 @@ var
   P: PAnsiChar;
   tmp: TSynTempBuffer; // faster than a dynamic array
 begin
-  Result := '';
+  result := '';
   if ValuesCount = 0 then
     exit;
   if InlinedValue then
@@ -4347,8 +4354,8 @@ begin
       inc(int);
     end;
     // create result
-    FastSetString(Result, nil, Len);
-    P := pointer(Result);
+    FastSetString(result, nil, Len);
+    P := pointer(result);
     if Prefix <> '' then
     begin
       L := length(Prefix);
@@ -4387,14 +4394,14 @@ end;
 function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
   const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  Result := IntegerDynArrayToCSV(pointer(Values), length(Values),
+  result := IntegerDynArrayToCSV(pointer(Values), length(Values),
     Prefix, Suffix, InlinedValue);
 end;
 
 function Int64DynArrayToCSV(const Values: TInt64DynArray;
   const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  Result := Int64DynArrayToCSV(pointer(Values), length(Values),
+  result := Int64DynArrayToCSV(pointer(Values), length(Values),
     Prefix, Suffix, InlinedValue);
 end;
 
@@ -4837,7 +4844,7 @@ begin
   inc(B, Len);
 end;
 
-procedure TBaseWriter.AddCurr64(const Value: TSynCurrency);
+procedure TBaseWriter.AddCurr64(const Value: currency);
 begin
   AddCurr64(PInt64(@Value));
 end;
@@ -6247,7 +6254,7 @@ end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
 begin
-  Result := FastLocatePUTF8CharSorted(P, R, Value, TUTF8Compare(@StrComp));
+  result := FastLocatePUTF8CharSorted(P, R, Value, TUTF8Compare(@StrComp));
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
@@ -6256,13 +6263,13 @@ var
   L, i, cmp: PtrInt;
 begin // fast O(log(n)) binary search
   if not Assigned(Compare) or (R < 0) then
-    Result := 0
+    result := 0
   else if Compare(P^[R], Value) < 0 then // quick return if already sorted
-    Result := R + 1
+    result := R + 1
   else
   begin
     L := 0;
-    Result := -1; // return -1 if found
+    result := -1; // return -1 if found
     repeat
       i := (L + R) shr 1;
       cmp := Compare(P^[i], Value);
@@ -6275,7 +6282,7 @@ begin // fast O(log(n)) binary search
     until (L > R);
     while (i >= 0) and (Compare(P^[i], Value) >= 0) do
       dec(i);
-    Result := i + 1; // return the index where to insert
+    result := i + 1; // return the index where to insert
   end;
 end;
 
@@ -6287,23 +6294,23 @@ begin // fast O(log(n)) binary search
   L := 0;
   if Assigned(Compare) and (R >= 0) then
     repeat
-      Result := (L + R) shr 1;
-      cmp := Compare(P^[Result], Value);
+      result := (L + R) shr 1;
+      cmp := Compare(P^[result], Value);
       if cmp = 0 then
         exit;
       if cmp < 0 then
       begin
-        L := Result + 1;
+        L := result + 1;
         if L <= R then
           continue;
         break;
       end;
-      R := Result - 1;
+      R := result - 1;
       if L <= R then
         continue;
       break;
     until false;
-  Result := -1;
+  result := -1;
 end;
 
 {$ifdef CPUX64}
@@ -6378,8 +6385,8 @@ begin // fast O(log(n)) binary search using inlined StrCompFast()
     begin
       L := 0;
       repeat
-        Result := (L + R) shr 1;
-        piv := pointer(P^[Result]);
+        result := (L + R) shr 1;
+        piv := pointer(P^[result]);
         if piv <> nil then
         begin
           val := pointer(Value);
@@ -6394,13 +6401,13 @@ begin // fast O(log(n)) binary search using inlined StrCompFast()
             until c <> val^;
           if c > val^ then
           begin
-            R := Result - 1;  // StrComp(P^[result],Value)>0
+            R := result - 1;  // StrComp(P^[result],Value)>0
             if L <= R then
               continue;
             break;
           end;
         end;
-        L := Result + 1;  // StrComp(P^[result],Value)<0
+        L := result + 1;  // StrComp(P^[result],Value)<0
         if L <= R then
           continue;
         break;
@@ -6408,10 +6415,10 @@ begin // fast O(log(n)) binary search using inlined StrCompFast()
     end
     else if P^[0] = nil then
     begin // '' should be in lowest P[] slot
-      Result := 0;
+      result := 0;
       exit;
     end;
-  Result := -1;
+  result := -1;
 end;
 
 {$endif CPUX64}
@@ -6422,7 +6429,7 @@ var
   tmp: array[byte] of AnsiChar;
 begin
   UpperCopy255Buf(@tmp, Value, ValueLen);
-  Result := FastFindPUTF8CharSorted(P, R, @tmp);
+  result := FastFindPUTF8CharSorted(P, R, @tmp);
 end;
 
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
@@ -6433,26 +6440,26 @@ begin // fast O(log(n)) binary search
   L := 0;
   if 0 <= R then
     repeat
-      Result := (L + R) shr 1;
-      cmp := ItemComp(P^[SortedIndexes[Result]], Value);
+      result := (L + R) shr 1;
+      cmp := ItemComp(P^[SortedIndexes[result]], Value);
       if cmp = 0 then
       begin
-        Result := SortedIndexes[Result];
+        result := SortedIndexes[result];
         exit;
       end;
       if cmp < 0 then
       begin
-        L := Result + 1;
+        L := result + 1;
         if L <= R then
           continue;
         break;
       end;
-      R := Result - 1;
+      R := result - 1;
       if L <= R then
         continue;
       break;
     until false;
-  Result := -1;
+  result := -1;
 end;
 
 function AddSortedRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
@@ -6462,14 +6469,14 @@ var
   n: PtrInt;
 begin
   if ForcedIndex >= 0 then
-    Result := ForcedIndex
+    result := ForcedIndex
   else
   begin
     if not Assigned(Compare) then
       Compare := @StrComp;
-    Result := FastLocatePUTF8CharSorted(pointer(Values), ValuesCount - 1,
+    result := FastLocatePUTF8CharSorted(pointer(Values), ValuesCount - 1,
       pointer(Value), Compare);
-    if Result < 0 then
+    if result < 0 then
       exit; // Value exists -> fails
   end;
   n := Length(Values);
@@ -6481,20 +6488,20 @@ begin
       SetLength(CoValues^, n);
   end;
   n := ValuesCount;
-  if Result < n then
+  if result < n then
   begin
-    n := (n - Result) * SizeOf(pointer);
-    MoveFast(Pointer(Values[Result]), Pointer(Values[Result + 1]), n);
-    PtrInt(Values[Result]) := 0; // avoid GPF
+    n := (n - result) * SizeOf(pointer);
+    MoveFast(Pointer(Values[result]), Pointer(Values[result + 1]), n);
+    PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues <> nil then
     begin
       {$ifdef CPU64} n := n shr 1; {$endif} // 64-bit pointer to 32-bit integer
-      MoveFast(CoValues^[Result], CoValues^[Result + 1], n);
+      MoveFast(CoValues^[result], CoValues^[result + 1], n);
     end;
   end
   else
-    Result := n;
-  Values[Result] := Value;
+    result := n;
+  Values[result] := Value;
   inc(ValuesCount);
 end;
 
@@ -6582,7 +6589,7 @@ var
 begin
   n := length(Values);
   if cardinal(Index) >= cardinal(n) then
-    Result := false
+    result := false
   else
   begin
     dec(n);
@@ -6596,7 +6603,7 @@ begin
       PtrUInt(Values[n]) := 0; // avoid GPF
     end;
     SetLength(Values, n);
-    Result := true;
+    result := true;
   end;
 end;
 
@@ -6607,7 +6614,7 @@ var
 begin
   n := ValuesCount;
   if cardinal(Index) >= cardinal(n) then
-    Result := false
+    result := false
   else
   begin
     dec(n);
@@ -6623,7 +6630,7 @@ begin
       MoveFast(pointer(Values[Index + 1]), pointer(Values[Index]), n * SizeOf(pointer));
       PtrUInt(Values[ValuesCount]) := 0; // avoid GPF
     end;
-    Result := true;
+    result := true;
   end;
 end;
 
@@ -6796,7 +6803,7 @@ begin
   Curr64ToStr(Value, result);
 end;
 
-function CurrencyToStr(const Value: TSynCurrency): RawUTF8;
+function CurrencyToStr(const Value: currency): RawUTF8;
 begin
   result := Curr64ToStr(PInt64(@Value)^);
 end;
@@ -6921,7 +6928,7 @@ begin
     result := -result;
 end;
 
-function StrToCurrency(P: PUTF8Char): TSynCurrency;
+function StrToCurrency(P: PUTF8Char): currency;
 begin
   PInt64(@result)^ := StrToCurr64(P, nil);
 end;
@@ -8632,7 +8639,7 @@ begin
     vtExtended:
       value := V.VExtended^;
     vtCurrency:
-      CurrencyToDouble(PSynCurrency(@V.VCurrency), value);
+      value := V.VCurrency^;
     vtVariant:
       value := V.VVariant^;
   else
@@ -9443,7 +9450,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexW;
     {$else}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexW; {$endif}
   if BinBytes > 0 then
@@ -9461,13 +9468,13 @@ var
 begin
   L := length(Bin);
   FastSetString(result, nil, L * 2);
-  mormot.core.text.BinToHex(pointer(Bin), pointer(Result), L);
+  mormot.core.text.BinToHex(pointer(Bin), pointer(result), L);
 end;
 
 function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
   FastSetString(result, nil, BinBytes * 2);
-  mormot.core.text.BinToHex(Bin, pointer(Result), BinBytes);
+  mormot.core.text.BinToHex(Bin, pointer(result), BinBytes);
 end;
 
 function HexToBin(const Hex: RawUTF8): RawByteString;
@@ -9496,7 +9503,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexW;
     {$else}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexW; {$endif}
   inc(Hex, BinBytes * 2);
@@ -9520,7 +9527,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
     {$else}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexWLower; {$endif}
   if BinBytes > 0 then
@@ -9553,7 +9560,7 @@ var {$ifdef CPUX86NOTPIC}
      tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
     {$else}
      tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin
   if (Bin = nil) or (Hex = nil) or (BinBytes <= 0) then
     exit;
@@ -9687,7 +9694,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
   if (Hex = nil) or (Bin = nil) then
@@ -9739,7 +9746,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
   if Hex = nil then
@@ -9775,7 +9782,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
   c: byte;
 begin
   {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
@@ -9810,7 +9817,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   if Hex <> nil then
   begin
@@ -10009,39 +10016,6 @@ end;
 function IPToCardinal(const aIP: RawUTF8): cardinal;
 begin
   IPToCardinal(pointer(aIP), result);
-end;
-
-function IsValidIP4Address(P: PUTF8Char): boolean;
-var
-  ndot: PtrInt;
-  V: PtrUInt;
-begin
-  result := false;
-  if (P = nil) or not (P^ in ['0'..'9']) then
-    exit;
-  V := 0;
-  ndot := 0;
-  repeat
-    case P^ of
-      #0:
-        break;
-      '.':
-        if (P[-1] = '.') or (V > 255) then
-          exit
-        else
-        begin
-          inc(ndot);
-          V := 0;
-        end;
-      '0'..'9':
-        V := (V * 10) + ord(P^) - 48;
-    else
-      exit;
-    end;
-    inc(P);
-  until false;
-  if (ndot = 3) and (V <= 255) and (P[-1] <> '.') then
-    result := true;
 end;
 
 function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;

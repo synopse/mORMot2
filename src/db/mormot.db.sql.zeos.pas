@@ -604,7 +604,7 @@ begin
   if result then
     meta.ClearCache; // we need to retrieve the actual metadata
   {$ifdef ZEOS72UP} // new since 7.2up
-  if Result and meta.GetDatabaseInfo.SupportsArrayBindings then
+  if result and meta.GetDatabaseInfo.SupportsArrayBindings then
   begin
     case GetDBMS of
       dPostgreSQL:
@@ -662,7 +662,7 @@ begin
     sTableName := meta.GetIdentifierConvertor.ExtractQuote(UTF8ToString(TableName));
     sTableName := meta.AddEscapeCharToWildcards(sTableName); //do not use "like" search patterns ['_','%'] so they need to be escaped
     res := meta.GetColumns('', sSchema, sTableName, '');
-    FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray), Fields, djRawUTF8, @n, true);
+    FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray), Fields, ptRawUTF8, @n, true);
     FillCharFast(F, sizeof(F), 0);
     while res.Next do
     begin

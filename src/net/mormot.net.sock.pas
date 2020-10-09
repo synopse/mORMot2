@@ -206,7 +206,8 @@ var
 type
   /// the events monitored by TPollSocketAbstract
   // - we don't make any difference between urgent or normal read/write events
-  TPollSocketEvent = (pseRead, pseWrite, pseError, pseClosed);
+  TPollSocketEvent = (
+    pseRead, pseWrite, pseError, pseClosed);
 
   /// set of events monitored by TPollSocketAbstract
   TPollSocketEvents = set of TPollSocketEvent;
@@ -359,7 +360,8 @@ type
   TCrtSocketClass = class of TCrtSocket;
 
   /// identify the incoming data availability in TCrtSocket.SockReceivePending
-  TCrtSocketPending = (cspSocketError, cspNoData, cspDataAvailable);
+  TCrtSocketPending = (
+    cspSocketError, cspNoData, cspDataAvailable);
 
   {$M+}
   /// Fast low-level Socket implementation
@@ -665,7 +667,8 @@ type
 const
   /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
   // HTTPS = DEFAULT_PORT[true]
-  DEFAULT_PORT: array[boolean] of RawUTF8 = ('80', '443');
+  DEFAULT_PORT: array[boolean] of RawUTF8 = (
+    '80', '443');
 
 
 /// create a TCrtSocket, returning nil on error
@@ -1097,7 +1100,8 @@ end;
 
 function TNetSocketWrap.ShutdownAndClose(rdwr: boolean): TNetResult;
 const
-  SHUT_: array[boolean] of integer = (SHUT_RD, SHUT_RDWR);
+  SHUT_: array[boolean] of integer = (
+    SHUT_RD, SHUT_RDWR);
 begin
   if @self = nil then
     result := nrNoSocket
@@ -1414,7 +1418,8 @@ begin
 end;
 
 const
-  BINDTXT: array[boolean] of string[4] = ('open', 'bind');
+  BINDTXT: array[boolean] of string[4] = (
+    'open', 'bind');
   BINDMSG: array[boolean] of string = (
     'Is a server running on this address:port?',
     'Another process may be currently listening to this port!');
@@ -2230,7 +2235,7 @@ begin
     exit;
   if ResultClass = nil then
     ResultClass := TCrtSocket;
-  result := ResultClass.Create;
+  result := ResultClass.Create(Timeout);
   result.AcceptRequest(client, @addr);
   result.CreateSockIn; // use SockIn with 1KB input buffer: 2x faster
 end;
@@ -2332,7 +2337,8 @@ end;
 
 function TURI.URI: RawUTF8;
 const
-  Prefix: array[boolean] of RawUTF8 = ('http://', 'https://');
+  Prefix: array[boolean] of RawUTF8 = (
+    'http://', 'https://');
 begin
   if layer = nlUNIX then
     result := 'http://unix:' + Server + ':/' + address

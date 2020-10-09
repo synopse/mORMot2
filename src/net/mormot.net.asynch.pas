@@ -75,10 +75,12 @@ type
   // - by default, TPollAsynchSockets.Write will first try to send the data
   // using Send() in non-blocking mode, unless paoWritePollOnly is defined,
   // and fWrite will be used to poll output state and send it asynchronously
-  TPollAsynchSocketsOptions = set of (paoWritePollOnly);
+  TPollAsynchSocketsOptions = set of (
+    paoWritePollOnly);
 
   /// let TPollAsynchSockets.OnRead shutdown the socket if needed
-  TPollAsynchSocketOnRead = (sorContinue, sorClose);
+  TPollAsynchSocketOnRead = (
+    sorContinue, sorClose);
 
   {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections
@@ -967,7 +969,7 @@ begin
   SetCurrentThreadName('% % %', [fOwner.fProcessName, self, ToText(fProcess)^]);
   fOwner.NotifyThreadStart(self);
   try
-    idletix := GetTickCount64 + 1000;
+    idletix := mormot.core.os.GetTickCount64 + 1000;
     while not Terminated and (fOwner.fClients <> nil) do
     begin
       // implement parallel client connections for TAsynchClient
@@ -981,10 +983,10 @@ begin
           pseWrite:
             begin
               fOwner.fClients.ProcessWrite(30000);
-              if GetTickCount64 >= idletix then
+              if mormot.core.os.GetTickCount64 >= idletix then
               begin
                 fOwner.IdleEverySecond; // may take some time -> retrieve ticks again
-                idletix := GetTickCount64 + 1000;
+                idletix := mormot.core.os.GetTickCount64 + 1000;
               end;
             end;
         else
@@ -1291,9 +1293,9 @@ begin
   fServer.Close; // shutdown the socket to unlock Accept() in Execute
   if NewSocket('127.0.0.1', fServer.Port, nlTCP, false, 1000, 0, 0, 0, touchandgo) = nrOk then
     touchandgo.ShutdownAndClose(false);
-  endtix := GetTickCount64 + 10000;
+  endtix := mormot.core.os.GetTickCount64 + 10000;
   inherited Destroy;
-  while not fExecuteFinished and (GetTickCount64 < endtix) do
+  while not fExecuteFinished and (mormot.core.os.GetTickCount64 < endtix) do
     SleepHiRes(1); // wait for Execute to be finalized (unlikely)
   fServer.Free;
 end;

@@ -285,14 +285,17 @@ type
   {$endif LIBCURLMULTI}
 
   /// low-level version identifier of the libcurl library
-  TCurlVersion = (cvFirst, cvSecond, cvThird, cvFour, cvLast);
+  TCurlVersion = (
+    cvFirst, cvSecond, cvThird, cvFour, cvLast);
 
   /// low-level initialization option for libcurl library API
   // - currently, only giSSL is set, since giWin32 is redundant with WinHTTP
-  TCurlGlobalInit = set of (giNone, giSSL, giWin32, giAll);
+  TCurlGlobalInit = set of (
+    giNone, giSSL, giWin32, giAll);
 
   /// low-level message state for libcurl library API
-  TCurlMsg = (cmNone, cmDone);
+  TCurlMsg = (
+    cmNone, cmDone);
 
   /// low-level version information for libcurl library
   TCurlVersionInfo = record

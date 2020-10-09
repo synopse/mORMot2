@@ -316,7 +316,7 @@ type
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindCurrency(Param: Integer; Value: system.currency;
+    procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -414,7 +414,7 @@ type
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
     // any rounding/conversion error from floating-point types
-    function ColumnCurrency(Col: integer): system.currency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column text generic VCL string value of the current Row, first Col is 0
@@ -717,7 +717,7 @@ begin
   CheckParam(Param, ftInt64, IO)^.VInt64 := Value;
 end;
 
-procedure TSQLDBOleDBStatement.BindCurrency(Param: Integer; Value: system.currency;
+procedure TSQLDBOleDBStatement.BindCurrency(Param: Integer; Value: currency;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftCurrency, IO)^.VInt64 := PInt64(@Value)^;
@@ -872,7 +872,7 @@ begin
             P := @V^.VData
           else
             P := V^.VAnsiChar;
-          SetString(Result, P, V^.Length);
+          SetString(result, P, V^.Length);
         end;
       ftUTF8:
         if V^.Length = 0 then
@@ -884,26 +884,26 @@ begin
           else
             P := V^.VAnsiChar;
           // +1 below for trailing WideChar(#0) in the resulting RawUnicode
-          SetString(Result, P, V^.Length + 1);
+          SetString(result, P, V^.Length + 1);
         end;
     else
       SetString(result, PAnsiChar(@V^.Int64), sizeof(Int64));
     end;
 end;
 
-function TSQLDBOleDBStatement.ColumnCurrency(Col: integer): system.currency;
+function TSQLDBOleDBStatement.ColumnCurrency(Col: integer): currency;
 begin
-  GetCol64(Col, ftCurrency, Result);
+  GetCol64(Col, ftCurrency, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
-  GetCol64(Col, ftDate, Result);
+  GetCol64(Col, ftDate, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnDouble(Col: integer): double;
 begin
-  GetCol64(Col, ftDouble, Result);
+  GetCol64(Col, ftDouble, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnIndex(const aColumnName: RawUTF8): integer;
@@ -920,7 +920,7 @@ end;
 
 function TSQLDBOleDBStatement.ColumnInt(Col: integer): Int64;
 begin
-  GetCol64(Col, ftInt64, Result);
+  GetCol64(Col, ftInt64, result);
 end;
 
 function TSQLDBOleDBStatement.ColumnName(Col: integer): RawUTF8;
@@ -1189,15 +1189,18 @@ begin
 end;
 
 const
-  PARAMTYPE2OLEDB: array[TSQLDBParamInOutType] of DBPARAMIO = (DBPARAMIO_INPUT,
-    DBPARAMIO_OUTPUT, DBPARAMIO_INPUT or DBPARAMIO_OUTPUT);
-  FIELDTYPE2OLEDB: array[TSQLDBFieldType] of DBTYPE = (DBTYPE_EMPTY, DBTYPE_I4,
-    DBTYPE_I8, DBTYPE_R8, DBTYPE_CY, DBTYPE_DATE, DBTYPE_WSTR or DBTYPE_BYREF,
-    DBTYPE_BYTES or DBTYPE_BYREF);
-  FIELDTYPE2OLEDBTYPE_NAME: array[TSQLDBFieldType] of WideString = ('',
-    'DBTYPE_I4', 'DBTYPE_I8', 'DBTYPE_R8', 'DBTYPE_CY', 'DBTYPE_DATE',
+  PARAMTYPE2OLEDB: array[TSQLDBParamInOutType] of DBPARAMIO = (
+    DBPARAMIO_INPUT, DBPARAMIO_OUTPUT, DBPARAMIO_INPUT or DBPARAMIO_OUTPUT);
+
+  FIELDTYPE2OLEDB: array[TSQLDBFieldType] of DBTYPE = (
+    DBTYPE_EMPTY, DBTYPE_I4, DBTYPE_I8, DBTYPE_R8, DBTYPE_CY, DBTYPE_DATE,
+    DBTYPE_WSTR or DBTYPE_BYREF, DBTYPE_BYTES or DBTYPE_BYREF);
+
+  FIELDTYPE2OLEDBTYPE_NAME: array[TSQLDBFieldType] of WideString = (
+     '', 'DBTYPE_I4', 'DBTYPE_I8', 'DBTYPE_R8', 'DBTYPE_CY', 'DBTYPE_DATE',
     'DBTYPE_WVARCHAR', 'DBTYPE_BINARY');
 // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
+
   TABLE_PARAM_DATASOURCE: WideString = 'table';
 
 procedure TSQLDBOleDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);

@@ -539,7 +539,7 @@ type
   // implementation. The purpose of this superclass is to define certain fields
   // that are common to all module implementations. This structure therefore
   // contains a pInstance field, which will be used to store a class instance
-  // handling the virtual table as a pure Delphi class: the TSQLVirtualTableModule
+  // handling the virtual table as a pure class: the TSQLVirtualTableModule
   // class will use it internaly
   TSQLite3VTab = record
     /// The module for this virtual table
@@ -555,7 +555,7 @@ type
     // the string will be automatically freed by sqlite3.free() and the zErrMsg
     // field will be zeroed.
     zErrMsg: PUTF8Char;
-    /// this will be used to store a Delphi class instance handling the Virtual Table
+    /// this will be used to store a class instance handling the Virtual Table
     pInstance: TObject;
   end;
 
@@ -571,12 +571,12 @@ type
   // - This superclass exists in order to define fields of the cursor that are
   // common to all implementationsThis structure therefore contains a pInstance
   // field, which will be used to store a class instance handling the virtual
-  // table as a pure Delphi class: the TSQLVirtualTableModule class will use
+  // table as a pure class: the TSQLVirtualTableModule class will use
   // it internaly
   TSQLite3VTabCursor = record
     /// Virtual table of this cursor
     pVtab: PSQLite3VTab;
-    /// this will be used to store a Delphi class instance handling the cursor
+    /// this will be used to store a class instance handling the cursor
     pInstance: TObject;
   end;
 
@@ -1943,15 +1943,15 @@ type
 
 
 /// an internal function which calls Freemem(p)
-// - can be used to free some PUTF8Char pointer allocated by Delphi Getmem()
+// - can be used to free some PUTF8Char pointer allocated by the RTL Getmem()
 procedure sqlite3InternalFree(p: pointer); cdecl;
 
 /// an internal function which calls TObject(p).Free
-// - can be used to free some Delphi class instance
+// - can be used to free some class instance
 procedure sqlite3InternalFreeObject(p: pointer); cdecl;
 
 /// an internal function which calls RawByteString(p) := ''
-// - can be used to free some Delphi class instance
+// - can be used to free some class instance
 // - use a local tmp: pointer variable to prepare the reference count, e.g.
 // !  tmp := nil;
 // !  RawUTF8(tmp) := Text; // fast COW assignment
@@ -1965,7 +1965,7 @@ procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
 function CheckNumberOfArgs(Context: TSQLite3FunctionContext; expected,sent: integer): boolean;
 
 /// create a TSQLite3Module.pzErr UTF-8 text buffer according to the given
-// Delphi exception
+// Exception class
 procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUTF8Char);
 
 /// set a TSQLVar into a SQlite3 result context
@@ -2127,7 +2127,8 @@ type
   // corrupted if the operating system crashes or the computer loses power
   // before that data has been written to the disk surface. On the other hand,
   // some operations are as much as 50 or more times faster with synchronous OFF.
-  TSQLSynchronousMode = (smOff, smNormal, smFull);
+  TSQLSynchronousMode = (
+    smOff, smNormal, smFull);
 
   /// available file-level database connection locking-mode
   // - lmNormal locking-mode (the default unless overridden at compile-time using
@@ -2144,7 +2145,8 @@ type
   // are not released until the next time the database file is accessed.
   // - lmExclusive gives much better write performance, and could be used when
   // needed, in case of a heavy loaded mORMot server
-  TSQLLockingMode = (lmNormal, lmExclusive);
+  TSQLLockingMode = (
+    lmNormal, lmExclusive);
 
   /// available Run-Time limit categories
   // - as expected by sqlite3.limit() function and TSQLDatabase.Limit property
@@ -2164,8 +2166,9 @@ type
   // LIKE or GLOB operators.
   // - lcVariableNumber The maximum number of parameters in an SQL statement.
   // - lcTriggerDepth The maximum depth of recursion for triggers.
-  TSQLLimitCategory = (lcLength, lcSQLLength, lcColumn, lcExprDepth,
-    lcCompoundSelect, lcVDBEop, lcFunctionArg, lcAttached, lcLikePatternLength,
+  TSQLLimitCategory = (
+    lcLength, lcSQLLength, lcColumn, lcExprDepth, lcCompoundSelect,
+    lcVDBEop, lcFunctionArg, lcAttached, lcLikePatternLength,
     lcVariableNumber, lcTriggerDepth);
 
   {$M+}
@@ -3555,9 +3558,10 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..91] of PChar = ('sqlite3_initialize',
-    'sqlite3_shutdown', 'sqlite3_open', 'sqlite3_open_v2', 'sqlite3_key',
-    'sqlite3_rekey', 'sqlite3_close', 'sqlite3_libversion', 'sqlite3_errmsg',
+  SQLITE3_ENTRIES: array[0..91] of PChar = (
+    'sqlite3_initialize', 'sqlite3_shutdown',
+    'sqlite3_open', 'sqlite3_open_v2', 'sqlite3_key', 'sqlite3_rekey',
+    'sqlite3_close', 'sqlite3_libversion', 'sqlite3_errmsg',
     'sqlite3_extended_errcode', 'sqlite3_create_function',
     'sqlite3_create_function_v2', 'create_window_function',
     'sqlite3_create_collation', 'sqlite3_last_insert_rowid',
@@ -4968,7 +4972,8 @@ end;
 
 procedure TSQLDataBase.SetLockingMode(const Value: TSQLLockingMode);
 const
-  CMD: array[TSQLLockingMode] of RawUTF8 = ('NORMAL;', 'EXCLUSIVE;');
+  CMD: array[TSQLLockingMode] of RawUTF8 = (
+    'NORMAL;', 'EXCLUSIVE;');
 begin
   ExecuteNoException('PRAGMA locking_mode=' + CMD[Value]);
 end;
@@ -4986,7 +4991,8 @@ end;
 
 procedure TSQLDataBase.SetWALMode(Value: Boolean);
 const
-  CMD: array[boolean] of RawUTF8 = ('DELETE;', 'WAL;');
+  CMD: array[boolean] of RawUTF8 = (
+    'DELETE;', 'WAL;');
 begin
   ExecuteNoException('PRAGMA journal_mode=' + CMD[Value]);
 end;
@@ -5742,7 +5748,7 @@ begin
   end;
   if fPosition > fSize then
     fPosition := fSize;
-  Result := fPosition;
+  result := fPosition;
 end;
 
 procedure TSQLBlobStream.ChangeRow(RowID: Int64);
@@ -5845,7 +5851,7 @@ end;
 
 procedure TSQLStatementCached.Init(aDB: TSQLite3DB);
 begin
-  Caches.InitSpecific(TypeInfo(TSQLStatementCacheDynArray), Cache, djRawUTF8, @Count);
+  Caches.InitSpecific(TypeInfo(TSQLStatementCacheDynArray), Cache, ptRawUTF8, @Count);
   DB := aDB;
 end;
 

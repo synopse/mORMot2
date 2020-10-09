@@ -101,6 +101,31 @@ function NeedsJsonEscape(P: PUTF8Char; PLen: integer): boolean; overload;
 function JsonEscapeToUtf8(var D: PUTF8Char; P: PUTF8Char): PUTF8Char;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// test if the supplied buffer is a "string" value or a numerical value
+// (floating point or integer), according to the characters within
+// - this version will recognize null/false/true as strings
+// - e.g. IsString('0')=false, IsString('abc')=true, IsString('null')=true
+function IsString(P: PUTF8Char): boolean;
+
+/// test if the supplied buffer is a "string" value or a numerical value
+// (floating or integer), according to the JSON encoding schema
+// - this version will NOT recognize JSON null/false/true as strings
+// - e.g. IsStringJSON('0')=false, IsStringJSON('abc')=true,
+// but IsStringJSON('null')=false
+// - will follow the JSON definition of number, i.e. '0123' is a string (i.e.
+// '0' is excluded at the begining of a number) and '123' is not a string
+function IsStringJSON(P: PUTF8Char): boolean;
+
+/// test if the supplied buffer is a correct JSON value
+function IsValidJSON(P: PUTF8Char; len: PtrInt): boolean; overload;
+
+/// test if the supplied buffer is a correct JSON value
+function IsValidJSON(const s: RawUTF8): boolean; overload;
+
+/// simple method to go after the next ',' character
+procedure IgnoreComma(var P: PUTF8Char);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// returns TRUE if the given text buffer contains simple characters as
 // recognized by JSON extended syntax
 // - follow GetJSONPropName and GotoNextJSONObjectOrArray expectations
@@ -472,7 +497,7 @@ function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
 // - calls IdemPropName/JSONRetrieveStringField so input buffer won't be
 // modified, but caller should ignore this "ClassName" property later on
 // - the corresponding class shall have been previously registered by
-// RttiCustom.RegisterClass(), in order to retrieve the class type from it name -
+// Rtti.RegisterClass(), in order to retrieve the class type from it name -
 // or, at least, by the RTL Classes.RegisterClass() function, if AndGlobalFindClass
 // parameter is left to default true so that RTL Classes.FindClass() is called
 function JSONRetrieveObjectRttiCustom(var JSON: PUTF8Char;
@@ -616,7 +641,6 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
   JSONFormat: boolean = false): RawUTF8; overload;
 
 
-
 { ********** TTextWriter class with proper JSON escaping and WriteObject() support }
 
 type
@@ -626,9 +650,17 @@ type
   TTextWriter = class(TBaseWriter)
   protected
     fBlockComment: RawUTF8;
+    /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
+    fInternalJSONWriter: TTextWriter;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
       AnsiToWide: PWordArray; Escape: TTextWriterKind);
   public
+    /// release all internal structures
+    destructor Destroy; override;
+    /// gives access to an internal temporary TTextWriter
+    // - may be used to escape some JSON espaced value (i.e. escape it twice),
+    // in conjunction with AddJSONEscape(Source: TTextWriter)
+    function InternalJSONWriter: TTextWriter;
     /// append '[' or '{' with proper indentation
     procedure BlockBegin(Starter: AnsiChar; Options: TTextWriterWriteObjectOptions);
     /// append ',' with proper indentation
@@ -641,6 +673,14 @@ type
     // - will call AddCRAndIndent then append "PropName":
     procedure WriteObjectPropName(const PropName: ShortString;
       Options: TTextWriterWriteObjectOptions);
+    /// same as WriteObject(), but will double all internal " and bound with "
+    // - this implementation will avoid most memory allocations
+    procedure WriteObjectAsString(Value: TObject;
+      Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
+    /// same as AddDynArrayJSON(), but will double all internal " and bound with "
+    // - this implementation will avoid most memory allocations
+    procedure AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue;
+      WriteOptions: TTextWriterWriteObjectOptions = []);
     /// append a JSON field name, followed by an escaped UTF-8 JSON String and
     // a comma (',')
     procedure AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
@@ -740,6 +780,14 @@ type
     // - this overriden version will properly handle JSON escape
     function AddJSONReformat(JSON: PUTF8Char; Format: TTextWriterJSONFormat;
       EndOfObject: PUTF8Char): PUTF8Char; override;
+    /// append a JSON value, array or document as simple XML content
+    // - you can use JSONBufferToXML() and JSONToXML() functions as wrappers
+    // - this method is called recursively to handle all kind of JSON values
+    // - WARNING: the JSON buffer is decoded in-place, so will be changed
+    // - returns the end of the current JSON converted level, or nil if the
+    // supplied content was not correct JSON
+    function AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char = nil;
+      EndOfObject: PUTF8Char = nil): PUTF8Char;
 
     /// append a record content as UTF-8 encoded JSON or custom serialization
     // - default serialization will use Base64 encoded binary stream, or
@@ -1470,7 +1518,33 @@ type
 
 
 
-{ ********** JSON Unserialization for any kind of Values }
+{ ********** Low-level JSON Serialization for any kind of Values }
+
+type
+  /// internal stack-allocated structure for nested serialization
+  // - defined here for low-level use of TRttiJsonSave functions
+  TJsonSaveContext = object
+  protected
+    W: TTextWriter;
+    Options: TTextWriterWriteObjectOptions;
+    Info: TRttiCustom;
+    Prop: PRttiCustomProp;
+    procedure Add64(Value: PInt64; UnSigned: boolean);
+    procedure AddShort(PS: PShortString);
+    procedure AddShortBoolean(PS: PShortString; Value: boolean);
+    procedure AddDateTime(Value: PDateTime; WithMS: boolean);
+  public
+    /// initialize this low-level context
+    procedure Init(WR: TTextWriter; WriteOptions: TTextWriterWriteObjectOptions;
+      TypeInfo: TRttiCustom); {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  /// internal function handler for JSON persistence of any TRTTIParserType value
+  // - i.e. the kind of functions called via PT_JSONSAVE[] lookup table
+  TRttiJsonSave = procedure(Data: pointer; const Ctxt: TJsonSaveContext);
+
+
+{ ********** Low-level JSON Unserialization for any kind of Values }
 
 type
   /// available options for JSON parsing process
@@ -1500,16 +1574,20 @@ type
   // jpoAllowDouble is set - see also dvoAllowDoubleValue in TDocVariantOptions
   // - jpoObjectListClassNameGlobalFindClass would also search for "ClassName":
   // TObjectList serialized field with the global Classes.FindClass() function
+  // - null will release any class instance, unless jpoNullDontReleaseObjectInstance
+  // is set which will leave the instance untouched
   TJsonParserOption = (
     jpoIgnoreUnknownProperty, jpoIgnoreStringType, jpoIgnoreUnknownEnum,
     jpoHandleCustomVariants, jpoHandleCustomVariantsWithinString,
     jpoSetterExpectsToFreeTempInstance, jpoSetterNoCreate,
-    jpoAllowInt64Hex, jpoAllowDouble, jpoObjectListClassNameGlobalFindClass);
+    jpoAllowInt64Hex, jpoAllowDouble, jpoObjectListClassNameGlobalFindClass,
+    jpoNullDontReleaseObjectInstance);
 
   /// set of options for JsonParser() parsing process
   TJsonParserOptions = set of TJsonParserOption;
 
   /// efficient execution context of the JSON parser
+  // - defined here for low-level use of TRttiJsonLoad functions
   TJsonParserContext = object
   public
     /// current position in the JSON input
@@ -1544,6 +1622,10 @@ type
   end;
 
   PJsonParserContext = ^TJsonParserContext;
+
+  /// internal function handler for JSON reading of any TRTTIParserType value
+  TRttiJsonLoad = procedure(Data: pointer; var Ctxt: TJsonParserContext);
+
 
 var
   /// default options for the JSON parser
@@ -1605,19 +1687,26 @@ type
   /// JSON-aware TRttiCustom class - used for global RttiCustom: TRttiCustomList
   TRttiJson = class(TRttiCustom)
   protected
+    // mormot.core.rtti has no dependency of TSynPersistent and such
     fClassNewInstance: TRttiJsonNewInstance;
-    /// called by ClassNewInstance/DoRegisterAutoCreateFields
-    procedure SetClassNewInstance;
+    fCompare: array[boolean] of TRttiCompare;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRTTIParserType;
       aParserComplex: TRTTIParserComplexType): TRttiCustom; override;
   public
     /// create a new TObject instance of this rkClass
     // - ensure the proper virtual constructor is called (if any)
-    function ClassNewInstance: pointer;
+    function ClassNewInstance: pointer; override;
+    /// simple wrapper around TRttiJsonSave(fJsonSave)
+    procedure RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// simple wrapper around TRttiJsonLoad(fJsonLoad)
+    procedure RawLoadJson(Data: pointer; var Ctxt: TJsonParserContext);
       {$ifdef HASINLINE} inline; {$endif}
     /// create and parse a new TObject instance of this rkClass
     function ParseNewInstance(var Context: TJsonParserContext): TObject;
+    /// compare two stored values of this type
+    function ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer; override;
     /// unserialize some JSON input into Data^
     procedure ValueLoadJson(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
@@ -1690,6 +1779,14 @@ function DynArraySaveJSON(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean = false): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// serialize a dynamic array content, supplied as raw binary buffer, as JSON
+// - Value shall be set to the source dynamic array field
+// - is just a wrapper around TTextWriter.AddDynArrayJSON(), creating
+// a temporary TDynArray wrapper on the stack
+// - to be used e.g. for custom record JSON serialization, within a
+// TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
+function DynArrayBlobSaveJSON(TypeInfo: PRttiInfo; BlobValue: pointer): RawUTF8;
+
 /// will serialize any TObject into its UTF-8 JSON representation
 /// - serialize as JSON the published integer, Int64, floating point values,
 // TDateTime (stored as ISO 8601 text), string, variant and enumerate
@@ -1699,7 +1796,7 @@ function DynArraySaveJSON(const Value; TypeInfo: PRttiInfo;
 // - will write also the properties published in the parent classes
 // - nested properties are serialized as nested JSON objects
 // - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY Delphi class, via mORMot.pas'
+// - you can add some custom serializers for ANY class, via mORMot.pas'
 // TJSONSerializer.RegisterCustomSerializer() class method
 // - call internaly TJSONSerializer.WriteObject() method (or fallback to
 // TJSONWriter if mORMot.pas is not linked to the executable)
@@ -1711,6 +1808,22 @@ function ObjectToJSON(Value: TObject;
 // - if Names is not supplied, the corresponding class names would be used
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
+
+/// persist a class instance into a JSON file
+// - returns TRUE on success, false on error (e.g. the file name is invalid
+// or the file is existing and could not be overwritten)
+function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
+  Options: TTextWriterWriteObjectOptions = [woHumanReadable]): boolean;
+
+/// will serialize any TObject into its expanded UTF-8 JSON representation
+// - includes debugger-friendly information, similar to TSynLog, i.e.
+// class name and sets/enumerates as text
+// - could be used to create a TDocVariant object with full information
+// - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
+// also able to serialize plain Exception as a simple '{"Exception":"Message"}',
+// and append .map/.mab source code line number for ESynException
+function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions =
+  [woDontStoreDefault, woHumanReadable, woStoreClassName, woStorePointer]): RawUTF8;
 
 /// fill a record content from a JSON serialization as saved by
 // TTextWriter.AddRecordJSON / RecordSaveJSON
@@ -1778,7 +1891,7 @@ function DynArrayLoadJSON(var Value; const JSON: RawUTF8;
 // registered by TJSONSerializer.RegisterClassForJSON() (or Classes.RegisterClass)
 // - will clear any previous TCollection objects, and convert any null JSON
 // basic type into nil - e.g. if From='null', will call FreeAndNil(Value)
-// - you can add some custom (un)serializers for ANY Delphi class, via the
+// - you can add some custom (un)serializers for ANY class, via the
 // TJSONSerializer.RegisterCustomSerializer() class method
 // - set Valid=TRUE on success, Valid=FALSE on error, and the main function
 // will point in From at the syntax error place (e.g. on any unknown property name)
@@ -1814,6 +1927,17 @@ function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
 function JSONToNewObject(var From: PUTF8Char; var Valid: boolean;
   Options: TJsonParserOptions = []): TObject;
 
+/// read an TObject published property, as saved by ObjectToJSON() function
+// - will use direct in-memory reference to the object, or call the corresponding
+// setter method (if any), creating a temporary instance
+// - unserialize the JSON input buffer via a call to JSONToObject()
+// - by default, a temporary instance will be created if a published field
+// has a setter, and the instance is expected to be released later by the
+// owner class: you can set the j2oSetterExpectsToFreeTempInstance option
+// to let this method release it when the setter returns
+function PropertyFromJSON(Prop: PRttiCustomProp; Instance: TObject;
+  From: PUTF8Char; var Valid: boolean; Options: TJsonParserOptions = []): PUTF8Char;
+
 /// decode a specified parameter compatible with URI encoding into its original
 // object contents
 // - ObjectInstance must be an existing TObject instance
@@ -1831,6 +1955,32 @@ function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar;
 function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
   TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): boolean;
 
+const
+  /// standard header for an UTF-8 encoded XML file
+  XMLUTF8_HEADER = '<?xml version="1.0" encoding="UTF-8"?>'#13#10;
+
+  /// standard namespace for a generic XML File
+  XMLUTF8_NAMESPACE = '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">';
+
+/// convert a JSON array or document into a simple XML content
+// - just a wrapper around TTextWriter.AddJSONToXML, with an optional
+// header before the XML converted data (e.g. XMLUTF8_HEADER), and an optional
+// name space content node which will nest the generated XML data (e.g.
+// '<contents xmlns="http://www.w3.org/2001/XMLSchema-instance">') - the
+// corresponding ending token will be appended after (e.g. '</contents>')
+// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
+procedure JSONBufferToXML(P: PUTF8Char; const Header, NameSpace: RawUTF8;
+  out result: RawUTF8);
+
+/// convert a JSON array or document into a simple XML content
+// - just a wrapper around TTextWriter.AddJSONToXML, making a private copy
+// of the supplied JSON buffer using TSynTempBuffer (so that JSON content
+// would stay untouched)
+// - the optional header is added at the beginning of the resulting string
+// - an optional name space content node could be added around the generated XML,
+// e.g. '<content>'
+function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8 = XMLUTF8_HEADER;
+  const NameSpace: RawUTF8 = ''): RawUTF8;
 
 
 { ********************* Abstract Classes with Auto-Create-Fields }
@@ -1932,6 +2082,31 @@ type
     // TPersistent/TSynPersistent/TSynAutoCreateFields class and T*ObjArray
     // published properties
     constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
+  end;
+
+  /// abstract TCollectionItem class, which will instantiate all its nested class
+  // published properties, then release them (and any T*ObjArray) when freed
+  // - could be used for gathering of TCollectionItem properties, e.g. for
+  // Domain objects in DDD, especially for list of value objects
+  // - consider using T*ObjArray dynamic array published properties in your
+  // value types instead of TCollection storage: T*ObjArray have a lower overhead
+  // and are easier to work with, once TJSONSerializer.RegisterObjArrayForJSON
+  // is called to register the T*ObjArray type
+  // - note that non published (e.g. public) properties won't be instantiated,
+  // serialized, nor released - but may contain weak references to other classes
+  // - please take care that you will not create any endless recursion: you should
+  // ensure that at one level, nested published properties won't have any class
+  // instance refering to its owner (there is no weak reference - remember!)
+  // - since the destructor will release all nested properties, you should
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
+  TCollectionItemAutoCreateFields = class(TCollectionItem)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields published properties
+    constructor Create(Collection: TCollection); override;
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
   end;
@@ -2051,6 +2226,130 @@ begin // P^ points at 'u1234' just after \u0123
   end;
   inc(D);
   result := P + 5;
+end;
+
+function IsString(P: PUTF8Char): boolean;  // test if P^ is a "string" value
+begin
+  if P = nil then
+  begin
+    result := false;
+    exit;
+  end;
+  while (P^ <= ' ') and (P^ <> #0) do
+    inc(P);
+  if (P[0] in ['0'..'9']) or // is first char numeric?
+     ((P[0] in ['-', '+']) and (P[1] in ['0'..'9'])) then
+  begin
+    // check if P^ is a true numerical value
+    repeat
+      inc(P);
+    until not (P^ in ['0'..'9']); // check digits
+    if P^ = '.' then
+      repeat
+        inc(P);
+      until not (P^ in ['0'..'9']); // check fractional digits
+    if ((P^ = 'e') or (P^ = 'E')) and (P[1] in ['0'..'9', '+', '-']) then
+    begin
+      inc(P);
+      if P^ = '+' then
+        inc(P)
+      else if P^ = '-' then
+        inc(P);
+      while (P^ >= '0') and (P^ <= '9') do
+        inc(P);
+    end;
+    while (P^ <= ' ') and (P^ <> #0) do
+      inc(P);
+    result := (P^ <> #0);
+    exit;
+  end
+  else
+    result := true; // don't begin with a numerical value -> must be a string
+end;
+
+function IsStringJSON(P: PUTF8Char): boolean;  // test if P^ is a "string" value
+var
+  c4: integer;
+  c: AnsiChar;
+  tab: PJsonCharSet;
+begin
+  if P = nil then
+  begin
+    result := false;
+    exit;
+  end;
+  while (P^ <= ' ') and (P^ <> #0) do
+    inc(P);
+  tab := @JSON_CHARS;
+  c4 := PInteger(P)^;
+  if (((c4 = NULL_LOW) or (c4 = TRUE_LOW)) and
+      (jcEndOfJSONValueField in tab[P[4]])) or
+     ((c4 = FALSE_LOW) and (P[4] = 'e') and
+      (jcEndOfJSONValueField in tab[P[5]])) then
+  begin
+    result := false; // constants are no string
+    exit;
+  end;
+  c := P^;
+  if (jcDigitFirstChar in tab[c]) and
+     (((c >= '1') and (c <= '9')) or // is first char numeric?
+     ((c = '0') and ((P[1] < '0') or (P[1] > '9'))) or // '012' excluded by JSON
+     ((c = '-') and (P[1] >= '0') and (P[1] <= '9'))) then
+  begin
+    // check if c is a true numerical value
+    repeat
+      inc(P);
+    until (P^ < '0') or (P^ > '9'); // check digits
+    if P^ = '.' then
+      repeat
+        inc(P);
+      until (P^ < '0') or (P^ > '9'); // check fractional digits
+    if ((P^ = 'e') or (P^ = 'E')) and (jcDigitFirstChar in tab[P[1]]) then
+    begin
+      inc(P);
+      c := P^;
+      if c = '+' then
+        inc(P)
+      else if c = '-' then
+        inc(P);
+      while (P^ >= '0') and (P^ <= '9') do
+        inc(P);
+    end;
+    while (P^ <= ' ') and (P^ <> #0) do
+      inc(P);
+    result := (P^ <> #0);
+    exit;
+  end
+  else
+    result := true; // don't begin with a numerical value -> must be a string
+end;
+
+function IsValidJSON(const s: RawUTF8): boolean;
+begin
+  result := IsValidJSON(pointer(s), length(s));
+end;
+
+function IsValidJSON(P: PUTF8Char; len: PtrInt): boolean;
+var
+  B: PUTF8Char;
+begin
+  result := false;
+  if (P = nil) or (len <= 0) or (StrLen(P) <> len) then
+    exit;
+  B := P;
+  P :=  GotoEndJSONItemStrict(B);
+  result := (P <> nil) and (P - B = len);
+end;
+
+procedure IgnoreComma(var P: PUTF8Char);
+begin
+  if P <> nil then
+  begin
+    while (P^ <= ' ') and (P^ <> #0) do
+      inc(P);
+    if P^ = ',' then
+      inc(P);
+  end;
 end;
 
 function JsonPropNameValid(P: PUTF8Char): boolean;
@@ -2740,7 +3039,7 @@ begin
   if c = nil then
     result := nil
   else
-    result := RttiCustom.RegisterClass(c);
+    result := Rtti.RegisterClass(c);
 end;
 
 function JSONRetrieveObjectRttiCustom(var JSON: PUTF8Char;
@@ -2763,7 +3062,7 @@ begin // at input, JSON^ = '{'
   if P = nil then
     exit; // invalid (maybe too complex) JSON string value
   JSON := P; // JSON^ is either } or ,
-  result := RttiCustom.Find(classname, classnamelen, rkClass);
+  result := Rtti.Find(classname, classnamelen, rkClass);
   if (result = nil) and AndGlobalFindClass then
     result := GlobalFindClass(classname, classnamelen);
 end;
@@ -3712,7 +4011,7 @@ function ObjArrayToJSON(const aObjArray;
 var
   temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     if woEnumSetsAsText in aOptions then
       CustomOptions := CustomOptions + [twoEnumSetsAsTextInRecord];
@@ -4112,28 +4411,7 @@ end;
 
 { ********** Low-Level JSON Serialization for all TRTTIParserType }
 
-type
-  /// internal stack-allocated structure for nested serialization
-  TJsonSaveContext = object
-    W: TTextWriter;
-    Options: TTextWriterWriteObjectOptions;
-    Info: TRttiCustom;
-    Prop: PRttiCustomProp;
-    procedure Init(WR: TTextWriter; WriteOptions: TTextWriterWriteObjectOptions;
-      TypeInfo: TRttiCustom); {$ifdef HASINLINE} inline; {$endif}
-    procedure Add64(Value: PInt64; UnSigned: boolean);
-    procedure AddShort(PS: PShortString);
-    procedure AddShortBoolean(PS: PShortString; Value: boolean);
-    procedure AddDateTime(Value: PDateTime; WithMS: boolean);
-  end;
-
-  /// internal function handler for JSON persistence of any TRTTIParserType value
-  // - i.e. the kind of functions called via PT_JSONSAVE[] lookup table
-  TRttiJsonSave = procedure(Data: pointer; const Ctxt: TJsonSaveContext);
-
-  /// internal function handler for JSON reading of any TRTTIParserType value
-  TRttiJsonLoad = procedure(Data: pointer; var Ctxt: TJsonParserContext);
-
+{ TJsonSaveContext }
 
 procedure TJsonSaveContext.Init(WR: TTextWriter;
   WriteOptions: TTextWriterWriteObjectOptions; TypeInfo: TRttiCustom);
@@ -4629,7 +4907,7 @@ begin
         if v <> c then
         begin
           c := v;
-          ctxt.Info := RttiCustom.RegisterClass(c);
+          ctxt.Info := Rtti.RegisterClass(c);
           save := TRttiJson(ctxt.Info).fJsonSave;
         end;
         save(pointer(Value), ctxt);
@@ -4665,7 +4943,7 @@ var
   c: TJsonSaveContext; // reuse same context for all collection items
 begin
   // can't use AddObjects() since we don't have access to the TCollection list
-  {%H-}c.Init(Ctxt.W, Ctxt.Options, RttiCustom.RegisterClass(Data^.ItemClass));
+  {%H-}c.Init(Ctxt.W, Ctxt.Options, Rtti.RegisterClass(Data^.ItemClass));
   c.W.BlockBegin('[', c.Options);
   i := 0;
   last := Data^.Count - 1;
@@ -4752,6 +5030,27 @@ begin
   AddPropName(PropName); // handle twoForceJSONExtended in CustomOptions
   if woHumanReadable in Options then
     Add(' ');
+end;
+
+procedure TTextWriter.WriteObjectAsString(Value: TObject;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  Add('"');
+  InternalJSONWriter.WriteObject(Value, Options);
+  AddJSONEscape(fInternalJSONWriter);
+  Add('"');
+end;
+
+procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue;
+  WriteOptions: TTextWriterWriteObjectOptions);
+var
+  temp: TDynArray;
+begin
+  Add('"');
+  temp.Init(aTypeInfo, aValue);
+  InternalJSONWriter.AddDynArrayJSON(temp, WriteOptions);
+  AddJSONEscape(fInternalJSONWriter);
+  Add('"');
 end;
 
 procedure TTextWriter.BlockBegin(Starter: AnsiChar;
@@ -4874,6 +5173,21 @@ begin
     dec(SourceChars);
     inc(Source);
   end;
+end;
+
+destructor TTextWriter.Destroy;
+begin
+  inherited Destroy;
+  fInternalJSONWriter.Free;
+end;
+
+function TTextWriter.InternalJSONWriter: TTextWriter;
+begin
+  if fInternalJSONWriter = nil then
+    fInternalJSONWriter := TTextWriter.CreateOwnedStream
+  else
+    fInternalJSONWriter.CancelAll;
+  result := fInternalJSONWriter;
 end;
 
 procedure TTextWriter.Add(P: PUTF8Char; Escape: TTextWriterKind);
@@ -5284,7 +5598,7 @@ var
   ctxt: TJsonSaveContext;
   save: TRttiJsonSave;
 begin
-  {%H-}ctxt.Init(self, WriteOptions, RttiCustom.RegisterType(TypeInfo));
+  {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterType(TypeInfo));
   save := TRttiJson(ctxt.Info).fJsonSave;
   if Assigned(save) then
     save(Value, ctxt)
@@ -5455,6 +5769,108 @@ begin
     repeat
       inc(JSON)
     until (JSON^ = #0) or (JSON^ > ' ');
+  result := JSON;
+end;
+
+function TTextWriter.AddJSONToXML(JSON: PUTF8Char;
+  ArrayName, EndOfObject: PUTF8Char): PUTF8Char;
+var
+  objEnd: AnsiChar;
+  Name, Value: PUTF8Char;
+  n, c: integer;
+begin
+  result := nil;
+  if JSON = nil then
+    exit;
+  while (JSON^ <= ' ') and (JSON^ <> #0) do
+    inc(JSON);
+  case JSON^ of
+  '[':
+    begin
+      repeat
+        inc(JSON);
+      until (JSON^ = #0) or (JSON^ > ' ');
+      if JSON^ = ']' then
+        JSON := GotoNextNotSpace(JSON + 1)
+      else
+      begin
+        n := 0;
+        repeat
+          if JSON = nil then
+            exit;
+          Add('<');
+          if ArrayName = nil then
+            Add(n)
+          else
+            AddXmlEscape(ArrayName);
+          Add('>');
+          JSON := AddJSONToXML(JSON, nil, @objEnd);
+          Add('<', '/');
+          if ArrayName = nil then
+            Add(n)
+          else
+            AddXmlEscape(ArrayName);
+          Add('>');
+          inc(n);
+        until objEnd = ']';
+      end;
+    end;
+  '{':
+    begin
+      repeat
+        inc(JSON);
+      until (JSON^ = #0) or (JSON^ > ' ');
+      if JSON^ = '}' then
+        JSON := GotoNextNotSpace(JSON + 1)
+      else
+      begin
+        repeat
+          Name := GetJSONPropName(JSON);
+          if Name = nil then
+            exit;
+          while (JSON^ <= ' ') and (JSON^ <> #0) do
+            inc(JSON);
+          if JSON^ = '[' then // arrays are written as list of items, without root
+            JSON := AddJSONToXML(JSON, Name, @objEnd)
+          else
+          begin
+            Add('<');
+            AddXmlEscape(Name);
+            Add('>');
+            JSON := AddJSONToXML(JSON, Name, @objEnd);
+            Add('<', '/');
+            AddXmlEscape(Name);
+            Add('>');
+          end;
+        until objEnd = '}';
+      end;
+    end;
+  else
+    begin
+      Value := GetJSONField(JSON, result, nil, EndOfObject); // let wasString=nil
+      if Value = nil then
+        AddShort('null')
+      else
+      begin
+        c := PInteger(Value)^ and $ffffff;
+        if (c = JSON_BASE64_MAGIC) or (c = JSON_SQLDATE_MAGIC) then
+          inc(Value, 3); // just ignore the Magic codepoint encoded as UTF-8
+        AddXmlEscape(Value);
+      end;
+      exit;
+    end;
+  end;
+  if JSON <> nil then
+  begin
+    while (JSON^ <= ' ') and (JSON^ <> #0) do
+      inc(JSON);
+    if EndOfObject <> nil then
+      EndOfObject^ := JSON^;
+    if JSON^ <> #0 then
+      repeat
+        inc(JSON);
+      until (JSON^ = #0) or (JSON^ > ' ');
+  end;
   result := JSON;
 end;
 
@@ -5851,9 +6267,9 @@ begin
     {%H-}ctxt.Init(self, WriteOptions, DynArray.Info);
     hacklen := PDALen(PAnsiChar(DynArray.Value^) - _DALEN);
     backup := hacklen^;
-    hacklen^ := len - _DAOFF; // may use ExternalCount
+    hacklen^ := len - _DAOFF; // may use ExternalCount -> ovewrite length(Array)
     _JS_DynArray(DynArray.Value, ctxt);
-    hacklen^ := backup;
+    hacklen^ := backup; // restore original length/capacity
   end;
 end;
 
@@ -5903,7 +6319,7 @@ begin
   if ObjectListItemClass = nil then
     ObjectListItem := nil
   else
-    ObjectListItem := RttiCustom.RegisterClass(ObjectListItemClass);
+    ObjectListItem := mormot.core.rtti.Rtti.RegisterClass(ObjectListItemClass);
 end;
 
 function TJsonParserContext.ParseNext: boolean;
@@ -6332,7 +6748,7 @@ begin
       Ctxt.Valid := false
     else
     begin
-      tmp := TRttiJson(Ctxt.Info).ClassNewInstance;
+      tmp := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info);
       try
         load(@tmp, Ctxt); // JsonToObject(tmp)
         if not Ctxt.Valid then
@@ -6358,7 +6774,7 @@ begin
     VarClear(PVariant(@v)^);
   end;
   Ctxt.Prop := nil;
-  result := Ctxt.Valid and (Ctxt.EndOfObject = '}');
+  result := Ctxt.Valid;
 end;
 
 procedure _JL_RttiCustom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
@@ -6379,11 +6795,12 @@ begin
     begin
       if Ctxt.ParseNull then
       begin
-        FreeAndNil(PObject(Data)^);
+        if not (jpoNullDontReleaseObjectInstance in Ctxt.Options) then
+          FreeAndNil(PObject(Data)^);
         exit;
       end;
       if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
-        PPointer(Data)^ := TRttiJson(Ctxt.Info).ClassNewInstance
+        PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
       else
         Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
       // class instances are accessed by reference, records are stored by value
@@ -6479,6 +6896,7 @@ end;
 procedure _JL_TCollection(Data: PCollection; var Ctxt: TJsonParserContext);
 var
   root: TRttiCustom;
+  load: TRttiJsonLoad;
   item: TCollectionItem;
 begin
   Data^.BeginUpdate;
@@ -6487,10 +6905,11 @@ begin
     if not Ctxt.ParseArray then
       exit;
     root := Ctxt.Info;
-    Ctxt.Info := RttiCustom.Find(root.CollectionItem);
+    Ctxt.Info := TRttiJSON(root).fCollectionItemRtti;
+    load := TRttiJSON(Ctxt.Info).fJsonLoad;
     repeat
       item := Data^.Add;
-      TRttiJsonLoad(TRttiJSON(Ctxt.Info).fJsonLoad)(@item, Ctxt);
+      load(@item, Ctxt);
     until (not Ctxt.Valid) or (Ctxt.EndOfObject = ']');
     Ctxt.Info := root;
     Ctxt.ParseEnd;
@@ -7997,7 +8416,7 @@ var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterSerializer.CreateOwnedStream(temp) as TTextWriter;
+  W := TTextWriter.CreateOwnedStream(temp) as TTextWriter;
   try
     SaveToJSON(W, EnumSetsAsText);
     W.SetText(result);
@@ -8116,79 +8535,6 @@ end;
 
 { TRttiJson }
 
-function TRttiJson.SetParserType(aParser: TRTTIParserType;
-  aParserComplex: TRTTIParserComplexType): TRttiCustom;
-begin
-  // set Name and Flags from Props[]
-  inherited SetParserType(aParser, aParserComplex);
-  // handle default JSON serialization/unserialization
-  if aParser = ptClass then
-  begin
-    // default serialization of published props
-    fJsonSave := @_JS_RttiCustom;
-    fJsonLoad := @_JL_RttiCustom;
-    // recognize mormot.core.data classes
-    if fValueClass.InheritsFrom(TSynObjectList) then
-    begin
-      fJsonSave := @_JS_TSynObjectList;
-      fJsonLoad := @_JL_TSynObjectList;
-    end
-    else if fValueClass.InheritsFrom(TSynList) then
-      fJsonSave := @_JS_TSynList
-    else if fValueClass.InheritsFrom(TRawUTF8List) then
-    begin
-      fJsonSave := @_JS_TRawUTF8List;
-      fJsonLoad := @_JL_TRawUTF8List;
-    end
-    else if fValueClass.InheritsFrom(TSynPersistent) then
-      // allow any kind of customization for TSynPersistent children
-      TSPHookClass(fValueClass).RttiCustomSet(self)
-    // recognize most known RTL classes
-    else if fValueClass.InheritsFrom(TStrings) then
-    begin
-      fJsonSave := @_JS_TStrings;
-      fJsonLoad := @_JL_TStrings;
-    end
-    else if fValueClass.InheritsFrom(TObjectList) then
-    begin
-      fJsonSave := @_JS_TObjectList;
-      fJsonLoad := @_JL_TObjectList;
-    end
-    else if fValueClass.InheritsFrom(TList) then
-      fJsonSave := @_JS_TList
-    else if fValueClass.InheritsFrom(TCollection) then
-    begin
-      fJsonSave := @_JS_TCollection;
-      fJsonSave := @_JL_TCollection;
-    end;
-  end
-  else if rcfBinary in Flags then
-  begin
-    fJsonSave := @_JS_Binary;
-    fJsonLoad := @_JL_Binary;
-  end
-  else
-  begin
-    fJsonSave := PTC_JSONSAVE[aParserComplex];
-    if not Assigned(fJsonSave) then
-      fJsonSave := PT_JSONSAVE[aParser];
-    if not Assigned(fJsonSave) and
-       (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
-      fJsonSave := @_JS_RttiCustom;
-   fJsonLoad := PT_JSONLOAD[aParser];
-   if not Assigned(fJsonLoad) and
-     (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
-    fJsonLoad := @_JL_RttiCustom
-  end;
-  // ensure custom fJsonWriter/fJsonReader events are called
-  if Assigned(fJsonWriter.Code) then
-    fJsonSave := @_JS_RttiCustom;
-  if Assigned(fJsonReader.Code) then
-    fJsonLoad := @_JL_RttiCustom;
-  result := self;
-end;
-
-
 function _New_ObjectList(Rtti: TRttiCustom): pointer;
 begin
   result := TObjectList(Rtti.ValueClass).Create;
@@ -8244,65 +8590,138 @@ begin
   result := Rtti.ValueClass.Create;
 end;
 
-procedure TRttiJson.SetClassNewInstance;
+function TRttiJson.SetParserType(aParser: TRTTIParserType;
+  aParserComplex: TRTTIParserComplexType): TRttiCustom;
 var
   C: TClass;
 begin
-  C := fValueClass;
-  if Kind <> rkClass then
-    raise EJSONException.CreateUTF8('%.ClassNewInstance: % is not a class',
-      [self, Name]);
-  repeat
-    if C = TObjectList then
-      fClassNewInstance := @_New_ObjectList
-    else if C = TInterfacedObjectWithCustomCreate then
-      fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
-    else if C = TPersistentWithCustomCreate then
-      fClassNewInstance := @_New_PersistentWithCustomCreate
-    else if C = TSynPersistent then
-      fClassNewInstance := @_New_SynPersistent
-    else if C = TSynObjectList then
-      fClassNewInstance := @_New_SynObjectList
-    else if C = TSynLocked then
-      fClassNewInstance := @_New_SynLocked
-    else if C = TComponent then
-      fClassNewInstance := @_New_Component
-    else if C = TInterfacedCollection then
-      fClassNewInstance := @_New_InterfacedCollection
-    else if C = TCollection then
-      if CollectionItem = nil then
-        raise EJSONException.CreateUTF8(
-          '%.ClassNewInstance: % has no CollectionItem', [self, Name])
+  // set Name and Flags from Props[]
+  inherited SetParserType(aParser, aParserComplex);
+  // handle default comparison
+  fCompare[true] := RTTI_COMPARE[true][Kind];
+  fCompare[false] := RTTI_COMPARE[false][Kind];
+  // handle default JSON serialization/unserialization
+  if aParser = ptClass then
+  begin
+    // prepare efficient ClassNewInstance() wrapper function
+    C := fValueClass;
+    repeat
+      if C = TObjectList then
+        fClassNewInstance := @_New_ObjectList
+      else if C = TInterfacedObjectWithCustomCreate then
+        fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
+      else if C = TPersistentWithCustomCreate then
+        fClassNewInstance := @_New_PersistentWithCustomCreate
+      else if C = TSynPersistent then
+        fClassNewInstance := @_New_SynPersistent
+      else if C = TSynObjectList then
+        fClassNewInstance := @_New_SynObjectList
+      else if C = TSynLocked then
+        fClassNewInstance := @_New_SynLocked
+      else if C = TComponent then
+        fClassNewInstance := @_New_Component
+      else if C = TInterfacedCollection then
+        fClassNewInstance := @_New_InterfacedCollection
+      else if C = TCollection then
+        if CollectionItem = nil then
+          raise EJSONException.CreateUTF8(
+            '%.SetParserType: % has no CollectionItem', [self, Name])
+        else
+          fClassNewInstance := @_New_Collection
+      else if C = TCollectionItem then
+        fClassNewInstance := @_New_CollectionItem
+      else if C = TObject then
+        fClassNewInstance := @_New_Object
       else
-        fClassNewInstance := @_New_Collection
-    else if C = TCollectionItem then
-      fClassNewInstance := @_New_CollectionItem
-    else if C = TObject then
-      fClassNewInstance := @_New_Object
-    else
+      begin
+        C := C.ClassParent;
+        continue;
+      end;
+      break;
+    until false;
+    // default serialization of published props
+    fJsonSave := @_JS_RttiCustom;
+    fJsonLoad := @_JL_RttiCustom;
+    // recognize mormot.core.data classes
+    if fValueClass.InheritsFrom(TSynObjectList) then
     begin
-      C := C.ClassParent;
-      continue;
+      fJsonSave := @_JS_TSynObjectList;
+      fJsonLoad := @_JL_TSynObjectList;
+    end
+    else if fValueClass.InheritsFrom(TSynList) then
+      fJsonSave := @_JS_TSynList
+    else if fValueClass.InheritsFrom(TRawUTF8List) then
+    begin
+      fJsonSave := @_JS_TRawUTF8List;
+      fJsonLoad := @_JL_TRawUTF8List;
+    end
+    else if fValueClass.InheritsFrom(TSynPersistent) then
+      // allow any kind of customization for TSynPersistent children
+      TSPHookClass(fValueClass).RttiCustomSet(self)
+    // recognize most known RTL classes
+    else if fValueClass.InheritsFrom(TStrings) then
+    begin
+      fJsonSave := @_JS_TStrings;
+      fJsonLoad := @_JL_TStrings;
+    end
+    else if fValueClass.InheritsFrom(TObjectList) then
+    begin
+      fJsonSave := @_JS_TObjectList;
+      fJsonLoad := @_JL_TObjectList;
+    end
+    else if fValueClass.InheritsFrom(TList) then
+      fJsonSave := @_JS_TList
+    else if fValueClass.InheritsFrom(TCollection) then
+    begin
+      fJsonSave := @_JS_TCollection;
+      fJsonLoad := @_JL_TCollection;
     end;
-    break;
-  until false;
+  end
+  else if rcfBinary in Flags then
+  begin
+    fJsonSave := @_JS_Binary;
+    fJsonLoad := @_JL_Binary;
+  end
+  else
+  begin
+    fJsonSave := PTC_JSONSAVE[aParserComplex];
+    if not Assigned(fJsonSave) then
+      fJsonSave := PT_JSONSAVE[aParser];
+    if not Assigned(fJsonSave) and
+       (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
+      fJsonSave := @_JS_RttiCustom;
+   fJsonLoad := PT_JSONLOAD[aParser];
+   if not Assigned(fJsonLoad) and
+     (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
+    fJsonLoad := @_JL_RttiCustom
+  end;
+  // ensure custom fJsonWriter/fJsonReader events are called
+  if Assigned(fJsonWriter.Code) then
+    fJsonSave := @_JS_RttiCustom;
+  if Assigned(fJsonReader.Code) then
+    fJsonLoad := @_JL_RttiCustom;
+  result := self;
 end;
 
 function TRttiJson.ClassNewInstance: pointer;
 begin
-  if not Assigned(fClassNewInstance) then
-    SetClassNewInstance;
   result := fClassNewInstance(self);
 end;
 
 function TRttiJson.ParseNewInstance(var Context: TJsonParserContext): TObject;
 begin
-  if not Assigned(fClassNewInstance) then
-    SetClassNewInstance;
   result := fClassNewInstance(self);
   TRttiJsonLoad(fJsonLoad)(@result, Context);
   if not Context.Valid then
     FreeAndNil(result);
+end;
+
+function TRttiJson.ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer;
+begin
+  if Assigned(fCompare[CaseInsensitive]) then
+    fCompare[CaseInsensitive](Data, Other, Info, result)
+  else
+    result := ComparePointer(Data, Other);
 end;
 
 procedure TRttiJson.ValueLoadJson(Data: pointer; var JSON: PUTF8Char;
@@ -8324,6 +8743,16 @@ begin
     JSON := nil;
 end;
 
+procedure TRttiJson.RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
+begin
+  TRttiJsonSave(fJsonSave)(Data, Ctxt);
+end;
+
+procedure TRttiJson.RawLoadJson(Data: pointer; var Ctxt: TJsonParserContext);
+begin
+  TRttiJsonLoad(fJsonLoad)(Data, Ctxt);
+end;
+
 procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
   TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 var
@@ -8333,7 +8762,7 @@ begin
     opt := JSONPARSER_TOLERANTOPTIONS
   else
     opt := JSONPARSER_DEFAULTOPTIONS;
-  TRttiJson(RttiCustom.RegisterType(TypeInfo)).ValueLoadJson(
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
     Data, JSON, EndOfObject, opt, CustomVariantOptions);
 end;
 
@@ -8342,7 +8771,7 @@ class function TRttiJson.RegisterCustomSerializer(Info: PRttiInfo;
 var
   res: TRttiJson absolute result;
 begin
-  result := RttiCustom.RegisterType(Info);
+  result := Rtti.RegisterType(Info);
   res.fJsonWriter := TMethod(Writer);
   res.fJsonReader := TMethod(Reader);
   res.SetParserType(res.Parser, res.ParserComplex); // set fJsonSave/fJsonLoad
@@ -8362,7 +8791,7 @@ procedure SaveJSON(const Value; TypeInfo: PRttiInfo; Options: TTextWriterOptions
 var
   temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     CustomOptions := CustomOptions + Options;
     AddTypedJSON(@Value, TypeInfo);
@@ -8398,7 +8827,33 @@ begin
   if (PPointer(Value)^ = nil) or (TypeInfo^.Kind <> rkDynArray) then
     result := NULL_STR_VAR
   else
-  result := SaveJSON(Value, TypeInfo, EnumSetsAsText);
+    result := SaveJSON(Value, TypeInfo, EnumSetsAsText);
+end;
+
+function DynArrayBlobSaveJSON(TypeInfo: PRttiInfo; BlobValue: pointer): RawUTF8;
+var
+  DynArray: TDynArray;
+  Value: pointer; // decode BlobValue into a temporary dynamic array
+  temp: TTextWriterStackBuffer;
+begin
+  Value := nil;
+  DynArray.Init(TypeInfo, Value);
+  try
+    if DynArray.LoadFrom(BlobValue) = nil then
+      result := ''
+    else
+    begin
+      with TTextWriter.CreateOwnedStream(temp) do
+      try
+        AddDynArrayJSON(DynArray);
+        SetText(result);
+      finally
+        Free;
+      end;
+     end;
+  finally
+    DynArray.Clear; // release temporary memory
+  end;
 end;
 
 function ObjectToJSON(Value: TObject;
@@ -8409,7 +8864,7 @@ begin
   if Value = nil then
     result := NULL_STR_VAR
   else
-    with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
       CustomOptions := CustomOptions + [twoForceJSONStandard];
       WriteObject(Value, Options);
@@ -8450,6 +8905,33 @@ begin
   finally
     Free;
   end;
+end;
+
+function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
+  Options: TTextWriterWriteObjectOptions): boolean;
+var
+  humanread: boolean;
+  json: RawUTF8;
+begin
+  humanread := woHumanReadable in Options;
+  if humanread and (woHumanReadableEnumSetAsComment in Options) then
+    humanread := false
+  else
+    // JsonReformat() erases comments
+    exclude(Options, woHumanReadable);
+  json := ObjectToJSON(Value, Options);
+  if humanread then
+    // woHumanReadable not working with custom JSON serializers, e.g. T*ObjArray
+    // TODO: check if this is always the case with our mORMot2 new serialization
+    result := JSONBufferReformatToFile(pointer(json), JSONFile)
+  else
+    result := FileFromString(json, JSONFile);
+end;
+
+function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
+begin
+  // our JSON serialization detects and serialize Exception.Message
+  result := ObjectToJSON(Value, Options);
 end;
 
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: PRttiInfo;
@@ -8509,7 +8991,7 @@ var
 begin
   if pointer(ObjectInstance) = nil then
     raise ERttiException.Create('JSONToObject(nil)');
-  ctxt.Init(From, RttiCustom.RegisterClass(PPointer(ObjectInstance)^), Options,
+  ctxt.Init(From, Rtti.RegisterClass(PPointer(ObjectInstance)^), Options,
     nil, TObjectListItemClass);
   _JL_RttiCustom(@ObjectInstance, ctxt);
   Valid := ctxt.Valid;
@@ -8560,6 +9042,22 @@ begin
   result := ctxt.ParseNewObject;
 end;
 
+function PropertyFromJSON(Prop: PRttiCustomProp; Instance: TObject;
+  From: PUTF8Char; var Valid: boolean; Options: TJsonParserOptions): PUTF8Char;
+var
+  ctxt: TJsonParserContext;
+begin
+  Valid := false;
+  result := nil;
+  if (Prop = nil) or (Prop^.Value.Kind <> rkClass) or (Instance = nil) then
+    exit;
+  ctxt.Init(From, Prop^.Value, Options, nil, nil);
+  if not JsonLoadProp(pointer(Instance), Prop^, ctxt) then
+    exit;
+  Valid := true;
+  result := ctxt.JSON;
+end;
+
 function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar;
   var ObjectInstance; Next: PPUTF8Char; Options: TJsonParserOptions): boolean;
 var
@@ -8585,23 +9083,65 @@ begin
   end;
 end;
 
+procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8;
+  out result: RawUTF8);
+var
+  i, j, L: integer;
+  temp: TTextWriterStackBuffer;
+begin
+  if P = nil then
+    result := Header
+  else
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      AddNoJSONEscape(pointer(Header), length(Header));
+      L := length(NameSpace);
+      if L <> 0 then
+        AddNoJSONEscape(pointer(NameSpace), L);
+      AddJSONToXML(P);
+      if L <> 0 then
+        for i := 1 to L do
+          if NameSpace[i] = '<' then
+          begin
+            for j := i + 1 to L do
+              if NameSpace[j] in [' ', '>'] then
+              begin
+                Add('<', '/');
+                AddStringCopy(NameSpace, i + 1, j - i - 1);
+                Add('>');
+                break;
+              end;
+            break;
+          end;
+      SetText(result);
+    finally
+      Free;
+    end;
+end;
+
+function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8;
+  const NameSpace: RawUTF8): RawUTF8;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON);
+  try
+    JSONBufferToXML(tmp.buf, Header, NameSpace, result);
+  finally
+    tmp.Done;
+  end;
+end;
+
 
 { ********************* Abstract Classes with Auto-Create-Fields }
 
 function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
-var
-  i: PtrInt;
 begin
-  result := RttiCustom.RegisterType(ObjectInstance.ClassInfo);
+  result := Rtti.RegisterType(ObjectInstance.ClassInfo);
   if PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^ <> result then
     raise ERttiException.CreateUTF8('AutoCreateFields(%): unexpected vmtAutoTable',
       [ObjectInstance]); // paranoid check
   result.Props.SetAutoCreateFields;
-  for i := 0 to high(result.Props.AutoCreateClasses) do
-    // for AutoCreateFields(): allow direct fClassNewInstance() call
-    with TRttiJson(result.Props.AutoCreateClasses[i]^.Value) do
-     if not Assigned(fClassNewInstance) then
-       SetClassNewInstance;
   result.Flags := result.Flags + [rcfAutoCreateFields];
 end;
 
@@ -8723,6 +9263,21 @@ begin
 end;
 
 
+{ TCollectionItemAutoCreateFields }
+
+constructor TCollectionItemAutoCreateFields.Create(Collection: TCollection);
+begin
+  AutoCreateFields(self);
+  inherited Create(Collection);
+end;
+
+destructor TCollectionItemAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+
 { TSynJsonFileSettings }
 
 function TSynJsonFileSettings.LoadFromJson(var aJson: RawUTF8): boolean;
@@ -8785,10 +9340,9 @@ begin
       include(JSON_CHARS[c], jcJsonIdentifier);
   end;
   // initialize JSON serialization
-  if RttiCustom.Count > 0 then
-    raise EJSONException.CreateUTF8('RttiCustom.Count=% at mormot.core.json start',
-      [RttiCustom.Count]);
-  RttiCustom.GlobalClass := TRttiJson;
+  if Rtti.Count > 0 then
+    raise EJSONException.CreateUTF8('Rtti.Count=% at mormot.core.json start', [Rtti.Count]);
+  Rtti.GlobalClass := TRttiJson;
   GetDataFromJSON := _GetDataFromJSON;
 end;
 

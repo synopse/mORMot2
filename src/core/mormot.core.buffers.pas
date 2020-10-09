@@ -590,6 +590,10 @@ type
     OnErrorOverflow: TFastReaderOnErrorOverflow;
     /// use this event to customize the ErrorData process
     OnErrorData: TFastReaderOnErrorData;
+    /// when used to unserialize variants, stores options for TDocVariant creation
+    // - contains a PDocVariantOptions reference pointer as defined in the
+    // mormot.core.data unit
+    CustomVariants: pointer;
     /// some opaque value, e.g. a version number to define the binary layout
     Tag: PtrInt;
     /// initialize the reader from a memory block
@@ -671,6 +675,9 @@ type
     // - Values[] will be resized only if it is not long enough, to spare heap
     // - returns decoded count in Values[], which may not be length(Values)
     function ReadVarUInt64Array(var Values: TInt64DynArray): PtrInt;
+    /// retrieved RawUTF8 values encoded with TFileBufferWriter.WriteRawUTF8DynArray
+    // - returns the number of items read into Values[] (may differ from length(Values))
+    function ReadVarRawUTF8DynArray(var Values: TRawUTF8DynArray): PtrInt;
     /// retrieve some TAlgoCompress buffer, appended via Write()
     // - BufferOffset could be set to reserve some bytes before the uncompressed buffer
     function ReadCompressed(Load: TAlgoCompressLoad = aclNormal;
@@ -1423,7 +1430,8 @@ function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
 const
   /// can be used to append to most English nouns to form a plural
   // - as used by the Plural() function
-  PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
+  PLURAL_FORM: array[boolean] of RawUTF8 = (
+    '','s');
 
 /// write count number and append 's' (if needed) to form a plural English noun
 // - for instance, Plural('row',100) returns '100 rows' with no heap allocation
@@ -2300,6 +2308,7 @@ begin
   Last := PAnsiChar(Buffer) + Len;
   OnErrorOverflow := nil;
   OnErrorData := nil;
+  CustomVariants := nil;
 end;
 
 procedure TFastReader.Init(const Buffer: RawByteString);
@@ -2361,7 +2370,7 @@ begin
   inc(P, 4);
 end;
 
-function TFastReader.Next8: QWord;
+function TFastReader.Next8: Qword;
 begin
   if P + 7 >= Last then
     ErrorOverflow;
@@ -2402,7 +2411,7 @@ begin
   end;
 end;
 
-procedure TFastReader.Copy(Dest: pointer; DataLen: PtrInt);
+procedure TFastReader.Copy(Dest: Pointer; DataLen: PtrInt);
 begin
   if P + DataLen > Last then
     ErrorOverflow;
@@ -2410,7 +2419,7 @@ begin
   inc(P, DataLen);
 end;
 
-function TFastReader.CopySafe(Dest: pointer; DataLen: PtrInt): boolean;
+function TFastReader.CopySafe(Dest: Pointer; DataLen: PtrInt): boolean;
 begin
   if P + DataLen > Last then
     result := false
@@ -3041,6 +3050,54 @@ begin
         ErrorData('ReadVarUInt64Array got kind=%', [ord(k)]);
     end;
   until n = 0;
+end;
+
+function TFastReader.ReadVarRawUTF8DynArray(var Values: TRawUTF8DynArray): PtrInt;
+var
+  count, len: integer;
+  fixedsize, chunk, chunkend: PtrUInt;
+  PI: PRawUTF8;
+begin
+  result := VarUInt32;
+  if result = 0 then
+    exit;
+  count := result;
+  if count > length(Values) then // change Values[] length only if not big enough
+    SetLength(Values, count);
+  PI := pointer(Values);
+  fixedsize := VarUInt32;
+  repeat
+    // chunked format: Isize+values
+    chunkend := Next4;
+    chunk := PtrUInt(Next(chunkend));
+    inc(chunkend, chunk);
+    if fixedsize = 0 then
+      // variable size strings
+      while (count > 0) and (chunk < chunkend) do
+      begin
+        len := FromVarUInt32(PByte(chunk));
+        if len > 0 then
+        begin
+          FastSetString(PI^, pointer(chunk), len);
+          inc(chunk, len);
+        end
+        else if PI^<>'' then
+          PI^ := '';
+        dec(count);
+        inc(PI);
+      end
+    else
+      // fixed size strings
+      while (count > 0) and (chunk < chunkend) do
+      begin
+        FastSetString(PI^, pointer(chunk), fixedsize);
+        inc(chunk, fixedsize);
+        dec(count);
+        inc(PI);
+      end;
+  until count <= 0;
+  if PI <> @Values[result] then
+    ErrorOverflow; // paranoid check
 end;
 
 function TFastReader.ReadCompressed(Load: TAlgoCompressLoad;
@@ -4646,8 +4703,8 @@ begin
   L := 0;
   for i := 0 to high(Values) do
     inc(L, length(Values[i]));
-  SetString(Result, nil, L);
-  P := pointer(Result);
+  SetString(result, nil, L);
+  P := pointer(result);
   for i := 0 to high(Values) do
   begin
     L := length(Values[i]);
@@ -4757,30 +4814,30 @@ end;
 function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
 begin
-  Result := AlgoSynLZ.Compress(P, Dest, PLen, DestLen,
+  result := AlgoSynLZ.Compress(P, Dest, PLen, DestLen,
     CompressionSizeTrigger, CheckMagicForCompressed);
 end;
 
 function SynLZDecompress(const Data: RawByteString): RawByteString;
 begin
-  AlgoSynLZ.Decompress(pointer(Data), Length(Data), Result);
+  AlgoSynLZ.Decompress(pointer(Data), Length(Data), result);
 end;
 
 function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
 begin
-  Result := AlgoSynLZ.DecompressHeader(P, PLen);
+  result := AlgoSynLZ.DecompressHeader(P, PLen);
 end;
 
 function SynLZDecompressBody(P, Body: PAnsiChar; PLen, BodyLen: integer;
   SafeDecompression: boolean): boolean;
 begin
-  Result := AlgoSynLZ.DecompressBody(P, Body, PLen, BodyLen,
+  result := AlgoSynLZ.DecompressBody(P, Body, PLen, BodyLen,
     ALGO_SAFE[SafeDecompression]);
 end;
 
 function SynLZDecompressPartial(P, Partial: PAnsiChar; PLen, PartialLen: integer): integer;
 begin
-  Result := AlgoSynLZ.DecompressPartial(P, Partial, PLen, PartialLen, PartialLen);
+  result := AlgoSynLZ.DecompressPartial(P, Partial, PLen, PartialLen, PartialLen);
 end;
 
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
@@ -4792,31 +4849,31 @@ end;
 function SynLZDecompress(const Data: RawByteString; out Len: integer;
   var tmp: RawByteString): pointer;
 begin
-  Result := AlgoSynLZ.Decompress(pointer(Data), length(Data), Len, tmp);
+  result := AlgoSynLZ.Decompress(pointer(Data), length(Data), Len, tmp);
 end;
 
 function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
   var tmp: RawByteString): pointer;
 begin
-  Result := AlgoSynLZ.Decompress(P, PLen, Len, tmp);
+  result := AlgoSynLZ.Decompress(P, PLen, Len, tmp);
 end;
 
 function SynLZCompressToBytes(const Data: RawByteString;
   CompressionSizeTrigger: integer): TByteDynArray;
 begin
-  Result := AlgoSynLZ.CompressToBytes(pointer(Data), length(Data),
+  result := AlgoSynLZ.CompressToBytes(pointer(Data), length(Data),
     CompressionSizeTrigger);
 end;
 
 function SynLZCompressToBytes(P: PAnsiChar;
   PLen, CompressionSizeTrigger: integer): TByteDynArray;
 begin
-  Result := AlgoSynLZ.CompressToBytes(P, PLen, CompressionSizeTrigger);
+  result := AlgoSynLZ.CompressToBytes(P, PLen, CompressionSizeTrigger);
 end;
 
 function SynLZDecompress(const Data: TByteDynArray): RawByteString;
 begin
-  AlgoSynLZ.Decompress(pointer(Data), length(Data), Result);
+  AlgoSynLZ.Decompress(pointer(Data), length(Data), result);
 end;
 
 {$endif PUREMORMOT2}
@@ -6893,7 +6950,7 @@ begin
   if Map.Map(FileName) then
   try
     if ForceUTF8 then
-      UTF8ToSynUnicode(PUTF8Char(Map.Buffer), Map.Size, Result)
+      UTF8ToSynUnicode(PUTF8Char(Map.Buffer), Map.Size, result)
     else
       case Map.TextFileKind of
         isUnicode:
@@ -6901,7 +6958,7 @@ begin
             (Map.Size - 2) shr 1);
         isUTF8:
           UTF8ToSynUnicode(PUTF8Char(pointer(PtrUInt(Map.Buffer) + 3)),
-            Map.Size - 3, Result);
+            Map.Size - 3, result);
         isAnsi:
           result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer,
             Map.Size);
@@ -6921,7 +6978,7 @@ begin
     case Map.TextFileKind of
       isUnicode:
         RawUnicodeToUtf8(PWideChar(PtrUInt(Map.Buffer) + 2),
-          (Map.Size - 2) shr 1, Result);
+          (Map.Size - 2) shr 1, result);
       isUTF8:
         FastSetString(result, pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
       isAnsi:
@@ -6947,7 +7004,7 @@ begin
       UTF8DecodeToString(PUTF8Char(Map.Buffer), Map.Size, result)
       {$else}
       result := CurrentAnsiConvert.UTF8BufferToAnsi(PUTF8Char(Map.Buffer), Map.Size)
-      {$endif}
+      {$endif UNICODE}
     else
       case Map.TextFileKind of
       {$ifdef UNICODE}
@@ -7024,7 +7081,7 @@ end;
 procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUTF8;
   Data: pointer; Len, PerLine: integer);
 var
-  line,i: integer;
+  line, i: integer;
   P: PByte;
 begin
   if (Dest = nil) or (Data = nil) or (Len <= 0) or (PerLine <= 0) then
@@ -7040,7 +7097,7 @@ begin
     else
       line := Len;
     Dest.AddShorter(#13#10'    ');
-    for i := 0 to line-1 do
+    for i := 1 to line do
     begin
       Dest.Add('$');
       Dest.AddByteToHex(P^);

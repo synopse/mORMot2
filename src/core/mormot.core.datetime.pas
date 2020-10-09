@@ -273,7 +273,7 @@ type
     // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
     procedure ComputeDayOfWeek;
-    /// convert the stored date into a Delphi TDate floating-point value
+    /// convert the stored date into a TDate floating-point value
     function ToDate: TDate; {$ifdef HASINLINE}inline;{$endif}
     /// encode the stored date as ISO-8601 text
     // - returns '' if the stored date is 0 (i.e. after Clear)
@@ -422,7 +422,8 @@ function TimeToString: RawUTF8;
 
 const
   /// used e.g. by DateTimeMSToString and TTextWriter.AddDateTimeMS
-  DTMS_FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%%:%:%.%%');
+  DTMS_FMT: array[boolean] of RawUTF8 = (
+    '%%%%%%%%%', '%-%-%%%:%:%.%%');
 
 
 
@@ -545,12 +546,12 @@ type
     // - never truncate to date/time or return '' as Text() does
     function FullText(Dest: PUTF8Char; Expanded: boolean;
       FirstTimeChar: AnsiChar = 'T'; QuotedChar: AnsiChar = #0): PUTF8Char; overload;
-    /// convert to a Delphi Time
-    function ToTime: TDateTime;
-    /// convert to a Delphi Date
+    /// extract the Time value of this date/time as floating-point TTime
+    function ToTime: TTime;
+    /// extract the Date value of this date/time as floating-point TDate
     // - will return 0 if the stored value is not a valid date
-    function ToDate: TDateTime;
-    /// convert to a Delphi Date and Time
+    function ToDate: TDate;
+    /// convert to a floating-point TDateTime
     // - will return 0 if the stored value is not a valid date
     function ToDateTime: TDateTime;
     /// convert to a second-based c-encoded time (from Unix epoch 1/1/1970)
@@ -615,7 +616,7 @@ function TimeLogNowUTC: TTimeLog;
 // - handle TTimeLog bit-encoded Int64 format
 function TimeLogFromFile(const FileName: TFileName): TTimeLog;
 
-/// get TTimeLog value from a given Delphi date and time
+/// get TTimeLog value from a given floating-point TDateTime
 // - handle TTimeLog bit-encoded Int64 format
 // - just a wrapper around PTimeLogBits(@aTime)^.From()
 // - we defined such a function since TTimeLogBits(aTimeLog).From() won't change
@@ -710,7 +711,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC, ARM and x86_64
-  {$endif}
+  {$endif CPUX86NOTPIC}
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
   unaligned(result) := 0;
@@ -786,7 +787,8 @@ begin
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
     Div100(Y, d100{%H-});
     unaligned(result) := (146097 * d100.d) shr 2 + (1461 * d100.m) shr 2 +
-      (153 * M + 2) div 5 + D - 693900;
+      (153 * M + 2) div 5 + D;
+    unaligned(result) := unaligned(result) - 693900; // avoid sign issue
     if L < 15 then
       exit; // not enough space to retrieve the time
   end;
@@ -981,7 +983,7 @@ var {$ifdef CPUX86NOTPIC}
     tab: TWordArray absolute TwoDigitLookupW;
     {$else}
     tab: PWordArray;
-    {$endif}
+    {$endif CPUX86NOTPIC}
 begin // use Thhmmss[.sss] format
   if FirstChar <> #0 then
   begin
@@ -1011,7 +1013,7 @@ begin // use Thhmmss[.sss] format
     YearToPChar(MS, P);
     {$else}
     YearToPChar2(tab, MS, P);
-    {$endif}
+    {$endif CPUX86NOTPIC}
     P^ := '.'; // override first digit
     inc(P, 4);
   end;
@@ -1334,13 +1336,13 @@ begin
     dow := DayOfWeek;
   // Encoding the day of change
   d := Day;
-  while not TryEncodeDayOfWeekInMonth(aYear, Month, d, dow, Result) do
+  while not TryEncodeDayOfWeekInMonth(aYear, Month, d, dow, result) do
   begin
     // if Day = 5 then try it and if needed decrement to find the last
     // occurence of the day in this month
     if d = 0 then
     begin
-      TryEncodeDayOfWeekInMonth(aYear, Month, 1, 7, Result);
+      TryEncodeDayOfWeekInMonth(aYear, Month, 1, 7, result);
       break;
     end;
     dec(d);
@@ -1486,7 +1488,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   P := WR.B + 1;
   if WR.BEnd - P <= 4 then
@@ -1521,7 +1523,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
   PWord(P)^ := tab[Day];
@@ -1681,7 +1683,8 @@ begin
   end;
   Div100(Year, d100{%H-});
   Date := (146097 * d100.D) shr 2 + (1461 * d100.M) shr 2 +
-          (153 * Month + 2) div 5 + Day - 693900;
+          (153 * Month + 2) div 5 + Day;
+  Date := Date - 693900; // separated to avoid sign issue
   result := true;
 end;
 
@@ -1759,7 +1762,7 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin // use 'YYMMDDHHMMSS' format
   if DateTime <= 0 then
   begin
@@ -1973,7 +1976,7 @@ begin
   From(@now);
 end;
 
-function TTimeLogBits.ToTime: TDateTime;
+function TTimeLogBits.ToTime: TTime;
 var
   lo: PtrUInt;
 begin
@@ -1981,14 +1984,14 @@ begin
   lo := Value;
   {$else}
   lo := PCardinal(@Value)^;
-  {$endif}
+  {$endif CPU64}
   if lo and (1 shl (6 + 6 + 5) - 1) = 0 then
     result := 0
   else
     result := EncodeTime((lo shr (6 + 6)) and 31, (lo shr 6) and 63, lo and 63, 0);
 end;
 
-function TTimeLogBits.ToDate: TDateTime;
+function TTimeLogBits.ToDate: TDate;
 var
   Y, lo: PtrUInt;
 begin
@@ -1998,10 +2001,10 @@ begin
   {$else}
   Y := Value shr (6 + 6 + 5 + 5 + 4);
   lo := PCardinal(@Value)^;
-  {$endif}
+  {$endif CPU64}
   if (Y = 0) or
      not TryEncodeDate(Y, 1 + (lo shr (6 + 6 + 5 + 5)) and 15,
-                       1 + (lo shr (6 + 6 + 5)) and 31, result) then
+                       1 + (lo shr (6 + 6 + 5)) and 31, TDateTime(result)) then
     result := 0;
 end;
 
@@ -2016,7 +2019,7 @@ begin
   {$else}
   Y := Value shr (6 + 6 + 5 + 5 + 4);
   lo := PCardinal(@Value)^;
-  {$endif}
+  {$endif CPU64}
   if (Y = 0) or
       not TryEncodeDate(Y, 1 + (lo shr (6 + 6 + 5 + 5)) and 15,
                         1 + (lo shr (6 + 6 + 5)) and 31, result) then
@@ -2209,7 +2212,7 @@ var
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PNormTableByte; // faster on PIC/x86_64/ARM
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   result := 0;
   if P = nil then

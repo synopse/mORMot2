@@ -53,15 +53,15 @@ const
   SQL_RETURN_VALUE = 5;
   SQL_PARAM_DATA_AVAILABLE = 101;
 
-  SQL_ERROR = (-1);
-  SQL_INVALID_HANDLE = (-2);
+  SQL_ERROR = -1;
+  SQL_INVALID_HANDLE = -2;
 
   SQL_STILL_EXECUTING = 2;
   SQL_NEED_DATA = 99;
 
   // flags for null-terminated string
-  SQL_NTS = (-3);
-  SQL_NTSL = (-3);
+  SQL_NTS = -3;
+  SQL_NTSL = -3;
 
   // maximum message length
   SQL_MAX_MESSAGE_LENGTH = 512;
@@ -113,8 +113,8 @@ const
   SQL_ATTR_APP_PARAM_DESC = 10011;
   SQL_ATTR_IMP_ROW_DESC = 10012;
   SQL_ATTR_IMP_PARAM_DESC = 10013;
-  SQL_ATTR_CURSOR_SCROLLABLE = (-1);
-  SQL_ATTR_CURSOR_SENSITIVITY = (-2);
+  SQL_ATTR_CURSOR_SCROLLABLE = -1;
+  SQL_ATTR_CURSOR_SENSITIVITY = -2;
 
   // SQL_ATTR_CURSOR_SCROLLABLE values
   SQL_NONSCROLLABLE = 0;
@@ -196,8 +196,8 @@ const
   SQL_C_DOUBLE = SQL_DOUBLE;
   SQL_C_NUMERIC = SQL_NUMERIC;
   SQL_C_DEFAULT = 99;
-  SQL_SIGNED_OFFSET = (-20);
-  SQL_UNSIGNED_OFFSET = (-22);
+  SQL_SIGNED_OFFSET = -20;
+  SQL_UNSIGNED_OFFSET = -22;
   SQL_C_DATE = SQL_DATE;
   SQL_C_TIME = SQL_TIME;
   SQL_C_TIMESTAMP = SQL_TIMESTAMP;
@@ -206,24 +206,24 @@ const
   SQL_C_TYPE_TIMESTAMP = SQL_TYPE_TIMESTAMP;
   SQL_C_BINARY = SQL_BINARY;
   SQL_C_BIT = SQL_BIT;
-  SQL_C_SBIGINT = (SQL_BIGINT+SQL_SIGNED_OFFSET);
-  SQL_C_UBIGINT = (SQL_BIGINT+SQL_UNSIGNED_OFFSET);
+  SQL_C_SBIGINT = SQL_BIGINT + SQL_SIGNED_OFFSET;
+  SQL_C_UBIGINT = SQL_BIGINT + SQL_UNSIGNED_OFFSET;
   SQL_C_TINYINT = SQL_TINYINT;
-  SQL_C_SLONG = (SQL_C_LONG+SQL_SIGNED_OFFSET);
-  SQL_C_SSHORT = (SQL_C_SHORT+SQL_SIGNED_OFFSET);
-  SQL_C_STINYINT = (SQL_TINYINT+SQL_SIGNED_OFFSET);
-  SQL_C_ULONG = (SQL_C_LONG+SQL_UNSIGNED_OFFSET);
-  SQL_C_USHORT = (SQL_C_SHORT+SQL_UNSIGNED_OFFSET);
-  SQL_C_UTINYINT = (SQL_TINYINT+SQL_UNSIGNED_OFFSET);
+  SQL_C_SLONG = SQL_C_LONG + SQL_SIGNED_OFFSET;
+  SQL_C_SSHORT = SQL_C_SHORT + SQL_SIGNED_OFFSET;
+  SQL_C_STINYINT = SQL_TINYINT + SQL_SIGNED_OFFSET;
+  SQL_C_ULONG = SQL_C_LONG + SQL_UNSIGNED_OFFSET;
+  SQL_C_USHORT = SQL_C_SHORT + SQL_UNSIGNED_OFFSET;
+  SQL_C_UTINYINT = SQL_TINYINT  +  SQL_UNSIGNED_OFFSET;
 
   // Driver specific SQL data type defines.
   // Microsoft has -150 thru -199 reserved for Microsoft SQL Server Native Client driver usage.
-  SQL_SS_VARIANT = (-150);
-  SQL_SS_UDT = (-151);
-  SQL_SS_XML = (-152);
-  SQL_SS_TABLE = (-153);
-  SQL_SS_TIME2 = (-154);
-  SQL_SS_TIMESTAMPOFFSET = (-155);
+  SQL_SS_VARIANT = -150;
+  SQL_SS_UDT = -151;
+  SQL_SS_XML = -152;
+  SQL_SS_TABLE = -153;
+  SQL_SS_TIME2 = -154;
+  SQL_SS_TIMESTAMPOFFSET = -155;
 
   // Statement attribute values for cursor sensitivity
   SQL_UNSPECIFIED = 0;
@@ -238,9 +238,9 @@ const
 
   // SQLSQLLEN GetData() code indicating that the application row descriptor
   // specifies the data type
-  SQL_ARD_TYPE = (-99);
+  SQL_ARD_TYPE = -99;
 
-  SQL_APD_TYPE = (-100);
+  SQL_APD_TYPE = -100;
 
   // SQL date/time type subcodes
   SQL_CODE_DATE = 1;
@@ -372,26 +372,26 @@ const
   // SQLSetStmtAttr SQL Server Native Client driver specific defines.
   // Statement attributes
   SQL_SOPT_SS_BASE                      = 1225;
-  SQL_SOPT_SS_TEXTPTR_LOGGING           = (SQL_SOPT_SS_BASE+0); // Text pointer logging
-  SQL_SOPT_SS_CURRENT_COMMAND           = (SQL_SOPT_SS_BASE+1); // dbcurcmd SQLGetStmtOption only
-  SQL_SOPT_SS_HIDDEN_COLUMNS            = (SQL_SOPT_SS_BASE+2); // Expose FOR BROWSE hidden columns
-  SQL_SOPT_SS_NOBROWSETABLE             = (SQL_SOPT_SS_BASE+3); // Set NOBROWSETABLE option
-  SQL_SOPT_SS_REGIONALIZE               = (SQL_SOPT_SS_BASE+4); // Regionalize output character conversions
-  SQL_SOPT_SS_CURSOR_OPTIONS            = (SQL_SOPT_SS_BASE+5); // Server cursor options
-  SQL_SOPT_SS_NOCOUNT_STATUS            = (SQL_SOPT_SS_BASE+6); // Real vs. Not Real row count indicator
-  SQL_SOPT_SS_DEFER_PREPARE             = (SQL_SOPT_SS_BASE+7); // Defer prepare until necessary
-  SQL_SOPT_SS_QUERYNOTIFICATION_TIMEOUT = (SQL_SOPT_SS_BASE+8); // Notification timeout
-  SQL_SOPT_SS_QUERYNOTIFICATION_MSGTEXT = (SQL_SOPT_SS_BASE+9); // Notification message text
-  SQL_SOPT_SS_QUERYNOTIFICATION_OPTIONS = (SQL_SOPT_SS_BASE+10);// SQL service broker name
-  SQL_SOPT_SS_PARAM_FOCUS               = (SQL_SOPT_SS_BASE+11);// Direct subsequent calls to parameter related methods to set properties on constituent columns/parameters of container types
-  SQL_SOPT_SS_NAME_SCOPE                = (SQL_SOPT_SS_BASE+12);// Sets name scope for subsequent catalog function calls
+  SQL_SOPT_SS_TEXTPTR_LOGGING           = SQL_SOPT_SS_BASE + 0; // Text pointer logging
+  SQL_SOPT_SS_CURRENT_COMMAND           = SQL_SOPT_SS_BASE + 1; // dbcurcmd SQLGetStmtOption only
+  SQL_SOPT_SS_HIDDEN_COLUMNS            = SQL_SOPT_SS_BASE + 2; // Expose FOR BROWSE hidden columns
+  SQL_SOPT_SS_NOBROWSETABLE             = SQL_SOPT_SS_BASE + 3; // Set NOBROWSETABLE option
+  SQL_SOPT_SS_REGIONALIZE               = SQL_SOPT_SS_BASE + 4; // Regionalize output character conversions
+  SQL_SOPT_SS_CURSOR_OPTIONS            = SQL_SOPT_SS_BASE + 5; // Server cursor options
+  SQL_SOPT_SS_NOCOUNT_STATUS            = SQL_SOPT_SS_BASE + 6; // Real vs. Not Real row count indicator
+  SQL_SOPT_SS_DEFER_PREPARE             = SQL_SOPT_SS_BASE + 7; // Defer prepare until necessary
+  SQL_SOPT_SS_QUERYNOTIFICATION_TIMEOUT = SQL_SOPT_SS_BASE + 8; // Notification timeout
+  SQL_SOPT_SS_QUERYNOTIFICATION_MSGTEXT = SQL_SOPT_SS_BASE + 9; // Notification message text
+  SQL_SOPT_SS_QUERYNOTIFICATION_OPTIONS = SQL_SOPT_SS_BASE + 10;// SQL service broker name
+  SQL_SOPT_SS_PARAM_FOCUS               = SQL_SOPT_SS_BASE + 11;// Direct subsequent calls to parameter related methods to set properties on constituent columns/parameters of container types
+  SQL_SOPT_SS_NAME_SCOPE                = SQL_SOPT_SS_BASE + 12;// Sets name scope for subsequent catalog function calls
   SQL_SOPT_SS_MAX_USED                  = SQL_SOPT_SS_NAME_SCOPE;
 
-  SQL_IS_POINTER                        = (-4);
-  SQL_IS_UINTEGER                       = (-5);
-  SQL_IS_INTEGER                        = (-6);
-  SQL_IS_USMALLINT                      = (-7);
-  SQL_IS_SMALLINT                       = (-8);
+  SQL_IS_POINTER                        = -4;
+  SQL_IS_UINTEGER                       = -5;
+  SQL_IS_INTEGER                        = -6;
+  SQL_IS_USMALLINT                      = -7;
+  SQL_IS_SMALLINT                       = -8;
 
 type
   SqlSmallint = Smallint;
@@ -433,12 +433,13 @@ type
 
 type
   {$A-}
+
   /// memory structure used to store SQL_C_TYPE_TIMESTAMP values
-//  {$ifdef USERECORDWITHMETHODS}
-//  SQL_TIMESTAMP_STRUCT = record
-//  {$else}
+  {$ifdef USERECORDWITHMETHODS}
+  SQL_TIMESTAMP_STRUCT = record
+  {$else}
   SQL_TIMESTAMP_STRUCT = object
-//  {$endif USERECORDWITHMETHODS}
+  {$endif USERECORDWITHMETHODS}
     Year:     SqlSmallint;
     Month:    SqlUSmallint;
     Day:      SqlUSmallint;
@@ -446,7 +447,7 @@ type
     Minute:   SqlUSmallint;
     Second:   SqlUSmallint;
     Fraction: SqlUInteger;
-    /// convert an ODBC date and time into Delphi TDateTime
+    /// convert an ODBC date and time into TDateTime
     // - depending on the original column data type specified, it will return
     // either a TDate (for SQL_TYPE_DATE), either a TTime (for SQL_TYPE_TIME),
     // either a TDateTime content (for SQL_TYPE_TIMESTAMP)
@@ -455,7 +456,7 @@ type
     // - will fill up to 21 characters, including double quotes
     // - depending on the column data type specified, it will return either an
     // ISO-8601 date (for SQL_TYPE_DATE), either a time (for SQL_TYPE_TIME),
-    // either a full date+time ISO-8601 content (for SQL_TYPE_TIMESTAMP)
+    // either a full date + time ISO-8601 content (for SQL_TYPE_TIMESTAMP)
     function ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
       WithMS: boolean = false): integer;
     /// convert a TDateTime into ODBC date or timestamp
@@ -477,6 +478,7 @@ type
     month:	SQLUSMALLINT;
     day:	SQLUSMALLINT;
   end;
+
   {$A+}
 
 
@@ -834,7 +836,7 @@ begin
     result := EncodeDate(Year, Month, Day);
   if (DataType <> SQL_TYPE_DATE) and (PInt64(@Hour)^ <> 0) and TryEncodeTime(Hour,
     Minute, Second, Fraction div 1000000, time) then
-    result := result + time;
+    result := result  +  time;
 end;
 
 function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
@@ -878,9 +880,10 @@ const
   ODBC_LIB = 'libodbc.so.1';
   {$endif MSWINDOWS}
 
-  ODBC_ENTRIES: array[0..66] of PChar = ('SQLAllocEnv', 'SQLAllocHandle',
-    'SQLAllocStmt', 'SQLBindCol', 'SQLBindParameter', 'SQLCancel',
-    'SQLCloseCursor', 'SQLColAttribute', 'SQLColAttributeW', 'SQLColumns',
+  ODBC_ENTRIES: array[0..66] of PChar = (
+    'SQLAllocEnv', 'SQLAllocHandle', 'SQLAllocStmt',
+    'SQLBindCol', 'SQLBindParameter', 'SQLCancel', 'SQLCloseCursor',
+    'SQLColAttribute', 'SQLColAttributeW', 'SQLColumns',
     'SQLColumnsW', 'SQLStatistics', 'SQLStatisticsW', 'SQLConnect',
     'SQLConnectW', 'SQLCopyDesc', 'SQLDataSources', 'SQLDataSourcesW',
     'SQLDescribeCol', 'SQLDescribeColW', 'SQLDisconnect', 'SQLEndTran',
@@ -929,12 +932,12 @@ begin
         for I := 0 to aDrivers.Count - 1 do
         begin
           CloseKey;
-          result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\' + aDrivers[I]);
+          result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\'  +  aDrivers[I]);
           if result then
           begin
             // expand environment variable, i.e %windir%
             lDriver := ExpandEnvVars(ReadString('Driver'));
-            aDrivers[I] := aDrivers[I] + '=' + GetFullFileVersion(lDriver);
+            aDrivers[I] := aDrivers[I]  +  '='  +  GetFullFileVersion(lDriver);
           end;
         end;
     end;

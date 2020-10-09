@@ -950,8 +950,9 @@ type
   THttpApiWebSocketServerProtocol = class;
 
   /// current state of a THttpApiWebSocketConnection
-  TWebSocketState = (wsConnecting, wsOpen,
-    wsClosing, wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown);
+  TWebSocketState = (
+    wsConnecting, wsOpen, wsClosing, wsClosedByClient, wsClosedByServer,
+    wsClosedByGuard, wsClosedByShutdown);
 
   /// structure representing a single WebSocket connection
   {$ifdef USERECORDWITHMETHODS}
@@ -2546,7 +2547,8 @@ procedure THttpApiServer.Execute;
 type
   TVerbText = array[hvOPTIONS..pred(hvMaximum)] of RawUTF8;
 const
-  VERB_TEXT: TVerbText = ('OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE',
+  VERB_TEXT: TVerbText = (
+    'OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE',
     'TRACE', 'CONNECT', 'TRACK', 'MOVE', 'COPY', 'PROPFIND', 'PROPPATCH',
     'MKCOL', 'LOCK', 'UNLOCK', 'SEARCH');
 var
@@ -2963,7 +2965,7 @@ begin
     else
       EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
         Http.QueryRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-          @Result, sizeof(Result), 0, @returnLength, nil));
+          @result, sizeof(result), 0, @returnLength, nil));
   end;
 end;
 
@@ -3045,7 +3047,7 @@ begin
   EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
     Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
       @qosInfoGet, SizeOf(qosInfoGet)));
-  Result := qosInfoGet.limitInfo.MaxBandwidth;
+  result := qosInfoGet.limitInfo.MaxBandwidth;
 end;
 
 function THttpApiServer.GetMaxConnections: Cardinal;
@@ -3073,7 +3075,7 @@ begin
   EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
     Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
       @qosInfoGet, SizeOf(qosInfoGet), @returnLength));
-  Result := qosInfoGet.limitInfo.MaxConnections;
+  result := qosInfoGet.limitInfo.MaxConnections;
 end;
 
 procedure THttpApiServer.SetMaxConnections(aValue: Cardinal);
@@ -3363,7 +3365,7 @@ begin
   if fFirstEmptyConnectionIndex >= fConnectionsCount then
     fConnectionsCount := fFirstEmptyConnectionIndex + 1;
   fConnections[fFirstEmptyConnectionIndex] := aConn;
-  Result := fFirstEmptyConnectionIndex;
+  result := fFirstEmptyConnectionIndex;
   for i := fFirstEmptyConnectionIndex + 1 to fConnectionsCount do
   begin
     if fConnections[i] = nil then
@@ -3396,7 +3398,7 @@ function THttpApiWebSocketServerProtocol.Close(index: Integer;
 var
   conn: PHttpApiWebSocketConnection;
 begin
-  Result := false;
+  result := false;
   if cardinal(index) < cardinal(fConnectionsCount) then
   begin
     conn := fConnections^[index];
@@ -3560,7 +3562,7 @@ begin
   finally
     result := WebSocketAPI.EndServerHandshake(fWSHandle) = S_OK;
   end;
-  if not Result then
+  if not result then
     Disconnect
   else
     fLastReceiveTickCount := 0;
@@ -3625,7 +3627,7 @@ var
   fBytesRead: cardinal;
   aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
-  Result := 0;
+  result := 0;
   if fWSHandle = nil then
     exit;
   Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.FReqQueue,
@@ -3637,7 +3639,7 @@ begin
     // (WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION) and terminate socket
     // see forum discussion https://synopse.info/forum/viewtopic.php?pid=27125
     ERROR_HANDLE_EOF:
-      Result := -1;
+      result := -1;
     ERROR_IO_PENDING:
       ; //
     NO_ERROR:

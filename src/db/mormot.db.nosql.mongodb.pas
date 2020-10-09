@@ -73,7 +73,8 @@ type
   // the collection if no matching document is found
   // - if mufMultiUpdate is set, the database will update all matching objects
   // in the collection; otherwise (by default) only updates first matching doc
-  TMongoUpdateFlag = (mufUpsert, mufMultiUpdate);
+  TMongoUpdateFlag = (
+    mufUpsert, mufMultiUpdate);
 
   /// define how a TMongoRequestUpdate message will behave
   TMongoUpdateFlags = set of TMongoUpdateFlag;
@@ -84,7 +85,8 @@ type
   // insert behave similarly to a series of single inserts, except lastError
   // will be set if any insert fails, not just the last one - if multiple
   // errors occur, only the most recent will be reported by getLastError
-  TMongoInsertFlag = (mifContinueOnError);
+  TMongoInsertFlag = (
+    mifContinueOnError);
 
   /// define how a TMongoRequestInsert message will behave
   TMongoInsertFlags = set of TMongoInsertFlag;
@@ -93,7 +95,8 @@ type
   // - if mdfSingleRemove is set, the database will remove only the first
   // matching document in the collection. Otherwise (by default) all matching
   // documents will be removed
-  TMongoDeleteFlag = (mdfSingleRemove);
+  TMongoDeleteFlag = (
+    mdfSingleRemove);
 
   /// define how a TMongoRequestDelete message will behave
   TMongoDeleteFlags = set of TMongoDeleteFlag;
@@ -2581,7 +2584,8 @@ end;
 constructor TMongoClient.Create(const Host: RawUTF8; Port: Integer;
   aTLS: boolean; const SecondaryHostCSV, SecondaryPortCSV: RawUTF8);
 const
-  PROT: array[boolean] of string[1] = ('', 's');
+  PROT: array[boolean] of string[1] = (
+    '', 's');
 var
   secHost: TRawUTF8DynArray;
   secPort: TIntegerDynArray;
@@ -3019,7 +3023,8 @@ end;
 function TMongoDatabase.CreateUserForThisDatabase(
   const UserName, Password: RawUTF8; allowWrite: Boolean): RawUTF8;
 const
-  RW: array[boolean] of RawUTF8 = ('read', 'readWrite');
+  RW: array[boolean] of RawUTF8 = (
+    'read', 'readWrite');
 begin
   result := CreateUser(UserName, Password,
     BSONVariant('[{role:?,db:?}]', [], [RW[allowWrite], name]));
@@ -3261,7 +3266,8 @@ end;
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUTF8;
   Ascending, Unique: boolean);
 const
-  order: array[boolean] of Integer = (-1, 1);
+  order: array[boolean] of Integer = (
+    -1, 1);
 var
   k, opt: variant;
   A: integer;
