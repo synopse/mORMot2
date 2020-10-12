@@ -1114,6 +1114,50 @@ function Base64uriToBin(const base64: RawByteString;
 // - you should better not use this, but Base64uriToBin() overloaded functions
 function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 
+type
+  /// used by MultiPartFormDataDecode() to return one item of its data
+  TMultiPart = record
+    Name: RawUTF8;
+    FileName: RawUTF8;
+    ContentType: RawUTF8;
+    Encoding: RawUTF8;
+    Content: RawByteString;
+  end;
+  /// used by MultiPartFormDataDecode() to return all its data items
+  TMultiPartDynArray = array of TMultiPart;
+
+/// decode multipart/form-data POST request content
+// - following RFC1867
+function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
+
+/// encode multipart fields and files
+// - only one of them can be used because MultiPartFormDataDecode must implement
+// both decodings
+// - MultiPart: parts to build the multipart content from, which may be created
+// using MultiPartFormDataAddFile/MultiPartFormDataAddField
+// - MultiPartContentType: variable returning
+// $ Content-Type: multipart/form-data; boundary=xxx
+// where xxx is the first generated boundary
+// - MultiPartContent: generated multipart content
+function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
+  var MultiPartContentType, MultiPartContent: RawUTF8): boolean;
+
+/// encode a file in a multipart array
+// - FileName: file to encode
+// - Multipart: where the part is added
+// - Name: name of the part, is empty the name 'File###' is generated
+function MultiPartFormDataAddFile(const FileName: TFileName;
+  var MultiPart: TMultiPartDynArray; const Name: RawUTF8 = ''): boolean;
+
+/// encode a field in a multipart array
+// - FieldName: field name of the part
+// - FieldValue: value of the field
+// - Multipart: where the part is added
+function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
+
+
 /// convert some ASCII-7 text into binary, using Emile Baudot code
 // - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
 // charset, following a custom static-huffman-like encoding with 5-bit masks
@@ -5644,6 +5688,187 @@ begin // '\uFFF0base64encodedbinary' checked and decode into binary
     result := false
   else
     result := Base64ToBinSafe(PAnsiChar(Value) + 3, ValueLen - 3, Blob);
+end;
+
+function MultiPartFormDataDecode(const MimeType, Body: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
+var
+  boundary, endBoundary: RawUTF8;
+  i, j: integer;
+  P: PUTF8Char;
+  part: TMultiPart;
+begin
+  result := false;
+  i := PosEx('boundary=', MimeType);
+  if i = 0 then
+    exit;
+  TrimCopy(MimeType, i + 9, 200, boundary);
+  if (boundary <> '') and (boundary[1] = '"') then
+    // "boundary" -> boundary
+    boundary := copy(boundary, 2, length(boundary) - 2);
+  boundary := '--' + boundary;
+  endBoundary := boundary + '--' + #13#10;
+  boundary := boundary + #13#10;
+  i := PosEx(boundary, Body);
+  if i <> 0 then
+    repeat
+      inc(i, length(boundary));
+      if i = length(Body) then
+        exit; // reached the end
+      P := PUTF8Char(Pointer(Body)) + i - 1;
+      Finalize(part);
+      repeat
+        if IdemPChar(P, 'CONTENT-DISPOSITION: ') then
+        begin
+          inc(P, 21);
+          if IdemPCharAndGetNextItem(P, 'FORM-DATA; NAME="', part.Name, '"') then
+            IdemPCharAndGetNextItem(P, '; FILENAME="', part.FileName, '"')
+          else
+            IdemPCharAndGetNextItem(P, 'FILE; FILENAME="', part.FileName, '"')
+        end
+        else if not IdemPCharAndGetNextItem(P, 'CONTENT-TYPE: ', part.ContentType) then
+          IdemPCharAndGetNextItem(P, 'CONTENT-TRANSFER-ENCODING: ', part.Encoding);
+        P := GotoNextLine(P);
+        if P = nil then
+          exit;
+      until PWord(P)^ = 13 + 10 shl 8;
+      i := P - PUTF8Char(Pointer(Body)) + 3; // i = just after header
+      j := PosEx(boundary, Body, i);
+      if j = 0 then
+      begin
+        j := PosEx(endBoundary, Body, i); // try last boundary
+        if j = 0 then
+          exit;
+      end;
+      part.Content := copy(Body, i, j - i - 2); // -2 to ignore latest #13#10
+      if (part.ContentType = '') or (PosEx('-8', part.ContentType) > 0) then
+      begin
+        part.ContentType := TEXT_CONTENT_TYPE;
+        {$ifdef HASCODEPAGE}
+        SetCodePage(part.Content, CP_UTF8, false); // ensure raw field value is UTF-8
+        {$endif HASCODEPAGE}
+      end;
+      if IdemPropNameU(part.Encoding, 'base64') then
+        part.Content := Base64ToBin(part.Content);
+      // note: "quoted-printable" not yet handled here
+      SetLength(MultiPart, length(MultiPart) + 1);
+      MultiPart[high(MultiPart)] := part;
+      result := true;
+      i := j;
+    until false;
+end;
+
+function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
+  var MultiPartContentType, MultiPartContent: RawUTF8): boolean;
+var
+  len, boundcount, filescount, i: integer;
+  boundaries: array of RawUTF8;
+  bound: RawUTF8;
+  W: TBaseWriter;
+  temp: TTextWriterStackBuffer;
+
+  procedure NewBound;
+  var
+    random: array[1..3] of cardinal;
+  begin
+    FillRandom(@random, 3);
+    bound := BinToBase64(@random, SizeOf(random));
+    SetLength(boundaries, boundcount + 1);
+    boundaries[boundcount] := bound;
+    inc(boundcount);
+  end;
+
+begin
+  result := false;
+  len := length(MultiPart);
+  if len = 0 then
+    exit;
+  boundcount := 0;
+  filescount := 0;
+  W := TBaseWriter.CreateOwnedStream(temp);
+  try
+    // header - see https://www.w3.org/Protocols/rfc1341/7_2_Multipart.html
+    NewBound;
+    MultiPartContentType := 'Content-Type: multipart/form-data; boundary=' + bound;
+    for i := 0 to len - 1 do
+      with MultiPart[i] do
+      begin
+        if FileName = '' then
+          W.Add('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10 +
+            'Content-Type: %'#13#10#13#10'%'#13#10'--%'#13#10,
+            [bound, Name, ContentType, Content, bound])
+        else
+        begin
+        // if this is the first file, create the header for files
+          if filescount = 0 then
+          begin
+            if i > 0 then
+              NewBound;
+            W.Add('Content-Disposition: form-data; name="files"'#13#10 +
+              'Content-Type: multipart/mixed; boundary=%'#13#10#13#10, [bound]);
+          end;
+          inc(filescount);
+          W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10 +
+            'Content-Type: %'#13#10, [bound, FileName, ContentType]);
+          if Encoding <> '' then
+            W.Add('Content-Transfer-Encoding: %'#13#10, [Encoding]);
+          W.AddCR;
+          W.AddString(MultiPart[i].Content);
+          W.Add(#13#10'--%'#13#10, [bound]);
+        end;
+      end;
+    // footer multipart
+    for i := boundcount - 1 downto 0 do
+      W.Add('--%--'#13#10, [boundaries[i]]);
+    W.SetText(MultiPartContent);
+    result := True;
+  finally
+    W.Free;
+  end;
+end;
+
+function MultiPartFormDataAddFile(const FileName: TFileName;
+  var MultiPart: TMultiPartDynArray; const Name: RawUTF8): boolean;
+var
+  part: TMultiPart;
+  newlen: integer;
+  content: RawByteString;
+begin
+  result := false;
+  content := StringFromFile(FileName);
+  if content = '' then
+    exit;
+  newlen := length(MultiPart) + 1;
+  if Name = '' then
+    FormatUTF8('File%', [newlen], part.Name)
+  else
+    part.Name := Name;
+  part.FileName := StringToUTF8(ExtractFileName(FileName));
+  part.ContentType := GetMimeContentType(pointer(content), length(content), FileName);
+  part.Encoding := 'base64';
+  part.Content := BinToBase64(content);
+  SetLength(MultiPart, newlen);
+  MultiPart[newlen - 1] := part;
+  result := true;
+end;
+
+function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
+var
+  part: TMultiPart;
+  newlen: integer;
+begin
+  result := false;
+  if FieldName = '' then
+    exit;
+  newlen := length(MultiPart) + 1;
+  part.Name := FieldName;
+  part.ContentType := GetMimeContentTypeFromBuffer(
+    pointer(FieldValue), length(FieldValue), 'text/plain');
+  part.Content := FieldValue;
+  SetLength(MultiPart, newlen);
+  MultiPart[newlen - 1] := part;
+  result := true;
 end;
 
 
