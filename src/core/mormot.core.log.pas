@@ -272,6 +272,10 @@ var
   // - do not access this variable in your code: defined here to allow inlining
   GlobalThreadLock: TRTLCriticalSection;
 
+  /// is set to TRUE before ObjArrayClear(SynLogFile) in unit finalization
+  // - defined here to avoid unexpected GPF at shutdown
+  SynLogFileFreeing: boolean;
+
 type
   /// class of Exceptions raised by this unit
   ESynLogException = class(ESynException);
@@ -5867,6 +5871,7 @@ end;
 procedure FinalizeUnit;
 begin
   ExeInstanceMapFile.Free;
+  SynLogFileFreeing := true; // to avoid GPF at shutdown
   ObjArrayClear(SynLogFile); // TSynLogFamily are freed as TRttiCustom.Private
   DeleteCriticalSection(GlobalThreadLock);
 end;
