@@ -1,0 +1,3063 @@
+/// REpresentation State Tranfer (REST) Core Types and Classes
+// - this unit is a part of the Open Source Synopse mORMot framework 2,
+// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
+unit mormot.rest.core;
+
+{
+  *****************************************************************************
+
+   Shared Types and Definitions for Abstract REST Process
+    - Customize REST Execution
+    - TSQLRestBackgroundTimer for Multi-Thread Process
+    - TSQLRest Abstract Parent Class
+    - RESTful Authentication Support
+    - TSQLRestURIParams REST URI Definitions
+    - TSQLRestThread Background Process of a REST instance
+
+  *****************************************************************************
+}
+
+interface
+
+{$I ..\mormot.defines.inc}
+
+uses
+  sysutils,
+  classes,
+  variants,
+  contnrs,
+  {$ifndef FPC}
+  //typinfo, // for proper Delphi inlining
+  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
+  Generics.Collections,
+  {$endif ISDELPHI2010}
+  {$endif FPC}
+  mormot.core.base,
+  mormot.core.os,
+  mormot.core.buffers,
+  mormot.core.unicode,
+  mormot.core.text,
+  mormot.core.datetime,
+  mormot.core.variants,
+  mormot.core.data,
+  mormot.core.rtti,
+  mormot.core.json,
+  mormot.core.threads,
+  mormot.core.crypto,
+  mormot.core.perf,
+  mormot.core.search,
+  mormot.core.secure,
+  mormot.core.log,
+  mormot.core.interfaces,
+  mormot.orm.core, // for TSQLRecord and IRestORM
+  mormot.soa.core,
+  mormot.db.core;
+
+
+{ ************ Customize REST Execution }
+
+type
+  /// all commands which may be executed by TSQLRestServer.URI() method
+  // - execSOAByMethod for method-based services
+  // - execSOAByInterface for interface-based services
+  // - execORMGet for ORM reads i.e. Retrieve*() methods
+  // - execORMWrite for ORM writes i.e. Add Update Delete TransactionBegin
+  // Commit Rollback methods
+  TSQLRestServerURIContextCommand = (
+    execNone, execSOAByMethod, execSOAByInterface, execORMGet, execORMWrite);
+
+  /// how a TSQLRest class may execute read or write operations
+  // - used e.g. for TSQLRestServer.AcquireWriteMode or
+  // TSQLRestServer.AcquireExecutionMode/AcquireExecutionLockedTimeOut
+  TSQLRestServerAcquireMode = (
+    amUnlocked, amLocked, amBackgroundThread, amBackgroundORMSharedThread,
+    amMainThread);
+
+  /// used to store the execution parameters for a TSQLRest instance
+  TSQLRestAcquireExecution = class(TSynPersistentLock)
+  public
+    /// how read or write operations will be executed
+    Mode: TSQLRestServerAcquireMode;
+    /// delay before failing to acquire the lock
+    LockedTimeOut: cardinal;
+    /// background thread instance (if any)
+    Thread: TSynBackgroundThreadMethod;
+    /// finalize the memory structure, and the associated background thread
+    destructor Destroy; override;
+  end;
+
+  /// define how a TSQLRest class may execute its ORM and SOA operations
+  TSQLRestAcquireExecutions = array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
+
+
+{ ************ TSQLRestBackgroundTimer for Multi-Thread Process }
+
+type
+  {$M+}
+  { we expect RTTI information for the published properties of these
+    forward definitions - due to internal coupling, those classes are
+    to be defined in a single "type" statement }
+  TSQLRest = class;
+  {$M-}
+
+  /// optionally called after TSQLRest.AsynchRedirect background execution
+  // - to retrieve any output result value, as JSON-encoded content
+  // - as used in TSQLRestBackgroundTimer.AsynchBackgroundExecute protected method
+  TOnAsynchRedirectResult = procedure(const aMethod: TInterfaceMethod;
+    const aInstance: IInvokable; const aParams, aResult: RawUTF8) of object;
+
+  /// TThread able to run one or several tasks at a periodic pace, or do
+  // asynchronous interface or batch execution, with proper TSQLRest integration
+  // - used e.g. by TSQLRest.TimerEnable/AsynchRedirect/AsynchBatchStart methods
+  // - TSQLRest.BackgroundTimer will define one instance, but you may create
+  // other dedicated instances to instantiate separated threads
+  TSQLRestBackgroundTimer = class(TSynBackgroundTimer)
+  protected
+    fRest: TSQLRest;
+    fBackgroundBatch: TSQLRestBatchLockedDynArray;
+    fBackgroundInterning: array of TRawUTF8Interning;
+    fBackgroundInterningMaxRefCount: integer;
+    procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+    // used by AsynchRedirect/AsynchBatch/AsynchInterning
+    function AsynchBatchIndex(aTable: TSQLRecordClass): integer;
+    function AsynchBatchLocked(aTable: TSQLRecordClass;
+      out aBatch: TSQLRestBatchLocked): boolean;
+    procedure AsynchBatchUnLock(aBatch: TSQLRestBatchLocked);
+    procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+    procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+    procedure AsynchBackgroundInterning(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+  public
+    /// initialize the thread for a periodic task processing
+    constructor Create(aRest: TSQLRest; const aThreadName: RawUTF8 = '';
+      aStats: TSynMonitorClass = nil); reintroduce; virtual;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this method implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - parameters will be serialized and stored as JSON in the queue
+    // - by design, only procedure methods without any output parameters are
+    // allowed, since their execution will take place asynchronously
+    // - of course, a slight delay is introduced in aDestinationInterface
+    // methods execution, but the main process thread is not delayed any more,
+    // and is free from potential race conditions
+    // - the returned fake aCallbackInterface should be freed before TSQLRest
+    // is destroyed, to release the redirection resources
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInterface: IInvokable; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this method implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - parameters will be serialized and stored as JSON in the queue
+    // - by design, only procedure methods without any output parameters are
+    // allowed, since their execution will take place asynchronously
+    // - of course, a slight delay is introduced in aDestinationInterface
+    // methods execution, but the main process thread is not delayed any more,
+    // and is free from potential race conditions
+    // - the returned fake aCallbackInterface should be freed before TSQLRest
+    // is destroyed, to release the redirection resources
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    /// prepare an asynchronous ORM BATCH process, executed in a background thread
+    // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
+    // background thread, following the given processing period (in seconds),
+    // or the TSQLRestBatch.Count threshold to call BatchSend
+    // - actual REST/CRUD commands will take place via AsynchBatchAdd,
+    // AsynchBatchUpdate and AsynchBatchDelete methods
+    // - only a single AsynchBatch() call per Table is allowed at a time, unless
+    // AsynchBatchStop method is used to flush the current asynchronous BATCH
+    // - using a BATCH in a dedicated thread will allow very fast background
+    // asynchronous process of ORM methods, sufficient for most use cases
+    function AsynchBatchStart(Table: TSQLRecordClass;
+      SendSeconds: integer; PendingRowThreshold: integer = 500;
+      AutomaticTransactionPerRow: integer = 1000;
+      Options: TSQLRestBatchOptions = [boExtendedJSON]): boolean;
+    /// finalize asynchronous ORM BATCH process, executed in a background thread
+    // - should have been preceded by a call to AsynchBatch(), or returns false
+    // - Table=nil will release all existing batch instances
+    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
+    /// create a new ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around TSQLRestBatch.Add() sent in the Timer thread,
+    // so will return the index in the BATCH rows, not the created TID
+    // - this method is thread-safe
+    function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
+      ForceID: boolean = false; const CustomFields: TSQLFieldBits = [];
+      DoNotAutoComputeFields: boolean = false): integer;
+    /// append some JSON content in a BATCH to be writen in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object
+    // - is a wrapper around TSQLRestBatch.RawAdd() sent in the Timer thread,
+    // so will return the index in the BATCH rows, not the created TID
+    // - this method is thread-safe
+    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+    /// append some JSON content in a BATCH to be writen in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object, as stored in a TTextWriter instance
+    // - is a wrapper around TSQLRestBatch.RawAppend.AddNoJSONEscape(SentData)
+    // in the Timer thread
+    // - this method is thread-safe
+    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+    /// update an ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around the TSQLRestBatch.Update() sent in the Timer thread
+    // - this method is thread-safe
+    function AsynchBatchUpdate(Value: TSQLRecord;
+      const CustomFields: TSQLFieldBits = [];
+      DoNotAutoComputeFields: boolean = false): integer;
+    /// delete an ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
+    // - this method is thread-safe
+    function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    /// allows background garbage collection of specified RawUTF8 interning
+    // - will run Interning.Clean(2) every 5 minutes by default
+    // - set InterningMaxRefCount=0 to disable process of the Interning instance
+    procedure AsynchInterning(Interning: TRawUTF8Interning;
+      InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
+    /// direct access to the TSQLRest instance owner
+    property Rest: TSQLRest read fRest;
+    /// direct access to the background thread TSQLBatch instances
+    property BackgroundBatch: TSQLRestBatchLockedDynArray read fBackgroundBatch;
+  published
+    /// the identifier of the thread, as logged
+    property Name: RawUTF8 read fThreadName;
+  end;
+
+
+{ ************ TSQLRest Abstract Parent Class }
+
+  /// Exception class raised on TSQLRest issues
+  ERestException = class(ESynException);
+
+  /// class-reference type (metaclass) of a TSQLRest kind
+  TSQLRestClass = class of TSQLRest;
+
+  /// a dynamic array of TSQLRest instances
+  TSQLRestDynArray = array of TSQLRest;
+
+  /// a dynamic array of TSQLRest instances, owning the instances
+  TSQLRestObjArray = array of TSQLRest;
+
+  /// a generic REpresentational State Transfer (REST) client/server class
+  // - is a TInterfaceResolver so is able to resolve IRestORM
+  TSQLRest = class(TInterfaceResolver)
+  protected
+    fORM: IRestORM;
+    fORMInstance: TInterfacedObject;
+    fModel: TSQLModel;
+    fServices: TServiceContainer;
+    fLogClass: TSynLogClass;
+    fLogFamily: TSynLogFamily;
+    fBackgroundTimer: TSQLRestBackgroundTimer;
+    fAcquireExecution: TSQLRestAcquireExecutions;
+    fPrivateGarbageCollector: TSynObjectList;
+    fServerTimestamp: record
+      Offset: TDateTime;
+      CacheTix: cardinal;
+      CacheValue: TTimeLogBits;
+    end;
+    function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
+    procedure SetLogClass(aClass: TSynLogClass); virtual;
+    function GetLogClass: TSynLogClass;
+    /// compute the server time stamp offset from the given date/time
+    procedure SetServerTimestamp(const Value: TTimeLog);
+    /// wrapper methods to access fAcquireExecution[]
+    function GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
+    procedure SetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand; Value: TSQLRestServerAcquireMode);
+    function GetAcquireExecutionLockedTimeOut(Cmd: TSQLRestServerURIContextCommand): cardinal;
+    procedure SetAcquireExecutionLockedTimeOut(Cmd: TSQLRestServerURIContextCommand; Value: cardinal);
+    /// any overriden TSQLRest class should call it in the initialization section
+    class procedure RegisterClassNameForDefinition;
+    // inherited classes should unserialize the other aDefinition properties by
+    // overriding this method, in a reverse logic to overriden DefinitionTo()
+    {%H-}constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); virtual;
+  public
+    /// initialize the class, and associate it to a specified database Model
+    constructor Create(aModel: TSQLModel); virtual;
+    /// release internal used instances
+    // - e.g. release associated TSQLModel or TServiceContainer
+    destructor Destroy; override;
+    /// called by TRestORM.Create overriden constructor to set fORM from IRestORM
+    procedure SetORMInstance(aORM: TInterfacedObject); virtual;
+    /// save the TSQLRest properties into a persistent storage object
+    // - you can then use TSQLRest.CreateFrom() to re-instantiate it
+    // - current Definition.Key value will be used for the password encryption
+    // - this default implementation will set the class name in Definition.Kind:
+    // inherited classes should override this method and serialize other
+    // properties, then override RegisteredClassCreateFrom() protected method
+    // to initiate the very same instance
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); virtual;
+    /// save the properties into a JSON file
+    // - you can then use TSQLRest.CreateFromJSON() to re-instantiate it
+    // - you can specify a custom Key, if the default is not enough for you
+    function DefinitionToJSON(Key: cardinal = 0): RawUTF8;
+    /// save the properties into a JSON file
+    // - you can then use TSQLRest.CreateFromFile() to re-instantiate it
+    // - you can specify a custom Key, if the default is not enough for you
+    procedure DefinitionToFile(const aJSONFile: TFileName; aKey: cardinal = 0);
+    /// create a new TSQLRest instance from its Model and stored values
+    // - aDefinition.Kind will define the actual class which will be
+    // instantiated: currently TSQLRestServerFullMemory, TSQLRestServerDB,
+    // TSQLRestClientURINamedPipe, TSQLRestClientURIMessage,
+    // TSQLHttpClientWinSock, TSQLHttpClientWinINet, TSQLHttpClientWinHTTP,
+    // and TSQLHttpClientCurl classes are recognized by this method
+    // - then other aDefinition fields will be used to refine the instance:
+    // please refer to each overriden DefinitionTo() method documentation
+    // - use TSQLRestMongoDBCreate() and/or TSQLRestExternalDBCreate() instead
+    // to create a TSQLRest instance will all tables defined as external when
+    // aDefinition.Kind is 'MongoDB' or a TSQLDBConnectionProperties class
+    // - will raise an exception if the supplied definition are not valid
+    class function CreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TSQLRest;
+    /// try to create a new TSQLRest instance from its Model and stored values
+    // - will return nil if the supplied definition are not valid
+    // - if the newly created instance is a TSQLRestServer, will force the
+    // supplied aServerHandleAuthentication parameter to enable authentication
+    class function CreateTryFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TSQLRest;
+    /// create a new TSQLRest instance from its Model and JSON stored values
+    // - aDefinition.Kind will define the actual class which will be instantiated
+    // - you can specify a custom Key, if the default is not safe enough for you
+    class function CreateFromJSON(aModel: TSQLModel;
+      const aJSONDefinition: RawUTF8; aServerHandleAuthentication: boolean;
+      aKey: cardinal = 0): TSQLRest;
+    /// create a new TSQLRest instance from its Model and a JSON file
+    // - aDefinition.Kind will define the actual class which will be instantiated
+    // - you can specify a custom Key, if the default is not safe enough for you
+    class function CreateFromFile(aModel: TSQLModel;
+      const aJSONFile: TFileName; aServerHandleAuthentication: boolean;
+      aKey: cardinal = 0): TSQLRest;
+    /// retrieve the registered class from the aDefinition.Kind string
+    class function ClassFrom(aDefinition: TSynConnectionDefinition): TSQLRestClass;
+
+    /// ease logging of some text in the context of the current TSQLRest
+    procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
+    /// ease logging of some text in the context of the current TSQLRest
+    procedure InternalLog(const Format: RawUTF8; const Args: array of const;
+      Level: TSynLogInfo = sllTrace); overload;
+    /// ease logging of method enter/leave in the context of the current TSQLRest
+    function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+      aInstance: TObject = nil): ISynLog;
+    /// internal method to retrieve the current Session TSQLAuthUser.ID
+    function GetCurrentSessionUserID: TID; virtual; abstract;
+    /// retrieve the server time stamp
+    // - default implementation will use an internal Offset to compute
+    // the value from PC time (i.e. NowUTC+Offset as TTimeLog)
+    // - inherited classes may override this method, or set the appropriate
+    // value in Offset field
+    function GetServerTimestamp: TTimeLog; virtual;
+    /// allows to safely execute a processing method in a background thread
+    // - returns a TSynBackgroundThreadMethod instance, ready to execute any
+    // background task via its RunAndWait() method
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewBackgroundThreadMethod(const Format: RawUTF8;
+      const Args: array of const): TSynBackgroundThreadMethod;
+    /// allows to safely execute a process at a given pace
+    // - returns a TSynBackgroundThreadProcess instance, ready to execute the
+    // supplied aOnProcess event in a loop, as aOnProcessMS periodic task
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
+      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
+      aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
+    /// allows to safely execute a process in parallel
+    // - returns a TSynParallelProcess instance, ready to execute any task
+    // in parrallel in a thread-pool given by ThreadCount
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+      const Args: array of const): TSynParallelProcess;
+    /// define a task running on a periodic number of seconds in a background thread
+    // - could be used to run background maintenance or monitoring tasks on
+    // this TSQLRest instance, at a low pace (typically every few minutes)
+    // - will instantiate and run a shared TSynBackgroundTimer instance for this
+    // TSQLRest, so all tasks will share the very same thread
+    // - you can run BackgroundTimer.EnQueue or ExecuteNow methods to implement
+    // a FIFO queue, or force immediate execution of the process
+    // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
+    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+      aOnProcessSecs: cardinal): TSQLRestBackgroundTimer;
+    /// undefine a task running on a periodic number of seconds
+    // - should have been registered by a previous call to TimerEnable() method
+    // - returns true on success, false if the supplied task was not registered
+    function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// will gather CPU and RAM information in a background thread
+    // - you can specify the update frequency, in seconds
+    // - access to the information via the returned instance, which maps
+    // the TSystemUse.Current class function
+    // - do nothing if global TSystemUse.Current was already assigned
+    function SystemUseTrack(periodSec: integer = 10): TSystemUse;
+    /// low-level access with optional initialization of the associated timer
+    function EnsureBackgroundTimerExists: TSQLRestBackgroundTimer;
+    /// you can call this method in TThread.Execute to ensure that
+    // the thread will be taken into account during process
+    // - this abstract method won't do anything, but TSQLRestServer's will
+    procedure BeginCurrentThread(Sender: TThread); virtual;
+    /// you can call this method just before a thread is finished to ensure
+    // e.g. that the associated external DB connection will be released
+    // - this abstract method will call fLogClass.Add.NotifyThreadEnded
+    // but TSQLRestServer.EndCurrentThread will do the main process
+    procedure EndCurrentThread(Sender: TThread); virtual;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    // - is a wrapper around BackgroundTimer.AsynchRedirect()
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInterface: IInvokable; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    // - is a wrapper around BackgroundTimer.AsynchRedirect()
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    /// allows background garbage collection of specified RawUTF8 interning
+    // - will run Interning.Clean(2) every 5 minutes by default
+    // - set InterningMaxRefCount=0 to disable process of the Interning instance
+    // - note that InterningMaxRefCount and PeriodMinutes parameters (if not 0),
+    // are common for all TRawUTF8Interning instances (the latest value wins)
+    // - you may e.g. run the following to clean up TDocVariant interned RawUTF8:
+    // ! aRest.AsynchInterning(DocVariantType.InternNames);
+    // ! aRest.AsynchInterning(DocVariantType.InternValues);
+    procedure AsynchInterning(Interning: TRawUTF8Interning;
+      InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
+    /// define redirection of interface methods calls in one or several instances
+    // - this class allows to implements any interface via a fake class, which
+    // will redirect all methods calls to one or several other interfaces
+    // - returned aCallbackInterface will redirect all its methods (identified
+    // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
+    // - typical use is thefore:
+    // ! fSharedCallback: IMyService;
+    // ! fSharedCallbacks: IMultiCallbackRedirect;
+    // ! ...
+    // !   if fSharedCallbacks=nil then begin
+    // !     fSharedCallbacks := aRest.MultiRedirect(IMyService, fSharedCallback);
+    // !     aServices.SubscribeForEvents(fSharedCallback);
+    // !   end;
+    // !   fSharedCallbacks.Redirect(TMyCallback.Create,[]);
+    // !   // now each time fSharedCallback receive one event, all callbacks
+    // !   // previously registered via Redirect() will receive it
+    // ! ...
+    // !   fSharedCallbacks := nil; // will stop redirection
+    // !                            // and unregister callbacks, if needed
+    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+      aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
+
+    /// main access to the IRestORM methods of this instance
+    property ORM: IRestORM read fORM;
+    /// low-level access to the associated Data Model
+    property Model: TSQLModel read fModel;
+    /// access to the interface-based services list
+    // - may be nil if no service interface has been registered yet: so be
+    // aware that the following line may trigger an access violation if
+    // no ICalculator is defined on server side:
+    // ! if fServer.Services['Calculator'].Get(Calc)) then
+    // !   ...
+    // - safer typical use, following the DI/IoC pattern, and which will not
+    // trigger any access violation if Services=nil, could be:
+    // ! if fServer.Services.Resolve(ICalculator, Calc) then
+    // !   ...
+    property Services: TServiceContainer read fServices;
+    /// low-level access to the associated timer
+    property BackgroundTimer: TSQLRestBackgroundTimer read fBackgroundTimer;
+    /// how this class execute its internal commands
+    // - by default, TSQLRestServer.URI() will lock for Write ORM according to
+    // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
+    // other operations won't be protected (for better scaling)
+    // - you can tune this behavior by setting this property to the expected
+    // execution mode, e.g. execute all method-based services in a dedicated
+    // thread via
+    // ! aServer.AcquireExecutionMode[execSOAByMethod] := amBackgroundThread;
+    // - if you use external DB and a custom ConnectionTimeOutMinutes value,
+    // both read and write access should be locked, so you should set:
+    // ! aServer.AcquireExecutionMode[execORMGet] := am***;
+    // ! aServer.AcquireExecutionMode[execORMWrite] := am***;
+    // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
+    // amLocked, amBackgroundThread, amBackgroundORMSharedThread or amMainThread
+    property AcquireExecutionMode[Cmd: TSQLRestServerURIContextCommand]: TSQLRestServerAcquireMode
+      read GetAcquireExecutionMode write SetAcquireExecutionMode;
+    /// the time (in mili seconds) to try locking internal commands of this class
+    // - this value is used only for AcquireExecutionMode[*]=amLocked
+    // - by default, TSQLRestServer.URI() will lock for Write ORM according to
+    // AcquireWriteTimeOut  (i.e. AcquireExecutionLockedTimeOut[execORMWrite])
+    // and other operations won't be locked nor have any time out set
+    property AcquireExecutionLockedTimeOut[Cmd: TSQLRestServerURIContextCommand]: cardinal
+      read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
+    /// how this class will handle write access to the database
+    // - is a common wrapper to AcquireExecutionMode[execORMWrite] property
+    // - default amLocked mode will wait up to AcquireWriteTimeOut mili seconds
+    // to have a single access to the server write ORM methods
+    // - amBackgroundThread will execute the write methods in a queue, in a
+    // dedicated unique thread (which can be convenient, especially for
+    // external database transaction process)
+    // - amBackgroundORMSharedThread will execute all ORM methods in a queue, in
+    // a dedicated unique thread, shared for both execORMWrite and execORMGet,
+    // but still dedicated for execSOAByMethod and execSOAByInterface
+    // - a slower alternative to amBackgroundThread may be amMainThread
+    // - you can set amUnlocked for a concurrent write access, but be aware
+    // that it may lead into multi-thread race condition issues, depending on
+    // the database engine used
+    property AcquireWriteMode: TSQLRestServerAcquireMode index execORMWrite
+      read GetAcquireExecutionMode write SetAcquireExecutionMode;
+    /// the time (in mili seconds) which the class will wait for acquiring a
+    // write acccess to the database, when AcquireWriteMode is amLocked
+    // - is a common wrapper to AcquireExecutionLockedTimeOut[execORMWrite]
+    // - in order to handle safe transactions and multi-thread safe writing, the
+    // server will identify transactions using the client Session ID: this
+    // property will set the time out wait period
+    // - default value is 5000, i.e. TSQLRestServer.URI will wait up to 5 seconds
+    // in order to acquire the right to write on the database before returning
+    // a "408 Request Time-out" status error
+    property AcquireWriteTimeOut: cardinal index execORMWrite
+      read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
+    /// low-level access to the execution mode of the ORM and SOA process
+    property AcquireExecution: TSQLRestAcquireExecutions read fAcquireExecution;
+    /// a local "Garbage collector" list, for some classes instances which must
+    // live during the whole TSQLRestServer process
+    // - is used internally by the class, but can be used for business code
+    property PrivateGarbageCollector: TSynObjectList read fPrivateGarbageCollector;
+
+  {$ifndef PUREMORMOT2}
+    // backward compatibility redirections to the homonymous IRestORM methods
+    // see IRestORM documentation for the proper use information
+  public
+    function TableRowCount(Table: TSQLRecordClass): Int64;
+    function TableHasRows(Table: TSQLRecordClass): boolean;
+    function TableMaxID(Table: TSQLRecordClass): TID;
+    function MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
+    function OneFieldValue(Table: TSQLRecordClass;
+      const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
+    function OneFieldValueInt64(Table: TSQLRecordClass;
+      const FieldName, WhereClause: RawUTF8; Default: Int64 = 0): Int64;
+    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8; overload;
+    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8; overload;
+    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
+      out Data: Int64): boolean; overload;
+    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      WhereID: TID): RawUTF8; overload;
+    function MultiFieldValue(Table: TSQLRecordClass;
+      const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
+      const WhereClause: RawUTF8): boolean; overload;
+    function MultiFieldValue(Table: TSQLRecordClass;
+      const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
+      WhereID: TID): boolean; overload;
+    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean; overload;
+    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      const WhereClause: RawUTF8; var Data: TInt64DynArray;
+      SQL: PRawUTF8 = nil): boolean; overload;
+    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+      const WhereClause: RawUTF8 = ''; const Separator: RawUTF8 = ','): RawUTF8; overload;
+    function OneFieldValues(Table: TSQLRecordClass; const FieldName, WhereClause:
+      RawUTF8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
+    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
+      const WhereClause: RawUTF8 = ''): TSQLTable; overload;
+    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTable; overload;
+    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
+    function FTSMatch(Table: TSQLRecordFTS3Class; const WhereClause: RawUTF8;
+      var DocID: TIDDynArray): boolean; overload;
+    function FTSMatch(Table: TSQLRecordFTS3Class; const MatchClause: RawUTF8;
+      var DocID: TIDDynArray; const PerFieldWeight: array of double;
+      limit: integer = 0; offset: integer = 0): boolean; overload;
+    function MainFieldValue(Table: TSQLRecordClass; ID: TID;
+      ReturnFirstIfNoUnique: boolean = false): RawUTF8;
+    function MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
+    function MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
+      out IDs: TIDDynArray): boolean;
+    function Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
+      const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
+    function Retrieve(const WhereClauseFmt: RawUTF8;
+      const Args, Bounds: array of const; Value: TSQLRecord;
+      const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
+    function Retrieve(aID: TID; Value: TSQLRecord;
+      ForUpdate: boolean = false): boolean; overload;
+    function Retrieve(Reference: TRecordReference;
+      ForUpdate: boolean = false): TSQLRecord; overload;
+    function Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean; overload;
+    function RetrieveList(Table: TSQLRecordClass;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList; overload;
+    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+    function RetrieveList<T: TSQLRecord>(
+      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
+       {$ifdef HASINLINE}inline;{$endif}
+    function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
+    {$endif ISDELPHI2010}
+    function RetrieveListJSON(Table: TSQLRecordClass;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8 = ''; aForceAJAX: boolean = false): RawJSON; overload;
+    function RetrieveListJSON(Table: TSQLRecordClass;
+      const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8 = '';
+      aForceAJAX: boolean = false): RawJSON; overload;
+    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+      const ObjectName, CustomFieldsCSV: RawUTF8;
+      FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
+    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+      const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
+      FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
+    function RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
+      const FieldName, FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const): variant;
+    function RetrieveDocVariant(Table: TSQLRecordClass;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+      const CustomFieldsCSV: RawUTF8): variant;
+    function RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8 = ''): boolean;
+    procedure AppendListAsJsonArray(Table: TSQLRecordClass;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+      const OutputFieldName: RawUTF8; W: TJSONSerializer;
+      const CustomFieldsCSV: RawUTF8 = '');
+    function RTreeMatch(DataTable: TSQLRecordClass;
+      const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
+      const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
+    function ExecuteList(const Tables: array of TSQLRecordClass;
+      const SQL: RawUTF8): TSQLTable;
+    function ExecuteJson(const Tables: array of TSQLRecordClass;
+      const SQL: RawUTF8; ForceAJAX: boolean = false;
+      ReturnedRowCount: PPtrInt = nil): RawJSON;
+    function Execute(const aSQL: RawUTF8): boolean;
+    function ExecuteFmt(const SQLFormat: RawUTF8;
+      const Args: array of const): boolean; overload;
+    function ExecuteFmt(const SQLFormat: RawUTF8;
+      const Args, Bounds: array of const): boolean; overload;
+    function UnLock(Table: TSQLRecordClass; aID: TID): boolean; overload;
+    function UnLock(Rec: TSQLRecord): boolean; overload;
+    function Add(Value: TSQLRecord; SendData: boolean;
+      ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
+    function Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+      ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
+    function Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+      ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
+    function AddWithBlobs(Value: TSQLRecord;
+      ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID;
+    function AddSimple(aTable: TSQLRecordClass;
+      const aSimpleFields: array of const; ForcedID: TID = 0): TID;
+    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+      DoNotAutoComputeFields: boolean = false): boolean; overload;
+    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+      DoNotAutoComputeFields: boolean = false): boolean; overload;
+    function Update(aTable: TSQLRecordClass; aID: TID;
+      const aSimpleFields: array of const): boolean; overload;
+    function AddOrUpdate(Value: TSQLRecord; ForceID: boolean = false): TID;
+    function UpdateField(Table: TSQLRecordClass; ID: TID;
+      const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload;
+    function UpdateField(Table: TSQLRecordClass; const WhereFieldName: RawUTF8;
+      const WhereFieldValue: array of const; const FieldName: RawUTF8;
+      const FieldValue: array of const): boolean; overload;
+    function UpdateField(Table: TSQLRecordClass; ID: TID;
+      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
+    function UpdateField(Table: TSQLRecordClass;
+      const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
+      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
+    function UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
+      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
+    function UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64 = 1): boolean;
+    function RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
+      Action: TSQLEvent; ErrorMsg: PRawUTF8 = nil): boolean;
+    function Delete(Table: TSQLRecordClass; ID: TID): boolean; overload;
+    function Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean; overload;
+    function Delete(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const): boolean; overload;
+    function RetrieveBlob(Table: TSQLRecordClass; aID: TID; const BlobFieldName: RawUTF8;
+      out BlobData: TSQLRawBlob): boolean; overload;
+    function RetrieveBlob(Table: TSQLRecordClass; aID: TID; const BlobFieldName: RawUTF8;
+      out BlobStream: TCustomMemoryStream): boolean; overload;
+    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
+      const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean; overload;
+    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
+      const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
+    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
+      const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean; overload;
+    function UpdateBlobFields(Value: TSQLRecord): boolean;
+    function RetrieveBlobFields(Value: TSQLRecord): boolean;
+    function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
+    function TransactionActiveSession: cardinal;
+    procedure Commit(SessionID: cardinal; RaiseException: boolean = false);
+    procedure RollBack(SessionID: cardinal);
+    procedure WriteLock;
+    procedure WriteUnLock;
+    function BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer; overload;
+    function BatchSend(Batch: TSQLRestBatch): integer; overload;
+    function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
+      PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
+      Options: TSQLRestBatchOptions = [boExtendedJSON]): boolean;
+    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
+    function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
+      ForceID: boolean = false; const CustomFields: TSQLFieldBits = [];
+      DoNotAutoComputeFields: boolean = false): integer;
+    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+    function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+      DoNotAutoComputeFields: boolean = false): integer;
+    function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    function Cache: TSQLRestCache;
+    function CacheOrNil: TSQLRestCache;
+    function CacheWorthItForTable(aTableIndex: cardinal): boolean;
+  {$endif PUREMORMOT2}
+  end;
+
+
+
+{ ************ RESTful Authentication Support }
+
+const
+  /// the used TAuthSession.IDCardinal value if the session not started yet
+  // - i.e. if the session handling is still in its handshaking phase
+  CONST_AUTHENTICATION_SESSION_NOT_STARTED = 0;
+
+  /// the used TAuthSession.IDCardinal value if authentication mode is not set
+  // - i.e. if TSQLRest.HandleAuthentication equals FALSE
+  CONST_AUTHENTICATION_NOT_USED = 1;
+
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for all users
+  // - contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  // - override AuthAdminDefaultPassword, AuthSupervisorDefaultPassword and
+  // AuthUserDefaultPassword values to follow your own application expectations
+  DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
+
+var
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Admin' group
+  // - you can override this value to follow your own application expectations
+  AuthAdminGroupDefaultTimeout: integer = 10;
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Supervisor' group
+  // - you can override this value to follow your own application expectations
+  // - note that clients will maintain the session alive using CacheFlush/_ping_
+  AuthSupervisorGroupDefaultTimeout: integer = 60;
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'User' group
+  // - you can override this value to follow your own application expectations
+  // - note that clients will maintain the session alive using CacheFlush/_ping_
+  AuthUserGroupDefaultTimeout: integer = 60;
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Guest' group
+  // - you can override this value to follow your own application expectations
+  // - note that clients will maintain the session alive using CacheFlush/_ping_
+  AuthGuestGroupDefaultTimeout: integer = 60;
+
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Admin' user
+  // - you can override this value to follow your own application expectations
+  AuthAdminDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Supervisor' user
+  // - you can override this value to follow your own application expectations
+  AuthSupervisorDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'User' user
+  // - you can override this value to follow your own application expectations
+  AuthUserDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+
+
+type
+  /// table containing the available user access rights for authentication
+  // - this class should be added to the TSQLModel, together with TSQLAuthUser,
+  // to allow authentication support
+  // - you can inherit from it to add your custom properties to each user info:
+  // TSQLModel will search for any class inheriting from TSQLAuthGroup to
+  // manage per-group authorization data
+  // - by default, it won't be accessible remotely by anyone
+  TSQLAuthGroup = class(TSQLRecord)
+  private
+    fIdent: RawUTF8;
+    fSessionTimeOut: integer;
+    fAccessRights: RawUTF8;
+    function GetSQLAccessRights: TSQLAccessRights;
+    procedure SetSQLAccessRights(const Value: TSQLAccessRights);
+  public
+    /// called when the associated table is created in the database
+    // - on a new database, if TSQLAuthUser and TSQLAuthGroup tables are defined
+    // in the associated TSQLModel, it this will add 'Admin', 'Supervisor',
+    // and 'User' rows in the AuthUser table (with 'synopse' as default password),
+    // and associated 'Admin', 'Supervisor', 'User' and 'Guest' groups, with the
+    // following access rights to the AuthGroup table:
+    // $            POSTSQL SELECTSQL Service AuthR AuthW TablesR TablesW
+    // $ Admin        Yes     Yes       Yes    Yes   Yes    Yes    Yes
+    // $ Supervisor   No      Yes       Yes    Yes   No     Yes    Yes
+    // $ User         No      No        Yes    No    No     Yes    Yes
+    // $ Guest        No      No        No     No    No     Yes    No
+    // - 'Admin' will be the only able to execute remote not SELECT SQL statements
+    // for POST commands (reSQL flag in TSQLAccessRights.AllowRemoteExecute) and
+    // modify the Auth tables (i.e. AuthUser and AuthGroup)
+    // - 'Admin' and 'Supervisor' will allow any SELECT SQL statements to be
+    // executed, even if the table can't be retrieved and checked (corresponding
+    // to the reSQLSelectWithoutTable flag)
+    // - 'User' won't have the reSQLSelectWithoutTable flag, nor the right
+    // to retrieve the Auth tables data for other users
+    // - 'Guest' won't have access to the interface-based remote JSON-RPC service
+    // (no reService flag), nor perform any modification to a table: in short,
+    // this is an ORM read-only limited user
+    // - you MUST override the default 'synopse' password to a custom value,
+    // or at least customize the global AuthAdminDefaultPassword,
+    // AuthSupervisorDefaultPassword, AuthUserDefaultPassword variables
+    // - of course, you can change and tune the settings of the AuthGroup and
+    // AuthUser tables, but only 'Admin' group users will be able to remotely
+    // modify the content of those two tables
+    class procedure InitializeTable(const Server: IRestORMServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
+    /// corresponding TSQLAccessRights for this authentication group
+    // - content is converted into/from text format via AccessRight DB property
+    // (so it will be not fixed e.g. by the binary TSQLFieldTables layout, i.e.
+    // the MAX_SQLTABLES constant value)
+    property SQLAccessRights: TSQLAccessRights read GetSQLAccessRights write SetSQLAccessRights;
+  published
+    /// the access right identifier, ready to be displayed
+    // - the same identifier can be used only once (this column is marked as
+    // unique via a "stored AS_UNIQUE" (i.e. "stored false") attribute)
+    // - so you can retrieve a TSQLAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fClient.MainFieldID(TSQLAuthGroup,'User');
+    property Ident: RawUTF8 index 50 read fIdent write fIdent stored AS_UNIQUE;
+    /// the number of minutes a session is kept alive
+    property SessionTimeout: integer read fSessionTimeOut write fSessionTimeOut;
+    /// a textual representation of a TSQLAccessRights buffer
+    property AccessRights: RawUTF8 index 1600 read fAccessRights write fAccessRights;
+  end;
+
+  /// table containing the Users registered for authentication
+  // - this class should be added to the TSQLModel, together with TSQLAuthGroup,
+  // to allow authentication support
+  // - you can inherit from it to add your custom properties to each user info:
+  // TSQLModel will search for any class inheriting from TSQLAuthUser to manage
+  // per-user authorization data
+  // - by default, it won't be accessible remotely by anyone; to enhance security,
+  // you could use the TSynValidatePassWord filter to this table
+  TSQLAuthUser = class(TSQLRecord)
+  protected
+    fLogonName: RawUTF8;
+    fPasswordHashHexa: RawUTF8;
+    fDisplayName: RawUTF8;
+    fGroup: TSQLAuthGroup;
+    fData: TSQLRawBlob;
+    procedure SetPasswordPlain(const Value: RawUTF8);
+    /// check if the user can authenticate in its current state
+    // - Ctxt is a TSQLRestServerURIContext instance
+    // - called by TSQLRestServerAuthentication.GetUser() method
+    // - this default implementation will return TRUE, i.e. allow the user
+    // to log on
+    // - override this method to disable user authentication, e.g. if the
+    // user is disabled via a custom ORM boolean and date/time field
+    function CanUserLog(Ctxt: TObject): boolean; virtual;
+  public
+    /// static function allowing to compute a hashed password
+    // - as expected by this class
+    // - defined as virtual so that you may use your own hashing class
+    // - you may specify your own values in aHashSalt/aHashRound, to enable
+    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
+    // security on storage side (reducing brute force attack via rainbow tables)
+    class function ComputeHashedPassword(const aPasswordPlain: RawUTF8;
+      const aHashSalt: RawUTF8 = ''; aHashRound: integer = 20000): RawUTF8; virtual;
+    /// able to set the PasswordHashHexa field from a plain password content
+    // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
+    // - use SetPassword() method if you want to customize the hash salt value
+    // and use the much safer PBKDF2_HMAC_SHA256 algorithm
+    property PasswordPlain: RawUTF8 write SetPasswordPlain;
+    /// set the PasswordHashHexa field from a plain password content and salt
+    // - use this method to specify aHashSalt/aHashRound values, enabling
+    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
+    // security on storage side (reducing brute force attack via rainbow tables)
+    // - you may use an application specific fixed salt, and/or append the
+    // user LogonName to make the challenge unique for each TSQLAuthUser
+    // - the default aHashRound=20000 is slow but secure - since the hashing
+    // process is expected to be done on client side, you may specify your
+    // own higher/slower value, depending on the security level you expect
+    procedure SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
+      aHashRound: integer = 20000);
+  published
+    /// the User identification Name, as entered at log-in
+    // - the same identifier can be used only once (this column is marked as
+    // unique via a "stored AS_UNIQUE" - i.e. "stored false" - attribute), and
+    // therefore indexed in the database (e.g. hashed in TSQLRestStorageInMemory)
+    property LogonName: RawUTF8
+      index 20 read fLogonName write fLogonName stored AS_UNIQUE;
+    /// the User Name, as may be displayed or printed
+    property DisplayName: RawUTF8
+      index 50 read fDisplayName write fDisplayName;
+    /// the hexa encoded associated SHA-256 hash of the password
+    // - see TSQLAuthUser.ComputeHashedPassword() or SetPassword() methods
+    // - store the SHA-256 32 bytes as 64 hexa chars
+    property PasswordHashHexa: RawUTF8
+      index 64 read fPasswordHashHexa write fPasswordHashHexa;
+    /// the associated access rights of this user
+    // - access rights are managed by group
+    // - in TAuthSession.User instance, GroupRights property will contain a
+    // REAL TSQLAuthGroup instance for fast retrieval in TSQLRestServer.URI
+    // - note that 'Group' field name is not allowed by SQLite
+    property GroupRights: TSQLAuthGroup
+      read fGroup write fGroup;
+    /// some custom data, associated to the User
+    // - Server application may store here custom data
+    // - its content is not used by the framework but 'may' be used by your
+    // application
+    property Data: TSQLRawBlob
+      read fData write fData;
+  end;
+
+  /// class-reference type (metaclass) of a table containing the Users
+  // registered for authentication
+  // - see also TSQLRestServer.OnAuthenticationUserRetrieve custom event
+  TSQLAuthUserClass = class of TSQLAuthUser;
+
+  /// class-reference type (metaclass) of the table containing the available
+  // user access rights for authentication, defined as a group
+  TSQLAuthGroupClass = class of TSQLAuthGroup;
+
+
+{ ************ TSQLRestURIParams REST URI Definitions }
+
+type
+  /// flags which may be set by the caller to notify low-level context
+  // - llfHttps will indicates that the communication was made over HTTPS
+  // - llfSecured is set if the transmission is encrypted or in-process,
+  // using e.g. HTTPS/SSL/TLS or our proprietary AES/ECDHE algorithms
+  // - llfWebsockets communication was made using WebSockets
+  TSQLRestURIParamsLowLevelFlag = (
+    llfHttps, llfSecured, llfWebsockets);
+
+  /// some flags set by the caller to notify low-level context
+  TSQLRestURIParamsLowLevelFlags = set of TSQLRestURIParamsLowLevelFlag;
+
+  /// store all parameters for a Client or Server method call
+  // - as used by TSQLRestServer.URI or TSQLRestClientURI.InternalURI
+//  {$ifdef USERECORDWITHMETHODS}
+//  TSQLRestURIParams = record
+//  {$else}
+  TSQLRestURIParams = object
+//  {$endif USERECORDWITHMETHODS}
+  public
+    /// input parameter containing the caller URI
+    Url: RawUTF8;
+    /// input parameter containing the caller method
+    // - handle enhanced REST codes: LOCK/UNLOCK/BEGIN/END/ABORT
+    Method: RawUTF8;
+    /// input parameter containing the caller message headers
+    // - you can use e.g. to retrieve the remote IP:
+    // ! Call.Header(HEADER_REMOTEIP_UPPER)
+    // ! or FindNameValue(Call.InHead,HEADER_REMOTEIP_UPPER)
+    // but consider rather using TSQLRestServerURIContext.RemoteIP
+    InHead: RawUTF8;
+    /// input parameter containing the caller message body
+    // - e.g. some GET/POST/PUT JSON data can be specified here
+    InBody: RawUTF8;
+    /// output parameter to be set to the response message header
+    // - it is the right place to set the returned message body content type,
+    // e.g. TEXT_CONTENT_TYPE_HEADER or HTTP_CONTENT_TYPE_HEADER: if not set,
+    // the default JSON_CONTENT_TYPE_HEADER will be returned to the client,
+    // meaning that the message is JSON
+    // - you can use OutBodyType() function to retrieve the stored content-type
+    OutHead: RawUTF8;
+    /// output parameter to be set to the response message body
+    OutBody: RawUTF8;
+    /// output parameter to be set to the HTTP status integer code
+    // - HTTP_NOTFOUND=404 e.g. if the url doesn't start with Model.Root (caller
+    // can try another TSQLRestServer)
+    OutStatus: cardinal;
+    /// output parameter to be set to the database internal state
+    OutInternalState: cardinal;
+    /// associated RESTful access rights
+    // - AccessRights must be handled by the TSQLRestServer child, according
+    // to the Application Security Policy (user logging, authentification and
+    // rights management) - making access rights a parameter allows this method
+    // to be handled as pure stateless, thread-safe and session-free
+    RestAccessRights: PSQLAccessRights;
+    /// opaque reference to the protocol context which made this request
+    // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
+    // a THttpApiServer, a TSQLRestClientURI, a TFastCGIServer or a
+    // TSQLRestServerNamedPipeResponse instance
+    // - stores SynCrtSock's THttpServerConnectionID, i.e. a Int64 as expected
+    // by http.sys, or an incremental rolling sequence of 31-bit integers for
+    // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
+    LowLevelConnectionID: Int64;
+    /// low-level properties of the current protocol context
+    LowLevelFlags: TSQLRestURIParamsLowLevelFlags;
+    /// initialize the non RawUTF8 values
+    procedure Init; overload;
+    /// initialize the input values
+    procedure Init(const aURI,aMethod,aInHead,aInBody: RawUTF8); overload;
+    /// retrieve the "Content-Type" value from InHead
+    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
+    function InBodyType(GuessJSONIfNoneSet: boolean = True): RawUTF8;
+    /// check if the "Content-Type" value from InHead is JSON
+    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
+    function InBodyTypeIsJson(GuessJSONIfNoneSet: boolean = True): boolean;
+    /// retrieve the "Content-Type" value from OutHead
+    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
+    function OutBodyType(GuessJSONIfNoneSet: boolean = True): RawUTF8;
+    /// check if the "Content-Type" value from OutHead is JSON
+    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
+    function OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean = True): boolean;
+    /// just a wrapper around FindNameValue(InHead,UpperName)
+    // - use e.g. as
+    // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
+    // - consider rather using TSQLRestServerURIContext.InHeader[] or even
+    // dedicated TSQLRestServerURIContext.RemoteIP/AuthenticationBearerToken
+    function Header(UpperName: PAnsiChar): RawUTF8;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// wrap FindNameValue(InHead,UpperName) with a cache store
+    function HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
+  end;
+
+  /// used to map set of parameters for a Client or Server method call
+  PSQLRestURIParams = ^TSQLRestURIParams;
+
+
+{ ************ TSQLRestThread Background Process of a REST instance }
+
+type
+  {$M+}
+  /// a simple TThread for doing some process within the context of a REST instance
+  // - also define a Start method for compatibility with older versions of Delphi
+  // - inherited classes should override InternalExecute abstract method
+  TSQLRestThread = class(TThread)
+  protected
+    fRest: TSQLRest;
+    fOwnRest: boolean;
+    fLog: TSynLog;
+    fSafe: TSynLocker;
+    fEvent: TEvent;
+    fExecuting: boolean;
+    /// allows customization in overriden Create (before Execute)
+    fThreadName: RawUTF8;
+    /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
+    procedure Execute; override;
+    /// you should override this method with the proper process
+    procedure InternalExecute; virtual; abstract;
+  public
+    /// initialize the thread
+    // - if aOwnRest is TRUE, the supplied REST instance will be
+    // owned by this thread
+    constructor Create(aRest: TSQLRest; aOwnRest, aCreateSuspended: boolean);
+    {$ifndef HASTTHREADSTART}
+    /// method to be called to start the thread
+    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
+    // do not implement this pause/resume feature; we define here this method
+    // for older versions of Delphi
+    procedure Start;
+    {$endif HASTTHREADSTART}
+    {$ifdef HASTTHREADTERMINATESET}
+    /// properly terminate the thread
+    // - called by TThread.Terminate since Delphi XE2
+    procedure TerminatedSet; override;
+    {$else}
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; virtual;
+    /// reintroduced to call TeminatedSet
+    procedure Terminate; reintroduce;
+    {$endif HASTTHREADTERMINATESET}
+    /// wait for Execute to be ended (i.e. fExecuting=false)
+    procedure WaitForNotExecuting(maxMS: integer = 500);
+    /// finalize the thread
+    // - and the associated REST instance if OwnRest is TRUE
+    destructor Destroy; override;
+    /// safe version of Sleep() which won't break the thread process
+    // - returns TRUE if the thread was Terminated
+    // - returns FALSE if successfully waited up to MS milliseconds
+    function SleepOrTerminated(MS: integer): boolean;
+    /// read-only access to the associated REST instance
+    property Rest: TSQLRest read FRest;
+    /// TRUE if the associated REST instance will be owned by this thread
+    property OwnRest: boolean read fOwnRest;
+    /// a critical section is associated to this thread
+    // - could be used to protect shared resources within the internal process
+    property Safe: TSynLocker read fSafe;
+    /// read-only access to the TSynLog instance of the associated REST instance
+    property Log: TSynLog read fLog;
+    /// a event associated to this thread
+    property Event: TEvent read fEvent;
+    /// publishes the thread running state
+    property Terminated;
+    /// publishes the thread executing state (set when Execute leaves)
+    property Executing: boolean read fExecuting;
+  end;
+  {$M-}
+
+
+implementation
+
+
+{ ************ Customize REST Execution }
+
+{ TSQLRestAcquireExecution }
+
+destructor TSQLRestAcquireExecution.Destroy;
+begin
+  inherited Destroy;
+  Thread.Free;
+end;
+
+
+type
+  TInterfacedObjectMultiDest = record
+    instance: IInvokable;
+    methods: TInterfaceFactoryMethodBits;
+  end;
+
+  TInterfacedObjectMultiDestDynArray = array of TInterfacedObjectMultiDest;
+
+  TInterfacedObjectMulti = class;
+
+  /// thread-safe implementation of IMultiCallbackRedirect
+  TInterfacedObjectMultiList = class(TInterfacedObjectLocked, IMultiCallbackRedirect)
+  protected
+    fDest: TInterfacedObjectMultiDestDynArray;
+    fDestCount: integer;
+    fDests: TDynArray;
+    fFakeCallback: TInterfacedObjectMulti;
+    procedure Redirect(const aCallback: IInvokable;
+      const aMethodsNames: array of RawUTF8; aSubscribe: boolean); overload;
+    procedure Redirect(const aCallback: TInterfacedObject;
+      const aMethodsNames: array of RawUTF8; aSubscribe: boolean); overload;
+    procedure CallBackUnRegister;
+    function GetInstances(aMethod: integer; var aInstances: TPointerDynArray): integer;
+  public
+    constructor Create; override;
+    destructor Destroy; override;
+  end;
+
+  TInterfacedObjectMulti = class(TInterfacedObjectFakeCallback)
+  protected
+    fRest: TSQLRest;
+    fList: TInterfacedObjectMultiList;
+    fCallBackUnRegisterNeeded: boolean;
+    function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUTF8;
+      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+      aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
+  public
+    constructor Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
+      aCallBackUnRegisterNeeded: boolean; out aCallbackInterface);
+    destructor Destroy; override;
+    procedure CallBackUnRegister;
+  end;
+
+
+{ TInterfacedObjectMultiList }
+
+constructor TInterfacedObjectMultiList.Create;
+begin
+  inherited Create;
+  fDests.InitSpecific(TypeInfo(TInterfacedObjectMultiDestDynArray), fDest,
+    ptInterface, @fDestCount);
+end;
+
+procedure TInterfacedObjectMultiList.Redirect(const aCallback: IInvokable;
+  const aMethodsNames: array of RawUTF8; aSubscribe: boolean);
+var
+  ndx: integer;
+  new: TInterfacedObjectMultiDest;
+const
+  NAM: array[boolean] of string[11] = ('Unsubscribe', 'Subscribe');
+begin
+  if (self = nil) or (fFakeCallback = nil) then
+    exit;
+  fFakeCallback.fLogClass.Add.Log(sllDebug, '%.Redirect: % % using %',
+    [ClassType, NAM[aSubscribe], fFakeCallback.Factory.InterfaceName,
+     ObjectFromInterface(aCallback)], self);
+  fFakeCallback.Factory.CheckMethodIndexes(aMethodsNames, true, new.methods);
+  new.instance := aCallback;
+  fSafe.Lock;
+  try
+    ndx := fDests.Find(aCallback);
+    if aSubscribe then
+      if ndx < 0 then
+        fDests.Add(new)
+      else
+        fDest[ndx] := new
+    else
+      fDests.Delete(ndx);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TInterfacedObjectMultiList.Redirect(const aCallback: TInterfacedObject;
+  const aMethodsNames: array of RawUTF8; aSubscribe: boolean);
+var
+  dest: IInvokable;
+begin
+  if (self = nil) or (fFakeCallback = nil) then
+    exit;
+  if aCallback = nil then
+    raise EServiceException.CreateUTF8('%.Redirect(nil)', [self]);
+  if not aCallback.GetInterface(fFakeCallback.Factory.InterfaceIID, dest) then
+    raise EServiceException.CreateUTF8('%.Redirect [%]: % is not a %',
+      [self, fFakeCallback.fName, aCallback, fFakeCallback.Factory.InterfaceName]);
+  Redirect(dest, aMethodsNames, aSubscribe);
+end;
+
+procedure TInterfacedObjectMultiList.CallBackUnRegister;
+begin
+  fSafe.Lock;
+  try
+    fDests.ClearSafe;
+  finally
+    fSafe.UnLock;
+  end;
+  if fFakeCallback <> nil then
+  begin
+    fFakeCallback.CallBackUnRegister;
+    fFakeCallback := nil; // disable any further Redirect()
+  end;
+end;
+
+destructor TInterfacedObjectMultiList.Destroy;
+begin
+  CallBackUnRegister;
+  inherited Destroy;
+end;
+
+function TInterfacedObjectMultiList.GetInstances(aMethod: integer;
+  var aInstances: TPointerDynArray): integer;
+var
+  i: integer;
+  dest: ^TInterfacedObjectMultiDest;
+begin
+  result := 0;
+  dec(aMethod, RESERVED_VTABLE_SLOTS);
+  if aMethod < 0 then
+    exit;
+  SetLength(aInstances, fDestCount);
+  dest := pointer(fDest);
+  for i := 1 to fDestCount do
+  begin
+    if aMethod in dest^.methods then
+    begin
+      aInstances[result] := pointer(dest^.instance);
+      inc(result);
+    end;
+    inc(dest);
+  end;
+  if result <> fDestCount then
+    SetLength(aInstances, result);
+end;
+
+
+{ TInterfacedObjectMulti }
+
+procedure TInterfacedObjectMulti.CallBackUnRegister;
+begin
+  if fCallBackUnRegisterNeeded then
+  begin
+    fLogClass.Add.Log(sllDebug, '%.Destroy -> Services.CallbackUnRegister(%)',
+      [fList.ClassType, fFactory.InterfaceName], self);
+    fRest.Services.CallBackUnRegister(IInvokable(pointer(@fVTable)));
+  end;
+end;
+
+constructor TInterfacedObjectMulti.Create(aRest: TSQLRest;
+  aFactory: TInterfaceFactory; aCallBackUnRegisterNeeded: boolean;
+  out aCallbackInterface);
+begin
+  if aRest = nil then
+    raise EServiceException.CreateUTF8('%.Create(aRest=nil)', [self]);
+  fRest := aRest;
+  fLogClass := fRest.fLogClass;
+  fName := fRest.Model.Root; // some context about the TSQLRest running it
+  fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
+  fList := TInterfacedObjectMultiList.Create;
+  fList.fFakeCallback := self;
+  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJSON],
+    FakeInvoke, nil);
+  Get(aCallbackInterface);
+end;
+
+destructor TInterfacedObjectMulti.Destroy;
+begin
+  fList.CallBackUnRegister;
+  inherited Destroy;
+end;
+
+function TInterfacedObjectMulti.FakeInvoke(const aMethod: TInterfaceMethod;
+  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+var
+  i: Ptrint;
+  exec: TInterfaceMethodExecute;
+  instances: TPointerDynArray;
+begin
+  result := inherited FakeInvoke(aMethod, aParams, aResult, aErrorMsg,
+    aClientDrivenID, aServiceCustomAnswer);
+  if not result or (fList.fDestCount = 0) then
+    exit;
+  fList.fSafe.Lock;
+  try
+    if fList.GetInstances(aMethod.ExecutionMethodIndex, instances) = 0 then
+      exit;
+    exec := TInterfaceMethodExecute.Create(@aMethod);
+    try
+      exec.Options := [optIgnoreException]; // use exec.ExecutedInstancesFailed
+      result := exec.ExecuteJson(instances, pointer('[' + aParams + ']'), nil);
+      if exec.ExecutedInstancesFailed <> nil then
+        for i := high(exec.ExecutedInstancesFailed) downto 0 do
+          if exec.ExecutedInstancesFailed[i] <> '' then
+          try
+            fRest.InternalLog('%.FakeInvoke % failed due to % -> unsubscribe',
+              [ClassType, aMethod.InterfaceDotMethodName,
+               exec.ExecutedInstancesFailed[i]], sllDebug);
+            fList.fDests.FindAndDelete(instances[i]);
+          except // ignore any exception when releasing the (unstable?) callback
+          end;
+    finally
+      exec.Free;
+    end;
+  finally
+    fList.fSafe.UnLock;
+  end;
+end;
+
+
+{ ************ TSQLRest Abstract Parent Class }
+
+{ TSQLRest }
+
+function TSQLRest.TryResolve(aInterface: PRttiInfo; out Obj): boolean;
+begin
+  result := true;
+  if aInterface = TypeInfo(IRestORM) then
+    IRestORM(Obj) := fORM
+  else
+    result := false;
+end;
+
+procedure TSQLRest.SetLogClass(aClass: TSynLogClass);
+begin
+  fLogClass := aClass;
+  fLogFamily := fLogClass.Family;
+end;
+
+function TSQLRest.GetLogClass: TSynLogClass;
+begin
+  if self = nil then
+    result := TSynLog
+  else
+    result := fLogClass;
+end;
+
+procedure TSQLRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
+begin
+  if (self <> nil) and (fLogFamily <> nil) and (Level in fLogFamily.Level) then
+    fLogFamily.SynLog.Log(Level, Text, self);
+end;
+
+procedure TSQLRest.InternalLog(const Format: RawUTF8; const Args: array of const;
+  Level: TSynLogInfo);
+begin
+  if (self <> nil) and (fLogFamily <> nil) and (Level in fLogFamily.Level) then
+    fLogFamily.SynLog.Log(Level, Format, Args, self);
+end;
+
+function TSQLRest.Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+  aInstance: TObject): ISynLog;
+begin
+  if aInstance = nil then
+    aInstance := self;
+  if (self <> nil) and (fLogFamily <> nil) and (sllEnter in fLogFamily.Level) then
+    result := fLogClass.Enter(TextFmt, TextArgs, aInstance)
+  else
+    result := nil;
+end;
+
+function TSQLRest.GetServerTimestamp: TTimeLog;
+var
+  tix: cardinal;
+begin
+  tix := GetTickCount64 shr 9; // resolution change from 1 ms to 512 ms
+  with fServerTimestamp do
+    if CacheTix = tix then
+      result := CacheValue.Value
+    else
+    begin
+      CacheTix := tix;
+      CacheValue.From(NowUTC + offset);
+      result := CacheValue.Value;
+    end;
+end;
+
+procedure TSQLRest.SetServerTimestamp(const Value: TTimeLog);
+begin
+  fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUTC;
+  if fServerTimestamp.Offset = 0 then
+    fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
+end;
+
+function TSQLRest.EnsureBackgroundTimerExists: TSQLRestBackgroundTimer;
+begin
+  if fBackgroundTimer = nil then
+    fBackgroundTimer := TSQLRestBackgroundTimer.Create(self);
+  result := fBackgroundTimer;
+end;
+
+function TSQLRest.NewBackgroundThreadMethod(const Format: RawUTF8;
+   const Args: array of const): TSynBackgroundThreadMethod;
+begin
+  result := TSynBackgroundThreadMethod.Create(nil, FormatUTF8(Format, Args),
+    BeginCurrentThread, EndCurrentThread);
+end;
+
+function TSQLRest.NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+  const Args: array of const): TSynParallelProcess;
+begin
+  result := TSynParallelProcess.Create(ThreadCount, FormatUTF8(Format, Args),
+    BeginCurrentThread, EndCurrentThread);
+end;
+
+function TSQLRest.NewBackgroundThreadProcess(
+  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const Format: RawUTF8; const Args: array of const;
+  aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
+var
+  name: RawUTF8;
+begin
+  FormatUTF8(Format, Args, name);
+  if self = nil then
+    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
+      nil, nil, aStats)
+  else
+    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
+      BeginCurrentThread, EndCurrentThread, aStats);
+end;
+
+function TSQLRest.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+  aOnProcessSecs: cardinal): TSQLRestBackgroundTimer;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  if aOnProcessSecs = 0 then
+  begin
+    TimerDisable(aOnProcess);
+    exit;
+  end;
+  result := EnsureBackgroundTimerExists;
+  result.Enable(aOnProcess, aOnProcessSecs);
+end;
+
+function TSQLRest.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  if (self = nil) or (fBackgroundTimer = nil) then
+    result := false
+  else
+    result := fBackgroundTimer.Disable(aOnProcess);
+end;
+
+function TSQLRest.SystemUseTrack(periodSec: integer): TSystemUse;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  result := TSystemUse.Current;
+  if (result.Timer = nil) or
+     ((BackgroundTimer <> nil) and (result.Timer = BackgroundTimer)) then
+  begin
+    if periodSec > 0 then
+      result.Timer := EnsureBackgroundTimerExists;
+    // TimerEnable() will disable if periodSec=0
+    TimerEnable(BackgroundTimer.SystemUseBackgroundExecute, periodSec);
+  end;
+end;
+
+procedure TSQLRest.BeginCurrentThread(Sender: TThread);
+begin
+  // nothing do to at this level -> see TSQLRestServer.BeginCurrentThread
+end;
+
+procedure TSQLRest.EndCurrentThread(Sender: TThread);
+begin
+  // most will be done e.g. in TSQLRestServer.EndCurrentThread
+  fLogFamily.OnThreadEnded(Sender);
+end;
+
+procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInterface: IInvokable; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+begin
+  if self <> nil then
+    EnsureBackgroundTimerExists.AsynchRedirect(
+      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
+end;
+
+procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+begin
+  if self <> nil then
+    EnsureBackgroundTimerExists.AsynchRedirect(
+      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
+end;
+
+procedure TSQLRest.AsynchInterning(Interning: TRawUTF8Interning;
+  InterningMaxRefCount, PeriodMinutes: integer);
+begin
+  if self <> nil then
+    EnsureBackgroundTimerExists.AsynchInterning(
+      Interning, InterningMaxRefCount, PeriodMinutes);
+end;
+
+function TSQLRest.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+  aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
+var factory: TInterfaceFactory;
+begin
+  factory := TInterfaceFactory.Get(aGUID);
+  if factory = nil then
+    raise EServiceException.CreateUTF8('%.MultiRedirect: unknown %',
+      [self, GUIDToShort(aGUID)]);
+   result := TInterfacedObjectMulti.Create(self, factory,
+     aCallBackUnRegisterNeeded, aCallbackInterface).fList;
+end;
+
+function TSQLRest.GetAcquireExecutionMode(
+  Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
+begin
+  result := fAcquireExecution[Cmd].Mode;
+end;
+
+procedure TSQLRest.SetAcquireExecutionMode(
+  Cmd: TSQLRestServerURIContextCommand; Value: TSQLRestServerAcquireMode);
+begin
+  fAcquireExecution[Cmd].Mode := Value;
+end;
+
+function TSQLRest.GetAcquireExecutionLockedTimeOut(
+  Cmd: TSQLRestServerURIContextCommand): cardinal;
+begin
+  result := fAcquireExecution[Cmd].LockedTimeOut;
+end;
+
+procedure TSQLRest.SetAcquireExecutionLockedTimeOut(
+  Cmd: TSQLRestServerURIContextCommand; Value: cardinal);
+begin
+  fAcquireExecution[Cmd].LockedTimeOut := Value;
+end;
+
+constructor TSQLRest.Create(aModel: TSQLModel);
+var
+  cmd: TSQLRestServerURIContextCommand;
+begin
+  fPrivateGarbageCollector := TSynObjectList.Create;
+  fModel := aModel;
+  for cmd := Low(cmd) to high(cmd) do
+    fAcquireExecution[cmd] := TSQLRestAcquireExecution.Create;
+  AcquireWriteMode := amLocked;
+  AcquireWriteTimeOut := 5000; // default 5 seconds
+  SetLogClass(TSynLog);
+end;
+
+procedure TSQLRest.SetORMInstance(aORM: TInterfacedObject);
+begin
+  if fORMInstance <> nil then
+    raise ERestException.CreateUTF8('%.SetORMInstance twice', [self]);
+  if aORM = nil then
+    raise ERestException.CreateUTF8('%.SetORMInstance(nil)', [self]);
+  if not fORMInstance.GetInterface(IRestORM, fORM) then
+    raise ERestException.CreateUTF8('%.Create with invalid %', [self, fORMInstance]);
+  fORMInstance := aORM;
+end;
+
+destructor TSQLRest.Destroy;
+var
+  cmd: TSQLRestServerURIContextCommand;
+begin
+  InternalLog('TSQLRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
+  if fORM <> nil then
+    fORM.AsynchBatchStop(nil); // abort any pending TSQLRestBatch
+  FreeAndNil(fBackgroundTimer);
+  fORM := nil;
+  if (fModel <> nil) and (fModel.Owner = self) then
+    // make sure we are the Owner (TSQLRestStorage has fModel<>nil e.g.)
+    FreeAndNil(fModel);
+  for cmd := Low(cmd) to high(cmd) do
+    FreeAndNil(fAcquireExecution[cmd]);
+  // fPrivateGarbageCollector should be released in last position
+  if fPrivateGarbageCollector <> nil then
+  begin
+    fPrivateGarbageCollector.ClearFromLast;
+    FreeAndNil(fPrivateGarbageCollector);
+  end;
+  inherited Destroy;
+end;
+
+var
+  GlobalDefinitions: array of TSQLRestClass;
+
+class procedure TSQLRest.RegisterClassNameForDefinition;
+begin
+  ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
+end;
+
+procedure TSQLRest.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition <> nil then
+    Definition.Kind := ClassName;
+end;
+
+function TSQLRest.DefinitionToJSON(Key: cardinal): RawUTF8;
+var
+  Definition: TSynConnectionDefinition;
+begin
+  Definition := TSynConnectionDefinition.Create;
+  try
+    Definition.Key := Key;
+    DefinitionTo(Definition);
+    result := Definition.SaveToJSON;
+  finally
+    Definition.Free;
+  end;
+end;
+
+procedure TSQLRest.DefinitionToFile(const aJSONFile: TFileName; aKey: cardinal);
+begin
+  FileFromString(JSONReformat(DefinitionToJSON(aKey)), aJSONFile);
+end;
+
+class function TSQLRest.ClassFrom(aDefinition: TSynConnectionDefinition): TSQLRestClass;
+var
+  ndx: integer;
+begin
+  for ndx := 0 to length(GlobalDefinitions) - 1 do
+    if GlobalDefinitions[ndx].ClassNameIs(aDefinition.Kind) then
+    begin
+      result := GlobalDefinitions[ndx];
+      exit;
+    end;
+  result := nil;
+end;
+
+constructor TSQLRest.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
+begin
+  Create(aModel);
+end;
+
+class function TSQLRest.CreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TSQLRest;
+var
+  C: TSQLRestClass;
+begin
+  C := ClassFrom(aDefinition);
+  if C = nil then
+    raise ERestException.CreateUTF8('%.CreateFrom: unknown % class - please ' +
+      'add a reference to its implementation unit', [self, aDefinition.Kind]);
+  result := C.RegisteredClassCreateFrom(aModel, aDefinition, aServerHandleAuthentication);
+end;
+
+class function TSQLRest.CreateTryFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TSQLRest;
+var
+  C: TSQLRestClass;
+begin
+  C := ClassFrom(aDefinition);
+  if C = nil then
+    result := nil
+  else
+    result := C.RegisteredClassCreateFrom(aModel, aDefinition,
+      aServerHandleAuthentication);
+end;
+
+class function TSQLRest.CreateFromJSON(aModel: TSQLModel;
+  const aJSONDefinition: RawUTF8; aServerHandleAuthentication: boolean;
+  aKey: cardinal): TSQLRest;
+var
+  Definition: TSynConnectionDefinition;
+begin
+  Definition := TSynConnectionDefinition.CreateFromJSON(aJSONDefinition, aKey);
+  try
+    result := CreateFrom(aModel, Definition, aServerHandleAuthentication);
+  finally
+    Definition.Free;
+  end;
+end;
+
+class function TSQLRest.CreateFromFile(aModel: TSQLModel;
+  const aJSONFile: TFileName; aServerHandleAuthentication: boolean;
+  aKey: cardinal): TSQLRest;
+begin
+  result := CreateFromJSON(aModel, AnyTextFileToRawUTF8(aJSONFile, true),
+    aServerHandleAuthentication, aKey);
+end;
+
+
+{$ifndef PUREMORMOT2}
+
+function TSQLRest.TableRowCount(Table: TSQLRecordClass): Int64;
+begin
+  result := fORM.TableRowCount(Table);
+end;
+
+function TSQLRest.TableHasRows(Table: TSQLRecordClass): boolean;
+begin
+  result := fORM.TableHasRows(Table);
+end;
+
+function TSQLRest.TableMaxID(Table: TSQLRecordClass): TID;
+begin
+  result := fORM.TableMaxID(Table);
+end;
+
+function TSQLRest.MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
+begin
+  result := fORM.MemberExists(Table, ID);
+end;
+
+function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName,
+  WhereClause: RawUTF8): RawUTF8;
+begin
+  result := fORM.OneFieldValue(Table, FieldName, WhereClause);
+end;
+
+function TSQLRest.OneFieldValueInt64(Table: TSQLRecordClass; const FieldName,
+  WhereClause: RawUTF8; Default: Int64): Int64;
+begin
+  result := fORM.OneFieldValueInt64(Table, FieldName, WhereClause, Default);
+end;
+
+function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8;
+begin
+  result := fORM.OneFieldValue(Table, FieldName, FormatSQLWhere, BoundsSQLWhere);
+end;
+
+function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+  const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8;
+begin
+  result := fORM.OneFieldValue(Table, FieldName, WhereClauseFmt);
+end;
+
+function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+  const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
+  out Data: Int64): boolean;
+begin
+  result := fORM.OneFieldValue(Table, FieldName, WhereClauseFmt, Args, Bounds, Data);
+end;
+
+function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+  WhereID: TID): RawUTF8;
+begin
+  result := fORM.OneFieldValue(Table, FieldName, WhereID);
+end;
+
+function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
+  const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
+  const WhereClause: RawUTF8): boolean;
+begin
+  result := fORM.MultiFieldValue(Table, FieldName, FieldValue, WhereClause);
+end;
+
+function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
+  const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
+  WhereID: TID): boolean;
+begin
+  result := fORM.MultiFieldValue(Table, FieldName, FieldValue, WhereID);
+end;
+
+function TSQLRest.OneFieldValues(Table: TSQLRecordClass;
+  const FieldName: RawUTF8; const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean;
+begin
+  result := fORM.OneFieldValues(Table, FieldName, WhereClause, Data);
+end;
+
+function TSQLRest.OneFieldValues(Table: TSQLRecordClass;
+  const FieldName: RawUTF8; const WhereClause: RawUTF8; var Data: TInt64DynArray;
+  SQL: PRawUTF8): boolean;
+begin
+  result := fORM.OneFieldValues(Table, FieldName, WhereClause, Data, SQL);
+end;
+
+function TSQLRest.OneFieldValues(Table: TSQLRecordClass;
+  const FieldName: RawUTF8; const WhereClause: RawUTF8; const Separator: RawUTF8): RawUTF8;
+begin
+  result := fORM.OneFieldValues(Table, FieldName, WhereClause, Separator);
+end;
+
+function TSQLRest.OneFieldValues(Table: TSQLRecordClass;
+  const FieldName, WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PID): boolean;
+begin
+  result := fORM.OneFieldValues(Table, FieldName, WhereClause, Strings, IDToIndex);
+end;
+
+function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
+  const FieldNames: RawUTF8; const WhereClause: RawUTF8): TSQLTable;
+begin
+  result := fORM.MultiFieldValues(Table, FieldNames, WhereClause);
+end;
+
+function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
+  const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
+  const BoundsSQLWhere: array of const): TSQLTable;
+begin
+  result := fORM.MultiFieldValues(Table, FieldNames, WhereClauseFormat, BoundsSQLWhere);
+end;
+
+function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
+  const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
+  const Args, Bounds: array of const): TSQLTable;
+begin
+  result := fORM.MultiFieldValues(Table, FieldNames, WhereClauseFormat, Args, Bounds);
+end;
+
+function TSQLRest.FTSMatch(Table: TSQLRecordFTS3Class;
+  const WhereClause: RawUTF8; var DocID: TIDDynArray): boolean;
+begin
+  result := fORM.FTSMatch(Table, WhereClause, DocID);
+end;
+
+function TSQLRest.FTSMatch(Table: TSQLRecordFTS3Class;
+  const MatchClause: RawUTF8; var DocID: TIDDynArray;
+  const PerFieldWeight: array of double; limit, offset: integer): boolean;
+begin
+  result := fORM.FTSMatch(Table, MatchClause, DocID, PerFieldWeight, limit, offset);
+end;
+
+function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: TID;
+  ReturnFirstIfNoUnique: boolean): RawUTF8;
+begin
+  result := fORM.MainFieldValue(Table, ID, ReturnFirstIfNoUnique);
+end;
+
+function TSQLRest.MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
+begin
+  result := fORM.MainFieldID(Table, Value);
+end;
+
+function TSQLRest.MainFieldIDs(Table: TSQLRecordClass;
+  const Values: array of RawUTF8; out IDs: TIDDynArray): boolean;
+begin
+  result := fORM.MainFieldIDs(Table, Values, IDs);
+end;
+
+function TSQLRest.Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
+  const aCustomFieldsCSV: RawUTF8): boolean;
+begin
+  result := fORM.Retrieve(SQLWhere, Value, aCustomFieldsCSV);
+end;
+
+function TSQLRest.Retrieve(const WhereClauseFmt: RawUTF8;
+  const Args, Bounds: array of const; Value: TSQLRecord;
+  const aCustomFieldsCSV: RawUTF8): boolean;
+begin
+  result := fORM.Retrieve(WhereClauseFmt, Args, Bounds, Value, aCustomFieldsCSV);
+end;
+
+function TSQLRest.Retrieve(aID: TID; Value: TSQLRecord; ForUpdate: boolean): boolean;
+begin
+  result := fORM.Retrieve(aID, Value, ForUpdate);
+end;
+
+function TSQLRest.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TSQLRecord;
+begin
+  result := fORM.Retrieve(Reference, ForUpdate);
+end;
+
+function TSQLRest.Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean;
+begin
+  result := fORM.Retrieve(aPublishedRecord, aValue);
+end;
+
+function TSQLRest.RetrieveList(Table: TSQLRecordClass;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+  const aCustomFieldsCSV: RawUTF8): TObjectList;
+begin
+  result := fORM.RetrieveList(Table, FormatSQLWhere, BoundsSQLWhere, aCustomFieldsCSV);
+end;
+
+{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
+
+function TSQLRest.RetrieveList<T>(const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+begin
+  result := fORM.Generics.RetrieveList<T>(aCustomFieldsCSV);
+end;
+
+function TSQLRest.RetrieveList<T>(const FormatSQLWhere: RawUTF8;
+  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+begin
+  result := fORM.Generics.RetrieveList<T>(FormatSQLWhere, BoundsSQLWhere, aCustomFieldsCSV);
+end;
+
+{$endif ISDELPHI2010}
+
+function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+  const aCustomFieldsCSV: RawUTF8; aForceAJAX: boolean): RawJSON;
+begin
+  result := fORM.RetrieveListJSON(Table, FormatSQLWhere, BoundsSQLWhere,
+    aCustomFieldsCSV, aForceAJAX);
+end;
+
+function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass;
+  const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8;
+  aForceAJAX: boolean): RawJSON;
+begin
+  result := fORM.RetrieveListJSON(Table, SQLWhere, aCustomFieldsCSV, aForceAJAX);
+end;
+
+function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
+  const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PID; LastRecordID: PID): variant;
+begin
+  result := fORM.RetrieveDocVariantArray(Table, ObjectName, CustomFieldsCSV,
+    FirstRecordID, LastRecordID);
+end;
+
+function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
+  const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8; const BoundsSQLWhere:
+  array of const; const CustomFieldsCSV: RawUTF8; FirstRecordID: PID;
+  LastRecordID: PID): variant;
+begin
+  result := fORM.RetrieveDocVariantArray(Table, ObjectName, FormatSQLWhere,
+    BoundsSQLWhere, CustomFieldsCSV, FirstRecordID, LastRecordID);
+end;
+
+function TSQLRest.RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
+  const FieldName, FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): variant;
+begin
+  result := fORM.RetrieveOneFieldDocVariantArray(Table, FieldName,
+    FormatSQLWhere, BoundsSQLWhere);
+end;
+
+function TSQLRest.RetrieveDocVariant(Table: TSQLRecordClass;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+  const CustomFieldsCSV: RawUTF8): variant;
+begin
+  result := fORM.RetrieveDocVariant(Table, FormatSQLWhere, BoundsSQLWhere,
+    CustomFieldsCSV);
+end;
+
+function TSQLRest.RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+  const aCustomFieldsCSV: RawUTF8): boolean;
+begin
+  result := fORM.RetrieveListObjArray(ObjArray, Table, FormatSQLWhere,
+    BoundsSQLWhere, aCustomFieldsCSV);
+end;
+
+procedure TSQLRest.AppendListAsJsonArray(Table: TSQLRecordClass;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+  const OutputFieldName: RawUTF8; W: TJSONSerializer; const CustomFieldsCSV: RawUTF8);
+begin
+  fORM.AppendListAsJsonArray(Table, FormatSQLWhere, BoundsSQLWhere,
+    OutputFieldName, W, CustomFieldsCSV);
+end;
+
+function TSQLRest.RTreeMatch(DataTable: TSQLRecordClass;
+  const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
+  const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
+begin
+  result := fORM.RTreeMatch(DataTable, DataTableBlobFieldName, RTreeTable,
+    DataTableBlobField, DataID);
+end;
+
+function TSQLRest.ExecuteList(const Tables: array of TSQLRecordClass;
+  const SQL: RawUTF8): TSQLTable;
+begin
+  result := fORM.ExecuteList(Tables, SQL);
+end;
+
+function TSQLRest.ExecuteJson(const Tables: array of TSQLRecordClass;
+  const SQL: RawUTF8; ForceAJAX: boolean; ReturnedRowCount: PPtrInt): RawJSON;
+begin
+  result := fORM.ExecuteJson(Tables, SQL, ForceAJAX, ReturnedRowCount);
+end;
+
+function TSQLRest.Execute(const aSQL: RawUTF8): boolean;
+begin
+  result := fORM.Execute(aSQL);
+end;
+
+function TSQLRest.ExecuteFmt(const SQLFormat: RawUTF8;
+  const Args: array of const): boolean;
+begin
+  result := fORM.ExecuteFmt(SQLFormat, Args);
+end;
+
+function TSQLRest.ExecuteFmt(const SQLFormat: RawUTF8;
+  const Args, Bounds: array of const): boolean;
+begin
+  result := fORM.ExecuteFmt(SQLFormat, Args, Bounds);
+end;
+
+function TSQLRest.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
+begin
+  result := fORM.UnLock(Table, aID);
+end;
+
+function TSQLRest.UnLock(Rec: TSQLRecord): boolean;
+begin
+  result := fORM.UnLock(Rec);
+end;
+
+function TSQLRest.Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean;
+  DoNotAutoComputeFields: boolean): TID;
+begin
+  result := fORM.Add(Value, SendData, ForceID, DoNotAutoComputeFields);
+end;
+
+function TSQLRest.Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+  ForceID: boolean; DoNotAutoComputeFields: boolean): TID;
+begin
+  result := fORM.Add(Value, CustomCSVFields, ForceID, DoNotAutoComputeFields);
+end;
+
+function TSQLRest.Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+  ForceID: boolean; DoNotAutoComputeFields: boolean): TID;
+begin
+  result := fORM.Add(Value, CustomFields, ForceID, DoNotAutoComputeFields);
+end;
+
+function TSQLRest.AddWithBlobs(Value: TSQLRecord; ForceID: boolean;
+  DoNotAutoComputeFields: boolean): TID;
+begin
+  result := fORM.AddWithBlobs(Value, ForceID, DoNotAutoComputeFields);
+end;
+
+function TSQLRest.AddSimple(aTable: TSQLRecordClass;
+  const aSimpleFields: array of const; ForcedID: TID): TID;
+begin
+  result := fORM.AddSimple(aTable, aSimpleFields, ForcedID);
+end;
+
+function TSQLRest.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+  DoNotAutoComputeFields: boolean): boolean;
+begin
+  result := fORM.Update(Value, CustomFields, DoNotAutoComputeFields);
+end;
+
+function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+  DoNotAutoComputeFields: boolean): boolean;
+begin
+  result := fORM.Update(Value, CustomCSVFields, DoNotAutoComputeFields);
+end;
+
+function TSQLRest.Update(aTable: TSQLRecordClass; aID: TID;
+  const aSimpleFields: array of const): boolean;
+begin
+  result := fORM.Update(aTable, aID, aSimpleFields);
+end;
+
+function TSQLRest.AddOrUpdate(Value: TSQLRecord; ForceID: boolean): TID;
+begin
+  result := fORM.AddOrUpdate(Value, ForceID);
+end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: TID;
+  const FieldName: RawUTF8; const FieldValue: array of const): boolean;
+begin
+  result := fORM.UpdateField(Table, ID, FieldName, FieldValue);
+end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass;
+  const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
+  const FieldName: RawUTF8; const FieldValue: array of const): boolean;
+begin
+  result := fORM.UpdateField(Table, WhereFieldName, WhereFieldValue, FieldName,
+    FieldValue);
+end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: TID;
+  const FieldName: RawUTF8; const FieldValue: variant): boolean;
+begin
+  result := fORM.UpdateField(Table, ID, FieldName, FieldValue);
+end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass;
+  const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
+  const FieldName: RawUTF8; const FieldValue: variant): boolean;
+begin
+  result := fORM.UpdateField(Table, WhereFieldName, WhereFieldValue, FieldName,
+    FieldValue);
+end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
+  const FieldName: RawUTF8; const FieldValue: variant): boolean;
+begin
+  result := fORM.UpdateField(Table, IDs, FieldName, FieldValue);
+end;
+
+function TSQLRest.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+  const FieldName: RawUTF8; Increment: Int64): boolean;
+begin
+  result := fORM.UpdateFieldIncrement(Table, ID, FieldName, Increment);
+end;
+
+function TSQLRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
+  Action: TSQLEvent; ErrorMsg: PRawUTF8): boolean;
+begin
+  result := fORM.RecordCanBeUpdated(Table, ID, Action, ErrorMsg);
+end;
+
+function TSQLRest.Delete(Table: TSQLRecordClass; ID: TID): boolean;
+begin
+  result := fORM.Delete(Table, ID);
+end;
+
+function TSQLRest.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean;
+begin
+  result := fORM.Delete(Table, SQLWhere);
+end;
+
+function TSQLRest.Delete(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
+  const BoundsSQLWhere: array of const): boolean;
+begin
+  result := fORM.Delete(Table, FormatSQLWhere, BoundsSQLWhere);
+end;
+
+function TSQLRest.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
+  const BlobFieldName: RawUTF8; out BlobData: TSQLRawBlob): boolean;
+begin
+  result := fORM.RetrieveBlob(Table, aID, BlobFieldName, BlobData);
+end;
+
+function TSQLRest.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
+  const BlobFieldName: RawUTF8; out BlobStream: TCustomMemoryStream): boolean;
+begin
+  result := fORM.RetrieveBlob(Table, aID, BlobFieldName, BlobStream);
+end;
+
+function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
+  const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean;
+begin
+  result := fORM.UpdateBlob(Table, aID, BlobFieldName, BlobData);
+end;
+
+function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
+  const BlobFieldName: RawUTF8; BlobData: TStream): boolean;
+begin
+  result := fORM.UpdateBlob(Table, aID, BlobFieldName, BlobData);
+end;
+
+function TSQLRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
+  const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean;
+begin
+  result := fORM.UpdateBlob(Table, aID, BlobFieldName, BlobData, BlobSize);
+end;
+
+function TSQLRest.UpdateBlobFields(Value: TSQLRecord): boolean;
+begin
+  result := fORM.UpdateBlobFields(Value);
+end;
+
+function TSQLRest.RetrieveBlobFields(Value: TSQLRecord): boolean;
+begin
+  result := fORM.RetrieveBlobFields(Value);
+end;
+
+function TSQLRest.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
+begin
+  result := fORM.TransactionBegin(aTable, SessionID);
+end;
+
+function TSQLRest.TransactionActiveSession: cardinal;
+begin
+  result := fORM.TransactionActiveSession;
+end;
+
+procedure TSQLRest.Commit(SessionID: cardinal; RaiseException: boolean);
+begin
+  fORM.Commit(SessionID, RaiseException);
+end;
+
+procedure TSQLRest.RollBack(SessionID: cardinal);
+begin
+  fORM.RollBack(SessionID);
+end;
+
+procedure TSQLRest.WriteLock;
+begin
+  fORM.WriteLock;
+end;
+
+procedure TSQLRest.WriteUnLock;
+begin
+  fORM.WriteUnLock;
+end;
+
+function TSQLRest.BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer;
+begin
+  result := fORM.BatchSend(Batch, Results);
+end;
+
+function TSQLRest.BatchSend(Batch: TSQLRestBatch): integer;
+begin
+  result := fORM.BatchSend(Batch);
+end;
+
+function TSQLRest.AsynchBatchStart(Table: TSQLRecordClass;
+  SendSeconds: integer; PendingRowThreshold: integer;
+  AutomaticTransactionPerRow: integer; Options: TSQLRestBatchOptions): boolean;
+begin
+  result := fORM.AsynchBatchStart(Table, SendSeconds, PendingRowThreshold,
+    AutomaticTransactionPerRow, Options);
+end;
+
+function TSQLRest.AsynchBatchStop(Table: TSQLRecordClass): boolean;
+begin
+  result := fORM.AsynchBatchStop(Table);
+end;
+
+function TSQLRest.AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
+  ForceID: boolean; const CustomFields: TSQLFieldBits;
+  DoNotAutoComputeFields: boolean): integer;
+begin
+  result := fORM.AsynchBatchAdd(Value, SendData, ForceID, CustomFields,
+    DoNotAutoComputeFields);
+end;
+
+function TSQLRest.AsynchBatchRawAdd(Table: TSQLRecordClass;
+  const SentData: RawUTF8): integer;
+begin
+  result := fORM.AsynchBatchRawAdd(Table, SentData);
+end;
+
+procedure TSQLRest.AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+begin
+  fORM.AsynchBatchRawAppend(Table, SentData);
+end;
+
+function TSQLRest.AsynchBatchUpdate(Value: TSQLRecord;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+begin
+  result := fORM.AsynchBatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
+end;
+
+function TSQLRest.AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+begin
+  result := fORM.AsynchBatchDelete(Table, ID);
+end;
+
+function TSQLRest.Cache: TSQLRestCache;
+begin
+  result := fORM.Cache;
+end;
+
+function TSQLRest.CacheOrNil: TSQLRestCache;
+begin
+  result := fORM.CacheOrNil;
+end;
+
+function TSQLRest.CacheWorthItForTable(aTableIndex: cardinal): boolean;
+begin
+  result := fORM.CacheWorthItForTable(aTableIndex);
+end;
+
+{$endif PUREMORMOT2}
+
+
+
+{ TInterfacedObjectAsynch }
+
+type
+  TInterfacedObjectAsynch = class(TInterfacedObjectFakeCallback)
+  protected
+    fTimer: TSQLRestBackgroundTimer;
+    fDest: IInvokable;
+    fOnResult: TOnAsynchRedirectResult;
+    function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUTF8;
+      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+      aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
+  public
+    constructor Create(aTimer: TSQLRestBackgroundTimer; aFactory:
+      TInterfaceFactory; const aDestinationInterface: IInvokable; out
+      aCallbackInterface; const aOnResult: TOnAsynchRedirectResult);
+  end;
+
+  TInterfacedObjectAsynchCall = packed record
+    Method: PInterfaceMethod;
+    Instance: pointer; // weak IInvokable reference
+    Params: RawUTF8;
+    OnOutputParamsCopy: RawUTF8;
+    OnOutput: TOnAsynchRedirectResult;
+  end;
+
+constructor TInterfacedObjectAsynch.Create(aTimer: TSQLRestBackgroundTimer;
+  aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
+  out aCallbackInterface; const aOnResult: TOnAsynchRedirectResult);
+begin
+  fTimer := aTimer;
+  fLogClass := fTimer.fRest.fLogClass;
+  fName := fTimer.fThreadName;
+  fDest := aDestinationInterface;
+  fOnResult := aOnResult;
+  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJSON],
+    FakeInvoke, nil);
+  Get(aCallbackInterface);
+end;
+
+function TInterfacedObjectAsynch.FakeInvoke(const aMethod: TInterfaceMethod;
+  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+var
+  msg: RawUTF8;
+  call: TInterfacedObjectAsynchCall;
+begin
+  result := inherited FakeInvoke(aMethod, aParams, aResult, aErrorMsg,
+    aClientDrivenID, aServiceCustomAnswer);
+  if not result then
+    exit;
+  call.Method := @aMethod;
+  call.Instance := pointer(fDest);
+  call.Params := aParams;
+  if Assigned(fOnResult) then
+  begin
+    FastSetString(call.OnOutputParamsCopy, pointer(aParams), length(aParams));
+    call.OnOutput := fOnResult;
+  end
+  else
+    call.OnOutput := nil;
+  msg := BinarySave(@call, TypeInfo(TInterfacedObjectAsynchCall), [rkRecord]);
+  result := fTimer.EnQueue(fTimer.AsynchBackgroundExecute, msg, true);
+end;
+
+
+{ ************ TSQLRestBackgroundTimer for Multi-Thread Process }
+
+{ TSQLRestBackgroundTimer }
+
+constructor TSQLRestBackgroundTimer.Create(aRest: TSQLRest;
+  const aThreadName: RawUTF8; aStats: TSynMonitorClass);
+var
+  aName: RawUTF8;
+begin
+  if aRest = nil then
+    raise ERestException.CreateUTF8('%.Create(aRest=nil,"%")', [self, aThreadName]);
+  fRest := aRest;
+  if aThreadName <> '' then
+    aName := aThreadName
+  else
+    FormatUTF8('% %', [fRest.Model.Root, ClassType], aName);
+  inherited Create(aName, fRest.BeginCurrentThread, fRest.EndCurrentThread, aStats);
+end;
+
+destructor TSQLRestBackgroundTimer.Destroy;
+begin
+  AsynchBatchStop(nil);
+  inherited Destroy;
+end;
+
+procedure TSQLRestBackgroundTimer.SystemUseBackgroundExecute(
+  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
+begin
+  TSystemUse.Current({createifnone=}false).OnTimerExecute(Sender);
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchIndex(aTable: TSQLRecordClass): integer;
+begin
+  if (self = nil) or (fBackgroundBatch = nil) then
+    result := -1
+  else
+  begin
+    result := fRest.Model.GetTableIndexExisting(aTable);
+    if (result >= length(fBackgroundBatch)) or (fBackgroundBatch[result] = nil) then
+      result := -1;
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchLocked(aTable: TSQLRecordClass;
+  out aBatch: TSQLRestBatchLocked): boolean;
+var
+  b: integer;
+begin
+  b := AsynchBatchIndex(aTable);
+  if b >= 0 then
+  begin
+    aBatch := fBackgroundBatch[b];
+    aBatch.Safe.Lock;
+    result := true;
+  end
+  else
+    result := false;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBatchUnLock(aBatch: TSQLRestBatchLocked);
+begin
+  try
+    if aBatch.Count >= aBatch.Threshold then
+      ExecuteNow(AsynchBatchExecute);
+  finally
+    aBatch.Safe.UnLock;
+  end;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBatchExecute(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUTF8);
+var
+  json, tablename: RawUTF8;
+  batch: TSQLRestBatchLocked;
+  table: TSQLRecordClass;
+  b, count, status: integer;
+  res: TIDDynArray;
+  log: ISynLog; // for Enter auto-leave to work with FPC
+begin
+  try
+    // send any pending json
+    for b := 0 to high(fBackgroundBatch) do
+    begin
+      batch := fBackgroundBatch[b];
+      if batch.Count = 0 then
+        continue;
+      json := '';
+      batch.Safe.Lock;
+      try
+        // locked copy of the batch to local variables, then reset it
+        table := batch.Table;
+        count := batch.Count;
+        if count > 0 then
+        try
+          if ({%H-}log = nil) and (fRest.fLogClass <> nil) then
+            log := fRest.fLogClass.Enter('AsynchBatchExecute % count=%',
+              [table, count], self);
+          batch.PrepareForSending(json);
+        finally
+          batch.Reset;
+        end;
+      finally
+        batch.Safe.UnLock;
+      end;
+      // inlined TSQLRest.BatchSend for lower contention
+      if json <> '' then
+      try
+        // json layout is '{"Table":["cmd":values,...]}'
+        status := fRest.ORM.BatchSend(table, json, res, count); // may take a while
+        fRest.InternalLog('AsynchBatchExecute % EngineBatchSend=%',
+          [table, status]);
+      except
+        on E: Exception do
+          fRest.InternalLog('% during AsynchBatchExecute %',
+            [E.ClassType, table], sllWarning);
+      end;
+    end;
+  finally
+    if IdemPChar(pointer(Msg), 'FREE@') then
+    begin
+      // from AsynchBatchStop()
+      fRest.InternalLog('AsynchBatchExecute %', [Msg]);
+      tablename := copy(Msg, 6, 127);
+      if tablename = '' then
+        // AsynchBatchStop(nil)
+        ObjArrayClear(fBackgroundBatch, true)
+      else
+      begin
+        // AsynchBatchStop(table)
+        b := fRest.Model.GetTableIndex(tablename);
+        if b < length(fBackgroundBatch) then
+          FreeAndNil(fBackgroundBatch[b]);
+      end;
+    end;
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchStart(Table: TSQLRecordClass;
+  SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
+  Options: TSQLRestBatchOptions): boolean;
+var
+  b: Integer;
+begin
+  result := false;
+  if (self = nil) or (SendSeconds <= 0) then
+    exit;
+  b := fRest.Model.GetTableIndexExisting(Table);
+  if (fBackgroundBatch <> nil) and (fBackgroundBatch[b] <> nil) then
+    exit; // already defined for this Table
+  fRest.InternalLog('AsynchBatchStart(%,%,%)',
+    [Table, SendSeconds, PendingRowThreshold], sllDebug);
+  Enable(AsynchBatchExecute, SendSeconds);
+  if fBackgroundBatch = nil then
+    SetLength(fBackgroundBatch, fRest.Model.TablesMax + 1);
+  fBackgroundBatch[b] := TSQLRestBatchLocked.Create(
+    fRest.ORM, Table, AutomaticTransactionPerRow, Options);
+  fBackgroundBatch[b].Threshold := PendingRowThreshold;
+  result := true;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchStop(Table: TSQLRecordClass): boolean;
+var
+  b: integer;
+  timeout: Int64;
+  log: ISynLog; // for Enter auto-leave to work with FPC
+begin
+  result := false;
+  if (self = nil) or (fBackgroundBatch = nil) then
+    exit;
+  log := fRest.fLogClass.Enter('AsynchBatchStop(%)', [Table], self);
+  timeout := mormot.core.os.GetTickCount64 + 5000;
+  if Table = nil then
+  begin
+    // as called from TSQLRest.Destroy
+    if not EnQueue(AsynchBatchExecute, 'free@', true) then
+      exit;
+    repeat
+      SleepHiRes(1); // wait for all batchs to be released
+    until (fBackgroundBatch = nil) or (mormot.core.os.GetTickCount64 > timeout);
+    result := Disable(AsynchBatchExecute);
+  end
+  else
+  begin
+    // wait for regular TSQLRestBatch process
+    b := AsynchBatchIndex(Table);
+    if (b < 0) or not EnQueue(AsynchBatchExecute, 'free@' + Table.SQLTableName, true) then
+      exit;
+    repeat
+      SleepHiRes(1); // wait for all pending rows to be sent
+    until (fBackgroundBatch[b] = nil) or (mormot.core.os.GetTickCount64 > timeout);
+    if ObjArrayCount(fBackgroundBatch) > 0 then
+      result := true
+    else
+    begin
+      result := Disable(AsynchBatchExecute);
+      if result then
+        ObjArrayClear(fBackgroundBatch, true);
+    end;
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchAdd(Value: TSQLRecord;
+  SendData, ForceID: boolean; const CustomFields: TSQLFieldBits;
+  DoNotAutoComputeFields: boolean): integer;
+var
+  b: TSQLRestBatchLocked;
+begin
+  result := -1;
+  if (self = nil) or (fBackgroundBatch = nil) or (Value = nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchAdd %', [Value], sllDebug);
+  if AsynchBatchLocked(Value.RecordClass, b) then
+  try
+    result := b.Add(Value, SendData, ForceID, CustomFields, DoNotAutoComputeFields);
+  finally
+    AsynchBatchUnLock(b);
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchRawAdd(Table: TSQLRecordClass;
+  const SentData: RawUTF8): integer;
+var
+  b: TSQLRestBatchLocked;
+begin
+  result := -1;
+  if (self = nil) or (fBackgroundBatch = nil) or (Table = nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchRawAdd % %', [Table, SentData], sllDebug);
+  if AsynchBatchLocked(Table, b) then
+  try
+    result := b.RawAdd(SentData);
+  finally
+    AsynchBatchUnLock(b);
+  end;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBatchRawAppend(Table: TSQLRecordClass;
+  SentData: TTextWriter);
+var
+  b: TSQLRestBatchLocked;
+begin
+  if (self = nil) or (fBackgroundBatch = nil) or (Table = nil) or (SentData = nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchRawAppend %', [Table], sllDebug);
+  if AsynchBatchLocked(Table, b) then
+  try
+    b.RawAppend.AddNoJSONEscape(SentData);
+  finally
+    AsynchBatchUnLock(b);
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchUpdate(Value: TSQLRecord;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+var
+  b: TSQLRestBatchLocked;
+begin
+  result := -1;
+  if (self = nil) or (fBackgroundBatch = nil) or (Value = nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchUpdate %', [Value], sllDebug);
+  if AsynchBatchLocked(Value.RecordClass, b) then
+  try
+    result := b.Update(Value, CustomFields, DoNotAutoComputeFields);
+  finally
+    AsynchBatchUnLock(b);
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchDelete(Table: TSQLRecordClass;
+  ID: TID): integer;
+var
+  b: TSQLRestBatchLocked;
+begin
+  result := -1;
+  if (self = nil) or (fBackgroundBatch = nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchDelete % %', [Table, ID], sllDebug);
+  if AsynchBatchLocked(Table, b) then
+  try
+    result := b.Delete(Table, ID);
+  finally
+    AsynchBatchUnLock(b);
+  end;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBackgroundExecute(
+  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
+var
+  exec: TInterfaceMethodExecute;
+  call: TInterfacedObjectAsynchCall;
+  o: PRawUTF8;
+  output: RawUTF8;
+  log: ISynLog; // for Enter auto-leave to work with FPC
+begin
+  if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsynchCall)) then
+    exit; // invalid message (e.g. periodic execution)
+  log := fRest.fLogClass.Enter('AsynchBackgroundExecute % %',
+    [call.Method^.InterfaceDotMethodName, call.Params], self);
+  exec := TInterfaceMethodExecute.Create(call.Method);
+  try
+    if Assigned(call.OnOutput) then
+      o := @output
+    else
+      o := nil;
+    if not exec.ExecuteJsonCallback(call.Instance, call.Params, o) then
+      fRest.InternalLog('%.AsynchBackgroundExecute %: ExecuteJsonCallback failed',
+        [ClassType, call.Method^.InterfaceDotMethodName], sllWarning)
+    else if o <> nil then
+      call.OnOutput(call.Method^,
+        IInvokable(call.Instance), call.OnOutputParamsCopy, output);
+  finally
+    exec.Free;
+  end;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInterface: IInvokable; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+var
+  factory: TInterfaceFactory;
+begin
+  factory := TInterfaceFactory.Get(aGUID);
+  if factory = nil then
+    raise EServiceException.CreateUTF8('%.AsynchRedirect: unknown %',
+      [self, GUIDToShort(aGUID)]);
+  if aDestinationInterface = nil then
+    raise EServiceException.CreateUTF8('%.AsynchRedirect(nil)', [self]);
+  fRest.InternalLog('AsynchRedirect % to % using %',
+    [factory.InterfaceName, ObjectFromInterface(aDestinationInterface), self]);
+  Enable(AsynchBackgroundExecute, 3600);
+  TInterfacedObjectAsynch.Create(self, factory, aDestinationInterface,
+    aCallbackInterface, aOnResult);
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+var
+  dest: IInvokable;
+begin
+  if aDestinationInstance = nil then
+    raise EServiceException.CreateUTF8('%.AsynchRedirect(nil)', [self]);
+  if not aDestinationInstance.GetInterface(aGUID, dest) then
+    raise EServiceException.CreateUTF8('%.AsynchRedirect [%]: % is not a %',
+      [self, fThreadName, aDestinationInstance, GUIDToShort(aGUID)]);
+  AsynchRedirect(aGUID, dest, aCallbackInterface, aOnResult);
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBackgroundInterning(
+  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
+var
+  i, claimed, total: integer;
+  timer: TPrecisionTimer;
+begin
+  timer.Start;
+  claimed := 0;
+  for i := 0 to high(fBackgroundInterning) do
+    inc(claimed, fBackgroundInterning[i].Clean(fBackgroundInterningMaxRefCount));
+  if claimed = 0 then
+    exit; // nothing to collect
+  total := claimed;
+  for i := 0 to high(fBackgroundInterning) do
+    inc(total, fBackgroundInterning[i].count);
+  fRest.InternalLog('%.AsynchInterning: Clean(%) claimed %/% strings from % pools in %',
+    [ClassType, fBackgroundInterningMaxRefCount, claimed, total, length(fBackgroundInterning),
+     timer.Stop], sllDebug);
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchInterning(Interning: TRawUTF8Interning;
+  InterningMaxRefCount, PeriodMinutes: integer);
+begin
+  if (self = nil) or (Interning = nil) then
+    exit;
+  fTaskLock.Lock;
+  try
+    if (InterningMaxRefCount <= 0) or (PeriodMinutes <= 0) then
+      ObjArrayDelete(fBackgroundInterning, Interning)
+    else
+    begin
+      fBackgroundInterningMaxRefCount := InterningMaxRefCount;
+      ObjArrayAddOnce(fBackgroundInterning, Interning);
+      Enable(AsynchBackgroundInterning, PeriodMinutes * 60);
+    end;
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+{ ************ RESTful Authentication Support }
+
+{ TSQLAuthGroup }
+
+function TSQLAuthGroup.GetSQLAccessRights: TSQLAccessRights;
+begin
+  if self = nil then
+    FillCharFast(result, SizeOf(result), 0)
+  else
+    result.FromString(pointer(AccessRights));
+end;
+
+class procedure TSQLAuthGroup.InitializeTable(const Server: IRestORMServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+var
+  UC: TSQLAuthUserClass;
+  G: TSQLAuthGroup;
+  U: TSQLAuthUser;
+  A: TSQLAccessRights;
+  AuthUserIndex, AuthGroupIndex: integer;
+  AdminID, SupervisorID, UserID: PtrInt;
+begin
+  inherited; // will create any needed index
+  if (Server <> nil) and (FieldName = '') and Server.HandleAuthentication then
+  begin
+    // create default Groups and Users (we are already in a Transaction)
+    AuthGroupIndex := Server.Model.GetTableIndex(self);
+    AuthUserIndex := Server.Model.GetTableIndexInheritsFrom(TSQLAuthUser);
+    if (AuthGroupIndex < 0) or (AuthUserIndex < 0) then
+      raise EModelException.CreateUTF8(
+        '%.InitializeTable: Model has missing % or TSQLAuthUser',
+        [self, self]);
+    UC := pointer(Server.Model.Tables[AuthUserIndex]);
+    if not (itoNoAutoCreateGroups in Options) then
+    begin
+      G := Create;
+      try
+        //            POSTSQL SELECTSQL Service AuthR AuthW TablesR TablesW
+        // Admin        Yes     Yes       Yes    Yes   Yes    Yes    Yes
+        // Supervisor   No      Yes       Yes    Yes   No     Yes    Yes
+        // User         No      No        Yes    No    No     Yes    Yes
+        // Guest        No      No        No     No    No     Yes    No
+        A := FULL_ACCESS_RIGHTS;
+        G.Ident := 'Admin';
+        G.SQLAccessRights := A;
+        G.SessionTimeout := AuthAdminGroupDefaultTimeout;
+        AdminID := Server.Add(G, true);
+        G.Ident := 'Supervisor';
+        A.AllowRemoteExecute := SUPERVISOR_ACCESS_RIGHTS.AllowRemoteExecute;
+        A.Edit(AuthUserIndex, [soSelect]); // AuthUser  R/O
+        A.Edit(AuthGroupIndex, [soSelect]); // AuthGroup R/O
+        G.SQLAccessRights := A;
+        G.SessionTimeout := AuthSupervisorGroupDefaultTimeout;
+        SupervisorID := Server.Add(G, true);
+        G.Ident := 'User';
+        Exclude(A.AllowRemoteExecute, reSQLSelectWithoutTable);
+        Exclude(A.GET, AuthUserIndex); // no Auth R
+        Exclude(A.GET, AuthGroupIndex);
+        G.SQLAccessRights := A;
+        G.SessionTimeout := AuthUserGroupDefaultTimeout;
+        UserID := Server.Add(G, true);
+        G.Ident := 'Guest';
+        A.AllowRemoteExecute := [];
+        FillcharFast(A.POST, SizeOf(TSQLFieldTables), 0); // R/O access
+        FillcharFast(A.PUT, SizeOf(TSQLFieldTables), 0);
+        FillcharFast(A.DELETE, SizeOf(TSQLFieldTables), 0);
+        G.SQLAccessRights := A;
+        G.SessionTimeout := AuthGuestGroupDefaultTimeout;
+        Server.Add(G, true);
+      finally
+        G.Free;
+      end;
+      if not (itoNoAutoCreateUsers in Options) and (Server.TableRowCount(UC) = 0) then
+      begin
+        U := UC.Create;
+        try
+          U.LogonName := 'Admin';
+          U.PasswordHashHexa := AuthAdminDefaultPassword;
+          U.DisplayName := U.LogonName;
+          U.GroupRights := TSQLAuthGroup(AdminID);
+          Server.Add(U, true);
+          U.LogonName := 'Supervisor';
+          U.PasswordHashHexa := AuthSupervisorDefaultPassword;
+          U.DisplayName := U.LogonName;
+          U.GroupRights := TSQLAuthGroup(SupervisorID);
+          Server.Add(U, true);
+          U.LogonName := 'User';
+          U.PasswordHashHexa := AuthUserDefaultPassword;
+          U.DisplayName := U.LogonName;
+          U.GroupRights := TSQLAuthGroup(UserID);
+          Server.Add(U, true);
+        finally
+          U.Free;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure TSQLAuthGroup.SetSQLAccessRights(const Value: TSQLAccessRights);
+begin
+  if self <> nil then
+    AccessRights := Value.ToString;
+end;
+
+
+{ TSQLAuthUser }
+
+class function TSQLAuthUser.ComputeHashedPassword(const aPasswordPlain,
+  aHashSalt: RawUTF8; aHashRound: integer): RawUTF8;
+const
+  TSQLAUTHUSER_SALT = 'salt';
+var
+  dig: TSHA256Digest;
+begin
+  if aHashSalt = '' then
+    result := SHA256(TSQLAUTHUSER_SALT + aPasswordPlain)
+  else
+  begin
+    PBKDF2_HMAC_SHA256(aPasswordPlain, aHashSalt, aHashRound, dig);
+    result := SHA256DigestToString(dig);
+    FillCharFast(dig, SizeOf(dig), 0);
+  end;
+end;
+
+procedure TSQLAuthUser.SetPasswordPlain(const Value: RawUTF8);
+begin
+  if self <> nil then
+    PasswordHashHexa := ComputeHashedPassword(Value);
+end;
+
+procedure TSQLAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
+  aHashRound: integer);
+begin
+  if self <> nil then
+    PasswordHashHexa := ComputeHashedPassword(aPasswordPlain, aHashSalt, aHashRound);
+end;
+
+function TSQLAuthUser.CanUserLog(Ctxt: TObject): boolean;
+begin
+  result := true; // any existing TSQLAuthUser is allowed by default
+end;
+
+
+{ ************ TSQLRestURIParams REST URI Definitions }
+
+{ TSQLRestURIParams }
+
+procedure TSQLRestURIParams.Init;
+begin
+  OutStatus := 0;
+  OutInternalState := 0;
+  RestAccessRights := nil;
+  LowLevelConnectionID := 0;
+  byte(LowLevelFlags) := 0;
+end;
+
+procedure TSQLRestURIParams.Init(const aURI, aMethod, aInHead, aInBody: RawUTF8);
+begin
+  Init;
+  Url := aURI;
+  Method := aMethod;
+  InHead := aInHead;
+  InBody := aInBody;
+end;
+
+function TSQLRestURIParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
+begin
+  FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, result);
+  if GuessJSONIfNoneSet and (result = '') then
+    result := JSON_CONTENT_TYPE_VAR;
+end;
+
+function TSQLRestURIParams.InBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+begin
+  result := IdemPChar(pointer(InBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+end;
+
+function TSQLRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
+begin
+  FindNameValue(OutHead, HEADER_CONTENT_TYPE_UPPER, result);
+  if GuessJSONIfNoneSet and (result = '') then
+    result := JSON_CONTENT_TYPE_VAR;
+end;
+
+function TSQLRestURIParams.OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+begin
+  result := IdemPChar(pointer(OutBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+end;
+
+function TSQLRestURIParams.Header(UpperName: PAnsiChar): RawUTF8;
+begin
+  FindNameValue(InHead, UpperName, result);
+end;
+
+function TSQLRestURIParams.HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
+begin
+  if (Store = '') and (@self <> nil) then
+  begin
+    FindNameValue(InHead, UpperName, result);
+    if result = '' then
+      Store := NULL_STR_VAR
+    else // ensure header is parsed only once
+      Store := result;
+  end
+  else if pointer(Store) = pointer(NULL_STR_VAR) then
+    result := ''
+  else
+    result := Store;
+end;
+
+
+{ ************ TSQLRestThread Background Process of a REST instance }
+
+{ TSQLRestThread }
+
+constructor TSQLRestThread.Create(aRest: TSQLRest; aOwnRest, aCreateSuspended: boolean);
+begin
+  if aRest = nil then
+    raise EORMException.CreateUTF8('%.Create(aRest=nil)', [self]);
+  fSafe.Init;
+  fRest := aRest;
+  fOwnRest := aOwnRest;
+  if fThreadName = '' then
+    FormatUTF8('% %', [self, fRest.Model.Root], fThreadName);
+  fEvent := TEvent.Create(nil, false, false, '');
+  inherited Create(aCreateSuspended);
+end;
+
+procedure TSQLRestThread.WaitForNotExecuting(maxMS: integer);
+var
+  endtix: Int64;
+begin
+  if fExecuting then
+  begin
+    endtix := mormot.core.os.GetTickCount64 + maxMS;
+    repeat
+      SleepHiRes(1); // wait for InternalExecute to finish
+    until not fExecuting or (mormot.core.os.GetTickCount64 >= endtix);
+  end;
+end;
+
+destructor TSQLRestThread.Destroy;
+begin
+  if fExecuting then
+  begin
+    Terminate; // will notify Execute that the process is finished
+    WaitForNotExecuting;
+  end;
+  inherited Destroy;
+  if fOwnRest and (fRest <> nil) then
+  begin
+    if GetCurrentThreadId = ThreadID then
+    begin
+      fRest.fLogFamily := nil; // no log after fRest.EndCurrentThread(self)
+      fRest.fLogClass := nil;
+    end;
+    FreeAndNil(fRest);
+  end;
+  fSafe.Done;
+  fEvent.Free;
+end;
+
+function TSQLRestThread.SleepOrTerminated(MS: integer): boolean;
+var
+  endtix: Int64;
+begin
+  result := true; // notify Terminated
+  if (self = nil) or Terminated then
+    exit;
+  endtix := mormot.core.os.GetTickCount64 + MS;
+  repeat
+    fEvent.WaitFor(MS);
+    if Terminated then
+      exit;
+  until (MS < 32) or (mormot.core.os.GetTickCount64 >= endtix);
+  result := false; // normal delay expiration
+end;
+
+procedure TSQLRestThread.Execute;
+begin
+  fLog := fRest.fLogClass.Add;
+  SetCurrentThreadName('%', [fThreadName]);
+  fRest.BeginCurrentThread(self);
+  try
+    fExecuting := true;
+    try
+      InternalExecute;
+    except
+      on E: Exception do
+        fLog.Add.Log(sllError, 'Unhandled % in %.Execute -> abort',
+          [E, ClassType], self);
+    end;
+  finally
+    fRest.EndCurrentThread(self);
+    fLog := nil; // no log after EndCurrentThread
+    fExecuting := false;
+  end;
+end;
+
+{$ifndef HASTTHREADSTART}
+procedure TSQLRestThread.Start;
+begin
+  Resume;
+end;
+{$endif HASTTHREADSTART}
+
+{$ifndef HASTTHREADTERMINATESET}
+
+procedure TSQLRestThread.Terminate;
+begin
+  inherited Terminate; // FTerminated := True
+  TerminatedSet;
+end;
+{$endif HASTTHREADTERMINATESET}
+
+procedure TSQLRestThread.TerminatedSet;
+begin
+  fEvent.SetEvent;
+end;
+
+initialization
+
+finalization
+
+end.
+
