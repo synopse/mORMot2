@@ -106,13 +106,14 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-dFPC_X64MM"/>
+            <CustomOptions Value="-dFPC_X64MM
+-dPUREMORMOT2"/>
             <OtherDefines Count="5">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
-              <Define4 Value="MAX_SQLFIELDS_128"/>
+              <Define4 Value="PUREMORMOT2"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -540,7 +541,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="54">
+    <Units Count="56">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -757,6 +758,14 @@
         <Filename Value="..\src\orm\mormot.orm.rest.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit53>
+      <Unit54>
+        <Filename Value="..\src\rest\mormot.rest.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit54>
+      <Unit55>
+        <Filename Value="..\src\orm\mormot.orm.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit55>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
