@@ -74,13 +74,6 @@ type
     fCache: TSQLRestCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TSQLRecordClass;
-    fServerTimestamp: record
-      Offset: TDateTime;
-      CacheTix: cardinal;
-      CacheValue: TTimeLogBits;
-    end;
-    /// compute the server time stamp offset from the given
-    procedure SetServerTimestamp(const Value: TTimeLog);
     /// compute SELECT ... FROM TABLE WHERE ...
     function SQLComputeForSelect(Table: TSQLRecordClass;
       const FieldNames, WhereClause: RawUTF8): RawUTF8;
@@ -214,7 +207,7 @@ type
   public
     // ------- TRestORM main methods
     /// initialize the class, and associated to a TSQLRest and its TSQLModel
-    constructor Create(aRest: TSQLRest; aModel: TSQLModel); reintroduce; virtual;
+    constructor Create(aRest: TSQLRest); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
   public
@@ -377,10 +370,10 @@ type
       const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean; overload;
     function UpdateBlobFields(Value: TSQLRecord): boolean; virtual;
     function RetrieveBlobFields(Value: TSQLRecord): boolean; virtual;
-    function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
+    function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean; virtual;
     function TransactionActiveSession: cardinal;
-    procedure Commit(SessionID: cardinal; RaiseException: boolean = false);
-    procedure RollBack(SessionID: cardinal);
+    procedure Commit(SessionID: cardinal; RaiseException: boolean = false); virtual;
+    procedure RollBack(SessionID: cardinal); virtual;
     procedure WriteLock;    {$ifdef HASINLINE}inline;{$endif}
     procedure WriteUnLock;  {$ifdef HASINLINE}inline;{$endif}
     function BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer; overload;
@@ -399,17 +392,17 @@ type
     function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
-    function Model: TSQLModel;
+    function Model: TSQLModel;          {$ifdef HASINLINE}inline;{$endif}
     function Cache: TSQLRestCache;
-    function CacheOrNil: TSQLRestCache;
+    function CacheOrNil: TSQLRestCache; {$ifdef HASINLINE}inline;{$endif}
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
     function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
     procedure InternalLog(const Format: RawUTF8; const Args: array of const;
       Level: TSynLogInfo = sllTrace); overload;
-    function GetServerTimestamp: TTimeLog; virtual;
-    function GetCurrentSessionUserID: TID; virtual; abstract;
+    function GetServerTimestamp: TTimeLog;
+    function GetCurrentSessionUserID: TID;
   end;
 
 
@@ -454,11 +447,12 @@ end;
 
 // ------- TRestORM main methods
 
-constructor TRestORM.Create(aRest: TSQLRest; aModel: TSQLModel);
+constructor TRestORM.Create(aRest: TSQLRest);
 begin
   inherited Create;
   fRest := aRest;
-  fModel := aModel;
+  fModel := aRest.Model;
+  fRest.SetORMInstance(self);
 end;
 
 destructor TRestORM.Destroy;
@@ -965,8 +959,7 @@ end;
 
 function TRestORM.FTSMatch(Table: TSQLRecordFTS3Class;
   const MatchClause: RawUTF8; var DocID: TIDDynArray;
-  const PerFieldWeight: array of double; limit: integer; offset: integer
-  ): boolean;
+  const PerFieldWeight: array of double; limit, offset: integer): boolean;
 var
   WhereClause: RawUTF8;
   i: PtrInt;
@@ -976,8 +969,8 @@ begin
     if length(PerFieldWeight) <> length(SimpleFields) then
       exit
     else
-      WhereClause := FormatUTF8('% MATCH ? ORDER BY rank(matchinfo(%)', [SQLTableName,
-        SQLTableName], [MatchClause]);
+      WhereClause := FormatUTF8('% MATCH ? ORDER BY rank(matchinfo(%)',
+        [SQLTableName, SQLTableName], [MatchClause]);
   for i := 0 to high(PerFieldWeight) do
     WhereClause := FormatUTF8('%,?', [WhereClause], [PerFieldWeight[i]]);
   WhereClause := WhereClause + ') DESC';
@@ -1337,7 +1330,7 @@ begin
   begin
     TSQLRecordRTree(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^, BDouble);
     for i := 0 to (RTree.RTreeCoordBoundaryFields shr 1) - 1 do
-      Where := FormatUTF8('%%>=:(%): and %<=:(%): and ', [Where,
+      Where := FormatUTF8('%%>=:(%): and %<=:(%): and ', [{%H-}Where,
         RTree.Fields.List[i * 2].Name, BDouble[i].Min * (1 - 0.00000012),
         RTree.Fields.List[i * 2+ 1].Name, BDouble[i].Max * (1 + 0.00000012)]);
     { from http://sqlite.org/rtree.html:
@@ -1350,8 +1343,8 @@ begin
   end
   else if RTreeTable.InheritsFrom(TSQLRecordRTreeInteger) then
   begin
-    TSQLRecordRTreeInteger(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^,
-      BInteger);
+    TSQLRecordRTreeInteger(RTreeTable).BlobToCoord(
+      pointer(DataTableBlobField)^, BInteger);
     for i := 0 to (RTree.RTreeCoordBoundaryFields shr 1) - 1 do
       Where := FormatUTF8('%%>=:(%): and %<=:(%): and ', [Where,
         RTree.Fields.List[i * 2].Name, BInteger[i].Min,
@@ -1687,7 +1680,7 @@ begin
   end;
 end;
 
-function TRestORM.EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
+function TRestORM.{%H-}EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
   raise EORMException.CreateUTF8('BATCH not supported by %', [self]);
@@ -2004,7 +1997,7 @@ begin
   result := BatchSend(Batch, dummyRes);
 end;
 
-function TRestORM.BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
+function TRestORM.{%H-}BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
   raise EORMException.CreateUTF8('BATCH not supported by %', [self]);
@@ -2118,28 +2111,14 @@ begin
 end;
 
 function TRestORM.GetServerTimestamp: TTimeLog;
-var
-  tix: cardinal;
 begin
-  tix := GetTickCount64 shr 9; // resolution change from 1 ms to 512 ms
-  with fServerTimestamp do
-    if CacheTix = tix then
-      result := CacheValue.Value
-    else
-    begin
-      CacheTix := tix;
-      CacheValue.From(NowUTC + offset);
-      result := CacheValue.Value;
-    end;
+  result := fRest.GetServerTimeStamp;
 end;
 
-procedure TRestORM.SetServerTimestamp(const Value: TTimeLog);
+function TRestORM.GetCurrentSessionUserID: TID;
 begin
-  fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUTC;
-  if fServerTimestamp.Offset = 0 then
-    fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
+  result := fRest.GetCurrentSessionUserID;
 end;
-
 
 
 initialization
