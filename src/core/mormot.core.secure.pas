@@ -102,7 +102,7 @@ type
 
   /// handle safe storage of any connection properties
   // - would be used by mormot.db to serialize TSQLDBConnectionProperties, or
-  // by mORMot.pas to serialize TSQLRest instances
+  // by mormot.rest.core.pas to serialize TRest instances
   // - the password will be stored as Base64, after a simple encryption as
   // defined by TSynPersistentWithPassword
   // - typical content could be:
@@ -113,7 +113,7 @@ type
   // $	"User": "",
   // $	"Password": "PtvlPA=="
   // $ }
-  // - the "Kind" value will be used to let the corresponding TSQLRest or
+  // - the "Kind" value will be used to let the corresponding TRest or
   // TSQLDBConnectionProperties NewInstance*() class methods create the
   // actual instance, from its class name
   TSynConnectionDefinition = class(TSynPersistentWithPassword)
@@ -133,7 +133,7 @@ type
     // - this method won't use ObjectToJSON() so avoid any dependency to mORMot.pas
     function SaveToJSON: RawUTF8; virtual;
   published
-    /// the class name implementing the connection or TSQLRest instance
+    /// the class name implementing the connection or TRest instance
     // - will be used to instantiate the expected class type
     property Kind: string read fKind write fKind;
     /// the associated server name (or file, for SQLite3) to be connected to

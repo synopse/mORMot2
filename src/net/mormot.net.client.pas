@@ -654,8 +654,8 @@ uses
 
 function DefaultUserAgent(Instance: TObject): RawUTF8;
 begin
-  // note: some part of mORMot.pas would identify 'mORMot' pattern in the
-  // agent header to enable advanced behavior e.g. about JSON transmission
+  // note: the framework would identify 'mORMot' pattern in the user-agent
+  // header to enable advanced behavior e.g. about JSON transmission
   FormatUTF8('Mozilla/5.0 (' + OS_TEXT + '; mORMot ' +
     SYNOPSE_FRAMEWORK_VERSION + ' %)', [Instance], result);
 end;

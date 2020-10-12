@@ -62,7 +62,7 @@ type
       overload; override;
     /// initialize access to an existing SQLite3 engine
     // - this overloaded constructor allows to access via SynDB methods to an
-    // existing SQLite3 database, e.g. TSQLRestServerDB.DB (from mORMotSQLite3.pas)
+    // existing SQLite3 database, e.g. TRestServerDB.DB (from mORMotSQLite3.pas)
     constructor Create(aDB: TSQLDatabase); reintroduce; overload;
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for

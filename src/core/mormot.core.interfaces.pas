@@ -276,7 +276,7 @@ type
     // - that is, a custom Header+Content BLOB transfert, not a JSON object
     ArgsResultIsServiceCustomAnswer: boolean;
     /// true if there is a single input parameter as RawByteString/TSQLRawBlob
-    // - TSQLRestRoutingREST.ExecuteSOAByInterface will identify binary input
+    // - TRestRoutingREST.ExecuteSOAByInterface will identify binary input
     // with mime-type 'application/octet-stream' as expected
     ArgsInputIsOctetStream: boolean;
     /// the index of the first argument expecting manual stack initialization
@@ -776,7 +776,7 @@ type
   // defining the resolution via InjectStub/InjectResolver/InjectInstance methods,
   // and doing the instance resolution using the overloaded Resolve*() methods
   // - TServiceContainer will inherit from this class, as the main entry point
-  // for interface-based services of the framework (via TSQLRest.Services)
+  // for interface-based services of the framework (via TRest.Services)
   // - you can use RegisterGlobal() class method to define some process-wide DI
   TInterfaceResolverInjected = class(TInterfaceResolver)
   protected
@@ -876,7 +876,7 @@ type
   // Resolve*() methods could be used to inject any needed dependency for lazy
   // dependency resolution (e.g. within a public property getter)
   // - any interface published property will also be automatically injected
-  // - if you implement a SOA service with this class, TSQLRestServer.Services
+  // - if you implement a SOA service with this class, TRestServer.Services
   // will be auto-injected via TServiceFactoryServer.CreateInstance()
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
@@ -1742,7 +1742,7 @@ type
   // a RunningThread.Synchronize() call - it can be used e.g. if your
   // implementation rely heavily on COM servers - by default, service methods
   // are called within the thread which received them, on multi-thread server
-  // instances (e.g. TSQLite3HttpServer or TSQLRestServerNamedPipeResponse),
+  // instances (e.g. TSQLite3HttpServer or TRestServerNamedPipeResponse),
   // for better response time and CPU use (this is the technical reason why
   // service implementation methods have to handle multi-threading safety
   // carefully, e.g. by using TRTLCriticalSection mutex on purpose)
@@ -1878,7 +1878,7 @@ type
     /// reference to the background execution thread, if any
     property BackgroundExecutionThread: TSynBackgroundThreadMethod
       read fBackgroundExecutionThread;
-    /// points e.g. to TSQLRestServerURIContext.ExecuteCallback
+    /// points e.g. to TRestServerURIContext.ExecuteCallback
     property OnCallback: TInterfaceMethodExecuteCallback read fOnCallback;
     /// contains exception serialization after ExecuteJson of multiple instances
     // - follows the Instances[] order as supplied to RawExecute/ExecuteJson
@@ -5958,7 +5958,7 @@ type
   // map TServiceRunningContext
   TPerThreadRunningContext = record
     Factory: TObject; // TServiceFactoryServer
-    Request: TObject; // TSQLRestServerURIContext;
+    Request: TObject; // TRestServerURIContext;
     RunningThread: TThread;
   end;
   PPerThreadRunningContext = ^TPerThreadRunningContext;

@@ -6,7 +6,7 @@ unit mormot.orm.rest;
 {
   *****************************************************************************
 
-   IRestORM Implementation as used by TSQLRest
+   IRestORM Implementation as used by TRest
     - Some definitions Used by TRestORM Implementation
     - TRestORM Parent Class for abstract REST client/server
    
@@ -66,12 +66,12 @@ function ToText(m: TSQLURIMethod): PShortString; overload;
 { ************ TRestORM Parent Class for abstract REST client/server }
 
 type
-  /// implements TSQLRest.ORM process for abstract REST client/server
+  /// implements TRest.ORM process for abstract REST client/server
   TRestORM = class(TRestORMParent, IRestORM)
   protected
-    fRest: TSQLRest;
+    fRest: TRest;
     fModel: TSQLModel;
-    fCache: TSQLRestCache;
+    fCache: TRestCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TSQLRecordClass;
     /// compute SELECT ... FROM TABLE WHERE ...
@@ -86,7 +86,7 @@ type
       ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass;
       const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
-    /// internal method called by TSQLRestServer.Batch() to process fast sending
+    /// internal method called by TRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     // - returns TRUE if this method is handled by the engine, or FALSE if
     // individual calls to Engine*() are expected
@@ -95,13 +95,13 @@ type
     // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
     // will properly handle operations until InternalBatchStop() is called
     function InternalBatchStart(Method: TSQLURIMethod;
-      BatchOptions: TSQLRestBatchOptions): boolean; virtual;
-    /// internal method called by TSQLRestServer.Batch() to process fast sending
+      BatchOptions: TRestBatchOptions): boolean; virtual;
+    /// internal method called by TRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     // - this default implementation will raise an EORMException (since
-    // InternalBatchStart returns always FALSE at this TSQLRest level)
+    // InternalBatchStart returns always FALSE at this TRest level)
     // - InternalBatchStart/Stop may safely use a lock for multithreading:
-    // implementation in TSQLRestServer.Batch use a try..finally block
+    // implementation in TRestServer.Batch use a try..finally block
     procedure InternalBatchStop; virtual;
   protected
     // ------- abstract methods to be overriden by the real database engine
@@ -199,15 +199,15 @@ type
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUTF8; Increment: Int64): boolean; virtual;
     /// send/execute the supplied JSON BATCH content, and return the expected array
-    // - this method will be implemented for TSQLRestClient and TSQLRestServer only
+    // - this method will be implemented for TRestClient and TRestServer only
     // - this default implementation will trigger an EORMException
     // - warning: supplied JSON Data can be parsed in-place, so modified
     function EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
   public
     // ------- TRestORM main methods
-    /// initialize the class, and associated to a TSQLRest and its TSQLModel
-    constructor Create(aRest: TSQLRest); reintroduce; virtual;
+    /// initialize the class, and associated to a TRest and its TSQLModel
+    constructor Create(aRest: TRest); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
   public
@@ -376,13 +376,13 @@ type
     procedure RollBack(SessionID: cardinal); virtual;
     procedure WriteLock;    {$ifdef HASINLINE}inline;{$endif}
     procedure WriteUnLock;  {$ifdef HASINLINE}inline;{$endif}
-    function BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer; overload;
-    function BatchSend(Batch: TSQLRestBatch): integer; overload;
+    function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
+    function BatchSend(Batch: TRestBatch): integer; overload;
     function BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; overload;
     function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
-      Options: TSQLRestBatchOptions = [boExtendedJSON]): boolean;
+      Options: TRestBatchOptions = [boExtendedJSON]): boolean;
     function AsynchBatchStop(Table: TSQLRecordClass): boolean;
     function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TSQLFieldBits = [];
@@ -393,8 +393,8 @@ type
       DoNotAutoComputeFields: boolean = false): integer;
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
     function Model: TSQLModel;          {$ifdef HASINLINE}inline;{$endif}
-    function Cache: TSQLRestCache;
-    function CacheOrNil: TSQLRestCache; {$ifdef HASINLINE}inline;{$endif}
+    function Cache: TRestCache;
+    function CacheOrNil: TRestCache; {$ifdef HASINLINE}inline;{$endif}
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
     function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
@@ -447,7 +447,7 @@ end;
 
 // ------- TRestORM main methods
 
-constructor TRestORM.Create(aRest: TSQLRest);
+constructor TRestORM.Create(aRest: TRest);
 begin
   inherited Create;
   fRest := aRest;
@@ -1746,7 +1746,7 @@ begin
 end;
 
 function TRestORM.InternalBatchStart(Method: TSQLURIMethod;
-  BatchOptions: TSQLRestBatchOptions): boolean;
+  BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false;
 end;
@@ -1970,7 +1970,7 @@ begin
   end;
 end;
 
-function TRestORM.BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer;
+function TRestORM.BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer;
 var
   json: RawUTF8; // layout is '{"Table":["cmd":values,...]}'
 begin
@@ -1985,12 +1985,12 @@ begin
     try
       result := BatchSend(Batch.Table, json, Results, Batch.Count);
     except
-      on Exception do // e.g. from TSQLRestServer.BatchSend()
+      on Exception do // e.g. from TRestServer.BatchSend()
         result := HTTP_SERVERERROR;
     end;
 end;
 
-function TRestORM.BatchSend(Batch: TSQLRestBatch): integer;
+function TRestORM.BatchSend(Batch: TRestBatch): integer;
 var
   dummyRes: TIDDynArray;
 begin
@@ -2005,7 +2005,7 @@ end;
 
 function TRestORM.AsynchBatchStart(Table: TSQLRecordClass;
   SendSeconds: integer; PendingRowThreshold: integer;
-  AutomaticTransactionPerRow: integer; Options: TSQLRestBatchOptions): boolean;
+  AutomaticTransactionPerRow: integer; Options: TRestBatchOptions): boolean;
 begin
   if self = nil then
     result := false
@@ -2076,14 +2076,14 @@ begin
   result := fModel;
 end;
 
-function TRestORM.Cache: TSQLRestCache;
+function TRestORM.Cache: TRestCache;
 begin
   if fCache = nil then
-    fCache := TSQLRestCache.Create(self);
+    fCache := TRestCache.Create(self);
   result := fCache;
 end;
 
-function TRestORM.CacheOrNil: TSQLRestCache;
+function TRestORM.CacheOrNil: TRestCache;
 begin
   result := fCache;
 end;
@@ -2119,6 +2119,7 @@ function TRestORM.GetCurrentSessionUserID: TID;
 begin
   result := fRest.GetCurrentSessionUserID;
 end;
+
 
 
 initialization

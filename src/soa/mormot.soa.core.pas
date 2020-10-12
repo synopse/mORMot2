@@ -150,7 +150,7 @@ type
   // - sicSingle: one object instance is created per call - this is the
   // most expensive way of implementing the service, but is safe for simple
   // workflows (like a one-type call); this is the default setting for
-  // TSQLRestServer.ServiceRegister method
+  // TRestServer.ServiceRegister method
   // - sicShared: one object instance is used for all incoming calls and is
   // not recycled subsequent to the calls - the implementation should be
   // thread-safe on the server side
@@ -180,7 +180,7 @@ type
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
     /// the list of denied TSQLAuthGroup ID(s)
-    // - used on server side within TSQLRestServerURIContext.ExecuteSOAByInterface
+    // - used on server side within TRestServerURIContext.ExecuteSOAByInterface
     // - bit 0 for client TSQLAuthGroup.ID=1 and so on...
     // - is therefore able to store IDs up to 256
     // - void by default, i.e. no denial = all groups allowed for this method
@@ -188,7 +188,7 @@ type
     /// execution options for this method (about thread safety or logging)
     Options: TInterfaceMethodOptions;
     /// where execution information should be written as TSQLRecordServiceLog
-    LogRest: TObject; // TSQLRest
+    LogRest: TObject; // TRest
     /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
     LogClass: TSQLRecordServiceLogClass;
   end;
@@ -198,17 +198,17 @@ type
 
   /// an abstract service provider, as registered in TServiceContainer
   // - each registered interface has its own TServiceFactory instance, available
-  // as one TSQLServiceContainer item from TSQLRest.Services property
+  // as one TSQLServiceContainer item from TRest.Services property
   // - this will be either implemented by a registered TInterfacedObject on the
   // server, or by a on-the-fly generated fake TInterfacedObject class
   // communicating via JSON on a client
-  // - TSQLRestServer will have to register an interface implementation as:
+  // - TRestServer will have to register an interface implementation as:
   // ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
-  // - TSQLRestClientURI will have to register an interface remote access as:
+  // - TRestClientURI will have to register an interface remote access as:
   // ! Client.ServiceRegister([TypeInfo(ICalculator)],sicShared));
   // note that the implementation (TServiceCalculator) remain on the server side
   // only: the client only needs the ICalculator interface
-  // - then TSQLRestServer and TSQLRestClientURI will both have access to the
+  // - then TRestServer and TRestClientURI will both have access to the
   // service, via their Services property, e.g. as:
   // !var I: ICalculator;
   // !...
@@ -243,7 +243,7 @@ type
     // - it will check and retrieve all methods of the supplied interface,
     // and prepare all internal structures for its serialized execution
     // - supplied TInterfaceResolver should be able to resolve IRestORM,
-    // and is typically a TSQLRest instance
+    // and is typically a TRest instance
     constructor Create(aOwner: TInterfaceResolver; aInterface: PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation;
       const aContractExpected: RawUTF8); reintroduce;
@@ -290,7 +290,7 @@ type
     // and TServiceFactoryServer instances must have a matching ContractExpected
     // - this value is returned by a '_contract_' pseudo-method name, with the URI:
     // $ POST /root/Interface._contract_
-    // or (if TSQLRestRoutingJSON_RPC is used):
+    // or (if TRestRoutingJSON_RPC is used):
     // $ POST /root/Interface
     // $ (...)
     // $ {"method":"_contract_","params":[]}
@@ -301,7 +301,7 @@ type
     // so may not implement POST /root/Interface._contract_
     property ContractExpected: RawUTF8 read fContractExpected write fContractExpected;
   published
-    /// access to the associated TSQLRest ORM instance
+    /// access to the associated TRest ORM instance
     property ORM: IRestORM read fORM;
   published
     /// the registered Interface URI
@@ -393,7 +393,7 @@ type
   public
     /// initialize the Services list
     // - supplied TInterfaceResolver should be able to resolve IRestORM,
-    // and is typically a TSQLRest instance
+    // and is typically a TRest instance
     constructor Create(aOwner: TInterfaceResolver); virtual;
     /// release all registered services
     destructor Destroy; override;
@@ -443,7 +443,7 @@ type
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the URI does not match any registered interface
     property Services[const aURI: RawUTF8]: TServiceFactory read GetService; default;
-    /// the associated TSQLRest instance, owning these services
+    /// the associated TRest instance, owning these services
     property Owner: TInterfaceResolver read fOwner;
     /// set if the URI is expected to be mangled from the GUID
     // - by default (FALSE), the clear service name is expected to be supplied at
@@ -458,7 +458,7 @@ type
 
 type
   /// prototype of a class implementing redirection of a given interface
-  // - as returned e.g. by TSQLRest.MultiRedirect method
+  // - as returned e.g. by TRest.MultiRedirect method
   // - can be used as a main callback, then call Redirect() to manage
   // an internal list of redirections
   // - when you release this instance, will call Rest.Service.CallbackUnregister

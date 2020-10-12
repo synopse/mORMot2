@@ -332,7 +332,7 @@ type
     // ! begin // TSQLDBConnectionPropertiesThreadSafe
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
-    // - is used e.g. by TSQLRest.EndCurrentThread for proper multi-threading
+    // - is used e.g. by TRest.EndCurrentThread for proper multi-threading
     property OnHttpThreadTerminate: TNotifyThreadEvent
       read fOnThreadTerminate write SetOnTerminate;
     /// reject any incoming request with a body size bigger than this value

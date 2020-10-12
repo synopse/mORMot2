@@ -544,7 +544,7 @@ type
     /// max count of connected clients
     property ClientsMax: TSynMonitorOneCount read fClientsMax;
     /// how many concurrent requests are currently processed
-    // - modified via AddCurrentRequestCount() in TSQLRestServer.URI()
+    // - modified via AddCurrentRequestCount() in TRestServer.URI()
     property CurrentRequestCount: integer read fCurrentRequestCount;
   end;
 
@@ -688,7 +688,7 @@ type
     property OnMeasured: TOnSystemUseMeasured read fOnMeasured write fOnMeasured;
     /// low-level access to the associated timer running BackgroundExecute
     // - equals nil if has been associated to no timer
-    // - holds e.g. a TSQLRestBackgroundTimer from TSQLRest.SystemUseTrack
+    // - holds e.g. a TRestBackgroundTimer from TRest.SystemUseTrack
     property Timer: TObject read fTimer write fTimer;
   end;
 

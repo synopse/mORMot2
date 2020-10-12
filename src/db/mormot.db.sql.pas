@@ -1458,8 +1458,8 @@ type
 
     /// returns the information to adapt the LIMIT # clause in the SQL SELECT
     // statement to a syntax matching the underlying DBMS
-    // - e.g. TSQLRestStorageExternal.AdaptSQLForEngineList() calls this
-    // to let TSQLRestServer.URI by-pass virtual table mechanism
+    // - e.g. TRestStorageExternal.AdaptSQLForEngineList() calls this
+    // to let TRestServer.URI by-pass virtual table mechanism
     function SQLLimitClause(AStmt: TSynTableStatement):
       TSQLDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
@@ -2219,7 +2219,7 @@ type
     // - similar to corresponding TSQLRequest.Execute method in the
     // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
-    // - warning: TSQLRestStorageExternal.EngineRetrieve in mORMotDB unit
+    // - warning: TRestStorageExternal.EngineRetrieve in mORMotDB unit
     // expects the Expanded=true format to return '[{...}]'#10
     function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     // Append all rows content as a CSV stream
@@ -2362,7 +2362,7 @@ type
     // - this method shall be called from the thread about to be terminated: e.g.
     // if you call it from the main thread, it may fail to release resources
     // - within the mORMot server, mORMotDB unit will call this method
-    // for every terminating thread created for TSQLRestServerNamedPipeResponse
+    // for every terminating thread created for TRestServerNamedPipeResponse
     // or TSQLHttpServer multi-thread process
     procedure EndCurrentThread; virtual;
     /// set this property if you want to disable the per-thread connection pool

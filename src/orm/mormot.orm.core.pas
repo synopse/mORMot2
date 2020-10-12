@@ -19,8 +19,8 @@ unit mormot.orm.core;
     - Virtual TSQLRecord Definitions
     - TSQLRecordProperties Definitions
     - TSQLModel TSQLModelRecordProperties Definitions
-    - TSQLRestCache Definition
-    - TSQLRestBatch TSQLRestBatchLocked Definitions
+    - TRestCache Definition
+    - TRestBatch TRestBatchLocked Definitions
     - TSynValidateRest TSynValidateUniqueField Definitions
     - TSQLAccessRights Definition
     - TSQLRecord High-Level Parents
@@ -90,8 +90,8 @@ type
   // - will identify a sftBlob field type, if used to define such a published
   // property
   // - by default, the BLOB fields are not retrieved or updated with raw
-  // TSQLRest.Retrieve() method, that is "Lazy loading" is enabled by default
-  // for blobs, unless TSQLRestClientURI.ForceBlobTransfert property is TRUE
+  // TRest.Retrieve() method, that is "Lazy loading" is enabled by default
+  // for blobs, unless TRestClientURI.ForceBlobTransfert property is TRUE
   // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
   // so use RetrieveBlob() methods for handling BLOB fields
   // - could be defined as value in a TSQLRecord property as such:
@@ -102,11 +102,11 @@ type
   // - stored as a 64-bit signed integer (just like the TID type)
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
-  // - use TSQLRest.Retrieve(Reference) to get a record value
+  // - use TRest.Retrieve(Reference) to get a record value
   // - don't change associated TSQLModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, this property will be set to 0
-  // by TSQLRestServer.AfterDeleteForceCoherency()
+  // by TRestServer.AfterDeleteForceCoherency()
   // - could be defined as value in a TSQLRecord property as such:
   // ! property AnotherRecord: TRecordReference read fAnotherRecord write fAnotherRecord;
   TRecordReference = type Int64;
@@ -115,11 +115,11 @@ type
   // - stored as a 64-bit signed integer (just like the TID type)
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
-  // - use TSQLRest.Retrieve(Reference) to get a record value
+  // - use TRest.Retrieve(Reference) to get a record value
   // - don't change associated TSQLModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, any record containg a matching
-  // property will be deleted by TSQLRestServer.AfterDeleteForceCoherency()
+  // property will be deleted by TRestServer.AfterDeleteForceCoherency()
   // - could be defined as value in a TSQLRecord property as such:
   // ! property AnotherRecord: TRecordReferenceToBeDeleted
   // !   read fAnotherRecord write fAnotherRecord;
@@ -329,13 +329,13 @@ type
   end;
 
   /// used to define the triggered Event types for TNotifySQLEvent
-  // - some Events can be triggered via TSQLRestServer.OnUpdateEvent when
+  // - some Events can be triggered via TRestServer.OnUpdateEvent when
   // a Table is modified, and actions can be authorized via overriding the
-  // TSQLRest.RecordCanBeUpdated method
+  // TRest.RecordCanBeUpdated method
   // - OnUpdateEvent is called BEFORE deletion, and AFTER insertion or update; it
   // should be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
-  // clients ask the server for refresh (see TSQLRestClientURI.UpdateFromServer)
+  // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
   // - is used also by TSQLRecord.ComputeFieldsBeforeWrite virtual method
   TSQLEvent = (
     seAdd, seUpdate, seDelete, seUpdateBlob);
@@ -522,14 +522,14 @@ function UTF8CompareDouble(P1, P2: PUTF8Char): PtrInt;
 function UTF8CompareISO8601(P1, P2: PUTF8Char): PtrInt;
 
 type
-  /// the available options for TSQLRest.BatchStart() process
+  /// the available options for TRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
   // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
   // - boInsertOrUpdate will create 'INSERT OR REPLACE' statements instead of
   // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
   // - boExtendedJSON will force the JSON to unquote the column names,
   // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
-  // - boPostNoSimpleFields will avoid to send a TSQLRestBach.Add() with simple
+  // - boPostNoSimpleFields will avoid to send a TRestBach.Add() with simple
   // fields as "SIMPLE":[val1,val2...] or "SIMPLE@tablename":[val1,val2...],
   // without the field names
   // - boPutNoCacheFlush won't force the associated Cache entry to be flushed:
@@ -537,13 +537,13 @@ type
   // - boRollbackOnError will raise an exception and Rollback any transaction
   // if any step failed - default if to continue batch processs, but setting
   // a value <> 200/HTTP_SUCCESS in Results[]
-  TSQLRestBatchOption = (
+  TRestBatchOption = (
     boInsertOrIgnore, boInsertOrReplace, boExtendedJSON,
     boPostNoSimpleFields, boPutNoCacheFlush, boRollbackOnError);
 
-  /// a set of options for TSQLRest.BatchStart() process
+  /// a set of options for TRest.BatchStart() process
   // - TJSONObjectDecoder will use it to compute the corresponding SQL
-  TSQLRestBatchOptions = set of TSQLRestBatchOption;
+  TRestBatchOptions = set of TRestBatchOption;
 
 
 
@@ -584,7 +584,7 @@ type
     InlinedParams: TJSONObjectDecoderParams;
     /// internal pointer over field names to be used after Decode() call
     // - either FieldNames, either Fields[] array as defined in Decode(), or
-    // external names as set by TSQLRestStorageExternal.JSONDecodedPrepareToSQL
+    // external names as set by TRestStorageExternal.JSONDecodedPrepareToSQL
     DecodedFieldNames: PRawUTF8Array;
     /// the ID=.. value as sent within the JSON object supplied to Decode()
     DecodedRowID: TID;
@@ -592,7 +592,7 @@ type
     // - to create 'INSERT INTO ... SELECT UNNEST(...)' or 'UPDATE ... FROM
     // SELECT UNNEST(...)' statements for very efficient bulk writes in a
     // PostgreSQL database
-    // - as set by TSQLRestStorageExternal.JSONDecodedPrepareToSQL when
+    // - as set by TRestStorageExternal.JSONDecodedPrepareToSQL when
     // cPostgreBulkArray flag is detected (for SynDBPostgres)
     DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
@@ -630,7 +630,7 @@ type
     // (i.e. ' inside a string is stored as '')
     // - if InlinedParams was TRUE, it will create prepared parameters like
     // 'COL1=:("VAL1"):, COL2=:(VAL2):'
-    // - called by GetJSONObjectAsSQL() function or TSQLRestStorageExternal
+    // - called by GetJSONObjectAsSQL() function or TRestStorageExternal
     function EncodeAsSQL(Update: boolean): RawUTF8;
     /// encode as a SQL-ready INSERT or UPDATE statement with ? as values
     // - after a successfull call to Decode()
@@ -639,7 +639,7 @@ type
     // - for soUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
     // - you can specify some options, e.g. boInsertOrIgnore for soInsert
     function EncodeAsSQLPrepared(const TableName: RawUTF8; Occasion: TSQLOccasion;
-      const UpdateIDFieldName: RawUTF8; BatchOptions: TSQLRestBatchOptions): RawUTF8;
+      const UpdateIDFieldName: RawUTF8; BatchOptions: TRestBatchOptions): RawUTF8;
     /// encode the FieldNames/FieldValues[] as a JSON object
     procedure EncodeAsJSON(out result: RawUTF8);
     /// set the specified array to the fields names
@@ -672,7 +672,7 @@ function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
   ReplaceRowIDWithID: boolean = false): RawUTF8; overload;
 
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
-// - is used e.g. by TSQLRestServerDB.EngineAdd/EngineUpdate methods
+// - is used e.g. by TRestServerDB.EngineAdd/EngineUpdate methods
 // - expect a regular JSON expanded object as "COL1"="VAL1",...} pairs
 // - make its own temporary copy of JSON data before calling GetJSONObjectAsSQL() above
 // - returns 'COL1="VAL1", COL2=VAL2' if UPDATE is true (UPDATE SET format)
@@ -1766,8 +1766,8 @@ type
   TSQLRecordProperties = class;
   TSQLModel = class;
   TSQLModelRecordProperties = class;
-  TSQLRestCache = class;
-  TSQLRestBatch = class;
+  TRestCache = class;
+  TRestBatch = class;
   {$M-}
 
   /// class-reference type (metaclass) of TSQLRecord
@@ -1798,7 +1798,7 @@ type
   /// exception raised in case of incorrect TSQLTable.Step / Field*() use
   ESQLTableException = class(ESynException);
 
-  /// exception raised in case of TSQLRestBatch problem
+  /// exception raised in case of TRestBatch problem
   EORMBatchException = class(EORMException);
 
   /// exception raised in case of wrong Model definition
@@ -1812,9 +1812,9 @@ type
   {$endif ISDELPHI2010}
 
   /// Object-Relational-Mapping calls for CRUD access to a database
-  // - as implemented in TSQLRest.ORM
+  // - as implemented in TRest.ORM
   // - this is the main abstract entry point to all ORM process, to be used as
-  // reference to the current TSQLRest instance, without the REST/communication
+  // reference to the current TRest instance, without the REST/communication
   // particularities
   IRestORM = interface
     ['{E3C24375-0E44-4C9F-B72C-89DBA8A8A9BD}']
@@ -2024,7 +2024,7 @@ type
     // temporary TSQLTable
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // and TSQLRecordMany fields (use RetrieveBlob method or set
-    // TSQLRestClientURI.ForceBlobTransfert)
+    // TRestClientURI.ForceBlobTransfert)
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - if this default set of simple fields does not fit your need, you could
     // specify your own set
@@ -2051,8 +2051,8 @@ type
     // - this method will call EngineRetrieve() abstract method
     // - the TSQLRawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
-    // BLOB fields, or set either the TSQLRestClientURI.ForceBlobTransfert
-    // or TSQLRestClientURI.ForceBlobTransfertTable[] properties
+    // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
+    // or TRestClientURI.ForceBlobTransfertTable[] properties
     // - the TSQLRecordMany fields are not retrieved either: they are separate
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
@@ -2067,8 +2067,8 @@ type
     // UnLock() method after Value usage, to release the record
     // - the TSQLRawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
-    // BLOB fields, or set either the TSQLRestClientURI.ForceBlobTransfert
-    // or TSQLRestClientURI.ForceBlobTransfertTable[] properties
+    // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
+    // or TRestClientURI.ForceBlobTransfertTable[] properties
     // - the TSQLRecordMany fields are not retrieved either: they are separate
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
@@ -2544,7 +2544,7 @@ type
     function UpdateBlobFields(Value: TSQLRecord): boolean;
     /// get all BLOB fields of the supplied value from the remote server
     // - call several REST GET collection (one for each BLOB) for the member
-    // - call internaly e.g. by TSQLRestClient.Retrieve method when
+    // - call internaly e.g. by TRestClient.Retrieve method when
     // ForceBlobTransfert / ForceBlobTransfertTable[] is set
     function RetrieveBlobFields(Value: TSQLRecord): boolean;
 
@@ -2571,10 +2571,10 @@ type
     // - the supplied SessionID will allow multi-user transaction safety on the
     // Server-Side: all database modification from another session will wait
     // for the global transaction to be finished; on Client-side, the SessionID
-    // is just ignored (TSQLRestClient will override this method with a default
+    // is just ignored (TRestClient will override this method with a default
     // SessionID=CONST_AUTHENTICATION_NOT_USED=1 parameter)
     // - if you have an external database engine which expect transactions to
-    // take place in the same thread, ensure TSQLRestServer force execution of
+    // take place in the same thread, ensure TRestServer force execution of
     // this method when accessed from RESTful clients in the same thread, e.g.:
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
@@ -2593,10 +2593,10 @@ type
     // - the supplied SessionID will allow multi-user transaction safety on the
     // Server-Side: all database modification from another session will wait
     // for the global transaction to be finished; on Client-side, the SessionID
-    // is just ignored (TSQLRestClient will override this method with a default
+    // is just ignored (TRestClient will override this method with a default
     // SessionID=CONST_AUTHENTICATION_NOT_USED=1 parameter)
     // - if you have an external database engine which expect transactions to
-    // take place in the same thread, ensure TSQLRestServer force execution of
+    // take place in the same thread, ensure TRestServer force execution of
     // this method when accessed from RESTful clients in the same thread, e.g.:
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
@@ -2611,22 +2611,22 @@ type
     // - the supplied SessionID will allow multi-user transaction safety on the
     // Server-Side: all database modification from another session will wait
     // for the global transaction to be finished; on Client-side, the SessionID
-    // is just ignored (TSQLRestClient will override this method with a default
+    // is just ignored (TRestClient will override this method with a default
     // SessionID=CONST_AUTHENTICATION_NOT_USED=1 parameter)
     // - if you have an external database engine which expect transactions to
-    // take place in the same thread, ensure TSQLRestServer force execution of
+    // take place in the same thread, ensure TRestServer force execution of
     // this method when accessed from RESTful clients in the same thread, e.g.:
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     procedure RollBack(SessionID: cardinal);
     /// enter the Mutex associated with the write operations of this instance
-    // - just a wrapper around TSQLRest.AcquireExecution[execORMWrite].Safe.Lock
+    // - just a wrapper around TRest.AcquireExecution[execORMWrite].Safe.Lock
     procedure WriteLock;
     /// leave the Mutex associated with the write operations of this instance
-    // - just a wrapper around TSQLRest.AcquireExecution[execORMWrite].Safe.UnLock
+    // - just a wrapper around TRest.AcquireExecution[execORMWrite].Safe.UnLock
     procedure WriteUnLock;
 
-    /// execute a BATCH sequence prepared in a TSQLRestBatch instance
+    /// execute a BATCH sequence prepared in a TRestBatch instance
     // - implements the "Unit Of Work" pattern, i.e. safe transactional process
     // even on multi-thread environments
     // - it is more efficient and safe than TransactionBegin/Commit, and
@@ -2639,15 +2639,15 @@ type
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
     // imply that all statements in the BATCH sequence were successfull),
-    // or boRollbackOnError should be set in TSQLRestBatchOptions
+    // or boRollbackOnError should be set in TRestBatchOptions
     // - note that the caller shall still free the supplied Batch instance
-    function BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer; overload;
-    /// execute a BATCH sequence prepared in a TSQLRestBatch instance
+    function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
+    /// execute a BATCH sequence prepared in a TRestBatch instance
     // - just a wrapper around the overloaded BatchSend() method without the
     // Results: TIDDynArray parameter
-    function BatchSend(Batch: TSQLRestBatch): integer; overload;
+    function BatchSend(Batch: TRestBatch): integer; overload;
     /// raw send/execute the supplied JSON BATCH content, and return the expected array
-    // - this method will be implemented for TSQLRestClient and TSQLRestServer only
+    // - this method will be implemented for TRestClient and TRestServer only
     // - default implementation will trigger an EORMException
     // - warning: supplied JSON Data can be parsed in-place, so modified
     // - you should not use this low-level method in your code, but rather the
@@ -2655,9 +2655,9 @@ type
     function BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
-    // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
+    // - will initialize a TRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
-    // or the TSQLRestBatch.Count threshold to call BatchSend
+    // or the TRestBatch.Count threshold to call BatchSend
     // - actual REST/CRUD commands will take place via AsynchBatchAdd,
     // AsynchBatchUpdate and AsynchBatchDelete methods
     // - only a single AsynchBatch() call per Table is allowed at a time, unless
@@ -2667,7 +2667,7 @@ type
     // - is a wrapper around BackgroundTimer.AsynchBatchStart()
     function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
-      Options: TSQLRestBatchOptions = [boExtendedJSON]): boolean;
+      Options: TRestBatchOptions = [boExtendedJSON]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
     // - should have been preceded by a call to AsynchBatch(), or returns false
     // - Table=nil will release all existing batch instances
@@ -2702,32 +2702,32 @@ type
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
-    // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
+    // - is a wrapper around the TRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
 
     /// access the Database Model associated with REST Client or Server instance
     function Model: TSQLModel;
     /// access the internal caching parameters for a given TSQLRecord
-    // - will always return a TSQLRestCache instance, creating one if needed
+    // - will always return a TRestCache instance, creating one if needed
     // - purpose of this caching mechanism is to speed up retrieval of some
     // common values at either Client or Server level (like configuration settings)
     // - by default, this CRUD level per-ID cache is disabled
     // - use Cache.SetCache() and Cache.SetTimeOut() methods to set the appropriate
-    // configuration for this particular TSQLRest instance
+    // configuration for this particular TRest instance
     // - only caching synchronization is about the direct RESTful/CRUD commands:
     // RETRIEVE, ADD, UPDATE and DELETE (that is, a complex direct SQL UPDATE or
     // via TSQLRecordMany pattern won't be taken into account - only exception is
-    // TSQLRestStorage tables accessed as SQLite3 virtual table)
-    // - this caching will be located at the TSQLRest level, that is no automated
-    // synchronization is implemented between TSQLRestClient and TSQLRestServer -
+    // TRestStorage tables accessed as SQLite3 virtual table)
+    // - this caching will be located at the TRest level, that is no automated
+    // synchronization is implemented between TRestClient and TRestServer -
     // you shall ensure that your business logic is safe, calling Cache.Flush()
     // overloaded methods on purpose: better no cache than unproper cache -
     // "premature optimization is the root of all evil"
-    function Cache: TSQLRestCache;
+    function Cache: TRestCache;
     /// access the internal caching parameters for a given TSQLRecord
-    // - will return nil if no TSQLRestCache instance has been defined
-    function CacheOrNil: TSQLRestCache;
+    // - will return nil if no TRestCache instance has been defined
+    function CacheOrNil: TRestCache;
     /// returns TRUE if this table is worth caching (e.g. not in memory)
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
     /// log the corresponding text (if logging is enabled)
@@ -2750,7 +2750,7 @@ type
   end;
 
   /// Client-Specific Object-Relational-Mapping calls for CRUD access to a database
-  // - in addition to the default IRestORM methods, offer to drive a TSQLRestBatch
+  // - in addition to the default IRestORM methods, offer to drive a TRestBatch
   // instance owned on the client side
   IRestORMClient = interface(IRestORM)
     ['{6553FE4C-B841-493C-82F8-495A34A4F966}']
@@ -2796,7 +2796,7 @@ type
     // - optional SQLWhere parameter to change the search range or ORDER
     // as in 'SELECT SQLSelect FROM TableName WHERE SQLWhere;'
     // - using inlined parameters via :(...): in SQLWhere is always a good idea
-    // - for one TClass, you should better use TSQLRest.MultiFieldValues()
+    // - for one TClass, you should better use TRest.MultiFieldValues()
     function List(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8 = 'RowID';
       const SQLWhere: RawUTF8 = ''): TSQLTable;
     /// retrieve a list of members as a TSQLTable
@@ -2804,7 +2804,7 @@ type
     // - in this version, the WHERE clause can be created with the same format
     // as FormatUTF8() function, replacing all '%' chars with Args[] values
     // - using inlined parameters via :(...): in SQLWhereFormat is always a good idea
-    // - for one TClass, you should better use TSQLRest.MultiFieldValues()
+    // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass;
       const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TSQLTable; overload;
@@ -2815,7 +2815,7 @@ type
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
     // ! Table := ListFmt([TSQLRecord],'Name','ID=?',[],[aID]);
-    // - for one TClass, you should better use TSQLRest.MultiFieldValues()
+    // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass;
       const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
@@ -2840,39 +2840,39 @@ type
     // !end;
     function TransactionBeginRetry(aTable: TSQLRecordClass; Retries: integer = 10): boolean;
     /// begin a BATCH sequence to speed up huge database change for a given table
-    // - is a wrapper around TSQLRestBatch.Create() which will be stored in the
+    // - is a wrapper around TRestBatch.Create() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     // - if you need a thread-safe "Unit Of Work" process, please use a private
-    // TSQLRestBatch instance and the overloaded IRestORM.BatchSend() method
+    // TRestBatch instance and the overloaded IRestORM.BatchSend() method
     // - call BatchStartAny() or set the aTable parameter to nil if you want to
     // use any kind of TSQLRecord objects within the process, not a single one
     function BatchStart(aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal = 0;
-      Options: TSQLRestBatchOptions = []): boolean; 
+      Options: TRestBatchOptions = []): boolean; 
     /// begin a BATCH sequence to speed up huge database change for any table
     // - will call the BatchStart() method with aTable = nil so that you may be
     // able to use any kind of TSQLRecord class within the process
-    // - is a wrapper around TSQLRestBatch.Create() which will be stored in the
+    // - is a wrapper around TRestBatch.Create() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
-      Options: TSQLRestBatchOptions = []): boolean;
+      Options: TRestBatchOptions = []): boolean;
     /// create a new member in current BATCH sequence
-    // - is a wrapper around TSQLRestBatch.Add() which will be stored in the
+    // - is a wrapper around TRestBatch.Add() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TSQLFieldBits = []): integer;
     /// update a member in current BATCH sequence
-    // - is a wrapper around TSQLRestBatch.Update() which will be stored in the
+    // - is a wrapper around TRestBatch.Update() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
-    // - this method will call BeforeUpdateEvent before TSQLRestBatch.Update
+    // - this method will call BeforeUpdateEvent before TRestBatch.Update
     function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete a member in current BATCH sequence
-    // - is a wrapper around TSQLRestBatch.Delete() which will be stored in the
+    // - is a wrapper around TRestBatch.Delete() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     function BatchDelete(ID: TID): integer; overload;
     /// delete a member in current BATCH sequence
-    // - is a wrapper around TSQLRestBatch.Delete() which will be stored in the
+    // - is a wrapper around TRestBatch.Delete() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     function BatchDelete(Table: TSQLRecordClass; ID: TID): integer; overload;
     /// retrieve the current number of pending transactions in the BATCH sequence
@@ -2892,7 +2892,7 @@ type
     /// abort a BATCH sequence started by BatchStart method
     // - in short, nothing is sent to the remote server, and current BATCH
     // sequence is closed
-    // - will Free the TSQLRestBatch stored in this class instance
+    // - will Free the TRestBatch stored in this class instance
     procedure BatchAbort;
   end;
 
@@ -3034,7 +3034,7 @@ type
   end;
 
 
-  /// the possible options for TSQLRestServer.CreateMissingTables and
+  /// the possible options for TRestServer.CreateMissingTables and
   // TSQLRecord.InitializeTable methods
   // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
   // TSQLAuthGroup.InitializeTable to fill the TSQLAuthGroup and TSQLAuthUser
@@ -3053,7 +3053,7 @@ type
     itoNoIndex4ID, itoNoIndex4UniqueField, itoNoIndex4NestedRecord,
     itoNoIndex4RecordReference, itoNoIndex4TID, itoNoIndex4RecordVersion);
 
-  /// the options to be specified for TSQLRestServer.CreateMissingTables and
+  /// the options to be specified for TRestServer.CreateMissingTables and
   // TSQLRecord.InitializeTable methods
   TSQLInitializeTableOptions = set of TSQLInitializeTableOption;
 
@@ -4214,7 +4214,7 @@ type
   // TSQLRecordClass and ID
   // - use RecordRef(Reference).TableIndex/Table/ID/Text methods to retrieve
   // the details of a TRecordReference encoded value
-  // - use TSQLRest.Retrieve(Reference) to get a record content from DB
+  // - use TRest.Retrieve(Reference) to get a record content from DB
   // - instead of From(Reference).From(), you could use the more explicit
   // TSQLRecord.RecordReference(Model) or TSQLModel.RecordReference()
   // methods or RecordReference() function to encode the value
@@ -5316,10 +5316,10 @@ type
     // TRecordReference values corresponding to the supplied IDs
     // - any current value of the additional fields are used to populate the
     // newly created content (i.e. all published properties of this record)
-    // - if aUseBatch is set, it will use this TSQLRestBach.Add() instead
+    // - if aUseBatch is set, it will use this TRestBach.Add() instead
     // of the slower aClient.Add() method
     function ManyAdd(const aClient: IRestORM; aSourceID, aDestID: TID;
-      NoDuplicates: boolean = false; aUseBatch: TSQLRestBatch = nil): boolean; overload;
+      NoDuplicates: boolean = false; aUseBatch: TRestBatch = nil): boolean; overload;
     /// add a Dest record to the current Source record list
     // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
     // - note that if the Source record has just been added, fSourceID is not
@@ -5328,10 +5328,10 @@ type
       NoDuplicates: boolean = false): boolean; overload;
     /// will delete the record associated with a particular Source/Dest pair
     // - will return TRUE if the pair was found and successfully deleted
-    // - if aUseBatch is set, it will use this TSQLRestBach.Delete() instead
+    // - if aUseBatch is set, it will use this TRestBach.Delete() instead
     // of the slower aClient.Delete() method
     function ManyDelete(const aClient: IRestORM; aSourceID, aDestID: TID;
-      aUseBatch: TSQLRestBatch = nil): boolean; overload;
+      aUseBatch: TRestBatch = nil): boolean; overload;
     /// will delete the record associated with the current source and a specified Dest
     // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
     // - note that if the Source record has just been added, fSourceID is not
@@ -5374,7 +5374,7 @@ type
   // forced at INSERT
   // - will use TSQLVirtualTableModule / TSQLVirtualTable / TSQLVirtualTableCursor
   // classes for a generic Virtual table mechanism on the Server side
-  // - call Model.VirtualTableRegister() before TSQLRestServer.Create on the
+  // - call Model.VirtualTableRegister() before TRestServer.Create on the
   // Server side (not needed for Client) to associate such a record with a
   // particular Virtual Table module, otherwise an exception will be raised:
   // ! Model.VirtualTableRegister(TSQLRecordDali1, TSQLVirtualTableJSON);
@@ -5414,7 +5414,7 @@ type
   // - queries against the ID or the coordinate ranges are almost immediate: so
   // you can e.g. extract some coordinates box from the regular TSQLRecord
   // table, then use a TSQLRecordRTree joined query to make the process faster;
-  // this is exactly what the TSQLRestClient.RTreeMatch method offers - of
+  // this is exactly what the TRestClient.RTreeMatch method offers - of
   // course Auxiliary Columns could avoid to make the JOIN and call RTreeMatch
   TSQLRecordRTreeAbstract = class(TSQLRecordVirtual)
   public
@@ -5425,7 +5425,7 @@ type
     // return exact matches
     // - by default, the BLOB array will be decoded via the BlobToCoord class
     // procedure, and will create a SQL function from the class name
-    //  - used e.g. by the TSQLRestClient.RTreeMatch method
+    //  - used e.g. by the TRestClient.RTreeMatch method
     class function ContainedIn(const BlobA, BlobB): boolean; virtual; abstract;
     /// will return 'MapBox_in' e.g. for TSQLRecordMapBox
     class function RTreeSQLFunctionName: RawUTF8; virtual;
@@ -5457,7 +5457,7 @@ type
     /// override this class function to implement a custom SQL *_in() function
     // - by default, the BLOB array will be decoded via the BlobToCoord() class
     // procedure, and will create a SQL function from the class name
-    //  - used e.g. by the TSQLRestClient.RTreeMatch method
+    //  - used e.g. by the TRestClient.RTreeMatch method
     class function ContainedIn(const BlobA, BlobB): boolean; override;
     /// override this class function to implement a custom box coordinates
     // from a given BLOB content
@@ -5468,7 +5468,7 @@ type
     // understood by the ContainedIn() class function
     // - the number of pairs in OutCoord will be taken from the current number
     // of published double properties
-    // - used e.g. by the TSQLRest.RTreeMatch method
+    // - used e.g. by the TRest.RTreeMatch method
     class procedure BlobToCoord(const InBlob;
       var OutCoord: TSQLRecordTreeCoords); virtual;
   end;
@@ -5499,7 +5499,7 @@ type
     /// override this class function to implement a custom SQL *_in() function
     // - by default, the BLOB array will be decoded via the BlobToCoord() class
     // procedure, and will create a SQL function from the class name
-    //  - used e.g. by the TSQLRest.RTreeMatch method
+    //  - used e.g. by the TRest.RTreeMatch method
     class function ContainedIn(const BlobA, BlobB): boolean; override;
     /// override this class function to implement a custom box coordinates
     // from a given BLOB content
@@ -5510,7 +5510,7 @@ type
     // understood by the ContainedIn() class function
     // - the number of pairs in OutCoord will be taken from the current number
     // of published integer properties
-    // - used e.g. by the TSQLRest.RTreeMatch method
+    // - used e.g. by the TRest.RTreeMatch method
     class procedure BlobToCoord(const InBlob;
       var OutCoord: TSQLRecordTreeCoordsInteger); virtual;
   end;
@@ -5546,7 +5546,7 @@ type
   // - you can select either the FTS3 engine, or the more efficient (and new)
   // FTS4 engine (available since version 3.7.4), by using the TSQLRecordFTS4
   // type, or TSQLRecordFTS5 for the latest (and preferred) FTS5 engine
-  // - in order to make FTS queries, use the dedicated TSQLRest.FTSMatch
+  // - in order to make FTS queries, use the dedicated TRest.FTSMatch
   // method, with the MATCH operator (you can use regular queries, but you must
   // specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
   // table specificity):
@@ -5852,10 +5852,10 @@ type
     /// set the W.ColNames[] array content + W.AddColumns
     procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
     /// save the TSQLRecord RTTI into a binary header
-    // - used e.g. by TSQLRestStorageInMemory.SaveToBinary()
+    // - used e.g. by TRestStorageInMemory.SaveToBinary()
     procedure SaveBinaryHeader(W: TBufferWriter);
     /// ensure that the TSQLRecord RTTI matches the supplied binary header
-    // - used e.g. by TSQLRestStorageInMemory.LoadFromBinary()
+    // - used e.g. by TRestStorageInMemory.LoadFromBinary()
     function CheckBinaryHeader(var R: TFastReader): boolean;
     /// convert a JSON array of simple field values into a matching JSON object
     function SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
@@ -6019,10 +6019,10 @@ type
     // - used e.g. by TSQLRecord.GetSQLValues
     property SQLTableSimpleFieldsNoRowID: RawUTF8 read fSQLTableSimpleFieldsNoRowID;
     /// returns 'COL1=?,COL2=?' with all BLOB columns names
-    // - used e.g. by TSQLRestServerDB.UpdateBlobFields()
+    // - used e.g. by TRestServerDB.UpdateBlobFields()
     property SQLTableUpdateBlobFields: RawUTF8 read fSQLTableUpdateBlobFields;
     /// returns 'COL1,COL2' with all BLOB columns names
-    // - used e.g. by TSQLRestServerDB.RetrieveBlobFields()
+    // - used e.g. by TRestServerDB.RetrieveBlobFields()
     property SQLTableRetrieveBlobFields: RawUTF8 read fSQLTableRetrieveBlobFields;
   public
     /// bit set to 1 for indicating each TSQLFieldType fields of this TSQLRecord
@@ -6075,13 +6075,13 @@ type
     // RowID, TRecordVersion and BLOBs
     // - this won't change depending on the ORM settings: so it can be safely
     // computed here and not in TSQLModelRecordProperties
-    // - used e.g. by TSQLRest.InternalListJSON()
+    // - used e.g. by TRest.InternalListJSON()
     property SQLTableRetrieveAllFields: RawUTF8 read fSQLTableRetrieveAllFields;
   end;
 
   /// how TSQLModel.URIMatch() will compare an URI
   // - will allow to make a difference about case-sensitivity
-  TSQLRestModelMatch = (
+  TRestModelMatch = (
     rmNoMatch, rmMatchExact, rmMatchWithCaseChange);
 
   /// the kind of SQlite3 (virtual) table
@@ -6273,11 +6273,11 @@ type
 
     /// opaque object used on the Server side to specify e.g. the DB connection
     // - will define such a generic TObject, to avoid any unecessary type
-    // dependency to other units, e.g. the SynDB unit in mORMot.pas
+    // dependency to other units, e.g. mormot.db.* or mormot.rest.*
     // - in practice, will be assigned by VirtualTableExternalRegister() to
     // a TSQLDBConnectionProperties instance in mORMotDB.pas, or by
     // StaticMongoDBRegister() to a TMongoCollection instance, or by
-    // TDDDRepositoryRestObjectMapping.Create to its associated TSQLRest
+    // TDDDRepositoryRestObjectMapping.Create to its associated TRest
     // - in ORM context, equals nil if the table is internal to SQLite3:
     // ! if Server.Model.Props[TSQLArticle].ExternalDB.ConnectionProperties = nil then
     // !   // this is not an external table, since Init() was not called
@@ -6455,7 +6455,7 @@ type
 
   /// a Database Model (in a MVC-driven way), for storing some tables types
   // as TSQLRecord classes
-  // - share this Model between TSQLRest Client and Server
+  // - share this Model between TRest Client and Server
   // - use this class to access the table properties: do not rely on the
   // low-level database methods (e.g. TSQLDataBase.GetTableNames), since the
   // tables may not exist in the main SQLite3 database, but in-memory or external
@@ -6470,7 +6470,7 @@ type
     fTableProps: TSQLModelRecordPropertiesObjArray;
     fCustomCollationForAll: array[TSQLFieldType] of RawUTF8;
     fOnClientIdle: TOnIdleSynBackgroundThread;
-    /// contains the TSQLRest caller of CreateOwnedStream()
+    /// contains the TRest caller of CreateOwnedStream()
     fOwner: TObject;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use of a dynamic array with one entry by table
@@ -6578,7 +6578,7 @@ type
     // - the returned enumerates allow to check if the match was exact (e.g.
     // 'root/sub' matches exactly Root='root'), or with character case
     // approximation (e.g. 'Root/sub' approximates Root='root')
-    function URIMatch(const URI: RawUTF8): TSQLRestModelMatch;
+    function URIMatch(const URI: RawUTF8): TRestModelMatch;
     /// returns the URI corresponding to a given table, i.e. 'root/table'
     function GetURI(aTable: TSQLRecordClass): RawUTF8;
     /// return the 'root/table/ID' URI
@@ -6653,7 +6653,7 @@ type
     // - aModule is expected to be a TSQLVirtualTableClass type definition
     // - optional aExternalTableName, aExternalDataBase and aMappingOptions can
     // be used to specify e.g. connection parameters as expected by mORMotDB
-    // - call it before TSQLRestServer.Create()
+    // - call it before TRestServer.Create()
     function VirtualTableRegister(aClass: TSQLRecordClass; aModule: TClass;
       const aExternalTableName: RawUTF8 = ''; aExternalDataBase: TObject = nil;
       aMappingOptions: TSQLRecordPropertiesMappingOptions = []): boolean;
@@ -6724,21 +6724,21 @@ type
 
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
-    // Owner.Destroy autofreeing this (TSQLRest) instance
+    // Owner.Destroy autofreeing this (TRest) instance
     property Owner: TObject read fOwner write fOwner;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TSQLLocks entry by table
     property Locks: TSQLLocksDynArray read fLocks;
     /// this array contain all TRecordReference and TSQLRecord properties
     // existing in the database model
-    // - used in TSQLRestServer.Delete() to enforce relational database coherency
+    // - used in TRestServer.Delete() to enforce relational database coherency
     // after deletion of a record: all other records pointing to it will be
     // reset to 0 or deleted (if CascadeDelete is true)
     property RecordReferences: TSQLModelRecordReferenceDynArray read fRecordReferences;
     /// set a callback event to be executed in loop during client remote
     // blocking process, e.g. to refresh the UI during a somewhat long request
-    // - will be passed to TSQLRestClientURI.OnIdle property by
-    // TSQLRestClientURI.RegisteredClassCreateFrom() method, if applying
+    // - will be passed to TRestClientURI.OnIdle property by
+    // TRestClientURI.RegisteredClassCreateFrom() method, if applying
     property OnClientIdle: TOnIdleSynBackgroundThread
       read fOnClientIdle write fOnClientIdle;
   published
@@ -6756,10 +6756,10 @@ type
   end;
 
 
-  { -------------------- TSQLRestCache Definition }
+  { -------------------- TRestCache Definition }
 
-  /// for TSQLRestCache, stores a table values
-  TSQLRestCacheEntryValue = packed record
+  /// for TRestCache, stores a table values
+  TRestCacheEntryValue = packed record
     /// corresponding ID
     ID: TID;
     /// GetTickCount64 shr 9 timestamp when this cached value was stored
@@ -6768,20 +6768,20 @@ type
     // - equals 0 when there is no JSON value cached
     Timestamp512: cardinal;
     /// some associated unsigned integer value
-    // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
+    // - not used by TRestCache, but available at TRestCacheEntry level
     Tag: cardinal;
     /// JSON encoded UTF-8 serialization of the record
     JSON: RawUTF8;
   end;
 
-  /// for TSQLRestCache, stores all tables values
-  TSQLRestCacheEntryValueDynArray = array of TSQLRestCacheEntryValue;
+  /// for TRestCache, stores all tables values
+  TRestCacheEntryValueDynArray = array of TRestCacheEntryValue;
 
-  /// for TSQLRestCache, stores a table settings and values
+  /// for TRestCache, stores a table settings and values
   {$ifdef USERECORDWITHMETHODS}
-  TSQLRestCacheEntry = record
+  TRestCacheEntry = record
   {$else}
-  TSQLRestCacheEntry = object
+  TRestCacheEntry = object
   {$endif USERECORDWITHMETHODS}
   public
     /// TRUE if this table should use caching
@@ -6795,14 +6795,14 @@ type
     /// the number of entries stored in Values[]
     Count: integer;
     /// all cached IDs and JSON content
-    Values: TSQLRestCacheEntryValueDynArray;
+    Values: TRestCacheEntryValueDynArray;
     /// TDynArray wrapper around the Values[] array
     Value: TDynArray;
     /// used to lock the table cache for multi thread safety
     Mutex: TSynLocker;
     /// initialize this table cache
     // - will set Value wrapper and Mutex handle - other fields should have
-    // been cleared by caller (is the case for a TSQLRestCacheEntryDynArray)
+    // been cleared by caller (is the case for a TRestCacheEntryDynArray)
     procedure Init;
     /// reset all settings corresponding to this table cache
     procedure Clear;
@@ -6830,12 +6830,12 @@ type
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
   end;
 
-  /// for TSQLRestCache, stores all table settings and values
-  // - this dynamic array will follow TSQLRest.Model.Tables[] layout, i.e. one
+  /// for TRestCache, stores all table settings and values
+  // - this dynamic array will follow TRest.Model.Tables[] layout, i.e. one
   // entry per TSQLRecord class in the data model
-  TSQLRestCacheEntryDynArray = array of TSQLRestCacheEntry;
+  TRestCacheEntryDynArray = array of TRestCacheEntry;
 
-  /// implement a fast TSQLRecord cache, per ID, at the TSQLRest level
+  /// implement a fast TSQLRecord cache, per ID, at the TRest level
   // - purpose of this caching mechanism is to speed up retrieval of some common
   // values at either Client or Server level (like configuration settings)
   // - only caching synchronization is about the following RESTful basic commands:
@@ -6843,15 +6843,15 @@ type
   // or via TSQLRecordMany pattern won't be taken into account)
   // - only Simple fields are cached: e.g. the BLOB fields are not stored
   // - this cache is thread-safe (access is locked per table)
-  // - this caching will be located at the TSQLRest level, that is no automated
-  // synchronization is implemented between TSQLRestClient and TSQLRestServer:
+  // - this caching will be located at the TRest level, that is no automated
+  // synchronization is implemented between TRestClient and TRestServer:
   // you shall ensure that your code won't fail due to this restriction
-  TSQLRestCache = class
+  TRestCache = class
   protected
     fRest: IRestORM;
     fModel: TSQLModel;
     /// fCache[] follows fRest.Model.Tables[] array: one entry per TSQLRecord
-    fCache: TSQLRestCacheEntryDynArray;
+    fCache: TRestCacheEntryDynArray;
   public
     /// create a cache instance
     // - the associated TSQLModel will be used internaly
@@ -6916,11 +6916,11 @@ type
     /// returns the memory used by JSON serialization records within this cache
     // - this method will also flush any outdated entries in the cache
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
-    /// read-only access to the associated TSQLRest.ORM instance
+    /// read-only access to the associated TRest.ORM instance
     property Rest: IRestORM read fRest;
     /// read-only access to the associated TSQLModel instance
     property Model: TSQLModel read fModel;
-  public { TSQLRest low level methods which are not to be called usualy: }
+  public { TRest low level methods which are not to be called usualy: }
     /// retrieve a record specified by its ID from cache into JSON content
     // - return '' if the item is not in cache
     function Retrieve(aTableIndex: integer; aID: TID): RawUTF8; overload;
@@ -6929,47 +6929,47 @@ type
     // - this method will call RetrieveJSON method, unserializing the cached
     // JSON content into the supplied aValue instance
     function Retrieve(aID: TID; aValue: TSQLRecord): boolean; overload;
-    /// TSQLRest instance shall call this method when a record is added or updated
+    /// TRest instance shall call this method when a record is added or updated
     // - this overloaded method expects the content to be specified as JSON object
     procedure Notify(aTable: TSQLRecordClass; aID: TID; const aJSON: RawUTF8;
       aAction: TSQLOccasion); overload;
-    /// TSQLRest instance shall call this method when a record is retrieved,
+    /// TRest instance shall call this method when a record is retrieved,
     // added or updated
     // - this overloaded method expects the content to be specified as JSON object,
     // and TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
     procedure Notify(aTableIndex: integer; aID: TID; const aJSON: RawUTF8;
       aAction: TSQLOccasion); overload;
-    /// TSQLRest instance shall call this method when a record is added or updated
+    /// TRest instance shall call this method when a record is added or updated
     // - this overloaded method will call the other Trace method, serializing
     // the supplied aRecord content as JSON (not in the case of seDelete)
     procedure Notify(aRecord: TSQLRecord; aAction: TSQLOccasion); overload;
-    /// TSQLRest instance shall call this method when a record is deleted
+    /// TRest instance shall call this method when a record is deleted
     // - this method is dedicated for a record deletion
     procedure NotifyDeletion(aTable: TSQLRecordClass; aID: TID); overload;
-    /// TSQLRest instance shall call this method when a record is deleted
+    /// TRest instance shall call this method when a record is deleted
     // - this method is dedicated for a record deletion
     // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletion(aTableIndex: integer; aID: TID); overload;
-    /// TSQLRest instance shall call this method when records are deleted
+    /// TRest instance shall call this method when records are deleted
     // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64); overload;
   end;
 
 
-  { -------------------- TSQLRestBatch TSQLRestBatchLocked Definitions }
+  { -------------------- TRestBatch TRestBatchLocked Definitions }
 
-  /// event signature triggered by TSQLRestBatch.OnWrite
-  // - also used by TSQLRestServer.RecordVersionSynchronizeSlave*() methods
-  TOnBatchWrite = procedure(Sender: TSQLRestBatch; Event: TSQLOccasion;
+  /// event signature triggered by TRestBatch.OnWrite
+  // - also used by TRestServer.RecordVersionSynchronizeSlave*() methods
+  TOnBatchWrite = procedure(Sender: TRestBatch; Event: TSQLOccasion;
     Table: TSQLRecordClass; const ID: TID; Value: TSQLRecord;
     const ValueFields: TSQLFieldBits) of object;
 
   /// used to store a BATCH sequence of writing operations
-  // - is used by TSQLRest to process BATCH requests using BatchSend() method,
-  // or TSQLRestClientURI for its Batch*() methods
+  // - is used by TRest to process BATCH requests using BatchSend() method,
+  // or TRestClientURI for its Batch*() methods
   // - but you can create your own stand-alone BATCH process, so that it will
   // be able to make some transactional process - aka the "Unit Of Work" pattern
-  TSQLRestBatch = class
+  TRestBatch = class
   protected
     fRest: IRestORM;
     fModel: TSQLModel;
@@ -6987,7 +6987,7 @@ type
     fUpdateCount: integer;
     fDeleteCount: integer;
     fAutomaticTransactionPerRow: cardinal;
-    fOptions: TSQLRestBatchOptions;
+    fOptions: TRestBatchOptions;
     fOnWrite: TOnBatchWrite;
     function GetCount: integer;
     function GetSizeBytes: cardinal;
@@ -7024,16 +7024,16 @@ type
     // - InternalBufferSize could be set to some high value (e.g. 10 shl 20),
     //   if you expect a very high number of rows in this BATCH
     constructor Create(const aRest: IRestORM; aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal = 0; Options: TSQLRestBatchOptions = [];
+      AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = [];
       InternalBufferSize: cardinal = 65536; CalledWithinRest: boolean = false); virtual;
     /// finalize the BATCH instance
     destructor Destroy; override;
-    /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
+    /// reset the BATCH sequence so that you can re-use the same TRestBatch
     procedure Reset(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal = 0;
-      Options: TSQLRestBatchOptions = []); overload; virtual;
+      Options: TRestBatchOptions = []); overload; virtual;
     /// reset the BATCH sequence to its previous state
     // - could be used to prepare a next chunk of values, after a call to
-    // TSQLRest.BatchSend
+    // TRest.BatchSend
     procedure Reset; overload;
     /// create a new member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
@@ -7104,12 +7104,12 @@ type
     // - returns the corresponding index in the current BATCH sequence, -1 on error
     function RawUpdate(const SentData: RawUTF8; ID: TID): integer;
     /// close a BATCH sequence started by Start method
-    // - Data is the JSON content, ready to be supplied to TSQLRest.BatchSend()
+    // - Data is the JSON content, ready to be supplied to TRest.BatchSend()
     // overloaded method - its layout is '{"Table":["cmd":values,...]}'
-    // - will also notify the TSQLRest.Cache for all deleted IDs
+    // - will also notify the TRest.Cache for all deleted IDs
     // - you should not have to call it in normal use cases
     function PrepareForSending(out Data: RawUTF8): boolean; virtual;
-    /// read only access to the associated TSQLRest instance
+    /// read only access to the associated TRest instance
     property Rest: IRestORM read fRest;
     /// read only access to the associated TSQLModel instance
     property Model: TSQLModel read fModel;
@@ -7131,7 +7131,7 @@ type
   end;
 
   /// thread-safe class to store a BATCH sequence of writing operations
-  TSQLRestBatchLocked = class(TSQLRestBatch)
+  TRestBatchLocked = class(TRestBatch)
   protected
     fResetTix: Int64;
     fSafe: TSynLocker;
@@ -7139,13 +7139,13 @@ type
   public
     /// initialize the BATCH instance
     constructor Create(const aRest: IRestORM; aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal = 0; Options: TSQLRestBatchOptions = [];
+      AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = [];
       InternalBufferSize: cardinal = 65536; CalledWithinRest: boolean = false); override;
     /// finalize the BATCH instance
     destructor Destroy; override;
-    /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
+    /// reset the BATCH sequence so that you can re-use the same TRestBatch
     procedure Reset(aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal = 0; Options: TSQLRestBatchOptions = []); override;
+      AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = []); override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
@@ -7155,13 +7155,13 @@ type
     property Threshold: integer read fThreshold write fThreshold;
   end;
 
-  TSQLRestBatchLockedDynArray = array of TSQLRestBatchLocked;
+  TRestBatchLockedDynArray = array of TRestBatchLocked;
 
 
   { -------------------- TSynValidateRest TSynValidateUniqueField Definitions }
 
   /// will define a validation to be applied to a TSQLRecord field, using
-  // if necessary an associated TSQLRest instance and a TSQLRecord class
+  // if necessary an associated TRest instance and a TSQLRecord class
   // - a typical usage is to validate a value to be unique in the table
   // (implemented in the TSynValidateUniqueField class)
   // - the optional associated parameters are to be supplied JSON-encoded
@@ -7180,9 +7180,9 @@ type
     function Validate(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string; const aProcessRest: IRestORM;
       aProcessRec: TSQLRecord): boolean;
-    /// access to the ORM process of the associated TSQLRest instance
+    /// access to the ORM process of the associated TRest instance
     // - this value is updated by Validate with the current
-    // TSQLRest used for the validation
+    // TRest used for the validation
     // - it can be used in the overridden DoValidate method
     property ProcessRest: IRestORM read fProcessRest;
     /// the associated TSQLRecord instance
@@ -7264,11 +7264,11 @@ type
     /// GET method (retrieve record) table access bits
     // - note that a GET request with a SQL statement without a table (i.e.
     // on 'ModelRoot' URI with a SQL statement as SentData, as used in
-    // TSQLRestClientURI.UpdateFromServer) will be checked for simple cases
+    // TRestClientURI.UpdateFromServer) will be checked for simple cases
     // (i.e. the first table in the FROM clause), otherwise will follow , whatever the bits
-    // here are: since TSQLRestClientURI.UpdateFromServer() is called only
+    // here are: since TRestClientURI.UpdateFromServer() is called only
     // for refreshing a direct statement, it will be OK; you can improve this
-    // by overriding the TSQLRestServer.URI() method
+    // by overriding the TRestServer.URI() method
     // - if the REST request is LOCK, the PUT access bits will be read instead
     // of the GET bits value
     GET: TSQLFieldTables;
@@ -7313,7 +7313,7 @@ const
   /// used as "stored AS_UNIQUE" published property definition in TSQLRecord
   AS_UNIQUE = false;
 
-  /// options to specify no index createon for TSQLRestServer.CreateMissingTables
+  /// options to specify no index createon for TRestServer.CreateMissingTables
   // and TSQLRecord.InitializeTable methods
   INITIALIZETABLE_NOINDEX: TSQLInitializeTableOptions =
     [itoNoIndex4ID.. itoNoIndex4RecordVersion];
@@ -7323,7 +7323,7 @@ const
 
   /// Complete Database access right, i.e. allmighty over all Tables
   // - WITH the possibility to remotely execute any SQL statement (reSQL right)
-  // - is used by default by TSQLRestClientDB.URI() method, i.e. for direct
+  // - is used by default by TRestClientDB.URI() method, i.e. for direct
   // local/in-process access
   // - is used as reference to create TSQLAuthUser 'Admin' access policy
   FULL_ACCESS_RIGHTS: TSQLAccessRights = (
@@ -8388,7 +8388,7 @@ const
 
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
   Occasion: TSQLOccasion; const UpdateIDFieldName: RawUTF8;
-  BatchOptions: TSQLRestBatchOptions): RawUTF8;
+  BatchOptions: TRestBatchOptions): RawUTF8;
 var
   F: integer;
   W: TTextWriter;
@@ -14105,7 +14105,7 @@ end;
 var
   /// simple wrapper to UTF-8 compare function for the SQLite3 field datatypes
   // - used internaly for field sorting (see TSQLTable.SortFields() method)
-  // and for default User Interface Query (see TSQLRest.QueryIsTrue() method)
+  // and for default User Interface Query (see TRest.QueryIsTrue() method)
   // - some functions do not match exactly the TUTF8Compare signature, so will
   // be set in the initialization section of this unit
   SQLFieldTypeComp: array[TSQLFieldType] of TUTF8Compare  =
@@ -18152,7 +18152,7 @@ begin
 end;
 
 function TSQLRecordMany.ManyAdd(const aClient: IRestORM; aSourceID, aDestID: TID;
-  NoDuplicates: boolean; aUseBatch: TSQLRestBatch): boolean;
+  NoDuplicates: boolean; aUseBatch: TRestBatch): boolean;
 begin
   result := false;
   if (self = nil) or (aClient = nil) or (aSourceID = 0) or (aDestID = 0) or
@@ -18305,7 +18305,7 @@ begin
 end;
 
 function TSQLRecordMany.ManyDelete(const aClient: IRestORM;
-  aSourceID, aDestID: TID; aUseBatch: TSQLRestBatch): boolean;
+  aSourceID, aDestID: TID; aUseBatch: TRestBatch): boolean;
 var
   aID: TID;
 begin
@@ -19965,7 +19965,7 @@ begin
   result := GetURIID(aTable, aID) + '/' + aMethodName;
 end;
 
-function TSQLModel.URIMatch(const URI: RawUTF8): TSQLRestModelMatch;
+function TSQLModel.URIMatch(const URI: RawUTF8): TRestModelMatch;
 var
   URILen: integer;
 begin
@@ -20807,23 +20807,23 @@ begin
 end;
 
 
-{ ------------ TSQLRestCache Definition }
+{ ------------ TRestCache Definition }
 
-{ TSQLRestCacheEntry }
+{ TRestCacheEntry }
 
-procedure TSQLRestCacheEntry.Init;
+procedure TRestCacheEntry.Init;
 begin
-  Value.InitSpecific(TypeInfo(TSQLRestCacheEntryValueDynArray),
+  Value.InitSpecific(TypeInfo(TRestCacheEntryValueDynArray),
     Values, ptInt64, @Count); // will search/sort by first ID: TID field
   Mutex.Init;
 end;
 
-procedure TSQLRestCacheEntry.Done;
+procedure TRestCacheEntry.Done;
 begin
   Mutex.Done;
 end;
 
-procedure TSQLRestCacheEntry.Clear;
+procedure TRestCacheEntry.Clear;
 begin
   Mutex.Lock;
   try
@@ -20836,7 +20836,7 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.FlushCacheEntry(Index: Integer);
+procedure TRestCacheEntry.FlushCacheEntry(Index: Integer);
 begin
   if cardinal(Index) < cardinal(Count) then
     if CacheAll then
@@ -20850,7 +20850,7 @@ begin
       end;
 end;
 
-procedure TSQLRestCacheEntry.FlushCacheAllEntries;
+procedure TRestCacheEntry.FlushCacheAllEntries;
 var
   i: PtrInt;
 begin
@@ -20873,9 +20873,9 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetCache(aID: TID);
+procedure TRestCacheEntry.SetCache(aID: TID);
 var
-  Rec: TSQLRestCacheEntryValue;
+  Rec: TRestCacheEntryValue;
   i: integer;
 begin
   Mutex.Lock;
@@ -20893,9 +20893,9 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8; aTag: cardinal);
+procedure TRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8; aTag: cardinal);
 var
-  Rec: TSQLRestCacheEntryValue;
+  Rec: TRestCacheEntryValue;
   i: integer;
 begin
   Rec.ID := aID;
@@ -20913,12 +20913,12 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetJSON(aRecord: TSQLRecord);
+procedure TRestCacheEntry.SetJSON(aRecord: TSQLRecord);
 begin  // soInsert = include all fields
   SetJSON(aRecord.fID, aRecord.GetJSONValues(true, false, soInsert));
 end;
 
-function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8;
+function TRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8;
   aTag: PCardinal): boolean;
 var
   i: PtrInt;
@@ -20945,7 +20945,7 @@ begin
   end;
 end;
 
-function TSQLRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord;
+function TRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord;
   aTag: PCardinal): boolean;
 var
   JSON: RawUTF8;
@@ -20960,7 +20960,7 @@ begin
     result := false;
 end;
 
-function TSQLRestCacheEntry.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
+function TRestCacheEntry.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
 var
   i: PtrInt;
   tix512: cardinal;
@@ -20981,7 +20981,7 @@ begin
                 inc(FlushedEntriesCount^);
             end
             else
-              inc(result, length(JSON) + (SizeOf(TSQLRestCacheEntryValue) + 16));
+              inc(result, length(JSON) + (SizeOf(TRestCacheEntryValue) + 16));
     finally
       Mutex.UnLock;
     end;
@@ -20989,9 +20989,9 @@ begin
 end;
 
 
-{ TSQLRestCache }
+{ TRestCache }
 
-constructor TSQLRestCache.Create(const aRest: IRestORM);
+constructor TRestCache.Create(const aRest: IRestORM);
 var
   i: PtrInt;
 begin
@@ -21003,7 +21003,7 @@ begin
     fCache[i].Init;
 end;
 
-destructor TSQLRestCache.Destroy;
+destructor TRestCache.Destroy;
 var
   i: PtrInt;
 begin
@@ -21012,7 +21012,7 @@ begin
   inherited;
 end;
 
-function TSQLRestCache.CachedEntries: cardinal;
+function TRestCache.CachedEntries: cardinal;
 var
   i, j: PtrInt;
 begin
@@ -21033,7 +21033,7 @@ begin
         end;
 end;
 
-function TSQLRestCache.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
+function TRestCache.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
 var
   i: PtrInt;
 begin
@@ -21045,7 +21045,7 @@ begin
       inc(result, fCache[i].CachedMemory(FlushedEntriesCount));
 end;
 
-function TSQLRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: cardinal): boolean;
+function TRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: cardinal): boolean;
 var
   i: PtrInt;
 begin
@@ -21067,7 +21067,7 @@ begin
       end;
 end;
 
-function TSQLRestCache.IsCached(aTable: TSQLRecordClass): boolean;
+function TRestCache.IsCached(aTable: TSQLRecordClass): boolean;
 var
   i: PtrUInt;
 begin
@@ -21080,7 +21080,7 @@ begin
       result := true;
 end;
 
-function TSQLRestCache.SetCache(aTable: TSQLRecordClass): boolean;
+function TRestCache.SetCache(aTable: TSQLRecordClass): boolean;
 var
   i: PtrInt;
 begin
@@ -21105,7 +21105,7 @@ begin
       end;
 end;
 
-function TSQLRestCache.SetCache(aTable: TSQLRecordClass; aID: TID): boolean;
+function TRestCache.SetCache(aTable: TSQLRecordClass; aID: TID): boolean;
 var
   i: PtrInt;
 begin
@@ -21120,7 +21120,7 @@ begin
   result := True;
 end;
 
-function TSQLRestCache.SetCache(aTable: TSQLRecordClass;
+function TRestCache.SetCache(aTable: TSQLRecordClass;
   const aIDs: array of TID): boolean;
 var
   i: PtrUInt;
@@ -21138,7 +21138,7 @@ begin
   result := True;
 end;
 
-function TSQLRestCache.SetCache(aRecord: TSQLRecord): boolean;
+function TRestCache.SetCache(aRecord: TSQLRecord): boolean;
 begin
   if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) then
     result := false
@@ -21146,7 +21146,7 @@ begin
     result := SetCache(PSQLRecordClass(aRecord)^, aRecord.fID);
 end;
 
-procedure TSQLRestCache.Clear;
+procedure TRestCache.Clear;
 var
   i: PtrInt;
 begin
@@ -21155,11 +21155,11 @@ begin
       fCache[i].Clear;
 end;
 
-function TSQLRestCache.FillFromQuery(aTable: TSQLRecordClass;
+function TRestCache.FillFromQuery(aTable: TSQLRecordClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): integer;
 var
   rec: TSQLRecord;
-  cache: ^TSQLRestCacheEntry;
+  cache: ^TRestCacheEntry;
 begin
   result := 0;
   if self = nil then
@@ -21179,7 +21179,7 @@ begin
   end;
 end;
 
-procedure TSQLRestCache.Flush;
+procedure TRestCache.Flush;
 var
   i: PtrInt;
 begin
@@ -21188,13 +21188,13 @@ begin
       fCache[i].FlushCacheAllEntries; // include *CriticalSection(Mutex)
 end;
 
-procedure TSQLRestCache.Flush(aTable: TSQLRecordClass);
+procedure TRestCache.Flush(aTable: TSQLRecordClass);
 begin
   if self <> nil then // includes *CriticalSection(Mutex):
     fCache[fRest.Model.GetTableIndexExisting(aTable)].FlushCacheAllEntries;
 end;
 
-procedure TSQLRestCache.Flush(aTable: TSQLRecordClass; aID: TID);
+procedure TRestCache.Flush(aTable: TSQLRecordClass; aID: TID);
 begin
   if self <> nil then
     with fCache[fRest.Model.GetTableIndexExisting(aTable)] do
@@ -21209,7 +21209,7 @@ begin
       end;
 end;
 
-procedure TSQLRestCache.Flush(aTable: TSQLRecordClass; const aIDs: array of TID);
+procedure TRestCache.Flush(aTable: TSQLRecordClass; const aIDs: array of TID);
 var
   i: PtrInt;
 begin
@@ -21227,14 +21227,14 @@ begin
       end;
 end;
 
-procedure TSQLRestCache.Notify(aTable: TSQLRecordClass; aID: TID;
+procedure TRestCache.Notify(aTable: TSQLRecordClass; aID: TID;
   const aJSON: RawUTF8; aAction: TSQLOccasion);
 begin
   if (self <> nil) and (aTable <> nil) and (aID > 0) then
     Notify(fRest.Model.GetTableIndex(aTable), aID, aJSON, aAction);
 end;
 
-procedure TSQLRestCache.Notify(aRecord: TSQLRecord; aAction: TSQLOccasion);
+procedure TRestCache.Notify(aRecord: TSQLRecord; aAction: TSQLOccasion);
 var
   aTableIndex: cardinal;
 begin
@@ -21248,7 +21248,7 @@ begin
         SetJSON(aRecord);
 end;
 
-procedure TSQLRestCache.Notify(aTableIndex: integer; aID: TID;
+procedure TRestCache.Notify(aTableIndex: integer; aID: TID;
   const aJSON: RawUTF8; aAction: TSQLOccasion);
 begin
   if (self <> nil) and (aID > 0) and
@@ -21259,7 +21259,7 @@ begin
         SetJSON(aID, aJSON);
 end;
 
-procedure TSQLRestCache.NotifyDeletion(aTableIndex: integer; aID: TID);
+procedure TRestCache.NotifyDeletion(aTableIndex: integer; aID: TID);
 begin
   if (self <> nil) and (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache)))
@@ -21276,7 +21276,7 @@ begin
       end;
 end;
 
-procedure TSQLRestCache.NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64);
+procedure TRestCache.NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64);
 var
   i: PtrInt;
 begin
@@ -21295,13 +21295,13 @@ begin
       end;
 end;
 
-procedure TSQLRestCache.NotifyDeletion(aTable: TSQLRecordClass; aID: TID);
+procedure TRestCache.NotifyDeletion(aTable: TSQLRecordClass; aID: TID);
 begin
   if (self <> nil) and (aTable <> nil) and (aID > 0) then
     NotifyDeletion(fRest.Model.GetTableIndex(aTable), aID);
 end;
 
-function TSQLRestCache.Retrieve(aID: TID; aValue: TSQLRecord): boolean;
+function TRestCache.Retrieve(aID: TID; aValue: TSQLRecord): boolean;
 var
   TableIndex: cardinal;
 begin
@@ -21315,7 +21315,7 @@ begin
         result := true;
 end;
 
-function TSQLRestCache.Retrieve(aTableIndex: integer; aID: TID): RawUTF8;
+function TRestCache.Retrieve(aTableIndex: integer; aID: TID): RawUTF8;
 begin
   result := '';
   if (self <> nil) and (aID > 0) and
@@ -21326,12 +21326,12 @@ begin
 end;
 
 
-{ ------------ TSQLRestBatch TSQLRestBatchLocked Definitions }
+{ ------------ TRestBatch TRestBatchLocked Definitions }
 
-{ TSQLRestBatch }
+{ TRestBatch }
 
-constructor TSQLRestBatch.Create(const aRest: IRestORM; aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions;
+constructor TRestBatch.Create(const aRest: IRestORM; aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
   InternalBufferSize: cardinal; CalledWithinRest: boolean);
 begin
   if aRest = nil then
@@ -21344,8 +21344,8 @@ begin
   Reset(aTable, AutomaticTransactionPerRow, Options);
 end;
 
-procedure TSQLRestBatch.Reset(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
+procedure TRestBatch.Reset(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions);
 begin
   fBatch.Free; // full reset for SetExpandedJSONWriter
   fBatch := TJSONSerializer.CreateOwnedStream(fInternalBufferSize);
@@ -21385,19 +21385,19 @@ begin
   end;
 end;
 
-procedure TSQLRestBatch.Reset;
+procedure TRestBatch.Reset;
 begin
   if self <> nil then
     Reset(fTable, fAutomaticTransactionPerRow, fOptions);
 end;
 
-destructor TSQLRestBatch.Destroy;
+destructor TRestBatch.Destroy;
 begin
   FreeAndNil(fBatch);
   inherited;
 end;
 
-function TSQLRestBatch.GetCount: integer;
+function TRestBatch.GetCount: integer;
 begin
   if self = nil then
     result := 0
@@ -21405,7 +21405,7 @@ begin
     result := fBatchCount;
 end;
 
-function TSQLRestBatch.GetSizeBytes: cardinal;
+function TRestBatch.GetSizeBytes: cardinal;
 begin
   if self = nil then
     result := 0
@@ -21413,7 +21413,7 @@ begin
     result := fBatch.TextLength;
 end;
 
-procedure TSQLRestBatch.SetExpandedJSONWriter(Props: TSQLRecordProperties;
+procedure TRestBatch.SetExpandedJSONWriter(Props: TSQLRecordProperties;
   ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
 begin
   if (self = nil) or (fBatch = nil) then
@@ -21428,14 +21428,14 @@ begin
   Props.SetJSONWriterColumnNames(fBatch, 0);
 end;
 
-function TSQLRestBatch.RawAppend(FullRow: boolean): TTextWriter;
+function TRestBatch.RawAppend(FullRow: boolean): TTextWriter;
 begin
   if FullRow then
     inc(fBatchCount);
   result := fBatch;
 end;
 
-function TSQLRestBatch.RawAdd(const SentData: RawUTF8): integer;
+function TRestBatch.RawAdd(const SentData: RawUTF8): integer;
 begin // '{"Table":[...,"POST",{object},...]}'
   if (fBatch = nil) or (fTable = nil) then
     raise EORMException.CreateUTF8('%.RawAdd %', [self, SentData]);
@@ -21447,7 +21447,7 @@ begin // '{"Table":[...,"POST",{object},...]}'
   inc(fAddCount);
 end;
 
-function TSQLRestBatch.RawUpdate(const SentData: RawUTF8; ID: TID): integer;
+function TRestBatch.RawUpdate(const SentData: RawUTF8; ID: TID): integer;
 var
   sentID: TID;
 begin // '{"Table":[...,"PUT",{object},...]}'
@@ -21465,7 +21465,7 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   inc(fUpdateCount);
 end;
 
-function TSQLRestBatch.Add(Value: TSQLRecord; SendData, ForceID: boolean;
+function TRestBatch.Add(Value: TSQLRecord; SendData, ForceID: boolean;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 var
   Props: TSQLRecordProperties;
@@ -21481,7 +21481,7 @@ begin
   Props := Value.RecordProps;
   if SendData and
      (fRest.Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID) then
-    ForceID := true; // same format as TSQLRestClient.Add
+    ForceID := true; // same format as TRestClient.Add
   if SendData and not ForceID and IsZero(CustomFields) and
      not (boPostNoSimpleFields in fOptions) then
   begin
@@ -21541,7 +21541,7 @@ begin
       FieldBits{%H-});
 end;
 
-function TSQLRestBatch.Delete(Table: TSQLRecordClass; ID: TID): integer;
+function TRestBatch.Delete(Table: TSQLRecordClass; ID: TID): integer;
 begin
   if (self = nil) or (fBatch = nil) or (Table = nil) or (ID <= 0) or
      not fRest.RecordCanBeUpdated(Table, ID, seDelete) then
@@ -21562,7 +21562,7 @@ begin
     fOnWrite(self, soDelete, Table, ID, nil, []);
 end;
 
-function TSQLRestBatch.Delete(ID: TID): integer;
+function TRestBatch.Delete(ID: TID): integer;
 begin
   if (self = nil) or (fTable = nil) or (ID <= 0) or
      not fRest.RecordCanBeUpdated(fTable, ID, seDelete) then
@@ -21581,7 +21581,7 @@ begin
     fOnWrite(self, soDelete, fTable, ID, nil, []);
 end;
 
-function TSQLRestBatch.PrepareForSending(out Data: RawUTF8): boolean;
+function TRestBatch.PrepareForSending(out Data: RawUTF8): boolean;
 var
   i: PtrInt;
 begin
@@ -21605,7 +21605,7 @@ begin
   end;
 end;
 
-function TSQLRestBatch.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+function TRestBatch.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
 var
   Props: TSQLRecordProperties;
@@ -21635,7 +21635,7 @@ begin
     fBatch.AddString(Props.SQLTableName);
     fBatch.Add('"', ',');
   end;
-  // same format as TSQLRest.Update, BUT including the ID
+  // same format as TRest.Update, BUT including the ID
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props, FieldBits)
   else if DoNotAutoComputeFields then
@@ -21663,7 +21663,7 @@ begin
     fOnWrite(self, soUpdate, PSQLRecordClass(Value)^, Value.IDValue, Value, FieldBits);
 end;
 
-function TSQLRestBatch.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+function TRestBatch.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
 begin
   if (Value = nil) or (fBatch = nil) then
@@ -21674,11 +21674,11 @@ begin
 end;
 
 
-{ TSQLRestBatchLocked }
+{ TRestBatchLocked }
 
-constructor TSQLRestBatchLocked.Create(const aRest: IRestORM;
+constructor TRestBatchLocked.Create(const aRest: IRestORM;
   aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal;
-  Options: TSQLRestBatchOptions; InternalBufferSize: cardinal;
+  Options: TRestBatchOptions; InternalBufferSize: cardinal;
   CalledWithinRest: boolean);
 begin
   inherited Create(aRest, aTable, AutomaticTransactionPerRow,
@@ -21686,14 +21686,14 @@ begin
   fSafe.Init;
 end;
 
-destructor TSQLRestBatchLocked.Destroy;
+destructor TRestBatchLocked.Destroy;
 begin
   fSafe.Done;
   inherited Destroy;
 end;
 
-procedure TSQLRestBatchLocked.Reset(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
+procedure TRestBatchLocked.Reset(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions);
 begin
   inherited Reset(aTable, AutomaticTransactionPerRow, Options);
   fResetTix := GetTickCount64;

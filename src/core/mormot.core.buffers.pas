@@ -6494,7 +6494,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
       $89a8275f, // jar = 5F 27 A8 89
       $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
       $a5a5a5a5, // .mab file = MAGIC_MAB in SynLog.pas
-      $a5aba5a5, // .data = TSQLRESTSTORAGEINMEMORY_MAGIC in mORMot.pas
+      $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server
       $aba51051, // .log.synlz = LOG_MAGIC in SynLog.pas
       $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
       $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C

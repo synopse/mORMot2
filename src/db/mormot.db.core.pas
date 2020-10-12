@@ -69,7 +69,8 @@ const
 type
   /// handled field/parameter/column types for abstract database access
   // - this will map JSON-compatible low-level database-level access types, not
-  // high-level object pascal types as TSQLFieldType defined in mORMot.pas
+  // high-level object pascal types as TSQLFieldType defined in
+  // mormot.orm.core.pas
   // - it does not map either all potential types as defined in DB.pas (which
   // are there for compatibility with old RDBMS, and are not abstract enough)
   // - those types can be mapped to standard SQLite3 generic types, i.e.
@@ -732,12 +733,12 @@ type
     ColNames: TRawUTF8DynArray;
     /// the data will be written to the specified Stream
     // - if no Stream is supplied, a temporary memory stream will be created
-    // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
+    // (it's faster to supply one, e.g. any TRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
       const Fields: TSQLFieldBits; aBufSize: integer = 8192); overload;
     /// the data will be written to the specified Stream
     // - if no Stream is supplied, a temporary memory stream will be created
-    // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
+    // (it's faster to supply one, e.g. any TRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
       const Fields: TSQLFieldIndexDynArray = nil; aBufSize: integer = 8192;
       aStackBuffer: PTextWriterStackBuffer = nil); overload;

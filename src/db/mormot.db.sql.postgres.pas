@@ -425,7 +425,7 @@ begin
   // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
   fBatchSendingAbilities := [cCreate, cDelete, cUpdate, cPostgreBulkArray];
   // disable MultiInsert SQL and rely on cPostgreBulkArray process for cCreate
-  fOnBatchInsert := nil; // see TSQLRestStorageExternal.InternalBatchStop
+  fOnBatchInsert := nil; // see TRestStorageExternal.InternalBatchStop
 end;
 
 function TSQLDBPostgresConnectionProperties.NewConnection: TSQLDBConnection;

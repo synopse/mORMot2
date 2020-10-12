@@ -2658,7 +2658,7 @@ function crc16(Data: PAnsiChar; Len: integer): cardinal;
 // than Adler32 for short strings, but more than xxhash32 or crc32/crc32c
 // - written in simple plain pascal, with no L1 CPU cache pollution, but we
 // also provide optimized x86/x64 assembly versions, since the algorithm is used
-// heavily e.g. for TDynArray binary serialization, TSQLRestStorageInMemory
+// heavily e.g. for TDynArray binary serialization, TRestStorageInMemory
 // binary persistence, or CompressSynLZ/StreamSynLZ/FileSynLZ
 // - some numbers on Linux x86_64:
 // $ 2500 xxhash32 in 1.34ms i.e. 1861504/s or 3.8 GB/s

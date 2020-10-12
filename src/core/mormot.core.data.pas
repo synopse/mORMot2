@@ -56,7 +56,7 @@ type
   {$M+}
   /// abstract parent class with threadsafe implementation of IInterface and
   // a virtual constructor
-  // - you can specify e.g. such a class to TSQLRestServer.ServiceRegister() if
+  // - you can specify e.g. such a class to TRestServer.ServiceRegister() if
   // you need an interfaced object with a virtual constructor, ready to be
   // overridden to initialize the instance
   TInterfacedObjectWithCustomCreate = class(TInterfacedObject)

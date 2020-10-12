@@ -72,7 +72,7 @@ type
     fForceBlobTransfert: array of boolean;
     fOnTableUpdate: TOnTableUpdate;
     fOnRecordUpdate: TOnRecordUpdate;
-    fBatchCurrent: TSQLRestBatch;
+    fBatchCurrent: TRestBatch;
     function GetForceBlobTransfert: boolean;
     procedure SetForceBlobTransfert(Value: boolean);
     function GetForceBlobTransfertTable(aTable: TSQLRecordClass): boolean;
@@ -110,12 +110,12 @@ type
   public
     /// release internal used instances
     destructor Destroy; override;
-    /// implements IRestORMClient methods with an internal TSQLRestBatch instance
+    /// implements IRestORMClient methods with an internal TRestBatch instance
     function BatchStart(aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal = 0;
-      Options: TSQLRestBatchOptions = []): boolean; virtual;
+      Options: TRestBatchOptions = []): boolean; virtual;
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
-      Options: TSQLRestBatchOptions = []): boolean;
+      Options: TRestBatchOptions = []): boolean;
     function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TSQLFieldBits = []): integer;
     function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
@@ -184,7 +184,7 @@ type
     // - optional SQLWhere parameter to change the search range or ORDER
     // as in 'SELECT SQLSelect FROM TableName WHERE SQLWhere;'
     // - using inlined parameters via :(...): in SQLWhere is always a good idea
-    // - for one TClass, you should better use TSQLRest.MultiFieldValues()
+    // - for one TClass, you should better use TRest.MultiFieldValues()
     function List(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8 = 'RowID';
       const SQLWhere: RawUTF8 = ''): TSQLTable; virtual; abstract;
     /// retrieve a list of members as a TSQLTable
@@ -192,7 +192,7 @@ type
     // - in this version, the WHERE clause can be created with the same format
     // as FormatUTF8() function, replacing all '%' chars with Args[] values
     // - using inlined parameters via :(...): in SQLWhereFormat is always a good idea
-    // - for one TClass, you should better use TSQLRest.MultiFieldValues()
+    // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect,
       SQLWhereFormat: RawUTF8; const Args: array of const): TSQLTable; overload;
@@ -203,7 +203,7 @@ type
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
     // ! Table := ListFmt([TSQLRecord],'Name','ID=?',[],[aID]);
-    // - for one TClass, you should better use TSQLRest.MultiFieldValues()
+    // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect,
       SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
@@ -269,22 +269,22 @@ type
 { ************ TRestORMClientURI REST Client from URI }
 
 type
-  /// main entry point of TRestORMClientURI, redirecting to TSQLRestClientURI.URI()
+  /// main entry point of TRestORMClientURI, redirecting to TRestClientURI.URI()
   TOnRestORMClientURI = function(const url, method: RawUTF8; Resp: PRawUTF8 = nil;
     Head: PRawUTF8 = nil; SendData: PRawUTF8 = nil): Int64Rec of object;
 
   /// URI-oriented REpresentational State Transfer (REST) client
   // - will later on be implemented over local, Windows messages, named pipe,
   // HTTP/1.1 or WebSockets
-  // - works in conjunction with TSQLRestClientURI from mormot.rest.client.pas
+  // - works in conjunction with TRestClientURI from mormot.rest.client.pas
   TRestORMClientURI = class(TRestORMClient)
   protected
     // ForUpdate=true->LOCK ForUpdate=false->GET
     function URIGet(Table: TSQLRecordClass; ID: TID; var Resp: RawUTF8;
       ForUpdate: boolean=false): Int64Rec;
   public
-    /// will redirect any client call to TSQLRestClientURI.URI()
-    // - is injected by TSQLRestClientURI.SetORMInstance
+    /// will redirect any client call to TRestClientURI.URI()
+    // - is injected by TRestClientURI.SetORMInstance
     URI: TOnRestORMClientURI;
     // overridden methods actually calling URI()
     function ClientRetrieve(TableModelIndex: integer; ID: TID; ForUpdate: boolean;
@@ -393,20 +393,20 @@ begin
 end;
 
 function TRestORMClient.BatchStart(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions): boolean;
+  AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions): boolean;
 begin
   if (self = nil) or (fBatchCurrent <> nil) then
     result := false
   else
   begin
-    fBatchCurrent := TSQLRestBatch.Create(self, aTable,
+    fBatchCurrent := TRestBatch.Create(self, aTable,
       AutomaticTransactionPerRow, Options, 1 shl 17, {withinrest=}true);
     result := true;
   end;
 end;
 
 function TRestORMClient.BatchStartAny(AutomaticTransactionPerRow: cardinal;
-  Options: TSQLRestBatchOptions): boolean;
+  Options: TRestBatchOptions): boolean;
 begin
   result := BatchStart(nil, AutomaticTransactionPerRow, Options);
 end;
@@ -820,7 +820,7 @@ var
   R: PUTF8Char;
   i: integer;
 begin
-  // TSQLRest.BatchSend() ensured that Batch contains some data
+  // TRest.BatchSend() ensured that Batch contains some data
   try
     // PUT on 'root/Batch' or 'root/Batch/Table' URI
     result := URI(fModel.GetURICallBack('Batch', Table, 0), 'PUT', @Resp, nil, @Data).Lo;
@@ -903,7 +903,7 @@ function TRestORMClientURI.UpdateFromServer(const Data: array of TObject;
   out Refreshed: boolean; PCurrentRow: PInteger): boolean;
 // notes about refresh mechanism:
 // - if server doesn't implement InternalState, its value is 0 -> always refresh
-// - if any TSQLTableJSON or TSQLRecord belongs to a TSQLRestStorage,
+// - if any TSQLTableJSON or TSQLRecord belongs to a TRestStorage,
 // the Server stated fInternalState=cardinal(-1) for them -> always refresh
 var
   i: PtrInt;

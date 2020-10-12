@@ -8,7 +8,7 @@ unit mormot.rest.client;
 
    Client-Side REST Process
     - Client Authentication and Authorization Logic
-    - TSQLRestClientURI Base Class for Actual Clients
+    - TRestClientURI Base Class for Actual Clients
 
   *****************************************************************************
 }
@@ -50,9 +50,9 @@ uses
 { ************ Client Authentication and Authorization Logic }
 
 type
-  TSQLRestClientURI = class;
+  TRestClientURI = class;
 
-  /// used by TSQLRestClientURI.URI() to let the client ask for an User name
+  /// used by TRestClientURI.URI() to let the client ask for an User name
   // and password, in order to retry authentication to the server
   // - should return TRUE if aUserName and aPassword both contain some entered
   // values to be sent for remote secure authentication
@@ -64,18 +64,18 @@ type
   TOnAuthentificationFailed = function(Retry: integer;
     var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean of object;
 
-  /// define how TSQLRestClientAuthentication.ClientSetUser() should interpret
+  /// define how TRestClientAuthentication.ClientSetUser() should interpret
   // the supplied password
   // - passClear means that the password is not encrypted, e.g. as entered
   // by the user in the login screen
   // - passHashed means that the passwod is already hashed as in
   // TSQLAuthUser.PasswordHashHexa i.e. SHA256('salt'+Value)
   // - passKerberosSPN indicates that the password is the Kerberos SPN domain
-  TSQLRestClientSetUserPassword = (
+  TRestClientSetUserPassword = (
     passClear, passHashed, passKerberosSPN);
 
-  /// algorithms known by TSQLRestClientAuthenticationSignedURI and
-  // TSQLRestServerAuthenticationSignedURI to digitaly compute the
+  /// algorithms known by TRestClientAuthenticationSignedURI and
+  // TRestServerAuthenticationSignedURI to digitaly compute the
   // session_signature parameter value for a given URI
   // - by default, suaCRC32 will compute fast but not cryptographically secure
   // ! crc32(crc32(privatesalt, timestamp, 8), url, urllen)
@@ -83,71 +83,71 @@ type
   // - but you can select other stronger alternatives, which result will be
   // reduced to 32-bit hexadecimal - suaMD5 will be the fastest cryptographic
   // hash available on all platforms, for enhanced security, by calling e.g.
-  // ! (aServer.AuthenticationRegister(TSQLRestClientAuthenticationDefault) as
-  // !   TSQLRestServerAuthenticationDefault).Algorithm := suaMD5;
+  // ! (aServer.AuthenticationRegister(TRestClientAuthenticationDefault) as
+  // !   TRestServerAuthenticationDefault).Algorithm := suaMD5;
   // - suaSHA1, suaSHA256 and suaSHA512 will be the slowest, to provide
   // additional level of trust, depending on your requirements: note that
   // since the hash is reduced to 32-bit resolution, those may not provide
   // higher security than suaMD5
   // - note that SynCrossPlatformRest clients only implements suaCRC32 yet
-  TSQLRestAuthenticationSignedURIAlgo = (
+  TRestAuthenticationSignedURIAlgo = (
     suaCRC32, suaCRC32C, suaXXHASH, suaMD5, suaSHA1, suaSHA256, suaSHA512);
 
-  /// function prototype for TSQLRestClientAuthenticationSignedURI and
-  // TSQLRestServerAuthenticationSignedURI computation of the session_signature
+  /// function prototype for TRestClientAuthenticationSignedURI and
+  // TRestServerAuthenticationSignedURI computation of the session_signature
   // parameter value
-  TSQLRestAuthenticationSignedURIComputeSignature = function(
+  TRestAuthenticationSignedURIComputeSignature = function(
     privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal of object;
 
   /// abstract class used to implement client-side authentication
   // - inherit from this class to implement expected authentication scheme
-  TSQLRestClientAuthentication = class
+  TRestClientAuthentication = class
   protected
     /// abstract method which will be called by ClientSetUser() to process the
     // authentication step on the client side
     // - at call, a TSQLAuthUser instance will be supplied, with LogonName set
     // with aUserName and PasswordHashHexa with a SHA-256 hash of aPassword
     // - override with the expected method, returning the session key on success
-    class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
+    class function ClientComputeSessionKey(Sender: TRestClientURI;
       User: TSQLAuthUser): RawUTF8; virtual; abstract;
     /// is called by ClientComputeSessionKey() overriden method to execute the
     // root/Auth service with the supplied parameters, then retrieve and
     // decode the "result": session key and any other values (e.g. "version")
-    class function ClientGetSessionKey(Sender: TSQLRestClientURI;
+    class function ClientGetSessionKey(Sender: TRestClientURI;
       User: TSQLAuthUser; const aNameValueParameters: array of const): RawUTF8; virtual;
   public
     /// class method to be used on client side to create a remote session
-    // - call this method instead of TSQLRestClientURI.SetUser() if you need
+    // - call this method instead of TRestClientURI.SetUser() if you need
     // a custom authentication class
     // - if saoUserByLogonOrID is defined in the server Options, aUserName may
     // be a TSQLAuthUser.ID and not a TSQLAuthUser.LogonName
     // - if passClear is used, you may specify aHashSalt and aHashRound,
     // to enable PBKDF2_HMAC_SHA256() use instead of plain SHA256(), and increase
     // security on storage side (reducing brute force attack via rainbow tables)
-    // - will call the ModelRoot/Auth service, i.e. call TSQLRestServer.Auth()
+    // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user
     // - returns true on success
-    class function ClientSetUser(Sender: TSQLRestClientURI;
+    class function ClientSetUser(Sender: TRestClientURI;
       const aUserName, aPassword: RawUTF8;
-      aPasswordKind: TSQLRestClientSetUserPassword = passClear;
+      aPasswordKind: TRestClientSetUserPassword = passClear;
       const aHashSalt: RawUTF8 = ''; aHashRound: integer = 20000): boolean; virtual;
     /// class method to be called on client side to sign an URI
-    // - used by TSQLRestClientURI.URI()
+    // - used by TRestClientURI.URI()
     // - shall match the method as expected by RetrieveSession() virtual method
-    class procedure ClientSessionSign(Sender: TSQLRestClientURI;
-      var Call: TSQLRestURIParams); virtual; abstract;
+    class procedure ClientSessionSign(Sender: TRestClientURI;
+      var Call: TRestURIParams); virtual; abstract;
   end;
 
   /// class-reference type (metaclass) used to define an authentication scheme
-  TSQLRestClientAuthenticationClass = class of TSQLRestClientAuthentication;
+  TRestClientAuthenticationClass = class of TRestClientAuthentication;
 
   /// weak authentication scheme using URL-level parameter
-  TSQLRestClientAuthenticationURI = class(TSQLRestClientAuthentication)
+  TRestClientAuthenticationURI = class(TRestClientAuthentication)
   public
     /// class method to be called on client side to add the SessionID to the URI
     // - append '&session_signature=SessionID' to the url
-    class procedure ClientSessionSign(Sender: TSQLRestClientURI;
-      var Call: TSQLRestURIParams); override;
+    class procedure ClientSessionSign(Sender: TRestClientURI;
+      var Call: TRestURIParams); override;
   end;
 
   /// secure authentication scheme using URL-level digital signature
@@ -156,9 +156,9 @@ type
   // !Hexa8(Timestamp)+
   // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
   // !            Hexa8(Timestamp)+url))
-  TSQLRestClientAuthenticationSignedURI = class(TSQLRestClientAuthenticationURI)
+  TRestClientAuthenticationSignedURI = class(TRestClientAuthenticationURI)
   protected
-    // class functions implementing TSQLRestAuthenticationSignedURIAlgo
+    // class functions implementing TRestAuthenticationSignedURIAlgo
     class function ComputeSignatureCrc32(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
     class function ComputeSignatureCrc32c(privatesalt: cardinal;
@@ -174,52 +174,52 @@ type
     class function ComputeSignatureSHA512(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
     class function GetComputeSignature(
-      algo: TSQLRestAuthenticationSignedURIAlgo): TSQLRestAuthenticationSignedURIComputeSignature;
+      algo: TRestAuthenticationSignedURIAlgo): TRestAuthenticationSignedURIComputeSignature;
   public
     /// class method to be called on client side to sign an URI
     // - generate the digital signature as expected by overridden RetrieveSession()
     // - timestamp resolution is about 256 ms in the current implementation
-    class procedure ClientSessionSign(Sender: TSQLRestClientURI;
-      var Call: TSQLRestURIParams); override;
+    class procedure ClientSessionSign(Sender: TRestClientURI;
+      var Call: TRestURIParams); override;
   end;
 
   /// mORMot secure RESTful authentication scheme
-  // - match TSQLRestServerAuthenticationDefault class on server side
+  // - match TRestServerAuthenticationDefault class on server side
   // - this scheme will use a password stored via safe SHA-256 hashing in the
   // TSQLAuthUser ORM table
-  TSQLRestClientAuthenticationDefault = class(TSQLRestClientAuthenticationSignedURI)
+  TRestClientAuthenticationDefault = class(TRestClientAuthenticationSignedURI)
   protected
     /// class method used on client side to create a remote session
-    // - will call the ModelRoot/Auth service, i.e. call TSQLRestServer.Auth()
+    // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user: so
-    // TSQLRestServerAuthenticationDefault should be registered on server side
+    // TRestServerAuthenticationDefault should be registered on server side
     // - User.LogonName and User.PasswordHashHexa will be checked
-    class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
+    class function ClientComputeSessionKey(Sender: TRestClientURI;
       User: TSQLAuthUser): RawUTF8; override;
   end;
 
   /// mORMot weak RESTful authentication scheme
   // - this method will authenticate with a given username, but no signature
-  // - match TSQLRestServerAuthenticationNone class on server side
-  // - on client side, this scheme is not called by TSQLRestClientURI.SetUser()
+  // - match TRestServerAuthenticationNone class on server side
+  // - on client side, this scheme is not called by TRestClientURI.SetUser()
   // method - so you have to write:
-  // ! TSQLRestClientAuthenticationNone.ClientSetUser(Client,'User','');
-  TSQLRestClientAuthenticationNone = class(TSQLRestClientAuthenticationURI)
+  // ! TRestClientAuthenticationNone.ClientSetUser(Client,'User','');
+  TRestClientAuthenticationNone = class(TRestClientAuthenticationURI)
   protected
     /// class method used on client side to create a remote session
-    // - will call the ModelRoot/Auth service, i.e. call TSQLRestClient.Auth()
+    // - will call the ModelRoot/Auth service, i.e. call TRestClient.Auth()
     // published method to create a session for this user: so
-    // TSQLRestServerAuthenticationNone should be registered on server side
+    // TRestServerAuthenticationNone should be registered on server side
     // - will check User.LogonName, but User.PasswordHashHexa will be ignored
-    class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
+    class function ClientComputeSessionKey(Sender: TRestClientURI;
       User: TSQLAuthUser): RawUTF8; override;
   end;
 
   /// abstract class for implementing HTTP authentication
-  // - do not use this abstract class, but e.g. TSQLRestClientAuthenticationHttpBasic
+  // - do not use this abstract class, but e.g. TRestClientAuthenticationHttpBasic
   // - this class will transmit the session_signature as HTTP cookie, not at
   // URI level, so is expected to be used only from browsers or old clients
-  TSQLRestClientAuthenticationHttpAbstract = class(TSQLRestClientAuthentication)
+  TRestClientAuthenticationHttpAbstract = class(TRestClientAuthentication)
   protected
     /// should be overriden according to the HTTP authentication scheme
     class function ComputeAuthenticateHeader(
@@ -228,44 +228,44 @@ type
     /// class method to be called on client side to sign an URI in Auth Basic
     // resolution is about 256 ms in the current implementation
     // - set "Cookie: mORMot_session_signature=..." HTTP header
-    class procedure ClientSessionSign(Sender: TSQLRestClientURI;
-      var Call: TSQLRestURIParams); override;
+    class procedure ClientSessionSign(Sender: TRestClientURI;
+      var Call: TRestURIParams); override;
     /// class method to be used on client side to create a remote session
-    // - call TSQLRestClientAuthenticationHttpBasic.ClientSetUser() instead of
-    // TSQLRestClientURI.SetUser(), and never the method of this abstract class
+    // - call TRestClientAuthenticationHttpBasic.ClientSetUser() instead of
+    // TRestClientURI.SetUser(), and never the method of this abstract class
     // - needs the plain aPassword, so aPasswordKind should be passClear
     // - returns true on success
-    class function ClientSetUser(Sender: TSQLRestClientURI;
+    class function ClientSetUser(Sender: TRestClientURI;
       const aUserName, aPassword: RawUTF8;
-      aPasswordKind: TSQLRestClientSetUserPassword = passClear;
+      aPasswordKind: TRestClientSetUserPassword = passClear;
       const aHashSalt: RawUTF8 = ''; aHashRound: integer = 20000): boolean; override;
     /// class method to be used on client side to force the HTTP header for
     // the corresponding HTTP authentication, without creating any remote session
     // - call virtual protected method ComputeAuthenticateHeader()
     // - here the password should be given as clear content
     // - potential use case is to use a mORMot client through a HTTPS proxy,
-    // e.g. with TSQLRestClientAuthenticationHttpBasic authentication
-    // - then you can use TSQLRestClientAuthentication*.ClientSetUser() to
+    // e.g. with TRestClientAuthenticationHttpBasic authentication
+    // - then you can use TRestClientAuthentication*.ClientSetUser() to
     // define any another "mORMot only" authentication
     // - this method is also called by the ClientSetUser() method of this class
     // for a full client + server authentication via HTTP
-    // TSQLRestClientAuthenticationHttp*.ClientSetUser()
-    class procedure ClientSetUserHttpOnly(Sender: TSQLRestClientURI;
+    // TRestClientAuthenticationHttp*.ClientSetUser()
+    class procedure ClientSetUserHttpOnly(Sender: TRestClientURI;
       const aUserName, aPasswordClear: RawUTF8); virtual;
   end;
 
   /// authentication using HTTP Basic scheme
   // - this protocol send both name and password as clear (just base-64 encoded)
   // so should only be used over SSL / HTTPS, or for compatibility reasons
-  // - match TSQLRestServerAuthenticationHttpBasic class on server side
-  // - will rely on TSQLRestClientAuthenticationNone for authorization
-  // - on client side, this scheme is not called by TSQLRestClientURI.SetUser()
+  // - match TRestServerAuthenticationHttpBasic class on server side
+  // - will rely on TRestClientAuthenticationNone for authorization
+  // - on client side, this scheme is not called by TRestClientURI.SetUser()
   // method - so you have to write:
-  // ! TSQLRestClientAuthenticationHttpBasic.ClientSetUser(Client,'User','password');
+  // ! TRestClientAuthenticationHttpBasic.ClientSetUser(Client,'User','password');
   // - for a remote proxy-only authentication (without creating any mORMot
   // session), you can write:
-  // ! TSQLRestClientAuthenticationHttpBasic.ClientSetUserHttpOnly(Client,'proxyUser','proxyPass');
-  TSQLRestClientAuthenticationHttpBasic = class(TSQLRestClientAuthenticationHttpAbstract)
+  // ! TRestClientAuthenticationHttpBasic.ClientSetUserHttpOnly(Client,'proxyUser','proxyPass');
+  TRestClientAuthenticationHttpBasic = class(TRestClientAuthenticationHttpAbstract)
   protected
     /// this overriden method returns "Authorization: Basic ...." HTTP header
     class function ComputeAuthenticateHeader(
@@ -287,19 +287,19 @@ type
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
-  TSQLRestClientAuthenticationSSPI = class(TSQLRestClientAuthenticationSignedURI)
+  TRestClientAuthenticationSSPI = class(TRestClientAuthenticationSignedURI)
   protected
-    class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
+    class function ClientComputeSessionKey(Sender: TRestClientURI;
       User: TSQLAuthUser): RawUTF8; override;
   end;
 
   {$endif DOMAINAUTH}
 
   /// store the information about the current session
-  // - as set after a sucessfull TSQLRestClientURI.SetUser() method
-  TSQLRestClientSession = record
+  // - as set after a sucessfull TRestClientURI.SetUser() method
+  TRestClientSession = record
     // for internal use
-    Authentication: TSQLRestClientAuthenticationClass;
+    Authentication: TRestClientAuthenticationClass;
     IDHexa8: RawUTF8;
     PrivateKey: cardinal;
     Data: RawByteString;
@@ -319,8 +319,8 @@ type
     ID: cardinal;
     /// access to the low-level HTTP header used for authentication
     // - you can force here your own header, e.g. a JWT as authentication bearer
-    // or as in TSQLRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
-    // - used e.g. by TSQLRestClientAuthenticationHttpBasic
+    // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
+    // - used e.g. by TRestClientAuthenticationHttpBasic
     HttpHeader: RawUTF8;
     /// the remote server executable name, as retrieved after a SetUser() success
     Server: RawUTF8;
@@ -340,10 +340,23 @@ type
     HeartbeatSeconds: integer;
   end;
 
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
 
-{ ************ TSQLRestClientURI Base Class for Actual Clients }
+  TSQLRestServerAuthenticationClientSetUserPassword = TRestClientSetUserPassword;
+  TSQLRestServerAuthenticationSignedURIAlgo = TRestAuthenticationSignedURIAlgo;
+  TSQLRestServerAuthenticationSignedURIComputeSignature  =
+    TRestAuthenticationSignedURIComputeSignature;
+  // TSQLRestServerAuthentication* classes have client-side only corresponding
+  // types named as TRestClientAuthentication*
 
-  /// called by TSQLRestClientURI.URI() when an error occurred
+{$endif PUREMORMOT2}
+
+
+
+{ ************ TRestClientURI Base Class for Actual Clients }
+
+  /// called by TRestClientURI.URI() when an error occurred
   // - so that you may have a single entry point for all client-side issues
   // - information will be available in Sender's LastErrorCode and
   // LastErrorMessage properties
@@ -351,13 +364,13 @@ type
   // - the REST context (if any) will be supplied within the Call parameter,
   // and in this case Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken
   // connection
-  TOnClientFailed = procedure(Sender: TSQLRestClientURI; E: Exception;
-    Call: PSQLRestURIParams) of object;
+  TOnClientFailed = procedure(Sender: TRestClientURI; E: Exception;
+    Call: PRestURIParams) of object;
 
   /// store information about registered interface callbacks
-  TSQLRestClientCallbackItem = record
+  TRestClientCallbackItem = record
     /// the identifier of the callback, as sent to the server side
-    // - computed from TSQLRestClientURICallbacks.fCurrentID counter
+    // - computed from TRestClientURICallbacks.fCurrentID counter
     ID: integer;
     /// weak pointer typecast to the associated IInvokable variable
     Instance: pointer;
@@ -368,22 +381,22 @@ type
   end;
 
   /// points to information about registered interface callbacks
-  PSQLRestClientCallbackItem = ^TSQLRestClientCallbackItem;
+  PRestClientCallbackItem = ^TRestClientCallbackItem;
 
   /// store the references to active interface callbacks on a REST Client
-  TSQLRestClientCallbacks = class(TSynPersistentLock)
+  TRestClientCallbacks = class(TSynPersistentLock)
   protected
     fCurrentID: integer;
     function UnRegisterByIndex(index: integer): boolean;
   public
     /// the associated REST instance
-    Owner: TSQLRestClientURI;
+    Owner: TRestClientURI;
     /// how many callbacks are registered
     Count: integer;
     /// list of registered interface callbacks
-    List: array of TSQLRestClientCallbackItem;
+    List: array of TRestClientCallbackItem;
     /// initialize the storage list
-    constructor Create(aOwner: TSQLRestClientURI); reintroduce;
+    constructor Create(aOwner: TRestClientURI); reintroduce;
     /// register a callback event interface instance from a new computed ID
     function DoRegister(aInstance: pointer; aFactory: TInterfaceFactory): integer; overload;
     /// register a callback event interface instance from its supplied ID
@@ -397,24 +410,24 @@ type
     /// find a matching callback
     // - will call FindIndex(aItem.ID) within Safe.Lock/Safe.Unlock
     // - returns TRUE if aItem.ID was found and aItem filled, FALSE otherwise
-    function FindEntry(var aItem: TSQLRestClientCallbackItem): boolean;
+    function FindEntry(var aItem: TRestClientCallbackItem): boolean;
     /// find a matching entry
     // - will call FindIndex(aID) within Safe.Lock/Safe.Unlock
     // - returns TRUE if aID was found and aInstance/aFactory set, FALSE otherwise
     function FindAndRelease(aID: integer): boolean;
   end;
 
-  /// signature e.g. of the TSQLRestClientURI.OnSetUser event handler
-  TOnRestClientNotify = procedure(Sender: TSQLRestClientURI) of object;
+  /// signature e.g. of the TRestClientURI.OnSetUser event handler
+  TOnRestClientNotify = procedure(Sender: TRestClientURI) of object;
 
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
-  TSQLRestClientURI = class(TSQLRest)
+  TRestClientURI = class(TRest)
   protected
     fORMClient: IRestORMClient;
-    fSession: TSQLRestClientSession;
-    fComputeSignature: TSQLRestAuthenticationSignedURIComputeSignature;
+    fSession: TRestClientSession;
+    fComputeSignature: TRestAuthenticationSignedURIComputeSignature;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnFailed: TOnClientFailed;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
@@ -426,7 +439,7 @@ type
     fLastErrorCode: integer;
     fLastErrorMessage: RawUTF8;
     fLastErrorException: ExceptClass;
-    fFakeCallbacks: TSQLRestClientCallbacks;
+    fFakeCallbacks: TRestClientCallbacks;
     fSafe: IAutoLocker; // to make the URI() method thread-safe
     fRemoteLogClass: TSynLog;
     fRemoteLogThread: TObject; // private TRemoteLogThread
@@ -442,7 +455,7 @@ type
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
     procedure SetLastException(E: Exception = nil; ErrorCode: integer = HTTP_BADREQUEST;
-      Call: PSQLRestURIParams = nil);
+      Call: PRestURIParams = nil);
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
@@ -451,11 +464,11 @@ type
       FakeCallbackID: integer; Instance: pointer): boolean; virtual;
     {%H-}constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); override;
-    procedure InternalNotificationMethodExecute(var Ctxt: TSQLRestURIParams); virtual;
+    procedure InternalNotificationMethodExecute(var Ctxt: TRestURIParams); virtual;
     /// will call timestamp/info if the session has currently not been retrieved
     function GetSessionVersion: RawUTF8;
-    // register the user session to the TSQLRestClientURI instance
-    function SessionCreate(aAuth: TSQLRestClientAuthenticationClass;
+    // register the user session to the TRestClientURI instance
+    function SessionCreate(aAuth: TRestClientAuthenticationClass;
       var aUser: TSQLAuthUser; const aSessionKey: RawUTF8): boolean;
     // call each fSession.HeartbeatSeconds delay
     procedure SessionRenewEvent(Sender: TSynBackgroundTimer; Event: TWaitResult;
@@ -464,7 +477,7 @@ type
     // - you can specify some POST/PUT data in Call.OutBody (leave '' otherwise)
     // - return the execution result in Call.OutStatus
     // - for clients, RestAccessRights is never used
-    procedure InternalURI(var Call: TSQLRestURIParams); virtual; abstract;
+    procedure InternalURI(var Call: TRestURIParams); virtual; abstract;
     /// overridden protected method shall check if not connected to reopen it
     // - shall return TRUE on success, FALSE on any connection error
     function InternalCheckOpen: boolean; virtual; abstract;
@@ -485,9 +498,9 @@ type
     function TransactionBeginRetry(aTable: TSQLRecordClass; Retries: integer = 10): boolean;
     function BatchStart(aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal = 0;
-      Options: TSQLRestBatchOptions = []): boolean;
+      Options: TRestBatchOptions = []): boolean;
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
-      Options: TSQLRestBatchOptions = []): boolean;
+      Options: TRestBatchOptions = []): boolean;
     function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TSQLFieldBits = []): integer;
     function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
@@ -576,14 +589,14 @@ type
     /// start to send all logs to the server 'RemoteLog' method-based service
     // - will associate the EchoCustom callback of the running log class to the
     // ServerRemoteLog() method
-    // - if aClientOwnedByFamily is TRUE, this TSQLRestClientURI instance
+    // - if aClientOwnedByFamily is TRUE, this TRestClientURI instance
     // lifetime will be managed by TSynLogFamily - which is mostly wished
     // - if aClientOwnedByFamily is FALSE, you should manage this instance
     // life time, and may call ServerRemoteLogStop to stop remote logging
     // - warning: current implementation will disable all logging for this
-    // TSQLRestClientURI instance, to avoid any potential concern (e.g. for
+    // TRestClientURI instance, to avoid any potential concern (e.g. for
     // multi-threaded process, or in case of communication error): you should
-    // therefore use this TSQLRestClientURI connection only for the remote log
+    // therefore use this TRestClientURI connection only for the remote log
     // server, e.g. via TSQLHttpClientGeneric.CreateForRemoteLogging() - do
     // not call ServerRemoteLogStart() from a high-level business client!
     procedure ServerRemoteLogStart(aLogClass: TSynLogClass;
@@ -592,9 +605,9 @@ type
     // - do nothing if aClientOwnedByFamily was TRUE for ServerRemoteLogStart
     procedure ServerRemoteLogStop;
     /// authenticate an User to the current connected Server
-    // - will call the ModelRoot/Auth service, i.e. call TSQLRestServer.Auth()
+    // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user, with our secure
-    // TSQLRestClientAuthenticationDefault authentication scheme
+    // TRestClientAuthenticationDefault authentication scheme
     // - returns true on success
     // - calling this method is optional, depending on your user right policy:
     // your Server need to handle authentication
@@ -606,14 +619,14 @@ type
     // contain the already-hashed value, just as stored in PasswordHashHexa
     // (i.e. SHA256('salt'+Value) as in TSQLAuthUser.SetPasswordPlain method)
     // - if SSPIAUTH conditional is defined, and aUserName='', a Windows
-    // authentication will be performed via TSQLRestClientAuthenticationSSPI -
+    // authentication will be performed via TRestClientAuthenticationSSPI -
     // in this case, aPassword will contain the SPN domain for Kerberos
     // (otherwise NTLM will be used), and table TSQLAuthUser shall contain
     // an entry for the logged Windows user, with the LoginName in form
     // 'DomainName\UserName'
     // - you can directly create the class method ClientSetUser() of a given
-    // TSQLRestClientAuthentication inherited class, if neither
-    // TSQLRestClientAuthenticationDefault nor TSQLRestClientAuthenticationSSPI
+    // TRestClientAuthentication inherited class, if neither
+    // TRestClientAuthenticationDefault nor TRestClientAuthenticationSSPI
     // match your need
     function SetUser(const aUserName, aPassword: RawUTF8;
       aHashedPassword: boolean = false): boolean;
@@ -624,19 +637,19 @@ type
     /// internal method to retrieve the current Session TSQLAuthUser.ID
     function GetCurrentSessionUserID: TID; override;
     /// customize the session_signature signing algorithm with a specific function
-    // - will be used by TSQLRestServerAuthenticationSignedURI classes,
-    // e.g. TSQLRestServerAuthenticationDefault instead of the algorithm
+    // - will be used by TRestServerAuthenticationSignedURI classes,
+    // e.g. TRestServerAuthenticationDefault instead of the algorithm
     // specified by the server at session handshake
-    property ComputeSignature: TSQLRestAuthenticationSignedURIComputeSignature
+    property ComputeSignature: TRestAuthenticationSignedURIComputeSignature
       read fComputeSignature write fComputeSignature;
     /// the current session information as set by a successfull SetUser() call
-    property Session: TSQLRestClientSession read fSession;
+    property Session: TRestClientSession read fSession;
     /// the current user as set by SetUser() method
     // - contains nil if no User is currently authenticated
     property SessionUser: TSQLAuthUser read fSession.User;
     /// access to the low-level HTTP header used for authentication
     // - you can force here your own header, e.g. a JWT as authentication bearer
-    // or as in TSQLRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
+    // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
     property SessionHttpHeader: RawUTF8
       read fSession.HttpHeader write fSession.HttpHeader;
 
@@ -661,9 +674,9 @@ type
     // - message will be sent for any interface-based service method callback
     // which expects no result (i.e. no out parameter nor function result),
     // so is safely handled as asynchronous notification
-    // - is defines as a class procedure, since the underlying TSQLRestClientURI
+    // - is defines as a class procedure, since the underlying TRestClientURI
     // instance has no impact here: a single WM_* handler is enough for
-    // several TSQLRestClientURI instances
+    // several TRestClientURI instances
     class procedure ServiceNotificationMethodExecute(var Msg: TMessage);
 
     {$endif MSWINDOWS}
@@ -693,7 +706,7 @@ type
     // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
     property OnFailed: TOnClientFailed read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
-    // - is called always, on each TSQLRestClientURI.SetUser call
+    // - is called always, on each TRestClientURI.SetUser call
     // - you can check the Sender.SessionUser property pointing to the current
     // authenticated user, or nil if authentication failed
     // - could be used to refresh the User Interface layout according to
@@ -750,6 +763,13 @@ type
       read fSession.HeartbeatSeconds write SetSessionHeartbeatSeconds;
   end;
 
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
+
+type
+  TSQLRestClientURI = TRestClientURI;
+
+{$endif PUREMORMOT2}
 
 
 implementation
@@ -760,16 +780,16 @@ uses
 
 { ************ Client Authentication and Authorization Logic }
 
-{ TSQLRestClientAuthentication }
+{ TRestClientAuthentication }
 
-class function TSQLRestClientAuthentication.ClientGetSessionKey(
-  Sender: TSQLRestClientURI; User: TSQLAuthUser;
+class function TRestClientAuthentication.ClientGetSessionKey(
+  Sender: TRestClientURI; User: TSQLAuthUser;
   const aNameValueParameters: array of const): RawUTF8;
 var
   resp: RawUTF8;
   values: array[0..9] of TValuePUTF8Char;
   a: integer;
-  algo: TSQLRestAuthenticationSignedURIAlgo absolute a;
+  algo: TRestAuthenticationSignedURIAlgo absolute a;
 begin
   result := '';
   if (Sender.CallBackGet('Auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
@@ -790,17 +810,17 @@ begin
     Sender.fSession.ServerTimeout := values[8].ToInteger;
     if Sender.fSession.ServerTimeout <= 0 then
       Sender.fSession.ServerTimeout := 60; // default 1 hour if not suppplied
-    a := GetEnumNameValueTrimmed(TypeInfo(TSQLRestAuthenticationSignedURIAlgo),
+    a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedURIAlgo),
       values[9].Value, values[9].ValueLen);
     if a >= 0 then
       Sender.fComputeSignature :=
-        TSQLRestClientAuthenticationSignedURI.GetComputeSignature(algo);
+        TRestClientAuthenticationSignedURI.GetComputeSignature(algo);
   end;
 end;
 
-class function TSQLRestClientAuthentication.ClientSetUser(
-  Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
-  aPasswordKind: TSQLRestClientSetUserPassword; const aHashSalt: RawUTF8;
+class function TRestClientAuthentication.ClientSetUser(
+  Sender: TRestClientURI; const aUserName, aPassword: RawUTF8;
+  aPasswordKind: TRestClientSetUserPassword; const aHashSalt: RawUTF8;
   aHashRound: integer): boolean;
 var
   U: TSQLAuthUser;
@@ -834,10 +854,10 @@ begin
   end;
 end;
 
-{ TSQLRestClientAuthenticationDefault }
+{ TRestClientAuthenticationDefault }
 
-class function TSQLRestClientAuthenticationDefault.ClientComputeSessionKey(
-  Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
+class function TRestClientAuthenticationDefault.ClientComputeSessionKey(
+  Sender: TRestClientURI; User: TSQLAuthUser): RawUTF8;
 var
   aServerNonce, aClientNonce: RawUTF8;
   rnd: THash256;
@@ -858,7 +878,7 @@ begin
 end;
 
 
-{ TSQLRestClientAuthenticationSignedURI }
+{ TRestClientAuthenticationSignedURI }
 
 { Some Numbers - Indicative only!
   - Client side REST sign with crc32: 794,759 assertions passed  730.86ms
@@ -869,28 +889,28 @@ end;
   - Client side REST sign with sha512: 794,753 assertions passed  800.34ms
 }
 
-class function TSQLRestClientAuthenticationSignedURI.ComputeSignatureCrc32(
+class function TRestClientAuthenticationSignedURI.ComputeSignatureCrc32(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 begin
   // historical algorithm, from zlib crc32 polynom
   result := crc32(crc32(privatesalt, timestamp, 8), url, urllen);
 end;
 
-class function TSQLRestClientAuthenticationSignedURI.ComputeSignatureCrc32c(
+class function TRestClientAuthenticationSignedURI.ComputeSignatureCrc32c(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 begin
   // faster on SSE4.2 CPU, and slightly more secure if not cascaded
   result := crc32c(privatesalt, timestamp, 8) xor crc32c(privatesalt, url, urllen);
 end;
 
-class function TSQLRestClientAuthenticationSignedURI.ComputeSignaturexxHash(
+class function TRestClientAuthenticationSignedURI.ComputeSignaturexxHash(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 begin
   // xxHash32 has no immediate reverse function, but is really weak
   result := xxHash32(privatesalt, timestamp, 8) xor xxHash32(privatesalt, url, urllen);
 end;
 
-class function TSQLRestClientAuthenticationSignedURI.ComputeSignatureMD5(
+class function TRestClientAuthenticationSignedURI.ComputeSignatureMD5(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: THash128Rec;
@@ -908,7 +928,7 @@ begin
     result := result xor digest.c[i];
 end;
 
-class function TSQLRestClientAuthenticationSignedURI.ComputeSignatureSHA1(
+class function TRestClientAuthenticationSignedURI.ComputeSignatureSHA1(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: array[0..(SizeOf(TSHA1Digest) div 4) - 1] of cardinal;
@@ -926,7 +946,7 @@ begin
     result := result xor digest[i];
 end;
 
-class function TSQLRestClientAuthenticationSignedURI.ComputeSignatureSHA256(
+class function TRestClientAuthenticationSignedURI.ComputeSignatureSHA256(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: THash256Rec;
@@ -944,7 +964,7 @@ begin
     result := result xor digest.c[i];
 end;
 
-class function TSQLRestClientAuthenticationSignedURI.ComputeSignatureSHA512(
+class function TRestClientAuthenticationSignedURI.ComputeSignatureSHA512(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: THash512Rec;
@@ -962,8 +982,8 @@ begin
     result := result xor digest.c[i];
 end;
 
-class function TSQLRestClientAuthenticationSignedURI.GetComputeSignature(
-  algo: TSQLRestAuthenticationSignedURIAlgo): TSQLRestAuthenticationSignedURIComputeSignature;
+class function TRestClientAuthenticationSignedURI.GetComputeSignature(
+  algo: TRestAuthenticationSignedURIAlgo): TRestAuthenticationSignedURIComputeSignature;
 begin
   // FPC doesn't allow to use constants for procedure of object
   case algo of
@@ -984,8 +1004,8 @@ begin
   end;
 end;
 
-class procedure TSQLRestClientAuthenticationSignedURI.ClientSessionSign(
-  Sender: TSQLRestClientURI; var Call: TSQLRestURIParams);
+class procedure TRestClientAuthenticationSignedURI.ClientSessionSign(
+  Sender: TRestClientURI; var Call: TRestURIParams);
 var
   nonce, blankURI: RawUTF8;
 begin
@@ -1007,10 +1027,10 @@ begin
 end;
 
 
-{ TSQLRestClientAuthenticationURI }
+{ TRestClientAuthenticationURI }
 
-class procedure TSQLRestClientAuthenticationURI.ClientSessionSign(
-  Sender: TSQLRestClientURI; var Call: TSQLRestURIParams);
+class procedure TRestClientAuthenticationURI.ClientSessionSign(
+  Sender: TRestClientURI; var Call: TRestURIParams);
 begin
   if (Sender <> nil) and (Sender.Session.ID <> 0) and (Sender.Session.User <> nil) then
     if PosExChar('?', Call.url) = 0 then
@@ -1020,22 +1040,22 @@ begin
 end;
 
 
-{ TSQLRestClientAuthenticationNone }
+{ TRestClientAuthenticationNone }
 
-class function TSQLRestClientAuthenticationNone.ClientComputeSessionKey(
-  Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
+class function TRestClientAuthenticationNone.ClientComputeSessionKey(
+  Sender: TRestClientURI; User: TSQLAuthUser): RawUTF8;
 begin
   result := ClientGetSessionKey(Sender, User, ['UserName', User.LogonName]);
 end;
 
 
-{ TSQLRestClientAuthenticationHttpAbstract }
+{ TRestClientAuthenticationHttpAbstract }
 
 const
   COOKIE_SESSION = 'mORMot_session_signature';
 
-class procedure TSQLRestClientAuthenticationHttpAbstract.ClientSessionSign(
-  Sender: TSQLRestClientURI; var Call: TSQLRestURIParams);
+class procedure TRestClientAuthenticationHttpAbstract.ClientSessionSign(
+  Sender: TRestClientURI; var Call: TRestURIParams);
 begin
   if (Sender <> nil) and (Sender.Session.ID <> 0) and
      (Sender.Session.User <> nil) then
@@ -1043,9 +1063,9 @@ begin
       (#13#10'Cookie: ' + COOKIE_SESSION + '=') + Sender.Session.IDHexa8);
 end;
 
-class function TSQLRestClientAuthenticationHttpAbstract.ClientSetUser(
-  Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
-  aPasswordKind: TSQLRestClientSetUserPassword;
+class function TRestClientAuthenticationHttpAbstract.ClientSetUser(
+  Sender: TRestClientURI; const aUserName, aPassword: RawUTF8;
+  aPasswordKind: TRestClientSetUserPassword;
   const aHashSalt: RawUTF8; aHashRound: integer): boolean;
 var
   res: RawUTF8;
@@ -1083,16 +1103,16 @@ begin
   end;
 end;
 
-class procedure TSQLRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnly(
-  Sender: TSQLRestClientURI; const aUserName, aPasswordClear: RawUTF8);
+class procedure TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnly(
+  Sender: TRestClientURI; const aUserName, aPasswordClear: RawUTF8);
 begin
   Sender.fSession.HttpHeader := ComputeAuthenticateHeader(aUserName, aPasswordClear);
 end;
 
 
-{ TSQLRestClientAuthenticationHttpBasic }
+{ TRestClientAuthenticationHttpBasic }
 
-class function TSQLRestClientAuthenticationHttpBasic.ComputeAuthenticateHeader(
+class function TRestClientAuthenticationHttpBasic.ComputeAuthenticateHeader(
   const aUserName, aPasswordClear: RawUTF8): RawUTF8;
 begin
   result := 'Authorization: Basic ' + BinToBase64(aUserName + ':' + aPasswordClear);
@@ -1101,8 +1121,8 @@ end;
 
 {$ifdef DOMAINAUTH}
 
-class function TSQLRestClientAuthenticationSSPI.ClientComputeSessionKey(
-  Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
+class function TRestClientAuthenticationSSPI.ClientComputeSessionKey(
+  Sender: TRestClientURI; User: TSQLAuthUser): RawUTF8;
 var
   SecCtx: TSecContext;
   WithPassword: boolean;
@@ -1140,17 +1160,17 @@ end;
 {$endif DOMAINAUTH}
 
 
-{ ************ TSQLRestClientURI Base Class for Actual Clients }
+{ ************ TRestClientURI Base Class for Actual Clients }
 
-{ TSQLRestClientCallbacks }
+{ TRestClientCallbacks }
 
-constructor TSQLRestClientCallbacks.Create(aOwner: TSQLRestClientURI);
+constructor TRestClientCallbacks.Create(aOwner: TRestClientURI);
 begin
   inherited Create;
   Owner := aOwner;
 end;
 
-function TSQLRestClientCallbacks.FindIndex(aID: integer): integer;
+function TRestClientCallbacks.FindIndex(aID: integer): integer;
 begin
   if self <> nil then
     for result := 0 to Count - 1 do
@@ -1159,11 +1179,11 @@ begin
   result := -1;
 end;
 
-function TSQLRestClientCallbacks.FindEntry(
-  var aItem: TSQLRestClientCallbackItem): boolean;
+function TRestClientCallbacks.FindEntry(
+  var aItem: TRestClientCallbackItem): boolean;
 var
   i: integer;
-  P: PSQLRestClientCallbackItem;
+  P: PRestClientCallbackItem;
 begin
   result := false;
   if self = nil then
@@ -1188,7 +1208,7 @@ begin
   end;
 end;
 
-function TSQLRestClientCallbacks.FindAndRelease(aID: integer): boolean;
+function TRestClientCallbacks.FindAndRelease(aID: integer): boolean;
 var
   i: PtrInt;
 begin
@@ -1207,7 +1227,7 @@ begin
   result := true;
 end;
 
-function TSQLRestClientCallbacks.UnRegisterByIndex(index: integer): boolean;
+function TRestClientCallbacks.UnRegisterByIndex(index: integer): boolean;
 begin
   result := false;
   if cardinal(index) >= cardinal(Count) then
@@ -1225,7 +1245,7 @@ begin
     MoveFast(List[index + 1], List[index], (Count - index) * SizeOf(List[index]));
 end;
 
-function TSQLRestClientCallbacks.UnRegister(aInstance: pointer): boolean;
+function TRestClientCallbacks.UnRegister(aInstance: pointer): boolean;
 var
   i: PtrInt;
 begin
@@ -1245,7 +1265,7 @@ begin
   end;
 end;
 
-procedure TSQLRestClientCallbacks.DoRegister(aID: integer; aInstance: pointer;
+procedure TRestClientCallbacks.DoRegister(aID: integer; aInstance: pointer;
   aFactory: TInterfaceFactory);
 begin
   if aID <= 0 then
@@ -1266,7 +1286,7 @@ begin
   end;
 end;
 
-function TSQLRestClientCallbacks.DoRegister(aInstance: pointer;
+function TRestClientCallbacks.DoRegister(aInstance: pointer;
   aFactory: TInterfaceFactory): integer;
 begin
   result := InterlockedIncrement(fCurrentID);
@@ -1277,18 +1297,18 @@ end;
 { TRemoteLogThread }
 
 type
-  TRemoteLogThread = class(TSQLRestThread)
+  TRemoteLogThread = class(TRestThread)
   protected
-    fClient: TSQLRestClientURI;
+    fClient: TRestClientURI;
     fPendingRows: RawUTF8;
     procedure InternalExecute; override;
   public
-    constructor Create(aClient: TSQLRestClientURI); reintroduce;
+    constructor Create(aClient: TRestClientURI); reintroduce;
     destructor Destroy; override;
     procedure AddRow(const aText: RawUTF8);
   end;
 
-constructor TRemoteLogThread.Create(aClient: TSQLRestClientURI);
+constructor TRemoteLogThread.Create(aClient: TRestClientURI);
 begin
   fClient := aClient;
   inherited Create(aClient, false, false);
@@ -1353,9 +1373,9 @@ begin
 end;
 
 
-{ TSQLRestClientURI }
+{ TRestClientURI }
 
-procedure TSQLRestClientURI.SetSessionHeartbeatSeconds(timeout: integer);
+procedure TRestClientURI.SetSessionHeartbeatSeconds(timeout: integer);
 begin
   if (timeout < 0) or (timeout = fSession.HeartbeatSeconds) then
     exit;
@@ -1363,16 +1383,16 @@ begin
   TimerEnable(SessionRenewEvent, timeout);
 end;
 
-function TSQLRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
+function TRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
 begin
   result := (self <> nil) and Assigned(fOnIdle) and
             fBackgroundThread.OnIdleBackgroundThreadActive;
 end;
 
-procedure TSQLRestClientURI.OnBackgroundProcess(
+procedure TRestClientURI.OnBackgroundProcess(
   Sender: TSynBackgroundThreadEvent; ProcessOpaqueParam: pointer);
 var
-  Call: ^TSQLRestURIParams absolute ProcessOpaqueParam;
+  Call: ^TRestURIParams absolute ProcessOpaqueParam;
 begin
   if Call = nil then
     exit;
@@ -1393,8 +1413,8 @@ begin
   end;
 end;
 
-procedure TSQLRestClientURI.SetLastException(E: Exception; ErrorCode: integer;
-  Call: PSQLRestURIParams);
+procedure TRestClientURI.SetLastException(E: Exception; ErrorCode: integer;
+  Call: PRestURIParams);
 begin
   fLastErrorCode := ErrorCode;
   if E = nil then
@@ -1414,13 +1434,13 @@ begin
     fOnFailed(self, E, Call);
 end;
 
-function TSQLRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
+function TRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
 begin
   result := URI(Model.GetURICallBack('RemoteLog', nil, 0), 'PUT', nil, nil, @aText).
     Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TSQLRestClientURI.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
+function TRestClientURI.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
   const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
   ParamValue: Pointer): integer;
 begin
@@ -1430,7 +1450,7 @@ begin
      ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
 end;
 
-function TSQLRestClientURI.{%H-}FakeCallbackUnregister(
+function TRestClientURI.{%H-}FakeCallbackUnregister(
   Factory: TInterfaceFactory; FakeCallbackID: integer; Instance: pointer): boolean;
 begin
   raise EServiceException.CreateUTF8(
@@ -1438,7 +1458,7 @@ begin
     [self, Factory.InterfaceName]);
 end;
 
-constructor TSQLRestClientURI.RegisteredClassCreateFrom(aModel: TSQLModel;
+constructor TRestClientURI.RegisteredClassCreateFrom(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 begin
   if fModel = nil then // if not already created with a reintroduced constructor
@@ -1456,7 +1476,7 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.GetCurrentSessionUserID: TID;
+function TRestClientURI.GetCurrentSessionUserID: TID;
 begin
   if fSession.User = nil then
     result := 0
@@ -1464,7 +1484,7 @@ begin
     result := fSession.User.IDValue;
 end;
 
-function TSQLRestClientURI.GetSessionVersion: RawUTF8;
+function TRestClientURI.GetSessionVersion: RawUTF8;
 var
   resp: RawUTF8;
 begin
@@ -1480,7 +1500,7 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.SessionCreate(aAuth: TSQLRestClientAuthenticationClass;
+function TRestClientURI.SessionCreate(aAuth: TRestClientAuthenticationClass;
   var aUser: TSQLAuthUser; const aSessionKey: RawUTF8): boolean;
 var
   period: integer;
@@ -1508,7 +1528,7 @@ begin
   result := true;
 end;
 
-procedure TSQLRestClientURI.SessionRenewEvent(Sender: TSynBackgroundTimer;
+procedure TRestClientURI.SessionRenewEvent(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
 var
   resp: RawUTF8;
@@ -1520,13 +1540,13 @@ begin
      fSession.Version, fSession.ServerTimeout], sllUserAuth);
 end;
 
-constructor TSQLRestClientURI.Create(aModel: TSQLModel);
+constructor TRestClientURI.Create(aModel: TSQLModel);
 begin
   inherited Create(aModel);
   fMaximumAuthentificationRetry := 1;
-  fComputeSignature := TSQLRestClientAuthenticationSignedURI.ComputeSignatureCrc32;
+  fComputeSignature := TRestClientAuthenticationSignedURI.ComputeSignatureCrc32;
   fSession.ID := CONST_AUTHENTICATION_NOT_USED;
-  fFakeCallbacks := TSQLRestClientCallbacks.Create(self);
+  fFakeCallbacks := TRestClientCallbacks.Create(self);
   {$ifdef USELOCKERDEBUG}
   fSafe := TAutoLockerDebug.Create(fLogClass, aModel.Root); // more verbose
   {$else}
@@ -1534,7 +1554,7 @@ begin
   {$endif USELOCKERDEBUG}
 end;
 
-destructor TSQLRestClientURI.Destroy;
+destructor TRestClientURI.Destroy;
 var
   t, i: PtrInt;
   aID: TID;
@@ -1571,7 +1591,7 @@ begin
     end;
     FreeAndNil(fSession.User);
     try
-      inherited Destroy; // fModel.Free if owned by this TSQLRest instance
+      inherited Destroy; // fModel.Free if owned by this TRest instance
       FreeAndNil(fBackgroundThread); // should be done after fServices.Free
       fOnIdle := nil;
     finally
@@ -1580,7 +1600,7 @@ begin
   end;
 end;
 
-procedure TSQLRestClientURI.SetORMInstance(aORM: TInterfacedObject);
+procedure TRestClientURI.SetORMInstance(aORM: TInterfacedObject);
 begin
   inherited SetORMInstance(aORM); // set fORM
   if not fORMInstance.GetInterface(IRestORMClient, fORMClient) then
@@ -1589,7 +1609,7 @@ begin
   (fORMInstance as TRestORMClientURI).URI := URI;
 end;
 
-procedure TSQLRestClientURI.SessionClose;
+procedure TRestClientURI.SessionClose;
 var
   tmp: RawUTF8;
 begin
@@ -1613,22 +1633,22 @@ begin
     fSession.Data := '';
     fSession.ServerTimeout := 0;
     FreeAndNil(fSession.User);
-    fComputeSignature := TSQLRestClientAuthenticationSignedURI.ComputeSignatureCrc32;
+    fComputeSignature := TRestClientAuthenticationSignedURI.ComputeSignatureCrc32;
   end;
 end;
 
 {$ifdef MSWINDOWS}
 
 type
-  TSQLRestClientURIServiceNotification = class(TInterfaceMethodExecute)
+  TRestClientURIServiceNotification = class(TInterfaceMethodExecute)
   protected
-    /// parameters set by TSQLRestClientURI.InternalNotificationMethodExecute
-    fOwner: TSQLRestClientURI;
+    /// parameters set by TRestClientURI.InternalNotificationMethodExecute
+    fOwner: TRestClientURI;
     fInstance: pointer; // weak IInvokable reference
     fPar: RawUTF8;
   end;
 
-procedure TSQLRestClientURI.ServiceNotificationMethodViaMessages(
+procedure TRestClientURI.ServiceNotificationMethodViaMessages(
   hWnd: HWND; Msg: cardinal);
 begin
   if Msg = 0 then
@@ -1637,16 +1657,16 @@ begin
   fServiceNotificationMethodViaMessages.Msg := Msg;
 end;
 
-class procedure TSQLRestClientURI.ServiceNotificationMethodExecute(
+class procedure TRestClientURI.ServiceNotificationMethodExecute(
   var Msg: TMessage);
 var
-  exec: TSQLRestClientURIServiceNotification;
+  exec: TRestClientURIServiceNotification;
 begin
   exec := pointer(Msg.LParam);
   if exec <> nil then
   try
     try
-      if exec.InheritsFrom(TSQLRestClientURIServiceNotification) and
+      if exec.InheritsFrom(TRestClientURIServiceNotification) and
          (HWND(Msg.WParam) = exec.fOwner.fServiceNotificationMethodViaMessages.Wnd) then
         // run asynchronous notification callback in the main UI thread context
         exec.ExecuteJson([exec.fInstance], pointer(exec.fPar), nil);
@@ -1660,11 +1680,11 @@ end;
 
 {$endif MSWINDOWS}
 
-procedure TSQLRestClientURI.InternalNotificationMethodExecute(
-  var Ctxt: TSQLRestURIParams);
+procedure TRestClientURI.InternalNotificationMethodExecute(
+  var Ctxt: TRestURIParams);
 var
   url, root, interfmethod, interf, id, method, frames: RawUTF8;
-  callback: TSQLRestClientCallbackItem;
+  callback: TRestClientCallbackItem;
   methodIndex: integer;
   WR: TTextWriter;
   temp: TTextWriterStackBuffer;
@@ -1675,7 +1695,7 @@ var
     method: PInterfaceMethod;
     exec: TInterfaceMethodExecute;
     {$ifdef MSWINDOWS}
-    execmsg: TSQLRestClientURIServiceNotification absolute exec;
+    execmsg: TRestClientURIServiceNotification absolute exec;
     {$endif MSWINDOWS}
   begin
     method := @callback.Factory.Methods[methodIndex];
@@ -1685,7 +1705,7 @@ var
     begin
       // expects no result -> asynchronous non blocking notification in UI thread
       Ctxt.OutStatus := 0;
-      execmsg := TSQLRestClientURIServiceNotification.Create(method);
+      execmsg := TRestClientURIServiceNotification.Create(method);
       execmsg.fOwner := self;
       execmsg.fInstance := callback.Instance;
       execmsg.fPar := par;
@@ -1709,7 +1729,7 @@ var
 
 begin
   Ctxt.OutStatus := HTTP_BADREQUEST;
-  // parse and validate the URI into its actual TSQLRestClientCallbackItem
+  // parse and validate the URI into its actual TRestClientCallbackItem
   url := Ctxt.Url;
   if (url = '') or (isDestroying in fInternalState) then
     exit;
@@ -1778,13 +1798,13 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.URI(const url, method: RawUTF8;
+function TRestClientURI.URI(const url, method: RawUTF8;
   Resp, Head, SendData: PRawUTF8): Int64Rec;
 var
   retry: Integer;
   aUserName, aPassword: string;
   StatusMsg: RawUTF8;
-  Call: TSQLRestURIParams;
+  Call: TRestURIParams;
   aPasswordHashed: boolean;
 
   procedure CallInternalURI;
@@ -1888,7 +1908,7 @@ const
   // log up to 2 KB of JSON response, to save space
   MAX_SIZE_RESPONSE_LOG = 2 shl 10;
 
-function TSQLRestClientURI.CallBackGet(const aMethodName: RawUTF8;
+function TRestClientURI.CallBackGet(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 var
@@ -1915,7 +1935,7 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
+function TRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass;
   aID: TID): RawUTF8;
 var
@@ -1927,14 +1947,14 @@ begin
     result := '';
 end;
 
-function TSQLRestClientURI.CallBackPut(const aMethodName, aSentData: RawUTF8;
+function TRestClientURI.CallBackPut(const aMethodName, aSentData: RawUTF8;
   out aResponse: RawUTF8; aTable: TSQLRecordClass; aID: TID;
   aResponseHead: PRawUTF8): integer;
 begin
   result := callback(mPUT, aMethodName, aSentData, aResponse, aTable, aID, aResponseHead);
 end;
 
-function TSQLRestClientURI.Callback(method: TSQLURIMethod;
+function TRestClientURI.Callback(method: TSQLURIMethod;
   const aMethodName, aSentData: RawUTF8; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 var
@@ -1955,12 +1975,12 @@ begin
   end;
 end;
 
-procedure TSQLRestClientURI.CallbackNonBlockingSetHeader(out Header: RawUTF8);
+procedure TRestClientURI.CallbackNonBlockingSetHeader(out Header: RawUTF8);
 begin
   // nothing to do by default (plain REST/HTTP works in blocking mode)
 end;
 
-function TSQLRestClientURI.ServerTimestampSynchronize: boolean;
+function TRestClientURI.ServerTimestampSynchronize: boolean;
 var
   status: integer;
   aResp: RawUTF8;
@@ -1982,7 +2002,7 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.ServerRemoteLog(Sender: TBaseWriter;
+function TRestClientURI.ServerRemoteLog(Sender: TBaseWriter;
   Level: TSynLogInfo; const Text: RawUTF8): boolean;
 begin
   if fRemoteLogThread = nil then
@@ -1994,14 +2014,14 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.ServerRemoteLog(Level: TSynLogInfo;
+function TRestClientURI.ServerRemoteLog(Level: TSynLogInfo;
   const FormatMsg: RawUTF8; const Args: array of const): boolean;
 begin
   result := ServerRemoteLog(nil, Level, FormatUTF8('%00%    %',
     [NowToString(false), LOG_LEVEL_TEXT[Level], FormatUTF8(FormatMsg, Args)]));
 end;
 
-procedure TSQLRestClientURI.ServerRemoteLogStart(aLogClass: TSynLogClass;
+procedure TRestClientURI.ServerRemoteLogStart(aLogClass: TSynLogClass;
   aClientOwnedByFamily: boolean);
 begin
   if (fRemoteLogClass <> nil) or (aLogClass = nil) then
@@ -2019,7 +2039,7 @@ begin
   fRemoteLogOwnedByFamily := aClientOwnedByFamily;
 end;
 
-procedure TSQLRestClientURI.ServerRemoteLogStop;
+procedure TRestClientURI.ServerRemoteLogStop;
 begin
   if fRemoteLogClass = nil then
     exit;
@@ -2038,10 +2058,10 @@ const
   SSPI_USER_CHAR = '\';
   {$endif GSSAPIAUTH}
 
-function TSQLRestClientURI.SetUser(const aUserName, aPassword: RawUTF8;
+function TRestClientURI.SetUser(const aUserName, aPassword: RawUTF8;
   aHashedPassword: boolean): boolean;
 const
-  HASH: array[boolean] of TSQLRestClientSetUserPassword = (
+  HASH: array[boolean] of TRestClientSetUserPassword = (
     passClear, passHashed);
 begin
   if self = nil then
@@ -2053,91 +2073,91 @@ begin
   // try Windows/GSSAPI authentication with the current logged user
   result := true;
   if (IsVoid(aUserName) or (PosExChar(SSPI_USER_CHAR, aUserName) > 0)) and
-    TSQLRestClientAuthenticationSSPI.ClientSetUser(
+    TRestClientAuthenticationSSPI.ClientSetUser(
       self, aUserName, aPassword, passKerberosSPN) then
     exit;
   {$endif DOMAINAUTH}
-  result := TSQLRestClientAuthentication.ClientSetUser(self, aUserName,
+  result := TRestClientAuthentication.ClientSetUser(self, aUserName,
     aPassword, HASH[aHashedPassword]);
 end;
 
 {$ifndef PUREMORMOT2}
 
-function TSQLRestClientURI.Refresh(aID: TID; Value: TSQLRecord;
+function TRestClientURI.Refresh(aID: TID; Value: TSQLRecord;
   var Refreshed: boolean): boolean;
 begin
   result := fORMClient.Refresh(aID, Value, Refreshed);
 end;
 
-function TSQLRestClientURI.List(const Tables: array of TSQLRecordClass;
+function TRestClientURI.List(const Tables: array of TSQLRecordClass;
   const SQLSelect: RawUTF8; const SQLWhere: RawUTF8): TSQLTable;
 begin
   result := fORMClient.List(Tables, SQLSelect, SQLWhere);
 end;
 
-function TSQLRestClientURI.ListFmt(const Tables: array of TSQLRecordClass;
+function TRestClientURI.ListFmt(const Tables: array of TSQLRecordClass;
   const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TSQLTable;
 begin
   result := fORMClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args);
 end;
 
-function TSQLRestClientURI.ListFmt(const Tables: array of TSQLRecordClass;
+function TRestClientURI.ListFmt(const Tables: array of TSQLRecordClass;
   const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable;
 begin
   result := fORMClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args, Bounds);
 end;
 
-function TSQLRestClientURI.TransactionBeginRetry(aTable: TSQLRecordClass;
+function TRestClientURI.TransactionBeginRetry(aTable: TSQLRecordClass;
   Retries: integer): boolean;
 begin
   result := fORMClient.TransactionBeginRetry(aTable, Retries);
 end;
 
-function TSQLRestClientURI.BatchStart(aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions): boolean;
+function TRestClientURI.BatchStart(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions): boolean;
 begin
   result := fORMClient.BatchStart(aTable, AutomaticTransactionPerRow, Options);
 end;
 
-function TSQLRestClientURI.BatchStartAny(AutomaticTransactionPerRow: cardinal;
-  Options: TSQLRestBatchOptions): boolean;
+function TRestClientURI.BatchStartAny(AutomaticTransactionPerRow: cardinal;
+  Options: TRestBatchOptions): boolean;
 begin
   result := fORMClient.BatchStartAny(AutomaticTransactionPerRow, Options);
 end;
 
-function TSQLRestClientURI.BatchAdd(Value: TSQLRecord; SendData: boolean;
+function TRestClientURI.BatchAdd(Value: TSQLRecord; SendData: boolean;
   ForceID: boolean; const CustomFields: TSQLFieldBits): integer;
 begin
   result := fORMClient.BatchAdd(Value, SendData, ForceID, CustomFields);
 end;
 
-function TSQLRestClientURI.BatchUpdate(Value: TSQLRecord;
+function TRestClientURI.BatchUpdate(Value: TSQLRecord;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   result := fORMClient.BatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TSQLRestClientURI.BatchDelete(ID: TID): integer;
+function TRestClientURI.BatchDelete(ID: TID): integer;
 begin
   result := fORMClient.BatchDelete(ID);
 end;
 
-function TSQLRestClientURI.BatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+function TRestClientURI.BatchDelete(Table: TSQLRecordClass; ID: TID): integer;
 begin
   result := fORMClient.BatchDelete(Table, ID);
 end;
 
-function TSQLRestClientURI.BatchCount: integer;
+function TRestClientURI.BatchCount: integer;
 begin
   result := fORMClient.BatchCount;
 end;
 
-function TSQLRestClientURI.BatchSend(var Results: TIDDynArray): integer;
+function TRestClientURI.BatchSend(var Results: TIDDynArray): integer;
 begin
   result := fORMClient.BatchSend(Results);
 end;
 
-procedure TSQLRestClientURI.BatchAbort;
+procedure TRestClientURI.BatchAbort;
 begin
   fORMClient.BatchAbort;
 end;

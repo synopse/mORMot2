@@ -120,7 +120,7 @@ type
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
   // during remote blocking process in a background thread
   // - typical use is to run Application.ProcessMessages, e.g. for
-  // TSQLRestClientURI.URI() to provide a responsive UI even in case of slow
+  // TRestClientURI.URI() to provide a responsive UI even in case of slow
   // blocking remote access
   // - provide the time elapsed (in milliseconds) from the request start (can be
   // used e.g. to popup a temporary message to wait)
@@ -152,7 +152,7 @@ type
   public
     /// initialize the thread
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, or
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, or
     // at least set OnAfterExecute to TSynLogFamily.OnThreadEnded
     constructor Create(const aThreadName: RawUTF8;
       OnBeforeExecute: TNotifyThreadEvent = nil;
@@ -209,7 +209,7 @@ type
   /// abstract TThread able to run a method in its own execution content
   // - typical use is a background thread for processing data or remote access,
   // while the UI will be still responsive by running OnIdle event in loop: see
-  // e.g. how TSQLRestClientURI.OnIdle handle this in mORMot.pas unit
+  // e.g. how TRestClientURI.OnIdle handle this in mORMot.pas unit
   // - you should not use this class directly, but inherit from it and override
   // the Process method, or use either TSynBackgroundThreadEvent /
   // TSynBackgroundThreadMethod and provide a much more convenient callback
@@ -239,7 +239,7 @@ type
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(aOnIdle: TOnIdleSynBackgroundThread;
       const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent = nil;
       OnAfterExecute: TNotifyThreadEvent = nil); reintroduce;
@@ -362,7 +362,7 @@ type
     // aOnProcessMS milliseconds period was elapse since last process
     // - if aOnProcessMS is 0, will wait until ProcessEvent.SetEvent is called
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(const aThreadName: RawUTF8;
       aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
       aOnBeforeExecute: TNotifyThreadEvent = nil;
@@ -406,8 +406,8 @@ type
 
   /// TThread able to run one or several tasks at a periodic pace in a
   // background thread
-  // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods, via the
-  // inherited TSQLRestBackgroundTimer
+  // - as used e.g. by TRest.TimerEnable/TimerDisable methods, via the
+  // inherited TRestBackgroundTimer
   // - each process can have its own FIFO of text messages
   // - if you expect to update some GUI, you should rather use a TTimer
   // component (with a period of e.g. 200ms), since TSynBackgroundTimer will
@@ -424,8 +424,8 @@ type
   public
     /// initialize the thread for a periodic task processing
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, as
-    // made by TSQLRestBackgroundTimer.Create
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, as
+    // made by TRestBackgroundTimer.Create
     constructor Create(const aThreadName: RawUTF8;
       aOnBeforeExecute: TNotifyThreadEvent = nil;
       aOnAfterExecute: TNotifyThreadEvent = nil;
@@ -433,13 +433,13 @@ type
     /// finalize the thread
     destructor Destroy; override;
     /// define a process method for a task running on a periodic number of seconds
-    // - for background process on a mORMot service, consider using TSQLRest
+    // - for background process on a mORMot service, consider using TRest
     // TimerEnable/TimerDisable methods, and its associated BackgroundTimer thread
     procedure Enable(aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
     /// undefine a task running on a periodic number of seconds
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    // - for background process on a mORMot service, consider using TSQLRestServer
+    // - for background process on a mORMot service, consider using TRestServer
     // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
     function Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// add a message to be processed during the next execution of a task
@@ -624,7 +624,7 @@ type
   public
     /// initialize the thread pool
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     // - up to MaxThreadPoolCount=32 threads could be setup (you may allow a
     // bigger value, but interrest of this thread pool is to have its process
     // saturating each CPU core)

@@ -380,7 +380,7 @@ type
 
   /// how threading is handled by the TSynLogFamily
   // - proper threading expects the TSynLog.NotifyThreadEnded method to be called
-  // when a thread is about to terminate, e.g. from TSQLRest.EndCurrentThread
+  // when a thread is about to terminate, e.g. from TRest.EndCurrentThread
   // - by default, ptMergedInOneFile will indicate that all threads are logged
   // in the same file, in occurence order
   // - if set to ptOneFilePerThread, it will create one .log file per thread
@@ -518,7 +518,7 @@ type
     /// callback to notify the current logger that its thread is finished
     // - method follows TNotifyThreadEvent signature, which can be assigned to
     // TSynBackgroundThreadAbstract.OnAfterExecute
-    // - is called e.g. by TSQLRest.EndCurrentThread
+    // - is called e.g. by TRest.EndCurrentThread
     // - just a wrapper around TSynLog.NotifyThreadEnded
     procedure OnThreadEnded(Sender: TThread);
 
@@ -898,7 +898,7 @@ type
     // - should be called in the thread context which is about to terminate,
     // in a situation where no other logging may occur from this thread any more
     // - it will release all thread-specific resource used by this TSynLog
-    // - called e.g. by TSQLRest.EndCurrentThread, via TSynLogFamily.OnThreadEnded
+    // - called e.g. by TRest.EndCurrentThread, via TSynLogFamily.OnThreadEnded
     procedure NotifyThreadEnded;
     /// handle generic method enter / auto-leave tracing
     // - this is the main method to be called within a procedure/function to trace:
@@ -4501,10 +4501,10 @@ var
   n: TShort31;
 begin
   FormatUTF8(Format, Args, name);
-  name := StringReplaceAll(name, ['TSQLRest', '', 'TSQL', '', 'TWebSocket', 'WS',
-    'TSyn', '', 'Thread', '', 'Process', '', 'Background', 'Bgd', 'Server', 'Svr',
-    'Client', 'Clt', 'WebSocket', 'WS', 'Parallel', 'Par', 'Timer', 'Tmr',
-    'Thread', 'Thd']);
+  name := StringReplaceAll(name, ['TSQLRest', '', 'TRest', '', 'TSQL', '',
+    'TWebSocket', 'WS', 'TSyn', '', 'Thread', '', 'Process', '',
+    'Background', 'Bgd', 'Server', 'Svr', 'Client', 'Clt', 'WebSocket', 'WS',
+    'Parallel', 'Par', 'Timer', 'Tmr', 'Thread', 'Thd']);
   for i := 1 to length(name) do
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line

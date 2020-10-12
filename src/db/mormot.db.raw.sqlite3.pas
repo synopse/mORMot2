@@ -372,7 +372,7 @@ type
   /// map the matchinfo function returned BLOB value
   // - i.e. the default 'pcx' layout, for both FTS3 and FTS4
   // - see http://www.sqlite.org/fts3.html#matchinfo
-  // - used for the FTS3/FTS4 ranking of results by TSQLRest.FTSMatch method
+  // - used for the FTS3/FTS4 ranking of results by TRest.FTSMatch method
   // and the internal RANK() function as proposed in
   // http://www.sqlite.org/fts3.html#appendix_a
   TFTSMatchInfo = packed record
@@ -2916,7 +2916,7 @@ type
     property Limit[Category: TSQLLimitCategory]: integer read GetLimit write SetLimit;
     {$ifdef WITHLOG}
     /// access to the log class associated with this SQLite3 database engine
-    // - can be customized, e.g. by overriden TSQLRestServerDB.SetLogClass()
+    // - can be customized, e.g. by overriden TRestServerDB.SetLogClass()
     property Log: TSynLogClass read fLog write fLog;
     /// sets a maximum size (in bytes) to be logged as sllResult rows
     // - by default, is set to 512 bytes, which sounds a good compromise
@@ -4890,7 +4890,7 @@ begin
   sqlite3.create_function(DB, 'JSONGET', 2, SQLITE_ANY, nil, InternalJsonGet, nil, nil);
   sqlite3.create_function(DB, 'JSONHAS', 2, SQLITE_ANY, nil, InternalJsonHas, nil, nil);
   sqlite3.create_function(DB, 'JSONSET', 3, SQLITE_ANY, nil, InternalJsonSet, nil, nil);
-  // reallocate all TSQLDataBaseSQLFunction for re-Open (TSQLRestServerDB.Backup)
+  // reallocate all TSQLDataBaseSQLFunction for re-Open (TRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count - 1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
 {$ifdef WITHLOG}
