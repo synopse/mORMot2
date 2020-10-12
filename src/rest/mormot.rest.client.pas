@@ -831,7 +831,7 @@ begin
     exit;
   try
     Sender.SessionClose;  // ensure Sender.SessionUser=nil
-    U := TSQLAuthUser(Sender.Model.GetTableInherited(TSQLAuthUser).Create);
+    U := TSQLAuthUser(Sender.fModel.GetTableInherited(TSQLAuthUser).Create);
     try
       U.LogonName := trim(aUserName);
       U.DisplayName := U.LogonName;
@@ -872,7 +872,7 @@ begin
   aClientNonce := BinToHexLower(@rnd, SizeOf(rnd));
   result := ClientGetSessionKey(Sender, User, [
     'UserName', User.LogonName,
-    'Password', Sha256(Sender.Model.Root + aServerNonce + aClientNonce +
+    'Password', Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
                        User.LogonName + User.PasswordHashHexa),
     'ClientNonce', aClientNonce]);
 end;
@@ -1082,7 +1082,7 @@ begin
     // inherited ClientSetUser() won't fit with server's Auth() method
     ClientSetUserHttpOnly(Sender, aUserName, aPassword);
     Sender.fSession.Authentication := self; // to enable ClientSessionSign()
-    U := TSQLAuthUser(Sender.Model.GetTableInherited(TSQLAuthUser).Create);
+    U := TSQLAuthUser(Sender.fModel.GetTableInherited(TSQLAuthUser).Create);
     try
       U.LogonName := trim(aUserName);
       res := ClientGetSessionKey(Sender, U, []);
@@ -1436,7 +1436,7 @@ end;
 
 function TRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
 begin
-  result := URI(Model.GetURICallBack('RemoteLog', nil, 0), 'PUT', nil, nil, @aText).
+  result := URI(fModel.GetURICallBack('RemoteLog', nil, 0), 'PUT', nil, nil, @aText).
     Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
@@ -1536,7 +1536,7 @@ var
 begin
   status := CallBack(mPOST, 'CacheFlush/_ping_', '', resp);
   InternalLog('SessionRenewEvent(%) received status=% count=% from % % (timeout=% min)',
-    [Model.Root, status, JSONDecode(resp, 'count'), fSession.Server,
+    [fModel.Root, status, JSONDecode(resp, 'count'), fSession.Server,
      fSession.Version, fSession.ServerTimeout], sllUserAuth);
 end;
 
@@ -1569,11 +1569,11 @@ begin
   FreeAndNil(fFakeCallbacks);
   try
     // unlock all still locked records by this client
-    if Model <> nil then
-      for t := 0 to high(Model.Locks) do
+    if fModel <> nil then
+      for t := 0 to high(fModel.Locks) do
       begin
-        Table := Model.Tables[t];
-        with Model.Locks[t] do
+        Table := fModel.Tables[t];
+        with fModel.Locks[t] do
           for i := 0 to Count - 1 do
           begin
             aID := IDs[i];
@@ -1737,7 +1737,7 @@ begin
     system.delete(url, 1, 1);
   // 'root/BidirCallback.AsynchEvent/1' into root/interfmethod/id
   Split(Split(url, '/', root), '/', interfmethod, id);
-  if not IdemPropNameU(root, Model.Root) then
+  if not IdemPropNameU(root, fModel.Root) then
     exit;
   callback.ID := GetInteger(pointer(id));
   if callback.ID <= 0 then
@@ -1819,7 +1819,7 @@ var
     begin
       if fBackgroundThread = nil then
         fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
-          OnIdle, FormatUTF8('% % background', [Self, Model.Root]));
+          OnIdle, FormatUTF8('% % background', [Self, fModel.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTTP_UNAVAILABLE;
     end
@@ -1919,7 +1919,7 @@ begin
     result := HTTP_UNAVAILABLE
   else
   begin
-    url := Model.GetURICallBack(aMethodName, aTable, aID);
+    url := fModel.GetURICallBack(aMethodName, aTable, aID);
     if high(aNameValueParameters) > 0 then
       url := url + UrlEncode(aNameValueParameters);
     log := fLogClass.Enter('CallBackGet %', [url], self);
@@ -1965,7 +1965,7 @@ begin
     result := HTTP_UNAVAILABLE
   else
   begin
-    u := Model.GetURICallBack(aMethodName, aTable, aID);
+    u := fModel.GetURICallBack(aMethodName, aTable, aID);
     log := fLogClass.Enter('Callback %', [u], self);
     m := TrimLeftLowerCaseShort(
       GetEnumName(TypeInfo(TSQLURIMethod), ord(method)));

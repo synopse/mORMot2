@@ -392,7 +392,7 @@ type
     function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
-    function Model: TSQLModel;          {$ifdef HASINLINE}inline;{$endif}
+    function Model: TSQLModel; {$ifdef HASINLINE}inline;{$endif}
     function Cache: TRestCache;
     function CacheOrNil: TRestCache; {$ifdef HASINLINE}inline;{$endif}
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
@@ -412,7 +412,8 @@ implementation
 
 function ToMethod(const method: RawUTF8): TSQLURIMethod;
 const
-  NAME: array[mGET..high(TSQLURIMethod)] of string[10] = ( // sorted by occurence
+  NAME: array[mGET..high(TSQLURIMethod)] of string[10] = (
+    // sorted by occurence for in-order O(n) search
     'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT',
     'LOCK','UNLOCK','STATE', 'OPTIONS','PROPFIND','PROPPATCH','TRACE',
     'COPY','MKCOL','MOVE','PURGE','REPORT', 'MKACTIVITY','MKCALENDAR',
@@ -451,7 +452,7 @@ constructor TRestORM.Create(aRest: TRest);
 begin
   inherited Create;
   fRest := aRest;
-  fModel := aRest.Model;
+  fModel := fRest.Model;
   fRest.SetORMInstance(self);
 end;
 
@@ -478,7 +479,7 @@ begin
   if (self = nil) or (Table = nil) then
     exit;
   if FieldNames = '' then
-    result := Model.Props[Table].SQLFromSelectWhere('*', WhereClause)
+    result := fModel.Props[Table].SQLFromSelectWhere('*', WhereClause)
   else
     with Table.RecordProps do
       if FieldNames = '*' then
@@ -501,13 +502,13 @@ var
 begin
   if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
     Value.ComputeFieldsBeforeWrite(self, seAdd);
-  if Model.TableProps[TableIndex].Kind in INSERT_WITH_ID then
+  if fModel.TableProps[TableIndex].Kind in INSERT_WITH_ID then
     ForceID := true;
-  if (Model.IDGenerator <> nil) and (Model.IDGenerator[TableIndex] <> nil) then
+  if (fModel.IDGenerator <> nil) and (fModel.IDGenerator[TableIndex] <> nil) then
   begin
     if (Value.IDValue = 0) or not ForceID then
     begin
-      Value.IDValue := Model.IDGenerator[TableIndex].ComputeNew;
+      Value.IDValue := fModel.IDGenerator[TableIndex].ComputeNew;
       ForceID := true;
     end;
   end
@@ -533,23 +534,23 @@ function TRestORM.InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields
   PSQLFieldBits; ForceID, DoNotAutoComputeFields: boolean): TID;
 var
   json: RawUTF8;
-  TableIndex: integer;
+  t: integer;
 begin
   if Value = nil then
   begin
     result := 0;
     exit;
   end;
-  TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
   if SendData then
-    GetJSONValuesForAdd(TableIndex, Value, ForceID, DoNotAutoComputeFields,
+    GetJSONValuesForAdd(t, Value, ForceID, DoNotAutoComputeFields,
       false, CustomFields, json)
   else
     json := '';
   // on success, returns the new RowID value; on error, returns 0
   WriteLock;
   try // may be within a batch in another thread
-    result := EngineAdd(TableIndex, json); // will call static if necessary
+    result := EngineAdd(t, json); // will call static if necessary
   finally
     WriteUnLock;
   end;
@@ -748,7 +749,7 @@ begin
 end;
 
 function TRestORM.OneFieldValues(Table: TSQLRecordClass;
-  const FieldName: RawUTF8; const WhereClause: RawUTF8;
+  const FieldName, WhereClause: RawUTF8;
   out Data: TRawUTF8DynArray): boolean;
 var
   T: TSQLTable;
@@ -764,7 +765,7 @@ begin
 end;
 
 function TRestORM.OneFieldValues(Table: TSQLRecordClass;
-  const FieldName: RawUTF8; const WhereClause: RawUTF8; var Data: TInt64DynArray;
+  const FieldName, WhereClause: RawUTF8; var Data: TInt64DynArray;
   SQL: PRawUTF8): boolean;
 var
   T: TSQLTable;
@@ -830,8 +831,7 @@ begin
 end;
 
 function TRestORM.OneFieldValues(Table: TSQLRecordClass;
-  const FieldName: RawUTF8; const WhereClause: RawUTF8; const Separator: RawUTF8
-  ): RawUTF8;
+  const FieldName, WhereClause, Separator: RawUTF8): RawUTF8;
 var
   i, Len, SepLen, L: PtrInt;
   Lens: TIntegerDynArray;
@@ -919,7 +919,7 @@ begin
 end;
 
 function TRestORM.MultiFieldValues(Table: TSQLRecordClass;
-  const FieldNames: RawUTF8; const WhereClause: RawUTF8): TSQLTable;
+  const FieldNames, WhereClause: RawUTF8): TSQLTable;
 var
   sql: RawUTF8;
 begin
@@ -931,7 +931,7 @@ begin
 end;
 
 function TRestORM.MultiFieldValues(Table: TSQLRecordClass;
-  const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
+  const FieldNames, WhereClauseFormat: RawUTF8;
   const BoundsSQLWhere: array of const): TSQLTable;
 var
   where: RawUTF8;
@@ -941,7 +941,7 @@ begin
 end;
 
 function TRestORM.MultiFieldValues(Table: TSQLRecordClass;
-  const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
+  const FieldNames, WhereClauseFormat: RawUTF8;
   const Args, Bounds: array of const): TSQLTable;
 var
   where: RawUTF8;
@@ -994,15 +994,15 @@ end;
 
 function TRestORM.MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
 var
-  aMainField: integer;
+  main: integer;
 begin
   result := 0;
   if (self <> nil) and (Value <> '') and (Table <> nil) then
     with Table.RecordProps do
     begin
-      aMainField := MainField[false];
-      if aMainField >= 0 then
-        SetID(OneFieldValue(Table, 'RowID', fields.List[aMainField].Name +
+      main := MainField[false];
+      if main >= 0 then
+        SetID(OneFieldValue(Table, 'RowID', fields.List[main].Name +
           '=:(' + QuotedStr(Value, '''') + '):'), result);
     end;
 end;
@@ -1010,7 +1010,7 @@ end;
 function TRestORM.MainFieldIDs(Table: TSQLRecordClass;
   const Values: array of RawUTF8; out IDs: TIDDynArray): boolean;
 var
-  aMainField, id: TID;
+  main, id: TID;
 begin
   if (self <> nil) and (high(Values) >= 0) and (Table <> nil) then
     if high(Values) = 0 then
@@ -1027,10 +1027,10 @@ begin
       with Table.RecordProps do
       begin
         // request all Values[] IDs at once
-        aMainField := MainField[false];
-        if aMainField >= 0 then
+        main := MainField[false];
+        if main >= 0 then
           OneFieldValues(Table, 'RowID',
-            SelectInClause(fields.List[aMainField].Name, Values), TInt64DynArray(IDs));
+            SelectInClause(fields.List[main].Name, Values), TInt64DynArray(IDs));
       end;
   result := {%H-}IDs <> nil;
 end;
@@ -1070,8 +1070,8 @@ end;
 
 function TRestORM.Retrieve(aID: TID; Value: TSQLRecord; ForUpdate: boolean): boolean;
 var
-  TableIndex: integer; // used by EngineRetrieve() for SQL statement caching
-  Resp: RawUTF8;
+  t: integer; // used by EngineRetrieve() for SQL statement caching
+  resp: RawUTF8;
 begin
   // check parameters
   result := false;
@@ -1080,40 +1080,40 @@ begin
   Value.IDValue := 0;
   if (self = nil) or (aID = 0) then
     exit;
-  TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
   // try to lock before retrieval (if ForUpdate)
-  if ForUpdate and not Model.Lock(TableIndex, aID) then
+  if ForUpdate and not fModel.Lock(t, aID) then
     exit;
   // try to retrieve existing JSON from internal cache
-  Resp := fCache.Retrieve(TableIndex, aID);
-  if Resp = '' then
+  resp := fCache.Retrieve(t, aID);
+  if resp = '' then
   begin
-    // get JSON object '{...}' in Resp from corresponding EngineRetrieve() method
-    Resp := EngineRetrieve(TableIndex, aID);
-    if Resp = '' then
+    // get JSON object '{...}' in resp from corresponding EngineRetrieve() method
+    resp := EngineRetrieve(t, aID);
+    if resp = '' then
     begin
-      fCache.NotifyDeletion(TableIndex, aID);
+      fCache.NotifyDeletion(t, aID);
       exit;
     end;
-    fCache.Notify(TableIndex, aID, Resp, soSelect);
+    fCache.Notify(t, aID, resp, soSelect);
   end;
-  Value.IDValue := aID; // Resp may not contain the "RowID": field after Update
+  Value.IDValue := aID; // resp may not contain the "RowID": field after Update
   // fill Value from JSON if was correctly retrieved
-  Value.FillFrom(Resp);
+  Value.FillFrom(resp);
   result := true;
 end;
 
 function TRestORM.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TSQLRecord;
 var
-  aClass: TSQLRecordClass;
+  c: TSQLRecordClass;
 begin
   result := nil;
   if (self = nil) or (RecordRef(Reference).ID = 0) then
     exit;
-  aClass := RecordRef(Reference).Table(Model);
-  if aClass = nil then
+  c := RecordRef(Reference).Table(Model);
+  if c = nil then
     exit;
-  result := aClass.Create(self, RecordRef(Reference).ID, ForUpdate);
+  result := c.Create(self, RecordRef(Reference).ID, ForUpdate);
   if result.IDValue = 0 then
     FreeAndNil(result); // error during value retrieval
 end;
@@ -1153,8 +1153,7 @@ begin
 end;
 
 function TRestORM.RetrieveListJSON(Table: TSQLRecordClass;
-  const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8;
-  aForceAJAX: boolean): RawJSON;
+  const SQLWhere, aCustomFieldsCSV: RawUTF8; aForceAJAX: boolean): RawJSON;
 var
   sql: RawUTF8;
 begin
@@ -1174,7 +1173,7 @@ begin
 end;
 
 function TRestORM.RetrieveDocVariantArray(Table: TSQLRecordClass;
-  const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
+  const ObjectName, FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
   FirstRecordID: PID; LastRecordID: PID): variant;
 var
@@ -1239,7 +1238,8 @@ begin
   SetVariantNull(result);
   if (self <> nil) and (Table <> nil) then
   begin
-    with Table.RecordProps do    // optimized primary key direct access
+    with Table.RecordProps do
+      // handle optimized primary key direct access
       if fCache.IsCached(Table) and (length(BoundsSQLWhere) = 1) and
          VarRecToInt64(BoundsSQLWhere[0], Int64(ID)) and
          FieldBitsFromCSV(CustomFieldsCSV, bits) and
@@ -1446,7 +1446,7 @@ end;
 function TRestORM.AddWithBlobs(Value: TSQLRecord; ForceID: boolean;
   DoNotAutoComputeFields: boolean): TID;
 var
-  TableIndex: integer;
+  t: integer;
   json: RawUTF8;
 begin
   if Value = nil then
@@ -1454,14 +1454,14 @@ begin
     result := 0;
     exit;
   end;
-  TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
-  GetJSONValuesForAdd(TableIndex, Value, ForceID, DoNotAutoComputeFields,
+  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  GetJSONValuesForAdd(t, Value, ForceID, DoNotAutoComputeFields,
     true, nil, json);
   // on success, returns the new RowID value; on error, returns 0
   WriteLock;
   try
     // may be within a batch in another thread
-    result := EngineAdd(TableIndex, json); // will call static if necessary
+    result := EngineAdd(t, json); // will call static if necessary
   finally
     WriteUnLock;
   end;
@@ -1495,7 +1495,7 @@ function TRestORM.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
   DoNotAutoComputeFields: boolean): boolean;
 var
   JSONValues: RawUTF8;
-  TableIndex: integer;
+  t: integer;
   FieldBits: TSQLFieldBits;
 begin
   if (self = nil) or (Value = nil) or (Value.IDValue = 0) or
@@ -1504,7 +1504,7 @@ begin
     result := false; // current user don't have enough right to update this record
     exit;
   end;
-  TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
   if not DoNotAutoComputeFields then
     Value.ComputeFieldsBeforeWrite(self, seUpdate); // update sftModTime fields
   if IsZero(CustomFields) then
@@ -1532,7 +1532,7 @@ begin
   WriteLock;
   try
     // may be within a batch in another thread
-    result := EngineUpdate(TableIndex, Value.IDValue, JSONValues);
+    result := EngineUpdate(t, Value.IDValue, JSONValues);
   finally
     WriteUnLock;
   end;
@@ -1589,19 +1589,19 @@ end;
 function TRestORM.UpdateField(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 var
-  tableIndex: integer;
+  t: integer;
 begin
-  tableIndex := Model.GetTableIndexExisting(Table);
+  t := fModel.GetTableIndexExisting(Table);
   result := UpdateField(Table, 'RowID', [ID], FieldName, FieldValue);
   if result then
-    fCache.NotifyDeletion(tableIndex, ID);
+    fCache.NotifyDeletion(t, ID);
 end;
 
 function TRestORM.UpdateField(Table: TSQLRecordClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 var
-  tableIndex: integer;
+  t: integer;
   SetValue, WhereValue: RawUTF8;
 begin
   result := false;
@@ -1610,8 +1610,8 @@ begin
     exit;
   VarRecToInlineValue(WhereFieldValue[0], WhereValue);
   VarRecToInlineValue(FieldValue[0], SetValue);
-  tableIndex := Model.GetTableIndexExisting(Table);
-  result := EngineUpdateField(tableIndex, FieldName, SetValue,
+  t := fModel.GetTableIndexExisting(Table);
+  result := EngineUpdateField(t, FieldName, SetValue,
     WhereFieldName, WhereValue);
   // warning: this may not update the internal cache
 end;
@@ -1619,47 +1619,46 @@ end;
 function TRestORM.UpdateField(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 var
-  tableIndex: integer;
+  t: integer;
 begin
-  tableIndex := Model.GetTableIndexExisting(Table);
+  t := fModel.GetTableIndexExisting(Table);
   result := UpdateField(Table, 'RowID', ID, FieldName, FieldValue);
   if result then
-    fCache.NotifyDeletion(tableIndex, ID);
+    fCache.NotifyDeletion(t, ID);
 end;
 
 function TRestORM.UpdateField(Table: TSQLRecordClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 var
-  tableIndex: integer;
-  SetValue, WhereValue: RawUTF8;
+  t: integer;
+  value, where: RawUTF8;
 begin
-  VariantToInlineValue(WhereFieldValue, WhereValue);
-  VariantToInlineValue(FieldValue, SetValue);
-  tableIndex := Model.GetTableIndexExisting(Table);
-  result := EngineUpdateField(tableIndex, FieldName, SetValue,
-    WhereFieldName, WhereValue);
+  VariantToInlineValue(WhereFieldValue, where);
+  VariantToInlineValue(FieldValue, value);
+  t := fModel.GetTableIndexExisting(Table);
+  result := EngineUpdateField(t, FieldName, value, WhereFieldName, where);
   // warning: this may not update the internal cache
 end;
 
 function TRestORM.UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 var
-  SetValue, Where: RawUTF8;
-  tableindex: integer;
+  value, where: RawUTF8;
+  t: integer;
 begin
-  tableindex := Model.GetTableIndexExisting(Table);
-  VariantToInlineValue(FieldValue, SetValue);
-  Where := SelectInClause('RowID', IDs, '', INLINED_MAX);
+  t := fModel.GetTableIndexExisting(Table);
+  VariantToInlineValue(FieldValue, value);
+  where := SelectInClause('RowID', IDs, '', INLINED_MAX);
   if length(IDs) <= INLINED_MAX then
     result := ExecuteFmt('update % set %=:(%): where %',
-      [Table.SQLTableName, FieldName, SetValue, Where])
+      [Table.SQLTableName, FieldName, value, where])
   else
     // don't cache such a statement
     result := ExecuteFmt('update % set %=% where %',
-      [Table.SQLTableName, FieldName, SetValue, Where]);
+      [Table.SQLTableName, FieldName, value, where]);
   if result then
-    fCache.NotifyDeletions(tableindex, IDs);
+    fCache.NotifyDeletions(t, IDs);
 end;
 
 function TRestORM.EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
@@ -1693,7 +1692,7 @@ var
 begin
   if ID <> 0 then
   begin
-    t := Model.GetTableIndexExisting(Table);
+    t := fModel.GetTableIndexExisting(Table);
     result := EngineUpdateFieldIncrement(t, ID, FieldName, Increment);
     if fCache <> nil then
       fCache.NotifyDeletion(t, ID);
@@ -1712,7 +1711,7 @@ function TRestORM.Delete(Table: TSQLRecordClass; ID: TID): boolean;
 var
   t: integer;
 begin
-  t := Model.GetTableIndexExisting(Table);
+  t := fModel.GetTableIndexExisting(Table);
   if not RecordCanBeUpdated(Table, ID, seDelete) then
     result := false
   else
@@ -1730,9 +1729,9 @@ end;
 function TRestORM.InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass;
   const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
 var
-  tableIndex, i: PtrInt;
+  t, i: PtrInt;
 begin
-  tableIndex := Model.GetTableIndexExisting(Table);
+  t := fModel.GetTableIndexExisting(Table);
   result := false;
   if OneFieldValues(Table, 'RowID', SQLWhere, TInt64DynArray(IDs)) and
      (IDs <> nil) then
@@ -1740,7 +1739,7 @@ begin
     for i := 0 to length(IDs) - 1 do
       if not RecordCanBeUpdated(Table, IDs[i], seDelete) then
         exit;
-    fCache.NotifyDeletions(tableIndex, TInt64DynArray(IDs));
+    fCache.NotifyDeletions(t, TInt64DynArray(IDs));
   end;
   result := true;
 end;
@@ -1764,7 +1763,7 @@ begin
   begin
     WriteLock;
     try // may be within a batch in another thread
-      result := EngineDeleteWhere(Model.GetTableIndexExisting(Table), SQLWhere, IDs);
+      result := EngineDeleteWhere(fModel.GetTableIndexExisting(Table), SQLWhere, IDs);
     finally
       WriteUnLock;
     end;
@@ -1785,28 +1784,28 @@ end;
 function TRestORM.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobData: TSQLRawBlob): boolean;
 var
-  BlobField: PRttiProp;
+  blob: PRttiProp;
 begin
   result := false;
   if (self = nil) or (aID <= 0) then
     exit;
-  BlobField := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
-  if BlobField = nil then
+  blob := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
+  if blob = nil then
     exit;
-  result := EngineRetrieveBlob(Model.GetTableIndexExisting(Table), aID,
-    BlobField, BlobData);
+  result := EngineRetrieveBlob(fModel.GetTableIndexExisting(Table), aID,
+    blob, BlobData);
 end;
 
 function TRestORM.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobStream: TCustomMemoryStream): boolean;
 var
-  BlobData: TSQLRawBlob;
+  data: TSQLRawBlob;
 begin
   BlobStream := TMemoryStream.Create;
-  result := RetrieveBlob(Table, aID, BlobFieldName, BlobData);
-  if not result or (BlobData = '') then
+  result := RetrieveBlob(Table, aID, BlobFieldName, data);
+  if not result or (data = '') then
     exit;
-  if BlobStream.Write(pointer(BlobData)^, length(BlobData)) <> length(BlobData) then
+  if BlobStream.Write(pointer(data)^, length(data)) <> length(data) then
     result := false;
   BlobStream.Seek(0, soFromBeginning); // rewind
 end;
@@ -1814,54 +1813,54 @@ end;
 function TRestORM.UpdateBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean;
 var
-  BlobField: PRttiProp;
+  blob: PRttiProp;
 begin
   result := false;
   if (self = nil) or (aID <= 0) or
      not RecordCanBeUpdated(Table, aID, seUpdate) then
     exit;
-  BlobField := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
-  if BlobField = nil then
+  blob := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
+  if blob = nil then
     exit;
-  result := EngineUpdateBlob(Model.GetTableIndexExisting(Table), aID, BlobField,
+  result := EngineUpdateBlob(fModel.GetTableIndexExisting(Table), aID, blob,
     BlobData);
 end;
 
 function TRestORM.UpdateBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: TStream): boolean;
 var
-  Blob: TSQLRawBlob;
+  data: TSQLRawBlob;
   L: integer;
 begin
   result := false;
   if (self = nil) or (BlobData = nil) then
     exit;
   L := BlobData.Seek(0, soFromEnd);
-  SetLength(Blob, L);
+  SetLength(data, L);
   BlobData.Seek(0, soFromBeginning);
-  if BlobData.Read(pointer(Blob)^, L) <> L then
+  if BlobData.Read(pointer(data)^, L) <> L then
     exit;
-  result := UpdateBlob(Table, aID, BlobFieldName, Blob);
+  result := UpdateBlob(Table, aID, BlobFieldName, data);
 end;
 
 function TRestORM.UpdateBlob(Table: TSQLRecordClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean;
 var
-  Blob: TSQLRawBlob;
+  data: TSQLRawBlob;
 begin
   if (self = nil) or (BlobData = nil) or (BlobSize < 0) then
     result := false
   else
   begin
-    SetString(Blob, PAnsiChar(BlobData), BlobSize);
-    result := UpdateBlob(Table, aID, BlobFieldName, Blob);
+    SetString(data, PAnsiChar(BlobData), BlobSize);
+    result := UpdateBlob(Table, aID, BlobFieldName, data);
   end;
 end;
 
 function TRestORM.UpdateBlobFields(Value: TSQLRecord): boolean;
 var
-  BlobData: RawByteString;
-  TableIndex, i: PtrInt;
+  data: RawByteString;
+  t, i: PtrInt;
 begin
   result := false;
   if (Value = nil) or (Value.IDValue <= 0) then
@@ -1869,12 +1868,12 @@ begin
   with Value.RecordProps do
     if BlobFields <> nil then
     begin
-      TableIndex := self.fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+      t := self.fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
       for i := 0 to length(BlobFields) - 1 do
       begin
-        BlobFields[i].PropInfo.GetLongStrProp(Value, BlobData);
-        if not EngineUpdateBlob(TableIndex, Value.IDValue,
-           BlobFields[i].PropInfo, BlobData) then
+        BlobFields[i].PropInfo.GetLongStrProp(Value, data);
+        if not EngineUpdateBlob(t, Value.IDValue,
+           BlobFields[i].PropInfo, data) then
           exit;
       end;
     end;
@@ -1883,8 +1882,8 @@ end;
 
 function TRestORM.RetrieveBlobFields(Value: TSQLRecord): boolean;
 var
-  BlobData: TSQLRawBlob;
-  TableIndex, i: PtrInt;
+  data: TSQLRawBlob;
+  t, i: PtrInt;
 begin
   result := false;
   if (Self = nil) or (Value = nil) or (Value.IDValue <= 0) then
@@ -1892,11 +1891,11 @@ begin
   with Value.RecordProps do
     if BlobFields <> nil then
     begin
-      TableIndex := self.fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+      t := self.fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
       for i := 0 to length(BlobFields) - 1 do
-        if EngineRetrieveBlob(TableIndex, Value.IDValue,
-            BlobFields[i].PropInfo, BlobData) then
-          BlobFields[i].PropInfo.SetLongStrProp(Value, BlobData)
+        if EngineRetrieveBlob(t, Value.IDValue,
+            BlobFields[i].PropInfo, data) then
+          BlobFields[i].PropInfo.SetLongStrProp(Value, data)
         else
           exit;
     end;
@@ -2023,8 +2022,8 @@ begin
     result := fRest.BackgroundTimer.AsynchBatchStop(Table);
 end;
 
-function TRestORM.AsynchBatchAdd(Value: TSQLRecord; SendData: boolean; ForceID:
-  boolean; const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+function TRestORM.AsynchBatchAdd(Value: TSQLRecord; SendData, ForceID: boolean;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   if (self = nil) or (fRest.BackgroundTimer = nil) or
      (fRest.BackgroundTimer.BackgroundBatch = nil) then

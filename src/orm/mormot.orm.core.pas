@@ -12541,15 +12541,17 @@ function RecordRef.Text(const Rest: IRestORM): RawUTF8;
 var
   T: TSQLRecordClass;
   aID: TID;
+  m: TSQLModel;
 begin
   result := '';
   if ((Value shr 6) = 0) or (Rest = nil) then
     exit;
-  T := Table(Rest.Model);
+  m := Rest.Model;
+  T := Table(m);
   if T = nil then
     exit;
   aID := ID;
-  with Rest.Model.TableProps[Value and 63].Props do
+  with m.TableProps[Value and 63].Props do
     if aID <= 0 then
       result := SQLTableName
     else
@@ -15110,6 +15112,7 @@ var
   P: PShortString;
   EnumValues: set of 0..63;
   Soundex: TSynSoundEx;
+  M: TSQLModel;
   tmp: array[0..23] of AnsiChar;
 begin
   result := 0;
@@ -15190,13 +15193,15 @@ begin
     end
   else if ((Kind in [sftRecord, sftID, sftTID, sftSessionUserID]) and
           (Client <> nil) and (Client.Model <> nil)) then
+  begin
+    M := Client.Model;
     while cardinal(result) <= cardinal(fRowCount) do
     begin
       SetInt64(U^, Val64);
       if Val64 <> 0 then
       begin
         if Kind = sftRecord then
-          EnumValue := RecordRef(Val64).Text(Client.Model)
+          EnumValue := RecordRef(Val64).Text(M)
         else
           EnumValue := U^; // sftID/sftTID -> display ID number -> no sounded
         if Lang = sndxNone then
@@ -15210,6 +15215,7 @@ begin
       inc(U, FieldCount); // ignore all other fields -> jump to next row data
       inc(result);
     end
+  end
   else  // by default, search as UTF-8 encoded text
   if Lang <> sndxNone then
   begin
@@ -18252,9 +18258,12 @@ begin
       aSourceID := fSourceID^;
   if aSourceID = 0 then
     exit;
-  SelfProps := aClient.Model.Props[PSQLRecordClass(self)^];
-  DestProps := aClient.Model.Props[TSQLRecordClass(
-    SelfProps.Props.fRecordManyDestProp.ObjectClass)];
+  with aClient.Model do
+  begin
+    SelfProps := Props[PSQLRecordClass(self)^];
+    DestProps := Props[
+      TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)];
+  end;
   case JoinKind of
     jkDestID:
       Select := DestProps.Props.SQLTableName + '.RowID';
@@ -18288,7 +18297,7 @@ begin
     // statement is not globaly inlined -> no caching of prepared statement
     SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
   result := aClient.ExecuteList([PSQLRecordClass(Self)^,
-     TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
+    TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
     FormatUTF8(SQL, [{%H-}Select, DestProps.Props.SQLTableName, SelfProps.Props.SQLTableName,
     SelfProps.Props.SQLTableName, aSourceID, SelfProps.Props.SQLTableName,
     DestProps.Props.SQLTableName, aDestWhereSQL]));
@@ -18443,42 +18452,42 @@ end;
 class procedure TSQLRecordFTS4.InitializeTable(const Server: IRestORMServer;
   const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var
-  Model: TSQLModel;
-  Props: TSQLModelRecordProperties;
+  m: TSQLModel;
+  p: TSQLModelRecordProperties;
   main, fts, ftsfields: RawUTF8;
 begin
   inherited;
   if FieldName <> '' then
     exit;
-  Model := Server.Model;
-  Props := Model.Props[self];
-  if (Props = nil) or (Props.fFTSWithoutContentFields = '') then
+  m := Server.Model;
+  p := m.Props[self];
+  if (p = nil) or (p.fFTSWithoutContentFields = '') then
     exit;
-  main := Model.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName;
-  if not Server.IsInternalSQLite3Table(Props.fFTSWithoutContentTableIndex) then
+  main := m.Tables[p.fFTSWithoutContentTableIndex].SQLTableName;
+  if not Server.IsInternalSQLite3Table(p.fFTSWithoutContentTableIndex) then
     raise EModelException.CreateUTF8(
       '% is an external content FTS4/5 table but source % is not ' +
       'a local SQLite3 table: FTS search will be unavailable', [self, main]);
-  fts := Props.Props.SQLTableName;
-  ftsfields := Props.Props.SQLTableSimpleFieldsNoRowID;
+  fts := p.Props.SQLTableName;
+  ftsfields := p.Props.SQLTableSimpleFieldsNoRowID;
   // see http://www.sqlite.org/fts3.html#*fts4content
-  if Props.Kind = rFTS5 then
+  if p.Kind = rFTS5 then
   begin
     // In fts 5 we can't use docid only rowid, also use insert() values('delete',) to delete record
     Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % ' +
       'BEGIN INSERT INTO %(%,rowid,%) VALUES(''delete'',old.rowid%); END;',
-      [main, main, fts, fts, ftsfields, StringReplaceAll(Props.fFTSWithoutContentFields,
+      [main, main, fts, fts, ftsfields, StringReplaceAll(p.fFTSWithoutContentFields,
        'new.', 'old.')]);
     Server.ExecuteFmt('CREATE TRIGGER %_bd BEFORE DELETE ON % ' +
       'BEGIN INSERT INTO %(%,rowid,%) VALUES(''delete'',old.rowid%); END;',
-      [main, main, fts, fts, ftsfields, StringReplaceAll(Props.fFTSWithoutContentFields,
+      [main, main, fts, fts, ftsfields, StringReplaceAll(p.fFTSWithoutContentFields,
       'new.', 'old.')]);
     Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % ' +
       'BEGIN INSERT INTO %(rowid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, Props.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
     Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % ' +
       'BEGIN INSERT INTO %(rowid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, Props.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
   end
   else
   begin
@@ -18488,10 +18497,10 @@ begin
       'BEGIN DELETE FROM % WHERE docid=old.rowid; END;', [main, main, fts]);
     Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % ' +
       'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, Props.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
     Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % ' +
       'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
-      [main, main, fts, ftsfields, Props.fFTSWithoutContentFields]);
+      [main, main, fts, ftsfields, p.fFTSWithoutContentFields]);
   end;
 end;
 
@@ -20998,7 +21007,8 @@ begin
   if aRest = nil then
     EORMException.CreateUTF8('%.Create', [self]);
   fRest := aRest;
-  SetLength(fCache, length(fRest.Model.Tables));
+  fModel := aRest.Model;
+  SetLength(fCache, length(fModel.Tables));
   for i := 0 to length(fCache) - 1 do
     fCache[i].Init;
 end;
@@ -21052,7 +21062,7 @@ begin
   result := false;
   if (self = nil) or (aTable = nil) then
     exit;
-  i := Rest.Model.GetTableIndexExisting(aTable);
+  i := fModel.GetTableIndexExisting(aTable);
   if Rest.CacheWorthItForTable(i) then
     if PtrUInt(i) < PtrUInt(Length(fCache)) then
       with fCache[i] do
@@ -21074,7 +21084,7 @@ begin
   result := false;
   if (self = nil) or (aTable = nil) then
     exit;
-  i := Rest.Model.GetTableIndexExisting(aTable);
+  i := fModel.GetTableIndexExisting(aTable);
   if i < PtrUInt(Length(fCache)) then
     if fCache[i].CacheEnable then
       result := true;
@@ -21087,7 +21097,7 @@ begin
   result := false;
   if (self = nil) or (aTable = nil) then
     exit;
-  i := Rest.Model.GetTableIndexExisting(aTable);
+  i := fModel.GetTableIndexExisting(aTable);
   if Rest.CacheWorthItForTable(i) then
     if PtrUInt(i) < PtrUInt(Length(fCache)) then
       with fCache[i] do
@@ -21112,7 +21122,7 @@ begin
   result := false;
   if (self = nil) or (aTable = nil) or (aID <= 0) then
     exit;
-  i := Rest.Model.GetTableIndex(aTable);
+  i := fModel.GetTableIndex(aTable);
   if PtrUInt(i) >= PtrUInt(Length(fCache)) then
     exit;
   if Rest.CacheWorthItForTable(i) then
@@ -21129,7 +21139,7 @@ begin
   result := false;
   if (self = nil) or (aTable = nil) or (length(aIDs) = 0) then
     exit;
-  i := Rest.Model.GetTableIndex(aTable);
+  i := fModel.GetTableIndex(aTable);
   if i >= PtrUInt(Length(fCache)) then
     exit;
   if Rest.CacheWorthItForTable(i) then
@@ -21164,7 +21174,7 @@ begin
   result := 0;
   if self = nil then
     exit;
-  cache := @fCache[fRest.Model.GetTableIndexExisting(aTable)];
+  cache := @fCache[fModel.GetTableIndexExisting(aTable)];
   if not cache^.CacheEnable then
     exit;
   rec := aTable.CreateAndFillPrepare(fRest, FormatSQLWhere, BoundsSQLWhere);
@@ -21191,13 +21201,13 @@ end;
 procedure TRestCache.Flush(aTable: TSQLRecordClass);
 begin
   if self <> nil then // includes *CriticalSection(Mutex):
-    fCache[fRest.Model.GetTableIndexExisting(aTable)].FlushCacheAllEntries;
+    fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheAllEntries;
 end;
 
 procedure TRestCache.Flush(aTable: TSQLRecordClass; aID: TID);
 begin
   if self <> nil then
-    with fCache[fRest.Model.GetTableIndexExisting(aTable)] do
+    with fCache[fModel.GetTableIndexExisting(aTable)] do
       if CacheEnable then
       begin
         Mutex.Lock;
@@ -21214,7 +21224,7 @@ var
   i: PtrInt;
 begin
   if (self <> nil) and (length(aIDs) > 0) then
-    with fCache[fRest.Model.GetTableIndexExisting(aTable)] do
+    with fCache[fModel.GetTableIndexExisting(aTable)] do
       if CacheEnable then
       begin
         Mutex.Lock;
@@ -21231,7 +21241,7 @@ procedure TRestCache.Notify(aTable: TSQLRecordClass; aID: TID;
   const aJSON: RawUTF8; aAction: TSQLOccasion);
 begin
   if (self <> nil) and (aTable <> nil) and (aID > 0) then
-    Notify(fRest.Model.GetTableIndex(aTable), aID, aJSON, aAction);
+    Notify(fModel.GetTableIndex(aTable), aID, aJSON, aAction);
 end;
 
 procedure TRestCache.Notify(aRecord: TSQLRecord; aAction: TSQLOccasion);
@@ -21241,7 +21251,7 @@ begin
   if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) or
      not (aAction in [soInsert, soUpdate]) then
     exit;
-  aTableIndex := fRest.Model.GetTableIndex(PSQLRecordClass(aRecord)^);
+  aTableIndex := fModel.GetTableIndex(PSQLRecordClass(aRecord)^);
   if aTableIndex < cardinal(Length(fCache)) then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -21298,7 +21308,7 @@ end;
 procedure TRestCache.NotifyDeletion(aTable: TSQLRecordClass; aID: TID);
 begin
   if (self <> nil) and (aTable <> nil) and (aID > 0) then
-    NotifyDeletion(fRest.Model.GetTableIndex(aTable), aID);
+    NotifyDeletion(fModel.GetTableIndex(aTable), aID);
 end;
 
 function TRestCache.Retrieve(aID: TID; aValue: TSQLRecord): boolean;
@@ -21308,7 +21318,7 @@ begin
   result := false;
   if (self = nil) or (aValue = nil) or (aID <= 0) then
     exit;
-  TableIndex := fRest.Model.GetTableIndexExisting(PSQLRecordClass(aValue)^);
+  TableIndex := fModel.GetTableIndexExisting(PSQLRecordClass(aValue)^);
   if TableIndex < cardinal(Length(fCache)) then
     with fCache[TableIndex] do
       if CacheEnable and RetrieveJSON(aID, aValue) then
@@ -21337,6 +21347,7 @@ begin
   if aRest = nil then
     raise EORMException.CreateUTF8('%.Create(aRest=nil)', [self]);
   fRest := aRest;
+  fModel := fRest.Model;
   if InternalBufferSize < 4096 then
     InternalBufferSize := 4096;
   fInternalBufferSize := InternalBufferSize;
@@ -21359,7 +21370,7 @@ begin
   fTable := aTable;
   if aTable <> nil then
   begin
-    fTableIndex := fRest.Model.GetTableIndexExisting(aTable);
+    fTableIndex := fModel.GetTableIndexExisting(aTable);
     fBatch.Add('{'); // sending data is '{"Table":["cmd":values,...]}'
     fBatch.AddFieldName(aTable.SQLTableName);
   end
@@ -21480,7 +21491,7 @@ begin
     exit;
   Props := Value.RecordProps;
   if SendData and
-     (fRest.Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID) then
+     (fModel.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID) then
     ForceID := true; // same format as TRestClient.Add
   if SendData and not ForceID and IsZero(CustomFields) and
      not (boPostNoSimpleFields in fOptions) then
@@ -21549,7 +21560,7 @@ begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
   end;
-  AddID(fDeletedRecordRef, fDeletedCount, fRest.Model.RecordReference(Table, ID));
+  AddID(fDeletedRecordRef, fDeletedCount, fModel.RecordReference(Table, ID));
   fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table",ID,...]}'
   fBatch.AddString(Table.RecordProps.SQLTableName);
   fBatch.Add('"', ',');
@@ -21630,7 +21641,7 @@ begin
     end
   else
   begin
-    tableIndex := fRest.Model.GetTableIndexExisting(Props.Table);
+    tableIndex := fModel.GetTableIndexExisting(Props.Table);
     fBatch.AddShort('"PUT@'); // '[...,"PUT@Table",{object}',...]'
     fBatch.AddString(Props.SQLTableName);
     fBatch.Add('"', ',');

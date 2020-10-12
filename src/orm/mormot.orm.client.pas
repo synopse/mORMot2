@@ -893,10 +893,10 @@ end;
 
 function TRestORMClientURI.ServerInternalState: cardinal;
 begin
-  if (Self = nil) or (Model = nil) then // avoid GPF
+  if (Self = nil) or (fModel = nil) then // avoid GPF
     result := cardinal(-1)
   else
-    result := URI(Model.Root, 'STATE').Hi;
+    result := URI(fModel.Root, 'STATE').Hi;
 end;
 
 function TRestORMClientURI.UpdateFromServer(const Data: array of TObject;
@@ -928,7 +928,7 @@ begin
         if (T.QuerySQL <> '') and (T.InternalState <> State) then
         begin
           // refresh needed
-          with URI(Model.Root, 'GET', @Resp, nil, @T.QuerySQL) do
+          with URI(fModel.Root, 'GET', @Resp, nil, @T.QuerySQL) do
             if Lo = HTTP_SUCCESS then
             begin
               // refresh after proper GET with SQL sent
