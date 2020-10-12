@@ -2206,7 +2206,12 @@ function FindIniNameValueInteger(P: PUTF8Char; const UpperName: RawUTF8): PtrInt
 // - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
 // - a typical use may be:
 // ! UpdateIniNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
-function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValue: RawUTF8): boolean;
+function UpdateIniNameValue(var Content: RawUTF8;
+  const Name, UpperName, NewValue: RawUTF8): boolean;
+
+/// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
+// 'Content-Type: application/json' or 'Content-Type: application/xml'
+function IsHTMLContentTypeTextual(Headers: PUTF8Char): boolean;
 
 
 { ************ RawUTF8 String Values Interning and TRawUTF8List }
@@ -3792,6 +3797,12 @@ begin
   FileFromString(Content, FileName);
 end;
 
+function IsHTMLContentTypeTextual(Headers: PUTF8Char): boolean;
+begin
+  result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER,
+    [JSON_CONTENT_TYPE_UPPER, 'TEXT/', 'APPLICATION/XML',
+     'APPLICATION/JAVASCRIPT', 'APPLICATION/X-JAVASCRIPT', 'IMAGE/SVG+XML']);
+end;
 
 
 { ************ RawUTF8 String Values Interning and TRawUTF8List }

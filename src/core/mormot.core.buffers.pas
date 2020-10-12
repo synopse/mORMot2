@@ -6457,6 +6457,7 @@ begin
         result := 'application/x-7z-compressed';
     else
       result := GetMimeContentTypeFromBuffer(Content, Len,
+        // e.g. 'application/zip' or 'application/pdf'
         'application/' + copy(result, 2, 20));
     end;
   end

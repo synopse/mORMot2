@@ -33,9 +33,16 @@ uses
 
 { ************ Thread-Safe Pending Tasks List }
 
+const
+  /// defined here to avoid explicit link to syncobjs in uses clause
+  wrSignaled = syncobjs.wrSignaled;
+
 type
   /// defined here to avoid explicit link to syncobjs in uses clause
   TWaitResult = syncobjs.TWaitResult;
+
+  /// defined here to avoid explicit link to syncobjs in uses clause
+  TEvent = syncobjs.TEvent;
 
   /// exception class raised by this unit
   ESynThread = class(ESynException);
@@ -163,7 +170,7 @@ type
     {$endif HASTTHREADSTART}
     {$ifdef HASTTHREADTERMINATESET}
     /// properly terminate the thread
-    // - called by TThread.Terminate
+    // - called by TThread.Terminate since Delphi XE2
     procedure TerminatedSet; override;
     {$else}
     /// properly terminate the thread

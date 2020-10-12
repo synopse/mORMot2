@@ -743,15 +743,15 @@ function TSynHasher.Final: RawUTF8;
 begin
   case fAlgo of
     hfMD5:
-      result := MD5DigestToString(PMD5(@ctxt)^.final);
+      result := MD5DigestToString(PMD5(@ctxt)^.Final);
     hfSHA1:
-      result := SHA1DigestToString(PSHA1(@ctxt)^.final);
+      result := SHA1DigestToString(PSHA1(@ctxt)^.Final);
     hfSHA256:
-      result := SHA256DigestToString(PSHA256(@ctxt)^.final);
+      result := SHA256DigestToString(PSHA256(@ctxt)^.Final);
     hfSHA384:
-      result := SHA384DigestToString(PSHA384(@ctxt)^.final);
+      result := SHA384DigestToString(PSHA384(@ctxt)^.Final);
     hfSHA512:
-      result := SHA512DigestToString(PSHA512(@ctxt)^.final);
+      result := SHA512DigestToString(PSHA512(@ctxt)^.Final);
     hfSHA3_256:
       result := SHA256DigestToString(PSHA3(@ctxt)^.Final256);
     hfSHA3_512:
@@ -763,7 +763,7 @@ function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): Raw
 begin
   Init(aAlgo);
   Update(aBuffer, aLen);
-  result := final;
+  result := Final;
 end;
 
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
@@ -797,7 +797,7 @@ begin
       hasher.Update(pointer(temp), read);
       dec(size, read);
     end;
-    result := hasher.final;
+    result := hasher.Final;
   finally
     FileClose(F);
   end;
@@ -926,7 +926,7 @@ function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUTF8;
 begin
   Init(aAlgo, aSecret);
   Update(aBuffer, aLen);
-  result := final;
+  result := Final;
 end;
 
 function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
@@ -934,7 +934,7 @@ function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
 begin
   Init(aAlgo, aSecret, aSalt, aSecretPBKDF2Rounds);
   Update(aBuffer, aLen);
-  result := final;
+  result := Final;
 end;
 
 procedure TSynSigner.PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;

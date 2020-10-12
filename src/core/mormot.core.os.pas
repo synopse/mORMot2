@@ -29,6 +29,7 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows, // needed here e.g. for redefinition of standard types
+  Messages,
   {$endif MSWINDOWS}
   classes,
   contnrs,
@@ -46,7 +47,8 @@ type
 
   /// the recognized operating systems
   // - it will also recognize most Linux distributions
-  TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX,
+  TOperatingSystem = (
+    osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX,
     osArch, osAurox, osDebian, osFedora, osGentoo, osKnoppix, osMint, osMandrake,
     osMandriva, osNovell, osUbuntu, osSlackware, osSolaris, osSuse, osSynology,
     osTrustix, osClear, osUnited, osRedHat, osLFS, osOracle, osMageia, osCentOS,
@@ -65,9 +67,12 @@ type
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
     case os: TOperatingSystem of
-    osUnknown: (b: array[0..2] of byte);
-    osWindows: (win: TWindowsVersion);
-    osLinux:   (utsrelease: array[0..2] of byte);
+    osUnknown: (
+      b: array[0..2] of byte);
+    osWindows: (
+      win: TWindowsVersion);
+    osLinux: (
+      utsrelease: array[0..2] of byte);
   end;
 
 const
@@ -82,13 +87,14 @@ const
     '10', '10 64bit', 'Server 2016', 'Server 2016 64bit', 'Server 2019 64bit');
 
   /// the recognized Windows versions which are 32-bit
-  WINDOWS_32 = [w2000, wXP, wServer2003, wServer2003_R2, wVista, wServer2008,
-    wSeven, wServer2008_R2, wEight, wServer2012, wEightOne, wServer2012R2,
-    wTen, wServer2016];
+  WINDOWS_32 = [
+     w2000, wXP, wServer2003, wServer2003_R2, wVista, wServer2008,
+     wSeven, wServer2008_R2, wEight, wServer2012, wEightOne, wServer2012R2,
+     wTen, wServer2016];
 
   /// translate one operating system (and distribution) into a its common name
-  OS_NAME: array[TOperatingSystem] of RawUTF8 =
-   ('Unknown', 'Windows', 'Linux', 'OSX', 'BSD', 'POSIX',
+  OS_NAME: array[TOperatingSystem] of RawUTF8 = (
+    'Unknown', 'Windows', 'Linux', 'OSX', 'BSD', 'POSIX',
     'Arch', 'Aurox', 'Debian', 'Fedora', 'Gentoo', 'Knoppix', 'Mint', 'Mandrake',
     'Mandriva', 'Novell', 'Ubuntu', 'Slackware', 'Solaris', 'Suse', 'Synology',
     'Trustix', 'Clear', 'United', 'RedHat', 'LFS', 'Oracle', 'Mageia', 'CentOS',
@@ -97,13 +103,14 @@ const
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
   // TFileVersion.UserAgent
-  OS_INITIAL: array[TOperatingSystem] of AnsiChar =
-    ('?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
-     'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
-     'c', 'd', 'x', 'Z', 'r', 'p', 'J'); // for Android: J=JVM
+  OS_INITIAL: array[TOperatingSystem] of AnsiChar = (
+    '?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
+    'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
+    'c', 'd', 'x', 'Z', 'r', 'p', 'J'); // for Android: J=JVM
 
   /// the operating systems items which actually have a Linux kernel
-  OS_LINUX = [osLinux, osArch .. osAndroid];
+  OS_LINUX = [
+    osLinux, osArch .. osAndroid];
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
@@ -432,6 +439,8 @@ function GetSystemPath(kind: TSystemPath): TFileName;
 
 type
   TThreadID = DWORD;
+  TMessage = Messages.TMessage;
+  HWND = Windows.HWND;
 
   /// the known Windows Registry Root key used by TWinRegistry.Open
   TWinRegistryRoot = (
@@ -505,10 +514,10 @@ type
     DestroyKey: function(hKey: HCRYPTKEY): BOOL; stdcall;
     /// encrypt the data designated by the key held by the CSP module
     // referenced by the hKey parameter
-    Encrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; final: BOOL;
+    Encrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
       dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD; dwBufLen: DWORD): BOOL; stdcall;
     /// decrypts data previously encrypted by using the CryptEncrypt function
-    Decrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; final: BOOL;
+    Decrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
       dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD): BOOL; stdcall;
     /// fills a buffer with cryptographically random bytes
     // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
@@ -576,6 +585,10 @@ procedure CoUninit;
 /// retrieves the current executable module handle, i.e.  its memory load address
 // - redefined in mormot.core.os to avoid dependency to Windows
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
+
+/// post a message to the Windows message queue
+// - redefined in mormot.core.os to avoid dependency to Windows
+function PostMessage(hWnd: HWND; Msg:UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
 
 /// retrieves the current stack trace
 // - only available since Windows XP
@@ -747,10 +760,6 @@ type
   TRTLCriticalSection = Windows.TRTLCriticalSection;
   {$endif ISDELPHI}
 
-const
-  /// redefined here to avoid dependency to Windows
-  INFINITE = cardinal(-1);
-
 /// returns the current UTC time as TSystemTime
 // - under Delphi/Windows, directly call the homonymous Win32 API
 // - redefined in mormot.core.os to avoid dependency to Windows
@@ -760,6 +769,10 @@ const
 procedure GetLocalTime(out result: TSystemTime); stdcall;
 
 {$endif MSWINDOWS}
+
+const
+  /// redefined here to avoid dependency to Windows or SyncObjs
+  INFINITE = cardinal(-1);
 
 /// initialize a Critical Section (for Lock/UnLock)
 // - redefined in mormot.core.os to avoid dependency to Windows

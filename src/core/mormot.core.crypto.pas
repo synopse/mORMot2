@@ -1510,7 +1510,7 @@ type
     procedure Final(out result: TMD5Digest); overload;
     /// finalize and compute the resulting MD5 hash Digest of all data
     // affected to Update() method
-    function final: TMD5Digest; overload;
+    function Final: TMD5Digest; overload;
     /// one method to rule them all
     // - call Init, then Update(), then Final()
     procedure Full(Buffer: pointer; Len: integer; out Digest: TMD5Digest);
@@ -6991,7 +6991,7 @@ end;
 
 { TMD5 }
 
-function TMD5.final: TMD5Digest;
+function TMD5.Final: TMD5Digest;
 begin
   Finalize;
   result := TMD5Digest(buf);
@@ -7017,7 +7017,8 @@ begin
   // Bytes of padding needed to make 56 bytes (-8..55)
   count := 55 - count;
   if count < 0 then
-  begin  //  Padding forces an extra block
+  begin
+    //  Padding forces an extra block
     FillcharFast(p^, count + 8, 0);
     MD5Transform(buf, in_);
     p := @in_;
@@ -7084,7 +7085,8 @@ begin
   t := bytes[0];
   Inc(bytes[0], len);
   if bytes[0] < t then
-    Inc(bytes[1]);     // 64 bit carry from low to high
+    // 64 bit carry from low to high
+    Inc(bytes[1]);
   t := 64 - (t and 63);  // space available in in_ (at least 1)
   if t > len then
   begin
@@ -7391,7 +7393,8 @@ begin
         Data.Index := 0;
       end
       else
-        sha1Compress(Data.Hash, Buffer); // avoid temporary copy
+        // direct compression to avoid uneeded temporary copy
+        sha1Compress(Data.Hash, Buffer);
       dec(Len, aLen);
       inc(PByte(Buffer), aLen);
     end
@@ -7447,7 +7450,7 @@ begin
   sha.Full(SHAKE_128, @aKey, aKeyLen, @dig, SizeOf(dig) shl 3); // XOF mode
   Init(dig, SizeOf(dig));
   FillCharFast(dig, SizeOf(dig), 0);
-  Drop(3072);
+  Drop(3072); // 3KB warmup
 end;
 
 procedure TRC4.EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);

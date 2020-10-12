@@ -3435,6 +3435,13 @@ type
 // - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 function StatusCodeToReason(Code: cardinal): RawUTF8;
 
+/// returns true for successful HTTP status codes, i.e. in 200..399 range
+// - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
+// PARTIALCONTENT (206), NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
+// - any HTTP status not part of this range will be identified as erronous
+// request in the internal server statistics
+function StatusCodeIsSuccess(Code: integer): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 implementation
@@ -5112,7 +5119,7 @@ label
 begin
   {$ifndef CPUX86}
   result := false;
-  {$endif}
+  {$endif CPUX86}
   inc(PtrUInt(P1), PtrUInt(Length));
   inc(PtrUInt(P2), PtrUInt(Length));
   Length := - Length;
@@ -5126,11 +5133,11 @@ begin
   result := true;
   {$ifdef CPUX86}
   exit;
-  {$endif}
+  {$endif CPUX86}
 zero:
   {$ifdef CPUX86}
   result := false;
-  {$endif}
+  {$endif CPUX86}
 end;
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
@@ -9151,7 +9158,7 @@ label
 begin // cut-down version of our pure pascal CompareMem() function
   {$ifndef CPUX86}
   result := false;
-  {$endif}
+  {$endif CPUX86}
   Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt)]);
   if Length >= PtrInt(PtrUInt(P1)) then
     repeat // compare one PtrInt per loop
@@ -9173,7 +9180,7 @@ begin // cut-down version of our pure pascal CompareMem() function
 zero:
   {$ifdef CPUX86}
   result := false;
-  {$endif}
+  {$endif CPUX86}
 end;
 
 {$else}
@@ -10435,59 +10442,59 @@ var
 function StatusCodeToReasonInternal(Code: cardinal): RawUTF8;
 begin
   case Code of
-    100:
+    HTTP_CONTINUE:
       result := 'Continue';
-    101:
+    HTTP_SWITCHINGPROTOCOLS:
       result := 'Switching Protocols';
-    200:
+    HTTP_SUCCESS:
       result := 'OK';
-    201:
+    HTTP_CREATED:
       result := 'Created';
-    202:
+    HTTP_ACCEPTED:
       result := 'Accepted';
-    203:
+    HTTP_NONAUTHORIZEDINFO:
       result := 'Non-Authoritative Information';
-    204:
+    HTTP_NOCONTENT:
       result := 'No Content';
-    205:
+    HTTP_RESETCONTENT:
       result := 'Reset Content';
-    206:
+    HTTP_PARTIALCONTENT:
       result := 'Partial Content';
     207:
       result := 'Multi-Status';
-    300:
+    HTTP_MULTIPLECHOICES:
       result := 'Multiple Choices';
-    301:
+    HTTP_MOVEDPERMANENTLY:
       result := 'Moved Permanently';
-    302:
+    HTTP_FOUND:
       result := 'Found';
-    303:
+    HTTP_SEEOTHER:
       result := 'See Other';
-    304:
+    HTTP_NOTMODIFIED:
       result := 'Not Modified';
-    305:
+    HTTP_USEPROXY:
       result := 'Use Proxy';
-    307:
+    HTTP_TEMPORARYREDIRECT:
       result := 'Temporary Redirect';
     308:
       result := 'Permanent Redirect';
-    400:
+    HTTP_BADREQUEST:
       result := 'Bad Request';
-    401:
+    HTTP_UNAUTHORIZED:
       result := 'Unauthorized';
-    403:
+    HTTP_FORBIDDEN:
       result := 'Forbidden';
-    404:
+    HTTP_NOTFOUND:
       result := 'Not Found';
-    405:
+    HTTP_NOTALLOWED:
       result := 'Method Not Allowed';
-    406:
+    HTTP_NOTACCEPTABLE:
       result := 'Not Acceptable';
-    407:
+    HTTP_PROXYAUTHREQUIRED:
       result := 'Proxy Authentication Required';
-    408:
+    HTTP_TIMEOUT:
       result := 'Request Timeout';
-    409:
+    HTTP_CONFLICT:
       result := 'Conflict';
     410:
       result := 'Gone';
@@ -10495,7 +10502,7 @@ begin
       result := 'Length Required';
     412:
       result := 'Precondition Failed';
-    413:
+    HTTP_PAYLOADTOOLARGE:
       result := 'Payload Too Large';
     414:
       result := 'URI Too Long';
@@ -10505,17 +10512,17 @@ begin
       result := 'Requested Range Not Satisfiable';
     426:
       result := 'Upgrade Required';
-    500:
+    HTTP_SERVERERROR:
       result := 'Internal Server Error';
-    501:
+    HTTP_NOTIMPLEMENTED:
       result := 'Not Implemented';
-    502:
+    HTTP_BADGATEWAY:
       result := 'Bad Gateway';
-    503:
+    HTTP_UNAVAILABLE:
       result := 'Service Unavailable';
-    504:
+    HTTP_GATEWAYTIMEOUT:
       result := 'Gateway Timeout';
-    505:
+    HTTP_HTTPVERSIONNONSUPPORTED:
       result := 'HTTP Version Not Supported';
     511:
       result := 'Network Authentication Required';
@@ -10551,6 +10558,10 @@ begin
   ReasonCache[Hi, Lo] := result;
 end;
 
+function StatusCodeIsSuccess(Code: integer): boolean;
+begin
+  result := (Code >= HTTP_SUCCESS) and (Code < HTTP_BADREQUEST); // 200..399
+end;
 
 procedure InitializeUnit;
 var

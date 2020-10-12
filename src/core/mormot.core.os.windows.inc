@@ -5,9 +5,6 @@
   Windows API calls for FPC/Delphi, as used by mormot.core.os.pas
 }
 
-uses
-  messages;
-
 
 { ****************** Unicode, Time, File process }
 
@@ -127,6 +124,11 @@ end;
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
+end;
+
+function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
+begin
+  result := Windows.PostMessage(hWnd, Msg, wParam, lParam); // call either A or W API
 end;
 
 function ExpandEnvVars(const aStr: string): string;

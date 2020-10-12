@@ -426,7 +426,7 @@ begin
   Upgrade := '';
   ContentLength := -1;
   ServerInternalState := 0;
-  fSndBufLen := 0; // SockSend() internal buffer is used when adding headers
+  fSndBufLen := 0; // SockSend() used as headers temp buffer to avoid getmem
   repeat
     P := @line;
     if (SockIn <> nil) and not HeadersUnFiltered then
@@ -445,8 +445,9 @@ begin
       SockRecvLn(s);
       if s = '' then
         break;
-      P := pointer(s); // set P=nil below to store in Headers[]
+      P := pointer(s);
     end;
+    // note: set P=nil below to store in Headers[]
     case IdemPCharArray(P, ['CONTENT-', 'TRANSFER-ENCODING: CHUNKED',
       'CONNECTION: ', 'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:',
       'X-POWERED-BY:']) of
@@ -519,7 +520,8 @@ begin
     else
       P := nil;
     end;
-    if (P = nil) or HeadersUnFiltered then // only store meaningful headers
+    if (P = nil) or HeadersUnFiltered then
+      // store meaningful headers into SockSend() fSndBuf/fSndLen as temp buffer
       if {%H-}s = '' then
       begin
         len := StrLen(@line);

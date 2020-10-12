@@ -69,7 +69,7 @@ type
   public
     /// raise ENetSock if res is not nrOK or nrRetry
     class procedure Check(res: TNetResult; const Context: shortstring);
-    /// raise ENetSock if last error is not nrOK or nrRetry
+    /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
     class procedure CheckLastError(const Context: shortstring; ForceRaise: boolean = false;
       AnotherNonFatal: integer = 0);
   end;
@@ -1901,7 +1901,7 @@ begin
             Str(VInteger, tmp);
             SockSend(@tmp[1], Length(tmp));
           end;
-        vtInt64{$ifdef FPC}, vtQWord{$endif}:
+        vtInt64 {$ifdef FPC}, vtQWord{$endif} :
           begin
             Str(VInt64^, tmp);
             SockSend(@tmp[1], Length(tmp));
@@ -1939,8 +1939,8 @@ begin
       LogEscapeFull(pointer(aBody), body)], self);
   {$endif}
   if not TrySockSendFlush then
-    raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s', [fServer, fSndBufLen,
-      _NR[NetLastError]]);
+    raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s',
+      [fServer, fSndBufLen, _NR[NetLastError]]);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
 end;
@@ -2102,7 +2102,8 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUTF8; CROnly: boolean);
             FastSetString(Line, @tmp, P - tmp)
           else
           begin
-            LP := P - tmp; // append to already read chars
+            // append to already read chars
+            LP := P - tmp;
             L := Length(Line);
             Setlength(Line, L + LP);
             MoveFast(tmp, PByteArray(Line)[L], LP);
@@ -2110,8 +2111,9 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUTF8; CROnly: boolean);
           exit;
         end
         else if P = @tmp[1023] then
-        begin // tmp[] buffer full?
-          L := Length(Line); // -> append to already read chars
+        begin
+          // tmp[] buffer full? -> append to already read chars
+          L := Length(Line);
           Setlength(Line, L + 1024);
           MoveFast(tmp, PByteArray(Line)[L], 1024);
           P := tmp;
@@ -2143,8 +2145,8 @@ begin
     readln(SockIn^, Line); // example: HTTP/1.0 200 OK
     Error := ioresult;
     if Error <> 0 then
-      raise ENetSock.CreateFmt('SockRecvLn error %d after %d chars', [Error,
-        Length(Line)]);
+      raise ENetSock.CreateFmt('SockRecvLn error %d after %d chars',
+        [Error, Length(Line)]);
   {$I+}
   end
   else

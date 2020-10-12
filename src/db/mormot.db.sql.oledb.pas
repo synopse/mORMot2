@@ -770,7 +770,7 @@ begin
   fOleDBConnection := TSQLDBOleDBConnection(aConnection);
   fParam.Init(TypeInfo(TSQLDBOleDBStatementParamDynArray), fParams, @fParamCount);
   fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray), fColumns,
-    djRawUTF8, @fColumnCount, True);
+    ptRawUTF8, @fColumnCount, True);
   fRowBufferSize := 16384;
   fAlignBuffer := true;
 end;

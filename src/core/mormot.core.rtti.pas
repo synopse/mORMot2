@@ -875,6 +875,8 @@ function AlignToPtr(p: pointer): pointer; inline;
 type
   // redefined here for proper Delphi inlining
   PTypeData = type typinfo.PTypeData;
+  TPropInfo = type typinfo.TPropInfo;
+  PPropInfo = type typinfo.PPropInfo;
 
 /// efficiently inlined low-level function to retrieve raw RTTI structure
 function GetTypeData(TypeInfo: pointer): PTypeData; inline;
@@ -1583,7 +1585,7 @@ type
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
-    // called by TRttiCustomList.RegisterObjArray/RegisterBinaryType
+    // for TRttiCustomList.RegisterObjArray/RegisterBinaryType/RegisterFromText
     function SetObjArray(Item: TClass): TRttiCustom;
     function SetBinaryType(BinarySize: integer): TRttiCustom;
     procedure SetPropsFromText(var P: PUTF8Char;
@@ -1596,7 +1598,7 @@ type
     procedure NoRttiArrayFinalize(Data: PAnsiChar);
     /// initialize this Value process for Parser and Parser Complex kinds
     // - this default method will set Name and Flags according to Props[]
-    // - overriden in mormot.core.json for proper JSON process
+    // - overriden in mormot.core.json for proper JSON process setup
     // - returns self to allow cascaded calls as a fluent interface
     function SetParserType(aParser: TRTTIParserType;
       aParserComplex: TRTTIParserComplexType): TRttiCustom; virtual;
@@ -1803,8 +1805,9 @@ type
     /// register one or several dynamic array RTTI TypeInfo() to be serialized
     // as T*ObjArray
     // - will call the RegisterObjArray() class method by pair:
-    // ! Rtti.RegisterObjArray([
-    // !  TypeInfo(TAddressObjArray),TAddress, TypeInfo(TUserObjArray),TUser]);
+    // ! Rtti.RegisterObjArrays([
+    // !   TypeInfo(TAddressObjArray), TAddress,
+    // !   TypeInfo(TUserObjArray), TUser]);
     procedure RegisterObjArrays(const DynArrayItem: array of const);
     /// register TypeInfo() custom serialization for a given dynamic array or record
     // - DynArrayOrRecord should be valid TypeInfo() - use overloaded
@@ -1987,7 +1990,8 @@ begin
 end;
 
 function TRttiProp.Next: PRttiProp;
-begin // this abtract code compiles into 2 asm lines under FPC :)
+begin
+  // this abtract code compiles into 2 asm lines under FPC :)
   with PPropInfo(@self)^ do
     result := AlignToPtr(@PByteArray(@self)[
       (PtrUInt(@PPropInfo(nil).Name) + SizeOf(Name[0])) + Length(Name)]);
@@ -3312,7 +3316,7 @@ begin
       rkInteger, rkEnumeration, rkSet, rkChar, rkWChar,
       rkClass {$ifdef FPC}, rkBool{$endif}:
         result := GetOrdProp(Instance);
-      rkInt64{$ifdef FPC}, rkQWord{$endif}:
+      rkInt64 {$ifdef FPC}, rkQWord{$endif}:
         result := GetInt64Prop(Instance);
     else
       result := 0;
@@ -3859,7 +3863,7 @@ begin
       PtrUInt(Entry^.ImplGetter and $00ffffff))^)
   else
     UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj))
-  {$endif};
+  {$endif FPC};
   result := Pointer(Obj) <> nil;
 end;
 
@@ -3933,7 +3937,8 @@ procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
   Count: integer);
 var
   fin: TRttiFinalizer;
-begin //  caller ensured ElemTypeInfo<>nil and Count>0
+begin
+  //  caller ensured ElemTypeInfo<>nil and Count>0
   case ElemTypeInfo^.Kind of
     rkRecord {$ifdef FPC} , rkObject {$endif}:
       // retrieve ElemTypeInfo.RecordManagedFields once
@@ -3947,8 +3952,8 @@ begin //  caller ensured ElemTypeInfo<>nil and Count>0
       // or at least from mormot.core.base
       VariantClearSeveral(pointer(Value), Count);
     else
-      // regular finalization
       begin
+        // regular finalization
         fin := RTTI_FINALIZE[ElemTypeInfo^.Kind];
         if Assigned(fin) then  // e.g. rkWString, rkArray, rkDynArray
           repeat
@@ -4142,7 +4147,7 @@ begin
     Finalize(V^);
     {$else}
     V^ := '';
-    {$endif}
+    {$endif FPC}
   result := SizeOf(V^);
 end;
 
@@ -4165,7 +4170,7 @@ begin
     Finalize(V^);
     {$else}
     V^ := nil;
-    {$endif}
+    {$endif FPC}
   result := SizeOf(V^);
 end;
 
@@ -5674,7 +5679,8 @@ begin
     if result = nil then
       exit;
     PEnd := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF];
-    repeat // efficient brute force search within L1 cache
+    repeat
+      // efficient brute force search within L1 cache
       if PPointer(result)^ <> Info then
       begin
         inc(PByte(result), 2 * SizeOf(pointer)); // PRttiInfo/TRttiCustom pairs
@@ -5943,7 +5949,7 @@ begin
     for i := 0 to (n shr 1) - 1 do
       if (DynArrayItem[i * 2].VType <> vtPointer) or
          (DynArrayItem[i * 2 + 1].VType <> vtClass) then
-        raise ERttiException.Create('Rtti.RegisterObjArrays[?]')
+        raise ERttiException.Create('Rtti.RegisterObjArrays([?])')
       else
         RegisterObjArray(DynArrayItem[i * 2].VPointer,
           DynArrayItem[i * 2 + 1].VClass);
