@@ -1939,10 +1939,10 @@ function TRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass;
   aID: TID): RawUTF8;
 var
-  aResponse: RawUTF8;
+  resp: RawUTF8;
 begin
-  if CallBackGet(aMethodName, aNameValueParameters, aResponse, aTable, aID) = HTTP_SUCCESS then
-    result := JSONDecode(aResponse)
+  if CallBackGet(aMethodName, aNameValueParameters, resp, aTable, aID) = HTTP_SUCCESS then
+    result := JSONDecode(resp)
   else
     result := '';
 end;
@@ -1967,8 +1967,7 @@ begin
   begin
     u := fModel.GetURICallBack(aMethodName, aTable, aID);
     log := fLogClass.Enter('Callback %', [u], self);
-    m := TrimLeftLowerCaseShort(
-      GetEnumName(TypeInfo(TSQLURIMethod), ord(method)));
+    m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSQLURIMethod), ord(method)));
     result := URI(u, m, @aResponse, aResponseHead, @aSentData).Lo;
     InternalLog('% result=% resplen=%',
       [m, result, length(aResponse)], sllServiceReturn);
@@ -1983,7 +1982,7 @@ end;
 function TRestClientURI.ServerTimestampSynchronize: boolean;
 var
   status: integer;
-  aResp: RawUTF8;
+  resp: RawUTF8;
 begin
   if self = nil then
   begin
@@ -1991,10 +1990,10 @@ begin
     exit;
   end;
   fServerTimestamp.Offset := 0.0001; // avoid endless recursive call
-  status := CallBackGet('Timestamp', [], aResp);
-  result := (status = HTTP_SUCCESS) and (aResp <> '');
+  status := CallBackGet('Timestamp', [], resp);
+  result := (status = HTTP_SUCCESS) and (resp <> '');
   if result then
-    SetServerTimestamp(GetInt64(pointer(aResp)))
+    SetServerTimestamp(GetInt64(pointer(resp)))
   else
   begin
     InternalLog('/Timestamp call failed -> Server not available', sllWarning);
