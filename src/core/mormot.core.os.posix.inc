@@ -259,8 +259,9 @@ function UnixMSTimeUTC: Int64;
 var
   r: timespec;
 begin
-  clock_gettime(CLOCK_REALTIME_FAST,@r); // likely = CLOCK_REALTIME_COARSE
-  result := (Int64(r.tv_sec) * THOUSAND) + (r.tv_nsec div MILLION); // in ms
+  clock_gettime(CLOCK_REALTIME_FAST, @r); // likely = CLOCK_REALTIME_COARSE
+  // convert from nanoseconds into milliseconds
+  result := PtrUInt(r.tv_nsec) div MILLION + (r.tv_sec * THOUSAND);
 end;
 
 function UnixTimeUTC: Int64;
@@ -276,7 +277,8 @@ var
   r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC, @r);
-  value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION; // as microseconds
+  // convert from nanoseconds into microseconds
+  value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION;
 end;
 
 procedure GetSystemTime(out result: TSystemTime);
@@ -294,7 +296,8 @@ var
   tp: timespec;
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
-  result := (Int64(tp.tv_sec) * THOUSAND) + (tp.tv_nsec div MILLION); // in ms
+  // convert from nanoseconds into milliseconds
+  result := PtrUInt(tp.tv_nsec) div MILLION + (tp.tv_sec * THOUSAND);
 end;
 
 {$endif DARWIN}
