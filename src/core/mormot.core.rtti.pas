@@ -24,8 +24,9 @@ unit mormot.core.rtti;
      Here fake record/objects are just wrappers around pointers defined in
     Delphi/FPC RTL's TypInfo.pas with the magic of inlining.
      We redefined all RTTI definitions as TRtti* types to avoid confusion
-    with TypInfo unit names.
-     TRttiCustom class is the main cached entry of our customizable RTTI.
+    with type names as published by the TypInfo unit.
+     TRttiCustom class is the main cached entry of our customizable RTTI,
+    accessible from the global Rtti.* methods.
 
     See mormot.core.rtti.fpc.inc and mormot.core.rtti.delphi.inc for
     compiler-specific code.
@@ -960,9 +961,92 @@ function GetRttiProps(RttiClass: TClass): PRttiProps;
 // such a loop is much faster than using the RTL's TypeInfo or RTTI units
 function GetRttiProp(C: TClass; out PropInfo: PRttiProp): integer;
 
+/// retrieve a Field property RTTI information from a Property Name
+function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PRttiProp;
+
+/// retrieve a Field property RTTI information from a Property Name
+// - this special version also search into parent properties (default is only current)
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+  aCaseSensitive: boolean = false): PRttiProp;
+
+/// retrieve an integer/Int64 Field propery value from a Property Name
+// - this version also search into parent properties
+// - returns TRUE and set PropValue if a matching property was found
+function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
+  out PropValue: Int64): boolean;
+
+/// retrieve a class Field property instance from a Property Name
+// - this version also search into parent properties
+// - returns TRUE and set PropInstance if a matching property was found
+function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
+  PropClassType: TClass; out PropInstance): boolean; overload;
+
+/// retrieve a Field property RTTI information from a Property Name
+// - this special version also search into parent properties (default is only current)
+function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
+  PropNameLen: integer; aCaseSensitive: boolean = false): PRttiProp;
+
+/// retrieve a Field property RTTI information searching for an exact Property class type
+// - this special version also search into parent properties
+function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: TClass): PRttiProp;
+
+/// retrieve a Field property RTTI information searching for an inherited Property class type
+// - this special version also search into parent properties
+function ClassFieldPropWithParentsInheritsFromClassType(aClassType,aSearchedClassType: TClass): PRttiProp;
+
+/// retrieve a Field property RTTI information searching for an exact Property offset address
+// - this special version also search into parent properties
+function ClassFieldPropWithParentsFromClassOffset(aClassType: TClass;
+  aSearchedOffset: pointer): PRttiProp;
+
+/// retrieve a class Field property instance from a Property class type
+// - this version also search into parent properties
+// - returns TRUE and set PropInstance if a matching property was found
+function ClassFieldInstance(Instance: TObject; PropClassType: TClass;
+  out PropInstance): boolean; overload;
+
+/// retrieve all class Field property instances from a Property class type
+// - this version also search into parent properties
+// - returns all matching property instances found
+function ClassFieldInstances(Instance: TObject; PropClassType: TClass): TObjectDynArray;
+
+/// retrieve a class instance property value matching a class type
+// - if aSearchedInstance is aSearchedClassType, will return aSearchedInstance
+// - if aSearchedInstance is not aSearchedClassType, it will try all nested
+// properties of aSearchedInstance for a matching aSearchedClassType: if no
+// exact match is found, will return aSearchedInstance
+function ClassFieldPropInstanceMatchingClass(aSearchedInstance: TObject;
+  aSearchedClassType: TClass): TObject;
+
 /// retrieve the total number of properties for a class, including its parents
-function ClassFieldCountWithParents(C: TClass;
+function ClassFieldCountWithParents(ClassType: TClass;
   onlyWithoutGetter: boolean = false): integer;
+
+/// returns TRUE if the class has some published fields, including its parents
+function ClassHasPublishedFields(ClassType: TClass): boolean;
+
+/// retrieve all class hierachy types which have some published properties
+function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
+
+/// retrieve the PRttiProp values of all published properties of a class
+// - you could select which property types should be included in the list
+function ClassFieldAllProps(ClassType: TClass;
+  Types: TRttiKinds = [low(TRttiKind)..high(TRttiKind)]): PRttiPropDynArray;
+
+/// retrieve the field names of all published properties of a class
+// - will optionally append the property type to the name, e.g 'Age: integer'
+// - you could select which property types should be included in the list
+function ClassFieldNamesAllProps(
+  ClassType: TClass; IncludePropType: boolean = false;
+  Types: TRttiKinds = [low(TRttiKind)..high(TRttiKind)]): TRawUTF8DynArray;
+
+/// retrieve the field names of all published properties of a class
+// - will optionally append the property type to the name, e.g 'Age: integer'
+// - you could select which property types should be included in the list
+function ClassFieldNamesAllPropsAsText(
+  ClassType: TClass; IncludePropType: boolean = false;
+  Types: TRttiKinds = [low(TRttiKind)..high(TRttiKind)]): RawUTF8;
+
 
 type
   /// information about one method, as returned by GetPublishedMethods
@@ -3489,7 +3573,300 @@ begin
   result := PRttiInfo(PPointer(PAnsiChar(RttiClass) + vmtTypeInfo)^)^.RttiClass;
 end;
 
-function ClassFieldCountWithParents(C: TClass; onlyWithoutGetter: boolean): integer;
+function ClassHasPublishedFields(ClassType: TClass): boolean;
+var
+  cp: PRttiProps;
+  p: PRttiProp;
+begin
+  result := true;
+  while ClassType <> nil do
+  begin
+    cp := GetRttiProps(ClassType);
+    if cp = nil then
+      break; // no RTTI information (e.g. reached TObject level)
+    if cp^.PropCount > 0 then
+      exit;
+    ClassType := GetClassParent(ClassType);
+  end;
+  result := false;
+end;
+
+function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
+
+  procedure InternalAdd(C: TClass; var list: TClassDynArray);
+  var
+    P: PRttiProps;
+  begin
+    if C = nil then
+      exit;
+    InternalAdd(GetClassParent(C), list);
+    P := GetRttiProps(C);
+    if (P <> nil) and (P^.PropCount > 0) then
+      PtrArrayAdd(list, pointer(C));
+  end;
+
+begin
+  result := nil;
+  InternalAdd(ClassType, result);
+end;
+
+function ClassFieldAllProps(ClassType: TClass; Types: TRttiKinds): PRttiPropDynArray;
+var
+  CP: PRttiProps;
+  P: PRttiProp;
+  i, n: integer;
+begin
+  n := 0;
+  result := nil;
+  while ClassType <> nil do
+  begin
+    CP := GetRttiProps(ClassType);
+    if CP = nil then
+      break; // no RTTI information (e.g. reached TObject level)
+    if CP^.PropCount > 0 then
+    begin
+      SetLength(result, n + CP^.PropCount);
+      P := CP^.PropList;
+      for i := 1 to CP^.PropCount do
+      begin
+        if P^.TypeInfo^.Kind in Types then
+        begin
+          result[n] := P;
+          inc(n);
+        end;
+        P := P^.Next
+      end;
+    end;
+    ClassType := GetClassParent(ClassType);
+  end;
+  SetLength(result,n);
+end;
+
+function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean;
+  Types: TRttiKinds): TRawUTF8DynArray;
+var
+  props: PRttiPropDynArray;
+  n, i: PtrInt;
+begin
+  result := nil;
+  props := ClassFieldAllProps(ClassType, Types);
+  n := length(props);
+  SetLength(result,n);
+  for i := 0 to n - 1 do
+    if IncludePropType then
+      FormatUTF8('%: %', [props[i]^.Name^, props[i]^.TypeInfo^.Name], result[i])
+    else
+      ShortStringToAnsi7String(props[i]^.Name^, result[i]);
+end;
+
+function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean;
+  Types: TRttiKinds): RawUTF8;
+begin
+  result := RawUTF8ArrayToCSV(
+    ClassFieldNamesAllProps(ClassType, IncludePropType, Types), ', ');
+end;
+
+function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PRttiProp;
+begin
+  if ClassType <> nil then
+    result := GetRttiProps(ClassType)^.FieldProp(PropName)
+  else
+    result := nil;
+end;
+
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+  aCaseSensitive: boolean): PRttiProp;
+var
+  n, i: integer;
+begin
+  while aClassType <> nil do
+  begin
+    n := GetRttiProp(aClassType, result);
+    if n <> 0 then
+      if aCaseSensitive then
+        for i := 1 to n do
+          if result^.Name^ = aPropName then
+            exit
+          else
+            result := result^.Next
+      else
+        for i := 1 to n do
+          if IdemPropName(result^.Name^, @aPropName[1], ord(aPropName[0])) then
+            exit
+          else
+            result := result^.Next;
+    aClassType := GetClassParent(aClassType);
+  end;
+  result := nil;
+end;
+
+function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
+  PropNameLen: integer; aCaseSensitive: boolean): PRttiProp;
+var
+  n, i: integer;
+begin
+  if PropNameLen <> 0 then
+    while aClassType <> nil do
+    begin
+      n := GetRttiProp(aClassType, result);
+      if n <> 0 then
+        if aCaseSensitive then
+          for i := 1 to n do
+            if (result^.Name^[0] = AnsiChar(PropNameLen)) and
+               CompareMemFixed(@result^.Name^[1], PropName, PropNameLen) then
+              exit
+            else
+              result := result^.Next
+        else
+          for i := 1 to n do
+            if IdemPropName(result^.Name^, PropName, PropNameLen) then
+              exit
+            else
+              result := result^.Next;
+      aClassType := GetClassParent(aClassType);
+    end;
+  result := nil;
+end;
+
+function ClassFieldPropWithParentsFromClassType(aClassType,
+  aSearchedClassType: TClass): PRttiProp;
+var
+  i: integer;
+begin
+  if aSearchedClassType <> nil then
+    while aClassType <> nil do
+    begin
+      for i := 1 to GetRttiProp(aClassType, result) do
+        with result^.TypeInfo^ do
+          if (Kind = rkClass) and
+             (RttiClass^.RttiClass = aSearchedClassType) then
+            exit
+          else
+            result := result^.Next;
+      aClassType := GetClassParent(aClassType);
+    end;
+  result := nil;
+end;
+
+function ClassFieldPropWithParentsInheritsFromClassType(aClassType,
+  aSearchedClassType: TClass): PRttiProp;
+var
+  i: integer;
+begin
+  if aSearchedClassType <> nil then
+    while aClassType <> nil do
+    begin
+      for i := 1 to GetRttiProp(aClassType, result) do
+        with result^.TypeInfo^ do
+          if (Kind = rkClass) and (InheritsFrom(aSearchedClassType)) then
+            exit
+          else
+            result := result^.Next;
+      aClassType := GetClassParent(aClassType);
+    end;
+  result := nil;
+end;
+
+function ClassFieldPropWithParentsFromClassOffset(aClassType: TClass;
+  aSearchedOffset: pointer): PRttiProp;
+var
+  i: integer;
+begin
+  if aSearchedOffset <> nil then
+    while aClassType <> nil do begin
+      for i := 1 to GetRttiProp(aClassType, result) do
+        if result^.GetFieldAddr(nil) = aSearchedOffset then
+          exit
+        else
+          result := result^.Next;
+      aClassType := GetClassParent(aClassType);
+    end;
+  result := nil;
+end;
+
+function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
+  PropClassType: TClass; out PropInstance): boolean;
+var
+  P: PRttiProp;
+begin
+  result := false;
+  if Instance = nil then
+    exit;
+  P := ClassFieldPropWithParents(PPointer(Instance)^, PropName);
+  if P = nil then
+    exit;
+  with P^.TypeInfo^ do
+    if (Kind <> rkClass) or not InheritsFrom(PropClassType) then
+      exit;
+  TObject(PropInstance) := P^.GetObjProp(Instance);
+  result := true;
+end;
+
+function ClassFieldInstance(Instance: TObject; PropClassType: TClass;
+  out PropInstance): boolean;
+var
+  P: PRttiProp;
+begin
+  result := false;
+  if (Instance = nil) or (PropClassType = nil) then
+    exit;
+  P := ClassFieldPropWithParentsFromClassType(PPointer(Instance)^, PropClassType);
+  if P = nil then
+    exit;
+  TObject(PropInstance) := P^.GetObjProp(Instance);
+  result := true;
+end;
+
+function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
+  out PropValue: Int64): boolean;
+var
+  P: PRttiProp;
+begin
+  result := false;
+  if Instance = nil then
+    exit;
+  P := ClassFieldPropWithParents(PPointer(Instance)^, PropName);
+  if P = nil then
+    exit;
+  PropValue := P^.GetInt64Value(Instance);
+  result := true;
+end;
+
+function ClassFieldInstances(Instance: TObject; PropClassType: TClass): TObjectDynArray;
+var
+  nested: PRttiPropDynArray;
+  i: PtrInt;
+begin
+  result := nil;
+  if (Instance = nil) or (PropClassType = nil) then
+    exit;
+  nested := ClassFieldAllProps(PPointer(Instance)^, [rkClass]);
+  for i := 0 to high(nested) do
+    with nested[i]^ do
+      if TypeInfo^.InheritsFrom(PropClassType) then
+        ObjArrayAdd(result, GetObjProp(Instance));
+end;
+
+function ClassFieldPropInstanceMatchingClass(
+  aSearchedInstance: TObject; aSearchedClassType: TClass): TObject;
+var
+  P: PRttiProp;
+begin
+  result := aSearchedInstance;
+  if (aSearchedInstance = nil) or
+     aSearchedInstance.InheritsFrom(aSearchedClassType) then
+    exit;
+  P := ClassFieldPropWithParentsFromClassType(
+    PPointer(aSearchedInstance)^, aSearchedClassType);
+  if P <> nil then
+  begin
+    result := P^.GetObjProp(aSearchedInstance);
+    if result = nil then
+      result := aSearchedInstance;
+  end;
+end;
+
+function ClassFieldCountWithParents(ClassType: TClass; onlyWithoutGetter: boolean): integer;
 var
   cp: PRttiProps;
   p: PRttiProp;
@@ -3499,9 +3876,9 @@ begin
   if onlyWithoutGetter then
   begin
     // we need to browse all inherited properties RTTI
-    while C <> nil do
+    while ClassType <> nil do
     begin
-      cp := GetRttiProps(C);
+      cp := GetRttiProps(ClassType);
       if cp = nil then
         break; // no RTTI information (e.g. reached TObject level)
       p := cp^.PropList;
@@ -3511,16 +3888,16 @@ begin
           inc(result);
         p := p^.Next;
       end;
-      C := GetClassParent(C);
+      ClassType := GetClassParent(ClassType);
     end;
   end
   else
   begin
     // we can use directly the root RTTI information
-    while C <> nil do
+    while ClassType <> nil do
     begin
-      inc(result, GetRttiClass(C)^.PropCount);
-      C := GetClassParent(C);
+      inc(result, GetRttiClass(ClassType)^.PropCount);
+      ClassType := GetClassParent(ClassType);
     end;
   end;
 end;
