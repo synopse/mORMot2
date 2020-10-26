@@ -3856,7 +3856,7 @@ end;
 
 function TInterfaceFactory.FindMethod(const aMethodName: RawUTF8): PInterfaceMethod;
 var
-  i: integer;
+  i: PtrInt;
 begin
   i := FindMethodIndex(aMethodName);
   if i < 0 then
@@ -3897,9 +3897,10 @@ procedure TInterfaceFactory.CheckMethodIndexes(
   const aMethodName: array of RawUTF8; aSetAllIfNone: boolean;
   out aBits: TInterfaceFactoryMethodBits);
 var
-  i: integer;
+  i: PtrInt;
 begin
-  if aSetAllIfNone and (high(aMethodName) < 0) then
+  if aSetAllIfNone and
+     (high(aMethodName) < 0) then
   begin
     FillCharFast(aBits, SizeOf(aBits), 255);
     exit;
@@ -4395,7 +4396,8 @@ begin
     begin
       C := E.ClassType;
       if C.InheritsFrom(EInterfaceFactory) or
-         (C = EAccessViolation) or (C = EInvalidPointer) then
+         (C = EAccessViolation) or
+         (C = EInvalidPointer) then
         raise; // propagate only dangerous exceptions
     end;
   end;
@@ -5384,7 +5386,8 @@ function TInterfaceStub.InternalCheck(aValid, aExpectationFailed: boolean;
   const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean;
 begin
   result := aValid;
-  if aExpectationFailed and not aValid then
+  if aExpectationFailed and
+     not aValid then
     raise EInterfaceStub.CreateUTF8('%.InternalCheck(%) failed: %', [self,
       fInterface.fInterfaceName, FormatUTF8(aErrorMsgFmt, aErrorMsgArgs)]);
 end;

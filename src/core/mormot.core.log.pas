@@ -1619,7 +1619,8 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
       result := false;
       if (P + 10 < PEnd) and
          (PInteger(P)^ = ord('0') + ord('0') shl 8 +
-           ord('0') shl 16 + ord('1') shl 24) and (P[4] = ':') then
+           ord('0') shl 16 + ord('1') shl 24) and
+         (P[4] = ':') then
       begin
         if not HexDisplayToBin(PAnsiChar(P) + 5, @Ptr, sizeof(Ptr)) then
           exit;
@@ -2465,8 +2466,10 @@ begin
   fLevel := aLevel;
   {$ifndef NOEXCEPTIONINTERCEPT}
   // intercept exceptions, if necessary
-  fHandleExceptions := (sllExceptionOS in aLevel) or (sllException in aLevel);
-  if fHandleExceptions and (GlobalCurrentHandleExceptionSynLog = nil) then
+  fHandleExceptions := (sllExceptionOS in aLevel) or
+                       (sllException in aLevel);
+  if fHandleExceptions and
+     (GlobalCurrentHandleExceptionSynLog = nil) then
   begin
     SynLog; // force GlobalCurrentHandleExceptionSynLog assignment
     RawExceptionIntercept(SynLogException);
@@ -2642,7 +2645,8 @@ begin
       result := CreateSynLog;
     {$ifndef NOEXCEPTIONINTERCEPT}
     // we should check this now, so that any exception is handled in this log
-    if fHandleExceptions and (GlobalCurrentHandleExceptionSynLog <> result) then
+    if fHandleExceptions and
+       (GlobalCurrentHandleExceptionSynLog <> result) then
       GlobalCurrentHandleExceptionSynLog := result;
     {$endif NOEXCEPTIONINTERCEPT}
   end
@@ -3848,7 +3852,8 @@ begin
     LogFileHeader
   else if not (logInitDone in fInternalFlags) then
     LogFileInit;
-  if not (sllEnter in fFamily.Level) and (Level in fFamily.fLevelStackTrace) then
+  if not (sllEnter in fFamily.Level) and
+     (Level in fFamily.fLevelStackTrace) then
     for i := 0 to fThreadContext^.RecursionCount - 1 do
     begin
       fWriter.AddChars(' ', i + 24 - byte(fFamily.HighResolutionTimestamp));
@@ -4037,7 +4042,8 @@ begin
      (fFileRotationNextHour = 0) then
     fFileName := fFileName + ' ' + Ansi7ToString(NowToString(false));
   {$ifdef MSWINDOWS}
-  if IsLibrary and (fFamily.fCustomFileName = '') then
+  if IsLibrary and
+     (fFamily.fCustomFileName = '') then
     fFileName := fFileName + ' ' + ExtractFileName(GetModuleName(HInstance));
   {$endif}
   if fFamily.fPerThreadLog = ptOneFilePerThread then
@@ -4070,7 +4076,8 @@ begin
         for i := 1 to 10 do
         try
           exists := FileExists(fFileName);
-          if exists and (fFamily.FileExistsAction <> acOverwrite) then
+          if exists and
+             (fFamily.FileExistsAction <> acOverwrite) then
           begin
             if fFamily.FileExistsAction = acAppend then
               Include(fInternalFlags, logHeaderWritten);
@@ -4396,7 +4403,8 @@ var
 label
   adr, fin;
 begin
-  if ExceptionIgnorePerThread or (Ctxt.EClass = ESynLogSilent) then
+  if ExceptionIgnorePerThread or
+     (Ctxt.EClass = ESynLogSilent) then
     exit;
   {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
   {$ifndef ISDELPHIXE6}
@@ -4474,7 +4482,8 @@ adr:with log.fWriter do
       begin
         AddString(info^.Addr);
         for i := 0 to Ctxt.EStackCount - 1 do
-          if (i = 0) or (Ctxt.EStack[i] <> Ctxt.EStack[i - 1]) then
+          if (i = 0) or
+             (Ctxt.EStack[i] <> Ctxt.EStack[i - 1]) then
             AddShort(BackTraceStrFunc(pointer(Ctxt.EStack[i])));
       end;
     {$else}
@@ -5405,7 +5414,8 @@ begin
     sllLeave:
       if (LineEnd - LineBeg > 10) and
          (LineEnd[-4] = '.') and
-         (LineEnd[-8] = '.') and (fLogProcStackCount[thread] > 0) then
+         (LineEnd[-8] = '.') and
+         (fLogProcStackCount[thread] > 0) then
       begin // 00.020.006
         MS := DecodeMicroSec(PByte(LineEnd - 10));
         if MS >= 0 then

@@ -372,7 +372,8 @@ begin
       else
         inc(P);
       TableName := GetJSONField(P, P, @wasString);
-      if not wasString or (P = nil) then
+      if not wasString or
+         (P = nil) then
         exit;
       t := Model.GetTableIndexPtr(TableName);
       if t < 0 then

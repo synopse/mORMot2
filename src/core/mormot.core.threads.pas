@@ -1023,7 +1023,9 @@ end;
 
 procedure TSynBackgroundThreadAbstract.SetExecuteLoopPause(dopause: boolean);
 begin
-  if Terminated or (dopause = fExecuteLoopPause) or (fExecute = exFinished) then
+  if Terminated or
+     (dopause = fExecuteLoopPause) or
+     (fExecute = exFinished) then
     exit;
   fExecuteLoopPause := dopause;
   fProcessEvent.SetEvent; // notify Execute main loop
@@ -1242,7 +1244,9 @@ end;
 
 function TSynBackgroundThreadMethodAbstract.GetOnIdleBackgroundThreadActive: boolean;
 begin
-  result := (self <> nil) and Assigned(fOnIdle) and (GetPendingProcess <> flagIdle);
+  result := (self <> nil) and
+            Assigned(fOnIdle) and
+            (GetPendingProcess <> flagIdle);
 end;
 
 
@@ -1334,7 +1338,8 @@ var
   wait: TWaitResult;
 begin
   wait := fProcessEvent.WaitFor(fOnProcessMS);
-  if not Terminated and (wait in [wrSignaled, wrTimeout]) then
+  if not Terminated and
+     (wait in [wrSignaled, wrTimeout]) then
     if fExecuteLoopPause then // pause -> try again later
       fProcessEvent.SetEvent
     else
@@ -1489,7 +1494,8 @@ begin
   timeout := mormot.core.os.GetTickCount64 + timeoutsecs * 1000;
   repeat
     SleepHiRes(1);
-  until not Processing or (mormot.core.os.GetTickcount64 > timeout);
+  until not Processing or
+        (mormot.core.os.GetTickcount64 > timeout);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
@@ -2130,7 +2136,8 @@ begin
         result := true; // thread pool acquired or queued the client sock
         break;
       end;
-    until fTerminated or (tix > endtix);
+    until fTerminated or
+          (tix > endtix);
     inc(fContentionTime, tix - starttix);
   end;
   if not result then
@@ -2288,7 +2295,8 @@ begin
   end;
 {$endif LINUX}
 {$endif FPC}
-  if Assigned(fOwner.fOnThreadStart) and not Assigned(Sender.fStartNotified) then
+  if Assigned(fOwner.fOnThreadStart) and
+     not Assigned(Sender.fStartNotified) then
   begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;

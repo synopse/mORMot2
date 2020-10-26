@@ -677,7 +677,8 @@ var
   v: PVarData;
 begin
   dec(Param);
-  if fShouldLogSQL and (cardinal(Param) < cardinal(length(fLogSQLValues))) then
+  if fShouldLogSQL and
+     (cardinal(Param) < cardinal(length(fLogSQLValues))) then
   begin
     v := @fLogSQLValues[Param];
     if v^.vtype = varString then

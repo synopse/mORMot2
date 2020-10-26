@@ -2278,7 +2278,7 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data (no conversion into TEXT, as with
-    // TORMTableDB) - so will work for oftBlob, oftBlobDynArray and oftBlobRecord
+    // TORMTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
       Expand: boolean = false): PtrInt; overload;
@@ -4165,7 +4165,8 @@ begin
      (fLog = nil) or
      not (sllSQL in fLog.Family.Level) then
     exit;
-  if not IdemPChar(pointer(aSQL), 'PRAGMA ') or (PosEx('=', aSQL) > 0) then
+  if not IdemPChar(pointer(aSQL), 'PRAGMA ') or
+     (PosEx('=', aSQL) > 0) then
     result := true;
 end;
 
@@ -4443,7 +4444,8 @@ end;
 
 function TSQLDataBase.GetUseCache: boolean;
 begin
-  result := (self <> nil) and (fCache <> nil);
+  result := (self <> nil) and
+            (fCache <> nil);
 end;
 
 procedure TSQLDataBase.SetUseCache(const Value: boolean);
@@ -4458,7 +4460,8 @@ end;
 
 function IsCacheable(const aSQL: RawUTF8): boolean;
 begin
-  result := isSelect(pointer(aSQL)) and (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
+  result := isSelect(pointer(aSQL)) and
+            (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
 end;
 
 procedure TSQLDataBase.Lock(const aSQL: RawUTF8);
@@ -4582,7 +4585,8 @@ end;
 
 function TSQLDataBase.GetBackupBackgroundInProcess: boolean;
 begin
-  result := (self <> nil) and (fBackupBackgroundInProcess <> nil);
+  result := (self <> nil) and
+            (fBackupBackgroundInProcess <> nil);
 end;
 
 function TSQLDataBase.GetSQLite3Library: TSQLite3Library;
@@ -4744,7 +4748,8 @@ begin
   utf8 := StringToUTF8(fFileName);
   {$ifdef LINUX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
-  if assigned(sqlite3.open_v2) and (fPassword = '') then
+  if assigned(sqlite3.open_v2) and
+     (fPassword = '') then
   begin
     result := sqlite3.open_v2(pointer(utf8), fDB, fOpenV2Flags, 'unix-excl');
     if result <> SQLITE_OK then // may be 'unix-excl' is not supported by the library
@@ -4767,7 +4772,9 @@ begin
     exit;
   end;
   // initialize optional encryption (if supported by the compiled engine)
-  if Assigned(sqlite3.key) and (fPassword <> '') and (fFileName <> '') and
+  if Assigned(sqlite3.key) and
+     (fPassword <> '') and
+     (fFileName <> '') and
      (fFileName <> SQLITE_MEMORY_DATABASE_NAME) then
     sqlite3.key(fDB, pointer(fPassword), length(fPassword));
   // tune up execution context (before accessing the database)
@@ -5182,7 +5189,8 @@ begin // avoid sqlite3_check() calls for no ESQLite3Exception
      (aSQL <> '') then
   try
     if not (Prepare(aDB, aSQL, {noexcept=}true) in SQLITE_ERRORS) and
-       (Request <> 0) and not (sqlite3.step(Request) in SQLITE_ERRORS) then
+       (Request <> 0) and
+       not (sqlite3.step(Request) in SQLITE_ERRORS) then
       result := true;
   finally
     Close; // always release statement, even if done normally in Execute
@@ -6020,8 +6028,11 @@ begin
     result := (FileRead(F, Header, sizeof(Header)) = SizeOf(Header)) and
               (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
               // don't check header 8..15 (may equal encrypted bytes 16..23)
-              (Header.b[21] = 64) and (Header.b[22] = 32) and (Header.b[23] = 32);
-    if result and (PageSize <> nil) then
+              (Header.b[21] = 64) and
+              (Header.b[22] = 32) and
+              (Header.b[23] = 32);
+    if result and
+       (PageSize <> nil) then
       // header bytes 16..23 are always stored unencrypted
       PageSize^ := Integer(Header.b[16]) shl 8 + Header.b[17];
     FileClose(F);

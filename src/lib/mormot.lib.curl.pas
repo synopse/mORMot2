@@ -616,7 +616,10 @@ const
 {$endif LIBCURLSTATIC}
 
 begin
-  if curl_initialized {$ifndef LIBCURLSTATIC} and (curl <> nil) {$endif} then
+  if curl_initialized
+     {$ifndef LIBCURLSTATIC}
+     and (curl <> nil)
+     {$endif LIBCURLSTATIC} then
     exit; // set it once, but allow to retry a given dllname
 
   GlobalLock;

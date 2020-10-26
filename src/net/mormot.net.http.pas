@@ -316,7 +316,8 @@ begin
       if i in Accepted then
         with Handled[i] do
           if (CompressMinSize = 0) or // 0 here means "always" (e.g. for encryption)
-             (compressible and (OutContentLen >= CompressMinSize)) then
+             (compressible and
+              (OutContentLen >= CompressMinSize)) then
           begin
             // compression of the OutContent + update header
             result := Func(OutContent, true);

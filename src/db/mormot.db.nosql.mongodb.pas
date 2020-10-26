@@ -2016,7 +2016,8 @@ begin
     W.AddShort('null');
     exit;
   end;
-  if WithHeader and (Mode = modMongoShell) then
+  if WithHeader and
+     (Mode = modMongoShell) then
     W.Add('{ReplyHeader:{ResponseFlags:%,RequestID:%,ResponseTo:%,CursorID:%,' +
       'StartingFrom:%,NumberReturned:%,ReplyDocuments:[', [byte(ResponseFlags),
       requestID, responseTo, CursorID, StartingFrom, DocumentCount]);
@@ -2122,7 +2123,8 @@ end;
 
 function TMongoConnection.GetOpened: boolean;
 begin
-  result := (self <> nil) and (fSocket <> nil);
+  result := (self <> nil) and
+            (fSocket <> nil);
 end;
 
 procedure TMongoConnection.Close;
@@ -2249,7 +2251,8 @@ begin
           finally
             getMore.Free;
           end;
-        until ((Query.NumberToReturn > 0) and (count <= 0)) or
+        until ((Query.NumberToReturn > 0) and
+               (count <= 0)) or
               (cursorID = 0);
     if cursorID <> 0 then // if cursor not exhausted: need to kill it
       SendAndFree(TMongoRequestKillCursor.Create(
@@ -2302,7 +2305,8 @@ function TMongoConnection.Send(Request: TMongoRequest): boolean;
 var
   doc: TBSONDocument;
 begin
-  if not Opened and not Client.ReOpen then
+  if not Opened and
+     not Client.ReOpen then
     raise EMongoRequestException.Create('Send: Missing Open', self, Request);
   if Request = nil then
     raise EMongoRequestException.Create('Send(nil)', self);
@@ -2472,7 +2476,8 @@ end;
 
 function TMongoConnection.GetLocked: boolean;
 begin
-  result := (self <> nil) and (fLocked > 0);
+  result := (self <> nil) and
+            (fLocked > 0);
 end;
 
 
@@ -2774,7 +2779,8 @@ begin
       digest := PasswordDigest(UserName, PassWord);
       Auth(DatabaseName, UserName, digest, ForceMongoDBCR);
       with fGracefulReconnect do
-        if Enabled and (EncryptedDigest = '') then
+        if Enabled and
+           (EncryptedDigest = '') then
         begin
           ForcedDBCR := ForceMongoDBCR;
           User := UserName;
@@ -2823,7 +2829,8 @@ begin // caller should have made fConnections[0].Open
      (Digest = '') then
     raise EMongoException.CreateUTF8('Invalid %.Auth("%") call',
       [self, DatabaseName]);
-  if ForceMongoDBCR or (ServerBuildInfoNumber < 3000000) then
+  if ForceMongoDBCR or
+     (ServerBuildInfoNumber < 3000000) then
   begin
     // MONGODB-CR
     // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver

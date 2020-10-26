@@ -2613,7 +2613,9 @@ function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 var
   found: integer;
 begin
-  if (S = '') or (OldPattern = '') or (OldPattern = NewPattern) then
+  if (S = '') or
+     (OldPattern = '') or
+     (OldPattern = NewPattern) then
     result := S
   else
   begin
@@ -2632,7 +2634,8 @@ var
 begin
   result := S;
   n := high(OldNewPatternPairs);
-  if (n > 0) and (n and 1 = 1) then
+  if (n > 0) and
+     (n and 1 = 1) then
     for i := 0 to n shr 1 do
       result := StringReplaceAll(result,
         OldNewPatternPairs[i * 2], OldNewPatternPairs[i * 2 + 1]);
@@ -2642,7 +2645,8 @@ function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): 
 var
   i, j, n: PtrInt;
 begin
-  if (OldChar <> NewChar) and (Source <> '') then
+  if (OldChar <> NewChar) and
+     (Source <> '') then
   begin
     n := length(Source);
     for i := 0 to n - 1 do
@@ -2717,7 +2721,8 @@ begin
   tmp := nil;
   L := length(S);
   P := pointer(S);
-  if (P <> nil) and (P = pointer(result)) then
+  if (P <> nil) and
+     (P = pointer(result)) then
   begin
     RawUTF8(tmp) := S; // make private ref-counted copy for QuotedStr(U,'"',U)
     P := pointer(tmp);
@@ -2970,7 +2975,8 @@ var
 label
   _0;
 begin
-  if (P = nil) or (UpperName = nil) then
+  if (P = nil) or
+     (UpperName = nil) then
     goto _0;
   {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
   repeat
@@ -3001,7 +3007,8 @@ begin
       if c = #13 then // most common case is text ending with #13#10
         repeat
           c := P^;
-          if (c <> #10) and (c <> #13) then
+          if (c <> #10) and
+             (c <> #13) then
             break;
           inc(P);
         until false
@@ -3071,7 +3078,9 @@ begin
       if PtrUInt(result) < PtrUInt(PEnd) then
       begin
         c := PByte(result)^;
-        if (c > 13) or ((c <> 10) and (c <> 13)) then
+        if (c > 13) or
+           ((c <> 10) and
+            (c <> 13)) then
           continue;
       end;
       break;
@@ -3081,7 +3090,8 @@ begin
     repeat // inlined BufferLineLength() ending at #0 for PEnd=nil
       inc(result);
       c := PByte(result)^;
-      if (c > 13) or ((c <> 0) and (c <> 10) and (c <> 13)) then
+      if (c > 13) or
+         ((c <> 0) and (c <> 10) and (c <> 13)) then
         continue;
       break;
     until false;
@@ -3330,7 +3340,8 @@ begin
         until not (P^ in ['A'..'Z']);
       if P^ = #0 then
         break; // no lowercase conversion of last fully uppercased word
-      if (CapitalCount > 1) and not Number then
+      if (CapitalCount > 1) and
+         not Number then
       begin
         dec(P);
         dec(D);
@@ -3506,7 +3517,8 @@ procedure GetNextItemTrimed(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8
 var
   S, E: PUTF8Char;
 begin
-  if (P = nil) or (Sep <= ' ') then
+  if (P = nil) or
+     (Sep <= ' ') then
     result := ''
   else
   begin
@@ -3577,7 +3589,9 @@ begin
   result := -1;
   P := pointer(CSVExt);
   Ext := ExtractFileExt(FileName);
-  if (P = nil) or (Ext = '') or (Ext[1] <> '.') then
+  if (P = nil) or
+     (Ext = '') or
+     (Ext[1] <> '.') then
     exit;
   delete(Ext, 1, 1);
   repeat
@@ -3641,7 +3655,8 @@ begin
     len := S - P;
     repeat
       dec(len);
-    until (len < 0) or not (P[len] in [#1..' ']); // trim right spaces
+    until (len < 0) or
+          not (P[len] in [#1..' ']); // trim right spaces
     if len >= 255 then
       len := 255
     else
@@ -3803,7 +3818,8 @@ begin
     bit := GetNextItemCardinalStrict(P) - 1; // '0' marks end of list
     if bit >= cardinal(BitsCount) then
       break; // avoid GPF
-    if (P = nil) or (P^ = ',') then
+    if (P = nil) or
+       (P^ = ',') then
       SetBitPtr(@Bits, bit)
     else if P^ = '-' then
     begin
@@ -3930,7 +3946,8 @@ begin
   else
     repeat // store up to Sep or end of string
       c := S[result];
-      if (c = #0) or (c = Sep) then
+      if (c = #0) or
+         (c = Sep) then
         break;
       Buf[result] := c;
       inc(result);
@@ -4170,8 +4187,11 @@ var
 begin
   result := OldValue = NewValue;
   i := length(OldValue);
-  if result or (length(Sep) <> 1) or (length(CSV) < i) or
-     (PosEx(Sep, OldValue) > 0) or (PosEx(Sep, NewValue) > 0) then
+  if result or
+     (length(Sep) <> 1) or
+     (length(CSV) < i) or
+     (PosEx(Sep, OldValue) > 0) or
+     (PosEx(Sep, NewValue) > 0) then
     exit;
   if CompareMem(pointer(OldValue), pointer(CSV), i) and // first (or unique) item
     ((CSV[i + 1] = Sep[1]) or (CSV[i + 1] = #0)) then
@@ -4185,7 +4205,8 @@ begin
       if i = 0 then
         exit;
       j := i + length(pattern);
-    until (CSV[j] = Sep[1]) or (CSV[j] = #0);
+    until (CSV[j] = Sep[1]) or
+          (CSV[j] = #0);
     inc(i);
   end;
   delete(CSV, i, length(OldValue));
@@ -5167,7 +5188,8 @@ begin
           repeat
             inc(P);
             dec(Len);
-          until (Len = 0) or (P^ >= #127);
+          until (Len = 0) or
+                (P^ >= #127);
         if P <> B then
           AddNoJSONEscape(B, P - B);
         if Len > 0 then
@@ -5863,7 +5885,8 @@ begin
   esc := @HTML_ESC[Fmt];
   repeat
     B := Text;
-    while (PtrUInt(Text) < PtrUInt(TextLen)) and not (Text^ in esc^) do
+    while (PtrUInt(Text) < PtrUInt(TextLen)) and
+          not (Text^ in esc^) do
       inc(Text);
     AddNoJSONEscape(B, Text - B);
     if PtrUInt(Text) = PtrUInt(TextLen) then

@@ -2150,7 +2150,8 @@ end;
 function _FreeMemSize(P: pointer; size: PtrUInt): PtrInt;
 begin
   // should return the chunk size - only used by heaptrc AFAIK
-  if (P <> nil) and (size <> 0) then
+  if (P <> nil) and
+     (size <> 0) then
     result := _FreeMem(P)
   else
     result := 0;
@@ -2410,7 +2411,8 @@ begin
         {$ifdef FPCMM_LOCKLESSFREE} {$ifdef FPCMM_DEBUG} ,
         '  locklessspin=', K(SmallFreememLockLessSpin) {$endif} {$endif} );
   end;
-  if (smallblockcontentioncount > 0) and (smallcount <> 0) then
+  if (smallblockcontentioncount > 0) and
+     (smallcount <> 0) then
   begin
     n := SetSmallBlockContention(res, smallblockcontentioncount);
     for i := 0 to n - 1 do
@@ -2421,7 +2423,8 @@ begin
         else
           write('  freemem(', FreememBlockSize);
         write(')=' , K(SleepCount));
-        if (i and 3 = 3) or (i = n - 1) then
+        if (i and 3 = 3) or
+           (i = n - 1) then
           writeln;
       end;
   end;
@@ -2434,7 +2437,8 @@ begin
       with TSmallBlockStatus(res[i]) do
       begin
         write('  ', BlockSize, '=', K(Total));
-        if (i and 7 = 7) or (i = n) then
+        if (i and 7 = 7) or
+           (i = n) then
           writeln;
       end;
     n := SortSmallBlockStatus(res, smallblockstatuscount, ord(obCurrent), @t, @b) - 1;
@@ -2443,7 +2447,8 @@ begin
       with TSmallBlockStatus(res[i]) do
       begin
         write('  ', BlockSize, '=', K(Current));
-        if (i and 7 = 7) or (i = n) then
+        if (i and 7 = 7) or
+           (i = n) then
           writeln;
       end;
   end;
@@ -2526,7 +2531,8 @@ begin
   for a := 0 to NumTinyBlockArenas do
     for i := 0 to NumSmallBlockTypes - 1 do
     begin
-      if (i = NumTinyBlockTypes) and (a > 0) then
+      if (i = NumTinyBlockTypes) and
+         (a > 0) then
         break;
       size := SmallBlockSizes[i];
       assert(size and 15 = 0);
@@ -2627,16 +2633,18 @@ var
   function SeemsRealPointer(p: pointer): boolean;
   begin
     result := (PtrUInt(p) > 65535)
-      {$ifndef MSWINDOWS}
+      {$ifndef MSWINDOWS} and
       // let the GPF happen silently in the kernel
-      and (fpaccess(p, F_OK) <> 0) and (fpgeterrno <> ESysEFAULT)
-      {$endif MSWINDOWS}
+      (fpaccess(p, F_OK) <> 0) and
+      (fpgeterrno <> ESysEFAULT)
+      {$endif MSWINDOWS};
   end;
   {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 
 begin
   with MediumBlockInfo do
-  if (SequentialFeedBytesLeft = 0) or (PtrUInt(LastSequentiallyFed) < PtrUInt(p)) or
+  if (SequentialFeedBytesLeft = 0) or
+     (PtrUInt(LastSequentiallyFed) < PtrUInt(p)) or
      (PtrUInt(LastSequentiallyFed) > PtrUInt(p) + MediumBlockPoolSize) then
     block := Pointer(PByte(p) + MediumBlockPoolHeaderSize)
   else if SequentialFeedBytesLeft <> MediumBlockPoolSize - MediumBlockPoolHeaderSize then

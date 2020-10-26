@@ -1268,7 +1268,8 @@ procedure TServerGeneric.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender = nil then
     raise EHttpServer.CreateUTF8('%.NotifyThreadStart(nil)', [self]);
-  if Assigned(fOnHttpThreadStart) and not Assigned(Sender.StartNotified) then
+  if Assigned(fOnHttpThreadStart) and
+     not Assigned(Sender.StartNotified) then
   begin
     fOnHttpThreadStart(Sender);
     Sender.StartNotified := self;
@@ -1580,7 +1581,8 @@ begin
   tix := mormot.core.os.GetTickCount64 + Seconds * 1000; // never wait forever
   repeat
     EnterCriticalSection(fProcessCS);
-    ok := Terminated or (fExecuteState in [esRunning, esFinished]);
+    ok := Terminated or
+          (fExecuteState in [esRunning, esFinished]);
     LeaveCriticalSection(fProcessCS);
     if ok then
       exit;
@@ -1631,7 +1633,8 @@ begin
           SleepHiRes(1); // failure (too many clients?) -> wait and retry
           continue;
         end;
-      if Terminated or (Sock = nil) then
+      if Terminated or
+         (Sock = nil) then
       begin
         ClientSock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down
@@ -1869,7 +1872,8 @@ begin
       TSynLog.Add.Log(sllCustom2, 'DoBeforeRequest=%', [Code], self);
       {$endif SYNCRTDEBUGLOW}
       if Code > 0 then
-        if not SendResponse or (Code <> HTTP_ACCEPTED) then
+        if not SendResponse or
+           (Code <> HTTP_ACCEPTED) then
           exit;
       Code := Request(ctxt);
       afterCode := DoAfterRequest(ctxt);
@@ -1961,7 +1965,8 @@ begin
       exit; // broken
     GetNextItem(P, ' ', fMethod); // 'GET'
     GetNextItem(P, ' ', fURL);    // '/path'
-    fKeepAliveClient := ((fServer = nil) or (fServer.ServerKeepAliveTimeOut > 0))
+    fKeepAliveClient := (fServer = nil) or
+                        (fServer.ServerKeepAliveTimeOut > 0)
       and IdemPChar(P, 'HTTP/1.1');
     Content := '';
     // get headers and content
@@ -2022,7 +2027,8 @@ begin
         end;
       end;
     end;
-    if withBody and not (connectionUpgrade in HeaderFlags) then
+    if withBody and
+       not (connectionUpgrade in HeaderFlags) then
     begin
       if IdemPCharArray(pointer(fMethod), ['HEAD', 'OPTIONS']) < 0 then
         GetBody;
@@ -2937,7 +2943,8 @@ begin
               RespSent := false;
               OutStatusCode := DoBeforeRequest(Context);
               if OutStatusCode > 0 then
-                if not SendResponse or (OutStatusCode <> HTTP_ACCEPTED) then
+                if not SendResponse or
+                   (OutStatusCode <> HTTP_ACCEPTED) then
                   continue;
               OutStatusCode := Request(Context);
               AfterStatusCode := DoAfterRequest(Context);
@@ -3463,7 +3470,8 @@ constructor THttpApiWebSocketServerProtocol.Create(const aName: RawUTF8;
   const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
   const aOnFragment: THttpApiWebSocketServerOnMessageEvent);
 begin
-  if aManualFragmentManagement and not Assigned(aOnFragment) then
+  if aManualFragmentManagement and
+     not Assigned(aOnFragment) then
     raise EWebSocketApi.CreateFmt(
       'Error register WebSocket protocol. Protocol %s does not use buffer, ' +
       'but OnFragment handler is not assigned', [aName]);
@@ -4066,7 +4074,8 @@ begin
     end;
     inc(p);
   end;
-  if not ProtocolHeaderFound and (Protocol = nil) and
+  if not ProtocolHeaderFound and
+     (Protocol = nil) and
      (Length(fRegisteredProtocols^) = 1) then
     Protocol := fRegisteredProtocols^[0];
 protocolFound:
@@ -4244,7 +4253,8 @@ begin
           end;
         end;
       i := 0;
-      while not Terminated and (i < fServer.fPingTimeout) do
+      while not Terminated and
+            (i < fServer.fPingTimeout) do
       begin
         Sleep(1000);
         inc(i);

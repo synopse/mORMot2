@@ -277,14 +277,16 @@ begin
     exit;
   // handle simple cases
   result := nrOk;
-  if (address = cLocalhost) or (address = c6Localhost) or
+  if (address = cLocalhost) or
+     (address = c6Localhost) or
      PropNameEquals(address, 'localhost') then
   begin
     ip4.sin_family := AF_INET;
     PCardinal(@ip4.sin_addr)^ := cLocalhost32; // 127.0.0.1
     exit;
   end
-  else if (address = cAnyHost) or (address = c6AnyHost) then
+  else if (address = cAnyHost) or
+          (address = c6AnyHost) then
   begin
     ip4.sin_family := AF_INET; // 0.0.0.0
     exit;
@@ -384,7 +386,8 @@ begin
   if res < 0 then
   begin
     res := sockerrno;
-    if (res = WSATRY_AGAIN) or (res = WSAEINTR) then
+    if (res = WSATRY_AGAIN) or
+       (res = WSAEINTR) then
       // timeout, not a true error
       result := [];
     exit;
@@ -435,7 +438,9 @@ var
   n, e, fd, s: integer;
 begin
   result := false;
-  if (self = nil) or (socket = nil) or (byte(events) = 0) or
+  if (self = nil) or
+     (socket = nil) or
+     (byte(events) = 0) or
      (fCount = fMaxSockets) then
     exit;
   if pseRead in events then
@@ -539,7 +544,8 @@ var
   ev: integer;
 begin
   result := -1; // error
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   result := poll(pointer(fFD), fFDCount, timeoutMS);
   if result <= 0 then
@@ -549,7 +555,8 @@ begin
   for i := 0 to fFDCount - 1 do
   begin
     ev := fFD[i].revents;
-    if (ev <> 0) and (fFD[i].fd > 0) then
+    if (ev <> 0) and
+       (fFD[i].fd > 0) then
     begin
       byte(e) := 0;
       if ev and POLLIN <> 0 then
@@ -620,8 +627,11 @@ var
   e: TEPollEvent;
 begin
   result := false;
-  if (self = nil) or (socket = nil) or (PtrUInt(socket) = PtrUInt(fEPFD)) or
-     (byte(events) = 0) or (fCount = fMaxSockets) then
+  if (self = nil) or
+     (socket = nil) or
+     (PtrUInt(socket) = PtrUInt(fEPFD)) or
+     (byte(events) = 0) or
+     (fCount = fMaxSockets) then
     exit;
   e.data.u64 := tag;
   if pseRead in events then
@@ -640,7 +650,9 @@ function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   e: TEPollEvent; // should be there even if not used
 begin
-  if (self = nil) or (socket = nil) or (PtrUInt(socket) = PtrUInt(fEPFD)) then
+  if (self = nil) or
+     (socket = nil) or
+     (PtrUInt(socket) = PtrUInt(fEPFD)) then
     result := false
   else
   begin
@@ -659,7 +671,8 @@ var
   t: TPollSocketTag;
 begin
   result := -1; // error
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   result := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
   if result <= 0 then

@@ -709,7 +709,8 @@ begin
   StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
   with CheckParam(Param, ftUTF8, paramIn, length(Values))^ do
     for i := 0 to high(Values) do
-      if StoreVoidStringAsNull and (Values[i] = '') then
+      if StoreVoidStringAsNull and
+         (Values[i] = '') then
         VArray[i] := 'null'
       else
         QuotedStr(Values[i], '''', VArray[i]);
@@ -824,7 +825,8 @@ function TSQLDBOleDBStatement.GetCol(Col: integer;
   out Column: PSQLDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value
-  if not Assigned(fRowSet) or (fColumnCount = 0) then
+  if not Assigned(fRowSet) or
+     (fColumnCount = 0) then
     raise EOleDBException.CreateUTF8('%.Column*() with no prior Execute', [self]);
   if CurrentRow <= 0 then
     raise EOleDBException.CreateUTF8('%.Column*() with no prior Step', [self]);
@@ -1166,7 +1168,8 @@ function TSQLDBOleDBStatement.ParamToVariant(Param: Integer; var Value: Variant;
 begin
   inherited ParamToVariant(Param, Value); // raise exception if Param incorrect
   dec(Param); // start at #1
-  if CheckIsOutParameter and (fParams[Param].VInOut = paramIn) then
+  if CheckIsOutParameter and
+     (fParams[Param].VInOut = paramIn) then
     raise EOleDBException.CreateUTF8('%.ParamToVariant expects an [In]Out parameter',
       [self]);
   // OleDB provider should have already modified the parameter in-place, i.e.
@@ -1215,8 +1218,11 @@ var
   SQLW: RawUnicode;
 begin
   SQLLogBegin(sllDB);
-  if Assigned(fCommand) or Assigned(fRowSet) or (fColumnCount > 0) or (fColumnBindings
-    <> nil) or (fParamBindings <> nil) then
+  if Assigned(fCommand) or
+     Assigned(fRowSet) or
+     (fColumnCount > 0) or
+     (fColumnBindings <> nil) or
+     (fParamBindings <> nil) then
     raise EOleDBException.CreateUTF8('%.Prepare should be called once', [self]);
   inherited;
   with OleDBConnection do
@@ -1263,8 +1269,10 @@ begin
   // 1. check execution context
   if not Assigned(fCommand) then
     raise EOleDBException.CreateUTF8('%s.Prepare should have been called', [self]);
-  if Assigned(fRowSet) or (fColumnCount > 0) or (fColumnBindings <> nil) or (fParamBindings
-    <> nil) then
+  if Assigned(fRowSet) or
+     (fColumnCount > 0) or
+     (fColumnBindings <> nil) or
+     (fParamBindings <> nil) then
     raise EOleDBException.CreateUTF8('Missing call to %.Reset', [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // 2. bind parameters
@@ -1419,7 +1427,8 @@ begin
         else if Assigned(mr) then
           repeat
             res := mr.GetResult(nil, 0, IID_IRowset, @fUpdateCount, @RowSet);
-          until Assigned(RowSet) or (res <> S_OK);
+          until Assigned(RowSet) or
+                (res <> S_OK);
       end;
       if OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then
         res := fCommand.Execute(nil, IID_IRowset, fDBParams, nil, @RowSet);
@@ -1484,7 +1493,8 @@ begin
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
-  if not Assigned(fRowSet) or (fColumnCount = 0) then
+  if not Assigned(fRowSet) or
+     (fColumnCount = 0) then
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   if fRowSetAccessor = 0 then
   begin
@@ -1842,7 +1852,8 @@ procedure TSQLDBOleDBConnection.OleDBCheck(aStmt: TSQLDBStatement; aResult:
         end;
     end;
     // get generic HRESULT error
-    if not Succeeded(aResult) or (fOleDBErrorMessage <> '') then
+    if not Succeeded(aResult) or
+           (fOleDBErrorMessage <> '') then
     begin
       s := SysErrorMessage(aResult);
       if s = '' then
@@ -2197,8 +2208,8 @@ begin
     exit;
   SetLength(Args, length(Fields));
   for i := 0 to high(Fields) do
-    if res and (1 shl i) <> 0 then
-      if Fields[i] <> '' then
+    if ((res and (1 shl i)) <> 0) and
+       (Fields[i] <> '') then
         // '' will leave VT_EMPTY parameter = no restriction
         Args[i] := UTF8ToWideString(Fields[i]); // expect parameter as BSTR
   aResult := nil;

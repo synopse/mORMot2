@@ -7872,7 +7872,9 @@ begin
   if Len = 0 then
     exit;
   if Len >= 3 then
-    if (P[0] in ['x', 'X']) and (P[1] = '''') and (P[Len - 1] = '''') then
+    if (P[0] in ['x', 'X']) and
+       (P[1] = '''') and
+       (P[Len - 1] = '''') then
     begin
       // BLOB literals format
       LenResult := (Len - 3) shr 1;
@@ -7936,10 +7938,12 @@ begin
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
-  if (P[0] in ['x', 'X']) and (P[1] = '''') then
+  if (P[0] in ['x', 'X']) and
+     (P[1] = '''') then
   begin
     Len := (StrLen(P) - 3) shr 1;
-    result := (P[Len - 1] = '''') and mormot.core.text.HexToBin(@P[2], nil, Len);
+    result := (P[Len - 1] = '''') and
+              mormot.core.text.HexToBin(@P[2], nil, Len);
     exit;
   end
   else
@@ -7959,7 +7963,8 @@ function UTF8ContentNumberType(P: PUTF8Char): TORMFieldType;
 begin
   if (P = nil) or
      ((PInteger(P)^ = ord('n') + ord('u') shl 8 + ord('l') shl 16 +
-       ord('l') shl 24) and (P[4] = #0)) then
+       ord('l') shl 24) and
+      (P[4] = #0)) then
     result := oftUnknown
   else
     case TextToVariantNumberType(P) of
@@ -7983,7 +7988,8 @@ begin
     while (P^ <= ' ') and
           (P^ <> #0) do
       inc(P);
-    if (PInteger(P)^ = NULL_LOW) and (P[4] = #0) then
+    if (PInteger(P)^ = NULL_LOW) and
+       (P[4] = #0) then
       result := oftUnknown
     else
     // don't check for 'false' or 'true' here, since their UTF-8 value is 0/1
@@ -8007,7 +8013,9 @@ begin
     else
     begin
       c := PInteger(P)^ and $00ffffff;
-      if (c = JSON_BASE64_MAGIC) or ((P^ = '''') and isBlobHex(P)) then
+      if (c = JSON_BASE64_MAGIC) or
+         ((P^ = '''') and
+          isBlobHex(P)) then
         result := oftBlob
       else if c = JSON_SQLDATE_MAGIC then
         result := oftDateTime
@@ -8043,8 +8051,10 @@ begin // assume 0 is FALSE, anything else is true
     goto P
   else if P2 = nil then
     goto n
-  else if (P1^ = #0) or (PWord(P1)^ = ord('0')) then
-    if (P2^ = #0) or (PWord(P2)^ = ord('0')) then
+  else if (P1^ = #0) or
+          (PWord(P1)^ = ord('0')) then
+    if (P2^ = #0) or
+       (PWord(P2)^ = ord('0')) then
     begin
 Z:    result := 0;  // P1=false P2=false
       exit;
@@ -8192,7 +8202,8 @@ begin
   end;
   Iso8601ToDateTimePUTF8CharVar(P1, 0, V1);
   Iso8601ToDateTimePUTF8CharVar(P2, 0, V2);
-  if (V1 = 0) or (V2 = 0) then // any invalid date -> compare as strings
+  if (V1 = 0) or
+     (V2 = 0) then // any invalid date -> compare as strings
     result := StrComp(P1, P2)
   else if SameValue(V1, V2, 1 / MSecsPerDay) then
     result := 0
@@ -8405,7 +8416,8 @@ begin
       if P = nil then
         break;
       FN := GetJSONPropName(P, @FNlen);
-      if (FN = nil) or (P = nil) then
+      if (FN = nil) or
+         (P = nil) then
         break; // invalid JSON field name
       FieldIsRowID := IsRowId(FN);
       if FieldIsRowID then
@@ -9293,8 +9305,9 @@ begin
     oftDateTime, oftDateTimeMS:
       Iso8601ToDateTimePUTF8CharVar(Value, 0, result.VDate);
     oftBoolean:
-      result.VBoolean := not ((Value = nil) or (PWord(Value)^ = ord('0')) or
-        (PInteger(Value)^ = FALSE_LOW));
+      result.VBoolean := not ((Value = nil) or
+                         (PWord(Value)^ = ord('0')) or
+                         (PInteger(Value)^ = FALSE_LOW));
     oftEnumerate:
       result.VInteger := GetInteger(Value);
     oftInteger, oftID, oftTID, oftRecord, oftSet, oftRecordVersion, oftSessionUserID,
@@ -10073,7 +10086,8 @@ procedure TORMPropInfoRTTIDouble.GetValueVar(Instance: TObject; ToSQL: boolean;
 begin
   DoubleToStr(fPropInfo.GetDoubleProp(Instance), result);
   if wasSQLString <> nil then
-    wasSQLString^ := (result = '') or not (result[1] in ['0'..'9']);
+    wasSQLString^ := (result = '') or
+                     not (result[1] in ['0'..'9']);
 end;
 
 procedure TORMPropInfoRTTIDouble.NormalizeValue(var Value: RawUTF8);
@@ -11826,7 +11840,8 @@ constructor TORMPropInfoRecordRTTI.Create(aRecordInfo: PRttiInfo;
   aAttributes: TORMPropInfoAttributes; aFieldWidth: integer; aData2Text:
   TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
-  if (aRecordInfo = nil) or not (aRecordInfo^.Kind in rkRecordTypes) then
+  if (aRecordInfo = nil) or
+     not (aRecordInfo^.Kind in rkRecordTypes) then
     raise EModelException.CreateUTF8(
       '%.Create: Invalid type information for %', [self, aName]);
   inherited Create(aName, oftBlobCustom, aAttributes, aFieldWidth,
@@ -19163,7 +19178,8 @@ begin
         W.AddFieldName(SimpleFields[i].Name);
       Start := P;
       P := GotoEndJSONItem(P);
-      if (P = nil) or not (P^ in [',', ']']) then
+      if (P = nil) or
+         not (P^ in [',', ']']) then
         exit;
       W.AddNoJSONEscape(Start, P - Start);
       W.Add(',');

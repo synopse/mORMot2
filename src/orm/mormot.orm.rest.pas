@@ -597,7 +597,8 @@ begin
   end;
   // on success, Value.ID is updated with the new RowID
   Value.IDValue := result;
-  if SendData and (result <> 0) then
+  if SendData and
+     (result <> 0) then
     fCache.Notify(PORMClass(Value)^, result, json, ooInsert);
 end;
 
@@ -864,12 +865,14 @@ var
 begin
   Data := nil;
   // handle naive expressions like SELECT ID from Table where ID=10
-  if IsRowID(pointer(FieldName)) and (length(WhereClause) > 2) then
+  if IsRowID(pointer(FieldName)) and
+     (length(WhereClause) > 2) then
   begin
     P := pointer(WhereClause);
     GetNextFieldProp(P, prop);
     if IsRowIDShort(prop) and
-       (StrPosI('AND', P) = nil) and (StrPosI('OR', P) = nil) then
+       (StrPosI('AND', P) = nil) and
+       (StrPosI('OR', P) = nil) then
       case P^ of
         '=':
           begin
@@ -1186,7 +1189,8 @@ begin
     exit;
   t := fModel.GetTableIndexExisting(PORMClass(Value)^);
   // try to lock before retrieval (if ForUpdate)
-  if ForUpdate and not fModel.Lock(t, aID) then
+  if ForUpdate and
+     not fModel.Lock(t, aID) then
     exit;
   // try to retrieve existing JSON from internal cache
   resp := fCache.Retrieve(t, aID);
@@ -1350,7 +1354,8 @@ begin
   begin
     with Table.RecordProps do
       // handle optimized primary key direct access
-      if fCache.IsCached(Table) and (length(BoundsSQLWhere) = 1) and
+      if fCache.IsCached(Table) and
+         (length(BoundsSQLWhere) = 1) and
          VarRecToInt64(BoundsSQLWhere[0], Int64(ID)) and
          FieldBitsFromCSV(CustomFieldsCSV, bits) and
          (IdemPropNameU('RowID=?', FormatSQLWhere) or
@@ -1700,7 +1705,8 @@ begin
     result := 0;
     exit;
   end;
-  if ForceID or (Value.IDValue = 0) then
+  if ForceID or
+     (Value.IDValue = 0) then
   begin
     result := Add(Value, true, ForceID);
     if (result <> 0) or
@@ -1933,7 +1939,8 @@ var
 begin
   BlobStream := TMemoryStream.Create;
   result := RetrieveBlob(Table, aID, BlobFieldName, data);
-  if not result or (data = '') then
+  if not result or
+     (data = '') then
     exit;
   if BlobStream.Write(pointer(data)^, length(data)) <> length(data) then
     result := false;

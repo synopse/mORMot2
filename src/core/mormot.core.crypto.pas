@@ -3245,7 +3245,9 @@ begin
         result := false;
     end;
     fIV := PAESBlock(Input)^;
-    if result and (fIVHistoryDec.Depth > 0) and not fIVHistoryDec.Add(fIV) then
+    if result and
+       (fIVHistoryDec.Depth > 0) and
+       not fIVHistoryDec.Add(fIV) then
       if RaiseESynCryptoOnError then
         raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: duplicated IV=% -> ' +
           'potential replay attack', [self, AESBlockToShortString(fIV)])
@@ -3852,7 +3854,8 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(aes.Context).AesNi32) and (Count and AESBlockMod = 0) then
+  if Assigned(TAESContext(aes.Context).AesNi32) and
+     (Count and AESBlockMod = 0) then
     asm
         push    ebx
         push    esi
@@ -3916,7 +3919,8 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(aes.Context).AesNi32) and (Count and AESBlockMod = 0) then
+  if Assigned(TAESContext(aes.Context).AesNi32) and
+     (Count and AESBlockMod = 0) then
     asm
         push    ebx
         push    esi
@@ -3980,7 +3984,8 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(aes.Context).AesNi32) and (Count and AESBlockMod = 0) then
+  if Assigned(TAESContext(aes.Context).AesNi32) and
+     (Count and AESBlockMod = 0) then
     asm
         push    ebx
         push    esi
@@ -4040,7 +4045,8 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(aes.Context).AesNi32) and (Count and AESBlockMod = 0) then
+  if Assigned(TAESContext(aes.Context).AesNi32) and
+     (Count and AESBlockMod = 0) then
     asm
         push    ebx
         push    esi
@@ -4180,7 +4186,8 @@ end;
 function TAESCTR.ComposeIV(Nonce, Counter: PAESBlock;
   NonceLen, CounterLen: integer; LSBCounter: boolean): boolean;
 begin
-  result := (NonceLen + CounterLen = 16) and (CounterLen > 0);
+  result := (NonceLen + CounterLen = 16) and
+            (CounterLen > 0);
   if result then
     if LSBCounter then
     begin
@@ -4495,7 +4502,8 @@ begin
     i := Len;
     if i > 32 then
       i := 32; // up to 256 bits - see "man urandom" Usage paragraph
-    fromos := (FileRead(dev, Buffer[0], i) = i) and (Len <= 32);
+    fromos := (FileRead(dev, Buffer[0], i) = i) and
+              (Len <= 32);
   finally
     FileClose(dev);
   end;
@@ -4760,7 +4768,8 @@ begin
       inc(P);
     end;
   until (Len <= 4) or
-        (haspunct and (LowerCase(result) <> result));
+        (haspunct and
+         (LowerCase(result) <> result));
 end;
 
 procedure SetMainAESPRNG;
@@ -4844,7 +4853,8 @@ var
   tmp: TByteDynArray;
 begin
   len := length(Split);
-  result := (len <> 0) and (len mod cardinal(BufferBytes) = 0);
+  result := (len <> 0) and
+            (len mod cardinal(BufferBytes) = 0);
   if not result then
     exit;
   src := pointer(Split);
@@ -7966,7 +7976,8 @@ begin
   outStreamCreated := nil;
   Head.SourceLen := inLen;
   nBlock := Head.SourceLen shr AESBlockShift;
-  if Encrypt and (OriginalLen <> 0) then
+  if Encrypt and
+     (OriginalLen <> 0) then
     Head.OriginalLen := OriginalLen
   else
     Head.OriginalLen := inLen;

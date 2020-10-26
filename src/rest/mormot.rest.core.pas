@@ -1624,7 +1624,8 @@ var
 begin
   result := inherited FakeInvoke(aMethod, aParams, aResult, aErrorMsg,
     aClientDrivenID, aServiceCustomAnswer);
-  if not result or (fList.fDestCount = 0) then
+  if not result or
+     (fList.fDestCount = 0) then
     exit;
   fList.fSafe.Lock;
   try
@@ -1801,7 +1802,8 @@ begin
     exit;
   result := TSystemUse.Current;
   if (result.Timer = nil) or
-     ((BackgroundTimer <> nil) and (result.Timer = BackgroundTimer)) then
+     ((BackgroundTimer <> nil) and
+      (result.Timer = BackgroundTimer)) then
   begin
     if periodSec > 0 then
       result.Timer := EnsureBackgroundTimerExists;
@@ -3273,7 +3275,8 @@ end;
 function TRestURIParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
 begin
   FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, result);
-  if GuessJSONIfNoneSet and (result = '') then
+  if GuessJSONIfNoneSet and
+     (result = '') then
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
@@ -3285,7 +3288,8 @@ end;
 function TRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
 begin
   FindNameValue(OutHead, HEADER_CONTENT_TYPE_UPPER, result);
-  if GuessJSONIfNoneSet and (result = '') then
+  if GuessJSONIfNoneSet and
+     (result = '') then
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
@@ -3344,7 +3348,8 @@ begin
     endtix := mormot.core.os.GetTickCount64 + maxMS;
     repeat
       SleepHiRes(1); // wait for InternalExecute to finish
-    until not fExecuting or (mormot.core.os.GetTickCount64 >= endtix);
+    until not fExecuting or
+              (mormot.core.os.GetTickCount64 >= endtix);
   end;
 end;
 
@@ -3356,7 +3361,8 @@ begin
     WaitForNotExecuting;
   end;
   inherited Destroy;
-  if fOwnRest and (fRest <> nil) then
+  if fOwnRest and
+     (fRest <> nil) then
   begin
     if GetCurrentThreadId = ThreadID then
     begin

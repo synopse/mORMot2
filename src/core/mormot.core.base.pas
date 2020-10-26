@@ -3652,7 +3652,10 @@ function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 var
   a: TPtrIntArray absolute guid;
 begin
-  result := (a[0] = 0) and (a[1] = 0) {$ifndef CPU64} and (a[2] = 0) and (a[3] = 0){$endif};
+  result := (a[0] = 0) and
+            (a[1] = 0) {$ifndef CPU64} and
+            (a[2] = 0) and
+            (a[3] = 0) {$endif CPU64};
 end;
 
 function AddGUID(var guids: TGUIDDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
@@ -3837,7 +3840,8 @@ procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring)
 begin
   if len < 0 then
     len := StrLen(buf);
-  if (len = 0) or (len + ord(dest[0]) > 255) then
+  if (len = 0) or
+     (len + ord(dest[0]) > 255) then
     exit;
   MoveFast(buf^, dest[ord(dest[0]) + 1], len);
   inc(dest[0], len);
@@ -4012,7 +4016,8 @@ var
   minus: boolean;
 begin
   result := 0;
-  if (P = nil) or (P >= PEnd) then
+  if (P = nil) or
+     (P >= PEnd) then
     exit;
   c := byte(P^);
   repeat
@@ -4207,7 +4212,8 @@ var
   c: byte;
 begin
   result := 0;
-  if (P = nil) or (P >= PEnd) then
+  if (P = nil) or
+     (P >= PEnd) then
     exit;
   c := byte(P^);
   repeat
@@ -4637,7 +4643,8 @@ begin
   digit := 18; // max Int64 resolution
   repeat
     inc(P);
-    if (c >= '0') and (c <= '9') then
+    if (c >= '0') and
+       (c <= '9') then
     begin
       if digit <> 0 then
       begin
@@ -4669,7 +4676,8 @@ begin
   until false;
   if frac < 0 then
     inc(frac); // adjust digits after '.'
-  if (c = 'E') or (c = 'e') then
+  if (c = 'E') or
+     (c = 'e') then
   begin
     exp := 0;
     exclude(flags, fValid);
@@ -4684,7 +4692,8 @@ begin
     repeat
       c := P^;
       inc(P);
-      if (c < '0') or (c > '9') then
+      if (c < '0') or
+         (c > '9') then
         break;
       dec(c, ord('0'));
       exp := (exp * 10) + byte(c);
@@ -4695,11 +4704,13 @@ begin
     else
       inc(frac, exp);
   end;
-  if (fValid in flags) and (c = #0) then
+  if (fValid in flags) and
+     (c = #0) then
     err := 0
   else
 e:  err := 1; // return the (partial) value even if not ended with #0
-  if (frac >= -31) and (frac <= 31) then
+  if (frac >= -31) and
+     (frac <= 31) then
     result := POW10[frac]
   else
     result := HugePower10(frac);
@@ -4724,7 +4735,9 @@ var
   err: integer;
 begin
   result := GetInteger(pointer(value), err);
-  if (err <> 0) or (result < min) or (result > max) then
+  if (err <> 0) or
+     (result < min) or
+     (result > max) then
     result := default;
 end;
 
@@ -4739,7 +4752,8 @@ end;
 function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal): boolean;
 begin
   value := GetCardinalDef(pointer(text), cardinal(-1));
-  result := (value <> cardinal(-1)) and (value >= minimal);
+  result := (value <> cardinal(-1)) and
+            (value >= minimal);
 end;
 
 function ToInt64(const text: RawUTF8; out value: Int64): boolean;
@@ -4925,7 +4939,10 @@ begin
     repeat
       if PtrUInt(P) > PtrUInt(Count) then
         break;
-      if (P^[0] = Value) or (P^[1] = Value) or (P^[2] = Value) or (P^[3] = Value) then
+      if (P^[0] = Value) or
+         (P^[1] = Value) or
+         (P^[2] = Value) or
+         (P^[3] = Value) then
         exit;
       P := @P[4];
     until false;
@@ -5452,7 +5469,8 @@ procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSiz
 var
   i, v, x, n: PtrInt;
 begin
-  if (Values = nil) or (Excluded = nil) then
+  if (Values = nil) or
+     (Excluded = nil) then
     exit; // nothing to exclude
   if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
     Values := copy(Values); // make unique
@@ -5461,7 +5479,8 @@ begin
   v := Length(Values);
   n := 0;
   x := Length(Excluded);
-  if (x > ExcludedSortSize) or (v > ExcludedSortSize) then
+  if (x > ExcludedSortSize) or
+     (v > ExcludedSortSize) then
   begin // sort if worth it
     dec(x);
     QuickSortInteger(pointer(Excluded), 0, x);
@@ -5489,7 +5508,8 @@ procedure IncludeInteger(var Values, Included: TIntegerDynArray; IncludedSortSiz
 var
   i, v, x, n: PtrInt;
 begin
-  if (Values = nil) or (Included = nil) then
+  if (Values = nil) or
+     (Included = nil) then
   begin
     Values := nil;
     exit;
@@ -5501,7 +5521,8 @@ begin
   v := Length(Values);
   n := 0;
   x := Length(Included);
-  if (x > IncludedSortSize) or (v > IncludedSortSize) then
+  if (x > IncludedSortSize) or
+     (v > IncludedSortSize) then
   begin // sort if worth it
     dec(x);
     QuickSortInteger(pointer(Included), 0, x);
@@ -5529,12 +5550,14 @@ procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: I
 var
   i, v, x, n: PtrInt;
 begin
-  if (Values = nil) or (Excluded = nil) then
+  if (Values = nil) or
+     (Excluded = nil) then
     exit; // nothing to exclude
   v := Length(Values);
   n := 0;
   x := Length(Excluded);
-  if (x > ExcludedSortSize) or (v > ExcludedSortSize) then
+  if (x > ExcludedSortSize) or
+     (v > ExcludedSortSize) then
   begin // sort if worth it
     dec(x);
     QuickSortInt64(pointer(Excluded), 0, x);
@@ -5562,7 +5585,8 @@ procedure IncludeInt64(var Values, Included: TInt64DynArray; IncludedSortSize: i
 var
   i, v, x, n: PtrInt;
 begin
-  if (Values = nil) or (Included = nil) then
+  if (Values = nil) or
+     (Included = nil) then
   begin
     Values := nil;
     exit;
@@ -5570,7 +5594,8 @@ begin
   v := Length(Values);
   n := 0;
   x := Length(Included);
-  if (x > IncludedSortSize) or (v > IncludedSortSize) then
+  if (x > IncludedSortSize) or
+     (v > IncludedSortSize) then
   begin // sort if worth it
     dec(x);
     QuickSortInt64(pointer(Included), 0, x);
@@ -6613,7 +6638,8 @@ end;
 function TSortedWordArray.Add(aValue: Word): PtrInt;
 begin
   result := Count; // optimistic check of perfectly increasing aValue
-  if (result > 0) and (aValue <= Values[result - 1]) then
+  if (result > 0) and
+     (aValue <= Values[result - 1]) then
     result := FastLocateWordSorted(pointer(Values), result - 1, aValue);
   if result < 0 then // aValue already exists in Values[] -> fails
     exit;
@@ -6638,7 +6664,8 @@ end;
 function TSortedIntegerArray.Add(aValue: Integer): PtrInt;
 begin
   result := Count; // optimistic check of perfectly increasing aValue
-  if (result > 0) and (aValue <= Values[result - 1]) then
+  if (result > 0) and
+     (aValue <= Values[result - 1]) then
     result := FastLocateIntegerSorted(pointer(Values), result - 1, aValue);
   if result < 0 then // aValue already exists in Values[] -> fails
     exit;
@@ -7056,7 +7083,8 @@ begin
     _0 := h^.Lo;
     _1 := h^.Hi;
     for result := 0 to Count - 1 do
-      if (P^.Lo = _0) and (P^.Hi = _1) then
+      if (P^.Lo = _0) and
+         (P^.Hi = _1) then
         exit
       else
         inc(P);
@@ -7073,8 +7101,10 @@ begin
     _0 := h^.d0;
     _1 := h^.d1;
     for result := 0 to Count - 1 do
-      if (P^.d0 = _0) and (P^.d1 = _1) and
-         (P^.d2 = h^.d2) and (P^.d3 = h^.d3) then
+      if (P^.d0 = _0) and
+         (P^.d1 = _1) and
+         (P^.d2 = h^.d2) and
+         (P^.d3 = h^.d3) then
         exit
       else
         inc(P);
@@ -7088,8 +7118,10 @@ function Hash128Index(P: PHash128Rec; Count: integer; h: PHash128Rec): integer;
 begin
   if P <> nil then
     for result := 0 to Count - 1 do
-      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and
-         (P^.i2 = h^.i2) and (P^.i3 = h^.i3) then
+      if (P^.i0 = h^.i0) and
+         (P^.i1 = h^.i1) and
+         (P^.i2 = h^.i2) and
+         (P^.i3 = h^.i3) then
         exit
       else
         inc(P);
@@ -7100,10 +7132,14 @@ function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
 begin
   if P <> nil then
     for result := 0 to Count - 1 do
-      if (P^.i0 = h^.i0) and (P^.i1 = h^.i1) and
-         (P^.i2 = h^.i2) and (P^.i3 = h^.i3) and
-         (P^.i4 = h^.i4) and (P^.i5 = h^.i5) and
-         (P^.i6 = h^.i6) and (P^.i7 = h^.i7) then
+      if (P^.i0 = h^.i0) and
+         (P^.i1 = h^.i1) and
+         (P^.i2 = h^.i2) and
+         (P^.i3 = h^.i3) and
+         (P^.i4 = h^.i4) and
+         (P^.i5 = h^.i5) and
+         (P^.i6 = h^.i6) and
+         (P^.i7 = h^.i7) then
         exit
       else
         inc(P);
@@ -7359,7 +7395,8 @@ end;
 
 function GetAllBits(Bits, BitCount: Cardinal): boolean;
 begin
-  if (BitCount >= low(ALLBITS_CARDINAL)) and (BitCount <= high(ALLBITS_CARDINAL)) then
+  if (BitCount >= low(ALLBITS_CARDINAL)) and
+     (BitCount <= high(ALLBITS_CARDINAL)) then
   begin
     BitCount := ALLBITS_CARDINAL[BitCount];
     result := (Bits and BitCount) = BitCount;
@@ -7436,11 +7473,14 @@ label
   Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4, AfterTestT, AfterTest0, Ret, Exit;
 begin
   result := 0;
-  if (p = nil) or (pSub = nil) or (PtrInt(Offset) <= 0) then
+  if (p = nil) or
+     (pSub = nil) or
+     (PtrInt(Offset) <= 0) then
     goto Exit;
   len := PStrLen(p - _STRLEN)^;
   lenSub := PStrLen(pSub - _STRLEN)^ - 1;
-  if (len < lenSub + PtrInt(Offset)) or (lenSub < 0) then
+  if (len < lenSub + PtrInt(Offset)) or
+     (lenSub < 0) then
     goto Exit;
   pStop := p + len;
   inc(p, lenSub);
@@ -7672,7 +7712,8 @@ begin
   if I > L then
     // void string
     FastAssignNew(result)
-  else if (I = 1) and (S[L] > ' ') then
+  else if (I = 1) and
+          (S[L] > ' ') then
     // nothing to trim: reference counted copy
     result := S
   else
@@ -7868,7 +7909,8 @@ end;
 function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean;
 begin
   result := false;
-  if (PW <> nil) and (Len > 0) then
+  if (PW <> nil) and
+     (Len > 0) then
     repeat
       if ord(PW^) > 127 then
         exit;
@@ -8080,7 +8122,8 @@ var
 begin
   if Event.Code <> nil then // callback assigned
     for result := 0 to length(Events) - 1 do
-      if (Events[result].Code = Event.Code) and (Events[result].Data = Event.Data) then
+      if (Events[result].Code = Event.Code) and
+         (Events[result].Data = Event.Data) then
         exit;
   result := -1;
 end;
@@ -8138,7 +8181,8 @@ var
   A: TMethod absolute eventA;
   B: TMethod absolute eventB;
 begin
-  result := (A.Code = B.Code) and (A.Data = B.Data);
+  result := (A.Code = B.Code) and
+            (A.Data = B.Data);
 end;
 
 
@@ -8482,7 +8526,8 @@ var
 begin // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
   tab := @crc32ctab;
   result := not crc;
-  if (buf <> nil) and (len > 0) then
+  if (buf <> nil) and
+     (len > 0) then
   begin
     repeat
       if PtrUInt(buf) and 3 = 0 then // align to 4 bytes boundary
@@ -8567,7 +8612,9 @@ begin
     if PtrUInt(result) < PtrUInt(TextEnd) then
     begin
       c := PByte(result)^;
-      if (c > 13) or ((c <> 10) and (c <> 13)) then
+      if (c > 13) or
+         ((c <> 10) and
+          (c <> 13)) then
         continue;
     end;
     break;
@@ -8636,7 +8683,9 @@ begin
       offset[h] := src;
       cached := v xor {%H-}cache[h]; // o=nil if cache[h] is uninitialized
       cache[h] := v;
-      if (cached and $00ffffff = 0) and (o <> nil) and (src - o > 2) then
+      if (cached and $00ffffff = 0) and
+         (o <> nil) and
+         (src - o > 2) then
       begin
         CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
         inc(src, 2);
@@ -9049,7 +9098,8 @@ end;
 
 procedure TSynTempBuffer.Done;
 begin
-  if (buf <> @tmp) and (buf <> nil) then
+  if (buf <> @tmp) and
+     (buf <> nil) then
     FreeMem(buf);
 end;
 
@@ -9059,7 +9109,8 @@ begin
     Dest := ''
   else
     FastSetString(Dest, buf, PAnsiChar(EndBuf) - PAnsiChar(buf));
-  if (buf <> @tmp) and (buf <> nil) then
+  if (buf <> @tmp) and
+     (buf <> nil) then
     FreeMem(buf);
 end;
 
@@ -9852,12 +9903,14 @@ begin
       varInteger:
         Value := vd^.VInteger;
       varWord64:
-        if (vd^.VInt64 >= 0) and (vd^.VInt64 <= High(integer)) then
+        if (vd^.VInt64 >= 0) and
+           (vd^.VInt64 <= High(integer)) then
           Value := vd^.VInt64
         else
           exit;
       varInt64:
-        if (vd^.VInt64 >= Low(integer)) and (vd^.VInt64 <= High(integer)) then
+        if (vd^.VInt64 >= Low(integer)) and
+           (vd^.VInt64 <= High(integer)) then
           Value := vd^.VInt64
         else
           exit;
@@ -10449,7 +10502,8 @@ end;
 
 procedure TRawByteStringStream.GetAsText(StartPos, Len: PtrInt; var Text: RawUTF8);
 begin
-  if (StartPos = 0) and (Len = length(fDataString)) then
+  if (StartPos = 0) and
+     (Len = length(fDataString)) then
   begin
     {$ifdef HASCODEPAGE} // FPC expects this
     SetCodePage(fDataString, CP_UTF8, false);
@@ -10592,7 +10646,8 @@ begin
   begin
     Hi := Code div 100;
     Lo := Code - Hi * 100;
-    if not ((Hi in [1..5]) and (Lo in [0..13])) then
+    if not ((Hi in [1..5]) and
+            (Lo in [0..13])) then
     begin
       result := StatusCodeToReasonInternal(Code);
       exit;
@@ -10607,7 +10662,8 @@ end;
 
 function StatusCodeIsSuccess(Code: integer): boolean;
 begin
-  result := (Code >= HTTP_SUCCESS) and (Code < HTTP_BADREQUEST); // 200..399
+  result := (Code >= HTTP_SUCCESS) and
+            (Code < HTTP_BADREQUEST); // 200..399
 end;
 
 procedure InitializeUnit;

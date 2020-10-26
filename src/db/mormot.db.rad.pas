@@ -636,7 +636,8 @@ begin
           ftTime:
             PDateTimeRec(Dest)^.Time := TS.Time;
           ftDateTime:
-            if (TS.Time < 0) or (TS.Date <= 0) then
+            if (TS.Time < 0) or
+               (TS.Date <= 0) then
               result := false
             else // matches ValidateTimeStamp() expectations
               PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
@@ -877,7 +878,8 @@ begin
         GetFieldList(FieldList, KeyFields);
         l := VarArrayLowBound(KeyValues, 1);
         h := VarArrayHighBound(KeyValues, 1);
-        if (FieldList.Count = 1) and (l < h) then
+        if (FieldList.Count = 1) and
+           (l < h) then
         begin
           found := SearchForField(StringToUTF8(KeyFields), KeyValues, Options);
           if found > 0 then
@@ -1116,7 +1118,8 @@ begin
      not (fColumns[F].FieldType in [mormot.db.core.ftNull,
        mormot.db.core.ftUnknown, mormot.db.core.ftCurrency]) then
     with _Safe(fValues[RowIndex])^ do
-      if (Kind = dvObject) and (Count > 0) then
+      if (Kind = dvObject) and
+         (Count > 0) then
       begin
         if IdemPropNameU(fColumns[F].Name, Names[F]) then
           ndx := F
@@ -1184,7 +1187,8 @@ begin
   f := -1; // allows O(1) field lookup for invariant object columns
   for result := 1 to length(fValues) do
     with _Safe(fValues[result - 1])^ do
-      if (Kind = dvObject) and (Count > 0) then
+      if (Kind = dvObject) and
+         (Count > 0) then
       begin
         if (cardinal(f) >= cardinal(Count)) or
            not IdemPropNameU(aLookupFieldName, Names[f]) then
@@ -1375,7 +1379,8 @@ begin
       [self, fPreparedParamsCount, fParamCount]);
   lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support
   repeat
-    if (not fDatasetSupportBatchBinding) and (fParamsArrayCount > 0) then
+    if (not fDatasetSupportBatchBinding) and
+       (fParamsArrayCount > 0) then
       inc(lArrayIndex); // enable BindArray() emulation
     for p := 0 to fParamCount - 1 do
       DatasetBindSQLParam(lArrayIndex, p, fParams[p]);
@@ -1406,7 +1411,8 @@ begin
     end
     else
       DatasetExecSQL;
-  until fDatasetSupportBatchBinding or (lArrayIndex = fParamsArrayCount - 1);
+  until fDatasetSupportBatchBinding or
+        (lArrayIndex = fParamsArrayCount - 1);
   // 3. handle out parameters
   if fParamCount > 0 then
     if fParamsArrayCount > 0 then
@@ -1612,7 +1618,8 @@ begin
           {$ifdef UNICODE}
             P.AsLargeInt := I64;
           {$else}
-            if (PInt64Rec(@I64)^.Hi = 0) or (PInt64Rec(@I64)^.Hi = Cardinal(-1)) then
+            if (PInt64Rec(@I64)^.Hi = 0) or
+               (PInt64Rec(@I64)^.Hi = Cardinal(-1)) then
               P.AsInteger := I64
             else if TSQLDBDatasetConnectionProperties(
                Connection.Properties).ForceInt64AsFloat then

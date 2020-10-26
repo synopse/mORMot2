@@ -657,10 +657,13 @@ begin
   if not fromcache then
     Parse(Token, JWT, headpayload, signature, ExcludedClaims);
   if JWT.result in [jwtValid, jwtNotBeforeFailed] then
-    if CheckAgainstActualTimestamp(JWT) and not fromcache then
+    if CheckAgainstActualTimestamp(JWT) and
+       not fromcache then
       // depending on the algorithm used
       CheckSignature(headpayload{%H-}, signature{%H-}, JWT);
-  if not fromcache and (self <> nil) and (fCache <> nil) and
+  if not fromcache and
+     (self <> nil) and
+     (fCache <> nil) and
      (JWT.result in fCacheResults) then
     fCache.Add(Token, JWT);
 end;
@@ -747,8 +750,9 @@ begin
       exit;
     Base64URIToBin(tok, headerlen - 1, signature);
     JSONDecode(pointer(signature), ['alg', 'typ'], @head);
-    if not head[0].Idem(fAlgorithm) or ((head[1].value <> nil) and
-       not head[1].Idem('JWT')) then
+    if not head[0].Idem(fAlgorithm) or
+       ((head[1].value <> nil) and
+        not head[1].Idem('JWT')) then
       exit;
   end
   else
@@ -939,12 +943,14 @@ begin
     begin
       time := V[2].ToCardinal;
       result := jwtExpired;
-      if not IgnoreTime and (now > time) then
+      if not IgnoreTime and
+         (now > time) then
         exit;
       if Expiration <> nil then
         Expiration^ := time;
     end;
-    if not IgnoreTime and (V[3].value <> nil) then
+    if not IgnoreTime and
+       (V[3].value <> nil) then
     begin
       time := V[3].ToCardinal;
       result := jwtNotBeforeFailed;

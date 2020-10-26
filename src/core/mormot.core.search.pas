@@ -1306,8 +1306,9 @@ var
     if FindFirst(dir + folder + Mask, faAnyfile - faDirectory, F) = 0 then
     begin
       repeat
-        if SearchRecValidFile(F) and ((IgnoreFileName = '') or
-          (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
+        if SearchRecValidFile(F) and
+           ((IgnoreFileName = '') or
+            (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
         begin
           if IncludesDir then
             ff.FromSearchRec(dir + folder, F)
@@ -1318,11 +1319,13 @@ var
       until FindNext(F) <> 0;
       FindClose(F);
     end;
-    if SubFolder and (FindFirst(dir + folder + '*', faDirectory, F) = 0) then
+    if SubFolder and
+       (FindFirst(dir + folder + '*', faDirectory, F) = 0) then
     begin
       repeat
-        if SearchRecValidFolder(F) and ((IgnoreFileName = '') or
-           (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
+        if SearchRecValidFolder(F) and
+           ((IgnoreFileName = '') or
+            (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
           SearchFolder(IncludeTrailingPathDelimiter(folder + F.Name));
       until FindNext(F) <> 0;
       FindClose(F);
@@ -1351,7 +1354,8 @@ begin
     if Directory <> '' then
       dir := IncludeTrailingPathDelimiter(Directory);
     SearchFolder('');
-    if SortByName and (da.Count > 0) then
+    if SortByName and
+       (da.Count > 0) then
       da.Sort(SortDynArrayFileName);
   end;
   da.Capacity := count; // trim result[]
@@ -1380,7 +1384,8 @@ begin
   result := 0;
   ref := IncludeTrailingPathDelimiter(Reference);
   dst := IncludeTrailingPathDelimiter(Dest);
-  if DirectoryExists(ref) and (FindFirst(dst + FILES_ALL, faAnyFile, fdst) = 0) then
+  if DirectoryExists(ref) and
+     (FindFirst(dst + FILES_ALL, faAnyFile, fdst) = 0) then
   begin
     repeat
       if SearchRecValidFile(fdst) then
@@ -1401,7 +1406,8 @@ begin
           continue; // skip if no reference file to copy from
         s := StringFromFile(ref + fdst.Name);
         if (s = '') or
-           (ByContent and (length(s) = fdst.Size) and
+           (ByContent and
+            (length(s) = fdst.Size) and
            (DefaultHasher(0, pointer(s), fdst.Size) = HashFile(dst + fdst.Name))) then
           continue;
         FileFromString(s, dst + fdst.Name, false, reftime);
@@ -2071,7 +2077,8 @@ begin
     Search := SearchVoid;
     exit;
   end;
-  if aCaseInsensitive and not IsCaseSensitive(aPattern, aPatternLen) then
+  if aCaseInsensitive and
+     not IsCaseSensitive(aPattern, aPatternLen) then
     aCaseInsensitive := false; // don't slow down e.g. number or IP search
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7
@@ -2263,7 +2270,8 @@ end;
 procedure TMatch.PrepareContains(var aPattern: RawUTF8; aCaseInsensitive: boolean);
 begin
   pmax := length(aPattern) - 1;
-  if aCaseInsensitive and not IsCaseSensitive(pointer(aPattern), pmax + 1) then
+  if aCaseInsensitive and
+     not IsCaseSensitive(pointer(aPattern), pmax + 1) then
     aCaseInsensitive := false;
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7
@@ -4449,7 +4457,8 @@ begin
   iteminfo := aTypeInfo^.DynArrayItemType(ElemSize);
   if (iteminfo <> nil) or
      (Source = nil) or
-     (Source[0] <> AnsiChar(ElemSize)) or (Source[1]<>#0) then
+     (Source[0] <> AnsiChar(ElemSize)) or
+     (Source[1]<>#0) then
     exit; // invalid type information or Source content
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
@@ -4650,7 +4659,8 @@ begin
         break;
       end;
     until false;
-  result := (State = STATE_SUBDOMAIN) and (subdomains >= 2);
+  result := (State = STATE_SUBDOMAIN) and
+            (subdomains >= 2);
 end;
 
 

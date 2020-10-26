@@ -1686,7 +1686,8 @@ begin
     for i := 0 to Size - 1 do
       OutData[Size - i] := Mant[i];
   Exp := (Exp + 65) or $80;
-  if not minus and (Size < high(TSQLT_VNU)) then
+  if not minus and
+     (Size < high(TSQLT_VNU)) then
   begin
     Exp := not Exp;
     inc(Size);

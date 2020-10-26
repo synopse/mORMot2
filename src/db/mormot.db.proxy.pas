@@ -757,7 +757,8 @@ begin
     finally
       LeaveCriticalSection(fLock);
     end;
-    if result or (tix > endTrial) then
+    if result or
+       (tix > endTrial) then
       break;
     SleepHiRes(1);
     tix := GetTickCount64;
@@ -1212,7 +1213,8 @@ begin
   endTrial := GetTickCount64 + fProxy.StartTransactionTimeOut;
   repeat
     fProxy.Process(cTryStartTransaction, self, started);
-    if started or (GetTickCount64 > endTrial) then
+    if started or
+       (GetTickCount64 > endTrial) then
       break;
     SleepHiRes(10); // retry every 10 ms
   until false;
@@ -1711,7 +1713,8 @@ function TSQLDBProxyStatementRandomAccess.GotoRow(Index: integer;
 var
   Reader: PByte;
 begin
-  result := (cardinal(Index) < cardinal(fDataRowCount)) and (fColumnCount > 0);
+  result := (cardinal(Index) < cardinal(fDataRowCount)) and
+            (fColumnCount > 0);
   if not result then
     if RaiseExceptionOnWrongIndex then
       raise ESQLDBRemote.CreateUTF8('Invalid %.GotoRow(%)', [self, Index])

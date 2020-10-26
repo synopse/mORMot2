@@ -282,7 +282,8 @@ end;
 
 function TSQLDBNexusDBConnectionProperties.DatabaseExists: boolean;
 begin
-  if (fProtocol = nxpFOLDER) and (fDatabaseName <> NEXUSDB_INMEMORY) then
+  if (fProtocol = nxpFOLDER) and
+     (fDatabaseName <> NEXUSDB_INMEMORY) then
     result := DirectoryExists(UTF8ToString(fDatabaseName))
   else
     result := True; // if we cannot determine directly, assume it exists

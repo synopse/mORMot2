@@ -1003,13 +1003,19 @@ var
 begin
   {$ifdef CPU64}
   {$ifdef MAX_SQLFIELDS_128}
-  result := (f[0] = 0) and (f[1] = 0);
+  result := (f[0] = 0) and
+            (f[1] = 0);
   {$else}
   {$ifdef MAX_SQLFIELDS_192}
-  result := (f[0] = 0) and (f[1] = 0) and (f[2] = 0);
+  result := (f[0] = 0) and
+            (f[1] = 0) and
+            (f[2] = 0);
   {$else}
   {$ifdef MAX_SQLFIELDS_256}
-  result := (f[0] = 0) and (f[1] = 0) and (f[2] = 0) and (f[3] = 0);
+  result := (f[0] = 0) and
+            (f[1] = 0) and
+            (f[2] = 0) and
+            (f[3] = 0);
   {$else}
   result := (f[0] = 0);
   {$endif MAX_SQLFIELDS_256}
@@ -1017,17 +1023,31 @@ begin
   {$endif MAX_SQLFIELDS_128}
   {$else}
   {$ifdef MAX_SQLFIELDS_128}
-  result := (f[0] = 0) and (f[1] = 0) and (f[2] = 0) and (f[3] = 0);
+  result := (f[0] = 0) and
+            (f[1] = 0) and
+            (f[2] = 0) and
+            (f[3] = 0);
   {$else}
   {$ifdef MAX_SQLFIELDS_192}
-  result := (f[0] = 0) and (f[1] = 0) and (f[2] = 0) and (f[3] = 0) and
-            (f[4] = 0) and (f[5] = 0);
+  result := (f[0] = 0) and
+            (f[1] = 0) and
+            (f[2] = 0) and
+            (f[3] = 0) and
+            (f[4] = 0) and
+            (f[5] = 0);
   {$else}
   {$ifdef MAX_SQLFIELDS_256}
-  result := (f[0] = 0) and (f[1] = 0) and (f[2] = 0) and (f[3] = 0) and
-            (f[4] = 0) and (f[5] = 0) and (f[6] = 0) and (f[7] = 0);
+  result := (f[0] = 0) and
+            (f[1] = 0) and
+            (f[2] = 0) and
+            (f[3] = 0) and
+            (f[4] = 0) and
+            (f[5] = 0) and
+            (f[6] = 0) and
+            (f[7] = 0);
   {$else}
-  result := (f[0] = 0) and (f[1] = 0);
+  result := (f[0] = 0) and
+            (f[1] = 0);
   {$endif MAX_SQLFIELDS_256}
   {$endif MAX_SQLFIELDS_192}
   {$endif MAX_SQLFIELDS_128}
@@ -1041,13 +1061,19 @@ var
 begin
   {$ifdef CPU64}
   {$ifdef MAX_SQLFIELDS_128}
-  result := (a_[0] = b_[0]) and (a_[1] = b_[1]);
+  result := (a_[0] = b_[0]) and
+            (a_[1] = b_[1]);
   {$else}
   {$ifdef MAX_SQLFIELDS_192}
-  result := (a_[0] = b_[0]) and (a_[1] = b_[1]) and (a_[2] = b_[2]);
+  result := (a_[0] = b_[0]) and
+            (a_[1] = b_[1]) and
+            (a_[2] = b_[2]);
   {$else}
   {$ifdef MAX_SQLFIELDS_256}
-  result := (a_[0] = b_[0]) and (a_[1] = b_[1]) and (a_[2] = b_[2]) and (a_[3] = b_[3]);
+  result := (a_[0] = b_[0]) and
+            (a_[1] = b_[1]) and
+            (a_[2] = b_[2]) and
+            (a_[3] = b_[3]);
   {$else}
   result := (a_[0] = b_[0]);
   {$endif MAX_SQLFIELDS_256}
@@ -1055,18 +1081,31 @@ begin
   {$endif MAX_SQLFIELDS_128}
   {$else}
   {$ifdef MAX_SQLFIELDS_128}
-  result := (a_[0] = b_[0]) and (a_[1] = b_[1]) and (a_[2] = b_[2]) and (a_[3] = b_[3]);
+  result := (a_[0] = b_[0]) and
+            (a_[1] = b_[1]) and
+            (a_[2] = b_[2]) and
+            (a_[3] = b_[3]);
   {$else}
   {$ifdef MAX_SQLFIELDS_192}
-  result := (a_[0] = b_[0]) and (a_[1] = b_[1]) and (a_[2] = b_[2]) and
-            (a_[3] = b_[3]) and (a_[4] = b_[4]) and (a_[5] = b_[5]);
+  result := (a_[0] = b_[0]) and
+            (a_[1] = b_[1]) and
+            (a_[2] = b_[2]) and
+            (a_[3] = b_[3]) and
+            (a_[4] = b_[4]) and
+            (a_[5] = b_[5]);
   {$else}
   {$ifdef MAX_SQLFIELDS_256}
-  result := (a_[0] = b_[0]) and (a_[1] = b_[1]) and (a_[2] = b_[2]) and
-            (a_[3] = b_[3]) and (a_[4] = b_[4]) and (a_[5] = b_[5]) and
-            (a_[6] = b_[6]) and (a_[7] = b_[7]);
+  result := (a_[0] = b_[0]) and
+            (a_[1] = b_[1]) and
+            (a_[2] = b_[2]) and
+            (a_[3] = b_[3]) and
+            (a_[4] = b_[4]) and
+            (a_[5] = b_[5]) and
+            (a_[6] = b_[6]) and
+            (a_[7] = b_[7]);
   {$else}
-  result := (a_[0] = b_[0]) and (a_[1] = b_[1]);
+  result := (a_[0] = b_[0]) and
+            (a_[1] = b_[1]);
   {$endif MAX_SQLFIELDS_256}
   {$endif MAX_SQLFIELDS_192}
   {$endif MAX_SQLFIELDS_128}
@@ -1784,8 +1823,10 @@ begin
       2, 3:
         result := P[6] in [#0..' ', ';'];
       4:
-        result := (P[4] <= ' ') and (StrPosI('INSERT', P + 5) = nil) and
-          (StrPosI('UPDATE', P + 5) = nil) and (StrPosI('DELETE', P + 5) = nil);
+        result := (P[4] <= ' ') and
+                  (StrPosI('INSERT', P + 5) = nil) and
+                  (StrPosI('UPDATE', P + 5) = nil) and
+                  (StrPosI('DELETE', P + 5) = nil);
     else
       result := false;
     end;
@@ -1973,7 +2014,8 @@ begin
       k := i + j;
       while SQL[k] in [#1..' '] do
         inc(k);
-      if not EnsureUniqueTableInFrom or (SQL[k] <> ',') then
+      if not EnsureUniqueTableInFrom or
+         (SQL[k] <> ',') then
       begin
         FastSetString(result, PAnsiChar(PtrInt(SQL) + i - 1), j);
         exit;
@@ -2197,7 +2239,8 @@ var
       P := GotoNextNotSpace(P + 1);
       select.FunctionName := Prop;
       inc(fSelectFunctionCount);
-      if IdemPropNameU(Prop, 'COUNT') and (P^ = '*') then
+      if IdemPropNameU(Prop, 'COUNT') and
+         (P^ = '*') then
       begin
         select.Field := 0; // count( * ) -> count(ID)
         select.FunctionKnown := funcCountStar;

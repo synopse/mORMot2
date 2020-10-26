@@ -5394,7 +5394,8 @@ end;
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
   nofullcheck: boolean): boolean;
 begin // nofullcheck is just ignored and deprecated
-  result := (bin <> nil) and (Base64ToBinLength(base64, base64len) = binlen) and
+  result := (bin <> nil) and
+            (Base64ToBinLength(base64, base64len) = binlen) and
     Base64Decode(base64, bin, base64len shr 2);
 end;
 
@@ -5966,7 +5967,8 @@ begin
     end
     else if c > 0 then
     begin
-      if shift and (P[i] >= ' ') then
+      if shift and
+         (P[i] >= ' ') then
       begin
         d := (d shl 5) or 31;
         inc(bits, 5);
@@ -6832,8 +6834,10 @@ begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
         begin
           Height := swap(PWord(jpeg + 4)^);
           Width := swap(PWord(jpeg + 6)^);
-          result := (Height > 0) and (Height < 20000) and
-                    (Width > 0) and (Width < 20000);
+          result := (Height > 0) and
+                    (Height < 20000) and
+                    (Width > 0) and
+                    (Width < 20000);
           exit;
         end;
       $d0..$d8, $01: // RST, SOI
@@ -6981,7 +6985,8 @@ begin // generated asm is much better with a local proc
     inc(P, BufferLineLength(P, PEnd)); // use branchless SSE2 on x86_64
     {$else}
     while (P < PEnd) and
-          (P^ <> #13) and (P^ <> #10) do
+          (P^ <> #13) and
+          (P^ <> #10) do
       inc(P);
     {$endif CPUX64}
     Map.ProcessOneLine(PBeg, P);
@@ -7479,7 +7484,8 @@ begin
     exit;
   end;
   B := P;
-  while not (ord(P^) in stopchars) and not IsHttpOrHttps(P) do
+  while not (ord(P^) in stopchars) and
+        not IsHttpOrHttps(P) do
     inc(P);
   W.AddHtmlEscape(B, P - B, fmt);
   result := P^;

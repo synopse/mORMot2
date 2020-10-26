@@ -707,9 +707,10 @@ function Iso8601CheckAndDecode(P: PUTF8Char; L: integer; var Value: TDateTime): 
 begin
   if P = nil then
     result := false
-  else if (((L = 9) or (L = 13)) and (P[0] = 'T') and (P[3] = ':')) or // 'Thh:mm:ss[.sss]'
-    ((L = 10) and (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
-    (((L = 19) or (L = 23)) and (P[4] = '-') and (P[10] = 'T')) then
+  else if (((L = 9) or (L = 13)) and
+            (P[0] = 'T') and (P[3] = ':')) or // 'Thh:mm:ss[.sss]'
+          ((L = 10) and (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
+          (((L = 19) or (L = 23)) and (P[4] = '-') and (P[10] = 'T')) then
   begin
     Iso8601ToDateTimePUTF8CharVar(P, L, Value);
     result := PInt64(@Value)^ <> 0;
@@ -774,7 +775,8 @@ begin
     if L >= 6 then
     begin // YYYYMM
       M := ord(P[4]) * 10 + ord(P[5]) - (48 + 480);
-      if (M = 0) or (M > 12) then
+      if (M = 0) or
+         (M > 12) then
         exit;
       if P[6] in ['-', '/'] then
       begin
@@ -783,10 +785,12 @@ begin
       end; // allow YYYY-MM-DD
       if L >= 8 then
       begin // YYYYMMDD
-        if (L > 8) and not (P[8] in [#0, ' ', 'T']) then
+        if (L > 8) and
+           not (P[8] in [#0, ' ', 'T']) then
           exit; // invalid date format
         D := ord(P[6]) * 10 + ord(P[7]) - (48 + 480);
-        if (D = 0) or (D > MonthDays[true][M]) then
+        if (D = 0) or
+           (D > MonthDays[true][M]) then
           exit; // worse day number to allow is for leapyear=true
       end;
     end
@@ -821,7 +825,8 @@ begin
     dec(L);
   end; // allow hh:mm:ss
   SS := ord(P[13]) * 10 + ord(P[14]) - (48 + 480);
-  if (L > 16) and (P[15] = '.') then
+  if (L > 16) and
+     (P[15] = '.') then
   begin
     // one or more digits representing a decimal fraction of a second
     MS := ord(P[16]) * 100 - 4800;
@@ -834,7 +839,9 @@ begin
   end
   else
     MS := 0;
-  if (H < 24) and (MI < 60) and (SS < 60) then // inlined EncodeTime()
+  if (H < 24) and
+     (MI < 60) and
+     (SS < 60) then // inlined EncodeTime()
     result := result + (H * (MinsPerHour * SecsPerMin * MSecsPerSec) +
       MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec + MS) / MSecsPerDay;
 end;
@@ -877,7 +884,8 @@ begin
     dec(L);
   end; // allow hh:mm:ss
   S := ord(P[4]) * 10 + ord(P[5]) - (48 + 480);
-  if (L > 6) and (P[6] = '.') then
+  if (L > 6) and
+     (P[6] = '.') then
   begin
     // one or more digits representing a decimal fraction of a second
     MS := ord(P[7]) * 100 - 4800;
@@ -888,7 +896,10 @@ begin
   end
   else
     MS := 0;
-  if (H < 24) and (M < 60) and (S < 60) and (MS < 1000) then
+  if (H < 24) and
+     (M < 60) and
+     (S < 60) and
+     (MS < 1000) then
     result := true;
 end;
 
@@ -899,22 +910,28 @@ begin
     exit;
   if L = 0 then
     L := StrLen(P);
-  if (L < 8) or not (P[0] in ['0'..'9']) or not (P[1] in ['0'..'9']) or
-     not (P[2] in ['0'..'9']) or not (P[3] in ['0'..'9']) then
+  if (L < 8) or
+     not (P[0] in ['0'..'9']) or
+     not (P[1] in ['0'..'9']) or
+     not (P[2] in ['0'..'9']) or
+     not (P[3] in ['0'..'9']) then
     exit; // we need 'YYYYMMDD' at least
   Y := ord(P[0]) * 1000 + ord(P[1]) * 100 + ord(P[2]) * 10 + ord(P[3])
        - (48 + 480 + 4800 + 48000);
-  if (Y < 1000) or (Y > 2999) then
+  if (Y < 1000) or
+     (Y > 2999) then
     exit;
   if P[4] in ['-', '/'] then
     inc(P); // allow YYYY-MM-DD
   M := ord(P[4]) * 10 + ord(P[5]) - (48 + 480);
-  if (M = 0) or (M > 12) then
+  if (M = 0) or
+     (M > 12) then
     exit;
   if P[6] in ['-', '/'] then
     inc(P);
   D := ord(P[6]) * 10 + ord(P[7]) - (48 + 480);
-  if (D <> 0) and (D <= MonthDays[true][M]) then
+  if (D <> 0) and
+     (D <= MonthDays[true][M]) then
     // worse day number to allow is for leapyear=true
     result := true;
 end;
@@ -1375,7 +1392,8 @@ end;
 
 function TSynSystemTime.IsZero: boolean;
 begin
-  result := (PInt64Array(@self)[0] = 0) and (PInt64Array(@self)[1] = 0);
+  result := (PInt64Array(@self)[0] = 0) and
+            (PInt64Array(@self)[1] = 0);
 end;
 
 function TSynSystemTime.IsEqual(const another: TSynSystemTime): boolean;
@@ -1687,7 +1705,11 @@ var
   d100: TDiv100Rec;
 begin 
   result := false;
-  if (Month = 0) or (Month > 12) or (Day = 0) or (Year = 0) or (Year > 10000) or
+  if (Month = 0) or
+     (Month > 12) or
+     (Day = 0) or
+     (Year = 0) or
+     (Year > 10000) or
      (Day > MonthDays[IsLeapYear(Year)][Month]) then
     exit;
   if Month > 2 then
@@ -2285,7 +2307,9 @@ begin
       begin
         // YYYYMMDD
         V := ord(P[6]) * 10 + ord(P[7]) - (48 + 480 + 1); // Day 1..31 -> 0..30
-        if (V <= 30) and ((L = 8) or (P[8] in [#0, ' ', 'T'])) then
+        if (V <= 30) and
+           ((L = 8) or
+            (P[8] in [#0, ' ', 'T'])) then
           inc(result, V shl 17)
         else
         begin

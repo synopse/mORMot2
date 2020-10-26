@@ -224,7 +224,8 @@ end;
 
 function TRttiProp.IsStored(Instance: TObject): boolean;
 begin
-  if (PtrUInt(PPropInfo(@self)^.StoredProc) and (not PtrUInt($ff))) = 0 then
+  if (PtrUInt(PPropInfo(@self)^.StoredProc) and
+     (not PtrUInt($ff))) = 0 then
     result := boolean(PtrUInt(PPropInfo(@self)^.StoredProc))
   else
     result := GetIsStored(Instance);
@@ -238,7 +239,8 @@ var
   call: TMethod;
 begin
   with PPropInfo(@self)^ do
-    if (PtrUInt(StoredProc) and (not PtrUInt($ff))) = 0 then
+    if (PtrUInt(StoredProc) and
+       (not PtrUInt($ff))) = 0 then
       result := boolean(PtrUInt(StoredProc))
     else
     begin
@@ -268,7 +270,8 @@ begin
     if GetProc = nil then
     begin
       // no 'read' was defined -> try from 'write' field
-      if (SetProc <> nil) and (PropWrap(SetProc).Kind = ptField) then
+      if (SetProc <> nil) and
+         (PropWrap(SetProc).Kind = ptField) then
       begin
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
         result := rpcField;
@@ -308,7 +311,8 @@ begin
     if SetProc = nil then
     begin
       // no 'write' was defined -> try from 'read' field
-      if (GetProc <> nil) and (PropWrap(GetProc).Kind = ptField) then
+      if (GetProc <> nil) and
+         (PropWrap(GetProc).Kind = ptField) then
       begin
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
         result := rpcField;
@@ -427,7 +431,8 @@ end;
 
 function TRttiInfo.IsBoolean: boolean;
 begin
-  result := (@self = TypeInfo(boolean)) or (@self = TypeInfo(wordbool));
+  result := (@self = TypeInfo(boolean)) or
+            (@self = TypeInfo(wordbool));
 end;
 
 function TRttiInfo.EnumBaseType: PRttiEnumType;
@@ -460,7 +465,8 @@ begin
   begin
     aDataCount := ElCount;
     aDataSize := ArraySize;
-    if (DimCount = 1) and (ArrayType <> nil) then
+    if (DimCount = 1) and
+       (ArrayType <> nil) then
       result := ArrayType^
     else
       result := nil;
@@ -617,7 +623,8 @@ begin
   p := @pi^.IntfUnit[ord(pi^.IntfUnit[0]) + 1];
   mn := pw^;
   inc(pw);
-  if (pw^ = $ffff) or (mn = 0) then
+  if (pw^ = $ffff) or
+     (mn = 0) then
     exit; // no method
   inc(pw);
   SetLength(Definition.Methods, MethodCount + mn);

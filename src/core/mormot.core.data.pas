@@ -3643,7 +3643,8 @@ begin
     P := pointer(Content);
     result := UpdateIniNameValueInternal(Content, NewValue, NewValue + #13#10,
       P, pointer(UpperName), length(UpperName));
-    if result or (Name = '') then
+    if result or
+       (Name = '') then
       exit;
     if Content <> '' then
       Content := Content + #13#10;
@@ -4652,12 +4653,14 @@ end;
 
 function TRawUTF8List.GetCaseSensitive: boolean;
 begin
-  result := (self <> nil) and (fCaseSensitive in fFlags);
+  result := (self <> nil) and
+            (fCaseSensitive in fFlags);
 end;
 
 function TRawUTF8List.GetNoDuplicate: boolean;
 begin
-  result := (self <> nil) and (fNoDuplicate in fFlags);
+  result := (self <> nil) and
+            (fNoDuplicate in fFlags);
 end;
 
 function TRawUTF8List.UpdateValue(const Name: RawUTF8; var Value: RawUTF8;
@@ -5453,7 +5456,8 @@ begin
   if A <> B then
   begin
     cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
-    if Assigned(cmp) and (Info^.Kind in Kinds) then
+    if Assigned(cmp) and
+       (Info^.Kind in Kinds) then
     begin
       size := cmp(A, B, Info, comp);
       if PSize <> nil then
@@ -5492,7 +5496,8 @@ var
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(save) and (Info^.Kind in Kinds) then
+  if Assigned(save) and
+     (Info^.Kind in Kinds) then
   begin
     W := TBufferWriter.Create(TFakeWriterStream, @temp, SizeOf(temp));
     try
@@ -5515,7 +5520,8 @@ var
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(save) and (Info^.Kind in Kinds) then
+  if Assigned(save) and
+     (Info^.Kind in Kinds) then
   begin
     W := TBufferWriter.Create(TFakeWriterStream, Dest, 1 shl 30);
     try
@@ -5538,7 +5544,8 @@ var
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(save) and (Info^.Kind in Kinds) then
+  if Assigned(save) and
+     (Info^.Kind in Kinds) then
   begin
     W := TBufferWriter.Create(temp{%H-});
     try
@@ -5568,7 +5575,8 @@ var
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(save) and (Info^.Kind in Kinds) then
+  if Assigned(save) and
+     (Info^.Kind in Kinds) then
   begin
     W := TBufferWriter.Create(temp{%H-});
     try
@@ -5589,7 +5597,8 @@ var
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(save) and (Info^.Kind in Kinds) then
+  if Assigned(save) and
+     (Info^.Kind in Kinds) then
   begin
     W := TBufferWriter.Create(TRawByteStringStream, @Dest.tmp,
       SizeOf(Dest.tmp) - 16); // Dest.Init() reserves 16 additional bytes
@@ -5618,7 +5627,8 @@ var
   save: TRttiBinarySave;
 begin
   save := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(save) and (Info^.Kind in Kinds) then
+  if Assigned(save) and
+     (Info^.Kind in Kinds) then
   begin
     W := TBufferWriter.Create(temp{%H-});
     try
@@ -5656,7 +5666,8 @@ var
   load: TRttiBinaryLoad;
 begin
   load := RTTI_BINARYLOAD[Info^.Kind];
-  if Assigned(load) and (Info^.Kind in Kinds) then
+  if Assigned(load) and
+     (Info^.Kind in Kinds) then
   begin
     read.Init(Source, SourceMax - Source);
     read.CustomVariants := TryCustomVariants;
@@ -5678,7 +5689,8 @@ begin
   begin
     P := pointer(Source);
     P := BinaryLoad(Data, P, Info, nil, P + length(Source), Kinds, TryCustomVariants);
-    result := (P <> nil) and (P - pointer(Source) = length(Source));
+    result := (P <> nil) and
+              (P - pointer(Source) = length(Source));
   end
   else
     result := false;
@@ -5884,7 +5896,8 @@ begin
   if Assigned(fCompare) then
     result := fCompare(A^, B^) = 0
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:result := CompareMemFixed(@A, @B, fElemSize) // binary comparison
+bin:// binary equality test
+    result := CompareMemFixed(@A, @B, fElemSize)
   else
   begin
     rtti := fInfo.Cache.ItemInfo;
@@ -5909,7 +5922,8 @@ begin
   if Assigned(fCompare) then
     result := fCompare(A^, B^)
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:result := StrCompL(A, B, fElemSize) // binary comparison
+bin:// binary comparison
+    result := StrCompL(A, B, fElemSize)
   else
   begin
     rtti := fInfo.Cache.ItemInfo;
@@ -6340,7 +6354,8 @@ var
   P: PAnsiChar;
 begin
   n := GetCount;
-  if Assigned(aCompare) and (n > 0) then
+  if Assigned(aCompare) and
+     (n > 0) then
   begin
     dec(n);
     P := fValue^;
@@ -6423,11 +6438,14 @@ begin
   n := GetCount;
   if not Assigned(aCompare) then
     aCompare := fCompare;
-  if Assigned(aCompare) and (n > 0) then
+  if Assigned(aCompare) and
+     (n > 0) then
   begin
     dec(n);
     P := fValue^;
-    if fSorted and (@aCompare = @fCompare) and (n > 10) then
+    if fSorted and
+       (@aCompare = @fCompare) and
+       (n > 10) then
     begin
       // array is sorted -> use fast O(log(n)) binary search
       L := 0;
@@ -6536,7 +6554,8 @@ function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: Pboolean): intege
 var
   toInsert: boolean;
 begin
-  toInsert := not FastLocateSorted(Item, result) and (result >= 0);
+  toInsert := not FastLocateSorted(Item, result) and
+              (result >= 0);
   if toInsert then
   begin
     Insert(result, Item);
@@ -6848,7 +6867,9 @@ begin
     QuickSort.Compare := aCompare
   else
     QuickSort.Compare := @fCompare;
-  if Assigned(QuickSort.Compare) and (fValue <> nil) and (fValue^ <> nil) then
+  if Assigned(QuickSort.Compare) and
+     (fValue <> nil) and
+     (fValue^ <> nil) then
     if ElemSize = SizeOf(pointer) then
       // dedicated function for pointers - e.g. T*ObjArray
       QuickSortPtr(aStart, aStop, QuickSort.Compare, fValue^)
@@ -6866,7 +6887,9 @@ var
   QuickSort: TDynArrayQuickSort;
   R: PtrInt;
 begin
-  if not Assigned(aCompare) or (fValue = nil) or (fValue^ = nil) then
+  if not Assigned(aCompare) or
+     (fValue = nil) or
+     (fValue^ = nil) then
     exit; // nothing to sort
   QuickSort.CompareEvent := aCompare;
   QuickSort.Value := fValue^;
@@ -6888,7 +6911,9 @@ begin
     QuickSort.Compare := aCompare
   else
     QuickSort.Compare := @fCompare;
-  if Assigned(QuickSort.Compare) and (fValue <> nil) and (fValue^ <> nil) then
+  if Assigned(QuickSort.Compare) and
+     (fValue <> nil) and
+     (fValue^ <> nil) then
   begin
     n := GetCount;
     if length(aIndex) < n then
@@ -6913,7 +6938,9 @@ begin
     QuickSort.Compare := aCompare
   else
     QuickSort.Compare := @fCompare;
-  if Assigned(QuickSort.Compare) and (fValue <> nil) and (fValue^ <> nil) then
+  if Assigned(QuickSort.Compare) and
+     (fValue <> nil) and
+     (fValue^ <> nil) then
   begin
     n := GetCount;
     QuickSort.Value := fValue^;
@@ -6975,7 +7002,8 @@ begin
   if (n <> B.Count) or
      (fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo) then
     exit;
-  if Assigned(fCompare) and not ignorecompare then
+  if Assigned(fCompare) and
+     not ignorecompare then
   begin // use customized comparison
     P1 := fValue^;
     P2 := B.fValue^;
@@ -7010,7 +7038,8 @@ begin
     result := ComparePointer(fValue^, B.fValue^);
     exit;
   end;
-  if Assigned(fCompare) and not ignorecompare then
+  if Assigned(fCompare) and
+     not ignorecompare then
   begin // use customized comparison
     P1 := fValue^;
     P2 := B.fValue^;
@@ -7035,8 +7064,9 @@ begin
   if (fValue = nil) or
      (fInfo.Cache.ItemInfo <> Source.fInfo.Cache.ItemInfo) then
     exit;
-  if not ObjArrayByRef and (rcfObjArray in fInfo.Flags) then
-     LoadFromJSON(pointer(Source.SaveToJSON))
+  if not ObjArrayByRef and
+     (rcfObjArray in fInfo.Flags) then
+    LoadFromJSON(pointer(Source.SaveToJSON))
   else
   begin
     DynArrayCopy(fValue^, Source.fValue^, fInfo.Cache.ItemInfo, Source.fCountP);
@@ -7233,7 +7263,8 @@ begin
       else
       // size-down
       if (aCount > 0) and
-         ((capa <= MINIMUM_SIZE) or (capa - aCount < capa shr 3)) then
+         ((capa <= MINIMUM_SIZE) or
+          (capa - aCount < capa shr 3)) then
         // reallocate memory only if worth it (for faster Delete)
         exit;
     end;
@@ -7754,7 +7785,8 @@ begin
       result := -(result + 1);
       exit;
     end
-    else if not aForAdd and (HashOne(P + ndx * siz) = aHashCode) then
+    else if not aForAdd and
+                (HashOne(P + ndx * siz) = aHashCode) then
     begin
       result := ndx;
       exit;
@@ -8036,9 +8068,12 @@ begin
   if not (hasHasher in State) then
     exit;
   n := DynArray^.count;
-  if not forced and ((n = 0) or (n < CountTrigger)) then
+  if not forced and
+     ((n = 0) or
+      (n < CountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if forceGrow and (siz > 0) then
+  if forceGrow and
+     (siz > 0) then
     // next power of two or next prime
     {$ifdef CPU32DELPHI}
     if siz < HASH_PO2 then
@@ -8257,7 +8292,8 @@ function TDynArrayHashed.FindHashedForAdding(const Item; out wasAdded: boolean;
   aHashCode: cardinal; noAddEntry: boolean): integer;
 begin
   result := fHash.FindBeforeAdd(@Item, wasAdded, aHashCode);
-  if wasAdded and not noAddEntry then
+  if wasAdded and
+     not noAddEntry then
     SetCount(result + 1); // reserve space for a void element in array
 end;
 
@@ -8460,7 +8496,8 @@ end;
 function TSynQueue.Pending: boolean;
 begin
   // allow some false positive in heavily multi-threaded context
-  result := (self <> nil) and (fFirst >= 0);
+  result := (self <> nil) and
+            (fFirst >= 0);
 end;
 
 procedure TSynQueue.Push(const aValue);
@@ -8581,7 +8618,8 @@ begin
   SleepHiRes(1);
   if Assigned(idle) then
     idle; // e.g. Application.ProcessMessages
-  result := InternalDestroying(0) or (GetTickCount64 > endtix);
+  result := InternalDestroying(0) or
+            (GetTickCount64 > endtix);
 end;
 
 function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;

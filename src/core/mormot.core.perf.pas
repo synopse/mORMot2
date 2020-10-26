@@ -1090,7 +1090,8 @@ end;
 
 function TPrecisionTimer.Started: boolean;
 begin
-  result := (fStart <> 0) or (fTime <> 0);
+  result := (fStart <> 0) or
+            (fTime <> 0);
 end;
 
 procedure TPrecisionTimer.Resume;
@@ -2107,7 +2108,8 @@ begin
       if val <> nil then
         for p := 0 to length(Track.Props) - 1 do
           with Track.Props[p] do
-            if val^.GetAsDocVariant(Name, int) and (int^.Count > 0) and
+            if val^.GetAsDocVariant(Name, int) and
+               (int^.Count > 0) and
                (dvoIsArray in int^.Options) then
             begin
               for v := 0 to length(Values[g]) - 1 do

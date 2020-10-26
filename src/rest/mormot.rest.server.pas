@@ -2838,13 +2838,17 @@ procedure TRestServerURIContext.InternalExecuteSOAByInterface;
   begin
     with TServiceFactoryServer(Service) do
     begin
-      ForceServiceResultAsXMLObject := ForceServiceResultAsXMLObject or ResultAsXMLObject;
+      // XML needs a full JSON object as input
+      ForceServiceResultAsXMLObject := ForceServiceResultAsXMLObject or
+                                       ResultAsXMLObject;
       ForceServiceResultAsJSONObject := ForceServiceResultAsJSONObject or
-        ResultAsJSONObject or ResultAsJSONObjectWithoutResult or
-        ForceServiceResultAsXMLObject; // XML needs a full JSON object as input
+                                        ResultAsJSONObject or
+                                        ResultAsJSONObjectWithoutResult or
+                                        ForceServiceResultAsXMLObject;
       ForceServiceResultAsJSONObjectWithoutResult :=
-        ForceServiceResultAsJSONObject and (InstanceCreation in
-        SERVICE_IMPLEMENTATION_NOID) and ResultAsJSONObjectWithoutResult;
+        ForceServiceResultAsJSONObject and
+        (InstanceCreation in SERVICE_IMPLEMENTATION_NOID) and
+        ResultAsJSONObjectWithoutResult;
       if ForceServiceResultAsXMLObjectNameSpace = '' then
         ForceServiceResultAsXMLObjectNameSpace := ResultAsXMLObjectNameSpace;
     end;
@@ -3017,7 +3021,8 @@ procedure TRestServerURIContext.ExecuteORMGet;
     // force plain standard JSON output for AJAX clients
     if (FieldsCSV = '') or
        // handle ID single field only if ID_str is needed
-       (IsRowID(pointer(FieldsCSV)) and not (jwoID_str in Options)) or
+       (IsRowID(pointer(FieldsCSV)) and
+        not (jwoID_str in Options)) or
        // we won't handle min()/max() functions
        not TableRecordProps.Props.FieldBitsFromCSV(FieldsCSV, bits, withid) then
       exit;
@@ -3236,9 +3241,11 @@ begin
                     UrlDecodeInteger(Parameters, StartIndex, SQLStartIndex);
                     UrlDecodeInteger(Parameters, Results, SQLResults);
                     UrlDecodeValue(Parameters, Select, SQLSelect);
-                    if NonStandardSQLSelectParameter and (SQLSelect = '') then
+                    if NonStandardSQLSelectParameter and
+                       (SQLSelect = '') then
                       UrlDecodeValue(Parameters, PAGINGPARAMETERS_YAHOO.Select, SQLSelect);
-                    if NonStandardSQLWhereParameter and ({%H-}SQLWhere = '') then
+                    if NonStandardSQLWhereParameter and
+                       ({%H-}SQLWhere = '') then
                       UrlDecodeValue(Parameters, PAGINGPARAMETERS_YAHOO.Where, SQLWhere);
                     UrlDecodeValue(Parameters, Server.URIPagingParameters.Where,
                       SQLWhere, @Parameters);
@@ -3841,7 +3848,8 @@ begin
       if met <> nil then
       begin
         a := met.ArgIndex(pointer(name), length(name), {input=}true);
-        forcestring := (a >= 0) and (vIsString in met.Args[a].ValueKindAsm);
+        forcestring := (a >= 0) and
+                       (vIsString in met.Args[a].ValueKindAsm);
       end
       else
         forcestring := false;
@@ -3913,7 +3921,8 @@ begin
   begin
     GetNextItemTrimed(P, '=', cn);
     GetNextItemTrimed(P, ';', cv);
-    if (cn = '') and (cv = '') then
+    if (cn = '') and
+       (cv = '') then
       break;
     SetLength(fInputCookies, n + 1);
     fInputCookies[n].Name := cn;
@@ -4004,7 +4013,8 @@ end;
 
 function TRestServerURIContext.GetRemoteIPIsLocalHost: boolean;
 begin
-  result := (GetRemoteIP = '') or (fRemoteIP = '127.0.0.1');
+  result := (GetRemoteIP = '') or
+            (fRemoteIP = '127.0.0.1');
 end;
 
 function TRestServerURIContext.AuthenticationBearerToken: RawUTF8;
@@ -4030,7 +4040,8 @@ begin
     Error('Invalid Bearer [%]', [ToText(JWTContent.result)^], HTTP_FORBIDDEN)
   else if (Server.fIPWhiteJWT <> nil) and
           not Server.fIPWhiteJWT.Exists(RemoteIP) and
-          (fRemoteIP <> '') and (fRemoteIP <> '127.0.0.1') then
+          (fRemoteIP <> '') and
+          (fRemoteIP <> '127.0.0.1') then
   begin
     Error('Invalid IP [%]', [fRemoteIP], HTTP_FORBIDDEN);
     result := false;
@@ -4061,7 +4072,8 @@ end;
 
 function TRestServerURIContext.IsRemoteAdministrationExecute: boolean;
 begin
-  result := (self <> nil) and (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
+  result := (self <> nil) and
+            (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
 end;
 
 function TRestServerURIContext.ClienTORMOptions: TJSONSerializerORMOptions;
@@ -4106,7 +4118,8 @@ begin
     if CacheControlMaxAge > 0 then
       Call.OutHead := Call.OutHead + #13#10'Cache-Control: max-age=' +
         UInt32ToUtf8(CacheControlMaxAge);
-    if Handle304NotModified and (Status = HTTP_SUCCESS) and
+    if Handle304NotModified and
+       (Status = HTTP_SUCCESS) and
        (Length(result) > 64) then
     begin
       FindNameValue(Call.InHead, 'IF-NONE-MATCH: ', clientHash);
@@ -4149,7 +4162,8 @@ var
 begin
   VariantSaveJSON(Value, Escape, json);
   if MakeHumanReadable and
-     (json <> '') and (json[1] in ['{', '[']) then
+     (json <> '') and
+     (json[1] in ['{', '[']) then
   begin
     tmp.Init(json);
     try
@@ -5630,7 +5644,8 @@ end;
 
 function TRestServer.GetNoAJAXJSON: boolean;
 begin
-  result := (self <> nil) and (rsoNoAJAXJSON in fOptions);
+  result := (self <> nil) and
+            (rsoNoAJAXJSON in fOptions);
 end;
 
 constructor TRestServer.RegisteredClassCreateFrom(aModel: TORMModel;
@@ -6778,7 +6793,8 @@ begin
       if Call.OutBody <> '' then
       begin
         len := length(Call.OutHead);
-        outcomingfile := (len >= 25) and (Call.OutHead[15] = '!') and
+        outcomingfile := (len >= 25) and
+                         (Call.OutHead[15] = '!') and
           IdemPChar(pointer(Call.OutHead), STATICFILE_CONTENT_TYPE_HEADER_UPPPER);
       end
       else

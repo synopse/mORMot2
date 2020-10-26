@@ -1337,7 +1337,8 @@ function TORMVirtualTablePrepared.IsWhereIDEquals(CalledFromPrepare: boolean): b
 begin
   result := (WhereCount = 1) and
             (Where[0].Column = VIRTUAL_TABLE_ROWID_COLUMN) and
-            (CalledFromPrepare or (Where[0].Value.VType = ftInt64)) and
+            (CalledFromPrepare or
+             (Where[0].Value.VType = ftInt64)) and
             (Where[0].Operation = soEqualTo);
 end;
 
@@ -1593,7 +1594,8 @@ end;
 
 function TORMVirtualTableCursorIndex.HasData: boolean;
 begin
-  result := (self <> nil) and (fCurrent <= fMax);
+  result := (self <> nil) and
+            (fCurrent <= fMax);
 end;
 
 function TORMVirtualTableCursorIndex.Next: boolean;
@@ -2707,7 +2709,8 @@ begin
         end
         else if (length(Stmt.Select) <> 1) or
                 (Stmt.SelectFunctionCount <> 1) or
-                (Stmt.Limit > 1) or (Stmt.Offset <> 0) then
+                (Stmt.Limit > 1) or
+                (Stmt.Offset <> 0) then
           // handle a single max() or count() function with no LIMIT nor OFFSET
           exit
         else
@@ -3209,7 +3212,8 @@ begin
     end;
     P.GetValueVar(fValue[i], false, V, @wasString);
     int := GetInt64(pointer(V), err);
-    if wasString or (err <> 0) then
+    if wasString or
+       (err <> 0) then
     begin
       InternalLog('EngineUpdateFieldIncrement: %.%=[%] not an integer',
         [fStoredClass, P.Name, V], sllDB);
@@ -3548,7 +3552,8 @@ end;
 
 function TRestStorageInMemory.TableHasRows(Table: TORMClass): boolean;
 begin
-  result := (Table = fStoredClass) and (fCount > 0);
+  result := (Table = fStoredClass) and
+            (fCount > 0);
 end;
 
 function TRestStorageInMemory.MemberExists(Table: TORMClass;
@@ -3556,7 +3561,8 @@ function TRestStorageInMemory.MemberExists(Table: TORMClass;
 begin
   StorageLock(false, 'UpdateFile');
   try
-    result := (Table = fStoredClass) and (IDToIndex(ID) >= 0);
+    result := (Table = fStoredClass) and
+              (IDToIndex(ID) >= 0);
   finally
     StorageUnLock;
   end;
@@ -3763,7 +3769,8 @@ procedure TRestStorageInMemoryExternal.StorageLock(WillModifyContent: boolean;
   const msg: RawUTF8);
 begin
   inherited StorageLock(WillModifyContent, msg);
-  if WillModifyContent and (Owner <> nil) then
+  if WillModifyContent and
+     (Owner <> nil) then
     Owner.FlushInternalDBCache;
 end;
 
@@ -3861,7 +3868,9 @@ end;
 function TORMVirtualTableJSON.Delete(aRowID: Int64): boolean;
 begin
   result := (static <> nil) and static.Delete(StaticTable, aRowID);
-  if result and (StaticStorage <> nil) and (StaticStorage.Owner <> nil) then
+  if result and
+     (StaticStorage <> nil) and
+     (StaticStorage.Owner <> nil) then
     StaticStorage.Owner.CacheOrNil.NotifyDeletion(StaticTable, aRowID);
 end;
 
@@ -3923,7 +3932,8 @@ function TORMVirtualTableJSON.Prepare(
   var Prepared: TORMVirtualTablePrepared): boolean;
 begin
   result := inherited Prepare(Prepared); // optimize ID=? WHERE clause
-  if result and (static <> nil) then
+  if result and
+     (static <> nil) then
   begin
     if Prepared.IsWhereOneFieldEquals then
       with Prepared.Where[0] do
@@ -3948,7 +3958,8 @@ begin
   result := false;
   if (self = nil) or
      (static = nil) or
-     (oldRowID <> newRowID) or (newRowID <= 0) then // don't allow ID change
+     (oldRowID <> newRowID) or
+     (newRowID <= 0) then // don't allow ID change
     exit;
   if fStaticInMemory.UpdateOne(newRowID, Values) then
   begin
@@ -4556,8 +4567,10 @@ begin
   result := false;
   StorageLock(true, 'EngineUpdateField');
   try
-    if not ((ssoNoUpdate in fOptions) or (ssoNoUpdateField in fOptions)) then
-      result := fShards[fShardLast].EngineUpdateField(fShardTableIndex[fShardLast], SetFieldName, SetValue, WhereFieldName, WhereValue);
+    if not ((ssoNoUpdate in fOptions) or
+       (ssoNoUpdateField in fOptions)) then
+      result := fShards[fShardLast].EngineUpdateField(fShardTableIndex[fShardLast],
+        SetFieldName, SetValue, WhereFieldName, WhereValue);
   finally
     StorageUnLock;
   end;

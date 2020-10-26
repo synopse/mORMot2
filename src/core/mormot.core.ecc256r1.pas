@@ -726,14 +726,19 @@ end;
 function _isZero(const VLI: TVLI): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := (VLI[0] = 0) and (VLI[1] = 0) and (VLI[2] = 0) and (VLI[3] = 0);
+  result := (VLI[0] = 0) and
+            (VLI[1] = 0) and
+            (VLI[2] = 0) and
+            (VLI[3] = 0);
 end;
 
 function _equals(const Left, Right: TVLI): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := (Left[0] = Right[0]) and (Left[1] = Right[1]) and (Left[2] = Right[2])
-    and (Left[3] = Right[3]);
+  result := (Left[0] = Right[0]) and
+            (Left[1] = Right[1]) and
+            (Left[2] = Right[2]) and
+            (Left[3] = Right[3]);
 end;
 
 // counts the number of bits required for VLI
@@ -1698,7 +1703,9 @@ begin
   result := false;
   _bswap256(@l_r, @Signature);
   _bswap256(@l_s, @Signature[ECC_BYTES]);
-  if _isZero(l_r) or _isZero(l_s) or (_cmp(Curve_N_32, l_r) <> 1) or
+  if _isZero(l_r) or
+     _isZero(l_s) or
+     (_cmp(Curve_N_32, l_r) <> 1) or
      (_cmp(Curve_N_32, l_s) <> 1) then
     exit; // r, s must be <> 0 and < n
   // calculate u1 and u2
@@ -1903,8 +1910,11 @@ var
 begin
   now := NowECCDate;
   with content.Signed do
-    result := (IssueDate <= now) and ((ValidityStart = 0) or
-      (ValidityStart <= now)) and ((ValidityEnd = 0) or (ValidityEnd >= now));
+    result := (IssueDate <= now) and
+              ((ValidityStart = 0) or
+               (ValidityStart <= now)) and
+              ((ValidityEnd = 0) or
+               (ValidityEnd >= now));
 end;
 
 function IsEqual(const issuer1, issuer2: TECCCertificateIssuer): boolean;
@@ -1912,8 +1922,12 @@ var
   a: TPtrIntArray absolute issuer1;
   b: TPtrIntArray absolute issuer2;
 begin
-  result := (a[0] = b[0]) and (a[1] = b[1])
-  {$ifndef CPU64} and (a[2] = b[2]) and (a[3] = b[3]) {$endif};
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifndef CPU64} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU64};
 end;
 
 function IsEqual(const id1, id2: TECCCertificateID): boolean;
@@ -1921,38 +1935,53 @@ var
   a: TPtrIntArray absolute id1;
   b: TPtrIntArray absolute id2;
 begin
-  result := (a[0] = b[0]) and (a[1] = b[1])
-  {$ifndef CPU64} and (a[2] = b[2]) and (a[3] = b[3]) {$endif};
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifndef CPU64} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU64};
 end;
 
 function IsZero(const issuer: TECCCertificateIssuer): boolean;
 var
   a: TPtrIntArray absolute issuer;
 begin
-  result := (a[0] = 0) and (a[1] = 0)
-  {$ifndef CPU64} and (a[2] = 0) and (a [3] = 0) {$endif};
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifndef CPU64} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU64};
 end;
 
 function IsZero(const id: TECCCertificateID): boolean;
 var
   a: TPtrIntArray absolute id;
 begin
-  result := (a[0] = 0) and (a[1] = 0)
-    {$ifndef CPU64} and (a[2] = 0) and (a [3] = 0) {$endif};
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifndef CPU64} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU64};
 end;
 
 function ECCSelfSigned(const content: TECCCertificateContent): boolean;
 begin
   with content.Signed do
-    result := IsEqual(AuthoritySerial, Serial) and not IsZero(Serial) and
-      IsEqual(AuthorityIssuer, Issuer);
+    result := IsEqual(AuthoritySerial, Serial) and
+              not IsZero(Serial) and
+              IsEqual(AuthorityIssuer, Issuer);
 end;
 
 function ECCCheck(const content: TECCSignatureCertifiedContent): boolean;
 begin
-  result := (content.Version in [1]) and (content.Date <> 0) and
-    not IsZero(content.AuthoritySerial) and not IsZero(content.AuthorityIssuer) and
-    not IsZero(@content.Signature, sizeof(content.Signature));
+  result := (content.Version in [1]) and
+            (content.Date <> 0) and
+            not IsZero(content.AuthoritySerial) and
+            not IsZero(content.AuthorityIssuer) and
+            not IsZero(@content.Signature, sizeof(content.Signature));
 end;
 
 function ECCSign(const base64: RawUTF8; out content:

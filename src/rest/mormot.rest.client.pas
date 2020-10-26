@@ -2328,7 +2328,8 @@ begin
   end;
   fServerTimestamp.Offset := 0.0001; // avoid endless recursive call
   status := CallBackGet('Timestamp', [], resp);
-  result := (status = HTTP_SUCCESS) and (resp <> '');
+  result := (status = HTTP_SUCCESS) and
+            (resp <> '');
   if result then
     SetServerTimestamp(GetInt64(pointer(resp)))
   else

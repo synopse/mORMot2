@@ -578,9 +578,11 @@ begin
     // weird .gz file of 0 length stream, with only header
     result := true
   else
-    result := (comp <> nil) and (stream <> nil) and
-      (UnCompressStream(comp, complen, stream, @crc, {zlib=}false, tempBufSize) =
-        uncomplen32) and (crc = crc32);
+    result := (comp <> nil) and
+              (stream <> nil) and
+              (UnCompressStream(comp, complen, stream, @crc, {zlib=}false,
+                tempBufSize) = uncomplen32) and
+              (crc = crc32);
 end;
 
 function TGZRead.ToFile(const filename: TFileName; tempBufSize: integer): boolean;
@@ -652,7 +654,8 @@ begin
   begin
     z.UncompressEnd;
     zsdest := nil;
-    result := (zscrc = crc32) and (cardinal(z.Stream.total_out) = uncomplen32);
+    result := (zscrc = crc32) and
+              (cardinal(z.Stream.total_out) = uncomplen32);
   end;
 end;
 

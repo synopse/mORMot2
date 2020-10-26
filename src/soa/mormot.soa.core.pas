@@ -1637,7 +1637,8 @@ function TServicesPublishedInterfacesList.RegisterFromServer(Client: TRestClient
 var json: RawUTF8;
 begin
   result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
-  if result and (json<>'') then
+  if result and
+     (json<>'') then
     RegisterFromServerJSON(json);
 end;
 }

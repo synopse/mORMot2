@@ -907,7 +907,8 @@ var
   U: RawUTF8;
 begin
   // dedicated version to avoid as much memory allocation than possible
-  if not Assigned(fStatement) or (CurrentRow <= 0) then
+  if not Assigned(fStatement) or
+      (CurrentRow <= 0) then
     raise ESQLDBOracle.CreateUTF8('%.ColumnsToJSON() with no prior Step', [self]);
   if WR.Expand then
     WR.Add('{');
@@ -1648,7 +1649,8 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
               end;
         end;
       // 2. retrieve column information (if not already done)
-      if fExpectResults and (fColumn.Count = 0) then
+      if fExpectResults and
+         (fColumn.Count = 0) then
         // We move this after params binding to prevent "ORA-00932: inconsistent
         // datatypes" during call to StmtExecute with OCI_DESCRIBE_ONLY.
         // Because if called here sometimes it breaks the Oracle shared pool and
@@ -1854,7 +1856,9 @@ function TSQLDBOracleStatement.GetCol(Col: Integer; out Column:
   PSQLDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value  against fColumnCount
-  if not Assigned(fStatement) or (fColumnCount = 0) or (fRowCount = 0) or
+  if not Assigned(fStatement) or
+     (fColumnCount = 0) or
+     (fRowCount = 0) or
      (fRowBuffer = nil) then
     raise ESQLDBOracle.CreateUTF8('%.Column*() with no prior Execute', [self]);
   if CurrentRow <= 0 then
@@ -1975,7 +1979,8 @@ begin
               AttrGet(oHandle, OCI_DTYPE_PARAM, @oScale, nil, OCI_ATTR_SCALE, fError);
               ColumnValueDBSize := sizeof(Double);
               case oScale of
-               {0: if (major_version>11) or ((major_version=11) and (minor_version>1)) then
+               {0: if (major_version>11) or
+                      ((major_version=11) and (minor_version>1)) then
                begin
                  // starting with 11.2, OCI supports NUMBER conversion into Int64
                  ColumnType := ftInt64;

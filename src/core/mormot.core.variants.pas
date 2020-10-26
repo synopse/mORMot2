@@ -3413,7 +3413,8 @@ begin
   if objClass = nil then
     exit;
   ObjArrayClear(obj);
-  if not (dvoIsArray in arr.Options) or (arr.Count = 0) then
+  if not (dvoIsArray in arr.Options) or
+     (arr.Count = 0) then
     exit;
   info := Rtti.RegisterClass(objClass);
   SetLength(obj, arr.Count);
@@ -3595,8 +3596,10 @@ begin
     for n := 0 to new^.Count - 1 do
     begin
       idx := AddOrUpdateValue(new^.names[n], new^.Values[n], @wasAdded, OnlyAddMissing);
-      if RecursiveUpdate and not wasAdded then
-        TDocVariantData(Values[idx]).AddOrUpdateObject(new^.Values[n], OnlyAddMissing, true);
+      if RecursiveUpdate and
+         not wasAdded then
+        TDocVariantData(Values[idx]).AddOrUpdateObject(
+          new^.Values[n], OnlyAddMissing, true);
     end;
 end;
 
@@ -4128,8 +4131,11 @@ begin
     exit;
   end;
   result := GetValueIndex(aName);
-  if not Update and (dvoCheckForDuplicatedNames in VOptions) and (result >= 0) then
-    raise EDocVariant.CreateUTF8('AddValueFromText: Duplicated [%] name', [aName]);
+  if not Update and
+     (dvoCheckForDuplicatedNames in VOptions) and
+     (result >= 0) then
+    raise EDocVariant.CreateUTF8(
+      'AddValueFromText: Duplicated [%] name', [aName]);
   if result < 0 then
     result := InternalAdd(aName);
   VarClear(VValue[result]);
@@ -4391,7 +4397,8 @@ procedure TDocVariantData.SortByName(Compare: TUTF8Compare);
 var
   qs: TQuickSortDocVariant;
 begin
-  if not (dvoIsObject in VOptions) or (VCount <= 0) then
+  if not (dvoIsObject in VOptions) or
+     (VCount <= 0) then
     exit;
   if Assigned(Compare) then
     qs.nameCompare := Compare
@@ -5003,7 +5010,8 @@ var
 begin
   if (cardinal(VType) <> DocVariantVType) or
      not (dvoIsObject in VOptions) or
-     (VCount = 0) or (aName = '') then
+     (VCount = 0) or
+     (aName = '') then
     result := nil
   else
   begin
@@ -5187,7 +5195,8 @@ var
   ndx: integer;
   W: TTextWriter;
 begin
-  if not (dvoIsObject in VOptions) or (VCount = 0) then
+  if not (dvoIsObject in VOptions) or
+     (VCount = 0) then
   begin
     result := NULL_STR_VAR;
     exit;
@@ -5234,7 +5243,8 @@ begin
     result := Variant(self);
     exit;
   end;
-  if not (dvoIsObject in VOptions) or (VCount = 0) then
+  if not (dvoIsObject in VOptions) or
+     (VCount = 0) then
   begin
     SetVariantNull(result{%H-});
     exit;

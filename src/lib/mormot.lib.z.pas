@@ -486,7 +486,8 @@ begin
     bits := - MAX_WBITS;
   result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, bits,
     DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream)) >= 0;
-  if FlushBufferOwned and not result then
+  if FlushBufferOwned and
+     not result then
     FreeMem(FlushBuffer);
 end;
 
@@ -511,7 +512,8 @@ begin
   else
     bits := - MAX_WBITS;
   result := inflateInit2_(Stream, bits, ZLIB_VERSION, SizeOf(Stream)) >= 0;
-  if FlushBufferOwned and not result then
+  if FlushBufferOwned and
+     not result then
     FreeMem(FlushBuffer);
 end;
 

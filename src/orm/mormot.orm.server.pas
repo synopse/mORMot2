@@ -591,7 +591,8 @@ begin
     if cardinal(aTableIndex) < cardinal(length(fStaticData)) then
       result := fStaticData[aTableIndex];
     if result = nil then
-      if fVirtualTableDirect and (fStaticVirtualTable <> nil) then
+      if fVirtualTableDirect and
+         (fStaticVirtualTable <> nil) then
         result := fStaticVirtualTable[aTableIndex];
   end;
 end;
@@ -638,11 +639,11 @@ begin
               'max(' + field.Name + ')', '', [], [], max) then
             if max > current then
               current := max;
-          mDeleted := Int64(m) shl SQLRECORDVERSION_DELETEID_SHIFT;
+          mDeleted := Int64(m) shl ORMVERSION_DELETEID_SHIFT;
           if OneFieldValue(fORMVersionDeleteTable, 'max(ID)', 'ID>? and ID<?',
-              [], [mDeleted, mDeleted + SQLRECORDVERSION_DELETEID_RANGE], max) then
+              [], [mDeleted, mDeleted + ORMVERSION_DELETEID_RANGE], max) then
           begin
-            max := max and pred(SQLRECORDVERSION_DELETEID_RANGE);
+            max := max and pred(ORMVERSION_DELETEID_RANGE);
             if max > current then
               current := max;
           end;
@@ -674,7 +675,7 @@ begin
   try
     revision := RecordVersionCompute;
     deleted.IDValue := revision +
-      Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+      Int64(TableIndex) shl ORMVERSION_DELETEID_SHIFT;
     deleted.Deleted := ID;
     if Batch <> nil then
       Batch.Add(deleted, True, True)
@@ -704,10 +705,10 @@ end;
 function TRestORMServer.RecordVersionCompute: TRecordVersion;
 begin
   result := InternalRecordVersionComputeNext;
-  if result >= SQLRECORDVERSION_DELETEID_RANGE then
+  if result >= ORMVERSION_DELETEID_RANGE then
     raise EORMException.CreateUTF8(
      '%.InternalRecordVersionCompute=% overflow: %.ID should be < 2^%)',
-     [self, result, fORMVersionDeleteTable, SQLRECORDVERSION_DELETEID_SHIFT]);
+     [self, result, fORMVersionDeleteTable, ORMVERSION_DELETEID_SHIFT]);
 end;
 
 function TRestORMServer.RecordVersionCurrent: TRecordVersion;
@@ -818,13 +819,13 @@ begin
     ListDeleted := nil;
     try
       DeletedMinID :=
-        Int64(SourceTableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+        Int64(SourceTableIndex) shl ORMVERSION_DELETEID_SHIFT;
       Where := 'ID>? and ID<? order by ID';
       if MaxRowLimit > 0 then
         Where := FormatUTF8('% limit %', [Where, MaxRowLimit]);
       ListDeleted := Master.ORM.MultiFieldValues(fORMVersionDeleteTable,
         'ID,Deleted', Where, [DeletedMinID + RecordVersion,
-         DeletedMinID + SQLRECORDVERSION_DELETEID_RANGE]);
+         DeletedMinID + ORMVERSION_DELETEID_RANGE]);
       if ListDeleted = nil then
         exit; // DB error
       result := TRestBatch.Create(self, nil, 10000);
@@ -856,7 +857,7 @@ begin
             begin
               Deleted.FillRow(DeletedRow);
               DeletedVersion := Deleted.IDValue and
-                pred(SQLRECORDVERSION_DELETEID_RANGE);
+                pred(ORMVERSION_DELETEID_RANGE);
               inc(DeletedRow);
             end;
           if (UpdatedVersion = 0) and
@@ -878,7 +879,7 @@ begin
           begin
             result.Delete(Table, Deleted.Deleted);
             Deleted.IDValue := DeletedVersion + // local ID follows current Model
-              Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+              Int64(TableIndex) shl ORMVERSION_DELETEID_SHIFT;
             result.Add(Deleted, true, true, [], true);
             RecordVersion := DeletedVersion;
             DeletedVersion := 0;
@@ -1458,7 +1459,8 @@ begin
         exit;
       end;
     end;
-    if fVirtualTableDirect and (fStaticVirtualTable <> nil) then
+    if fVirtualTableDirect and
+       (fStaticVirtualTable <> nil) then
     begin
       result := fStaticVirtualTable[aTableIndex];
       if result <> nil then
@@ -1592,7 +1594,7 @@ begin
           HistBlob.IDValue := 0;
           HistBlob.Event := heArchiveBlob;
           if not Retrieve('ModifiedRecord=? and Event=%',
-             [ord(heArchiveBlob)], [HistJson.ModifiedRecord], HistBlob) then
+              [ord(heArchiveBlob)], [HistJson.ModifiedRecord], HistBlob) then
             HistBlob.ModifiedRecord := HistJson.ModifiedRecord
           else
             RetrieveBlobFields(HistBlob);

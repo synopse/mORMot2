@@ -235,7 +235,8 @@ begin
   inherited Create(server, aDatabaseName, aUserID, aPassWord);
   fOnBatchInsert := nil; // MultipleValuesInsert is slower than FireDAC ArrayDML
   fFireDACOptions := TStringList.Create;
-  if ((fDBMS < low(FIREDAC_PROVIDER)) or (fDBMS > high(FIREDAC_PROVIDER))) and
+  if ((fDBMS < low(FIREDAC_PROVIDER)) or
+      (fDBMS > high(FIREDAC_PROVIDER))) and
      (fDBMS <> dNexusDB) then
     if SameTextU(server, 'ASA') then
       fDBMS := dMSSQL
@@ -537,15 +538,17 @@ procedure TSQLDBFireDACStatement.DataSetBindSQLParam(const aArrayIndex,
   aParamIndex: integer; const aParam: TSQLDBParam);
 var
   P: TADParam;
-  i: integer;
+  i: PtrInt;
   tmp: RawUTF8;
   StoreVoidStringAsNull: boolean;
 begin
   if fDatasetSupportBatchBinding then
-    fPreparedUseArrayDML := (aArrayIndex < 0) and (fParamsArrayCount > 0)
+    fPreparedUseArrayDML := (aArrayIndex < 0) and
+                            (fParamsArrayCount > 0)
   else
     fPreparedUseArrayDML := false;
-  if fPreparedUseArrayDML and (fQueryParams.ArraySize <> fParamsArrayCount) then
+  if fPreparedUseArrayDML and
+     (fQueryParams.ArraySize <> fParamsArrayCount) then
     fQueryParams.ArraySize := fParamsArrayCount;
   with aParam do
   begin
@@ -628,7 +631,8 @@ begin
             StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
             for i := 0 to fParamsArrayCount - 1 do
               if (VArray[i] = 'null') or
-                 (StoreVoidStringAsNull and (VArray[i] = #39#39)) then
+                 (StoreVoidStringAsNull and
+                  (VArray[i] = #39#39)) then
                 P.Clear(i)
               else
               begin

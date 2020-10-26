@@ -699,8 +699,13 @@ begin
   err := sockerrno;
   if err = NO_ERROR then
     result := nrOK
-  else if {$ifdef MSWINDOWS} (err <> WSAETIMEDOUT) and (err <> WSAEWOULDBLOCK) and {$endif}
-          (err <> WSATRY_AGAIN) and (err <> WSAEINTR) and (err <> AnotherNonFatal) then
+  else if {$ifdef MSWINDOWS}
+          (err <> WSAETIMEDOUT) and
+          (err <> WSAEWOULDBLOCK) and
+          {$endif MSWINDOWS}
+          (err <> WSATRY_AGAIN) and
+          (err <> WSAEINTR) and
+          (err <> AnotherNonFatal) then
     if err = WSAEMFILE then
       result := nrTooManyConnections
     else
@@ -775,7 +780,8 @@ var
   res: TNetResult;
 begin
   res := NetLastError(AnotherNonFatal);
-  if ForceRaise and (res in [nrOK, nrRetry]) then
+  if ForceRaise and
+     (res in [nrOK, nrRetry]) then
     res := nrUnknownError;
   Check(res, Context);
 end;
@@ -819,7 +825,8 @@ begin
         exit;
       end;
   IPShort(tmp, {withport=}false);
-  if not localasvoid or (tmp <> c6Localhost) then
+  if not localasvoid or
+     (tmp <> c6Localhost) then
     FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
@@ -1252,7 +1259,8 @@ var
   last: PtrInt;
 begin
   result := false;
-  if fTerminated or (fPending = nil) then
+  if fTerminated or
+     (fPending = nil) then
     exit;
   EnterCriticalSection(fPendingLock);
   try
@@ -1302,7 +1310,8 @@ var
   elapsed, start: Int64;
 begin
   result := GetOneWithinPending(notif); // some events may be available
-  if result or (timeoutMS < 0) then
+  if result or
+     (timeoutMS < 0) then
     exit;
   InterlockedIncrement(fGettingOne);
   try
@@ -1338,7 +1347,8 @@ begin
         end;
       end;
       // wait a little for something to happen
-      if fTerminated or (timeoutMS = 0) then
+      if fTerminated or
+         (timeoutMS = 0) then
         exit;
       elapsed := mormot.core.os.GetTickCount64 - start;
       if elapsed > timeoutMS then
@@ -1515,7 +1525,9 @@ begin
       aSock.SetNoDelay(true); // disable Nagle algorithm since we use our own buffers
       aSock.SetKeepAlive(true); // enable TCP keepalive (even if we rely on transport layer)
     end;
-    if aTLS and ({%H-}PtrInt(aSock)<=0) and not doBind then
+    if aTLS and
+       ({%H-}PtrInt(aSock)<=0) and
+       not doBind then
     try
       if Assigned(NewNetTLS) then
         fSecure := NewNetTLS;
@@ -1750,7 +1762,8 @@ begin
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
   {$ifdef LINUXNOTBSD}
-  if (fWasBind and (fPort = '')) then
+  if fWasBind and
+     (fPort = '') then
   begin // binded on external socket
     fSock := TNetSocket(-1);
     exit;
@@ -1815,7 +1828,8 @@ end;
 
 function TCrtSocket.SockIsDefined: boolean;
 begin
-  result := (self <> nil) and ({%H-}PtrInt(fSock) > 0);
+  result := (self <> nil) and
+            ({%H-}PtrInt(fSock) > 0);
 end;
 
 function TCrtSocket.SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket:
@@ -1866,7 +1880,8 @@ function TCrtSocket.SockConnected: boolean;
 var
   addr: TNetAddr;
 begin
-  result := SockIsDefined and (fSock.GetPeer(addr) = nrOK);
+  result := SockIsDefined and
+            (fSock.GetPeer(addr) = nrOK);
 end;
 
 procedure TCrtSocket.SockSend(P: pointer; Len: integer);
@@ -1982,7 +1997,8 @@ var
   read: integer;
 begin
   read := Length;
-  if not TrySockRecv(Buffer, read, {StopBeforeLength=}false) or (Length <> read) then
+  if not TrySockRecv(Buffer, read, {StopBeforeLength=}false) or
+     (Length <> read) then
     raise ENetSock.CreateFmt('SockRecv(%d) failure (read=%d)', [Length, read]);
 end;
 
@@ -2023,7 +2039,8 @@ begin
         break; // return what we have
     SetLength(result, resultlen + available); // append to result
     read := available;
-    if not TrySockRecv(@PByteArray(result)[resultlen], read, {StopBeforeLength=}true) then
+    if not TrySockRecv(@PByteArray(result)[resultlen], read,
+         {StopBeforeLength=}true) then
     begin
       Close;
       SetLength(result, resultlen);
@@ -2044,7 +2061,9 @@ var
   res: TNetResult;
 begin
   result := false;
-  if SockIsDefined and (Buffer <> nil) and (Length > 0) then
+  if SockIsDefined and
+     (Buffer <> nil) and
+     (Length > 0) then
   begin
     expected := Length;
     Length := 0;
@@ -2061,7 +2080,8 @@ begin
         TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% AsynchRecv=% %', [sock,
           read, SocketErrorMessage], self);
         {$endif}
-        if StopBeforeLength and (res = nrRetry) then
+        if StopBeforeLength and
+           (res = nrRetry) then
           break;
         Close; // connection broken or socket closed gracefully
         exit;
@@ -2070,7 +2090,8 @@ begin
       begin
         inc(fBytesIn, read);
         inc(Length, read);
-        if StopBeforeLength or (Length = expected) then
+        if StopBeforeLength or
+           (Length = expected) then
           break; // good enough for now
         inc(PByte(Buffer), read);
       end;
@@ -2201,7 +2222,9 @@ var
   res: TNetResult;
 begin
   result := Len = 0;
-  if not SockIsDefined or (Len <= 0) or (P = nil) then
+  if not SockIsDefined or
+     (Len <= 0) or
+     (P = nil) then
     exit;
   start := {$ifdef MSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
   repeat

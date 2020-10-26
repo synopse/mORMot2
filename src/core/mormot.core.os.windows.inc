@@ -214,10 +214,12 @@ begin
   PInt64Rec(@FileId).lo := lp.nFileIndexLow;
   PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
   if LastWriteAccess <> 0 then
-    if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
+    if (FileCreateDateTime = 0) or
+       (FileCreateDateTime > LastWriteAccess) then
       FileCreateDateTime := LastWriteAccess;
   if lastreadaccess <> 0 then
-    if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
+    if (FileCreateDateTime = 0) or
+       (FileCreateDateTime > lastreadaccess) then
       FileCreateDateTime := lastreadaccess;
 end;
 
@@ -263,7 +265,8 @@ var
 begin
   r.V := Offset;
   r.L := SetFilePointer(Handle, R.L, @R.H, Origin);
-  if (r.Li = -1) and (GetLastError <> 0) then
+  if (r.Li = -1) and
+     (GetLastError <> 0) then
     result := -1
   else
     result := r.V;
@@ -558,7 +561,8 @@ begin
   try
     _RawLogException := nil; // disable nested exception
     ctxt.ECode := Exc.ExceptionCode;
-    if (Exc.ExceptionCode = cDelphiException) and (Exc.ExceptObject <> nil) then
+    if (Exc.ExceptionCode = cDelphiException) and
+       (Exc.ExceptObject <> nil) then
     begin
       if Exc.ExceptObject.InheritsFrom(Exception) then
         ctxt.EClass := PPointer(Exc.ExceptObject)^
@@ -857,7 +861,8 @@ begin
         Data.Timestamp := Now^;
       FileTimeToInt64(ftkrn, pkrn);
       FileTimeToInt64(ftusr, pusr);
-      if (PrevKernel <> 0) and (fDiffTotal > 0) then
+      if (PrevKernel <> 0) and
+         (fDiffTotal > 0) then
       begin
         Data.Kernel := ((pkrn - PrevKernel) * 100) / fDiffTotal;
         Data.User := ((pusr - PrevUser) * 100) / fDiffTotal;
@@ -988,9 +993,12 @@ begin
     aDriveFolderOrFile := SysUtils.UpperCase(
       ExtractFileDrive(ExeVersion.ProgramFilePath));
   dn := SynUnicode(aDriveFolderOrFile);
-  if (dn <> '') and (dn[2] = ':') and (dn[3] = #0) then
+  if (dn <> '') and
+     (dn[2] = ':') and
+     (dn[3] = #0) then
     dn := dn + '\';
-  if (aVolumeName <> nil) and (aVolumeName^ = '') then
+  if (aVolumeName <> nil) and
+     (aVolumeName^ = '') then
   begin
     tmp[0] := #0;
     GetVolumeInformationW(pointer(dn), tmp, MAX_PATH, nil, dummy, flags, nil, 0);
@@ -1176,7 +1184,8 @@ begin
             aRelease := dwFileVersionLS shr 16;
           end;
           aBuild := word(dwFileVersionLS);
-          if (dwFileDateLS <> 0) and (dwFileDateMS <> 0) then
+          if (dwFileDateLS <> 0) and
+             (dwFileDateMS <> 0) then
           begin
             FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
             FileTime.dwHighDateTime := dwFileDateMS;
@@ -1647,7 +1656,8 @@ begin
     if OSVersionInfo.wProductType <> VER_NT_WORKSTATION then
     begin // Server edition
       inc(Vers, 2); // e.g. wEight -> wServer2012
-      if (Vers = wServer2016) and (OSVersionInfo.dwBuildNumber >= 17763) then
+      if (Vers = wServer2016) and
+         (OSVersionInfo.dwBuildNumber >= 17763) then
         // https://stackoverflow.com/q/53393150
         Vers := wServer2019_64;
     end;
@@ -1699,7 +1709,8 @@ begin
     if prodver = '' then
       prodver := reg.ReadString('BIOSVersion');
   end;
-  if ({%H-}prod = '') or ({%H-}prodver = '') then
+  if ({%H-}prod = '') or
+     ({%H-}prodver = '') then
   begin
     if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System', true) then
     begin

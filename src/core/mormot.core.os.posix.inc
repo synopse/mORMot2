@@ -457,15 +457,18 @@ begin
   lastreadaccess := lp.st_atime * MSecsPerSec;
   LastWriteAccess := lp.st_mtime * MSecsPerSec;
   {$ifdef OPENBSD}
-  if (lp.st_birthtime <> 0) and (lp.st_birthtime < lp.st_ctime) then
+  if (lp.st_birthtime <> 0) and
+     (lp.st_birthtime < lp.st_ctime) then
     lp.st_ctime := lp.st_birthtime;
   {$endif OPENBSD}
   FileCreateDateTime := lp.st_ctime * MSecsPerSec;
   if LastWriteAccess <> 0 then
-    if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
+    if (FileCreateDateTime = 0) or
+       (FileCreateDateTime > LastWriteAccess) then
       FileCreateDateTime := LastWriteAccess;
   if lastreadaccess <> 0 then
-    if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
+    if (FileCreateDateTime = 0) or
+       (FileCreateDateTime > lastreadaccess) then
       FileCreateDateTime := lastreadaccess;
 end;
 
@@ -592,7 +595,9 @@ end;
 
 procedure TMemoryMap.DoUnMap;
 begin
-  if (fBuf <> nil) and (fBufSize > 0) and (fFile <> 0) then
+  if (fBuf <> nil) and
+     (fBufSize > 0) and
+     (fFile <> 0) then
     fpmunmap(fBuf, fBufSize);
 end;
 
@@ -693,8 +698,10 @@ begin
   result := -1;
   if fpgetrlimit(RLIMIT_NOFILE, @limit) <> 0 then
     exit;
-  if (hard and (integer(limit.rlim_max) = max)) or
-     (not hard and (integer(limit.rlim_cur) = max)) then
+  if (hard and
+      (integer(limit.rlim_max) = max)) or
+     (not hard and
+      (integer(limit.rlim_cur) = max)) then
   begin
     result := max; // already to the expected value
     exit;
@@ -762,7 +769,8 @@ begin
     // note: for example on Ubuntu 20.04 INVOCATION_ID is always defined
     // from the other side PPID 1 can be in case we run under docker of started
     // by init.d so let's verify both
-    (fpgetppid() = 1) and (fpGetenv(ENV_INVOCATION_ID) <> nil);
+    (fpgetppid() = 1) and
+    (fpGetenv(ENV_INVOCATION_ID) <> nil);
 end;
 
 procedure TSystemDAPI.Done;
@@ -786,7 +794,8 @@ var
   c, u: AnsiChar;
 begin
   result := false;
-  if (p = nil) or (up = nil) then
+  if (p = nil) or
+     (up = nil) then
     exit;
   repeat
     u := up^;
@@ -795,7 +804,8 @@ begin
     inc(up);
     c := p^;
     inc(p);
-    if (c >= 'a') and (c <= 'z') then
+    if (c >= 'a') and
+       (c <= 'z') then
       dec(c, 32);
     if c <> u then
       exit;
@@ -925,7 +935,8 @@ procedure ConsoleWaitForEnterKey;
 var
   c: AnsiChar;
 begin
-  if IsMultiThread and (GetCurrentThreadID = MainThreadID) then
+  if IsMultiThread and
+     (GetCurrentThreadID = MainThreadID) then
     repeat
       CheckSynchronize(100);
       if UnixKeyPending then
@@ -965,7 +976,8 @@ begin
   begin
     VI := TVersionInfo.Create;
     try
-      if (aFileName <> '') and (aFileName <> ParamStr(0)) then
+      if (aFileName <> '') and
+         (aFileName <> ParamStr(0)) then
         VI.Load(aFileName)
       else
         VI.Load(HInstance); // load info for currently running program
@@ -1133,7 +1145,8 @@ begin
     e := FpReaddir(d^);
     if e = nil then
       break;
-    if (e.d_type = DT_UNKNOWN) or (e.d_type = DT_DIR) or
+    if (e.d_type = DT_UNKNOWN) or
+       (e.d_type = DT_DIR) or
        not (e.d_name[0] in ['1'..'9']) then
       continue;
     pid := GetCardinal(@e.d_name[0]);
@@ -1303,9 +1316,12 @@ begin
     fs :=  GetNextItem(p);
     mnt := GetNextItem(p);
     typ := GetNextItem(p);
-    if (fs <> '') and (fs <> 'rootfs') and
+    if (fs <> '') and
+       (fs <> 'rootfs') and
        not IdemPChar(pointer(fs), '/DEV/LOOP') and
-       (mnt <> '') and (mnt <> '/mnt') and (typ <> '') and
+       (mnt <> '') and
+       (mnt <> '/mnt') and
+       (typ <> '') and
        not IdemPChars(mnt, ['/PROC/', '/SYS/', '/RUN/']) and
        not IdemPChars(typ, ['AUTOFS', 'PROC', 'SUBFS', 'DEBUGFS', 'DEVPTS',
         'FUSECTL', 'MQUEUE', 'RPC-PIPEFS', 'SYSFS', 'DEVFS', 'KERNFS',
@@ -1313,7 +1329,8 @@ begin
         'HUGETLBFS', 'ISO9660']) then
     begin
       fn := mnt;
-      if GetDiskInfo(fn, av, fr, tot) and (tot > 1 shl 20) then
+      if GetDiskInfo(fn, av, fr, tot) and
+         (tot > 1 shl 20) then
       begin
 //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         SetLength(result, n + 1);
@@ -1533,38 +1550,47 @@ begin
     until (modname^ = #0) or
           (modname^ > ' ');
   FindNameValue(StringFromFile('/etc/os-release'), 'PRETTY_NAME=', release);
-  if (release <> '') and (release[1] = '"') then
+  if (release <> '') and
+     (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
   release := trim(release);
   if release = '' then
   begin
     FindNameValue(StringFromFile('/etc/lsb-release'), 'DISTRIB_DESCRIPTION=', release);
-    if (release <> '') and (release[1] = '"') then
+    if (release <> '') and
+       (release[1] = '"') then
       release := copy(release, 2, length(release) - 2);
   end;
-  if (release = '') and (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then
+  if (release = '') and
+     (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then
   begin
     release := SR.Name; // 'redhat-release' 'SuSE-release'
-    if IdemPChar(pointer(release), 'LSB-') and (FindNext(SR) = 0) then
+    if IdemPChar(pointer(release), 'LSB-') and
+       (FindNext(SR) = 0) then
       release := SR.Name;
     release := split(release, '-');
     dist := split(trim(StringFromFile('/etc/' + SR.Name)), #10);
-    if (dist <> '') and (PosExChar('=', dist) = 0) and (PosExChar(' ', dist) > 0) then
+    if (dist <> '') and
+       (PosExChar('=', dist) = 0) and
+       (PosExChar(' ', dist) > 0) then
       SetLinuxDistrib(dist) // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
     else
       dist := '';
     FindClose(SR);
   end;
-  if (release <> '') and (OS_KIND = osLinux) then
+  if (release <> '') and
+     (OS_KIND = osLinux) then
   begin
     SetLinuxDistrib(release);
-    if (OS_KIND = osLinux) and ({%H-}dist <> '') then
+    if (OS_KIND = osLinux) and
+       ({%H-}dist <> '') then
     begin
       SetLinuxDistrib(dist);
       release := dist;
     end;
     if (OS_KIND = osLinux) and
-       ((PosEx('RH', release) > 0) or (PosEx('Red Hat', release) > 0)) then
+       ((PosEx('RH', release) > 0) or
+        (PosEx('Red Hat', release) > 0)) then
       OS_KIND := osRedHat;
   end;
   SystemInfo.release := release;
@@ -1583,7 +1609,8 @@ begin
   {$ifdef ANDROID}
   OSVersionText := 'Android (' + OSVersionText + ')';
   {$endif ANDROID}
-  if (SystemInfo.dwNumberOfProcessors > 0) and (modname <> nil) then
+  if (SystemInfo.dwNumberOfProcessors > 0) and
+     (modname <> nil) then
   begin
     beg := modname;
     while not (ord(modname^) in [0, 10, 13]) do
@@ -1605,7 +1632,8 @@ begin
   {$ifdef DARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
-  mach_timenanosecond := (mach_timeinfo.Numer = 1) and (mach_timeinfo.Denom = 1);
+  mach_timenanosecond := (mach_timeinfo.Numer = 1) and
+                         (mach_timeinfo.Denom = 1);
   {$else}
   {$ifdef LINUX}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks

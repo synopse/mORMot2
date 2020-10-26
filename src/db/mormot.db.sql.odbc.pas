@@ -578,7 +578,8 @@ var
 
   function IsTruncated: boolean;
   begin
-    result := (Indicator > 0) and (ODBC.GetDiagField(fStatement) = '01004');
+    result := (Indicator > 0) and
+              (ODBC.GetDiagField(fStatement) = '01004');
   end;
 
   procedure CheckStatus;
@@ -653,7 +654,8 @@ var
   c: Integer;
 begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
-  if not Assigned(fStatement) or (fColData = nil) then
+  if not Assigned(fStatement) or
+     (fColData = nil) then
     raise EODBCException.CreateUTF8('%.Column*() with no prior Execute', [self]);
   // get all fColData[] (driver may be without SQL_GD_ANY_ORDER)
   for c := 0 to fColumnCount - 1 do
@@ -776,7 +778,8 @@ var
   col: integer;
   tmp: array[0..31] of AnsiChar;
 begin
-  if not Assigned(fStatement) or (CurrentRow <= 0) then
+  if not Assigned(fStatement) or
+     (CurrentRow <= 0) then
     raise EODBCException.CreateUTF8('%.ColumnsToJSON() with no prior Step', [self]);
   if WR.Expand then
     WR.Add('{');
@@ -1200,7 +1203,8 @@ begin
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
-  if not Assigned(fStatement) or (fColumnCount = 0) then
+  if not Assigned(fStatement) or
+     (fColumnCount = 0) then
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   for i := 0 to fColumnCount - 1 do
     fColumns[i].ColumnDataState := colNone; // force load all fColData[]

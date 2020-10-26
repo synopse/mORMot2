@@ -1985,13 +1985,16 @@ end;
 
 function SearchRecValidFile(const F: TSearchRec): boolean;
 begin
-  result := (F.Name <> '') and (F.Attr and faInvalidFile = 0);
+  result := (F.Name <> '') and
+            (F.Attr and faInvalidFile = 0);
 end;
 
 function SearchRecValidFolder(const F: TSearchRec): boolean;
 begin
   result := (F.Attr and faDirectoryMask = faDirectory) and
-            (F.Name <> '') and (F.Name <> '.') and (F.Name <> '..');
+            (F.Name <> '') and
+            (F.Name <> '.') and
+            (F.Name <> '..');
 end;
 
 {$ifdef FPC}
@@ -2852,14 +2855,16 @@ end;
 
 function TSynLocker.TryLock: boolean;
 begin
-  result := not fLocked and (TryEnterCriticalSection(fSection) <> 0);
+  result := not fLocked and
+            (TryEnterCriticalSection(fSection) <> 0);
 end;
 
 function TSynLocker.TryLockMS(retryms: integer): boolean;
 begin
   repeat
     result := TryLock;
-    if result or (retryms <= 0) then
+    if result or
+       (retryms <= 0) then
       break;
     SleepHiRes(1);
     dec(retryms);

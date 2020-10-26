@@ -2678,7 +2678,8 @@ begin
             repeat // ignore chars inside ' quotes
               inc(i);
             until (i = L) or
-                  ((P[i] = '''') and (P[i + 1] <> ''''));
+                  ((P[i] = '''') and
+                   (P[i + 1] <> ''''));
             if i = L then
               break;
           end;
@@ -3291,7 +3292,9 @@ begin // cachable if with ? parameter or SELECT without WHERE clause
     while P^ in [#1..' '] do
       inc(P);
     NoWhere := IdemPChar(P, 'SELECT ');
-    if NoWhere or not (IdemPChar(P, 'CREATE ') or IdemPChar(P, 'ALTER ')) then
+    if NoWhere or
+       not (IdemPChar(P, 'CREATE ') or
+            IdemPChar(P, 'ALTER ')) then
     begin
       result := true;
       while P^ <> #0 do
@@ -3723,7 +3726,8 @@ begin
   SQL := SQLGetTableNames;
   if SQL <> '' then
   try
-    if FilterTableViewSchemaName and (fForcedSchemaName <> '') then
+    if FilterTableViewSchemaName and
+       (fForcedSchemaName <> '') then
       checkschema := UpperCase(fForcedSchemaName) + '.';
     with Execute(SQL, []) do
     begin
@@ -3751,7 +3755,8 @@ begin
   SQL := SQLGetViewNames;
   if SQL <> '' then
   try
-    if FilterTableViewSchemaName and (fForcedSchemaName <> '') then
+    if FilterTableViewSchemaName and
+       (fForcedSchemaName <> '') then
       checkschema := UpperCase(fForcedSchemaName) + '.';
     with Execute(SQL, []) do
     begin
@@ -4340,7 +4345,8 @@ begin
     result := fSQLCreateField[aField.DBType];
   if aField.NonNullable or aField.Unique or aField.PrimaryKey then
     result := result + ' NOT NULL';
-  if aField.Unique and not aField.PrimaryKey then
+  if aField.Unique and
+     not aField.PrimaryKey then
     result := result + ' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp
   if aField.PrimaryKey then
     case DBMS of
@@ -4438,7 +4444,8 @@ begin
         EndQuoteChar := '`';
       end;
   end;
-  if UseQuote and (PosEx(BeginQuoteChar, aTableName) = 0) then
+  if UseQuote and
+     (PosEx(BeginQuoteChar, aTableName) = 0) then
     result := BeginQuoteChar + aTableName + EndQuoteChar
   else
     result := aTableName;
@@ -5049,7 +5056,8 @@ procedure TSQLDBStatement.Bind(Param: Integer; ParamType: TSQLDBFieldType;
 var
   tmp: RawUTF8;
 begin
-  if not ValueAlreadyUnquoted and (Value = 'null') then
+  if not ValueAlreadyUnquoted and
+     (Value = 'null') then
     // bind null (ftUTF8 should be '"null"')
     BindNull(Param, IO)
   else
@@ -5096,8 +5104,10 @@ end;
 function VariantIsBlob(const V: variant): boolean;
 begin
   with TVarData(V) do
-    result := (VType = varNull) or ((VType = varString) and (VString <> nil) and
-      (PCardinal(VString)^ and $ffffff = JSON_BASE64_MAGIC));
+    result := (VType = varNull) or
+              ((VType = varString) and
+               (VString <> nil) and
+               (PCardinal(VString)^ and $ffffff = JSON_BASE64_MAGIC));
 end;
 
 procedure TSQLDBStatement.Bind(const Params: array of const; IO: TSQLDBParamInOutType);
@@ -5257,10 +5267,11 @@ procedure TSQLDBStatement.BindArray(Param: Integer; ParamType: TSQLDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
   if (Param <= 0) or
-     (ParamType in [ftUnknown, ftNull]) or (ValuesCount <= 0) or
-    (length(Values) < ValuesCount) or
-    (fConnection = nil) or
-    (fConnection.fProperties.BatchSendingAbilities *
+     (ParamType in [ftUnknown, ftNull]) or
+     (ValuesCount <= 0) or
+     (length(Values) < ValuesCount) or
+     (fConnection = nil) or
+     (fConnection.fProperties.BatchSendingAbilities *
       [cCreate, cUpdate, cDelete] = []) then
     raise ESQLDBException.CreateUTF8(
       'Invalid call to %.BindArray(Param=%,Type=%)',
@@ -6105,7 +6116,8 @@ begin
         inc(P);
         c := P^;
       until (c = #0) or
-            ((c = '''') and (P[1] <> ''''));
+            ((c = '''') and
+             (P[1] <> ''''));
       if c = #0 then
         break;
     end;
@@ -6154,7 +6166,8 @@ begin
       AddParamValueAsText(num, W, maxAllowed);
       inc(num);
     until (P^ = #0) or
-          ((maxSize > 0) and (W.TextLength >= maxSize));
+          ((maxSize > 0) and
+           (W.TextLength >= maxSize));
     W.SetText(fSQLWithInlinedParams);
   finally
     W.Free;
@@ -6518,7 +6531,9 @@ end;
 
 function TSQLDBConnection.GetLastErrorWasAboutConnection: boolean;
 begin
-  result := (self <> nil) and (Properties <> nil) and (fErrorMessage <> '') and
+  result := (self <> nil) and
+            (Properties <> nil) and
+            (fErrorMessage <> '') and
     Properties.ExceptionIsAboutConnection(fErrorException, fErrorMessage);
 end;
 
@@ -6582,7 +6597,8 @@ begin
   // first check if could be retrieved from cache
   cachedSQL := aSQL;
   ToCache := fProperties.IsCachable(Pointer(aSQL));
-  if ToCache and (fCache <> nil) then
+  if ToCache and
+     (fCache <> nil) then
   begin
     ndx := fCache.IndexOf(cachedSQL);
     if ndx >= 0 then
@@ -6649,7 +6665,8 @@ begin
       else
         result := nil;
     end
-    else if RaiseExceptionOnError and (fErrorException <> nil) then
+    else if RaiseExceptionOnError and
+            (fErrorException <> nil) then
       // propagate error not related to connection (e.g. SQL syntax error)
       raise fErrorException.Create(UTF8ToString(fErrorMessage));
   end
@@ -7006,9 +7023,10 @@ function TSQLDBStatementWithParams.ParamToVariant(Param: Integer;
 begin
   inherited ParamToVariant(Param, Value); // raise exception if Param incorrect
   dec(Param); // start at #1
-  if CheckIsOutParameter and (fParams[Param].VInOut = paramIn) then
-    raise ESQLDBException.CreateUTF8('%.ParamToVariant expects an [In]Out parameter',
-      [self]);
+  if CheckIsOutParameter and
+     (fParams[Param].VInOut = paramIn) then
+    raise ESQLDBException.CreateUTF8(
+      '%.ParamToVariant expects an [In]Out parameter', [self]);
   // OleDB provider should have already modified the parameter in-place, i.e.
   // in our fParams[] buffer, especialy for TEXT parameters (OleStr/WideString)
   // -> we have nothing to do but return the current value! :)
@@ -7124,7 +7142,8 @@ begin
     fConnection.Properties.StoreVoidStringAsNull;
   with CheckParam(Param, ftUTF8, paramIn, length(Values))^ do
     for i := 0 to high(Values) do
-      if StoreVoidStringAsNull and (Values[i] = '') then
+      if StoreVoidStringAsNull and
+         (Values[i] = '') then
         VArray[i] := 'null'
       else
         QuotedStr(Values[i], '''', VArray[i]);

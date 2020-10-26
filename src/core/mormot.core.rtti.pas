@@ -734,7 +734,7 @@ type
   public
     /// contains the index value of an indexed class data property
     // - outside SQLite3, this can be used to define a VARCHAR() length value
-    // for the textual field definition (oftUTF8Text/oftAnsiText); e.g.
+    // for the textual field definition (sftUTF8Text/sftAnsiText); e.g.
     // the following will create a NAME VARCHAR(40) field:
     // ! Name: RawUTF8 index 40 read fName write fName;
     // - is used by a dynamic array property for fast usage of the
@@ -4598,7 +4598,8 @@ begin
   Value^ := nil;
   dec(p);
   if (p^.refCnt < 0) or
-     ((p^.refCnt > 1) and not RefCntDecFree(p^.refCnt)) then
+     ((p^.refCnt > 1) and
+     not RefCntDecFree(p^.refCnt)) then
   begin
     n := p^.length;
     DynArraySetLength(pointer(Value), Info, 1, @n);
@@ -5139,7 +5140,8 @@ begin
       end
       else
       // try to guess from 1st record/object field
-      if not exactType and (ElemInfo^.Kind in rkRecordTypes) then
+      if not exactType and
+         (ElemInfo^.Kind in rkRecordTypes) then
       begin
         ElemInfo.RecordManagedFields(fields);
         if fields.Count = 0 then
@@ -6671,7 +6673,8 @@ begin
   p := pointer(rtticustom.Props.List);
   for i := 1 to rtticustom.Props.Count do
   begin
-    if not FreeAndNilNestedObjects and (p^.Value.Kind = rkClass) then
+    if not FreeAndNilNestedObjects and
+       (p^.Value.Kind = rkClass) then
       ClearObject(p^.Prop.GetObjProp(Value), false)
     else if p^.OffsetSet >= 0 then
       // for rkClass, _ObjClear() mimics FreeAndNil()

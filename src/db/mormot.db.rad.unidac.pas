@@ -437,7 +437,8 @@ var
   PortNumber, i: Integer;
 begin
   inherited Create(aProperties);
-  if (aProperties.DBMS = dMSSQL) and (not SameText(cMSSQLProvider, 'prDirect')) then
+  if (aProperties.DBMS = dMSSQL) and
+     not SameText(cMSSQLProvider, 'prDirect') then
     CoInit;
   fDatabase := TUniConnection.Create(nil);
   fDatabase.LoginPrompt := false;
@@ -485,7 +486,8 @@ begin
   try
     case fProperties.DBMS of
       dFirebird:
-        if (fDatabase.Server = '') and not FileExists(fDatabase.Database) then
+        if (fDatabase.Server = '') and
+           not FileExists(fDatabase.Database) then
           with TUniScript.Create(nil) do // always create database for embedded Firebird
           try
             NoPreconnect := true;
@@ -523,7 +525,8 @@ destructor TSQLDBUniDACConnection.Destroy;
 begin
   try
     Disconnect;
-    if (fProperties.DBMS = dMSSQL) and (not SameText(cMSSQLProvider, 'prDirect')) then
+    if (fProperties.DBMS = dMSSQL) and
+       not SameText(cMSSQLProvider, 'prDirect') then
       CoUnInit;
   except
     on Exception do
@@ -567,7 +570,8 @@ begin
   P := TDAParam(fQueryParams[aParamIndex]);
   if P.InheritsFrom(TDAParam) then
     with aParam do
-      if (VinOut <> paramInOut) and (VType = SynTable.ftBlob) then
+      if (VinOut <> paramInOut) and
+         (VType = SynTable.ftBlob) then
       begin
         P.ParamType := SQLParamTypeToDBParamType(VInOut);
         {$ifdef UNICODE}

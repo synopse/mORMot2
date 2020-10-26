@@ -1345,7 +1345,8 @@ begin
     exit;
   if FileRead(F, head, sizeof(head)) = sizeof(head) then
     result := ECIESHeader(head);
-  if result and (rawencryptedfile <> '') then
+  if result and
+     (rawencryptedfile <> '') then
   begin
     len := FileSize(F) - sizeof(head);
     SetLength(tmp, len);
@@ -1887,7 +1888,8 @@ end;
 
 function TECCCertificateSecret.HasSecret: boolean;
 begin
-  result := (self <> nil) and not IsZero(THash256(fPrivateKey));
+  result := (self <> nil) and
+            not IsZero(THash256(fPrivateKey));
 end;
 
 const
@@ -2074,7 +2076,8 @@ begin
     st := TRawByteStringStream.Create(decrypted);
     try
       if LoadFromStream(st) then
-        result := ECCCheck(fContent) and not IsZero(THash256(fPrivateKey));
+        result := ECCCheck(fContent) and
+                  not IsZero(THash256(fPrivateKey));
     finally
       st.Free;
     end;
@@ -2530,9 +2533,11 @@ begin
   fMetaData := fLowLevelInfo.GetValueOrEmpty('meta'); // Value[] makes GPF
   fMD5 := fLowLevelInfo.U['md5'];
   fSHA256 := fLowLevelInfo.U['sha256'];
-  result := (fSize > 0) and (_Safe(fMetaData)^.Kind <> dvArray) and
-    MD5StringToDigest(fMD5, fMD5Digest) and SHA256StringToDigest(fSHA256,
-    fSHA256Digest) and FromBase64(fLowLevelInfo.U['sign']);
+  result := (fSize > 0) and
+            (_Safe(fMetaData)^.Kind <> dvArray) and
+            MD5StringToDigest(fMD5, fMD5Digest) and
+            SHA256StringToDigest(fSHA256, fSHA256Digest) and
+            FromBase64(fLowLevelInfo.U['sign']);
 end;
 
 function TECCSignatureCertifiedFile.FromDecryptedFile(
@@ -2656,7 +2661,8 @@ begin
   begin
     fSafe.Lock;
     try
-      if fIsValidCached and (crc <> 0) then
+      if fIsValidCached and
+         (crc <> 0) then
         AddInt64(fIsValidCache, fIsValidCacheCount, crc);
     finally
       fSafe.Unlock;

@@ -2337,8 +2337,10 @@ end;
 
 function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
-  result := ((aCodePage >= 1250) and (aCodePage <= 1258)) or
-    (aCodePage = CODEPAGE_LATIN1) or (aCodePage = CP_RAWBYTESTRING);
+  result := ((aCodePage >= 1250) and
+             (aCodePage <= 1258)) or
+            (aCodePage = CODEPAGE_LATIN1) or
+            (aCodePage = CP_RAWBYTESTRING);
 end;
 
 function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
@@ -4934,7 +4936,8 @@ begin
       w := ord(PW^);
     until (PW - Start >= UpperLen) or
           (w = 0) or
-          ((w < 126) and (not (tcWord in TEXT_BYTES[w])));
+          ((w < 126) and
+           not (tcWord in TEXT_BYTES[w]));
     if PW - Start >= UpperLen then
       if Unicode_CompareString(Start, Upper, UpperLen, UpperLen, {ignorecase=}true) = 2 then
       begin

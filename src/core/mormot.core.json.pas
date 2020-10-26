@@ -2288,9 +2288,11 @@ begin
     inc(P);
   tab := @JSON_CHARS;
   c4 := PInteger(P)^;
-  if (((c4 = NULL_LOW) or (c4 = TRUE_LOW)) and
+  if (((c4 = NULL_LOW) or
+       (c4 = TRUE_LOW)) and
       (jcEndOfJSONValueField in tab[P[4]])) or
-     ((c4 = FALSE_LOW) and (P[4] = 'e') and
+     ((c4 = FALSE_LOW) and
+      (P[4] = 'e') and
       (jcEndOfJSONValueField in tab[P[5]])) then
   begin
     result := false; // constants are no string
@@ -2351,7 +2353,8 @@ begin
     exit;
   B := P;
   P :=  GotoEndJSONItemStrict(B);
-  result := (P <> nil) and (P - B = len);
+  result := (P <> nil) and
+            (P - B = len);
 end;
 
 procedure IgnoreComma(var P: PUTF8Char);
@@ -2500,9 +2503,11 @@ lit:        inc(P);
                   case c4 of
                     // inlined UTF16CharToUtf8()
                     UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-                      c4 := ((c4 - $D7C0) shl 10) or (surrogate xor UTF16_LOSURROGATE_MIN);
+                      c4 := ((c4 - $D7C0) shl 10) or
+                         (surrogate xor UTF16_LOSURROGATE_MIN);
                     UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-                      c4 := ((surrogate - $D7C0) shl 10) or (c4 xor UTF16_LOSURROGATE_MIN);
+                      c4 := ((surrogate - $D7C0) shl 10) or
+                         (c4 xor UTF16_LOSURROGATE_MIN);
                   end;
                   if c4 <= $7ff then
                     c := #2
@@ -3158,7 +3163,8 @@ begin
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
-  if HandleValuesAsObjectOrArray and (P^ in ['{', '[']) then
+  if HandleValuesAsObjectOrArray and
+     (P^ in ['{', '[']) then
   begin
     Value := P;
     P := GotoNextJSONObjectOrArrayMax(P, nil);
@@ -3185,7 +3191,8 @@ begin
     result := GetJSONField(P, P, @wStr, EndOfObject, Len);
     if WasString <> nil then
       WasString^ := wStr;
-    if not wStr and NormalizeBoolean and (result <> nil) then
+    if not wStr and NormalizeBoolean and
+       (result <> nil) then
     begin
       if PInteger(result)^ = TRUE_LOW then
         result := pointer(SmallUInt32UTF8[1])
@@ -3498,7 +3505,8 @@ begin
       begin
         P := GotoEndOfJSONString(P {$ifndef CPUX86NOTPIC}, jsonset{$endif} );
         if (P^ <> '"') or
-           ((PMax <> nil) and (P > PMax)) then
+           ((PMax <> nil) and
+            (P > PMax)) then
           exit;
         inc(P);
         goto ok;
@@ -3535,7 +3543,8 @@ ok:     while (P^ <= ' ') and
     inc(P);
   until jcEndOfJSONFieldOr0 in jsonset[P^];
   if (P^ = #0) or
-     ((PMax <> nil) and (P > PMax)) then
+     ((PMax <> nil) and
+      (P > PMax)) then
     exit; // unexpected end
   result := P;
 end;
@@ -4424,7 +4433,8 @@ label
   Txt;
 begin
   if (Format = '') or
-     ((high(Args) < 0) and (high(Params) < 0)) then
+     ((high(Args) < 0) and
+      (high(Params) < 0)) then
   begin // no formatting to process, but may be a const -> make unique
     FastSetString(result, pointer(Format), length(Format));
     exit; // e.g. _JsonFmt() will parse it in-place
@@ -4484,7 +4494,8 @@ Txt:  len := F - FDeb;
     begin // handle ? substitution
       if tmpN = length(tmp) then
         SetLength(tmp, tmpN + 8);
-      if JSONFormat and (Params[P].VType = vtVariant) then
+      if JSONFormat and
+         (Params[P].VType = vtVariant) then
         VariantSaveJSON(Params[P].VVariant^, twJSONEscape, tmp[tmpN])
       else
       begin
@@ -4516,7 +4527,8 @@ Txt:  len := F - FDeb;
   end;
   if L = 0 then
     exit;
-  if not JSONFormat and (tmpN > SizeOf(inlin) shl 3) then
+  if not JSONFormat and
+     (tmpN > SizeOf(inlin) shl 3) then
     raise EJSONException.CreateUTF8('Too many parameters for FormatUTF8(): %>%',
       [tmpN, SizeOf(inlin) shl 3]);
   FastSetString(result, nil, L);
@@ -4890,7 +4902,8 @@ begin
       c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkDynArray], {withMagic=}true);
   end
   else if (woHumanReadableEnumSetAsComment in Ctxt.Options) and
-          (c.Info <> nil) and (rcfHasNestedProperties in c.Info.Flags) then
+          (c.Info <> nil) and
+          (rcfHasNestedProperties in c.Info.Flags) then
     // void dynarray should include record/T*ObjArray fields as comment
     c.Info.Props.AsText(c.W.fBlockComment, true, 'array of {', '}');
   c.W.BlockEnd(']', c.Options);
@@ -6631,7 +6644,8 @@ end;
 procedure _JL_Int64(Data: PInt64; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
-    if Ctxt.WasString and (Ctxt.ValueLen = SizeOf(Data^) * 2) then
+    if Ctxt.WasString and
+       (Ctxt.ValueLen = SizeOf(Data^) * 2) then
       Ctxt.Valid := (jpoAllowInt64Hex in Ctxt.Options) and
         HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
     else
@@ -6641,7 +6655,8 @@ end;
 procedure _JL_QWord(Data: PQWord; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
-    if Ctxt.WasString and (Ctxt.ValueLen = SizeOf(Data^) * 2) then
+    if Ctxt.WasString and
+       (Ctxt.ValueLen = SizeOf(Data^) * 2) then
       Ctxt.Valid := (jpoAllowInt64Hex in Ctxt.Options) and
         HexDisplayToBin(PAnsiChar(Ctxt.Value), pointer(Data), SizeOf(Data^))
     else
@@ -6844,8 +6859,9 @@ begin
     exit;
   if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE then
     // legacy binary layout with a single Base-64 encoded item
-    Ctxt.Valid := Ctxt.ParseNext and (Ctxt.EndOfObject = ']') and
-      (Ctxt.Value <> nil) and
+    Ctxt.Valid := Ctxt.ParseNext and
+                  (Ctxt.EndOfObject = ']') and
+                  (Ctxt.Value <> nil) and
       (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC) and
       BinaryLoadBase64(PAnsiChar(pointer(Ctxt.Value)) + 3, Ctxt.ValueLen - 3,
         Data, Ctxt.Info.Info, {uri=}false, [rkDynArray], {nocrc=}true)
@@ -7005,7 +7021,8 @@ begin
       for p := 1 to root.Props.Count do
       begin
         propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
-        Ctxt.Valid := (Ctxt.JSON <> nil) and (propname <> nil);
+        Ctxt.Valid := (Ctxt.JSON <> nil) and
+                      (propname <> nil);
         if not Ctxt.Valid then
           break;
         // O(1) optimistic process of the propertyname
@@ -7035,7 +7052,8 @@ begin
                (Ctxt.EndOfObject = '}') then
                break;
             propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
-            Ctxt.Valid := (Ctxt.JSON <> nil) and (propname <> nil);
+            Ctxt.Valid := (Ctxt.JSON <> nil) and
+                          (propname <> nil);
           until not Ctxt.Valid;
           break;
         end;
@@ -8392,7 +8410,8 @@ begin // caller is expected to call fSafe.Lock/Unlock
     result := -1
   else
     result := fKeys.FindHashed(aKey);
-  if aUpdateTimeOut and (result >= 0) then
+  if aUpdateTimeOut and
+     (result >= 0) then
   begin
     tim := fSafe.Padding[DIC_TIMESEC].VInteger;
     if tim > 0 then // inlined fTimeout[result] := GetTimeout
@@ -8542,7 +8561,8 @@ begin
   try
     result := 0;
     if not Assigned(OnMatch) or
-       (not Assigned(KeyCompare) and not Assigned(ValueCompare)) then
+       (not Assigned(KeyCompare) and
+        not Assigned(ValueCompare)) then
       exit;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     k := fKeys.Value^;
@@ -9109,7 +9129,8 @@ var
   json: RawUTF8;
 begin
   humanread := woHumanReadable in Options;
-  if humanread and (woHumanReadableEnumSetAsComment in Options) then
+  if humanread and
+     (woHumanReadableEnumSetAsComment in Options) then
     humanread := false
   else
     // JsonReformat() erases comments

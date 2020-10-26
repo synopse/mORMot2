@@ -452,9 +452,13 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     //EH: switch off tds support in any kind -> deprecated and our 64bit lib isn't compiled with libiconv support
     //users permanently run into the encoding issues which can't be resolved using the dblib tds-types:
     //tdsNVarchar/tdsNText is defined but will never be used by DBLIB + SQLServer)
-    if {$IFDEF MSWINDOWS}(protocol <> 'ado') and (protocol <> 'oledb') and {$endif}
-       (protocol <> 'odbc_w') and (protocol <> 'odbc_a') then
-      {$IFDEF MSWINDOWS}
+    if {$ifdef MSWINDOWS}
+       (protocol <> 'ado') and
+       (protocol <> 'oledb') and
+       {$endif MSWINDOWS}
+       (protocol <> 'odbc_w') and
+       (protocol <> 'odbc_a') then
+      {$ifdef MSWINDOWS}
       FURL.Protocol := 'OleDB';
       {$else}
       FURL.Protocol := 'odbc_w'
@@ -532,7 +536,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
       begin
         // see https://synopse.info/forum/viewtopic.php?pid=13260#p13260
         fURL.Properties.Add('NoTableInfoCache=true');
-        {$IFDEF ZEOS73UP}
+        {$ifdef ZEOS73UP}
         //fURL.Properties.Add(DSProps_BinaryWireResultMode+'=False');
         {$endif}
       end;
@@ -632,7 +636,7 @@ begin
     TableTypes[0] := 'TABLE';
     res := meta.GetTables('', '', '', TableTypes);
     n := 0;
-    while res.Next do      {$IFDEF ZEOS72UP}
+    while res.Next do      {$ifdef ZEOS72UP}
       AddSortedRawUTF8(Tables, n, res.GetUTF8String(TableNameIndex));
       {$else}
     AddSortedRawUTF8(Tables, n, SynUnicodeToUtf8(res.GetUnicodeString(TableNameIndex)));
@@ -667,7 +671,7 @@ begin
     FillCharFast(F, sizeof(F), 0);
     while res.Next do
     begin
-      {$IFDEF ZEOS72UP}
+      {$ifdef ZEOS72UP}
       F.ColumnName := res.GetUTF8String(ColumnNameIndex);
       F.ColumnTypeNative := res.GetUTF8String(TableColColumnTypeNameIndex);
       {$else}
@@ -685,7 +689,7 @@ begin
       res := meta.GetIndexInfo('', sSchema, sTableName, false, true);
       while res.Next do
       begin
-        {$IFDEF ZEOS72UP}
+        {$ifdef ZEOS72UP}
         F.ColumnName := res.GetUTF8String(IndexInfoColColumnNameIndex);
         {$else}
         F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(IndexInfoColColumnNameIndex));
@@ -830,7 +834,7 @@ var
 begin
   log := SynDBLog.Enter(self, 'StartTransaction');
   inherited StartTransaction;
-  {$IFDEF ZEOS73UP}
+  {$ifdef ZEOS73UP}
   fDatabase.StartTransaction; //returns the txn level
   {$ELSE}
   fDatabase.SetAutoCommit(false);
@@ -1364,7 +1368,8 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           else
             WriteIZBlob;
       else
-        raise ESQLDBException.CreateUTF8('%.ColumnsToJSON: invalid ColumnType(#% "%")=%',
+        raise ESQLDBException.CreateUTF8(
+          '%.ColumnsToJSON: invalid ColumnType(#% "%")=%',
           [self, col, fColumns[col].ColumnName, ord(fColumns[col].ColumnType)]);
       end;
     end;

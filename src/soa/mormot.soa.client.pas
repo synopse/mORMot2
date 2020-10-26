@@ -496,7 +496,8 @@ begin
   else
     notify := nil;
   result := TInterfacedObjectFakeClient.Create(self, Invoke, notify);
-  if not fDelayedInstance and (fInstanceCreation = sicClientDriven) and
+  if not fDelayedInstance and
+     (fInstanceCreation = sicClientDriven) and
     InternalInvoke(SERVICE_PSEUDO_METHOD[imInstance], '', @id) then
     // thread-safe initialization of the fClientDrivenID
     TInterfacedObjectFakeClient(result).fClientDrivenID := GetCardinal(pointer(id));
@@ -590,9 +591,11 @@ var
       uri, ctxt, aMethod, aParams, clientDrivenID, sent, head);
     if service <> nil then
     begin // ParamsAsJSONObject won't apply to _signature_ e.g.
-      if fParamsAsJSONObject and (clientDrivenID = '') then
+      if fParamsAsJSONObject and
+         (clientDrivenID = '') then
         sent := service^.ArgsArrayToObject(Pointer(sent), true);
-      if fNonBlockWithoutAnswer and (head = '') and
+      if fNonBlockWithoutAnswer and
+         (head = '') and
          (service^.ArgsOutputValuesCount = 0) then
         rcu.CallbackNonBlockingSetHeader(head);
     end;

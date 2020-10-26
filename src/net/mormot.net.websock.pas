@@ -1093,7 +1093,8 @@ begin
     for i := 0 to length(ExtIn) - 1 do
       if IdemPropNameU(ExtIn[i], 'synhk') then
         synhk := true
-      else if synhk and IdemPChar(pointer(ExtIn[i]), 'HK=') then
+      else if synhk and
+              IdemPChar(pointer(ExtIn[i]), 'HK=') then
       begin
         msgin := copy(ExtIn[i], 4, maxInt);
         break;
@@ -1151,7 +1152,8 @@ end;
 
 function TWebSocketProtocol.GetEncrypted: boolean;
 begin
-  result := (self <> nil) and (fEncryption <> nil);
+  result := (self <> nil) and
+            (fEncryption <> nil);
 end;
 
 function TWebSocketProtocol.GetSubprotocols: RawUTF8;
@@ -1459,7 +1461,8 @@ var
   status, outHeaders, outContentType, outContent: RawByteString;
 begin
   result := HTTP_NOTFOUND;
-  if not FrameDecompress(answer, 'a', [@status, @outHeaders], outContentType, outContent) then
+  if not FrameDecompress(answer, 'a',
+     [@status, @outHeaders], outContentType, outContent) then
     exit;
   result := GetInteger(pointer(status));
   Ctxt.OutCustomHeaders := outHeaders;
@@ -1578,7 +1581,8 @@ begin
   P := FrameData(frame, Head);
   if P = nil then
     exit;
-  if not NextNotSpaceCharIs(P, ':') or not NextNotSpaceCharIs(P, '[') then
+  if not NextNotSpaceCharIs(P, ':') or
+     not NextNotSpaceCharIs(P, '[') then
     exit;
   for i := 0 to high(values) do
     GetNext(values[i]^);
@@ -1608,7 +1612,8 @@ begin
      (frame.opcode <> focText) then
     exit;
   P := pointer(frame.payload);
-  if not NextNotSpaceCharIs(P, '{') or not NextNotSpaceCharIs(P, '"') then
+  if not NextNotSpaceCharIs(P, '{') or
+     not NextNotSpaceCharIs(P, '"') then
     exit;
   txt := P;
   P := GotoEndOfJSONString(P);
@@ -1739,7 +1744,8 @@ begin
   begin
     if fCompressed then
     begin
-      if fRemoteLocalhost or (fopAlreadyCompressed in frame.content) then
+      if fRemoteLocalhost or
+         (fopAlreadyCompressed in frame.content) then
         // localhost or compressed -> no SynLZ
         threshold := maxInt
       else
@@ -1885,7 +1891,8 @@ begin
   if (self = nil) or
      (fFramesInBytes = 0) then
     result := 100
-  else if not fCompressed or (fFramesInBytesSocket < fFramesInBytes) then
+  else if not fCompressed or
+          (fFramesInBytesSocket < fFramesInBytes) then
     result := 0
   else
     result := 100 - (fFramesInBytesSocket * 100) div fFramesInBytes;
@@ -1896,7 +1903,8 @@ begin
   if (self = nil) or
      (fFramesOutBytes = 0) then
     result := 100
-  else if not fCompressed or (fFramesOutBytesSocket <= fFramesOutBytes) then
+  else if not fCompressed or
+          (fFramesOutBytesSocket <= fFramesOutBytes) then
     result := 0
   else
     result := 100 - (fFramesOutBytesSocket * 100) div fFramesOutBytes;
@@ -1991,7 +1999,9 @@ begin
   if aName <> '' then
     for result := 0 to high(fProtocols) do
       with fProtocols[result] do
-        if IdemPropNameU(fName, aName) and ((fURI = '') or IdemPropNameU(fURI, aURI)) then
+        if IdemPropNameU(fName, aName) and
+           ((fURI = '') or
+            IdemPropNameU(fURI, aURI)) then
           exit;
   result := -1;
 end;
@@ -2385,7 +2395,8 @@ begin
     wscBlockWithAnswer:
       if fIncoming.AnswerToIgnore > 0 then
       begin
-        WebSocketLog.Add.Log(sllDebug, 'NotifyCallback: Waiting for AnswerToIgnore=%',
+        WebSocketLog.Add.Log(sllDebug,
+          'NotifyCallback: Waiting for AnswerToIgnore=%',
           [fIncoming.AnswerToIgnore], self);
         start := GetTickCount64;
         max := start + 30000;
@@ -2411,7 +2422,8 @@ begin
   try
     if (i > 2) and
        (WebSocketLog <> nil) then
-      WebSocketLog.Add.Log(sllWarning, 'NotifyCallback with fProcessCount=%', [i], self);
+      WebSocketLog.Add.Log(sllWarning,
+        'NotifyCallback with fProcessCount=%', [i], self);
     if not SendFrame(request) then
       exit;
     if aMode = wscBlockWithoutAnswer then
@@ -3000,7 +3012,8 @@ var
   c: PWebSocketServerResp;
 begin // no need to optimize (not called often)
   result := nil;
-  if Terminated or (ConnectionThread = nil) or
+  if Terminated or
+     (ConnectionThread = nil) or
      not ConnectionThread.InheritsFrom(TWebSocketServerResp) then
     exit;
   fWebSocketConnections.Safe.Lock;
@@ -3046,7 +3059,8 @@ function TWebSocketServer.IsActiveWebSocket(
   ConnectionID: THttpServerConnectionID): TWebSocketServerResp;
 begin
   result := nil;
-  if Terminated or (ConnectionID = 0) then
+  if Terminated or
+     (ConnectionID = 0) then
     exit;
   fWebSocketConnections.Safe.Lock;
   try
@@ -3070,7 +3084,8 @@ var
   temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
   sorted: TSynTempBuffer;
 begin
-  if Terminated or not (aFrame.opcode in [focText, focBinary]) then
+  if Terminated or
+     not (aFrame.opcode in [focText, focBinary]) then
     exit;
   ids := length(aClientsConnectionID);
   if ids > 0 then
@@ -3362,7 +3377,8 @@ begin
         'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ', bin1, #13#10 +
         'Sec-WebSocket-Protocol: ', aProtocol.GetSubprotocols, #13#10 +
         'Sec-WebSocket-Version: 13']);
-      if aProtocol.ProcessHandshake(nil, extout, nil) and (extout <> '') then
+      if aProtocol.ProcessHandshake(nil, extout, nil) and
+         (extout <> '') then
         SockSend(['Sec-WebSocket-Extensions: ', extout]);
       if aCustomHeaders <> '' then
         SockSend(aCustomHeaders);
@@ -3437,7 +3453,9 @@ begin
   endtix := GetTickCount64 + 5000;
   repeat // wait for TWebSocketProcess.ProcessLoop to initiate
     SleepHiRes(0);
-  until fProcessEnded or (fState <> wpsCreate) or (GetTickCount64 > endtix);
+  until fProcessEnded or
+        (fState <> wpsCreate) or
+        (GetTickCount64 > endtix);
 end;
 
 destructor TWebSocketProcessClient.Destroy;
@@ -3488,7 +3506,8 @@ begin
     if fProcess <> nil then // may happen when debugging under FPC (alf)
       SetCurrentThreadName('% % %', [fProcess.fProcessName, self, fProcess.Protocol.Name]);
     WebSocketLog.Add.Log(sllDebug, 'Execute: before ProcessLoop %', [fProcess], self);
-    if not Terminated and (fProcess <> nil) then
+    if not Terminated and
+       (fProcess <> nil) then
       fProcess.ProcessLoop;
     WebSocketLog.Add.Log(sllDebug, 'Execute: after ProcessLoop %', [fProcess], self);
     if (fProcess <> nil) and

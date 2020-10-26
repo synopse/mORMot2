@@ -1317,7 +1317,8 @@ end;
 
 function TDecimal128.Equals(const other: TDecimal128): boolean;
 begin
-  result := (Bits.lo = other.Bits.lo) and (Bits.hi = other.Bits.hi);
+  result := (Bits.lo = other.Bits.lo) and
+            (Bits.hi = other.Bits.hi);
 end;
 
 function div128bits9digits(var value: THash128Rec): PtrUInt;
@@ -1756,7 +1757,8 @@ begin
     if sign.L < signlo then
     {$else} // manual QWord processs for less efficient Delphi compilers
     if (sign.c1 < TQWordRec(signlo).H) or
-       ((sign.c1 = TQWordRec(signlo).H) and (sign.c0 < TQWordRec(signlo).L)) then
+       ((sign.c1 = TQWordRec(signlo).H) and
+        (sign.c0 < TQWordRec(signlo).L)) then
     {$endif FPC}
       inc(sign.H);
   end;
@@ -2002,7 +2004,9 @@ begin
     if VType = varByRef or varVariant then
       result := IsOfKind(PVariant(TVarData(V).VPointer)^, Kind)
     else
-      result := (self <> nil) and (VType = VarType) and (VKind = Kind);
+      result := (self <> nil) and
+                (VType = VarType) and
+                (VKind = Kind);
 end;
 
 function TBSONVariant.ToBlob(const V: Variant; var Blob: RawByteString): boolean;
@@ -2015,7 +2019,8 @@ begin
     end;
   with TBSONVariantData(V) do
   begin
-    result := (VType = VarType) and (VKind = betBinary);
+    result := (VType = VarType) and
+              (VKind = betBinary);
     if result then
       if (VBlob = nil) or
          (PInteger(VBlob)^ <> Length(RawByteString(VBlob)) - (sizeof(integer) + 1)) then

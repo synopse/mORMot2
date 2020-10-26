@@ -573,8 +573,8 @@ type
 
 
 const
-  SQLRECORDVERSION_DELETEID_SHIFT = 58;
-  SQLRECORDVERSION_DELETEID_RANGE = Int64(1) shl SQLRECORDVERSION_DELETEID_SHIFT;
+  ORMVERSION_DELETEID_SHIFT = 58;
+  ORMVERSION_DELETEID_RANGE = Int64(1) shl ORMVERSION_DELETEID_SHIFT;
 
 
 implementation
@@ -1072,7 +1072,8 @@ begin
                   W.AddU(Status);
                 end;
                 if not fExcludeServiceLogCustomAnswer and
-                   (len > 0) and (len <= 1024) then
+                   (len > 0) and
+                   (len <= 1024) then
                 begin
                   // write up to 1KB of result binary as base-64 text
                   W.AddShort(',result:"');
@@ -1282,7 +1283,8 @@ begin
     try
       Ctxt.ThreadServer^.Factory := self;
       if not (optForceStandardJSON in opt) and
-         ((Ctxt.Call.InHead = '') or (Ctxt.ClientKind = ckFramework)) then
+         ((Ctxt.Call.InHead = '') or
+          (Ctxt.ClientKind = ckFramework)) then
         // return extended/optimized pseudo-JSON, as recognized by mORMot
         WR.CustomOptions := WR.CustomOptions + [twoForceJSONExtended]
       else
@@ -2027,7 +2029,7 @@ begin
     raise EServiceException.CreateUTF8('%.Create: % has no TRecordVersion field',
       [self, aTable]);
   fTableDeletedIDOffset := Int64(fSlave.Model.GetTableIndexExisting(aTable))
-    shl SQLRECORDVERSION_DELETEID_SHIFT;
+    shl ORMVERSION_DELETEID_SHIFT;
   inherited Create(aMaster, IServiceRecordVersionCallback);
   fTable := aTable;
   fOnNotify := aOnNotify;
