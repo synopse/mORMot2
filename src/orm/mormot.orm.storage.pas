@@ -719,11 +719,11 @@ type
     procedure SetBinaryFile(aBinary: boolean);
     procedure GetJSONValuesEvent(aDest: pointer; aRec: TORM; aIndex: integer);
     /// used to create the JSON content from a SELECT parsed command
-    // - WhereField index follows FindWhereEqual / TSynTableStatement.WhereField
+    // - WhereField index follows FindWhereEqual / TSelectStatement.WhereField
     // - returns the number of data row added (excluding field names)
     // - this method is very fast and optimized (for search and JSON serializing)
     function GetJSONValues(Stream: TStream; Expand: boolean;
-      Stmt: TSynTableStatement): PtrInt;
+      Stmt: TSelectStatement): PtrInt;
   public
     /// TRestORMServer.URI use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle basic queries as handled by EngineList()
@@ -2525,7 +2525,7 @@ begin
 end;
 
 function TRestStorageInMemory.GetJSONValues(Stream: TStream; Expand: boolean;
-  Stmt: TSynTableStatement): PtrInt;
+  Stmt: TSelectStatement): PtrInt;
 var
   ndx, KnownRowsCount: PtrInt;
   j: PtrInt;
@@ -2666,7 +2666,7 @@ function TRestStorageInMemory.EngineList(const SQL: RawUTF8; ForceAJAX: boolean;
 var
   MS: TRawByteStringStream;
   ResCount: PtrInt;
-  Stmt: TSynTableStatement;
+  Stmt: TSelectStatement;
   max: Int64;
 
   procedure SetCount(aCount: integer);
@@ -2697,7 +2697,7 @@ begin
       end
     else
     begin
-      Stmt := TSynTableStatement.Create(SQL,
+      Stmt := TSelectStatement.Create(SQL,
         fStoredClassRecordProps.Fields.IndexByName,
         fStoredClassRecordProps.SimpleFieldsBits[ooSelect]);
       try

@@ -79,7 +79,7 @@ type
     /// determine if the SQL statement can be cached
     // - always returns false, to force server-side caching only on this driver
     function IsCachable(P: PUTF8Char): boolean; override;
-    function SQLLimitClause(AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; override;
+    function SQLLimitClause(AStmt: TSelectStatement): TSQLDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
     property ClientVersion: RawUTF8 read GetClientVersion;
@@ -430,7 +430,7 @@ begin
 end;
 
 function TSQLDBOracleConnectionProperties.SQLLimitClause(AStmt:
-  TSynTableStatement): TSQLDBDefinitionLimitClause;
+  TSelectStatement): TSQLDBDefinitionLimitClause;
 begin
   if AStmt.OrderByField <> nil then
   begin

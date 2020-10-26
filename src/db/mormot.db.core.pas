@@ -12,7 +12,7 @@ unit mormot.db.core;
     - Date/Time SQL encoding
     - SQL Parameters Inlining and Processing
     - TJSONWriter Specialized for Database Export
-    - TSynTableStatement SQL SELECT Parser
+    - TSelectStatement SQL SELECT Parser
 
     This unit is used by both mormot.db.* units and mormot.orm.* units.
 
@@ -815,15 +815,15 @@ type
   end;
 
 
-{ ************ TSynTableStatement SQL SELECT Parser }
+{ ************ TSelectStatement SQL SELECT Parser }
 
 type
   /// function prototype used to retrieve the index of a specified property name
   // - 'ID' is handled separately: here must be available only the custom fields
-  TSynTableFieldIndex = function(const PropName: RawUTF8): integer of object;
+  TOnGetFieldIndex = function(const PropName: RawUTF8): integer of object;
 
-  /// the recognized operators for a TSynTableStatement where clause
-  TSynTableStatementOperator = (
+  /// the recognized operators for a TSelectStatement where clause
+  TSelectStatementOperator = (
      opEqualTo,
      opNotEqualTo,
      opLessThan,
@@ -837,8 +837,8 @@ type
      opContains,
      opFunction);
 
-  /// one recognized SELECT expression for TSynTableStatement
-  TSynTableStatementSelect = record
+  /// one recognized SELECT expression for TSelectStatement
+  TSelectStatementSelect = record
     /// the column SELECTed for the SQL statement, in the expected order
     // - contains 0 for ID/RowID, or the RTTI field index + 1
     Field: integer;
@@ -863,11 +863,11 @@ type
     SubField: RawUTF8;
   end;
 
-  /// the recognized SELECT expressions for TSynTableStatement
-  TSynTableStatementSelectDynArray = array of TSynTableStatementSelect;
+  /// the recognized SELECT expressions for TSelectStatement
+  TSelectStatementSelectDynArray = array of TSelectStatementSelect;
 
-  /// one recognized WHERE expression for TSynTableStatement
-  TSynTableStatementWhere = record
+  /// one recognized WHERE expression for TSelectStatement
+  TSelectStatementWhere = record
     /// any '(' before the actual expression
     ParenthesisBefore: RawUTF8;
     /// any ')' after the actual expression
@@ -885,7 +885,7 @@ type
     // SubField='.subfield1.subfield2'
     SubField: RawUTF8;
     /// the operator of the WHERE expression
-    Operation: TSynTableStatementOperator;
+    Operation: TSelectStatementOperator;
     /// the SQL function name associated to a Field and Value
     // - e.g. 'INTEGERDYNARRAYCONTAINS' and Field=0 for
     // IntegerDynArrayContains(RowID,10) and ValueInteger=10
@@ -904,21 +904,21 @@ type
     ValueVariant: variant;
   end;
 
-  /// the recognized WHERE expressions for TSynTableStatement
-  TSynTableStatementWhereDynArray = array of TSynTableStatementWhere;
+  /// the recognized WHERE expressions for TSelectStatement
+  TSelectStatementWhereDynArray = array of TSelectStatementWhere;
 
   /// used to parse a SELECT SQL statement, following the SQlite3 syntax
   // - handle basic REST commands, i.e. a SELECT over a single table (no JOIN)
   // with its WHERE clause, and result column aliases
   // - handle also aggregate functions like "SELECT Count( * ) FROM TableName"
   // - will also parse any LIMIT, OFFSET, ORDER BY, GROUP BY statement clause
-  TSynTableStatement = class
+  TSelectStatement = class
   protected
     fSQLStatement: RawUTF8;
-    fSelect: TSynTableStatementSelectDynArray;
+    fSelect: TSelectStatementSelectDynArray;
     fSelectFunctionCount: integer;
     fTableName: RawUTF8;
-    fWhere: TSynTableStatementWhereDynArray;
+    fWhere: TSelectStatementWhereDynArray;
     fOrderByField: TFieldIndexDynArray;
     fGroupByField: TFieldIndexDynArray;
     fWhereHasParenthesis, fHasSelectSubFields, fWhereHasSubFields: boolean;
@@ -935,7 +935,7 @@ type
     // - SQLStatement is left '' if the SQL statement is not correct
     // - if SQLStatement is set, the caller must check for TableName to match
     // the expected value, then use the Where[] to retrieve the content
-    constructor Create(const SQL: RawUTF8; const GetFieldIndex: TSynTableFieldIndex;
+    constructor Create(const SQL: RawUTF8; const GetFieldIndex: TOnGetFieldIndex;
       const SimpleFieldsBits: TFieldBits = [0 .. MAX_SQLFIELDS - 1]);
     /// compute the SELECT column bits from the SelectFields array
     // - optionally set Select[].SubField into SubFields[Select[].Field]
@@ -947,7 +947,7 @@ type
     // - equals '' if the parsing failed
     property SQLStatement: RawUTF8 read fSQLStatement;
     /// the column SELECTed for the SQL statement, in the expected order
-    property Select: TSynTableStatementSelectDynArray read fSelect;
+    property Select: TSelectStatementSelectDynArray read fSelect;
     /// if the SELECTed expression of this SQL statement have any function defined
     property SelectFunctionCount: integer read fSelectFunctionCount;
     /// the retrieved table name
@@ -955,7 +955,7 @@ type
     /// if any Select[].SubField was actually set
     property HasSelectSubFields: boolean read fHasSelectSubFields;
     /// the WHERE clause of this SQL statement
-    property Where: TSynTableStatementWhereDynArray read fWhere;
+    property Where: TSelectStatementWhereDynArray read fWhere;
     /// if the WHERE clause contains any ( ) parenthesis expression
     property WhereHasParenthesis: boolean read fWhereHasParenthesis;
     /// if the WHERE clause contains any Where[].SubField
@@ -977,6 +977,15 @@ type
     /// optional associated writer
     property Writer: TJSONWriter read fWriter write fWriter;
   end;
+
+
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
+
+type
+  TSynTableStatement = TSelectStatement;
+
+{$endif PUREMORMOT2}
 
 
 implementation
@@ -2194,15 +2203,15 @@ begin
 end;
 
 
-{ ************ TSynTableStatement SQL SELECT Parser }
+{ ************ TSelectStatement SQL SELECT Parser }
 
-{ TSynTableStatement }
+{ TSelectStatement }
 
 const
   NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
 
-constructor TSynTableStatement.Create(const SQL: RawUTF8;
-  const GetFieldIndex: TSynTableFieldIndex; const SimpleFieldsBits: TFieldBits);
+constructor TSelectStatement.Create(const SQL: RawUTF8;
+  const GetFieldIndex: TOnGetFieldIndex; const SimpleFieldsBits: TFieldBits);
 var
   Prop, whereBefore: RawUTF8;
   P, B: PUTF8Char;
@@ -2226,7 +2235,7 @@ var
 
   function SetFields: boolean;
   var
-    select: TSynTableStatementSelect;
+    select: TSelectStatementSelect;
     B: PUTF8Char;
   begin
     result := false;
@@ -2289,7 +2298,7 @@ var
     result := true;
   end;
 
-  function GetWhereValue(var Where: TSynTableStatementWhere): boolean;
+  function GetWhereValue(var Where: TSelectStatementWhere): boolean;
   var
     B: PUTF8Char;
   begin
@@ -2344,9 +2353,9 @@ var
     result := true;
   end;
 
-  function GetWhereValues(var Where: TSynTableStatementWhere): boolean;
+  function GetWhereValues(var Where: TSelectStatementWhere): boolean;
   var
-    v: TSynTableStatementWhereDynArray;
+    v: TSelectStatementWhereDynArray;
     n, w: integer;
     tmp: RawUTF8;
   begin
@@ -2383,7 +2392,7 @@ var
   end;
 
   function GetWhereExpression(FieldIndex: integer;
-    var Where: TSynTableStatementWhere): boolean;
+    var Where: TSelectStatementWhere): boolean;
   var
     B: PUTF8Char;
   begin
@@ -2687,11 +2696,11 @@ lim2: if IdemPropNameU(Prop, 'LIMIT') then
   fSQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
 end;
 
-procedure TSynTableStatement.SelectFieldBits(var Fields: TFieldBits;
+procedure TSelectStatement.SelectFieldBits(var Fields: TFieldBits;
   var withID: boolean; SubFields: PRawUTF8Array);
 var
   i: integer;
-  f: ^TSynTableStatementSelect;
+  f: ^TSelectStatementSelect;
 begin
   FillZero(Fields);
   withID := false;

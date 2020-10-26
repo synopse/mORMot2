@@ -6000,8 +6000,7 @@ type
     /// all TSynFilter or TSynValidate instances registered per each field
     // - since validation and filtering are used within some CPU-consuming
     // part of the framework (like UI edition), both filters and validation
-    // rules are grouped in the same list - for TSynTableFieldProperties there
-    // are separated Filters[] and Validates[] arrays, for better performance
+    // rules are grouped in the same list
     property Filters: TSynFilterOrValidateObjArrayArray read fFilters;
     /// for a TORMMany class, points to the Source property RTTI
     property RecordManySourceProp: TORMPropInfoRTTIInstance read fRecordManySourceProp;

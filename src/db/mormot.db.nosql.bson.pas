@@ -794,7 +794,7 @@ type
     // - inverted should be TRUE e.g. for a NOT ... expression
     // - returns TRUE on success, FALSE if the operator is not implemented yet
     function BSONWriteQueryOperator(name: RawUTF8; inverted: boolean;
-      op: TSynTableStatementOperator; const Value: variant): boolean;
+      op: TSelectStatementOperator; const Value: variant): boolean;
     /// write one array item, i.e. the ASCII index name as text
     // - only one level of array should be used per TBSONWriter class
     procedure BSONWriteArray(const kind: TBSONElementType); overload;
@@ -3509,11 +3509,11 @@ begin
 end;
 
 function TBSONWriter.BSONWriteQueryOperator(name: RawUTF8; inverted: boolean; op:
-  TSynTableStatementOperator; const Value: variant): boolean;
+  TSelectStatementOperator; const Value: variant): boolean;
 const
   QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
     '$ne', '$lt', '$lte', '$gt', '$gte', '$in');
-  INVERT_OPS: array[opEqualTo..opGreaterThanOrEqualTo] of TSynTableStatementOperator = (
+  INVERT_OPS: array[opEqualTo..opGreaterThanOrEqualTo] of TSelectStatementOperator = (
     opNotEqualTo, opEqualTo, opGreaterThanOrEqualTo, opGreaterThan,
     opLessThanOrEqualTo, opLessThan);
 var

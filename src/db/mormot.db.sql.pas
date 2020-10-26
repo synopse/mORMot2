@@ -1464,7 +1464,7 @@ type
     // statement to a syntax matching the underlying DBMS
     // - e.g. TRestStorageExternal.AdaptSQLForEngineList() calls this
     // to let TRestServer.URI by-pass virtual table mechanism
-    function SQLLimitClause(AStmt: TSynTableStatement):
+    function SQLLimitClause(AStmt: TSelectStatement):
       TSQLDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
     // - used by TSQLDBConnection.NewStatementPrepared() for handling cache
@@ -4932,7 +4932,7 @@ begin
   result := StringReplaceAll(fDatabaseName, PassWord, '***');
 end;
 
-function TSQLDBConnectionProperties.SQLLimitClause(AStmt: TSynTableStatement):
+function TSQLDBConnectionProperties.SQLLimitClause(AStmt: TSelectStatement):
   TSQLDBDefinitionLimitClause;
 begin
   result := DB_SQLLIMITCLAUSE[DBMS];
