@@ -399,7 +399,7 @@ type
     procedure ComputeNew(out result: TSynUniqueIdentifierBits); overload;
     /// return a new unique ID, type-casted to an Int64
     function ComputeNew: Int64; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// return an unique ID matching this generator pattern, at a given timestamp
     // - may be used e.g. to limit database queries on a particular time range
     procedure ComputeFromDateTime(const aDateTime: TDateTime;
@@ -484,7 +484,7 @@ type
     procedure Update(aBuffer: pointer; aLen: integer); overload;
     /// process some message content supplied as string
     procedure Update(const aBuffer: RawByteString); overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the computed digital signature as lowercase hexadecimal text
     function Final: RawUTF8; overload;
     /// returns the raw computed digital signature
@@ -551,7 +551,7 @@ type
     procedure Update(aBuffer: Pointer; aLen: integer); overload;
     /// hash the supplied string content
     procedure Update(const aBuffer: RawByteString); overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the resulting hash as lowercase hexadecimal string
     function Final: RawUTF8;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
@@ -782,7 +782,8 @@ var
   read: cardinal;
 begin
   result := '';
-  if (aFileName = '') or not hasher.Init(aAlgo) then
+  if (aFileName = '') or
+     not hasher.Init(aAlgo) then
     exit;
   F := FileOpenSequentialRead(aFileName);
   if PtrInt(F) >= 0 then
@@ -987,7 +988,8 @@ var
 
 begin
   SetDefault;
-  if (aParamsJSON = nil) or (aParamsJSONLen <= 0) then
+  if (aParamsJSON = nil) or
+     (aParamsJSONLen <= 0) then
     k.secret := aDefaultSalt
   else if aParamsJSON[1] <> '{' then
     FastSetString(k.secret, aParamsJSON, aParamsJSONLen)
@@ -996,7 +998,8 @@ begin
     tmp.Init(aParamsJSON, aParamsJSONLen);
     try
       if (RecordLoadJSON(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
-         (k.secret = '') or (k.salt = '') then
+         (k.secret = '') or
+         (k.salt = '') then
       begin
         SetDefault;
         FastSetString(k.secret, aParamsJSON, aParamsJSONLen);
@@ -1170,13 +1173,16 @@ var
   i, j: integer;
 begin
   result := '';
-  if (self = nil) or (fPassWord = '') then
+  if (self = nil) or
+     (fPassWord = '') then
     exit;
   if AppSecret = '' then
     ClassToText(ClassType, AppSecret);
   usr := ExeVersion.User + ':';
   i := PosEx(usr, fPassword);
-  if (i = 1) or ((i > 0) and (fPassword[i - 1] = ',')) then
+  if (i = 1) or
+     ((i > 0) and
+      (fPassword[i - 1] = ',')) then
   begin
     // handle '....,username:passwordbase64,....' or 'unsername:passwordbase64'
     inc(i, length(usr));
@@ -1418,7 +1424,8 @@ begin
 end;
 
 procedure TIPBan.SaveToWriter(aWriter: TBufferWriter);
-begin // wkSorted not efficient: too big diffs between IPs
+begin
+  // wkSorted not efficient: too big diffs between IPs
   aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
 end;
 
@@ -1427,7 +1434,8 @@ var
   ip4: cardinal;
 begin
   result := false;
-  if (self = nil) or not IPToCardinal(aIP, ip4) then
+  if (self = nil) or
+     not IPToCardinal(aIP, ip4) then
     exit;
   fSafe.Lock;
   try
@@ -1444,7 +1452,8 @@ var
   i: integer;
 begin
   result := false;
-  if (self = nil) or not IPToCardinal(aIP, ip4) then
+  if (self = nil) or
+     not IPToCardinal(aIP, ip4) then
     exit;
   fSafe.Lock;
   try
@@ -1463,7 +1472,9 @@ var
   ip4: cardinal;
 begin
   result := false;
-  if (self = nil) or (fCount = 0) or not IPToCardinal(aIP, ip4) then
+  if (self = nil) or
+     (fCount = 0) or
+     not IPToCardinal(aIP, ip4) then
     exit;
   fSafe.Lock;
   try
@@ -1836,7 +1847,6 @@ end;
 
 initialization
   InitializeUnit;
-
 finalization
   FinalizeUnit;
 end.

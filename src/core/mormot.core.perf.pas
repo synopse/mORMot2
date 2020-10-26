@@ -23,6 +23,7 @@ interface
 
 uses
   sysutils,
+  typinfo, // to please Delphi
   mormot.core.base,
   mormot.core.os,
   mormot.core.datetime,
@@ -119,7 +120,7 @@ type
   public
     /// initialize the timer
     // - will fill all internal state with 0
-    // - not necessary e.g. if TPrecisionTimer is defined as a TObject field
+    // - not necessary e.g. if TPrecisionTimer is defined as a class field
     procedure Init; {$ifdef HASINLINE}inline;{$endif}
     /// initialize and start the high resolution timer
     // - similar to Init + Resume
@@ -1520,7 +1521,8 @@ end;
 
 procedure TSynMonitor.Sum(another: TSynMonitor);
 begin
-  if (self = nil) or (another = nil) then
+  if (self = nil) or
+     (another = nil) then
     exit;
   fSafe^.Lock;
   another.fSafe^.Lock;
@@ -1535,7 +1537,8 @@ end;
 procedure TSynMonitor.LockedSum(another: TSynMonitor);
 begin
   fTotalTime.MicroSec := fTotalTime.MicroSec + another.fTotalTime.MicroSec;
-  if (fMinimalTime.MicroSec = 0) or (another.fMinimalTime.MicroSec < fMinimalTime.MicroSec) then
+  if (fMinimalTime.MicroSec = 0) or
+     (another.fMinimalTime.MicroSec < fMinimalTime.MicroSec) then
     fMinimalTime.MicroSec := another.fMinimalTime.MicroSec;
   if another.fMaximalTime.MicroSec > fMaximalTime.MicroSec then
     fMaximalTime.MicroSec := another.fMaximalTime.MicroSec;
@@ -1829,7 +1832,8 @@ begin
   result := -1;
   if Instance = nil then
     exit; // nothing to track
-  if (Name = '') and Instance.InheritsFrom(TSynMonitor) then
+  if (Name = '') and
+     Instance.InheritsFrom(TSynMonitor) then
     instanceName := TSynMonitor(Instance).Name
   else
     instanceName := Name;
@@ -1968,7 +1972,8 @@ function TSynMonitorUsage.Modified(Instance: TObject;
     min := time.Minute;
     for j := 0 to length(track.Props) - 1 do
       with track.Props[j] do
-        if (high(PropNames) < 0) or (FindPropName(PropNames, Name) >= 0) then
+        if (high(PropNames) < 0) or
+           (FindPropName(PropNames, Name) >= 0) then
         begin
           v := info^.GetInt64Value(Instance);
           diff := v - ValueLast;
@@ -2033,7 +2038,8 @@ begin
   id.FromTimeLog(fPrevious.Value);
   Save(id, mugHour, Scope); // always save current minutes values
   for g := mugDay to mugYear do
-    if (Scope <> mugUndefined) and (g > Scope) then
+    if (Scope <> mugUndefined) and
+       (g > Scope) then
       break
     else
       // mugUndefined from Destroy
@@ -2274,7 +2280,8 @@ begin
   GetEnumType(TypeInfo(TIntelCpuFeature), List);
   for f := low(f) to high(f) do
   begin
-    if (f in aIntelCPUFeatures) and (List^[3] <> '_') then
+    if (f in aIntelCPUFeatures) and
+       (List^[3] <> '_') then
     begin
       if result <> '' then
         result := result + Sep;
@@ -2324,7 +2331,9 @@ var
   i: PtrInt;
   now: TDateTime;
 begin
-  if (self = nil) or (fProcess = nil) or (fHistoryDepth = 0) or
+  if (self = nil) or
+     (fProcess = nil) or
+     (fHistoryDepth = 0) or
      not fProcessInfo.Start then
     exit;
   fTimer := Sender;
@@ -2509,7 +2518,8 @@ begin
       begin
         n := length(Data);
         last := n - 1;
-        if (aDepth > 0) and (n > aDepth) then
+        if (aDepth > 0) and
+           (n > aDepth) then
           n := aDepth;
         SetLength(result, n); // make ordered copy
         for i := 0 to n - 1 do
@@ -2551,7 +2561,8 @@ var
 
 class function TSystemUse.Current(aCreateIfNone: boolean): TSystemUse;
 begin
-  if (ProcessSystemUse = nil) and aCreateIfNone then
+  if (ProcessSystemUse = nil) and
+     aCreateIfNone then
   begin
     GlobalLock; // paranoid thread-safety
     try
@@ -2633,7 +2644,8 @@ var
   end;
 
 begin
-  if (_DiskPartitions = nil) or nocache then
+  if (_DiskPartitions = nil) or
+     nocache then
   begin
     _DiskPartitions := GetDiskPartitions;
     {$ifndef MSWINDOWS}

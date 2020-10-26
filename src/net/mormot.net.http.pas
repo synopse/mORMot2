@@ -296,7 +296,9 @@ var
   compressible: boolean;
   OutContentTypeP: PUTF8Char absolute OutContentType;
 begin
-  if (integer(Accepted) <> 0) and (OutContentType <> '') and (Handled <> nil) then
+  if (integer(Accepted) <> 0) and
+     (OutContentType <> '') and
+     (Handled <> nil) then
   begin
     OutContentLen := length(OutContent);
     case IdemPCharArray(OutContentTypeP, ['TEXT/', 'IMAGE/', 'APPLICATION/']) of
@@ -352,12 +354,14 @@ procedure GetTrimmed(P: PUTF8Char; out result: RawUTF8);
 var
   B: PUTF8Char;
 begin
-  while (P^ > #0) and (P^ <= ' ') do
+  while (P^ > #0) and
+        (P^ <= ' ') do
     inc(P);
   B := P;
   while P^ <> #0 do
     inc(P);
-  while (P > B) and (P[-1] <= ' ') do
+  while (P > B) and
+        (P[-1] <= ' ') do
     dec(P);
   FastSetString(result, B, P - B);
 end;
@@ -406,7 +410,8 @@ begin
       SockSend(['Content-Encoding: ', OutContentEncoding]);
   end;
   SockSend(['Content-Length: ', length(OutContent)]); // needed even 0
-  if (OutContentType <> '') and (OutContentType <> STATICFILE_CONTENT_TYPE) then
+  if (OutContentType <> '') and
+     (OutContentType <> STATICFILE_CONTENT_TYPE) then
     SockSend(['Content-Type: ', OutContentType]);
 end;
 
@@ -429,7 +434,8 @@ begin
   fSndBufLen := 0; // SockSend() used as headers temp buffer to avoid getmem
   repeat
     P := @line;
-    if (SockIn <> nil) and not HeadersUnFiltered then
+    if (SockIn <> nil) and
+       not HeadersUnFiltered then
     begin
       {$I-}
       readln(SockIn^, line);
@@ -520,7 +526,8 @@ begin
     else
       P := nil;
     end;
-    if (P = nil) or HeadersUnFiltered then
+    if (P = nil) or
+       HeadersUnFiltered then
       // store meaningful headers into SockSend() fSndBuf/fSndLen as temp buffer
       if {%H-}s = '' then
       begin
@@ -636,7 +643,8 @@ end;
 
 function THttpSocket.HeaderGetText(const aRemoteIP: RawUTF8): RawUTF8;
 begin
-  if (aRemoteIP <> '') and not (hasRemoteIP in HeaderFlags) then
+  if (aRemoteIP <> '') and
+     not (hasRemoteIP in HeaderFlags) then
   begin
     Headers := Headers + 'RemoteIP: ' + aRemoteIP + #13#10;
     include(HeaderFlags, hasRemoteIP);

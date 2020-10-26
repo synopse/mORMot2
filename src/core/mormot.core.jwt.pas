@@ -632,7 +632,8 @@ procedure TJWTAbstract.SetCacheTimeoutSeconds(value: integer);
 begin
   fCacheTimeoutSeconds := value;
   FreeAndNil(fCache);
-  if (value > 0) and (fCacheResults <> []) then
+  if (value > 0) and
+     (fCacheResults <> []) then
     fCache := TSynDictionary.Create(
       TypeInfo(TRawUTF8DynArray), TypeInfo(TJWTContentDynArray), false, value);
 end;
@@ -645,7 +646,8 @@ var
   fromcache: boolean;
 begin
   JWT.result := jwtNoToken;
-  if (self = nil) or (fCache = nil) then
+  if (self = nil) or
+     (fCache = nil) then
     fromcache := false
   else
   begin
@@ -729,7 +731,8 @@ begin
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
   toklen := length(Token);
-  if (toklen = 0) or (self = nil) then
+  if (toklen = 0) or
+     (self = nil) then
   begin
     JWT.result := jwtNoToken;
     exit;
@@ -739,7 +742,8 @@ begin
   if joHeaderParse in fOptions then
   begin // slower parsing
     headerlen := PosExChar('.', Token);
-    if (headerlen = 0) or (headerlen > 512) then
+    if (headerlen = 0) or
+       (headerlen > 512) then
       exit;
     Base64URIToBin(tok, headerlen - 1, signature);
     JSONDecode(pointer(signature), ['alg', 'typ'], @head);
@@ -759,10 +763,12 @@ begin
   if toklen > JWT_MAXSIZE then
     exit;
   payloadend := PosEx('.', Token, headerlen + 1);
-  if (payloadend = 0) or (payloadend - headerlen > 2700) then
+  if (payloadend = 0) or
+     (payloadend - headerlen > 2700) then
     exit;
   Base64URIToBin(tok + payloadend, toklen - payloadend, signature);
-  if (signature = '') and (payloadend <> toklen) then
+  if (signature = '') and
+     (payloadend <> toklen) then
     exit;
   JWT.result := jwtInvalidPayload;
   Base64URIToBin(tok + headerlen, payloadend - headerlen - 1, RawByteString(payload));
@@ -914,15 +920,19 @@ begin
     _Json(text, Payload^, JSON_OPTIONS_FAST);
   JSONDecode(pointer(text), ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true);
   result := jwtUnexpectedClaim;
-  if ((ExpectedSubject <> '') and not V[4].Idem(ExpectedSubject)) or
-     ((ExpectedIssuer <> '') and not V[0].Idem(ExpectedIssuer)) then
+  if ((ExpectedSubject <> '') and
+      not V[4].Idem(ExpectedSubject)) or
+     ((ExpectedIssuer <> '') and
+      not V[0].Idem(ExpectedIssuer)) then
     exit;
   result := jwtUnknownAudience;
-  if (ExpectedAudience <> '') and not V[1].Idem(ExpectedAudience) then
+  if (ExpectedAudience <> '') and
+     not V[1].Idem(ExpectedAudience) then
     exit;
   if Expiration <> nil then
     Expiration^ := 0;
-  if (V[2].value <> nil) or (V[3].value <> nil) then
+  if (V[2].value <> nil) or
+     (V[3].value <> nil) then
   begin
     now := UnixTimeUTC;
     if V[2].value <> nil then
@@ -938,7 +948,8 @@ begin
     begin
       time := V[3].ToCardinal;
       result := jwtNotBeforeFailed;
-      if (time = 0) or (now + PtrUInt(NotBeforeDelta) < time) then
+      if (time = 0) or
+         (now + PtrUInt(NotBeforeDelta) < time) then
         exit;
     end;
   end;
@@ -1016,7 +1027,8 @@ begin
   algo := GetAlgo;
   inherited Create(JWT_TEXT[algo], aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey);
-  if (aSecret <> '') and (aSecretPBKDF2Rounds > 0) then
+  if (aSecret <> '') and
+     (aSecretPBKDF2Rounds > 0) then
     fSignPrepared.Init(algo, aSecret, fHeaderB64, aSecretPBKDF2Rounds, aPBKDF2Secret)
   else
     fSignPrepared.Init(algo, aSecret);

@@ -55,7 +55,7 @@ function Iso8601ToDateTime(const S: RawByteString): TDateTime; overload;
 // - will also recognize '.sss' milliseconds suffix, if any
 // - if L is left to default 0, it will be computed from StrLen(P)
 function Iso8601ToDateTimePUTF8Char(P: PUTF8Char; L: integer = 0): TDateTime;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// Date/Time conversion from ISO-8601
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format, with potentially
@@ -75,7 +75,7 @@ function Iso8601CheckAndDecode(P: PUTF8Char; L: integer; var Value: TDateTime): 
 // - will also recognize '.sss' milliseconds suffix, if any
 // - if L is left to default 0, it will be computed from StrLen(P)
 function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer = 0): TDateTime; overload;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// Time conversion from ISO-8601 (with no Date part)
 // - handle 'hhmmss' and 'hh:mm:ss' format
@@ -104,7 +104,7 @@ function Iso8601ToDatePUTF8Char(P: PUTF8Char; L: integer; var Y, M, D: cardinal)
 // !DateTimeToIso8601Text(IntervalTextToDateTime('+1 06:03:20'))='1899-12-31T06:03:20'
 // !DateTimeToIso8601Text(IntervalTextToDateTime('-2 06:03:20'))='1899-12-28T06:03:20'
 function IntervalTextToDateTime(Text: PUTF8Char): TDateTime;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// Interval date/time conversion from simple text
 // - expected format does not match ISO-8601 Time intervals format, but Oracle
@@ -187,7 +187,7 @@ function DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUTF8Char;
 // - used e.g. by TPropInfo.GetValue() and TPropInfo.NormalizeValue() methods
 function DateTimeToIso8601Text(DT: TDateTime; FirstChar: AnsiChar = 'T';
   WithMS: boolean = false): RawUTF8;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// write a TDateTime into strict ISO-8601 date and/or time text
 // - if DT=0, returns ''
@@ -231,12 +231,20 @@ function TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
 type
+  {$A-}
+
   /// a simple way to store a date as Year/Month/Day
   // - with no intermediate computation needed as with TDate/TUnixTime values
   // - consider using TSynSystemTime if you need to handle both Date and Time
   // - match the first 4 fields of TSynSystemTime - so PSynDate(@aSynSystemTime)^
   // is safe to be used
+  // - some Delphi revisions have trouble with "object" as own method parameters
+  // (e.g. IsEqual or Compare) so we force to use "record" type if possible
+  {$ifdef USERECORDWITHMETHODS}
+  TSynDate = record
+  {$else}
   TSynDate = object
+  {$endif USERECORDWITHMETHODS}
     /// the Year value of this Date
     Year: word;
     /// the Month value of this Date (1..12)
@@ -292,7 +300,13 @@ type
   // for fast conversion from TDateTime to its ready-to-display members
   // - DayOfWeek field is not handled by most methods by default, but could be
   // filled on demand via ComputeDayOfWeek
+  // - some Delphi revisions have trouble with "object" as own method parameters
+  // (e.g. IsEqual) so we force to use "record" type if possible
+  {$ifdef USERECORDWITHMETHODS}
+  TSynSystemTime = record
+  {$else}
   TSynSystemTime = object
+  {$endif USERECORDWITHMETHODS}
   public
     Year, Month, DayOfWeek, Day, Hour, Minute, Second, MilliSecond: word;
     /// set all fields to 0
@@ -369,12 +383,14 @@ type
   /// pointer to our cross-platform and cross-compiler TSystemTime 128-bit structure
   PSynSystemTime = ^TSynSystemTime;
 
+  {$A+}
+
 /// our own faster version of the corresponding RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
 
 /// our own faster version of the corresponding RTL function
 function IsLeapYear(Year: cardinal): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -438,12 +454,12 @@ const
 /// convert a second-based c-encoded time as TDateTime
 //  - i.e. number of seconds elapsed since Unix epoch 1/1/1970 into TDateTime
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TDateTime into a second-based c-encoded time
 //  - i.e. TDateTime into number of seconds elapsed since Unix epoch 1/1/1970
 function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
 // the ISO 8601 text layout
@@ -474,12 +490,12 @@ function UnixTimePeriodToString(const UnixTime: TUnixTime;
 
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TDateTime into a millisecond-based c-encoded time (from Unix epoch 1/1/1970)
 // - if AValue is 0, will return 0 (since is likely to be an error constant)
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some millisecond-based c-encoded time (from Unix epoch 1/1/1970) to
 // the ISO 8601 text layout, including milliseconds

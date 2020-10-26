@@ -48,7 +48,7 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD;
 var
   U1, U2: UnicodeString; // faster than WideString on Windows
 begin
-  // not inlined to avoid try..finally UnicodeString protection
+  // not inlined to avoid try..finally UnicodeString protection overhead
   if cchCount1 < 0 then
     cchCount1 := StrLenW(lpString1);
   SetString(U1, lpString1, cchCount1);
@@ -98,7 +98,7 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   MILLION  = Int64(THOUSAND * THOUSAND);
 
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   YYear, XYear, Temp, TempMonth: PtrUInt;
 begin
@@ -601,7 +601,8 @@ var
   timeout: TTimespec;
   d: cardinal;
 begin
-  if ms = 0 then // handle SleepHiRes(0) special case
+  if ms = 0 then
+    // handle SleepHiRes(0) special case
     if SleepHiRes0Yield then
     begin
       // warning: reported as buggy by Alan on POSIX, and despited by Linus
@@ -705,6 +706,7 @@ begin
   if fpsetrlimit(RLIMIT_NOFILE, @limit) = 0 then
     result := GetFileOpenLimit(hard);
 end;
+
 
 {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
 
@@ -823,7 +825,8 @@ begin
     if IdemPChar(p, pointer(up)) then
     begin
       inc(p, length(up));
-      while (p^ <= ' ') and (p^ <> #0) do
+      while (p^ <= ' ') and
+            (p^ <> #0) do
         inc(p);
       L := 0;
       while p[L] > #13 do
@@ -1049,7 +1052,8 @@ begin
     spUserData:
       begin
         if _UserPath = '' then
-        begin //  ~/.cache/appname
+        begin
+          //  ~/.cache/appname
           _UserPath := GetEnvironmentVariable('XDG_CACHE_HOME');
           if (_UserPath = '') or not IsDirectoryWritable(_UserPath) then
             _UserPath := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
@@ -1075,7 +1079,8 @@ begin
       end
   else
     begin
-      if _HomePath = '' then // POSIX requires a value for $HOME
+      if _HomePath = '' then
+        // POSIX requires a value for $HOME
         _HomePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
       result := _HomePath;
     end;
@@ -1202,7 +1207,8 @@ function TProcessInfo.PerSystem(out Idle, Kernel, User: single): boolean;
 var
   P: PUTF8Char;
   U, K, I, S: cardinal;
-begin // see http://www.linuxhowtos.org/System/procstat.htm
+begin
+  // see http://www.linuxhowtos.org/System/procstat.htm
   result := false;
   P := pointer(StringFromFile('/proc/stat', {nosize=}true));
   if P = nil then
@@ -1369,6 +1375,66 @@ begin
   end;
 end;
 
+const
+  STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
+
+{$ifdef CPUARM}
+
+var
+  StubCallAllocMemLastStart: PtrUInt; // avoid unneeded fpmmap() calls
+
+function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
+const
+  STUB_RELJMP = {$ifdef CPUARM} $7fffff {$else} $7fffffff {$endif}; // relative jmp
+  STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
+  STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
+var
+  start, stop, stub, dist: PtrUInt;
+begin
+  stub := PtrUInt(ArmFakeStubAddr); // = @TInterfacedObjectFake.ArmFakeStub
+  if StubCallAllocMemLastStart <> 0 then
+    start := StubCallAllocMemLastStart
+  else
+  begin
+    start := stub - STUB_INTERV;
+    if start > stub then
+      start := 0; // avoid range overflow
+    start := start and STUB_ALIGN;
+  end;
+  stop := stub + STUB_INTERV;
+  if stop < stub then
+    stop := high(PtrUInt);
+  stop := stop and STUB_ALIGN;
+  while start < stop do
+  begin
+    // try whole -STUB_INTERV..+STUB_INTERV range
+    inc(start, STUB_SIZE);
+    result := fpmmap(pointer(start), STUB_SIZE, flProtect, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+    if result <> MAP_FAILED then
+    begin
+      // close enough for a 24/32-bit relative jump?
+      dist := abs(stub - PtrUInt(result));
+      if dist < STUB_RELJMP then
+      begin
+        StubCallAllocMemLastStart := start;
+        exit;
+      end else
+        fpmunmap(result, STUB_SIZE);
+    end;
+  end;
+  result := MAP_FAILED; // error
+end;
+
+{$else}
+
+// other platforms (Intel+Arm64) use plain Kernel call
+function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
+begin
+  result := fpmmap(nil, STUB_SIZE, flProtect, MAP_PRIVATE OR MAP_ANONYMOUS, -1, 0);
+end;
+
+{$endif CPUARM}
+
 
 { ****************** Gather Operating System Information }
 
@@ -1416,7 +1482,7 @@ begin
   // retrieve Kernel and Hardware information
   stdoutIsTTY := IsATTY(StdOutputHandle) = 1;
   modname := nil;
-  SystemInfo.dwPageSize := getpagesize;
+  SystemInfo.dwPageSize := getpagesize; // call libc API
   fpuname(uts);
   {$ifdef BSD}
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -1428,7 +1494,8 @@ begin
   {$else}
   {$ifndef ANDROID}
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
-  if pthread <> nil then begin
+  if pthread <> nil then
+  begin
     {$ifdef LINUXNOTBSD}
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
     {$endif LINUXNOTBSD}
@@ -1463,7 +1530,8 @@ begin
   if modname <> nil then
     repeat
       inc(modname);
-    until (modname^ = #0) or (modname^ > ' ');
+    until (modname^ = #0) or
+          (modname^ > ' ');
   FindNameValue(StringFromFile('/etc/os-release'), 'PRETTY_NAME=', release);
   if (release <> '') and (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
@@ -1512,9 +1580,9 @@ begin
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then
     OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
-  {$ifdef Android}
+  {$ifdef ANDROID}
   OSVersionText := 'Android (' + OSVersionText + ')';
-  {$endif}
+  {$endif ANDROID}
   if (SystemInfo.dwNumberOfProcessors > 0) and (modname <> nil) then
   begin
     beg := modname;

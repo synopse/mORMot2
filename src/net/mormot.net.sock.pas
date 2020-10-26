@@ -101,7 +101,7 @@ type
     function Family: TNetFamily;
     function IP(localasvoid: boolean = false): RawUTF8;
     function IPShort(withport: boolean = false): shortstring; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: shortstring; withport: boolean = false); overload;
     function Port: cardinal;
     function Size: integer;
@@ -138,7 +138,7 @@ type
     function RecvPending(out pending: integer): TNetResult;
     function ShutdownAndClose(rdwr: boolean): TNetResult;
     function Close: TNetResult;
-    function Socket: PtrInt; {$ifdef HASINLINE} inline; {$endif}
+    function Socket: PtrInt; {$ifdef HASINLINE}inline;{$endif}
   end;
 
 
@@ -478,7 +478,7 @@ type
     function SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket: boolean = false): integer;
     /// checks if the low-level socket handle has been assigned
     // - just a wrapper around PtrInt(fSock)>0
-    function SockIsDefined: boolean; {$ifdef HASINLINE} inline; {$endif}
+    function SockIsDefined: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
@@ -710,7 +710,7 @@ begin
 end;
 
 function NetCheck(res: integer): TNetResult;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if res = NO_ERROR then
     result := nrOK
@@ -764,7 +764,8 @@ end;
 
 class procedure ENetSock.Check(res: TNetResult; const Context: shortstring);
 begin
-  if (res <> nrOK) and (res <> nrRetry) then
+  if (res <> nrOK) and
+     (res <> nrRetry) then
     raise CreateFmt('%s: ''%s'' error', [Context, _NR[res]]);
 end;
 
@@ -914,7 +915,8 @@ begin
       // Socket should remain open for 5 seconds after a closesocket() call
       TNetSocket(sock).SetLinger(5);
       if (bind(sock, @addr, addr.Size)  <> NO_ERROR) or
-         ((layer <> nlUDP) and (listen(sock, DefaultListenBacklog)  <> NO_ERROR)) then
+         ((layer <> nlUDP) and
+          (listen(sock, DefaultListenBacklog)  <> NO_ERROR)) then
         result := NetLastError(WSAEADDRNOTAVAIL);
     end
     else
@@ -928,7 +930,8 @@ begin
       if connect(sock, @addr, addr.Size)  <> NO_ERROR then
         result := NetLastError(WSAEADDRNOTAVAIL);
     end;
-    if (result = nrOK) or (retry <= 0) then
+    if (result = nrOK) or
+       (retry <= 0) then
       break;
     dec(retry);
     SleepHiRes(10);
@@ -1171,7 +1174,8 @@ var
 begin
   Terminate;
   endtix := GetTickCount64 + 1000;
-  while (fGettingOne > 0) and (GetTickCount64 < endtix) do
+  while (fGettingOne > 0) and
+        (GetTickCount64 < endtix) do
     SleepHiRes(1);
   for p := 0 to high(fPoll) do
     fPoll[p].Free;
@@ -1187,7 +1191,9 @@ var
   poll: TPollSocketAbstract;
 begin
   result := false;
-  if (self = nil) or (socket = nil) or (events = []) then
+  if (self = nil) or
+     (socket = nil) or
+     (events = []) then
     exit;
   EnterCriticalSection(fPollLock);
   try
@@ -1251,7 +1257,8 @@ begin
   EnterCriticalSection(fPendingLock);
   try
     last := high(fPending);
-    while (fPendingIndex <= last) and (fPending <> nil) do
+    while (fPendingIndex <= last) and
+          (fPending <> nil) do
     begin
       // retrieve next notified event
       notif := fPending[fPendingIndex];
@@ -1475,7 +1482,8 @@ begin
   fWasBind := doBind;
   if {%H-}PtrInt(aSock)<=0 then
   begin
-    if (aPort = '') and (aLayer <> nlUNIX) then
+    if (aPort = '') and
+       (aLayer <> nlUNIX) then
       fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
     else
       fPort := aPort;
@@ -1500,7 +1508,9 @@ begin
   end;
   if aLayer = nlTCP then
   begin
-    if ({%H-}PtrInt(aSock) < 0) or (({%H-}PtrInt(aSock) > 0) and not doBind) then
+    if ({%H-}PtrInt(aSock) < 0) or
+       (({%H-}PtrInt(aSock) > 0) and
+        not doBind) then
     begin // do not touch externally created socket
       aSock.SetNoDelay(true); // disable Nagle algorithm since we use our own buffers
       aSock.SetKeepAlive(true); // enable TCP keepalive (even if we rely on transport layer)
@@ -1655,7 +1665,8 @@ end;
 procedure TCrtSocket.CreateSockIn(LineBreak: TTextLineBreakStyle;
   InputBufferSize: Integer);
 begin
-  if (Self = nil) or (SockIn <> nil) then
+  if (Self = nil) or
+     (SockIn <> nil) then
     exit; // initialization already occured
   if InputBufferSize < SOCKMINBUFSIZE then
     InputBufferSize := SOCKMINBUFSIZE;
@@ -1698,7 +1709,8 @@ end;
 
 procedure TCrtSocket.CloseSockIn;
 begin
-  if (self <> nil) and (fSockIn <> nil) then
+  if (self <> nil) and
+     (fSockIn <> nil) then
   begin
     Freemem(fSockIn);
     fSockIn := nil;
@@ -1707,7 +1719,8 @@ end;
 
 procedure TCrtSocket.CloseSockOut;
 begin
-  if (self <> nil) and (fSockOut <> nil) then
+  if (self <> nil) and
+     (fSockOut <> nil) then
   begin
     Freemem(fSockOut);
     fSockOut := nil;
@@ -1719,7 +1732,8 @@ begin
   if self = nil then
     exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
-  if (SockIn <> nil) or (SockOut <> nil) then
+  if (SockIn <> nil) or
+     (SockOut <> nil) then
   begin
     ioresult; // reset ioresult value if SockIn/SockOut were used
     if SockIn <> nil then
@@ -1842,7 +1856,8 @@ begin
   // ioctl syscall is redundant
   if aPendingAlsoInSocket then
     // also includes data in socket bigger than TTextRec's buffer
-    if (sock.RecvPending(insocket) = nrOK) and (insocket > 0) then
+    if (sock.RecvPending(insocket) = nrOK) and
+       (insocket > 0) then
       inc(result, insocket);
   {$endif MSWINDOWS}
 end;
@@ -2060,7 +2075,8 @@ begin
         inc(PByte(Buffer), read);
       end;
       now := GetTickCount64;
-      if (last = 0) or (read > 0) then // check timeout from unfinished read
+      if (last = 0) or
+         (read > 0) then // check timeout from unfinished read
         last := now
       else
       begin
@@ -2202,10 +2218,12 @@ begin
         break;
       inc(PByte(P), sent);
     end
-    else if (res <> nrOK) and (res <> nrRetry) then
+    else if (res <> nrOK) and
+            (res <> nrRetry) then
       exit; // fatal socket error
     now := GetTickCount64;
-    if (start = 0) or (sent > 0) then
+    if (start = 0) or
+       (sent > 0) then
       start := now
     else // measure timeout since nothing written
       if now - start > TimeOut then
@@ -2261,7 +2279,8 @@ var
   c, u: AnsiChar;
 begin
   result := false;
-  if (p = nil) or (up = nil) then
+  if (p = nil) or
+     (up = nil) then
     exit;
   repeat
     u := up^;
@@ -2270,7 +2289,8 @@ begin
     inc(up);
     c := p^;
     inc(p);
-    if (c >= 'a') and (c <= 'z') then
+    if (c >= 'a') and
+       (c <= 'z') then
       dec(c, 32);
     if c <> u then
       exit;
@@ -2306,7 +2326,8 @@ begin
     P := S + 3;
   end;
   S := P;
-  if (PInteger(S)^ = UNIX_LOW) and (S[4] = ':') then
+  if (PInteger(S)^ = UNIX_LOW) and
+     (S[4] = ':') then
   begin
     inc(S, 5); // 'http://unix:/path/to/socket.sock:/url/path'
     inc(P, 5);
@@ -2344,7 +2365,9 @@ const
 begin
   if layer = nlUNIX then
     result := 'http://unix:' + Server + ':/' + address
-  else if (port = '') or (port = '0') or (port = DEFAULT_PORT[Https]) then
+  else if (port = '') or
+          (port = '0') or
+          (port = DEFAULT_PORT[Https]) then
     result := Prefix[Https] + Server + '/' + address
   else
     result := Prefix[Https] + Server + ':' + port + '/' + address;

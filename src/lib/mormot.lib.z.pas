@@ -637,7 +637,8 @@ function CompressZipString(src: pointer; srcLen: integer; CompressionLevel: inte
 var
   s: TRawByteStringStream;
 begin
-  if (src = nil) or (srcLen <= 0) then
+  if (src = nil) or
+     (srcLen <= 0) then
   begin
     result := '';
     exit;
@@ -663,7 +664,8 @@ function UncompressZipString(src: pointer; srcLen: integer;
 var
   s: TRawByteStringStream;
 begin
-  if (src = nil) or (srcLen <= 0) then
+  if (src = nil) or
+     (srcLen <= 0) then
   begin
     result := '';
     exit;

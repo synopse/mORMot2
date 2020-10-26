@@ -61,10 +61,12 @@ type
     /// write all pending compressed data into outStream
     procedure Flush;
     /// the number of byte written, i.e. the current uncompressed size
-    function SizeIn: PtrUInt;  {$ifdef HASINLINE} inline; {$endif}
+    function SizeIn: PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the number of byte sent to the destination stream, i.e. the current
     // compressed size
-    function SizeOut: PtrUInt; {$ifdef HASINLINE} inline; {$endif}
+    function SizeOut: PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the current CRC of the written data, i.e. the uncompressed data CRC
     property CRC: cardinal read fCRC;
   end;
@@ -446,20 +448,25 @@ function TSynZipCompressor.Seek(Offset: Longint; Origin: Word): Longint;
 begin
   if not FInitialized then
     result := 0
-  else if (Offset = 0) and (Origin = soFromCurrent) then // for TStream.Position
+  else if (Offset = 0) and
+          (Origin = soFromCurrent) then
+    // for TStream.Position
     result := Z.Stream.total_in
   else
   begin
     result := 0;
-    if not ((Offset = 0) and (Origin = soFromBeginning) and
-           (Z.Stream.total_in = 0)) then
+    if (Offset <> 0) or
+       (Origin <> soFromBeginning) or
+       (Z.Stream.total_in <> 0) then
       raise ESynZip.CreateFmt('Unexpected %.Seek', [ClassNameShort(self)^]);
   end;
 end;
 
 function TSynZipCompressor.Write(const Buffer; Count: Longint): Longint;
 begin
-  if (self = nil) or not FInitialized or (Count <= 0) then
+  if (self = nil) or
+     not FInitialized or
+     (Count <= 0) then
   begin
     result := 0;
     exit;
@@ -503,7 +510,8 @@ begin
   extra := nil;
   fname := nil;
   fcomment := nil;
-  if (gz = nil) or (gzLen <= 18) or
+  if (gz = nil) or
+     (gzLen <= 18) or
      (PCardinal(gz)^ and $ffffff <> GZHEAD[0]) then
     exit; // .gz file as header + compressed + crc32 + len32 format
   flags := TGZFlags(gz[3]);
@@ -518,14 +526,16 @@ begin
   begin
     // FNAME flag (as created e.g. by 7Zip)
     fname := gz + offset;
-    while (offset < gzLen) and (gz[offset] <> #0) do
+    while (offset < gzLen) and
+          (gz[offset] <> #0) do
       inc(offset);
     inc(offset);
   end;
   if gzfComment in flags then
   begin
     fcomment := gz + offset;
-    while (offset < gzLen) and (gz[offset] <> #0) do
+    while (offset < gzLen) and
+          (gz[offset] <> #0) do
       inc(offset);
     inc(offset);
   end;
@@ -546,7 +556,9 @@ end;
 function TGZRead.ToMem: RawByteString;
 begin
   result := '';
-  if (comp = nil) or ((uncomplen32 = 0) and (crc32 = 0)) then
+  if (comp = nil) or
+     ((uncomplen32 = 0) and
+      (crc32 = 0)) then
     // 0 length stream
     exit;
   SetLength(result, uncomplen32);
@@ -560,7 +572,9 @@ var
   crc: cardinal;
 begin
   crc := 0;
-  if (comp = nil) or ((uncomplen32 = 0) and (crc32 = 0)) then
+  if (comp = nil) or
+     ((uncomplen32 = 0) and
+      (crc32 = 0)) then
     // weird .gz file of 0 length stream, with only header
     result := true
   else
@@ -574,7 +588,8 @@ var
   f: TStream;
 begin
   result := false;
-  if (comp = nil) or (filename = '') then
+  if (comp = nil) or
+     (filename = '') then
     exit;
   f := TFileStream.Create(filename, fmCreate);
   try
@@ -588,7 +603,9 @@ function TGZRead.ZStreamStart(dest: pointer; destsize: integer): boolean;
 begin
   result := false;
   zscode := Z_STREAM_ERROR;
-  if (comp = nil) or (dest = nil) or (destsize <= 0) then
+  if (comp = nil) or
+     (dest = nil) or
+     (destsize <= 0) then
     exit;
   z.Init(comp, dest, complen, destsize);
   if z.UncompressInit({zlibformat=}false) then
@@ -609,8 +626,11 @@ end;
 function TGZRead.ZStreamNext: integer;
 begin
   result := 0;
-  if (comp = nil) or (zsdest = nil) or
-     not ((zscode = Z_OK) or (zscode = Z_STREAM_END) or (zscode = Z_BUF_ERROR)) then
+  if (comp = nil) or
+     (zsdest = nil) or
+     not ((zscode = Z_OK) or
+     (zscode = Z_STREAM_END) or
+     (zscode = Z_BUF_ERROR)) then
     exit;
   if zscode <> Z_STREAM_END then
   begin
@@ -627,7 +647,8 @@ end;
 function TGZRead.ZStreamDone: boolean;
 begin
   result := false;
-  if (comp <> nil) and (zsdest <> nil) then
+  if (comp <> nil) and
+     (zsdest <> nil) then
   begin
     z.UncompressEnd;
     zsdest := nil;
@@ -719,10 +740,13 @@ end;
 
 function TFileInfo.SameAs(aInfo: PFileInfo): boolean;
 begin // tolerate a time change through a network: zcrc32 is accurate enough
-  if (zzipSize = 0) or (aInfo.zzipSize = 0) then
+  if (zzipSize = 0) or
+     (aInfo.zzipSize = 0) then
     raise ESynZip.Create('SameAs() with crc+sizes in "data descriptor"');
-  result := (zzipMethod = aInfo.zzipMethod) and (flags = aInfo.flags) and
-            (zzipSize = aInfo.zzipSize) and (zfullSize = aInfo.zfullSize) and
+  result := (zzipMethod = aInfo.zzipMethod) and
+            (flags = aInfo.flags) and
+            (zzipSize = aInfo.zzipSize) and
+            (zfullSize = aInfo.zfullSize) and
             (zcrc32 = aInfo.zcrc32);
 end;
 
@@ -862,7 +886,8 @@ end;
 
 procedure TZipWriteAbstract.Append(const Content: RawByteString);
 begin
-  if (self = nil) or (fAppendOffset <> 0) then
+  if (self = nil) or
+     (fAppendOffset <> 0) then
     exit;
   fAppendOffset := length(Content);
   InternalWrite(pointer(Content)^, fAppendOffset);
@@ -994,7 +1019,8 @@ end;
 
 procedure TZipWrite.AddFromZip(const ZipEntry: TZipEntry);
 begin
-  if (self = nil) or (Handle <= 0) then
+  if (self = nil) or
+     (Handle <= 0) then
     exit;
   if Count >= length(Entry) then
     SetLength(Entry, length(Entry) + 20);
@@ -1119,11 +1145,14 @@ begin
     with lfhr^.fileInfo do
       if flags and (1 shl 3) <> 0 then
       begin // crc+sizes in "data descriptor"
-        if (zcrc32 <> 0) or (zzipSize <> 0) or (zfullSize <> 0) then
+        if (zcrc32 <> 0) or
+           (zzipSize <> 0) or
+           (zfullSize <> 0) then
           raise ESynZip.Create('ZIP extended format');
         // UnZip() will call RetrieveFileInfo()
       end
-      else if (zzipSize = cardinal(-1)) or (zfullSize = cardinal(-1)) then
+      else if (zzipSize = cardinal(-1)) or
+              (zfullSize = cardinal(-1)) then
         raise ESynZip.Create('ZIP64 format not supported');
     with Entry[Count] do
     begin
@@ -1145,7 +1174,8 @@ begin
       if not (infoLocal^.zZipMethod in [Z_STORED, Z_DEFLATED]) then
         raise ESynZip.CreateFmt('Unsupported compression method %d for %s',
           [infoLocal^.zZipMethod, zipName]);
-      if (zipName = '') or (zipName[length(zipName)] = '\') then
+      if (zipName = '') or
+         (zipName[length(zipName)] = '\') then
         continue; // ignore folder
       inc(Count); // add file to Entry[]
     end;
@@ -1209,7 +1239,8 @@ end;
 
 function TZipRead.NameToIndex(const aName: TFileName): integer;
 begin
-  if (self <> nil) and (aName <> '') then
+  if (self <> nil) and
+     (aName <> '') then
     for result := 0 to Count - 1 do
       if SameText(Entry[result].zipName, aName) then
         exit;
@@ -1229,7 +1260,8 @@ var
   P: ^TDataDescriptor;
   PDataStart: PtrUInt;
 begin
-  if (self = nil) or (cardinal(Index) >= cardinal(Count)) then
+  if (self = nil) or
+     (cardinal(Index) >= cardinal(Count)) then
   begin
     result := false;
     exit;
@@ -1243,7 +1275,8 @@ begin
   end;
   // get info from ending "central directory" (faster than "data descriptor")
   with Entry[Index].infoDirectory^.fileInfo do
-    if (zzipSize <> cardinal(-1)) and (zfullSize <> cardinal(-1)) then
+    if (zzipSize <> cardinal(-1)) and
+       (zfullSize <> cardinal(-1)) then
     begin
       // ZIP64 format not supported yet (sizes=-1)
       Info.zcrc32 := zcrc32;
@@ -1269,8 +1302,10 @@ begin
         break
     else if P^.zipSize = PtrUInt(P) - PDataStart then
     begin
-      if (P^.zipSize = 0) or (P^.fullSize = 0) or
-         (P^.zipSize = cardinal(-1)) or (P^.fullSize = cardinal(-1)) then
+      if (P^.zipSize = 0) or
+         (P^.fullSize = 0) or
+         (P^.zipSize = cardinal(-1)) or
+         (P^.fullSize = cardinal(-1)) then
         break; // we expect sizes to be available
       Info.zcrc32 := P^.crc32;
       Info.zzipSize := P^.zipSize;
@@ -1425,7 +1460,8 @@ begin
         system.copy(aDestinationPath, 1, length(aDestinationPath) - 1) + '.zip');
     n := EventArchiveZipWrite.Count;
     EventArchiveZipWrite.AddDeflated(aOldLogFileName, True);
-    if (EventArchiveZipWrite.Count = n + 1) and DeleteFile(aOldLogFileName) then
+    if (EventArchiveZipWrite.Count = n + 1) and
+       DeleteFile(aOldLogFileName) then
       result := True;
   end;
 end;

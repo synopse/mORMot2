@@ -366,7 +366,8 @@ end;
 destructor TSQLDBODBCConnection.Destroy;
 begin
   inherited Destroy;
-  if (ODBC <> nil) and (fEnv <> nil) then
+  if (ODBC <> nil) and
+     (fEnv <> nil) then
     ODBC.FreeHandle(SQL_HANDLE_ENV, fEnv);
 end;
 
@@ -377,7 +378,8 @@ begin
   try
     inherited Disconnect; // flush any cached statement
   finally
-    if (ODBC <> nil) and (fDbc <> nil) then
+    if (ODBC <> nil) and
+       (fDbc <> nil) then
       with ODBC do
       begin
         log := SynDBLog.Enter(self, 'Disconnect');
@@ -657,7 +659,8 @@ begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
     if fColumns[c].ColumnDataState = colNone then
       GetData(fColumns[c], c);
   // retrieve information for the specified column
-  if (ExpectedType = ftNull) or (fColumns[Col].ColumnType = ExpectedType) or
+  if (ExpectedType = ftNull) or
+     (fColumns[Col].ColumnType = ExpectedType) or
      (fColumns[Col].ColumnDataState = colNull) then
     result := fColumns[Col].ColumnDataState
   else
@@ -833,7 +836,7 @@ begin
 end;
 
 const
-  NULCHAR: WideChar = #0;
+  NULWCHAR: WideChar = #0;
 
 procedure TSQLDBODBCStatement.ExecutePrepared;
 const
@@ -898,15 +901,17 @@ begin
     raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',
       [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  ansitext := TSQLDBODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
+  ansitext := TSQLDBODBCConnection(fConnection).fODBCProperties.
+    fDriverDoesNotHandleUnicode;
   try
     // 1. bind parameters
-    if (fParamsArrayCount > 0) and (fDBMS <> dMSSQL) then
+    if (fParamsArrayCount > 0) and
+       (fDBMS <> dMSSQL) then
       raise EODBCException.CreateUTF8('%.BindArray() not supported', [self]);
     if fParamCount > 0 then
     begin
       SetLength(StrLen_or_Ind, fParamCount);
-      if (fParamsArrayCount > 0) then
+      if fParamsArrayCount > 0 then
         SetLength(ArrayData, fParamCount);
       for p := 0 to fParamCount - 1 do
         with fParams[p] do
@@ -918,11 +923,13 @@ begin
           InputOutputType := ODBC_IOTYPE_TO_PARAM[VInOut];
           ColumnSize := 0;
           DecimalDigits := 0;
-          if (fDBMS = dMSSQL) and (VArray <> nil) then
+          if (fDBMS = dMSSQL) and
+             (VArray <> nil) then
           begin
             // bind an array as one object - metadata only at the moment
-            if (VInOut <> paramIn) then
-              raise EODBCException.CreateUTF8('%.ExecutePrepared: Unsupported array parameter direction #%',
+            if VInOut <> paramIn then
+              raise EODBCException.CreateUTF8(
+                '%.ExecutePrepared: Unsupported array parameter direction #%',
                 [self, p + 1]);
             CValueType := SQL_C_DEFAULT;
             ParameterType := SQL_SS_TABLE;
@@ -994,10 +1001,10 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
                 else
                 begin
                   VData := Utf8DecodeToRawUnicode(VData);
-                  if (fDBMS=dMSSQL) then
+                  if fDBMS = dMSSQL then
                   begin // CONTAINS(field, ?) do not accept NVARCHAR(max)
                     ColumnSize := length(VData) shr 1; // length in characters
-                    if (ColumnSize > 4000) then // > 8000 bytes - use varchar(max)
+                    if ColumnSize > 4000 then // > 8000 bytes - use varchar(max)
                       ColumnSize := 0;
                   end;
                 end;
@@ -1010,7 +1017,7 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
             if ParameterValue = nil then
             begin
               if pointer(VData) = nil then
-                ParameterValue := @NULCHAR
+                ParameterValue := @NULWCHAR
               else
                 ParameterValue := pointer(VData);
               BufferSize := length(VData);
@@ -1026,7 +1033,8 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
           status := ODBC.BindParameter(fStatement, p + 1, InputOutputType,
             CValueType, ParameterType, ColumnSize, DecimalDigits, ParameterValue,
             BufferSize, StrLen_or_Ind[p]);
-          if (status = SQL_ERROR) and not ansitext and
+          if (status = SQL_ERROR) and
+             not ansitext and
              (ODBC.GetDiagField(fStatement) = 'HY004') then
           begin
             TSQLDBODBCConnection(fConnection).fODBCProperties.
@@ -1037,7 +1045,8 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
           end;
           ODBC.Check(nil, self, status, SQL_HANDLE_STMT, fStatement);
           // populate array data
-          if (fDBMS = dMSSQL) and (VArray <> nil) then
+          if (fDBMS = dMSSQL) and
+             (VArray <> nil) then
           begin
             // first set focus on param
             status := ODBC.SetStmtAttrA(fStatement, SQL_SOPT_SS_PARAM_FOCUS,
@@ -1142,7 +1151,8 @@ function TSQLDBODBCStatement.UpdateCount: integer;
 var
   RowCount: SqlLen;
 begin
-  if (fStatement <> nil) and not fExpectResults then
+  if (fStatement <> nil) and
+     not fExpectResults then
     ODBC.Check(nil, self,
       ODBC.RowCount(fStatement, RowCount),
       SQL_HANDLE_STMT, fStatement)
@@ -1154,8 +1164,10 @@ end;
 procedure TSQLDBODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
-  if (fStatement <> nil) or (fColumnCount > 0) then
-    raise EODBCException.CreateUTF8('%.Prepare should be called only once', [self]);
+  if (fStatement <> nil) or
+     (fColumnCount > 0) then
+    raise EODBCException.CreateUTF8(
+      '%.Prepare should be called only once', [self]);
   // 1. process SQL
   inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
   fSQLW := Utf8DecodeToRawUnicode(fSQL);

@@ -554,10 +554,12 @@ type
     // - typical use may be:
     // ! var Customer: Variant;
     // ! begin
-    // !   with Props.Execute( 'select * from Sales.Customer where AccountNumber like ?',
-    // !       ['AW000001%'],@Customer) do begin
+    // !   with Props.Execute(
+    // !       'select * from Sales.Customer where AccountNumber like ?',
+    // !       ['AW000001%'], @Customer) do
+    // !   begin
     // !     while Step do //  loop through all matching data rows
-    // !       assert(Copy(Customer.AccountNumber,1,8)='AW000001');
+    // !       assert(Copy(Customer.AccountNumber, 1, 8)='AW000001');
     // !     ReleaseRows;
     // !   end;
     // ! end;
@@ -690,7 +692,8 @@ type
     // - typical use is:
     // ! var Row: Variant;
     // ! (...)
-    // !  with MyConnProps.Execute('select * from table where name=?',[aName]) do begin
+    // !  with MyConnProps.Execute('select * from table where name=?',[aName]) do
+    // !  begin
     // !    Row := RowData;
     // !    while Step do
     // !      writeln(Row.FirstName,Row.BirthDate);
@@ -1279,7 +1282,8 @@ type
     // ! procedure WriteFamily(const aName: RawUTF8);
     // ! var R: Variant;
     // ! begin
-    // !   with MyConnProps.Execute('select * from table where name=?',[aName],@R) do begin
+    // !   with MyConnProps.Execute('select * from table where name=?',[aName],@R) do
+    // !   begin
     // !     while Step do
     // !       writeln(R.FirstName,' ',DateToStr(R.BirthDate));
     // !     ReleaseRows;
@@ -2172,7 +2176,8 @@ type
     // - typical use is:
     // ! var Row: Variant;
     // ! (...)
-    // !  with MyConnProps.Execute('select * from table where name=?',[aName]) do begin
+    // !  with MyConnProps.Execute('select * from table where name=?',[aName]) do
+    // !  begin
     // !    Row := RowDaa;
     // !    while Step do
     // !      writeln(Row.FirstName,Row.BirthDate);
@@ -2647,8 +2652,11 @@ begin
   result := 0;
   L := Length(aSQL);
   if aStripSemicolon then
-    while (L > 0) and (aSQL[L] in [#1..' ', ';']) do
-      if (aSQL[L] = ';') and (L > 5) and IdemPChar(@aSQL[L - 3], 'END') then
+    while (L > 0) and
+          (aSQL[L] in [#1..' ', ';']) do
+      if (aSQL[L] = ';') and
+         (L > 5) and
+         IdemPChar(@aSQL[L - 3], 'END') then
         break
       else // allows 'END;' at the end of a statement
         dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
@@ -2662,13 +2670,15 @@ begin
     if P <> nil then
       repeat
         B := i;
-        while (i < L) and (P[i] <> '?') do
+        while (i < L) and
+              (P[i] <> '?') do
         begin
           if P[i] = '''' then
           begin
             repeat // ignore chars inside ' quotes
               inc(i);
-            until (i = L) or ((P[i] = '''') and (P[i + 1] <> ''''));
+            until (i = L) or
+                  ((P[i] = '''') and (P[i + 1] <> ''''));
             if i = L then
               break;
           end;
@@ -2713,7 +2723,8 @@ begin
   ndx := 0;
   L := Length(aSQL);
   s := pointer(aSQL);
-  if (s = nil) or (PosExChar('?', aSQL) = 0) then
+  if (s = nil) or
+     (PosExChar('?', aSQL) = 0) then
     exit;
   // calculate ? parameters count, check for ;
   while s^ <> #0 do
@@ -2746,7 +2757,8 @@ begin
           else
             break;
       until false;
-    end else if (c = ';') and not AllowSemicolon then
+    end else if (c = ';') and
+                not AllowSemicolon then
       exit; // complex expression can not be prepared
     inc(s);
   end;
@@ -2832,7 +2844,8 @@ begin
               if s[1] = '''' then
                 dec(L); // double ' into single '
             end
-            else if (c = '"') or (c = '\') then
+            else if (c = '"') or
+                    (c = '\') then
               inc(L); // escape \ before "
             dec(vl);
           until vl = 0;
@@ -2866,7 +2879,8 @@ begin
               if s[1] = '''' then
                 goto _dq; // double ' into single '
             end
-            else if (c = '"') or (c = '\') then
+            else if (c = '"') or
+                    (c = '\') then
             begin
               d^ := '\'; // escape \ before "
               inc(d);
@@ -2914,7 +2928,9 @@ var
 begin
   msg := FormatUTF8(Format, Args);
   {$ifndef SYNDB_SILENCE}
-  if (length(Args) > 0) and (Args[0].VType = vtObject) and (Args[0].VObject <> nil) then
+  if (length(Args) > 0) and
+     (Args[0].VType = vtObject) and
+     (Args[0].VObject <> nil) then
     if Args[0].VObject.InheritsFrom(TSQLDBStatement) then
     begin
       fStatement := TSQLDBStatement(Args[0].VObject);
@@ -3269,7 +3285,8 @@ function TSQLDBConnectionProperties.IsCachable(P: PUTF8Char): boolean;
 var
   NoWhere: boolean;
 begin // cachable if with ? parameter or SELECT without WHERE clause
-  if (P <> nil) and fUseCache then
+  if (P <> nil) and
+     fUseCache then
   begin
     while P^ in [#1..' '] do
       inc(P);
@@ -3289,7 +3306,8 @@ begin // cachable if with ? parameter or SELECT without WHERE clause
         end
         else if P^ = '?' then
           exit
-        else if (P^ = ' ') and IdemPChar(P + 1, 'WHERE ') then
+        else if (P^ = ' ') and
+                IdemPChar(P + 1, 'WHERE ') then
           NoWhere := false;
         inc(P);
       end;
@@ -3306,7 +3324,8 @@ begin
   with Column do
   begin
     FormatUTF8('% [%', [ColumnName, ColumnTypeNative], result);
-    if (ColumnLength <> 0) or (Column.ColumnPrecision <> 0) or
+    if (ColumnLength <> 0) or
+       (Column.ColumnPrecision <> 0) or
        (Column.ColumnScale <> 0) then
       result := FormatUTF8('% % % %]',
         [result, ColumnLength, ColumnPrecision, ColumnScale])
@@ -3324,7 +3343,8 @@ begin // 'Name: RawUTF8 index 20 read fName write fName;';
   begin
     FormatUTF8('property %: %',
       [ColumnName, SQLDBFIELDTYPE_TO_DELPHITYPE[ColumnType]], result);
-    if (ColumnType = ftUTF8) and (ColumnLength > 0) then
+    if (ColumnType = ftUTF8) and
+       (ColumnLength > 0) then
       result := FormatUTF8('% index %', [result, ColumnLength]);
     result := FormatUTF8('% read f% write f%;', [result, ColumnName, ColumnName]);
   end;
@@ -3711,7 +3731,8 @@ begin
       while Step do
       begin
         table := trim(ColumnUTF8(0));
-        if (checkschema = '') or IdemPChar(pointer(table), pointer(checkschema)) then
+        if (checkschema = '') or
+           IdemPChar(pointer(table), pointer(checkschema)) then
           AddSortedRawUTF8(Tables, count, table);
       end;
       SetLength(Tables, count);
@@ -3738,7 +3759,8 @@ begin
       while Step do
       begin
         table := trim(ColumnUTF8(0));
-        if (checkschema = '') or IdemPChar(pointer(table), pointer(checkschema)) then
+        if (checkschema = '') or
+           IdemPChar(pointer(table), pointer(checkschema)) then
           AddSortedRawUTF8(Views, count, table);
       end;
       SetLength(Views, count);
@@ -3823,8 +3845,9 @@ end;
 
 function TSQLDBConnectionProperties.SQLFullTableName(const aTableName: RawUTF8): RawUTF8;
 begin
-  if (aTableName <> '') and (fForcedSchemaName <> '') and (PosExChar('.',
-    aTableName) = 0) then
+  if (aTableName <> '') and
+     (fForcedSchemaName <> '') and
+     (PosExChar('.', aTableName) = 0) then
     result := fForcedSchemaName + '.' + aTableName
   else
     result := aTableName;
@@ -3964,7 +3987,7 @@ begin
         ' order by ORDINAL_POSITION';
     dFirebird:
       begin
-        if (package = '') then
+        if package = '' then
           result :=
             'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
             ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
@@ -4092,11 +4115,12 @@ begin
   case DBMS of
     dFirebird:
       begin
-        if (aDefaultPageSize <> 8192) or (aDefaultPageSize <> 16384) then
+        if (aDefaultPageSize <> 8192) or
+           (aDefaultPageSize <> 16384) then
           aDefaultPageSize := 4096;
-        FormatUTF8('create database ''%'' user ''sysdba'' password ''masterkey'''
-          + ' page_size % default character set utf8;', [aDatabaseName,
-          aDefaultPageSize], result);
+        FormatUTF8('create database ''%'' user ''sysdba'' password ''masterkey''' +
+          ' page_size % default character set utf8;',
+          [aDatabaseName, aDefaultPageSize], result);
       end;
   else
     result := '';
@@ -4134,7 +4158,8 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
   begin
     //assert(StrComp(PCHARS[DECIMAL],'DECIMAL')=0);
     ndx := IdemPCharArray(pointer(aNativeType), PCHARS);
-    if (aScale = 0) and (ndx in [DECIMAL, NUMERIC]) then
+    if (aScale = 0) and
+       (ndx in [DECIMAL, NUMERIC]) then
       result := ftInt64
     else
       result := Types[ndx];
@@ -4242,7 +4267,8 @@ function TSQLDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUTF8): Ra
   function TrimTInIso: RawUTF8;
   begin
     result := Iso8601;
-    if (length(result) > 10) and (result[11] = 'T') then
+    if (length(result) > 10) and
+       (result[11] = 'T') then
       result[11] := ' '; // 'T' -> ' '
   end;
 
@@ -4345,7 +4371,9 @@ var
   IndexName, FieldsCSV, ColsDesc, Owner, Table: RawUTF8;
 begin
   result := '';
-  if (self = nil) or (aTableName = '') or (high(aFieldNames) < 0) then
+  if (self = nil) or
+     (aTableName = '') or
+     (high(aFieldNames) < 0) then
     exit;
   if aUnique then
     result := 'UNIQUE ';
@@ -4493,7 +4521,8 @@ var
     f, r, p, len: integer;
     tmp: TTextWriterStackBuffer;
   begin
-    if (fDBMS <> dFireBird) and (rowcount = prevrowcount) then
+    if (fDBMS <> dFireBird) and
+       (rowcount = prevrowcount) then
       exit;
     prevrowcount := rowcount;
     with TTextWriter.CreateOwnedStream(tmp) do
@@ -4624,10 +4653,12 @@ var
   Query: ISQLDBStatement;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
-  if (Props = nil) or (FieldNames = nil) or (TableName = '') or (length(FieldValues)
-    <> maxf) then
-    raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsert(%) call', [self,
-      TableName]);
+  if (Props = nil) or
+     (FieldNames = nil) or
+     (TableName = '') or
+     (length(FieldValues) <> maxf) then
+    raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsert(%) call',
+      [self, TableName]);
   batchRowCount := 0;
   paramCountLimit := 0;
   case Props.fDBMS of
@@ -4691,8 +4722,8 @@ begin
       end; // exception leaves Query=nil to raise exception
     end;
     if Query = nil then
-      raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert: Query=nil for [%]',
-        [self, SQL]);
+      raise ESQLDBException.CreateUTF8(
+        '%.MultipleValuesInsert: Query=nil for [%]', [self, SQL]);
     try
       p := 1;
       for i := 1 to prevrowcount do
@@ -4721,10 +4752,13 @@ var
   v: RawUTF8;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
-  if (Props = nil) or (FieldNames = nil) or (TableName = '') or
-     (length(FieldValues) <> maxf) or (Props.fDBMS <> dFirebird) then
-    raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsertFirebird(%,%)',
-      [self, Props, TableName]);
+  if (Props = nil) or
+     (FieldNames = nil) or
+     (TableName = '') or
+     (length(FieldValues) <> maxf) or
+     (Props.fDBMS <> dFirebird) then
+    raise ESQLDBException.CreateUTF8(
+      'Invalid %.MultipleValuesInsertFirebird(%,%)', [self, Props, TableName]);
   sqllenwitoutvalues := 3 * maxf + 24;
   dec(maxf);
   for f := 0 to maxf do
@@ -4764,7 +4798,8 @@ begin
         for f := 0 to maxf do
         begin
           v := FieldValues[f, r]; // includes single quotes (#39)
-          if (v = '') or (v = 'null') then
+          if (v = '') or
+             (v = 'null') then
             W.AddShort('null')
           else if FieldTypes[f] = ftDate then
             if v = #39#39 then
@@ -4838,7 +4873,8 @@ end;
 function TSQLDBConnectionProperties.SQLSelectAll(const aTableName: RawUTF8;
   const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
 begin
-  if (self = nil) or (aTableName = '') then
+  if (self = nil) or
+     (aTableName = '') then
     result := ''
   else
     result := 'select ' + FieldsFromList(aFields, aExcludeTypes) + ' from ' +
@@ -4859,9 +4895,11 @@ begin
     else if result[1] = 'T' then
       Delete(result, 1, 1);
     L := length(result);
-    if (L > 20) and IdemPropName('ConnectionProperties', @result[L - 19], 20) then
+    if (L > 20) and
+       IdemPropName('ConnectionProperties', @result[L - 19], 20) then
       SetLength(result, L - 20);
-    if (L > 5) and IdemPropName('OleDB', pointer(result), 5) then
+    if (L > 5) and
+       IdemPropName('OleDB', pointer(result), 5) then
       Delete(result, 1, 5);
   end;
 end;
@@ -5035,9 +5073,11 @@ begin
           BindDateTime(Param, Iso8601ToDateTime(tmp), IO);
         end;
       ftUTF8:
-        if (fConnection <> nil) and fConnection.fProperties.StoreVoidStringAsNull and
-          ((Value = '') or // check if '' or '""' should be stored as null
-           ((PInteger(Value)^ and $ffffff = $2727) and not ValueAlreadyUnquoted)) then
+        if (fConnection <> nil) and
+           fConnection.fProperties.StoreVoidStringAsNull and
+           ((Value = '') or // check if '' or '""' should be stored as null
+            ((PInteger(Value)^ and $ffffff = $2727) and
+             not ValueAlreadyUnquoted)) then
           BindNull(Param, IO, ftUTF8)
         else
         begin
@@ -5174,7 +5214,8 @@ begin
         BindDateTime(Param, VDate, IO);
       varCurrency:
         BindCurrency(Param, VCurrency, IO);
-      varOleStr: // handle special case if was bound explicitely as WideString
+      varOleStr:
+        // handle special case if was bound explicitely as WideString
         BindTextW(Param, WideString(VAny), IO);
       {$ifdef HASVARUSTRING}
       varUString:
@@ -5186,7 +5227,8 @@ begin
       {$endif}
       varString:
         if DataIsBlob then
-          if (VAny <> nil) and (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC) then
+          if (VAny <> nil) and
+             (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC) then
             // recognized as Base64 encoded text
             BindBlob(Param, Base64ToBin(PAnsiChar(VAny) + 3,
               length(RawByteString(VAny)) - 3))
@@ -5214,10 +5256,14 @@ end;
 procedure TSQLDBStatement.BindArray(Param: Integer; ParamType: TSQLDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
-  if (Param <= 0) or (ParamType in [ftUnknown, ftNull]) or (ValuesCount <= 0) or
-    (length(Values) < ValuesCount) or (fConnection = nil) or
-    (fConnection.fProperties.BatchSendingAbilities * [cCreate, cUpdate, cDelete] = []) then
-    raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
+  if (Param <= 0) or
+     (ParamType in [ftUnknown, ftNull]) or (ValuesCount <= 0) or
+    (length(Values) < ValuesCount) or
+    (fConnection = nil) or
+    (fConnection.fProperties.BatchSendingAbilities *
+      [cCreate, cUpdate, cDelete] = []) then
+    raise ESQLDBException.CreateUTF8(
+      'Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(ParamType)^]);
 end;
 
@@ -5250,8 +5296,10 @@ end;
 
 procedure TSQLDBStatement.CheckCol(Col: integer);
 begin
-  if (self = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESQLDBException.CreateUTF8('Invalid call to %.Column*(Col=%)', [self, Col]);
+  if (self = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
+    raise ESQLDBException.CreateUTF8(
+      'Invalid call to %.Column*(Col=%)', [self, Col]);
 end;
 
 function TSQLDBStatement.GetForceBlobAsNull: boolean;
@@ -5522,7 +5570,8 @@ function TSQLDBStatement.ParamToVariant(Param: Integer; var Value: Variant;
   CheckIsOutParameter: boolean = true): TSQLDBFieldType;
 begin
   dec(Param); // start at #1
-  if (self = nil) or (cardinal(Param) >= cardinal(fParamCount)) then
+  if (self = nil) or
+     (cardinal(Param) >= cardinal(fParamCount)) then
     raise ESQLDBException.CreateUTF8('%.ParamToVariant(%)', [self, Param]);
   // overridden method should fill Value with proper data
   result := ftUnknown;
@@ -5571,7 +5620,8 @@ begin
     fSQLLogTimer.Pause;
     {$endif}
     ReleaseRows;
-    if (result = 0) and W.Expand then
+    if (result = 0) and
+       W.Expand then
     begin
       // we want the field names at least, even with no data (RowCount=0)
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
@@ -5601,7 +5651,9 @@ var
   V: TSQLVar;
 begin
   result := 0;
-  if (Dest = nil) or (self = nil) or (ColumnCount = 0) then
+  if (Dest = nil) or
+     (self = nil) or
+     (ColumnCount = 0) then
     exit;
   fForceBlobAsNull := true;
   if Tab then
@@ -5773,7 +5825,9 @@ begin
       begin
         W.Write(ColumnName(F));
         ft := ColumnType(F, @FieldSize);
-        if (ft = ftUnknown) and (currentRow = 0) and Step then
+        if (ft = ftUnknown) and
+           (currentRow = 0) and
+           Step then
           ft := ColumnType(F, @FieldSize); // e.g. SQLite3 -> fetch and guess
         ColTypes[F] := ft;
         W.Write1(ord(ft));
@@ -5784,7 +5838,8 @@ begin
       NullRowSize := 0;
       // save all data rows
       StartPos := W.TotalWritten;
-      if (currentRow = 1) or Step then // Step may already be done (e.g. TQuery.Open)
+      if (currentRow = 1) or
+         Step then // Step may already be done (e.g. TQuery.Open)
         repeat
           // save row position in DataRowPosition[] (if any)
           if DataRowPosition <> nil then
@@ -5815,7 +5870,8 @@ begin
           // then write data values
           ColumnsToBinary(W, pointer(Null), ColTypes);
           inc(result);
-          if (MaxRowCount > 0) and (result >= MaxRowCount) then
+          if (MaxRowCount > 0) and
+             (result >= MaxRowCount) then
             break;
         until not Step;
       ReleaseRows;
@@ -6033,20 +6089,23 @@ begin
 end;
 
 function GotoNextParam(P: PUTF8Char): PUTF8Char;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   c: AnsiChar;
 begin
   repeat
     c := P^;
-    if (c = #0) or (c = '?') then
+    if (c = #0) or
+       (c = '?') then
       break;
-    if (c = '''') and (P[1] <> '''') then
+    if (c = '''') and
+       (P[1] <> '''') then
     begin
       repeat // ignore ? inside ' quotes
         inc(P);
         c := P^;
-      until (c = #0) or ((c = '''') and (P[1] <> ''''));
+      until (c = #0) or
+            ((c = '''') and (P[1] <> ''''));
       if c = #0 then
         break;
     end;
@@ -6068,7 +6127,8 @@ begin
     maxSize := 0
   else
     maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
-  if (integer(maxSize) < 0) or (PosExChar('?', fSQL) = 0) then
+  if (integer(maxSize) < 0) or
+     (PosExChar('?', fSQL) = 0) then
     // maxsize=-1 -> log statement without any parameter value (just ?)
     exit;
   P := pointer(fSQL);
@@ -6093,7 +6153,8 @@ begin
         maxAllowed := maxInt;
       AddParamValueAsText(num, W, maxAllowed);
       inc(num);
-    until (P^ = #0) or ((maxSize > 0) and (W.TextLength >= maxSize));
+    until (P^ = #0) or
+          ((maxSize > 0) and (W.TextLength >= maxSize));
     W.SetText(fSQLWithInlinedParams);
   finally
     W.Free;
@@ -6137,7 +6198,8 @@ begin
         AppendUnicode(VString, length(UnicodeString(VString)));
       {$endif}
     else
-      if (ft = ftDate) and (cardinal(VType) in [varDouble, varDate]) then
+      if (ft = ftDate) and
+         (cardinal(VType) in [varDouble, varDate]) then
         Dest.AddDateTime(vdate)
       else
         Dest.AddVariant(v);
@@ -6185,15 +6247,17 @@ begin
   try
     L := length(aSQL);
     if StripSemicolon then
-      if (L > 5) and (aSQL[L] = ';') and // avoid syntax error for some drivers
-        not IdemPChar(@aSQL[L - 4], ' END') then
+      if (L > 5) and
+         (aSQL[L] = ';') and // avoid syntax error for some drivers
+         not IdemPChar(@aSQL[L - 4], ' END') then
         fSQL := copy(aSQL, 1, L - 1)
       else
         fSQL := aSQL
     else
       fSQL := aSQL;
     fExpectResults := ExpectResults;
-    if (fConnection <> nil) and not fConnection.IsConnected then
+    if (fConnection <> nil) and
+       not fConnection.IsConnected then
       fConnection.Connect;
   finally
     Connection.InternalProcess(speNonActive);
@@ -6224,7 +6288,8 @@ var
   F, size: integer;
 begin
   result := '';
-  if (self = nil) or (TableName = '') then
+  if (self = nil) or
+     (TableName = '') then
     exit;
   SetLength(Fields, ColumnCount);
   if Fields = nil then
@@ -6256,7 +6321,9 @@ procedure TSQLDBStatement.BindFromRows(const Fields: TSQLDBFieldTypeDynArray;
 var
   F: integer;
 begin
-  if (self <> nil) and (Fields <> nil) and (Rows <> nil) then
+  if (self <> nil) and
+     (Fields <> nil) and
+     (Rows <> nil) then
     for F := 0 to high(Fields) do
       if Rows.ColumnNull(F) then
         BindNull(F + 1)
@@ -6303,7 +6370,8 @@ end;
 
 procedure TSQLDBConnection.InternalProcess(Event: TOnSQLDBProcessEvent);
 begin
-  if (self = nil) or not Assigned(OnProcess) then
+  if (self = nil) or
+     not Assigned(OnProcess) then
     exit;
   case Event of // thread-safe handle of speActive/peNonActive nested calls
     speActive:
@@ -6404,7 +6472,8 @@ end;
 function TSQLDBConnection.IsOutdated(tix: Int64): boolean;
 begin
   result := false;
-  if (self = nil) or (fProperties.fConnectionTimeOutTicks = 0) then
+  if (self = nil) or
+     (fProperties.fConnectionTimeOutTicks = 0) then
     exit;
   if fLastAccessTicks < 0 then
   begin // was forced by ClearConnectionPool
@@ -6434,7 +6503,8 @@ var
   Current: TDateTime;
 begin
   Current := NowUTC; // so won't conflict with any potential time zone change
-  if (fServerTimestampOffset = 0) and (fProperties.fSQLGetServerTimestamp <> '') then
+  if (fServerTimestampOffset = 0) and
+     (fProperties.fSQLGetServerTimestamp <> '') then
   begin
     with fProperties do
       with Execute(fSQLGetServerTimestamp, []) do
@@ -6620,7 +6690,9 @@ var
   i, n: integer;
 begin
   result := 0;
-  if (self = nil) or (Rows = nil) or (Rows.ColumnCount = 0) then
+  if (self = nil) or
+     (Rows = nil) or
+     (Rows.ColumnCount = 0) then
     exit;
   aTableName := Properties.SQLTableName(TableName);
   if WithinTransaction then
@@ -6723,7 +6795,8 @@ begin // caller made fConnectionPool.Safe.Lock
     if result >= 0 then
     begin
       conn := fConnectionPool.List[result];
-      if (conn.fThreadID = id) and not conn.IsOutdated(tix) then
+      if (conn.fThreadID = id) and
+         not conn.IsOutdated(tix) then
         exit;
     end;
     result := 0;
@@ -6823,9 +6896,12 @@ function TSQLDBStatementWithParams.CheckParam(Param: Integer; NewType:
   TSQLDBFieldType; IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam;
 begin
   result := CheckParam(Param, NewType, IO);
-  if (NewType in [ftUnknown, ftNull]) or (fConnection = nil) or
-     (fConnection.fProperties.BatchSendingAbilities * [cCreate, cUpdate, cDelete] = []) then
-    raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
+  if (NewType in [ftUnknown, ftNull]) or
+     (fConnection = nil) or
+     (fConnection.fProperties.BatchSendingAbilities *
+       [cCreate, cUpdate, cDelete] = []) then
+    raise ESQLDBException.CreateUTF8(
+      'Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(NewType)^]);
   SetLength(result^.VArray, ArrayCount);
   result^.VInt64 := ArrayCount;
@@ -6883,7 +6959,8 @@ end;
 procedure TSQLDBStatementWithParams.BindTextS(Param: Integer;
   const Value: string; IO: TSQLDBParamInOutType);
 begin
-  if (Value = '') and (fConnection <> nil) and
+  if (Value = '') and
+     (fConnection <> nil) and
      fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
@@ -6893,9 +6970,9 @@ end;
 procedure TSQLDBStatementWithParams.BindTextU(Param: Integer;
   const Value: RawUTF8; IO: TSQLDBParamInOutType);
 begin
-  if (Value = '') and (fConnection <> nil) and
-     fConnection.fProperties.StoreVoidStringAsNull
-    then
+  if (Value = '') and
+     (fConnection <> nil) and
+     fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
     CheckParam(Param, ftUTF8, IO)^.VData := Value;
@@ -6904,7 +6981,8 @@ end;
 procedure TSQLDBStatementWithParams.BindTextP(Param: Integer; Value: PUTF8Char;
   IO: TSQLDBParamInOutType);
 begin
-  if (Value = nil) and (fConnection <> nil) and
+  if (Value = nil) and
+     (fConnection <> nil) and
      fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
@@ -6914,7 +6992,8 @@ end;
 procedure TSQLDBStatementWithParams.BindTextW(Param: Integer; const Value:
   WideString; IO: TSQLDBParamInOutType);
 begin
-  if (Value = '') and (fConnection <> nil) and
+  if (Value = '') and
+     (fConnection <> nil) and
      fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
@@ -7023,9 +7102,11 @@ begin
   p := CheckParam(Param, ParamType, paramIn);
   p^.VInt64 := ValuesCount;
   p^.VArray := Values; // immediate COW reference-counted assignment
-  if (ParamType = ftDate) and (ChangeFirstChar <> 'T') then
+  if (ParamType = ftDate) and
+     (ChangeFirstChar <> 'T') then
     for i := 0 to ValuesCount - 1 do // fix e.g. for PostgreSQL
-      if (p^.VArray[i] <> '') and (p^.VArray[i][1] = '''') then
+      if (p^.VArray[i] <> '') and
+         (p^.VArray[i][1] = '''') then
       begin
         v.From(PUTF8Char(pointer(p^.VArray[i])) + 1, length(p^.VArray[i]) - 2);
         p^.VArray[i] := v.FullText({expanded=}true, ChangeFirstChar, '''');
@@ -7092,7 +7173,8 @@ begin
       if length(VArray) <= fParamsArrayCount then
         SetLength(VArray, NextGrow(fParamsArrayCount));
       VInt64 := fParamsArrayCount;
-      if (VType = ftDate) and (aValues[i].VType = vtExtended) then
+      if (VType = ftDate) and
+         (aValues[i].VType = vtExtended) then
         VArray[fParamsArrayCount] := // direct binding of TDateTime value
           Connection.Properties.SQLDateToIso8601Quoted(aValues[i].VExtended^)
       else
@@ -7100,7 +7182,8 @@ begin
         VarRecToUTF8(aValues[i], VArray[fParamsArrayCount]);
         case VType of
           ftUTF8:
-            if (VArray[fParamsArrayCount] = '') and (fConnection <> nil) and
+            if (VArray[fParamsArrayCount] = '') and
+               (fConnection <> nil) and
               fConnection.Properties.StoreVoidStringAsNull then
               VArray[fParamsArrayCount] := 'null'
             else
@@ -7145,7 +7228,8 @@ begin
               ftUTF8:
                 begin
                   U := Rows.ColumnUTF8(F);
-                  if (U = '') and (fConnection <> nil) and
+                  if (U = '') and
+                     (fConnection <> nil) and
                      fConnection.Properties.StoreVoidStringAsNull then
                     VArray[fParamsArrayCount] := 'null'
                   else

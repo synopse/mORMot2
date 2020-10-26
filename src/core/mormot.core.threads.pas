@@ -909,7 +909,8 @@ end;
 function TPendingTaskList.NextPendingTask: RawByteString;
 begin
   result := '';
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   fSafe.Lock;
   try
@@ -926,7 +927,8 @@ end;
 
 procedure TPendingTaskList.Clear;
 begin
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   fSafe.Lock;
   try
@@ -981,7 +983,8 @@ begin
     endtix := mormot.core.os.GetTickCount64 + maxMS;
     repeat
       SleepHiRes(1); // wait for Execute to finish
-    until (fExecute <> exRun) or (mormot.core.os.GetTickCount64 >= endtix);
+    until (fExecute <> exRun) or
+          (mormot.core.os.GetTickCount64 >= endtix);
   end;
 end;
 
@@ -1160,7 +1163,8 @@ procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64;
 var
   E: Exception;
 begin
-  if (self = nil) or not (fPendingProcessFlag in [flagStarted, flagFinished]) then
+  if (self = nil) or
+     not (fPendingProcessFlag in [flagStarted, flagFinished]) then
     exit; // nothing to wait for
   try
     if Assigned(onmainthreadidle) then
@@ -1203,7 +1207,8 @@ var
 begin
   result := false;
   ThreadID := GetCurrentThreadId;
-  if (self = nil) or (ThreadID = fCallerThreadID) then
+  if (self = nil) or
+     (ThreadID = fCallerThreadID) then
     // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
     exit;
   // 1. wait for any previous request to be finished (should not happen often)
@@ -1370,7 +1375,8 @@ end;
 
 destructor TSynBackgroundTimer.Destroy;
 begin
-  if (ProcessSystemUse <> nil) and (ProcessSystemUse.Timer = self) then
+  if (ProcessSystemUse <> nil) and
+     (ProcessSystemUse.Timer = self) then
     ProcessSystemUse.Timer := nil; // allows processing by another background timer
   inherited Destroy;
   fTaskLock.Done;
@@ -1387,7 +1393,8 @@ var
   t: ^TSynBackgroundTimerTask;
   todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
 begin
-  if (fTask = nil) or Terminated then
+  if (fTask = nil) or
+     Terminated then
     exit;
   tix := mormot.core.os.GetTickCount64;
   n := 0;
@@ -1432,7 +1439,8 @@ function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
 begin // caller should have made fTaskLock.Lock;
   for result := length(fTask) - 1 downto 0 do
     with TMethod(fTask[result].OnProcess) do
-      if (Code = aProcess.Code) and (Data = aProcess.Data) then
+      if (Code = aProcess.Code) and
+         (Data = aProcess.Data) then
         exit;
   result := -1;
 end;
@@ -1443,7 +1451,9 @@ var
   task: TSynBackgroundTimerTask;
   found: integer;
 begin
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   if aOnProcessSecs = 0 then
   begin
@@ -1508,7 +1518,9 @@ var
   found: integer;
 begin
   result := false;
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   fTaskLock.Lock;
   try
@@ -1537,7 +1549,9 @@ var
   found: integer;
 begin
   result := false;
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   fTaskLock.Lock;
   try
@@ -1555,7 +1569,9 @@ var
   found: integer;
 begin
   result := false;
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   fTaskLock.Lock;
   try
@@ -1758,7 +1774,8 @@ var
   p: ^TBlockingProcessPoolItem;
 begin
   result := nil;
-  if (fCallCounter = CALL_DESTROYING) or (call <= 0) then
+  if (fCallCounter = CALL_DESTROYING) or
+     (call <= 0) then
     exit;
   fPool.Safe.Lock;
   try
@@ -1836,10 +1853,13 @@ var
   use, t, n, perthread: integer;
   error: RawUTF8;
 begin
-  if (MethodCount <= 0) or not Assigned(Method) then
+  if (MethodCount <= 0) or
+     not Assigned(Method) then
     exit;
   if not Assigned(OnMainThreadIdle) then
-    if (self = nil) or (MethodCount = 1) or (fThreadPoolCount = 0) then
+    if (self = nil) or
+       (MethodCount = 1) or
+       (fThreadPoolCount = 0) then
     begin
       Method(0, MethodCount - 1); // no need (or impossible) to use background thread
       exit;
@@ -2014,7 +2034,8 @@ begin
     {$endif USE_WINIOCP}
     // wait for threads to finish, with 30 seconds TimeOut
     endtix := GetTickCount64 + 30000;
-    while (fRunningThreads > 0) and (GetTickCount64 < endtix) do
+    while (fRunningThreads > 0) and
+          (GetTickCount64 < endtix) do
       SleepHiRes(5);
     for i := 0 to fSubThreadCount - 1 do
       fSubThread[i].Free;
@@ -2083,13 +2104,15 @@ var
   tix, starttix, endtix: Int64;
 begin
   result := false;
-  if (self = nil) or fTerminated then
+  if (self = nil) or
+     fTerminated then
     exit;
   result := Enqueue;
   if result then
     exit;
   inc(fContentionCount);
-  if (fContentionAbortDelay > 0) and aWaitOnContention then
+  if (fContentionAbortDelay > 0) and
+     aWaitOnContention then
   begin
     tix := GetTickCount64;
     starttix := tix;
@@ -2119,7 +2142,9 @@ end;
 function TSynThreadPool.GetPendingContextCount: integer;
 begin
   result := 0;
-  if (self = nil) or fTerminated or (fPendingContext = nil) then
+  if (self = nil) or
+     fTerminated or
+     (fPendingContext = nil) then
     exit;
   EnterCriticalsection(fSafe);
   try
@@ -2138,7 +2163,9 @@ end;
 function TSynThreadPool.PopPendingContext: pointer;
 begin
   result := nil;
-  if (self = nil) or fTerminated or (fPendingContext = nil) then
+  if (self = nil) or
+     fTerminated or
+     (fPendingContext = nil) then
     exit;
   EnterCriticalsection(fSafe);
   try

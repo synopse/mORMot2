@@ -14,7 +14,6 @@ unit mormot.core.data;
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray, TDynArrayHashed and TSynQueue Wrappers
     - RawUTF8 String Values Interning and TRawUTF8List
-    - Cross-Platform Time Zones
 
   *****************************************************************************
 }
@@ -245,7 +244,8 @@ type
     // or
     // !begin
     // !  ... // unsafe code
-    // !  with fSharedAutoLocker.ProtectMethod do begin
+    // !  with fSharedAutoLocker.ProtectMethod do
+    // !  begin
     // !    ... // thread-safe code
     // !  end; // local hidden IUnknown will release the lock for the method
     // !end;
@@ -292,7 +292,8 @@ type
     // or
     // !begin
     // !  ... // unsafe code
-    // !  with fSharedAutoLocker.ProtectMethod do begin
+    // !  with fSharedAutoLocker.ProtectMethod do
+    // !  begin
     // !    ... // thread-safe code
     // !  end; // local hidden IUnknown will release the lock for the method
     // !end;
@@ -386,7 +387,8 @@ type
     constructor Create; virtual;
     /// very efficiently retrieve the TRttiCustom associated with this class
     // - since Create did register it, just return the first vmtAutoTable slot
-    class function RttiCustom: TRttiCustom; {$ifdef HASINLINE} inline; {$endif}
+    class function RttiCustom: TRttiCustom;
+      {$ifdef HASINLINE}inline;{$endif}
     /// allows to implement a TPersistent-like assignement mechanism
     // - inherited class should override AssignTo() protected method
     // to implement the proper assignment
@@ -414,7 +416,8 @@ type
   protected
     fCount: integer;
     fList: TPointerDynArray;
-    function Get(index: Integer): pointer; {$ifdef HASINLINE} inline; {$endif}
+    function Get(index: Integer): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// virtual constructor called at instance creation
     constructor Create; virtual;
@@ -477,6 +480,7 @@ type
   // would use a TSynLocker which does not suffer from CPU cache line conflit,
   // and is cross-compiler whereas TMonitor is Delphi-specific and buggy (at
   // least before XE5)
+  // - if you don't need TSynPersistent overhead, consider plain TSynLocked class
   TSynPersistentLock = class(TSynPersistent)
   protected
     // TSynLocker would increase inherited fields offset -> managed PSynLocker
@@ -631,7 +635,7 @@ type
     // - just an overloaded wrapper
     function SaveTo(nocompression: boolean = false; BufLen: integer = 65536;
       ForcedAlgo: TAlgoCompress = nil; BufferOffset: integer = 0): RawByteString; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
     // - returns the number of bytes of the resulting file
@@ -1167,7 +1171,12 @@ type
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
     // - can be called directly for a very fast TDynArray initialization
-    procedure InitRtti(aInfo: TRttiCustom; var aValue; aCountPointer: PInteger = nil);
+    procedure InitRtti(aInfo: TRttiCustom; var aValue; aCountPointer: PInteger); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// initialize the wrapper with a one-dimension dynamic array
+    // - low-level method, as called by Init() and InitSpecific()
+    // - can be called directly for a very fast TDynArray initialization
+    procedure InitRtti(aInfo: TRttiCustom; var aValue); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// fast initialize a wrapper for an existing dynamic array of the same type
     // - is slightly faster than
@@ -1197,7 +1206,8 @@ type
     // - note: if you use this method to add a new item with a reference to the
     // dynamic array, using a local variable is needed under FPC:
     // !    i := DynArray.New;
-    // !    with Values[i] do begin // otherwise Values is nil -> GPF
+    // !    with Values[i] do // otherwise Values is nil -> GPF
+    // !    begin
     // !      Field1 := 1;
     // !      ...
     function New: integer;
@@ -1452,7 +1462,7 @@ type
     // - this method will therefore recognize T*ObjArray types
     function SaveToJSON(EnumSetsAsText: boolean = false;
       reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddTypedJSON()
     // - this method will therefore recognize T*ObjArray types
@@ -2577,132 +2587,6 @@ procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean = false);
 
 
-{ ***************** Cross-Platform Time Zones }
-
-type
-  {$A-}
-
-  /// used to store Time Zone bias in TSynTimeZone
-  // - map how low-level information is stored in the Windows Registry
-  TTimeZoneInfo = record
-    Bias: integer;
-    bias_std: integer;
-    bias_dlt: integer;
-    change_time_std: TSynSystemTime;
-    change_time_dlt: TSynSystemTime;
-  end;
-  PTimeZoneInfo = ^TTimeZoneInfo;
-
-  /// text identifier of a Time Zone, following Microsoft Windows naming
-  TTimeZoneID = type RawUTF8;
-
-  /// used to store Time Zone information for a single area in TSynTimeZone
-  // - Delphi "object" is buggy on stack -> also defined as record with methods
-  {$ifdef USERECORDWITHMETHODS}
-  TTimeZoneData = record
-  {$else}
-  TTimeZoneData = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    id: TTimeZoneID;
-    display: RawUTF8;
-    tzi: TTimeZoneInfo;
-    dyn: array of packed record
-      year: integer;
-      tzi: TTimeZoneInfo;
-    end;
-    function GetTziFor(year: integer): PTimeZoneInfo;
-  end;
-
-  /// used to store the Time Zone information of a TSynTimeZone class
-  TTimeZoneDataDynArray = array of TTimeZoneData;
-
-  {$A+}
-
-  /// handle cross-platform time conversions, following Microsoft time zones
-  // - is able to retrieve accurate information from the Windows registry,
-  // or from a binary compressed file on other platforms (which should have been
-  // saved from a Windows system first)
-  // - each time zone will be idendified by its TzId string, as defined by
-  // Microsoft for its Windows Operating system
-  TSynTimeZone = class
-  protected
-    fZone: TTimeZoneDataDynArray;
-    fZones: TDynArrayHashed;
-    fLastZone: TTimeZoneID;
-    fLastIndex: integer;
-    fIds: TStringList;
-    fDisplays: TStringList;
-  public
-    /// will retrieve the default shared TSynTimeZone instance
-    // - locally created via the CreateDefault constructor
-    // - this is the usual entry point for time zone process, calling e.g.
-    // $ aLocalTime := TSynTimeZone.Default.NowToLocal(aTimeZoneID);
-    class function Default: TSynTimeZone;
-    /// initialize the internal storage
-    // - but no data is available, until Load* methods are called
-    constructor Create;
-    /// retrieve the time zones from Windows registry, or from a local file
-    // - under Linux, the file should be located with the executable, renamed
-    // with a .tz extension - may have been created via SaveToFile(''), or
-    // from a 'TSynTimeZone' bound resource
-    // "dummy" parameter exists only to disambiguate constructors for C++
-    constructor CreateDefault(dummy: integer = 0);
-    /// finalize the instance
-    destructor Destroy; override;
-    {$ifdef MSWINDOWS}
-    /// read time zone information from the Windows registry
-    procedure LoadFromRegistry;
-    {$endif MSWINDOWS}
-    /// read time zone information from a compressed file
-    // - if no file name is supplied, a ExecutableName.tz file would be used
-    procedure LoadFromFile(const FileName: TFileName = '');
-    /// read time zone information from a compressed memory buffer
-    procedure LoadFromBuffer(const Buffer: RawByteString);
-    /// read time zone information from a 'TSynTimeZone' resource
-    // - the resource should contain the SaveToBuffer compressed binary content
-    // - is no resource matching the TSynTimeZone class name and ResType=10
-    // do exist, nothing would be loaded
-    // - the resource could be created as such, from a Windows system:
-    // ! TSynTimeZone.Default.SaveToFile('TSynTimeZone.data');
-    // then compile the resource as expected, with a brcc32 .rc entry:
-    // ! TSynTimeZone 10 "TSynTimeZone.data"
-    // - you can specify a library (dll) resource instance handle, if needed
-    procedure LoadFromResource(Instance: THandle = 0);
-    /// write then time zone information into a compressed file
-    // - if no file name is supplied, a ExecutableName.tz file would be created
-    procedure SaveToFile(const FileName: TFileName);
-    /// write then time zone information into a compressed memory buffer
-    function SaveToBuffer: RawByteString;
-    /// retrieve the time bias (in minutes) for a given date/time on a TzId
-    function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
-      out Bias: integer; out HaveDaylight: boolean): boolean;
-    /// retrieve the display text corresponding to a TzId
-    // - returns '' if the supplied TzId is not recognized
-    function GetDisplay(const TzId: TTimeZoneID): RawUTF8;
-    /// compute the UTC date/time corrected for a given TzId
-    function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
-    /// compute the current date/time corrected for a given TzId
-    function NowToLocal(const TzId: TTimeZoneID): TDateTime;
-    /// compute the UTC date/time for a given local TzId value
-    // - by definition, a local time may correspond to two UTC times, during the
-    // time biais period, so the returned value is informative only, and any
-    // stored value should be following UTC
-    function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
-    /// direct access to the low-level time zone information
-    property Zone: TTimeZoneDataDynArray read fZone;
-    /// direct access to the wrapper over the time zone information array
-    property Zones: TDynArrayHashed read fZones;
-    /// returns a TStringList of all TzID values
-    // - could be used to fill any VCL component to select the time zone
-    // - order in Ids[] array follows the Zone[].id information
-    function Ids: TStrings;
-    /// returns a TStringList of all Display text values
-    // - could be used to fill any VCL component to select the time zone
-    // - order in Displays[] array follows the Zone[].display information
-    function Displays: TStrings;
-  end;
-
 
 implementation
 
@@ -2794,16 +2678,18 @@ end;
 
 constructor TAutoFree.Create(const varObjPairs: array of pointer);
 var
-  n, i: integer;
+  n, i: PtrInt;
 begin
   n := length(varObjPairs);
-  if (n = 0) or (n and 1 = 1) then
+  if (n = 0) or
+     (n and 1 = 1) then
     exit;
   n := n shr 1;
   if n = 0 then
     exit;
   SetLength(fObjectList, n);
-  for i := 0 to n - 1 do begin
+  for i := 0 to n - 1 do
+  begin
     fObjectList[i] := varObjPairs[i * 2 + 1];
     PPointer(varObjPairs[i * 2])^ := fObjectList[i];
   end;
@@ -2811,7 +2697,7 @@ end;
 
 procedure TAutoFree.Another(var localVariable; obj: TObject);
 var
-  n: integer;
+  n: PtrInt;
 begin
   n := length(fObjectList);
   SetLength(fObjectList, n + 1);
@@ -2821,7 +2707,7 @@ end;
 
 destructor TAutoFree.Destroy;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if fObjectList <> nil then
     for i := high(fObjectList) downto 0 do // release FILO
@@ -2955,7 +2841,12 @@ end;
 
 function TSynList.Add(item: pointer): integer;
 begin
-  result := ObjArrayAddCount(fList, item, fCount);
+  // inlined result := ObjArrayAddCount(fList, item, fCount);
+  result := fCount;
+  if result = length(fList) then
+    SetLength(fList, NextGrow(result));
+  fList[result] := item;
+  inc(fCount);
 end;
 
 procedure TSynList.Clear;
@@ -2967,7 +2858,8 @@ end;
 procedure TSynList.Delete(index: integer);
 begin
   PtrArrayDelete(fList, index, @fCount);
-  if (fCount > 64) and (length(fList) > fCount * 2) then
+  if (fCount > 64) and
+     (length(fList) > fCount * 2) then
     SetLength(fList, fCount); // reduce capacity when half list is void
 end;
 
@@ -3233,7 +3125,8 @@ var
   p: pointer;
   temp: PRawByteString;
 begin
-  if (aBuffer = nil) or (aBufferLen <= 0) then
+  if (aBuffer = nil) or
+     (aBufferLen <= 0) then
     exit; // nothing to load
   fLoadFromLastAlgo := TAlgoCompress.Algo(aBuffer, aBufferLen);
   if fLoadFromLastAlgo = nil then
@@ -3306,7 +3199,7 @@ end;
 { ************ INI Files and In-memory Access }
 
 function IdemPChar2(table: PNormTable; p: PUTF8Char; up: PAnsiChar): boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   u: AnsiChar;
 begin // here p and up are expected to be <> nil
@@ -3329,7 +3222,8 @@ var
   charset: PTextCharSet;
 begin
   result := false;
-  if (source = nil) or (search = nil) then
+  if (source = nil) or
+     (search = nil) then
     exit;
   table := @NormToUpperAnsi7;
   charset := @TEXT_CHARS;
@@ -3380,7 +3274,9 @@ var
   table: PNormTable;
   {$endif CPUX86NOTPIC}
 begin // expect UpperName as 'NAME='
-  if (P <> nil) and (P^ <> '[') and (UpperName <> nil) then
+  if (P <> nil) and
+     (P^ <> '[') and
+     (UpperName <> nil) then
   begin
     {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
     PBeg := nil;
@@ -3449,7 +3345,8 @@ var
   table: PNormTable;
 begin
   result := false;
-  if (P <> nil) and (P^ <> '[') then
+  if (P <> nil) and
+     (P^ <> '[') then
   begin
     table := @NormToUpperAnsi7;
     repeat
@@ -3512,10 +3409,12 @@ var
   table: PNormTable;
 begin
   result := true;
-  if (high(UpperValues) >= 0) and (UpperName <> '') then
+  if (high(UpperValues) >= 0) and
+     (UpperName <> '') then
   begin
     table := @NormToUpperAnsi7;
-    while (P <> nil) and (P^ <> '[') do
+    while (P <> nil) and
+          (P^ <> '[') do
     begin
       if P^ = ' ' then
         repeat
@@ -3540,7 +3439,8 @@ var
   PBeg: PUTF8Char;
 begin
   PBeg := SectionFirstLine;
-  while (SectionFirstLine <> nil) and (SectionFirstLine^ <> '[') do
+  while (SectionFirstLine <> nil) and
+        (SectionFirstLine^ <> '[') do
     SectionFirstLine := GotoNextLine(SectionFirstLine);
   if SectionFirstLine = nil then
     result := PBeg
@@ -3583,9 +3483,11 @@ begin
   result := false;
   PEnd := SectionFirstLine;
   if EraseSectionHeader then // erase [Section] header line
-    while (PtrUInt(SectionFirstLine) > PtrUInt(Content)) and (SectionFirstLine^ <> '[') do
+    while (PtrUInt(SectionFirstLine) > PtrUInt(Content)) and
+          (SectionFirstLine^ <> '[') do
       dec(SectionFirstLine);
-  while (PEnd <> nil) and (PEnd^ <> '[') do
+  while (PEnd <> nil) and
+        (PEnd^ <> '[') do
     PEnd := GotoNextLine(PEnd);
   IndexBegin := SectionFirstLine - pointer(Content);
   if IndexBegin = 0 then
@@ -3607,7 +3509,8 @@ begin
     exit;
   // delete existing [Section] content
   PEnd := SectionFirstLine;
-  while (PEnd <> nil) and (PEnd^ <> '[') do
+  while (PEnd <> nil) and
+        (PEnd^ <> '[') do
     PEnd := GotoNextLine(PEnd);
   IndexBegin := SectionFirstLine - pointer(Content);
   if PEnd = nil then
@@ -3636,7 +3539,8 @@ var
   table: PNormTable;
 begin
   result := 0;
-  if (P = nil) or (UpperName = '') then
+  if (P = nil) or
+     (UpperName = '') then
     exit;
   table := @NormToUpperAnsi7;
   repeat
@@ -3700,7 +3604,8 @@ var
   i: integer;
 begin
   if UpperName <> nil then
-    while (P <> nil) and (P^ <> '[') do
+    while (P <> nil) and
+          (P^ <> '[') do
     begin
       while P^ = ' ' do
         inc(P);   // trim left ' '
@@ -3712,7 +3617,8 @@ begin
         result := true;
         inc(PBeg, UpperNameLength);
         i := (PBeg - pointer(Content)) + 1;
-        if (i = length(NewValue)) and CompareMem(PBeg, pointer(NewValue), i) then
+        if (i = length(NewValue)) and
+           CompareMem(PBeg, pointer(NewValue), i) then
           exit; // new Value is identical to the old one -> no change
         if P = nil then // avoid last line (P-PBeg) calculation error
           SetLength(Content, i - 1)
@@ -3938,8 +3844,8 @@ begin
         fPool[i].Init;
       exit;
     end;
-  raise ESynException.CreateUTF8('%.Create(%) not allowed: should be a power of 2',
-    [self, aHashTables]);
+  raise ESynException.CreateUTF8(
+    '%.Create(%) not allowed: should be a power of 2 <= 512', [self, aHashTables]);
 end;
 
 destructor TRawUTF8Interning.Destroy;
@@ -3999,7 +3905,8 @@ procedure TRawUTF8Interning.UniqueText(var aText: RawUTF8);
 var
   hash: cardinal;
 begin
-  if (self <> nil) and (aText <> '') then
+  if (self <> nil) and
+     (aText <> '') then
   begin // inlined fPool[].Values.HashElement
     hash := InterningHasher(0, pointer(aText), length(aText));
     fPool[hash and fPoolLast].UniqueText(aText, hash);
@@ -4101,7 +4008,8 @@ end;
 
 procedure TRawUTF8List.SetCaseSensitive(Value: boolean);
 begin
-  if (self = nil) or (fCaseSensitive in fFlags = Value) then
+  if (self = nil) or
+     (fCaseSensitive in fFlags = Value) then
     exit;
   fSafe.Lock;
   try
@@ -4185,7 +4093,8 @@ begin
       if not added then
       begin
         obj := GetObject(result);
-        if (obj = aObject) and (obj <> nil) then
+        if (obj = aObject) and
+           (obj <> nil) then
           exit; // found identical aText/aObject -> behave as if added
         if aFreeAndReturnExistingObject <> nil then
         begin
@@ -4199,7 +4108,8 @@ begin
       end;
     end;
     result := fValues.Add(aText);
-    if (fObjects <> nil) or (aObject <> nil) then
+    if (fObjects <> nil) or
+       (aObject <> nil) then
     begin
       if result >= length(fObjects) then
         SetLength(fObjects, length(fValue)); // same capacity
@@ -4249,10 +4159,12 @@ end;
 
 procedure TRawUTF8List.EndUpdate;
 begin
-  if (fOnChangeLevel <= 0) or (InterLockedDecrement(fOnChangeLevel) > 0) then
+  if (fOnChangeLevel <= 0) or
+     (InterLockedDecrement(fOnChangeLevel) > 0) then
     exit; // allows nested BeginUpdate..EndUpdate calls
   fOnChange := fOnChangeBackupForBeginUpdate;
-  if (fOnChangeTrigerred in fFlags) and Assigned(fOnChange) then
+  if (fOnChangeTrigerred in fFlags) and
+     Assigned(fOnChange) then
     Changed;
   exclude(fFlags, fOnChangeTrigerred);
   fSafe.UnLock;
@@ -4290,7 +4202,8 @@ end;
 
 procedure TRawUTF8List.Delete(Index: PtrInt);
 begin
-  if (self <> nil) and (PtrUInt(Index) < PtrUInt(fCount)) then
+  if (self <> nil) and
+     (PtrUInt(Index) < PtrUInt(fCount)) then
     if fNoDuplicate in fFlags then // force update the hash table
       Delete(fValue[Index])
     else
@@ -4343,7 +4256,8 @@ end;
 
 function TRawUTF8List.Get(Index: PtrInt): RawUTF8;
 begin
-  if (self = nil) or (PtrUInt(Index) >= PtrUInt(fCount)) then
+  if (self = nil) or
+     (PtrUInt(Index) >= PtrUInt(fCount)) then
     result := ''
   else
     result := fValue[Index];
@@ -4395,7 +4309,9 @@ end;
 
 function TRawUTF8List.GetObject(Index: PtrInt): pointer;
 begin
-  if (self <> nil) and (fObjects <> nil) and (PtrUInt(Index) < PtrUInt(fCount)) then
+  if (self <> nil) and
+     (fObjects <> nil) and
+     (PtrUInt(Index) < PtrUInt(fCount)) then
     result := fObjects[Index]
   else
     result := nil;
@@ -4406,7 +4322,8 @@ var
   ndx: PtrUInt;
 begin
   result := nil;
-  if (self <> nil) and (fObjects <> nil) then
+  if (self <> nil) and
+     (fObjects <> nil) then
   begin
     fSafe.Lock;
     try
@@ -4425,7 +4342,8 @@ var
   P: PUTF8Char;
 begin
   result := '';
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   fSafe.Lock;
   try
@@ -4463,7 +4381,8 @@ var
   i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   fSafe.Lock;
   try
@@ -4543,7 +4462,8 @@ end;
 
 function TRawUTF8List.IndexOfObject(aObject: TObject): PtrInt;
 begin
-  if (self <> nil) and (fObjects <> nil) then
+  if (self <> nil) and
+     (fObjects <> nil) then
   begin
     fSafe.Lock;
     try
@@ -4585,7 +4505,8 @@ end;
 
 procedure TRawUTF8List.Put(Index: PtrInt; const Value: RawUTF8);
 begin
-  if (self <> nil) and (PtrUInt(Index) < PtrUInt(fCount)) then
+  if (self <> nil) and
+     (PtrUInt(Index) < PtrUInt(fCount)) then
   begin
     fValue[Index] := Value;
     if Assigned(fOnChange) then
@@ -4595,7 +4516,8 @@ end;
 
 procedure TRawUTF8List.PutObject(Index: PtrInt; Value: pointer);
 begin
-  if (self <> nil) and (PtrUInt(Index) < PtrUInt(fCount)) then
+  if (self <> nil) and
+     (PtrUInt(Index) < PtrUInt(fCount)) then
   begin
     if fObjects = nil then
       SetLength(fObjects, Length(fValue));
@@ -4650,7 +4572,9 @@ begin
   BeginUpdate; // also makes fSafe.Lock
   try
     Clear;
-    if (P <> nil) and (DelimLen > 0) and (P < PEnd) then
+    if (P <> nil) and
+       (DelimLen > 0) and
+       (P < PEnd) then
     begin
       DelimFirst := Delimiter[1];
       DelimNext := PUTF8Char(pointer(Delimiter)) + 1;
@@ -4981,7 +4905,8 @@ begin
   result := SizeOf(pointer);
 end;
 
-function DelphiType(Info: PRttiInfo): integer; {$ifdef HASINLINE} inline; {$endif}
+function DelphiType(Info: PRttiInfo): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 begin // compatible with legacy TDynArray.SaveTo() format
   if Info = nil then
     result := 0
@@ -5119,7 +5044,8 @@ begin
         exit;
       dec(n1); // both items are equal -> continue to next items
       dec(n2);
-    until (n2 = 0) or (n1 = 0);
+    until (n2 = 0) or
+          (n1 = 0);
   result := n1 - n2;
 end;
 
@@ -5457,7 +5383,9 @@ var
   pA, pB: PRttiCustomProp;
   i: integer;
 begin
-  if (A = nil) or (B = nil) or (A = B) then
+  if (A = nil) or
+     (B = nil) or
+     (A = B) then
   begin
     result := ComparePointer(A, B);
     exit;
@@ -5544,7 +5472,8 @@ var
   cmp: TRttiCompare;
 begin
   result := 0; // A=B at pointer level, or no fair comparison possible
-  if (A = B) or (Info = nil) then
+  if (A = B) or
+     (Info = nil) then
     exit;
   cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
   if Assigned(cmp) then
@@ -5761,7 +5690,8 @@ var
   temp: TSynTempBuffer;
   tempend: pointer;
 begin
-  if (Len > 6) and (Info^.Kind in Kinds) then
+  if (Len > 6) and
+     (Info^.Kind in Kinds) then
   begin
     if UriCompatible then
       result := Base64uriToBin(Source, Len, temp)
@@ -5868,6 +5798,16 @@ begin
   fCountP := aCountPointer;
   if fCountP <> nil then
     fCountP^ := 0;
+  fCompare := nil;
+  fSorted := false;
+end;
+
+procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue);
+begin
+  fInfo := aInfo;
+  fValue := @aValue;
+  fElemSize := fInfo.Cache.ItemSize;
+  fCountP := nil;
   fCompare := nil;
   fSorted := false;
 end;
@@ -6132,7 +6072,8 @@ var
   p: pointer;
 begin
   p := ItemPtr(index);
-  if (p = nil) or (Dest = nil) then
+  if (p = nil) or
+     (Dest = nil) then
     exit;
   if fInfo.ArrayRtti <> nil then
     fInfo.ArrayRtti.ValueFinalize(Dest); // also handle T*ObjArray
@@ -6264,7 +6205,8 @@ var
   W: TBufferWriter;
   tmp: TTextWriterStackBuffer; // 8KB buffer
 begin
-  if (fValue = nil) or (Stream = nil) then
+  if (fValue = nil) or
+     (Stream = nil) then
     exit; // avoid GPF if void
   W := TBufferWriter.Create(Stream, @tmp, SizeOf(tmp));
   try
@@ -6401,7 +6343,8 @@ begin
   begin
     dec(n);
     P := fValue^;
-    if (n > 10) and (length(aIndex) >= n) then
+    if (n > 10) and
+       (length(aIndex) >= n) then
     begin
       // array should be sorted via aIndex[] -> use fast O(log(n)) binary search
       L := 0;
@@ -7009,11 +6952,13 @@ procedure TDynArray.AddDynArray(aSource: PDynArray; aStartIndex: integer; aCount
 var
   SourceCount: integer;
 begin
-  if (aSource <> nil) and (aSource^.fValue <> nil) and
+  if (aSource <> nil) and
+     (aSource^.fValue <> nil) and
      (fInfo.Cache.ItemInfo = aSource^.fInfo.Cache.ItemInfo) then
   begin
     SourceCount := aSource^.Count;
-    if (aCount < 0) or (aCount > SourceCount) then
+    if (aCount < 0) or
+       (aCount > SourceCount) then
       aCount := SourceCount; // force use of external Source.Count, if any
     AddArray(aSource.fValue^, aStartIndex, aCount);
   end;
@@ -7026,7 +6971,8 @@ var
 begin
   result := false;
   n := GetCount;
-  if (n <> B.Count) or (fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo) then
+  if (n <> B.Count) or
+     (fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo) then
     exit;
   if Assigned(fCompare) and not ignorecompare then
   begin // use customized comparison
@@ -7085,7 +7031,8 @@ end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);
 begin
-  if (fValue = nil) or (fInfo.Cache.ItemInfo <> Source.fInfo.Cache.ItemInfo) then
+  if (fValue = nil) or
+     (fInfo.Cache.ItemInfo <> Source.fInfo.Cache.ItemInfo) then
     exit;
   if not ObjArrayByRef and (rcfObjArray in fInfo.Flags) then
      LoadFromJSON(pointer(Source.SaveToJSON))
@@ -7121,7 +7068,8 @@ var
   comp: integer;
   P: PAnsiChar;
 begin
-  if (fValue <> nil) and (@Item <> nil) then
+  if (fValue <> nil) and
+     (@Item <> nil) then
     if not(rcfArrayItemManaged in fInfo.Flags) then
       result := AnyScanIndex(fValue^, @Item, GetCount, fElemSize)
     else
@@ -7171,7 +7119,8 @@ begin // this method is faster than default System.DynArraySetLength() function
     if p <> nil then
     begin // FastDynArrayClear() with ObjArray support
       dec(p);
-      if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
+      if (p^.refCnt >= 0) and
+         RefCntDecFree(p^.refCnt) then
       begin
         if OldLength <> 0 then
           if rcfArrayItemManaged in fInfo.Flags then
@@ -7200,7 +7149,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   else
   begin
     dec(PtrUInt(p), SizeOf(TDynArrayRec)); // p^ = start of heap object
-    if (p^.refCnt >= 0) and RefCntDecFree(p^.refCnt) then
+    if (p^.refCnt >= 0) and
+       RefCntDecFree(p^.refCnt) then
     begin
       // we own the dynamic array instance -> direct reallocation
       if NewLength < OldLength then // reduce array in-place
@@ -7261,7 +7211,8 @@ begin
     if arrayptr = 0 then
     begin
       // void array
-      if (delta > 0) and (aCount < MINIMUM_SIZE) then
+      if (delta > 0) and
+         (aCount < MINIMUM_SIZE) then
         // reserve some minimal (64) items for Add()
         aCount := MINIMUM_SIZE;
     end
@@ -7371,7 +7322,8 @@ begin
     c := PDALen(c - _DALEN)^ + _DAOFF;
   if aStartIndex >= c then
     exit; // nothing to copy
-  if (aCount < 0) or (cardinal(aStartIndex + aCount) > cardinal(c)) then
+  if (aCount < 0) or
+     (cardinal(aStartIndex + aCount) > cardinal(c)) then
     aCount := c - aStartIndex;
   if aCount <= 0 then
     exit;
@@ -7385,7 +7337,8 @@ end;
 
 function TDynArray.ItemLoad(Source: PAnsiChar; SourceMax: PAnsiChar): RawByteString;
 begin
-  if (Source <> nil) and (fInfo.Cache.ItemInfo = nil) then
+  if (Source <> nil) and
+     (fInfo.Cache.ItemInfo = nil) then
     SetString(result, Source, ElemSize)
   else
   begin
@@ -7407,7 +7360,8 @@ begin
   if Source <> nil then // avoid GPF
     if fInfo.Cache.ItemInfo = nil then
     begin
-      if (SourceMax = nil) or (Source + ElemSize <= SourceMax) then
+      if (SourceMax = nil) or
+         (Source + ElemSize <= SourceMax) then
         MoveFast(Source^, Item^, ElemSize);
     end
     else
@@ -7428,7 +7382,8 @@ var
   data: pointer;
 begin
   result := -1;
-  if (Source = nil) or (ElemSize > SizeOf(tmp)) then
+  if (Source = nil) or
+     (ElemSize > SizeOf(tmp)) then
     exit;
   if fInfo.Cache.ItemInfo = nil then
     data := Source
@@ -7672,11 +7627,13 @@ begin
     Hasher := aHasher;
   HashItem := aHashItem;
   EventHash := aEventHash;
-  if (@HashItem = nil) and (@EventHash = nil) then
+  if (@HashItem = nil) and
+     (@EventHash = nil) then
     HashItem := _PT_HASH[aCaseInsensitive, DynArray^.Info.ArrayFirstField];
   Compare := aCompare;
   EventCompare := aEventCompare;
-  if (@Compare = nil) and (@EventCompare = nil) then
+  if (@Compare = nil) and
+     (@EventCompare = nil) then
     Compare := PT_SORT[aCaseInsensitive, DynArray^.Info.ArrayFirstField];
   CountTrigger := 32;
   Clear;
@@ -7690,8 +7647,10 @@ var
 begin
   cmp := PT_SORT[aCaseInsensitive, aKind];
   hsh := _PT_HASH[aCaseInsensitive, aKind];
-  if (@hsh = nil) or (@cmp = nil) then
-    raise EDynArray.CreateUTF8('TDynArrayHasher.InitSpecific: %?', [ToText(aKind)^]);
+  if (@hsh = nil) or
+     (@cmp = nil) then
+    raise EDynArray.CreateUTF8(
+      'TDynArrayHasher.InitSpecific: %?', [ToText(aKind)^]);
   Init(aDynArray, hsh, nil, aHasher, cmp, nil, aCaseInsensitive)
 end;
 
@@ -7732,7 +7691,7 @@ const
     1337987929, 1685759167, 2123923447);
 
 // as used internally by TDynArrayHasher.ReHash()
-function NextPrime(v: integer): integer; {$ifdef HASINLINE} inline;{$endif}
+function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 var
   i: PtrInt;
   P: PIntegerArray;
@@ -8375,7 +8334,8 @@ begin
   begin
 doh:hc := fHash.HashOne(@Item);
     result := fHash.FindOrNew(hc, @Item);
-    if (result < 0) and AddIfNotExisting then
+    if (result < 0) and
+       AddIfNotExisting then
     begin
       fHash.HashAdd(hc, result); // ReHash only if necessary
       SetCount(result + 1); // add new item
@@ -8661,7 +8621,8 @@ begin
         if result = nil then
           fSafe.UnLock; // caller should always Unlock once done
       end;
-    until (result <> nil) or InternalWaitDone(endtix, aWhenIdle);
+    until (result <> nil) or
+          InternalWaitDone(endtix, aWhenIdle);
   finally
     InternalDestroying(-1);
   end;
@@ -8682,7 +8643,8 @@ begin
   endtix := GetTickCount64 + aTimeoutMS;
   repeat
     SleepHiRes(1); // ensure WaitPos() is actually finished
-  until (fWaitPopCounter = 0) or (GetTickCount64 > endtix);
+  until (fWaitPopCounter = 0) or
+        (GetTickCount64 > endtix);
 end;
 
 procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
@@ -8790,311 +8752,6 @@ begin
   end;
 end;
 
-
-{ ***************** Cross-Platform Time Zones }
-
-
-{ TTimeZoneData }
-
-function TTimeZoneData.GetTziFor(year: integer): PTimeZoneInfo;
-var
-  i, last: PtrInt;
-begin
-  if dyn = nil then
-    result := @tzi
-  else if year <= dyn[0].year then
-    result := @dyn[0].tzi
-  else
-  begin
-    last := high(dyn);
-    if year >= dyn[last].year then
-      result := @dyn[last].tzi
-    else
-    begin
-      for i := 1 to last do
-        if year < dyn[i].year then
-        begin
-          result := @dyn[i - 1].tzi;
-          exit;
-        end;
-      result := @tzi; // should never happen, but makes compiler happy
-    end;
-  end;
-end;
-
-
-{ TTimeZoneInformation }
-
-constructor TSynTimeZone.Create;
-begin
-  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray), fZone, ptRawUTF8);
-end;
-
-constructor TSynTimeZone.CreateDefault;
-begin
-  Create;
-  {$ifdef MSWINDOWS}
-  LoadFromRegistry;
-  {$else}
-  LoadFromFile;
-  if fZones.Count = 0 then
-    LoadFromResource; // if no .tz file is available, try if bound to executable
-  {$endif MSWINDOWS}
-end;
-
-destructor TSynTimeZone.Destroy;
-begin
-  inherited Destroy;
-  fIds.Free;
-  fDisplays.Free;
-end;
-
-var
-  SharedSynTimeZone: TSynTimeZone;
-
-class function TSynTimeZone.Default: TSynTimeZone;
-begin
-  if SharedSynTimeZone = nil then
-  begin
-    GlobalLock;
-    try
-      if SharedSynTimeZone = nil then
-        SharedSynTimeZone := TSynTimeZone.CreateDefault;
-    finally
-      GlobalUnLock;
-    end;
-  end;
-  result := SharedSynTimeZone;
-end;
-
-function TSynTimeZone.SaveToBuffer: RawByteString;
-begin
-  result := AlgoSynLZ.Compress(fZones.SaveTo);
-end;
-
-procedure TSynTimeZone.SaveToFile(const FileName: TFileName);
-var
-  FN: TFileName;
-begin
-  if FileName = '' then
-    FN := ChangeFileExt(ExeVersion.ProgramFileName, '.tz')
-  else
-    FN := FileName;
-  FileFromString(SaveToBuffer, FN);
-end;
-
-procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
-begin
-  fZones.LoadFromBinary(AlgoSynLZ.Decompress(Buffer));
-  fZones.ReHash;
-  FreeAndNil(fIds);
-  FreeAndNil(fDisplays);
-end;
-
-procedure TSynTimeZone.LoadFromFile(const FileName: TFileName);
-var
-  FN: TFileName;
-begin
-  if FileName = '' then
-    FN := ChangeFileExt(ExeVersion.ProgramFileName, '.tz')
-  else
-    FN := FileName;
-  LoadFromBuffer(StringFromFile(FN));
-end;
-
-procedure TSynTimeZone.LoadFromResource(Instance: THandle);
-var
-  buf: RawByteString;
-begin
-  ResourceToRawByteString(ClassName, PChar(10), buf, Instance);
-  if buf <> '' then
-    LoadFromBuffer(buf);
-end;
-
-{$ifdef MSWINDOWS}
-
-procedure TSynTimeZone.LoadFromRegistry;
-const
-  REGKEY = 'Software\Microsoft\Windows NT\CurrentVersion\Time Zones\';
-var
-  reg: TWinRegistry;
-  keys: TRawUTF8DynArray;
-  i, first, last, year, n: integer;
-  item: TTimeZoneData;
-begin
-  fZones.Clear;
-  if reg.ReadOpen(wrLocalMachine, REGKEY) then
-    keys := reg.ReadEnumEntries
-  else
-    keys := nil; // make Delphi 6 happy
-  n := length(keys);
-  fZones.Capacity := n;
-  for i := 0 to n - 1 do
-  begin
-    Finalize(item);
-    FillcharFast(item.tzi, SizeOf(item.tzi), 0);
-    if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
-    begin
-      item.id := keys[i];
-      item.Display := reg.ReadString('Display');
-      reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
-      if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
-      begin
-        // warning: never defined on XP/2003, and not for all entries
-        first := reg.ReadDword('FirstEntry');
-        last := reg.ReadDword('LastEntry');
-        if (first > 0) and (last >= first) then
-        begin
-          n := 0;
-          SetLength(item.dyn, last - first + 1);
-          for year := first to last do
-            if reg.ReadBuffer(UTF8ToSynUnicode(UInt32ToUTF8(year)),
-              @item.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
-            begin
-              item.dyn[n].year := year;
-              inc(n);
-            end;
-          SetLength(item.dyn, n);
-        end;
-      end;
-      fZones.Add(item);
-    end;
-  end;
-  reg.Close;
-  fZones.ReHash;
-  FreeAndNil(fIds);
-  FreeAndNil(fDisplays);
-end;
-
-{$endif MSWINDOWS}
-
-function TSynTimeZone.GetDisplay(const TzId: TTimeZoneID): RawUTF8;
-var
-  ndx: integer;
-begin
-  if self = nil then
-    ndx := -1
-  else
-    ndx := fZones.FindHashed(TzId);
-  if ndx < 0 then
-    if TzId = 'UTC' then // e.g. on XP
-      result := TzId
-    else
-      result := ''
-  else
-    result := fZone[ndx].display;
-end;
-
-function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
-  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean): boolean;
-var
-  ndx: integer;
-  d: TSynSystemTime;
-  tzi: PTimeZoneInfo;
-  std, dlt: TDateTime;
-begin
-  if (self = nil) or (TzId = '') then
-    ndx := -1
-  else if TzId = fLastZone then
-    ndx := fLastIndex
-  else
-  begin
-    ndx := fZones.FindHashed(TzId);
-    fLastZone := TzId;
-    flastIndex := ndx;
-  end;
-  if ndx < 0 then
-  begin
-    Bias := 0;
-    HaveDaylight := false;
-    result := TzId = 'UTC'; // e.g. on XP
-    exit;
-  end;
-  d.FromDate(Value); // faster than DecodeDate
-  tzi := fZone[ndx].GetTziFor(d.Year);
-  if tzi.change_time_std.IsZero then
-  begin
-    HaveDaylight := false;
-    Bias := tzi.Bias + tzi.bias_std;
-  end
-  else
-  begin
-    HaveDaylight := true;
-    std := tzi.change_time_std.EncodeForTimeChange(d.Year);
-    dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
-    if std < dlt then
-      if (std <= Value) and (Value < dlt) then
-        Bias := tzi.Bias + tzi.bias_std
-      else
-        Bias := tzi.Bias + tzi.bias_dlt
-    else if (dlt <= Value) and (Value < std) then
-      Bias := tzi.Bias + tzi.bias_dlt
-    else
-      Bias := tzi.Bias + tzi.bias_std;
-  end;
-  result := true;
-end;
-
-function TSynTimeZone.UtcToLocal(const UtcDateTime: TDateTime;
-  const TzId: TTimeZoneID): TDateTime;
-var
-  Bias: integer;
-  HaveDaylight: boolean;
-begin
-  if (self = nil) or (TzId = '') then
-    result := UtcDateTime
-  else
-  begin
-    GetBiasForDateTime(UtcDateTime, TzId, Bias, HaveDaylight);
-    result := ((UtcDateTime * MinsPerDay) - Bias) / MinsPerDay;
-  end;
-end;
-
-function TSynTimeZone.NowToLocal(const TzId: TTimeZoneID): TDateTime;
-begin
-  result := UtcToLocal(NowUtc, TzId);
-end;
-
-function TSynTimeZone.LocalToUtc(const LocalDateTime: TDateTime;
-  const TzID: TTimeZoneID): TDateTime;
-var
-  Bias: integer;
-  HaveDaylight: boolean;
-begin
-  if (self = nil) or (TzID = '') then
-    result := LocalDateTime
-  else
-  begin
-    GetBiasForDateTime(LocalDateTime, TzID, Bias, HaveDaylight);
-    result := ((LocalDateTime * MinsPerDay) + Bias) / MinsPerDay;
-  end;
-end;
-
-function TSynTimeZone.Ids: TStrings;
-var
-  i: PtrInt;
-begin
-  if fIDs = nil then
-  begin
-    fIDs := TStringList.Create;
-    for i := 0 to length(fZone) - 1 do
-      fIDs.Add(UTF8ToString(fZone[i].id));
-  end;
-  result := fIDs;
-end;
-
-function TSynTimeZone.Displays: TStrings;
-var
-  i: PtrInt;
-begin
-  if fDisplays = nil then
-  begin
-    fDisplays := TStringList.Create;
-    for i := 0 to length(fZone) - 1 do
-      fDisplays.Add(UTF8ToString(fZone[i].Display));
-  end;
-  result := fDisplays;
-end;
 
 
 

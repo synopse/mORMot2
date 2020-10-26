@@ -1621,7 +1621,8 @@ begin
     P := Request.Headers.pUnknownHeaders;
     if P <> nil then
       for i := 1 to Request.Headers.UnknownHeaderCount do
-        if (P^.NameLength = L) and IdemPChar(P^.pName, Pointer(RemoteIPHeadUp)) then
+        if (P^.NameLength = L) and
+           IdemPChar(P^.pName, Pointer(RemoteIPHeadUp)) then
         begin
           FastSetString(RemoteIP, P^.pRawValue, P^.RawValueLength);
           break;
@@ -1629,7 +1630,8 @@ begin
         else
           inc(P);
   end;
-  if (RemoteIP = '') and (Request.Address.pRemoteAddress <> nil) then
+  if (RemoteIP = '') and
+     (Request.Address.pRemoteAddress <> nil) then
     RemoteIP := Request.Address.pRemoteAddress.IP(RemoteIPLocalHostAsVoidInServers);
   // compute headers length
   Lip := length(RemoteIP);
@@ -1831,7 +1833,8 @@ begin
   else
     i := IdemPCharArray(P, KNOWNHEADERS);
   // WebSockets need CONNECTION as unknown header
-  if (i >= 0) and (THttpHeader(i) <> reqConnection) then
+  if (i >= 0) and
+     (THttpHeader(i) <> reqConnection) then
     with Headers.KnownHeaders[THttpHeader(i)] do
     begin
       while P^ <> ':' do
@@ -1847,7 +1850,8 @@ begin
   else
   begin
     UnknownName := pointer(P);
-    while (P^ >= ' ') and (P^ <> ':') do
+    while (P^ >= ' ') and
+          (P^ <> ':') do
       inc(P);
     if P^ = ':' then
       with UnknownHeaders[Headers.UnknownHeaderCount] do
@@ -1912,7 +1916,8 @@ begin
   UserSize := 0;
   DomainSize := 0;
   LookupAccountSidW(nil, UserInfo^.Sid, nil, UserSize, nil, DomainSize, NameUse);
-  if (UserSize = 0) or (DomainSize = 0) then
+  if (UserSize = 0) or
+     (DomainSize = 0) then
     exit;
   SetLength(tmp, UserSize + DomainSize - 1);
   P := pointer(tmp);

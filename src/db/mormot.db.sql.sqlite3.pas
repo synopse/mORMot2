@@ -284,7 +284,9 @@ var
   Conn: TSQLDBSQLite3Connection;
 begin
   result := 0;
-  if (Dest = '') or (Rows = nil) or (Rows.ColumnCount = 0) then
+  if (Dest = '') or
+     (Rows = nil) or
+     (Rows.ColumnCount = 0) then
     exit;
   // we do not call DeleteFile(Dest) since DB may be completed on purpose
   DB := TSQLDBSQLite3ConnectionProperties.Create(StringToUTF8(Dest), '', '', '');
@@ -510,9 +512,6 @@ begin
   fStatement.BindNull(Param);
 end;
 
-const
-  NULCHAR: AnsiChar = #0;
-
 procedure TSQLDBSQLite3Statement.BindTextP(Param: Integer; Value: PUTF8Char;
   IO: TSQLDBParamInOutType);
 var
@@ -631,7 +630,8 @@ begin
   if not aConnection.InheritsFrom(TSQLDBSQLite3Connection) then
     raise ESQLDBException.CreateUTF8('%.Create(%)', [self, aConnection]);
   inherited Create(aConnection);
-  if (SynDBLog <> nil) and (sllSQL in SynDBLog.Family.Level) then
+  if (SynDBLog <> nil) and
+     (sllSQL in SynDBLog.Family.Level) then
     fShouldLogSQL := true;
 end;
 

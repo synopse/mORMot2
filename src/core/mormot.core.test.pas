@@ -171,27 +171,27 @@ type
     /// used by the published methods to run test assertion against integers
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(a, b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a=b, will fail and include '#=#' text before the supplied msg
     function CheckNotEqual(a, b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
     // - includes some optional precision argument
     function CheckSame(const Value1, Value2: double;
@@ -598,7 +598,8 @@ procedure TSynTestCase.Check(condition: Boolean; const msg: string);
 begin
   if self = nil then
     exit;
-  if (msg <> '') and (tcoLogEachCheck in fOptions) then
+  if (msg <> '') and
+     (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
   InterlockedIncrement(fAssertions);
   if not condition then
@@ -612,7 +613,8 @@ begin
     result := false;
     exit;
   end;
-  if (msg <> '') and (tcoLogEachCheck in fOptions) then
+  if (msg <> '') and
+     (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
   InterlockedIncrement(fAssertions);
   if condition then
@@ -978,7 +980,8 @@ end;
 
 procedure TSynTests.Color(aColor: TConsoleColor);
 begin
-  if (StdOut <> 0) and (THandle(TTextRec(fSaveToFile).Handle) = StdOut) then
+  if (StdOut <> 0) and
+     (THandle(TTextRec(fSaveToFile).Handle) = StdOut) then
     TextColor(aColor);
 end;
 
@@ -1044,7 +1047,8 @@ end;
 
 function TSynTests.GetFailed(Index: integer): TSynTestFailed;
 begin
-  if (self = nil) or (cardinal(Index) >= cardinal(fFailedCount)) then
+  if (self = nil) or
+     (cardinal(Index) >= cardinal(fFailedCount)) then
     Finalize(result)
   else
     result := fFailed[Index];
@@ -1338,7 +1342,8 @@ end;
 
 destructor TSynTestsLogged.Destroy;
 begin
-  if (fLogFile <> nil) and (fConsoleDup <> '') then
+  if (fLogFile <> nil) and
+     (fConsoleDup <> '') then
     fLogFile.LogLines(sllCustom1, pointer(fConsoleDup), nil, '  ----');
   fLogFile.Log(sllMemory, '', self);
   inherited Destroy;

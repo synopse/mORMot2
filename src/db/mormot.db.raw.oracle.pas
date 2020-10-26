@@ -916,7 +916,7 @@ type
     procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: Integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     procedure CheckSession(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: Integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
@@ -1005,7 +1005,8 @@ implementation
 
 function TOracleDate.ToDateTime: TDateTime;
 begin
-  if (PInteger(@self)^ = 0) and (PInteger(PtrUInt(@self) + 3)^ = 0) then
+  if (PInteger(@self)^ = 0) and
+     (PInteger(PtrUInt(@self) + 3)^ = 0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> returns 0
     result := 0
   else
@@ -1015,7 +1016,9 @@ begin
       result := 0
     else
       result := EncodeDate((Cent - 100) * 100 + Year - 100, Month, Day);
-    if (Hour > 1) or (Min > 1) or (Sec > 1) then
+    if (Hour > 1) or
+       (Min > 1) or
+       (Sec > 1) then
       result := result + EncodeTime(Hour - 1, Min - 1, Sec - 1, 0);
   end;
 end;
@@ -1024,13 +1027,16 @@ procedure TOracleDate.ToIso8601(var aIso8601: RawByteString);
 var
   tmp: array[0..23] of AnsiChar;
 begin
-  if (PInteger(@self)^ = 0) and (PInteger(PtrUInt(@self) + 3)^ = 0) then
+  if (PInteger(@self)^ = 0) and
+     (PInteger(PtrUInt(@self) + 3)^ = 0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     aIso8601 := ''
   else
   begin
     DateToIso8601PChar(tmp{%H-}, true, (Cent - 100) * 100 + Year - 100, Month, Day);
-    if (Hour > 1) or (Min > 1) or (Sec > 1) then
+    if (Hour > 1) or
+       (Min > 1) or
+       (Sec > 1) then
     begin
       TimeToIso8601PChar(@tmp[10], true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
       SetString(aIso8601, tmp, 19); // we use 'T' as TTextWriter.AddDateTime
@@ -1045,7 +1051,8 @@ var
   Y: cardinal;
 begin
   Dest^ := '"';
-  if (PInteger(@self)^ = 0) and (PInteger(PtrUInt(@self) + 3)^ = 0) then
+  if (PInteger(@self)^ = 0) and
+     (PInteger(PtrUInt(@self) + 3)^ = 0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     result := 2
   else
@@ -1057,7 +1064,9 @@ begin
     else
     begin
       DateToIso8601PChar(Dest + 1, true, Y, Month, Day);
-      if (Hour > 1) or (Min > 1) or (Sec > 1) then
+      if (Hour > 1) or
+         (Min > 1) or
+         (Sec > 1) then
       begin
         TimeToIso8601PChar(Dest + 11, true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
         result := 21; // we use 'T' as TTextWriter.AddDateTime
@@ -1084,7 +1093,9 @@ begin
   Year := (T.Year mod 100) + 100;
   Month := T.Month;
   Day := T.Day;
-  if (T.Hour <> 0) or (T.Minute <> 0) or (T.Second <> 0) then
+  if (T.Hour <> 0) or
+     (T.Minute <> 0) or
+     (T.Second <> 0) then
   begin
     Hour := T.Hour + 1;
     Min := T.Minute + 1;
@@ -1463,17 +1474,20 @@ begin
         tmp[0] := #0;
         ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, sizeof(tmp), OCI_HTYPE_ERROR);
         L := mormot.core.base.StrLen(@tmp);
-        while (L > 0) and (tmp[L - 1] < ' ') do
+        while (L > 0) and
+              (tmp[L - 1] < ' ') do
         begin
           tmp[L - 1] := #0; // trim right #10
           dec(L);
         end;
         msg := CurrentAnsiConvert.AnsiBufferToRawUTF8(tmp, L);
-        if (Status = OCI_SUCCESS_WITH_INFO) and not InfoRaiseException then
+        if (Status = OCI_SUCCESS_WITH_INFO) and
+           not InfoRaiseException then
         begin
           if LogLevelNoRaise = sllNone then // may be e.g. sllWarning
             LogLevelNoRaise := sllInfo;
-          if (Conn = nil) and (Stmt <> nil) then
+          if (Conn = nil) and
+             (Stmt <> nil) then
             Conn := Stmt.Connection;
           if Conn <> nil then
             with Conn.Properties do
@@ -1523,7 +1537,8 @@ begin
     tmp[0] := #0;
     ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, sizeof(tmp), OCI_HTYPE_ERROR);
     L := mormot.core.base.StrLen(@tmp);
-    while (L > 0) and (tmp[L - 1] < ' ') do
+    while (L > 0) and
+          (tmp[L - 1] < ' ') do
     begin
       tmp[L - 1] := #0; // trim right #10
       dec(L);
@@ -1599,7 +1614,8 @@ var
   i: PtrInt;
   l1, l2, l3: TFileName;
 begin
-  if (SynDBOracleOCIpath <> '') and DirectoryExists(SynDBOracleOCIpath) then
+  if (SynDBOracleOCIpath <> '') and
+     DirectoryExists(SynDBOracleOCIpath) then
     l1 := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath + PathDelim)) + LIBNAME;
   l2 := ExeVersion.ProgramFilePath + LIBNAME;
   if not FileExists(l2) then
@@ -1655,7 +1671,8 @@ begin
       V := Value;
       Value := 0;
     end;
-    if (V <> 0) or (Size > 1) then
+    if (V <> 0) or
+       (Size > 1) then
     begin
       if minus then
         inc(V)

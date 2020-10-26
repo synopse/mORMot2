@@ -205,7 +205,8 @@ procedure FillZero(var Fields: TSQLFieldBits); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TSQLFieldBits set of bits into an array of integers
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits; out Index: TSQLFieldIndexDynArray;
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
+  out Index: TSQLFieldIndexDynArray;
   MaxLength: integer = MAX_SQLFIELDS; IndexStart: integer = 0); overload;
 
 /// convert a TSQLFieldBits set of bits into an array of integers
@@ -285,6 +286,9 @@ type
      soSoundsLikeSpanish);
 
 const
+  /// special TSQLFieldBits value containing all field bits set to 1
+  ALL_FIELDS: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1];
+
   /// convert identified field types into high-level ORM types
   // - as will be implemented in unit mORMot.pas
   SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
@@ -752,7 +756,8 @@ type
     /// allow to change on the fly an expanded format column layout
     // - by definition, a non expanded format will raise a ESynException
     // - caller should then set ColNames[] and run AddColumns()
-    procedure ChangeExpandedFields(aWithID: boolean; const aFields: TSQLFieldIndexDynArray); overload;
+    procedure ChangeExpandedFields(aWithID: boolean;
+      const aFields: TSQLFieldIndexDynArray); overload;
     /// end the serialized JSON object
     // - cancel last ','
     // - close the JSON object ']' or ']}'
@@ -766,17 +771,21 @@ type
     // - expect not Expanded format
     procedure TrimFirstRow;
     /// is set to TRUE in case of Expanded format
-    property Expand: boolean read fExpand write fExpand;
+    property Expand: boolean
+      read fExpand write fExpand;
     /// is set to TRUE if the ID field must be appended to the resulting JSON
     // - this field is used only by TSQLRecord.GetJSONValues
     // - this field is ignored by TSQLTable.GetJSONValues
-    property WithID: boolean read fWithID;
+    property WithID: boolean
+      read fWithID;
     /// Read-Only access to the field bits set for each column to be stored
-    property Fields: TSQLFieldIndexDynArray read fFields;
+    property Fields: TSQLFieldIndexDynArray
+      read fFields;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
-    property StartDataPosition: integer read fStartDataPosition;
+    property StartDataPosition: integer
+      read fStartDataPosition;
   end;
 
 
@@ -820,7 +829,8 @@ type
     /// if the function needs a special process
     // - e.g. funcCountStar for the special Count( * ) expression or
     // funcDistinct, funcMax for distinct(...)/max(...) aggregation
-    FunctionKnown: (funcNone, funcCountStar, funcDistinct, funcMax);
+    FunctionKnown: (
+      funcNone, funcCountStar, funcDistinct, funcMax);
     /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
     // - still identifying 'mainfield' in Field index, and setting
     // SubField='.subfield1.subfield2'
@@ -1499,7 +1509,9 @@ end;
 function DateToSQL(Year, Month, Day: Cardinal): RawUTF8;
 begin
   result := '';
-  if (Year = 0) or (Month - 1 > 11) or (Day - 1 > 30) then
+  if (Year = 0) or
+     (Month - 1 > 11) or
+     (Day - 1 > 30) then
     exit;
   FastSetString(result, nil, 13);
   PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
@@ -1549,9 +1561,6 @@ end;
 
 { ************ SQL Parameters Inlining and Processing }
 
-const
-  NULL_LOW = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
-
 function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType;
   out ParamValue: RawUTF8; out wasNull: boolean): PUTF8Char;
 var
@@ -1564,7 +1573,8 @@ begin
   result := nil;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   case P^ of
     '''', '"':
@@ -1641,7 +1651,8 @@ begin
   else
     exit; // invalid content
   end;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if PWord(P)^ <> Ord(')') + Ord(':') shl 8 then
     // we expect finishing with P^ pointing at '):'
@@ -1662,7 +1673,8 @@ begin
   maxParam := 0;
   FillZero(Nulls);
   ppBeg := PosEx(RawUTF8(':('), SQL, 1);
-  if (ppBeg = 0) or (PosEx(RawUTF8('):'), SQL, ppBeg + 2) = 0) then
+  if (ppBeg = 0) or
+     (PosEx(RawUTF8('):'), SQL, ppBeg + 2) = 0) then
   begin
     // SQL code with no valid :(...): internal parameters -> leave maxParam=0
     result := SQL;
@@ -1689,7 +1701,8 @@ begin
     end;
     if wasNull then
       include(Nulls, maxParam);
-    while (P^ <> #0) and (PWord(P)^ <> Ord(':') + Ord('(') shl 8) do
+    while (P^ <> #0) and
+          (PWord(P)^ <> Ord(':') + Ord('(') shl 8) do
     begin
       Gen^ := P^;
       inc(Gen);
@@ -2090,8 +2103,10 @@ procedure TJSONWriter.TrimFirstRow;
 var
   P, PBegin, PEnd: PUTF8Char;
 begin
-  if (self = nil) or not fStream.InheritsFrom(TMemoryStream) or
-     fExpand or (fStartDataPosition = 0) then
+  if (self = nil) or
+     not fStream.InheritsFrom(TMemoryStream) or
+     fExpand or
+     (fStartDataPosition = 0) then
     exit;
   // go to begin of first row
   FlushToStream; // we need the data to be in fStream memory
@@ -2222,7 +2237,8 @@ var
         exit; // end of string before end quote -> incorrect
       RawUTF8ToVariant(Where.Value, Where.ValueVariant);
     end
-    else if (PInteger(P)^ and $DFDFDFDF = NULL_UPP) and (P[4] in [#0..' ', ';']) then
+    else if (PInteger(P)^ and $DFDFDFDF = NULL_UPP) and
+            (P[4] in [#0..' ', ';']) then
     begin
       // NULL statement
       Where.Value := NULL_STR_VAR; // not void
@@ -2244,7 +2260,8 @@ var
       inc(P, 2); // ignore :(...): parameter
     Where.ValueSQLLen := P - Where.ValueSQL;
     P := GotoNextNotSpace(P);
-    if (P^ = ')') and (Where.FunctionName = '') then
+    if (P^ = ')') and
+       (Where.FunctionName = '') then
     begin
       B := P;
       repeat
@@ -2377,7 +2394,8 @@ var
                 exit; // incorrect SQL statement
               B := P; // get the IN() clause as JSON
               inc(P);
-              while (P^ <> ')') or (P[1] = ':') do // handle :(...): within the clause
+              while (P^ <> ')') or
+                    (P[1] = ':') do // handle :(...): within the clause
                 if P^ = #0 then
                   exit
                 else
@@ -2410,7 +2428,8 @@ label
   lim, lim2;
 begin
   P := pointer(SQL);
-  if (P = nil) or (self = nil) then
+  if (P = nil) or
+     (self = nil) then
     exit; // avoid GPF
   P := GotoNextNotSpace(P); // trim left
   if not IdemPChar(P, 'SELECT ') then
@@ -2494,8 +2513,9 @@ begin
             FunctionName := UpperCase(Prop);
             // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
             len := length(Prop);
-            if (len > 16) and IdemPropName('DynArrayContains',
-                PUTF8Char(@PByteArray(Prop)[len - 16]), 16) then
+            if (len > 16) and
+               IdemPropName('DynArrayContains',
+                 PUTF8Char(@PByteArray(Prop)[len - 16]), 16) then
               Operator := opContains
             else
               Operator := opFunction;
@@ -2507,7 +2527,9 @@ begin
               break
             else
               P := GotoNextNotSpace(P + 1);
-            if (P^ = ')') or (GetWhereValue(fWhere[whereCount]) and (P^ = ')')) then
+            if (P^ = ')') or
+               (GetWhereValue(fWhere[whereCount]) and
+                (P^ = ')')) then
             begin
               inc(P);
               break;
@@ -2533,7 +2555,8 @@ begin
     until false;
     // 4. get optional LIMIT/OFFSET/ORDER clause
 lim:P := GotoNextNotSpace(P);
-    while (P <> nil) and not (P^ in [#0, ';']) do
+    while (P <> nil) and
+          not (P^ in [#0, ';']) do
     begin
       GetNextFieldProp(P, Prop);
 lim2: if IdemPropNameU(Prop, 'LIMIT') then
@@ -2610,7 +2633,8 @@ begin
       withID := true
     else
       include(Fields, f^.Field - 1);
-    if (SubFields <> nil) and fHasSelectSubFields then
+    if (SubFields <> nil) and
+       fHasSelectSubFields then
       SubFields^[f^.Field] := f^.SubField;
     inc(f);
   end;

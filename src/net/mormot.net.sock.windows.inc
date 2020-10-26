@@ -555,7 +555,7 @@ end;
 { ******************** Efficient Multiple Sockets Polling }
 
 function FD_ISSET(Socket: TNetSocket; const FDSet: TFDSet): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   result := PtrUIntScanExists(@FDSet.fd_array, FDSet.fd_count, PtrUInt(Socket));
 end;
@@ -996,7 +996,8 @@ begin
   len := 0;
   SetLength(tmp, 65536);
   res := SEC_I_CONTINUE_NEEDED;
-  while (res = SEC_I_CONTINUE_NEEDED) or (res = SEC_E_INCOMPLETE_MESSAGE) do
+  while (res = SEC_I_CONTINUE_NEEDED) or
+        (res = SEC_E_INCOMPLETE_MESSAGE) do
   begin
     if res <> SEC_E_INCOMPLETE_MESSAGE then
       len := 0;

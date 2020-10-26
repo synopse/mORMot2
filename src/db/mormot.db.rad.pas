@@ -453,7 +453,8 @@ begin
   begin
     repeat
       dec(P)
-    until (P^ <> ord('0')) or (P = @ADest);
+    until (P^ <> ord('0')) or
+          (P = @ADest);
     PEnd := pointer(P);
     if PEnd^ <> '.' then
       inc(PEnd);
@@ -463,7 +464,8 @@ begin
   PEnd^ := #0;
   // remove leading 0
   PBeg := @ADest;
-  while (PBeg[0] = '0') and (PBeg[1] in ['0'..'9']) do
+  while (PBeg[0] = '0') and
+        (PBeg[1] in ['0'..'9']) do
     inc(PBeg);
   result := PEnd - PBeg;
 end;

@@ -117,7 +117,7 @@ type
   /// a CPU-dependent unsigned integer type cast of a pointer / register
   // - used for 64-bit compatibility, native under Free Pascal Compiler
   PtrUInt = cardinal;
-  {$endif}
+  {$endif CPU64}
   /// a CPU-dependent unsigned integer type cast of a pointer of pointer
   // - used for 64-bit compatibility, native under Free Pascal Compiler
   PPtrUInt = ^PtrUInt;
@@ -172,7 +172,7 @@ type
   RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
   {$else}
   RawUnicode = type AnsiString;
-  {$endif}
+  {$endif HASCODEPAGE}
 
   /// RawUTF8 is an UTF-8 String stored in an AnsiString
   // - use this type instead of System.UTF8String, which behavior changed
@@ -184,7 +184,7 @@ type
   RawUTF8 = type AnsiString(CP_UTF8); // Codepage for an UTF8 string
   {$else}
   RawUTF8 = type AnsiString;
-  {$endif}
+  {$endif HASCODEPAGE}
 
   /// WinAnsiString is a WinAnsi-encoded AnsiString (code page 1252)
   // - use this type instead of System.String, which behavior changed
@@ -201,7 +201,7 @@ type
   {$ifdef FPC}
   // missing declaration
   PRawByteString = ^RawByteString;
-  {$endif}
+  {$endif FPC}
   {$else}
   /// define RawByteString, as it does exist in Delphi 2009+
   // - to be used for byte storage into an AnsiString
@@ -211,7 +211,7 @@ type
   RawByteString = type AnsiString;
   /// pointer to a RawByteString
   PRawByteString = ^RawByteString;
-  {$endif}
+  {$endif HASCODEPAGE}
 
   /// RawJSON will indicate that this variable content would stay in raw JSON
   // - i.e. won't be serialized into values
@@ -355,6 +355,7 @@ type
   TSynUnicodeDynArray = array of SynUnicode;
   PSynUnicodeDynArray = ^TSynUnicodeDynArray;
   TGUIDDynArray = array of TGUID;
+  PGUIDDynArray = array of PGUID;
 
   PObject = ^TObject;
   PClass = ^TClass;
@@ -467,7 +468,7 @@ type
       elemSize: Word;
       {$ifdef CPU64}
       _PaddingToQWord: DWord;
-      {$endif}
+      {$endif CPU64}
     {$endif HASCODEPAGE}
       refCnt: TRefCnt; // =SizeInt
       length: TStrLen;
@@ -489,7 +490,7 @@ type
       {$ifdef CPU64}
       /// padding bytes for 16 byte alignment of the header
       _Padding: LongInt;
-      {$endif}
+      {$endif CPU64}
       /// the string code page - e.g. CP_UTF8 for RawUTF8
       codePage: Word;
       /// 1 for AnsiString/RawByteString/RawUTF8, 2 for UnicodeString
@@ -638,12 +639,12 @@ function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
 /// direct conversion of an ANSI-7 shortstring into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
 function ShortStringToAnsi7String(const source: shortstring): RawByteString; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of an ANSI-7 shortstring into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
 procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// simple concatenation of a 32-bit integer as text into a shorstring
 procedure AppendShortInteger(value: integer; var dest: shortstring);
@@ -791,70 +792,70 @@ const
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure CurrencyToDouble(const c: currency; out d: double); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a currency value pointer into a double
 // - using PInt64() division by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure CurrencyToDouble(c: PCurrency; out d: double); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a currency value pointer into a double
 // - using PInt64() division by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 function CurrencyToDouble(c: PCurrency): double; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a variant value from a currency value
 // - as compatible with VariantToCurrency/VariantToDouble
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure CurrencyToVariant(const c: currency; var v: variant);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a double value into a currency
 // - using truncated multiplication by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure DoubleToCurrency(const d: double; out c: currency); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a double value into a currency
 // - using truncated multiplication by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure DoubleToCurrency(const d: double; c: PCurrency); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a double value into a currency
 // - using truncated multiplication by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 function DoubleToCurrency(const d: double): currency; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a currency value into a Int64
 // - using PInt64() division by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure CurrencyToInt64(c: PCurrency; var i: Int64); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Int64 value into a currency
 // - using multiplication by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure Int64ToCurrency(const i: Int64; out c: currency); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Int64 value into a currency
 // - using multiplication by CURR_RES (=10000)
 // - warning: FPC Win64 to Win32 cross-compiler doesn't support currency
 // values properly -> use FPC Win32 compiler only on Windows
 procedure Int64ToCurrency(const i: Int64; c: PCurrency); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// no banker rounding into two digits after the decimal point
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
@@ -2019,12 +2020,13 @@ const
 
   /// constant array used by GetAllBits() function (when inlined)
   ALLBITS_CARDINAL: array[1..32] of Cardinal = (
-    1 shl 1-1, 1 shl 2-1, 1 shl 3-1, 1 shl 4-1, 1 shl 5-1, 1 shl 6-1,
-    1 shl 7-1, 1 shl 8-1, 1 shl 9-1, 1 shl 10-1, 1 shl 11-1, 1 shl 12-1,
-    1 shl 13-1, 1 shl 14-1, 1 shl 15-1, 1 shl 16-1, 1 shl 17-1, 1 shl 18-1,
-    1 shl 19-1, 1 shl 20-1, 1 shl 21-1, 1 shl 22-1, 1 shl 23-1, 1 shl 24-1,
-    1 shl 25-1, 1 shl 26-1, 1 shl 27-1, 1 shl 28-1, 1 shl 29-1, 1 shl 30-1,
-    $7fffffff, $ffffffff);
+    1 shl  1 - 1, 1 shl  2 - 1, 1 shl  3 - 1, 1 shl  4 - 1, 1 shl  5 - 1,
+    1 shl  6 - 1, 1 shl  7 - 1, 1 shl  8 - 1, 1 shl  9 - 1, 1 shl 10 - 1,
+    1 shl 11 - 1, 1 shl 12 - 1, 1 shl 13 - 1, 1 shl 14 - 1, 1 shl 15 - 1,
+    1 shl 16 - 1, 1 shl 17 - 1, 1 shl 18 - 1, 1 shl 19 - 1, 1 shl 20 - 1,
+    1 shl 21 - 1, 1 shl 22 - 1, 1 shl 23 - 1, 1 shl 24 - 1, 1 shl 25 - 1,
+    1 shl 26 - 1, 1 shl 27 - 1, 1 shl 28 - 1, 1 shl 29 - 1, 1 shl 30 - 1,
+    $7fffffff,    $ffffffff);
 
 /// returns TRUE if all BitCount bits are set in the input 32-bit cardinal
 function GetAllBits(Bits, BitCount: cardinal): boolean;
@@ -2219,18 +2221,20 @@ function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef CPUX86}
-/// low-level function used when inlining PosEx()
+/// low-level efficient pure pascal function used when inlining PosEx()
+// - not to be called directly
 function PosExPas(pSub, p: PUTF8Char; Offset: PtrUInt): PtrInt;
 {$endif CPUX86}
+
+{$ifdef UNICODE}
+/// low-level efficient pure pascal function used when inlining PosExString()
+// - not to be called directly
+function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
+{$endif UNICODE}
 
 /// faster RawUTF8 Equivalent of standard StrUtils.PosEx
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): PtrInt;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
-
-{$ifdef UNICODE}
-/// low-level function used when inlining PosExString()
-function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
-{$endif UNICODE}
 
 /// our own PosEx() function dedicated to VCL/LCL string process
 // - Delphi XE or older don't support Pos() with an Offset
@@ -2242,10 +2246,17 @@ function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast dedicated RawUTF8 version of Trim()
+// - in the middle of VCL code, consider using TrimU() which won't have name
+// collision ambiguity as with SysUtils' homonymous function
 function Trim(const S: RawUTF8): RawUTF8;
 
+/// fast dedicated RawUTF8 version of Trim()
+// - could be used if overloaded Trim() from SysUtils.pas is ambiguous
+function TrimU(const S: RawUTF8): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
+
 // single-allocation (therefore faster) alternative to Trim(copy())
-procedure TrimCopy(const S: RawUTF8; start,count: PtrInt;
+procedure TrimCopy(const S: RawUTF8; start, count: PtrInt;
   out result: RawUTF8);
 
 /// returns the left part of a RawUTF8 string, according to SepStr separator
@@ -2259,7 +2270,7 @@ function StrComp(Str1, Str2: pointer): PtrInt;
 
 /// our fast version of StrComp(), to be used with PWideChar
 function StrCompW(Str1, Str2: PWideChar): PtrInt;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// simple version of StrLen(), but which will never read beyond the string
 // - this version won't access the memory beyond the string, so may be
@@ -2280,7 +2291,7 @@ function StrLenW(S: PWideChar): PtrInt;
 // - source is expected to be not nil
 // - returns the beginning of next line, or nil if source^=#0 was reached
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// return TRUE if the supplied buffer only contains 7-bits Ansi characters
 function IsAnsiCompatible(PC: PAnsiChar): boolean; overload;
@@ -2293,7 +2304,7 @@ function IsAnsiCompatibleW(PW: PWideChar): boolean; overload;
 
 /// return TRUE if the supplied text only contains 7-bits Ansi characters
 function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
 function IsAnsiCompatibleW(PW: PWideChar; Len: PtrInt): boolean; overload;
@@ -2451,7 +2462,7 @@ procedure MultiEventMerge(var DestList; const ToBeAddedList);
 
 /// compare two TMethod instances
 function EventEquals(const eventA, eventB): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
@@ -2695,7 +2706,7 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
 /// shuffle a 32-bit value using the last stage of xxHash32 algorithm
 // - is a cascade of binary shifts and multiplications by prime numbers
 function xxHash32Mixup(crc: cardinal): cardinal;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 var
   /// the default hasher used by TDynArrayHashed
@@ -2714,7 +2725,7 @@ type
 
 /// get maximum possible (worse) SynLZ compressed size
 function SynLZcompressdestlen(in_len: integer): integer;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// get exact uncompressed size from SynLZ-compressed buffer (to reserve memory, e.g.)
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
@@ -2805,7 +2816,7 @@ procedure VarClear(var v: variant); inline;
 
 /// same as Value := Null, but slightly faster
 procedure SetVariantNull(var Value: variant);
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a raw binary buffer into a variant RawByteString varString
 // - you can then use VariantToRawByteString() to retrieve the binary content
@@ -2823,26 +2834,26 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 /// get the root PVarData of a variant, redirecting any varByRef
 // - if result^.VPointer=nil, returns varEmpty
 function VarDataFromVariant(const Value: variant): PVarData;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
 function VarIsEmptyOrNull(const V: Variant): Boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(PVariant(V)^) or VarIsEmpty(PVariant(V)^), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
 function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as Dest := TVarData(Source) for simple values
 // - will return TRUE for all simple values after varByRef unreference, and
 // copying the unreferenced Source value into Dest raw storage
 // - will return FALSE for not varByRef values, or complex values (e.g. string)
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any numerical Variant into a 32-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
@@ -2892,7 +2903,7 @@ function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
 /// internal efficient wrapper of VarClear() + set VType=varString and VAny=nil
 // - used e.g. by RawUTF8ToVariant() functions
 procedure ClearVariantForString(var Value: variant);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Variant varString value into RawUTF8 encoded String
 // - works as the exact reverse of RawUTF8ToVariant() function
@@ -3025,7 +3036,7 @@ function SortDynArrayFileName(const A, B): integer;
 /// low-level inlined function for exchanging two pointers
 // - used e.g. during sorting process
 procedure ExchgPointer(n1, n2: PPointer);
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level inlined function for exchanging two variants
 // - used e.g. during sorting process
@@ -3035,7 +3046,7 @@ procedure ExchgVariant(v1, v2: PPtrIntArray);
 /// low-level inlined function for exchanging two memory buffers
 // - used e.g. during sorting process
 procedure Exchg(P1, P2: PAnsiChar; count: PtrInt);
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************ Some Convenient TStream descendants and File access functions }
@@ -3259,6 +3270,12 @@ const
   // - the OutCustomHeader should contain the proper 'Content-type: ....'
   // corresponding to the file (e.g. by calling GetMimeContentType() function)
   STATICFILE_CONTENT_TYPE = '!STATICFILE';
+
+  /// internal HTTP content-type Header for efficient static file sending
+  STATICFILE_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + STATICFILE_CONTENT_TYPE;
+
+  /// uppercase version of HTTP header for static file content serving
+  STATICFILE_CONTENT_TYPE_HEADER_UPPPER = HEADER_CONTENT_TYPE_UPPER + STATICFILE_CONTENT_TYPE;
 
   /// used to notify e.g. the THttpServerRequest not to wait for any response
   // from the client
@@ -4290,7 +4307,8 @@ begin
   result := 0;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ = '-' then
   begin
@@ -4343,7 +4361,8 @@ begin
   result := 0;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ = '+' then
     repeat
@@ -4390,7 +4409,8 @@ begin
   result := 0;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ = '-' then
   begin
@@ -4470,7 +4490,8 @@ begin
   result := 0;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   c := byte(P^) - 48;
   if c > 9 then
@@ -4558,7 +4579,7 @@ const
     1E29,  1E30,  1E31,  0,     -1);
 
 function HugePower10(exponent: integer): TSynExtended;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   e: TSynExtended;
 begin
@@ -6124,24 +6145,31 @@ begin
   o := 0;
   n := 0;
   repeat
-    while (n < newn) and (o < oldn) and (old[o] = new[n]) do
+    while (n < newn) and
+          (o < oldn) and
+          (old[o] = new[n]) do
     begin
       inc(o);
       inc(n);
     end;
-    while (o < oldn) and ((n >= newn) or (old[o] < new[n])) do
+    while (o < oldn) and
+          ((n >= newn) or
+           (old[o] < new[n])) do
     begin
       if Assigned(deleted) then
         deleted(sender, old[o]);
       inc(o);
     end;
-    while (n < newn) and ((o >= oldn) or (new[n] < old[o])) do
+    while (n < newn) and
+          ((o >= oldn) or
+           (new[n] < old[o])) do
     begin
       if Assigned(added) then
         added(sender, new[n]);
       inc(n);
     end;
-  until (o >= oldn) and (n >= newn);
+  until (o >= oldn) and
+        (n >= newn);
 end;
 
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
@@ -6314,7 +6342,8 @@ begin
       else
         R := i - 1;
     until L > R;
-    while (i >= 0) and (P^[i] >= Value) do
+    while (i >= 0) and
+          (P^[i] >= Value) do
       dec(i);
     result := i + 1; // return the index where to insert
   end;
@@ -6341,8 +6370,9 @@ begin
         L := result + 1
       else
         R := result - 1;
-    until (L > R);
-    while (result >= 0) and (P^[result] >= Value) do
+    until L > R;
+    while (result >= 0) and
+          (P^[result] >= Value) do
       dec(result);
     result := result + 1; // return the index where to insert
   end;
@@ -6494,7 +6524,7 @@ begin
     result[i] := Values[i];
 end;
 
-procedure Exchg32(var A, B: integer); {$ifdef HASINLINE} inline; {$endif}
+procedure Exchg32(var A, B: integer); {$ifdef HASINLINE}inline;{$endif}
 var
   tmp: integer;
 begin
@@ -7242,7 +7272,8 @@ begin
   repeat
     d := s;
     ReadBarrier;
-  until (d.L = s.L) and (d.H = s.H);
+  until (d.L = s.L) and
+        (d.H = s.H);
 end;
 
 procedure RCU(var src, dst; len: integer);
@@ -7635,18 +7666,27 @@ var
 begin
   L := Length(S);
   I := 1;
-  while (I <= L) and (S[I] <= ' ') do
+  while (I <= L) and
+        (S[I] <= ' ') do
     inc(I);
   if I > L then
+    // void string
     FastAssignNew(result)
   else if (I = 1) and (S[L] > ' ') then
+    // nothing to trim: reference counted copy
     result := S
   else
   begin
+    // allocate a new trimmed UTF-8 string
     while S[L] <= ' ' do
       dec(L);
     result := Copy(S, I, L - I + 1);
   end;
+end;
+
+function TrimU(const S: RawUTF8): RawUTF8;
+begin
+  result := Trim(S);
 end;
 
 procedure TrimCopy(const S: RawUTF8; start, count: PtrInt;
@@ -7659,7 +7699,8 @@ begin
   if start <= 0 then
     start := 1;
   L := Length(S);
-  while (start <= L) and (S[start] <= ' ') do
+  while (start <= L) and
+        (S[start] <= ' ') do
   begin
     inc(start);
     dec(count);
@@ -7843,8 +7884,9 @@ var
 begin
   i := length(FileName);
   max := i - 16;
-  while (i > 0) and not (cardinal(FileName[i]) in
-     [ord('\'), ord('/'), ord('.')]) and (i >= max) do
+  while (i > 0) and
+        not (cardinal(FileName[i]) in [ord('\'), ord('/'), ord('.')]) and
+        (i >= max) do
     dec(i);
   if (i = 0) or (FileName[i] <> '.') then
   begin
@@ -7962,7 +8004,9 @@ begin
     rs1 := rs1 xor e.c0 xor e.c3;
     rs2 := rs2 xor e.c1;
     rs3 := rs3 xor e.c2;
-  until (rs1 > 1) and (rs2 > 7) and (rs3 > 15);
+  until (rs1 > 1) and
+        (rs2 > 7) and
+        (rs3 > 15);
   seedcount := 1;
   for i := 1 to e.i3 and 15 do
     Next; // warm up
@@ -7970,8 +8014,8 @@ end;
 
 function TLecuyer.Next: cardinal;
 begin
-  if word(seedcount) = 0 then // reseed at startup, and after 256KB of output
-    Seed(nil, 0)
+  if word(seedcount) = 0 then
+    Seed(nil, 0) // reseed at startup, and after 256KB of output
   else
     inc(seedcount);
   result := rs1;
@@ -8044,7 +8088,7 @@ end;
 function MultiEventAdd(var EventList; const Event: TMethod): boolean;
 var
   Events: TMethodDynArray absolute EventList;
-  n: integer;
+  n: PtrInt;
 begin
   result := false;
   n := MultiEventFind(EventList, Event);
@@ -8079,7 +8123,7 @@ procedure MultiEventMerge(var DestList; const ToBeAddedList);
 var
   Dest: TMethodDynArray absolute DestList;
   New: TMethodDynArray absolute ToBeAddedList;
-  d, n: integer;
+  d, n: PtrInt;
 begin
   d := length(Dest);
   n := length(New);
@@ -8130,10 +8174,12 @@ begin
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PIntegerArray(@CpuFeatures)^[4] := regs.edx;
-  {$ifdef DISABLE_SSE42} // paranoid execution on Darwin x64 (as reported by alf)
+  {$ifdef DISABLE_SSE42}
+  // paranoid basic execution on Darwin x64 (as reported by alf)
   CpuFeatures := CpuFeatures - [cfSSE42, cfAESNI, cfAVX, cfAVX2, cfFMA];
   {$else}
   if not (cfOSXS in CpuFeatures) or not IsXmmYmmOSEnabled then
+    // available on the CPU, but not supported at OS level during context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
   {$endif DISABLE_SSE42}
   {$ifdef ASMX64}
@@ -8599,7 +8645,8 @@ begin
         tmax := src_end - src - 1;
         if tmax >= (255 + 16) then
           tmax := (255 + 16);
-        while (o[t] = src[t]) and (t < tmax) do
+        while (o[t] = src[t]) and
+              (t < tmax) do
           inc(t);
         inc(src, t);
         h := h shl 4;
@@ -8677,7 +8724,7 @@ var
   last_hashed: PAnsiChar; // initial src and dst value
   {$ifdef CPU64}
   o: PAnsiChar;
-  {$endif}
+  {$endif CPU64}
   CW, CWbit: cardinal;
   v, t, h: PtrUInt;
 label
@@ -8735,7 +8782,7 @@ nextCW:
           MoveFast(offset[h]^, dst^, t)
         else
           PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
-        {$endif}
+        {$endif CPU64}
         if src >= src_end then
           break;
         if last_hashed < dst then
@@ -8781,7 +8828,7 @@ var
   v, t, h: PtrUInt;
   {$ifdef CPU64}
   o: PAnsiChar;
-  {$endif}
+  {$endif CPU64}
 label
   nextCW;
 begin
@@ -8838,7 +8885,7 @@ nextCW:
           MoveSmall(offset[h], dst, t)
         else
           MoveFast(offset[h]^, dst^, t);
-        {$endif}
+        {$endif CPU64}
         if src >= src_end then
           break;
         if last_hashed < dst then
@@ -9093,7 +9140,7 @@ begin
     {$else}
     if (PCardinalArray(P)^[0] <> 0) or (PCardinalArray(P)^[1] <> 0) or
        (PCardinalArray(P)^[2] <> 0) or (PCardinalArray(P)^[3] <> 0) then
-    {$endif}
+    {$endif CPU64}
         exit
       else
         inc(PByte(P), 16);
@@ -9754,7 +9801,7 @@ begin
 end;
 
 function SetVarDataUnRefSimpleValue(V: PVarData; var tmp: TVarData): PVarData;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   typ: cardinal;
 begin
@@ -10601,6 +10648,7 @@ begin
   TestIntelCpuFeatures;
   {$endif CPUINTEL}
 end;
+
 
 initialization
   InitializeUnit;

@@ -836,9 +836,11 @@ begin
     raise ESQLDBRemote.CreateUTF8('%.RemoteProcessMessage(connection=nil)', [self]);
   msgInput := HandleInput(Input);
   header := pointer(msgInput);
-  if (header = nil) or (header.Magic <> REMOTE_MAGIC) then
+  if (header = nil) or
+     (header.Magic <> REMOTE_MAGIC) then
     raise ESQLDBRemote.CreateUTF8('Wrong %.RemoteProcessMessage() input', [self]);
-  if (Authenticate <> nil) and (Authenticate.UsersCount > 0) and
+  if (Authenticate <> nil) and
+     (Authenticate.UsersCount > 0) and
      not (header.Command in [cGetToken, cGetDBMS]) then
     if not Authenticate.SessionExists(header.SessionID) then
       raise ESQLDBRemote.Create('You do not have the right to be here');
@@ -852,7 +854,8 @@ begin
       cGetDBMS:
         begin
           session := 0;
-          if (Authenticate <> nil) and (Authenticate.UsersCount > 0) then
+          if (Authenticate <> nil) and
+             (Authenticate.UsersCount > 0) then
           begin
             GetNextItem(PUTF8Char(O), #1, user);
             session := Authenticate.CreateSession(user, PCardinal(O)^);
@@ -1087,7 +1090,8 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   ProcessMessage(fProtocol.HandleOutput(msgInput), msgRaw);
   msgOutput := fProtocol.HandleInput(msgRaw);
   outheader := pointer(msgOutput);
-  if (outheader = nil) or (outheader.Magic <> REMOTE_MAGIC) then
+  if (outheader = nil) or
+     (outheader.Magic <> REMOTE_MAGIC) then
     raise ESQLDBRemote.CreateUTF8('Wrong %.Process() returned content', [self]);
   O := pointer(msgOutput);
   inc(O, sizeof(header));
@@ -1379,7 +1383,8 @@ end;
 
 function TSQLDBProxyStatementAbstract.ColumnData(Col: integer): pointer;
 begin
-  if (fDataCurrentRowValues <> nil) and (cardinal(Col) < cardinal(fColumnCount)) then
+  if (fDataCurrentRowValues <> nil) and
+     (cardinal(Col) < cardinal(fColumnCount)) then
     result := fDataCurrentRowValues[Col]
   else
     result := nil;
@@ -1388,7 +1393,8 @@ end;
 function TSQLDBProxyStatementAbstract.ColumnType(Col: integer;
   FieldSize: PInteger): TSQLDBFieldType;
 begin
-  if (fDataRowCount > 0) and (cardinal(Col) < cardinal(fColumnCount)) then
+  if (fDataRowCount > 0) and
+     (cardinal(Col) < cardinal(fColumnCount)) then
     if GetBitPtr(pointer(fDataCurrentRowNull), Col) then
       result := ftNull
     else
@@ -1405,7 +1411,8 @@ end;
 function TSQLDBProxyStatementAbstract.IntColumnType(Col: integer;
   out Data: PByte): TSQLDBFieldType;
 begin
-  if (cardinal(Col) >= cardinal(fColumnCount)) or (fDataCurrentRowValues = nil) then
+  if (cardinal(Col) >= cardinal(fColumnCount)) or
+     (fDataCurrentRowValues = nil) then
     result := ftUnknown
   else
   begin
@@ -1568,7 +1575,8 @@ end;
 procedure TSQLDBProxyStatement.ParamsToCommand(
   var Input: TSQLDBProxyConnectionCommandExecute);
 begin
-  if (fColumnCount > 0) or (fDataInternalCopy <> '') then
+  if (fColumnCount > 0) or
+     (fDataInternalCopy <> '') then
     raise ESQLDBRemote.CreateUTF8('Invalid %.ExecutePrepared* call', [self]);
   Input.SQL := fSQL;
   if length(fParams) <> fParamCount then // strip to only needed memory
@@ -1626,7 +1634,8 @@ end;
 function TSQLDBProxyStatement.FetchAllToBinary(Dest: TStream;
   MaxRowCount: cardinal; DataRowPosition: PCardinalDynArray): cardinal;
 begin
-  if (MaxRowCount > 0) and (MaxRowCount < cardinal(fDataRowCount)) then
+  if (MaxRowCount > 0) and
+     (MaxRowCount < cardinal(fDataRowCount)) then
   begin
     result := inherited FetchAllToBinary(Dest, MaxRowCount, DataRowPosition);
     exit;
@@ -1642,7 +1651,7 @@ function TSQLDBProxyStatement.Step(SeekFirst: boolean): boolean;
 begin // retrieve one row of data from TSQLDBStatement.FetchAllToBinary() format
   if SeekFirst then
     fCurrentRow := 0;
-  if (cardinal(fCurrentRow) >= cardinal(fDataRowCount)) then
+  if cardinal(fCurrentRow) >= cardinal(fDataRowCount) then
   begin
     result := false; // no data was retrieved
     exit;
@@ -1669,7 +1678,8 @@ begin
   inherited Create(nil);
   IntHeaderProcess(Data, DataLen);
   Reader := fDataRowReaderOrigin;
-  if (DataRowPosition <> nil) and (DataRowPosition^ <> nil) then
+  if (DataRowPosition <> nil) and
+     (DataRowPosition^ <> nil) then
   begin
     fRowData := DataRowPosition^; // fast copy-on-write
     if not IgnoreColumnDataSize then
@@ -1767,7 +1777,8 @@ function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequest): cardinal;
 var
   o: RawByteString;
 begin
-  if (Ctxt.Method <> 'POST') or (Ctxt.InContent = '') or
+  if (Ctxt.Method <> 'POST') or
+     (Ctxt.InContent = '') or
      not IdemPropNameU(trim(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
   begin
     result := HTTP_NOTFOUND;

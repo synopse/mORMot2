@@ -637,7 +637,8 @@ implementation
 procedure TSQLDBOleDBStatement.BindTextU(Param: Integer; const Value: RawUTF8;
   IO: TSQLDBParamInOutType);
 begin
-  if (Value = '') and fConnection.Properties.StoreVoidStringAsNull then
+  if (Value = '') and
+     fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
     UTF8ToWideString(Value, CheckParam(Param, ftUTF8, IO)^.VText);
@@ -646,7 +647,8 @@ end;
 procedure TSQLDBOleDBStatement.BindTextP(Param: Integer; Value: PUTF8Char;
   IO: TSQLDBParamInOutType);
 begin
-  if (Value = '') and fConnection.Properties.StoreVoidStringAsNull then
+  if (Value = '') and
+     fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
     UTF8ToWideString(Value, StrLen(Value), CheckParam(Param, ftUTF8, IO)^.VText);
@@ -655,7 +657,8 @@ end;
 procedure TSQLDBOleDBStatement.BindTextS(Param: Integer; const Value: string;
   IO: TSQLDBParamInOutType);
 begin
-  if (Value = '') and fConnection.Properties.StoreVoidStringAsNull then
+  if (Value = '') and
+     fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
     CheckParam(Param, ftUTF8, IO)^.VText := StringToSynUnicode(Value);
@@ -664,7 +667,8 @@ end;
 procedure TSQLDBOleDBStatement.BindTextW(Param: Integer; const Value: WideString;
   IO: TSQLDBParamInOutType);
 begin
-  if (Value = '') and fConnection.Properties.StoreVoidStringAsNull then
+  if (Value = '') and
+     fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
     CheckParam(Param, ftUTF8, IO)^.VText := Value;
@@ -754,8 +758,10 @@ function TSQLDBOleDBStatement.CheckParam(Param: Integer; NewType: TSQLDBFieldTyp
 begin
   result := CheckParam(Param, NewType, IO);
   if (NewType in [ftUnknown, ftNull]) or
-     (fConnection.Properties.BatchSendingAbilities * [cCreate, cUpdate, cDelete] = []) then
-    raise ESQLDBException.CreateUTF8('Invalid call to %s.BindArray(Param=%d,Type=%s)',
+     (fConnection.Properties.BatchSendingAbilities *
+       [cCreate, cUpdate, cDelete] = []) then
+    raise ESQLDBException.CreateUTF8(
+      'Invalid call to %s.BindArray(Param=%d,Type=%s)',
       [self, Param, TSQLDBFieldTypeToString(NewType)]);
   SetLength(result^.VArray, ArrayCount);
   result^.VInt64 := ArrayCount;
@@ -1222,7 +1228,8 @@ begin
   end;
   L := Length(fSQL);
   if StripSemicolon then
-    while (L > 0) and (fSQL[L] in [#1..' ', ';']) do
+    while (L > 0) and
+          (fSQL[L] in [#1..' ', ';']) do
       dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
   SetLength(SQLW, L * 2 + 1);
   UTF8ToWideChar(pointer(SQLW), pointer(fSQL), L);
@@ -1620,7 +1627,8 @@ begin
     fColumn.Capacity := nCols;
     for i := 1 to nCols do
     begin
-      if (nfo^.pwszName = nil) or (nfo^.pwszName^ = #0) then
+      if (nfo^.pwszName = nil) or
+         (nfo^.pwszName^ = #0) then
         aName := 'col_' + Int32ToUTF8(i)
       else
         aName := RawUnicodeToUtf8(nfo^.pwszName, StrLenW(nfo^.pwszName));
@@ -2021,7 +2029,8 @@ begin
         count := 0;
         schemaCol := ColumnIndex('TABLE_SCHEMA');
         nameCol := ColumnIndex('TABLE_NAME');
-        if (schemaCol >= 0) and (nameCol >= 0) then
+        if (schemaCol >= 0) and
+           (nameCol >= 0) then
           while Step do
           begin
             schema := Trim(ColumnUTF8(schemaCol));
@@ -2147,7 +2156,8 @@ var
   Args: array of Variant;
 begin
   result := false;
-  if (self = nil) or (high(Fields) < 0) then
+  if (self = nil) or
+     (high(Fields) < 0) then
     exit;
   C := MainConnection as TSQLDBOleDBConnection;
   if C.fSession = nil then
@@ -2271,7 +2281,8 @@ var
   utf8: RawUTF8;
 begin
   result := False;
-  if (self = nil) or (Connection = nil) then
+  if (self = nil) or
+     (Connection = nil) then
     exit;
   ErrorRecords.GetCustomErrorObject(RecordNum, IID_ISQLServerErrorInfo, IUnknown
     (SQLServerErrorInfo));

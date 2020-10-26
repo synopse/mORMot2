@@ -475,7 +475,8 @@ type
 function ExceptionInheritsFrom(E: TClass; const Name: ShortString): boolean;
 begin
   result := true;
-  while (E <> nil) and (E <> Exception) do
+  while (E <> nil) and
+        (E <> Exception) do
     if PropNameEquals(PPointer(PtrInt(E) + vmtClassName)^, @Name) then
       exit
     else
@@ -637,6 +638,9 @@ end;
 
 {$endif NOEXCEPTIONINTERCEPT}
 
+const
+  STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
+
 type
   TProcessMemoryCounters = record
     cb: DWORD;
@@ -732,7 +736,8 @@ var
 begin
   Len := FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_ARGUMENT_ARRAY,
     nil, error, 0, Buffer{%H-}, SizeOf(Buffer), nil);
-  while (Len > 0) and (ord(Buffer[Len - 1]) in [0..32, ord('.')]) do
+  while (Len > 0) and
+        (ord(Buffer[Len - 1]) in [0..32, ord('.')]) do
     dec(Len);
   RawUnicodeToUtf8(Buffer, Len, result);
 end;

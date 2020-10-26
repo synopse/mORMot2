@@ -753,7 +753,7 @@ destructor TBaseAggregatingRowset.Destroy;
 var
   pIAccessor: IAccessor;
 begin
-  if (fhAccessor[0] <> 0) then
+  if fhAccessor[0] <> 0 then
   begin
     pIAccessor := nil;
     OleCheck(fUnkInnerSQLNCLIRowset.QueryInterface(IID_IAccessor, pIAccessor));

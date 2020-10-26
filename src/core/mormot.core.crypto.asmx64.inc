@@ -20,7 +20,8 @@ procedure aesencryptasm(const ctxt: TAESContext; bi, bo: PWA4);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         .noframe
-{$endif} // rolled optimized encryption asm version by A. Bouchez
+{$endif}
+        // rolled optimized encryption asm version by A. Bouchez
         push    r15
         push    r14
         push    r13
@@ -208,7 +209,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         {$else}
         push    rsi   // Win64 expects those registers to be preserved
         push    rdi
-        {$endif}
+        {$endif LINUX}
         push    rbp
         push    r13
         push    r14
@@ -222,7 +223,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  [rsp + 60H], xmm10
         movaps  [rsp + 70H], xmm11
         movaps  [rsp + 80H], xmm12
-        {$endif}
+        {$endif LINUX}
         shl     r8, 6
         je      @done
         add     r8, rcx
@@ -1130,7 +1131,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm10, [rsp + 60H]
         movaps  xmm11, [rsp + 70H]
         movaps  xmm12, [rsp + 80H]
-        {$endif}
+        {$endif LINUX}
         add     rsp, STACK_SIZE
         pop     r15
         pop     r14
@@ -1139,7 +1140,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         {$ifndef LINUX}
         pop     rdi
         pop     rsi
-        {$endif}
+        {$endif LINUX}
         pop     rbx
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -2822,7 +2823,7 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
 
 // defined in mormot.core.crypto.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base
-// crc32c x86_64 asm is alredy fast enough
+// crc32c x86_64 asm is alredy fast enough)
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal;
   {$ifdef FPC}cdecl;{$endif} external;
 
@@ -2845,10 +2846,15 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         ret
 @sml:   shr     len, 3
         jz      @2
-{$ifdef FPC} align 16
-@s:     crc32   rax, qword [buf] // hash 8 bytes per loop
-{$else} @s:     db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
-{$endif}add     buf, 8
+{$ifdef FPC}
+        align   16
+        // hash 8 bytes per loop
+@s:     crc32   rax, qword [buf]
+{$else} .align  16
+        // circumvent Delphi inline asm compiler bug
+@s:     db $F2,$48,$0F,$38,$F1,$02
+{$endif FPC}
+        add     buf, 8
         dec     len
         jnz     @s
 @2:     test    cl, 4

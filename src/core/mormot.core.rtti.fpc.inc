@@ -165,9 +165,9 @@ begin
     result := result^.EnumBaseType;
 end;
 
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 begin
-  result := PRttiInfo(aTypeInfo)^.EnumBaseType.GetEnumNameOrd(aIndex);
+  result := aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex);
 end;
 
 

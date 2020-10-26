@@ -131,7 +131,7 @@ end;
 
 {$ifdef CPUX86} // Delphi is not efficient when inlining code :(
 
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
   {$ifdef FPC}nostackframe; assembler; {$endif}
 asm // eax=aTypeInfo edx=aIndex
         test    eax, eax
@@ -176,7 +176,7 @@ end;
 
 {$else}
 
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 begin
   if PRttiKind(aTypeInfo)^ = rkEnumeration then
     with GetTypeData(aTypeInfo).BaseType^^ do

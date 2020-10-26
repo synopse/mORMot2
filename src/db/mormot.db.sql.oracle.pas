@@ -588,7 +588,8 @@ end;
 destructor TSQLDBOracleConnection.Destroy;
 begin
   inherited Destroy;
-  if (OCI <> nil) and (fEnv <> nil) then
+  if (OCI <> nil) and
+     (fEnv <> nil) then
     OCI.HandleFree(fEnv, OCI_HTYPE_ENV);
 end;
 
@@ -597,7 +598,8 @@ begin
   try
     inherited Disconnect; // flush any cached statement
   finally
-    if (fError <> nil) and (OCI <> nil) then
+    if (fError <> nil) and
+       (OCI <> nil) then
       with SynDBLog.Enter(self, 'Disconnect'), OCI do
       begin
         if fTrans <> nil then
@@ -679,8 +681,9 @@ begin
   except
     on E: Exception do
     begin
-      if (Properties as TSQLDBOracleConnectionProperties).IgnoreORA01453OnStartTransaction
-        and (Pos('ORA-01453', E.Message) > 0) then
+      if (Properties as TSQLDBOracleConnectionProperties).
+          IgnoreORA01453OnStartTransaction and
+         (Pos('ORA-01453', E.Message) > 0) then
       begin
         if log <> nil then
           log.Log(sllWarning, 'It seems that we use DBLink, and Oracle ' +
@@ -702,8 +705,10 @@ var
   L: integer;
 begin
   L := StrLen(PUTF8Char(P));
-  if (L = 0) or (ColumnDBCharSet = OCI_AL32UTF8) or (ColumnDBCharSet = OCI_UTF8)
-    or (ColumnDBForm = SQLCS_NCHAR) then
+  if (L = 0) or
+     (ColumnDBCharSet = OCI_AL32UTF8) or
+     (ColumnDBCharSet = OCI_UTF8) or
+     (ColumnDBForm = SQLCS_NCHAR) then
     FastSetString(result, P, L)
   else
     result := fAnsiConvert.AnsiBufferToRawUTF8(P, L);
@@ -717,7 +722,8 @@ var
 begin
   L := StrLen(PUTF8Char(P));
   if (L = 0) or
-     ((ColumnDBCharSet <> OCI_AL32UTF8) and (ColumnDBCharSet <> OCI_UTF8) and
+     ((ColumnDBCharSet <> OCI_AL32UTF8) and
+      (ColumnDBCharSet <> OCI_UTF8) and
       (ColumnDBForm <> SQLCS_NCHAR) and
       (fAnsiConvert.CodePage = cardinal(Unicode_CodePage))) then
     SetString(result, P, L)
@@ -912,7 +918,8 @@ begin
         WR.AddFieldName(ColumnName); // add '"ColumnName":'
       indicator := PSmallIntArray(fRowBuffer)[cardinal(col) * fRowCount +
         fRowFetchedCurrent];
-      if (indicator = -1) or (ColumnType = ftNull) then // ftNull for SQLT_RSET
+      if (indicator = -1) or
+         (ColumnType = ftNull) then // ftNull for SQLT_RSET
         WR.AddShort('null')
       else
       begin
@@ -1314,7 +1321,7 @@ var
 label
   txt;
 begin
-  if (fStatement = nil) then
+  if fStatement = nil then
     raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare', [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   SQLLogBegin(sllSQL);
@@ -1331,8 +1338,9 @@ begin
           [self, fPreparedParamsCount, fParamCount]);
       if not fExpectResults then
         fRowCount := 1; // to avoid ORA-24333 error
-      if (fParamCount > 0) then
-        if (fParamsArrayCount > 0) and not fExpectResults then
+      if fParamCount > 0 then
+        if (fParamsArrayCount > 0) and
+           not fExpectResults then
         begin
           // 1.1. Array DML binding
           SetLength(aIndicator, fParamCount);
@@ -1539,7 +1547,8 @@ begin
                       else
                       // before 11.2, we will use either SQLT_INT, SQLT_STR or SQLT_FLT
                       if VInOut = paramIn then
-                        if (VInt64 > low(integer)) and (VInt64 < high(Integer)) then
+                        if (VInt64 > low(integer)) and
+                           (VInt64 < high(Integer)) then
                         begin
                           // map to 32 bit will always work
                           VDBType := SQLT_INT;
@@ -1646,7 +1655,8 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
         // only `ALTER system flush shared_pool` seems to fix the DB state
         SetColumnsForPreparedStatement;
       // 3. execute prepared statement and dispatch data in row buffers
-      if (fColumnCount = 0) and (Connection.TransactionCount = 0) then
+      if (fColumnCount = 0) and
+         (Connection.TransactionCount = 0) then
         // for INSERT/UPDATE/DELETE without a transaction: AutoCommit after execution
         mode := OCI_COMMIT_ON_SUCCESS
       else        // for SELECT or inside a transaction: wait for an explicit COMMIT
@@ -2055,8 +2065,8 @@ begin
                 oCharSet := TSQLDBOracleConnection(Connection).fOCICharSet;
                 if ColumnValueDBCharSet = SQLCS_IMPLICIT then
                   ColumnValueDBCharSet := oCharSet
-                else if (ColumnValueDBCharSet <> oCharSet) and not
-                  SimilarCharSet(ColumnValueDBCharSet, oCharSet) then
+                else if (ColumnValueDBCharSet <> oCharSet) and
+                        not SimilarCharSet(ColumnValueDBCharSet, oCharSet) then
                   // log a warning, but use the connection-level code page
                   SynDBLog.Add.Log(sllWarning, 'Column [%] has % (%) charset - ' +
                     'expected % (%) -> possible data loss', [ColumnName,
@@ -2087,7 +2097,8 @@ begin
       fRowCount := 1;
     end
     else if (TSQLDBOracleConnectionProperties(Connection.Properties).
-      RowsPrefetchSize > 1024) and (ColumnLongTypes = []) then
+               RowsPrefetchSize > 1024) and
+            (ColumnLongTypes = []) then
     begin
       // prefetching if no LOB nor LONG column(s)
       Prefetch := 0; // set prefetch by Memory, not by row count
@@ -2099,7 +2110,8 @@ begin
     end;
     Setlength(fRowBuffer, fInternalBufferSize);
     assert(fRowCount > 0);
-    if ((hasLOB in ColumnLongTypes) or (hasCURS in ColumnLongTypes)) and
+    if ((hasLOB in ColumnLongTypes) or
+        (hasCURS in ColumnLongTypes)) and
        (fRowCount > 100) then
       fRowCount := 100; // do not create too much POCILobLocator items
     fRowBufferCount := fRowCount; // fRowCount may be set to 0: avoid leaking
@@ -2164,17 +2176,21 @@ begin
   SQLLogBegin(sllDB);
   try
     try
-      if (fStatement <> nil) or (fColumnCount > 0) then
-        raise ESQLDBOracle.CreateUTF8('%.Prepare should be called only once', [self]);
+      if (fStatement <> nil) or
+         (fColumnCount > 0) then
+        raise ESQLDBOracle.CreateUTF8(
+          '%.Prepare should be called only once', [self]);
       // 1. process SQL
       inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
       fPreparedParamsCount := ReplaceParamsByNumbers(aSQL, fSQLPrepared, ':', true);
       L := Length(fSQLPrepared);
-      while (L > 0) and (fSQLPrepared[L] <= ' ') do // trim right
+      while (L > 0) and
+            (fSQLPrepared[L] <= ' ') do // trim right
         dec(L);
       // allow one trailing ';' by writing ';;' or allows 'END;' at the end of a statement
-      if (L > 5) and (fSQLPrepared[L] = ';') and not IdemPChar(@fSQLPrepared[L -
-        3], 'END') then
+      if (L > 5) and
+         (fSQLPrepared[L] = ';') and
+         not IdemPChar(@fSQLPrepared[L - 3], 'END') then
         dec(L);
       if L <> Length(fSQLPrepared) then
         SetLength(fSQLPrepared, L); // trim trailing spaces or ';' if needed
@@ -2222,7 +2238,8 @@ begin
   if not Assigned(fStatement) then
     raise ESQLDBOracle.CreateUTF8('%.Execute should be called before Step', [self]);
   result := false;
-  if (fCurrentRow < 0) or (fRowCount = 0) then
+  if (fCurrentRow < 0) or
+     (fRowCount = 0) then
     exit; // no data available at all
   sav := fCurrentRow;
   fCurrentRow := -1;

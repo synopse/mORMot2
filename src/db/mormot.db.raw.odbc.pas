@@ -757,7 +757,7 @@ type
     procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status: SqlReturn;
       HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: Boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// generic process of error handle
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
@@ -834,8 +834,9 @@ begin
     result := 0
   else
     result := EncodeDate(Year, Month, Day);
-  if (DataType <> SQL_TYPE_DATE) and (PInt64(@Hour)^ <> 0) and TryEncodeTime(Hour,
-    Minute, Second, Fraction div 1000000, time) then
+  if (DataType <> SQL_TYPE_DATE) and
+     (PInt64(@Hour)^ <> 0)  and
+     TryEncodeTime(Hour, Minute, Second, Fraction div 1000000, time) then
     result := result  +  time;
 end;
 
@@ -849,8 +850,11 @@ begin
     DateToIso8601PChar(Dest, true, Year, Month, Day);
     inc(Dest, 10);
   end;
-  if (DataType <> SQL_TYPE_DATE) and (PInt64(@Hour)^ <> 0) and (Hour < 24) and
-     (Minute < 60) and (Second < 60) then
+  if (DataType <> SQL_TYPE_DATE) and
+     (PInt64(@Hour)^ <> 0) and
+     (Hour < 24) and
+     (Minute < 60) and
+     (Second < 60) then
   begin // we use 'T' as TTextWriter.AddDateTime
     TimeToIso8601PChar(Dest, true, Hour, Minute, Second, Fraction div 1000000,
       'T', WithMS);
@@ -1009,7 +1013,8 @@ var
   TextLength: SqlSmallint;
   msg: RawUTF8;
 begin
-  if (Handle = nil) or (Status = SQL_INVALID_HANDLE) then
+  if (Handle = nil) or
+     (Status = SQL_INVALID_HANDLE) then
     msg := 'Invalid handle'
   else
   begin
@@ -1017,7 +1022,8 @@ begin
     while ODBC.GetDiagRecW(HandleType, Handle, RecNum, Sqlstate{%H-},
       NativeError, MessageText{%H-}, 1024, TextLength) and (not 1) = 0 do
     begin
-      while (TextLength > 0) and (MessageText[TextLength - 1] < ' ') do
+      while (TextLength > 0) and
+            (MessageText[TextLength - 1] < ' ') do
       begin
         dec(TextLength);
         MessageText[TextLength] := #0; // trim #13/#10 right of MessageText
@@ -1027,10 +1033,12 @@ begin
     end;
     if msg = '' then
       msg := 'Unspecified error';
-    if (Status = SQL_SUCCESS_WITH_INFO) and not InfoRaiseException then
+    if (Status = SQL_SUCCESS_WITH_INFO) and
+       not InfoRaiseException then
     begin
       LogLevelNoRaise := sllInfo;
-      if (Conn = nil) and (Stmt <> nil) then
+      if (Conn = nil) and
+         (Stmt <> nil) then
         Conn := Stmt.Connection;
       if Conn <> nil then
         with Conn.Properties do

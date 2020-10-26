@@ -524,7 +524,7 @@ type
     // based PRNG specified in NIST Special Publication 800-90 is used
     GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
     /// try to load the CryptoAPI on this system
-    function Available: boolean; {$ifdef HASINLINE} inline; {$endif}
+    function Available: boolean; {$ifdef HASINLINE}inline;{$endif}
   end;
 
 const
@@ -1416,7 +1416,7 @@ procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
 // - returns nil if no Properties was registered for this class; caller should
 // call ClassPropertiesAdd() to initialize
 function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// try to register a given Properties instance for a given class
 // - returns associated PropertiesInstance otherwise, which may not be the supplied
@@ -1538,7 +1538,8 @@ type
     // or
     // !begin
     // !  ... // unsafe code
-    // !  with Safe.ProtectMethod do begin
+    // !  with Safe.ProtectMethod do
+    // !  begin
     // !    ... // thread-safe code
     // !  end; // local hidden IUnknown will release the lock for the method
     // !end;
@@ -1708,7 +1709,7 @@ threadvar
 /// retrieve the thread name, as set by SetThreadName()
 // - if possible, direct CurrentThreadName threadvar access is slightly faster
 function GetCurrentThreadName: RawUTF8;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// enter a process-wide giant lock for thread-safe shared process
 // - shall be protected as such:
@@ -1760,7 +1761,8 @@ var
   osv: TOperatingSystemVersion absolute osint32;
 begin
   result := ToText(osv);
-  if (osv.os >= osLinux) and (osv.utsrelease[2] <> 0) then
+  if (osv.os >= osLinux) and
+     (osv.utsrelease[2] <> 0) then
     result := RawUTF8(Format('%s %d.%d.%d', [result, osv.utsrelease[2],
       osv.utsrelease[1], osv.utsrelease[0]]));
 end;
@@ -1796,7 +1798,8 @@ begin
     ObjectClass := PropertiesClass; // better TClass constant inlining on FPC
     repeat
       result := slots^;
-      if (result = nil) or (PClass(result)^ = ObjectClass) then
+      if (result = nil) or
+         (PClass(result)^ = ObjectClass) then
         exit; // reached end of list, or found the expected class type
       inc(slots);
     until false;
@@ -1885,7 +1888,8 @@ begin
     FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
     pointer(GetModuleHandle(ModuleName)), Code, ENGLISH_LANGID, @err, 0, nil);
   try
-    while (tmpLen > 0) and (ord(err[tmpLen - 1]) in [0..32, ord('.')]) do
+    while (tmpLen > 0) and
+          (ord(err[tmpLen - 1]) in [0..32, ord('.')]) do
       dec(tmpLen);
     SetString(result, err, tmpLen);
   finally
@@ -1937,7 +1941,8 @@ procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: short
 begin
   if LW <= 0 then
     res[0] := #0
-  else if (LW <= 255) and IsAnsiCompatibleW(W, LW) then
+  else if (LW <= 255) and
+          IsAnsiCompatibleW(W, LW) then
   begin
     res[0] := AnsiChar(LW);
     repeat
@@ -1961,7 +1966,8 @@ var
 begin
   DecodeDate(DateTime, YY, MM, DD);
   DecodeTime(DateTime, h, m, s, ms);
-  If (YY < 1980) or (YY > 2099) then
+  if (YY < 1980) or
+     (YY > 2099) then
     result := 0
   else
     result := (s shr 1) or (m shl 5) or (h shl 11) or
@@ -1971,10 +1977,10 @@ end;
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 begin
   {$ifdef ISDELPHIXE}
-  result := F.Timestamp;
+  result := F.Timestamp; // use new API
   {$else}
   result := FileDateToDateTime(F.Time);
-  {$endif}
+  {$endif ISDELPHIXE}
 end;
 
 function SearchRecValidFile(const F: TSearchRec): boolean;
@@ -2114,7 +2120,8 @@ begin // fast cross-platform implementation
   if _TmpCounter = 0 then
     _TmpCounter := Random32;
   retry := 10;
-  repeat // thread-safe unique file name generation
+  repeat
+    // thread-safe unique file name generation
     result := Format('%s%s_%x.tmp', [folder, ExeVersion.ProgramName,
       InterlockedIncrement(_TmpCounter)]);
     if not FileExists(result) then
@@ -2164,7 +2171,8 @@ var
   backuphandler: TOnRawLogException;
 begin
   if Assigned(_RawLogException) then
-    if (Obj <> nil) and (Obj.InheritsFrom(Exception)) then
+    if (Obj <> nil) and
+       Obj.InheritsFrom(Exception) then
     begin
       backuplasterror := GetLastError;
       backuphandler := _RawLogException;
@@ -2308,10 +2316,12 @@ end;
 function TMemoryMap.TextFileKind: TTextFileKind;
 begin
   result := isAnsi;
-  if (fBuf <> nil) and (fBufSize >= 3) then
+  if (fBuf <> nil) and
+     (fBufSize >= 3) then
     if PWord(fBuf)^ = $FEFF then
       result := isUnicode
-    else if (PWord(fBuf)^ = $BBEF) and (PByteArray(fBuf)[2] = $BF) then
+    else if (PWord(fBuf)^ = $BBEF) and
+            (PByteArray(fBuf)[2] = $BF) then
       result := isUTF8;
 end;
 
@@ -2377,64 +2387,6 @@ end;
 
 { ReserveExecutableMemory() / TFakeStubBuffer }
 
-const
-  STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
-
-{$ifdef FPC} // alf: multi platforms support
-{$ifndef MSWINDOWS}
-var
-  StubCallAllocMemLastStart: PtrUInt; // avoid unneeded fpmmap() calls
-
-function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
-{$ifdef CPUARM}
-const
-  STUB_RELJMP = {$ifdef CPUARM} $7fffff {$else} $7fffffff {$endif}; // relative jmp
-  STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
-  STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
-var
-  start, stop, stub, dist: PtrUInt;
-begin
-  stub := PtrUInt(ArmFakeStubAddr); // = @TInterfacedObjectFake.ArmFakeStub
-  if StubCallAllocMemLastStart <> 0 then
-    start := StubCallAllocMemLastStart
-  else
-  begin
-    start := stub - STUB_INTERV;
-    if start > stub then
-      start := 0; // avoid range overflow
-    start := start and STUB_ALIGN;
-  end;
-  stop := stub + STUB_INTERV;
-  if stop < stub then
-    stop := high(PtrUInt);
-  stop := stop and STUB_ALIGN;
-  while start < stop do
-  begin
-    // try whole -STUB_INTERV..+STUB_INTERV range
-    inc(start, STUB_SIZE);
-    result := fpmmap(pointer(start), STUB_SIZE, flProtect, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
-    if result <> MAP_FAILED then
-    begin
-      // close enough for a 24/32-bit relative jump?
-      dist := abs(stub - PtrUInt(result));
-      if dist < STUB_RELJMP then
-      begin
-        StubCallAllocMemLastStart := start;
-        exit;
-      end else
-        fpmunmap(result, STUB_SIZE);
-    end;
-  end;
-  result := MAP_FAILED; // error
-end;
-{$else} // other platforms (Intel+Arm64) use absolute call
-begin
-  result := fpmmap(nil, STUB_SIZE, flProtect, MAP_PRIVATE OR MAP_ANONYMOUS, -1, 0);
-end;
-{$endif CPUARM}
-{$endif MSWINDOWS}
-{$endif FPC}
-
 type
   // internal memory buffer created with PAGE_EXECUTE_READWRITE flags
   TFakeStubBuffer = class
@@ -2461,7 +2413,8 @@ begin
   {$else MSWINDOWS}
   if not MemoryProtection then
     fStub := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
-  if (fStub = MAP_FAILED) or MemoryProtection then
+  if (fStub = MAP_FAILED) or
+     MemoryProtection then
   begin
     // i.e. on OpenBSD, we can have w^x protection
     fStub := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
@@ -2532,6 +2485,7 @@ procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 begin // nothing to be done
 end;
 {$endif UNIX}
+
 {$ifndef PUREMORMOT2}
 
 function GetDelphiCompilerVersion: RawUTF8;
@@ -2595,14 +2549,16 @@ end;
 function TSynLibrary.GetProc(ProcName: PChar; Entry: PPointer;
   RaiseExceptionOnFailure: ExceptionClass): boolean;
 begin
-  if (Entry = nil) or (Handle = 0) then
+  if (Entry = nil) or
+     (Handle = 0) then
     result := false // avoid GPF
   else
   begin
     Entry^ := GetProcAddress(Handle, ProcName);
     result := Entry^ <> nil;
   end;
-  if (RaiseExceptionOnFailure <> nil) and not result then
+  if (RaiseExceptionOnFailure <> nil) and
+     not result then
   begin
     FreeLib;
     raise RaiseExceptionOnFailure.CreateFmt('Invalid %s: missing %s',
@@ -2634,7 +2590,7 @@ begin
     if nwd <> '' then
     begin
       cwd := GetCurrentDir;
-      SetCurrentDir(nwd); // search for dll dependencies in the same folder
+      SetCurrentDir(nwd); // search for dependencies in the .dll folder
     end;
     fHandle := SafeLoadLibrary(lib);
     if nwd <> '' then
@@ -2692,7 +2648,8 @@ end;
 
 function TFileVersion.DetailedOrVoid: string;
 begin
-  if (self = nil) or (Major or Minor or Release or Build = 0) then
+  if (self = nil) or
+     (Major or Minor or Release or Build = 0) then
     result := ''
   else
     result := fDetailed;

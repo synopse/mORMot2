@@ -1304,7 +1304,8 @@ end;
 
 function THttpServerGeneric.Request(Ctxt: THttpServerRequest): cardinal;
 begin
-  if (self = nil) or fShutdownInProgress then
+  if (self = nil) or
+     fShutdownInProgress then
     result := HTTP_NOTFOUND
   else
   begin
@@ -1447,7 +1448,8 @@ begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   if fThreadPool <> nil then
     fThreadPool.fTerminated := true; // notify background process
-  if (fExecuteState = esRunning) and (Sock <> nil) then
+  if (fExecuteState = esRunning) and
+     (Sock <> nil) then
   begin
     Sock.Close; // shutdown the socket to unlock Accept() in Execute
     if NewSocket('127.0.0.1', Sock.Port, nlTCP, false, 1, 1, 1, 0, callback) = nrOK then
@@ -1465,7 +1467,8 @@ begin
         resp.fServerSock.Sock.ShutdownAndClose({rdwr=}true);
       end;
       repeat // wait for all THttpServerResp.Execute to be finished
-        if (fInternalHttpServerRespList.Count = 0) and (fExecuteState <> esRunning) then
+        if (fInternalHttpServerRespList.Count = 0) and
+           (fExecuteState <> esRunning) then
           break;
         LeaveCriticalSection(fProcessCS);
         SleepHiRes(100);
@@ -1499,7 +1502,9 @@ end;
 
 procedure THttpServer.InternalHttpServerRespListAdd(resp: THttpServerResp);
 begin
-  if (self = nil) or (fInternalHttpServerRespList = nil) or (resp = nil) then
+  if (self = nil) or
+     (fInternalHttpServerRespList = nil) or
+     (resp = nil) then
     exit;
   EnterCriticalSection(fProcessCS);
   try
@@ -1513,7 +1518,8 @@ procedure THttpServer.InternalHttpServerRespListRemove(resp: THttpServerResp);
 var
   i: integer;
 begin
-  if (self = nil) or (fInternalHttpServerRespList = nil) then
+  if (self = nil) or
+     (fInternalHttpServerRespList = nil) then
     exit;
   EnterCriticalSection(fProcessCS);
   try
@@ -1685,7 +1691,7 @@ begin
 end;
 
 function IdemPCharNotVoid(p: PByteArray; up: PByte; toup: PByteArray): boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   u: byte;
 begin
@@ -1707,7 +1713,8 @@ procedure ExtractNameValue(var headers: RawUTF8; const upname: RawUTF8; out res:
 var
   i, j, k: PtrInt;
 begin
-  if (headers = '') or (upname = '') then
+  if (headers = '') or
+      (upname = '') then
     exit;
   i := 1;
   repeat
@@ -1724,7 +1731,8 @@ begin
       inc(i, length(upname));
       TrimCopy(headers, i, k - i, res);
       while true do // delete also ending #13#10
-        if (headers[k] = #0) or (headers[k] >= ' ') then
+        if (headers[k] = #0) or
+           (headers[k] >= ' ') then
           break
         else
           inc(k);
@@ -1764,7 +1772,8 @@ var
     {$endif}
     respsent := true;
     // handle case of direct sending of static file (as with http.sys)
-    if (ctxt.OutContent <> '') and (ctxt.OutContentType = STATICFILE_CONTENT_TYPE) then
+    if (ctxt.OutContent <> '') and
+       (ctxt.OutContentType = STATICFILE_CONTENT_TYPE) then
     try
       ExtractNameValue(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
       fn := UTF8ToString(ctxt.OutContent);
@@ -1789,7 +1798,8 @@ var
     if ctxt.OutContentType = NORESPONSE_CONTENT_TYPE then
       ctxt.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
-    if (Code < HTTP_SUCCESS) or (ClientSock.Headers = '') then
+    if (Code < HTTP_SUCCESS) or
+       (ClientSock.Headers = '') then
       Code := HTTP_NOTFOUND;
     reason := StatusCodeToReason(Code);
     if ErrorMsg <> '' then
@@ -1841,7 +1851,8 @@ var
   end;
 
 begin
-  if (ClientSock = nil) or (ClientSock.Headers = '') then
+  if (ClientSock = nil) or
+     (ClientSock.Headers = '') then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
@@ -1930,7 +1941,9 @@ begin
     if fServer <> nil then
     begin
       pending := SockInPending(100, {alsosocket=}true);
-      if (pending < 0) or (fServer = nil) or fServer.Terminated then
+      if (pending < 0) or
+         (fServer = nil) or
+         fServer.Terminated then
         exit;
       noheaderfilter := fServer.HeadersNotFiltered;
     end
@@ -1968,16 +1981,20 @@ begin
     end;
     if connectionClose in HeaderFlags then
       fKeepAliveClient := false;
-    if (ContentLength < 0) and (KeepAliveClient or (fMethod = 'GET')) then
+    if (ContentLength < 0) and
+       (KeepAliveClient or
+       (fMethod = 'GET')) then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
-    if (headerMaxTix > 0) and (GetTickCount64 > headerMaxTix) then
+    if (headerMaxTix > 0) and
+       (GetTickCount64 > headerMaxTix) then
     begin
       result := grTimeout;
       exit; // allow 10 sec for header -> DOS/TCPSYN Flood
     end;
     if fServer <> nil then
     begin
-      if (ContentLength > 0) and (fServer.MaximumAllowedContentLength > 0) and
+      if (ContentLength > 0) and
+         (fServer.MaximumAllowedContentLength > 0) and
          (cardinal(ContentLength) > fServer.MaximumAllowedContentLength) then
       begin
         SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
@@ -2064,11 +2081,14 @@ procedure THttpServerResp.Execute;
         keepaliveendtix := beforetix + fServer.ServerKeepAliveTimeOut;
         repeat
           // within this loop, break=wait for next command, exit=quit
-          if (fServer = nil) or fServer.Terminated or (fServerSock = nil) then
+          if (fServer = nil) or
+             fServer.Terminated or
+             (fServerSock = nil) then
             // server is down -> close connection
             exit;
           pending := fServerSock.SockReceivePending(50); // 50 ms timeout
-          if (fServer = nil) or fServer.Terminated then
+          if (fServer = nil) or
+             fServer.Terminated then
             // server is down -> disconnect the client
             exit;
           {$ifdef SYNCRTDEBUGLOW}
@@ -2092,7 +2112,8 @@ procedure THttpServerResp.Execute;
                     [fServerSock.fSock, tix - beforetix], self);
                   {$endif}
                   SleepHiRes(1); // seen only on Windows in practice
-                  if (fServer = nil) or fServer.Terminated then
+                  if (fServer = nil) or
+                     fServer.Terminated then
                     // server is down -> disconnect the client
                     exit;
                 end;
@@ -2105,7 +2126,8 @@ procedure THttpServerResp.Execute;
                 if headertix > 0 then
                   inc(headertix, beforetix);
                 res := fServerSock.GetRequest({withbody=}true, headertix);
-                if (fServer = nil) or fServer.Terminated then
+                if (fServer = nil) or
+                   fServer.Terminated then
                   // server is down -> disconnect the client
                   exit;
                 InterLockedIncrement(fServer.fStats[res]);
@@ -2169,7 +2191,8 @@ begin
            (IdemPCharArray(pointer(fServerSock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
           fServerSock.GetBody;
         fServer.Process(fServerSock, ConnectionID, self);
-        if (fServer <> nil) and fServerSock.KeepAliveClient then
+        if (fServer <> nil) and
+           fServerSock.KeepAliveClient then
           HandleRequestsProcess; // process further kept alive requests
       end;
     finally
@@ -2229,7 +2252,8 @@ begin
     if headertix > 0 then
       headertix := headertix + GetTickCount64;
     res := ServerSock.GetRequest({withbody=}false, headertix);
-    if (fServer = nil) or fServer.Terminated then
+    if (fServer = nil) or
+       fServer.Terminated then
       exit;
     InterlockedIncrement(fServer.fStats[res]);
     case res of
@@ -2289,7 +2313,9 @@ var
   n: integer;
 begin
   result := -1;
-  if (Self = nil) or (fReqQueue = 0) or (Http.Module = 0) then
+  if (Self = nil) or
+     (fReqQueue = 0) or
+     (Http.Module = 0) then
     exit;
   uri := RegURL(aRoot, aPort, Https, aDomainName);
   if uri = '' then
@@ -2315,7 +2341,9 @@ var
   i, j, n: integer;
 begin
   result := -1;
-  if (Self = nil) or (fReqQueue = 0) or (Http.Module = 0) then
+  if (Self = nil) or
+     (fReqQueue = 0) or
+     (Http.Module = 0) then
     exit;
   uri := RegURL(aRoot, aPort, Https, aDomainName);
   if uri = '' then
@@ -2372,7 +2400,8 @@ begin
           Error := Http.SetServiceConfiguration(
             0, hscUrlAclInfo, @Config, Sizeof(Config));
         end;
-        if (Error <> NO_ERROR) and (Error <> ERROR_ALREADY_EXISTS) then
+        if (Error <> NO_ERROR) and
+           (Error <> ERROR_ALREADY_EXISTS) then
           raise EHttpApiServer.Create(hSetServiceConfiguration, Error);
         result := ''; // success
       finally
@@ -2392,7 +2421,9 @@ procedure THttpApiServer.Clone(ChildThreadCount: integer);
 var
   i: integer;
 begin
-  if (fReqQueue = 0) or not Assigned(OnRequest) or (ChildThreadCount <= 0) or
+  if (fReqQueue = 0) or
+     not Assigned(OnRequest) or
+     (ChildThreadCount <= 0) or
      (fClones <> nil) then
     exit; // nothing to clone (need a queue and a process event)
   if ChildThreadCount > 256 then
@@ -2507,7 +2538,8 @@ var
 begin
   Terminate; // for Execute to be notified about end of process
   try
-    if (fOwner = nil) and (Http.Module <> 0) then // fOwner<>nil for cloned threads
+    if (fOwner = nil) and
+       (Http.Module <> 0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
     if fExecuting then
     begin
@@ -2829,7 +2861,8 @@ begin
             with Req^.headers.KnownHeaders[reqContentLength] do
               InContentLength := GetCardinal(
                 pointer(pRawValue), pointer(pRawValue + RawValueLength));
-            if (InContentLength > 0) and (MaximumAllowedContentLength > 0) and
+            if (InContentLength > 0) and
+               (MaximumAllowedContentLength > 0) and
                (InContentLength > MaximumAllowedContentLength) then
             begin
               SendError(HTTP_PAYLOADTOOLARGE, 'Rejected');
@@ -2954,7 +2987,8 @@ function THttpApiServer.GetHTTPQueueLength: Cardinal;
 var
   returnLength: ULONG;
 begin
-  if (Http.Version.MajorVersion < 2) or (self = nil) then
+  if (Http.Version.MajorVersion < 2) or
+     (self = nil) then
     result := 0
   else
   begin
@@ -2973,7 +3007,8 @@ procedure THttpApiServer.SetHTTPQueueLength(aValue: Cardinal);
 begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetRequestQueueProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and (fReqQueue <> 0) then
+  if (self <> nil) and
+     (fReqQueue <> 0) then
     EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
       Http.SetRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
         @aValue, sizeof(aValue), 0, nil));
@@ -3003,7 +3038,8 @@ var
 begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and (fUrlGroupID <> 0) then
+  if (self <> nil) and
+     (fUrlGroupID <> 0) then
   begin
     if aValue = 0 then
       limitInfo.MaxBandwidth := HTTP_LIMIT_INFINITE
@@ -3030,7 +3066,8 @@ var
     limitInfo: HTTP_BANDWIDTH_LIMIT_INFO;
   end;
 begin
-  if (Http.Version.MajorVersion < 2) or (self = nil) then
+  if (Http.Version.MajorVersion < 2) or
+     (self = nil) then
   begin
     result := 0;
     exit;
@@ -3058,7 +3095,8 @@ var
   end;
   returnLength: ULONG;
 begin
-  if (Http.Version.MajorVersion < 2) or (self = nil) then
+  if (Http.Version.MajorVersion < 2) or
+     (self = nil) then
   begin
     result := 0;
     exit;
@@ -3085,7 +3123,8 @@ var
 begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  if (self <> nil) and (fUrlGroupID <> 0) then
+  if (self <> nil) and
+     (fUrlGroupID <> 0) then
   begin
     if aValue = 0 then
       limitInfo.MaxConnections := HTTP_LIMIT_INFINITE
@@ -3118,7 +3157,8 @@ var
   logInfo: HTTP_LOGGING_INFO;
   folder, software: SynUnicode;
 begin
-  if (self = nil) or (fOwner <> nil) then
+  if (self = nil) or
+     (fOwner <> nil) then
     exit;
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
@@ -3175,7 +3215,9 @@ procedure THttpApiServer.LogStop;
 var
   i: integer;
 begin
-  if (self = nil) or (fClones = nil) or (fLogData = nil) then
+  if (self = nil) or
+     (fClones = nil) or
+     (fLogData = nil) then
     exit;
   fLogData := nil;
   for i := 0 to length(fClones) - 1 do
@@ -3291,7 +3333,8 @@ procedure THttpApiServer.SetAuthenticationSchemes(schemes:
 var
   authInfo: HTTP_SERVER_AUTHENTICATION_INFO;
 begin
-  if (self = nil) or (fOwner <> nil) then
+  if (self = nil) or
+     (fOwner <> nil) then
     exit;
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
@@ -3324,7 +3367,8 @@ procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
 var
   timeoutInfo: HTTP_TIMEOUT_LIMIT_INFO;
 begin
-  if (self = nil) or (fOwner <> nil) then
+  if (self = nil) or
+     (fOwner <> nil) then
     exit;
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
@@ -3402,7 +3446,8 @@ begin
   if cardinal(index) < cardinal(fConnectionsCount) then
   begin
     conn := fConnections^[index];
-    if (conn <> nil) and (conn.fState = wsOpen) then
+    if (conn <> nil) and
+       (conn.fState = wsOpen) then
     begin
       conn.Close(aStatus, aBuffer, aBufferSize);
       result := True;
@@ -3497,7 +3542,7 @@ procedure THttpApiWebSocketServerProtocol.RemoveConnection(index: integer);
 begin
   fPendingForClose.Add(fConnections[index]);
   fConnections[index] := nil;
-  if (fFirstEmptyConnectionIndex > index) then
+  if fFirstEmptyConnectionIndex > index then
     fFirstEmptyConnectionIndex := index;
 end;
 
@@ -3507,10 +3552,12 @@ var
   conn: PHttpApiWebSocketConnection;
 begin
   result := false;
-  if (index >= 0) and (index < fConnectionsCount) then
+  if (index >= 0) and
+     (index < fConnectionsCount) then
   begin
     conn := fConnections^[index];
-    if (conn <> nil) and (conn.fState = wsOpen) then
+    if (conn <> nil) and
+       (conn.fState = wsOpen) then
     begin
       conn.Send(aBufferType, aBuffer, aBufferSize);
       result := True;
@@ -3539,8 +3586,9 @@ begin
   req := PHTTP_REQUEST(Ctxt.HttpApiRequest);
   fIndex := fProtocol.fFirstEmptyConnectionIndex;
   fOpaqueHTTPRequestId := req^.RequestId;
-  if (fProtocol = nil) or (Assigned(fProtocol.OnAccept) and
-     not fProtocol.OnAccept(Ctxt, Self)) then
+  if (fProtocol = nil) or
+     (Assigned(fProtocol.OnAccept) and
+      not fProtocol.OnAccept(Ctxt, Self)) then
   begin
     result := False;
     exit;
@@ -3611,13 +3659,15 @@ end;
 
 procedure THttpApiWebSocketConnection.DoOnConnect;
 begin
-  if (fProtocol <> nil) and Assigned(fProtocol.OnConnect) then
+  if (fProtocol <> nil) and
+     Assigned(fProtocol.OnConnect) then
     fProtocol.OnConnect(self);
 end;
 
 procedure THttpApiWebSocketConnection.DoOnDisconnect;
 begin
-  if (fProtocol <> nil) and Assigned(fProtocol.OnDisconnect) then
+  if (fProtocol <> nil) and
+     Assigned(fProtocol.OnDisconnect) then
     fProtocol.OnDisconnect(self, fCloseStatus, Pointer(fBuffer), length(fBuffer));
 end;
 
@@ -3684,7 +3734,8 @@ var
 const
   sCloseReason = 'Closed after ping timeout';
 begin
-  if (fLastReceiveTickCount > 0) and (fProtocol.fServer.fPingTimeout > 0) then
+  if (fLastReceiveTickCount > 0) and
+     (fProtocol.fServer.fPingTimeout > 0) then
   begin
     elapsed := GetTickCount64 - fLastReceiveTickCount;
     if elapsed > 2 * fProtocol.fServer.PingTimeout * 1000 then
@@ -3847,7 +3898,7 @@ begin
     Err := WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0);
     if ActionContext <> nil then
       EWebSocketApi.RaiseOnError(hCompleteAction, Err);
-  until ({%H-}Action = WEB_SOCKET_NO_ACTION);
+  until {%H-}Action = WEB_SOCKET_NO_ACTION;
 end;
 
 procedure THttpApiWebSocketConnection.InternalSend(
@@ -3997,10 +4048,12 @@ begin
         ch := p.pRawValue;
         while (ch - p.pRawValue) < p.RawValueLength do
         begin
-          while ((ch - p.pRawValue) < p.RawValueLength) and (ch^ in [',', ' ']) do
+          while ((ch - p.pRawValue) < p.RawValueLength) and
+                (ch^ in [',', ' ']) do
             inc(ch);
           chB := ch;
-          while ((ch - p.pRawValue) < p.RawValueLength) and not (ch^ in [',']) do
+          while ((ch - p.pRawValue) < p.RawValueLength) and
+                not (ch^ in [',']) do
             inc(ch);
           FastSetString(aName, chB, ch - chB);
           if aName = fRegisteredProtocols^[i].name then
@@ -4120,7 +4173,7 @@ var
 begin
   if aContext = @fServer.fSendOverlaped then
     exit;
-  if (aContext = @fServer.fServiceOverlaped) then
+  if aContext = @fServer.fServiceOverlaped then
   begin
     if Assigned(fServer.onServiceMessage) then
       fServer.onServiceMessage;

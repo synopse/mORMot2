@@ -2279,7 +2279,8 @@ begin
   result := maxcount;
   if result > NumSmallBlockTypes then
     result := NumSmallBlockTypes;
-  while (result > 0) and (res[result - 1, orderby] = 0) do
+  while (result > 0) and
+        (res[result - 1, orderby] = 0) do
     dec(result);
 end;
 

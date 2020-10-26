@@ -670,7 +670,8 @@ begin
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   if TCPPrefix <> '' then
     SockSend(TCPPrefix);
-  if (url = '') or (url[1] <> '/') then
+  if (url = '') or
+     (url[1] <> '/') then
     SockSend([method, ' /', url, ' HTTP/1.1'])
   else
     SockSend([method, ' ', url, ' HTTP/1.1']);
@@ -913,7 +914,8 @@ var
   aDataEncoding, aAcceptEncoding, aURL: RawUTF8;
   i: integer;
 begin
-  if (url = '') or (url[1] <> '/') then
+  if (url = '') or
+     (url[1] <> '/') then
     aURL := '/' + url
   else // need valid url according to the HTTP/1.1 RFC
     aURL := url;
@@ -1174,7 +1176,8 @@ end;
 
 procedure TWinHTTP.InternalAddHeader(const hdr: RawUTF8);
 begin
-  if (hdr <> '') and not WinHttpAPI.AddRequestHeaders(FRequest,
+  if (hdr <> '') and
+     not WinHttpAPI.AddRequestHeaders(FRequest,
     Pointer(UTF8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
 end;
@@ -1385,7 +1388,8 @@ end;
 procedure TWinINet.InternalAddHeader(const hdr: RawUTF8);
 begin
   if (hdr <> '') and
-     not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr), HTTP_ADDREQ_FLAG_COALESCE) then
+     not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr),
+       HTTP_ADDREQ_FLAG_COALESCE) then
     raise EWinINet.Create;
 end;
 
@@ -1396,7 +1400,8 @@ var
   datapos, datalen, max, Bytes, BytesWritten: cardinal;
 begin
   datalen := length(aData);
-  if (datalen > 0) and Assigned(fOnUpload) then
+  if (datalen > 0) and
+     Assigned(fOnUpload) then
   begin
     FillCharFast(buff, SizeOf(buff), 0);
     buff.dwStructSize := SizeOf(buff);
@@ -1818,9 +1823,11 @@ var
   modified: boolean;
 begin
   result := '';
-  if (fHttp = nil) and (fSocket = nil) then // either fHttp or fSocket is used
+  if (fHttp = nil) and
+     (fSocket = nil) then // either fHttp or fSocket is used
     exit;
-  if (fCache <> nil) and fCache.FindAndCopy(aAddress, cache) then
+  if (fCache <> nil) and
+     fCache.FindAndCopy(aAddress, cache) then
     FormatUTF8('If-None-Match: %', [cache.Tag], headin);
   if fTokenHeader <> '' then
   begin
@@ -1866,7 +1873,10 @@ function THttpRequestCached.LoadFromURI(const aURI, aToken: RawUTF8;
   aHttpClass: THttpRequestClass): boolean;
 begin
   result := false;
-  if (self = nil) or (fHttp <> nil) or (fSocket <> nil) or not fURI.From(aURI) then
+  if (self = nil) or
+     (fHttp <> nil) or
+     (fSocket <> nil) or
+     not fURI.From(aURI) then
     exit;
   fTokenHeader := AuthorizationBearer(aToken);
   if aHttpClass = nil then

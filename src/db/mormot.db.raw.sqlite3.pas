@@ -35,10 +35,6 @@ uses
   mormot.core.log,
   mormot.db.core;
 
-{$define WITHLOG}
-// if defined, logging will be generated - set by default since it won't hurt
-
-
 { ************ Raw SQLite3 API Constants and Functions }
 
 {$ifdef BSD}
@@ -2588,10 +2584,8 @@ type
     fBackupBackgroundInProcess: TSQLDatabaseBackupThread;
     fBackupBackgroundLastTime: RawUTF8;
     fBackupBackgroundLastFileName: TFileName;
-    {$ifdef WITHLOG}
     fLogResultMaximumSize: integer;
     fLog: TSynLogClass;
-    {$endif WITHLOG}
     /// store TSQLDataBaseSQLFunction instances
     fSQLFunctions: TSynObjectList;
     function GetUseCache: boolean;
@@ -2914,7 +2908,6 @@ type
     // - see TSQLLimitCategory for a details of all available limits
     // - see @http://www.sqlite.org/c3ref/limit.html
     property Limit[Category: TSQLLimitCategory]: integer read GetLimit write SetLimit;
-    {$ifdef WITHLOG}
     /// access to the log class associated with this SQLite3 database engine
     // - can be customized, e.g. by overriden TRestServerDB.SetLogClass()
     property Log: TSynLogClass read fLog write fLog;
@@ -2923,7 +2916,6 @@ type
     // since it does not make sense to log all the JSON content retrieved from
     // the database engine, when a huge SELECT is executed
     property LogResultMaximumSize: integer read fLogResultMaximumSize write fLogResultMaximumSize;
-    {$endif WITHLOG}
     /// this integer pointer (if not nil) is incremented when any SQL statement
     // changes the database contents (i.e. any not SELECT statement)
     // - this pointer is thread-safe updated, inside a critical section
@@ -3122,14 +3114,12 @@ const
   backupFinished = [backupSuccess,backupFailure];
 
 
-{$ifdef WITHLOG}
 var
   /// the TSynLog class used for logging for all our mormot.db.raw.sqlite3 related functions
   // - you may override it with TSQLLog, if available from mORMot.pas
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
   SynSQLite3Log: TSynLogClass = TSynLog;
-{$endif WITHLOG}
 
 
 /// check from the file beginning if sounds like a valid SQLite3 file
@@ -3169,9 +3159,6 @@ implementation
 
 { ************ Raw SQLite3 API Constants and Functions }
 
-const
-  NULCHAR: AnsiChar = #0;
-
 function SQLVarToSQlite3Context(const Res: TSQLVar;
   Context: TSQLite3FunctionContext): boolean;
 var
@@ -3205,10 +3192,8 @@ begin
   else
     begin
       sqlite3.result_null(Context);
-      {$ifdef WITHLOG}
       SynSQLite3Log.DebuggerNotify(sllWarning, 'SQLVarToSQlite3Context(%)', [ord
         (Res.VType)]);
-      {$endif}
       result := false; // not handled type (will set null value)
       exit;
     end;
@@ -3248,9 +3233,7 @@ begin
       end;
   else
     begin
-    {$ifdef WITHLOG}
       SynSQLite3Log.DebuggerNotify(sllWarning, 'SQlite3ValueToSQLVar(%)', [ValueType]);
-    {$endif}
       Res.VType := ftUnknown;
     end;
   end;
@@ -3383,7 +3366,8 @@ end;
 
 function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8): integer;
 begin
-  if (DB = 0) or (aResult in SQLITE_ERRORS) then // possible error codes
+  if (DB = 0) or
+     (aResult in SQLITE_ERRORS) then // possible error codes
     raise ESQLite3Exception.Create(DB, aResult, SQL);
   result := aResult;
 end;
@@ -3535,11 +3519,7 @@ begin
     res := SQLITE_INTERNAL;
   end;
   if res <> SQLITE_OK then
-  begin
-    {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllError, 'SQLITE_CONFIG_MALLOC failed as %', [res]);
-    {$endif}
-  end
+    SynSQLite3Log.Add.Log(sllError, 'SQLITE_CONFIG_MALLOC failed as %', [res])
   else
     fUseInternalMM := true;
 end;
@@ -3594,7 +3574,8 @@ const
 
 function TSQLite3LibraryDynamic.GetLibraryName: TFileName;
 begin
-  if (self = nil) or (fLoader = nil) then
+  if (self = nil) or
+     (fLoader = nil) then
     result := ''
   else
     result := fLoader.LibraryPath;
@@ -3629,9 +3610,7 @@ begin
       [self, LibraryName, vers]);
   end; // some APIs like config() key() or trace() may not be available
   inherited Create; // set fVersionNumber/fVersionText
-  {$ifdef WITHLOG}
   SynSQLite3Log.Add.Log(sllInfo, 'Loaded external % version %', [LibraryName, Version]);
-  {$endif}
 end;
 
 destructor TSQLite3LibraryDynamic.Destroy;
@@ -3709,7 +3688,8 @@ begin
   begin
     Iso8601ToDateTimePUTF8CharVar(s1, s1Len, V1);
     Iso8601ToDateTimePUTF8CharVar(s2, s2Len, V2);
-    if (V1 = 0) or (V2 = 0) then
+    if (V1 = 0) or
+       (V2 = 0) then
       // any invalid date -> compare as UTF-8 strings
       result := UTF8ILComp(s1, s2, s1Len, s2Len)
     else if SameValue(V1, V2, 1 / MSecsPerDay) then
@@ -4070,7 +4050,8 @@ end;
 
 procedure TSQLDataBase.Rollback;
 begin
-  if (self = nil) or not fTransactionActive then
+  if (self = nil) or
+     not fTransactionActive then
     exit;
   Execute('ROLLBACK TRANSACTION;');
   fTransactionActive := false;
@@ -4096,7 +4077,8 @@ end;
 
 procedure TSQLDataBase.Commit;
 begin
-  if (Self <> nil) and fTransactionActive then
+  if (Self <> nil) and
+     fTransactionActive then
   try
     Execute('COMMIT TRANSACTION;');
   finally
@@ -4114,10 +4096,8 @@ begin
     raise ESQLite3Exception.CreateUTF8('%.Create: No SQLite3 libray available' +
       ' - you shall either add SynSQLite3Static to your project uses clause, ' +
       'or run sqlite3 := TSQLite3LibraryDynamic.Create(..)', [self]);
-  {$ifdef WITHLOG}
   fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
-  {$endif}
   if SysUtils.Trim(aFileName) = '' then
     raise ESQLite3Exception.CreateUTF8('%.Create('''')', [self]);
   if aOpenV2Flags = 0 then
@@ -4144,14 +4124,10 @@ begin
 end;
 
 destructor TSQLDataBase.Destroy;
-{$ifdef WITHLOG}
 var
   FPCLog: ISynLog;
 begin
   FPCLog := fLog.Enter('Destroy %', [fFileNameWithoutPath], self);
-{$else}
-begin
-{$endif}
   if DB <> 0 then
   try
     Rollback; // any unfinished transaction is rollbacked
@@ -4185,31 +4161,27 @@ end;
 function TSQLDataBase.SQLShouldBeLogged(const aSQL: RawUTF8): boolean;
 begin
   result := false;
-  {$ifdef WITHLOG}
-  if (self = nil) or (fLog = nil) or not (sllSQL in fLog.Family.Level) then
+  if (self = nil) or
+     (fLog = nil) or
+     not (sllSQL in fLog.Family.Level) then
     exit;
   if not IdemPChar(pointer(aSQL), 'PRAGMA ') or (PosEx('=', aSQL) > 0) then
     result := true;
-  {$endif WITHLOG}
 end;
 
 procedure TSQLDataBase.ExecuteAll(const aSQL: RawUTF8);
 var
   R: TSQLRequest;
-  {$ifdef WITHLOG}
   log: ISynLog;
-  {$endif WITHLOG}
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then
   begin
     log := fLog.Enter(self, 'ExecuteAll');
     if log <> nil then
       log.Log(sllSQL, aSQL, self, 4096);
   end;
-  {$endif WITHLOG}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB, aSQL);
@@ -4231,30 +4203,26 @@ begin
     R.Execute(DB, aSQL);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % %', [Timer.Stop, FileNameWithoutPath, aSQL], self);
-    {$endif WITHLOG}
   end;
 end;
 
 function TSQLDataBase.Execute(const aSQL: RawUTF8; var ID: TInt64DynArray): integer;
 var
   R: TSQLRequest;
-{$ifdef WITHLOG}   log: ISynLog; {$endif}
+  log: ISynLog;
 begin
   if self = nil then
   begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
-  {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then
   begin
     log := fLog.Enter(self, 'Execute');
     if log <> nil then
       log.Log(sllSQL, aSQL, self, 2048);
   end;
-  {$endif}
   Lock(aSQL);
   try
     result := R.Execute(DB, aSQL, ID);
@@ -4276,11 +4244,9 @@ begin
     R.Execute(DB, aSQL, ID);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     if not NoLog then
       fLog.Add.Log(sllSQL, '% % returned % for %', [Timer.Stop,
         FileNameWithoutPath, ID, aSQL], self);
-    {$endif}
   end;
 end;
 
@@ -4297,11 +4263,9 @@ begin
     R.Execute(DB, aSQL, ID);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     if not NoLog then
       fLog.Add.Log(sllSQL, '% % returned [%] for %', [Timer.Stop,
         FileNameWithoutPath, ID, aSQL], self);
-    {$endif}
   end;
 end;
 
@@ -4311,7 +4275,8 @@ var
   Timer: TPrecisionTimer;
 begin
   result := false;
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
   Lock(aSQL); // run one statement -> we can trust IsCacheable()
@@ -4319,16 +4284,15 @@ begin
     result := R.ExecuteNoException(DB, aSQL);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % % = %', [Timer.Stop, FileNameWithoutPath, aSQL,
       BOOL_STR[result]], self);
-    {$endif}
   end;
 end;
 
 function TSQLDataBase.ExecuteNoExceptionInt64(const aSQL: RawUTF8): Int64;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := 0
   else
   try
@@ -4340,7 +4304,8 @@ end;
 
 function TSQLDataBase.ExecuteNoExceptionUTF8(const aSQL: RawUTF8): RawUTF8;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := ''
   else
   try
@@ -4371,10 +4336,8 @@ begin
       aResultCount^ := Count;
   finally
     UnLockJSON(result, Count);
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
       FileNameWithoutPath, length(result), aSQL], self);
-    {$endif}
   end;
 end;
 
@@ -4392,16 +4355,15 @@ begin
     result := R.Execute(DB, aSQL, Values);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % returned % rows %', [Timer.Stop,
       FileNameWithoutPath, length(Values), aSQL], self);
-    {$endif}
   end;
 end;
 
 function TSQLDataBase.LastInsertRowID: Int64;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := 0
   else
   try
@@ -4414,7 +4376,8 @@ end;
 
 function TSQLDataBase.LastChangeCount: integer;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := 0
   else
   try
@@ -4427,7 +4390,9 @@ end;
 
 function TSQLDataBase.TotalChangeCount: integer;
 begin
-  if (self = nil) or (DB = 0) or not Assigned(sqlite3.total_changes) then
+  if (self = nil) or
+     (DB = 0) or
+     not Assigned(sqlite3.total_changes) then
     result := 0
   else
   try
@@ -4457,7 +4422,8 @@ var
   R: TSQLRequest;
   n: integer;
 begin
-  if (self = nil) or (fDB = 0) then
+  if (self = nil) or
+     (fDB = 0) then
     exit; // avoid GPF in case of call from a static-only server
   Lock;
   try
@@ -4499,7 +4465,8 @@ procedure TSQLDataBase.Lock(const aSQL: RawUTF8);
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  if (aSQL = '') or IsCacheable(aSQL) then
+  if (aSQL = '') or
+     IsCacheable(aSQL) then
     fSafe.Lock
   else // on non-concurent calls, is very fast
     LockAndFlushCache; // INSERT UPDATE DELETE statements need to flush cache
@@ -4547,13 +4514,11 @@ begin
       result := fCache.Find(aSQL, aResultCount); // try to get JSON result from cache
       if result <> '' then
       begin
-        {$ifdef WITHLOG}
         if fLog <> nil then
         begin
           fLog.Add.Log(sllSQL, 'from cache % %', [FileNameWithoutPath, aSQL], self);
           fLog.Add.Log(sllResult, result, self, fLogResultMaximumSize);
         end;
-        {$endif}
         fSafe.UnLock; // found in cache -> leave critical section
       end;
     end
@@ -4576,10 +4541,8 @@ procedure TSQLDataBase.UnLockJSON(const aJSONResult: RawUTF8; aResultCount: PtrI
 begin
   if self <> nil then
   try
-    {$ifdef WITHLOG}
     if fLog <> nil then
       fLog.Add.Log(sllResult, aJSONResult, self, fLogResultMaximumSize);
-    {$endif}
     fCache.Add(aJSONResult, aResultCount); // no-op if Reset was made just before
   finally
     fSafe.UnLock; // on non-concurent calls, this API is very fast
@@ -4587,14 +4550,10 @@ begin
 end;
 
 function TSQLDataBase.Backup(const BackupFileName: TFileName): boolean;
-{$ifdef WITHLOG}
 var
   Log: ISynLog;
 begin
   Log := fLog.Enter('Backup % -> %', [fFileNameWithoutPath, BackupFileName], self);
-{$else}
-begin
-{$endif}
   if self = nil then
   begin
     result := false;
@@ -4605,21 +4564,15 @@ begin
   LockAndFlushCache;
   try
     try
-    {$ifdef WITHLOG}
       if Log <> nil then
         Log.Log(sllTrace, 'close', self);
-    {$endif}
       DBClose;
-    {$ifdef WITHLOG}
       if Log <> nil then
         Log.Log(sllTrace, 'copy file', self);
-    {$endif}
       result := CopyFile(fFileName, BackupFileName, false);
     finally
-    {$ifdef WITHLOG}
       if Log <> nil then
         Log.Log(sllTrace, 'reopen', self);
-    {$endif}
       DBOpen;
     end;
   finally
@@ -4645,13 +4598,13 @@ var
   Backup: TSQLite3Backup;
 begin
   result := false;
-  if (self = nil) or (BackupFileName = '') or
-     not Assigned(sqlite3.backup_init) or (fBackupBackgroundInProcess <> nil) then
+  if (self = nil) or
+     (BackupFileName = '') or
+     not Assigned(sqlite3.backup_init) or
+     (fBackupBackgroundInProcess <> nil) then
     exit;
-  {$ifdef WITHLOG}
   fLog.Add.Log(sllDB,'BackupBackground("%") started on %',
     [BackupFileName, FileNameWithoutPath],self);
-  {$endif}
   if FileExists(BackupFileName) then
     if not DeleteFile(BackupFileName) then
       exit;
@@ -4677,13 +4630,13 @@ function TSQLDataBase.BackupBackgroundToDB(BackupDB: TSQLDatabase;
 var Backup: TSQLite3Backup;
 begin
   result := false;
-  if (self = nil) or (BackupDB = nil) or not Assigned(sqlite3.backup_init) or
+  if (self = nil) or
+     (BackupDB = nil) or
+     not Assigned(sqlite3.backup_init) or
      (fBackupBackgroundInProcess <> nil) then
     exit;
-  {$ifdef WITHLOG}
   fLog.Add.Log(sllDB,'BackupBackgroundToDB("%") started on %',
     [BackupDB.FileName,FileNameWithoutPath],self);
-  {$endif}
   Backup := sqlite3.backup_init(BackupDB.DB, 'main', DB, 'main');
   if Backup = 0 then
     exit;
@@ -4739,19 +4692,17 @@ begin
 end;
 
 function TSQLDataBase.DBClose: integer;
-{$ifdef WITHLOG}
 var log: ISynLog;
-{$endif}
 begin
   result := SQLITE_OK;
-  if (self=nil) or (fDB=0) then
+  if (self=nil) or
+     (fDB=0) then
     exit;
-  {$ifdef WITHLOG}
   log := fLog.Enter(self,'DBClose');
   if log<>nil then
     log.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
-  {$endif}
-  if (sqlite3 = nil) or not Assigned(sqlite3.close) then
+  if (sqlite3 = nil) or
+     not Assigned(sqlite3.close) then
     raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
   if fBackupBackgroundInProcess<>nil then
     BackupBackgroundWaitUntilFinished;
@@ -4761,19 +4712,17 @@ begin
 end;
 
 function TSQLDataBase.EnableCustomTokenizer: integer;
-{$ifdef WITHLOG}
 var log: ISynLog;
-{$endif}
 begin
   result := SQLITE_OK;
-  if (self=nil) or (fDB=0) then
+  if (self=nil) or
+     (fDB=0) then
     exit;
-  {$ifdef WITHLOG}
   log := fLog.Enter;
   if log<>nil then
     log.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
-  {$endif}
-  if (sqlite3=nil) or not Assigned(sqlite3.db_config) then
+  if (sqlite3=nil) or
+     not Assigned(sqlite3.db_config) then
     raise ESQLite3Exception.CreateUTF8(
       '%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
   result := sqlite3.db_config(fDB, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1);
@@ -4783,17 +4732,14 @@ function TSQLDataBase.DBOpen: integer;
 var
   utf8: RawUTF8;
   i: integer;
-{$ifdef WITHLOG}
   log: ISynLog;
 begin
   log := fLog.Enter('DBOpen %', [fFileNameWithoutPath], self);
-{$else}
-begin
-{$endif WITHLOG}
   if fDB <> 0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
   // open the database with the proper API call
-  if (sqlite3 = nil) or not Assigned(sqlite3.open) then
+  if (sqlite3 = nil) or
+     not Assigned(sqlite3.open) then
     raise ESQLite3Exception.Create('DBOpen called with no sqlite3 global');
   utf8 := StringToUTF8(fFileName);
   {$ifdef LINUX}
@@ -4813,11 +4759,9 @@ begin
     result := sqlite3.open(pointer(utf8), fDB);
   if result <> SQLITE_OK then
   begin
-  {$ifdef WITHLOG}
     if log <> nil then
       log.Log(sllError, 'sqlite3_open ("%") failed with error % (%): %', [utf8,
         sqlite3_resultToErrorText(result), result, sqlite3.errmsg(fDB)]);
-  {$endif WITHLOG}
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
     exit;
@@ -4893,17 +4837,14 @@ begin
   // reallocate all TSQLDataBaseSQLFunction for re-Open (TRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count - 1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
-{$ifdef WITHLOG}
   i := CacheSize;
   if i < 0 then
     i := (-i) shr 10
   else
     i := PageSize * CacheSize;
   if log <> nil then
-    log.Log(sllDB,
-      '"%" database file (%) opened with PageSize=% CacheSize=% (%)', [FileName,
-      KB(GetFileSize), PageSize, CacheSize, KB(i)], self);
-{$endif}
+    log.Log(sllDB, '"%" database file (%) opened with PageSize=% CacheSize=% (%)',
+      [FileName, KB(GetFileSize), PageSize, CacheSize, KB(i)], self);
 end;
 
 function TSQLDataBase.GetUserVersion: cardinal;
@@ -5004,7 +4945,8 @@ end;
 
 procedure TSQLDataBase.SetBusyTimeout(const ms: Integer);
 begin
-  if (self = nil) or (fDB = 0) then
+  if (self = nil) or
+     (fDB = 0) then
     exit;
   sqlite3.busy_timeout(DB, ms);
   fBusyTimeout := ms;
@@ -5012,7 +4954,9 @@ end;
 
 function TSQLDataBase.GetLimit(Category: TSQLLimitCategory): integer;
 begin
-  if (self = nil) or (fDB = 0) or not Assigned(sqlite3.limit) then
+  if (self = nil) or
+     (fDB = 0) or
+     not Assigned(sqlite3.limit) then
     result := 0
   else
     result := sqlite3.limit(fDB, ord(Category), -1);
@@ -5020,7 +4964,8 @@ end;
 
 procedure TSQLDataBase.SetLimit(Category: TSQLLimitCategory; Value: integer);
 begin
-  if (self <> nil) and Assigned(sqlite3.limit) then
+  if (self <> nil) and
+     Assigned(sqlite3.limit) then
     sqlite3.limit(fDB, ord(Category), Value);
 end;
 
@@ -5031,17 +4976,16 @@ begin
   if InternalState <> nil then
     inc(InternalState^);
   if fCache.Reset then
-   {$ifdef WITHLOG}
     if fLog <> nil then
       fLog.Add.Log(sllCache, '% cache flushed', [FileNameWithoutPath], self);
-    {$endif}
 end;
 
 procedure TSQLDataBase.RegisterSQLFunction(aFunction: TSQLDataBaseSQLFunction);
 var
-  i: integer;
+  i: PtrInt;
 begin
-  if (self = nil) or (aFunction = nil) then
+  if (self = nil) or
+     (aFunction = nil) then
     exit;
   for i := 0 to fSQLFunctions.Count - 1 do
     with TSQLDataBaseSQLFunction(fSQLFunctions.List[i]) do
@@ -5051,11 +4995,9 @@ begin
         aFunction.Free;
         exit; // already registered with the same name and parameters count
       end;
-  {$ifdef WITHLOG}
   if fLog <> nil then
-    fLog.Add.Log(sllDB, '% RegisterSQLFunction("%") %', [FileNameWithoutPath,
-      aFunction.FunctionName], self);
-  {$endif}
+    fLog.Add.Log(sllDB, '% RegisterSQLFunction("%") %',
+      [FileNameWithoutPath, aFunction.FunctionName], self);
   fSQLFunctions.Add(aFunction);
   if DB <> 0 then
     // DB already opened -> register this custom function
@@ -5236,7 +5178,8 @@ end;
 function TSQLRequest.ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
 begin // avoid sqlite3_check() calls for no ESQLite3Exception
   result := false;
-  if (aDB <> 0) and (aSQL <> '') then
+  if (aDB <> 0) and
+     (aSQL <> '') then
   try
     if not (Prepare(aDB, aSQL, {noexcept=}true) in SQLITE_ERRORS) and
        (Request <> 0) and not (sqlite3.step(Request) in SQLITE_ERRORS) then
@@ -5350,7 +5293,8 @@ begin
           break;
       end;
     until false;
-    if (result = 0) and W.Expand then
+    if (result = 0) and
+       W.Expand then
     begin
       // we want the field names at least, even with no data: we allow RowCount=0
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
@@ -5589,7 +5533,8 @@ begin
   begin
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL) + 1,
       fRequest, fNextSQL);
-    while (result = SQLITE_OK) and (Request = 0) do // comment or white-space
+    while (result = SQLITE_OK) and
+          (Request = 0) do // comment or white-space
       result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
     fFieldCount := sqlite3.column_count(fRequest);
     if not NoExcept then
@@ -5604,13 +5549,16 @@ end;
 
 function TSQLRequest.PrepareNext: integer;
 begin
-  if (Request = 0) or (fNextSQL^ = #0) then
+  if (Request = 0) or
+     (fNextSQL^ = #0) then
     result := SQLITE_DONE
   else
   begin
     Close; // free previous statement
     result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
-    while (result = SQLITE_OK) and (Request = 0) and (fNextSQL^ <> #0) do
+    while (result = SQLITE_OK) and
+          (Request = 0) and
+          (fNextSQL^ <> #0) do
       // comment or white-space -> ignore
       result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
     fFieldCount := sqlite3.column_count(fRequest);
@@ -5815,8 +5763,11 @@ begin
   item := sqlite3.value_blob(argv[1]);
   itemLen := sqlite3.value_bytes(argv[1]);
   caller := sqlite3.user_data(Context);
-  if (P <> nil) and (PLen > 0) and (item <> nil) and (itemLen > 0) and (caller
-    <> nil) then
+  if (P <> nil) and
+     (PLen > 0) and
+     (item <> nil) and
+     (itemLen > 0) and
+     (caller <> nil) then
     with caller.fDummyDynArray do
     try // temporary allocate all dynamic array content
       try
@@ -5942,7 +5893,8 @@ begin
     fStepPageNumber := 1
   else
     fStepPageNumber := StepPageNumber;
-  if (cardinal(StepSleepMS) <= 1000) and (StepPageNumber > 0) then
+  if (cardinal(StepSleepMS) <= 1000) and
+     (StepPageNumber > 0) then
     fStepSleepMS := StepSleepMS;
   fOnProgress := OnProgress;
   fStepSynLzCompress := SynLzCompress;
@@ -5952,18 +5904,14 @@ begin
 end;
 
 procedure TSQLDatabaseBackupThread.Execute;
-{$ifdef WITHLOG}
 var
   log: ISynLog;
-{$endif}
 
   procedure NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep);
   begin
     fStep := aStep;
-    {$ifdef WITHLOG}
     if Assigned(log) then
       log.Log(sllTrace, '%', [self]);
-    {$endif}
     if Assigned(fOnProgress) then
       if not fOnProgress(self) then
         raise ESQLite3Exception.CreateUtf8('%.Execute aborted by OnProgress=false',
@@ -5975,10 +5923,8 @@ var
   fn, fn2: TFileName;
 begin
   fn := fDestDB.FileName;
-  {$ifdef WITHLOG}
   SetCurrentThreadName('% [%] [%]', [self, fSourceDB.FileName, fn]);
   log := SynSQLite3Log.Enter(self, 'Execute');
-  {$endif}
   try
     try
       NotifyProgressAndContinue(backupStart);
@@ -6029,11 +5975,9 @@ begin
           if not TSQLDatabase.BackupSynLZ(fn2, fn, true) then
             raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
               [self, fn, fn2]);
-          {$ifdef WITHLOG}
           if Assigned(log) then
-            log.Log(sllTrace, 'TSQLDatabase.BackupSynLZ into % %', [KB(FileSize(fn)),
-              fn], self);
-          {$endif}
+            log.Log(sllTrace, 'TSQLDatabase.BackupSynLZ into % %',
+              [KB(FileSize(fn)), fn], self);
         end;
         fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       end;
@@ -6059,10 +6003,8 @@ begin
         fOnProgress(self);
     end;
   end;
-  {$ifdef WITHLOG}
   log := nil;
   SynSQLite3Log.Add.NotifyThreadEnded;
-  {$endif}
 end;
 
 function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;
@@ -6100,7 +6042,9 @@ begin // see CodecEncrypt/CodecDecrypt in SynSQLite3Static
      // header bytes 16..23 are stored unencrypted
      (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
      (Header.d1 <> SQLITE_FILE_HEADER128.Hi) and
-     (Header.b[21] = 64) and (Header.b[22] = 32) and (Header.b[23] = 32) then
+     (Header.b[21] = 64) and
+     (Header.b[22] = 32) and
+     (Header.b[23] = 32) then
     result := true;
   FileClose(F);
 end;

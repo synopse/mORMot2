@@ -82,7 +82,7 @@ var
 // - e.g. if contains " or \ characters, as defined by
 // http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(const Text: RawUTF8): boolean; overload;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
@@ -99,7 +99,7 @@ function NeedsJsonEscape(P: PUTF8Char; PLen: integer): boolean; overload;
 // - P^ should point at 'u1234' just after \u1234
 // - return ending P position, maybe after another \u#### UTF-16 surrogate char
 function JsonEscapeToUtf8(var D: PUTF8Char; P: PUTF8Char): PUTF8Char;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// test if the supplied buffer is a "string" value or a numerical value
 // (floating point or integer), according to the characters within
@@ -130,7 +130,7 @@ procedure IgnoreComma(var P: PUTF8Char);
 // recognized by JSON extended syntax
 // - follow GetJSONPropName and GotoNextJSONObjectOrArray expectations
 function JsonPropNameValid(P: PUTF8Char): boolean;
-  {$ifdef HASINLINE} inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// decode a JSON field in-place from an UTF-8 encoded text buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
@@ -208,14 +208,14 @@ function GotoNextJSONPropName(P: PUTF8Char): PUTF8Char;
 // - it will return the latest " position, ignoring \" within
 // - caller should check that return PUTF8Char is indeed a "
 function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// get the next character after a quoted buffer
 // - the first character in P^ must be "
 // - it will return the latest " position, ignoring \" within
 // - overloaded version when JSON_CHARS table is already available locally
 function GotoEndOfJSONString(P: PUTF8Char; tab: PJsonCharSet): PUTF8Char; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -270,7 +270,7 @@ function GotoNextJSONObjectOrArrayMax(P, PMax: PUTF8Char): PUTF8Char;
 
 /// search the EndOfObject of a JSON buffer, just like GetJsonField() does
 function ParseEndOfObject(P: PUTF8Char; out EndOfObject: AnsiChar): PUTF8Char;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the number of elements of a JSON array
 // - this will handle any kind of arrays, including those with nested
@@ -666,7 +666,7 @@ type
     /// append ',' with proper indentation
     // - warning: this will break CancelLastComma, since CRLF+tabs are added
     procedure BlockAfterItem(Options: TTextWriterWriteObjectOptions);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// append ']' or '}' with proper indentation
     procedure BlockEnd(Stopper: AnsiChar; Options: TTextWriterWriteObjectOptions);
     /// used internally by WriteObject() when serializing a published property
@@ -1151,11 +1151,11 @@ type
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
     function FindAsText(aPosition, aLength: integer): RawByteString; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
     // - explicitly returns null if the supplied text was not found
@@ -1536,7 +1536,7 @@ type
   public
     /// initialize this low-level context
     procedure Init(WR: TTextWriter; WriteOptions: TTextWriterWriteObjectOptions;
-      TypeInfo: TRttiCustom); {$ifdef HASINLINE} inline; {$endif}
+      TypeInfo: TRttiCustom); {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// internal function handler for JSON persistence of any TRTTIParserType value
@@ -1614,11 +1614,11 @@ type
     Value: PUTF8Char;
     ValueLen: integer;
     DVO: TDocVariantOptions;
-    function ParseNext: boolean;      {$ifdef HASINLINE} inline; {$endif}
-    procedure ParseEnd;               {$ifdef HASINLINE} inline; {$endif}
-    function ParseNull: boolean;      {$ifdef HASINLINE} inline; {$endif}
+    function ParseNext: boolean;      {$ifdef HASINLINE}inline;{$endif}
+    procedure ParseEnd;               {$ifdef HASINLINE}inline;{$endif}
+    function ParseNull: boolean;      {$ifdef HASINLINE}inline;{$endif}
     function ParseArray: boolean;
-    function ParseNewObject: TObject; {$ifdef HASINLINE} inline; {$endif}
+    function ParseNewObject: TObject; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   PJsonParserContext = ^TJsonParserContext;
@@ -1699,10 +1699,10 @@ type
     function ClassNewInstance: pointer; override;
     /// simple wrapper around TRttiJsonSave(fJsonSave)
     procedure RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// simple wrapper around TRttiJsonLoad(fJsonLoad)
     procedure RawLoadJson(Data: pointer; var Ctxt: TJsonParserContext);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// create and parse a new TObject instance of this rkClass
     function ParseNewInstance(var Context: TJsonParserContext): TObject;
     /// compare two stored values of this type
@@ -1989,12 +1989,12 @@ function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8 = XMLUTF8_HEADER;
 // - will also register this class type, if needed, so RegisterClass() is
 // redundant to this method
 procedure AutoCreateFields(ObjectInstance: TObject);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// should be called by T*AutoCreateFields destructors
 // - constructor should have called AutoCreateFields()
 procedure AutoDestroyFields(ObjectInstance: TObject);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// internal function called by AutoCreateFields() when inlined
 // - do not call this internal function, but always AutoCreateFields()
@@ -2198,7 +2198,8 @@ begin // P^ points at 'u1234' just after \u0123
     D[1] := AnsiChar($80 or (c and $3F));
     inc(D);
   end
-  else if (c >= UTF16_HISURROGATE_MIN) and (c <= UTF16_LOSURROGATE_MAX) then
+  else if (c >= UTF16_HISURROGATE_MIN) and
+          (c <= UTF16_LOSURROGATE_MAX) then
     if PWord(P + 5)^ = ord('\') + ord('u') shl 8 then
     begin
       s := (ConvertHexToBin[ord(P[7])] shl 12)+
@@ -2235,10 +2236,12 @@ begin
     result := false;
     exit;
   end;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if (P[0] in ['0'..'9']) or // is first char numeric?
-     ((P[0] in ['-', '+']) and (P[1] in ['0'..'9'])) then
+     ((P[0] in ['-', '+']) and
+      (P[1] in ['0'..'9'])) then
   begin
     // check if P^ is a true numerical value
     repeat
@@ -2248,17 +2251,20 @@ begin
       repeat
         inc(P);
       until not (P^ in ['0'..'9']); // check fractional digits
-    if ((P^ = 'e') or (P^ = 'E')) and (P[1] in ['0'..'9', '+', '-']) then
+    if ((P^ = 'e') or (P^ = 'E')) and
+       (P[1] in ['0'..'9', '+', '-']) then
     begin
       inc(P);
       if P^ = '+' then
         inc(P)
       else if P^ = '-' then
         inc(P);
-      while (P^ >= '0') and (P^ <= '9') do
+      while (P^ >= '0') and
+            (P^ <= '9') do
         inc(P);
     end;
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
     result := (P^ <> #0);
     exit;
@@ -2278,7 +2284,8 @@ begin
     result := false;
     exit;
   end;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   tab := @JSON_CHARS;
   c4 := PInteger(P)^;
@@ -2299,12 +2306,15 @@ begin
     // check if c is a true numerical value
     repeat
       inc(P);
-    until (P^ < '0') or (P^ > '9'); // check digits
+    until (P^ < '0') or
+          (P^ > '9'); // check digits
     if P^ = '.' then
       repeat
         inc(P);
-      until (P^ < '0') or (P^ > '9'); // check fractional digits
-    if ((P^ = 'e') or (P^ = 'E')) and (jcDigitFirstChar in tab[P[1]]) then
+      until (P^ < '0') or
+            (P^ > '9'); // check fractional digits
+    if ((P^ = 'e') or (P^ = 'E')) and
+       (jcDigitFirstChar in tab[P[1]]) then
     begin
       inc(P);
       c := P^;
@@ -2312,10 +2322,12 @@ begin
         inc(P)
       else if c = '-' then
         inc(P);
-      while (P^ >= '0') and (P^ <= '9') do
+      while (P^ >= '0') and
+            (P^ <= '9') do
         inc(P);
     end;
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
     result := (P^ <> #0);
     exit;
@@ -2334,7 +2346,9 @@ var
   B: PUTF8Char;
 begin
   result := false;
-  if (P = nil) or (len <= 0) or (StrLen(P) <> len) then
+  if (P = nil) or
+     (len <= 0) or
+     (StrLen(P) <> len) then
     exit;
   B := P;
   P :=  GotoEndJSONItemStrict(B);
@@ -2345,7 +2359,8 @@ procedure IgnoreComma(var P: PUTF8Char);
 begin
   if P <> nil then
   begin
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
     if P^ = ',' then
       inc(P);
@@ -2357,7 +2372,8 @@ var
   tab: PJsonCharSet;
 begin
   tab := @JSON_CHARS;
-  if (P <> nil) and (jcJsonIdentifierFirstChar in tab[P^]) then
+  if (P <> nil) and
+     (jcJsonIdentifierFirstChar in tab[P^]) then
   begin // ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
     repeat
       inc(P);
@@ -2425,7 +2441,8 @@ begin
           // get char after \
           inc(P);
           c := P^;
-          if (c = '"') or (c = '\') then
+          if (c = '"') or
+             (c = '\') then
           begin
             // most common cases are \\ or \"
 lit:        inc(P);
@@ -2533,7 +2550,8 @@ lit:        inc(P);
           Len^ := D - result;
       end;
     '0':
-      if (P[1] >= '0') and (P[1] <= '9') then
+      if (P[1] >= '0') and
+         (P[1] <= '9') then
         // 0123 excluded by JSON!
         exit
       else
@@ -2627,7 +2645,9 @@ begin
       inc(P);   // not [#0, '"', '\']
       continue; // very fast parsing of most UTF-8 chars
     end;
-    if (P^ = '"') or (P^ = #0) or (P[1] = #0) then
+    if (P^ = '"') or
+       (P^ = #0) or
+       (P[1] = #0) then
       // end of string/buffer, or buffer overflow detected as \#0
       break;
     inc(P, 2); // P^ was '\' -> ignore \#
@@ -2666,7 +2686,9 @@ begin
   if c = '"' then
   begin
     Name := GetJSONField(P, P, @WasString, @EndOfObject, Len);
-    if (Name = nil) or not WasString or (EndOfObject <> ':') then
+    if (Name = nil) or
+       not WasString or
+       (EndOfObject <> ':') then
       exit;
   end
   else if c = '''' then
@@ -2684,7 +2706,8 @@ begin
     P^ := #0;
     repeat
       inc(P)
-    until (P^ > ' ') or (P^ = #0);
+    until (P^ > ' ') or
+          (P^ = #0);
     if P^ <> ':' then
       exit;
     inc(P);
@@ -2701,12 +2724,14 @@ begin
     // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
     if Len <> nil then
       Len^ := P - Name;
-    if (P^ <= ' ') and (P^ <> #0) then
+    if (P^ <= ' ') and
+       (P^ <> #0) then
     begin
       P^ := #0;
       inc(P);
     end;
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
     if not (P^ in [':', '=']) then
       // allow both age:18 and age=18 pairs (very relaxed JSON syntax)
@@ -2750,7 +2775,8 @@ begin
     SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
     repeat
       inc(P)
-    until (P^ > ' ') or (P^ = #0);
+    until (P^ > ' ') or
+          (P^ = #0);
     if P^ <> ':' then
     begin
       PropName[0] := #0;
@@ -2771,7 +2797,8 @@ begin
     SetString(PropName, Name, P - Name);
     repeat
       inc(P)
-    until (P^ > ' ') or (P^ = #0);
+    until (P^ > ' ') or
+          (P^ = #0);
     if P^ <> ':' then
     begin
       PropName[0] := #0;
@@ -2790,9 +2817,11 @@ begin
     until not (jcJsonIdentifier in tab[P^]);
     // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
     SetString(PropName, Name, P - Name);
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
-    if (P^ <> ':') and (P^ <> '=') then
+    if (P^ <> ':') and
+       (P^ <> '=') then
     begin
       // allow both age:18 and age=18 pairs (very relaxed JSON syntax)
       PropName[0] := #0;
@@ -2827,7 +2856,8 @@ begin
       exit;
 s:  repeat
       inc(P)
-    until (P^ > ' ') or (P^ = #0);
+    until (P^ > ' ') or
+          (P^ = #0);
     if P^ <> ':' then
       exit;
   end
@@ -2852,9 +2882,11 @@ s:  repeat
       inc(P);
     until not (jcJsonIdentifier in tab[P^]);
     // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
-    if (P^ <= ' ') and (P^ <> #0) then
+    if (P^ <= ' ') and
+       (P^ <> #0) then
       inc(P);
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
     if not (P^ in [':', '=']) then
       // allow both age:18 and age=18 pairs (very relaxed JSON syntax)
@@ -2862,7 +2894,8 @@ s:  repeat
   end;
   repeat
     inc(P)
-  until (P^ > ' ') or (P^ = #0);
+  until (P^ > ' ') or
+        (P^ = #0);
   result := P;
 end;
 
@@ -2946,13 +2979,15 @@ begin
     if not (EndOfObject in [',', '}']) then
       exit; // invalid item separator
     for i := 0 to n do
-      if (Values[i].value = nil) and IdemPropNameU(Names[i], name, namelen) then
+      if (Values[i].value = nil) and
+         IdemPropNameU(Names[i], name, namelen) then
       begin
         Values[i].value := value;
         Values[i].valuelen := valuelen;
         break;
       end;
-  until (P = nil) or (EndOfObject = '}');
+  until (P = nil) or
+        (EndOfObject = '}');
   if P = nil then // result=nil indicates failure -> points to #0 for end of text
     result := @NULCHAR
   else
@@ -2989,7 +3024,8 @@ begin
       FastSetString(result, Value, ValueLen);
       exit;
     end;
-  until (P = nil) or (EndOfObject = '}');
+  until (P = nil) or
+        (EndOfObject = '}');
 end;
 
 function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
@@ -3024,7 +3060,8 @@ begin
         SetLength(Values, n + 32);
       Values[n] := field;
       inc(n);
-    until (P = nil) or (EndOfObject = '}');
+    until (P = nil) or
+          (EndOfObject = '}');
   end;
   SetLength(Values, n);
   if P = nil then // result=nil indicates failure -> points to #0 for end of text
@@ -3042,7 +3079,8 @@ begin
   // retrieve string field
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ <> '"' then
     exit;
@@ -3057,7 +3095,8 @@ begin
   // check valid JSON delimiter
   repeat
     inc(P)
-  until (P^ > ' ') or (P^ = #0);
+  until (P^ > ' ') or
+        (P^ = #0);
   if ExpectNameField then
   begin
     if P^ <> ':' then
@@ -3102,7 +3141,8 @@ begin // at input, JSON^ = '{'
     exit; // invalid (maybe too complex) JSON string value
   JSON := P; // JSON^ is either } or ,
   result := Rtti.Find(classname, classnamelen, rkClass);
-  if (result = nil) and AndGlobalFindClass then
+  if (result = nil) and
+     AndGlobalFindClass then
     result := GlobalFindClass(classname, classnamelen);
 end;
 
@@ -3116,7 +3156,8 @@ begin
   result := nil;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if HandleValuesAsObjectOrArray and (P^ in ['{', '[']) then
   begin
@@ -3128,7 +3169,8 @@ begin
       Len^ := P - Value;
     if WasString <> nil then
       WasString^ := false; // was object or array
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
     if EndOfObject <> nil then
       EndOfObject^ := P^;
@@ -3172,14 +3214,16 @@ begin
   if P = nil then
     exit;
   FastSetString(RawUTF8(result), B, P - B);
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if EndOfObject <> nil then
     EndOfObject^ := P^;
   if P^ <> #0 then //if P^=',' then
     repeat
       inc(P)
-    until (P^ > ' ') or (P^ = #0);
+    until (P^ > ' ') or
+          (P^ = #0);
 end;
 
 function GetJSONItemAsRawUTF8(var P: PUTF8Char; var output: RawUTF8;
@@ -3212,7 +3256,8 @@ begin // should match GetJSONPropName()
         begin
           repeat
             inc(P)
-          until (P^ > ' ') or (P^ = #0);
+          until (P^ > ' ') or
+                (P^ = #0);
           P := GotoNextJSONObjectOrArrayInternal(P, PMax, '}');
           if P = nil then
             exit;
@@ -3221,7 +3266,8 @@ begin // should match GetJSONPropName()
         begin
           repeat
             inc(P)
-          until (P^ > ' ') or (P^ = #0);
+          until (P^ > ' ') or
+                (P^ = #0);
           P := GotoNextJSONObjectOrArrayInternal(P, PMax, ']');
           if P = nil then
             exit;
@@ -3282,7 +3328,8 @@ begin // should match GetJSONPropName()
           until P^ = '''';
           repeat
             inc(P)
-          until (P^ > ' ') or (P^ = #0);
+          until (P^ > ' ') or
+                (P^ = #0);
           if P^ <> ':' then
             exit;
         end;
@@ -3295,7 +3342,8 @@ begin // should match GetJSONPropName()
           until P^ = '/';
           repeat
             inc(P)
-          until (P^ > ' ') or (P^ = #0);
+          until (P^ > ' ') or
+                (P^ = #0);
         end;
     else
       begin
@@ -3306,12 +3354,14 @@ Prop:   tab := @JSON_CHARS;
           inc(P);
         until not (jcJsonIdentifier in tab[P^]);
         // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
-        while (P^ <= ' ') and (P^ <> #0) do
+        while (P^ <= ' ') and
+              (P^ <> #0) do
           inc(P);
         if P^ = '(' then
         begin // handle e.g. "born":isodate("1969-12-31")
           inc(P);
-          while (P^ <= ' ') and (P^ <> #0) do
+          while (P^ <= ' ') and
+                (P^ <> #0) do
             inc(P);
           if P^ = '"' then
           begin
@@ -3320,7 +3370,8 @@ Prop:   tab := @JSON_CHARS;
               exit;
           end;
           inc(P);
-          while (P^ <= ' ') and (P^ <> #0) do
+          while (P^ <= ' ') and
+                (P^ <> #0) do
             inc(P);
           if P^ <> ')' then
             exit;
@@ -3330,9 +3381,11 @@ Prop:   tab := @JSON_CHARS;
           exit;
       end;
     end;
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
-    if (PMax <> nil) and (P >= PMax) then
+    if (PMax <> nil) and
+       (P >= PMax) then
       exit;
   until P^ = EndChar;
   result := P + 1;
@@ -3351,7 +3404,8 @@ begin
   result := nil; // to notify unexpected end
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   {$ifndef CPUX86NOTPIC}
   jsonset := @JSON_CHARS;
@@ -3370,7 +3424,8 @@ begin
       begin
         repeat
           inc(P)
-        until (P^ > ' ') or (P^ = #0);
+        until (P^ > ' ') or
+              (P^ = #0);
         P := GotoNextJSONObjectOrArrayInternal(P, nil, ']');
         goto pok;
       end;
@@ -3378,11 +3433,13 @@ begin
       begin
         repeat
           inc(P)
-        until (P^ > ' ') or (P^ = #0);
+        until (P^ > ' ') or
+              (P^ = #0);
         P := GotoNextJSONObjectOrArrayInternal(P, nil, '}');
 pok:    if P = nil then
           exit;
-ok:     while (P^ <= ' ') and (P^ <> #0) do
+ok:     while (P^ <= ' ') and
+              (P^ <> #0) do
           inc(P);
         result := P;
         exit;
@@ -3430,7 +3487,8 @@ begin
   result := nil; // to notify unexpected end
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   // handle complex JSON string, object or array
   {$ifndef CPUX86NOTPIC}
@@ -3440,7 +3498,8 @@ begin
     '"':
       begin
         P := GotoEndOfJSONString(P {$ifndef CPUX86NOTPIC}, jsonset{$endif} );
-        if (P^ <> '"') or ((PMax <> nil) and (P > PMax)) then
+        if (P^ <> '"') or
+           ((PMax <> nil) and (P > PMax)) then
           exit;
         inc(P);
         goto ok;
@@ -3449,7 +3508,8 @@ begin
       begin
         repeat
           inc(P)
-        until (P^ > ' ') or (P^ = #0);
+        until (P^ > ' ') or
+              (P^ = #0);
         P := GotoNextJSONObjectOrArrayInternal(P, PMax, ']');
         goto pok;
       end;
@@ -3457,11 +3517,13 @@ begin
       begin
         repeat
           inc(P)
-        until (P^ > ' ') or (P^ = #0);
+        until (P^ > ' ') or
+              (P^ = #0);
         P := GotoNextJSONObjectOrArrayInternal(P, PMax, '}');
 pok:    if P = nil then
           exit;
-ok:     while (P^ <= ' ') and (P^ <> #0) do
+ok:     while (P^ <= ' ') and
+              (P^ <> #0) do
           inc(P);
         result := P;
         exit;
@@ -3473,7 +3535,8 @@ ok:     while (P^ <= ' ') and (P^ <> #0) do
   repeat
     inc(P);
   until jcEndOfJSONFieldOr0 in jsonset[P^];
-  if (P^ = #0) or ((PMax <> nil) and (P > PMax)) then
+  if (P^ = #0) or
+     ((PMax <> nil) and (P > PMax)) then
     exit; // unexpected end
   result := P;
 end;
@@ -3497,7 +3560,8 @@ end;
 
 function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar): PUTF8Char;
 begin // should match GetJSONPropName()
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   result := GotoNextJSONObjectOrArrayInternal(P, nil, EndChar);
 end;
@@ -3507,7 +3571,8 @@ var
   EndChar: AnsiChar;
 begin // should match GetJSONPropName()
   result := nil; // mark error or unexpected end (#0)
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   case P^ of
     '[':
@@ -3519,7 +3584,8 @@ begin // should match GetJSONPropName()
   end;
   repeat
     inc(P)
-  until (P^ > ' ') or (P^ = #0);
+  until (P^ > ' ') or
+        (P^ = #0);
   result := GotoNextJSONObjectOrArrayInternal(P, PMax, EndChar);
 end;
 
@@ -3564,7 +3630,8 @@ begin
         break;
       inc(P);
     end;
-  if (P = nil) or (P^ <> ']') then
+  if (P = nil) or
+     (P^ <> ']') then
     result := - result;
 end;
 
@@ -3617,7 +3684,8 @@ begin
             exit;
           end;
           P := GotoEndJSONItem(P);
-          if (P = nil) or (P^ <> ',') then
+          if (P = nil) or
+             (P^ <> ',') then
             break; // invalid content or #0 reached
           inc(P);
           dec(Index);
@@ -3675,9 +3743,11 @@ begin
       if P^ <> '}' then
         repeat
           GetJSONPropName(P, name);
-          if (name[0] = #0) or (name[0] > #200) then
+          if (name[0] = #0) or
+             (name[0] > #200) then
             break;
-          while (P^ <= ' ') and (P^ <> #0) do
+          while (P^ <= ' ') and
+                (P^ <> #0) do
             inc(P);
           if PropNameLen = 0 then // 'PropName*'
           begin
@@ -3696,7 +3766,8 @@ begin
             exit;
           end;
           P := GotoEndJSONItem(P);
-          if (P = nil) or (P^ <> ',') then
+          if (P = nil) or
+             (P^ <> ',') then
             break; // invalid content, or #0 reached
           inc(P);
         until false;
@@ -3710,7 +3781,8 @@ var
   objName: RawUTF8;
 begin
   result := nil;
-  if (JsonObject = nil) or (PropPath = nil) then
+  if (JsonObject = nil) or
+     (PropPath = nil) then
     exit;
   repeat
     GetNextItem(PropPath, '.', objName);
@@ -3744,14 +3816,16 @@ var
     else
       WR.Add(',');
     WR.AddFieldName(name);
-    while (ending > start) and (ending[-1] <= ' ') do
+    while (ending > start) and
+          (ending[-1] <= ' ') do
       dec(ending); // trim right
     WR.AddNoJSONEscape(start, ending - start);
   end;
 
 begin
   result := '';
-  if (JsonObject = nil) or (PropPath = nil) then
+  if (JsonObject = nil) or
+     (PropPath = nil) then
     exit;
   WR := nil;
   try
@@ -3812,7 +3886,8 @@ var
   temp1, temp2: TTextWriterStackBuffer;
 begin
   result := false;
-  if (JSON = nil) or (JSON^ <> '{') then
+  if (JSON = nil) or
+     (JSON^ <> '{') then
     exit;
   wk := TBaseWriter.CreateOwnedStream(temp1);
   wv := TBaseWriter.CreateOwnedStream(temp2);
@@ -3822,11 +3897,13 @@ begin
     kb := JSON + 1;
     repeat
       ke := GotoEndJSONItem(kb);
-      if (ke = nil) or (ke^ <> ':') then
+      if (ke = nil) or
+         (ke^ <> ':') then
         exit; // invalid input content
       vb := ke + 1;
       ve := GotoEndJSONItem(vb);
-      if (ve = nil) or not (ve^ in [',', '}']) then
+      if (ve = nil) or
+         not (ve^ in [',', '}']) then
         exit;
       wk.AddNoJSONEscape(kb, ke - kb);
       wk.Add(',');
@@ -3871,7 +3948,9 @@ begin // replace comments by ' ' characters which will be ignored by parser
                 repeat
                   P^ := ' ';
                   inc(P)
-                until (P^ = #0) or (P^ = #10) or (P^ = #13);
+                until (P^ = #0) or
+                      (P^ = #10) or
+                      (P^ = #13);
                 if P^ <> #0 then
                   inc(P);
               end;
@@ -3879,7 +3958,8 @@ begin // replace comments by ' ' characters which will be ignored by parser
               begin // this is /* comment - replace by ' ' but keep CRLF
                 P[-1] := ' ';
                 repeat
-                  if (P^ <> #10) and (P^ <> #13) then
+                  if (P^ <> #10) and
+                     (P^ <> #13) then
                     // keep CRLF for correct line numbering (e.g. for error)
                     P^ := ' ';
                   inc(P);
@@ -3898,8 +3978,10 @@ begin // replace comments by ' ' characters which will be ignored by parser
           PComma := P;
           repeat
             inc(P)
-          until (P^ > ' ') or (P^ = #0);
-          if (P^ = '}') or (P^ = ']') then
+          until (P^ > ' ') or
+                (P^ = #0);
+          if (P^ = '}') or
+             (P^ = ']') then
             PComma^ := ' ';
         end;
       else
@@ -3928,7 +4010,8 @@ begin
     while not (jcEndOfJSONFieldOr0 in tab[P^]) do
       inc(P); // not #0 , ] } :
     EndOfObject := P^;
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
   end;
   result := P;
@@ -3942,22 +4025,27 @@ var
   TextLen, i: integer;
 begin
   result := 0;
-  if (P = nil) or (Names = nil) or (MaxValue < 0) then
+  if (P = nil) or
+     (Names = nil) or
+     (MaxValue < 0) then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ = '[' then
   begin
     repeat
       inc(P)
-    until (P^ > ' ') or (P^ = #0);
+    until (P^ > ' ') or
+          (P^ = #0);
     if P^ = ']' then
       inc(P)
     else
     begin
       repeat
         Text := GetJSONField(P, P, @WasString, @EndOfObject, @TextLen);
-        if (Text = nil) or not WasString then
+        if (Text = nil) or
+           not WasString then
         begin
           P := nil; // invalid input (expects a JSON array of strings)
           exit;
@@ -4003,7 +4091,8 @@ begin
     with TBaseWriter.CreateOwnedStream(temp) do
     try
       AddString(URIName);
-      if (JSONDecode(ParametersJSON, Params, true) <> nil) and (Params <> nil) then
+      if (JSONDecode(ParametersJSON, Params, true) <> nil) and
+         (Params <> nil) then
       begin
         sep := '?';
         for i := 0 to length(Params) - 1 do
@@ -4175,7 +4264,8 @@ procedure JSONEncodeNameSQLValue(const Name, SQLValue: RawUTF8;
 var
   temp: TTextWriterStackBuffer;
 begin
-  if (SQLValue <> '') and (SQLValue[1] in ['''', '"']) then
+  if (SQLValue <> '') and
+     (SQLValue[1] in ['''', '"']) then
     // unescape SQL quoted string value into a valid JSON string
     with TTextWriter.CreateOwnedStream(temp) do
     try
@@ -4201,9 +4291,11 @@ var
   Lp, Ls: PtrInt;
   D: PUTF8Char;
 begin
-  if (P = nil) or (PLen <= 0) then
+  if (P = nil) or
+     (PLen <= 0) then
     result := '""'
-  else if (pointer(result) = pointer(P)) or NeedsJsonEscape(P, PLen) then
+  else if (pointer(result) = pointer(P)) or
+          NeedsJsonEscape(P, PLen) then
     with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(aPrefix);
@@ -4332,7 +4424,8 @@ const
 label
   Txt;
 begin
-  if (Format = '') or ((high(Args) < 0) and (high(Params) < 0)) then
+  if (Format = '') or
+     ((high(Args) < 0) and (high(Params) < 0)) then
   begin // no formatting to process, but may be a const -> make unique
     FastSetString(result, pointer(Format), length(Format));
     exit; // e.g. _JsonFmt() will parse it in-place
@@ -4374,7 +4467,8 @@ Txt:  len := F - FDeb;
       break;
     isParam := F^;
     inc(F); // jump '%' or '?'
-    if (isParam = '%') and (A <= high(Args)) then
+    if (isParam = '%') and
+       (A <= high(Args)) then
     begin // handle % substitution
       if tmpN = length(tmp) then
         SetLength(tmp, tmpN + 8);
@@ -4386,7 +4480,8 @@ Txt:  len := F - FDeb;
         inc(tmpN);
       end;
     end
-    else if (isParam = '?') and (P <= high(Params)) then
+    else if (isParam = '?') and
+            (P <= high(Params)) then
     begin // handle ? substitution
       if tmpN = length(tmp) then
         SetLength(tmp, tmpN + 8);
@@ -4416,7 +4511,7 @@ Txt:  len := F - FDeb;
       FDeb := F;
       repeat
         inc(F)
-      until (F^ = #0);
+      until F^ = #0;
       goto Txt;
     end;
   end;
@@ -4833,7 +4928,8 @@ var
 begin
   c.W := Ctxt.W;
   c.Options := Ctxt.Options;
-  if (Ctxt.Info.Kind = rkClass) and (Data <> nil) then
+  if (Ctxt.Info.Kind = rkClass) and
+     (Data <> nil) then
     // class instances are accessed by reference, records are stored by value
     Data := PPointer(Data)^
   else
@@ -4863,7 +4959,8 @@ begin
         c.W.Add('"');
         c.W.AddShort(ClassNameShort(PClass(Data)^)^);
         c.W.Add('"');
-        if (c.Prop <> nil) or (woStorePointer in c.Options) then
+        if (c.Prop <> nil) or
+           (woStorePointer in c.Options) then
           c.W.BlockAfterItem(c.Options);
       end;
       if woStorePointer in c.Options then
@@ -4879,13 +4976,16 @@ begin
       // this is the main loop serializing Info.Props[]
       repeat
         // handle woStoreStoredFalse flag and "stored" attribute in code
-        if ((c.Prop^.Prop = nil) or (woStoreStoredFalse in c.Options) or
+        if ((c.Prop^.Prop = nil) or
+            (woStoreStoredFalse in c.Options) or
             (c.Prop^.Prop.IsStored(pointer(Data)))) and
            // handle woDontStoreDefault flag over "default" attribute in code
-           (not (woDontStoreDefault in c.Options) or (c.Prop.PropDefault = NO_DEFAULT) or
+           (not (woDontStoreDefault in c.Options) or
+            (c.Prop.PropDefault = NO_DEFAULT) or
             not c.Prop.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
-           (not (woDontStoreVoid in c.Options) or not c.Prop.ValueIsVoid(Data)) then
+           (not (woDontStoreVoid in c.Options) or
+            not c.Prop.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
           c.W.WriteObjectPropName(c.Prop^.Name^, c.Options);
@@ -5281,7 +5381,8 @@ begin
   L := length(s);
   if L = 0 then
     exit;
-  if (L > 2) and (PInteger(s)^ and $ffffff = JSON_BASE64_MAGIC) then
+  if (L > 2) and
+     (PInteger(s)^ and $ffffff = JSON_BASE64_MAGIC) then
   begin
     AddNoJSONEscape(pointer(s), L); // was marked as a BLOB content
     exit;
@@ -5338,11 +5439,13 @@ begin
             inc(P, 4);
             dec(Len, 4);
           until Len < 4;
-        if (Len > 0) and (P^ < #128) then
+        if (Len > 0) and
+           (P^ < #128) then
           repeat
             inc(P);
             dec(Len);
-          until (Len = 0) or (P^ >= #127);
+          until (Len = 0) or
+                (P^ >= #127);
         if P <> pointer(B) then
           Add(B, P - B, Escape);
         if Len <= 0 then
@@ -5429,7 +5532,8 @@ var
 begin
   if Format = '' then
     exit;
-  if (Format = '%') and (high(Values) >= 0) then
+  if (Format = '%') and
+     (high(Values) >= 0) then
   begin
     Add(Values[0], Escape);
     exit;
@@ -5439,7 +5543,8 @@ begin
   repeat
     S := F;
     repeat
-      if (F^ = #0) or (F^ = '%') then
+      if (F^ = #0) or
+         (F^ = '%') then
         break;
       inc(F);
     until false;
@@ -5544,7 +5649,8 @@ begin
   if L > 0 then
   begin
     quote := QuotedString[1];
-    if (quote in ['''', '"']) and (QuotedString[L] = quote) then
+    if (quote in ['''', '"']) and
+       (QuotedString[L] = quote) then
     begin
       Add('"');
       P := pointer(QuotedString);
@@ -5693,14 +5799,16 @@ begin
   result := nil;
   if JSON = nil then
     exit;
-  while (JSON^ <= ' ') and (JSON^ <> #0) do
+  while (JSON^ <= ' ') and
+        (JSON^ <> #0) do
     inc(JSON);
   case JSON^ of
     '[':
       begin // array
         repeat
           inc(JSON)
-        until (JSON^ = #0) or (JSON^ > ' ');
+        until (JSON^ = #0) or
+              (JSON^ > ' ');
         if JSON^ = ']' then
         begin
           Add('[');
@@ -5732,7 +5840,8 @@ begin
       begin // object
         repeat
           inc(JSON)
-        until (JSON^ = #0) or (JSON^ > ' ');
+        until (JSON^ = #0) or
+              (JSON^ > ' ');
         Add('{');
         inc(fHumanReadableLevel);
         if not (Format in [jsonCompact, jsonUnquotedPropNameCompact]) then
@@ -5740,7 +5849,8 @@ begin
         if JSON^ = '}' then
           repeat
             inc(JSON)
-          until (JSON^ = #0) or (JSON^ > ' ')
+          until (JSON^ = #0) or
+                (JSON^ > ' ')
         else
           repeat
             Name := GetJSONPropName(JSON, @NameLen);
@@ -5759,7 +5869,8 @@ begin
               Add(':')
             else
               Add(':', ' ');
-            while (JSON^ <= ' ') and (JSON^ <> #0) do
+            while (JSON^ <= ' ') and
+                  (JSON^ <> #0) do
               inc(JSON);
             JSON := AddJSONReformat(JSON, Format, @objEnd);
             if objEnd = '}' then
@@ -5793,21 +5904,24 @@ begin
         inc(ValueLen);
       until jcEndOfJSONFieldOr0 in tab[JSON[ValueLen]];
       inc(JSON, ValueLen);
-      while (ValueLen > 0) and (Value[ValueLen - 1] <= ' ') do
+      while (ValueLen > 0) and
+            (Value[ValueLen - 1] <= ' ') do
         dec(ValueLen);
       AddNoJSONEscape(Value, ValueLen);
     end;
   end;
   if JSON = nil then
     exit;
-  while (JSON^ <= ' ') and (JSON^ <> #0) do
+  while (JSON^ <= ' ') and
+        (JSON^ <> #0) do
     inc(JSON);
   if EndOfObject <> nil then
     EndOfObject^ := JSON^;
   if JSON^ <> #0 then
     repeat
       inc(JSON)
-    until (JSON^ = #0) or (JSON^ > ' ');
+    until (JSON^ = #0) or
+          (JSON^ > ' ');
   result := JSON;
 end;
 
@@ -5821,14 +5935,16 @@ begin
   result := nil;
   if JSON = nil then
     exit;
-  while (JSON^ <= ' ') and (JSON^ <> #0) do
+  while (JSON^ <= ' ') and
+        (JSON^ <> #0) do
     inc(JSON);
   case JSON^ of
   '[':
     begin
       repeat
         inc(JSON);
-      until (JSON^ = #0) or (JSON^ > ' ');
+      until (JSON^ = #0) or
+            (JSON^ > ' ');
       if JSON^ = ']' then
         JSON := GotoNextNotSpace(JSON + 1)
       else
@@ -5858,7 +5974,8 @@ begin
     begin
       repeat
         inc(JSON);
-      until (JSON^ = #0) or (JSON^ > ' ');
+      until (JSON^ = #0) or
+            (JSON^ > ' ');
       if JSON^ = '}' then
         JSON := GotoNextNotSpace(JSON + 1)
       else
@@ -5867,7 +5984,8 @@ begin
           Name := GetJSONPropName(JSON);
           if Name = nil then
             exit;
-          while (JSON^ <= ' ') and (JSON^ <> #0) do
+          while (JSON^ <= ' ') and
+                (JSON^ <> #0) do
             inc(JSON);
           if JSON^ = '[' then // arrays are written as list of items, without root
             JSON := AddJSONToXML(JSON, Name, @objEnd)
@@ -5892,7 +6010,8 @@ begin
       else
       begin
         c := PInteger(Value)^ and $ffffff;
-        if (c = JSON_BASE64_MAGIC) or (c = JSON_SQLDATE_MAGIC) then
+        if (c = JSON_BASE64_MAGIC) or
+           (c = JSON_SQLDATE_MAGIC) then
           inc(Value, 3); // just ignore the Magic codepoint encoded as UTF-8
         AddXmlEscape(Value);
       end;
@@ -5901,14 +6020,16 @@ begin
   end;
   if JSON <> nil then
   begin
-    while (JSON^ <= ' ') and (JSON^ <> #0) do
+    while (JSON^ <= ' ') and
+          (JSON^ <> #0) do
       inc(JSON);
     if EndOfObject <> nil then
       EndOfObject^ := JSON^;
     if JSON^ <> #0 then
       repeat
         inc(JSON);
-      until (JSON^ = #0) or (JSON^ > ' ');
+      until (JSON^ = #0) or
+            (JSON^ > ' ');
   end;
   result := JSON;
 end;
@@ -5943,7 +6064,8 @@ noesc:
     else
       repeat
         inc(i);
-      until (i >= Len) or (tab[PByteArray(P)[i]] <> JSON_ESCAPE_NONE);
+      until (i >= Len) or
+            (tab[PByteArray(P)[i]] <> JSON_ESCAPE_NONE);
     inc(PByte(P), start);
     dec(i, start);
     if Len >= 0 then
@@ -5955,7 +6077,8 @@ noesc:
       MoveFast(P^, B[1], i);
       inc(B, i);
     end;
-    if (Len >= 0) and (i >= Len) then
+    if (Len >= 0) and
+       (i >= Len) then
       exit;
   end;
   repeat
@@ -5977,7 +6100,8 @@ noesc:
     end;
     inc(i);
     inc(B, 2);
-  until (Len >= 0) and (i >= Len);
+  until (Len >= 0) and
+        (i >= Len);
 end;
 
 procedure TTextWriter.AddJSONEscapeString(const s: string);
@@ -6010,7 +6134,8 @@ begin
     s := i;
     repeat
       c := PWordArray(P)[i];
-      if (c <= 127) and (JSON_ESCAPE[c] <> JSON_ESCAPE_NONE) then
+      if (c <= 127) and
+         (JSON_ESCAPE[c] <> JSON_ESCAPE_NONE) then
         break;
       inc(i);
     until i >= Len;
@@ -6180,8 +6305,12 @@ procedure TTextWriter.AddJSONArraysAsJSONObject(keys, values: PUTF8Char);
 var
   k, v: PUTF8Char;
 begin
-  if (keys = nil) or (keys[0] <> '[') or (values = nil) or (values[0] <> '[') or
-     (keys[1] = ']') or (values[1] = ']') then
+  if (keys = nil) or
+     (keys[0] <> '[') or
+     (values = nil) or
+     (values[0] <> '[') or
+     (keys[1] = ']') or
+     (values[1] = ']') then
   begin
     AddNull;
     exit;
@@ -6192,13 +6321,15 @@ begin
   repeat
     k := GotoEndJSONItem(keys);
     v := GotoEndJSONItem(values);
-    if (k = nil) or (v = nil) then
+    if (k = nil) or
+       (v = nil) then
       break; // invalid JSON input
     AddNoJSONEscape(keys, k - keys);
     Add(':');
     AddNoJSONEscape(values, v - values);
     Add(',');
-    if (k^ <> ',') or (v^ <> ',') then
+    if (k^ <> ',') or
+       (v^ <> ',') then
       break; // reached the end of the input JSON arrays
     keys := k + 1;
     values := v + 1;
@@ -6432,7 +6563,8 @@ begin
   begin
     Info := JSONRetrieveObjectRttiCustom(JSON,
       jpoObjectListClassNameGlobalFindClass in Options);
-    if (Info <> nil) and (JSON^ = ',') then
+    if (Info <> nil) and
+       (JSON^ = ',') then
       JSON^ := '{' // will now parse other properties as a regular JSON object
     else
     begin
@@ -6676,7 +6808,8 @@ begin
     else
     begin
       v := GetInteger(Ctxt.Value, err);
-      if (err <> 0) or (PtrUInt(v) > Ctxt.Info.Cache.EnumMax) then
+      if (err <> 0) or
+         (PtrUInt(v) > Ctxt.Info.Cache.EnumMax) then
         v := -1;
     end;
     if v < 0 then
@@ -6731,9 +6864,11 @@ begin
     n := 0;
     cap := abs(JSONArrayCount(Ctxt.JSON, Ctxt.JSON + 256 shl 10)); // guess
     repeat
-      if (n = 0) or (n = cap) then
+      if (n = 0) or
+         (n = cap) then
       begin
-        if (n <> 0) or (cap = 0) then
+        if (n <> 0) or
+           (cap = 0) then
           cap := NextGrow(cap);
         DynArraySetLength(pointer(arr), arrinfo.Info, 1, @cap);
         Data := arr^;
@@ -6897,7 +7032,8 @@ begin
                 Ctxt.Valid := false
             else
               Ctxt.Valid := JsonLoadProp(Data, prop^, Ctxt);
-            if (not Ctxt.Valid) or (Ctxt.EndOfObject = '}') then
+            if (not Ctxt.Valid) or
+               (Ctxt.EndOfObject = '}') then
                break;
             propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
             Ctxt.Valid := (Ctxt.JSON <> nil) and (propname <> nil);
@@ -6949,7 +7085,8 @@ begin
     repeat
       item := Data^.Add;
       load(@item, Ctxt);
-    until (not Ctxt.Valid) or (Ctxt.EndOfObject = ']');
+    until (not Ctxt.Valid) or
+          (Ctxt.EndOfObject = ']');
     Ctxt.Info := root;
     Ctxt.ParseEnd;
   finally
@@ -6992,7 +7129,8 @@ begin
         UTF8DecodeToString(Ctxt.Value, Ctxt.ValueLen, item);
         Data^.Add(item);
       end;
-    until (not Ctxt.Valid) or (Ctxt.EndOfObject = ']');
+    until (not Ctxt.Valid) or
+          (Ctxt.EndOfObject = ']');
   finally
     Data^.EndUpdate;
   end;
@@ -7014,7 +7152,8 @@ begin
         FastSetString(item, Ctxt.Value, Ctxt.ValueLen);
         Data^.AddObject(item, nil);
       end;
-    until (not Ctxt.Valid) or (Ctxt.EndOfObject = ']');
+    until (not Ctxt.Valid) or
+          (Ctxt.EndOfObject = ']');
   finally
     Data^.EndUpdate;
   end;
@@ -7065,11 +7204,13 @@ var
 begin
   Init(false);
   fOnAdd := OnAdd;
-  while (Section <> nil) and (Section^ <> '[') do
+  while (Section <> nil) and
+        (Section^ <> '[') do
   begin
     s := GetNextLine(Section, Section);
     i := PosExChar('=', s);
-    if (i > 1) and not (s[1] in [';', '[']) then
+    if (i > 1) and
+       not (s[1] in [';', '[']) then
       if Assigned(OnTheFlyConvert) then
         Add(copy(s, 1, i - 1), OnTheFlyConvert(copy(s, i + 1, 1000)))
       else
@@ -7118,13 +7259,15 @@ begin
   Init(aCaseSensitive);
   if JSON = nil then
     exit;
-  while (JSON^ <= ' ') and (JSON^ <> #0) do
+  while (JSON^ <= ' ') and
+        (JSON^ <> #0) do
     inc(JSON);
   if JSON^ <> '{' then
     exit;
   repeat
     inc(JSON)
-  until (JSON^ = #0) or (JSON^ > ' ');
+  until (JSON^ = #0) or
+        (JSON^ > ' ');
   c := JSONObjectPropCount(JSON);
   if c <= 0 then
     exit;
@@ -7245,7 +7388,8 @@ begin
   if v = '' then
     exit;
   i := GetInteger(pointer(v), err);
-  if (err <> 0) or (i < 0) then
+  if (err <> 0) or
+     (i < 0) then
     i := GetEnumNameValue(aEnumTypeInfo, v, true);
   if i >= 0 then
   begin
@@ -7293,13 +7437,14 @@ end;
 
 function TSynNameValue.AsCSV(const KeySeparator, ValueSeparator, IgnoreKey: RawUTF8): RawUTF8;
 var
-  i: integer;
+  i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
   with TBaseWriter.CreateOwnedStream(temp) do
   try
     for i := 0 to Count - 1 do
-      if (IgnoreKey = '') or (List[i].Name <> IgnoreKey) then
+      if (IgnoreKey = '') or
+         (List[i].Name <> IgnoreKey) then
       begin
         AddNoJSONEscapeUTF8(List[i].Name);
         AddNoJSONEscapeUTF8(KeySeparator);
@@ -7519,11 +7664,14 @@ end;
 
 function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
 begin
-  if ((Values = nil) and (aAnother.Values <> nil)) or
-     ((Values <> nil) and (aAnother.Values = nil)) or
+  if ((Values = nil) and
+      (aAnother.Values <> nil)) or
+     ((Values <> nil) and
+      (aAnother.Values = nil)) or
      (Position <> aAnother.Position) then
     result := false
-  else if (Count <> 1) or (aAnother.Count <> 1) or
+  else if (Count <> 1) or
+          (aAnother.Count <> 1) or
           (Values[0].Value <> aAnother.Values[0].Value) then
     result := AsText = aAnother.AsText
   else
@@ -7572,7 +7720,8 @@ var
   v: PRawByteStringGroupValue;
   tmp: RawByteString;
 begin
-  if (Values <> nil) and (Count > 1) then
+  if (Values <> nil) and
+     (Count > 1) then
   begin
     SetString(tmp, nil, Position);
     v := pointer(Values);
@@ -7651,7 +7800,8 @@ function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
 var
   i: integer;
 begin
-  if (pointer(Values) <> nil) and (cardinal(aPosition) < cardinal(Position)) then
+  if (pointer(Values) <> nil) and
+     (cardinal(aPosition) < cardinal(Position)) then
   begin
     result := @Values[LastFind]; // this cache is very efficient in practice
     if (aPosition >= result^.Position) and
@@ -7686,7 +7836,8 @@ begin
   begin
     P := @Values[LastFind]; // this cache is very efficient in practice
     i := aPosition - P^.Position;
-    if (i >= 0) and (i + aLength < length(P^.Value)) then
+    if (i >= 0) and
+       (i + aLength < length(P^.Value)) then
     begin
       result := @PByteArray(P^.Value)[i];
       exit;
@@ -7722,7 +7873,8 @@ begin
   if P = nil then
     exit;
   dec(aPosition, P^.Position);
-  if (aPosition = 0) and (length(P^.Value) = aLength) then
+  if (aPosition = 0) and
+     (length(P^.Value) = aLength) then
     aText := P^.Value
   else
   // direct return if not yet compacted
@@ -7804,7 +7956,8 @@ end;
 
 procedure TSynCache.Add(const aValue: RawUTF8; aTag: PtrInt);
 begin
-  if (self = nil) or (fFindLastKey = '') then
+  if (self = nil) or
+     (fFindLastKey = '') then
     exit;
   ResetIfNeeded;
   inc(fRamUsed, length(aValue));
@@ -8001,8 +8154,9 @@ var
   now: cardinal;
 begin
   result := 0;
-  if (self = nil) or (fSafe.Padding[DIC_TIMECOUNT].VInteger = 0) or // no entry
-    (fSafe.Padding[DIC_TIMESEC].VInteger = 0) then // nothing in fTimeOut[]
+  if (self = nil) or
+     (fSafe.Padding[DIC_TIMECOUNT].VInteger = 0) or // no entry
+     (fSafe.Padding[DIC_TIMESEC].VInteger = 0) then // nothing in fTimeOut[]
     exit;
   now := GetTickCount64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger = integer(now) then
@@ -8011,7 +8165,8 @@ begin
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger - 1 downto 0 do
-      if (now > fTimeOut[i]) and (fTimeOut[i] <> 0) and
+      if (now > fTimeOut[i]) and
+         (fTimeOut[i] <> 0) and
          (not Assigned(fOnCanDelete) or
           fOnCanDelete(fKeys.ItemPtr(i)^, fValues.ItemPtr(i)^, i)) then
       begin
@@ -8357,7 +8512,8 @@ begin
   fSafe.Lock;
   try
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
-    if (n = 0) or not Assigned(OnEach) then
+    if (n = 0) or
+       not Assigned(OnEach) then
       exit;
     k := fKeys.Value^;
     ks := fKeys.ElemSize;
@@ -8396,8 +8552,10 @@ begin
     vs := fValues.ElemSize;
     for i := 0 to n - 1 do
     begin
-      if (Assigned(KeyCompare) and (KeyCompare(k^, aKey) = 0)) or
-         (Assigned(ValueCompare) and (ValueCompare(v^, aValue) = 0)) then
+      if (Assigned(KeyCompare) and
+          (KeyCompare(k^, aKey) = 0)) or
+         (Assigned(ValueCompare) and
+          (ValueCompare(v^, aValue) = 0)) then
       begin
         inc(result);
         if not OnMatch(k^, v^, i, n, Opaque) then
@@ -8698,19 +8856,19 @@ begin
       // allow any kind of customization for TSynPersistent children
       TSPHookClass(fValueClass).RttiCustomSet(self)
     // recognize most known RTL classes
-    else if fValueClass.InheritsFrom(TStrings) then
+    else if fValueKnownClass = TStrings then
     begin
       fJsonSave := @_JS_TStrings;
       fJsonLoad := @_JL_TStrings;
     end
-    else if fValueClass.InheritsFrom(TObjectList) then
+    else if fValueKnownClass = TObjectList then
     begin
       fJsonSave := @_JS_TObjectList;
       fJsonLoad := @_JL_TObjectList;
     end
-    else if fValueClass.InheritsFrom(TList) then
+    else if fValueKnownClass = TList then
       fJsonSave := @_JS_TList
-    else if fValueClass.InheritsFrom(TCollection) then
+    else if fValueKnownClass = TCollection then
     begin
       fJsonSave := @_JS_TCollection;
       fJsonLoad := @_JL_TCollection;
@@ -8863,7 +9021,8 @@ end;
 function DynArraySaveJSON(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean): RawUTF8;
 begin
-  if (PPointer(Value)^ = nil) or (TypeInfo^.Kind <> rkDynArray) then
+  if (PPointer(Value)^ = nil) or
+     (TypeInfo^.Kind <> rkDynArray) then
     result := NULL_STR_VAR
   else
     result := SaveJSON(Value, TypeInfo, EnumSetsAsText);
@@ -8881,7 +9040,6 @@ begin
     if DynArray.LoadFrom(BlobValue) = nil then
       result := ''
     else
-    begin
       with TTextWriter.CreateOwnedStream(temp) do
       try
         AddDynArrayJSON(DynArray);
@@ -8889,7 +9047,6 @@ begin
       finally
         Free;
       end;
-     end;
   finally
     DynArray.Clear; // release temporary memory
   end;
@@ -8977,7 +9134,8 @@ function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUTF8Char; CustomVariantOptions: PDocVariantOptions;
   Tolerant: boolean): PUTF8Char;
 begin
-  if (TypeInfo = nil) or not (TypeInfo.Kind in rkRecordTypes) then
+  if (TypeInfo = nil) or
+     not (TypeInfo.Kind in rkRecordTypes) then
     raise EJSONException.CreateUTF8('RecordLoadJSON: % is not a record',
       [TypeInfo.Name]);
   GetDataFromJSON(@Rec, JSON, EndOfObject, TypeInfo, CustomVariantOptions, Tolerant);
@@ -9002,7 +9160,8 @@ function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUTF8Char; CustomVariantOptions: PDocVariantOptions;
   Tolerant: boolean): PUTF8Char;
 begin
-  if (TypeInfo = nil) or (TypeInfo.Kind <> rkDynArray) then
+  if (TypeInfo = nil) or
+     (TypeInfo.Kind <> rkDynArray) then
     raise EJSONException.CreateUTF8('DynArrayLoadJSON: % is not a dynamic array',
       [TypeInfo.Name]);
   GetDataFromJSON(@Value, JSON, EndOfObject, TypeInfo, CustomVariantOptions, Tolerant);
@@ -9088,7 +9247,9 @@ var
 begin
   Valid := false;
   result := nil;
-  if (Prop = nil) or (Prop^.Value.Kind <> rkClass) or (Instance = nil) then
+  if (Prop = nil) or
+     (Prop^.Value.Kind <> rkClass) or
+     (Instance = nil) then
     exit;
   ctxt.Init(From, Prop^.Value, Options, nil, nil);
   if not JsonLoadProp(pointer(Instance), Prop^, ctxt) then
@@ -9192,7 +9353,8 @@ var
 begin
   // faster than ClassPropertiesGet: we know it is the first slot
   rtti := PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^;
-  if (rtti = nil) or not (rcfAutoCreateFields in rtti.Flags) then
+  if (rtti = nil) or
+     not (rcfAutoCreateFields in rtti.Flags) then
     rtti := DoRegisterAutoCreateFields(ObjectInstance);
   p := pointer(rtti.Props.AutoCreateClasses);
   if p = nil then
@@ -9338,7 +9500,8 @@ procedure TSynJsonFileSettings.SaveIfNeeded;
 var
   saved: RawUTF8;
 begin
-  if (self = nil) or (fFileName = '') then
+  if (self = nil) or
+     (fFileName = '') then
     exit;
   saved := ObjectToJSON(self, SETTINGS_WRITEOPTIONS);
   if saved = fInitialJsonContent then

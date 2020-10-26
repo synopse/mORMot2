@@ -367,7 +367,8 @@ begin
   end
   else
     fServerName := aServerName;
-  if (fServerName <> '') and (PosExChar(':', fServerName) = 0) then
+  if (fServerName <> '') and
+     (PosExChar(':', fServerName) = 0) then
     fServerName := fServerName + ':';
   if not IdemPChar(Pointer(aServerName), 'ZDBC:') then
     fServerName := 'zdbc:' + fServerName;
@@ -745,7 +746,8 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     result := result + '//' + aServerName;
   if aLibraryLocation <> '' then
   begin
-    if (aServerName <> '') and (aServerName[1] = '?') then
+    if (aServerName <> '') and
+       (aServerName[1] = '?') then
       result := result + ';LibLocation='
     else
       result := result + '?LibLocation=';
@@ -804,7 +806,8 @@ begin
   try
     inherited Disconnect; // flush any cached statement
   finally
-    if (fDatabase <> nil) and not fDatabase.IsClosed then
+    if (fDatabase <> nil) and
+       not fDatabase.IsClosed then
       fDatabase.Close;
   end;
 end;
@@ -862,7 +865,8 @@ end;
 procedure TSQLDBZEOSStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
-  if (fStatement <> nil) or (fResultSet <> nil) then
+  if (fStatement <> nil) or
+     (fResultSet <> nil) then
     raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once', [self]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
   fStatement := (fConnection as TSQLDBZEOSConnection).fDatabase.
@@ -1036,12 +1040,14 @@ begin
   try
     if arrayBinding=nil then
   {$else}
-  if (fParamsArrayCount>0) and not fExpectResults then
+  if (fParamsArrayCount>0) and
+     not fExpectResults then
     raise ESQLDBZEOS.CreateUTF8('%.BindArray() not supported', [self])
   else
   {$endif ZEOS72UP}
     for i := fParamCount-1 downto 0 do // EG: downto minimize memallocs
-    with fParams[i] do begin
+    with fParams[i] do
+    begin
       if (Length(VArray) > 0) and
          (fConnection.Properties.DBMS = dPostgreSQL) then
       begin
@@ -1181,11 +1187,13 @@ function TSQLDBZEOSStatement.ColumnBlob(Col: Integer): RawByteString;
 var
   blob: IZBlob;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnBlob(%) ResultSet=%',
       [self, Col, fResultSet]);
   blob := fResultSet.GetBlob(Col + FirstDbcIndex);
-  if (blob = nil) or blob.IsEmpty then
+  if (blob = nil) or
+     blob.IsEmpty then
     result := ''
   else
     result := blob.GetString; // ZAnsiString = RawByteString
@@ -1193,7 +1201,8 @@ end;
 
 function TSQLDBZEOSStatement.ColumnCurrency(Col: Integer): currency;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnCurrency(%) ResultSet=%',
       [self, Col, fResultSet]);
   {$ifdef ZEOS72UP}
@@ -1205,7 +1214,8 @@ end;
 
 function TSQLDBZEOSStatement.ColumnDateTime(Col: Integer): TDateTime;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnDateTime(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetTimestamp(Col + FirstDbcIndex);
@@ -1213,7 +1223,8 @@ end;
 
 function TSQLDBZEOSStatement.ColumnDouble(Col: Integer): double;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnDouble(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetDouble(Col + FirstDbcIndex);
@@ -1221,7 +1232,8 @@ end;
 
 function TSQLDBZEOSStatement.ColumnInt(Col: Integer): Int64;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnInt(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetLong(Col + FirstDbcIndex);
@@ -1229,14 +1241,16 @@ end;
 
 function TSQLDBZEOSStatement.ColumnNull(Col: Integer): boolean;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnNull(%) ResultSet=%', [self, Col, fResultSet]);
   result := fResultSet.IsNull(Col + FirstDbcIndex);
 end;
 
 function TSQLDBZEOSStatement.ColumnUTF8(Col: Integer): RawUTF8;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnUTF8(%) ResultSet=%',
       [self, Col, fResultSet]);
   {$ifdef ZEOS72UP}

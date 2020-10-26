@@ -483,7 +483,8 @@ end;
 {$else}
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
 begin // full pascal version of the standard C library function
-  if (p1 <> p2) and (Size <> 0) then
+  if (p1 <> p2) and
+     (Size <> 0) then
     if p1 <> nil then
       if p2 <> nil then
       begin
@@ -519,7 +520,8 @@ begin // a fast full pascal version of the standard C library function
   for i := 1 to Size do
   begin
     result := p1^ - p2^;
-    if (result <> 0) or (p1^ = 0) then
+    if (result <> 0) or
+       (p1^ = 0) then
       exit;
     inc(p1);
     inc(p2);
@@ -625,7 +627,8 @@ procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'qsort'{$else}'_qsort'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
-  if (cardinal(NElem) > 1) and (Width > 0) then
+  if (cardinal(NElem) > 1) and
+     (Width > 0) then
     if Width = sizeof(pointer) then
       QuickSortPtr(baseP, 0, NElem-1, qsort_compare_func(comparF))
     else
@@ -755,8 +758,11 @@ var
   plain: Int64;    // bytes 16..23 should always be unencrypted
   iv: THash128Rec; // is genuine and AES-protected (since not random)
 begin
-  if (len and AESBlockMod <> 0) or (len <= 0) or (integer(page) <= 0) then
-    raise ESQLite3Exception.CreateUTF8('CodecAESProcess(page=%,len=%)', [page, len]);
+  if (len and AESBlockMod <> 0) or
+     (len <= 0) or
+     (integer(page) <= 0) then
+    raise ESQLite3Exception.CreateUTF8(
+      'CodecAESProcess(page=%,len=%)', [page, len]);
   iv.c0 := page xor 668265263; // prime-based initialization
   iv.c1 := page * 2654435761;
   iv.c2 := page * 2246822519;
@@ -766,7 +772,9 @@ begin
   len := len shr AESBlockShift;
   if page = 1 then // ensure header bytes 16..23 are stored unencrypted
     if (PInt64(data)^ = SQLITE_FILE_HEADER128.lo) and
-       (data[21] = #64) and (data[22] = #32) and (data[23] = #32) then
+       (data[21] = #64) and
+       (data[22] = #32) and
+       (data[23] = #32) then
       if encrypt then
       begin
         plain := PInt64(data + 16)^;
@@ -779,7 +787,9 @@ begin
       begin
         PInt64(data + 16)^ := PInt64(data + 8)^;
         aes^.DoBlocksOFB(iv.b, data + 16, data + 16, len - 1);
-        if (data[21] = #64) and (data[22] = #32) and (data[23] = #32) then
+        if (data[21] = #64) and
+           (data[22] = #32) and
+           (data[23] = #32) then
           PHash128(data)^ := SQLITE_FILE_HEADER128.b
         else
           FillZero(PHash128(data)^); // report incorrect password
@@ -848,8 +858,10 @@ begin
       bufsize := size;
     pagesize := cardinal(head.b[16]) shl 8 + head.b[17];
     pagecount := size div pagesize;
-    if (pagesize < 1024) or (pagesize and AESBlockMod <> 0) or
-       (pagesize > bufsize) or (QWord(pagecount) * pagesize <> size) or
+    if (pagesize < 1024) or
+       (pagesize and AESBlockMod <> 0) or
+       (pagesize > bufsize) or
+       (QWord(pagecount) * pagesize <> size) or
        (head.d0 <> SQLITE_FILE_HEADER128.Lo) or
        ((head.d1 = SQLITE_FILE_HEADER128.Hi) <> (OldPassWord = '')) then
       exit;
@@ -872,7 +884,9 @@ begin
         if OldPassWord <> '' then
         begin
           CodecAESProcess(page + p, buf, pagesize, @old, false);
-          if (p = 0) and (page = 1) and (PInteger(buf)^ = 0) then
+          if (p = 0) and
+             (page = 1) and
+             (PInteger(buf)^ = 0) then
             exit; // OldPassword is obviously incorrect
         end;
         if NewPassword <> '' then
