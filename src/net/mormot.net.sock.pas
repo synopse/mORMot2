@@ -1173,9 +1173,9 @@ var
   endtix: Int64; // never wait forever
 begin
   Terminate;
-  endtix := GetTickCount64 + 1000;
+  endtix := mormot.core.os.GetTickCount64 + 1000;
   while (fGettingOne > 0) and
-        (GetTickCount64 < endtix) do
+        (mormot.core.os.GetTickCount64 < endtix) do
     SleepHiRes(1);
   for p := 0 to high(fPoll) do
     fPoll[p].Free;
@@ -1312,7 +1312,7 @@ begin
     if timeoutMS = 0 then
       start := 0
     else
-      start := GetTickCount64;
+      start := mormot.core.os.GetTickCount64;
     repeat
       // non-blocking search within all fPoll[] items
       if fCount > 0 then
@@ -1340,7 +1340,7 @@ begin
       // wait a little for something to happen
       if fTerminated or (timeoutMS = 0) then
         exit;
-      elapsed := GetTickCount64 - start;
+      elapsed := mormot.core.os.GetTickCount64 - start;
       if elapsed > timeoutMS then
         break;
       if elapsed > 300 then
@@ -2048,7 +2048,7 @@ begin
   begin
     expected := Length;
     Length := 0;
-    last := {$ifdef MSWINDOWS}GetTickCount64{$else}0{$endif};
+    last := {$ifdef MSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
     repeat
       read := expected - Length;
       if fSecure <> nil then
@@ -2074,7 +2074,7 @@ begin
           break; // good enough for now
         inc(PByte(Buffer), read);
       end;
-      now := GetTickCount64;
+      now := mormot.core.os.GetTickCount64;
       if (last = 0) or
          (read > 0) then // check timeout from unfinished read
         last := now
@@ -2203,7 +2203,7 @@ begin
   result := Len = 0;
   if not SockIsDefined or (Len <= 0) or (P = nil) then
     exit;
-  start := {$ifdef MSWINDOWS}GetTickCount64{$else}0{$endif};
+  start := {$ifdef MSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
   repeat
     sent := Len;
     if fSecure <> nil then
@@ -2221,7 +2221,7 @@ begin
     else if (res <> nrOK) and
             (res <> nrRetry) then
       exit; // fatal socket error
-    now := GetTickCount64;
+    now := mormot.core.os.GetTickCount64;
     if (start = 0) or
        (sent > 0) then
       start := now
