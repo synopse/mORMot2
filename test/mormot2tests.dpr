@@ -46,9 +46,15 @@ uses
   mormot.orm.core          in '..\src\orm\mormot.orm.core.pas',
   mormot.orm.rest          in '..\src\orm\mormot.orm.rest.pas',
   mormot.orm.client        in '..\src\orm\mormot.orm.client.pas',
+  mormot.orm.storage       in '..\src\orm\mormot.orm.storage.pas',
+  mormot.orm.server        in '..\src\orm\mormot.orm.server.pas',
   mormot.soa.core          in '..\src\soa\mormot.soa.core.pas',
+  mormot.soa.client        in '..\src\soa\mormot.soa.client.pas',
+  mormot.soa.server        in '..\src\soa\mormot.soa.server.pas',
   mormot.rest.core         in '..\src\rest\mormot.rest.core.pas',
   mormot.rest.client       in '..\src\rest\mormot.rest.client.pas',
+  mormot.rest.server       in '..\src\rest\mormot.rest.server.pas',
+  mormot.rest.memserver    in '..\src\rest\mormot.rest.memserver.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
   mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
   mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',
@@ -91,6 +97,7 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([TTestCoreBase, TTestCoreCrypto]);
 end;
+
 
 
 begin
