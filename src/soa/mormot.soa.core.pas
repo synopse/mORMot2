@@ -7,7 +7,7 @@ unit mormot.soa.core;
   *****************************************************************************
 
    Shared Interface-based Service Oriented Architecture (SOA) Process
-    - TSQLRecordServiceLog TSQLRecordServiceNotifications Classes
+    - TORMServiceLog TORMServiceNotifications Classes
     - TServiceFactory Abstract Service Provider
     - TServiceFactoryServerAbstract Abstract Service Provider
     - TServiceContainer Abstract Services Holder
@@ -40,7 +40,7 @@ uses
   mormot.orm.core;
 
 
-{ ************ TSQLRecordServiceLog TSQLRecordServiceNotifications Classes }
+{ ************ TORMServiceLog TORMServiceNotifications Classes }
 
 type
   /// common ancestor for storing interface-based service execution statistics
@@ -48,7 +48,7 @@ type
   // - TServiceMethodExecute could store all its calls in such a table
   // - enabled on server side via either TServiceFactoryServer.SetServiceLog or
   // TServiceContainerServer.SetServiceLog method
-  TSQLRecordServiceLog = class(TSQLRecordNoCaseExtended)
+  TORMServiceLog = class(TORMNoCaseExtended)
   protected
     fMethod: RawUTF8;
     fInput: variant;
@@ -61,7 +61,7 @@ type
   public
     /// overriden method creating an index on the Method/MicroSec columns
     class procedure InitializeTable(const Server: IRestORMServer;
-      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
+      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
   published
     /// the 'interface.method' identifier of this call
     // - this column will be indexed, for fast SQL queries, with the MicroSec
@@ -95,13 +95,13 @@ type
   // - as used by TServiceFactoryClient.SendNotifications
   // - here, the Output column may contain the information about an error
   // occurred during process
-  TSQLRecordServiceNotifications = class(TSQLRecordServiceLog)
+  TORMServiceNotifications = class(TORMServiceLog)
   protected
     fSent: TTimeLog;
   public
     /// this overriden method will create an index on the 'Sent' column
     class procedure InitializeTable(const Server: IRestORMServer;
-      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
+      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
     /// search for pending events since a supplied ID
     // - returns FALSE if no notification was found
     // - returns TRUE ad fill a TDocVariant array of JSON Objects, including
@@ -126,14 +126,14 @@ type
 
   /// class-reference type (metaclass) for storing interface-based service
   // execution statistics
-  // - you could inherit from TSQLRecordServiceLog, and specify additional
+  // - you could inherit from TORMServiceLog, and specify additional
   // fields corresponding to the execution context
-  TSQLRecordServiceLogClass = class of TSQLRecordServiceLog;
+  TORMServiceLogClass = class of TORMServiceLog;
 
   /// class-reference type (metaclass) for storing interface-based service
   // execution statistics used for DB-based asynchronous notifications
   // - as used by TServiceFactoryClient.SendNotifications
-  TSQLRecordServiceNotificationsClass = class of TSQLRecordServiceNotifications;
+  TORMServiceNotificationsClass = class of TORMServiceNotifications;
 
 
 { ************ TServiceFactory Abstract Service Provider }
@@ -181,19 +181,19 @@ type
 
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
-    /// the list of denied TSQLAuthGroup ID(s)
+    /// the list of denied TAuthGroup ID(s)
     // - used on server side within TRestServerURIContext.ExecuteSOAByInterface
-    // - bit 0 for client TSQLAuthGroup.ID=1 and so on...
+    // - bit 0 for client TAuthGroup.ID=1 and so on...
     // - is therefore able to store IDs up to 256
     // - void by default, i.e. no denial = all groups allowed for this method
     Denied: set of 0..255;
     /// execution options for this method (about thread safety or logging)
     Options: TInterfaceMethodOptions;
-    /// where execution information should be written as TSQLRecordServiceLog
+    /// where execution information should be written as TORMServiceLog
     // - is a weak pointer to a IRestORM instance to avoid reference counting
     LogRest: pointer;
-    /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
-    LogClass: TSQLRecordServiceLogClass;
+    /// the TORMServiceLog class to use, as defined in LogRest.Model
+    LogClass: TORMServiceLogClass;
   end;
 
   /// points to the execution context of one method within TServiceFactory
@@ -358,61 +358,61 @@ type
     function GetAuthGroupIDs(const aGroup: array of RawUTF8;
       out IDs: TIDDynArray): boolean;
   public
-    /// allow all methods execution for all TSQLAuthGroup
+    /// allow all methods execution for all TAuthGroup
     // - all Groups will be affected by this method (on both client and server sides)
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function AllowAll: TServiceFactoryServerAbstract;
-    /// allow all methods execution for the specified TSQLAuthGroup ID(s)
+    /// allow all methods execution for the specified TAuthGroup ID(s)
     // - the specified group ID(s) will be used to authorize remote service
     // calls from the client side
-    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
-    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - you can retrieve a TAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function AllowAllByID(const aGroupID: array of TID): TServiceFactoryServerAbstract;
-    /// allow all methods execution for the specified TSQLAuthGroup names
+    /// allow all methods execution for the specified TAuthGroup names
     // - is just a wrapper around the other AllowAllByID() method, retrieving the
     // Group ID from its main field
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function AllowAllByName(const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
-    /// deny all methods execution for all TSQLAuthGroup
+    /// deny all methods execution for all TAuthGroup
     // - all Groups will be affected by this method (on both client and server sides)
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function DenyAll: TServiceFactoryServerAbstract;
-    /// deny all methods execution for the specified TSQLAuthGroup ID(s)
+    /// deny all methods execution for the specified TAuthGroup ID(s)
     // - the specified group ID(s) will be used to authorize remote service
     // calls from the client side
-    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
-    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - you can retrieve a TAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function DenyAllByID(const aGroupID: array of TID): TServiceFactoryServerAbstract;
-    /// dent all methods execution for the specified TSQLAuthGroup names
+    /// dent all methods execution for the specified TAuthGroup names
     // - is just a wrapper around the other DenyAllByID() method, retrieving the
     // Group ID from its main field
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function DenyAllByName(const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
-    /// allow specific methods execution for the all TSQLAuthGroup
+    /// allow specific methods execution for the all TAuthGroup
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - all Groups will be affected by this method (on both client and server sides)
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function Allow(const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
-    /// allow specific methods execution for the specified TSQLAuthGroup ID(s)
+    /// allow specific methods execution for the specified TAuthGroup ID(s)
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - the specified group ID(s) will be used to authorize remote service
     // calls from the client side
-    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
-    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - you can retrieve a TAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function AllowByID(const aMethod: array of RawUTF8;
       const aGroupID: array of TID): TServiceFactoryServerAbstract;
-    /// allow specific methods execution for the specified TSQLAuthGroup name(s)
+    /// allow specific methods execution for the specified TAuthGroup name(s)
     // - is just a wrapper around the other AllowByID() method, retrieving the
     // Group ID from its main field
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
@@ -420,23 +420,23 @@ type
     // calls, in a fluent interface
     function AllowByName(const aMethod: array of RawUTF8;
       const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
-    /// deny specific methods execution for the all TSQLAuthGroup
+    /// deny specific methods execution for the all TAuthGroup
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - all Groups will be affected by this method (on both client and server sides)
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function Deny(const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
-    /// deny specific methods execution for the specified TSQLAuthGroup ID(s)
+    /// deny specific methods execution for the specified TAuthGroup ID(s)
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - the specified group ID(s) will be used to unauthorize remote service
     // calls from the client side
-    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
-    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - you can retrieve a TAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function DenyByID(const aMethod: array of RawUTF8;
       const aGroupID: array of TID): TServiceFactoryServerAbstract; overload;
-    /// deny specific methods execution for the specified TSQLAuthGroup name(s)
+    /// deny specific methods execution for the specified TAuthGroup name(s)
     // - is just a wrapper around the other DenyByID() method, retrieving the
     // Group ID from its main field
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
@@ -461,18 +461,18 @@ type
     // calls for the service, in a fluent interface
     function SetTimeoutSec(value: cardinal): TServiceFactoryServerAbstract;
       virtual; abstract;
-    /// log method execution information to a TSQLRecordServiceLog table
+    /// log method execution information to a TORMServiceLog table
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - if no method name is given (i.e. []), option will be set for all methods
     // - will write to the specified aLogRest instance, and will disable
     // writing if aLogRest is nil
-    // - will write to a (inherited) TSQLRecordServiceLog table, as available in
+    // - will write to a (inherited) TORMServiceLog table, as available in
     // TRest's model, unless a dedicated table is specified as aLogClass
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function SetServiceLog(const aMethod: array of RawUTF8;
       const aLogRest: IRestORM;
-      aLogClass: TSQLRecordServiceLogClass = nil): TServiceFactoryServerAbstract;
+      aLogClass: TORMServiceLogClass = nil): TServiceFactoryServerAbstract;
       virtual; abstract;
     /// set to TRUE disable Authentication method check for the whole interface
     // - by default (FALSE), all interface-based services will require valid
@@ -660,12 +660,12 @@ type
       const aMethodsNames: array of RawUTF8; aSubscribe: boolean = true); overload;
   end;
 
-  /// a callback interface used to notify a TSQLRecord modification in real time
+  /// a callback interface used to notify a TORM modification in real time
   // - will be used e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster()
   // - all methods of this interface will be called asynchronously when
   // transmitted via our WebSockets implementation, since they are defined as
   // plain procedures
-  // - each callback instance should be private to a specific TSQLRecord
+  // - each callback instance should be private to a specific TORM
   IServiceRecordVersionCallback = interface(IInvokable)
     ['{8598E6BE-3590-4F76-9449-7AF7AF4241B0}']
     /// this event will be raised on any Add on a versioned record
@@ -686,7 +686,7 @@ type
     procedure CurrentFrame(isLast: boolean);
   end;
 
-  /// a list of callback interfaces to notify TSQLRecord modifications
+  /// a list of callback interfaces to notify TORM modifications
   // - you can use InterfaceArray*() wrapper functions to manage the list
   IServiceRecordVersionCallbackDynArray = array of IServiceRecordVersionCallback;
 
@@ -827,12 +827,12 @@ uses
   mormot.rest.core;
 
 
-{ ************ TSQLRecordServiceLog TSQLRecordServiceNotifications Classes }
+{ ************ TORMServiceLog TORMServiceNotifications Classes }
 
-{ TSQLRecordServiceLog }
+{ TORMServiceLog }
 
-class procedure TSQLRecordServiceLog.InitializeTable(const Server: IRestORMServer;
-  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+class procedure TORMServiceLog.InitializeTable(const Server: IRestORMServer;
+  const FieldName: RawUTF8; Options: TORMInitializeTableOptions);
 begin
   inherited;
   if FieldName = '' then
@@ -840,11 +840,11 @@ begin
 end;
 
 
-{ TSQLRecordServiceNotifications }
+{ TORMServiceNotifications }
 
-class procedure TSQLRecordServiceNotifications.InitializeTable(
+class procedure TORMServiceNotifications.InitializeTable(
   const Server: IRestORMServer; const FieldName: RawUTF8;
-  Options: TSQLInitializeTableOptions);
+  Options: TORMInitializeTableOptions);
 begin
   inherited;
   if (FieldName = '') or
@@ -852,11 +852,11 @@ begin
     Server.CreateSQLMultiIndex(self, ['Sent'], false);
 end;
 
-class function TSQLRecordServiceNotifications.LastEventsAsObjects(
+class function TORMServiceNotifications.LastEventsAsObjects(
   const Rest: IRestORM; LastKnownID: TID; Limit: integer; Service: TInterfaceFactory;
   out Dest: TDocVariantData; const MethodName: RawUTF8; IDAsHexa: boolean): boolean;
 var
-  res: TSQLRecordServiceNotifications;
+  res: TORMServiceNotifications;
 begin
   res := CreateAndFillPrepare(Rest, 'ID > ? order by ID limit %',
     [Limit], [LastKnownID], 'ID,Method,Input');
@@ -873,7 +873,7 @@ begin
   end;
 end;
 
-function TSQLRecordServiceNotifications.SaveInputAsObject(
+function TORMServiceNotifications.SaveInputAsObject(
   Service: TInterfaceFactory; const MethodName: RawUTF8; IDAsHexa: boolean): variant;
 var
   m: integer;
@@ -890,7 +890,7 @@ begin
       _Safe(fInput)^, TDocVariantData(result), true);
 end;
 
-procedure TSQLRecordServiceNotifications.SaveFillInputsAsObjects(
+procedure TORMServiceNotifications.SaveFillInputsAsObjects(
   Service: TInterfaceFactory; out Dest: TDocVariantData; const MethodName: RawUTF8;
   IDAsHexa: boolean);
 begin
@@ -990,7 +990,7 @@ var
   i: PtrInt;
 begin
   result := (self <> nil) and
-    fORM.MainFieldIDs(fORM.Model.GetTableInherited(TSQLAuthGroup), aGroup, IDs);
+    fORM.MainFieldIDs(fORM.Model.GetTableInherited(TAuthGroup), aGroup, IDs);
   if result then
     for i := 0 to high(IDs) do
       // fExecution[].Denied set is able to store IDs up to 256 only

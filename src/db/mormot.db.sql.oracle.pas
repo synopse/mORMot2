@@ -308,7 +308,7 @@ type
     // - this implementation will retrieve the data with no temporary variable,
     // and handling ftCurrency/NUMBER(22,0) as fast as possible, directly from
     // the memory buffers returned by OCI: it will ensure best performance
-    // possible when called from TSQLVirtualTableCursorExternal.Column method
+    // possible when called from TORMVirtualTableCursorExternal.Column method
     // as defined in mORMotDB unit (i.e. mORMot external DB access)
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
       var Temp: RawByteString); override;

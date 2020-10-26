@@ -69,7 +69,7 @@ const
 type
   /// handled field/parameter/column types for abstract database access
   // - this will map JSON-compatible low-level database-level access types, not
-  // high-level object pascal types as TSQLFieldType defined in
+  // high-level object pascal types as TORMFieldType defined in
   // mormot.orm.core.pas
   // - it does not map either all potential types as defined in DB.pas (which
   // are there for compatibility with old RDBMS, and are not abstract enough)
@@ -80,7 +80,14 @@ type
   // - the only string type handled here uses UTF-8 encoding (implemented
   // using our RawUTF8 type), for cross-Delphi true Unicode process
   TSQLDBFieldType = (
-    ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob);
+    ftUnknown,
+    ftNull,
+    ftInt64,
+    ftDouble,
+    ftCurrency,
+    ftDate,
+    ftUTF8,
+    ftBlob);
 
   /// set of field/parameter/column types for abstract database access
   TSQLDBFieldTypes = set of TSQLDBFieldType;
@@ -140,26 +147,31 @@ type
   // - with current MAX_SQLFIELDS value, 64 bits uses 8 bytes of memory
   // - see also IsZero() and IsEqual() functions
   // - you can also use ALL_FIELDS as defined in mORMot.pas
-  TSQLFieldBits = set of 0..MAX_SQLFIELDS - 1;
+  TFieldBits = set of 0..MAX_SQLFIELDS - 1;
+
+  /// points to a bit set used for all available fields in a Table
+  PFieldBits = ^TFieldBits;
 
   /// used to store a field index in a Table
   // - note that -1 is commonly used for the ID/RowID field so the values should
   // be signed
   // - MAX_SQLFIELDS may be up to 256, so ShortInt (-128..127) would not have
   // been enough, so we use the SmallInt range (-32768..32767)
-  TSQLFieldIndex = SmallInt;
+  TFieldIndex = SmallInt;
 
   /// used to store field indexes in a Table
-  // - same as TSQLFieldBits, but allowing to store the proper order
-  TSQLFieldIndexDynArray = array of TSQLFieldIndex;
-
-  /// points to a bit set used for all available fields in a Table
-  PSQLFieldBits = ^TSQLFieldBits;
+  // - same as TFieldBits, but allowing to store the proper order
+  TFieldIndexDynArray = array of TFieldIndex;
 
   /// generic parameter types, as recognized by SQLParamContent() and
   // ExtractInlineParameters() functions
   TSQLParamType = (
-    sptUnknown, sptInteger, sptFloat, sptText, sptBlob, sptDateTime);
+    sptUnknown,
+    sptInteger,
+    sptFloat,
+    sptText,
+    sptBlob,
+    sptDateTime);
 
   /// array of parameter types, as recognized by SQLParamContent() and
   // ExtractInlineParameters() functions
@@ -168,7 +180,8 @@ type
 
 const
   /// TSQLDBFieldType kind of columns which have a fixed width
-  FIXEDLENGTH_SQLDBFIELDTYPE = [ftInt64, ftDouble, ftCurrency, ftDate];
+  FIXEDLENGTH_SQLDBFIELDTYPE =
+    [ftInt64, ftDouble, ftCurrency, ftDate];
 
   /// conversion matrix from TSQLDBFieldType into variant type
   MAP_FIELDTYPE2VARTYPE: array[TSQLDBFieldType] of Word = (
@@ -186,48 +199,48 @@ function ToText(Field: TSQLDBFieldType): PShortString; overload;
 function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
 
 
-/// returns TRUE if no bit inside this TSQLFieldBits is set
+/// returns TRUE if no bit inside this TFieldBits is set
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
-function IsZero(const Fields: TSQLFieldBits): boolean; overload;
+function IsZero(const Fields: TFieldBits): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast comparison of two TSQLFieldBits values
+/// fast comparison of two TFieldBits values
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
-function IsEqual(const A, B: TSQLFieldBits): boolean; overload;
+function IsEqual(const A, B: TFieldBits): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast initialize a TSQLFieldBits with 0
+/// fast initialize a TFieldBits with 0
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
-procedure FillZero(var Fields: TSQLFieldBits); overload;
+procedure FillZero(var Fields: TFieldBits); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a TSQLFieldBits set of bits into an array of integers
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
-  out Index: TSQLFieldIndexDynArray;
+/// convert a TFieldBits set of bits into an array of integers
+procedure FieldBitsToIndex(const Fields: TFieldBits;
+  out Index: TFieldIndexDynArray;
   MaxLength: integer = MAX_SQLFIELDS; IndexStart: integer = 0); overload;
 
-/// convert a TSQLFieldBits set of bits into an array of integers
-function FieldBitsToIndex(const Fields: TSQLFieldBits;
-  MaxLength: integer = MAX_SQLFIELDS): TSQLFieldIndexDynArray; overload;
+/// convert a TFieldBits set of bits into an array of integers
+function FieldBitsToIndex(const Fields: TFieldBits;
+  MaxLength: integer = MAX_SQLFIELDS): TFieldIndexDynArray; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// add a field index to an array of field indexes
 // - returns the index in Indexes[] of the newly appended Field value
-function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
 
-/// convert an array of field indexes into a TSQLFieldBits set of bits
-procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
-  out Fields: TSQLFieldBits); overload;
+/// convert an array of field indexes into a TFieldBits set of bits
+procedure FieldIndexToBits(const Index: TFieldIndexDynArray;
+  out Fields: TFieldBits); overload;
 
 // search a field index in an array of field indexes
 // - returns the index in Indexes[] of the given Field value, -1 if not found
-function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
 
-/// convert an array of field indexes into a TSQLFieldBits set of bits
-function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
+/// convert an array of field indexes into a TFieldBits set of bits
+function FieldIndexToBits(const Index: TFieldIndexDynArray): TFieldBits; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -272,7 +285,7 @@ type
   /// SQL Query comparison operators
   // - used e.g. by CompareOperator() functions in SynTable.pas or vt_BestIndex()
   // in mORMotSQLite3.pas
-  TCompareOperator = (
+  TSQLCompareOperator = (
      soEqualTo,
      soNotEqualTo,
      soLessThan,
@@ -286,13 +299,25 @@ type
      soSoundsLikeSpanish);
 
 const
-  /// special TSQLFieldBits value containing all field bits set to 1
-  ALL_FIELDS: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1];
+  /// special TFieldBits value containing all field bits set to 1
+  ALL_FIELDS: TFieldBits = [0 .. MAX_SQLFIELDS - 1];
 
   /// convert identified field types into high-level ORM types
-  // - as will be implemented in unit mORMot.pas
+  // - as will be implemented in TORM classes
   SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
-    '???','???', 'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TSQLRawBlob');
+    '???','???',
+    'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TRawBlob');
+
+
+{$ifndef PUREMORMOT2}
+
+type
+  TSQLFieldBits = TFieldBits;
+  PSQLFieldBits = PFieldBits;
+  TSQLFieldIndex = TFieldIndex;
+  TSQLFieldIndexDynArray = TFieldIndexDynArray;
+
+{$endif PUREMORMOT2}
 
 
 
@@ -646,7 +671,7 @@ function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType;
 // - sptUnknown is returned on invalid content
 function ExtractInlineParameters(const SQL: RawUTF8;
   var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
-  var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
+  var maxParam: integer; var Nulls: TFieldBits): RawUTF8;
 
 /// returns a 64-bit value as inlined ':(1234):' text
 function InlineParameter(ID: Int64): shortstring; overload;
@@ -724,10 +749,10 @@ type
   protected
     /// used to store output format
     fExpand: boolean;
-    /// used to store output format for TSQLRecord.GetJSONValues()
+    /// used to store output format for TORM.GetJSONValues()
     fWithID: boolean;
-    /// used to store field for TSQLRecord.GetJSONValues()
-    fFields: TSQLFieldIndexDynArray;
+    /// used to store field for TORM.GetJSONValues()
+    fFields: TFieldIndexDynArray;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
@@ -739,12 +764,12 @@ type
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldBits; aBufSize: integer = 8192); overload;
+      const Fields: TFieldBits; aBufSize: integer = 8192); overload;
     /// the data will be written to the specified Stream
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldIndexDynArray = nil; aBufSize: integer = 8192;
+      const Fields: TFieldIndexDynArray = nil; aBufSize: integer = 8192;
       aStackBuffer: PTextWriterStackBuffer = nil); overload;
     /// rewind the Stream position and write void JSON object
     procedure CancelAllVoid;
@@ -757,7 +782,7 @@ type
     // - by definition, a non expanded format will raise a ESynException
     // - caller should then set ColNames[] and run AddColumns()
     procedure ChangeExpandedFields(aWithID: boolean;
-      const aFields: TSQLFieldIndexDynArray); overload;
+      const aFields: TFieldIndexDynArray); overload;
     /// end the serialized JSON object
     // - cancel last ','
     // - close the JSON object ']' or ']}'
@@ -774,12 +799,12 @@ type
     property Expand: boolean
       read fExpand write fExpand;
     /// is set to TRUE if the ID field must be appended to the resulting JSON
-    // - this field is used only by TSQLRecord.GetJSONValues
-    // - this field is ignored by TSQLTable.GetJSONValues
+    // - this field is used only by TORM.GetJSONValues
+    // - this field is ignored by TORMTable.GetJSONValues
     property WithID: boolean
       read fWithID;
     /// Read-Only access to the field bits set for each column to be stored
-    property Fields: TSQLFieldIndexDynArray
+    property Fields: TFieldIndexDynArray
       read fFields;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
@@ -859,7 +884,7 @@ type
     // SubField='.subfield1.subfield2'
     SubField: RawUTF8;
     /// the operator of the WHERE expression
-    Operator: TSynTableStatementOperator;
+    Operation: TSynTableStatementOperator;
     /// the SQL function name associated to a Field and Value
     // - e.g. 'INTEGERDYNARRAYCONTAINS' and Field=0 for
     // IntegerDynArrayContains(RowID,10) and ValueInteger=10
@@ -893,8 +918,8 @@ type
     fSelectFunctionCount: integer;
     fTableName: RawUTF8;
     fWhere: TSynTableStatementWhereDynArray;
-    fOrderByField: TSQLFieldIndexDynArray;
-    fGroupByField: TSQLFieldIndexDynArray;
+    fOrderByField: TFieldIndexDynArray;
+    fGroupByField: TFieldIndexDynArray;
     fWhereHasParenthesis, fHasSelectSubFields, fWhereHasSubFields: boolean;
     fOrderByDesc: boolean;
     fLimit: integer;
@@ -910,11 +935,11 @@ type
     // - if SQLStatement is set, the caller must check for TableName to match
     // the expected value, then use the Where[] to retrieve the content
     constructor Create(const SQL: RawUTF8; const GetFieldIndex: TSynTableFieldIndex;
-      const SimpleFieldsBits: TSQLFieldBits = [0 .. MAX_SQLFIELDS - 1]);
+      const SimpleFieldsBits: TFieldBits = [0 .. MAX_SQLFIELDS - 1]);
     /// compute the SELECT column bits from the SelectFields array
     // - optionally set Select[].SubField into SubFields[Select[].Field]
     // (e.g. to include specific fields from MongoDB embedded document)
-    procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean;
+    procedure SelectFieldBits(var Fields: TFieldBits; var withID: boolean;
       SubFields: PRawUTF8Array = nil);
 
     /// the SELECT SQL statement parsed
@@ -936,10 +961,10 @@ type
     property WhereHasSubFields: boolean read fWhereHasSubFields;
     /// recognize an GROUP BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
-    property GroupByField: TSQLFieldIndexDynArray read fGroupByField;
+    property GroupByField: TFieldIndexDynArray read fGroupByField;
     /// recognize an ORDER BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
-    property OrderByField: TSQLFieldIndexDynArray read fOrderByField;
+    property OrderByField: TFieldIndexDynArray read fOrderByField;
     /// false for default ASC order, true for DESC attribute
     property OrderByDesc: boolean read fOrderByDesc;
     /// the number specified by the optional LIMIT ... clause
@@ -971,7 +996,7 @@ begin
     FormatShort16('#%', [ord(aType)], result);
 end;
 
-function IsZero(const Fields: TSQLFieldBits): boolean;
+function IsZero(const Fields: TFieldBits): boolean;
 var
   f: TPtrIntArray absolute Fields;
 begin
@@ -1008,7 +1033,7 @@ begin
   {$endif CPU64}
 end;
 
-function IsEqual(const A, B: TSQLFieldBits): boolean;
+function IsEqual(const A, B: TFieldBits): boolean;
 var
   a_: TPtrIntArray absolute A;
   b_: TPtrIntArray absolute B;
@@ -1047,7 +1072,7 @@ begin
   {$endif CPU64}
 end;
 
-procedure FillZero(var Fields: TSQLFieldBits);
+procedure FillZero(var Fields: TFieldBits);
 begin
   {$ifdef MAX_SQLFIELDS_128}
   PInt64Array(@Fields)^[0] := 0;
@@ -1070,11 +1095,11 @@ begin
   {$endif MAX_SQLFIELDS_128}
 end;
 
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
-  out Index: TSQLFieldIndexDynArray; MaxLength, IndexStart: integer);
+procedure FieldBitsToIndex(const Fields: TFieldBits;
+  out Index: TFieldIndexDynArray; MaxLength, IndexStart: integer);
 var
   i, n: PtrInt;
-  sets: array[0..MAX_SQLFIELDS - 1] of TSQLFieldIndex; // to avoid memory reallocation
+  sets: array[0..MAX_SQLFIELDS - 1] of TFieldIndex; // to avoid memory reallocation
 begin
   n := 0;
   for i := 0 to MaxLength - 1 do
@@ -1088,20 +1113,20 @@ begin
     Index[IndexStart + i] := {%H-}sets[i];
 end;
 
-function FieldBitsToIndex(const Fields: TSQLFieldBits;
-  MaxLength: integer): TSQLFieldIndexDynArray;
+function FieldBitsToIndex(const Fields: TFieldBits;
+  MaxLength: integer): TFieldIndexDynArray;
 begin
   FieldBitsToIndex(Fields, result, MaxLength);
 end;
 
-function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
 begin
   result := length(Indexes);
   SetLength(Indexes, result + 1);
   Indexes[result] := Field;
 end;
 
-function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
 begin
   for result := 0 to length(Indexes) - 1 do
     if Indexes[result] = Field then
@@ -1109,8 +1134,8 @@ begin
   result := -1;
 end;
 
-procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray;
-  out Fields: TSQLFieldBits);
+procedure FieldIndexToBits(const Index: TFieldIndexDynArray;
+  out Fields: TFieldBits);
 var
   i: integer;
 begin
@@ -1120,7 +1145,7 @@ begin
       include(Fields, Index[i]);
 end;
 
-function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits;
+function FieldIndexToBits(const Index: TFieldIndexDynArray): TFieldBits;
 begin
   FieldIndexToBits(Index, result);
 end;
@@ -1664,7 +1689,7 @@ end;
 
 function ExtractInlineParameters(const SQL: RawUTF8;
   var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
-  var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
+  var maxParam: integer; var Nulls: TFieldBits): RawUTF8;
 var
   ppBeg: integer;
   P, Gen: PUTF8Char;
@@ -2011,13 +2036,13 @@ begin
 end;
 
 constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldBits; aBufSize: integer);
+  const Fields: TFieldBits; aBufSize: integer);
 begin
   Create(aStream, Expand, withID, FieldBitsToIndex(Fields), aBufSize);
 end;
 
 constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldIndexDynArray; aBufSize: integer;
+  const Fields: TFieldIndexDynArray; aBufSize: integer;
   aStackBuffer: PTextWriterStackBuffer);
 begin
   if aStream = nil then
@@ -2071,7 +2096,7 @@ begin
 end;
 
 procedure TJSONWriter.ChangeExpandedFields(aWithID: boolean;
-  const aFields: TSQLFieldIndexDynArray);
+  const aFields: TFieldIndexDynArray);
 begin
   if not Expand then
     raise ESynException.CreateUTF8(
@@ -2134,7 +2159,7 @@ const
   NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
 
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
-  const GetFieldIndex: TSynTableFieldIndex; const SimpleFieldsBits: TSQLFieldBits);
+  const GetFieldIndex: TSynTableFieldIndex; const SimpleFieldsBits: TFieldBits);
 var
   Prop, whereBefore: RawUTF8;
   P, B: PUTF8Char;
@@ -2335,29 +2360,29 @@ var
     end;
     case P^ of
       '=':
-        Where.Operator := opEqualTo;
+        Where.Operation := opEqualTo;
       '>':
         if P[1] = '=' then
         begin
           inc(P);
-          Where.Operator := opGreaterThanOrEqualTo;
+          Where.Operation := opGreaterThanOrEqualTo;
         end
         else
-          Where.Operator := opGreaterThan;
+          Where.Operation := opGreaterThan;
       '<':
         case P[1] of
           '=':
             begin
               inc(P);
-              Where.Operator := opLessThanOrEqualTo;
+              Where.Operation := opLessThanOrEqualTo;
             end;
           '>':
             begin
               inc(P);
-              Where.Operator := opNotEqualTo;
+              Where.Operation := opNotEqualTo;
             end;
         else
-          Where.Operator := opLessThan;
+          Where.Operation := opLessThan;
         end;
       'i', 'I':
         case P[1] of
@@ -2367,7 +2392,7 @@ var
               if IdemPChar(P, 'NULL') then
               begin
                 Where.Value := NULL_STR_VAR;
-                Where.Operator := opIsNull;
+                Where.Operation := opIsNull;
                 Where.ValueSQL := P;
                 Where.ValueSQLLen := 4;
                 TVarData(Where.ValueVariant).VType := varNull;
@@ -2377,7 +2402,7 @@ var
               else if IdemPChar(P, 'NOT NULL') then
               begin
                 Where.Value := 'not null';
-                Where.Operator := opIsNotNull;
+                Where.Operation := opIsNotNull;
                 Where.ValueSQL := P;
                 Where.ValueSQLLen := 8;
                 TVarData(Where.ValueVariant).VType := varNull;
@@ -2388,7 +2413,7 @@ var
             end;
           'n', 'N':
             begin
-              Where.Operator := opIn;
+              Where.Operation := opIn;
               P := GotoNextNotSpace(P + 2);
               if P^ <> '(' then
                 exit; // incorrect SQL statement
@@ -2412,12 +2437,12 @@ var
         if IdemPChar(P + 1, 'IKE') then
         begin
           inc(P, 3);
-          Where.Operator := opLike;
+          Where.Operation := opLike;
         end
         else
           exit;
     else
-      exit; // unknown Operator
+      exit; // unknown Operation
     end;
     // we got 'WHERE FieldName operator ' -> handle value
     inc(P);
@@ -2442,7 +2467,7 @@ begin
   if P^ = #0 then
     exit; // no SQL statement
   if P^ = '*' then
-  begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
+  begin // all simple (not TRawBlob/TORMMany) fields
     inc(P);
     len := GetBitsCount(SimpleFieldsBits, MAX_SQLFIELDS) + 1;
     SetLength(fSelect, len);
@@ -2516,9 +2541,9 @@ begin
             if (len > 16) and
                IdemPropName('DynArrayContains',
                  PUTF8Char(@PByteArray(Prop)[len - 16]), 16) then
-              Operator := opContains
+              Operation := opContains
             else
-              Operator := opFunction;
+              Operation := opFunction;
             B := P;
             Field := GetPropIndex;
             if Field < 0 then
@@ -2618,7 +2643,7 @@ lim2: if IdemPropNameU(Prop, 'LIMIT') then
   fSQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
 end;
 
-procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits;
+procedure TSynTableStatement.SelectFieldBits(var Fields: TFieldBits;
   var withID: boolean; SubFields: PRawUTF8Array);
 var
   i: integer;

@@ -535,7 +535,7 @@ type
   // implementation. The purpose of this superclass is to define certain fields
   // that are common to all module implementations. This structure therefore
   // contains a pInstance field, which will be used to store a class instance
-  // handling the virtual table as a pure class: the TSQLVirtualTableModule
+  // handling the virtual table as a pure class: the TORMVirtualTableModule
   // class will use it internaly
   TSQLite3VTab = record
     /// The module for this virtual table
@@ -567,7 +567,7 @@ type
   // - This superclass exists in order to define fields of the cursor that are
   // common to all implementationsThis structure therefore contains a pInstance
   // field, which will be used to store a class instance handling the virtual
-  // table as a pure class: the TSQLVirtualTableModule class will use
+  // table as a pure class: the TORMVirtualTableModule class will use
   // it internaly
   TSQLite3VTabCursor = record
     /// Virtual table of this cursor
@@ -2274,11 +2274,11 @@ type
     // - if Expand is true, JSON data is an array of objects, for direct use
     // with any Ajax or .NET client:
     // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expand is false, JSON data is serialized (used in TSQLTableJSON)
+    // - if Expand is false, JSON data is serialized (used in TORMTableJSON)
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data (no conversion into TEXT, as with
-    // TSQLTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
+    // TORMTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
       Expand: boolean = false): PtrInt; overload;
@@ -2388,7 +2388,7 @@ type
     function FieldA(Col: integer): WinAnsiString;
     /// return a field RawUnicode encoded text value, first Col is 0
     function FieldW(Col: integer): RawUnicode;
-    /// return a field as a blob value (RawByteString/TSQLRawBlob is an AnsiString),
+    /// return a field as a blob value (RawByteString/TRawBlob is an AnsiString),
     // first Col is 0
     function FieldBlob(Col: integer): RawByteString;
     /// return a field as a TStream blob value, first Col is 0
@@ -2929,7 +2929,7 @@ type
     /// if this property is set, all ExecuteJSON() responses will be cached
     // - cache is flushed on any write access to the DB (any not SELECT statement)
     // - cache is consistent only if ExecuteJSON() Expand parameter is constant
-    // - cache is used by TSQLDataBase.ExecuteJSON() and TSQLTableDB.Create()
+    // - cache is used by TSQLDataBase.ExecuteJSON() and TORMTableDB.Create()
     property UseCache: boolean read GetUseCache write SetUseCache;
     /// return TRUE if a Transaction begun
     property TransactionActive: boolean read fTransactionActive;

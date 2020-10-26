@@ -13,7 +13,7 @@ unit mormot.rest.core;
     - RESTful Authentication Support
     - TRestURIParams REST URI Definitions
     - TRestThread Background Process of a REST instance
-    - TSQLRecordHistory/TSQLRecordTableDeleted Modifications Tracked Persistence
+    - TORMHistory/TORMTableDeleted Modifications Tracked Persistence
 
   *****************************************************************************
 }
@@ -47,7 +47,7 @@ uses
   mormot.core.secure,
   mormot.core.log,
   mormot.core.interfaces,
-  mormot.orm.core, // for TSQLRecord and IRestORM
+  mormot.orm.core, // for TORM and IRestORM
   mormot.soa.core,
   mormot.db.core;
 
@@ -133,8 +133,8 @@ type
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUTF8);
     // used by AsynchRedirect/AsynchBatch/AsynchInterning
-    function AsynchBatchIndex(aTable: TSQLRecordClass): integer;
-    function AsynchBatchLocked(aTable: TSQLRecordClass;
+    function AsynchBatchIndex(aTable: TORMClass): integer;
+    function AsynchBatchLocked(aTable: TORMClass;
       out aBatch: TRestBatchLocked): boolean;
     procedure AsynchBatchUnLock(aBatch: TRestBatchLocked);
     procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
@@ -199,21 +199,21 @@ type
     // AsynchBatchStop method is used to flush the current asynchronous BATCH
     // - using a BATCH in a dedicated thread will allow very fast background
     // asynchronous process of ORM methods, sufficient for most use cases
-    function AsynchBatchStart(Table: TSQLRecordClass;
+    function AsynchBatchStart(Table: TORMClass;
       SendSeconds: integer; PendingRowThreshold: integer = 500;
       AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJSON]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
     // - should have been preceded by a call to AsynchBatch(), or returns false
     // - Table=nil will release all existing batch instances
-    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
+    function AsynchBatchStop(Table: TORMClass): boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around TRestBatch.Add() sent in the Timer thread,
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
-      ForceID: boolean = false; const CustomFields: TSQLFieldBits = [];
+    function AsynchBatchAdd(Value: TORM; SendData: boolean;
+      ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
     // - could be used to emulate AsynchBatchAdd() with an already pre-computed
@@ -221,26 +221,26 @@ type
     // - is a wrapper around TRestBatch.RawAdd() sent in the Timer thread,
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+    function AsynchBatchRawAdd(Table: TORMClass; const SentData: RawUTF8): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
     // - could be used to emulate AsynchBatchAdd() with an already pre-computed
     // JSON object, as stored in a TTextWriter instance
     // - is a wrapper around TRestBatch.RawAppend.AddNoJSONEscape(SentData)
     // in the Timer thread
     // - this method is thread-safe
-    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+    procedure AsynchBatchRawAppend(Table: TORMClass; SentData: TTextWriter);
     /// update an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Update() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchUpdate(Value: TSQLRecord;
-      const CustomFields: TSQLFieldBits = [];
+    function AsynchBatchUpdate(Value: TORM;
+      const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    function AsynchBatchDelete(Table: TORMClass; ID: TID): integer;
     /// allows background garbage collection of specified RawUTF8 interning
     // - will run Interning.Clean(2) every 5 minutes by default
     // - set InterningMaxRefCount=0 to disable process of the Interning instance
@@ -248,7 +248,7 @@ type
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
     /// direct access to the TRest instance owner
     property Rest: TRest read fRest;
-    /// direct access to the background thread TSQLBatch instances
+    /// direct access to the background thread TRestBatch instances
     property BackgroundBatch: TRestBatchLockedDynArray read fBackgroundBatch;
   published
     /// the identifier of the thread, as logged
@@ -287,7 +287,7 @@ type
   protected
     fORM: IRestORM;
     fORMInstance: TInterfacedObject; // is a TRestORM
-    fModel: TSQLModel;
+    fModel: TORMModel;
     fServices: TServiceContainer;
     fLogClass: TSynLogClass;
     fLogFamily: TSynLogFamily;
@@ -313,13 +313,13 @@ type
     class procedure RegisterClassNameForDefinition;
   public
     /// initialize the class, and associate it to a specified database Model
-    constructor Create(aModel: TSQLModel); virtual;
+    constructor Create(aModel: TORMModel); virtual;
     // inherited classes should unserialize the other aDefinition properties by
     // overriding this method, in a reverse logic to overriden DefinitionTo()
-    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+    constructor RegisteredClassCreateFrom(aModel: TORMModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); virtual;
     /// release internal used instances
-    // - e.g. release associated TSQLModel and TServiceContainer
+    // - e.g. release associated TORMModel and TServiceContainer
     destructor Destroy; override;
     /// called by TRestORM.Create overriden constructor to set fORM from IRestORM
     procedure SetORMInstance(aORM: TInterfacedObject); virtual;
@@ -351,24 +351,24 @@ type
     // to create a TRest instance will all tables defined as external when
     // aDefinition.Kind is 'MongoDB' or a TSQLDBConnectionProperties class
     // - will raise an exception if the supplied definition are not valid
-    class function CreateFrom(aModel: TSQLModel;
+    class function CreateFrom(aModel: TORMModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TRest;
     /// try to create a new TRest instance from its Model and stored values
     // - will return nil if the supplied definition are not valid
     // - if the newly created instance is a TRestServer, will force the
     // supplied aServerHandleAuthentication parameter to enable authentication
-    class function CreateTryFrom(aModel: TSQLModel;
+    class function CreateTryFrom(aModel: TORMModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TRest;
     /// create a new TRest instance from its Model and JSON stored values
     // - aDefinition.Kind will define the actual class which will be instantiated
     // - you can specify a custom Key, if the default is not safe enough for you
-    class function CreateFromJSON(aModel: TSQLModel;
+    class function CreateFromJSON(aModel: TORMModel;
       const aJSONDefinition: RawUTF8; aServerHandleAuthentication: boolean;
       aKey: cardinal = 0): TRest;
     /// create a new TRest instance from its Model and a JSON file
     // - aDefinition.Kind will define the actual class which will be instantiated
     // - you can specify a custom Key, if the default is not safe enough for you
-    class function CreateFromFile(aModel: TSQLModel;
+    class function CreateFromFile(aModel: TORMModel;
       const aJSONFile: TFileName; aServerHandleAuthentication: boolean;
       aKey: cardinal = 0): TRest;
     /// retrieve the registered class from the aDefinition.Kind string
@@ -382,7 +382,7 @@ type
     /// ease logging of method enter/leave in the context of the current TRest
     function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
-    /// internal method to retrieve the current Session TSQLAuthUser.ID
+    /// internal method to retrieve the current Session TAuthUser.ID
     function GetCurrentSessionUserID: TID; virtual; abstract;
     /// retrieve the server time stamp
     // - default implementation will use an internal Offset to compute
@@ -508,7 +508,7 @@ type
     /// main access to the IRestORM methods of this instance
     property ORM: IRestORM read fORM;
     /// low-level access to the associated Data Model
-    property Model: TSQLModel read fModel;
+    property Model: TORMModel read fModel;
     /// access to the interface-based services list
     // - may be nil if no service interface has been registered yet: so be
     // aware that the following line may trigger an access violation if
@@ -600,107 +600,107 @@ type
     // backward compatibility redirections to the homonymous IRestORM methods
     // see IRestORM documentation for the proper use information
   public
-    function TableRowCount(Table: TSQLRecordClass): Int64;
-    function TableHasRows(Table: TSQLRecordClass): boolean;
-    function TableMaxID(Table: TSQLRecordClass): TID;
-    function MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
-    function OneFieldValue(Table: TSQLRecordClass;
+    function TableRowCount(Table: TORMClass): Int64;
+    function TableHasRows(Table: TORMClass): boolean;
+    function TableMaxID(Table: TORMClass): TID;
+    function MemberExists(Table: TORMClass; ID: TID): boolean;
+    function OneFieldValue(Table: TORMClass;
       const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
-    function OneFieldValueInt64(Table: TSQLRecordClass;
+    function OneFieldValueInt64(Table: TORMClass;
       const FieldName, WhereClause: RawUTF8; Default: Int64 = 0): Int64;
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8; overload;
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8; overload;
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
       out Data: Int64): boolean; overload;
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       WhereID: TID): RawUTF8; overload;
-    function MultiFieldValue(Table: TSQLRecordClass;
+    function MultiFieldValue(Table: TORMClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       const WhereClause: RawUTF8): boolean; overload;
-    function MultiFieldValue(Table: TSQLRecordClass;
+    function MultiFieldValue(Table: TORMClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       WhereID: TID): boolean; overload;
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean; overload;
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; var Data: TInt64DynArray;
       SQL: PRawUTF8 = nil): boolean; overload;
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8 = ''; const Separator: RawUTF8 = ','): RawUTF8; overload;
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName, WhereClause:
+    function OneFieldValues(Table: TORMClass; const FieldName, WhereClause:
       RawUTF8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
-    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClause: RawUTF8 = ''): TSQLTable; overload;
-    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTable; overload;
-    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
-    function FTSMatch(Table: TSQLRecordFTS3Class; const WhereClause: RawUTF8;
+    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
+      const WhereClause: RawUTF8 = ''): TORMTable; overload;
+    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TORMTable; overload;
+    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TORMTable; overload;
+    function FTSMatch(Table: TORMFTS3Class; const WhereClause: RawUTF8;
       var DocID: TIDDynArray): boolean; overload;
-    function FTSMatch(Table: TSQLRecordFTS3Class; const MatchClause: RawUTF8;
+    function FTSMatch(Table: TORMFTS3Class; const MatchClause: RawUTF8;
       var DocID: TIDDynArray; const PerFieldWeight: array of double;
       limit: integer = 0; offset: integer = 0): boolean; overload;
-    function MainFieldValue(Table: TSQLRecordClass; ID: TID;
+    function MainFieldValue(Table: TORMClass; ID: TID;
       ReturnFirstIfNoUnique: boolean = false): RawUTF8;
-    function MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
-    function MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
+    function MainFieldID(Table: TORMClass; const Value: RawUTF8): TID;
+    function MainFieldIDs(Table: TORMClass; const Values: array of RawUTF8;
       out IDs: TIDDynArray): boolean;
-    function Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
+    function Retrieve(const SQLWhere: RawUTF8; Value: TORM;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
     function Retrieve(const WhereClauseFmt: RawUTF8;
-      const Args, Bounds: array of const; Value: TSQLRecord;
+      const Args, Bounds: array of const; Value: TORM;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
-    function Retrieve(aID: TID; Value: TSQLRecord;
+    function Retrieve(aID: TID; Value: TORM;
       ForUpdate: boolean = false): boolean; overload;
     function Retrieve(Reference: TRecordReference;
-      ForUpdate: boolean = false): TSQLRecord; overload;
-    function Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean; overload;
-    function RetrieveList(Table: TSQLRecordClass;
+      ForUpdate: boolean = false): TORM; overload;
+    function Retrieve(aPublishedRecord, aValue: TORM): boolean; overload;
+    function RetrieveList(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList; overload;
     {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
-    function RetrieveList<T: TSQLRecord>(
+    function RetrieveList<T: TORM>(
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
        {$ifdef HASINLINE}inline;{$endif}
-    function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
+    function RetrieveList<T: TORM>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
     {$endif ISDELPHI2010}
-    function RetrieveListJSON(Table: TSQLRecordClass;
+    function RetrieveListJSON(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''; aForceAJAX: boolean = false): RawJSON; overload;
-    function RetrieveListJSON(Table: TSQLRecordClass;
+    function RetrieveListJSON(Table: TORMClass;
       const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8 = '';
       aForceAJAX: boolean = false): RawJSON; overload;
-    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+    function RetrieveDocVariantArray(Table: TORMClass;
       const ObjectName, CustomFieldsCSV: RawUTF8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
-    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+    function RetrieveDocVariantArray(Table: TORMClass;
       const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
-    function RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
+    function RetrieveOneFieldDocVariantArray(Table: TORMClass;
       const FieldName, FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): variant;
-    function RetrieveDocVariant(Table: TSQLRecordClass;
+    function RetrieveDocVariant(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8): variant;
-    function RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
+    function RetrieveListObjArray(var ObjArray; Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean;
-    procedure AppendListAsJsonArray(Table: TSQLRecordClass;
+    procedure AppendListAsJsonArray(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const OutputFieldName: RawUTF8; W: TJSONSerializer;
       const CustomFieldsCSV: RawUTF8 = '');
-    function RTreeMatch(DataTable: TSQLRecordClass;
-      const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
+    function RTreeMatch(DataTable: TORMClass;
+      const DataTableBlobFieldName: RawUTF8; RTreeTable: TORMRTreeClass;
       const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
-    function ExecuteList(const Tables: array of TSQLRecordClass;
-      const SQL: RawUTF8): TSQLTable;
-    function ExecuteJson(const Tables: array of TSQLRecordClass;
+    function ExecuteList(const Tables: array of TORMClass;
+      const SQL: RawUTF8): TORMTable;
+    function ExecuteJson(const Tables: array of TORMClass;
       const SQL: RawUTF8; ForceAJAX: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawJSON;
     function Execute(const aSQL: RawUTF8): boolean;
@@ -708,58 +708,58 @@ type
       const Args: array of const): boolean; overload;
     function ExecuteFmt(const SQLFormat: RawUTF8;
       const Args, Bounds: array of const): boolean; overload;
-    function UnLock(Table: TSQLRecordClass; aID: TID): boolean; overload;
-    function UnLock(Rec: TSQLRecord): boolean; overload;
-    function Add(Value: TSQLRecord; SendData: boolean;
+    function UnLock(Table: TORMClass; aID: TID): boolean; overload;
+    function UnLock(Rec: TORM): boolean; overload;
+    function Add(Value: TORM; SendData: boolean;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
-    function Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+    function Add(Value: TORM; const CustomCSVFields: RawUTF8;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
-    function Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+    function Add(Value: TORM; const CustomFields: TFieldBits;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
-    function AddWithBlobs(Value: TSQLRecord;
+    function AddWithBlobs(Value: TORM;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID;
-    function AddSimple(aTable: TSQLRecordClass;
+    function AddSimple(aTable: TORMClass;
       const aSimpleFields: array of const; ForcedID: TID = 0): TID;
-    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+    function Update(Value: TORM; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): boolean; overload;
-    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+    function Update(Value: TORM; const CustomCSVFields: RawUTF8;
       DoNotAutoComputeFields: boolean = false): boolean; overload;
-    function Update(aTable: TSQLRecordClass; aID: TID;
+    function Update(aTable: TORMClass; aID: TID;
       const aSimpleFields: array of const): boolean; overload;
-    function AddOrUpdate(Value: TSQLRecord; ForceID: boolean = false): TID;
-    function UpdateField(Table: TSQLRecordClass; ID: TID;
+    function AddOrUpdate(Value: TORM; ForceID: boolean = false): TID;
+    function UpdateField(Table: TORMClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload;
-    function UpdateField(Table: TSQLRecordClass; const WhereFieldName: RawUTF8;
+    function UpdateField(Table: TORMClass; const WhereFieldName: RawUTF8;
       const WhereFieldValue: array of const; const FieldName: RawUTF8;
       const FieldValue: array of const): boolean; overload;
-    function UpdateField(Table: TSQLRecordClass; ID: TID;
+    function UpdateField(Table: TORMClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
-    function UpdateField(Table: TSQLRecordClass;
+    function UpdateField(Table: TORMClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
-    function UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
+    function UpdateField(Table: TORMClass; const IDs: array of Int64;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
-    function UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+    function UpdateFieldIncrement(Table: TORMClass; ID: TID;
       const FieldName: RawUTF8; Increment: Int64 = 1): boolean;
-    function RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
-      Action: TSQLEvent; ErrorMsg: PRawUTF8 = nil): boolean;
-    function Delete(Table: TSQLRecordClass; ID: TID): boolean; overload;
-    function Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean; overload;
-    function Delete(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
+    function RecordCanBeUpdated(Table: TORMClass; ID: TID;
+      Action: TORMEvent; ErrorMsg: PRawUTF8 = nil): boolean;
+    function Delete(Table: TORMClass; ID: TID): boolean; overload;
+    function Delete(Table: TORMClass; const SQLWhere: RawUTF8): boolean; overload;
+    function Delete(Table: TORMClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): boolean; overload;
-    function RetrieveBlob(Table: TSQLRecordClass; aID: TID; const BlobFieldName: RawUTF8;
-      out BlobData: TSQLRawBlob): boolean; overload;
-    function RetrieveBlob(Table: TSQLRecordClass; aID: TID; const BlobFieldName: RawUTF8;
+    function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
+      out BlobData: TRawBlob): boolean; overload;
+    function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
       out BlobStream: TCustomMemoryStream): boolean; overload;
-    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
-      const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean; overload;
-    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
+    function UpdateBlob(Table: TORMClass; aID: TID;
+      const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean; overload;
+    function UpdateBlob(Table: TORMClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
-    function UpdateBlob(Table: TSQLRecordClass; aID: TID;
+    function UpdateBlob(Table: TORMClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean; overload;
-    function UpdateBlobFields(Value: TSQLRecord): boolean;
-    function RetrieveBlobFields(Value: TSQLRecord): boolean;
-    function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
+    function UpdateBlobFields(Value: TORM): boolean;
+    function RetrieveBlobFields(Value: TORM): boolean;
+    function TransactionBegin(aTable: TORMClass; SessionID: cardinal): boolean;
     function TransactionActiveSession: cardinal;
     procedure Commit(SessionID: cardinal; RaiseException: boolean = false);
     procedure RollBack(SessionID: cardinal);
@@ -767,18 +767,18 @@ type
     procedure WriteUnLock;
     function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
     function BatchSend(Batch: TRestBatch): integer; overload;
-    function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
+    function AsynchBatchStart(Table: TORMClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJSON]): boolean;
-    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
-    function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
-      ForceID: boolean = false; const CustomFields: TSQLFieldBits = [];
+    function AsynchBatchStop(Table: TORMClass): boolean;
+    function AsynchBatchAdd(Value: TORM; SendData: boolean;
+      ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
-    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
-    function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+    function AsynchBatchRawAdd(Table: TORMClass; const SentData: RawUTF8): integer;
+    procedure AsynchBatchRawAppend(Table: TORMClass; SentData: TTextWriter);
+    function AsynchBatchUpdate(Value: TORM; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    function AsynchBatchDelete(Table: TORMClass; ID: TID): integer;
     function Cache: TRestCache;
     function CacheOrNil: TRestCache;
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
@@ -818,59 +818,59 @@ const
   // - i.e. if TRest.HandleAuthentication equals FALSE
   CONST_AUTHENTICATION_NOT_USED = 1;
 
-  /// default hashed password set by TSQLAuthGroup.InitializeTable for all users
-  // - contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  /// default hashed password set by TAuthGroup.InitializeTable for all users
+  // - contains TAuthUser.ComputeHashedPassword('synopse')
   // - override AuthAdminDefaultPassword, AuthSupervisorDefaultPassword and
   // AuthUserDefaultPassword values to follow your own application expectations
   DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
 
 var
-  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Admin' group
+  /// default timeout period set by TAuthGroup.InitializeTable for 'Admin' group
   // - you can override this value to follow your own application expectations
   AuthAdminGroupDefaultTimeout: integer = 10;
-  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Supervisor' group
+  /// default timeout period set by TAuthGroup.InitializeTable for 'Supervisor' group
   // - you can override this value to follow your own application expectations
   // - note that clients will maintain the session alive using CacheFlush/_ping_
   AuthSupervisorGroupDefaultTimeout: integer = 60;
-  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'User' group
+  /// default timeout period set by TAuthGroup.InitializeTable for 'User' group
   // - you can override this value to follow your own application expectations
   // - note that clients will maintain the session alive using CacheFlush/_ping_
   AuthUserGroupDefaultTimeout: integer = 60;
-  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Guest' group
+  /// default timeout period set by TAuthGroup.InitializeTable for 'Guest' group
   // - you can override this value to follow your own application expectations
   // - note that clients will maintain the session alive using CacheFlush/_ping_
   AuthGuestGroupDefaultTimeout: integer = 60;
 
-  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Admin' user
+  /// default hashed password set by TAuthGroup.InitializeTable for 'Admin' user
   // - you can override this value to follow your own application expectations
   AuthAdminDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
-  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Supervisor' user
+  /// default hashed password set by TAuthGroup.InitializeTable for 'Supervisor' user
   // - you can override this value to follow your own application expectations
   AuthSupervisorDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
-  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'User' user
+  /// default hashed password set by TAuthGroup.InitializeTable for 'User' user
   // - you can override this value to follow your own application expectations
   AuthUserDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
 
 
 type
   /// table containing the available user access rights for authentication
-  // - this class should be added to the TSQLModel, together with TSQLAuthUser,
+  // - this class should be added to the TORMModel, together with TAuthUser,
   // to allow authentication support
   // - you can inherit from it to add your custom properties to each user info:
-  // TSQLModel will search for any class inheriting from TSQLAuthGroup to
+  // TORMModel will search for any class inheriting from TAuthGroup to
   // manage per-group authorization data
   // - by default, it won't be accessible remotely by anyone
-  TSQLAuthGroup = class(TSQLRecord)
+  TAuthGroup = class(TORM)
   private
     fIdent: RawUTF8;
     fSessionTimeOut: integer;
     fAccessRights: RawUTF8;
-    function GetSQLAccessRights: TSQLAccessRights;
-    procedure SetSQLAccessRights(const Value: TSQLAccessRights);
+    function GetORMAccessRights: TORMAccessRights;
+    procedure SetORMAccessRights(const Value: TORMAccessRights);
   public
     /// called when the associated table is created in the database
-    // - on a new database, if TSQLAuthUser and TSQLAuthGroup tables are defined
-    // in the associated TSQLModel, it this will add 'Admin', 'Supervisor',
+    // - on a new database, if TAuthUser and TAuthGroup tables are defined
+    // in the associated TORMModel, it this will add 'Admin', 'Supervisor',
     // and 'User' rows in the AuthUser table (with 'synopse' as default password),
     // and associated 'Admin', 'Supervisor', 'User' and 'Guest' groups, with the
     // following access rights to the AuthGroup table:
@@ -880,7 +880,7 @@ type
     // $ User         No      No        Yes    No    No     Yes    Yes
     // $ Guest        No      No        No     No    No     Yes    No
     // - 'Admin' will be the only able to execute remote not SELECT SQL statements
-    // for POST commands (reSQL flag in TSQLAccessRights.AllowRemoteExecute) and
+    // for POST commands (reSQL flag in TORMAccessRights.AllowRemoteExecute) and
     // modify the Auth tables (i.e. AuthUser and AuthGroup)
     // - 'Admin' and 'Supervisor' will allow any SELECT SQL statements to be
     // executed, even if the table can't be retrieved and checked (corresponding
@@ -896,41 +896,45 @@ type
     // - of course, you can change and tune the settings of the AuthGroup and
     // AuthUser tables, but only 'Admin' group users will be able to remotely
     // modify the content of those two tables
-    class procedure InitializeTable(const Server: IRestORMServer; const FieldName: RawUTF8;
-      Options: TSQLInitializeTableOptions); override;
-    /// corresponding TSQLAccessRights for this authentication group
+    class procedure InitializeTable(const Server: IRestORMServer;
+      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
+    /// corresponding TORMAccessRights for this authentication group
     // - content is converted into/from text format via AccessRight DB property
-    // (so it will be not fixed e.g. by the binary TSQLFieldTables layout, i.e.
+    // (so it will be not fixed e.g. by the binary TORMFieldTables layout, i.e.
     // the MAX_SQLTABLES constant value)
-    property SQLAccessRights: TSQLAccessRights read GetSQLAccessRights write SetSQLAccessRights;
+    property SQLAccessRights: TORMAccessRights
+      read GetORMAccessRights write SetORMAccessRights;
   published
     /// the access right identifier, ready to be displayed
     // - the same identifier can be used only once (this column is marked as
     // unique via a "stored AS_UNIQUE" (i.e. "stored false") attribute)
-    // - so you can retrieve a TSQLAuthGroup ID from its identifier, as such:
-    // ! UserGroupID := fClient.MainFieldID(TSQLAuthGroup,'User');
-    property Ident: RawUTF8 index 50 read fIdent write fIdent stored AS_UNIQUE;
+    // - so you can retrieve a TAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fClient.MainFieldID(TAuthGroup,'User');
+    property Ident: RawUTF8 index 50
+      read fIdent write fIdent stored AS_UNIQUE;
     /// the number of minutes a session is kept alive
-    property SessionTimeout: integer read fSessionTimeOut write fSessionTimeOut;
-    /// a textual representation of a TSQLAccessRights buffer
-    property AccessRights: RawUTF8 index 1600 read fAccessRights write fAccessRights;
+    property SessionTimeout: integer
+      read fSessionTimeOut write fSessionTimeOut;
+    /// a textual representation of a TORMAccessRights buffer
+    property AccessRights: RawUTF8 index 1600
+      read fAccessRights write fAccessRights;
   end;
 
   /// table containing the Users registered for authentication
-  // - this class should be added to the TSQLModel, together with TSQLAuthGroup,
+  // - this class should be added to the TORMModel, together with TAuthGroup,
   // to allow authentication support
   // - you can inherit from it to add your custom properties to each user info:
-  // TSQLModel will search for any class inheriting from TSQLAuthUser to manage
+  // TORMModel will search for any class inheriting from TAuthUser to manage
   // per-user authorization data
   // - by default, it won't be accessible remotely by anyone; to enhance security,
   // you could use the TSynValidatePassWord filter to this table
-  TSQLAuthUser = class(TSQLRecord)
+  TAuthUser = class(TORM)
   protected
     fLogonName: RawUTF8;
     fPasswordHashHexa: RawUTF8;
     fDisplayName: RawUTF8;
-    fGroupRights: TSQLAuthGroup;
-    fData: TSQLRawBlob;
+    fGroupRights: TAuthGroup;
+    fData: TRawBlob;
     procedure SetPasswordPlain(const Value: RawUTF8);
   public
     /// static function allowing to compute a hashed password
@@ -951,7 +955,7 @@ type
     // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     // - you may use an application specific fixed salt, and/or append the
-    // user LogonName to make the challenge unique for each TSQLAuthUser
+    // user LogonName to make the challenge unique for each TAuthUser
     // - the default aHashRound=20000 is slow but secure - since the hashing
     // process is expected to be done on client side, you may specify your
     // own higher/slower value, depending on the security level you expect
@@ -976,33 +980,33 @@ type
     property DisplayName: RawUTF8
       index 50 read fDisplayName write fDisplayName;
     /// the hexa encoded associated SHA-256 hash of the password
-    // - see TSQLAuthUser.ComputeHashedPassword() or SetPassword() methods
+    // - see TAuthUser.ComputeHashedPassword() or SetPassword() methods
     // - store the SHA-256 32 bytes as 64 hexa chars
     property PasswordHashHexa: RawUTF8
       index 64 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user
     // - access rights are managed by group
     // - in TAuthSession.User instance, GroupRights property will contain a
-    // REAL TSQLAuthGroup instance for fast retrieval in TRestServer.URI
+    // REAL TAuthGroup instance for fast retrieval in TRestServer.URI
     // - note that 'Group' field name is not allowed by SQLite
-    property GroupRights: TSQLAuthGroup
+    property GroupRights: TAuthGroup
       read fGroupRights write fGroupRights;
     /// some custom data, associated to the User
     // - Server application may store here custom data
     // - its content is not used by the framework but 'may' be used by your
     // application
-    property Data: TSQLRawBlob
+    property Data: TRawBlob
       read fData write fData;
   end;
 
   /// class-reference type (metaclass) of a table containing the Users
   // registered for authentication
   // - see also TRestServer.OnAuthenticationUserRetrieve custom event
-  TSQLAuthUserClass = class of TSQLAuthUser;
+  TAuthUserClass = class of TAuthUser;
 
   /// class-reference type (metaclass) of the table containing the available
   // user access rights for authentication, defined as a group
-  TSQLAuthGroupClass = class of TSQLAuthGroup;
+  TAuthGroupClass = class of TAuthGroup;
 
 
 { ************ TRestURIParams REST URI Definitions }
@@ -1107,6 +1111,10 @@ type
 // backward compatibility types redirections
 
 type
+  TSQLAuthUser = TAuthUser;
+  TSQLAuthGroup = TAuthGroup;
+  TSQLAuthUserClass = TAuthUserClass;
+  TSQLAuthGroupClass = TAuthGroupClass;
   TSQLRestURIParamsLowLevelFlag = TRestURIParamsLowLevelFlag;
   TSQLRestURIParamsLowLevelFlags = TRestURIParamsLowLevelFlags;
   TSQLRestURIParams = TRestURIParams;
@@ -1189,21 +1197,21 @@ type
 
 
 
-{ ************ TSQLRecordHistory/TSQLRecordTableDeleted Modifications Tracked Persistence }
+{ ************ TORMHistory/TORMTableDeleted Modifications Tracked Persistence }
 
 type
-  /// common ancestor for tracking TSQLRecord modifications
-  // - e.g. TSQLRecordHistory and TSQLRecordVersion will inherit from this class
-  // to track TSQLRecord changes
-  TSQLRecordModification = class(TSQLRecord)
+  /// common ancestor for tracking TORM modifications
+  // - e.g. TORMHistory and TORMVersion will inherit from this class
+  // to track TORM changes
+  TORMModification = class(TORM)
   protected
     fModifiedRecord: TID;
     fTimestamp: TModTime;
   public
     /// returns the modified record table, as stored in ModifiedRecord
-    function ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+    function ModifiedTable(Model: TORMModel): TORMClass;
       {$ifdef HASINLINE}inline;{$endif}
-    /// returns the record table index in the TSQLModel, as stored in ModifiedRecord
+    /// returns the record table index in the TORMModel, as stored in ModifiedRecord
     function ModifiedTableIndex: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the modified record ID, as stored in ModifiedRecord
@@ -1211,9 +1219,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   published
     /// identifies the modified record
-    // - ID and table index in TSQLModel is stored as one RecordRef integer
-    // - you can use ModifiedTable/ModifiedID to retrieve the TSQLRecord item
-    // - in case of the record deletion, all matching TSQLRecordHistory won't
+    // - ID and table index in TORMModel is stored as one RecordRef integer
+    // - you can use ModifiedTable/ModifiedID to retrieve the TORM item
+    // - in case of the record deletion, all matching TORMHistory won't
     // be touched by TRestORMServer.AfterDeleteForceCoherency(): so this
     // property is a plain TID/Int64, not a TRecordReference field
     property ModifiedRecord: TID read fModifiedRecord write fModifiedRecord;
@@ -1221,24 +1229,24 @@ type
     // - even if in most cases, this timestamp may be synchronized over TRest
     // instances (thanks to TRestClientURI.ServerTimestampSynchronize), it
     // is not safe to use this field as absolute: you should rather rely on
-    // pure monotonic ID/RowID increasing values (see e.g. TSQLRecordVersion)
+    // pure monotonic ID/RowID increasing values (see e.g. TORMVersion)
     property Timestamp: TModTime read fTimestamp write fTimestamp;
   end;
 
-  /// common ancestor for tracking changes on TSQLRecord tables
+  /// common ancestor for tracking changes on TORM tables
   // - used by TRestServer.TrackChanges() method for simple fields history
   // - TRestServer.InternalUpdateEvent will use this table to store individual
   // row changes as SentDataJSON, then will compress them in History BLOB
-  // - note that any layout change of the tracked TSQLRecord table (e.g. adding
+  // - note that any layout change of the tracked TORM table (e.g. adding
   // a new property) will break the internal data format, so will void the table
-  TSQLRecordHistory = class(TSQLRecordModification)
+  TORMHistory = class(TORMModification)
   protected
-    fEvent: TSQLHistoryEvent;
+    fEvent: TORMHistoryEvent;
     fSentData: RawUTF8;
-    fHistory: TSQLRawBlob;
+    fHistory: TRawBlob;
     // BLOB storage layout is: RTTIheader + offsets + recordsdata
-    fHistoryModel: TSQLModel;
-    fHistoryTable: TSQLRecordClass;
+    fHistoryModel: TORMModel;
+    fHistoryTable: TORMClass;
     fHistoryTableIndex: integer;
     fHistoryUncompressed: RawByteString;
     fHistoryUncompressedCount: integer;
@@ -1250,7 +1258,7 @@ type
     /// load the change history of a given record
     // - then you can use HistoryGetLast, HistoryCount or HistoryGet() to access
     // all previous stored versions
-    constructor CreateHistory(const aClient: IRestORM; aTable: TSQLRecordClass;
+    constructor CreateHistory(const aClient: IRestORM; aTable: TORMClass;
       aID: TID);
     /// finalize any internal memory
     destructor Destroy; override;
@@ -1260,13 +1268,13 @@ type
     /// called when the associated table is created in the database
     // - create index on History(ModifiedRecord,Event) for process speed-up
     class procedure InitializeTable(const Server: IRestORMServer;
-      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
+      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
   public
     /// prepare to access the History BLOB content
     // - ModifiedRecord should have been set to a proper value
-    // - returns FALSE if the History BLOB is incorrect (e.g. TSQLRecord
+    // - returns FALSE if the History BLOB is incorrect (e.g. TORM
     // layout changed): caller shall flush all previous history
-    function HistoryOpen(Model: TSQLModel): boolean;
+    function HistoryOpen(Model: TORMModel): boolean;
     /// returns how many revisions are stored in the History BLOB
     // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
@@ -1275,35 +1283,35 @@ type
     // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
     // - if Rec=nil, will only retrieve Event and Timestamp
-    // - if Rec is set, will fill all simple properties of this TSQLRecord
-    function HistoryGet(Index: integer; out Event: TSQLHistoryEvent;
-      out Timestamp: TModTime; Rec: TSQLRecord): boolean; overload;
+    // - if Rec is set, will fill all simple properties of this TORM
+    function HistoryGet(Index: integer; out Event: TORMHistoryEvent;
+      out Timestamp: TModTime; Rec: TORM): boolean; overload;
     /// retrieve an historical version
     // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
-    // - will fill all simple properties of the supplied TSQLRecord instance
-    function HistoryGet(Index: integer; Rec: TSQLRecord): boolean; overload;
+    // - will fill all simple properties of the supplied TORM instance
+    function HistoryGet(Index: integer; Rec: TORM): boolean; overload;
     /// retrieve an historical version
     // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
-    // - will return either nil, or a TSQLRecord with all simple properties set
-    function HistoryGet(Index: integer): TSQLRecord; overload;
+    // - will return either nil, or a TORM with all simple properties set
+    function HistoryGet(Index: integer): TORM; overload;
     /// retrieve the latest stored historical version
     // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
     // - you should not have to use it, since a TRest.Retrieve() is faster
-    function HistoryGetLast(Rec: TSQLRecord): boolean; overload;
+    function HistoryGetLast(Rec: TORM): boolean; overload;
     /// retrieve the latest stored historical version
     // - HistoryOpen() or CreateHistory() should have been called before,
     // otherwise it will return nil
     // - this method will ignore any previous HistoryAdd() call
     // - you should not have to use it, since a TRest.Retrieve() is faster
-    function HistoryGetLast: TSQLRecord; overload;
+    function HistoryGetLast: TORM; overload;
     /// add a record content to the History BLOB
     // - HistoryOpen() should have been called before using this method -
     // CreateHistory() won't allow history modification
     // - use then HistorySave() to compress and replace the History field
-    procedure HistoryAdd(Rec: TSQLRecord; Hist: TSQLRecordHistory);
+    procedure HistoryAdd(Rec: TORM; Hist: TORMHistory);
     /// update the History BLOB field content
     // - HistoryOpen() should have been called before using this method -
     // CreateHistory() won't allow history modification
@@ -1317,12 +1325,12 @@ type
     // to circumvent any issue about inconsistent use of tracking, e.g. if the
     // database has been modified directly, by-passing the ORM
     function HistorySave(const Server: IRestORMServer;
-      LastRec: TSQLRecord = nil): boolean;
+      LastRec: TORM = nil): boolean;
   published
     /// the kind of modification stored
     // - is heArchiveBlob when this record stores the compress BLOB in History
     // - otherwise, SentDataJSON may contain the latest values as JSON
-    property Event: TSQLHistoryEvent
+    property Event: TORMHistoryEvent
       read fEvent write fEvent;
     /// for heAdd/heUpdate, the data is stored as JSON
     // - note that we defined a default maximum size of 4KB for this column,
@@ -1337,18 +1345,18 @@ type
     // - as any BLOB field, this one won't be retrieved by default: use
     // explicitly TRest.RetrieveBlobFields(aRecordHistory) to get it if you
     // want to access it directly, and not via CreateHistory()
-    property History: TSQLRawBlob
+    property History: TRawBlob
       read fHistory write fHistory;
   end;
 
   /// class-reference type (metaclass) to specify the storage table to be used
-  // for tracking TSQLRecord changes
-  // - you can create your custom type from TSQLRecordHistory, even for a
+  // for tracking TORM changes
+  // - you can create your custom type from TORMHistory, even for a
   // particular table, to split the tracked changes storage in several tables:
   // ! type
-  // !  TSQLRecordMyHistory = class(TSQLRecordHistory);
+  // !  TORMMyHistory = class(TORMHistory);
   // - as expected by TRestServer.TrackChanges() method
-  TSQLRecordHistoryClass = class of TSQLRecordHistory;
+  TORMHistoryClass = class of TORMHistory;
 
   /// ORM table used to store the deleted items of a versioned table
   // - the ID/RowID primary key of this table will be the version number
@@ -1356,7 +1364,7 @@ type
   // mapped with the corresponding 'TableIndex shl 58' (so that e.g.
   // TRestServer.RecordVersionSynchronizeToBatch() could easily ask for the
   // deleted rows of a given table with a single WHERE clause on the ID/RowID)
-  TSQLRecordTableDeleted = class(TSQLRecord)
+  TORMTableDeleted = class(TORM)
   protected
     fDeleted: Int64;
   published
@@ -1368,8 +1376,8 @@ type
   end;
 
   /// class-reference type (metaclass) to specify the storage table to be used
-  // for tracking TSQLRecord deletion
-  TSQLRecordTableDeletedClass = class of TSQLRecordTableDeleted;
+  // for tracking TORM deletion
+  TORMTableDeletedClass = class of TORMTableDeleted;
 
 
 {$ifndef PUREMORMOT2}
@@ -1877,7 +1885,7 @@ begin
   fAcquireExecution[Cmd].LockedTimeOut := Value;
 end;
 
-constructor TRest.Create(aModel: TSQLModel);
+constructor TRest.Create(aModel: TORMModel);
 var
   cmd: TRestServerURIContextCommand;
 begin
@@ -1980,13 +1988,13 @@ begin
   result := nil;
 end;
 
-constructor TRest.RegisteredClassCreateFrom(aModel: TSQLModel;
+constructor TRest.RegisteredClassCreateFrom(aModel: TORMModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 begin
   Create(aModel);
 end;
 
-class function TRest.CreateFrom(aModel: TSQLModel;
+class function TRest.CreateFrom(aModel: TORMModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TRest;
 var
   C: TRestClass;
@@ -1998,7 +2006,7 @@ begin
   result := C.RegisteredClassCreateFrom(aModel, aDefinition, aServerHandleAuthentication);
 end;
 
-class function TRest.CreateTryFrom(aModel: TSQLModel;
+class function TRest.CreateTryFrom(aModel: TORMModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TRest;
 var
   C: TRestClass;
@@ -2011,7 +2019,7 @@ begin
       aServerHandleAuthentication);
 end;
 
-class function TRest.CreateFromJSON(aModel: TSQLModel;
+class function TRest.CreateFromJSON(aModel: TORMModel;
   const aJSONDefinition: RawUTF8; aServerHandleAuthentication: boolean;
   aKey: cardinal): TRest;
 var
@@ -2025,7 +2033,7 @@ begin
   end;
 end;
 
-class function TRest.CreateFromFile(aModel: TSQLModel;
+class function TRest.CreateFromFile(aModel: TORMModel;
   const aJSONFile: TFileName; aServerHandleAuthentication: boolean;
   aKey: cardinal): TRest;
 begin
@@ -2042,181 +2050,181 @@ end;
 
 {$ifndef PUREMORMOT2}
 
-function TRest.TableRowCount(Table: TSQLRecordClass): Int64;
+function TRest.TableRowCount(Table: TORMClass): Int64;
 begin
   result := fORM.TableRowCount(Table);
 end;
 
-function TRest.TableHasRows(Table: TSQLRecordClass): boolean;
+function TRest.TableHasRows(Table: TORMClass): boolean;
 begin
   result := fORM.TableHasRows(Table);
 end;
 
-function TRest.TableMaxID(Table: TSQLRecordClass): TID;
+function TRest.TableMaxID(Table: TORMClass): TID;
 begin
   result := fORM.TableMaxID(Table);
 end;
 
-function TRest.MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
+function TRest.MemberExists(Table: TORMClass; ID: TID): boolean;
 begin
   result := fORM.MemberExists(Table, ID);
 end;
 
-function TRest.OneFieldValue(Table: TSQLRecordClass; const FieldName,
+function TRest.OneFieldValue(Table: TORMClass; const FieldName,
   WhereClause: RawUTF8): RawUTF8;
 begin
   result := fORM.OneFieldValue(Table, FieldName, WhereClause);
 end;
 
-function TRest.OneFieldValueInt64(Table: TSQLRecordClass; const FieldName,
+function TRest.OneFieldValueInt64(Table: TORMClass; const FieldName,
   WhereClause: RawUTF8; Default: Int64): Int64;
 begin
   result := fORM.OneFieldValueInt64(Table, FieldName, WhereClause, Default);
 end;
 
-function TRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+function TRest.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8;
 begin
   result := fORM.OneFieldValue(Table, FieldName, FormatSQLWhere, BoundsSQLWhere);
 end;
 
-function TRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+function TRest.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
   const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8;
 begin
   result := fORM.OneFieldValue(Table, FieldName, WhereClauseFmt);
 end;
 
-function TRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+function TRest.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
   const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
   out Data: Int64): boolean;
 begin
   result := fORM.OneFieldValue(Table, FieldName, WhereClauseFmt, Args, Bounds, Data);
 end;
 
-function TRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+function TRest.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
   WhereID: TID): RawUTF8;
 begin
   result := fORM.OneFieldValue(Table, FieldName, WhereID);
 end;
 
-function TRest.MultiFieldValue(Table: TSQLRecordClass;
+function TRest.MultiFieldValue(Table: TORMClass;
   const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
   const WhereClause: RawUTF8): boolean;
 begin
   result := fORM.MultiFieldValue(Table, FieldName, FieldValue, WhereClause);
 end;
 
-function TRest.MultiFieldValue(Table: TSQLRecordClass;
+function TRest.MultiFieldValue(Table: TORMClass;
   const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
   WhereID: TID): boolean;
 begin
   result := fORM.MultiFieldValue(Table, FieldName, FieldValue, WhereID);
 end;
 
-function TRest.OneFieldValues(Table: TSQLRecordClass;
+function TRest.OneFieldValues(Table: TORMClass;
   const FieldName: RawUTF8; const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean;
 begin
   result := fORM.OneFieldValues(Table, FieldName, WhereClause, Data);
 end;
 
-function TRest.OneFieldValues(Table: TSQLRecordClass;
+function TRest.OneFieldValues(Table: TORMClass;
   const FieldName: RawUTF8; const WhereClause: RawUTF8; var Data: TInt64DynArray;
   SQL: PRawUTF8): boolean;
 begin
   result := fORM.OneFieldValues(Table, FieldName, WhereClause, Data, SQL);
 end;
 
-function TRest.OneFieldValues(Table: TSQLRecordClass;
+function TRest.OneFieldValues(Table: TORMClass;
   const FieldName: RawUTF8; const WhereClause: RawUTF8; const Separator: RawUTF8): RawUTF8;
 begin
   result := fORM.OneFieldValues(Table, FieldName, WhereClause, Separator);
 end;
 
-function TRest.OneFieldValues(Table: TSQLRecordClass;
+function TRest.OneFieldValues(Table: TORMClass;
   const FieldName, WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PID): boolean;
 begin
   result := fORM.OneFieldValues(Table, FieldName, WhereClause, Strings, IDToIndex);
 end;
 
-function TRest.MultiFieldValues(Table: TSQLRecordClass;
-  const FieldNames: RawUTF8; const WhereClause: RawUTF8): TSQLTable;
+function TRest.MultiFieldValues(Table: TORMClass;
+  const FieldNames: RawUTF8; const WhereClause: RawUTF8): TORMTable;
 begin
   result := fORM.MultiFieldValues(Table, FieldNames, WhereClause);
 end;
 
-function TRest.MultiFieldValues(Table: TSQLRecordClass;
+function TRest.MultiFieldValues(Table: TORMClass;
   const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
-  const BoundsSQLWhere: array of const): TSQLTable;
+  const BoundsSQLWhere: array of const): TORMTable;
 begin
   result := fORM.MultiFieldValues(Table, FieldNames, WhereClauseFormat, BoundsSQLWhere);
 end;
 
-function TRest.MultiFieldValues(Table: TSQLRecordClass;
+function TRest.MultiFieldValues(Table: TORMClass;
   const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
-  const Args, Bounds: array of const): TSQLTable;
+  const Args, Bounds: array of const): TORMTable;
 begin
   result := fORM.MultiFieldValues(Table, FieldNames, WhereClauseFormat, Args, Bounds);
 end;
 
-function TRest.FTSMatch(Table: TSQLRecordFTS3Class;
+function TRest.FTSMatch(Table: TORMFTS3Class;
   const WhereClause: RawUTF8; var DocID: TIDDynArray): boolean;
 begin
   result := fORM.FTSMatch(Table, WhereClause, DocID);
 end;
 
-function TRest.FTSMatch(Table: TSQLRecordFTS3Class;
+function TRest.FTSMatch(Table: TORMFTS3Class;
   const MatchClause: RawUTF8; var DocID: TIDDynArray;
   const PerFieldWeight: array of double; limit, offset: integer): boolean;
 begin
   result := fORM.FTSMatch(Table, MatchClause, DocID, PerFieldWeight, limit, offset);
 end;
 
-function TRest.MainFieldValue(Table: TSQLRecordClass; ID: TID;
+function TRest.MainFieldValue(Table: TORMClass; ID: TID;
   ReturnFirstIfNoUnique: boolean): RawUTF8;
 begin
   result := fORM.MainFieldValue(Table, ID, ReturnFirstIfNoUnique);
 end;
 
-function TRest.MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
+function TRest.MainFieldID(Table: TORMClass; const Value: RawUTF8): TID;
 begin
   result := fORM.MainFieldID(Table, Value);
 end;
 
-function TRest.MainFieldIDs(Table: TSQLRecordClass;
+function TRest.MainFieldIDs(Table: TORMClass;
   const Values: array of RawUTF8; out IDs: TIDDynArray): boolean;
 begin
   result := fORM.MainFieldIDs(Table, Values, IDs);
 end;
 
-function TRest.Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
+function TRest.Retrieve(const SQLWhere: RawUTF8; Value: TORM;
   const aCustomFieldsCSV: RawUTF8): boolean;
 begin
   result := fORM.Retrieve(SQLWhere, Value, aCustomFieldsCSV);
 end;
 
 function TRest.Retrieve(const WhereClauseFmt: RawUTF8;
-  const Args, Bounds: array of const; Value: TSQLRecord;
+  const Args, Bounds: array of const; Value: TORM;
   const aCustomFieldsCSV: RawUTF8): boolean;
 begin
   result := fORM.Retrieve(WhereClauseFmt, Args, Bounds, Value, aCustomFieldsCSV);
 end;
 
-function TRest.Retrieve(aID: TID; Value: TSQLRecord; ForUpdate: boolean): boolean;
+function TRest.Retrieve(aID: TID; Value: TORM; ForUpdate: boolean): boolean;
 begin
   result := fORM.Retrieve(aID, Value, ForUpdate);
 end;
 
-function TRest.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TSQLRecord;
+function TRest.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TORM;
 begin
   result := fORM.Retrieve(Reference, ForUpdate);
 end;
 
-function TRest.Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean;
+function TRest.Retrieve(aPublishedRecord, aValue: TORM): boolean;
 begin
   result := fORM.Retrieve(aPublishedRecord, aValue);
 end;
 
-function TRest.RetrieveList(Table: TSQLRecordClass;
+function TRest.RetrieveList(Table: TORMClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): TObjectList;
 begin
@@ -2238,7 +2246,7 @@ end;
 
 {$endif ISDELPHI2010}
 
-function TRest.RetrieveListJSON(Table: TSQLRecordClass;
+function TRest.RetrieveListJSON(Table: TORMClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8; aForceAJAX: boolean): RawJSON;
 begin
@@ -2246,14 +2254,14 @@ begin
     aCustomFieldsCSV, aForceAJAX);
 end;
 
-function TRest.RetrieveListJSON(Table: TSQLRecordClass;
+function TRest.RetrieveListJSON(Table: TORMClass;
   const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8;
   aForceAJAX: boolean): RawJSON;
 begin
   result := fORM.RetrieveListJSON(Table, SQLWhere, aCustomFieldsCSV, aForceAJAX);
 end;
 
-function TRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
+function TRest.RetrieveDocVariantArray(Table: TORMClass;
   const ObjectName, CustomFieldsCSV: RawUTF8;
   FirstRecordID: PID; LastRecordID: PID): variant;
 begin
@@ -2261,7 +2269,7 @@ begin
     FirstRecordID, LastRecordID);
 end;
 
-function TRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
+function TRest.RetrieveDocVariantArray(Table: TORMClass;
   const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8; const BoundsSQLWhere:
   array of const; const CustomFieldsCSV: RawUTF8; FirstRecordID: PID;
   LastRecordID: PID): variant;
@@ -2270,14 +2278,14 @@ begin
     BoundsSQLWhere, CustomFieldsCSV, FirstRecordID, LastRecordID);
 end;
 
-function TRest.RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
+function TRest.RetrieveOneFieldDocVariantArray(Table: TORMClass;
   const FieldName, FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): variant;
 begin
   result := fORM.RetrieveOneFieldDocVariantArray(Table, FieldName,
     FormatSQLWhere, BoundsSQLWhere);
 end;
 
-function TRest.RetrieveDocVariant(Table: TSQLRecordClass;
+function TRest.RetrieveDocVariant(Table: TORMClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const CustomFieldsCSV: RawUTF8): variant;
 begin
@@ -2285,7 +2293,7 @@ begin
     CustomFieldsCSV);
 end;
 
-function TRest.RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
+function TRest.RetrieveListObjArray(var ObjArray; Table: TORMClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
 begin
@@ -2293,7 +2301,7 @@ begin
     BoundsSQLWhere, aCustomFieldsCSV);
 end;
 
-procedure TRest.AppendListAsJsonArray(Table: TSQLRecordClass;
+procedure TRest.AppendListAsJsonArray(Table: TORMClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const OutputFieldName: RawUTF8; W: TJSONSerializer; const CustomFieldsCSV: RawUTF8);
 begin
@@ -2301,21 +2309,21 @@ begin
     OutputFieldName, W, CustomFieldsCSV);
 end;
 
-function TRest.RTreeMatch(DataTable: TSQLRecordClass;
-  const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
+function TRest.RTreeMatch(DataTable: TORMClass;
+  const DataTableBlobFieldName: RawUTF8; RTreeTable: TORMRTreeClass;
   const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
 begin
   result := fORM.RTreeMatch(DataTable, DataTableBlobFieldName, RTreeTable,
     DataTableBlobField, DataID);
 end;
 
-function TRest.ExecuteList(const Tables: array of TSQLRecordClass;
-  const SQL: RawUTF8): TSQLTable;
+function TRest.ExecuteList(const Tables: array of TORMClass;
+  const SQL: RawUTF8): TORMTable;
 begin
   result := fORM.ExecuteList(Tables, SQL);
 end;
 
-function TRest.ExecuteJson(const Tables: array of TSQLRecordClass;
+function TRest.ExecuteJson(const Tables: array of TORMClass;
   const SQL: RawUTF8; ForceAJAX: boolean; ReturnedRowCount: PPtrInt): RawJSON;
 begin
   result := fORM.ExecuteJson(Tables, SQL, ForceAJAX, ReturnedRowCount);
@@ -2338,76 +2346,76 @@ begin
   result := fORM.ExecuteFmt(SQLFormat, Args, Bounds);
 end;
 
-function TRest.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
+function TRest.UnLock(Table: TORMClass; aID: TID): boolean;
 begin
   result := fORM.UnLock(Table, aID);
 end;
 
-function TRest.UnLock(Rec: TSQLRecord): boolean;
+function TRest.UnLock(Rec: TORM): boolean;
 begin
   result := fORM.UnLock(Rec);
 end;
 
-function TRest.Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean;
+function TRest.Add(Value: TORM; SendData: boolean; ForceID: boolean;
   DoNotAutoComputeFields: boolean): TID;
 begin
   result := fORM.Add(Value, SendData, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRest.Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+function TRest.Add(Value: TORM; const CustomCSVFields: RawUTF8;
   ForceID: boolean; DoNotAutoComputeFields: boolean): TID;
 begin
   result := fORM.Add(Value, CustomCSVFields, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRest.Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+function TRest.Add(Value: TORM; const CustomFields: TFieldBits;
   ForceID: boolean; DoNotAutoComputeFields: boolean): TID;
 begin
   result := fORM.Add(Value, CustomFields, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRest.AddWithBlobs(Value: TSQLRecord; ForceID: boolean;
+function TRest.AddWithBlobs(Value: TORM; ForceID: boolean;
   DoNotAutoComputeFields: boolean): TID;
 begin
   result := fORM.AddWithBlobs(Value, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRest.AddSimple(aTable: TSQLRecordClass;
+function TRest.AddSimple(aTable: TORMClass;
   const aSimpleFields: array of const; ForcedID: TID): TID;
 begin
   result := fORM.AddSimple(aTable, aSimpleFields, ForcedID);
 end;
 
-function TRest.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+function TRest.Update(Value: TORM; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): boolean;
 begin
   result := fORM.Update(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRest.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+function TRest.Update(Value: TORM; const CustomCSVFields: RawUTF8;
   DoNotAutoComputeFields: boolean): boolean;
 begin
   result := fORM.Update(Value, CustomCSVFields, DoNotAutoComputeFields);
 end;
 
-function TRest.Update(aTable: TSQLRecordClass; aID: TID;
+function TRest.Update(aTable: TORMClass; aID: TID;
   const aSimpleFields: array of const): boolean;
 begin
   result := fORM.Update(aTable, aID, aSimpleFields);
 end;
 
-function TRest.AddOrUpdate(Value: TSQLRecord; ForceID: boolean): TID;
+function TRest.AddOrUpdate(Value: TORM; ForceID: boolean): TID;
 begin
   result := fORM.AddOrUpdate(Value, ForceID);
 end;
 
-function TRest.UpdateField(Table: TSQLRecordClass; ID: TID;
+function TRest.UpdateField(Table: TORMClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 begin
   result := fORM.UpdateField(Table, ID, FieldName, FieldValue);
 end;
 
-function TRest.UpdateField(Table: TSQLRecordClass;
+function TRest.UpdateField(Table: TORMClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 begin
@@ -2415,13 +2423,13 @@ begin
     FieldValue);
 end;
 
-function TRest.UpdateField(Table: TSQLRecordClass; ID: TID;
+function TRest.UpdateField(Table: TORMClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 begin
   result := fORM.UpdateField(Table, ID, FieldName, FieldValue);
 end;
 
-function TRest.UpdateField(Table: TSQLRecordClass;
+function TRest.UpdateField(Table: TORMClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 begin
@@ -2429,81 +2437,81 @@ begin
     FieldValue);
 end;
 
-function TRest.UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
+function TRest.UpdateField(Table: TORMClass; const IDs: array of Int64;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 begin
   result := fORM.UpdateField(Table, IDs, FieldName, FieldValue);
 end;
 
-function TRest.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+function TRest.UpdateFieldIncrement(Table: TORMClass; ID: TID;
   const FieldName: RawUTF8; Increment: Int64): boolean;
 begin
   result := fORM.UpdateFieldIncrement(Table, ID, FieldName, Increment);
 end;
 
-function TRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
-  Action: TSQLEvent; ErrorMsg: PRawUTF8): boolean;
+function TRest.RecordCanBeUpdated(Table: TORMClass; ID: TID;
+  Action: TORMEvent; ErrorMsg: PRawUTF8): boolean;
 begin
   result := fORM.RecordCanBeUpdated(Table, ID, Action, ErrorMsg);
 end;
 
-function TRest.Delete(Table: TSQLRecordClass; ID: TID): boolean;
+function TRest.Delete(Table: TORMClass; ID: TID): boolean;
 begin
   result := fORM.Delete(Table, ID);
 end;
 
-function TRest.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean;
+function TRest.Delete(Table: TORMClass; const SQLWhere: RawUTF8): boolean;
 begin
   result := fORM.Delete(Table, SQLWhere);
 end;
 
-function TRest.Delete(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
+function TRest.Delete(Table: TORMClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const): boolean;
 begin
   result := fORM.Delete(Table, FormatSQLWhere, BoundsSQLWhere);
 end;
 
-function TRest.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
-  const BlobFieldName: RawUTF8; out BlobData: TSQLRawBlob): boolean;
+function TRest.RetrieveBlob(Table: TORMClass; aID: TID;
+  const BlobFieldName: RawUTF8; out BlobData: TRawBlob): boolean;
 begin
   result := fORM.RetrieveBlob(Table, aID, BlobFieldName, BlobData);
 end;
 
-function TRest.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
+function TRest.RetrieveBlob(Table: TORMClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobStream: TCustomMemoryStream): boolean;
 begin
   result := fORM.RetrieveBlob(Table, aID, BlobFieldName, BlobStream);
 end;
 
-function TRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
-  const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean;
+function TRest.UpdateBlob(Table: TORMClass; aID: TID;
+  const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean;
 begin
   result := fORM.UpdateBlob(Table, aID, BlobFieldName, BlobData);
 end;
 
-function TRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
+function TRest.UpdateBlob(Table: TORMClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: TStream): boolean;
 begin
   result := fORM.UpdateBlob(Table, aID, BlobFieldName, BlobData);
 end;
 
-function TRest.UpdateBlob(Table: TSQLRecordClass; aID: TID;
+function TRest.UpdateBlob(Table: TORMClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean;
 begin
   result := fORM.UpdateBlob(Table, aID, BlobFieldName, BlobData, BlobSize);
 end;
 
-function TRest.UpdateBlobFields(Value: TSQLRecord): boolean;
+function TRest.UpdateBlobFields(Value: TORM): boolean;
 begin
   result := fORM.UpdateBlobFields(Value);
 end;
 
-function TRest.RetrieveBlobFields(Value: TSQLRecord): boolean;
+function TRest.RetrieveBlobFields(Value: TORM): boolean;
 begin
   result := fORM.RetrieveBlobFields(Value);
 end;
 
-function TRest.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
+function TRest.TransactionBegin(aTable: TORMClass; SessionID: cardinal): boolean;
 begin
   result := fORM.TransactionBegin(aTable, SessionID);
 end;
@@ -2543,7 +2551,7 @@ begin
   result := fORM.BatchSend(Batch);
 end;
 
-function TRest.AsynchBatchStart(Table: TSQLRecordClass;
+function TRest.AsynchBatchStart(Table: TORMClass;
   SendSeconds: integer; PendingRowThreshold: integer;
   AutomaticTransactionPerRow: integer; Options: TRestBatchOptions): boolean;
 begin
@@ -2551,37 +2559,37 @@ begin
     AutomaticTransactionPerRow, Options);
 end;
 
-function TRest.AsynchBatchStop(Table: TSQLRecordClass): boolean;
+function TRest.AsynchBatchStop(Table: TORMClass): boolean;
 begin
   result := fORM.AsynchBatchStop(Table);
 end;
 
-function TRest.AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
-  ForceID: boolean; const CustomFields: TSQLFieldBits;
+function TRest.AsynchBatchAdd(Value: TORM; SendData: boolean;
+  ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 begin
   result := fORM.AsynchBatchAdd(Value, SendData, ForceID, CustomFields,
     DoNotAutoComputeFields);
 end;
 
-function TRest.AsynchBatchRawAdd(Table: TSQLRecordClass;
+function TRest.AsynchBatchRawAdd(Table: TORMClass;
   const SentData: RawUTF8): integer;
 begin
   result := fORM.AsynchBatchRawAdd(Table, SentData);
 end;
 
-procedure TRest.AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+procedure TRest.AsynchBatchRawAppend(Table: TORMClass; SentData: TTextWriter);
 begin
   fORM.AsynchBatchRawAppend(Table, SentData);
 end;
 
-function TRest.AsynchBatchUpdate(Value: TSQLRecord;
-  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+function TRest.AsynchBatchUpdate(Value: TORM;
+  const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   result := fORM.AsynchBatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRest.AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+function TRest.AsynchBatchDelete(Table: TORMClass; ID: TID): integer;
 begin
   result := fORM.AsynchBatchDelete(Table, ID);
 end;
@@ -2706,7 +2714,7 @@ begin
   TSystemUse.Current({createifnone=}false).OnTimerExecute(Sender);
 end;
 
-function TRestBackgroundTimer.AsynchBatchIndex(aTable: TSQLRecordClass): integer;
+function TRestBackgroundTimer.AsynchBatchIndex(aTable: TORMClass): integer;
 begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
@@ -2720,7 +2728,7 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchLocked(aTable: TSQLRecordClass;
+function TRestBackgroundTimer.AsynchBatchLocked(aTable: TORMClass;
   out aBatch: TRestBatchLocked): boolean;
 var
   b: integer;
@@ -2751,7 +2759,7 @@ procedure TRestBackgroundTimer.AsynchBatchExecute(Sender: TSynBackgroundTimer;
 var
   json, tablename: RawUTF8;
   batch: TRestBatchLocked;
-  table: TSQLRecordClass;
+  table: TORMClass;
   b: PtrInt;
   count, status: integer;
   res: TIDDynArray;
@@ -2816,7 +2824,7 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchStart(Table: TSQLRecordClass;
+function TRestBackgroundTimer.AsynchBatchStart(Table: TORMClass;
   SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
   Options: TRestBatchOptions): boolean;
 var
@@ -2842,7 +2850,7 @@ begin
   result := true;
 end;
 
-function TRestBackgroundTimer.AsynchBatchStop(Table: TSQLRecordClass): boolean;
+function TRestBackgroundTimer.AsynchBatchStop(Table: TORMClass): boolean;
 var
   b: integer;
   timeout: Int64;
@@ -2887,8 +2895,8 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchAdd(Value: TSQLRecord;
-  SendData, ForceID: boolean; const CustomFields: TSQLFieldBits;
+function TRestBackgroundTimer.AsynchBatchAdd(Value: TORM;
+  SendData, ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 var
   b: TRestBatchLocked;
@@ -2907,7 +2915,7 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchRawAdd(Table: TSQLRecordClass;
+function TRestBackgroundTimer.AsynchBatchRawAdd(Table: TORMClass;
   const SentData: RawUTF8): integer;
 var
   b: TRestBatchLocked;
@@ -2926,7 +2934,7 @@ begin
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchBatchRawAppend(Table: TSQLRecordClass;
+procedure TRestBackgroundTimer.AsynchBatchRawAppend(Table: TORMClass;
   SentData: TTextWriter);
 var
   b: TRestBatchLocked;
@@ -2945,8 +2953,8 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchUpdate(Value: TSQLRecord;
-  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+function TRestBackgroundTimer.AsynchBatchUpdate(Value: TORM;
+  const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 var
   b: TRestBatchLocked;
 begin
@@ -2964,7 +2972,7 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchDelete(Table: TSQLRecordClass;
+function TRestBackgroundTimer.AsynchBatchDelete(Table: TORMClass;
   ID: TID): integer;
 var
   b: TRestBatchLocked;
@@ -3093,9 +3101,9 @@ end;
 
 { ************ RESTful Authentication Support }
 
-{ TSQLAuthGroup }
+{ TAuthGroup }
 
-function TSQLAuthGroup.GetSQLAccessRights: TSQLAccessRights;
+function TAuthGroup.GetORMAccessRights: TORMAccessRights;
 begin
   if self = nil then
     FillCharFast(result, SizeOf(result), 0)
@@ -3103,13 +3111,13 @@ begin
     result.FromString(pointer(AccessRights));
 end;
 
-class procedure TSQLAuthGroup.InitializeTable(const Server: IRestORMServer;
-  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+class procedure TAuthGroup.InitializeTable(const Server: IRestORMServer;
+  const FieldName: RawUTF8; Options: TORMInitializeTableOptions);
 var
-  UC: TSQLAuthUserClass;
-  G: TSQLAuthGroup;
-  U: TSQLAuthUser;
-  A: TSQLAccessRights;
+  UC: TAuthUserClass;
+  G: TAuthGroup;
+  U: TAuthUser;
+  A: TORMAccessRights;
   AuthUserIndex, AuthGroupIndex: integer;
   AdminID, SupervisorID, UserID: PtrInt;
 begin
@@ -3120,11 +3128,11 @@ begin
   begin
     // create default Groups and Users (we are already in a Transaction)
     AuthGroupIndex := Server.Model.GetTableIndex(self);
-    AuthUserIndex := Server.Model.GetTableIndexInheritsFrom(TSQLAuthUser);
+    AuthUserIndex := Server.Model.GetTableIndexInheritsFrom(TAuthUser);
     if (AuthGroupIndex < 0) or
        (AuthUserIndex < 0) then
       raise EModelException.CreateUTF8(
-        '%.InitializeTable: Model has missing % or TSQLAuthUser',
+        '%.InitializeTable: Model has missing % or TAuthUser',
         [self, self]);
     UC := pointer(Server.Model.Tables[AuthUserIndex]);
     if not (itoNoAutoCreateGroups in Options) then
@@ -3143,8 +3151,8 @@ begin
         AdminID := Server.Add(G, true);
         G.Ident := 'Supervisor';
         A.AllowRemoteExecute := SUPERVISOR_ACCESS_RIGHTS.AllowRemoteExecute;
-        A.Edit(AuthUserIndex, [soSelect]); // AuthUser  R/O
-        A.Edit(AuthGroupIndex, [soSelect]); // AuthGroup R/O
+        A.Edit(AuthUserIndex, [ooSelect]); // AuthUser  R/O
+        A.Edit(AuthGroupIndex, [ooSelect]); // AuthGroup R/O
         G.SQLAccessRights := A;
         G.SessionTimeout := AuthSupervisorGroupDefaultTimeout;
         SupervisorID := Server.Add(G, true);
@@ -3157,9 +3165,9 @@ begin
         UserID := Server.Add(G, true);
         G.Ident := 'Guest';
         A.AllowRemoteExecute := [];
-        FillcharFast(A.POST, SizeOf(TSQLFieldTables), 0); // R/O access
-        FillcharFast(A.PUT, SizeOf(TSQLFieldTables), 0);
-        FillcharFast(A.DELETE, SizeOf(TSQLFieldTables), 0);
+        FillcharFast(A.POST, SizeOf(TORMFieldTables), 0); // R/O access
+        FillcharFast(A.PUT, SizeOf(TORMFieldTables), 0);
+        FillcharFast(A.DELETE, SizeOf(TORMFieldTables), 0);
         G.SQLAccessRights := A;
         G.SessionTimeout := AuthGuestGroupDefaultTimeout;
         Server.Add(G, true);
@@ -3174,17 +3182,17 @@ begin
           U.LogonName := 'Admin';
           U.PasswordHashHexa := AuthAdminDefaultPassword;
           U.DisplayName := U.LogonName;
-          U.GroupRights := TSQLAuthGroup(AdminID);
+          U.GroupRights := TAuthGroup(AdminID);
           Server.Add(U, true);
           U.LogonName := 'Supervisor';
           U.PasswordHashHexa := AuthSupervisorDefaultPassword;
           U.DisplayName := U.LogonName;
-          U.GroupRights := TSQLAuthGroup(SupervisorID);
+          U.GroupRights := TAuthGroup(SupervisorID);
           Server.Add(U, true);
           U.LogonName := 'User';
           U.PasswordHashHexa := AuthUserDefaultPassword;
           U.DisplayName := U.LogonName;
-          U.GroupRights := TSQLAuthGroup(UserID);
+          U.GroupRights := TAuthGroup(UserID);
           Server.Add(U, true);
         finally
           U.Free;
@@ -3194,24 +3202,24 @@ begin
   end;
 end;
 
-procedure TSQLAuthGroup.SetSQLAccessRights(const Value: TSQLAccessRights);
+procedure TAuthGroup.SetORMAccessRights(const Value: TORMAccessRights);
 begin
   if self <> nil then
     AccessRights := Value.ToString;
 end;
 
 
-{ TSQLAuthUser }
+{ TAuthUser }
 
-class function TSQLAuthUser.ComputeHashedPassword(const aPasswordPlain,
+class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
   aHashSalt: RawUTF8; aHashRound: integer): RawUTF8;
 const
-  TSQLAUTHUSER_SALT = 'salt';
+  TAuthUser_SALT = 'salt';
 var
   dig: TSHA256Digest;
 begin
   if aHashSalt = '' then
-    result := SHA256(TSQLAUTHUSER_SALT + aPasswordPlain)
+    result := SHA256(TAuthUser_SALT + aPasswordPlain)
   else
   begin
     PBKDF2_HMAC_SHA256(aPasswordPlain, aHashSalt, aHashRound, dig);
@@ -3220,22 +3228,22 @@ begin
   end;
 end;
 
-procedure TSQLAuthUser.SetPasswordPlain(const Value: RawUTF8);
+procedure TAuthUser.SetPasswordPlain(const Value: RawUTF8);
 begin
   if self <> nil then
     PasswordHashHexa := ComputeHashedPassword(Value);
 end;
 
-procedure TSQLAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
+procedure TAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
   aHashRound: integer);
 begin
   if self <> nil then
     PasswordHashHexa := ComputeHashedPassword(aPasswordPlain, aHashSalt, aHashRound);
 end;
 
-function TSQLAuthUser.CanUserLog(Ctxt: TObject): boolean;
+function TAuthUser.CanUserLog(Ctxt: TObject): boolean;
 begin
-  result := true; // any existing TSQLAuthUser is allowed by default
+  result := true; // any existing TAuthUser is allowed by default
 end;
 
 
@@ -3420,11 +3428,11 @@ begin
 end;
 
 
-{ ************ TSQLRecordHistory Modifications Tracked Persistence }
+{ ************ TORMHistory Modifications Tracked Persistence }
 
-{ TSQLRecordModification }
+{ TORMModification }
 
-function TSQLRecordModification.ModifiedID: TID;
+function TORMModification.ModifiedID: TID;
 begin
   if self = nil then
     result := 0
@@ -3432,7 +3440,7 @@ begin
     result := RecordRef(fModifiedRecord).ID;
 end;
 
-function TSQLRecordModification.ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+function TORMModification.ModifiedTable(Model: TORMModel): TORMClass;
 begin
   if (self = nil) or
      (Model = nil) then
@@ -3441,7 +3449,7 @@ begin
     result := RecordRef(fModifiedRecord).Table(Model);
 end;
 
-function TSQLRecordModification.ModifiedTableIndex: integer;
+function TORMModification.ModifiedTableIndex: integer;
 begin
   if self = nil then
     result := 0
@@ -3450,28 +3458,28 @@ begin
 end;
 
 
-{ TSQLRecordHistory }
+{ TORMHistory }
 
-class procedure TSQLRecordHistory.InitializeTable(const Server: IRestORMServer;
-  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+class procedure TORMHistory.InitializeTable(const Server: IRestORMServer;
+  const FieldName: RawUTF8; Options: TORMInitializeTableOptions);
 begin
   inherited InitializeTable(Server, FieldName, Options);
   if FieldName = '' then
     Server.CreateSQLMultiIndex(self, ['ModifiedRecord', 'Event'], false);
 end;
 
-destructor TSQLRecordHistory.Destroy;
+destructor TORMHistory.Destroy;
 begin
   inherited;
   fHistoryAdd.Free;
 end;
 
-constructor TSQLRecordHistory.CreateHistory(const aClient: IRestORM;
-  aTable: TSQLRecordClass; aID: TID);
+constructor TORMHistory.CreateHistory(const aClient: IRestORM;
+  aTable: TORMClass; aID: TID);
 var
   ref: RecordRef;
-  rec: TSQLRecord;
-  hist: TSQLRecordHistory;
+  rec: TORM;
+  hist: TORMHistory;
 begin
   if (aClient = nil) or
      (aID <= 0) then
@@ -3491,7 +3499,7 @@ begin
   // append JSON changes
   hist := RecordClass.CreateAndFillPrepare(aClient,
     'ModifiedRecord=? and Event<>%', [ord(heArchiveBlob)], [fModifiedRecord])
-    as TSQLRecordHistory;
+    as TORMHistory;
   try
     if hist.FillTable.RowCount = 0 then
       // no JSON to append
@@ -3514,14 +3522,14 @@ begin
   HistoryOpen(aClient.Model);
 end;
 
-class procedure TSQLRecordHistory.InitializeFields(const Fields: array of const;
+class procedure TORMHistory.InitializeFields(const Fields: array of const;
   var JSON: RawUTF8);
 begin
   // you may use a TDocVariant to add some custom fields in your own class
   JSON := JSONEncode(Fields);
 end;
 
-function TSQLRecordHistory.HistoryOpen(Model: TSQLModel): boolean;
+function TORMHistory.HistoryOpen(Model: TORMModel): boolean;
 var
   len: cardinal;
   start, i: PtrInt;
@@ -3542,7 +3550,7 @@ begin
   begin
     R.Init(pointer(tmp), len);
     if not fHistoryTable.RecordProps.CheckBinaryHeader(R) then
-      // invalid content: TSQLRecord layout may have changed
+      // invalid content: TORM layout may have changed
       exit;
     R.ReadVarUInt32Array(fHistoryUncompressedOffset);
     fHistoryUncompressedCount := length(fHistoryUncompressedOffset);
@@ -3554,7 +3562,7 @@ begin
   result := true;
 end;
 
-function TSQLRecordHistory.HistoryCount: integer;
+function TORMHistory.HistoryCount: integer;
 begin
   if (self = nil) or
      (fHistoryUncompressed = '') then
@@ -3563,9 +3571,9 @@ begin
     result := fHistoryUncompressedCount;
 end;
 
-function TSQLRecordHistory.HistoryGet(Index: integer;
-  out Event: TSQLHistoryEvent; out Timestamp: TModTime;
-  Rec: TSQLRecord): boolean;
+function TORMHistory.HistoryGet(Index: integer;
+  out Event: TORMHistoryEvent; out Timestamp: TModTime;
+  Rec: TORM): boolean;
 var
   P, PEnd: PAnsiChar;
 begin
@@ -3577,7 +3585,7 @@ begin
   inc(P, fHistoryUncompressedOffset[Index]);
   if P >= PEnd then
     exit;
-  Event := TSQLHistoryEvent(P^);
+  Event := TORMHistoryEvent(P^);
   inc(P);
   P := pointer(FromVarUInt64Safe(pointer(P), pointer(PEnd), PQWord(@Timestamp)^));
   if P = nil then
@@ -3596,17 +3604,17 @@ begin
   result := true;
 end;
 
-function TSQLRecordHistory.HistoryGet(Index: integer; Rec: TSQLRecord): boolean;
+function TORMHistory.HistoryGet(Index: integer; Rec: TORM): boolean;
 var
-  Event: TSQLHistoryEvent;
+  Event: TORMHistoryEvent;
   Timestamp: TModTime;
 begin
   result := HistoryGet(Index, Event, Timestamp, Rec);
 end;
 
-function TSQLRecordHistory.HistoryGet(Index: integer): TSQLRecord;
+function TORMHistory.HistoryGet(Index: integer): TORM;
 var
-  Event: TSQLHistoryEvent;
+  Event: TORMHistoryEvent;
   Timestamp: TModTime;
 begin
   if fHistoryTable = nil then
@@ -3619,14 +3627,14 @@ begin
   end;
 end;
 
-function TSQLRecordHistory.HistoryGetLast(Rec: TSQLRecord): boolean;
+function TORMHistory.HistoryGetLast(Rec: TORM): boolean;
 begin
   result := HistoryGet(fHistoryUncompressedCount - 1, Rec);
 end;
 
-function TSQLRecordHistory.HistoryGetLast: TSQLRecord;
+function TORMHistory.HistoryGetLast: TORM;
 var
-  event: TSQLHistoryEvent;
+  event: TORMHistoryEvent;
   modtime: TModTime;
 begin
   if fHistoryTable = nil then
@@ -3638,7 +3646,7 @@ begin
   end;
 end;
 
-procedure TSQLRecordHistory.HistoryAdd(Rec: TSQLRecord; Hist: TSQLRecordHistory);
+procedure TORMHistory.HistoryAdd(Rec: TORM; Hist: TORMHistory);
 begin
   if (self = nil) or
      (fHistoryModel = nil) or
@@ -3653,14 +3661,14 @@ begin
     Rec.GetBinaryValuesSimpleFields(fHistoryAdd);
 end;
 
-function TSQLRecordHistory.HistorySave(const Server: IRestORMServer;
-  LastRec: TSQLRecord): boolean;
+function TORMHistory.HistorySave(const Server: IRestORMServer;
+  LastRec: TORM): boolean;
 var
   size, i, maxSize: PtrInt;
   firstOldIndex, firstOldOffset, firstNewIndex, firstNewOffset: integer;
   newOffset: TIntegerDynArray;
-  rec: TSQLRecord;
-  hist: TSQLRecordHistory;
+  rec: TORM;
+  hist: TORMHistory;
   W: TBufferWriter;
 begin
   result := false;
@@ -3679,7 +3687,7 @@ begin
       try // may be just deleted
         if not rec.SameRecord(LastRec) then
         begin
-          hist := RecordClass.Create as TSQLRecordHistory;
+          hist := RecordClass.Create as TORMHistory;
           try
             hist.fEvent := heUpdate;
             hist.fTimestamp := Server.GetServerTimestamp;

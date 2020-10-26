@@ -757,7 +757,7 @@ type
   TSynFilterOrValidateObjArrayArray = array of TSynFilterOrValidateObjArray;
 
   /// will define a filter (transformation) or a validation process to be
-  // applied to a database Record content (typicaly a TSQLRecord)
+  // applied to a database Record content (typicaly a TORM)
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynFilterOrValidate = class
   protected
@@ -784,7 +784,7 @@ type
     property Parameters: RawUTF8 read fParameters write SetParameters;
   end;
 
-  /// will define a validation to be applied to a Record (typicaly a TSQLRecord)
+  /// will define a validation to be applied to a Record (typicaly a TORM)
   // field content
   // - a typical usage is to validate an email or IP adress e.g.
   // - the optional associated parameters are to be supplied JSON-encoded
@@ -805,11 +805,11 @@ type
   end;
 
   /// points to a TSynValidate variable
-  // - used e.g. as optional parameter to TSQLRecord.Validate/FilterAndValidate
+  // - used e.g. as optional parameter to TORM.Validate/FilterAndValidate
   PSynValidate = ^TSynValidate;
 
   /// IP v4 address validation to be applied to a Record field content
-  // (typicaly a TSQLRecord)
+  // (typicaly a TORM)
   // - this versions expect no parameter
   TSynValidateIPAddress = class(TSynValidate)
   protected
@@ -820,7 +820,7 @@ type
   end;
 
   /// IP address validation to be applied to a Record field content
-  // (typicaly a TSQLRecord)
+  // (typicaly a TORM)
   // - optional JSON encoded parameters are "AllowedTLD" or "ForbiddenTLD",
   // expecting a CSV lis of Top-Level-Domain (TLD) names, e.g.
   // $ '{"AllowedTLD":"com,org,net","ForbiddenTLD":"fr"}'
@@ -892,7 +892,7 @@ type
   end;
 
   /// glob case-insensitive pattern validation of a text field content
-  // (typicaly a TSQLRecord)
+  // (typicaly a TORM)
   // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
   // - same as TSynValidatePattern, but is NOT case sensitive
   TSynValidatePatternI = class(TSynValidatePattern);
@@ -996,7 +996,7 @@ type
   end;
 {$M-}
 
-  /// strong password validation for a Record field content (typicaly a TSQLRecord)
+  /// strong password validation for a Record field content (typicaly a TORM)
   // - the following parameters are set by default to
   // $ '{"MinLength":5,"MaxLength":20,"MinAlphaCount":1,"MinDigitCount":1,
   // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1,"MaxSpaceCount":0}'
@@ -1017,7 +1017,7 @@ type
   {$NODEFINE TSynValidatePassWord }
 
   /// will define a transformation to be applied to a Record field content
-  // (typicaly a TSQLRecord)
+  // (typicaly a TORM)
   // - here "filter" means that content would be transformed according to a
   // set of defined rules
   // - a typical usage is to convert to lower or upper case, or

@@ -9,21 +9,21 @@ unit mormot.orm.core;
    Shared Types and Definitions for our RESTful ORM
     - Shared ORM/JSON Fields and Values Definitions
     - JSON Object Decoder and SQL Generation
-    - TJSONSerializer Class for TSQLRecord Serialization
-    - TSQLPropInfo Classes for Efficient ORM Processing
+    - TJSONSerializer Class for TORM Serialization
+    - TORMPropInfo Classes for Efficient ORM Processing
     - IRestORM IRestORMServer IRestORMClient Definitions
-    - TSQLRecord Definition
+    - TORM Definition
     - RecordRef Wrapper Definition
-    - TSQLTable TSQLTableJSON Definitions
-    - TSQLRecordMany Definition
-    - Virtual TSQLRecord Definitions
-    - TSQLRecordProperties Definitions
-    - TSQLModel TSQLModelRecordProperties Definitions
+    - TORMTable TORMTableJSON Definitions
+    - TORMMany Definition
+    - Virtual TORM Definitions
+    - TORMProperties Definitions
+    - TORMModel TORMModelRecordProperties Definitions
     - TRestCache Definition
     - TRestBatch TRestBatchLocked Definitions
     - TSynValidateRest TSynValidateUniqueField Definitions
-    - TSQLAccessRights Definition
-    - TSQLRecord High-Level Parents
+    - TORMAccessRights Definition
+    - TORM High-Level Parents
 
    This unit is not depending from mormot.rest.core so can be used as a pure
    ORM layer for your projects. IRestORM is the main abstract entry point.
@@ -71,7 +71,7 @@ const
   // - this constant is used internaly to optimize memory usage in the
   // generated asm code
   // - you should not change it to a value lower than expected in an existing
-  // database (e.g. as expected by TSQLAccessRights or such)
+  // database (e.g. as expected by TORMAccessRights or such)
   MAX_SQLTABLES = 256;
 
   /// after how many parameters inlining is not worth it
@@ -82,7 +82,7 @@ type
   EORMException = class(ESynException);
 
   /// used to store bit set for all available Tables in a Database Model
-  TSQLFieldTables = set of 0..MAX_SQLTABLES - 1;
+  TORMFieldTables = set of 0..MAX_SQLTABLES - 1;
 
   /// a String used to store the BLOB content
   // - equals RawByteString for byte storage, to force no implicit charset
@@ -94,20 +94,20 @@ type
   // for blobs, unless TRestClientURI.ForceBlobTransfert property is TRUE
   // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
   // so use RetrieveBlob() methods for handling BLOB fields
-  // - could be defined as value in a TSQLRecord property as such:
-  // ! property Blob: TSQLRawBlob read fBlob write fBlob;
-  TSQLRawBlob = type RawByteString;
+  // - could be defined as value in a TORM property as such:
+  // ! property Blob: TRawBlob read fBlob write fBlob;
+  TRawBlob = type RawByteString;
 
   /// a reference to another record in any table in the database Model
   // - stored as a 64-bit signed integer (just like the TID type)
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
   // - use TRest.Retrieve(Reference) to get a record value
-  // - don't change associated TSQLModel tables order, since TRecordReference
+  // - don't change associated TORMModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, this property will be set to 0
   // by TRestORMServer.AfterDeleteForceCoherency()
-  // - could be defined as value in a TSQLRecord property as such:
+  // - could be defined as value in a TORM property as such:
   // ! property AnotherRecord: TRecordReference read fAnotherRecord write fAnotherRecord;
   TRecordReference = type Int64;
 
@@ -116,17 +116,17 @@ type
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
   // - use TRest.Retrieve(Reference) to get a record value
-  // - don't change associated TSQLModel tables order, since TRecordReference
+  // - don't change associated TORMModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, any record containg a matching
   // property will be deleted by TRestORMServer.AfterDeleteForceCoherency()
-  // - could be defined as value in a TSQLRecord property as such:
+  // - could be defined as value in a TORM property as such:
   // ! property AnotherRecord: TRecordReferenceToBeDeleted
   // !   read fAnotherRecord write fAnotherRecord;
   TRecordReferenceToBeDeleted = type TRecordReference;
 
   /// an Int64-encoded date and time of the latest update of a record
-  // - can be used as published property field in TSQLRecord for sftModTime:
+  // - can be used as published property field in TORM for sftModTime:
   // if any such property is defined in the table, it will be auto-filled with
   // the server timestamp corresponding to the latest record update
   // - use internally for computation an abstract "year" of 16 months of 32 days
@@ -134,12 +134,12 @@ type
   // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow/Iso8601ToTimeLog
   // functions, or type-cast the value with a TTimeLogBits memory structure for
   // direct access to its bit-oriented content (or via PTimeLogBits pointer)
-  // - could be defined as value in a TSQLRecord property as such:
+  // - could be defined as value in a TORM property as such:
   // ! property LastModif: TModTime read fLastModif write fLastModif;
   TModTime = type TTimeLog;
 
   /// an Int64-encoded date and time of the record creation
-  // - can be used as published property field in TSQLRecord for sftCreateTime:
+  // - can be used as published property field in TORM for sftCreateTime:
   // if any such property is defined in the table, it will be auto-filled with
   // the server timestamp corresponding to the record creation
   // - use internally for computation an abstract "year" of 16 months of 32 days
@@ -147,29 +147,29 @@ type
   // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow/Iso8601ToTimeLog
   // functions, or type-cast the value with a TTimeLogBits memory structure for
   // direct access to its bit-oriented content (or via PTimeLogBits pointer)
-  // - could be defined as value in a TSQLRecord property as such:
+  // - could be defined as value in a TORM property as such:
   // ! property CreatedAt: TModTime read fCreatedAt write fCreatedAt;
   TCreateTime = type TTimeLog;
 
-  /// the Int64/TID of the TSQLAuthUser currently logged
-  // - can be used as published property field in TSQLRecord for sftSessionUserID:
+  /// the Int64/TID of the TAuthUser currently logged
+  // - can be used as published property field in TORM for sftSessionUserID:
   // if any such property is defined in the table, it will be auto-filled with
-  // the current TSQLAuthUser.ID value at update, or 0 if no session is running
-  // - could be defined as value in a TSQLRecord property as such:
+  // the current TAuthUser.ID value at update, or 0 if no session is running
+  // - could be defined as value in a TORM property as such:
   // ! property User: TSessionUserID read fUser write fUser;
   TSessionUserID = type TID;
 
   /// a monotonic version number, used to track changes on a table
-  // - add such a published field to any TSQLRecord will allow tracking of
+  // - add such a published field to any TORM will allow tracking of
   // record modifications - note that only a single field of this type should
   // be defined for a given record
   // - note that this published field is NOT part of the record "simple fields":
   // by default, the version won't be retrieved from the DB, nor will be sent
   // from a client - the Engine*() CRUD method will take care of computing the
   // monotonic version number, just before storage to the persistence engine
-  // - such a field will use a separated TSQLRecordTableDeletion table to
+  // - such a field will use a separated TORMTableDeletion table to
   // track the deleted items
-  // - could be defined as value in a TSQLRecord property as such:
+  // - could be defined as value in a TORM property as such:
   // ! property TrackedVersion: TRecordVersion read fVersion write fVersion;
   TRecordVersion = type Int64;
 
@@ -177,12 +177,12 @@ type
   // database driver
   // - sftUnknown: unknown or not defined field type
   // - sftAnsiText: a WinAnsi encoded TEXT, forcing a NOCASE collation
-  // (TSQLRecord Delphi property was declared as AnsiString or string before
+  // (TORM Delphi property was declared as AnsiString or string before
   // Delphi 2009)
   // - sftUTF8Text is UTF-8 encoded TEXT, forcing a SYSTEMNOCASE collation,
-  // i.e. using UTF8IComp() (TSQLRecord property was declared as RawUTF8,
+  // i.e. using UTF8IComp() (TORM property was declared as RawUTF8,
   // RawUnicode or WideString - or string in Delphi 2009+) - you may inherit
-  // from TSQLRecordNoCase to use the NOCASE standard SQLite3 collation
+  // from TORMNoCase to use the NOCASE standard SQLite3 collation
   //- sftEnumerate is an INTEGER value corresponding to an index in any
   // enumerate Delphi type; storage is an INTEGER value (fast, easy and size
   // efficient); at display, this integer index will be converted into the
@@ -194,7 +194,7 @@ type
   // up to 64 elements is allowed yet (stored as an Int64)
   // - sftInteger is an INTEGER (Int64 precision, as expected by SQLite3) field
   // - sftID is an INTEGER field pointing to the ID/RowID of another record of
-  // a table, defined by the class type of the TSQLRecord inherited property;
+  // a table, defined by the class type of the TORM inherited property;
   // coherency is always ensured: after a delete, all values pointing to
   // it is reset to 0
   // - sftRecord is an INTEGER field pointing to the ID/RowID of another
@@ -230,26 +230,26 @@ type
   // stored as a local variant property, identifying TNullableInteger,
   // TNullableBoolean, TNullableFloat, TNullableCurrency,
   // TNullableDateTime, TNullableTimeLog and TNullableUTF8Text types
-  // - sftBlob is a BLOB field (TSQLRawBlob Delphi property), and won't be
+  // - sftBlob is a BLOB field (TRawBlob Delphi property), and won't be
   // retrieved by default (not part of ORM "simple types"), to save bandwidth
   // - sftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
   // property will be retrieved by default, i.e. is recognized as a "simple
   // field", and will use Base64 encoding during JSON transmission, or a true
   // JSON array, depending on the database back-end (e.g. MongoDB)
   // - sftBlobCustom is a custom property, stored as BLOB field: such
-  // properties are defined by adding a TSQLPropInfoCustom instance, overriding
-  // TSQLRecord.InternalRegisterCustomProperties virtual method - they will
+  // properties are defined by adding a TORMPropInfoCustom instance, overriding
+  // TORM.InternalRegisterCustomProperties virtual method - they will
   // be retrieved by default, i.e. recognized as "simple fields"
   // - sftUTF8Custom is a custom property, stored as JSON in a TEXT field,
-  // defined by overriding TSQLRecord.InternalRegisterCustomProperties
-  // virtual method, and adding a TSQLPropInfoCustom instance, e.g. via
+  // defined by overriding TORM.InternalRegisterCustomProperties
+  // virtual method, and adding a TORMPropInfoCustom instance, e.g. via
   // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRTTI();
   // they will be retrieved by default, i.e. recognized as "simple fields"
-  // - sftMany is a 'many to many' field (TSQLRecordMany Delphi property);
+  // - sftMany is a 'many to many' field (TORMMany Delphi property);
   // nothing is stored in the table row, but in a separate pivot table: so
-  // there is nothing to retrieve here; in contrast to other TSQLRecord
-  // published properties, which contains an INTEGER ID, the TSQLRecord.Create
-  // will instanciate a true TSQLRecordMany instance to handle this pivot table
+  // there is nothing to retrieve here; in contrast to other TORM
+  // published properties, which contains an INTEGER ID, the TORM.Create
+  // will instanciate a true TORMMany instance to handle this pivot table
   // via its dedicated ManyAdd/FillMany/ManySelect methods - as a result, such
   // properties won't be retrieved by default, i.e. not recognized as "simple
   // fields" unless you used the dedicated methods
@@ -259,10 +259,10 @@ type
   // the value of this field is automatically updated with the current
   // date and time each time a record is updated (with external DB, it will
   // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
-  // virtual method of TSQLRecord; note also that only RESTful PUT/POST access
+  // virtual method of TORM; note also that only RESTful PUT/POST access
   // will change this field value: manual SQL statements (like
   // 'UPDATE Table SET Column=0') won't change its content; note also that
-  // this is automated on Delphi client side, so only within TSQLRecord ORM use
+  // this is automated on Delphi client side, so only within TORM ORM use
   // (a pure AJAX application should fill such fields explicitely before sending)
   // - sftCreateTime is an INTEGER field containing the TCreateTime time
   // of the record creation; TCreateTime (just like TTimeLog or TModTime)
@@ -270,13 +270,13 @@ type
   // the value of this field is automatically updated with the current
   // date and time when the record is created (with external DB, it will
   // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
-  // virtual method of TSQLRecord; note also that only RESTful PUT/POST access
+  // virtual method of TORM; note also that only RESTful PUT/POST access
   // will set this field value: manual SQL statements (like
   // 'INSERT INTO Table ...') won't set its content; note also that this is
-  // automated on Delphi client side, so only within TSQLRecord ORM use (a
+  // automated on Delphi client side, so only within TORM ORM use (a
   // pure AJAX application should fill such fields explicitely before sending)
   // - sftTID is an INTEGER field containing a TID pointing to another record;
-  // since regular TSQLRecord published properties (i.e. sftID kind of field)
+  // since regular TORM published properties (i.e. sftID kind of field)
   // can not be greater than 2,147,483,647 (i.e. a signed 32-bit value) under
   // Win32, defining TID published properties will allow to store the ID
   // as signed 64-bit, e.g. up to 9,223,372,036,854,775,808; despite to
@@ -284,28 +284,28 @@ type
   // values pointing to are NOT reset to 0 - it is up to your business logic
   // to ensure data coherency as expected
   // - sftRecordVersion is an INTEGER field containing a TRecordVersion
-  // monotonic number: adding such a published field to any TSQLRecord will
+  // monotonic number: adding such a published field to any TORM will
   // allow tracking of record modifications, at storage level; by design,
   // such a field won't be part of "simple types", so won't be transmitted
   // between the clients and the server, but will be updated at any write
   // operation by the low-level Engine*() storage methods - such a field
-  // will use a TSQLRecordTableDeletion table to track the deleted items
-  // - sftSessionUserID is an INTEGER field containing the TSQLAuthUser.ID
+  // will use a TORMTableDeletion table to track the deleted items
+  // - sftSessionUserID is an INTEGER field containing the TAuthUser.ID
   // of the record modification; the value of this field is automatically
   // updated with the current User ID of the active session; note also that
   // only RESTful PUT/POST access will change this field value: manual SQL
   // statements (like 'UPDATE Table SET Column=0') won't change its content;
-  // this is automated on Delphi client side, so only within TSQLRecord ORM use
+  // this is automated on Delphi client side, so only within TORM ORM use
   // (a pure AJAX application should fill such fields explicitely before sending)
   // - sftUnixTime is an INTEGER field for coding a date and time as second-based
   // Unix Time (SQLite3 compatible), which should be defined as TUnixTime=Int64
-  // TSQLRecord property
+  // TORM property
   // - sftUnixMSTime is an INTEGER field for coding a date and time as
   // millisecond-based Unix Time (JavaScript compatible), which should be
-  // defined as TUnixMSTime=Int64 TSQLRecord property
+  // defined as TUnixMSTime=Int64 TORM property
   // - WARNING: do not change the order of items below, otherwise some methods
-  // (like TSQLRecordProperties.CheckBinaryHeader) may be broken and fail
-  TSQLFieldType = (
+  // (like TORMProperties.CheckBinaryHeader) may be broken and fail
+  TORMFieldType = (
     sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
     sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
     sftObject, sftVariant, sftNullable, sftBlob, sftBlobDynArray, sftBlobCustom,
@@ -313,18 +313,18 @@ type
     sftSessionUserID, sftDateTimeMS, sftUnixTime, sftUnixMSTime);
 
   /// set of available SQL field property types
-  TSQLFieldTypes = set of TSQLFieldType;
+  TORMFieldTypes = set of TORMFieldType;
 
   //// a fixed array of SQL field property types
-  TSQLFieldTypeArray = array[0..MAX_SQLFIELDS] of TSQLFieldType;
+  TORMFieldTypeArray = array[0..MAX_SQLFIELDS] of TORMFieldType;
 
   /// contains the parameters used for sorting
   // - FieldCount is 0 if was never sorted
-  // - used to sort data again after a successfull data update with TSQLTableJSON.FillFrom()
-  TSQLTableSortParams = record
+  // - used to sort data again after a successfull data update with TORMTableJSON.FillFrom()
+  TORMTableSortParams = record
     Comp: TUTF8Compare;
     FieldCount, FieldIndex: integer;
-    FieldType: TSQLFieldType;
+    FieldType: TORMFieldType;
     Asc: boolean;
   end;
 
@@ -336,38 +336,38 @@ type
   // should be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-  // - is used also by TSQLRecord.ComputeFieldsBeforeWrite virtual method
-  TSQLEvent = (
-    seAdd, seUpdate, seDelete, seUpdateBlob);
+  // - is used also by TORM.ComputeFieldsBeforeWrite virtual method
+  TORMEvent = (
+    oeAdd, oeUpdate, oeDelete, oeUpdateBlob);
 
-  /// used to define the triggered Event types for TSQLRecordHistory
-  // - TSQLRecordHistory.History will be used for heArchiveBlob
-  // - TSQLRecordHistory.SentDataJSON will be used for other kind of events
-  TSQLHistoryEvent = (
+  /// used to define the triggered Event types for TORMHistory
+  // - TORMHistory.History will be used for heArchiveBlob
+  // - TORMHistory.SentDataJSON will be used for other kind of events
+  TORMHistoryEvent = (
     heAdd, heUpdate, heDelete, heArchiveBlob);
 
   /// used to defined the CRUD associated SQL statement of a command
-  // - used e.g. by TSQLRecord.GetJSONValues methods and SimpleFieldsBits[] array
-  // (in this case, soDelete is never used, since deletion is global for all fields)
+  // - used e.g. by TORM.GetJSONValues methods and SimpleFieldsBits[] array
+  // (in this case, ooDelete is never used, since deletion is global for all fields)
   // - also used for cache content notification
-  TSQLOccasion = (
-    soSelect, soInsert, soUpdate, soDelete);
+  TORMOccasion = (
+    ooSelect, ooInsert, ooUpdate, ooDelete);
 
   /// used to defined a set of CRUD associated SQL statement of a command
-  TSQLOccasions = set of TSQLOccasion;
+  TORMOccasions = set of TORMOccasion;
 
 
 const
   /// kind of fields not retrieved during normal query, update or adding
   // - by definition, BLOB are excluded to save transmission bandwidth
-  // - by design, TSQLRecordMany properties are stored in an external pivot table
+  // - by design, TORMMany properties are stored in an external pivot table
   // - by convenience, the TRecordVersion number is for internal use only
-  NOT_SIMPLE_FIELDS: TSQLFieldTypes =
+  NOT_SIMPLE_FIELDS: TORMFieldTypes =
     [sftUnknown, sftBlob, sftMany, sftRecordVersion];
 
-  /// kind of fields which can be copied from one TSQLRecord instance to another
-  COPIABLE_FIELDS: TSQLFieldTypes =
-    [low(TSQLFieldType)..high(TSQLFieldType)] - [sftUnknown, sftMany];
+  /// kind of fields which can be copied from one TORM instance to another
+  COPIABLE_FIELDS: TORMFieldTypes =
+    [low(TORMFieldType)..high(TORMFieldType)] - [sftUnknown, sftMany];
 
   /// kind of DB fields which will contain TEXT content when converted to JSON
   TEXT_DBFIELDS: TSQLDBFieldTypes =
@@ -376,12 +376,12 @@ const
   /// kind of fields which will contain pure TEXT values
   // - independently from the actual storage level
   // - i.e. will match RawUTF8, string, UnicodeString, WideString properties
-  RAWTEXT_FIELDS: TSQLFieldTypes =
+  RAWTEXT_FIELDS: TORMFieldTypes =
     [sftAnsiText, sftUTF8Text];
 
   /// kind of fields which will be stored as TEXT values
   // - i.e. RAWTEXT_FIELDS and TDateTime/TDateTimeMS
-  STRING_FIELDS: TSQLFieldTypes =
+  STRING_FIELDS: TORMFieldTypes =
     [sftAnsiText, sftUTF8Text, sftUTF8Custom, sftDateTime, sftDateTimeMS];
 
   /// the SQL field property types with their TNullable* equivalency
@@ -394,17 +394,17 @@ const
      sftDateTime, sftTimeLog, sftUTF8Text];
 
 
-function ToText(ft: TSQLFieldType): PShortString; overload;
-function ToText(e: TSQLEvent): PShortString; overload;
-function ToText(he: TSQLHistoryEvent): PShortString; overload;
-function ToText(o: TSQLOccasion): PShortString; overload;
+function ToText(ft: TORMFieldType): PShortString; overload;
+function ToText(e: TORMEvent): PShortString; overload;
+function ToText(he: TORMHistoryEvent): PShortString; overload;
+function ToText(o: TORMOccasion): PShortString; overload;
 
 /// get the SQL type of this class type
 // - returns either sftObject, sftID, sftMany or sftUnknown
-function ClassSQLFieldType(info: PRttiInfo): TSQLFieldType;
+function ClassSQLFieldType(info: PRttiInfo): TORMFieldType;
 
 /// get the SQL type of this type, as managed with the database driver
-function GetSQLFieldType(Info: PRttiInfo): TSQLFieldType;
+function GeTORMFieldType(Info: PRttiInfo): TORMFieldType;
 
 /// similar to AddInt64() function, but for a TIDDynArray
 // - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
@@ -426,21 +426,21 @@ procedure SetID(P: PUTF8Char; var result: TID); overload;
 procedure SetID(const U: RawByteString; var result: TID); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fill a TSQLRawBlob from TEXT-encoded blob data
+/// fill a TRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob; overload;
+function BlobToTRawBlob(P: PUTF8Char): TRawBlob; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fill a TSQLRawBlob from TEXT-encoded blob data
+/// fill a TRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-procedure BlobToTSQLRawBlob(P: PUTF8Char; var result: TSQLRawBlob); overload;
+procedure BlobToTRawBlob(P: PUTF8Char; var result: TRawBlob); overload;
 
-/// fill a TSQLRawBlob from TEXT-encoded blob data
+/// fill a TRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToTSQLRawBlob(const Blob: RawByteString): TSQLRawBlob; overload;
+function BlobToTRawBlob(const Blob: RawByteString): TRawBlob; overload;
 
 /// create a TBytes from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -453,15 +453,15 @@ function BlobToBytes(P: PUTF8Char): TBytes;
 // - the caller must free the stream instance after use
 function BlobToStream(P: PUTF8Char): TStream;
 
-/// creates a TEXT-encoded version of blob data from a TSQLRawBlob
+/// creates a TEXT-encoded version of blob data from a TRawBlob
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
-function TSQLRawBlobToBlob(const RawBlob: TSQLRawBlob): RawUTF8; overload;
+function TRawBlobToBlob(const RawBlob: TRawBlob): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a TEXT-encoded version of blob data from a memory data
-// - same as TSQLRawBlob, but with direct memory access via a pointer/byte size pair
+// - same as TRawBlob, but with direct memory access via a pointer/byte size pair
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
-function TSQLRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; overload;
+function TRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; overload;
 
 /// convert a Base64-encoded content into binary hexadecimal ready for SQL
 // - returns e.g. X'53514C697465'
@@ -471,7 +471,7 @@ procedure Base64MagicToBlob(Base64: PUTF8Char; var result: RawUTF8);
 function isBlobHex(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
+/// guess the content type of an UTF-8 encoded field value, as used in TORMTable.Get()
 // - if P if nil or 'null', return sftUnknown
 // - otherwise, guess its type from its value characters
 // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
@@ -483,13 +483,13 @@ function isBlobHex(P: PUTF8Char): boolean;
 // as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftRecordVersion,
 // sftSessionUserID, sftBoolean, sftModTime/sftCreateTime/sftTimeLog or
 // sftUnixTime/sftUnixMSTime type
-function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
+function UTF8ContentType(P: PUTF8Char): TORMFieldType;
 
-/// guess the number type of an UTF-8 encoded field value, as used in TSQLTable.Get()
+/// guess the number type of an UTF-8 encoded field value, as used in TORMTable.Get()
 // - if P if nil or 'null', return sftUnknown
 // - will return sftInteger or sftFloat if the supplied text is a number
 // - will return sftUTF8Text for any non numerical content
-function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
+function UTF8ContentNumberType(P: PUTF8Char): TORMFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// special comparison function for sorting ftRecord (TRecordReference/RecordRef)
@@ -635,10 +635,10 @@ type
     /// encode as a SQL-ready INSERT or UPDATE statement with ? as values
     // - after a successfull call to Decode()
     // - FieldValues[] content will be ignored
-    // - Occasion can be only soInsert or soUpdate
-    // - for soUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
-    // - you can specify some options, e.g. boInsertOrIgnore for soInsert
-    function EncodeAsSQLPrepared(const TableName: RawUTF8; Occasion: TSQLOccasion;
+    // - Occasion can be only ooInsert or ooUpdate
+    // - for ooUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
+    // - you can specify some options, e.g. boInsertOrIgnore for ooInsert
+    function EncodeAsSQLPrepared(const TableName: RawUTF8; Occasion: TORMOccasion;
       const UpdateIDFieldName: RawUTF8; BatchOptions: TRestBatchOptions): RawUTF8;
     /// encode the FieldNames/FieldValues[] as a JSON object
     procedure EncodeAsJSON(out result: RawUTF8);
@@ -683,7 +683,7 @@ function GetJSONObjectAsSQL(const JSON: RawUTF8; Update, InlinedParams: boolean;
   RowID: TID = 0; ReplaceRowIDWithID: boolean = false): RawUTF8; overload;
 
 /// get the FIRST field value of the FIRST row, from a JSON content
-// - e.g. useful to get an ID without converting a JSON content into a TSQLTableJSON
+// - e.g. useful to get an ID without converting a JSON content into a TORMTableJSON
 function UnJSONFirstField(var P: PUTF8Char): RawUTF8;
 
 /// returns TRUE if the JSON content is in expanded format
@@ -702,13 +702,13 @@ function NotExpandedBufferRowCountPos(P, PEnd: PUTF8Char): PUTF8Char;
 // field won't be included in the resulting UTF-8 encoded JSON object unless
 // KeepIDField is true
 // - this function expects this "ID" property to be the FIRST in the
-// "Name":Value pairs, as generated by TSQLRecord.GetJSONValues(W)
+// "Name":Value pairs, as generated by TORM.GetJSONValues(W)
 function JSONGetObject(var P: PUTF8Char; ExtractID: PID;
   var EndOfObject: AnsiChar; KeepIDField: boolean): RawUTF8;
 
 /// retrieve the ID/RowID field of a JSON object
 // - this function expects this "ID" property to be the FIRST in the
-// "Name":Value pairs, as generated by TSQLRecord.GetJSONValues(W)
+// "Name":Value pairs, as generated by TORM.GetJSONValues(W)
 // - returns TRUE if a ID/RowID>0 has been found, and set ID with the value
 function JSONGetID(P: PUTF8Char; out ID: TID): boolean;
 
@@ -720,14 +720,14 @@ function JSONGetID(P: PUTF8Char; out ID: TID): boolean;
 // - sftUnknown and sftMany will set a varEmpty (Unassigned) value
 // - typeInfo may be used for sftBlobDynArray conversion to a TDocVariant array
 procedure ValueVarToVariant(Value: PUTF8Char; ValueLen: integer;
-  fieldType: TSQLFieldType; var result: TVarData; createValueTempCopy: boolean;
+  fieldType: TORMFieldType; var result: TVarData; createValueTempCopy: boolean;
   typeInfo: PRttiInfo; options: TDocVariantOptions = JSON_OPTIONS_FAST);
 
 
-{ ************ TJSONSerializer Class for TSQLRecord Serialization }
+{ ************ TJSONSerializer Class for TORM Serialization }
 
 type
-  /// several options to customize how TSQLRecord will be serialized
+  /// several options to customize how TORM will be serialized
   // - e.g. if properties storing JSON should be serialized as an object, and not
   // escaped as a string (which is the default, matching ORM column storage)
   // - if an additional "ID_str":"12345" field should be added to the standard
@@ -735,23 +735,23 @@ type
   TJSONSerializerSQLRecordOption = (
     jwoAsJsonNotAsString, jwoID_str);
 
-  /// options to customize how TSQLRecord will be written by TJSONSerializer
+  /// options to customize how TORM will be written by TJSONSerializer
   TJSONSerializerSQLRecordOptions = set of TJSONSerializerSQLRecordOption;
 
-  /// simple writer to a Stream, specialized for writing TSQLRecord as JSON
+  /// simple writer to a Stream, specialized for writing TORM as JSON
   // - in respect to the standard TJSONWriter as defined in mormot.db.core,
-  // this class has some options dedicated to our TSQLRecord serialization
+  // this class has some options dedicated to our TORM serialization
   TJSONSerializer = class(TJSONWriter)
   protected
     fSQLRecordOptions: TJSONSerializerSQLRecordOptions;
-    procedure SetSQLRecordOptions(Value: TJSONSerializerSQLRecordOptions);
+    procedure SeTORMOptions(Value: TJSONSerializerSQLRecordOptions);
   public
-    /// customize TSQLRecord.GetJSONValues serialization process
-    // - jwoAsJsonNotAsString will force TSQLRecord.GetJSONValues to serialize
+    /// customize TORM.GetJSONValues serialization process
+    // - jwoAsJsonNotAsString will force TORM.GetJSONValues to serialize
     // nested property instances as a JSON object/array, not a JSON string:
     // i.e. root/table/id REST will be ready-to-be-consumed from AJAX clients
-    // (e.g. TSQLPropInfoRTTIObject.GetJSONValues as a JSON object, and
-    // TSQLPropInfoRTTIDynArray.GetJSONValues as a JSON array)
+    // (e.g. TORMPropInfoRTTIObject.GetJSONValues as a JSON object, and
+    // TORMPropInfoRTTIDynArray.GetJSONValues as a JSON array)
     // - jwoID_str will add an "ID_str":"12345" property to the default
     // "ID":12345 field to circumvent JavaScript's limitation of 53-bit for
     // integer numbers, which is easily reached with our 64-bit TID values, e.g.
@@ -759,32 +759,32 @@ type
     // better use this "ID_str" string value to identify each record, and ignore
     // the "id" fields
     property SQLRecordOptions: TJSONSerializerSQLRecordOptions
-      read fSQLRecordOptions write SetSQLRecordOptions;
+      read fSQLRecordOptions write SeTORMOptions;
   end;
 
 
-{ ************ TSQLPropInfo Classes for Efficient ORM Processing }
+{ ************ TORMPropInfo Classes for Efficient ORM Processing }
 
 type
-  /// ORM attributes for a TSQLPropInfo definition
-  TSQLPropInfoAttribute = (
+  /// ORM attributes for a TORMPropInfo definition
+  TORMPropInfoAttribute = (
     aIsUnique, aAuxiliaryRTreeField, aBinaryCollation);
 
-  /// set of ORM attributes for a TSQLPropInfo definition
-  TSQLPropInfoAttributes = set of TSQLPropInfoAttribute;
+  /// set of ORM attributes for a TORMPropInfo definition
+  TORMPropInfoAttributes = set of TORMPropInfoAttribute;
 
   /// abstract parent class to store information about a published property
-  // - property information could be retrieved from RTTI (TSQLPropInfoRTTI*),
-  // or be defined by code (TSQLPropInfoCustom derivated classes) when RTTI
+  // - property information could be retrieved from RTTI (TORMPropInfoRTTI*),
+  // or be defined by code (TORMPropInfoCustom derivated classes) when RTTI
   // is not available
-  TSQLPropInfo = class
+  TORMPropInfo = class
   protected
     fName: RawUTF8;
     fNameUnflattened: RawUTF8;
-    fSQLFieldType: TSQLFieldType;
-    fSQLFieldTypeStored: TSQLFieldType;
+    fSQLFieldType: TORMFieldType;
+    fSQLFieldTypeStored: TORMFieldType;
     fSQLDBFieldType: TSQLDBFieldType;
-    fAttributes: TSQLPropInfoAttributes;
+    fAttributes: TORMPropInfoAttributes;
     fFieldWidth: integer;
     fPropertyIndex: integer;
     fFromRTTI: boolean;
@@ -794,43 +794,43 @@ type
     procedure BinaryToText(var Value: RawUTF8; ToSQL: boolean;
       wasSQLString: PBoolean); virtual;
     procedure TextToBinary(Value: PUTF8Char; var result: RawByteString); virtual;
-    function GetSQLFieldTypeName: PShortString;
+    function GeTORMFieldTypeName: PShortString;
     function GetSQLFieldRTTITypeName: RawUTF8; virtual;
     // overriden method shall use direct copy of the low-level binary content,
     // to be faster than a DestInfo.SetValue(Dest,GetValue(Source)) call
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); virtual;
   public
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
-    // class function TSQLPropInfoRTTI.CreateFrom() or overridden constructors
-    constructor Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldType;
-      aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
+    // class function TORMPropInfoRTTI.CreateFrom() or overridden constructors
+    constructor Create(const aName: RawUTF8; aSQLFieldType: TORMFieldType;
+      aAttributes: TORMPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
       reintroduce; virtual;
     /// the property definition Name
     property Name: RawUTF8 read fName;
     /// the property definition Name, afer un-camelcase and translation
     property NameDisplay: string read GetNameDisplay;
     /// the property definition Name, with full path name if has been flattened
-    // - if the property has been flattened (for a TSQLPropInfoRTTI), the real
+    // - if the property has been flattened (for a TORMPropInfoRTTI), the real
     // full nested class will be returned, e.g. 'Address.Country.Iso' for
     // the 'Address_Country' flattened property name
     property NameUnflattened: RawUTF8 read fNameUnflattened;
     /// the property index in the RTTI
     property PropertyIndex: integer read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
-    property SQLFieldType: TSQLFieldType read fSQLFieldType;
+    property SQLFieldType: TORMFieldType read fSQLFieldType;
     /// the corresponding column type, as stored by the ORM layer
     // - match SQLFieldType, unless for SQLFieldType=sftNullable, in which this
     // field will contain the simple type eventually stored in the database
-    property SQLFieldTypeStored: TSQLFieldType read fSQLFieldTypeStored;
+    property SQLFieldTypeStored: TORMFieldType read fSQLFieldTypeStored;
     /// the corresponding column type name, as managed by the ORM layer and
     // retrieved by the RTTI
     // - returns e.g. 'sftTimeLog'
-    property SQLFieldTypeName: PShortString read GetSQLFieldTypeName;
+    property SQLFieldTypeName: PShortString read GeTORMFieldTypeName;
     /// the type name, as defined in the RTTI
     // - returns e.g. 'RawUTF8'
-    // - will return the TSQLPropInfo class name if it is not a TSQLPropInfoRTTI
+    // - will return the TORMPropInfo class name if it is not a TORMPropInfoRTTI
     property SQLFieldRTTITypeName: RawUTF8 read GetSQLFieldRTTITypeName;
     /// the corresponding column type, as managed for abstract database access
     // - TNullable* fields will report here the corresponding simple DB type,
@@ -839,12 +839,12 @@ type
     /// the corresponding column type name, as managed for abstract database access
     function SQLDBFieldTypeName: PShortString;
     /// the ORM attributes of this property
-    // - contains aIsUnique e.g for TSQLRecord published properties marked as
+    // - contains aIsUnique e.g for TORM published properties marked as
     // ! property MyProperty: RawUTF8 stored AS_UNIQUE;
     // (i.e. "stored false")
-    property Attributes: TSQLPropInfoAttributes read fAttributes write fAttributes;
+    property Attributes: TORMPropInfoAttributes read fAttributes write fAttributes;
     /// the optional width of this field, in external databases
-    // - is set e.g. by index attribute of TSQLRecord published properties as
+    // - is set e.g. by index attribute of TORM published properties as
     // ! property MyProperty: RawUTF8 index 10;
     property FieldWidth: integer read fFieldWidth;
   public
@@ -854,7 +854,7 @@ type
     // - handle UTF-8 SQL to Delphi values conversion
     // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
     // or base-64 encoded stream for JSON ("\uFFF0base64encodedbinary") - i.e.
-    // both format supported by BlobToTSQLRawBlob() function
+    // both format supported by BlobToTRawBlob() function
     // - handle TPersistent, TCollection, TRawUTF8List or TStrings with JSONToObject
     // - note that the supplied Value buffer won't be modified by this method:
     // overriden implementation should create their own temporary copy
@@ -908,9 +908,9 @@ type
     // - both objects should have the same exact property
     procedure CopyValue(Source, Dest: TObject); virtual;
     /// copy a value from one instance to another property instance
-    // - if the property has been flattened (for a TSQLPropInfoRTTI), the real
+    // - if the property has been flattened (for a TORMPropInfoRTTI), the real
     // Source/Dest instance will be used for the copy
-    procedure CopyProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject);
+    procedure CopyProp(Source: TObject; DestInfo: TORMPropInfo; Dest: TObject);
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // SQLFieldType type
@@ -945,18 +945,18 @@ type
     function GetFieldAddr(Instance: TObject): pointer; virtual; abstract;
   end;
 
-  /// class-reference type (metaclass) of a TSQLPropInfo information
-  TSQLPropInfoClass = class of TSQLPropInfo;
+  /// class-reference type (metaclass) of a TORMPropInfo information
+  TORMPropInfoClass = class of TORMPropInfo;
 
   /// define how the published properties RTTI is to be interpreted
-  // - i.e. how TSQLPropInfoList.Create() and TSQLPropInfoRTTI.CreateFrom()
+  // - i.e. how TORMPropInfoList.Create() and TORMPropInfoRTTI.CreateFrom()
   // will handle the incoming RTTI
-  TSQLPropInfoListOptions = set of (pilRaiseEORMExceptionIfNotHandled,
+  TORMPropInfoListOptions = set of (pilRaiseEORMExceptionIfNotHandled,
     pilAllowIDFields, pilSubClassesFlattening, pilIgnoreIfGetter,
     pilSingleHierarchyLevel, pilAuxiliaryFields);
 
   /// parent information about a published property retrieved from RTTI
-  TSQLPropInfoRTTI = class(TSQLPropInfo)
+  TORMPropInfoRTTI = class(TORMPropInfo)
   protected
     fPropInfo: PRttiProp; // equals fPropRttiProp.Prop
     fPropType: PRttiInfo;
@@ -971,8 +971,8 @@ type
     // of the specified property RTTI
     // - it will raise an EORMException in case of an unhandled type
     class function CreateFrom(aPropInfo: PRttiProp; aPropIndex: integer;
-      aOptions: TSQLPropInfoListOptions;
-      const aFlattenedProps: PRttiPropDynArray): TSQLPropInfo;
+      aOptions: TORMPropInfoListOptions;
+      const aFlattenedProps: PRttiPropDynArray): TORMPropInfo;
     /// register this class corresponding to the RTTI TypeInfo() pointer
     // - could be used e.g. to define custom serialization and process of
     // any custom type
@@ -981,8 +981,8 @@ type
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType;
-      aOptions: TSQLPropInfoListOptions); reintroduce; virtual;
+      aSQLFieldType: TORMFieldType;
+      aOptions: TORMPropInfoListOptions); reintroduce; virtual;
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // SQLFieldType type
@@ -1008,20 +1008,20 @@ type
     property PropRtti: TRttiJson read fPropRtti;
   end;
 
-  /// class-reference type (metaclass) of a TSQLPropInfoRTTI information
-  TSQLPropInfoRTTIClass = class of TSQLPropInfoRTTI;
+  /// class-reference type (metaclass) of a TORMPropInfoRTTI information
+  TORMPropInfoRTTIClass = class of TORMPropInfoRTTI;
 
-  TSQLPropInfoRTTIObjArray = array of TSQLPropInfoRTTI;
+  TORMPropInfoRTTIObjArray = array of TORMPropInfoRTTI;
 
   /// information about an ordinal Int32 published property
-  TSQLPropInfoRTTIInt32 = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIInt32 = class(TORMPropInfoRTTI)
   protected
     fUnsigned: boolean;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1037,23 +1037,23 @@ type
   end;
 
   /// information about a set published property
-  TSQLPropInfoRTTISet = class(TSQLPropInfoRTTIInt32)
+  TORMPropInfoRTTISet = class(TORMPropInfoRTTIInt32)
   protected
     fSetEnumType: PRttiEnumType;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     property SetEnumType: PRttiEnumType read fSetEnumType;
   end;
 
   /// information about a enumeration published property
   // - can be either sftBoolean or sftEnumerate kind of property
-  TSQLPropInfoRTTIEnum = class(TSQLPropInfoRTTIInt32)
+  TORMPropInfoRTTIEnum = class(TORMPropInfoRTTIInt32)
   protected
     fEnumType: PRttiEnumType;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1064,7 +1064,7 @@ type
   end;
 
   /// information about a character published property
-  TSQLPropInfoRTTIChar = class(TSQLPropInfoRTTIInt32)
+  TORMPropInfoRTTIChar = class(TORMPropInfoRTTIInt32)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
@@ -1073,14 +1073,14 @@ type
   end;
 
   /// information about an ordinal Int64 published property
-  TSQLPropInfoRTTIInt64 = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIInt64 = class(TORMPropInfoRTTI)
   protected
     fIsQWord: boolean;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1098,27 +1098,27 @@ type
   /// information about a PtrInt published property, according to the native CPU
   // - not a real stand-alone class, but a convenient wrapper type
   {$ifdef CPU64}
-  TSQLPropInfoRTTIPtrInt = TSQLPropInfoRTTIInt64;
+  TORMPropInfoRTTIPtrInt = TORMPropInfoRTTIInt64;
   {$else}
-  TSQLPropInfoRTTIPtrInt =TSQLPropInfoRTTIInt32;
+  TORMPropInfoRTTIPtrInt =TORMPropInfoRTTIInt32;
   {$endif CPU64}
 
   /// information about a TTimeLog published property
   // - stored as an Int64, but with a specific class
-  TSQLPropInfoRTTITimeLog = class(TSQLPropInfoRTTIInt64);
+  TORMPropInfoRTTITimeLog = class(TORMPropInfoRTTIInt64);
 
   /// information about a TUnixTime published property
   // - stored as an Int64, but with a specific class
-  TSQLPropInfoRTTIUnixTime = class(TSQLPropInfoRTTIInt64);
+  TORMPropInfoRTTIUnixTime = class(TORMPropInfoRTTIInt64);
 
   /// information about a TUnixMSTime published property
   // - stored as an Int64, but with a specific class
-  TSQLPropInfoRTTIUnixMSTime = class(TSQLPropInfoRTTIInt64);
+  TORMPropInfoRTTIUnixMSTime = class(TORMPropInfoRTTIInt64);
 
   /// information about a floating-point Double published property
-  TSQLPropInfoRTTIDouble = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIDouble = class(TORMPropInfoRTTI)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1136,9 +1136,9 @@ type
   end;
 
   /// information about a fixed-decimal Currency published property
-  TSQLPropInfoRTTICurrency = class(TSQLPropInfoRTTIDouble)
+  TORMPropInfoRTTICurrency = class(TORMPropInfoRTTIDouble)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1156,7 +1156,7 @@ type
   end;
 
   /// information about a TDateTime published property
-  TSQLPropInfoRTTIDateTime = class(TSQLPropInfoRTTIDouble)
+  TORMPropInfoRTTIDateTime = class(TORMPropInfoRTTIDouble)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
@@ -1170,14 +1170,14 @@ type
   end;
 
   /// information about a AnsiString published property
-  TSQLPropInfoRTTIAnsi = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIAnsi = class(TORMPropInfoRTTI)
   protected
     fEngine: TSynAnsiConvert;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
@@ -1196,9 +1196,9 @@ type
 
   /// information about a RawUTF8 published property
   // - will also serialize a RawJSON property without JSON escape
-  TSQLPropInfoRTTIRawUTF8 = class(TSQLPropInfoRTTIAnsi)
+  TORMPropInfoRTTIRawUTF8 = class(TORMPropInfoRTTIAnsi)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1216,9 +1216,9 @@ type
   end;
 
   /// information about a RawUnicode published property
-  TSQLPropInfoRTTIRawUnicode = class(TSQLPropInfoRTTIAnsi)
+  TORMPropInfoRTTIRawUnicode = class(TORMPropInfoRTTIAnsi)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1230,10 +1230,10 @@ type
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
-  /// information about a TSQLRawBlob published property
-  TSQLPropInfoRTTIRawBlob = class(TSQLPropInfoRTTIAnsi)
+  /// information about a TRawBlob published property
+  TORMPropInfoRTTIRawBlob = class(TORMPropInfoRTTIAnsi)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1253,9 +1253,9 @@ type
   end;
 
   /// information about a WideString published property
-  TSQLPropInfoRTTIWide = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIWide = class(TORMPropInfoRTTI)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest:
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo; Dest:
       TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1271,9 +1271,9 @@ type
 
   {$ifdef HASVARUSTRING}
   /// information about a UnicodeString published property
-  TSQLPropInfoRTTIUnicode = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIUnicode = class(TORMPropInfoRTTI)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1295,7 +1295,7 @@ type
 
   /// information about a dynamic array published property
 
-  TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIDynArray = class(TORMPropInfoRTTI)
   protected
     fObjArray: TRttiJson;
     procedure GetDynArray(Instance: TObject; var result: TDynArray);
@@ -1305,14 +1305,14 @@ type
     /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
     procedure Serialize(Instance: TObject; var data: RawByteString;
       ExtendedJson: boolean); virtual;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1328,7 +1328,7 @@ type
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
     /// optional index of the dynamic array published property
-    // - used e.g. for fast lookup by TSQLRecord.DynArray(DynArrayFieldIndex)
+    // - used e.g. for fast lookup by TORM.DynArray(DynArrayFieldIndex)
     property DynArrayIndex: integer read fFieldWidth;
     /// read-only access to the low-level type information the array item type
     property DynArrayElemType: TRttiCustom read GetDynArrayElemType;
@@ -1341,19 +1341,19 @@ type
     property ObjArray: TRttiJson read fObjArray;
   end;
 
-  TSQLPropInfoRTTIDynArrayObjArray = array of TSQLPropInfoRTTIDynArray;
+  TORMPropInfoRTTIDynArrayObjArray = array of TORMPropInfoRTTIDynArray;
 
   /// information about a variant published property
   // - is also used for TNullable* properties
-  TSQLPropInfoRTTIVariant = class(TSQLPropInfoRTTI)
+  TORMPropInfoRTTIVariant = class(TORMPropInfoRTTI)
   protected
     fDocVariantOptions: TDocVariantOptions;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     /// initialize the internal fields
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure SetValuePtr(Instance: TObject; Value: PUTF8Char; ValueLen: integer;
@@ -1378,31 +1378,31 @@ type
     // '{"name":"John","age":123}': be aware that this syntax is supported by
     // the ORM, SOA, TDocVariant, TBSONVariant, and our SynCrossPlatformJSON
     // unit, but not AJAX/JavaScript or most JSON libraries
-    // - see also TSQLModel/TSQLRecordProperties.SetVariantFieldsDocVariantOptions
+    // - see also TORMModel/TORMProperties.SetVariantFieldsDocVariantOptions
     property DocVariantOptions: TDocVariantOptions
       read fDocVariantOptions write fDocVariantOptions;
   end;
 
-  /// optional event handler used by TSQLPropInfoRecord to handle textual storage
-  // - by default, TSQLPropInfoRecord content will be stored as sftBlobCustom;
+  /// optional event handler used by TORMPropInfoRecord to handle textual storage
+  // - by default, TORMPropInfoRecord content will be stored as sftBlobCustom;
   // specify such a callback event to allow storage as UTF-8 textual field and
   // use a sftUTF8Custom kind of column
   // - event implementation shall convert data/datalen binary value into Text
   TOnSQLPropInfoRecord2Text = procedure(Data: pointer; DataLen: integer;
     var Text: RawUTF8);
 
-  /// optional event handler used by TSQLPropInfoRecord to handle textual storage
-  // - by default, TSQLPropInfoRecord content will be stored as sftBlobCustom;
+  /// optional event handler used by TORMPropInfoRecord to handle textual storage
+  // - by default, TORMPropInfoRecord content will be stored as sftBlobCustom;
   // specify such a callback event to allow storage as UTF-8 textual field and
   // use a sftUTF8Custom kind of column
   // - event implementaiton shall convert Text into Data binary value
   TOnSQLPropInfoRecord2Data = procedure(Text: PUTF8Char; var Data: RawByteString);
 
   /// abstract information about a record-like property defined directly in code
-  // - do not use this class, but TSQLPropInfoRecordRTTI and TSQLPropInfoRecordFixedSize
+  // - do not use this class, but TORMPropInfoRecordRTTI and TORMPropInfoRecordFixedSize
   // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
   // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
-  TSQLPropInfoCustom = class(TSQLPropInfo)
+  TORMPropInfoCustom = class(TORMPropInfo)
   protected
     fOffset: PtrUInt;
     fData2Text: TOnSQLPropInfoRecord2Text;
@@ -1413,9 +1413,9 @@ type
   public
     /// define a custom property in code
     // - do not call this constructor directly, but one of its inherited classes,
-    // via a call to TSQLRecordProperties.RegisterCustom*()
-    constructor Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldType;
-      aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropIndex: Integer;
+    // via a call to TORMProperties.RegisterCustom*()
+    constructor Create(const aName: RawUTF8; aSQLFieldType: TORMFieldType;
+      aAttributes: TORMPropInfoAttributes; aFieldWidth, aPropIndex: Integer;
       aProperty: pointer; aData2Text: TOnSQLPropInfoRecord2Text;
       aText2Data: TOnSQLPropInfoRecord2Data); reintroduce;
   public
@@ -1423,7 +1423,7 @@ type
   end;
 
   /// information about a record property defined directly in code using RTTI
-  TSQLPropInfoRecordTyped = class(TSQLPropInfoCustom)
+  TORMPropInfoRecordTyped = class(TORMPropInfoCustom)
   protected
     fTypeInfo: PRttiInfo;
   public
@@ -1436,17 +1436,17 @@ type
   // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
   // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
   // - this class will use only binary RecordLoad/RecordSave methods
-  TSQLPropInfoRecordRTTI = class(TSQLPropInfoRecordTyped)
+  TORMPropInfoRecordRTTI = class(TORMPropInfoRecordTyped)
   protected
     function GetSQLFieldRTTITypeName: RawUTF8; override;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     /// define a record property from its RTTI definition
     // - handle any kind of record with available generated TypeInfo()
     // - aPropertyPointer shall be filled with the offset to the private
     // field within a nil object, e.g for
-    // !  class TMainObject = class(TSQLRecord)
+    // !  class TMainObject = class(TORM)
     // !    (...)
     // !    fFieldName: TMyRecord;
     // !  public
@@ -1454,14 +1454,14 @@ type
     // !    property FieldName: TMyRecord read fFieldName write fFieldName;
     // !  end;
     // you will have to register it via a call to
-    // TSQLRecordProperties.RegisterCustomRTTIRecordProperty()
+    // TORMProperties.RegisterCustomRTTIRecordProperty()
     // - optional aIsNotUnique parametercanl be defined
     // - implementation will use internally RecordLoad/RecordSave functions
     // - you can specify optional aData2Text/aText2Data callbacks to store
     // the content as textual values, and not as BLOB
     constructor Create(aRecordInfo: PRttiInfo; const aName: RawUTF8;
       aPropertyIndex: integer; aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes = []; aFieldWidth: integer = 0;
+      aAttributes: TORMPropInfoAttributes = []; aFieldWidth: integer = 0;
       aData2Text: TOnSQLPropInfoRecord2Text = nil;
       aText2Data: TOnSQLPropInfoRecord2Data = nil); reintroduce; overload;
   public
@@ -1486,11 +1486,11 @@ type
   // a record with no reference-counted types within)
   // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
   // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
-  TSQLPropInfoRecordFixedSize = class(TSQLPropInfoRecordTyped)
+  TORMPropInfoRecordFixedSize = class(TORMPropInfoRecordTyped)
   protected
     fRecordSize: integer;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     /// define an unmanaged fixed-size record property
@@ -1500,7 +1500,7 @@ type
     // - main parameter is the record size, in bytes
     constructor Create(aRecordSize: cardinal; const aName: RawUTF8;
       aPropertyIndex: integer; aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes = []; aFieldWidth: integer = 0;
+      aAttributes: TORMPropInfoAttributes = []; aFieldWidth: integer = 0;
       aData2Text: TOnSQLPropInfoRecord2Text = nil;
       aText2Data: TOnSQLPropInfoRecord2Data = nil); reintroduce; overload;
   public
@@ -1523,7 +1523,7 @@ type
   // - you can define any kind of property, either a record or any type
   // - this class will use JSON serialization, by type name or TypeInfo() pointer
   // - will store the content as TEXT by default, and SQLFieldType as sftUTF8Custom
-  TSQLPropInfoCustomJSON = class(TSQLPropInfoRecordTyped)
+  TORMPropInfoCustomJSON = class(TORMPropInfoRecordTyped)
   protected
     fCustomParser: TRttiJson;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
@@ -1538,7 +1538,7 @@ type
     // defined via TTextWriter.RegisterCustomJSONSerializer[FromText]()
     // - aPropertyPointer shall be filled with the offset to the private
     // field within a nil object, e.g for
-    // !  class TMainObject = class(TSQLRecord)
+    // !  class TMainObject = class(TORM)
     // !    (...)
     // !    fFieldName: TMyRecord;
     // !  public
@@ -1546,21 +1546,21 @@ type
     // !    property FieldName: TMyRecord read fFieldName write fFieldName;
     // !  end;
     // you will have to register it via a call to
-    // TSQLRecordProperties.RegisterCustomPropertyFromRTTI()
+    // TORMProperties.RegisterCustomPropertyFromRTTI()
     // - optional aIsNotUnique parameter can be defined
     // - implementation will use internally RecordLoadJSON/RecordSave functions
     // - you can specify optional aData2Text/aText2Data callbacks to store
     // the content as textual values, and not as BLOB
     constructor Create(aTypeInfo: PRttiInfo; const aName: RawUTF8;
       aPropertyIndex: integer; aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes = []; aFieldWidth: integer = 0);
+      aAttributes: TORMPropInfoAttributes = []; aFieldWidth: integer = 0);
       reintroduce; overload;
     /// define a custom property from its RTTI definition
     // - handle any kind of property, e.g. from enhanced RTTI or a custom record
     // defined via TTextWriter.RegisterCustomJSONSerializer[FromText]()
     // - aPropertyPointer shall be filled with the offset to the private
     // field within a nil object, e.g for
-    // !  class TMainObject = class(TSQLRecord)
+    // !  class TMainObject = class(TORM)
     // !    (...)
     // !    fGUID: TGUID;
     // !  public
@@ -1568,13 +1568,13 @@ type
     // !    property GUID: TGUID read fGUID write fGUID;
     // !  end;
     // you will have to register it via a call to
-    // TSQLRecordProperties.RegisterCustomPropertyFromTypeName()
+    // TORMProperties.RegisterCustomPropertyFromTypeName()
     // - optional aIsNotUnique parameter can be defined
     // - implementation will use internally RecordLoadJSON/RecordSave functions
     // - you can specify optional aData2Text/aText2Data callbacks to store
     // the content as textual values, and not as BLOB
     constructor Create(const aTypeName, aName: RawUTF8; aPropertyIndex: integer;
-      aPropertyPointer: pointer; aAttributes: TSQLPropInfoAttributes = [];
+      aPropertyPointer: pointer; aAttributes: TORMPropInfoAttributes = [];
       aFieldWidth: integer = 0); reintroduce; overload;
     /// finalize the instance
     destructor Destroy; override;
@@ -1591,37 +1591,37 @@ type
   end;
 
   /// dynamic array of ORM fields information for published properties
-  TSQLPropInfoObjArray = array of TSQLPropInfo;
+  TORMPropInfoObjArray = array of TORMPropInfo;
 
   /// handle a read-only list of fields information for published properties
-  // - is mainly used by our ORM for TSQLRecord RTTI, but may be used for
+  // - is mainly used by our ORM for TORM RTTI, but may be used for
   // any TPersistent
-  TSQLPropInfoList = class
+  TORMPropInfoList = class
   protected
-    fList: TSQLPropInfoObjArray;
+    fList: TORMPropInfoObjArray;
     fCount: integer;
-    fTable: TClass; // TSQLRecordClass
-    fOptions: TSQLPropInfoListOptions;
+    fTable: TClass; // TORMClass
+    fOptions: TORMPropInfoListOptions;
     fOrderedByName: TIntegerDynArray;
-    function GetItem(aIndex: integer): TSQLPropInfo;
+    function GetItem(aIndex: integer): TORMPropInfo;
     procedure QuickSortByName(L, R: PtrInt);
     procedure InternalAddParentsFirst(aClassType: TClass); overload;
     procedure InternalAddParentsFirst(aClassType: TClass;
       aFlattenedProps: PRttiPropDynArray); overload;
   public
     /// initialize the list from a given class RTTI
-    constructor Create(aTable: TClass; aOptions: TSQLPropInfoListOptions);
+    constructor Create(aTable: TClass; aOptions: TORMPropInfoListOptions);
     /// release internal list items
     destructor Destroy; override;
-    /// add a TSQLPropInfo to the list
-    function Add(aItem: TSQLPropInfo): integer;
+    /// add a TORMPropInfo to the list
+    function Add(aItem: TORMPropInfo): integer;
     /// find an item in the list
     // - returns nil if not found
-    function ByRawUTF8Name(const aName: RawUTF8): TSQLPropInfo; overload;
+    function ByRawUTF8Name(const aName: RawUTF8): TORMPropInfo; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list
     // - returns nil if not found
-    function ByName(aName: PUTF8Char): TSQLPropInfo; overload;
+    function ByName(aName: PUTF8Char): TORMPropInfo; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list
     // - returns -1 if not found
@@ -1649,29 +1649,29 @@ type
     /// fill a TRawUTF8DynArray instance from the field names
     // - excluding ID
     procedure NamesToRawUTF8DynArray(var Names: TRawUTF8DynArray);
-    /// returns the number of TSQLPropInfo in the list
+    /// returns the number of TORMPropInfo in the list
     property Count: integer read fCount;
-    /// quick access to the TSQLPropInfo list
+    /// quick access to the TORMPropInfo list
     // - note that length(List) may not equal Count, since is its capacity
-    property List: TSQLPropInfoObjArray read fList;
-    /// read-only retrieval of a TSQLPropInfo item
+    property List: TORMPropInfoObjArray read fList;
+    /// read-only retrieval of a TORMPropInfo item
     // - will raise an exception if out of range
-    property Items[aIndex: integer]: TSQLPropInfo read GetItem;
+    property Items[aIndex: integer]: TORMPropInfo read GetItem;
   end;
 
-  /// information about a TSQLRecord class property
-  // - sftID for TSQLRecord properties, which are pointer(RecordID), not
+  /// information about a TORM class property
+  // - sftID for TORM properties, which are pointer(RecordID), not
   // any true class instance
-  // - sftMany for TSQLRecordMany properties, for which no data is
+  // - sftMany for TORMMany properties, for which no data is
   // stored in the table itself, but in a pivot table
   // - sftObject for e.g. TStrings TRawUTF8List TCollection instances
-  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIPtrInt)
+  TORMPropInfoRTTIInstance = class(TORMPropInfoRTTIPtrInt)
   protected
     fObjectClass: TClass;
   public
     /// will setup the corresponding ObjectClass property
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     /// direct access to the property class instance
     function GetInstance(Instance: TObject): TObject;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1679,53 +1679,53 @@ type
     procedure SetInstance(Instance, Value: TObject);
       {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the property class
-    // - can be used e.g. for TSQLRecordMany properties
+    // - can be used e.g. for TORMMany properties
     property ObjectClass: TClass read fObjectClass;
   end;
 
   /// information about a TRecordReference/TRecordReferenceToBeDeleted
   // published property
   // - identified as a sftRecord kind of property
-  TSQLPropInfoRTTIRecordReference = class(TSQLPropInfoRTTIInt64)
+  TORMPropInfoRTTIRecordReference = class(TORMPropInfoRTTIInt64)
   protected
     fCascadeDelete: boolean;
   public
     /// will identify TRecordReferenceToBeDeleted kind of field, and
     // setup the corresponding CascadeDelete property
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     /// TRUE if this sftRecord is a TRecordReferenceToBeDeleted
     property CascadeDelete: boolean read fCascadeDelete;
   end;
 
   /// information about a TRecordVersion published property
   // - identified as a sftRecordVersion kind of property, to track changes
-  TSQLPropInfoRTTIRecordVersion = class(TSQLPropInfoRTTIInt64);
+  TORMPropInfoRTTIRecordVersion = class(TORMPropInfoRTTIInt64);
 
-  /// information about a TSQLRecord class TSQLRecord property
+  /// information about a TORM class TORM property
   // - kind sftID, which are pointer(RecordID), not any true class instance
   // - will store the content just as an integer value
   // - will recognize any instance pre-allocated via Create*Joined() constructor
-  TSQLPropInfoRTTIID = class(TSQLPropInfoRTTIInstance)
+  TORMPropInfoRTTIID = class(TORMPropInfoRTTIInstance)
   public
     /// raise an exception if was created by Create*Joined() constructor
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
-    /// this method will recognize if the TSQLRecord was allocated by
+    /// this method will recognize if the TORM was allocated by
     // a Create*Joined() constructor: in this case, it will write the ID
     // of the nested property, and not the PtrInt() transtyped value
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
   end;
 
-  TSQLPropInfoRTTIIDObjArray = array of TSQLPropInfoRTTIID;
+  TORMPropInfoRTTIIDObjArray = array of TORMPropInfoRTTIID;
 
-  /// information about a TSQLRecord class TStrings/TRawUTF8List/TCollection
+  /// information about a TORM class TStrings/TRawUTF8List/TCollection
   // property
   // - kind sftObject e.g. for TStrings TRawUTF8List TCollection TObjectList instances
   // - binary serialization will store textual JSON serialization of the
   // object, including custom serialization
-  TSQLPropInfoRTTIObject = class(TSQLPropInfoRTTIInstance)
+  TORMPropInfoRTTIObject = class(TORMPropInfoRTTIInstance)
   protected
-    procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
+    procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
       Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -1738,10 +1738,10 @@ type
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
   end;
 
-  /// information about a TSQLRecord class TSQLRecordMany property
+  /// information about a TORM class TORMMany property
   // - kind sftMany, for which no data is stored in the table itself, but in
   // a separated pivot table
-  TSQLPropInfoRTTIMany = class(TSQLPropInfoRTTIInstance)
+  TORMPropInfoRTTIMany = class(TORMPropInfoRTTIInstance)
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
@@ -1750,14 +1750,14 @@ type
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
   end;
 
-  TSQLPropInfoRTTIManyObjArray = array of TSQLPropInfoRTTIMany;
+  TORMPropInfoRTTIManyObjArray = array of TORMPropInfoRTTIMany;
 
 
 
-{ ************ TSQLRecord TSQLModel TSQLTable IRestORM Core Definitions }
+{ ************ TORM TORMModel TORMTable IRestORM Core Definitions }
 
 const
-  /// maximum handled dimension for TSQLRecordRTree
+  /// maximum handled dimension for TORMRTree
   // - this value is the one used by SQLite3 R-Tree virtual table
   RTREE_MAX_DIMENSION = 5;
 
@@ -1768,44 +1768,44 @@ type
   { we expect RTTI information for the published properties of these
     forward definitions - due to internal coupling, those classes are
     to be defined in a single "type" statement }
-  TSQLTable = class;
-  TSQLRecord = class;
-  TSQLRecordMany = class;
-  TSQLRecordFTS3 = class;
-  TSQLRecordRTree = class;
-  TSQLRecordProperties = class;
-  TSQLModel = class;
-  TSQLModelRecordProperties = class;
+  TORMTable = class;
+  TORM = class;
+  TORMMany = class;
+  TORMFTS3 = class;
+  TORMRTree = class;
+  TORMProperties = class;
+  TORMModel = class;
+  TORMModelRecordProperties = class;
   TRestCache = class;
   TRestBatch = class;
   {$M-}
 
-  /// class-reference type (metaclass) of TSQLRecord
-  TSQLRecordClass = class of TSQLRecord;
+  /// class-reference type (metaclass) of TORM
+  TORMClass = class of TORM;
 
-  /// pointer-level redirection of a TSQLRecord metaclass
+  /// pointer-level redirection of a TORM metaclass
   // - used for efficient PSQLRecordClass(aRecord)^ access to the class info
-  PSQLRecordClass = ^TSQLRecordClass;
+  PSQLRecordClass = ^TORMClass;
 
   /// class-reference type (metaclass) of a FTS3/FTS4/FTS5 virtual table
-  // - either a TSQLRecordFTS3 TSQLRecordFTS4 or TSQLRecordFTS5 class
-  TSQLRecordFTS3Class = class of TSQLRecordFTS3;
+  // - either a TORMFTS3 TORMFTS4 or TORMFTS5 class
+  TORMFTS3Class = class of TORMFTS3;
 
   /// class-reference type (metaclass) of RTREE virtual table
-  // - either a TSQLRecordRTree or a TSQLRecordRTreeInteger
-  TSQLRecordRTreeClass = class of TSQLRecordRTree;
+  // - either a TORMRTree or a TORMRTreeInteger
+  TORMRTreeClass = class of TORMRTree;
 
-  /// a dynamic array storing TSQLRecord instances
+  /// a dynamic array storing TORM instances
   // - not used direcly, but as specialized T*ObjArray types
-  TSQLRecordObjArray = array of TSQLRecord;
+  TORMObjArray = array of TORM;
 
-  /// a dynamic array used to store the TSQLRecord classes in a Database Model
-  TSQLRecordClassDynArray = array of TSQLRecordClass;
+  /// a dynamic array used to store the TORM classes in a Database Model
+  TORMClassDynArray = array of TORMClass;
 
-  /// a dynamic array of TSQLRecordMany instances
-  TSQLRecordManyObjArray = array of TSQLRecordMany;
+  /// a dynamic array of TORMMany instances
+  TORMManyObjArray = array of TORMMany;
 
-  /// exception raised in case of incorrect TSQLTable.Step / Field*() use
+  /// exception raised in case of incorrect TORMTable.Step / Field*() use
   ESQLTableException = class(ESynException);
 
   /// exception raised in case of TRestBatch problem
@@ -1832,102 +1832,102 @@ type
     // - returns -1 on error
     // - returns the row count of the table on success
     // - calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
-    function TableRowCount(Table: TSQLRecordClass): Int64;
+    function TableRowCount(Table: TORMClass): Int64;
     /// check if there is some data rows in a specified table
     // - calls internaly a "SELECT RowID FROM TableName LIMIT 1" SQL statement,
     // which is much faster than testing if "SELECT count(*)" equals 0 - see
     // @http://stackoverflow.com/questions/8988915
-    function TableHasRows(Table: TSQLRecordClass): boolean;
+    function TableHasRows(Table: TORMClass): boolean;
     /// search for the last inserted ID in a specified table
     // - returns -1 on error
     // - will execute by default "SELECT max(rowid) FROM TableName"
-    function TableMaxID(Table: TSQLRecordClass): TID;
+    function TableMaxID(Table: TORMClass): TID;
     /// check if a given ID do exist for a given table
-    function MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
+    function MemberExists(Table: TORMClass; ID: TID): boolean;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - example of use - including inlined parameters via :(...):
-    // ! aClient.OneFieldValue(TSQLRecord, 'Name', 'ID=:(23):')
+    // ! aClient.OneFieldValue(TORM, 'Name', 'ID=:(23):')
     // you should better call the corresponding overloaded method as such:
-    // ! aClient.OneFieldValue(TSQLRecord, 'Name', 'ID=?', [aID])
+    // ! aClient.OneFieldValue(TORM, 'Name', 'ID=?', [aID])
     // which is the same as calling:
-    // ! aClient.OneFieldValue(TSQLRecord, 'Name', FormatUTF8('ID=?', [], [23]))
+    // ! aClient.OneFieldValue(TORM, 'Name', FormatUTF8('ID=?', [], [23]))
     // - call internaly ExecuteList() to get the value
-    function OneFieldValue(Table: TSQLRecordClass;
+    function OneFieldValue(Table: TORMClass;
       const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
     /// get the Int64 value of an unique field with a Where Clause
     // - call internaly ExecuteList() to get the value
-    function OneFieldValueInt64(Table: TSQLRecordClass;
+    function OneFieldValueInt64(Table: TORMClass;
       const FieldName, WhereClause: RawUTF8; Default: Int64 = 0): Int64;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, binding all '?' chars with Args[] values
     // - example of use:
-    // ! aClient.OneFieldValue(TSQLRecord, 'Name', 'ID=?', [aID])
+    // ! aClient.OneFieldValue(TORM, 'Name', 'ID=?', [aID])
     // - call internaly ExecuteList() to get the value
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be Args and '%' in the FormatSQLWhere
     // statement, whereas it now expects bound parameters as '?'
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8; overload;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
-    // ! OneFieldValue(TSQLRecord,'Name', '%=?', ['ID'], [aID])
+    // ! OneFieldValue(TORM,'Name', '%=?', ['ID'], [aID])
     // - call internaly ExecuteList() to get the value
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8; overload;
     /// get one integer value of an unique field with a Where Clause
     // - this overloaded function will return the field value as integer
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
       out Data: Int64): boolean; overload;
     /// get the UTF-8 encoded value of an unique field from its ID
-    // - example of use: OneFieldValue(TSQLRecord,'Name',23)
+    // - example of use: OneFieldValue(TORM,'Name',23)
     // - call internaly ExecuteList() to get the value
-    function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
       WhereID: TID): RawUTF8; overload;
     /// get the UTF-8 encoded value of some fields with a Where Clause
-    // - example of use: MultiFieldValue(TSQLRecord,['Name'],Name,'ID=:(23):')
+    // - example of use: MultiFieldValue(TORM,['Name'],Name,'ID=:(23):')
     // (using inlined parameters via :(...): is always a good idea)
     // - FieldValue[] will have the same length as FieldName[]
     // - return true on success, false on SQL error or no result
     // - call internaly ExecuteList() to get the list
-    function MultiFieldValue(Table: TSQLRecordClass;
+    function MultiFieldValue(Table: TORMClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       const WhereClause: RawUTF8): boolean; overload;
     /// get the UTF-8 encoded value of some fields from its ID
-    // - example of use: MultiFieldValue(TSQLRecord,['Name'],Name,23)
+    // - example of use: MultiFieldValue(TORM,['Name'],Name,23)
     // - FieldValue[] will have the same length as FieldName[]
     // - return true on success, false on SQL error or no result
     // - call internaly ExecuteList() to get the list
-    function MultiFieldValue(Table: TSQLRecordClass;
+    function MultiFieldValue(Table: TORMClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       WhereID: TID): boolean; overload;
     /// get the UTF-8 encoded values of an unique field with a Where Clause
-    // - example of use: OneFieldValue(TSQLRecord,'FirstName','Name=:("Smith"):',Data)
+    // - example of use: OneFieldValue(TORM,'FirstName','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
     // - call internaly ExecuteList() to get the list
     // - returns TRUE on success, FALSE if no data was retrieved
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean; overload;
     /// get the integer value of an unique field with a Where Clause
-    // - example of use: OneFieldValue(TSQLRecordPeople,'ID','Name=:("Smith"):',Data)
+    // - example of use: OneFieldValue(TORMPeople,'ID','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
     // - call internaly ExecuteList() to get the list
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; var Data: TInt64DynArray;
       SQL: PRawUTF8 = nil): boolean; overload;
     /// get the CSV-encoded UTF-8 encoded values of an unique field with a Where Clause
-    // - example of use: OneFieldValue(TSQLRecord,'FirstName','Name=:("Smith")',Data)
+    // - example of use: OneFieldValue(TORM,'FirstName','Name=:("Smith")',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
     // - call internaly ExecuteList() to get the list
     // - using inlined parameters via :(...): in WhereClause is always a good idea
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8 = ''; const Separator: RawUTF8 = ','): RawUTF8; overload;
     /// get the string-encoded values of an unique field into some TStrings
     // - Items[] will be filled with string-encoded values of the given field)
@@ -1937,19 +1937,19 @@ type
     // - if IDToIndex is set, its value will be replaced with the index in
     // Strings.Objects[] where ID=IDToIndex^
     // - using inlined parameters via :(...): in WhereClause is always a good idea
-    function OneFieldValues(Table: TSQLRecordClass; const FieldName, WhereClause:
+    function OneFieldValues(Table: TORMClass; const FieldName, WhereClause:
       RawUTF8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
-    /// Execute directly a SQL statement, returning a TSQLTable list of resutls
-    // - return a TSQLTableJSON instance on success, nil on failure
+    /// Execute directly a SQL statement, returning a TORMTable list of resutls
+    // - return a TORMTableJSON instance on success, nil on failure
     // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - call internaly ExecuteList() to get the list
     // - using inlined parameters via :(...): in WhereClause is always a good idea
-    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClause: RawUTF8 = ''): TSQLTable; overload;
-    /// Execute directly a SQL statement, returning a TSQLTable list of resutls
-    // - return a TSQLTableJSON instance on success, nil on failure
+    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
+      const WhereClause: RawUTF8 = ''): TORMTable; overload;
+    /// Execute directly a SQL statement, returning a TORMTable list of resutls
+    // - return a TORMTableJSON instance on success, nil on failure
     // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
@@ -1957,15 +1957,15 @@ type
     // from supplied parameters, binding all '?' chars with Args[] values
     // - example of use:
     // ! aList := aClient.MultiFieldValues(
-    // !   TSQLRecord, 'Name,FirstName', 'Salary>=?', [aMinSalary]);
+    // !   TORM, 'Name,FirstName', 'Salary>=?', [aMinSalary]);
     // - call overloaded MultiFieldValues() / ExecuteList() to get the list
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be Args and '%' in the WhereClauseFormat
     // statement, whereas it now expects bound parameters as '?'
-    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTable; overload;
-    /// Execute directly a SQL statement, returning a TSQLTable list of resutls
-    // - return a TSQLTableJSON instance on success, nil on failure
+    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TORMTable; overload;
+    /// Execute directly a SQL statement, returning a TORMTable list of resutls
+    // - return a TORMTableJSON instance on success, nil on failure
     // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
@@ -1973,24 +1973,24 @@ type
     // as FormatUTF8() function, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
-    // ! Table := MultiFieldValues(TSQLRecord, 'Name', '%=?', ['ID'], [aID]);
+    // ! Table := MultiFieldValues(TORM, 'Name', '%=?', ['ID'], [aID]);
     // - call overloaded MultiFieldValues() / ExecuteList() to get the list
-    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
+    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TORMTable; overload;
     /// dedicated method used to retrieve free-text matching DocIDs
-    // - this method works for TSQLRecordFTS3, TSQLRecordFTS4 and TSQLRecordFTS5
+    // - this method works for TORMFTS3, TORMFTS4 and TORMFTS5
     // - this method expects the column/field names to be supplied in the MATCH
     // statement clause
     // - example of use:  FTSMatch(TSQLMessage,'Body MATCH :("linu*"):',IntResult)
     // (using inlined parameters via :(...): is always a good idea)
-    function FTSMatch(Table: TSQLRecordFTS3Class; const WhereClause: RawUTF8;
+    function FTSMatch(Table: TORMFTS3Class; const WhereClause: RawUTF8;
       var DocID: TIDDynArray): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs with
     // enhanced ranking information
-    // - this method works for TSQLRecordFTS3, TSQLRecordFTS4 and TSQLRecordFTS5
+    // - this method works for TORMFTS3, TORMFTS4 and TORMFTS5
     // - this method will search in all FTS3 columns, and except some floating-point
     // constants for weigthing each column (there must be the same number of
-    // PerFieldWeight parameters as there are columns in the TSQLRecordFTS3 table)
+    // PerFieldWeight parameters as there are columns in the TORMFTS3 table)
     // - example of use:  FTSMatch(TSQLDocuments,'"linu*"',IntResult,[1,0.5])
     // which will sort the results by the rank obtained with the 1st column/field
     // beeing given twice the weighting of those in the 2nd (and last) column
@@ -1999,7 +1999,7 @@ type
     // http://www.sqlite.org/fts3.html#appendix_a
     // $ SELECT RowID FROM Documents WHERE Documents MATCH 'linu*'
     // $ ORDER BY rank(matchinfo(Documents),1.0,0.5) DESC
-    function FTSMatch(Table: TSQLRecordFTS3Class; const MatchClause: RawUTF8;
+    function FTSMatch(Table: TORMFTS3Class; const MatchClause: RawUTF8;
       var DocID: TIDDynArray; const PerFieldWeight: array of double;
       limit: integer = 0; offset: integer = 0): boolean; overload;
     /// retrieve the main field (mostly 'Name') value of the specified record
@@ -2008,20 +2008,20 @@ type
     // - return '' if no such field or record exists
     // - if ReturnFirstIfNoUnique is TRUE and no unique property is found,
     // the first RawUTF8 property is returned anyway
-    function MainFieldValue(Table: TSQLRecordClass; ID: TID;
+    function MainFieldValue(Table: TORMClass; ID: TID;
       ReturnFirstIfNoUnique: boolean = false): RawUTF8;
     /// return the ID of the record which main field match the specified value
     // - search field is mainly the "Name" property, i.e. the one with
-    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TSQLRecord
+    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TORM
     // - returns 0 if no matching record was found }
-    function MainFieldID(Table: TSQLRecordClass; const Value: RawUTF8): TID;
+    function MainFieldID(Table: TORMClass; const Value: RawUTF8): TID;
     /// return the IDs of the record which main field match the specified values
     // - search field is mainly the "Name" property, i.e. the one with
-    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TSQLRecord
+    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TORM
     // - if any of the Values[] is not existing, then no ID will appear in the
     // IDs[] array - e.g. it will return [] if no matching record was found
     // - returns TRUE if any matching ID was found (i.e. if length(IDs)>0) }
-    function MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
+    function MainFieldIDs(Table: TORMClass; const Values: array of RawUTF8;
       out IDs: TIDDynArray): boolean;
 
     /// get a member from a SQL statement
@@ -2031,26 +2031,26 @@ type
     // (using inlined parameters via :(...): in SQLWhere is always a good idea)
     // - since no record is specified, locking is pointless here
     // - default implementation call ExecuteList(), and fill Value from a
-    // temporary TSQLTable
+    // temporary TORMTable
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
-    // and TSQLRecordMany fields (use RetrieveBlob method or set
+    // and TORMMany fields (use RetrieveBlob method or set
     // TRestClientURI.ForceBlobTransfert)
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - if this default set of simple fields does not fit your need, you could
     // specify your own set
-    function Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
+    function Retrieve(const SQLWhere: RawUTF8; Value: TORM;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
     /// get a member from a SQL statement
     // - implements REST GET collection
     // - return true on success
-    // - same as Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord) method, but
+    // - same as Retrieve(const SQLWhere: RawUTF8; Value: TORM) method, but
     // this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     function Retrieve(const WhereClauseFmt: RawUTF8;
-      const Args, Bounds: array of const; Value: TSQLRecord;
+      const Args, Bounds: array of const; Value: TORM;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
     /// get a member from its ID
     // - return true on success
@@ -2059,14 +2059,14 @@ type
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
     // - this method will call EngineRetrieve() abstract method
-    // - the TSQLRawBlob (BLOB) fields are not retrieved by this method, to
+    // - the TRawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
     // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
     // or TRestClientURI.ForceBlobTransfertTable[] properties
-    // - the TSQLRecordMany fields are not retrieved either: they are separate
-    // instances created by TSQLRecordMany.Create, with dedicated methods to
+    // - the TORMMany fields are not retrieved either: they are separate
+    // instances created by TORMMany.Create, with dedicated methods to
     // access to the separated pivot table
-    function Retrieve(aID: TID; Value: TSQLRecord;
+    function Retrieve(aID: TID; Value: TORM;
       ForUpdate: boolean = false): boolean; overload;
     /// get a member from its TRecordReference property content
     // - instead of the other Retrieve() methods, this implementation Create an
@@ -2075,20 +2075,20 @@ type
     // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
-    // - the TSQLRawBlob (BLOB) fields are not retrieved by this method, to
+    // - the TRawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
     // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
     // or TRestClientURI.ForceBlobTransfertTable[] properties
-    // - the TSQLRecordMany fields are not retrieved either: they are separate
-    // instances created by TSQLRecordMany.Create, with dedicated methods to
+    // - the TORMMany fields are not retrieved either: they are separate
+    // instances created by TORMMany.Create, with dedicated methods to
     // access to the separated pivot table
     function Retrieve(Reference: TRecordReference;
-      ForUpdate: boolean = false): TSQLRecord; overload;
-    /// get a member from a published property TSQLRecord
+      ForUpdate: boolean = false): TORM; overload;
+    /// get a member from a published property TORM
     // - those properties are not class instances, but TObject(aRecordID)
     // - is just a wrapper around Retrieve(aPublishedRecord.ID,aValue)
     // - return true on success
-    function Retrieve(aPublishedRecord, aValue: TSQLRecord): boolean; overload;
+    function Retrieve(aPublishedRecord, aValue: TORM): boolean; overload;
     /// get a list of members from a SQL statement as TObjectList
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -2103,7 +2103,7 @@ type
     // responsible of freeing the instance
     // - this TObjectList will contain a list of all matching records
     // - return nil on error
-    function RetrieveList(Table: TSQLRecordClass;
+    function RetrieveList(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList; overload;
     {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
@@ -2130,7 +2130,7 @@ type
     // without any conversion, so this method will be the fastest, but complex
     // types like dynamic array will be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
-    function RetrieveListJSON(Table: TSQLRecordClass;
+    function RetrieveListJSON(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''; aForceAJAX: boolean = false): RawJSON; overload;
     /// get a list of members from a SQL statement as RawJSON
@@ -2148,7 +2148,7 @@ type
     // without any conversion, so this method will be the fastest, but complex
     // types like dynamic array will be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
-    function RetrieveListJSON(Table: TSQLRecordClass;
+    function RetrieveListJSON(Table: TORMClass;
       const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8 = '';
       aForceAJAX: boolean = false): RawJSON; overload;
     /// get a list of all members from a SQL statement as a TDocVariant
@@ -2161,11 +2161,11 @@ type
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
-    // TSQLRecord layout, so complex types like dynamic array will be returned
+    // TORM layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
     // - warning: under FPC, we observed that assigning the result of this
     // method to a local variable may circumvent a memory leak FPC bug
-    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+    function RetrieveDocVariantArray(Table: TORMClass;
       const ObjectName, CustomFieldsCSV: RawUTF8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
     /// get a list of members from a SQL statement as a TDocVariant
@@ -2183,11 +2183,11 @@ type
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
-    // TSQLRecord layout, so complex types like dynamic array will be returned
+    // TORM layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
     // - warning: under FPC, we observed that assigning the result of this
     // method to a local variable may circumvent a memory leak FPC bug
-    function RetrieveDocVariantArray(Table: TSQLRecordClass;
+    function RetrieveDocVariantArray(Table: TORMClass;
       const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
@@ -2199,17 +2199,17 @@ type
     // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
     // double, currency, RawUTF8 values to be bound to the request as parameters
     // - the data will be converted to variants and TDocVariant following the
-    // TSQLRecord layout, so complex types like dynamic array will be returned
+    // TORM layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
-    function RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
+    function RetrieveOneFieldDocVariantArray(Table: TORMClass;
       const FieldName, FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): variant;
     /// get one member from a SQL statement as a TDocVariant
     // - implements REST GET collection
     // - the data will be converted to a TDocVariant variant following the
-    // TSQLRecord layout, so complex types like dynamic array will be returned
+    // TORM layout, so complex types like dynamic array will be returned
     // as a true array of values
-    function RetrieveDocVariant(Table: TSQLRecordClass;
+    function RetrieveDocVariant(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8): variant;
     /// get a list of members from a SQL statement as T*ObjArray
@@ -2227,7 +2227,7 @@ type
     // - it is up to the caller to ensure that ObjClear(ObjArray) is called
     // when the T*ObjArray list is not needed any more
     // - returns true on success, false on error
-    function RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
+    function RetrieveListObjArray(var ObjArray; Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean;
     /// get and append a list of members as an expanded JSON array
@@ -2244,14 +2244,14 @@ type
     // - CustomFieldsCSV can be the CSV list of field names to be retrieved
     // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
-    // - is just a wrapper around TSQLRecord.AppendFillAsJsonArray()
-    procedure AppendListAsJsonArray(Table: TSQLRecordClass;
+    // - is just a wrapper around TORM.AppendFillAsJsonArray()
+    procedure AppendListAsJsonArray(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const OutputFieldName: RawUTF8; W: TJSONSerializer;
       const CustomFieldsCSV: RawUTF8 = '');
     /// dedicated method used to retrieve matching IDs using a fast R-Tree index
-    // - a TSQLRecordRTree is associated to a TSQLRecord with a specified BLOB
-    // field, and will call TSQLRecordRTree BlobToCoord and ContainedIn virtual
+    // - a TORMRTree is associated to a TORM with a specified BLOB
+    // field, and will call TORMRTree BlobToCoord and ContainedIn virtual
     // class methods to execute an optimized SQL query
     // - as alternative, with SQLite3 >= 3.24.0, you may use Auxiliary Columns
     // - will return all matching DataTable IDs in DataID[]
@@ -2260,21 +2260,21 @@ type
     // $  AND minX>=:(-81.0): AND maxX<=:(-79.6): AND minY>=:(35.0): AND :(maxY<=36.2):
     // $  AND MapBox_in(MapData.BlobField,:('\uFFF0base64encoded-81,-79.6,35,36.2'):);
     // when the following Delphi code is executed:
-    // ! aClient.RTreeMatch(TSQLRecordMapData, 'BlobField', TSQLRecordMapBox,
+    // ! aClient.RTreeMatch(TORMMapData, 'BlobField', TORMMapBox,
     // !   aMapData.BlobField, ResultID);
-    function RTreeMatch(DataTable: TSQLRecordClass;
-      const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
+    function RTreeMatch(DataTable: TORMClass;
+      const DataTableBlobFieldName: RawUTF8; RTreeTable: TORMRTreeClass;
       const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
-    function ExecuteList(const Tables: array of TSQLRecordClass;
-      const SQL: RawUTF8): TSQLTable;
+    function ExecuteList(const Tables: array of TORMClass;
+      const SQL: RawUTF8): TORMTable;
     /// Execute directly a SQL statement, expecting a list of results
     // - you should not have to use this method, but the ORM versions instead
     // - return a result set as JSON on success, '' on failure
     // - will call EngineList() abstract method to retrieve its JSON content
-    function ExecuteJson(const Tables: array of TSQLRecordClass;
+    function ExecuteJson(const Tables: array of TORMClass;
       const SQL: RawUTF8; ForceAJAX: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawJSON;
     /// Execute directly a SQL statement, without any expected result
@@ -2300,14 +2300,14 @@ type
     // forupdate=true, i.e. retrieved not via GET with LOCK REST-like verb
     // - use our custom UNLOCK REST-like verb
     // - returns true on success
-    function UnLock(Table: TSQLRecordClass; aID: TID): boolean; overload;
+    function UnLock(Table: TORMClass; aID: TID): boolean; overload;
     /// unlock the corresponding record
     // - record should have been locked previously e.g. with Retrieve() and
     // forupdate=true, i.e. retrieved not via GET with LOCK REST-like verb
     // - use our custom UNLOCK REST-like method
     // - calls internally UnLock() above
     // - returns true on success
-    function UnLock(Rec: TSQLRecord): boolean; overload;
+    function UnLock(Rec: TORM): boolean; overload;
     /// create a new member
     // - implements REST POST collection
     // - if SendData is true, client sends the current content of Value with the
@@ -2316,27 +2316,27 @@ type
     // adding the record (instead of a database-generated ID)
     // - on success, returns the new RowID value; on error, returns 0
     // - on success, Value.ID is updated with the new RowID
-    // - the TSQLRawBlob(BLOB) fields values are not set by this method, to
+    // - the TRawBlob(BLOB) fields values are not set by this method, to
     // preserve bandwidth - see UpdateBlobFields() and AddWithBlobs() methods
-    // - the TSQLRecordMany fields are not set either: they are separate
-    // instances created by TSQLRecordMany.Create, with dedicated methods to
+    // - the TORMMany fields are not set either: they are separate
+    // instances created by TORMMany.Create, with dedicated methods to
     // access to the separated pivot table
     // - this method will call EngineAdd() to perform the request
-    function Add(Value: TSQLRecord; SendData: boolean;
+    function Add(Value: TORM; SendData: boolean;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
     /// create a new member, including selected fields
     // - implements REST POST collection
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
     // - this method will call EngineAdd() to perform the request
-    function Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+    function Add(Value: TORM; const CustomCSVFields: RawUTF8;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
     /// create a new member, including selected fields
     // - implements REST POST collection
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
     // - this method will call EngineAdd() to perform the request
-    function Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+    function Add(Value: TORM; const CustomFields: TFieldBits;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
     /// create a new member, including its BLOB fields
     // - implements REST POST collection
@@ -2345,59 +2345,59 @@ type
     // efficient than a dual Add() + UpdateBlobFields() methods if the
     // binary content has a non trivial size
     // - this method will call EngineAdd() to perform the request
-    function AddWithBlobs(Value: TSQLRecord;
+    function AddWithBlobs(Value: TORM;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID;
     /// create a new member, from a supplied list of field values
     // - implements REST POST collection
     // - the aSimpleFields parameters must follow explicitely the order of published
-    // properties of the supplied aTable class, excepting the TSQLRawBlob and
-    // TSQLRecordMany kind (i.e. only so called "simple fields")
+    // properties of the supplied aTable class, excepting the TRawBlob and
+    // TORMMany kind (i.e. only so called "simple fields")
     // - the aSimpleFields must have exactly the same count of parameters as
     // there are "simple fields" in the published properties
     // - if ForcedID is set to non null, client sends this ID to be used
     // when adding the record (instead of a database-generated ID)
     // - on success, returns the new RowID value; on error, returns 0
     // - call internaly the Add virtual method above
-    function AddSimple(aTable: TSQLRecordClass;
+    function AddSimple(aTable: TORMClass;
       const aSimpleFields: array of const; ForcedID: TID = 0): TID;
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
-    // - the TSQLRawBlob(BLOB) fields values are not updated by this method, to
+    // - the TRawBlob(BLOB) fields values are not updated by this method, to
     // preserve bandwidth: use the UpdateBlob() methods for handling BLOB fields
-    // - the TSQLRecordMany fields are not set either: they are separate
-    // instances created by TSQLRecordMany.Create, with dedicated methods to
+    // - the TORMMany fields are not set either: they are separate
+    // instances created by TORMMany.Create, with dedicated methods to
     // access to the separated pivot table
     // - if CustomFields is left void, the  simple fields will be used, or the
     // fields retrieved via a previous FillPrepare() call; otherwise, you can
     // specify your own set of fields to be transmitted (including BLOBs, even
     // if they will be Base64-encoded within the JSON content) - CustomFields
-    // could be computed by TSQLRecordProperties.FieldBitsFromCSV()
-    // or TSQLRecordProperties.FieldBitsFromRawUTF8()
+    // could be computed by TORMProperties.FieldBitsFromCSV()
+    // or TORMProperties.FieldBitsFromRawUTF8()
     // - this method will always compute and send any TModTime fields
     // - this method will call EngineUpdate() to perform the request
-    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+    function Update(Value: TORM; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): boolean; overload;
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
     // - is an overloaded method to Update(Value,FieldBitsFromCSV())
-    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+    function Update(Value: TORM; const CustomCSVFields: RawUTF8;
       DoNotAutoComputeFields: boolean = false): boolean; overload;
     /// update a member from a supplied list of simple field values
     // - implements REST PUT collection
     // - the aSimpleFields parameters MUST follow explicitely both count and
     // order of published properties of the supplied aTable class, excepting the
-    // TSQLRawBlob and TSQLRecordMany kind (i.e. only so called "simple fields")
+    // TRawBlob and TORMMany kind (i.e. only so called "simple fields")
     // - return true on success
     // - call internaly the Update() / EngineUpdate() virtual methods
-    function Update(aTable: TSQLRecordClass; aID: TID;
+    function Update(aTable: TORMClass; aID: TID;
       const aSimpleFields: array of const): boolean; overload;
     /// create or update a member, depending if the Value has already an ID
     // - implements REST POST if Value.ID=0 or ForceID is set, or a REST PUT
     // collection to update the record pointed by a Value.ID<>0
     // - will return the created or updated ID
-    function AddOrUpdate(Value: TSQLRecord; ForceID: boolean = false): TID;
+    function AddOrUpdate(Value: TORM; ForceID: boolean = false): TID;
     /// update one field/column value a given member
     // - implements REST PUT collection with one field value
     // - only one single field shall be specified in FieldValue, but could
@@ -2407,7 +2407,7 @@ type
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
     // it will notify the internal Cache
-    function UpdateField(Table: TSQLRecordClass; ID: TID;
+    function UpdateField(Table: TORMClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload;
     /// update one field in one or several members, depending on a WHERE clause
     // - implements REST PUT collection with one field value on a one where value
@@ -2421,7 +2421,7 @@ type
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
     // it will notify the internal Cache
-    function UpdateField(Table: TSQLRecordClass; const WhereFieldName: RawUTF8;
+    function UpdateField(Table: TORMClass; const WhereFieldName: RawUTF8;
       const WhereFieldValue: array of const; const FieldName: RawUTF8;
       const FieldValue: array of const): boolean; overload;
     /// update one field in a given member with a value specified as variant
@@ -2433,7 +2433,7 @@ type
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
     // it will notify the internal Cache
-    function UpdateField(Table: TSQLRecordClass; ID: TID;
+    function UpdateField(Table: TORMClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
     /// update one field in one or several members, depending on a WHERE clause,
     // with both update and where values specified as variant
@@ -2446,7 +2446,7 @@ type
     // - note that this method won't update the TModTime properties, nor the
     // internal table Cache: you should rather use a classic Retrieve()/FillPrepare()
     // followed by an Update() of the whole record
-    function UpdateField(Table: TSQLRecordClass;
+    function UpdateField(Table: TORMClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
     /// update one field in one or several members, depending on a set of IDs
@@ -2460,31 +2460,31 @@ type
     // - warning: this method will call directly EngineExecute(), and will
     // work just fine with SQLite3, but some other DB engines may not allow
     // a huge number of items within the IN(...) clause
-    function UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
+    function UpdateField(Table: TORMClass; const IDs: array of Int64;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
     /// increments one integer field value
     // - if available, this method will use atomic value modification, e.g.
     // $ UPDATE table SET field=field+?
-    function UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+    function UpdateFieldIncrement(Table: TORMClass; ID: TID;
       const FieldName: RawUTF8; Increment: Int64 = 1): boolean;
     /// override this method to guess if this record can be updated or deleted
     // - this default implementation returns always true
     // - e.g. you can add digital signature to a record to disallow record editing
     // - the ErrorMsg can be set to a variable, which will contain an explicit
     // error message
-    function RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
-      Action: TSQLEvent; ErrorMsg: PRawUTF8 = nil): boolean;
+    function RecordCanBeUpdated(Table: TORMClass; ID: TID;
+      Action: TORMEvent; ErrorMsg: PRawUTF8 = nil): boolean;
     /// delete a member
     // - implements REST DELETE collection
     // - return true on success
     // - call internaly the EngineDelete() abstract method
-    function Delete(Table: TSQLRecordClass; ID: TID): boolean; overload;
+    function Delete(Table: TORMClass; ID: TID): boolean; overload;
     /// delete a member with a WHERE clause
     // - implements REST DELETE collection
     // - return true on success
     // - this default method call OneFieldValues() to retrieve all matching IDs,
     // then will delete each row using protected EngineDeleteWhere() virtual method
-    function Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean; overload;
+    function Delete(Table: TORMClass; const SQLWhere: RawUTF8): boolean; overload;
     /// delete a member with a WHERE clause
     // - implements REST DELETE collection
     // - return true on success
@@ -2495,7 +2495,7 @@ type
     // currency / RawUTF8 values to be bound to the request as parameters
     // - is a simple wrapper around:
     // ! Delete(Table, FormatUTF8(FormatSQLWhere, [], BoundsSQLWhere))
-    function Delete(Table: TSQLRecordClass;
+    function Delete(Table: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): boolean; overload;
 
     /// get a blob field content from its record ID and supplied blob field name
@@ -2504,27 +2504,27 @@ type
     // - this method is defined as abstract, i.e. there is no default implementation:
     // it must be implemented 100% RestFul with a
     // GET ModelRoot/TableName/TableID/BlobFieldName request for example
-    // - this method retrieve the blob data as a TSQLRawBlob string using
+    // - this method retrieve the blob data as a TRawBlob string using
     // EngineRetrieveBlob()
-    function RetrieveBlob(Table: TSQLRecordClass;
+    function RetrieveBlob(Table: TORMClass;
       aID: TID; const BlobFieldName: RawUTF8;
-      out BlobData: TSQLRawBlob): boolean; overload;
+      out BlobData: TRawBlob): boolean; overload;
     /// get a blob field content from its record ID and supplied blob field name
     // - implements REST GET collection with a supplied member ID and field name
     // - return true on success
     // - this method will create a TStream instance (which must be freed by the
     // caller after use) and fill it with the blob data
-    function RetrieveBlob(Table: TSQLRecordClass;
+    function RetrieveBlob(Table: TORMClass;
       aID: TID; const BlobFieldName: RawUTF8;
       out BlobStream: TCustomMemoryStream): boolean; overload;
     /// update a blob field from its record ID and supplied blob field name
     // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
     // - call internaly the EngineUpdateBlob() abstract method
-    // - this method expect the Blob data to be supplied as TSQLRawBlob, using
+    // - this method expect the Blob data to be supplied as TRawBlob, using
     // EngineUpdateBlob()
-    function UpdateBlob(Table: TSQLRecordClass;
-      aID: TID; const BlobFieldName: RawUTF8; const BlobData: TSQLRawBlob): boolean; overload;
+    function UpdateBlob(Table: TORMClass;
+      aID: TID; const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean; overload;
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
@@ -2532,7 +2532,7 @@ type
     // - this method expect the Blob data to be supplied as a TStream: it will
     // send the whole stream content (from its beginning position upto its
     // current size) to the database engine
-    function UpdateBlob(Table: TSQLRecordClass;
+    function UpdateBlob(Table: TORMClass;
       aID: TID; const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT collection with a supplied member ID and field name
@@ -2540,7 +2540,7 @@ type
     // - call internaly the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as direct memory pointer
     // and size
-    function UpdateBlob(Table: TSQLRecordClass;
+    function UpdateBlob(Table: TORMClass;
       aID: TID; const BlobFieldName: RawUTF8;
       BlobData: pointer; BlobSize: integer): boolean; overload;
     /// update all BLOB fields of the supplied Value
@@ -2551,12 +2551,12 @@ type
     // - you can use this method by hand, to avoid several calls to UpdateBlob()
     // - returns TRUE on success (or if there is no BLOB field)
     // - returns FALSE on error (e.g. if Value is invalid or with db/transmission)
-    function UpdateBlobFields(Value: TSQLRecord): boolean;
+    function UpdateBlobFields(Value: TORM): boolean;
     /// get all BLOB fields of the supplied value from the remote server
     // - call several REST GET collection (one for each BLOB) for the member
     // - call internaly e.g. by TRestClient.Retrieve method when
     // ForceBlobTransfert / ForceBlobTransfertTable[] is set
-    function RetrieveBlobFields(Value: TSQLRecord): boolean;
+    function RetrieveBlobFields(Value: TORM): boolean;
 
     /// begin a transaction (to be used on Server side)
     // - implements REST BEGIN collection
@@ -2570,7 +2570,7 @@ type
     // - return true if no transaction is active, false otherwise
     // - in a multi-threaded or Client-Server with multiple concurrent Client
     // connections, you may check the returned value, as such:
-    //  !if Client.TransactionBegin(TSQLRecordPeopleObject) then
+    //  !if Client.TransactionBegin(TORMPeopleObject) then
     //  !try
     //  !  //.... modify the database content, raise exceptions on error
     //  !  Client.Commit;
@@ -2588,7 +2588,7 @@ type
     // this method when accessed from RESTful clients in the same thread, e.g.:
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
-    function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
+    function TransactionBegin(aTable: TORMClass; SessionID: cardinal): boolean;
     /// check current transaction status (to be used on Server side)
     // - warning: from CLIENT side, you should better use a BATCH process
     // - returns the session ID if a transaction is active
@@ -2662,7 +2662,7 @@ type
     // - warning: supplied JSON Data can be parsed in-place, so modified
     // - you should not use this low-level method in your code, but rather the
     // overloaded BatchSend() functions; is defined for raw asynchronous call
-    function BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
+    function BatchSend(Table: TORMClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
     // - will initialize a TRestBatch and call TimerEnable to initialize the
@@ -2675,21 +2675,21 @@ type
     // - using a BATCH in a dedicated thread will allow very fast background
     // asynchronous process of ORM methods, sufficient for most use cases
     // - is a wrapper around BackgroundTimer.AsynchBatchStart()
-    function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
+    function AsynchBatchStart(Table: TORMClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJSON]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
     // - should have been preceded by a call to AsynchBatch(), or returns false
     // - Table=nil will release all existing batch instances
     // - is a wrapper around BackgroundTimer.AsynchBatchStop()
-    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
+    function AsynchBatchStop(Table: TORMClass): boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around BackgroundTimer.AsynchBatchAdd(),
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
-      ForceID: boolean = false; const CustomFields: TSQLFieldBits = [];
+    function AsynchBatchAdd(Value: TORM; SendData: boolean;
+      ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// append some JSON content in a BATCH to be written in a background thread
     // - could be used to emulate AsynchBatchAdd() with an already pre-computed
@@ -2697,28 +2697,28 @@ type
     // - is a wrapper around BackgroundTimer.AsynchBatchRawAdd(),
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+    function AsynchBatchRawAdd(Table: TORMClass; const SentData: RawUTF8): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
     // - could be used to emulate AsynchBatchAdd() with an already pre-computed
     // JSON object, as stored in a TTextWriter instance
     // - is a wrapper around BackgroundTimer.AsynchBatchRawAppend()
     // - this method is thread-safe
-    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+    procedure AsynchBatchRawAppend(Table: TORMClass; SentData: TTextWriter);
     /// update an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around BackgroundTimer.AsynchBatchUpdate()
     // - this method is thread-safe
-    function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+    function AsynchBatchUpdate(Value: TORM; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    function AsynchBatchDelete(Table: TORMClass; ID: TID): integer;
 
     /// access the Database Model associated with REST Client or Server instance
-    function Model: TSQLModel;
-    /// access the internal caching parameters for a given TSQLRecord
+    function Model: TORMModel;
+    /// access the internal caching parameters for a given TORM
     // - will always return a TRestCache instance, creating one if needed
     // - purpose of this caching mechanism is to speed up retrieval of some
     // common values at either Client or Server level (like configuration settings)
@@ -2727,7 +2727,7 @@ type
     // configuration for this particular TRest instance
     // - only caching synchronization is about the direct RESTful/CRUD commands:
     // RETRIEVE, ADD, UPDATE and DELETE (that is, a complex direct SQL UPDATE or
-    // via TSQLRecordMany pattern won't be taken into account - only exception is
+    // via TORMMany pattern won't be taken into account - only exception is
     // TRestStorage tables accessed as SQLite3 virtual table)
     // - this caching will be located at the TRest level, that is no automated
     // synchronization is implemented between TRestClient and TRestServer -
@@ -2735,7 +2735,7 @@ type
     // overloaded methods on purpose: better no cache than unproper cache -
     // "premature optimization is the root of all evil"
     function Cache: TRestCache;
-    /// access the internal caching parameters for a given TSQLRecord
+    /// access the internal caching parameters for a given TORM
     // - will return nil if no TRestCache instance has been defined
     function CacheOrNil: TRestCache;
     /// returns TRUE if this table is worth caching (e.g. not in memory)
@@ -2750,11 +2750,11 @@ type
     /// access to the associate TSynLog class familly
     function LogFamily: TSynLogFamily;
     /// retrieve the current server time stamp as a TTimeLog
-    // - used e.g. by TSQLRecord.ComputeFieldsBeforeWrite for sftModTime/sftCreateTime
+    // - used e.g. by TORM.ComputeFieldsBeforeWrite for sftModTime/sftCreateTime
     // - is safe on both client and server sides
     function GetServerTimestamp: TTimeLog;
     /// retrieve the logged session User ID
-    // - used e.g. by TSQLRecord.ComputeFieldsBeforeWrite for sftSessionUserID
+    // - used e.g. by TORM.ComputeFieldsBeforeWrite for sftSessionUserID
     // - returns 0 if no session/authentication was currently initiated
     function GetCurrentSessionUserID: TID;
   end;
@@ -2769,21 +2769,21 @@ type
     // - URI is 'ModelRoot/TableName/TableID' with GET method
     // - returns true on server returned 200/HTTP_SUCCESS OK success, false on error
     // - set Refreshed to true if the content changed
-    function Refresh(aID: TID; Value: TSQLRecord; var Refreshed: boolean): boolean;
+    function Refresh(aID: TID; Value: TORM; var Refreshed: boolean): boolean;
     /// ask the server for its current internal state revision counter
     // - this counter is incremented every time the database is modified
     // - the returned value is 0 if the database doesn't support this feature
-    // - TSQLTable does compare this value with its internal one to check if
+    // - TORMTable does compare this value with its internal one to check if
     // its content must be updated
     // - is defined here and not in IRestORMClient since it is very specific
     function ServerInternalState: cardinal;
     /// check if the data may have changed of the server for this objects, and
     // update it if possible
-    // - only working types are TSQLTableJSON and TSQLRecord descendants
+    // - only working types are TORMTableJSON and TORM descendants
     // - make use of the InternalState function to check the data content revision
     // - return true if Data is updated successfully, or false on any error
-    // during data retrieval from server (e.g. if the TSQLRecord has been deleted)
-    // - if Data contains only one TSQLTableJSON, PCurrentRow can point to the
+    // during data retrieval from server (e.g. if the TORM has been deleted)
+    // - if Data contains only one TORMTableJSON, PCurrentRow can point to the
     // current selected row of this table, in order to refresh its value
     // - use this method to refresh the client UI, e.g. via a timer
     // - is defined here and not in IRestORMClient since it is very specific
@@ -2795,9 +2795,9 @@ type
     // - ServerCacheFlush() with no parameter will flush all stored JSON content
     // - ServerCacheFlush(aTable) will flush the cache for a given table
     // - ServerCacheFlush(aTable,aID) will flush the cache for a given record
-    function ServerCacheFlush(aTable: TSQLRecordClass = nil;
+    function ServerCacheFlush(aTable: TORMClass = nil;
       aID: TID = 0): boolean;
-    /// retrieve a list of members as a TSQLTable
+    /// retrieve a list of members as a TORMTable
     // - implements REST GET collection
     // - default SQL statement is 'SELECT ID FROM TableName;' (i.e. retrieve
     // the list of all ID of this collection members)
@@ -2807,31 +2807,31 @@ type
     // as in 'SELECT SQLSelect FROM TableName WHERE SQLWhere;'
     // - using inlined parameters via :(...): in SQLWhere is always a good idea
     // - for one TClass, you should better use TRest.MultiFieldValues()
-    function List(const Tables: array of TSQLRecordClass;
+    function List(const Tables: array of TORMClass;
       const SQLSelect: RawUTF8 = 'RowID';
-      const SQLWhere: RawUTF8 = ''): TSQLTable;
-    /// retrieve a list of members as a TSQLTable
+      const SQLWhere: RawUTF8 = ''): TORMTable;
+    /// retrieve a list of members as a TORMTable
     // - implements REST GET collection
     // - in this version, the WHERE clause can be created with the same format
     // as FormatUTF8() function, replacing all '%' chars with Args[] values
     // - using inlined parameters via :(...): in SQLWhereFormat is always a good idea
     // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
-    function ListFmt(const Tables: array of TSQLRecordClass;
+    function ListFmt(const Tables: array of TORMClass;
       const SQLSelect, SQLWhereFormat: RawUTF8;
-      const Args: array of const): TSQLTable; overload;
-    /// retrieve a list of members as a TSQLTable
+      const Args: array of const): TORMTable; overload;
+    /// retrieve a list of members as a TORMTable
     // - implements REST GET collection
     // - in this version, the WHERE clause can be created with the same format
     // as FormatUTF8() function, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
-    // ! Table := ListFmt([TSQLRecord],'Name','ID=?',[],[aID]);
+    // ! Table := ListFmt([TORM],'Name','ID=?',[],[aID]);
     // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
-    function ListFmt(const Tables: array of TSQLRecordClass;
+    function ListFmt(const Tables: array of TORMClass;
       const SQLSelect, SQLWhereFormat: RawUTF8;
-      const Args, Bounds: array of const): TSQLTable; overload;
+      const Args, Bounds: array of const): TORMTable; overload;
     /// begin a transaction
     // - implements REST BEGIN collection
     // - in aClient-Server environment with multiple Clients connected at the
@@ -2844,14 +2844,14 @@ type
     // - default is to retry 10 times, i.e. within 2 second timeout
     // - in the current implementation, the aTable parameter is not used yet
     // - typical usage should be for instance:
-    // !if Client.TransactionBeginRetry(TSQLRecordPeopleObject,20) then
+    // !if Client.TransactionBeginRetry(TORMPeopleObject,20) then
     // !try
     // !  // .... modify the database content, raise exceptions on error
     // !  Client.Commit;
     // !except
     // !  Client.RollBack; //  in case of error
     // !end;
-    function TransactionBeginRetry(aTable: TSQLRecordClass;
+    function TransactionBeginRetry(aTable: TORMClass;
       Retries: integer = 10): boolean;
     /// begin a BATCH sequence to speed up huge database change for a given table
     // - is a wrapper around TRestBatch.Create() which will be stored in the
@@ -2859,13 +2859,13 @@ type
     // - if you need a thread-safe "Unit Of Work" process, please use a private
     // TRestBatch instance and the overloaded IRestORM.BatchSend() method
     // - call BatchStartAny() or set the aTable parameter to nil if you want to
-    // use any kind of TSQLRecord objects within the process, not a single one
-    function BatchStart(aTable: TSQLRecordClass;
+    // use any kind of TORM objects within the process, not a single one
+    function BatchStart(aTable: TORMClass;
       AutomaticTransactionPerRow: cardinal = 0;
       Options: TRestBatchOptions = []): boolean; 
     /// begin a BATCH sequence to speed up huge database change for any table
     // - will call the BatchStart() method with aTable = nil so that you may be
-    // able to use any kind of TSQLRecord class within the process
+    // able to use any kind of TORM class within the process
     // - is a wrapper around TRestBatch.Create() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
@@ -2873,13 +2873,13 @@ type
     /// create a new member in current BATCH sequence
     // - is a wrapper around TRestBatch.Add() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
-    function BatchAdd(Value: TSQLRecord; SendData: boolean; ForceID: boolean = false;
-      const CustomFields: TSQLFieldBits = []): integer;
+    function BatchAdd(Value: TORM; SendData: boolean; ForceID: boolean = false;
+      const CustomFields: TFieldBits = []): integer;
     /// update a member in current BATCH sequence
     // - is a wrapper around TRestBatch.Update() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
     // - this method will call BeforeUpdateEvent before TRestBatch.Update
-    function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+    function BatchUpdate(Value: TORM; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete a member in current BATCH sequence
     // - is a wrapper around TRestBatch.Delete() which will be stored in the
@@ -2888,7 +2888,7 @@ type
     /// delete a member in current BATCH sequence
     // - is a wrapper around TRestBatch.Delete() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
-    function BatchDelete(Table: TSQLRecordClass; ID: TID): integer; overload;
+    function BatchDelete(Table: TORMClass; ID: TID): integer; overload;
     /// retrieve the current number of pending transactions in the BATCH sequence
     // - every call to BatchAdd/Update/Delete methods increases this counter
     function BatchCount: integer;
@@ -2915,10 +2915,10 @@ type
     ['{F8FB2109-5629-4DFB-A74C-7A0F86F91362}']
     /// create an index for the specific FieldName
     // - will call CreateSQLMultiIndex() internaly
-    function CreateSQLIndex(Table: TSQLRecordClass; const FieldName: RawUTF8;
+    function CreateSQLIndex(Table: TORMClass; const FieldName: RawUTF8;
       Unique: boolean; const IndexName: RawUTF8 = ''): boolean; overload;
     /// create one or multiple index(es) for the specific FieldName(s)
-    function CreateSQLIndex(Table: TSQLRecordClass;
+    function CreateSQLIndex(Table: TORMClass;
       const FieldNames: array of RawUTF8; Unique: boolean): boolean; overload;
     /// create one index for all specific FieldNames at once
     // - will call any static engine for the index creation of such tables, or
@@ -2929,183 +2929,183 @@ type
     // Then the following index is not mandatory for SQLite3:
     // ! aServer.CreateSQLIndex(TEmails, 'Email', False);
     // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
-    function CreateSQLMultiIndex(Table: TSQLRecordClass;
+    function CreateSQLMultiIndex(Table: TORMClass;
       const FieldNames: array of RawUTF8; Unique: boolean; IndexName: RawUTF8 = ''): boolean;
-    /// check if the supplied TSQLRecord is not a virtual or static table
+    /// check if the supplied TORM is not a virtual or static table
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// returns the maximum BLOB size per record as specified to TrackChanges()
-    function MaxUncompressedBlobSize(Table: TSQLRecordClass): integer;
+    function MaxUncompressedBlobSize(Table: TORMClass): integer;
     /// returns true if the server will handle per-user authentication and
     // access right management
-    // - i.e. if the associated TSQLModel contains TSQLAuthUser and
-    // TSQLAuthGroup tables (set by constructor)
+    // - i.e. if the associated TORMModel contains TAuthUser and
+    // TAuthGroup tables (set by constructor)
     function HandleAuthentication: boolean;
   end;
 
 
-  { -------------------- TSQLRecord Definitions }
+  { -------------------- TORM Definitions }
 
   /// the possible options for handling table names
-  TSQLCheckTableName = (
+  TORMCheckTableName = (
     ctnNoCheck, ctnMustExist, ctnTrimExisting);
 
-  /// internal data used by TSQLRecord.FillPrepare()/FillPrepareMany() methods
-  // - using a dedicated class will reduce memory usage for each TSQLRecord
+  /// internal data used by TORM.FillPrepare()/FillPrepareMany() methods
+  // - using a dedicated class will reduce memory usage for each TORM
   // instance (which won't need these properties most of the time)
-  TSQLRecordFill = class
+  TORMFill = class
   protected
     /// associated table
-    fTable: TSQLTable;
+    fTable: TORMTable;
     /// current retrieved row
     fFillCurrentRow: integer;
     /// number of used items in TableMap[] array
     // - calculated in FillPrepare() or FillPrepareMany() methods
     fTableMapCount: integer;
-    /// set by TSQLRecord.FillPrepareMany() to release M.fDestID^ instances
-    fTableMapRecordManyInstances: TSQLRecordManyObjArray;
+    /// set by TORM.FillPrepareMany() to release M.fDestID^ instances
+    fTableMapRecordManyInstances: TORMManyObjArray;
     /// map the published fields index
     // - calculated in FillPrepare() or FillPrepareMany() methods
     fTableMap: array of record
-      /// the class instance to be filled from the TSQLTable
-      // - can be a TSQLRecordMany instance after FillPrepareMany() method call
-      Dest: TSQLRecord;
-      /// the published property RTTI to be filled from the TSQLTable
+      /// the class instance to be filled from the TORMTable
+      // - can be a TORMMany instance after FillPrepareMany() method call
+      Dest: TORM;
+      /// the published property RTTI to be filled from the TORMTable
       // - is nil for the RowID/ID field
-      DestField: TSQLPropInfo;
-      /// the column index in TSQLTable
+      DestField: TORMPropInfo;
+      /// the column index in TORMTable
       TableIndex: integer;
     end;
     /// mark all mapped or TModTime fields
-    fTableMapFields: TSQLFieldBits;
-    /// if Joined instances were initialized via TSQLRecord.CreateJoined()
+    fTableMapFields: TFieldBits;
+    /// if Joined instances were initialized via TORM.CreateJoined()
     fJoinedFields: boolean;
     /// return fJoinedFields or false if self=nil
     function GetJoinedFields: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// add a property to the fTableMap[] array
-    // - aIndex is the column index in TSQLTable
-    procedure AddMap(aRecord: TSQLRecord; aField: TSQLPropInfo;
+    // - aIndex is the column index in TORMTable
+    procedure AddMap(aRecord: TORM; aField: TORMPropInfo;
       aIndex: integer); overload;
     /// add a property to the fTableMap[] array
-    // - aIndex is the column index in TSQLTable
-    procedure AddMap(aRecord: TSQLRecord; const aFieldName: RawUTF8;
+    // - aIndex is the column index in TORMTable
+    procedure AddMap(aRecord: TORM; const aFieldName: RawUTF8;
       aIndex: integer); overload;
     /// add all simple property names, with  to the fTableMap[] array
-    // - will map ID/RowID, then all simple fields of this TSQLRecord
-    // - aIndex is the column index in TSQLTable
-    procedure AddMapSimpleFields(aRecord: TSQLRecord;
-      const aProps: array of TSQLPropInfo; var aIndex: integer);
+    // - will map ID/RowID, then all simple fields of this TORM
+    // - aIndex is the column index in TORMTable
+    procedure AddMapSimpleFields(aRecord: TORM;
+      const aProps: array of TORMPropInfo; var aIndex: integer);
   public
     /// finalize the mapping
     destructor Destroy; override;
-    /// map all columns of a TSQLTable to a record mapping
+    /// map all columns of a TORMTable to a record mapping
     // - this is the main entry point of this class
-    procedure Map(aRecord: TSQLRecord; aTable: TSQLTable;
-      aCheckTableName: TSQLCheckTableName);
+    procedure Map(aRecord: TORM; aTable: TORMTable;
+      aCheckTableName: TORMCheckTableName);
     /// reset the mapping
-    // - is called e.g. by TSQLRecord.FillClose
+    // - is called e.g. by TORM.FillClose
     // - will free any previous Table if necessary
-    // - will release TSQLRecordMany.Dest instances as set by TSQLRecord.FillPrepareMany()
+    // - will release TORMMany.Dest instances as set by TORM.FillPrepareMany()
     procedure UnMap;
-    /// fill a TSQLRecord published properties from a TSQLTable row
+    /// fill a TORM published properties from a TORMTable row
     // - use the mapping prepared with Map() method
     function Fill(aRow: integer): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// fill a TSQLRecord published properties from a TSQLTable row
+    /// fill a TORM published properties from a TORMTable row
     // - use the mapping prepared with Map() method
     // - aTableRow will point to the first column of the matching row
     procedure Fill(aTableRow: PPUtf8CharArray); overload;
-    /// fill a TSQLRecord published properties from a TSQLTable row
+    /// fill a TORM published properties from a TORMTable row
     // - overloaded method using a specified destination record to be filled
     // - won't work with cross-reference mapping (FillPrepareMany)
     // - use the mapping prepared with Map() method
     // - aTableRow will point to the first column of the matching row
-    procedure Fill(aTableRow: PPUtf8CharArray; aDest: TSQLRecord); overload;
-    /// fill a TSQLRecord published properties from a TSQLTable row
+    procedure Fill(aTableRow: PPUtf8CharArray; aDest: TORM); overload;
+    /// fill a TORM published properties from a TORMTable row
     // - overloaded method using a specified destination record to be filled
     // - won't work with cross-reference mapping (FillPrepareMany)
     // - use the mapping prepared with Map() method
-    function Fill(aRow: integer; aDest: TSQLRecord): boolean; overload;
+    function Fill(aRow: integer; aDest: TORM): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used to compute the updated field bits during a fill
-    // - will return Props.SimpleFieldsBits[soUpdate] if no fill is in process
-    procedure ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
-      out Bits: TSQLFieldBits);
-    /// the TSQLTable stated as FillPrepare() parameter
-    // - the internal temporary table is stored here for TSQLRecordMany
-    // - this instance is freed by TSQLRecord.Destroy if fTable.OwnerMustFree=true
-    property Table: TSQLTable read fTable;
+    // - will return Props.SimpleFieldsBits[ooUpdate] if no fill is in process
+    procedure ComputeSetUpdatedFieldBits(Props: TORMProperties;
+      out Bits: TFieldBits);
+    /// the TORMTable stated as FillPrepare() parameter
+    // - the internal temporary table is stored here for TORMMany
+    // - this instance is freed by TORM.Destroy if fTable.OwnerMustFree=true
+    property Table: TORMTable read fTable;
     /// the current Row during a Loop
     property FillCurrentRow: integer read fFillCurrentRow;
-    /// equals TRUE if the instance was initialized via TSQLRecord.CreateJoined()
-    // TSQLRecord.CreateAndFillPrepareJoined()
-    // - it means that all nested TSQLRecord are pre-allocated instances,
+    /// equals TRUE if the instance was initialized via TORM.CreateJoined()
+    // TORM.CreateAndFillPrepareJoined()
+    // - it means that all nested TORM are pre-allocated instances,
     // not trans-typed pointer(IDs)
     property JoinedFields: boolean read GetJoinedFields;
-    /// set by TSQLRecord.FillPrepareMany() to release M.fDestID^ instances
-    property TableMapRecordManyInstances: TSQLRecordManyObjArray
+    /// set by TORM.FillPrepareMany() to release M.fDestID^ instances
+    property TableMapRecordManyInstances: TORMManyObjArray
       read fTableMapRecordManyInstances;
     /// return all mapped fields, or [] if nil
-    function TableMapFields: TSQLFieldBits;
+    function TableMapFields: TFieldBits;
   end;
 
 
   /// the possible options for TRestServer.CreateMissingTables and
-  // TSQLRecord.InitializeTable methods
+  // TORM.InitializeTable methods
   // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
-  // TSQLAuthGroup.InitializeTable to fill the TSQLAuthGroup and TSQLAuthUser
+  // TAuthGroup.InitializeTable to fill the TAuthGroup and TAuthUser
   // tables with default records
   // - itoNoCreateMissingField will avoid to create the missing fields on a table
   // - itoNoIndex4ID won't create the index for the main ID field (do nothing
   // on SQLite3, by design - but may be used for tables on external databases)
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
-  // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
+  // - itoNoIndex4NestedRecord won't create indexes for TORM fields
   // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
   // - itoNoIndex4TID won't create indexes for TID fields
   // - itoNoIndex4RecordVersion won't create indexes for TRecordVersion fields
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
-  TSQLInitializeTableOption = (
+  TORMInitializeTableOption = (
     itoNoAutoCreateGroups, itoNoAutoCreateUsers, itoNoCreateMissingField,
     itoNoIndex4ID, itoNoIndex4UniqueField, itoNoIndex4NestedRecord,
     itoNoIndex4RecordReference, itoNoIndex4TID, itoNoIndex4RecordVersion);
 
   /// the options to be specified for TRestServer.CreateMissingTables and
-  // TSQLRecord.InitializeTable methods
-  TSQLInitializeTableOptions = set of TSQLInitializeTableOption;
+  // TORM.InitializeTable methods
+  TORMInitializeTableOptions = set of TORMInitializeTableOption;
 
 
   /// root class for defining and mapping database records
-  // - inherits a class from TSQLRecord, and add published properties to describe
+  // - inherits a class from TORM, and add published properties to describe
   // the table columns (see TPropInfo for SQL and Delphi type mapping/conversion)
-  // - this published properties can be auto-filled from TSQLTable answer with
-  // FillPrepare() and FillRow(), or FillFrom() with TSQLTable or JSON data
+  // - this published properties can be auto-filled from TORMTable answer with
+  // FillPrepare() and FillRow(), or FillFrom() with TORMTable or JSON data
   // - these published properties can be converted back into UTF-8 encoded SQL
   // source with GetSQLValues or GetSQLSet or into JSON format with GetJSONValues
-  // - BLOB fields are decoded to auto-freeing TSQLRawBlob properties
+  // - BLOB fields are decoded to auto-freeing TRawBlob properties
   // - any published property defined as a T*ObjArray dynamic array storage
   // of persistents (via TJSONSerializer.RegisterObjArrayForJSON) will be freed
-  // - consider inherit from TSQLRecordNoCase and TSQLRecordNoCaseExtended if
+  // - consider inherit from TORMNoCase and TORMNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence
-  TSQLRecord = class(TSynPersistentWithID)
-  { note that every TSQLRecord has an Instance size of 20 bytes (on 32-bit)
+  TORM = class(TSynPersistentWithID)
+  { note that every TORM has an Instance size of 20 bytes (on 32-bit)
     for private and protected fields (such as fID or fFill e.g.) }
   protected
     /// used by FillPrepare() and corresponding Fill*() methods
-    fFill: TSQLRecordFill;
+    fFill: TORMFill;
     /// internal properties getters (using fProps data for speed)
     function GetHasBlob: boolean;
     function GetSimpleFieldCount: integer;
     function GetFillCurrentRow: integer;
     function GetFillReachedEnd: boolean;
-    function GetTable: TSQLTable;
+    function GetTable: TORMTable;
   protected
     fInternalState: cardinal;
     /// defined here for proper RecordProps inlining
-    class function PropsCreate: TSQLRecordProperties;
+    class function PropsCreate: TORMProperties;
     /// virtual class method to be overridden to register some custom properties
     // - do nothing by default, but allow inherited classes to define some
-    // properties, by adding some TSQLPropInfo instances to Props.Fields list,
+    // properties, by adding some TORMPropInfo instances to Props.Fields list,
     // or calling Props.RegisterCustomFixedSizeRecordProperty() or
     // Props.RegisterCustomRTTIRecordProperty() methods
     // - can also be used to specify a custom text collation, by calling
@@ -3113,14 +3113,14 @@ type
     // - do not call RecordProps from here (e.g. by calling AddFilter*): it
     // woult trigger a stack overflow, since at this state Props is not stored -
     // but rather use InternalDefineModel class method
-    class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); virtual;
+    class procedure InternalRegisterCustomProperties(Props: TORMProperties); virtual;
     /// virtual class method to be overridden to define some record-level modeling
     // - do nothing by default, but allow inherited classes to define some
-    // process which will take place after TSQLRecordProperties initialization
+    // process which will take place after TORMProperties initialization
     // - this may be the place e.g. to call AddFilter*() methods, if you do not
     // want those to be written "in stone", and not manually when creating the
-    // TSQLModel instance, or to call Props.SetCustomCollationForAll
-    class procedure InternalDefineModel(Props: TSQLRecordProperties); virtual;
+    // TORMModel instance, or to call Props.SetCustomCollationForAll
+    class procedure InternalDefineModel(Props: TORMProperties); virtual;
     /// trick to get the ID even in case of a sftID published property
     function GetID: TID;
       {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
@@ -3128,25 +3128,25 @@ type
     function GetIDAsPointer: pointer;
       {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
   public
-    /// direct access to the TSQLRecord properties from RTTI
-    // - TSQLRecordProperties is faster than e.g. the class function FieldProp()
+    /// direct access to the TORM properties from RTTI
+    // - TORMProperties is faster than e.g. the class function FieldProp()
     // - use internal the unused vmtAutoTable VMT entry to fast retrieve of a
     // class variable which is unique for each class ("class var" is unique only
     // for the class within it is defined, and we need a var for each class:
     // so even Delphi XE syntax is not powerful enough for our purpose, and the
     // vmtAutoTable trick if very fast, and works with all versions of Delphi -
     // including 64-bit target)
-    class function RecordProps: TSQLRecordProperties;
+    class function RecordProps: TORMProperties;
       {$ifdef HASINLINE}inline;{$endif}
-    /// the Table name in the database, associated with this TSQLRecord class
-    // - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
-    // - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
+    /// the Table name in the database, associated with this TORM class
+    // - 'TSQL' or 'TORM' chars are trimmed at the beginning of the ClassName
+    // - or the ClassName is returned as is, if no 'TSQL' or 'TORM' at first
     // - is just a wrapper around RecordProps.SQLTableName
     class function SQLTableName: RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
     /// register a custom filter (transformation) or validate to the
-    // TSQLRecord class for a specified field
-    // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
+    // TORM class for a specified field
+    // - this will be used by TORM.Filter and TORM.Validate
     // methods (in default implementation)
     // - will raise an EModelException on failure
     // - this function is just a wrapper around RecordProps.AddFilterOrValidate
@@ -3160,66 +3160,66 @@ type
     // - will only affect RAWTEXT_FIELDS
     class procedure AddFilterNotVoidAllTextFields;
 
-    /// protect several TSQLRecord local variable instances
+    /// protect several TORM local variable instances
     // - specified as localVariable/recordClass pairs
     // - is a wrapper around TAutoFree.Several(...) constructor
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
     // - you may write for instance:
-    // ! var info: TSQLBlogInfo;
-    // !     article: TSQLArticle;
-    // !     comment: TSQLComment;
+    // ! var info: TORMBlogInfo;
+    // !     article: TORMArticle;
+    // !     comment: TORMComment;
     // ! begin
-    // !   TSQLRecord.AutoFree([ // avoid several try..finally
-    // !     @info, TSQLBlogInfo, @article, TSQLArticle, @comment, TSQLComment]);
+    // !   TORM.AutoFree([ // avoid several try..finally
+    // !     @info, TORMBlogInfo, @article, TORMArticle, @comment, TORMComment]);
     // !   .... now you can use info, article or comment
     // ! end; // will call info.Free article.Free and comment.Free
     // - warning: under FPC, you should assign the result of this method to
-    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // a local IAutoFree variable, or use a with TORM.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(varClassPairs: array of pointer): IAutoFree; overload;
-    /// protect one TSQLRecord local variable instance
+    /// protect one TORM local variable instance
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
     // - you may write for instance:
-    // ! var info: TSQLBlogInfo;
+    // ! var info: TORMBlogInfo;
     // ! begin
-    // !   TSQLBlogInfo.AutoFree(info);
+    // !   TORMBlogInfo.AutoFree(info);
     // !   .... now you can use info
     // ! end; // will call info.Free
     // - warning: under FPC, you should assign the result of this method to
-    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // a local IAutoFree variable, or use a with TORM.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable): IAutoFree; overload;
-    /// read and protect one TSQLRecord local variable instance
+    /// read and protect one TORM local variable instance
     // - is a wrapper around TAutoFree.Create(localVariable,Create(Rest,ID))
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
     // - warning: under FPC, you should assign the result of this method to
-    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // a local IAutoFree variable, or use a with TORM.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; const Rest: IRestORM; ID: TID): IAutoFree; overload;
-    /// FillPrepare and protect one TSQLRecord local variable instance
+    /// FillPrepare and protect one TORM local variable instance
     // - is a wrapper around TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,...))
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
     // - warning: under FPC, you should assign the result of this method to
-    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // a local IAutoFree variable, or use a with TORM.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; const Rest: IRestORM;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): IAutoFree; overload;
-    /// FillPrepare and protect one TSQLRecord local variable instance
+    /// FillPrepare and protect one TORM local variable instance
     // - is a wrapper around TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,...))
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
     // - warning: under FPC, you should assign the result of this method to
-    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // a local IAutoFree variable, or use a with TORM.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; const Rest: IRestORM;
       const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
@@ -3230,16 +3230,16 @@ type
     // if FieldName is specified, initialization regarding this field must be processed
     // - override this method in order to initialize indexs or create default records
     // - by default, create indexes for all TRecordReference properties, and
-    // for all TSQLRecord inherited properties (i.e. of sftID type, that is
+    // for all TORM inherited properties (i.e. of sftID type, that is
     // an INTEGER field containing the ID of the pointing record)
     // - the options specified at CreateMissingTables() are passed to this method,
     // within the context of an opened DB transaction, in which missing tables
     // and fields have already been added
-    // - is not part of TSQLRecordProperties because has been declared as virtual
+    // - is not part of TORMProperties because has been declared as virtual
     class procedure InitializeTable(const Server: IRestORMServer;
-      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); virtual;
+      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); virtual;
 
-    /// filter/transform the specified fields values of the TSQLRecord instance
+    /// filter/transform the specified fields values of the TORM instance
     // - by default, this will perform all TSynFilter as registered by
     // [RecordProps.]AddFilterOrValidate()
     // - inherited classes may add some custom filtering/transformation here, if
@@ -3247,13 +3247,13 @@ type
     // this case, the function has to return TRUE if the filtering took place,
     // and FALSE if any default registered TSynFilter must be processed
     // - the default aFields parameter will process all fields
-    function Filter(const aFields: TSQLFieldBits = [0..MAX_SQLFIELDS - 1]): boolean;
+    function Filter(const aFields: TFieldBits = [0..MAX_SQLFIELDS - 1]): boolean;
       overload; virtual;
-    ///  filter/transform the specified fields values of the TSQLRecord instance
+    ///  filter/transform the specified fields values of the TORM instance
     // - this version will call the overloaded Filter() method above
     // - return TRUE if all field names were correct and processed, FALSE otherwise
     function Filter(const aFields: array of RawUTF8): boolean; overload;
-    /// validate the specified fields values of the current TSQLRecord instance
+    /// validate the specified fields values of the current TORM instance
     // - by default, this will perform all TSynValidate as registered by
     //  [RecordProps.]AddFilterOrValidate()
     // - it will also check if any UNIQUE field value won't be duplicated
@@ -3267,30 +3267,30 @@ type
     //  index found
     // - caller SHOULD always call the Filter() method before calling Validate()
     function Validate(const aRest: IRestORM;
-      const aFields: TSQLFieldBits = [0.. MAX_SQLFIELDS - 1];
+      const aFields: TFieldBits = [0.. MAX_SQLFIELDS - 1];
       aInvalidFieldIndex: PInteger = nil; aValidator: PSynValidate = nil): string;
         overload; virtual;
-    ///  validate the specified fields values of the current TSQLRecord instance
+    ///  validate the specified fields values of the current TORM instance
     // - this version will call the overloaded Validate() method above
     // - returns '' if all field names were correct and processed, or an
     // explicit error message (translated in the current language) on error
     // - if aInvalidFieldIndex is set, it will contain the first invalid field index
     function Validate(const aRest: IRestORM; const aFields: array of RawUTF8;
       aInvalidFieldIndex: PInteger = nil; aValidator: PSynValidate = nil): string; overload;
-    /// filter (transform) then validate the specified fields values of the TSQLRecord
+    /// filter (transform) then validate the specified fields values of the TORM
     // - this version will call the overloaded Filter() and Validate() methods
     // and display the faulty field name at the beginning of the error message
     // - returns true if all field names were correct and processed, or false
     // and an explicit error message (translated in the current language) on error
     function FilterAndValidate(const aRest: IRestORM; out aErrorMessage: string;
-      const aFields: TSQLFieldBits = [0..MAX_SQLFIELDS - 1];
+      const aFields: TFieldBits = [0..MAX_SQLFIELDS - 1];
       aValidator: PSynValidate = nil): boolean; overload;
-    /// filter (transform) then validate the specified fields values of the TSQLRecord
+    /// filter (transform) then validate the specified fields values of the TORM
     // - this version will call the overloaded Filter() and Validate() methods
     // and return '' on validation success, or an error message with the faulty
     // field names at the beginning
     function FilterAndValidate(const aRest: IRestORM;
-      const aFields: TSQLFieldBits = [0..MAX_SQLFIELDS - 1];
+      const aFields: TFieldBits = [0..MAX_SQLFIELDS - 1];
       aValidator: PSynValidate = nil): RawUTF8; overload;
     /// should modify the record content before writing to the Server
     // - this default implementation will update any sftModTime / TModTime,
@@ -3301,18 +3301,18 @@ type
     // back the content to the remote Server: therefore, TModTime / TCreateTime
     // fields are a pure client ORM feature - it won't work directly at REST level
     procedure ComputeFieldsBeforeWrite(const aRest: IRestORM;
-      aOccasion: TSQLEvent); virtual;
+      aOccasion: TORMEvent); virtual;
 
     /// this constructor initializes the record
-    // - auto-instanciate any TSQLRecordMany instance defined in published properties
+    // - auto-instanciate any TORMMany instance defined in published properties
     // - override this method if you want to use some internal objects (e.g.
     // TStringList or TCollection as published property)
     constructor Create; overload; override;
     /// this constructor initializes the record and set the simple fields
     // with the supplied values
     // - the aSimpleFields parameters must follow explicitely the order of
-    // published properties of the aTable class, excepting the TSQLRawBlob and
-    // TSQLRecordMany kind (i.e. only so called "simple fields") - in
+    // published properties of the aTable class, excepting the TRawBlob and
+    // TORMMany kind (i.e. only so called "simple fields") - in
     // particular, parent properties must appear first in the list
     // - the aSimpleFields must have exactly the same count of parameters as
     // there are "simple fields" in the published properties
@@ -3326,21 +3326,21 @@ type
     constructor Create(const aClient: IRestORM; aID: TID;
       ForUpdate: boolean = false); reintroduce; overload;
     /// this constructor initializes the object and fills its content from a client
-    // or server connection, from a TSQLRecord published property content
+    // or server connection, from a TORM published property content
     // - is just a wrapper around Create(aClient,PtrInt(aPublishedRecord))
     // or Create(aClient,aPublishedRecord.ID)
-    // - a published TSQLRecord property is not a class instance, but a typecast to
+    // - a published TORM property is not a class instance, but a typecast to
     // TObject(RecordID) - you can also use its ID property
     // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
-    constructor Create(const aClient: IRestORM; aPublishedRecord: TSQLRecord;
+    constructor Create(const aClient: IRestORM; aPublishedRecord: TORM;
       ForUpdate: boolean = false); reintroduce; overload;
     /// this constructor initializes the object as above, and fills its content
     //  from a client or server connection, using a specified WHERE clause
     //  - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
     //  for better server speed - note that you can use FormatUTF8() as such:
-    //  ! aRec := TSQLMyRec.Create(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
+    //  ! aRec := TORMMyRec.Create(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
     //  or call the overloaded contructor with BoundsSQLWhere array of parameters
     constructor Create(const aClient: IRestORM; const aSQLWhere: RawUTF8);
       reintroduce; overload;
@@ -3363,11 +3363,11 @@ type
     // - the FormatSQLWhere clause will replace all '%' chars with the supplied
     // ParamsSQLWhere[] values, and all '?' chars with BoundsSQLWhere[] values,
     // as :(...): inlined parameters - you should either call:
-    // ! Rec := TSQLMyRecord.Create(aClient, 'Count=:(%):', [aCount],[]);
+    // ! Rec := TORMMyRecord.Create(aClient, 'Count=:(%):', [aCount],[]);
     // or (letting the inlined parameters being computed by FormatUTF8)
-    // !  Rec := TSQLMyRecord.Create(aClient,'Count=?',[],[aCount]);
+    // !  Rec := TORMMyRecord.Create(aClient,'Count=?',[],[aCount]);
     // or even better, using the other Create overloaded constructor:
-    // !  Rec := TSQLMyRecord.Create(aClient,'Count=?',[aCount]);
+    // !  Rec := TORMMyRecord.Create(aClient,'Count=?',[aCount]);
     // - using '?' and BoundsSQLWhere[] is perhaps more readable in your code, and
     // will in all case create a request with :(..): inline parameters, with
     // automatic RawUTF8 quoting if necessary
@@ -3395,14 +3395,14 @@ type
 
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a statement using a specified WHERE clause
-    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // - this method creates a TORMTableJSON, retrieves all records corresponding
     // to the WHERE clause, then call FillPrepare - previous Create(aClient)
     // methods retrieve only one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
-    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the TORMTableJSON will be freed by TORM.Destroy
     // - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
     // for better server speed - note that you can use FormatUTF8() as such:
-    // ! aRec := TSQLMyRec.CreateAndFillPrepare(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
+    // ! aRec := TORMMyRec.CreateAndFillPrepare(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
     // or call the overloaded CreateAndFillPrepare() contructor directly with
     // BoundsSQLWhere array of parameters
     // - aCustomFieldsCSV can be used to specify which fields must be retrieved
@@ -3416,11 +3416,11 @@ type
       const aSQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8 = ''); overload;
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a statement using a specified WHERE clause
-    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // - this method creates a TORMTableJSON, retrieves all records corresponding
     // to the WHERE clause, then call FillPrepare - previous Create(aClient)
     // methods retrieve only one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
-    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the TORMTableJSON will be freed by TORM.Destroy
     // - for better server speed, the WHERE clause should use bound parameters
     // identified as '?' in the FormatSQLWhere statement, which is expected to
     // follow the order of values supplied in BoundsSQLWhere open array - use
@@ -3443,11 +3443,11 @@ type
       const aCustomFieldsCSV: RawUTF8 = ''); overload;
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a statement using a specified WHERE clause
-    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // - this method creates a TORMTableJSON, retrieves all records corresponding
     // to the WHERE clause, then call FillPrepare - previous Create(aClient)
     // methods retrieve only one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
-    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the TORMTableJSON will be freed by TORM.Destroy
     // - the FormatSQLWhere clause will replace all '%' chars with the supplied
     // ParamsSQLWhere[] supplied values, and bind all '?' chars as parameters
     // with BoundsSQLWhere[] values
@@ -3465,11 +3465,11 @@ type
       const aCustomFieldsCSV: RawUTF8 = ''); overload;
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a given list of IDs
-    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // - this method creates a TORMTableJSON, retrieves all records corresponding
     // to the specified IDs, then call FillPrepare - previous Create(aClient)
     // methods retrieve only one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
-    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the TORMTableJSON will be freed by TORM.Destroy
     // - aCustomFieldsCSV can be used to specify which fields must be retrieved
     // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
@@ -3483,59 +3483,59 @@ type
       const aIDs: array of Int64; const aCustomFieldsCSV: RawUTF8 = ''); overload;
     /// this constructor initializes the object, and prepares itself to loop
     // through a specified JSON table, which will use a private copy
-    // - this method creates a TSQLTableJSON, fill it with the supplied JSON buffer,
+    // - this method creates a TORMTableJSON, fill it with the supplied JSON buffer,
     // then call FillPrepare - previous Create(aClient) methods retrieve only
     // one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
-    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the TORMTableJSON will be freed by TORM.Destroy
     constructor CreateAndFillPrepare(const aJSON: RawUTF8); overload;
     /// this constructor initializes the object, and prepares itself to loop
     // through a specified JSON table buffer, which will be modified in-place
-    // - this method creates a TSQLTableJSON, fill it with the supplied JSON buffer,
+    // - this method creates a TORMTableJSON, fill it with the supplied JSON buffer,
     // then call FillPrepare - previous Create(aClient) methods retrieve only
     // one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
-    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the TORMTableJSON will be freed by TORM.Destroy
     constructor CreateAndFillPrepare(aJSON: PUTF8Char; aJSONLen: integer); overload;
     /// this constructor initializes the object from its ID, including all
-    // nested TSQLRecord properties, through a JOINed statement
+    // nested TORM properties, through a JOINed statement
     // - by default, Create(aClient,aID) will return only the one-to-one
-    // nested TSQLRecord published properties IDs trans-typed as pointer - this
+    // nested TORM published properties IDs trans-typed as pointer - this
     // constructor allow to retrieve the nested values in one statement
-    // - use this constructor if you want all TSQLRecord published properties to
+    // - use this constructor if you want all TORM published properties to
     // be allocated, and loaded with the corresponding values
     // - Free/Destroy will release these instances
     // - warning: if you call Update() after it, only the main object will be
-    // updated, not the nested TSQLRecord properties
+    // updated, not the nested TORM properties
     constructor CreateJoined(const aClient: IRestORM; aID: TID);
     /// this constructor initializes the object, and prepares itself to loop
-    // nested TSQLRecord properties, through a JOINed statement and a WHERE clause
+    // nested TORM properties, through a JOINed statement and a WHERE clause
     // - by default, CreateAndFillPrepare() will return only the one-to-one
-    // nested TSQLRecord published properties IDs trans-typed as pointer - this
+    // nested TORM published properties IDs trans-typed as pointer - this
     // constructor allow to retrieve the nested values in one statement
-    //  - this method creates a TSQLTableJSON, fill it with the supplied JSON buffer,
+    //  - this method creates a TORMTableJSON, fill it with the supplied JSON buffer,
     // then call FillPrepare - previous CreateJoined() method retrieve only
     // one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
-    // - use this constructor if you want all TSQLRecord published properties to
+    // - use this constructor if you want all TORM published properties to
     // be allocated, and loaded with the corresponding values
     // - Free/Destroy will release these instances
     // - warning: if you call Update() after it, only the main object will be
-    // updated, not the nested TSQLRecord properties
+    // updated, not the nested TORM properties
     constructor CreateAndFillPrepareJoined(const aClient: IRestORM;
       const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
-    /// this constructor initializes the object including all TSQLRecordMany properties,
+    /// this constructor initializes the object including all TORMMany properties,
     // and prepares itself to loop through a JOINed statement
-    // - the created instance will have all its TSQLRecordMany Dest property allocated
+    // - the created instance will have all its TORMMany Dest property allocated
     // with proper instance (and not only pointer(DestID) e.g.), ready to be
     // consumed during a while FillOne do... loop (those instances will be
-    // freed by TSQLRecord.FillClose or Destroy) - and the Source property
-    // won't contain pointer(SourceID) but the main TSQLRecord instance
+    // freed by TORM.FillClose or Destroy) - and the Source property
+    // won't contain pointer(SourceID) but the main TORM instance
     // - the aFormatSQLJoin clause will define a WHERE clause for an automated
-    // JOINed statement, including TSQLRecordMany published properties (and
+    // JOINed statement, including TORMMany published properties (and
     // their nested properties)
     // - a typical use could be the following:
-    // ! aProd := TSQLProduct.CreateAndFillPrepareMany(Database,
+    // ! aProd := TORMProduct.CreateAndFillPrepareMany(Database,
     // !   'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',
     // !   [], ['mark', 'for boy', 'small', 'medium']);
     // ! if aProd <> nil then
@@ -3556,7 +3556,7 @@ type
     // $  s.id=ss.dest and ss.source=p.id and
     // $  p.Owner='mark' and c.Name='for boy' and (s.Name='small' or s.Name='medium')
     // - you SHALL call explicitely the FillClose method before using any
-    // methods of nested TSQLRecordMany instances which may override the Dest
+    // methods of nested TORMMany instances which may override the Dest
     // instance content (e.g. ManySelect) to avoid any GPF
     // - the aFormatSQLJoin clause will replace all '%' chars with the supplied
     // aParamsSQLJoin[] supplied values, and bind all '?' chars as bound
@@ -3565,23 +3565,23 @@ type
       const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
     /// this method create a clone of the current record, with same ID and properties
     // - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
-    // those fields don't contain any data, but a TSQLRecordMany instance
+    // those fields don't contain any data, but a TORMMany instance
     // which allow to access to the pivot table data)
     // - you can override this method to allow custom copy of the object,
     // including (or not) published properties copy
-    function CreateCopy: TSQLRecord; overload; virtual;
+    function CreateCopy: TORM; overload; virtual;
     /// this method create a clone of the current record, with same ID and properties
     // - overloaded method to copy the specified properties
-    function CreateCopy(const CustomFields: TSQLFieldBits): TSQLRecord; overload;
+    function CreateCopy(const CustomFields: TFieldBits): TORM; overload;
     /// set the bits corresponding to non-void (0,'') copiable fields
-    function GetNonVoidFields: TSQLFieldBits;
+    function GetNonVoidFields: TFieldBits;
     /// release the associated memory
-    // - in particular, release all TSQLRecordMany instance created by the
-    // constructor of this TSQLRecord
+    // - in particular, release all TORMMany instance created by the
+    // constructor of this TORM
     destructor Destroy; override;
 
     /// return the UTF-8 encoded SQL source to create the table containing the
-    // published fields of a TSQLRecord child
+    // published fields of a TORM child
     // - a 'ID INTEGER PRIMARY KEY' field is always created first (mapping
     // SQLite3 RowID)
     // - AnsiString are created as TEXT COLLATE NOCASE (fast SQLite3 7bits compare)
@@ -3591,29 +3591,29 @@ type
     // (which calls our very fast ISO TEXT to Int64 conversion routine)
     // - an individual bit set in UniqueField forces the corresponding field to
     // be marked as UNIQUE (an unique index is automaticaly created on the specified
-    // column); use TSQLModel fIsUnique[] array, which set the bits values
+    // column); use TORMModel fIsUnique[] array, which set the bits values
     // to 1 if a property field was published with "stored AS_UNIQUE"
     // (i.e. "stored false")
-    // - this method will handle TSQLRecordFTS* classes like FTS* virtual tables,
-    // TSQLRecordRTree as RTREE virtual table, and TSQLRecordVirtualTable*ID
+    // - this method will handle TORMFTS* classes like FTS* virtual tables,
+    // TORMRTree as RTREE virtual table, and TORMVirtualTable*ID
     // classes as corresponding Delphi designed virtual tables
-    // - is not part of TSQLRecordProperties because has been declared as virtual
-    // so that you could specify a custom SQL statement, per TSQLRecord type
-    // - anyway, don't call this method directly, but use TSQLModel.GetSQLCreate()
+    // - is not part of TORMProperties because has been declared as virtual
+    // so that you could specify a custom SQL statement, per TORM type
+    // - anyway, don't call this method directly, but use TORMModel.GetSQLCreate()
     // - the aModel parameter is used to retrieve the Virtual Table module name,
     // and can be ignored for regular (not virtual) tables
-    class function GetSQLCreate(aModel: TSQLModel): RawUTF8; virtual;
-    /// return the Class Type of the current TSQLRecord
-    function RecordClass: TSQLRecordClass;
+    class function GetSQLCreate(aModel: TORMModel): RawUTF8; virtual;
+    /// return the Class Type of the current TORM
+    function RecordClass: TORMClass;
       {$ifdef HASINLINE}inline;{$endif}
     /// return the RTTI property information for this record
     function ClassProp: TRttiJson;
     /// return the TRecordReference Int64 value pointing to this record
-    function RecordReference(Model: TSQLModel): TRecordReference;
+    function RecordReference(Model: TORMModel): TRecordReference;
 
     /// return the UTF-8 encoded SQL source to INSERT the values contained
-    // in the current published fields of a TSQLRecord child
-    // - only simple fields name (i.e. not TSQLRawBlob/TSQLRecordMany) are updated:
+    // in the current published fields of a TORM child
+    // - only simple fields name (i.e. not TRawBlob/TORMMany) are updated:
     // BLOB fields are ignored (use direct update via dedicated methods instead)
     // - format is '(COL1, COL2) VALUES ('VAL1', 'VAL2')' if some column was ignored
     // (BLOB e.g.)
@@ -3622,19 +3622,19 @@ type
     // for conveniency
     function GetSQLValues: RawUTF8;
     /// return the UTF-8 encoded SQL source to UPDATE the values contained
-    // in the current published fields of a TSQLRecord child
-    // - only simple fields name (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
+    // in the current published fields of a TORM child
+    // - only simple fields name (i.e. not TRawBlob/TORMMany) are retrieved:
     // BLOB fields are ignored (use direct access via dedicated methods instead)
     // - format is 'COL1='VAL1', COL2='VAL2''
     // - is not used by the ORM (do not use prepared statements) - only here
     // for conveniency
     function GetSQLSet: RawUTF8;
-    /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
+    /// return the UTF-8 encoded JSON objects for the values of this TORM
     // - layout and fields should have been set at TJSONSerializer construction:
     // to append some content to an existing TJsonSerializer, call the
     // AppendAsJsonObject() method
     procedure GetJSONValues(W: TJSONSerializer); overload;
-    /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
+    /// return the UTF-8 encoded JSON objects for the values of this TORM
     // - the JSON buffer will be finalized if needed (e.g. non expanded mode),
   	// and the supplied TJSONSerializer instance will be freed by this method
     // - layout and fields should have been set at TJSONSerializer construction:
@@ -3642,12 +3642,12 @@ type
     // AppendAsJsonObject() method
     procedure GetJSONValuesAndFree(JSON: TJSONSerializer); overload;
     /// return the UTF-8 encoded JSON objects for the values contained
-    // in the current published fields of a TSQLRecord child
-    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
+    // in the current published fields of a TORM child
+    // - only simple fields (i.e. not TRawBlob/TORMMany) are retrieved:
     //   BLOB fields are ignored (use direct access via dedicated methods instead)
     // - if Expand is true, JSON data is an object, for direct use with any Ajax or .NET client:
     // $ {"col1":val11,"col2":"val12"}
-    // - if Expand is false, JSON data is serialized (as used in TSQLTableJSON)
+    // - if Expand is false, JSON data is serialized (as used in TORMTableJSON)
     // $ { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - if withID is true, then the first ID field value is included
     // - you can customize SQLRecordOptions, e.g. if sftObject/sftBlobDynArray
@@ -3655,15 +3655,15 @@ type
     // JSON string (which is the default, as expected by the database storage),
     // or if an "ID_str" string field should be added for JavaScript
     procedure GetJSONValues(JSON: TStream; Expand, withID: boolean;
-      Occasion: TSQLOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions = []); overload;
+      Occasion: TORMOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions = []); overload;
     /// same as overloaded GetJSONValues(), but returning result into a RawUTF8
     // - if UsingStream is not set, it will use a temporary THeapMemoryStream instance
     function GetJSONValues(Expand, withID: boolean;
-      Occasion: TSQLOccasion; UsingStream: TCustomMemoryStream = nil;
+      Occasion: TORMOccasion; UsingStream: TCustomMemoryStream = nil;
       SQLRecordOptions: TJSONSerializerSQLRecordOptions = []): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
-    function GetJSONValues(Expand, withID: boolean; const Fields: TSQLFieldBits;
+    function GetJSONValues(Expand, withID: boolean; const Fields: TFieldBits;
       SQLRecordOptions: TJSONSerializerSQLRecordOptions = []): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
@@ -3674,7 +3674,7 @@ type
     // method will add the JSON object directly to any TJSONSerializer
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
-    procedure AppendAsJsonObject(W: TJSONSerializer; Fields: TSQLFieldBits);
+    procedure AppendAsJsonObject(W: TJSONSerializer; Fields: TFieldBits);
     /// will append all the FillPrepare() records as an expanded JSON array
     // - generates '[{rec1},{rec2},...]' using a loop similar to:
     // ! while FillOne do .. AppendJsonObject() ..
@@ -3684,7 +3684,7 @@ type
     // parameter is customized to a non void value
     // - see also IRestORM.AppendListAsJsonArray for a high-level wrapper method
     procedure AppendFillAsJsonArray(const FieldName: RawUTF8; W: TJSONSerializer;
-      const Fields: TSQLFieldBits = []);
+      const Fields: TFieldBits = []);
     /// change TDocVariantData.Options for all variant published fields
     // - may be used to replace e.g. JSON_OPTIONS_FAST_EXTENDED by JSON_OPTIONS_FAST
     procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions = JSON_OPTIONS_FAST);
@@ -3693,7 +3693,7 @@ type
     procedure GetBinaryValues(W: TBufferWriter); overload;
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
-    procedure GetBinaryValues(W: TBufferWriter; const aFields: TSQLFieldBits);
+    procedure GetBinaryValues(W: TBufferWriter; const aFields: TFieldBits);
       overload;
     /// write the simple field values (excluding ID) into the binary buffer
     procedure GetBinaryValuesSimpleFields(W: TBufferWriter);
@@ -3739,11 +3739,11 @@ type
     // ("x'01234'" e.g.) or '\uFFF0base64encodedbinary'
     procedure SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
     /// retrieve the record content as a TDocVariant custom variant object
-    function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
+    function GetAsDocVariant(withID: boolean; const withFields: TFieldBits;
       options: PDocVariantOptions = nil; replaceRowIDWithID: boolean = false): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the record content as a TDocVariant custom variant object
-    procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
+    procedure GetAsDocVariant(withID: boolean; const withFields: TFieldBits;
       var result: variant; options: PDocVariantOptions = nil;
       ReplaceRowIDWithID: boolean = false); overload;
     /// retrieve the simple record content as a TDocVariant custom variant object
@@ -3763,23 +3763,23 @@ type
     // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
     procedure SetFieldVariant(const PropName: string; const Source: Variant);
 
-    /// prepare to get values from a TSQLTable result
+    /// prepare to get values from a TORMTable result
     // - then call FillRow(1..Table.RowCount) to get any row value
     // - or you can also loop through all rows with
     // ! while Rec.FillOne do
     // !   dosomethingwith(Rec);
-    // - the specified TSQLTable is stored in an internal fTable protected field
+    // - the specified TORMTable is stored in an internal fTable protected field
     // - set aCheckTableName if you want e.g. the Field Names from the Table
     // any pending 'TableName.' trimmed before matching to the current record
-    procedure FillPrepare(Table: TSQLTable;
-      aCheckTableName: TSQLCheckTableName = ctnNoCheck); overload;
+    procedure FillPrepare(Table: TORMTable;
+      aCheckTableName: TORMCheckTableName = ctnNoCheck); overload;
     /// prepare to get values from a SQL where statement
     // - returns true in case of success, false in case of an error during SQL request
     // - then call FillRow(1..Table.RowCount) to get any row value
     // - or you can also loop through all rows with
     // ! while Rec.FillOne do
     // !   dosomethingwith(Rec);
-    // - a temporary TSQLTable is created then stored in an internal fTable protected field
+    // - a temporary TORMTable is created then stored in an internal fTable protected field
     // - if aSQLWhere is left to '', all rows are retrieved as fast as possible
     // (e.g. by-passing SQLite3 virtual table modules for external databases)
     // - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
@@ -3798,14 +3798,14 @@ type
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(const aClient: IRestORM;
       const aSQLWhere: RawUTF8 = ''; const aCustomFieldsCSV: RawUTF8 = '';
-      aCheckTableName: TSQLCheckTableName = ctnNoCheck): boolean; overload;
+      aCheckTableName: TORMCheckTableName = ctnNoCheck): boolean; overload;
     /// prepare to get values using a specified WHERE clause with '%' parameters
     // - returns true in case of success, false in case of an error during SQL request
     // - then call FillRow(1..Table.RowCount) to get any row value
     // - or you can also loop through all rows with
     // ! while Rec.FillOne do
     // !   dosomethingwith(Rec);
-    // - a temporary TSQLTable is created then stored in an internal fTable protected field
+    // - a temporary TORMTable is created then stored in an internal fTable protected field
     // - for better server speed, the WHERE clause should use bound parameters
     // identified as '?' in the FormatSQLWhere statement, which is expected to
     // follow the order of values supplied in BoundsSQLWhere open array - use
@@ -3832,7 +3832,7 @@ type
     // - or you can also loop through all rows with
     // ! while Rec.FillOne do
     // !   dosomethingwith(Rec);
-    // - a temporary TSQLTable is created then stored in an internal fTable
+    // - a temporary TORMTable is created then stored in an internal fTable
     // protected field
     // - the FormatSQLWhere clause will replace all '%' chars with the supplied
     // ParamsSQLWhere[] supplied values, and bind all '?' chars as bound
@@ -3855,7 +3855,7 @@ type
     // - or you can also loop through all rows with
     // ! while Rec.FillOne do
     // !   dosomethingwith(Rec);
-    // - a temporary TSQLTable is created then stored in an internal fTable protected field
+    // - a temporary TORMTable is created then stored in an internal fTable protected field
     // - aCustomFieldsCSV can be used to specify which fields must be retrieved
     // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
     // you may need  to access only one or several fields, and will save remote
@@ -3868,13 +3868,13 @@ type
     function FillPrepare(const aClient: IRestORM;
       const aIDs: array of Int64;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
-    // / prepare to loop through a JOINed statement including TSQLRecordMany fields
-    // - all TSQLRecordMany.Dest published fields will now contain a true TSQLRecord
+    // / prepare to loop through a JOINed statement including TORMMany fields
+    // - all TORMMany.Dest published fields will now contain a true TORM
     // instance, ready to be filled with the JOINed statement results (these
     // instances will be released at FillClose) - the same for Source which will
     // point to the self instance
     // - the aFormatSQLJoin clause will define a WHERE clause for an automated
-    // JOINed statement, including TSQLRecordMany published properties (and
+    // JOINed statement, including TORMMany published properties (and
     // their nested properties)
     // - returns true in case of success, false in case of an error during SQL request
     // - a typical use could be the following:
@@ -3896,39 +3896,39 @@ type
     // ParamsSQLWhere[] supplied values, and bind all '?' chars as parameters
     // with BoundsSQLWhere[] values
     // - you SHALL call explicitely the FillClose method before using any
-    // methods of nested TSQLRecordMany instances which may override the Dest
+    // methods of nested TORMMany instances which may override the Dest
     // instance content (e.g. ManySelect) to avoid any GPF
-    // - is used by TSQLRecord.CreateAndFillPrepareMany constructor
+    // - is used by TORM.CreateAndFillPrepareMany constructor
     function FillPrepareMany(const aClient: IRestORM;
       const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
-    /// compute a JOINed statement including TSQLRecordMany fields
+    /// compute a JOINed statement including TORMMany fields
     // - is called by FillPrepareMany() to retrieve the JSON of the corresponding
     // request: so you could use this method to retrieve directly the same
     // information, ready to be transmitted (e.g. as RawJSON) to a client
     function EnginePrepareMany(const aClient: IRestORM;
       const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const;
-      out ObjectsClass: TSQLRecordClassDynArray; out SQL: RawUTF8): RawUTF8;
-    /// fill all published properties of an object from a TSQLTable prepared row
+      out ObjectsClass: TORMClassDynArray; out SQL: RawUTF8): RawUTF8;
+    /// fill all published properties of an object from a TORMTable prepared row
     // - FillPrepare() must have been called before
     // - if Dest is nil, this object values are filled
     // - if Dest is not nil, this object values will be filled, but it won't
-    // work with TSQLRecordMany properties (i.e. after FillPrepareMany call)
+    // work with TORMMany properties (i.e. after FillPrepareMany call)
     // - ID field is updated if first Field Name is 'ID'
     // - Row number is from 1 to Table.RowCount
     // - setter method (write Set*) is called if available
     // - handle UTF-8 SQL to Delphi values conversion (see TPropInfo mapping)
     // - this method has been made virtual e.g. so that a calculated value can be
     // used in a custom field
-    function FillRow(aRow: integer; aDest: TSQLRecord = nil): boolean; virtual;
+    function FillRow(aRow: integer; aDest: TORM = nil): boolean; virtual;
     /// fill all published properties of this object from the next available
-    // TSQLTable prepared row
+    // TORMTable prepared row
     // - FillPrepare() must have been called before
     // - the Row number is taken from property FillCurrentRow
     // - return true on success, false if no more Row data is available
     // - internally call FillRow() to update published properties values
-    function FillOne(aDest: TSQLRecord = nil): boolean;
+    function FillOne(aDest: TORM = nil): boolean;
     /// go to the first prepared row, ready to loop through all rows with FillOne()
     // - the Row number (property FillCurrentRow) is reset to 1
     // - return true on success, false if no Row data is available
@@ -3941,9 +3941,9 @@ type
     function FillRewind: boolean;
     /// close any previous FillPrepare..FillOne loop
     // - is called implicitely by FillPrepare() call to release any previous loop
-    // - release the internal hidden TSQLTable instance if necessary
-    // - is not mandatory if the TSQLRecord is released just after, since
-    // TSQLRecord.Destroy will call it
+    // - release the internal hidden TORMTable instance if necessary
+    // - is not mandatory if the TORM is released just after, since
+    // TORM.Destroy will call it
     // - used e.g. by FillFrom methods below to avoid any GPF/memory confusion
     procedure FillClose;
     /// will iterate over all FillPrepare items, appending them as a JSON array
@@ -3951,11 +3951,11 @@ type
     // ! while FillOne do GetJSONValues(W)...
     procedure AppendFillAsJsonValues(W: TJSONSerializer);
 
-    /// fill all published properties of this object from a TSQLTable result row
+    /// fill all published properties of this object from a TORMTable result row
     // - call FillPrepare() then FillRow(Row)
-    procedure FillFrom(Table: TSQLTable; Row: integer); overload;
+    procedure FillFrom(Table: TORMTable; Row: integer); overload;
     /// fill all published properties of this object from a JSON result row
-    // - create a TSQLTable from the JSON data
+    // - create a TORMTable from the JSON data
     // - call FillPrepare() then FillRow(Row)
     procedure FillFrom(const JSONTable: RawUTF8; Row: integer); overload;
     /// fill all published properties of this object from a JSON object result
@@ -3964,7 +3964,7 @@ type
     // - make an internal copy of the JSONTable RawUTF8 before calling
     // FillFrom() below
     // - if FieldBits is defined, it will store the identified field index
-    procedure FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBits = nil); overload;
+    procedure FillFrom(const JSONRecord: RawUTF8; FieldBits: PFieldBits = nil); overload;
     /// fill all published properties of this object from a JSON result
     // - the data inside P^ is modified (unescaped and transformed): don't call
     // FillFrom(pointer(JSONRecordUTF8)) but FillFrom(JSONRecordUTF8) which makes
@@ -3972,18 +3972,18 @@ type
     // - use JSON data, as exported by GetJSONValues()
     // - JSON data may be expanded or not
     // - if FieldBits is defined, it will store the identified field index
-    procedure FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits = nil); overload;
+    procedure FillFrom(P: PUTF8Char; FieldBits: PFieldBits = nil); overload;
     /// fill all published properties of this object from another object
     // - source object must be a parent or of the same class as the current record
     // - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
-    // those fields don't contain any data, but a TSQLRecordMany instance
+    // those fields don't contain any data, but a TORMMany instance
     // which allow to access to the pivot table data)
-    procedure FillFrom(aRecord: TSQLRecord); overload;
+    procedure FillFrom(aRecord: TORM); overload;
     /// fill the specified properties of this object from another object
     // - source object must be a parent or of the same class as the current record
     // - copy the fields, as specified by their bit index in the source record;
     // you may use aRecord.GetNonVoidFields if you want to update some fields
-    procedure FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits); overload;
+    procedure FillFrom(aRecord: TORM; const aRecordFieldBits: TFieldBits); overload;
     /// fill all published properties of this object from a supplied TDocVariant
     // object document
     // - is a wrapper around VariantSaveJSON() + FillFrom() methods
@@ -3991,26 +3991,26 @@ type
     /// fill a published property value of this object from a UTF-8 encoded value
     // - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
     // - use this method to fill a BLOB property, i.e. a property defined with
-    // type TSQLRawBlob, since by default all BLOB properties are not
+    // type TRawBlob, since by default all BLOB properties are not
     // set by the standard Retrieve() method (to save bandwidth)
     // - if FieldBits is defined, it will store the identified field index
     procedure FillValue(PropName, Value: PUTF8Char; wasString: boolean;
-      FieldBits: PSQLFieldBits = nil);
+      FieldBits: PFieldBits = nil);
 
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
     // - instances must be of the same class type
-    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
+    // - only simple fields (i.e. not TRawBlob/TORMMany) are compared
     // - comparison is much faster than SameValues() below
-    function SameRecord(Reference: TSQLRecord): boolean;
+    function SameRecord(Reference: TORM): boolean;
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
     // - work with different classes: Reference properties name must just be
     // present in the calling object
-    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
+    // - only simple fields (i.e. not TRawBlob/TORMMany) are compared
     // - compare the text representation of the values: fields may be of different
     // type, encoding or precision, but still have same values
-    function SameValues(Reference: TSQLRecord): boolean;
+    function SameValues(Reference: TORM): boolean;
     /// clear the values of all published properties, and also the ID property
     procedure ClearProperties; overload;
     /// clear the values of specified published properties
@@ -4018,8 +4018,8 @@ type
     procedure ClearProperties(const aFieldsCSV: RawUTF8); overload;
     /// set the simple fields with the supplied values
     // - the aSimpleFields parameters must follow explicitely the order of published
-    // properties of the supplied aTable class, excepting the TSQLRawBlob and
-    // TSQLRecordMany kind (i.e. only so called "simple fields") - in particular,
+    // properties of the supplied aTable class, excepting the TRawBlob and
+    // TORMMany kind (i.e. only so called "simple fields") - in particular,
     // parent properties must appear first in the list
     // - the aSimpleFields must have exactly the same count of parameters as there are
     // "simple fields" in the published properties
@@ -4041,8 +4041,8 @@ type
     function DynArray(DynArrayFieldIndex: integer): TDynArray; overload;
 
     /// this property stores the record's integer ID
-    // - if this TSQLRecord is not a instance, but a field value in a published
-    //  property of type sftID (i.e. TSQLRecord(aID)), this method will try
+    // - if this TORM is not a instance, but a field value in a published
+    //  property of type sftID (i.e. TORM(aID)), this method will try
     //  to retrieve it; but prefered method is to typecast it via PtrInt(aProperty),
     //  because GetID() relies on some low-level Windows memory mapping trick, and
     //  will recognize an ID value up to 1,048,576 (i.e. $100000)
@@ -4050,41 +4050,41 @@ type
     //  aRecord.ID := someID in your code, since the ID is set during Retrieve or
     //  Add of the record
     // - use parent TSynPersistentID.IDValue property for direct read/write
-    // access to the record's ID field, if you know that this TSQLRecord is a
+    // access to the record's ID field, if you know that this TORM is a
     // true allocated class instance
     property ID: TID read GetID;
-    /// this read-only property can be used to retrieve the ID as a TSQLRecord object
-    // - published properties of type TSQLRecord (one-to-many relationship) do not
+    /// this read-only property can be used to retrieve the ID as a TORM object
+    // - published properties of type TORM (one-to-many relationship) do not
     // store real class instances (only exception is if they inherit from
-    // TSQLRecordMany) - you can use this value to assign a TSQLRecord instance
+    // TORMMany) - you can use this value to assign a TORM instance
     // to a published property, as such:
-    // ! Main := TSQLRecordMain.Create;
+    // ! Main := TORMMain.Create;
     // ! Client.Add(Main);
-    // ! Detail := TSQLRecordDetail.Create;
-    // ! Detail.Main := Main.AsTSQLRecord; // will store Main.ID in MAIN column
+    // ! Detail := TORMDetail.Create;
+    // ! Detail.Main := Main.AsTORM; // will store Main.ID in MAIN column
     // ! Client.Add(Detail);
     // - is especially useful on 64-bit plaform, since on 32-bit:
     // ! Detail.Main := pointer(Main.ID)
     // compiles (whereas it won't on 64-bit) and is the same than platform-independent
-    // ! Detail.Main := Main.AsTSQLRecord;
-    // - using Main.AsTSQLRecord will ensure that the ID is retrieved, even
+    // ! Detail.Main := Main.AsTORM;
+    // - using Main.AsTORM will ensure that the ID is retrieved, even
     // if Main itself is not a true instance
     // - if the stored ID is bigger than 32-bit, then it will raise an
     // EORMException: in this case, you should use a TID / T*ID kind of
-    // published property, and not a TSQLRecord, which is limited to the
+    // published property, and not a TORM, which is limited to the
     // pointer size
-    property AsTSQLRecord: pointer read GetIDAsPointer;
-    /// this property is set to true, if any published property is a BLOB (TSQLRawBlob)
+    property AsTORM: pointer read GetIDAsPointer;
+    /// this property is set to true, if any published property is a BLOB (TRawBlob)
     property HasBlob: boolean read GetHasBlob;
     /// this property returns the published property count with any valid
-    // database field except TSQLRawBlob/TSQLRecordMany
-    // - by default, the TSQLRawBlob (BLOB) fields are not included into this set:
+    // database field except TRawBlob/TORMMany
+    // - by default, the TRawBlob (BLOB) fields are not included into this set:
     // they must be read specificaly (in order to spare bandwidth)
-    // - TSQLRecordMany fields are not accessible directly, but as instances
-    // created by TSQLRecord.Create
+    // - TORMMany fields are not accessible directly, but as instances
+    // created by TORM.Create
     property SimpleFieldCount: integer read GetSimpleFieldCount;
-    /// this property contains the TSQLTable after a call to FillPrepare()
-    property FillTable: TSQLTable read GetTable;
+    /// this property contains the TORMTable after a call to FillPrepare()
+    property FillTable: TORMTable read GetTable;
     /// this property contains the current row number (beginning with 1),
     // initialized to 1 by FillPrepare(), which will be read by FillOne
     property FillCurrentRow: integer read GetFillCurrentRow;
@@ -4092,7 +4092,7 @@ type
     // FillPrepare / while FillOne do ...
     property FillReachedEnd: boolean read GetFillReachedEnd;
     /// used internally by FillPrepare() and corresponding Fill*() methods
-    property FillContext: TSQLRecordFill read fFill;
+    property FillContext: TORMFill read fFill;
     /// this property contains the internal state counter of the server database
     // when the data was retrieved from it
     // - can be used to check if retrieved data may be out of date
@@ -4101,51 +4101,51 @@ type
     { published properties in inherited classes will be interpreted as SQL fields }
   end;
 
-  PSQLRecord = ^TSQLRecord;
+  PSQLRecord = ^TORM;
 
-  TSQLRecordArray = array[0..MaxInt div SizeOf(TSQLRecord) - 1] of TSQLRecord;
-  PSQLRecordArray = ^TSQLRecordArray;
+  TORMArray = array[0..MaxInt div SizeOf(TORM) - 1] of TORM;
+  PSQLRecordArray = ^TORMArray;
 
   /// information about a TID published property
-  // - identified as a sftTID kind of property, optionally tied to a TSQLRecord
+  // - identified as a sftTID kind of property, optionally tied to a TORM
   // class, via its custom type name, e.g.
-  // ! TSQLRecordClientID = type TID;  ->  TSQLRecordClient class
-  TSQLPropInfoRTTITID = class(TSQLPropInfoRTTIRecordReference)
+  // ! TORMClientID = type TID;  ->  TORMClient class
+  TORMPropInfoRTTITID = class(TORMPropInfoRTTIRecordReference)
   protected
-    fRecordClass: TSQLRecordClass;
+    fRecordClass: TORMClass;
   public
     /// will setup the corresponding RecordClass property from the TID type name
-    // - the TSQLRecord type should have previously been registered to the
-    // TJSONSerializer.RegisterClassForJSON list, e.g. in TSQLModel.Create, so
-    // that e.g. 'TSQLRecordClientID' type name will match TSQLRecordClient
+    // - the TORM type should have previously been registered to the
+    // TJSONSerializer.RegisterClassForJSON list, e.g. in TORMModel.Create, so
+    // that e.g. 'TORMClientID' type name will match TORMClient
     // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
-    /// the TSQLRecord class associated to this TID
+      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+    /// the TORM class associated to this TID
     // - is computed from its type name - for instance, if you define:
     // ! type
-    // !   TSQLRecordClientID = type TID;
-    // !   TSQLOrder = class(TSQLRecord)
+    // !   TORMClientID = type TID;
+    // !   TORMOrder = class(TORM)
     // !   ...
-    // !   published OrderedBy: TSQLRecordClientID read fOrderedBy write fOrderedBy;
+    // !   published OrderedBy: TORMClientID read fOrderedBy write fOrderedBy;
     // !   ...
-    // then this OrderedBy property will be tied to the TSQLRecordClient class
+    // then this OrderedBy property will be tied to the TORMClient class
     // of the corresponding model, and the field value will be reset to 0 when
     // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
-    // - equals TSQLRecord for plain TID field
+    // - equals TORM for plain TID field
     // - equals nil if T*ID type name doesn't match any registered class
-    property RecordClass: TSQLRecordClass read fRecordClass;
+    property RecordClass: TORMClass read fRecordClass;
     /// TRUE if this sftTID type name follows the '...ToBeDeletedID' pattern
-    // - e.g. 'TSQLRecordClientToBeDeletedID' type name will match
-    // TSQLRecordClient and set CascadeDelete
+    // - e.g. 'TORMClientToBeDeletedID' type name will match
+    // TORMClient and set CascadeDelete
     // - is computed from its type name - for instance, if you define:
     // ! type
-    // !   TSQLRecordClientToBeDeletedID = type TID;
-    // !   TSQLOrder = class(TSQLRecord)
+    // !   TORMClientToBeDeletedID = type TID;
+    // !   TORMOrder = class(TORM)
     // !   ...
-    // !   published OrderedBy: TSQLRecordClientToBeDeletedID read fOrderedBy write fOrderedBy;
+    // !   published OrderedBy: TORMClientToBeDeletedID read fOrderedBy write fOrderedBy;
     // !   ...
-    // then this OrderedBy property will be tied to the TSQLRecordClient class
+    // then this OrderedBy property will be tied to the TORMClient class
     // of the corresponding model, and the whole record will be deleted when
     // the targetting record is deleted (emulating a ON DELETE CASCADE)
     property CascadeDelete: boolean read fCascadeDelete;
@@ -4158,8 +4158,8 @@ type
   TRestORMGenerics = class(TInterfacedObject)
   protected
     // needed to implement RetrieveList<T> actual data retrieval
-    function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTable;
+    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TORMTable;
       overload; virtual; abstract;
   public
     /// access to ORM parametrized/generic methods
@@ -4177,11 +4177,11 @@ type
     // - since Delphi interface cannot have parametrized methods, we need to
     // call this overloaded TRestORMGenerics method to use generics signature
     // - you can write for instance:
-    // !var list: TObjectList<TSQLRecordTest>;
-    // !    R: TSQLRecordTest;
+    // !var list: TObjectList<TORMTest>;
+    // !    R: TORMTest;
     // !    orm: IRestORM
     // ! ...
-    // !    list := orm.Generics.RetrieveList<TSQLRecordTest>('ID,Test');
+    // !    list := orm.Generics.RetrieveList<TORMTest>('ID,Test');
     // !    if list <> nil then
     // !    try
     // !      for R in list do
@@ -4189,7 +4189,7 @@ type
     // !    finally
     // !      list.Free;
     // !    end;
-    function RetrieveList<T: TSQLRecord>(
+    function RetrieveList<T: TORM>(
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
        {$ifdef HASINLINE}inline;{$endif}
     /// get a list of members from a SQL statement
@@ -4207,7 +4207,7 @@ type
     // - return nil on error
     // - since Delphi interface cannot have parametrized methods, we need to
     // call this overloaded TRestORMGenerics method to use generics signature
-    function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
+    function RetrieveList<T: TORM>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
   end;
@@ -4227,17 +4227,17 @@ type
   { -------------------- RecordRef Wrapper Definition }
 
   /// useful object to type cast TRecordReference type value into explicit
-  // TSQLRecordClass and ID
+  // TORMClass and ID
   // - use RecordRef(Reference).TableIndex/Table/ID/Text methods to retrieve
   // the details of a TRecordReference encoded value
   // - use TRest.Retrieve(Reference) to get a record content from DB
   // - instead of From(Reference).From(), you could use the more explicit
-  // TSQLRecord.RecordReference(Model) or TSQLModel.RecordReference()
+  // TORM.RecordReference(Model) or TORMModel.RecordReference()
   // methods or RecordReference() function to encode the value
-  // - don't change associated TSQLModel tables order, since TRecordReference
+  // - don't change associated TORMModel tables order, since TRecordReference
   // depends on it to store the Table type
   // - since 6 bits are used for the table index, the corresponding table
-  // MUST appear in the first 64 items of the associated TSQLModel.Tables[]
+  // MUST appear in the first 64 items of the associated TORMModel.Tables[]
   RecordRef = object
   public
     /// the value itself
@@ -4251,21 +4251,21 @@ type
     // typecast as such:
     // ! aClass := PRecordRef(@Reference)^.Table(Model);
     Value: TID;
-    /// return the index of the content Table in the TSQLModel
+    /// return the index of the content Table in the TORMModel
     function TableIndex: integer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return the class of the content in a specified TSQLModel
-    function Table(Model: TSQLModel): TSQLRecordClass;
+    /// return the class of the content in a specified TORMModel
+    function Table(Model: TORMModel): TORMClass;
     /// return the ID of the content
     function ID: TID;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill Value with the corresponding parameters
     // - since 6 bits are used for the table index, aTable MUST appear in the
-    // first 64 items of the associated TSQLModel.Tables[] array
-    procedure From(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID);
+    // first 64 items of the associated TORMModel.Tables[] array
+    procedure From(Model: TORMModel; aTable: TORMClass; aID: TID);
     /// get a ready to be displayed text from the stored Table and ID
     // - display 'Record 2301' e.g.
-    function Text(Model: TSQLModel): RawUTF8; overload;
+    function Text(Model: TORMModel): RawUTF8; overload;
     /// get a ready to be displayed text from the stored Table and ID
     // - display 'Record "RecordName"' e.g.
     function Text(const Rest: IRestORM): RawUTF8; overload;
@@ -4274,20 +4274,20 @@ type
   PRecordRef = ^RecordRef;
 
 
-  { -------------------- TSQLTable TSQLTableJSON Definitions }
+  { -------------------- TORMTable TORMTableJSON Definitions }
 
-  /// allow on-the-fly translation of a TSQLTable grid value
+  /// allow on-the-fly translation of a TORMTable grid value
   // - should return valid JSON value of the given cell (i.e. quoted strings,
   // or valid JSON object/array) unless HumanFriendly is defined
-  // - e.g. TSQLTable.OnExportValue property will customize TSQLTable's
+  // - e.g. TORMTable.OnExportValue property will customize TORMTable's
   // GetJSONValues, GetHtmlTable, and GetCSVValues methods returned content
-  TOnSQLTableGetValue = function(Sender: TSQLTable; Row, Field: integer;
+  TOnSQLTableGetValue = function(Sender: TORMTable; Row, Field: integer;
     HumanFriendly: boolean): RawJSON of object;
 
-  /// store TSQLFieldType and RTTI for a given TSQLTable field
-  TSQLTableFieldType = record
-    /// the field kind, as in JSON (match TSQLPropInfo.SQLFieldTypeStored)
-    ContentType: TSQLFieldType;
+  /// store TORMFieldType and RTTI for a given TORMTable field
+  TORMTableFieldType = record
+    /// the field kind, as in JSON (match TORMPropInfo.SQLFieldTypeStored)
+    ContentType: TORMFieldType;
     /// how this field could be stored in a database
     // - equals ftUnknown if InitFields guessed the field type, or for sftVariant
     ContentDB: TSQLDBFieldType;
@@ -4301,22 +4301,22 @@ type
     TableIndex: integer;
   end;
 
-  PSQLTableFieldType = ^TSQLTableFieldType;
+  PSQLTableFieldType = ^TORMTableFieldType;
 
   /// wrapper to an ORM result table, staticaly stored as UTF-8 text
   // - contain all result in memory, until destroyed
   // - first row contains the field names
   // - following rows contains the data itself
   // - GetString() can be used in a TDrawString
-  // - will be implemented as TSQLTableJSON for remote access through optimized
+  // - will be implemented as TORMTableJSON for remote access through optimized
   // JSON content
-  TSQLTable = class
+  TORMTable = class
   protected
     fRowCount: integer;
     fFieldCount: integer;
     /// contains the data, e.g. as returned by sqlite3_get_table()
     fResults: PPUTF8CharArray;
-    fFieldType: array of TSQLTableFieldType;
+    fFieldType: array of TORMTableFieldType;
     fFieldTypeAllRows: boolean;
     /// the field names
     fFieldNames: TRawUTF8DynArray;
@@ -4329,16 +4329,16 @@ type
     /// the internal state counter of the database when the data was retrieved
     fInternalState: cardinal;
     /// contains the parameters used for sorting
-    fSortParams: TSQLTableSortParams;
-    /// contains the TSQLRecord instances created by NewRecord method
+    fSortParams: TORMTableSortParams;
+    /// contains the TORM instances created by NewRecord method
     fOwnedRecords: TSynObjectList;
-    /// if the TSQLRecord is the owner of this table, i.e. if it must free it
+    /// if the TORM is the owner of this table, i.e. if it must free it
     fOwnerMustFree: boolean;
     /// current cursor row (1..RowCount), as set by the Step() method
     fStepRow: integer;
     /// information about the Query sourcing this result set
-    fQueryTables: TSQLRecordClassDynArray;
-    fQueryColumnTypes: array of TSQLFieldType;
+    fQueryTables: TORMClassDynArray;
+    fQueryColumnTypes: array of TORMFieldType;
     fQuerySQL: RawUTF8;
     fQueryTableNameFromSQL: RawUTF8;
     fQueryTableIndexFromSQL: integer; // -2=nosearch -1=notfound fQueryTables[0..n]
@@ -4348,7 +4348,7 @@ type
     /// column bit set at parsing to mark a string value (e.g. "..." in JSON)
     fFieldParsedAsString: set of 0..255;
     fOnExportValue: TOnSQLTableGetValue;
-    /// avoid GPF when TSQLTable is nil
+    /// avoid GPF when TORMTable is nil
     function GetRowCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
@@ -4357,21 +4357,21 @@ type
     procedure InitFieldNames;
     /// guess the property type information from ORM
     function FieldPropFromTables(const PropName: RawUTF8;
-      out PropInfo: TSQLPropInfo; out TableIndex: integer): TSQLFieldType;
+      out PropInfo: TORMPropInfo; out TableIndex: integer): TORMFieldType;
     function GetQueryTableNameFromSQL: RawUTF8;
   public
     /// initialize the result table
-    // - you can optionaly associate the corresponding TSQLRecordClass types,
+    // - you can optionaly associate the corresponding TORMClass types,
     // by which the results were computed (it will use RTTI for column typing)
     constructor Create(const aSQL: RawUTF8);
     /// initialize the result table
-    // - you can associate the corresponding TSQLRecordClass types,
+    // - you can associate the corresponding TORMClass types,
     // by which the results were computed (it will use RTTI for column typing)
-    constructor CreateFromTables(const Tables: array of TSQLRecordClass;
+    constructor CreateFromTables(const Tables: array of TORMClass;
       const aSQL: RawUTF8);
     /// initialize the result table
     // - you can set the expected column types matching the results column layout
-    constructor CreateWithColumnTypes(const ColumnTypes: array of TSQLFieldType;
+    constructor CreateWithColumnTypes(const ColumnTypes: array of TORMFieldType;
       const aSQL: RawUTF8);
     /// free associated memory and owned records
     destructor Destroy; override;
@@ -4449,7 +4449,7 @@ type
     // - sftDateTime/sftDateTimeMS will be converted from ISO-8601 text
     // - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
     // encoded as a TTimeLog Int64 value - as sftInteger may have been
-    // identified by TSQLTable.InitFieldTypes
+    // identified by TORMTable.InitFieldTypes
     // - sftUnixTime/sftUnixMSTime field will call UnixTimeToDateTime/UnixMSTimeToDateTime
     // - for sftTimeLog, sftModTime, sftCreateTime or sftUnixTime fields, you
     // may have to force the column type, since it may be identified as sftInteger
@@ -4473,11 +4473,11 @@ type
     // - then System.LoadResStringTranslate() is called if available
     function GetCaption(Row, Field: integer): string;
     /// read-only access to a particular Blob value
-    // - a new TSQLRawBlob is created
+    // - a new TRawBlob is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
     // or Base-64 encoded content ('\uFFF0base64encodedbinary')
     // - prefered manner is to directly use REST protocol to retrieve a blob field
-    function GetBlob(Row, Field: integer): TSQLRawBlob;
+    function GetBlob(Row, Field: integer): TRawBlob;
     /// read-only access to a particular Blob value
     // - a new TBytes is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
@@ -4491,8 +4491,7 @@ type
     // - prefered manner is to directly use REST protocol to retrieve a blob field
     function GetStream(Row, Field: integer): TStream;
     /// read-only access to a particular field value, as VCL text
-    // - Client is one TSQLClient instance (used to display TRecordReference via
-    // the associated TSQLModel)
+    // - Client is used to display TRecordReference via the associated TORMModel
     // - returns the Field Type
     // - return generic string Text, i.e. UnicodeString for Delphi 2009+, ready
     // to be displayed to the VCL, for sftEnumerate, sftTimeLog,
@@ -4509,14 +4508,13 @@ type
     // of fields (as sftDateTime, sftDateTimeMS, sftTimeLog, sftModTime,
     // sftCreateTime, sftUnixTime, sftUnixMSTime)
     function ExpandAsString(Row, Field: integer; const Client: IRestORM;
-      out Text: string; const CustomFormat: string = ''): TSQLFieldType;
+      out Text: string; const CustomFormat: string = ''): TORMFieldType;
     /// read-only access to a particular field value, as VCL text
     // - this method is just a wrapper around ExpandAsString method, returning
     // the content as a SynUnicode string type (i.e. UnicodeString since Delphi
     // 2009, and WideString for non Unicode versions of Delphi)
-    // - it is used by the reporting layers of the framework (e.g. TSQLRibbon.AddToReport)
     function ExpandAsSynUnicode(Row, Field: integer; const Client: IRestORM;
-      out Text: SynUnicode): TSQLFieldType;
+      out Text: SynUnicode): TORMFieldType;
     /// read-only access to a particular DateTime field value
     // - expect SQLite3 TEXT field in ISO 8601 'YYYYMMDD hhmmss' or
     // 'YYYY-MM-DD hh:mm:ss' format
@@ -4543,7 +4541,7 @@ type
     // - returns the total length as result, and fill LenStore with all rows
     // individual lengths using StrLen() - caller should eventually call
     // LenStore.Done to release any temp memory
-    // - returns 0 if Field is invalid or no data is stored in this TSQLTable -
+    // - returns 0 if Field is invalid or no data is stored in this TORMTable -
     // don't call LenStore.Done in this case
     function GetRowLengths(Field: integer; var LenStore: TSynTempBuffer): integer;
     /// retrieve a field value in a variant
@@ -4555,7 +4553,7 @@ type
     /// retrieve a row value as a variant, ready to be accessed via late-binding
     // - Row parameter numbering starts from 1 to RowCount
     // - this method will return a TDocVariant containing a copy of all
-    // field values of this row, uncoupled to the TSQLTable instance life time
+    // field values of this row, uncoupled to the TORMTable instance life time
     // - expand* methods will allow to return human-friendly representations
     procedure ToDocVariant(Row: integer; out doc: variant;
       options: TDocVariantOptions = JSON_OPTIONS_FAST;
@@ -4563,20 +4561,20 @@ type
       expandHugeIDAsUniqueIdentifier: boolean = false); overload;
     /// retrieve all row values as a dynamic array of variants, ready to be
     // accessed via late-binding
-    // - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
-    // will point directly to the TSQLTable, which should remain allocated
+    // - if readonly is TRUE, will contain an array of TORMTableRowVariant, which
+    // will point directly to the TORMTable, which should remain allocated
     // - if readonly is FALSE, will contain an array of TDocVariant, containing
-    // a copy of all field values of this row, uncoupled to the TSQLTable instance
+    // a copy of all field values of this row, uncoupled to the TORMTable instance
     // - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
     // may be slightly slower to access than readonly=FALSE, if all values are
     // likely be accessed later in the process
     procedure ToDocVariant(out docs: TVariantDynArray; readonly: boolean); overload;
     /// retrieve all row values as a TDocVariant of kind dvArray, ready to be
     // accessed via late-binding
-    // - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
-    // will point directly to the TSQLTable, which should remain allocated
+    // - if readonly is TRUE, will contain an array of TORMTableRowVariant, which
+    // will point directly to the TORMTable, which should remain allocated
     // - if readonly is FALSE, will contain an array of TDocVariant, containing
-    // a copy of all field values of this row, uncoupled to the TSQLTable instance
+    // a copy of all field values of this row, uncoupled to the TORMTable instance
     // - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
     // may be slightly slower to access than readonly=FALSE, if all values are
     // likely be accessed later in the process
@@ -4588,7 +4586,7 @@ type
     // - if Expand is true, JSON data is an array of objects, for direct use
     // with any Ajax or .NET client:
     // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if W.Expand is false, JSON data is serialized (used in TSQLTableJSON)
+    // - if W.Expand is false, JSON data is serialized (used in TORMTableJSON)
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - RowFirst and RowLast can be used to ask for a specified row extent
     // of the returned data (by default, all rows are retrieved)
@@ -4647,7 +4645,7 @@ type
     // - raise an ESQLTableException if not found, index (0..FieldCount-1) if found
     function FieldIndexExisting(const FieldName: RawUTF8): integer; overload;
     /// get the Field indexes of several Field names
-    // - could be used to speed-up field access in a TSQLTable loop, avoiding
+    // - could be used to speed-up field access in a TORMTable loop, avoiding
     // a FieldIndex(aFieldName) lookup for each value
     // - returns the number of matching Field names
     // - set -1 in FieldIndexes[]^ if not found, index (0..FieldCount-1) if found
@@ -4656,9 +4654,9 @@ type
     /// get the Field indexes of several Field names
     // - raise an ESQLTableException if not found
     // - set FieldIndexes[]^ to the index (0..FieldCount-1) if found
-    // - could be used to speed-up field access in a TSQLTable loop, avoiding
+    // - could be used to speed-up field access in a TORMTable loop, avoiding
     // a FieldIndex(aFieldName) lookup for each value, as such:
-    //! list := TSQLTableJSON.Create('',pointer(json),length(json));
+    //! list := TORMTableJSON.Create('',pointer(json),length(json));
     //! list.FieldIndexExisting(
     //!   ['FirstName','LastName','YearOfBirth','YearOfDeath','RowID','Data'],
     //!   [@FirstName,@LastName,@YearOfBirth,@YearOfDeath,@RowID,@Data]);
@@ -4684,12 +4682,12 @@ type
     // designed field, and, if the field value is identical, the ID value is
     // used (it will therefore sort by time all identical values)
     procedure SortFields(Field: integer; Asc: boolean = true;
-      PCurrentRow: PInteger = nil; FieldType: TSQLFieldType = sftUnknown;
+      PCurrentRow: PInteger = nil; FieldType: TORMFieldType = sftUnknown;
       CustomCompare: TUTF8Compare = nil); overload;
     /// sort result Rows, according to a specific field
     // - overloaded method allowing to specify the field by its name
     procedure SortFields(const FieldName: RawUTF8; Asc: boolean = true;
-      PCurrentRow: PInteger = nil; FieldType: TSQLFieldType = sftUnknown;
+      PCurrentRow: PInteger = nil; FieldType: TORMFieldType = sftUnknown;
       CustomCompare: TUTF8Compare = nil); overload;
     /// sort result Rows, according to some specific fields
     // - is able to make multi-field sort
@@ -4710,17 +4708,17 @@ type
     // - return sftUnknown is all data fields are null
     // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
     // (X'53514C697465' e.g.)
-    // - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only
-    function FieldType(Field: integer): TSQLFieldType; overload;
+    // - since TORMTable data is PUTF8Char, string type is sftUTF8Text only
+    function FieldType(Field: integer): TORMFieldType; overload;
     /// guess the field type from first non null data row
     // - if QueryTables[] are set, exact field type and (enumerate) TypeInfo() is
     // retrieved from the Delphi RTTI; otherwise, get from the cells content
     // - return sftUnknown is all data fields are null
     // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
     // (X'53514C697465' e.g.)
-    // - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only
+    // - since TORMTable data is PUTF8Char, string type is sftUTF8Text only
     function FieldType(Field: integer;
-      out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType; overload;
+      out FieldTypeInfo: PSQLTableFieldType): TORMFieldType; overload;
     /// get the appropriate Sort comparison function for a field,
     // nil if not available (bad field index or field is blob)
     // - field type is guessed from first data row
@@ -4744,7 +4742,7 @@ type
     /// get the record class (i.e. the table) associated to a field
     // - is nil if this table has no QueryTables property
     // - very fast: calculated only once for all fields
-    function FieldTable(Field: integer): TSQLRecordClass;
+    function FieldTable(Field: integer): TORMClass;
     /// force the mean of characters length for every field
     // - expect as many parameters as fields in this table
     // - override internal fFieldLengthMean[] and fFieldLengthMeanSum values
@@ -4758,7 +4756,7 @@ type
     // ! aTable.SetFieldType(0, sftEnumerate, TypeInfo(TEnumSample));
     // ! aTable.SetFieldType(1, sftSet, TypeInfo(TSetSamples));
     // or for dynamic arrays
-    procedure SetFieldType(Field: integer; FieldType: TSQLFieldType;
+    procedure SetFieldType(Field: integer; FieldType: TORMFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1;
       FieldTableIndex: integer = -1); overload;
     /// set the exact type of a given field
@@ -4769,7 +4767,7 @@ type
     // - FieldTypeInfo can be specified for sets or enumerations, as such:
     // ! aTable.SetFieldType('Sample', sftEnumerate, TypeInfo(TEnumSample));
     // ! aTable.SetFieldType('Samples', sftSet, TypeInfo(TSetSamples));
-    procedure SetFieldType(const FieldName: RawUTF8; FieldType: TSQLFieldType;
+    procedure SetFieldType(const FieldName: RawUTF8; FieldType: TORMFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1); overload;
     /// set the exact type of all fields, from the DB-like information
     procedure SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
@@ -4778,10 +4776,10 @@ type
     // checkbox for Marked[] fields)
     procedure FieldLengthMeanIncrease(aField, aIncrease: integer);
 
-    /// copy the parameters of a TSQLTable into this instance
-    // - the Results[] remain in the source TSQLTable: source TSQLTable has not
-    // to be destroyed before this TSQLTable
-    procedure Assign(source: TSQLTable);
+    /// copy the parameters of a TORMTable into this instance
+    // - the Results[] remain in the source TORMTable: source TORMTable has not
+    // to be destroyed before this TORMTable
+    procedure Assign(source: TORMTable);
 
     /// search a text value inside the table data in a specified field
     // - the text value must already be uppercased 7-bits ANSI encoded
@@ -4877,44 +4875,44 @@ type
     function DeleteColumnValues(Field: integer): boolean;
 
     /// retrieve QueryTables[0], if existing
-    function QueryRecordType: TSQLRecordClass;
+    function QueryRecordType: TORMClass;
 
-    /// create a new TSQLRecord instance for a specific Table
-    // - a void TSQLRecord instance is created, ready to be filled
-    // - use the specified TSQLRecord class or create one instance
+    /// create a new TORM instance for a specific Table
+    // - a void TORM instance is created, ready to be filled
+    // - use the specified TORM class or create one instance
     // of the first associated record class (from internal QueryTables[])
-    // - the returned records will be managed by this TSQLTable: they will be
-    // freed when the TSQLTable is destroyed: you don't need to make a
+    // - the returned records will be managed by this TORMTable: they will be
+    // freed when the TORMTable is destroyed: you don't need to make a
     // try..finally..Free..end block with them
-    function NewRecord(RecordType: TSQLRecordClass = nil): TSQLRecord;
-    /// create a TObjectList with TSQLRecord instances corresponding to this
-    // TSQLTable result set
-    // - use the specified TSQLRecord class or create instances
+    function NewRecord(RecordType: TORMClass = nil): TORM;
+    /// create a TObjectList with TORM instances corresponding to this
+    // TORMTable result set
+    // - use the specified TORM class or create instances
     // of the first associated record class (from internal QueryTables[])
-    // - always returns an instance, even if the TSQLTable is nil or void
-    function ToObjectList(RecordType: TSQLRecordClass = nil): TObjectList; overload;
-    /// fill an existing TObjectList with TSQLRecord instances corresponding
-    // to this TSQLTable result set
-    // - use the specified TSQLRecord class or create instances
+    // - always returns an instance, even if the TORMTable is nil or void
+    function ToObjectList(RecordType: TORMClass = nil): TObjectList; overload;
+    /// fill an existing TObjectList with TORM instances corresponding
+    // to this TORMTable result set
+    // - use the specified TORM class or create instances
     // of the first associated record class (from internal QueryTables[])
     procedure ToObjectList(DestList: TObjectList;
-      RecordType: TSQLRecordClass = nil); overload;
+      RecordType: TORMClass = nil); overload;
     {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-    /// create a TObjectList<TSQLRecord> with TSQLRecord instances corresponding
-    // to this TSQLTable result set
-    // - use the specified TSQLRecord class or create instances
+    /// create a TObjectList<TORM> with TORM instances corresponding
+    // to this TORMTable result set
+    // - use the specified TORM class or create instances
     // of the first associated record class (from internal QueryTables[])
-    // - always returns an instance, even if the TSQLTable is nil or void
-    function ToObjectList<T: TSQLRecord>: TObjectList<T>; overload;
+    // - always returns an instance, even if the TORMTable is nil or void
+    function ToObjectList<T: TORM>: TObjectList<T>; overload;
     {$endif ISDELPHI2010}
-    /// fill an existing T*ObjArray variable with TSQLRecord instances
-    // corresponding to this TSQLTable result set
-    // - use the specified TSQLRecord class or create instances
+    /// fill an existing T*ObjArray variable with TORM instances
+    // corresponding to this TORMTable result set
+    // - use the specified TORM class or create instances
     // of the first associated record class (from internal QueryTables[])
     // - returns TRUE on success (even if ObjArray=[]), FALSE on error
-    function ToObjArray(var ObjArray; RecordType: TSQLRecordClass = nil): boolean;
+    function ToObjArray(var ObjArray; RecordType: TORMClass = nil): boolean;
 
-    /// after a TSQLTable has been initialized, this method can be called
+    /// after a TORMTable has been initialized, this method can be called
     // one or more times to iterate through all data rows
     // - you shall call this method before calling FieldBuffer()/Field() methods
     // - return TRUE on success, with data ready to be retrieved by Field*()
@@ -4990,7 +4988,7 @@ type
     function Field(const FieldName: RawUTF8): variant; overload;
 
     /// contains the associated record class on Query
-    property QueryTables: TSQLRecordClassDynArray read fQueryTables;
+    property QueryTables: TORMClassDynArray read fQueryTables;
     /// contains the associated SQL statement on Query
     property QuerySQL: RawUTF8 read fQuerySQL;
     /// returns the SQL Table name, guessed from the associated QuerySQL statement
@@ -4998,7 +4996,7 @@ type
     /// read-only access to the number of data Rows in this table
     // - first row contains field name
     // - then 1..RowCount rows contain the data itself
-    // - safely returns 0 if the TSQLTable instance is nil
+    // - safely returns 0 if the TORMTable instance is nil
     property RowCount: integer read GetRowCount;
     /// read-only access to the number of fields for each Row in this table
     property FieldCount: integer read fFieldCount;
@@ -5018,7 +5016,7 @@ type
     // - can be used to check if retrieved data may be out of date
     property InternalState: cardinal
       read fInternalState write fInternalState;
-    /// if the TSQLRecord is the owner of this table, i.e. if it must free it
+    /// if the TORM is the owner of this table, i.e. if it must free it
     property OwnerMustFree: boolean
       read fOwnerMustFree write fOwnerMustFree;
     /// by default, if field types are not set, only the content of the first
@@ -5026,7 +5024,7 @@ type
     // - you can set this property to TRUE so that all non string rows will
     // be checked for the exact number precision
     // - note that the safest is to provide the column type, either by supplying
-    // the TSQLRecord class, or by calling SetFieldType() overloaded methods
+    // the TORM class, or by calling SetFieldType() overloaded methods
     property FieldTypeIntegerDetectionOnAllRows: boolean
       read fFieldTypeAllRows write fFieldTypeAllRows;
     /// used by GetJsonValues, GetHtmlTable and GetCSVValues methods
@@ -5035,31 +5033,31 @@ type
       read fOnExportValue write fOnExportValue;
   end;
 
-  /// memory structure used for our TSQLTableRowVariant custom variant type
-  // used to have direct access to TSQLTable content
-  // - the associated TSQLTable must stay allocated as long as this variant
+  /// memory structure used for our TORMTableRowVariant custom variant type
+  // used to have direct access to TORMTable content
+  // - the associated TORMTable must stay allocated as long as this variant
   // is used, otherwise random GPF issues may occur
-  TSQLTableRowVariantData = packed record
+  TORMTableRowVariantData = packed record
     /// the custom variant type registered number
     VType: TVarType;
     VFiller: array[1..SizeOf(TVarData) - SizeOf(TVarType)
-      - SizeOf(TSQLTable) - SizeOf(integer)] of byte;
-    /// reference to the associated TSQLTable
-    VTable: TSQLTable;
+      - SizeOf(TORMTable) - SizeOf(integer)] of byte;
+    /// reference to the associated TORMTable
+    VTable: TORMTable;
     /// the row number corresponding to this value
     // - equals -1 if should follow StepRow property value
     VRow: integer;
   end;
 
-  /// pointer to the memory structure used for TSQLTableRowVariant storage
-  PSQLTableRowVariantData = ^TSQLTableRowVariantData;
+  /// pointer to the memory structure used for TORMTableRowVariant storage
+  PSQLTableRowVariantData = ^TORMTableRowVariantData;
 
-  /// a custom variant type used to have direct access to TSQLTable content
-  // - use TSQLTable.Step(..,@Data) method to initialize such a Variant
+  /// a custom variant type used to have direct access to TORMTable content
+  // - use TORMTable.Step(..,@Data) method to initialize such a Variant
   // - the variant members/fields are read-only by design
-  // - the associated TSQLTable must stay allocated as long as this variant
+  // - the associated TORMTable must stay allocated as long as this variant
   // is used, otherwise random GPF issues may occur
-  TSQLTableRowVariant = class(TSynInvokeableVariantType)
+  TORMTableRowVariant = class(TSynInvokeableVariantType)
   protected
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
@@ -5078,9 +5076,9 @@ type
   /// store a read-only ORM result table from a JSON message
   // - the JSON data is parsed and unescaped in-place, to enhanced performance
   // and reduce resource consumption (mainly memory/heap fragmentation)
-  // - is used by the ORM for TSQLRecord.FillPrepare/FillOne methods for
+  // - is used by the ORM for TORM.FillPrepare/FillOne methods for
   // fast access to individual object values
-  TSQLTableJSON = class(TSQLTable)
+  TORMTableJSON = class(TORMTable)
   protected
     /// used if a private copy of the JSON buffer is needed
     fPrivateCopy: RawUTF8;
@@ -5121,37 +5119,37 @@ type
     constructor Create(const aSQL, aJSON: RawUTF8); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
     // - the JSON data is parsed and formatted in-place
-    // - you can specify a set of TSQLRecord classes which will be used to
+    // - you can specify a set of TORM classes which will be used to
     // retrieve the column exact type information
     // - please note that the supplied JSON buffer content will be changed
-    constructor CreateFromTables(const Tables: array of TSQLRecordClass;
+    constructor CreateFromTables(const Tables: array of TORMClass;
       const aSQL: RawUTF8;
       JSONBuffer: PUTF8Char; JSONBufferLen: integer); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
-    // - you can specify a set of TSQLRecord classes which will be used to
+    // - you can specify a set of TORM classes which will be used to
     // retrieve the column exact type information
     // - the JSON data is parsed and formatted in-place, after having been
     // copied in the protected fPrivateCopy variable
-    constructor CreateFromTables(const Tables: array of TSQLRecordClass; const
+    constructor CreateFromTables(const Tables: array of TORMClass; const
       aSQL, aJSON: RawUTF8); reintroduce; overload;
     /// initialize the result table from a JSON-formated Data message
     // - you can set the expected column types matching the results column layout
     // - the JSON data is parsed and formatted in-place
-    constructor CreateWithColumnTypes(const ColumnTypes: array of TSQLFieldType;
+    constructor CreateWithColumnTypes(const ColumnTypes: array of TORMFieldType;
       const aSQL: RawUTF8; JSONBuffer: PUTF8Char; JSONBufferLen: integer);
       reintroduce; overload;
     /// initialize the result table from a JSON-formated Data message
     // - you can set the expected column types matching the results column layout
     // - the JSON data is parsed and formatted in-place, after having been
     // copied in the protected fPrivateCopy variable
-    constructor CreateWithColumnTypes(const ColumnTypes: array of TSQLFieldType;
+    constructor CreateWithColumnTypes(const ColumnTypes: array of TORMFieldType;
       const aSQL, aJSON: RawUTF8); reintroduce; overload;
 
     /// update the result table content from a JSON-formated Data message
     // - return true on parsing success, false if no valid JSON data was found
     // - set Refreshed to true if the content changed
     // - update all content fields (Results[], RowCount, FieldCount, etc...)
-    // - call SortFields() or IDColumnHide if was already done for this TSQLTable
+    // - call SortFields() or IDColumnHide if was already done for this TORMTable
     // - the conversion into PPUTF8CharArray is made inplace and is very fast
     // (only one memory buffer is allocated for the whole data)
     function UpdateFrom(const aJSON: RawUTF8; var Refreshed: boolean;
@@ -5168,13 +5166,13 @@ type
   end;
 
 
-  { -------------------- TSQLRecordMany Definition }
+  { -------------------- TORMMany Definition }
 
   /// the kind of fields to be available in a Table resulting of
-  // a TSQLRecordMany.DestGetJoinedTable() method call
+  // a TORMMany.DestGetJoinedTable() method call
   // - Source fields are not available, because they will be always the same for
-  // a same SourceID, and they should be available from the TSQLRecord which
-  // hold the TSQLRecordMany instance
+  // a same SourceID, and they should be available from the TORM which
+  // hold the TORMMany instance
   // - jkDestID and jkPivotID will retrieve only DestTable.ID and PivotTable.ID
   // - jkDestFields will retrieve DestTable.* simple fields, or the fields
   // specified by aCustomFieldsCSV (the Dest table name will be added: e.g.
@@ -5185,41 +5183,41 @@ type
   // - jkPivotAndDestAllFields for PivotTable.* and DestTable.* simple fields,
   // or will retrieve the specified aCustomFieldsCSV fields (with
   // the table name associated: e.g. 'PivotTable.One, DestTable.Two')
-  TSQLRecordManyJoinKind = (
+  TORMManyJoinKind = (
     jkDestID, jkPivotID, jkDestFields, jkPivotFields, jkPivotAndDestFields);
 
   /// handle "has many" and "has many through" relationships
   // - many-to-many relationship is tracked using a table specifically for that
   // relationship, turning the relationship into two one-to-many relationships
   // pointing in opposite directions
-  // - by default, only two TSQLRecord (i.e. INTEGER) fields must be created,
+  // - by default, only two TORM (i.e. INTEGER) fields must be created,
   // named "Source" and "Dest", the first pointing to the source record (the one
-  // with a TSQLRecordMany published property) and the second to the destination record
-  // - you should first create a type inheriting from TSQLRecordMany, which
+  // with a TORMMany published property) and the second to the destination record
+  // - you should first create a type inheriting from TORMMany, which
   // will define the pivot table, providing optional "through" parameters if needed
-  // ! TSQLDest = class(TSQLRecord);
-  // ! TSQLSource = class;
-  // ! TSQLDestPivot = class(TSQLRecordMany)
+  // ! TORMProductDest = class(TORM);
+  // ! TORMProductSource = class;
+  // ! TORMProductDestPivot = class(TORMMany)
   // ! private
-  // !  fSource: TSQLSource;
-  // !  fDest: TSQLDest;
+  // !  fSource: TORMProductSource;
+  // !  fDest: TORMProductDest;
   // !  fTime: TDateTime;
   // ! published
-  // !   property Source: TSQLSource read fSource; // map Source column
-  // !   property Dest: TSQLDest read fDest; // map Dest column
+  // !   property Source: TORMProductSource read fSource; // map Source column
+  // !   property Dest: TORMProductDest read fDest; // map Dest column
   // !   property AssociationTime: TDateTime read fTime write fTime;
   // ! end;
-  // ! TSQLSource = class(TSQLRecord)
+  // ! TORMProductSource = class(TORM)
   // ! private
-  // !   fDestList: TSQLDestPivot;
+  // !   fDestList: TORMProductDestPivot;
   // ! published
-  // !   DestList: TSQLDestPivot read fDestList;
+  // !   DestList: TORMProductDestPivot read fDestList;
   // ! end;
   // - in all cases, at leat two 'Source' and 'Dest' published properties must
-  // be declared as TSQLRecord children in any TSQLRecordMany descendant
+  // be declared as TORM children in any TORMMany descendant
   // because they will always be needed for the 'many to many' relationship
-  // - when a TSQLRecordMany published property exists in a TSQLRecord, it is
-  // initialized automaticaly by TSQLRecord.Create
+  // - when a TORMMany published property exists in a TORM, it is
+  // initialized automaticaly by TORM.Create
   // - to add some associations to the pivot table, use the ManyAdd() method
   // - to retrieve an association, use the ManySelect() method
   // - to delete an association, use the ManyDelete() method
@@ -5229,13 +5227,13 @@ type
   // - to read all Source records and the associaed "through" fields content,
   // FillManyFromDest then FillRow, FillOne and FillRewind methods
   // - to read all Dest IDs after a join to the pivot table, use DestGetJoined
-  TSQLRecordMany = class(TSQLRecord)
+  TORMMany = class(TORM)
   protected
-    // internal fields initialized during TSQLRecord.Create
-    // - map to the Source and Dest properties field values in TSQLRecord values
+    // internal fields initialized during TORM.Create
+    // - map to the Source and Dest properties field values in TORM values
     fSourceID: PPtrInt;
     fDestID: PPtrInt;
-    /// retrieve the TSQLRecordMany ID from a given source+dest IDs pair
+    /// retrieve the TORMMany ID from a given source+dest IDs pair
     function InternalIDFromSourceDest(const aClient: IRestORM;
       aSourceID, aDestID: TID): TID;
     function InternalFillMany(const aClient: IRestORM; aID: TID;
@@ -5245,33 +5243,33 @@ type
     // - will set protected fSourceID/fDestID fields
     constructor Create; override;
     /// retrieve all records associated to a particular source record, which
-    // has a TSQLRecordMany property
+    // has a TORMMany property
     // - returns the Count of records corresponding to this aSource record
-    // - the records are stored in an internal TSQLTable, refered in the private
+    // - the records are stored in an internal TORMTable, refered in the private
     // fTable field, and initialized via a FillPrepare call: all Dest items
     // are therefore accessible with standard FillRow, FillOne and FillRewind methods
     // - use a "for .." loop or a "while FillOne do ..." loop to iterate
     // through all Dest items, getting also any additional 'through' columns
     // - if source ID parameter is 0, the ID is taken from the fSourceID field
-    // (set by TSQLRecord.Create)
+    // (set by TORM.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please specify aSourceID parameter with
     // the one just added/created
     // - the optional aAndWhereSQL parameter can be used to add any additional
     // condition to the WHERE statement (e.g. 'Salary>:(1000): AND Salary<:(2000):')
-    // according to TSQLRecordMany properties - note that you should better use
+    // according to TORMMany properties - note that you should better use
     // inlined parameters for faster processing on server, so you may call e.g.
     // ! aRec.FillMany(Client, 0, FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000]));
     function FillMany(const aClient: IRestORM; aSourceID: TID = 0;
       const aAndWhereSQL: RawUTF8 = ''): integer;
     /// retrieve all records associated to a particular Dest record, which
-    // has a TSQLRecordMany property
+    // has a TORMMany property
     // - returns the Count of records corresponding to this aSource record
     // - use a "for .." loop or a "while FillOne do ..." loop to iterate
     // through all Dest items, getting also any additional 'through' columns
     // - the optional aAndWhereSQL parameter can be used to add any additional
     // condition to the WHERE statement (e.g. 'Salary>:(1000): AND Salary<:(2000):')
-    // according to TSQLRecordMany properties - note that you should better use
+    // according to TORMMany properties - note that you should better use
     // inlined parameters for faster processing on server, so you may call e.g.
     // ! aRec.FillManyFromDest(Client, DestID, FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000]));
     function FillManyFromDest(const aClient: IRestORM; aDestID: TID;
@@ -5280,7 +5278,7 @@ type
     function DestGet(const aClient: IRestORM; aSourceID: TID;
       out DestIDs: TIDDynArray): boolean; overload;
     /// retrieve all Dest items IDs associated to the current Source ID
-    // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
+    // - source ID is taken from the fSourceID field (set by TORM.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
     function DestGet(const aClient: IRestORM;
@@ -5291,7 +5289,7 @@ type
     /// retrieve all Dest items IDs associated to the current or
     // specified Source ID, adding a WHERE condition against the Dest rows
     // - if aSourceID is 0, the value is taken from current fSourceID field
-    // (set by TSQLRecord.Create)
+    // (set by TORM.Create)
     // - aDestWhereSQL can specify the Dest table name in the statement, e.g.
     //  'Salary>:(1000): AND Salary<:(2000):' - note that you should better use
     // inlined parameters for faster processing on server, so you may use the
@@ -5305,27 +5303,27 @@ type
     // associated to the current or specified Source ID, adding a WHERE condition
     // against the Dest rows
     // - if aSourceID is 0, the value is taken from current fSourceID field
-    // (set by TSQLRecord.Create)
+    // (set by TORM.Create)
     // - aDestWhereSQL can specify the Dest table name in the statement, e.g.
-    // 'Salary>:(1000): AND Salary<:(2000):') according to TSQLRecordMany
+    // 'Salary>:(1000): AND Salary<:(2000):') according to TORMMany
     // properties - note that you should better use such inlined parameters as
     // ! FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000])
     function DestGetJoined(const aClient: IRestORM; const aDestWhereSQL: RawUTF8;
-      aSourceID: TID): TSQLRecord; overload;
-    /// create a TSQLTable, containing all specified Fields, after a JOIN
+      aSourceID: TID): TORM; overload;
+    /// create a TORMTable, containing all specified Fields, after a JOIN
     // associated to the current or specified Source ID
     // - the Table will have the fields specified by the JoinKind parameter
     // - aCustomFieldsCSV can be used to specify which fields must be retrieved
     // (for jkDestFields, jkPivotFields, jkPivotAndDestFields) - default is all
     // - if aSourceID is 0, the value is taken from current fSourceID field
-    // (set by TSQLRecord.Create)
+    // (set by TORM.Create)
     // - aDestWhereSQL can specify the Dest table name in the statement, e.g.
-    // 'Salary>:(1000): AND Salary<:(2000):') according to TSQLRecordMany
+    // 'Salary>:(1000): AND Salary<:(2000):') according to TORMMany
     // properties - note that you should better use such inlined parameters as
     // ! FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000])
     function DestGetJoinedTable(const aClient: IRestORM;
-      const aDestWhereSQL: RawUTF8; aSourceID: TID; JoinKind: TSQLRecordManyJoinKind;
-      const aCustomFieldsCSV: RawUTF8 = ''): TSQLTable;
+      const aDestWhereSQL: RawUTF8; aSourceID: TID; JoinKind: TORMManyJoinKind;
+      const aCustomFieldsCSV: RawUTF8 = ''): TORMTable;
     /// add a Dest record to the Source record list
     // - returns TRUE on success, FALSE on error
     // - if NoDuplicates is TRUE, the existence of this Source/Dest ID pair
@@ -5339,7 +5337,7 @@ type
     function ManyAdd(const aClient: IRestORM; aSourceID, aDestID: TID;
       NoDuplicates: boolean = false; aUseBatch: TRestBatch = nil): boolean; overload;
     /// add a Dest record to the current Source record list
-    // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
+    // - source ID is taken from the fSourceID field (set by TORM.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
     function ManyAdd(const aClient: IRestORM; aDestID: TID;
@@ -5351,17 +5349,17 @@ type
     function ManyDelete(const aClient: IRestORM; aSourceID, aDestID: TID;
       aUseBatch: TRestBatch = nil): boolean; overload;
     /// will delete the record associated with the current source and a specified Dest
-    // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
+    // - source ID is taken from the fSourceID field (set by TORM.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
     function ManyDelete(const aClient: IRestORM; aDestID: TID): boolean; overload;
     /// will retrieve the record associated with a particular Source/Dest pair
     // - will return TRUE if the pair was found
-    // - in this case, all "through" columns are available in the TSQLRecordMany
+    // - in this case, all "through" columns are available in the TORMMany
     // field instance
     function ManySelect(const aClient: IRestORM; aSourceID, aDestID: TID): boolean; overload;
     /// will retrieve the record associated with the current source and a specified Dest
-    // - source ID is taken from the fSourceID field (set by TSQLRecord.Create)
+    // - source ID is taken from the fSourceID field (set by TORM.Create)
     // - note that if the Source record has just been added, fSourceID is not
     // set, so this method will fail: please call the other overloaded method
     function ManySelect(const aClient: IRestORM; aDestID: TID): boolean; overload;
@@ -5372,7 +5370,7 @@ type
     // - search for aID as Dest ID if isDest is TRUE
     // - the optional aAndWhereSQL parameter can be used to add any additional
     // condition to the WHERE statement (e.g. 'Salary>:(1000): AND Salary<:(2000):')
-    // according to TSQLRecordMany properties - note that you should better use
+    // according to TORMMany properties - note that you should better use
     // such inlined parameters e.g. calling
     // ! FormatUTF8('Salary>? AND Salary<?', [], [1000, 2000])
     function IDWhereSQL(const aClient: IRestORM; aID: TID; isDest: boolean;
@@ -5380,26 +5378,26 @@ type
   end;
 
 
-  { -------------------- Virtual TSQLRecord Definitions }
+  { -------------------- Virtual TORM Definitions }
 
   /// parent of all ORM virtual classes
-  // - you can define a plain TSQLRecord class as virtual if needed  - e.g.
-  // inheriting from TSQLRecordMany then calling VirtualTableExternalRegister() -
+  // - you can define a plain TORM class as virtual if needed  - e.g.
+  // inheriting from TORMMany then calling VirtualTableExternalRegister() -
   // but using this class will seal its state to be virtual
-  TSQLRecordVirtual = class(TSQLRecord);
+  TORMVirtual = class(TORM);
 
   /// Record associated to a Virtual Table implemented in Delphi, with ID
   // forced at INSERT
-  // - will use TSQLVirtualTableModule / TSQLVirtualTable / TSQLVirtualTableCursor
+  // - will use TORMVirtualTableModule / TORMVirtualTable / TORMVirtualTableCursor
   // classes for a generic Virtual table mechanism on the Server side
   // - call Model.VirtualTableRegister() before TRestServer.Create on the
   // Server side (not needed for Client) to associate such a record with a
   // particular Virtual Table module, otherwise an exception will be raised:
-  // ! Model.VirtualTableRegister(TSQLRecordDali1, TSQLVirtualTableJSON);
-  TSQLRecordVirtualTableForcedID = class(TSQLRecordVirtual);
+  // ! Model.VirtualTableRegister(TORMDali1, TORMVirtualTableJSON);
+  TORMVirtualTableForcedID = class(TORMVirtual);
 
   /// an abstract base class, corresponding to an R-Tree table of values
-  // - do not use this class, but either TSQLRecordRTree or TSQLRecordRTreeInteger
+  // - do not use this class, but either TORMRTree or TORMRTreeInteger
   // - an R-Tree is a special index that is designed for doing range queries.
   // R-Trees are most commonly used in geospatial systems where each entry is a
   // rectangle with minimum and maximum X and Y coordinates. Given a query
@@ -5412,8 +5410,8 @@ type
   // time during a given time interval, or all events that started during a
   // particular time interval, or all events that both started and ended within
   // a given time interval. And so forth. See http:// www.sqlite.org/rtree.html
-  // - any record which inherits from this class as TSQLRecordRTree must have
-  // only sftFloat (double) fields (or integer fields for TSQLRecordRTreeInteger)
+  // - any record which inherits from this class as TORMRTree must have
+  // only sftFloat (double) fields (or integer fields for TORMRTreeInteger)
   // grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions
   // (i.e. 11 columns, including the ID property)
   // - since SQLite version 3.24.0 (2018-06-04), R-Tree tables can have
@@ -5424,17 +5422,17 @@ type
   // SQLite3 .dll/.so library as supplied by the system may be outdated
   // - internally, the SQlite3 R-Tree extension will be implemented as a virtual
   // table, storing coordinates/values as 32-bit floating point (single - as
-  // TSQLRecordRTree kind of ORM classes) or 32-bit integers (as TSQLRecordRTreeInteger),
+  // TORMRTree kind of ORM classes) or 32-bit integers (as TORMRTreeInteger),
   // but will make all R-Tree computation using 64-bit floating point (double)
   // - as with any virtual table, the ID: TID property must be set before adding
-  // a TSQLRecordRTree to the database, e.g. to link a R-Tree representation to
-  // a regular TSQLRecord table
+  // a TORMRTree to the database, e.g. to link a R-Tree representation to
+  // a regular TORM table
   // - queries against the ID or the coordinate ranges are almost immediate: so
-  // you can e.g. extract some coordinates box from the regular TSQLRecord
-  // table, then use a TSQLRecordRTree joined query to make the process faster;
+  // you can e.g. extract some coordinates box from the regular TORM
+  // table, then use a TORMRTree joined query to make the process faster;
   // this is exactly what the TRestClient.RTreeMatch method offers - of
   // course Auxiliary Columns could avoid to make the JOIN and call RTreeMatch
-  TSQLRecordRTreeAbstract = class(TSQLRecordVirtual)
+  TORMRTreeAbstract = class(TORMVirtual)
   public
     /// override this class function to implement a custom SQL *_in() function
     // - in practice, an R-Tree index does not normally provide the exact answer
@@ -5445,20 +5443,20 @@ type
     // procedure, and will create a SQL function from the class name
     //  - used e.g. by the TRestClient.RTreeMatch method
     class function ContainedIn(const BlobA, BlobB): boolean; virtual; abstract;
-    /// will return 'MapBox_in' e.g. for TSQLRecordMapBox
+    /// will return 'MapBox_in' e.g. for TORMMapBox
     class function RTreeSQLFunctionName: RawUTF8; virtual;
   end;
 
   /// this kind of record array can be used for direct floating-point
-  // coordinates storage as in TSQLRecordRTree.BlobToCoord
-  TSQLRecordTreeCoords = array[0..RTREE_MAX_DIMENSION - 1] of packed record
+  // coordinates storage as in TORMRTree.BlobToCoord
+  TORMTreeCoords = array[0..RTREE_MAX_DIMENSION - 1] of packed record
     min, max: double;
   end;
 
   /// a base record, corresponding to an R-Tree table of floating-point values
   // - for instance, the following class will define a 2 dimensional RTree
   // of floating point coordinates, and an associated MapBox_in() function:
-  // ! TSQLRecordMapBox = class(TSQLRecordRTree)
+  // ! TORMMapBox = class(TORMRTree)
   // ! protected
   // !   fMinX, fMaxX, fMinY, fMaxY: double;
   // ! published
@@ -5467,10 +5465,10 @@ type
   // !   property MinY: double read fMinY write fMinY;
   // !   property MaxY: double read fMaxY write fMaxY;
   // ! end;
-  // - since SQLite version 3.24.0, TSQLRecordRTree can have auxiliary columns
+  // - since SQLite version 3.24.0, TORMRTree can have auxiliary columns
   // that store arbitrary data, having their property name starting with '_'
   // (only in this class definition: SQL and Where clauses will trim it)
-  TSQLRecordRTree = class(TSQLRecordRTreeAbstract)
+  TORMRTree = class(TORMRTreeAbstract)
   public
     /// override this class function to implement a custom SQL *_in() function
     // - by default, the BLOB array will be decoded via the BlobToCoord() class
@@ -5488,19 +5486,19 @@ type
     // of published double properties
     // - used e.g. by the TRest.RTreeMatch method
     class procedure BlobToCoord(const InBlob;
-      var OutCoord: TSQLRecordTreeCoords); virtual;
+      var OutCoord: TORMTreeCoords); virtual;
   end;
 
   /// this kind of record array can be used for direct 32-bit integer
-  // coordinates storage as in TSQLRecordRTreeInteger.BlobToCoord
-  TSQLRecordTreeCoordsInteger = array[0..RTREE_MAX_DIMENSION - 1] of packed record
+  // coordinates storage as in TORMRTreeInteger.BlobToCoord
+  TORMTreeCoordsInteger = array[0..RTREE_MAX_DIMENSION - 1] of packed record
     min, max: integer;
   end;
 
   /// a base record, corresponding to an R-Tree table of 32-bit integer values
   // - for instance, the following class will define a 2 dimensional RTree
   // of 32-bit integer coordinates, and an associated MapBox_in() function:
-  // ! TSQLRecordMapBox = class(TSQLRecordRTree)
+  // ! TORMMapBox = class(TORMRTree)
   // ! protected
   // !   fMinX, fMaxX, fMinY, fMaxY: integer;
   // ! published
@@ -5509,10 +5507,10 @@ type
   // !   property MinY: integer read fMinY write fMinY;
   // !   property MaxY: integer read fMaxY write fMaxY;
   // ! end;
-  // - since SQLite version 3.24.0, TSQLRecordRTreeInteger can have auxiliary
+  // - since SQLite version 3.24.0, TORMRTreeInteger can have auxiliary
   // columns that store arbitrary data, having their property name starting with '_'
   // (only in this class definition: SQL and Where clauses will trim it)
-  TSQLRecordRTreeInteger = class(TSQLRecordRTreeAbstract)
+  TORMRTreeInteger = class(TORMRTreeAbstract)
   public
     /// override this class function to implement a custom SQL *_in() function
     // - by default, the BLOB array will be decoded via the BlobToCoord() class
@@ -5530,7 +5528,7 @@ type
     // of published integer properties
     // - used e.g. by the TRest.RTreeMatch method
     class procedure BlobToCoord(const InBlob;
-      var OutCoord: TSQLRecordTreeCoordsInteger); virtual;
+      var OutCoord: TORMTreeCoordsInteger); virtual;
   end;
 
   /// a base record, corresponding to a FTS3 table, i.e. implementing full-text
@@ -5546,35 +5544,35 @@ type
   // (RawUTF8) fields - with Delphi 2009+, you can have string fields
   // - this record has its fID: TID property which may be published
   // as DocID, to be consistent with SQLite3 praxis, and reflect that it
-  // points to an ID of another associated TSQLRecord
-  // - a good approach is to store your data in a regular TSQLRecord table, then
+  // points to an ID of another associated TORM
+  // - a good approach is to store your data in a regular TORM table, then
   // store your text content in a separated FTS3 table, associated to this
-  // TSQLRecordFTS3 table via its ID/DocID
+  // TORMFTS3 table via its ID/DocID
   // - the ID/DocID property can be set when the record is added, to retrieve any
-  // associated TSQLRecord (note that for a TSQLRecord record,
+  // associated TORM (note that for a TORM record,
   // the ID property can't be set at adding, but is calculated by the engine)
-  // - static tables don't handle TSQLRecordFTS3 classes
+  // - static tables don't handle TORMFTS3 classes
   // - by default, the FTS3 engine ignore all characters >= #80, but handle
   // low-level case insentivity (i.e. 'A'..'Z') so you must keep your
   // request with the same range for upper case
   // - by default, the "simple" tokenizer is used, but you can inherits from
-  // TSQLRecordFTS3Porter class if you want a better English matching, using
-  // the Porter Stemming algorithm, or TSQLRecordFTS3Unicode61 for Unicode
+  // TORMFTS3Porter class if you want a better English matching, using
+  // the Porter Stemming algorithm, or TORMFTS3Unicode61 for Unicode
   // support - see http:// sqlite.org/fts3.html#tokenizer
   // - you can select either the FTS3 engine, or the more efficient (and new)
-  // FTS4 engine (available since version 3.7.4), by using the TSQLRecordFTS4
-  // type, or TSQLRecordFTS5 for the latest (and preferred) FTS5 engine
+  // FTS4 engine (available since version 3.7.4), by using the TORMFTS4
+  // type, or TORMFTS5 for the latest (and preferred) FTS5 engine
   // - in order to make FTS queries, use the dedicated TRest.FTSMatch
   // method, with the MATCH operator (you can use regular queries, but you must
   // specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
   // table specificity):
   // ! var IDs: TIDDynArray;
-  // ! if FTSMatch(TSQLMyFTS3Table, 'text MATCH "linu*"', IDs) then
+  // ! if FTSMatch(TORMMyFTS3Table, 'text MATCH "linu*"', IDs) then
   // !  //  you have all matching IDs in IDs[]
   // - by convention, inherited class name could specify a custom stemming
-  // algorithm by starting with "TSQLRecordFTS3", and adding the algorithm name as
-  // suffix, e.g. TSQLRecordFTS3Porter will create a "tokenize=porter" virtual table
-  TSQLRecordFTS3 = class(TSQLRecordVirtual)
+  // algorithm by starting with "TORMFTS3", and adding the algorithm name as
+  // suffix, e.g. TORMFTS3Porter will create a "tokenize=porter" virtual table
+  TORMFTS3 = class(TORMVirtual)
   public
      /// optimize the FTS3 virtual table
      // - this causes FTS3 to merge all existing index b-trees into a single large
@@ -5585,22 +5583,22 @@ type
     class function OptimizeFTS3Index(const Server: IRestORMServer): boolean;
      /// this DocID property map the internal Row_ID property
      // - but you can set a value to this property before calling the Add()
-     // method, to associate this TSQLRecordFTS3 to another TSQLRecord
+     // method, to associate this TORMFTS3 to another TORM
      // - ID property is read-only, but this DocID property can be written/set
      // - internaly, we use RowID in the SQL statements, which is compatible
-     // with both TSQLRecord and TSQLRecordFTS3 kind of table
+     // with both TORM and TORMFTS3 kind of table
     property DocID: TID read GetID write fID;
   end;
 
   /// this base class will create a FTS3 table using the Porter Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
   // - will generate tokenize=porter by convention from the class name
-  TSQLRecordFTS3Porter = class(TSQLRecordFTS3);
+  TORMFTS3Porter = class(TORMFTS3);
 
   /// this base class will create a FTS3 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
   // - will generate tokenize=unicode64 by convention from the class name
-  TSQLRecordFTS3Unicode61 = class(TSQLRecordFTS3);
+  TORMFTS3Unicode61 = class(TORMFTS3);
 
   /// a base record, corresponding to a FTS4 table, which is an enhancement to FTS3
   // - FTS3 and FTS4 are nearly identical. They share most of their code in common,
@@ -5609,107 +5607,107 @@ type
   // shadow tables. This additional information allows FTS4 to use certain
   // query performance optimizations that FTS3 cannot use. And the added information
   // permits some additional useful output options in the matchinfo() function.
-  // - for newer applications, TSQLRecordFTS5 is recommended; though if minimal
+  // - for newer applications, TORMFTS5 is recommended; though if minimal
   // disk usage or compatibility with older versions of SQLite are important,
-  // then TSQLRecordFTS3 will usually serve just as well
+  // then TORMFTS3 will usually serve just as well
   // - see http:// sqlite.org/fts3.html#section_1_1
   // - by convention, inherited class name could specify a custom stemming
-  // algorithm by starting with "TSQLRecordFTS4", and adding the algorithm name as
-  // suffix, e.g. TSQLRecordFTS'Porter will create a "tokenize=porter" virtual table
-  TSQLRecordFTS4 = class(TSQLRecordFTS3)
+  // algorithm by starting with "TORMFTS4", and adding the algorithm name as
+  // suffix, e.g. TORMFTS'Porter will create a "tokenize=porter" virtual table
+  TORMFTS4 = class(TORMFTS3)
   public
     /// this overriden method will create TRIGGERs for FTSWithoutContent()
     class procedure InitializeTable(const Server: IRestORMServer;
-      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
+      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
   end;
 
   /// this base class will create a FTS4 table using the Porter Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
   // - will generate tokenize=porter by convention from the class name
-  TSQLRecordFTS4Porter = class(TSQLRecordFTS4);
+  TORMFTS4Porter = class(TORMFTS4);
 
   /// this base class will create a FTS4 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
   // - will generate tokenize=unicode64 by convention from the class name
-  TSQLRecordFTS4Unicode61 = class(TSQLRecordFTS4);
+  TORMFTS4Unicode61 = class(TORMFTS4);
 
   /// a base record, corresponding to a FTS5 table, which is an enhancement to FTS4
   // - FTS5 is a new version of FTS4 that includes various fixes and solutions for
   // problems that could not be fixed in FTS4 without sacrificing backwards compatibility
-  // - for newer applications, TSQLRecordFTS5 is recommended; though if minimal
+  // - for newer applications, TORMFTS5 is recommended; though if minimal
   // disk usage or compatibility with older versions of SQLite are important,
-  // then TSQLRecordFTS3/TSQLRecordFTS4 will usually serve just as well
+  // then TORMFTS3/TORMFTS4 will usually serve just as well
   // - see https://sqlite.org/fts5.html#appendix_a
   // - by convention, inherited class name could specify a custom stemming
-  // algorithm by starting with "TSQLRecordFTS5", and adding the algorithm name as
-  // suffix, e.g. TSQLRecordFTS5Porter will create a "tokenize=porter" virtual table
-  TSQLRecordFTS5 = class(TSQLRecordFTS4);
+  // algorithm by starting with "TORMFTS5", and adding the algorithm name as
+  // suffix, e.g. TORMFTS5Porter will create a "tokenize=porter" virtual table
+  TORMFTS5 = class(TORMFTS4);
 
   /// this base class will create a FTS5 table using the Porter Stemming algorithm
   // - see https://sqlite.org/fts5.html#tokenizers
   // - will generate tokenize=porter by convention from the class name
-  TSQLRecordFTS5Porter = class(TSQLRecordFTS5);
+  TORMFTS5Porter = class(TORMFTS5);
 
   /// this base class will create a FTS5 table using the Unicode61 Stemming algorithm
   // - see https://sqlite.org/fts5.html#tokenizers
   // - will generate tokenize=unicode64 by convention from the class name
-  TSQLRecordFTS5Unicode61 = class(TSQLRecordFTS5);
+  TORMFTS5Unicode61 = class(TORMFTS5);
 
 
-  { -------------------- TSQLRecordProperties Definitions }
+  { -------------------- TORMProperties Definitions }
 
-  /// some information about a given TSQLRecord class properties
-  // - used internaly by TSQLRecord, via a global cache handled by this unit:
-  // you can access to each record's properties via TSQLRecord.RecordProps class
-  // - such a global cache saves some memory for each TSQLRecord instance,
+  /// some information about a given TORM class properties
+  // - used internaly by TORM, via a global cache handled by this unit:
+  // you can access to each record's properties via TORM.RecordProps class
+  // - such a global cache saves some memory for each TORM instance,
   // and allows faster access to most wanted RTTI properties
-  TSQLRecordProperties = class
+  TORMProperties = class
   protected
     fLock: TRTLCriticalSection;
-    fTable: TSQLRecordClass;
+    fTable: TORMClass;
     fTableRtti: TRttiJson;
     fHasNotSimpleFields: boolean;
-    fHasTypeFields: TSQLFieldTypes;
-    fFields: TSQLPropInfoList;
-    fSimpleFields: TSQLPropInfoObjArray;
+    fHasTypeFields: TORMFieldTypes;
+    fFields: TORMPropInfoList;
+    fSimpleFields: TORMPropInfoObjArray;
     fSQLTableName: RawUTF8;
-    fCopiableFields: TSQLPropInfoObjArray;
-    fManyFields: TSQLPropInfoRTTIManyObjArray;
-    fJoinedFields: TSQLPropInfoRTTIIDObjArray;
-    fJoinedFieldsTable: TSQLRecordClassDynArray;
-    fDynArrayFields: TSQLPropInfoRTTIDynArrayObjArray;
+    fCopiableFields: TORMPropInfoObjArray;
+    fManyFields: TORMPropInfoRTTIManyObjArray;
+    fJoinedFields: TORMPropInfoRTTIIDObjArray;
+    fJoinedFieldsTable: TORMClassDynArray;
+    fDynArrayFields: TORMPropInfoRTTIDynArrayObjArray;
     fDynArrayFieldsHasObjArray: boolean;
-    fBlobCustomFields: TSQLPropInfoObjArray;
-    fBlobFields: TSQLPropInfoRTTIObjArray;
+    fBlobCustomFields: TORMPropInfoObjArray;
+    fBlobFields: TORMPropInfoRTTIObjArray;
     fFilters: TSynFilterOrValidateObjArrayArray;
-    fRecordManySourceProp: TSQLPropInfoRTTIInstance;
-    fRecordManyDestProp: TSQLPropInfoRTTIInstance;
+    fRecordManySourceProp: TORMPropInfoRTTIInstance;
+    fRecordManyDestProp: TORMPropInfoRTTIInstance;
     fSQLTableNameUpperWithDot: RawUTF8;
     fSQLFillPrepareMany: RawUTF8;
     fSQLTableSimpleFieldsNoRowID: RawUTF8;
     fSQLTableUpdateBlobFields: RawUTF8;
     fSQLTableRetrieveBlobFields: RawUTF8;
     fSQLTableRetrieveAllFields: RawUTF8;
-    fRecordVersionField: TSQLPropInfoRTTIRecordVersion;
+    fRecordVersionField: TORMPropInfoRTTIRecordVersion;
     fWeakZeroClass: TObject;
-    /// the associated TSQLModel instances
-    // - e.g. allow O(1) search of a TSQLRecordClass in a model
+    /// the associated TORMModel instances
+    // - e.g. allow O(1) search of a TORMClass in a model
     fModel: array of record
       /// one associated model
-      Model: TSQLModel;
+      Model: TORMModel;
       /// the index in the Model.Tables[] array
       TableIndex: PtrInt;
       /// associated ORM parameters
-      Properties: TSQLModelRecordProperties;
+      Properties: TORMModelRecordProperties;
     end;
     fModelMax: integer;
     fCustomCollation: TRawUTF8DynArray;
     /// add an entry in fModel[] / fModelMax
-    procedure InternalRegisterModel(aModel: TSQLModel; aTableIndex: integer;
-      aProperties: TSQLModelRecordProperties);
+    procedure InternalRegisterModel(aModel: TORMModel; aTableIndex: integer;
+      aProperties: TORMModelRecordProperties);
   public
     /// initialize the properties content
-    constructor Create(aTable: TSQLRecordClass);
+    constructor Create(aTable: TORMClass);
     /// release associated used memory
     destructor Destroy; override;
 
@@ -5721,56 +5719,56 @@ type
     /// set all bits corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldBitsFromRawUTF8(const aFields: array of RawUTF8;
-      var Bits: TSQLFieldBits): boolean; overload;
+      var Bits: TFieldBits): boolean; overload;
     /// set all bits corresponding to the supplied field names
     // - returns the matching fields set
-    function FieldBitsFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldBits; overload;
+    function FieldBitsFromRawUTF8(const aFields: array of RawUTF8): TFieldBits; overload;
     /// set all bits corresponding to the supplied CSV field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
-      var Bits: TSQLFieldBits): boolean; overload;
+      var Bits: TFieldBits): boolean; overload;
     /// set all bits corresponding to the supplied CSV field names, including ID
     // - returns TRUE on success, FALSE if any field name is not existing
     // - this overloaded method will identify ID/RowID field name, and set
     // withID output parameter according to its presence
     // - if aFieldsCSV='*', Bits will contain all simple fields, and withID=true
-    function FieldBitsFromCSV(const aFieldsCSV: RawUTF8; var Bits: TSQLFieldBits;
+    function FieldBitsFromCSV(const aFieldsCSV: RawUTF8; var Bits: TFieldBits;
       out withID: boolean): boolean; overload;
     /// set all bits corresponding to the supplied CSV field names
     // - returns the matching fields set
-    function FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits; overload;
+    function FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TFieldBits; overload;
     /// set all simple bits corresponding to the simple fields, excluding some
     // - could be a convenient alternative to FieldBitsFromCSV() if only some
     // fields are to be excluded
     // - returns the matching fields set
     function FieldBitsFromExcludingCSV(const aFieldsCSV: RawUTF8;
-      aOccasion: TSQLOccasion = soSelect): TSQLFieldBits;
+      aOccasion: TORMOccasion = ooSelect): TFieldBits;
     /// set all bits corresponding to the supplied BLOB field type information
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldBitsFromBlobField(aBlobField: PRttiProp;
-      var Bits: TSQLFieldBits): boolean;
+      var Bits: TFieldBits): boolean;
     /// compute the CSV field names text from a set of bits
-    function CSVFromFieldBits(const Bits: TSQLFieldBits): RawUTF8;
+    function CSVFromFieldBits(const Bits: TFieldBits): RawUTF8;
     /// set all field indexes corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8;
-      var Indexes: TSQLFieldIndexDynArray): boolean; overload;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
     /// set all field indexes corresponding to the supplied field names
     // - returns the matching fields set
     function FieldIndexDynArrayFromRawUTF8(
-      const aFields: array of RawUTF8): TSQLFieldIndexDynArray; overload;
+      const aFields: array of RawUTF8): TFieldIndexDynArray; overload;
     /// set all field indexes corresponding to the supplied CSV field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldIndexDynArrayFromCSV(const aFieldsCSV: RawUTF8;
-      var Indexes: TSQLFieldIndexDynArray): boolean; overload;
+      var Indexes: TFieldIndexDynArray): boolean; overload;
     /// set all field indexes corresponding to the supplied CSV field names
     // - returns the matching fields set
     function FieldIndexDynArrayFromCSV(
-      const aFieldsCSV: RawUTF8): TSQLFieldIndexDynArray; overload;
+      const aFieldsCSV: RawUTF8): TFieldIndexDynArray; overload;
     /// set all field indexes corresponding to the supplied BLOB field type information
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldIndexDynArrayFromBlobField(aBlobField: PRttiProp;
-      var Indexes: TSQLFieldIndexDynArray): boolean;
+      var Indexes: TFieldIndexDynArray): boolean;
     /// retrieve a Field property RTTI information from a Property Name
     // - this version returns nil if the property is not a BLOB field
     function BlobFieldPropFromRawUTF8(const PropName: RawUTF8): PRttiProp;
@@ -5787,7 +5785,7 @@ type
       ForceNoRowID: boolean): boolean;
     /// return the first unique property of kind RawUTF8
     // - this property is mainly the "Name" property, i.e. the one with
-    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TSQLRecord
+    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TORM
     // - if ReturnFirstIfNoUnique is TRUE and no unique property is found,
     // the first RawUTF8 property is returned anyway
     // - returns '' if no matching field was found
@@ -5801,7 +5799,7 @@ type
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE
     // - do nothing if FieldIndex is not valid, and returns false
-    // - could be set in overridden class procedure TSQLRecord.InternalDefineModel
+    // - could be set in overridden class procedure TORM.InternalDefineModel
     // so that it will be common to all database models, for both client and server
     function SetCustomCollation(FieldIndex: integer;
       const aCollationName: RawUTF8): boolean; overload;
@@ -5814,11 +5812,11 @@ type
     // file be available outside the scope of mORMot's SQLite3 engine
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE
-    // - could be set in overridden class procedure TSQLRecord.InternalDefineModel
+    // - could be set in overridden class procedure TORM.InternalDefineModel
     // so that it will be common to all database models, for both client and server
-    // - note that you may inherit from TSQLRecordNoCase to use the NOCASE
+    // - note that you may inherit from TORMNoCase to use the NOCASE
     // standard SQLite3 collation for all descendant ORM objects
-    procedure SetCustomCollationForAll(aFieldType: TSQLFieldType;
+    procedure SetCustomCollationForAll(aFieldType: TORMFieldType;
       const aCollationName: RawUTF8);
     /// allow to validate length of all text published properties of this table
     // - the "index" attribute of the RawUTF8/string published properties could
@@ -5841,27 +5839,27 @@ type
     // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length in "index"
     procedure SetMaxLengthFilterForTextFields(IndexIsUTF8Length: boolean = false);
     /// customize the TDocVariant options for all variant published properties
-    // - will change the TSQLPropInfoRTTIVariant.DocVariantOptions value
+    // - will change the TORMPropInfoRTTIVariant.DocVariantOptions value
     // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
-    // - see also TSQLRecordNoCaseExtended root class
+    // - see also TORMNoCaseExtended root class
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     /// return the UTF-8 encoded SQL statement source to alter the table for
     //  adding the specified field
     function SQLAddField(FieldIndex: integer): RawUTF8;
 
-    /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues
-    // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
-    // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
+    /// create a TJSONWriter, ready to be filled with TORM.GetJSONValues
+    // - you can use TORMProperties.FieldBitsFromCSV() or
+    // TORMProperties.FieldBitsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
-      const aFields: TSQLFieldBits; KnownRowsCount: integer;
+      const aFields: TFieldBits; KnownRowsCount: integer;
       aBufSize: integer = 8192): TJSONSerializer; overload;
-    /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
-    // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
-    // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
+    /// create a TJSONWriter, ready to be filled with TORM.GetJSONValues(W)
+    // - you can use TORMProperties.FieldBitsFromCSV() or
+    // TORMProperties.FieldBitsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
-      const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer;
+      const aFields: TFieldIndexDynArray; KnownRowsCount: integer;
       aBufSize: integer = 8192): TJSONSerializer; overload;
-    /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
+    /// create a TJSONWriter, ready to be filled with TORM.GetJSONValues(W)
     // - this overloaded method will call FieldBitsFromCSV(aFieldsCSV,bits,withID)
     // to retrieve the bits just like a SELECT (i.e. '*' for simple fields)
     function CreateJSONWriter(JSON: TStream; Expand: boolean;
@@ -5869,10 +5867,10 @@ type
       aBufSize: integer = 8192): TJSONSerializer; overload;
     /// set the W.ColNames[] array content + W.AddColumns
     procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
-    /// save the TSQLRecord RTTI into a binary header
+    /// save the TORM RTTI into a binary header
     // - used e.g. by TRestStorageInMemory.SaveToBinary()
     procedure SaveBinaryHeader(W: TBufferWriter);
-    /// ensure that the TSQLRecord RTTI matches the supplied binary header
+    /// ensure that the TORM RTTI matches the supplied binary header
     // - used e.g. by TRestStorageInMemory.LoadFromBinary()
     function CheckBinaryHeader(var R: TFastReader): boolean;
     /// convert a JSON array of simple field values into a matching JSON object
@@ -5881,14 +5879,14 @@ type
 
     /// register a custom filter (transformation) or validation rule to
     // the TSQMRecord class for a specified field
-    // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
+    // - this will be used by TORM.Filter and TORM.Validate
     // methods (in default implementation)
     // - will return FALSE in case of an invalid field index
     function AddFilterOrValidate(aFieldIndex: integer;
       aFilter: TSynFilterOrValidate): boolean; overload;
     /// register a custom filter (transformation) or validatation to the
-    // TSQLRecord class for a specified field
-    // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
+    // TORM class for a specified field
+    // - this will be used by TORM.Filter and TORM.Validate
     // methods (in default implementation)
     // - will raise an EModelException if the field name does not exist
     procedure AddFilterOrValidate(const aFieldName: RawUTF8;
@@ -5897,23 +5895,23 @@ type
     /// add a custom unmanaged fixed-size record property
     // - simple kind of records (i.e. those not containing reference-counted
     // members) do not have RTTI generated, at least in older versions of Delphi
-    // - use this method within TSQLRecord.InternalRegisterCustomProperties
+    // - use this method within TORM.InternalRegisterCustomProperties
     // overridden method to define a custom record property with no
     // reference-counted types within (like strings) - typical use may be TGUID
     // - main parameters are the record size, in bytes, and the property pointer
-    // - add an TSQLPropInfoRecordFixedSize instance to the internal list
+    // - add an TORMPropInfoRecordFixedSize instance to the internal list
     // - if aData2Text/aText2Data parameters are not defined, it will fallback
-    // to TSQLPropInfo.BinaryToText() simple text Base64 encoding
-    // - can be used to override the default TSQLRecord corresponding method:
-    // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
-    // !  Props: TSQLRecordProperties);
+    // to TORMPropInfo.BinaryToText() simple text Base64 encoding
+    // - can be used to override the default TORM corresponding method:
+    // !class procedure TORMMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TORMProperties);
     // !begin
     // !  Props.RegisterCustomFixedSizeRecordProperty(self, SizeOf(TMyRec),
-    // !    'RecField', @TSQLMyRecord(nil).fRecField, [], SizeOf(TMyRec));
+    // !    'RecField', @TORMMyRecord(nil).fRecField, [], SizeOf(TMyRec));
     // !end;
     procedure RegisterCustomFixedSizeRecordProperty(aTable: TClass;
       aRecordSize: cardinal; const aName: RawUTF8; aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
+      aAttributes: TORMPropInfoAttributes; aFieldWidth: integer;
       aData2Text: TOnSQLPropInfoRecord2Text = nil;
       aText2Data: TOnSQLPropInfoRecord2Data = nil);
     /// add a custom record property from its RTTI definition
@@ -5921,17 +5919,17 @@ type
     // - use this method within InternalRegisterCustomProperties overridden method
     // to define a custom record property containing reference-counted types
     // - main parameters are the record RTTI information, and the property pointer
-    // - add an TSQLPropInfoRecordRTTI instance to the internal list
+    // - add an TORMPropInfoRecordRTTI instance to the internal list
     // - can be used as such:
-    // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
-    // !  Props: TSQLRecordProperties);
+    // !class procedure TORMMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TORMProperties);
     // !begin
     // !  Props.RegisterCustomRTTIRecordProperty(self, TypeInfo(TMyRec),
-    // !    'RecField', @TSQLMyRecord(nil).fRecField);
+    // !    'RecField', @TORMMyRecord(nil).fRecField);
     // !end;
     procedure RegisterCustomRTTIRecordProperty(aTable: TClass;
       aRecordInfo: PRttiInfo; const aName: RawUTF8; aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes = []; aFieldWidth: integer = 0;
+      aAttributes: TORMPropInfoAttributes = []; aFieldWidth: integer = 0;
       aData2Text: TOnSQLPropInfoRecord2Text = nil;
       aText2Data: TOnSQLPropInfoRecord2Data = nil);
     /// add a custom property from its RTTI definition stored as JSON
@@ -5939,102 +5937,102 @@ type
     // - use this method within InternalRegisterCustomProperties overridden method
     // to define a custom record property containing reference-counted types
     // - main parameters are the record RTTI information, and the property pointer
-    // - add an TSQLPropInfoCustomJSON instance to the internal list
+    // - add an TORMPropInfoCustomJSON instance to the internal list
     // - can be used as such:
-    // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
-    // !  Props: TSQLRecordProperties);
+    // !class procedure TORMMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TORMProperties);
     // !begin
     // !  Props.RegisterCustomPropertyFromRTTI(self, TypeInfo(TMyRec),
-    // !    'RecField', @TSQLMyRecord(nil).fRecField);
+    // !    'RecField', @TORMMyRecord(nil).fRecField);
     // !end;
     procedure RegisterCustomPropertyFromRTTI(aTable: TClass;
       aTypeInfo: PRttiInfo; const aName: RawUTF8; aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes = []; aFieldWidth: integer = 0);
+      aAttributes: TORMPropInfoAttributes = []; aFieldWidth: integer = 0);
     /// add a custom property from its type name, stored as JSON
     // - handle any kind of registered record, including TGUID
     // - use this method within InternalRegisterCustomProperties overridden method
     // to define a custom record property containing reference-counted types
     // - main parameters are the record RTTI information, and the property pointer
-    // - add an TSQLPropInfoCustomJSON instance to the internal list
+    // - add an TORMPropInfoCustomJSON instance to the internal list
     // - can be used as such:
-    // !class procedure TSQLMyRecord.InternalRegisterCustomProperties(
-    // !  Props: TSQLRecordProperties);
+    // !class procedure TORMMyRecord.InternalRegisterCustomProperties(
+    // !  Props: TORMProperties);
     // !begin
     // !  Props.RegisterCustomPropertyFromTypeName(self, 'TGUID', 'GUID',
-    // !    @TSQLMyRecord(nil).fGUID, [aIsUnique], 38);
+    // !    @TORMMyRecord(nil).fGUID, [aIsUnique], 38);
     // !end;
     procedure RegisterCustomPropertyFromTypeName(aTable: TClass;
       const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
-      aAttributes: TSQLPropInfoAttributes = []; aFieldWidth: integer = 0);
+      aAttributes: TORMPropInfoAttributes = []; aFieldWidth: integer = 0);
 
     /// fast access to the RTTI properties attribute
     property TableRtti: TRttiJson read fTableRtti;
-    /// if this class has any BLOB or TSQLRecodMany fields
+    /// if this class has any BLOB or TORMRecordMany fields
     // - i.e. some fields to be ignored
     property HasNotSimpleFields: boolean read fHasNotSimpleFields;
     /// set of field types appearing in this record
-    property HasTypeFields: TSQLFieldTypes read fHasTypeFields;
+    property HasTypeFields: TORMFieldTypes read fHasTypeFields;
     /// list all fields, as retrieved from RTTI
-    property Fields: TSQLPropInfoList read fFields;
-    /// list all "simple" fields of this TSQLRecord
-    // - by default, the TSQLRawBlob and TSQLRecordMany fields are not included
+    property Fields: TORMPropInfoList read fFields;
+    /// list all "simple" fields of this TORM
+    // - by default, the TRawBlob and TORMMany fields are not included
     // into this set: they must be read specificaly (in order to spare
     // bandwidth for BLOBs)
     // - dynamic arrays belong to simple fields: they are sent with other
     // properties content
     // - match inverted NOT_SIMPLE_FIELDS mask
-    property SimpleFields: TSQLPropInfoObjArray read fSimpleFields;
-    /// list all fields which can be copied from one TSQLRecord instance to another
+    property SimpleFields: TORMPropInfoObjArray read fSimpleFields;
+    /// list all fields which can be copied from one TORM instance to another
     // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
-    property CopiableFields: TSQLPropInfoObjArray read fCopiableFields;
-    /// list all TSQLRecordMany fields of this TSQLRecord
-    property ManyFields: TSQLPropInfoRTTIManyObjArray read fManyFields;
-    /// list all TSQLRecord fields of this TSQLRecord
-    // - ready to be used by TSQLTableJSON.CreateFromTables()
+    property CopiableFields: TORMPropInfoObjArray read fCopiableFields;
+    /// list all TORMMany fields of this TORM
+    property ManyFields: TORMPropInfoRTTIManyObjArray read fManyFields;
+    /// list all TORM fields of this TORM
+    // - ready to be used by TORMTableJSON.CreateFromTables()
     // - i.e. the class itself then, all fields of type sftID (excluding sftMany)
-    property JoinedFields: TSQLPropInfoRTTIIDObjArray read fJoinedFields;
-    /// wrapper of all nested TSQLRecord class of this TSQLRecord
-    // - ready to be used by TSQLTableJSON.CreateFromTables()
+    property JoinedFields: TORMPropInfoRTTIIDObjArray read fJoinedFields;
+    /// wrapper of all nested TORM class of this TORM
+    // - ready to be used by TORMTableJSON.CreateFromTables()
     // - i.e. the class itself as JoinedFieldsTable[0], then, all nested
-    // TSQLRecord published properties (of type sftID, ergo excluding sftMany)
-    // - equals nil if there is no nested TSQLRecord property (i.e. JoinedFields=nil)
-    property JoinedFieldsTable: TSQLRecordClassDynArray read fJoinedFieldsTable;
-    /// list of all sftBlobDynArray fields of this TSQLRecord
-    property DynArrayFields: TSQLPropInfoRTTIDynArrayObjArray read fDynArrayFields;
-    /// TRUE if any of the sftBlobDynArray fields of this TSQLRecord is a T*ObjArray
-    // - used e.g. by TSQLRecord.Destroy to release all owned nested instances
+    // TORM published properties (of type sftID, ergo excluding sftMany)
+    // - equals nil if there is no nested TORM property (i.e. JoinedFields=nil)
+    property JoinedFieldsTable: TORMClassDynArray read fJoinedFieldsTable;
+    /// list of all sftBlobDynArray fields of this TORM
+    property DynArrayFields: TORMPropInfoRTTIDynArrayObjArray read fDynArrayFields;
+    /// TRUE if any of the sftBlobDynArray fields of this TORM is a T*ObjArray
+    // - used e.g. by TORM.Destroy to release all owned nested instances
     property DynArrayFieldsHasObjArray: boolean read fDynArrayFieldsHasObjArray;
-    /// list of all sftBlobCustom fields of this TSQLRecord
-    // - have been defined e.g. as TSQLPropInfoCustom custom definition
-    property BlobCustomFields: TSQLPropInfoObjArray read fBlobCustomFields;
-    /// list all BLOB fields of this TSQLRecord
+    /// list of all sftBlobCustom fields of this TORM
+    // - have been defined e.g. as TORMPropInfoCustom custom definition
+    property BlobCustomFields: TORMPropInfoObjArray read fBlobCustomFields;
+    /// list all BLOB fields of this TORM
     // - i.e. generic sftBlob fields (not sftBlobDynArray, sftBlobCustom nor
     // sftBlobRecord)
-    property BlobFields: TSQLPropInfoRTTIObjArray read fBlobFields;
+    property BlobFields: TORMPropInfoRTTIObjArray read fBlobFields;
     /// all TSynFilter or TSynValidate instances registered per each field
     // - since validation and filtering are used within some CPU-consuming
     // part of the framework (like UI edition), both filters and validation
     // rules are grouped in the same list - for TSynTableFieldProperties there
     // are separated Filters[] and Validates[] arrays, for better performance
     property Filters: TSynFilterOrValidateObjArrayArray read fFilters;
-    /// for a TSQLRecordMany class, points to the Source property RTTI
-    property RecordManySourceProp: TSQLPropInfoRTTIInstance read fRecordManySourceProp;
-    /// for a TSQLRecordMany class, points to the Dest property RTTI
-    property RecordManyDestProp: TSQLPropInfoRTTIInstance read fRecordManyDestProp;
+    /// for a TORMMany class, points to the Source property RTTI
+    property RecordManySourceProp: TORMPropInfoRTTIInstance read fRecordManySourceProp;
+    /// for a TORMMany class, points to the Dest property RTTI
+    property RecordManyDestProp: TORMPropInfoRTTIInstance read fRecordManyDestProp;
     /// points to any TRecordVersion field
     // - contains nil if no such sftRecordVersion field do exist
     // - will be used by low-level storage engine to compute and store the
     // monotonic version number during any write operation
-    property RecordVersionField: TSQLPropInfoRTTIRecordVersion read fRecordVersionField;
+    property RecordVersionField: TORMPropInfoRTTIRecordVersion read fRecordVersionField;
     /// the Table name in the database in uppercase with a final '.'
-    // - e.g. 'TEST.' for TSQLRecordTest class
+    // - e.g. 'TEST.' for TORMTest class
     // - can be used with IdemPChar() for fast check of a table name
     property SQLTableNameUpperWithDot: RawUTF8 read fSQLTableNameUpperWithDot;
     /// returns 'COL1,COL2' with all COL* set to simple field names
     // - same value as SQLTableSimpleFields[false,false]
     // - this won't change depending on the ORM settings: so it can be safely
-    // computed here and not in TSQLModelRecordProperties
-    // - used e.g. by TSQLRecord.GetSQLValues
+    // computed here and not in TORMModelRecordProperties
+    // - used e.g. by TORM.GetSQLValues
     property SQLTableSimpleFieldsNoRowID: RawUTF8 read fSQLTableSimpleFieldsNoRowID;
     /// returns 'COL1=?,COL2=?' with all BLOB columns names
     // - used e.g. by TRestServerDB.UpdateBlobFields()
@@ -6043,84 +6041,84 @@ type
     // - used e.g. by TRestServerDB.RetrieveBlobFields()
     property SQLTableRetrieveBlobFields: RawUTF8 read fSQLTableRetrieveBlobFields;
   public
-    /// bit set to 1 for indicating each TSQLFieldType fields of this TSQLRecord
-    FieldBits: array[TSQLFieldType] of TSQLFieldBits;
+    /// bit set to 1 for indicating each TORMFieldType fields of this TORM
+    FieldBits: array[TORMFieldType] of TFieldBits;
     /// bit set to 1 for indicating TModTime/TSessionUserID fields
-    // of this TSQLRecord (leaving TCreateTime untouched)
+    // of this TORM (leaving TCreateTime untouched)
     // - as applied before an UPDATE
     // - i.e. sftModTime and sftSessionUserID fields
-    ComputeBeforeUpdateFieldsBits: TSQLFieldBits;
+    ComputeBeforeUpdateFieldsBits: TFieldBits;
     /// bit set to 1 for indicating TModTime/TCreateTime/TSessionUserID fields
-    // of this TSQLRecord
+    // of this TORM
     // - as applied before an INSERT
     // - i.e. sftModTime, sftCreateTime and sftSessionUserID fields
-    ComputeBeforeAddFieldsBits: TSQLFieldBits;
+    ComputeBeforeAddFieldsBits: TFieldBits;
     /// bit set to 1 for indicating fields to export, i.e. "simple" fields
     // - this array will handle special cases, like the TCreateTime fields
-    // which shall not be included in soUpdate but soInsert and soSelect e.g.
-    SimpleFieldsBits: array[TSQLOccasion] of TSQLFieldBits;
+    // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.
+    SimpleFieldsBits: array[TORMOccasion] of TFieldBits;
     /// number of fields to export, i.e. "simple" fields
     // - this array will handle special cases, like the TCreateTime fields
-    // which shall not be included in soUpdate but soInsert and soSelect e.g.
-    SimpleFieldsCount: array[TSQLOccasion] of integer;
+    // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.
+    SimpleFieldsCount: array[TORMOccasion] of integer;
     /// bit set to 1 for an unique field
     // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
     // in its property definition
-    IsUniqueFieldsBits: TSQLFieldBits;
+    IsUniqueFieldsBits: TFieldBits;
     /// bit set to 1 for the smallest simple fields
     // - i.e. excluding non only sftBlob and sftMany, but also sftVariant,
     // sftBlobDynArray, sftBlobCustom and sftUTF8Custom fields
     // - may be used to minimize the transmitted content, e.g. when serializing
     // to JSON for the most
-    SmallFieldsBits: TSQLFieldBits;
+    SmallFieldsBits: TFieldBits;
     /// bit set to 1 for the all fields storing some data
     // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
-    CopiableFieldsBits: TSQLFieldBits;
+    CopiableFieldsBits: TFieldBits;
     /// contains the main field index (e.g. mostly 'Name')
     // - the [boolean] is for [ReturnFirstIfNoUnique] version
     // - contains -1 if no field matches
     MainField: array[boolean] of integer;
-    /// count of coordinate fields of a TSQLRecordRTree, before auxiliary columns
+    /// count of coordinate fields of a TORMRTree, before auxiliary columns
     RTreeCoordBoundaryFields: integer;
   published
-    /// the TSQLRecord class
-    property Table: TSQLRecordClass read fTable;
-    /// the Table name in the database, associated with this TSQLRecord class
-    // - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
-    // - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
+    /// the TORM class
+    property Table: TORMClass read fTable;
+    /// the Table name in the database, associated with this TORM class
+    // - 'TSQL' or 'TORM' chars are trimmed at the beginning of the ClassName
+    // - or the ClassName is returned as is, if no 'TSQL' or 'TORM' at first
     property SQLTableName: RawUTF8 read fSQLTableName;
     /// returns 'COL1,COL2' with all COL* set to all field names, including
     // RowID, TRecordVersion and BLOBs
     // - this won't change depending on the ORM settings: so it can be safely
-    // computed here and not in TSQLModelRecordProperties
+    // computed here and not in TORMModelRecordProperties
     // - used e.g. by TRest.InternalListJSON()
     property SQLTableRetrieveAllFields: RawUTF8 read fSQLTableRetrieveAllFields;
   end;
 
-  /// how TSQLModel.URIMatch() will compare an URI
+  /// how TORMModel.URIMatch() will compare an URI
   // - will allow to make a difference about case-sensitivity
   TRestModelMatch = (
     rmNoMatch, rmMatchExact, rmMatchWithCaseChange);
 
   /// the kind of SQlite3 (virtual) table
-  // - TSQLRecordFTS3/4/5 will be associated with vFTS3/vFTS4/vFTS5 values,
-  // TSQLRecordRTree/TSQLRecordRTreeInteger with rRTree/rRTreeInteger, any native
-  // SQlite3 table as vSQLite3, and a TSQLRecordVirtualTable*ID as
+  // - TORMFTS3/4/5 will be associated with vFTS3/vFTS4/vFTS5 values,
+  // TORMRTree/TORMRTreeInteger with rRTree/rRTreeInteger, any native
+  // SQlite3 table as vSQLite3, and a TORMVirtualTable*ID as
   // rCustomForcedID/rCustomAutoID
-  // - a plain TSQLRecord class can be defined as rCustomForcedID (e.g. for
-  // TSQLRecordMany) after registration for an external DB via a call to
+  // - a plain TORM class can be defined as rCustomForcedID (e.g. for
+  // TORMMany) after registration for an external DB via a call to
   // VirtualTableExternalRegister() from mORMotDB unit
-  TSQLRecordVirtualKind = (
+  TORMVirtualKind = (
     rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger,
     rCustomForcedID, rCustomAutoID);
 
   /// pre-computed SQL statements for ORM operations for a given
-  // TSQLModelRecordProperties instance
-  TSQLModelRecordPropertiesSQL = record
+  // TORMModelRecordProperties instance
+  TORMModelRecordPropertiesSQL = record
     /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
     // - format is
     // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-    // - returns '*' if no field is of TSQLRawBlob/TSQLRecordMany kind
+    // - returns '*' if no field is of TRawBlob/TORMMany kind
     // - returns 'COL1,COL2' with all COL* set to simple field names if withID is false
     // - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true
     // - returns 'Table.ID,Table.COL1,Table.COL2' if withTableName and withID are true
@@ -6132,26 +6130,26 @@ type
     // - to be checked if we may safely call EngineList()
     SelectAllWithID: RawUTF8;
     /// the JOINed SQL statement for reading all fields with ID, including
-    // nested TSQLRecord pre-allocated instances
-    // - is '' if there is no nested TSQLRecord
+    // nested TORM pre-allocated instances
+    // - is '' if there is no nested TORM
     SelectAllJoined: RawUTF8;
     /// the updated simple fields exposed as 'COL1=?,COL2=?'
     // - excluding ID (but including TCreateTime fields - as used in
-    // TSQLVirtualTableExternal.Update method)
+    // TORMVirtualTableExternal.Update method)
     // - to be used e.g. for UPDATE statements
     UpdateSetSimple: RawUTF8;
     /// all updated fields exposed as 'COL1=?,COL2=?'
     // - excluding ID (but including TCreateTime fields - as used in
-    // TSQLVirtualTableExternal.Update method)
+    // TORMVirtualTableExternal.Update method)
     // - to be used e.g. for UPDATE statements
     UpdateSetAll: RawUTF8;
     /// all fields, excluding the ID field, exposed as 'COL1,COL2'
-    // - to be used e.g. in TSQLVirtualTableExternal.Insert()
+    // - to be used e.g. in TORMVirtualTableExternal.Insert()
     InsertSet: RawUTF8;
   end;
 
-  /// used by TSQLRecordPropertiesMapping.Options for custom field mapping
-  // of a TSQLRecord on an external database process
+  /// used by TORMPropertiesMapping.Options for custom field mapping
+  // of a TORM on an external database process
   // - rpmAutoMapKeywordFields is set if MapAutoKeywordFields has been defined,
   // i.e. if field names which may conflict with a keyword should be
   // automatically mapped to a harmless symbol name
@@ -6164,36 +6162,36 @@ type
   // - rpmQuoteFieldName will quote the field names - to be used e.g. with
   // FireBird in its Dialect 3
   // - rpmClearPoolOnConnectionIssue will enable detecting connection loss
-  TSQLRecordPropertiesMappingOptions = set of (
+  TORMPropertiesMappingOptions = set of (
     rpmAutoMapKeywordFields, rpmNoCreateMissingTable, rpmNoCreateMissingField,
     rpmMissingFieldNameCaseSensitive, rpmQuoteFieldName, rpmClearPoolOnConnectionIssue);
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
-  PSQLRecordPropertiesMapping = ^TSQLRecordPropertiesMapping;
+  PSQLRecordPropertiesMapping = ^TORMPropertiesMapping;
 
-  /// allow custom field mapping of a TSQLRecord
+  /// allow custom field mapping of a TORM
   // - used e.g. for external database process, including SQL generation,
   // as implemented in the mORMotDB.pas unit
   // - in end user code, mostly MapField/MapFields/Options methods
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
   {$ifdef USERECORDWITHMETHODS}
-  TSQLRecordPropertiesMapping = record
+  TORMPropertiesMapping = record
   {$else}
-  TSQLRecordPropertiesMapping = object
+  TORMPropertiesMapping = object
   {$endif USERECORDWITHMETHODS}
   private
     /// storage of main read-only properties
-    fProps: TSQLRecordProperties;
+    fProps: TORMProperties;
     fConnectionProperties: TObject;
     fTableName: RawUTF8;
     fRowIDFieldName: RawUTF8;
     fExtFieldNames: TRawUTF8DynArray;
     fExtFieldNamesUnQuotedSQL: TRawUTF8DynArray;
-    fSQL: TSQLModelRecordPropertiesSQL;
-    fFieldNamesMatchInternal: TSQLFieldBits;
-    fOptions: TSQLRecordPropertiesMappingOptions;
+    fSQL: TORMModelRecordPropertiesSQL;
+    fFieldNamesMatchInternal: TFieldBits;
+    fOptions: TORMPropertiesMappingOptions;
     fAutoComputeSQL: boolean;
     fMappingVersion: cardinal;
     /// fill fRowIDFieldName/fSQL with the current information
@@ -6203,7 +6201,7 @@ type
     // - will re-compute all needed SQL statements as needed, and initialize
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - can be used e.g. as
-    // ! aModel.Props[TSQLMyExternal].ExternalDB.MapField('IntField', 'ExtField');
+    // ! aModel.Props[TORMMyExternal].ExternalDB.MapField('IntField', 'ExtField');
     // - since it returns a PSQLRecordPropertiesMapping instance, you can
     // chain MapField().MapField().MapField(); calls to map several fields
     function MapField(
@@ -6214,7 +6212,7 @@ type
     // that all field names won't conflict with a SQL reserved keyword: such
     // fields will be identified and automatically mapped as fieldname_
     // - can be used e.g. as
-    // ! aModel.Props[TSQLMyExternal].ExternalDB.
+    // ! aModel.Props[TORMMyExternal].ExternalDB.
     // !   MapField('IntField', 'ExtField').
     // !   MapAutoKeywordFields;
     // - will in fact include the rpmAutoMapKeywordFields flag in Options
@@ -6222,18 +6220,18 @@ type
     // chain MapField().MapAutoKeywordFields.MapField(); calls to map several fields
     function MapAutoKeywordFields: PSQLRecordPropertiesMapping;
     /// specify some advanced options for the field mapping
-    // - see TSQLRecordPropertiesMappingOptions for all possibilities
+    // - see TORMPropertiesMappingOptions for all possibilities
     // - can be used e.g. as
-    // ! aModel.Props[TSQLMyExternal].ExternalDB.
+    // ! aModel.Props[TORMMyExternal].ExternalDB.
     // !   MapField('IntField', 'ExtField').
     // !   SetOptions([rpmNoCreateMissingTable, rpmNoCreateMissingField]);
     // - since it returns a PSQLRecordPropertiesMapping instance, you can
     // chain MapField().SetOptions().MapField(); calls to map several fields
     function SetOptions(
-      aOptions: TSQLRecordPropertiesMappingOptions): PSQLRecordPropertiesMapping;
+      aOptions: TORMPropertiesMappingOptions): PSQLRecordPropertiesMapping;
     /// add several custom field mappings
     // - can be used e.g. as
-    // ! aModel.Props[TSQLMyExternal].ExternalDB.
+    // ! aModel.Props[TORMMyExternal].ExternalDB.
     // !   MapFields(['IntField1', 'ExtField1', 'IntField2', 'ExtField2']);
     // - will re-compute all needed SQL statements as needed, and initialize
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
@@ -6242,21 +6240,21 @@ type
     function MapFields(
       const InternalExternalPairs: array of RawUTF8): PSQLRecordPropertiesMapping;
   public
-    /// initialize the field mapping for a given TSQLRecord
+    /// initialize the field mapping for a given TORM
     // - if AutoComputeSQL is true, will pre-compute all needed SQL from the
     // supplied information
     // - will left void fSortedFieldsName[] and fSortedFieldsIndex[], to disable
     // custom field mapping
-    procedure Init(Table: TSQLRecordClass; const MappedTableName: RawUTF8;
+    procedure Init(Table: TORMClass; const MappedTableName: RawUTF8;
       MappedConnection: TObject; AutoComputeSQL: boolean;
-      MappingOptions: TSQLRecordPropertiesMappingOptions);
+      MappingOptions: TORMPropertiesMappingOptions);
     /// map a field name from its internal name to its external name
     // - raise an EORMException if the supplied field name is not defined in
-    // the TSQLRecord as ID or a published property
+    // the TORM as ID or a published property
     function InternalToExternal(const FieldName: RawUTF8): RawUTF8;
     /// map a CSV list of field names from its internals to its externals values
     // - raise an EORMException if any of the supplied field name is not defined
-    // in the TSQLRecord as ID or as property (RowIDFieldName or FieldNames[])
+    // in the TORM as ID or as property (RowIDFieldName or FieldNames[])
     // - to be used for a simple CSV (e.g. for INSERT/SELECT statements):
     // ! ExtCSV := InternalCSVToExternalCSV('ID,Name');
     // - or for a more complex CSV (e.g. for UPDATE statements);
@@ -6265,7 +6263,7 @@ type
       const Sep: RawUTF8 = ','; const SepEnd: RawUTF8 = ''): RawUTF8;
     /// create a list of external field names, from the internal field names
     // - raise an EORMException if any of the supplied field name is not defined
-    // in the TSQLRecord as ID or a published property
+    // in the TORM as ID or a published property
     // - if IntFieldIndex is set, it will store an array of internal field
     // indexes, i.e. -1 for ID or index in in FieldNames[] for other fields
     procedure InternalToExternalDynArray(const IntFieldNames: array of RawUTF8;
@@ -6297,26 +6295,26 @@ type
     // StaticMongoDBRegister() to a TMongoCollection instance, or by
     // TDDDRepositoryRestObjectMapping.Create to its associated TRest
     // - in ORM context, equals nil if the table is internal to SQLite3:
-    // ! if Server.Model.Props[TSQLArticle].ExternalDB.ConnectionProperties = nil then
+    // ! if Server.Model.Props[TORMArticle].ExternalDB.ConnectionProperties = nil then
     // !   // this is not an external table, since Init() was not called
     property ConnectionProperties: TObject read fConnectionProperties;
-    /// the associated TSQLRecordProperties
-    property Properties: TSQLRecordProperties read fProps;
+    /// the associated TORMProperties
+    property Properties: TORMProperties read fProps;
     /// used on the Server side to specify the external DB table name
     // - e.g. for including a schema name or an existing table name, with an
     // OleDB/MSSQL/Oracle/MySQL/PostgreSQL/Jet/SQLite3 backend
     // - equals SQLTableName by default (may be overridden e.g. by mORMotDB's
     // VirtualTableExternalRegister procedure)
     property TableName: RawUTF8 read fTableName;
-    /// pre-computed SQL statements for this external TSQLRecord in this model
+    /// pre-computed SQL statements for this external TORM in this model
     // - you can use those SQL statements directly with the external engine
     // - filled if AutoComputeSQL was set to true in Init() method
-    property SQL: TSQLModelRecordPropertiesSQL read fSQL;
+    property SQL: TORMModelRecordPropertiesSQL read fSQL;
     /// the ID/RowID customized external field name, if any
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
     // database engines (e.g. Oracle)
     // - can be customized e.g. via
-    // ! aModel.Props[TSQLMyExternal].ExternalDB.MapField('ID', 'ExternalID');
+    // ! aModel.Props[TORMMyExternal].ExternalDB.MapField('ID', 'ExternalID');
     property RowIDFieldName: RawUTF8 read fRowIDFieldName;
     /// the external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
@@ -6328,9 +6326,9 @@ type
     /// each bit set, following fProps.Props.Field[]+1 order (i.e. 0=ID,
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
-    property FieldNamesMatchInternal: TSQLFieldBits read fFieldNamesMatchInternal;
+    property FieldNamesMatchInternal: TFieldBits read fFieldNamesMatchInternal;
     /// how the mapping process will take place
-    property Options: TSQLRecordPropertiesMappingOptions read fOptions;
+    property Options: TORMPropertiesMappingOptions read fOptions;
     /// each time MapField/MapFields is called, this number will increase
     // - can be used to track mapping changes in real time
     property MappingVersion: cardinal read fMappingVersion;
@@ -6338,15 +6336,15 @@ type
 
 
 
-  { -------------------- TSQLModel TSQLModelRecordProperties Definitions }
+  { -------------------- TORMModel TORMModelRecordProperties Definitions }
 
   /// used to store the locked record list, in a specified table
   // - the maximum count of the locked list if fixed to 512 by default,
   // which seems correct for common usage
   {$ifdef USERECORDWITHMETHODS}
-  TSQLLocks = record
+  TORMLocks = record
   {$else}
-  TSQLLocks = object
+  TORMLocks = object
   {$endif USERECORDWITHMETHODS}
   public
     /// the number of locked records stored in this object
@@ -6373,50 +6371,50 @@ type
     procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
   end;
 
-  PSQLLocks = ^TSQLLocks;
+  PSQLLocks = ^TORMLocks;
 
-  TSQLLocksDynArray = array of TSQLLocks;
+  TORMLocksDynArray = array of TORMLocks;
 
-  /// dynamic array of TSQLModelRecordProperties
-  // - used by TSQLModel to store the non-shared information of all its tables
-  TSQLModelRecordPropertiesObjArray = array of TSQLModelRecordProperties;
+  /// dynamic array of TORMModelRecordProperties
+  // - used by TORMModel to store the non-shared information of all its tables
+  TORMModelRecordPropertiesObjArray = array of TORMModelRecordProperties;
 
-  /// ORM properties associated to a TSQLRecord within a given model
+  /// ORM properties associated to a TORM within a given model
   // - "stable" / common properties derivated from RTTI are shared in the
-  // TSQLRecordProperties instance
-  // - since the same TSQLRecord can be defined in several models, with diverse
+  // TORMProperties instance
+  // - since the same TORM can be defined in several models, with diverse
   // implementation patterns (e.g. internal in one, external in another),
   // this class is used to regroup all model-specific settings, like SQL
   // pre-generated patterns or external DB properties
-  TSQLModelRecordProperties = class
+  TORMModelRecordProperties = class
   protected
-    fProps: TSQLRecordProperties;
-    fKind: TSQLRecordVirtualKind;
-    fModel: TSQLModel;
+    fProps: TORMProperties;
+    fKind: TORMVirtualKind;
+    fModel: TORMModel;
     fTableIndex: integer;
     fFTSWithoutContentTableIndex: integer;
     fFTSWithoutContentFields: RawUTF8;
-    procedure SetKind(Value: TSQLRecordVirtualKind);
-    function GetProp(const PropName: RawUTF8): TSQLPropInfo;
+    procedure SetKind(Value: TORMVirtualKind);
+    function GetProp(const PropName: RawUTF8): TORMPropInfo;
   public
-    /// pre-computed SQL statements for this TSQLRecord in this model
+    /// pre-computed SQL statements for this TORM in this model
     // - those statements will work for internal tables, not for external
     // tables with mapped table or fields names
-    SQL: TSQLModelRecordPropertiesSQL;
-    /// allow SQL process for one external TSQLRecord in this model
-    ExternalDB: TSQLRecordPropertiesMapping;
-    /// will by-pass automated table and field creation for this TSQLRecord
-    // - may be used e.g. when the TSQLRecord is in fact mapped into a View,
+    SQL: TORMModelRecordPropertiesSQL;
+    /// allow SQL process for one external TORM in this model
+    ExternalDB: TORMPropertiesMapping;
+    /// will by-pass automated table and field creation for this TORM
+    // - may be used e.g. when the TORM is in fact mapped into a View,
     // or is attached as external table and not a real local table
     NoCreateMissingTable: boolean;
 
-    /// initialize the ORM properties from the TSQLRecord RTTI and the supplied
-    // TSQLModel
-    constructor Create(aModel: TSQLModel; aTable: TSQLRecordClass;
-      aKind: TSQLRecordVirtualKind);
-    /// clone ORM properties from an existing TSQLModelRecordProperties to
+    /// initialize the ORM properties from the TORM RTTI and the supplied
+    // TORMModel
+    constructor Create(aModel: TORMModel; aTable: TORMClass;
+      aKind: TORMVirtualKind);
+    /// clone ORM properties from an existing TORMModelRecordProperties to
     // another model
-    constructor CreateFrom(aModel: TSQLModel; aSource: TSQLModelRecordProperties);
+    constructor CreateFrom(aModel: TORMModel; aSource: TORMModelRecordProperties);
 
     /// compute the SQL statement to be executed for a specific SELECT
     // - non simple fields (e.g. BLOBs) will be excluded if SelectFields='*'
@@ -6432,98 +6430,98 @@ type
     // - by design, all fields of the FTS4 table should exist in the source
     // ContentTable - otherwise an exception is raised
     // - the indexed text will be assigned to the FTS4 table, using triggers
-    // generated by TSQLRecordFTS4.InitializeTable at table creation
+    // generated by TORMFTS4.InitializeTable at table creation
     // - note that FTS3 does not support this feature
-    procedure FTS4WithoutContent(ContentTable: TSQLRecordClass);
+    procedure FTS4WithoutContent(ContentTable: TORMClass);
 
-    /// the table index of this TSQLRecord in the associated Model
+    /// the table index of this TORM in the associated Model
     property TableIndex: Integer read fTableIndex;
     /// direct access to a property RTTI information, by name
-    property Prop[const PropName: RawUTF8]: TSQLPropInfo read GetProp; default;
+    property Prop[const PropName: RawUTF8]: TORMPropInfo read GetProp; default;
   published
-    /// the shared TSQLRecordProperties information of this TSQLRecord
+    /// the shared TORMProperties information of this TORM
     // - as retrieved from RTTI
-    property Props: TSQLRecordProperties read fProps;
+    property Props: TORMProperties read fProps;
     /// define if is a normal table (rSQLite3), an FTS/R-Tree virtual
-    // table or a custom TSQLVirtualTable*ID (rCustomForcedID/rCustomAutoID)
+    // table or a custom TORMVirtualTable*ID (rCustomForcedID/rCustomAutoID)
     // - when set, all internal SQL statements will be (re)created, depending of
     // the expected ID/RowID column name expected (i.e. SQLTableSimpleFields[]
     // and SQLSelectAll[] - SQLUpdateSet and SQLInsertSet do not include ID)
-    property Kind: TSQLRecordVirtualKind
+    property Kind: TORMVirtualKind
       read fKind write SetKind default rSQLite3;
   end;
 
-  /// how a TSQLModel stores a foreign link to be cascaded
-  TSQLModelRecordReference = record
-    /// refers to the source TSQLRecordClass as model Tables[] index
+  /// how a TORMModel stores a foreign link to be cascaded
+  TORMModelRecordReference = record
+    /// refers to the source TORMClass as model Tables[] index
     TableIndex: integer;
     /// the property
-    FieldType: TSQLPropInfo;
-    /// the target TSQLRecordClass of the field
-    FieldTable: TSQLRecordClass;
-    /// the target TSQLRecordClass of the field, from its Tables[] index
+    FieldType: TORMPropInfo;
+    /// the target TORMClass of the field
+    FieldTable: TORMClass;
+    /// the target TORMClass of the field, from its Tables[] index
     FieldTableIndex: integer;
     /// TRUE if this field is a TRecordReferenceToBeDeleted
     CascadeDelete: boolean;
   end;
 
-  PSQLModelRecordReference = ^TSQLModelRecordReference;
+  PSQLModelRecordReference = ^TORMModelRecordReference;
 
-  TSQLModelRecordReferenceDynArray = array of TSQLModelRecordReference;
+  TORMModelRecordReferenceDynArray = array of TORMModelRecordReference;
 
   /// a Database Model (in a MVC-driven way), for storing some tables types
-  // as TSQLRecord classes
+  // as TORM classes
   // - share this Model between TRest Client and Server
   // - use this class to access the table properties: do not rely on the
   // low-level database methods (e.g. TSQLDataBase.GetTableNames), since the
   // tables may not exist in the main SQLite3 database, but in-memory or external
   // - don't modify the order of Tables inside this Model, if you publish
   // some TRecordReference property in any of your tables
-  TSQLModel = class
+  TORMModel = class
   private
-    fTables: TSQLRecordClassDynArray;
+    fTables: TORMClassDynArray;
     fRoot: RawUTF8;
     fRootUpper: RawUTF8;
     fTablesMax: integer;
-    fTableProps: TSQLModelRecordPropertiesObjArray;
-    fCustomCollationForAll: array[TSQLFieldType] of RawUTF8;
+    fTableProps: TORMModelRecordPropertiesObjArray;
+    fCustomCollationForAll: array[TORMFieldType] of RawUTF8;
     fOnClientIdle: TOnIdleSynBackgroundThread;
     /// contains the TRest caller of CreateOwnedStream()
     fOwner: TObject;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use of a dynamic array with one entry by table
-    fLocks: TSQLLocksDynArray;
+    fLocks: TORMLocksDynArray;
     /// for fastest SQL Table name lookup via O(log(n)) binary search
     fSortedTablesNameUpper: TRawUTF8DynArray;
     fSortedTablesNameIndex: TIntegerDynArray;
-    /// will contain the registered TSQLVirtualTableClass modules
+    /// will contain the registered TORMVirtualTableClass modules
     fVirtualTableModule: array of TClass;
-    /// all TRecordReference and TSQLRecord properties of the model
-    fRecordReferences: TSQLModelRecordReferenceDynArray;
+    /// all TRecordReference and TORM properties of the model
+    fRecordReferences: TORMModelRecordReferenceDynArray;
     fIDGenerator: TSynUniqueIdentifierGenerators;
     procedure SetRoot(const aRoot: RawUTF8);
     procedure SetTableProps(aIndex: integer);
-    function GetTableProps(aClass: TSQLRecordClass): TSQLModelRecordProperties;
+    function GetTableProps(aClass: TORMClass): TORMModelRecordProperties;
     /// get the enumerate type information about the possible actions to be
-    function GetLocks(aTable: TSQLRecordClass): PSQLLocks;
-    function GetTable(const SQLTableName: RawUTF8): TSQLRecordClass;
+    function GetLocks(aTable: TORMClass): PSQLLocks;
+    function GetTable(const SQLTableName: RawUTF8): TORMClass;
     function GetTableExactIndex(const TableName: RawUTF8): PtrInt;
-    function GetTableExactClass(const TableName: RawUTF8): TSQLRecordClass;
+    function GetTableExactClass(const TableName: RawUTF8): TORMClass;
   public
     /// initialize the Database Model
-    // - set the Tables to be associated with this Model, as TSQLRecord classes
+    // - set the Tables to be associated with this Model, as TORM classes
     // - set the optional Root URI path of this Model
     // - initialize the fIsUnique[] array from "stored AS_UNIQUE" (i.e. "stored
-    // false") published properties of every TSQLRecordClass
-    constructor Create(const Tables: array of TSQLRecordClass;
+    // false") published properties of every TORMClass
+    constructor Create(const Tables: array of TORMClass;
       const aRoot: RawUTF8 = 'root'); reintroduce; overload;
     /// you should not use this constructor, but one of the overloaded versions,
-    // specifying the associated TSQLRecordClass
+    // specifying the associated TORMClass
     constructor Create; reintroduce; overload;
     /// clone an existing Database Model
     // - all supplied classes won't be redefined as non-virtual:
     // VirtualTableExternalRegister explicit calls are not mandatory here
-    constructor Create(CloneFrom: TSQLModel); reintroduce; overload;
+    constructor Create(CloneFrom: TORMModel); reintroduce; overload;
     /// release associated memory
     destructor Destroy; override;
     /// add the class if it doesn't exist yet
@@ -6532,35 +6530,35 @@ type
     // - supplied class will be redefined as non-virtual: VirtualTableExternalRegister
     // explicit call is to be made if table should be managed as external
     // - return FALSE if already present, or TRUE if was added to the internal list
-    function AddTable(aTable: TSQLRecordClass;
+    function AddTable(aTable: TORMClass;
       aTableIndexCreated: PInteger = nil): boolean;
     /// add the class if it doesn't exist yet as itself or as inherited class
     // - similar to AddTable(), but any class inheriting from the supplied type
     // will be considered as sufficient
     // - return the class which has been added, or was already there as
     // inherited, so that could be used for further instance creation:
-    // ! fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
-    function AddTableInherited(aTable: TSQLRecordClass): pointer;
+    // ! fSQLAuthUserClass := Model.AddTableInherited(TAuthUser);
+    function AddTableInherited(aTable: TORMClass): pointer;
     /// return any class inheriting from the given table in the model
     // - if the model does not contain such table, supplied aTable is returned
-    function GetTableInherited(aTable: TSQLRecordClass): TSQLRecordClass;
+    function GetTableInherited(aTable: TORMClass): TORMClass;
     /// get the index of aTable in Tables[]
     // - returns -1 if the table is not in the model
-    function GetTableIndex(aTable: TSQLRecordClass): integer; overload;
+    function GetTableIndex(aTable: TORMClass): integer; overload;
     /// get the index of any class inherithing from aTable in Tables[]
     // - returns -1 if no table is matching in the model
-    function GetTableIndexInheritsFrom(aTable: TSQLRecordClass): integer;
+    function GetTableIndexInheritsFrom(aTable: TORMClass): integer;
     /// get the index of aTable in Tables[]
     // - raise an EModelException if the table is not in the model
-    function GetTableIndexExisting(aTable: TSQLRecordClass): integer;
+    function GetTableIndexExisting(aTable: TORMClass): integer;
     /// get the index of a table in Tables[]
-    // - expects SQLTableName to be SQL-like formatted (i.e. without TSQL[Record])
+    // - expects SQLTableName to be SQL-like formatted (i.e. without TORM[Record])
     function GetTableIndex(const SQLTableName: RawUTF8): integer; overload;
     /// get the index of a table in Tables[], optionally raising EModelException
-    function GetTableIndexSafe(aTable: TSQLRecordClass;
+    function GetTableIndexSafe(aTable: TORMClass;
       RaiseExceptionIfNotExisting: boolean): PtrInt;
     /// get the index of a table in Tables[]
-    // - expects SQLTableName to be SQL-like formatted (i.e. without TSQL[Record])
+    // - expects SQLTableName to be SQL-like formatted (i.e. without TORM[Record])
     function GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
     /// return the UTF-8 encoded SQL source to create the table
     function GetSQLCreate(aTableIndex: integer): RawUTF8;
@@ -6568,14 +6566,14 @@ type
     // via a "ALTER TABLE" statement
     function GetSQLAddField(aTableIndex, aFieldIndex: integer): RawUTF8;
     /// return the TRecordReference pointing to the specified record
-    function RecordReference(Table: TSQLRecordClass; ID: TID): TRecordReference;
+    function RecordReference(Table: TORMClass; ID: TID): TRecordReference;
     /// return the table class correspondig to a TRecordReference
-    function RecordReferenceTable(const Ref: TRecordReference): TSQLRecordClass;
+    function RecordReferenceTable(const Ref: TRecordReference): TORMClass;
     /// return TRUE if the specified field of this class was marked as unique
     // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
     // in its property definition
     // - reflects the internal private fIsUnique propery
-    function GetIsUnique(aTable: TSQLRecordClass; aFieldIndex: integer): boolean;
+    function GetIsUnique(aTable: TORMClass; aFieldIndex: integer): boolean;
     /// try to retrieve a table index from a SQL statement
     // - naive search of '... FROM TableName' pattern in the supplied SQL,
     // using GetTableNameFromSQLSelect() function
@@ -6583,10 +6581,10 @@ type
     // is in the FROM clause, otherwise it will return the first Table specified
     function GetTableIndexFromSQLSelect(const SQL: RawUTF8;
       EnsureUniqueTableInFrom: boolean): integer;
-    /// try to retrieve one or several TSQLRecordClass from a SQL statement
+    /// try to retrieve one or several TORMClass from a SQL statement
     // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
     // using GetTableNamesFromSQLSelect() function
-    function GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDynArray;
+    function GetTablesFromSQLSelect(const SQL: RawUTF8): TORMClassDynArray;
     /// try to retrieve one or several table index from a SQL statement
     // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
     // using GetTableNamesFromSQLSelect() function
@@ -6599,19 +6597,19 @@ type
     // approximation (e.g. 'Root/sub' approximates Root='root')
     function URIMatch(const URI: RawUTF8): TRestModelMatch;
     /// returns the URI corresponding to a given table, i.e. 'root/table'
-    function GetURI(aTable: TSQLRecordClass): RawUTF8;
+    function GetURI(aTable: TORMClass): RawUTF8;
     /// return the 'root/table/ID' URI
-    function GetURIID(aTable: TSQLRecordClass; aID: TID): RawUTF8;
+    function GetURIID(aTable: TORMClass; aID: TID): RawUTF8;
     /// return the 'root/table/ID/method' URI
     function GetURICallBack(const aMethodName: RawUTF8;
-      aTable: TSQLRecordClass; aID: TID): RawUTF8;
+      aTable: TORMClass; aID: TID): RawUTF8;
     /// compute the SQL statement to be executed for a specific SELECT on Tables
     // - you can set multiple Table class in Tables: the statement will contain the
     // table name ('SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.)
-    function SQLFromSelectWhere(const Tables: array of TSQLRecordClass;
+    function SQLFromSelectWhere(const Tables: array of TORMClass;
       const SQLSelect, SQLWhere: RawUTF8): RawUTF8;
     /// set a custom SQlite3 text column collation for all fields of a given
-    // type for all TSQLRecord of this model
+    // type for all TORM of this model
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUTF8,
     // or COLLATE ISO8601 for TDateTime, and let the generated SQLite3 file be
     // available outside the scope of mORMot's SQLite3 engine
@@ -6621,7 +6619,7 @@ type
     // ! SetCustomCollationForAll(sftUTF8Text, 'WIN32CASE');
     // - shall be set on both Client and Server sides, otherwise some issues
     // may occur
-    procedure SetCustomCollationForAll(aFieldType: TSQLFieldType;
+    procedure SetCustomCollationForAll(aFieldType: TORMFieldType;
       const aCollationName: RawUTF8);
     /// allow to validate length of all text published properties of all tables
     // of this model
@@ -6646,91 +6644,91 @@ type
     // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length
     procedure SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean = false);
     /// customize the TDocVariant options for all variant published properties
-    // - will change the TSQLPropInfoRTTIVariant.DocVariantOptions value
+    // - will change the TORMPropInfoRTTIVariant.DocVariantOptions value
     // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
-    // - see also TSQLRecordNoCaseExtended root class
+    // - see also TORMNoCaseExtended root class
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     /// force a given table to use a TSynUniqueIdentifierGenerator for its IDs
     /// - will initialize a generator for the supplied table, using the
     // given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
-    function SetIDGenerator(aTable: TSQLRecordClass;
+    function SetIDGenerator(aTable: TORMClass;
       aIdentifier: TSynUniqueIdentifierProcess;
       const aSharedObfuscationKey: RawUTF8 = ''): TSynUniqueIdentifierGenerator;
     /// returns the TSynUniqueIdentifierGenerator associated to a table, if any
-    function GetIDGenerator(aTable: TSQLRecordClass): TSynUniqueIdentifierGenerator;
+    function GetIDGenerator(aTable: TORMClass): TSynUniqueIdentifierGenerator;
     /// low-level access to the TSynUniqueIdentifierGenerator instances, if any
     property IDGenerator: TSynUniqueIdentifierGenerators read fIDGenerator;
 
     /// register a Virtual Table module for a specified class
     // - to be called server-side only (Client don't need to know the virtual
     // table implementation details, and it will increase the code size)
-    // - aClass parameter could be either a TSQLRecordVirtual class, either
-    // a TSQLRecord class which has its kind set to rCustomForcedID or
-    // rCustomAutoID (e.g. TSQLRecordMany calling VirtualTableExternalRegister)
-    // - aModule is expected to be a TSQLVirtualTableClass type definition
+    // - aClass parameter could be either a TORMVirtual class, either
+    // a TORM class which has its kind set to rCustomForcedID or
+    // rCustomAutoID (e.g. TORMMany calling VirtualTableExternalRegister)
+    // - aModule is expected to be a TORMVirtualTableClass type definition
     // - optional aExternalTableName, aExternalDataBase and aMappingOptions can
     // be used to specify e.g. connection parameters as expected by mORMotDB
     // - call it before TRestServer.Create()
-    function VirtualTableRegister(aClass: TSQLRecordClass; aModule: TClass;
+    function VirtualTableRegister(aClass: TORMClass; aModule: TClass;
       const aExternalTableName: RawUTF8 = ''; aExternalDataBase: TObject = nil;
-      aMappingOptions: TSQLRecordPropertiesMappingOptions = []): boolean;
+      aMappingOptions: TORMPropertiesMappingOptions = []): boolean;
     /// retrieve a Virtual Table module associated to a class
-    // - returns a TSQLVirtualTableClass type definition
-    function VirtualTableModule(aClass: TSQLRecordClass): TClass;
+    // - returns a TORMVirtualTableClass type definition
+    function VirtualTableModule(aClass: TORMClass): TClass;
 
-    /// create a New TSQLRecord instance for a specific Table
-    // - expects SQLTableName to be SQL-like formated (i.e. without TSQL[Record])
+    /// create a New TORM instance for a specific Table
+    // - expects SQLTableName to be SQL-like formated (i.e. without TORM[Record])
     // - use this to create a working copy of a table's record, e.g.
     // - don't forget to Free it when not used any more (use a try...finally
     // block)
-    // - it's prefered in practice to directly call TSQLRecord*.Create()
+    // - it's prefered in practice to directly call TORM*.Create()
     // in your code
-    function NewRecord(const SQLTableName: RawUTF8): TSQLRecord;
+    function NewRecord(const SQLTableName: RawUTF8): TORM;
 
     /// lock a record
     // - returns true on success, false if was already locked
-    function Lock(aTable: TSQLRecordClass; aID: TID): boolean; overload;
+    function Lock(aTable: TORMClass; aID: TID): boolean; overload;
     /// lock a record
     // - returns true on success, false if was already locked
     function Lock(aTableIndex: integer; aID: TID): boolean; overload;
     /// lock a record
     // - returns true on success, false if was already locked
-    function Lock(aRec: TSQLRecord): boolean; overload;
+    function Lock(aRec: TORM): boolean; overload;
     /// unlock a specified record
     // - returns true on success, false if was not already locked
-    function UnLock(aTable: TSQLRecordClass; aID: TID): boolean; overload;
+    function UnLock(aTable: TORMClass; aID: TID): boolean; overload;
     /// unlock a specified record
     // - returns true on success, false if was not already locked
     function UnLock(aTableIndex: integer; aID: TID): boolean; overload;
     /// unlock a specified record
     // - returns true on success, false if was not already locked
-    function UnLock(aRec: TSQLRecord): boolean; overload;
+    function UnLock(aRec: TORM): boolean; overload;
     /// unlock all previously locked records
     procedure UnLockAll;
     /// return true if a specified record is locked
-    function isLocked(aTable: TSQLRecordClass; aID: TID): boolean; overload;
+    function isLocked(aTable: TORMClass; aID: TID): boolean; overload;
     /// return true if a specified record is locked
-    function isLocked(aRec: TSQLRecord): boolean; overload;
+    function isLocked(aRec: TORM): boolean; overload;
     /// delete all the locked IDs entries, after a specified time
     // - to be used to release locked records if the client crashed
     // - default value is 30 minutes, which seems correct for common usage
     procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
 
-    /// the associated ORM information for a given TSQLRecord class
+    /// the associated ORM information for a given TORM class
     // - raise an EModelException if aClass is not declared within this model
     // - returns the corresponding TableProps[] item if the class is known
-    property Props[aClass: TSQLRecordClass]: TSQLModelRecordProperties
+    property Props[aClass: TORMClass]: TORMModelRecordProperties
       read GetTableProps;
-    /// get the classes list (TSQLRecord descendent) of all available tables
-    property Tables: TSQLRecordClassDynArray read fTables;
+    /// get the classes list (TORM descendent) of all available tables
+    property Tables: TORMClassDynArray read fTables;
     /// get a class from a table name
-    // - expects SQLTableName to be SQL-like formated (i.e. without TSQL[Record])
-    property Table[const SQLTableName: RawUTF8]: TSQLRecordClass
+    // - expects SQLTableName to be SQL-like formated (i.e. without TORM[Record])
+    property Table[const SQLTableName: RawUTF8]: TORMClass
       read GetTable; default;
-    /// get a class from a table TableName (don't truncate TSQLRecord* if necessary)
-    property TableExact[const TableName: RawUTF8]: TSQLRecordClass
+    /// get a class from a table TableName (don't truncate TORM* if necessary)
+    property TableExact[const TableName: RawUTF8]: TORMClass
       read GetTableExactClass;
     /// the maximum index of TableProps[] class properties array
     property TablesMax: integer read fTablesMax;
@@ -6739,21 +6737,21 @@ type
     function SafeRoot: RawUTF8;
     /// compute the URI for a class in this Model, as 'ModelRoot/SQLTableName'
     // - set also GetURI/GetURIID/GetURICallback methods
-    property URI[aClass: TSQLRecordClass]: RawUTF8 read GetURI;
+    property URI[aClass: TORMClass]: RawUTF8 read GetURI;
 
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
     // Owner.Destroy autofreeing this (TRest) instance
     property Owner: TObject read fOwner write fOwner;
     /// for every table, contains a locked record list
-    // - very fast, thanks to the use one TSQLLocks entry by table
-    property Locks: TSQLLocksDynArray read fLocks;
-    /// this array contain all TRecordReference and TSQLRecord properties
+    // - very fast, thanks to the use one TORMLocks entry by table
+    property Locks: TORMLocksDynArray read fLocks;
+    /// this array contain all TRecordReference and TORM properties
     // existing in the database model
     // - used in TRestServer.Delete() to enforce relational database coherency
     // after deletion of a record: all other records pointing to it will be
     // reset to 0 or deleted (if CascadeDelete is true)
-    property RecordReferences: TSQLModelRecordReferenceDynArray read fRecordReferences;
+    property RecordReferences: TORMModelRecordReferenceDynArray read fRecordReferences;
     /// set a callback event to be executed in loop during client remote
     // blocking process, e.g. to refresh the UI during a somewhat long request
     // - will be passed to TRestClientURI.OnIdle property by
@@ -6766,12 +6764,12 @@ type
     // routing, so it should contain only URI-friendly characters,
     // i.e. only alphanumerical characters, excluding e.g. space or '+',
     // otherwise an EModelException is raised
-    // - use SafeRoot function is you are not sure that the TSQLModel is not nil
+    // - use SafeRoot function is you are not sure that the TORMModel is not nil
     property Root: RawUTF8 read fRoot write SetRoot;
-    /// the associated ORM information about all handled TSQLRecord class properties
+    /// the associated ORM information about all handled TORM class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].RecordProps values
-    property TableProps: TSQLModelRecordPropertiesObjArray read fTableProps;
+    property TableProps: TORMModelRecordPropertiesObjArray read fTableProps;
   end;
 
 
@@ -6837,12 +6835,12 @@ type
     procedure SetJSON(aID: TID; const aJSON: RawUTF8;
       aTag: cardinal = 0); overload;
     /// update/refresh the cached JSON serialization of a supplied Record
-    procedure SetJSON(aRecord: TSQLRecord); overload;
+    procedure SetJSON(aRecord: TORM); overload;
     /// retrieve a JSON serialization of a given ID from cache
     function RetrieveJSON(aID: TID; var aJSON: RawUTF8;
       aTag: PCardinal = nil): boolean; overload;
     /// unserialize a JSON cached record of a given ID
-    function RetrieveJSON(aID: TID; aValue: TSQLRecord;
+    function RetrieveJSON(aID: TID; aValue: TORM;
       aTag: PCardinal = nil): boolean; overload;
     /// compute how much memory stored entries are using
     // - will also flush outdated entries
@@ -6851,15 +6849,15 @@ type
 
   /// for TRestCache, stores all table settings and values
   // - this dynamic array will follow TRest.Model.Tables[] layout, i.e. one
-  // entry per TSQLRecord class in the data model
+  // entry per TORM class in the data model
   TRestCacheEntryDynArray = array of TRestCacheEntry;
 
-  /// implement a fast TSQLRecord cache, per ID, at the TRest level
+  /// implement a fast TORM cache, per ID, at the TRest level
   // - purpose of this caching mechanism is to speed up retrieval of some common
   // values at either Client or Server level (like configuration settings)
   // - only caching synchronization is about the following RESTful basic commands:
   // RETRIEVE, ADD, DELETION and UPDATE (that is, a complex direct SQL UPDATE
-  // or via TSQLRecordMany pattern won't be taken into account)
+  // or via TORMMany pattern won't be taken into account)
   // - only Simple fields are cached: e.g. the BLOB fields are not stored
   // - this cache is thread-safe (access is locked per table)
   // - this caching will be located at the TRest level, that is no automated
@@ -6868,12 +6866,12 @@ type
   TRestCache = class
   protected
     fRest: IRestORM;
-    fModel: TSQLModel;
-    /// fCache[] follows fRest.Model.Tables[] array: one entry per TSQLRecord
+    fModel: TORMModel;
+    /// fCache[] follows fRest.Model.Tables[] array: one entry per TORM
     fCache: TRestCacheEntryDynArray;
   public
     /// create a cache instance
-    // - the associated TSQLModel will be used internaly
+    // - the associated TORMModel will be used internaly
     constructor Create(const aRest: IRestORM); reintroduce;
     /// release the cache instance
     destructor Destroy; override;
@@ -6884,52 +6882,52 @@ type
     /// flush the cache for a given table
     // - this will flush all stored JSON content, but keep the settings
     // (SetCache/SetTimeOut) as before for this table
-    procedure Flush(aTable: TSQLRecordClass); overload;
+    procedure Flush(aTable: TORMClass); overload;
     /// flush the cache for a given record
     // - this will flush the stored JSON content for this record (and table
     // settings will be kept)
-    procedure Flush(aTable: TSQLRecordClass; aID: TID); overload;
+    procedure Flush(aTable: TORMClass; aID: TID); overload;
     /// flush the cache for a set of specified records
     // - this will flush the stored JSON content for these record (and table
     // settings will be kept)
-    procedure Flush(aTable: TSQLRecordClass; const aIDs: array of TID); overload;
+    procedure Flush(aTable: TORMClass; const aIDs: array of TID); overload;
     /// flush the cache, and destroy all settings
     // - this will flush all stored JSON content, AND destroy the settings
     // (SetCache/SetTimeOut) to default (i.e. no cache enabled)
     procedure Clear;
     // - will fill the internal JSON cache of a given Table with data coming
     // from a REST query
-    // - returns the number of TSQLRecord items actually cached
+    // - returns the number of TORM items actually cached
     // - may be handy to pre-load a set of values (e.g. a lookup table) from a
     // single REST query, without waiting for each record to be retrieved
-    function FillFromQuery(aTable: TSQLRecordClass;
+    function FillFromQuery(aTable: TORMClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): integer;
     /// activate the internal caching for a whole Table
     // - any cached item of this table will be flushed
     // - return true on success
-    function SetCache(aTable: TSQLRecordClass): boolean; overload;
-    /// activate the internal caching for a given TSQLRecord
+    function SetCache(aTable: TORMClass): boolean; overload;
+    /// activate the internal caching for a given TORM
     // - if this item is already cached, do nothing
     // - return true on success
-    function SetCache(aTable: TSQLRecordClass; aID: TID): boolean; overload;
-    /// activate the internal caching for a set of specified TSQLRecord
+    function SetCache(aTable: TORMClass; aID: TID): boolean; overload;
+    /// activate the internal caching for a set of specified TORM
     // - if these items are already cached, do nothing
     // - return true on success
-    function SetCache(aTable: TSQLRecordClass; const aIDs: array of TID):
+    function SetCache(aTable: TORMClass; const aIDs: array of TID):
       boolean; overload;
-    /// activate the internal caching for a given TSQLRecord
+    /// activate the internal caching for a given TORM
     // - will cache the specified aRecord.ID item
     // - if this item is already cached, do nothing
     // - return true on success
-    function SetCache(aRecord: TSQLRecord): boolean; overload;
+    function SetCache(aRecord: TORM): boolean; overload;
     /// set the internal caching time out delay (in ms) for a given table
     // - actual resolution is 512 ms
     // - time out setting is common to all items of the table
     // - if aTimeOut is left to its default 0 value, caching will never expire
     // - return true on success
-    function SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: cardinal): boolean;
+    function SetTimeOut(aTable: TORMClass; aTimeoutMS: cardinal): boolean;
     /// returns TRUE if the table is part of the current caching policy
-    function IsCached(aTable: TSQLRecordClass): boolean;
+    function IsCached(aTable: TORMClass): boolean;
     /// returns the number of JSON serialization records within this cache
     function CachedEntries: cardinal;
     /// returns the memory used by JSON serialization records within this cache
@@ -6937,40 +6935,40 @@ type
     function CachedMemory(FlushedEntriesCount: PInteger = nil): cardinal;
     /// read-only access to the associated TRest.ORM instance
     property Rest: IRestORM read fRest;
-    /// read-only access to the associated TSQLModel instance
-    property Model: TSQLModel read fModel;
+    /// read-only access to the associated TORMModel instance
+    property Model: TORMModel read fModel;
   public { TRest low level methods which are not to be called usualy: }
     /// retrieve a record specified by its ID from cache into JSON content
     // - return '' if the item is not in cache
     function Retrieve(aTableIndex: integer; aID: TID): RawUTF8; overload;
-    /// fill a record specified by its ID from cache into a new TSQLRecord instance
+    /// fill a record specified by its ID from cache into a new TORM instance
     // - return false if the item is not in cache
     // - this method will call RetrieveJSON method, unserializing the cached
     // JSON content into the supplied aValue instance
-    function Retrieve(aID: TID; aValue: TSQLRecord): boolean; overload;
+    function Retrieve(aID: TID; aValue: TORM): boolean; overload;
     /// TRest instance shall call this method when a record is added or updated
     // - this overloaded method expects the content to be specified as JSON object
-    procedure Notify(aTable: TSQLRecordClass; aID: TID; const aJSON: RawUTF8;
-      aAction: TSQLOccasion); overload;
+    procedure Notify(aTable: TORMClass; aID: TID; const aJSON: RawUTF8;
+      aAction: TORMOccasion); overload;
     /// TRest instance shall call this method when a record is retrieved,
     // added or updated
     // - this overloaded method expects the content to be specified as JSON object,
-    // and TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
+    // and TORMClass to be specified as its index in Rest.Model.Tables[]
     procedure Notify(aTableIndex: integer; aID: TID; const aJSON: RawUTF8;
-      aAction: TSQLOccasion); overload;
+      aAction: TORMOccasion); overload;
     /// TRest instance shall call this method when a record is added or updated
     // - this overloaded method will call the other Trace method, serializing
-    // the supplied aRecord content as JSON (not in the case of seDelete)
-    procedure Notify(aRecord: TSQLRecord; aAction: TSQLOccasion); overload;
+    // the supplied aRecord content as JSON (not in the case of oeDelete)
+    procedure Notify(aRecord: TORM; aAction: TORMOccasion); overload;
     /// TRest instance shall call this method when a record is deleted
     // - this method is dedicated for a record deletion
-    procedure NotifyDeletion(aTable: TSQLRecordClass; aID: TID); overload;
+    procedure NotifyDeletion(aTable: TORMClass; aID: TID); overload;
     /// TRest instance shall call this method when a record is deleted
     // - this method is dedicated for a record deletion
-    // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
+    // - TORMClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletion(aTableIndex: integer; aID: TID); overload;
     /// TRest instance shall call this method when records are deleted
-    // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
+    // - TORMClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64); overload;
   end;
 
@@ -6979,9 +6977,9 @@ type
 
   /// event signature triggered by TRestBatch.OnWrite
   // - also used by TRestServer.RecordVersionSynchronizeSlave*() methods
-  TOnBatchWrite = procedure(Sender: TRestBatch; Event: TSQLOccasion;
-    Table: TSQLRecordClass; const ID: TID; Value: TSQLRecord;
-    const ValueFields: TSQLFieldBits) of object;
+  TOnBatchWrite = procedure(Sender: TRestBatch; Event: TORMOccasion;
+    Table: TORMClass; const ID: TID; Value: TORM;
+    const ValueFields: TFieldBits) of object;
 
   /// used to store a BATCH sequence of writing operations
   // - is used by TRest to process BATCH requests using BatchSend() method,
@@ -6991,13 +6989,13 @@ type
   TRestBatch = class
   protected
     fRest: IRestORM;
-    fModel: TSQLModel;
+    fModel: TORMModel;
     fInternalBufferSize: integer;
     fCalledWithinRest: boolean;
     fBatch: TJSONSerializer;
-    fBatchFields: TSQLFieldBits;
-    fTable: TSQLRecordClass;
-    fTablePreviousSendData: TSQLRecordClass;
+    fBatchFields: TFieldBits;
+    fTable: TORMClass;
+    fTablePreviousSendData: TORMClass;
     fTableIndex: integer;
     fBatchCount: integer;
     fDeletedRecordRef: TIDDynArray;
@@ -7010,8 +7008,8 @@ type
     fOnWrite: TOnBatchWrite;
     function GetCount: integer;
     function GetSizeBytes: cardinal;
-    procedure SetExpandedJSONWriter(Props: TSQLRecordProperties;
-      ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
+    procedure SetExpandedJSONWriter(Props: TORMProperties;
+      ForceResetFields, withID: boolean; const WrittenFields: TFieldBits);
   public
     /// begin a BATCH sequence to speed up huge database changes
     // - each call to normal Add/Update/Delete methods will create a Server request,
@@ -7022,9 +7020,9 @@ type
     //   as one to the remote server, i.e. in one URI request
     // - if BatchAbort is called instead, all pending BatchAdd/Update/Delete
     //   transactions will be aborted, i.e. ignored
-    // - expect one TSQLRecordClass as parameter, which will be used for the whole
+    // - expect one TORMClass as parameter, which will be used for the whole
     //   sequence (in this case, you can't mix classes in the same BATCH sequence)
-    // - if no TSQLRecordClass is supplied, the BATCH sequence will allow any
+    // - if no TORMClass is supplied, the BATCH sequence will allow any
     //   kind of individual record in BatchAdd/BatchUpdate/BatchDelete
     // - return TRUE on success, FALSE if aTable is incorrect or a previous BATCH
     //   sequence was already initiated
@@ -7042,13 +7040,13 @@ type
     //   OR IGNORE on internal SQLite3 engine
     // - InternalBufferSize could be set to some high value (e.g. 10 shl 20),
     //   if you expect a very high number of rows in this BATCH
-    constructor Create(const aRest: IRestORM; aTable: TSQLRecordClass;
+    constructor Create(const aRest: IRestORM; aTable: TORMClass;
       AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = [];
       InternalBufferSize: cardinal = 65536; CalledWithinRest: boolean = false); virtual;
     /// finalize the BATCH instance
     destructor Destroy; override;
     /// reset the BATCH sequence so that you can re-use the same TRestBatch
-    procedure Reset(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal = 0;
+    procedure Reset(aTable: TORMClass; AutomaticTransactionPerRow: cardinal = 0;
       Options: TRestBatchOptions = []); overload; virtual;
     /// reset the BATCH sequence to its previous state
     // - could be used to prepare a next chunk of values, after a call to
@@ -7060,22 +7058,22 @@ type
     // - if SendData is true, content of Value is sent to the server as JSON
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
-    // - if Value is TSQLRecordFTS3/4/5, Value.ID is stored to the virtual table
-    // - Value class MUST match the TSQLRecordClass used at BatchStart,
+    // - if Value is TORMFTS3/4/5, Value.ID is stored to the virtual table
+    // - Value class MUST match the TORMClass used at BatchStart,
     // or may be of any kind if no class was specified
     // - BLOB fields are NEVER transmitted here, even if ForceBlobTransfert=TRUE
     // - if CustomFields is left void, the simple fields will be used; otherwise,
     // you can specify your own set of fields to be transmitted when SendData=TRUE
     // (including BLOBs, even if they will be Base64-encoded within JSON content) -
-    // CustomFields could be computed by TSQLRecordProperties.FieldBitsFromCSV()
-    // or TSQLRecordProperties.FieldBitsFromRawUTF8(), or by setting ALL_FIELDS
+    // CustomFields could be computed by TORMProperties.FieldBitsFromCSV()
+    // or TORMProperties.FieldBitsFromRawUTF8(), or by setting ALL_FIELDS
     // - this method will always compute and send TCreateTime/TModTime fields
-    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean = false;
-      const CustomFields: TSQLFieldBits = []; DoNotAutoComputeFields: boolean = false): integer;
+    function Add(Value: TORM; SendData: boolean; ForceID: boolean = false;
+      const CustomFields: TFieldBits = []; DoNotAutoComputeFields: boolean = false): integer;
     /// update a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
-    // - Value class MUST match the TSQLRecordClass used at BatchStart,
+    // - Value class MUST match the TORMClass used at BatchStart,
     // or may be of any kind if no class was specified
     // - BLOB fields are NEVER transmitted here, even if ForceBlobTransfert=TRUE
     // - if Value has an opened FillPrepare() mapping, only the mapped fields
@@ -7085,31 +7083,31 @@ type
     // fields retrieved via a previous FillPrepare() call; otherwise, you can
     // specify your own set of fields to be transmitted (including BLOBs, even
     // if they will be Base64-encoded within the JSON content) - CustomFields
-    // could be computed by TSQLRecordProperties.FieldBitsFromCSV()
-    // or TSQLRecordProperties.FieldBitsFromRawUTF8()
+    // could be computed by TORMProperties.FieldBitsFromCSV()
+    // or TORMProperties.FieldBitsFromRawUTF8()
     // - this method will always compute and send any TModTime fields, unless
     // DoNotAutoComputeFields is set to true
     // - if not all fields are specified, will reset the cache entry associated
     // with this value, unless ForceCacheUpdate is TRUE
-    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
+    function Update(Value: TORM; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false; ForceCacheUpdate: boolean = false): integer; overload; virtual;
     /// update a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - is an overloaded method to Update(Value,FieldBitsFromCSV())
-    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+    function Update(Value: TORM; const CustomCSVFields: RawUTF8;
       DoNotAutoComputeFields: boolean = false; ForceCacheUpdate: boolean = false): integer; overload;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
-    // - deleted record class is the TSQLRecordClass used at BatchStart()
+    // - deleted record class is the TORMClass used at BatchStart()
     // call: it will fail if no class was specified for this BATCH sequence
     function Delete(ID: TID): integer; overload;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
     // - with this overloaded method, the deleted record class is specified:
-    // no TSQLRecordClass shall have been set at BatchStart() call
-    function Delete(Table: TSQLRecordClass; ID: TID): integer; overload;
+    // no TORMClass shall have been set at BatchStart() call
+    function Delete(Table: TORMClass; ID: TID): integer; overload;
     /// allow to append some JSON content to the internal raw buffer
     // - could be used to emulate Add/Update/Delete
     // - FullRow=TRUE will increment the global Count
@@ -7130,8 +7128,8 @@ type
     function PrepareForSending(out Data: RawUTF8): boolean; virtual;
     /// read only access to the associated TRest instance
     property Rest: IRestORM read fRest;
-    /// read only access to the associated TSQLModel instance
-    property Model: TSQLModel read fModel;
+    /// read only access to the associated TORMModel instance
+    property Model: TORMModel read fModel;
     /// how many times Add() has been called for this BATCH process
     property AddCount: integer read fAddCount;
     /// how many times Update() has been called for this BATCH process
@@ -7141,8 +7139,8 @@ type
     /// this event handler will be triggerred by each Add/Update/Delete method
     property OnWrite: TOnBatchWrite read fOnWrite write fOnWrite;
   published
-    /// read only access to the main associated TSQLRecord class (if any)
-    property Table: TSQLRecordClass read fTable;
+    /// read only access to the main associated TORM class (if any)
+    property Table: TORMClass read fTable;
     /// retrieve the current number of pending transactions in the BATCH sequence
     property Count: integer read GetCount;
     /// retrieve the current JSON size of pending transaction in the BATCH sequence
@@ -7157,13 +7155,13 @@ type
     fThreshold: integer;
   public
     /// initialize the BATCH instance
-    constructor Create(const aRest: IRestORM; aTable: TSQLRecordClass;
+    constructor Create(const aRest: IRestORM; aTable: TORMClass;
       AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = [];
       InternalBufferSize: cardinal = 65536; CalledWithinRest: boolean = false); override;
     /// finalize the BATCH instance
     destructor Destroy; override;
     /// reset the BATCH sequence so that you can re-use the same TRestBatch
-    procedure Reset(aTable: TSQLRecordClass;
+    procedure Reset(aTable: TORMClass;
       AutomaticTransactionPerRow: cardinal = 0; Options: TRestBatchOptions = []); override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
@@ -7179,39 +7177,39 @@ type
 
   { -------------------- TSynValidateRest TSynValidateUniqueField Definitions }
 
-  /// will define a validation to be applied to a TSQLRecord field, using
-  // if necessary an associated TRest instance and a TSQLRecord class
+  /// will define a validation to be applied to a TORM field, using
+  // if necessary an associated TRest instance and a TORM class
   // - a typical usage is to validate a value to be unique in the table
   // (implemented in the TSynValidateUniqueField class)
   // - the optional associated parameters are to be supplied JSON-encoded
   // - ProcessRest and ProcessRec properties will be filled before Validate
-  // method call by TSQLRecord.Validate()
+  // method call by TORM.Validate()
   TSynValidateRest = class(TSynValidate)
   protected
     fProcessRest: IRestORM;
-    fProcessRec: TSQLRecord;
+    fProcessRec: TORM;
     function DoValidate(aFieldIndex: integer; const Value: RawUTF8;
-      var ErrorMsg: string; const aProcessRest: IRestORM; aProcessRec: TSQLRecord): boolean;
+      var ErrorMsg: string; const aProcessRest: IRestORM; aProcessRec: TORM): boolean;
       virtual; abstract;
   public
     function Process(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string): boolean; override;
     function Validate(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string; const aProcessRest: IRestORM;
-      aProcessRec: TSQLRecord): boolean;
+      aProcessRec: TORM): boolean;
     /// access to the ORM process of the associated TRest instance
     // - this value is updated by Validate with the current
     // TRest used for the validation
     // - it can be used in the overridden DoValidate method
     property ProcessRest: IRestORM read fProcessRest;
-    /// the associated TSQLRecord instance
+    /// the associated TORM instance
     // - this value is updated by Validate with the current
-    // TSQLRecord instance to be validated
+    // TORM instance to be validated
     // - it can be used in the overridden DoValidate method
-    property ProcessRec: TSQLRecord read fProcessRec;
+    property ProcessRec: TORM read fProcessRec;
   end;
 
-  /// will define a validation for a TSQLRecord Unique text field
+  /// will define a validation for a TORM Unique text field
   // - this class will handle only textual fields, not numeric values
   // - it will check that the field value is not void
   // - it will check that the field value is not a duplicate
@@ -7220,13 +7218,13 @@ type
     /// perform the unique field validation action to the specified value
     function DoValidate(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string; const aProcessRest: IRestORM;
-      aProcessRec: TSQLRecord): boolean; override;
+      aProcessRec: TORM): boolean; override;
   end;
 
-  /// will define an unicity validation for a set of TSQLRecord text fields
+  /// will define an unicity validation for a set of TORM text fields
   // - field names should be specified as CSV in the JSON "FieldNames" property
   // in the constructor, or the Parameters field, e.g. like
-  // ! TSQLSampleRecord.AddFilterOrValidate('propA',
+  // ! TORMSampleRecord.AddFilterOrValidate('propA',
   // !   TSynValidateUniqueFields.Create('{"FieldNames":"propA,propB"}'));
   // - this class will handle only textual fields, not numeric values
   // - it will check that the field values are not a duplicate
@@ -7237,21 +7235,21 @@ type
     /// perform the unique fields validation action to the specified value
     function DoValidate(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string; const aProcessRest: IRestORM;
-      aProcessRec: TSQLRecord): boolean; override;
+      aProcessRec: TORM): boolean; override;
   public
     /// the validated field names
     property FieldNames: TRawUTF8DynArray read fFieldNames;
   end;
 
 
-  { -------------------- TSQLAccessRights Definition }
+  { -------------------- TORMAccessRights Definition }
 
   /// a set of potential actions to be executed from the server
   // - reSQL will indicate the right to execute any POST SQL statement (not only
   // SELECT statements)
   // - reSQLSelectWithoutTable will allow executing a SELECT statement with
   // arbitrary content via GET/LOCK (simple SELECT .. FROM aTable will be checked
-  // against TSQLAccessRights.GET[] per-table right
+  // against TORMAccessRights.GET[] per-table right
   // - reService will indicate the right to execute the interface-based JSON-RPC
   // service implementation
   // - reUrlEncodedSQL will indicate the right to execute a SQL query encoded
@@ -7263,23 +7261,23 @@ type
   // for one user, even if connection comes from the same IP: in this case,
   // you may have to set the SessionTimeOut to a small value, in case the
   // session is not closed gracefully
-  // - by default, read/write access to the TSQLAuthUser table is disallowed,
+  // - by default, read/write access to the TAuthUser table is disallowed,
   // for obvious security reasons: but you can define reUserCanChangeOwnPassword
   // so that the current logged user will be able to change its own password
   // - order of this set does matter, since it will be stored as a byte value
-  // e.g. by TSQLAccessRights.ToString: ensure that new items will always be
+  // e.g. by TORMAccessRights.ToString: ensure that new items will always be
   // appended to the list, not inserted within
-  TSQLAllowRemoteExecute = set of (
+  TORMAllowRemoteExecute = set of (
     reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete,
     reOneSessionPerUser, reSQLSelectWithoutTable, reUserCanChangeOwnPassword);
 
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
   // - one bit for every and each Table in Model.Tables[]
-  TSQLAccessRights = object
+  TORMAccessRights = object
   public
     /// set of allowed actions on the server side
-    AllowRemoteExecute: TSQLAllowRemoteExecute;
+    AllowRemoteExecute: TORMAllowRemoteExecute;
     /// GET method (retrieve record) table access bits
     // - note that a GET request with a SQL statement without a table (i.e.
     // on 'ModelRoot' URI with a SQL statement as SentData, as used in
@@ -7290,51 +7288,51 @@ type
     // by overriding the TRestServer.URI() method
     // - if the REST request is LOCK, the PUT access bits will be read instead
     // of the GET bits value
-    GET: TSQLFieldTables;
+    GET: TORMFieldTables;
     /// POST method (create record) table access bits
-    POST: TSQLFieldTables;
+    POST: TORMFieldTables;
     /// PUT method (update record) table access bits
     // - if the REST request is LOCK, the PUT access bits will be read instead
     // of the GET bits value
-    PUT: TSQLFieldTables;
+    PUT: TORMFieldTables;
     /// DELETE method (delete record) table access bits
-    DELETE: TSQLFieldTables;
+    DELETE: TORMFieldTables;
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - C=Create, R=Read, U=Update, D=Delete rights
     procedure Edit(aTableIndex: integer;
       C, R, U, D: boolean); overload;
     /// wrapper method which can be used to set the CRUD abilities over a table
-    // - use TSQLOccasion set as parameter
+    // - use TORMOccasion set as parameter
     procedure Edit(aTableIndex: integer;
-      aRights: TSQLOccasions); overload;
+      aRights: TORMOccasions); overload;
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - will raise an EModelException if the supplied table is incorrect
     // - C=Create, R=Read, U=Update, D=Delete rights
-    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass;
+    procedure Edit(aModel: TORMModel; aTable: TORMClass;
       C, R, U, D: boolean); overload;
     /// wrapper method which can be used to set the CRUD abilities over a table
     // - will raise an EModelException if the supplied table is incorrect
-    // - use TSQLOccasion set as parameter
-    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass;
-      aRights: TSQLOccasions); overload;
+    // - use TORMOccasion set as parameter
+    procedure Edit(aModel: TORMModel; aTable: TORMClass;
+      aRights: TORMOccasions); overload;
     /// serialize the content as TEXT
-    // - use the TSQLAuthGroup.AccessRights CSV format
+    // - use the TAuthGroup.AccessRights CSV format
     function ToString: RawUTF8;
     /// unserialize the content from TEXT
-    // - use the TSQLAuthGroup.AccessRights CSV format
+    // - use the TAuthGroup.AccessRights CSV format
     procedure FromString(P: PUTF8Char);
   end;
 
-  PSQLAccessRights = ^TSQLAccessRights;
+  PSQLAccessRights = ^TORMAccessRights;
 
 
 const
-  /// used as "stored AS_UNIQUE" published property definition in TSQLRecord
+  /// used as "stored AS_UNIQUE" published property definition in TORM
   AS_UNIQUE = false;
 
   /// options to specify no index createon for TRestServer.CreateMissingTables
-  // and TSQLRecord.InitializeTable methods
-  INITIALIZETABLE_NOINDEX: TSQLInitializeTableOptions =
+  // and TORM.InitializeTable methods
+  INITIALIZETABLE_NOINDEX: TORMInitializeTableOptions =
     [itoNoIndex4ID.. itoNoIndex4RecordVersion];
 
   /// Supervisor Table access right, i.e. alllmighty over all fields
@@ -7344,8 +7342,8 @@ const
   // - WITH the possibility to remotely execute any SQL statement (reSQL right)
   // - is used by default by TRestClientDB.URI() method, i.e. for direct
   // local/in-process access
-  // - is used as reference to create TSQLAuthUser 'Admin' access policy
-  FULL_ACCESS_RIGHTS: TSQLAccessRights = (
+  // - is used as reference to create TAuthUser 'Admin' access policy
+  FULL_ACCESS_RIGHTS: TORMAccessRights = (
     AllowRemoteExecute:
      [reSQL, reSQLSelectWithoutTable, reService, reUrlEncodedSQL, reUrlEncodedDelete];
     GET: ALL_ACCESS_RIGHTS;
@@ -7356,8 +7354,8 @@ const
 
   /// Supervisor Database access right, i.e. allmighty over all Tables
   // - but WITHOUT the possibility to remotely execute any SQL statement (reSQL)
-  // - is used as reference to create TSQLAuthUser 'Supervisor' access policy
-  SUPERVISOR_ACCESS_RIGHTS: TSQLAccessRights = (
+  // - is used as reference to create TAuthUser 'Supervisor' access policy
+  SUPERVISOR_ACCESS_RIGHTS: TORMAccessRights = (
     AllowRemoteExecute:
       [reSQLSelectWithoutTable, reService, reUrlEncodedSQL, reUrlEncodedDelete];
     GET: ALL_ACCESS_RIGHTS;
@@ -7366,43 +7364,43 @@ const
     DELETE: ALL_ACCESS_RIGHTS
   );
 
-  /// if the TSQLRecordVirtual table kind is a FTS virtual table
+  /// if the TORMVirtual table kind is a FTS virtual table
   IS_FTS =
     [rFTS3, rFTS4, rFTS5];
 
-  /// if the TSQLRecordVirtual table kind is not an embedded type
-  // - can be set for a TSQLRecord after a VirtualTableExternalRegister call
+  /// if the TORMVirtual table kind is not an embedded type
+  // - can be set for a TORM after a VirtualTableExternalRegister call
   IS_CUSTOM_VIRTUAL =
     [rCustomForcedID, rCustomAutoID];
 
-  /// if the TSQLRecordVirtual table kind expects the ID to be set on INSERT
+  /// if the TORMVirtual table kind expects the ID to be set on INSERT
   INSERT_WITH_ID =
     [rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger, rCustomForcedID];
 
-  /// if a TSQLVirtualTablePreparedConstraint.Column is to be ignored
+  /// if a TORMVirtualTablePreparedConstraint.Column is to be ignored
   VIRTUAL_TABLE_IGNORE_COLUMN = -2;
 
-  /// if a TSQLVirtualTablePreparedConstraint.Column points to the RowID
+  /// if a TORMVirtualTablePreparedConstraint.Column points to the RowID
   VIRTUAL_TABLE_ROWID_COLUMN = -1;
 
 var
-  /// late-binding return of TSQLVirtualTableClass.ModuleName
+  /// late-binding return of TORMVirtualTableClass.ModuleName
   // - link mormot.orm.storage.pas unit for properly set this value
   GetVirtualTableModuleName: function(VirtualTableClass: TClass): RawUTF8;
 
-function ToText(vk: TSQLRecordVirtualKind): PShortString; overload;
+function ToText(vk: TORMVirtualKind): PShortString; overload;
 
 /// compute the SQL field names, used to create a SQLite3 virtual table
-function GetVirtualTableSQLCreate(Props: TSQLRecordProperties): RawUTF8;
+function GetVirtualTableSQLCreate(Props: TORMProperties): RawUTF8;
 
-/// TDynArraySortCompare compatible function, sorting by TSQLRecord.ID
-function TSQLRecordDynArrayCompare(const Item1, Item2): integer;
+/// TDynArraySortCompare compatible function, sorting by TORM.ID
+function TORMDynArrayCompare(const Item1, Item2): integer;
 
-/// TDynArrayHashOne compatible function, hashing TSQLRecord.ID
-function TSQLRecordDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
+/// TDynArrayHashOne compatible function, hashing TORM.ID
+function TORMDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 
 /// create a TRecordReference with the corresponding parameters
-function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass;
+function RecordReference(Model: TORMModel; aTable: TORMClass;
   aID: TID): TRecordReference; overload;
 
 /// create a TRecordReference with the corresponding parameters
@@ -7418,15 +7416,48 @@ procedure RecordRefToID(var aArray: TInt64DynArray);
 // backward compatibility types redirections
 
 type
+  TSQLRawBlob = TRawBlob;
+  TSQLRecord = TORM;
+  TSQLRecordClass = TORMClass;
+  TSQLTable = TORMTable;
+  TSQLTableJSON = TORMTableJSON;
+  TSQLInitializeTableOption = TORMInitializeTableOption;
+  TSQLInitializeTableOptions = TORMInitializeTableOptions;
+  TSQLAccessRights = TORMAccessRights;
+  TSQLFieldTables = TORMFieldTables;
+  TSQLModel = TORMModel;
+  TSQLModelRecordProperties = TORMModelRecordProperties;
+  TSQLModelRecordPropertiesObjArray = TORMModelRecordPropertiesObjArray;
+  TSQLProperties = TORMProperties;
+  TSQLPropInfo = TORMPropInfo;
+  TSQLPropInfoObjArray = TORMPropInfoObjArray;
+  TSQLPropInfoClass = TORMPropInfoClass;
+  TSQLPropInfoListOptions = TORMPropInfoListOptions;
+  TSQLPropInfoAttribute = TORMPropInfoAttribute;
+  TSQLPropInfoAttributes = TORMPropInfoAttributes;
   TSQLRestCache = TRestCache;
   TSQLRestBatch = TRestBatch;
   TSQLRestBatchLocked = TRestBatchLocked;
+  TSQLEvent = TORMEvent;
+  TSQLHistoryEvent = TORMHistoryEvent;
+  TSQLOccasion = TORMOccasion;
+  TSQLOccasions = TORMOccasions;
+
+const
+  seAdd        =  oeAdd;
+  seUpdate     =  oeUpdate;
+  seDelete     =  oeDelete;
+  seUpdateBlob =  oeUpdateBlob;
+  soSelect     =  ooSelect;
+  soInsert     =  ooInsert;
+  soUpdate     =  ooUpdate;
+  soDelete     =  ooDelete;
 
 {$endif PUREMORMOT2}
 
 
 
-{ ************** TSQLRecord High-Level Parents }
+{ ************** TORM High-Level Parents }
 
 type
   /// root class for defining and mapping database records with case-insensitive
@@ -7437,14 +7468,14 @@ type
   // UTF8ILComp() to handle most western languages, but is not standard
   // - you may inherit from this class to ensure any text field will use the
   // faster and SQLite3 built-in NOCASE collation, handling only 7-bit A-Z chars
-  // - inherit from TSQLRecordNoCase or TSQLRecordCaseSensitive if you expect
+  // - inherit from TORMNoCase or TORMCaseSensitive if you expect
   // your text fields to contain only basic (un)accentued ASCCI characters, and
   // to be opened by any standard/ SQlite3 library or tool (outside of
   // SynSQLite3.pas/SynDBExplorer)
-  TSQLRecordNoCase = class(TSQLRecord)
+  TORMNoCase = class(TORM)
   protected
     /// will call Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE')
-    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+    class procedure InternalDefineModel(Props: TORMProperties); override;
   end;
 
   /// root class for defining and mapping database records with case-sensitive
@@ -7455,40 +7486,40 @@ type
   // UTF8ILComp() to handle most western languages, but is not standard
   // - you may inherit from this class to ensure any text field will use the
   // faster and SQLite3 built-in BINARY collation, which is case-sensitive
-  // - inherit from TSQLRecordNoCase or TSQLRecordCaseSensitive if you expect
+  // - inherit from TORMNoCase or TORMCaseSensitive if you expect
   // your text fields to contain only basic (un)accentued ASCCI characters, and
   // to be opened by any standard/ SQlite3 library or tool (outside of
   // SynSQLite3.pas/SynDBExplorer)
-  TSQLRecordCaseSensitive = class(TSQLRecord)
+  TORMCaseSensitive = class(TORM)
   protected
     /// will call Props.SetCustomCollationForAll(sftUTF8Text,'BINARY')
-    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+    class procedure InternalDefineModel(Props: TORMProperties); override;
   end;
 
   /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED variants
   // - abstract ancestor, from which you may inherit your own ORM classes
-  TSQLRecordNoCaseExtended = class(TSQLRecordNoCase)
+  TORMNoCaseExtended = class(TORMNoCase)
   protected
     /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
-    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+    class procedure InternalDefineModel(Props: TORMProperties); override;
   end;
 
   /// database records with BINARY collation and JSON_OPTIONS_FAST_EXTENDED variants
   // - abstract ancestor, from which you may inherit your own ORM classes
-  TSQLRecordCaseSensitiveExtended = class(TSQLRecordCaseSensitive)
+  TORMCaseSensitiveExtended = class(TORMCaseSensitive)
   protected
     /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
-    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+    class procedure InternalDefineModel(Props: TORMProperties); override;
   end;
 
   /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED
   // variants, and itoNoIndex4TID option to avoid indexes on TID/T*ID properties
   // - abstract ancestor, from which you may inherit your own ORM classes
-  TSQLRecordNoCaseExtendedNoID = class(TSQLRecordNoCaseExtended)
+  TORMNoCaseExtendedNoID = class(TORMNoCaseExtended)
   public
     /// overriden method forcing no index creation on TID/T*ID properties
     class procedure InitializeTable(const Server: IRestORMServer;
-     const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
+     const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
   end;
 
 
@@ -7497,27 +7528,27 @@ implementation
 
 { ************ Shared ORM/JSON Fields and Values Definitions }
 
-function ToText(ft: TSQLFieldType): PShortString;
+function ToText(ft: TORMFieldType): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLFieldType), ord(ft));
+  result := GetEnumName(TypeInfo(TORMFieldType), ord(ft));
 end;
 
-function ToText(e: TSQLEvent): PShortString;
+function ToText(e: TORMEvent): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLEvent), ord(e));
+  result := GetEnumName(TypeInfo(TORMEvent), ord(e));
 end;
 
-function ToText(he: TSQLHistoryEvent): PShortString;
+function ToText(he: TORMHistoryEvent): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLHistoryEvent), ord(he));
+  result := GetEnumName(TypeInfo(TORMHistoryEvent), ord(he));
 end;
 
-function ToText(o: TSQLOccasion): PShortString;
+function ToText(o: TORMOccasion): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLOccasion), ord(o));
+  result := GetEnumName(TypeInfo(TORMOccasion), ord(o));
 end;
 
-function GetSQLFieldType(Info: PRttiInfo): TSQLFieldType;
+function GeTORMFieldType(Info: PRttiInfo): TORMFieldType;
 begin // very fast, thanks to the TypeInfo() compiler-generated function
   case Info^.Kind of
     rkInteger:
@@ -7636,7 +7667,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       end;
     rkLString:
       // do not use AnsiStringCodePage since AnsiString = GetAcp may change
-      if (Info = TypeInfo(TSQLRawBlob)) or
+      if (Info = TypeInfo(TRawBlob)) or
          (Info = TypeInfo(RawByteString)) then
       begin
         result := sftBlob;
@@ -7727,12 +7758,12 @@ begin
 {$endif CPU64}
 end;
 
-function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob;
+function BlobToTRawBlob(P: PUTF8Char): TRawBlob;
 begin
-  BlobToTSQLRawBlob(P, result);
+  BlobToTRawBlob(P, result);
 end;
 
-procedure BlobToTSQLRawBlob(P: PUTF8Char; var result: TSQLRawBlob);
+procedure BlobToTRawBlob(P: PUTF8Char; var result: TRawBlob);
 var
   Len, LenHex: integer;
 begin
@@ -7759,7 +7790,7 @@ begin
   SetString(result, PAnsiChar(P), Len);
 end;
 
-function BlobToTSQLRawBlob(const Blob: RawByteString): TSQLRawBlob;
+function BlobToTRawBlob(const Blob: RawByteString): TRawBlob;
 var
   Len, LenHex: integer;
   P: PUTF8Char;
@@ -7790,7 +7821,7 @@ end;
 
 function BlobToStream(P: PUTF8Char): TStream;
 begin
-  result := TRawByteStringStream.Create(BlobToTSQLRawBlob(P));
+  result := TRawByteStringStream.Create(BlobToTRawBlob(P));
 end;
 
 function BlobToBytes(P: PUTF8Char): TBytes;
@@ -7827,14 +7858,14 @@ begin
   MoveFast(P^, pointer(result)^, Len);
 end;
 
-function TSQLRawBlobToBlob(const RawBlob: TSQLRawBlob): RawUTF8;
+function TRawBlobToBlob(const RawBlob: TRawBlob): RawUTF8;
 // BLOB literals are string literals containing hexadecimal data and
 //  preceded by a single "x" or "X" character. For example: X'53514C697465'
 begin
-  result := TSQLRawBlobToBlob(pointer(RawBlob), length(RawBlob));
+  result := TRawBlobToBlob(pointer(RawBlob), length(RawBlob));
 end;
 
-function TSQLRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8;
+function TRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8;
 // BLOB literals are string literals containing hexadecimal data and
 //  preceded by a single "x" or "X" character. For example: X'53514C697465'
 var
@@ -7882,10 +7913,10 @@ end;
 procedure Base64MagicToBlob(Base64: PUTF8Char; var result: RawUTF8);
 begin
   // do not escape the result: returns e.g. X'53514C697465'
-  result := TSQLRawBlobToBlob(Base64ToBin(PAnsiChar(Base64), StrLen(Base64)));
+  result := TRawBlobToBlob(Base64ToBin(PAnsiChar(Base64), StrLen(Base64)));
 end;
 
-function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
+function UTF8ContentNumberType(P: PUTF8Char): TORMFieldType;
 begin
   if (P = nil) or
      ((PInteger(P)^ = ord('n') + ord('u') shl 8 + ord('l') shl 16 +
@@ -7904,7 +7935,7 @@ begin
     end;
 end;
 
-function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
+function UTF8ContentType(P: PUTF8Char): TORMFieldType;
 var
   c, len: integer;
 begin
@@ -8427,7 +8458,7 @@ const
     'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
 
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
-  Occasion: TSQLOccasion; const UpdateIDFieldName: RawUTF8;
+  Occasion: TORMOccasion; const UpdateIDFieldName: RawUTF8;
   BatchOptions: TRestBatchOptions): RawUTF8;
 var
   F: integer;
@@ -8437,7 +8468,7 @@ begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
     case Occasion of
-      soUpdate:
+      ooUpdate:
         begin
           if FieldCount = 0 then
             raise EJSONObjectDecoder.Create('Invalid EncodeAsSQLPrepared(0)');
@@ -8489,7 +8520,7 @@ begin
             W.Add('=', '?'); // last param is ID
           end;
         end;
-      soInsert:
+      ooInsert:
         begin
           if boInsertOrIgnore in BatchOptions then
             W.AddShort('insert or ignore into ')
@@ -8894,11 +8925,11 @@ begin
 end;
 
 
-{ ************ TJSONSerializer Class for TSQLRecord Serialization }
+{ ************ TJSONSerializer Class for TORM Serialization }
 
 { TJSONSerializer }
 
-procedure TJSONSerializer.SetSQLRecordOptions(Value: TJSONSerializerSQLRecordOptions);
+procedure TJSONSerializer.SeTORMOptions(Value: TJSONSerializerSQLRecordOptions);
 begin
   fSQLRecordOptions := Value;
   if Value * [jwoAsJsonNotAsString, jwoID_str] <> [] then
@@ -8908,14 +8939,14 @@ end;
 
 
 
-{ ************ TSQLPropInfo Classes for Efficient ORM Processing }
+{ ************ TORMPropInfo Classes for Efficient ORM Processing }
 
-{ TSQLPropInfo }
+{ TORMPropInfo }
 
 const
   NULL_SHORTSTRING: string[1] = '';
 
-function TSQLPropInfo.GetSQLFieldTypeName: PShortString;
+function TORMPropInfo.GeTORMFieldTypeName: PShortString;
 begin
   if self = nil then
     result := @NULL_SHORTSTRING
@@ -8923,24 +8954,24 @@ begin
     result := ToText(fSQLFieldType);
 end;
 
-function TSQLPropInfo.GetSQLFieldRTTITypeName: RawUTF8;
+function TORMPropInfo.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   result := GetDisplayNameFromClass(ClassType);
   if IdemPChar(pointer(result), 'PROPINFO') then
     delete(result, 1, 8);
 end;
 
-function TSQLPropInfo.GetNameDisplay: string;
+function TORMPropInfo.GetNameDisplay: string;
 begin
   GetCaptionFromPCharLen(pointer(fName), result);
 end;
 
-procedure TSQLPropInfo.TextToBinary(Value: PUTF8Char; var result: RawByteString);
+procedure TORMPropInfo.TextToBinary(Value: PUTF8Char; var result: RawByteString);
 begin
-  result := BlobToTSQLRawBlob(Value);
+  result := BlobToTRawBlob(Value);
 end;
 
-procedure TSQLPropInfo.BinaryToText(var Value: RawUTF8; ToSQL: boolean;
+procedure TORMPropInfo.BinaryToText(var Value: RawUTF8; ToSQL: boolean;
   wasSQLString: PBoolean);
 begin
   if Value = '' then
@@ -8955,14 +8986,14 @@ begin
       wasSQLString^ := true;
     if ToSQL then
       // encode as BLOB literals (e.g. "X'53514C697465'")
-      Value := TSQLRawBlobToBlob(TSQLRawBlob(Value))
+      Value := TRawBlobToBlob(TRawBlob(Value))
     else
       // JSON content is e.g. '\uFFF0base64encodedbinary'
       Value := BinToBase64WithMagic(Value);
   end;
 end;
 
-function NullableTypeToSQLFieldType(aType: PRttiInfo): TSQLFieldType;
+function NullableTypeToSQLFieldType(aType: PRttiInfo): TORMFieldType;
 begin
   if aType <> nil then
     if aType <> TypeInfo(TNullableInteger) then
@@ -8995,14 +9026,14 @@ begin
 end;
 
 const
-  SQLFIELDTYPETODBFIELDTYPE: array[TSQLFieldType] of TSQLDBFieldType = (
+  SQLFIELDTYPETODBFIELDTYPE: array[TORMFieldType] of TSQLDBFieldType = (
     ftUnknown,   // sftUnknown
     ftUTF8,      // sftAnsiText
     ftUTF8,      // sftUTF8Text
     ftInt64,     // sftEnumerate
     ftInt64,     // sftSet
     ftInt64,     // sftInteger
-    ftInt64,     // sftID = TSQLRecord(aID)
+    ftInt64,     // sftID = TORM(aID)
     ftInt64,     // sftRecord = TRecordReference = RecordRef
     ftInt64,     // sftBoolean
     ftDouble,    // sftFloat
@@ -9026,7 +9057,7 @@ const
     ftInt64,     // sftUnixTime = TUnixTime
     ftInt64);    // sftUnixMSTime = TUnixMSTime
 
-function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType;
+function SQLFieldTypeToDBField(aSQLFieldType: TORMFieldType;
   aTypeInfo: PRttiInfo): TSQLDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -9035,8 +9066,8 @@ begin
   result := SQLFIELDTYPETODBFIELDTYPE[aSQLFieldType];
 end;
 
-constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType:
-  TSQLFieldType; aAttributes: TSQLPropInfoAttributes;
+constructor TORMPropInfo.Create(const aName: RawUTF8; aSQLFieldType:
+  TORMFieldType; aAttributes: TORMPropInfoAttributes;
   aFieldWidth, aPropertyIndex: integer);
 begin
   if aName = '' then
@@ -9055,7 +9086,7 @@ begin
   fPropertyIndex := aPropertyIndex;
 end;
 
-function TSQLPropInfo.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
+function TORMPropInfo.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var
   tmp: RawUTF8;
 begin
@@ -9063,7 +9094,7 @@ begin
   result := crc32c(0, pointer(tmp), length(tmp));
 end;
 
-procedure TSQLPropInfo.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfo.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   wasString: boolean;
   tmp: RawUTF8;
@@ -9080,24 +9111,24 @@ begin
     W.AddRawJSON(tmp);
 end;
 
-function TSQLPropInfo.GetValue(Instance: TObject; ToSQL: boolean; wasSQLString:
+function TORMPropInfo.GetValue(Instance: TObject; ToSQL: boolean; wasSQLString:
   PBoolean): RawUTF8;
 begin
   GetValueVar(Instance, ToSQL, result, wasSQLString);
 end;
 
-procedure TSQLPropInfo.SetValueVar(Instance: TObject; const Value: RawUTF8;
+procedure TORMPropInfo.SetValueVar(Instance: TObject; const Value: RawUTF8;
   wasString: boolean);
 begin
   SetValue(Instance, pointer(Value), wasString);
 end;
 
-function TSQLPropInfo.SQLDBFieldTypeName: PShortString;
+function TORMPropInfo.SQLDBFieldTypeName: PShortString;
 begin
   result := ToText(fSQLDBFieldType);
 end;
 
-procedure TSQLPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+procedure TORMPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
   GetValueVar(Instance, true, RawUTF8(temp), nil);
@@ -9117,7 +9148,7 @@ begin
         aValue.VType := ftNull
       else
       begin
-        temp := BlobToTSQLRawBlob(temp);
+        temp := BlobToTRawBlob(temp);
         aValue.VBlob := pointer(temp);
         aValue.VBlobLen := length(temp);
       end;
@@ -9128,7 +9159,7 @@ begin
   end;
 end;
 
-function TSQLPropInfo.IsValueVoid(Instance: TObject): boolean;
+function TORMPropInfo.IsValueVoid(Instance: TObject): boolean;
 var
   temp: RawUTF8;
   wasString: boolean;
@@ -9140,7 +9171,7 @@ begin
     result := GetInt64(pointer(temp)) = 0;
 end;
 
-function TSQLPropInfo.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
+function TORMPropInfo.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
 begin
   case aValue.VType of
     ftInt64:
@@ -9153,7 +9184,7 @@ begin
       SetValueVar(Instance, DateTimeToIso8601Text(aValue.VDateTime, 'T',
         svoDateWithMS in aValue.Options), true);
     ftBlob:
-      SetValueVar(Instance, TSQLRawBlobToBlob(aValue.VBlob, aValue.VBlobLen), true);
+      SetValueVar(Instance, TRawBlobToBlob(aValue.VBlob, aValue.VBlobLen), true);
     ftUTF8:
       SetValue(Instance, aValue.VText, true);
   else
@@ -9168,12 +9199,12 @@ const
   TRUE_LOW  = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
 
 procedure ValueVarToVariant(Value: PUTF8Char; ValueLen: integer;
-  fieldType: TSQLFieldType; var result: TVarData; createValueTempCopy: boolean;
+  fieldType: TORMFieldType; var result: TVarData; createValueTempCopy: boolean;
   typeInfo: PRttiInfo; options: TDocVariantOptions);
 const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
-  SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
+  SQL_ELEMENTTYPES: array[TORMFieldType] of word = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
     varEmpty, varString, varString, varInteger, varInt64, varInt64,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime,
@@ -9233,13 +9264,13 @@ begin
     sftAnsiText, sftUTF8Text:
       FastSetString(RawUTF8(result.VAny), Value, ValueLen);
     sftBlobCustom, sftBlob:
-      BlobToTSQLRawBlob(Value, TSQLRawBlob(result.VAny));
+      BlobToTRawBlob(Value, TRawBlob(result.VAny));
     sftVariant, sftNullable, sftBlobDynArray, sftObject, sftUTF8Custom:
       Complex;
   end;
 end;
 
-procedure TSQLPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
+procedure TORMPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
 var
   temp: RawUTF8;
 begin
@@ -9248,13 +9279,13 @@ begin
     TVarData(Dest), false, nil);
 end;
 
-procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
+procedure TORMPropInfo.SetVariant(Instance: TObject; const Source: Variant);
 begin
   SetValueVar(Instance, VariantToUTF8(Source),
     (TVarData(Source).VType = varOleStr) or (TVarData(Source).VType >= varString));
 end;
 
-function TSQLPropInfo.CompareValue(Item1, Item2: TObject;
+function TORMPropInfo.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   tmp1, tmp2: RawUTF8;
@@ -9276,7 +9307,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfo.CopyProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfo.CopyProp(Source: TObject; DestInfo: TORMPropInfo; Dest: TObject);
 
   procedure GenericCopy;
   var
@@ -9300,11 +9331,11 @@ var
 begin
   if (Source = nil) or (DestInfo = nil) or (Dest = nil) then
     exit; // avoid GPF
-  with TSQLPropInfoRTTI(self) do
+  with TORMPropInfoRTTI(self) do
     if fFromRTTI and (fFlattenedProps <> nil) then
       for i := 0 to length(fFlattenedProps) - 1 do
         Source := fFlattenedProps[i].GetObjProp(Source);
-  with TSQLPropInfoRTTI(DestInfo) do
+  with TORMPropInfoRTTI(DestInfo) do
     if fFromRTTI and (fFlattenedProps <> nil) then
       for i := 0 to length(fFlattenedProps) - 1 do
         Dest := fFlattenedProps[i].GetObjProp(Dest);
@@ -9314,13 +9345,13 @@ begin
     GenericCopy;
 end;
 
-procedure TSQLPropInfo.CopyValue(Source, Dest: TObject);
+procedure TORMPropInfo.CopyValue(Source, Dest: TObject);
 begin
   CopySameClassProp(Source, self, Dest);
 end;
 
-procedure TSQLPropInfo.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfo.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   tmp: RawUTF8;
   wasString: boolean;
@@ -9330,12 +9361,12 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTI }
+{ TORMPropInfoRTTI }
 
 var
   SQLPropInfoRegistration: TSynDictionary = nil;
 
-class procedure TSQLPropInfoRTTI.RegisterTypeInfo(aTypeInfo: PRttiInfo);
+class procedure TORMPropInfoRTTI.RegisterTypeInfo(aTypeInfo: PRttiInfo);
 begin
   if SQLPropInfoRegistration = nil then
     SQLPropInfoRegistration := TSynDictionary.Create(
@@ -9343,19 +9374,19 @@ begin
   SQLPropInfoRegistration.AddOrUpdate(aTypeInfo, self);
 end;
 
-class function TSQLPropInfoRTTI.CreateFrom(aPropInfo: PRttiProp;
-  aPropIndex: integer; aOptions: TSQLPropInfoListOptions;
-  const aFlattenedProps: PRttiPropDynArray): TSQLPropInfo;
+class function TORMPropInfoRTTI.CreateFrom(aPropInfo: PRttiProp;
+  aPropIndex: integer; aOptions: TORMPropInfoListOptions;
+  const aFlattenedProps: PRttiPropDynArray): TORMPropInfo;
 var
-  aSQLFieldType: TSQLFieldType;
+  aSQLFieldType: TORMFieldType;
   aType: PRttiInfo;
-  C: TSQLPropInfoRTTIClass;
+  C: TORMPropInfoRTTIClass;
 
   procedure FlattenedPropNameSet;
   var
     i, max: Integer;
   begin // Address.Street1 -> Address_Street1
-    (result as TSQLPropInfoRTTI).fFlattenedProps := aFlattenedProps;
+    (result as TORMPropInfoRTTI).fFlattenedProps := aFlattenedProps;
     result.fNameUnflattened := result.fName;
     max := high(aFlattenedProps);
     for i := max downto 0 do
@@ -9383,12 +9414,12 @@ begin
   begin
     aSQLFieldType := NullableTypeToSQLFieldType(aType);
     if aSQLFieldType <> sftUnknown then // handle sftNullable type
-      result := TSQLPropInfoRTTIVariant.Create(aPropInfo, aPropIndex,
+      result := TORMPropInfoRTTIVariant.Create(aPropInfo, aPropIndex,
         aSQLFieldType, aOptions);
   end;
   if result = nil then
   begin
-    aSQLFieldType := GetSQLFieldType(aType);
+    aSQLFieldType := GeTORMFieldType(aType);
     C := nil;
     if (SQLPropInfoRegistration = nil) or
        not SQLPropInfoRegistration.FindAndCopy(aType, C) then
@@ -9396,72 +9427,72 @@ begin
         sftUnknown, sftBlobCustom:
           ; // will raise an EORMException
         sftBoolean, sftEnumerate:
-          C := TSQLPropInfoRTTIEnum;
+          C := TORMPropInfoRTTIEnum;
         sftTimeLog, sftModTime, sftCreateTime:
           // specific class for further use
-          C := TSQLPropInfoRTTITimeLog;
+          C := TORMPropInfoRTTITimeLog;
         sftUnixTime:
           // specific class for further use
-          C := TSQLPropInfoRTTIUnixTime;
+          C := TORMPropInfoRTTIUnixTime;
         sftUnixMSTime:
-          C := TSQLPropInfoRTTIUnixMSTime;
+          C := TORMPropInfoRTTIUnixMSTime;
         sftCurrency:
-          C := TSQLPropInfoRTTICurrency;
+          C := TORMPropInfoRTTICurrency;
         sftDateTime, sftDateTimeMS:
-          C := TSQLPropInfoRTTIDateTime;
-        sftID: // = TSQLRecord(aID)
-          C := TSQLPropInfoRTTIID;
+          C := TORMPropInfoRTTIDateTime;
+        sftID: // = TORM(aID)
+          C := TORMPropInfoRTTIID;
         sftTID:
           // = TID or T*ID
-          C := TSQLPropInfoRTTITID;
+          C := TORMPropInfoRTTITID;
         sftSessionUserID:
-          C := TSQLPropInfoRTTIInt64;
+          C := TORMPropInfoRTTIInt64;
         sftRecord:
           // = TRecordReference/TRecordReferenceToBeDeleted
-          C := TSQLPropInfoRTTIRecordReference;
+          C := TORMPropInfoRTTIRecordReference;
         sftRecordVersion:
-          C := TSQLPropInfoRTTIRecordVersion;
+          C := TORMPropInfoRTTIRecordVersion;
         sftMany:
-          C := TSQLPropInfoRTTIMany;
+          C := TORMPropInfoRTTIMany;
         sftObject:
-          C := TSQLPropInfoRTTIObject;
+          C := TORMPropInfoRTTIObject;
         sftVariant:
-          C := TSQLPropInfoRTTIVariant;  // sftNullable already handle above
+          C := TORMPropInfoRTTIVariant;  // sftNullable already handle above
         sftBlob:
-          C := TSQLPropInfoRTTIRawBlob;
+          C := TORMPropInfoRTTIRawBlob;
         sftBlobDynArray:
-          C := TSQLPropInfoRTTIDynArray;
+          C := TORMPropInfoRTTIDynArray;
         sftUTF8Custom:
           // will happen only for DELPHI XE5 and up
-          result := TSQLPropInfoCustomJSON.Create(aPropInfo, aPropIndex);
+          result := TORMPropInfoCustomJSON.Create(aPropInfo, aPropIndex);
       else
         case aType^.Kind of // retrieve matched type from RTTI binary level
           rkInteger:
-            C := TSQLPropInfoRTTIInt32;
+            C := TORMPropInfoRTTIInt32;
           rkSet:
-            C := TSQLPropInfoRTTISet;
+            C := TORMPropInfoRTTISet;
           rkChar, rkWChar:
-            C := TSQLPropInfoRTTIChar;
+            C := TORMPropInfoRTTIChar;
           rkInt64 {$ifdef FPC}, rkQWord{$endif}:
-            C := TSQLPropInfoRTTIInt64;
+            C := TORMPropInfoRTTIInt64;
           rkFloat:
             if aType^.RttiFloat = rfDouble then
-              C := TSQLPropInfoRTTIDouble;
+              C := TORMPropInfoRTTIDouble;
           rkLString:
             case aType^.AnsiStringCodePage of // recognize optimized UTF-8/UTF-16
               CP_UTF8:
-                C := TSQLPropInfoRTTIRawUTF8;
+                C := TORMPropInfoRTTIRawUTF8;
               CP_UTF16:
-                C := TSQLPropInfoRTTIRawUnicode;
+                C := TORMPropInfoRTTIRawUnicode;
             else
-              C := TSQLPropInfoRTTIAnsi; // will use the right TSynAnsiConvert
+              C := TORMPropInfoRTTIAnsi; // will use the right TSynAnsiConvert
             end;
         {$ifdef HASVARUSTRING}
           rkUString:
-            C := TSQLPropInfoRTTIUnicode;
+            C := TORMPropInfoRTTIUnicode;
         {$endif HASVARUSTRING}
           rkWString:
-            C := TSQLPropInfoRTTIWide;
+            C := TORMPropInfoRTTIWide;
         end;
       end;
     if C <> nil then
@@ -9477,12 +9508,12 @@ begin
       [self, ToText(aSQLFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name]);
 end;
 
-function TSQLPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
+function TORMPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   result := ToUTF8(fPropType^.Name^);
 end;
 
-function TSQLPropInfoRTTI.GetFieldAddr(Instance: TObject): pointer;
+function TORMPropInfoRTTI.GetFieldAddr(Instance: TObject): pointer;
 begin
   if Instance = nil then
     result := nil
@@ -9490,7 +9521,7 @@ begin
     result := fPropInfo^.GetFieldAddr(Instance);
 end;
 
-function TSQLPropInfoRTTI.Flattened(Instance: TObject): TObject;
+function TORMPropInfoRTTI.Flattened(Instance: TObject): TObject;
 var
   i: integer;
 begin
@@ -9499,7 +9530,7 @@ begin
     result := fFlattenedProps[i].GetObjProp(result);
 end;
 
-procedure TSQLPropInfoRTTI.GetVariant(Instance: TObject; var Dest: Variant);
+procedure TORMPropInfoRTTI.GetVariant(Instance: TObject; var Dest: Variant);
 var
   temp: RawUTF8;
 begin
@@ -9508,10 +9539,10 @@ begin
     TVarData(Dest), false, fPropInfo^.TypeInfo);
 end;
 
-constructor TSQLPropInfoRTTI.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTI.Create(aPropInfo: PRttiProp; aPropIndex: integer;
+  aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 var
-  attrib: TSQLPropInfoAttributes;
+  attrib: TORMPropInfoAttributes;
 begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil) = AS_UNIQUE then
@@ -9538,28 +9569,28 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIInt32 }
+{ TORMPropInfoRTTIInt32 }
 
-constructor TSQLPropInfoRTTIInt32.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIInt32.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   fUnsigned := fPropType^.RttiOrd in [roUByte, roUWord, roULong];
 end;
 
-procedure TSQLPropInfoRTTIInt32.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIInt32.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 begin
-  TSQLPropInfoRTTIInt32(DestInfo).fPropInfo.SetOrdProp(Dest, fPropInfo.GetOrdProp
+  TORMPropInfoRTTIInt32(DestInfo).fPropInfo.SetOrdProp(Dest, fPropInfo.GetOrdProp
     (Source));
 end;
 
-procedure TSQLPropInfoRTTIInt32.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIInt32.GetBinary(Instance: TObject; W: TBufferWriter);
 begin
   W.WriteVarUInt32(cardinal(fPropInfo.GetOrdProp(Instance)));
 end;
 
-function TSQLPropInfoRTTIInt32.GetHash(Instance: TObject;
+function TORMPropInfoRTTIInt32.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   v: integer;
@@ -9568,7 +9599,7 @@ begin
   result := crc32cBy4(0, v); // better hash distribution using crc32c
 end;
 
-procedure TSQLPropInfoRTTIInt32.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIInt32.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   v: integer;
 begin
@@ -9579,7 +9610,7 @@ begin
     W.Add(v);
 end;
 
-procedure TSQLPropInfoRTTIInt32.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIInt32.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   v: integer;
@@ -9593,7 +9624,7 @@ begin
     Int32ToUtf8(v, result);
 end;
 
-procedure TSQLPropInfoRTTIInt32.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIInt32.NormalizeValue(var Value: RawUTF8);
 var
   err, v: integer;
 begin
@@ -9606,7 +9637,7 @@ begin
     Int32ToUtf8(v, Value);
 end;
 
-function TSQLPropInfoRTTIInt32.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIInt32.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   A, B: integer;
@@ -9625,7 +9656,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
+function TORMPropInfoRTTIInt32.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
 var
   c: cardinal;
 begin
@@ -9638,13 +9669,13 @@ begin
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
   fPropInfo.SetOrdProp(Instance, GetInteger(Value));
 end;
 
-function TSQLPropInfoRTTIInt32.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIInt32.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 begin
   if aValue.VType = ftInt64 then
@@ -9656,7 +9687,7 @@ begin
     result := inherited SetFieldSQLVar(Instance, aValue);
 end;
 
-procedure TSQLPropInfoRTTIInt32.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIInt32.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 var
   v: integer;
@@ -9671,26 +9702,26 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTISet }
+{ TORMPropInfoRTTISet }
 
-constructor TSQLPropInfoRTTISet.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTISet.Create(aPropInfo: PRttiProp; aPropIndex: integer;
+  aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   fSetEnumType := fPropType^.SetEnumType;
 end;
 
 
-{ TSQLPropInfoRTTIEnum }
+{ TORMPropInfoRTTIEnum }
 
-constructor TSQLPropInfoRTTIEnum.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIEnum.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   fEnumType := fPropType^.EnumBaseType;
 end;
 
-procedure TSQLPropInfoRTTIEnum.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIEnum.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   i: PtrInt;
 begin
@@ -9701,7 +9732,7 @@ begin
     W.Add(i);
 end;
 
-function TSQLPropInfoRTTIEnum.GetCaption(Value: RawUTF8; out IntValue: integer): string;
+function TORMPropInfoRTTIEnum.GetCaption(Value: RawUTF8; out IntValue: integer): string;
 begin
   NormalizeValue(Value);
   IntValue := GetInteger(pointer(Value));
@@ -9711,7 +9742,7 @@ begin
     result := EnumType^.GetCaption(IntValue);
 end;
 
-procedure TSQLPropInfoRTTIEnum.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIEnum.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   i: PtrInt;
@@ -9725,7 +9756,7 @@ begin
     UInt32ToUtf8(i, result);
 end;
 
-procedure TSQLPropInfoRTTIEnum.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIEnum.NormalizeValue(var Value: RawUTF8);
 var
   i, err: integer;
 begin
@@ -9746,7 +9777,7 @@ begin
     UInt32ToUtf8(i, Value);
 end;
 
-procedure TSQLPropInfoRTTIEnum.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIEnum.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   i, err, len: integer;
@@ -9776,9 +9807,9 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIChar }
+{ TORMPropInfoRTTIChar }
 
-procedure TSQLPropInfoRTTIChar.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIChar.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   w: WideChar;
@@ -9799,11 +9830,11 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIChar.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIChar.NormalizeValue(var Value: RawUTF8);
 begin // do nothing: should already be UTF-8 encoded
 end;
 
-procedure TSQLPropInfoRTTIChar.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIChar.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   i: integer;
@@ -9816,23 +9847,23 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIInt64 }
+{ TORMPropInfoRTTIInt64 }
 
-constructor TSQLPropInfoRTTIInt64.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIInt64.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   fIsQWord := fPropType^.IsQword;
 end;
 
-procedure TSQLPropInfoRTTIInt64.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIInt64.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 begin
-  TSQLPropInfoRTTIInt64(DestInfo).fPropInfo.SetInt64Prop(
+  TORMPropInfoRTTIInt64(DestInfo).fPropInfo.SetInt64Prop(
     Dest, fPropInfo.GetInt64Prop(Source));
 end;
 
-procedure TSQLPropInfoRTTIInt64.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIInt64.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   V64: Int64;
 begin
@@ -9840,7 +9871,7 @@ begin
   W.Write(@V64, SizeOf(Int64));
 end;
 
-function TSQLPropInfoRTTIInt64.GetHash(Instance: TObject;
+function TORMPropInfoRTTIInt64.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   V64: TQWordRec;
@@ -9852,7 +9883,7 @@ begin
   result := crc32cBy4(V64.L, V64.H); // better hash distribution using crc32c
 end;
 
-procedure TSQLPropInfoRTTIInt64.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIInt64.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   V64: Int64;
 begin
@@ -9866,7 +9897,7 @@ begin
     W.Add(V64);
 end;
 
-procedure TSQLPropInfoRTTIInt64.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIInt64.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   V64: Int64;
@@ -9883,7 +9914,7 @@ begin
     Int64ToUtf8(V64, result);
 end;
 
-procedure TSQLPropInfoRTTIInt64.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIInt64.NormalizeValue(var Value: RawUTF8);
 var
   err: integer;
   V64: Int64;
@@ -9906,7 +9937,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIInt64.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIInt64.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   V1, V2: Int64;
@@ -9936,7 +9967,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIInt64.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
+function TORMPropInfoRTTIInt64.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
 begin
   if P = nil then
     result := nil
@@ -9950,7 +9981,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIInt64.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIInt64.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   V64: Int64;
@@ -9962,7 +9993,7 @@ begin
   fPropInfo.SetInt64Prop(Instance, V64);
 end;
 
-function TSQLPropInfoRTTIInt64.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIInt64.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 begin
   if aValue.VType = ftInt64 then
@@ -9974,7 +10005,7 @@ begin
     result := inherited SetFieldSQLVar(Instance, aValue);
 end;
 
-procedure TSQLPropInfoRTTIInt64.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIInt64.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   aValue.Options := [];
@@ -9983,21 +10014,21 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIDouble }
+{ TORMPropInfoRTTIDouble }
 
-procedure TSQLPropInfoRTTIDouble.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIDouble.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 begin
-  TSQLPropInfoRTTIDouble(DestInfo).fPropInfo.SetDoubleProp(
+  TORMPropInfoRTTIDouble(DestInfo).fPropInfo.SetDoubleProp(
     Dest, fPropInfo.GetDoubleProp(Source));
 end;
 
-procedure TSQLPropInfoRTTIDouble.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIDouble.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
   W.AddDouble(fPropInfo.GetDoubleProp(Instance));
 end;
 
-procedure TSQLPropInfoRTTIDouble.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIDouble.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   DoubleToStr(fPropInfo.GetDoubleProp(Instance), result);
@@ -10005,7 +10036,7 @@ begin
     wasSQLString^ := (result = '') or not (result[1] in ['0'..'9']);
 end;
 
-procedure TSQLPropInfoRTTIDouble.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIDouble.NormalizeValue(var Value: RawUTF8);
 var
   VFloat: TSynExtended;
   err: integer;
@@ -10017,7 +10048,7 @@ begin
     DoubleToStr(VFloat, Value);
 end;
 
-procedure TSQLPropInfoRTTIDouble.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIDouble.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   V: double;
@@ -10034,7 +10065,7 @@ begin
   fPropInfo.SetDoubleProp(Instance, V);
 end;
 
-function TSQLPropInfoRTTIDouble.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIDouble.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 begin
   if Item1 = Item2 then
@@ -10048,7 +10079,7 @@ begin
       fPropInfo.GetDoubleProp(Item1), fPropInfo.GetDoubleProp(Item2));
 end;
 
-function TSQLPropInfoRTTIDouble.GetHash(Instance: TObject;
+function TORMPropInfoRTTIDouble.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   V: double;
@@ -10058,7 +10089,7 @@ begin
     result := crc32cBy4(L, H); // better hash distribution using crc32c
 end;
 
-procedure TSQLPropInfoRTTIDouble.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIDouble.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   V: double;
 begin
@@ -10071,7 +10102,7 @@ type
   unaligned = Double;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-function TSQLPropInfoRTTIDouble.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
+function TORMPropInfoRTTIDouble.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
   PAnsiChar;
 begin
   if P = nil then
@@ -10086,7 +10117,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIDouble.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIDouble.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
   V: double;
@@ -10108,7 +10139,7 @@ begin
   result := true;
 end;
 
-procedure TSQLPropInfoRTTIDouble.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIDouble.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   aValue.Options := [];
@@ -10117,18 +10148,18 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTICurrency }
+{ TORMPropInfoRTTICurrency }
 
-procedure TSQLPropInfoRTTICurrency.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTICurrency.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   curr: currency;
 begin
   fPropInfo.GetCurrencyProp(Source, curr);
-  TSQLPropInfoRTTICurrency(DestInfo).fPropInfo.SetCurrencyProp(Dest, curr);
+  TORMPropInfoRTTICurrency(DestInfo).fPropInfo.SetCurrencyProp(Dest, curr);
 end;
 
-procedure TSQLPropInfoRTTICurrency.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTICurrency.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   curr: currency;
 begin
@@ -10136,7 +10167,7 @@ begin
   W.AddCurr64(curr);
 end;
 
-procedure TSQLPropInfoRTTICurrency.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTICurrency.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   curr: currency;
@@ -10147,12 +10178,12 @@ begin
   result := CurrencyToStr(curr);
 end;
 
-procedure TSQLPropInfoRTTICurrency.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTICurrency.NormalizeValue(var Value: RawUTF8);
 begin
   Value := Curr64ToStr(StrToCurr64(pointer(Value)));
 end;
 
-procedure TSQLPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   tmp: Int64;
@@ -10161,7 +10192,7 @@ begin
   fPropInfo.SetCurrencyProp(Instance, PCurrency(@tmp)^);
 end;
 
-function TSQLPropInfoRTTICurrency.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTICurrency.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   V1, V2: currency;
@@ -10180,7 +10211,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTICurrency.GetHash(Instance: TObject;
+function TORMPropInfoRTTICurrency.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   V: currency;
@@ -10190,7 +10221,7 @@ begin
     result := crc32cBy4(L, H); // better hash distribution using crc32c
 end;
 
-procedure TSQLPropInfoRTTICurrency.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTICurrency.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   aValue.Options := [];
@@ -10198,7 +10229,7 @@ begin
   fPropInfo.GetCurrencyProp(Instance, aValue.VCurrency);
 end;
 
-function TSQLPropInfoRTTICurrency.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTICurrency.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
   V: currency;
@@ -10220,7 +10251,7 @@ begin
   result := true;
 end;
 
-procedure TSQLPropInfoRTTICurrency.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTICurrency.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   V: currency;
 begin
@@ -10228,7 +10259,7 @@ begin
   W.Write(@V, SizeOf(V));
 end;
 
-function TSQLPropInfoRTTICurrency.SetBinary(Instance: TObject;
+function TORMPropInfoRTTICurrency.SetBinary(Instance: TObject;
   P, PEnd: PAnsiChar): PAnsiChar;
 begin
   if P = nil then
@@ -10244,16 +10275,16 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIDateTime }
+{ TORMPropInfoRTTIDateTime }
 
-procedure TSQLPropInfoRTTIDateTime.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIDateTime.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
   W.Add('"');
   W.AddDateTime(fPropInfo.GetDoubleProp(Instance), fSQLFieldType = sftDateTimeMS);
   W.Add('"');
 end;
 
-function TSQLPropInfoRTTIDateTime.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIDateTime.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 const
   PRECISION: array[boolean] of double = (1 / SecsPerDay, 1 / MSecsPerDay);
@@ -10279,7 +10310,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIDateTime.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIDateTime.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   if wasSQLString <> nil then
@@ -10288,13 +10319,13 @@ begin
     fSQLFieldType = sftDateTimeMS);
 end;
 
-procedure TSQLPropInfoRTTIDateTime.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIDateTime.NormalizeValue(var Value: RawUTF8);
 begin
   DateTimeToIso8601TextVar(Iso8601ToDateTime(Value), 'T', Value,
     {withms=}fSQLFieldType = sftDateTimeMS);
 end;
 
-procedure TSQLPropInfoRTTIDateTime.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIDateTime.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   V: TDateTime;
@@ -10303,7 +10334,7 @@ begin
   fPropInfo.SetDoubleProp(Instance, V);
 end;
 
-procedure TSQLPropInfoRTTIDateTime.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIDateTime.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   if fSQLFieldType = sftDateTimeMS then
@@ -10315,65 +10346,65 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIMany }
+{ TORMPropInfoRTTIMany }
 
-// TSQLRecordMany stores nothing within the table
+// TORMMany stores nothing within the table
 
-procedure TSQLPropInfoRTTIMany.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIMany.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   result := '';
 end;
 
-procedure TSQLPropInfoRTTIMany.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIMany.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
 end;
 
-procedure TSQLPropInfoRTTIMany.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIMany.GetBinary(Instance: TObject; W: TBufferWriter);
 begin
 end;
 
-function TSQLPropInfoRTTIMany.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
+function TORMPropInfoRTTIMany.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
 begin
   result := P;
 end;
 
 
-{ TSQLPropInfoRTTIInstance }
+{ TORMPropInfoRTTIInstance }
 
-constructor TSQLPropInfoRTTIInstance.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIInstance.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   fObjectClass := fPropType^.RttiClass^.RttiClass;
 end;
 
-function TSQLPropInfoRTTIInstance.GetInstance(Instance: TObject): TObject;
+function TORMPropInfoRTTIInstance.GetInstance(Instance: TObject): TObject;
 begin
   result := fPropInfo.GetObjProp(Instance);
 end;
 
-procedure TSQLPropInfoRTTIInstance.SetInstance(Instance, Value: TObject);
+procedure TORMPropInfoRTTIInstance.SetInstance(Instance, Value: TObject);
 begin
   fPropInfo.SetOrdProp(Instance, PtrInt(Value));
 end;
 
 
-{ TSQLPropInfoRTTIRecordReference }
+{ TORMPropInfoRTTIRecordReference }
 
-constructor TSQLPropInfoRTTIRecordReference.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIRecordReference.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   fCascadeDelete := IdemPropName(fPropType^.Name^, 'TRecordReferenceToBeDeleted')
 end;
 
 
-{ TSQLPropInfoRTTITID }
+{ TORMPropInfoRTTITID }
 
-constructor TSQLPropInfoRTTITID.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTITID.Create(aPropInfo: PRttiProp; aPropIndex: integer;
+  aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 var
   TypeName: PShortString;
   Found: TRttiCustom;
@@ -10389,48 +10420,48 @@ begin
   if (ord(TypeName^[0]) > 13) and
      IdemPropName('ToBeDeletedID', @TypeName^[ord(TypeName^[0]) - 12], 13) then
   begin
-    // 'TSQLRecordClientToBeDeletedID' -> TSQLRecordClient + CascadeDelete=true
+    // 'TORMClientToBeDeletedID' -> TORMClient + CascadeDelete=true
     fCascadeDelete := true;
     Found := Rtti.Find(@TypeName^[1], ord(TypeName^[0]) - 13, rkClass);
   end
-  else    // 'TSQLRecordClientID' -> TSQLRecordClient
+  else    // 'TORMClientID' -> TORMClient
     Found := Rtti.Find(@TypeName^[1], ord(TypeName^[0]) - 2, rkClass);
-  if (Found <> nil) and Found.ValueClass.InheritsFrom(TSQLRecord) then
+  if (Found <> nil) and Found.ValueClass.InheritsFrom(TORM) then
     fRecordClass := pointer(Found.ValueClass);
 end;
 
 
-{ TSQLPropInfoRTTIID }
+{ TORMPropInfoRTTIID }
 
-procedure TSQLPropInfoRTTIID.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIID.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
-  if TSQLRecord(Instance).fFill.JoinedFields then
+  if TORM(Instance).fFill.JoinedFields then
     raise EModelException.CreateUTF8('%(%).SetValue after Create*Joined', [self, Name]);
   inherited SetValue(Instance, Value, wasString);
 end;
 
-procedure TSQLPropInfoRTTIID.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIID.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   ID: PtrUInt;
 begin
   ID := fPropInfo.GetOrdProp(Instance);
-  if TSQLRecord(Instance).fFill.JoinedFields then
-    ID := TSQLRecord(ID).fID;
+  if TORM(Instance).fFill.JoinedFields then
+    ID := TORM(ID).fID;
   W.AddU(ID);
 end;
 
 
-{ TSQLPropInfoRTTIIObject }
+{ TORMPropInfoRTTIIObject }
 
-procedure TSQLPropInfoRTTIObject.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIObject.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   S, D: TObject;
 begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
-  D := TSQLPropInfoRTTIObject(DestInfo).GetInstance(Dest);
+  D := TORMPropInfoRTTIObject(DestInfo).GetInstance(Dest);
   if fPropRtti.ValueKnownClass = TCollection then
     CopyCollection(TCollection(S), TCollection(D))
   else if fPropRtti.ValueKnownClass = TStrings then
@@ -10438,11 +10469,11 @@ begin
   else
   begin
     D.Free; // release previous instance
-    TSQLPropInfoRTTIObject(DestInfo).SetInstance(Dest, CopyObject(S));
+    TORMPropInfoRTTIObject(DestInfo).SetInstance(Dest, CopyObject(S));
   end;
 end;
 
-procedure TSQLPropInfoRTTIObject.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIObject.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   valid: boolean;
@@ -10457,7 +10488,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIObject.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIObject.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   if wasSQLString <> nil then
@@ -10465,13 +10496,13 @@ begin
   result := ObjectToJSON(GetInstance(Instance));
 end;
 
-procedure TSQLPropInfoRTTIObject.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIObject.GetBinary(Instance: TObject; W: TBufferWriter);
 begin
   // serialize object as JSON UTF-8 TEXT - not fast, but works
   W.Write(ObjectToJSON(GetInstance(Instance)));
 end;
 
-function TSQLPropInfoRTTIObject.SetBinary(Instance: TObject;
+function TORMPropInfoRTTIObject.SetBinary(Instance: TObject;
   P, PEnd: PAnsiChar): PAnsiChar;
 var
   valid: boolean;
@@ -10491,7 +10522,7 @@ begin
     result := nil;
 end;
 
-function TSQLPropInfoRTTIObject.GetHash(Instance: TObject;
+function TORMPropInfoRTTIObject.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   tmp: RawUTF8;
@@ -10500,11 +10531,11 @@ begin // JSON is case-sensitive by design -> ignore CaseInsensitive parameter
   result := crc32c(0, pointer(tmp), length(tmp));
 end;
 
-procedure TSQLPropInfoRTTIObject.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIObject.NormalizeValue(var Value: RawUTF8);
 begin // do nothing: should already be normalized
 end;
 
-procedure TSQLPropInfoRTTIObject.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIObject.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
   if jwoAsJsonNotAsString in W.fSQLRecordOptions then
     W.WriteObject(GetInstance(Instance))
@@ -10513,24 +10544,24 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIAnsi }
+{ TORMPropInfoRTTIAnsi }
 
-constructor TSQLPropInfoRTTIAnsi.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIAnsi.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited;
   fEngine := TSynAnsiConvert.Engine(aPropInfo^.typeInfo^.AnsiStringCodePage);
 end;
 
-procedure TSQLPropInfoRTTIAnsi.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIAnsi.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   Value: RawByteString;
 begin
-  if TSQLPropInfoRTTIAnsi(DestInfo).fEngine = fEngine then
+  if TORMPropInfoRTTIAnsi(DestInfo).fEngine = fEngine then
   begin
     fPropInfo.GetLongStrProp(Source, Value);
-    TSQLPropInfoRTTIAnsi(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
+    TORMPropInfoRTTIAnsi(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
   end
   else
   begin
@@ -10539,7 +10570,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIAnsi.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIAnsi.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   Value: RawByteString;
 begin
@@ -10547,7 +10578,7 @@ begin
   W.Write(Value);
 end;
 
-function TSQLPropInfoRTTIAnsi.GetHash(Instance: TObject;
+function TORMPropInfoRTTIAnsi.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Up: array[byte] of AnsiChar; // avoid slow heap allocation
@@ -10563,7 +10594,7 @@ begin
     result := crc32c(0, pointer(Value), length(Value));
 end;
 
-procedure TSQLPropInfoRTTIAnsi.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIAnsi.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   tmp: RawByteString;
@@ -10574,11 +10605,11 @@ begin
   result := fEngine.AnsiBufferToRawUTF8(pointer(tmp), length(tmp));
 end;
 
-procedure TSQLPropInfoRTTIAnsi.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIAnsi.NormalizeValue(var Value: RawUTF8);
 begin // do nothing: should already be UTF-8 encoded
 end;
 
-function TSQLPropInfoRTTIAnsi.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIAnsi.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   tmp1, tmp2: RawByteString;
@@ -10603,7 +10634,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIAnsi.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
+function TORMPropInfoRTTIAnsi.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
 var
   tmp: RawByteString;
 begin
@@ -10612,7 +10643,7 @@ begin
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIAnsi.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIAnsi.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
   if Value = nil then
@@ -10621,13 +10652,13 @@ begin
     fPropInfo.SetLongStrProp(Instance, fEngine.UTF8BufferToAnsi(Value, StrLen(Value)));
 end;
 
-procedure TSQLPropInfoRTTIAnsi.SetValueVar(Instance: TObject; const Value:
+procedure TORMPropInfoRTTIAnsi.SetValueVar(Instance: TObject; const Value:
   RawUTF8; wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance, fEngine.UTF8ToAnsi(Value));
 end;
 
-procedure TSQLPropInfoRTTIAnsi.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIAnsi.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   tmp: RawByteString;
 begin
@@ -10638,7 +10669,7 @@ begin
   W.Add('"');
 end;
 
-function TSQLPropInfoRTTIAnsi.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIAnsi.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
   tmp: RawByteString;
@@ -10658,7 +10689,7 @@ begin
   result := True;
 end;
 
-procedure TSQLPropInfoRTTIAnsi.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIAnsi.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, temp);
@@ -10668,7 +10699,7 @@ begin
   aValue.VText := pointer(temp);
 end;
 
-procedure TSQLPropInfoRTTIAnsi.CopyValue(Source, Dest: TObject);
+procedure TORMPropInfoRTTIAnsi.CopyValue(Source, Dest: TObject);
 begin // avoid temporary variable use, for simple fields with no getter/setter
   if fInPlaceCopySameClassPropOffset = 0 then
     fPropInfo.CopyLongStrProp(Source, Dest)
@@ -10678,18 +10709,18 @@ begin // avoid temporary variable use, for simple fields with no getter/setter
 end;
 
 
-{ TSQLPropInfoRTTIRawUTF8 }
+{ TORMPropInfoRTTIRawUTF8 }
 
-procedure TSQLPropInfoRTTIRawUTF8.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIRawUTF8.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   Value: RawByteString;
 begin // don't know why, but fInPlaceCopySameClassPropOffset trick leaks memory :(
   fPropInfo.GetLongStrProp(Source, Value);
-  TSQLPropInfoRTTIRawUTF8(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
+  TORMPropInfoRTTIRawUTF8(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
 end;
 
-function TSQLPropInfoRTTIRawUTF8.GetHash(Instance: TObject;
+function TORMPropInfoRTTIRawUTF8.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Up: array[byte] of AnsiChar; // avoid slow heap allocation
@@ -10702,7 +10733,7 @@ begin
     result := crc32c(0, pointer(Value), length(Value));
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIRawUTF8.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   tmp: RawByteString;
 begin
@@ -10718,7 +10749,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIRawUTF8.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   if wasSQLString <> nil then
@@ -10726,14 +10757,14 @@ begin
   fPropInfo.GetLongStrProp(Instance, RawByteString(result));
 end;
 
-function TSQLPropInfoRTTIRawUTF8.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
+function TORMPropInfoRTTIRawUTF8.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
   PAnsiChar;
 begin
   fPropInfo.SetLongStrProp(Instance, FromVarString(PByte(P), PByte(PEnd)));
   result := P;
 end;
 
-function TSQLPropInfoRTTIRawUTF8.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIRawUTF8.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
   tmp: RawByteString;
@@ -10753,7 +10784,7 @@ begin
   result := True;
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIRawUTF8.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, temp);
@@ -10762,7 +10793,7 @@ begin
   aValue.VText := Pointer(temp);
 end;
 
-function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 
   function CompareWithLocalTempCopy: PtrInt;
@@ -10804,7 +10835,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   tmp: RawUTF8;
@@ -10814,25 +10845,25 @@ begin
   fPropInfo.SetLongStrProp(Instance, tmp);
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject;
+procedure TORMPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject;
   const Value: RawUTF8; wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance, Value);
 end;
 
 
-{ TSQLPropInfoRTTIRawUnicode }
+{ TORMPropInfoRTTIRawUnicode }
 
-procedure TSQLPropInfoRTTIRawUnicode.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIRawUnicode.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   Value: RawByteString;
 begin
   fPropInfo.GetLongStrProp(Source, Value);
-  TSQLPropInfoRTTIRawUnicode(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
+  TORMPropInfoRTTIRawUnicode(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
 end;
 
-function TSQLPropInfoRTTIRawUnicode.GetHash(Instance: TObject;
+function TORMPropInfoRTTIRawUnicode.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Up: array[byte] of AnsiChar; // avoid slow heap allocation
@@ -10846,7 +10877,7 @@ begin
     result := crc32c(0, pointer(Value), length(Value));
 end;
 
-procedure TSQLPropInfoRTTIRawUnicode.GetValueVar(Instance: TObject;
+procedure TORMPropInfoRTTIRawUnicode.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 var
   tmp: RawByteString;
@@ -10857,7 +10888,7 @@ begin
   RawUnicodeToUTF8(pointer(tmp), length(tmp) shr 1, result);
 end;
 
-function TSQLPropInfoRTTIRawUnicode.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIRawUnicode.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   tmp1, tmp2: RawByteString;
@@ -10879,7 +10910,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawUnicode.SetValue(Instance: TObject;
+procedure TORMPropInfoRTTIRawUnicode.SetValue(Instance: TObject;
   Value: PUTF8Char; wasString: boolean);
 begin
   if Value = nil then
@@ -10889,25 +10920,25 @@ begin
       Utf8DecodeToRawUnicode(Value, StrLen(Value)));
 end;
 
-procedure TSQLPropInfoRTTIRawUnicode.SetValueVar(Instance: TObject;
+procedure TORMPropInfoRTTIRawUnicode.SetValueVar(Instance: TObject;
   const Value: RawUTF8; wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance, Utf8DecodeToRawUnicode(Value));
 end;
 
 
-{ TSQLPropInfoRTTIRawBlob }
+{ TORMPropInfoRTTIRawBlob }
 
-procedure TSQLPropInfoRTTIRawBlob.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIRawBlob.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   Value: RawByteString;
 begin
   fPropInfo.GetLongStrProp(Source, Value);
-  TSQLPropInfoRTTIRawBlob(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
+  TORMPropInfoRTTIRawBlob(DestInfo).fPropInfo.SetLongStrProp(Dest, Value);
 end;
 
-function TSQLPropInfoRTTIRawBlob.GetHash(Instance: TObject;
+function TORMPropInfoRTTIRawBlob.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Value: RawByteString;
@@ -10916,7 +10947,7 @@ begin
   result := crc32c(0, pointer(Value), length(Value)); // binary -> case sensitive
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIRawBlob.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   tmp: RawByteString;
 begin
@@ -10924,17 +10955,17 @@ begin
   W.WrBase64(pointer(tmp), length(tmp), true);
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.GetBlob(Instance: TObject; var Blob: RawByteString);
+procedure TORMPropInfoRTTIRawBlob.GetBlob(Instance: TObject; var Blob: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, Blob);
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.SetBlob(Instance: TObject; const Blob: RawByteString);
+procedure TORMPropInfoRTTIRawBlob.SetBlob(Instance: TObject; const Blob: RawByteString);
 begin
   fPropInfo.SetLongStrProp(Instance, Blob);
 end;
 
-function TSQLPropInfoRTTIRawBlob.IsNull(Instance: TObject): boolean;
+function TORMPropInfoRTTIRawBlob.IsNull(Instance: TObject): boolean;
 var
   Blob: RawByteString;
 begin
@@ -10942,14 +10973,14 @@ begin
   result := (Blob = '');
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIRawBlob.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   fPropInfo.GetLongStrProp(Instance, RawByteString(result));
   BinaryToText(result, ToSQL, wasSQLString);
 end;
 
-function TSQLPropInfoRTTIRawBlob.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIRawBlob.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   tmp1, tmp2: RawByteString;
@@ -10969,19 +11000,19 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIRawBlob.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
-  fPropInfo.SetLongStrProp(Instance, BlobToTSQLRawBlob(Value));
+  fPropInfo.SetLongStrProp(Instance, BlobToTRawBlob(Value));
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.SetValueVar(Instance: TObject;
+procedure TORMPropInfoRTTIRawBlob.SetValueVar(Instance: TObject;
   const Value: RawUTF8; wasString: boolean);
 begin
-  fPropInfo.SetLongStrProp(Instance, BlobToTSQLRawBlob(Value));
+  fPropInfo.SetLongStrProp(Instance, BlobToTRawBlob(Value));
 end;
 
-function TSQLPropInfoRTTIRawBlob.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIRawBlob.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
   tmp: RawByteString;
@@ -11003,7 +11034,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIRawBlob.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIRawBlob.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, temp);
@@ -11019,18 +11050,18 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIWide }
+{ TORMPropInfoRTTIWide }
 
-procedure TSQLPropInfoRTTIWide.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIWide.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   Value: WideString;
 begin
   fPropInfo.GetWideStrProp(Source, Value);
-  TSQLPropInfoRTTIWide(DestInfo).fPropInfo.SetWideStrProp(Dest, Value);
+  TORMPropInfoRTTIWide(DestInfo).fPropInfo.SetWideStrProp(Dest, Value);
 end;
 
-procedure TSQLPropInfoRTTIWide.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIWide.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   Value: WideString;
 begin
@@ -11038,7 +11069,7 @@ begin
   W.Write(WideStringToUTF8(Value));
 end;
 
-function TSQLPropInfoRTTIWide.GetHash(Instance: TObject;
+function TORMPropInfoRTTIWide.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Up: array[byte] of AnsiChar; // avoid slow heap allocation
@@ -11052,7 +11083,7 @@ begin
     result := crc32c(0, pointer(Value), length(Value) * 2);
 end;
 
-procedure TSQLPropInfoRTTIWide.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIWide.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   Value: WideString;
 begin
@@ -11063,7 +11094,7 @@ begin
   W.Add('"');
 end;
 
-procedure TSQLPropInfoRTTIWide.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIWide.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   Value: WideString;
@@ -11074,7 +11105,7 @@ begin
     wasSQLString^ := true;
 end;
 
-procedure TSQLPropInfoRTTIWide.CopyValue(Source, Dest: TObject);
+procedure TORMPropInfoRTTIWide.CopyValue(Source, Dest: TObject);
 begin // avoid temporary variable use, for simple fields with no getter/setter
   if fInPlaceCopySameClassPropOffset = 0 then
     CopySameClassProp(Source, self, Dest)
@@ -11083,7 +11114,7 @@ begin // avoid temporary variable use, for simple fields with no getter/setter
       PWideString(PtrUInt(Source) + fInPlaceCopySameClassPropOffset)^;
 end;
 
-function TSQLPropInfoRTTIWide.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIWide.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   tmp1, tmp2: WideString;
@@ -11105,14 +11136,14 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIWide.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
+function TORMPropInfoRTTIWide.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
 begin
   fPropInfo.SetWideStrProp(Instance,
     UTF8ToWideString(FromVarString(PByte(P), pointer(PEnd))));
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIWide.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIWide.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   Wide: WideString;
@@ -11125,18 +11156,18 @@ end;
 
 {$ifdef HASVARUSTRING}
 
-{ TSQLPropInfoRTTIUnicode }
+{ TORMPropInfoRTTIUnicode }
 
-procedure TSQLPropInfoRTTIUnicode.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIUnicode.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   tmp: UnicodeString;
 begin
   fPropInfo.GetUnicodeStrProp(Source, tmp);
-  TSQLPropInfoRTTIUnicode(DestInfo).fPropInfo.SetUnicodeStrProp(Dest, tmp);
+  TORMPropInfoRTTIUnicode(DestInfo).fPropInfo.SetUnicodeStrProp(Dest, tmp);
 end;
 
-procedure TSQLPropInfoRTTIUnicode.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIUnicode.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   tmp: UnicodeString;
 begin
@@ -11144,7 +11175,7 @@ begin
   W.Write(UnicodeStringToUtf8(tmp));
 end;
 
-procedure TSQLPropInfoRTTIUnicode.CopyValue(Source, Dest: TObject);
+procedure TORMPropInfoRTTIUnicode.CopyValue(Source, Dest: TObject);
 begin // avoid temporary variable use, for simple fields with no getter/setter
   if fInPlaceCopySameClassPropOffset = 0 then
     CopySameClassProp(Source, self, Dest)
@@ -11153,7 +11184,7 @@ begin // avoid temporary variable use, for simple fields with no getter/setter
       PUnicodeString(PtrUInt(Source) + fInPlaceCopySameClassPropOffset)^;
 end;
 
-function TSQLPropInfoRTTIUnicode.GetHash(Instance: TObject;
+function TORMPropInfoRTTIUnicode.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Up: array[byte] of AnsiChar; // avoid slow heap allocation
@@ -11167,7 +11198,7 @@ begin
     result := crc32c(0, pointer(Value), length(Value) * 2);
 end;
 
-procedure TSQLPropInfoRTTIUnicode.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIUnicode.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   tmp: UnicodeString;
@@ -11178,7 +11209,7 @@ begin
     wasSQLString^ := true;
 end;
 
-procedure TSQLPropInfoRTTIUnicode.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIUnicode.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   tmp: UnicodeString;
 begin
@@ -11189,7 +11220,7 @@ begin
   W.Add('"');
 end;
 
-function TSQLPropInfoRTTIUnicode.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIUnicode.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   tmp1, tmp2: UnicodeString;
@@ -11211,7 +11242,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIUnicode.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
+function TORMPropInfoRTTIUnicode.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
   PAnsiChar;
 begin
   fPropInfo.SetUnicodeStrProp(Instance,
@@ -11219,7 +11250,7 @@ begin
   result := P;
 end;
 
-procedure TSQLPropInfoRTTIUnicode.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIUnicode.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   tmp: UnicodeString;
@@ -11229,13 +11260,13 @@ begin
   fPropInfo.SetUnicodeStrProp(Instance, tmp);
 end;
 
-procedure TSQLPropInfoRTTIUnicode.SetValueVar(Instance: TObject;
+procedure TORMPropInfoRTTIUnicode.SetValueVar(Instance: TObject;
   const Value: RawUTF8; wasString: boolean);
 begin
   fPropInfo.SetUnicodeStrProp(Instance, UTF8DecodeToUnicodeString(Value));
 end;
 
-function TSQLPropInfoRTTIUnicode.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIUnicode.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
   tmp: UnicodeString;
@@ -11255,7 +11286,7 @@ begin
   result := True;
 end;
 
-procedure TSQLPropInfoRTTIUnicode.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIUnicode.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 var
   tmp: UnicodeString;
@@ -11270,10 +11301,10 @@ end;
 {$endif HASVARUSTRING}
 
 
-{ TSQLPropInfoRTTIDynArray }
+{ TORMPropInfoRTTIDynArray }
 
-constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIDynArray.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   if rcfObjArray in fPropRtti.Flags then
@@ -11286,18 +11317,18 @@ begin
       [self, fPropType^.Name]);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
+procedure TORMPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
 begin
   // very fast assignment of fWrapper pre-initialized RTTI
   result.InitRtti(fPropRtti, pointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^);
 end;
 
-function TSQLPropInfoRTTIDynArray.GetDynArrayElemType: TRttiCustom;
+function TORMPropInfoRTTIDynArray.GetDynArrayElemType: TRttiCustom;
 begin
   result := fPropRtti.ArrayRtti;
 end;
 
-procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
+procedure TORMPropInfoRTTIDynArray.Serialize(Instance: TObject;
   var data: RawByteString; ExtendedJson: boolean);
 var
   da: TDynArray;
@@ -11320,21 +11351,21 @@ begin
     data := da.SaveTo;
 end;
 
-procedure TSQLPropInfoRTTIDynArray.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIDynArray.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   sda, dda: TDynArray;
 begin
   GetDynArray(Source, sda);
-  TSQLPropInfoRTTIDynArray(DestInfo).GetDynArray(Dest, dda);
-  if (fObjArray <> nil) or (TSQLPropInfoRTTIDynArray(DestInfo).fObjArray <> nil)
+  TORMPropInfoRTTIDynArray(DestInfo).GetDynArray(Dest, dda);
+  if (fObjArray <> nil) or (TORMPropInfoRTTIDynArray(DestInfo).fObjArray <> nil)
     or (sda.Info.ArrayRtti <> dda.Info.ArrayRtti) then
     dda.LoadFromJSON(pointer(sda.SaveToJSON))
   else
     dda.Copy(@sda);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   Value: RawByteString;
 begin
@@ -11345,7 +11376,7 @@ begin
     W.WriteBinary(Value);
 end;
 
-function TSQLPropInfoRTTIDynArray.GetHash(Instance: TObject;
+function TORMPropInfoRTTIDynArray.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   tmp: RawByteString;
@@ -11354,7 +11385,7 @@ begin
   result := crc32c(0, pointer(tmp), length(tmp));
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIDynArray.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   Serialize(Instance, RawByteString(result), false);
@@ -11362,7 +11393,7 @@ begin
     BinaryToText(result, ToSQL, wasSQLString);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetVariant(Instance: TObject; var Dest: Variant);
+procedure TORMPropInfoRTTIDynArray.GetVariant(Instance: TObject; var Dest: Variant);
 var
   json: RawUTF8;
   da: TDynArray;
@@ -11373,7 +11404,7 @@ begin
   TDocVariantData(Dest).InitJSONInPlace(pointer(json), JSON_OPTIONS_FAST);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.SetVariant(Instance: TObject; const Source: Variant);
+procedure TORMPropInfoRTTIDynArray.SetVariant(Instance: TObject; const Source: Variant);
 var
   json: RawUTF8;
   da: TDynArray;
@@ -11383,11 +11414,11 @@ begin
   da.LoadFromJSON(pointer(json));
 end;
 
-procedure TSQLPropInfoRTTIDynArray.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIDynArray.NormalizeValue(var Value: RawUTF8);
 begin // do nothing: should already be normalized
 end;
 
-function TSQLPropInfoRTTIDynArray.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIDynArray.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   da1, da2: TDynArray;
@@ -11423,7 +11454,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIDynArray.SetBinary(Instance: TObject; P, PEnd:
+function TORMPropInfoRTTIDynArray.SetBinary(Instance: TObject; P, PEnd:
   PAnsiChar): PAnsiChar;
 var
   tmp: TSynTempBuffer; // LoadFromJSON() may change the input buffer
@@ -11444,7 +11475,7 @@ begin
     result := da.LoadFrom(P, PEnd);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIDynArray.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   tmp: TSynTempBuffer;
@@ -11464,7 +11495,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 var
   da: TDynArray;
@@ -11478,7 +11509,7 @@ begin
     result := inherited SetFieldSQLVar(Instance, aValue);
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIDynArray.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   tmp: RawByteString;
 begin
@@ -11493,7 +11524,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   Serialize(Instance, temp, false);
@@ -11514,10 +11545,10 @@ begin
 end;
 
 
-{ TSQLPropInfoRTTIVariant }
+{ TORMPropInfoRTTIVariant }
 
-constructor TSQLPropInfoRTTIVariant.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoRTTIVariant.Create(aPropInfo: PRttiProp;
+  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited;
   if aSQLFieldType = sftVariant then
@@ -11526,16 +11557,16 @@ begin
     fSQLFieldType := sftNullable; // TNullable* will use fSQLFieldTypeStored
 end;
 
-procedure TSQLPropInfoRTTIVariant.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRTTIVariant.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 var
   value: Variant;
 begin
   fPropInfo.GetVariantProp(Source, value, {byref=}true);
-  TSQLPropInfoRTTIVariant(DestInfo).fPropInfo.SetVariantProp(Dest, value);
+  TORMPropInfoRTTIVariant(DestInfo).fPropInfo.SetVariantProp(Dest, value);
 end;
 
-procedure TSQLPropInfoRTTIVariant.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRTTIVariant.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   value: Variant;
 begin
@@ -11543,7 +11574,7 @@ begin
   BinarySave(@value, fPropType, W);
 end;
 
-function TSQLPropInfoRTTIVariant.GetHash(Instance: TObject; CaseInsensitive:
+function TORMPropInfoRTTIVariant.GetHash(Instance: TObject; CaseInsensitive:
   boolean): cardinal;
 var
   value: Variant;
@@ -11552,7 +11583,7 @@ begin
   result := VariantHash(value, CaseInsensitive);
 end;
 
-procedure TSQLPropInfoRTTIVariant.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoRTTIVariant.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   value: Variant;
   backup: TTextWriterOptions;
@@ -11565,7 +11596,7 @@ begin
   W.CustomOptions := backup;
 end;
 
-procedure TSQLPropInfoRTTIVariant.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRTTIVariant.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   wasString: boolean;
@@ -11582,16 +11613,16 @@ begin
       wasSQLString^ := not VarIsEmptyOrNull(value);
 end;
 
-procedure TSQLPropInfoRTTIVariant.GetVariant(Instance: TObject; var Dest: Variant);
+procedure TORMPropInfoRTTIVariant.GetVariant(Instance: TObject; var Dest: Variant);
 begin
   fPropInfo.GetVariantProp(Instance, Dest, {byref=}true);
 end;
 
-procedure TSQLPropInfoRTTIVariant.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRTTIVariant.NormalizeValue(var Value: RawUTF8);
 begin // content should be already normalized
 end;
 
-function TSQLPropInfoRTTIVariant.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRTTIVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 
   function CompareWithLocalTempCopy: PtrInt;
@@ -11618,7 +11649,7 @@ begin
     result := CompareWithLocalTempCopy;
 end;
 
-function TSQLPropInfoRTTIVariant.SetBinary(Instance: TObject;
+function TORMPropInfoRTTIVariant.SetBinary(Instance: TObject;
   P, PEnd: PAnsiChar): PAnsiChar;
 var
   value: Variant;
@@ -11633,19 +11664,19 @@ begin
   fPropInfo.SetVariantProp(Instance, value);
 end;
 
-procedure TSQLPropInfoRTTIVariant.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRTTIVariant.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
   SetValuePtr(Instance, Value, StrLen(Value), wasString);
 end;
 
-procedure TSQLPropInfoRTTIVariant.SetValueVar(Instance: TObject;
+procedure TORMPropInfoRTTIVariant.SetValueVar(Instance: TObject;
   const Value: RawUTF8; wasString: boolean);
 begin
   SetValuePtr(Instance, pointer(Value), length(Value), wasString);
 end;
 
-procedure TSQLPropInfoRTTIVariant.SetValuePtr(Instance: TObject;
+procedure TORMPropInfoRTTIVariant.SetValuePtr(Instance: TObject;
   Value: PUTF8Char; ValueLen: integer; wasString: boolean);
 var
   tmp: TSynTempBuffer;
@@ -11681,15 +11712,15 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoRTTIVariant.SetVariant(Instance: TObject; const Source: Variant);
+procedure TORMPropInfoRTTIVariant.SetVariant(Instance: TObject; const Source: Variant);
 begin
   fPropInfo.SetVariantProp(Instance, Source);
 end;
 
 
-{ TSQLPropInfoCustom }
+{ TORMPropInfoCustom }
 
-function TSQLPropInfoCustom.GetFieldAddr(Instance: TObject): pointer;
+function TORMPropInfoCustom.GetFieldAddr(Instance: TObject): pointer;
 begin
   if Instance = nil then
     result := nil
@@ -11697,8 +11728,8 @@ begin
     result := PAnsiChar(Instance) + fOffset;
 end;
 
-constructor TSQLPropInfoCustom.Create(const aName: RawUTF8;
-  aSQLFieldType: TSQLFieldType; aAttributes: TSQLPropInfoAttributes;
+constructor TORMPropInfoCustom.Create(const aName: RawUTF8;
+  aSQLFieldType: TORMFieldType; aAttributes: TORMPropInfoAttributes;
   aFieldWidth, aPropIndex: integer; aProperty: pointer;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
@@ -11712,15 +11743,15 @@ begin
   fText2Data := aText2Data;
 end;
 
-procedure TSQLPropInfoCustom.TextToBinary(Value: PUTF8Char; var result: RawByteString);
+procedure TORMPropInfoCustom.TextToBinary(Value: PUTF8Char; var result: RawByteString);
 begin
   if Assigned(fText2Data) then
     fText2Data(Value, result)
   else
-    result := BlobToTSQLRawBlob(Value);
+    result := BlobToTRawBlob(Value);
 end;
 
-procedure TSQLPropInfoCustom.BinaryToText(var Value: RawUTF8; ToSQL: boolean;
+procedure TORMPropInfoCustom.BinaryToText(var Value: RawUTF8; ToSQL: boolean;
   wasSQLString: PBoolean);
 begin
   if Assigned(fData2Text) then
@@ -11730,19 +11761,19 @@ begin
 end;
 
 
-{ TSQLPropInfoRecordRTTI }
+{ TORMPropInfoRecordRTTI }
 
-procedure TSQLPropInfoRecordRTTI.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRecordRTTI.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 begin
-  if TSQLPropInfoRecordRTTI(DestInfo).fTypeInfo = fTypeInfo then
-    RecordCopy(TSQLPropInfoRecordRTTI(DestInfo).GetFieldAddr(Dest)^,
+  if TORMPropInfoRecordRTTI(DestInfo).fTypeInfo = fTypeInfo then
+    RecordCopy(TORMPropInfoRecordRTTI(DestInfo).GetFieldAddr(Dest)^,
       GetFieldAddr(Source)^, fTypeInfo)
   else
     inherited CopySameClassProp(Source, DestInfo, Dest);
 end;
 
-function TSQLPropInfoRecordRTTI.GetSQLFieldRTTITypeName: RawUTF8;
+function TORMPropInfoRecordRTTI.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   if fTypeInfo = nil then
     result := inherited GetSQLFieldRTTITypeName
@@ -11750,9 +11781,9 @@ begin
     result := ToUTF8(fTypeInfo^.Name^);
 end;
 
-constructor TSQLPropInfoRecordRTTI.Create(aRecordInfo: PRttiInfo;
+constructor TORMPropInfoRecordRTTI.Create(aRecordInfo: PRttiInfo;
   const aName: RawUTF8; aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer; aData2Text:
+  aAttributes: TORMPropInfoAttributes; aFieldWidth: integer; aData2Text:
   TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   if (aRecordInfo = nil) or not (aRecordInfo^.Kind in rkRecordTypes) then
@@ -11763,7 +11794,7 @@ begin
   fTypeInfo := aRecordInfo;
 end;
 
-procedure TSQLPropInfoRecordRTTI.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRecordRTTI.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   Value: RawByteString;
 begin
@@ -11771,7 +11802,7 @@ begin
   W.Write(pointer(Value), length(Value));
 end;
 
-function TSQLPropInfoRecordRTTI.GetHash(Instance: TObject;
+function TORMPropInfoRecordRTTI.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   tmp: TSynTempBuffer;
@@ -11781,12 +11812,12 @@ begin
   tmp.Done;
 end;
 
-procedure TSQLPropInfoRecordRTTI.GetVariant(Instance: TObject; var Dest: Variant);
+procedure TORMPropInfoRecordRTTI.GetVariant(Instance: TObject; var Dest: Variant);
 begin
   RawByteStringToVariant(RecordSave(GetFieldAddr(Instance)^, fTypeInfo), Dest);
 end;
 
-procedure TSQLPropInfoRecordRTTI.SetVariant(Instance: TObject; const Source: Variant);
+procedure TORMPropInfoRecordRTTI.SetVariant(Instance: TObject; const Source: Variant);
 var
   tmp: RawByteString;
 begin
@@ -11794,11 +11825,11 @@ begin
   RecordLoad(GetFieldAddr(Instance)^, tmp, fTypeInfo);
 end;
 
-procedure TSQLPropInfoRecordRTTI.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRecordRTTI.NormalizeValue(var Value: RawUTF8);
 begin // a BLOB should already be normalized
 end;
 
-function TSQLPropInfoRecordRTTI.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRecordRTTI.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 begin
   if RecordEquals(GetFieldAddr(Item1)^, GetFieldAddr(Item2)^, fTypeInfo) then
@@ -11807,13 +11838,13 @@ begin
     result := PtrInt(Item1) - PtrInt(Item2); // pseudo comparison
 end;
 
-function TSQLPropInfoRecordRTTI.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
+function TORMPropInfoRecordRTTI.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
   PAnsiChar;
 begin // use our RecordLoad() binary serialization
   result := RecordLoad(GetFieldAddr(Instance)^, P, fTypeInfo, nil, PEnd);
 end;
 
-procedure TSQLPropInfoRecordRTTI.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoRecordRTTI.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   data: RawByteString;
@@ -11822,14 +11853,14 @@ begin
   RecordLoad(GetFieldAddr(Instance)^, data, fTypeInfo);
 end;
 
-procedure TSQLPropInfoRecordRTTI.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoRecordRTTI.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 begin
   result := RecordSave(GetFieldAddr(Instance)^, fTypeInfo);
   BinaryToText(result, ToSQL, wasSQLString);
 end;
 
-function TSQLPropInfoRecordRTTI.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRecordRTTI.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 begin
   if aValue.VType = ftBlob then
@@ -11838,7 +11869,7 @@ begin
     result := inherited SetFieldSQLVar(Instance, aValue);
 end;
 
-procedure TSQLPropInfoRecordRTTI.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRecordRTTI.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   temp := RecordSave(GetFieldAddr(Instance)^, fTypeInfo);
@@ -11849,19 +11880,19 @@ begin
 end;
 
 
-{ TSQLPropInfoRecordFixedSize }
+{ TORMPropInfoRecordFixedSize }
 
-procedure TSQLPropInfoRecordFixedSize.CopySameClassProp(Source: TObject;
-  DestInfo: TSQLPropInfo; Dest: TObject);
+procedure TORMPropInfoRecordFixedSize.CopySameClassProp(Source: TObject;
+  DestInfo: TORMPropInfo; Dest: TObject);
 begin
-  if TSQLPropInfoRecordFixedSize(DestInfo).fTypeInfo = fTypeInfo then
-    MoveFast(GetFieldAddr(Source)^, TSQLPropInfoRecordFixedSize(DestInfo).GetFieldAddr
+  if TORMPropInfoRecordFixedSize(DestInfo).fTypeInfo = fTypeInfo then
+    MoveFast(GetFieldAddr(Source)^, TORMPropInfoRecordFixedSize(DestInfo).GetFieldAddr
       (Dest)^, fRecordSize)
   else
     inherited CopySameClassProp(Source, DestInfo, Dest);
 end;
 
-function TSQLPropInfoRecordFixedSize.GetSQLFieldRTTITypeName: RawUTF8;
+function TORMPropInfoRecordFixedSize.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   if fTypeInfo = nil then
     result := inherited GetSQLFieldRTTITypeName
@@ -11869,9 +11900,9 @@ begin
     result := ToUTF8(fTypeInfo^.Name^);
 end;
 
-constructor TSQLPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
+constructor TORMPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
   const aName: RawUTF8; aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
+  aAttributes: TORMPropInfoAttributes; aFieldWidth: integer;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   if integer(aRecordSize) <= 0 then
@@ -11882,25 +11913,25 @@ begin
     aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
 end;
 
-procedure TSQLPropInfoRecordFixedSize.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoRecordFixedSize.GetBinary(Instance: TObject; W: TBufferWriter);
 begin
   W.Write(GetFieldAddr(Instance), fRecordSize);
 end;
 
-function TSQLPropInfoRecordFixedSize.GetHash(Instance: TObject;
+function TORMPropInfoRecordFixedSize.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 begin
   result := crc32c(0, GetFieldAddr(Instance), fRecordSize);
 end;
 
-procedure TSQLPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
+procedure TORMPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
   FastSetString(result, GetFieldAddr(Instance), fRecordSize);
   BinaryToText(result, ToSQL, wasSQLString);
 end;
 
-procedure TSQLPropInfoRecordFixedSize.GetVariant(Instance: TObject; var Dest: Variant);
+procedure TORMPropInfoRecordFixedSize.GetVariant(Instance: TObject; var Dest: Variant);
 var
   tmp: RawByteString;
 begin
@@ -11908,7 +11939,7 @@ begin
   Dest := tmp;
 end;
 
-procedure TSQLPropInfoRecordFixedSize.SetVariant(Instance: TObject;
+procedure TORMPropInfoRecordFixedSize.SetVariant(Instance: TObject;
   const Source: Variant);
 begin
   if TVarData(Source).VType = varString then
@@ -11917,11 +11948,11 @@ begin
     FillCharFast(GetFieldAddr(Instance)^, fRecordSize, 0);
 end;
 
-procedure TSQLPropInfoRecordFixedSize.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoRecordFixedSize.NormalizeValue(var Value: RawUTF8);
 begin // a BLOB should already be normalized
 end;
 
-function TSQLPropInfoRecordFixedSize.CompareValue(Item1, Item2: TObject;
+function TORMPropInfoRecordFixedSize.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
   i: Integer;
@@ -11947,7 +11978,7 @@ begin
   end;
 end;
 
-function TSQLPropInfoRecordFixedSize.SetBinary(Instance: TObject;
+function TORMPropInfoRecordFixedSize.SetBinary(Instance: TObject;
   P, PEnd: PAnsiChar): PAnsiChar;
 begin
   result := P + fRecordSize;
@@ -11957,7 +11988,7 @@ begin
     MoveFast(P^, GetFieldAddr(Instance)^, fRecordSize);
 end;
 
-procedure TSQLPropInfoRecordFixedSize.SetValue(Instance: TObject;
+procedure TORMPropInfoRecordFixedSize.SetValue(Instance: TObject;
   Value: PUTF8Char; wasString: boolean);
 var
   data: RawByteString;
@@ -11970,7 +12001,7 @@ begin
     MoveFast(Value^, GetFieldAddr(Instance)^, fRecordSize);
 end;
 
-function TSQLPropInfoRecordFixedSize.SetFieldSQLVar(Instance: TObject;
+function TORMPropInfoRecordFixedSize.SetFieldSQLVar(Instance: TObject;
   const aValue: TSQLVar): boolean;
 begin
   if aValue.VType = ftBlob then
@@ -11983,7 +12014,7 @@ begin
     result := inherited SetFieldSQLVar(Instance, aValue);
 end;
 
-procedure TSQLPropInfoRecordFixedSize.GetFieldSQLVar(Instance: TObject;
+procedure TORMPropInfoRecordFixedSize.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   SetString(temp, PAnsiChar(GetFieldAddr(Instance)), fRecordSize);
@@ -11994,11 +12025,11 @@ begin
 end;
 
 
-{ TSQLPropInfoCustomJSON }
+{ TORMPropInfoCustomJSON }
 
-constructor TSQLPropInfoCustomJSON.Create(aPropInfo: PRttiProp; aPropIndex: integer);
+constructor TORMPropInfoCustomJSON.Create(aPropInfo: PRttiProp; aPropIndex: integer);
 var
-  attrib: TSQLPropInfoAttributes;
+  attrib: TORMPropInfoAttributes;
 begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil) = AS_UNIQUE then
@@ -12007,9 +12038,9 @@ begin
     (nil), attrib, aPropInfo^.Index);
 end;
 
-constructor TSQLPropInfoCustomJSON.Create(aTypeInfo: PRttiInfo;
+constructor TORMPropInfoCustomJSON.Create(aTypeInfo: PRttiInfo;
   const aName: RawUTF8; aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
+  aAttributes: TORMPropInfoAttributes; aFieldWidth: integer);
 begin
   inherited Create(aName, sftUTF8Custom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, nil, nil);
@@ -12017,16 +12048,16 @@ begin
   SetCustomParser(rtti.RegisterType(aTypeInfo) as TRttiJson);
 end;
 
-constructor TSQLPropInfoCustomJSON.Create(const aTypeName, aName: RawUTF8;
+constructor TORMPropInfoCustomJSON.Create(const aTypeName, aName: RawUTF8;
   aPropertyIndex: integer; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
+  aAttributes: TORMPropInfoAttributes; aFieldWidth: integer);
 begin
   inherited Create(aName, sftUTF8Custom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, nil, nil);
   SetCustomParser(rtti.Find(pointer(aTypeName), length(aTypeName)) as TRttiJson);
 end;
 
-function TSQLPropInfoCustomJSON.GetSQLFieldRTTITypeName: RawUTF8;
+function TORMPropInfoCustomJSON.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   if fTypeInfo = nil then
     result := inherited GetSQLFieldRTTITypeName
@@ -12034,7 +12065,7 @@ begin
     result := ToUTF8(fTypeInfo^.Name^);
 end;
 
-procedure TSQLPropInfoCustomJSON.SetCustomParser(aCustomParser: TRttiJson);
+procedure TORMPropInfoCustomJSON.SetCustomParser(aCustomParser: TRttiJson);
 begin
   if aCustomParser = nil then
     raise EModelException.CreateUTF8('%.SetCustomParser: Invalid type information for %',
@@ -12042,13 +12073,13 @@ begin
   fCustomParser := aCustomParser;
 end;
 
-destructor TSQLPropInfoCustomJSON.Destroy;
+destructor TORMPropInfoCustomJSON.Destroy;
 begin
   inherited;
   fCustomParser.Free;
 end;
 
-procedure TSQLPropInfoCustomJSON.GetBinary(Instance: TObject; W: TBufferWriter);
+procedure TORMPropInfoCustomJSON.GetBinary(Instance: TObject; W: TBufferWriter);
 var
   JSON: RawUTF8;
 begin
@@ -12056,7 +12087,7 @@ begin
   W.Write(JSON);
 end;
 
-function TSQLPropInfoCustomJSON.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
+function TORMPropInfoCustomJSON.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
   PAnsiChar;
 var
   tmp: TSynTempBuffer;
@@ -12072,11 +12103,11 @@ begin // stored as JSON VarString in the binary stream
   result := P;
 end;
 
-procedure TSQLPropInfoCustomJSON.NormalizeValue(var Value: RawUTF8);
+procedure TORMPropInfoCustomJSON.NormalizeValue(var Value: RawUTF8);
 begin // do nothing: should already be normalized
 end;
 
-procedure TSQLPropInfoCustomJSON.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+procedure TORMPropInfoCustomJSON.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var
   Data: PByte;
 begin
@@ -12084,7 +12115,7 @@ begin
   W.AddRttiCustomJSON(Data, fCustomParser, []);
 end;
 
-procedure TSQLPropInfoCustomJSON.GetValueVar(Instance: TObject; ToSQL: boolean;
+procedure TORMPropInfoCustomJSON.GetValueVar(Instance: TObject; ToSQL: boolean;
   var result: RawUTF8; wasSQLString: PBoolean);
 var
   W: TJSONSerializer;
@@ -12101,7 +12132,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoCustomJSON.SetValue(Instance: TObject; Value: PUTF8Char;
+procedure TORMPropInfoCustomJSON.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var
   Data: PByte;
@@ -12130,13 +12161,13 @@ begin
 end;
 
 
-{ TSQLPropInfoList }
+{ TORMPropInfoList }
 
-constructor TSQLPropInfoList.Create(aTable: TClass; aOptions: TSQLPropInfoListOptions);
+constructor TORMPropInfoList.Create(aTable: TClass; aOptions: TORMPropInfoListOptions);
 begin
   fTable := aTable;
   fOptions := aOptions;
-  if aTable.InheritsFrom(TSQLRecordRTreeAbstract) then
+  if aTable.InheritsFrom(TORMRTreeAbstract) then
     include(fOptions, pilAuxiliaryFields);
   if pilSubClassesFlattening in fOptions then
     InternalAddParentsFirst(aTable, nil)
@@ -12144,7 +12175,7 @@ begin
     InternalAddParentsFirst(aTable);
 end;
 
-destructor TSQLPropInfoList.Destroy;
+destructor TORMPropInfoList.Destroy;
 var
   i: PtrInt;
 begin
@@ -12155,7 +12186,7 @@ end;
 
 // we don't use TRttiCustom.Props but the raw RTTI which doesn't include fID
 
-procedure TSQLPropInfoList.InternalAddParentsFirst(aClassType: TClass;
+procedure TORMPropInfoList.InternalAddParentsFirst(aClassType: TClass;
   aFlattenedProps: PRttiPropDynArray);
 var
   p: PRttiProp;
@@ -12177,12 +12208,12 @@ begin
       SetLength(aFlattenedProps, prev);
     end
     else if not (pilIgnoreIfGetter in fOptions) or p^.GetterIsField then
-      Add(TSQLPropInfoRTTI.CreateFrom(p, Count, fOptions, aFlattenedProps));
+      Add(TORMPropInfoRTTI.CreateFrom(p, Count, fOptions, aFlattenedProps));
     p := p^.Next;
   end;
 end;
 
-procedure TSQLPropInfoList.InternalAddParentsFirst(aClassType: TClass);
+procedure TORMPropInfoList.InternalAddParentsFirst(aClassType: TClass);
 var
   p: PRttiProp;
   i: Integer;
@@ -12193,12 +12224,12 @@ begin
     InternalAddParentsFirst(GetClassParent(aClassType));
   for i := 1 to GetRttiProp(aClassType, p) do
   begin
-    Add(TSQLPropInfoRTTI.CreateFrom(p, Count, fOptions, nil));
+    Add(TORMPropInfoRTTI.CreateFrom(p, Count, fOptions, nil));
     p := p^.Next;
   end;
 end;
 
-function TSQLPropInfoList.Add(aItem: TSQLPropInfo): integer;
+function TORMPropInfoList.Add(aItem: TORMPropInfo): integer;
 var
   f: integer;
 begin
@@ -12225,14 +12256,14 @@ begin
   fOrderedByName := nil; // force recompute sorted name array
 end;
 
-function TSQLPropInfoList.GetItem(aIndex: integer): TSQLPropInfo;
+function TORMPropInfoList.GetItem(aIndex: integer): TORMPropInfo;
 begin
   if cardinal(aIndex) >= cardinal(fCount) then
-    raise EORMException.Create('Invalid TSQLPropInfoList index');
+    raise EORMException.Create('Invalid TORMPropInfoList index');
   result := fList[aIndex];
 end;
 
-procedure TSQLPropInfoList.QuickSortByName(L, R: PtrInt);
+procedure TORMPropInfoList.QuickSortByName(L, R: PtrInt);
 var
   I, J, P, tmp: PtrInt;
   pivot: PUTF8Char;
@@ -12277,7 +12308,7 @@ begin
     until L >= R;
 end;
 
-function TSQLPropInfoList.ByRawUTF8Name(const aName: RawUTF8): TSQLPropInfo;
+function TORMPropInfoList.ByRawUTF8Name(const aName: RawUTF8): TORMPropInfo;
 var
   i: integer;
 begin
@@ -12288,7 +12319,7 @@ begin
     result := fList[i];
 end;
 
-function TSQLPropInfoList.ByName(aName: PUTF8Char): TSQLPropInfo;
+function TORMPropInfoList.ByName(aName: PUTF8Char): TORMPropInfo;
 var
   i: integer;
 begin
@@ -12299,7 +12330,7 @@ begin
     result := fList[i];
 end;
 
-function TSQLPropInfoList.IndexByName(aName: PUTF8Char): integer;
+function TORMPropInfoList.IndexByName(aName: PUTF8Char): integer;
 var
   cmp, L, R: integer;
 begin
@@ -12340,12 +12371,12 @@ begin
   result := -1;
 end;
 
-function TSQLPropInfoList.IndexByName(const aName: RawUTF8): integer;
+function TORMPropInfoList.IndexByName(const aName: RawUTF8): integer;
 begin
   result := IndexByName(pointer(aName));
 end;
 
-function TSQLPropInfoList.IndexByNameOrExcept(const aName: RawUTF8): integer;
+function TORMPropInfoList.IndexByNameOrExcept(const aName: RawUTF8): integer;
 begin
   if IsRowID(pointer(aName)) then
     result := -1
@@ -12358,7 +12389,7 @@ begin
   end;
 end;
 
-procedure TSQLPropInfoList.IndexesByNamesOrExcept(const aNames: array of RawUTF8;
+procedure TORMPropInfoList.IndexesByNamesOrExcept(const aNames: array of RawUTF8;
   const aIndexes: array of PInteger);
 var
   i: PtrInt;
@@ -12373,7 +12404,7 @@ begin
       aIndexes[i]^ := IndexByNameOrExcept(aNames[i]);
 end;
 
-procedure TSQLPropInfoList.NamesToRawUTF8DynArray(var Names: TRawUTF8DynArray);
+procedure TORMPropInfoList.NamesToRawUTF8DynArray(var Names: TRawUTF8DynArray);
 var
   i: PtrInt;
 begin
@@ -12382,7 +12413,7 @@ begin
     Names[i] := fList[i].Name;
 end;
 
-function TSQLPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUTF8): integer;
+function TORMPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUTF8): integer;
 begin
   if pilSubClassesFlattening in fOptions then
   begin
@@ -12403,17 +12434,17 @@ begin
 end;
 
 
-{ ************ TSQLRecord TSQLModel TSQLTable IRestORM Core Definitions }
+{ ************ TORM TORMModel TORMTable IRestORM Core Definitions }
 
 {$ifdef CPUX64}
 
 // very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
-function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
+function TORMDynArrayCompare(const Item1,Item2): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr[Item1]
         mov     rdx, qword ptr[Item2]
-        mov     rcx, qword ptr[rcx + TSQLRecord.fID]
-        mov     rdx, qword ptr[rdx + TSQLRecord.fID]
+        mov     rcx, qword ptr[rcx + TORM.fID]
+        mov     rdx, qword ptr[rdx + TORM.fID]
         xor     eax, eax
         cmp     rcx, rdx
         seta    al
@@ -12422,26 +12453,26 @@ end;
 
 {$else}
 
-function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
+function TORMDynArrayCompare(const Item1,Item2): integer;
 begin
   // we assume Item1<>nil and Item2<>nil
-  result := CompareQWord(TSQLRecord(Item1).fID, TSQLRecord(Item2).fID);
+  result := CompareQWord(TORM(Item1).fID, TORM(Item2).fID);
   // inlined branchless comparison or correct x86 asm for older Delphi
 end;
 
 {$endif CPUX64}
 
-function TSQLRecordDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
+function TORMDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 begin
-  with PQWordRec(@TSQLRecord(Elem).fID)^ do
+  with PQWordRec(@TORM(Elem).fID)^ do
     result := crc32cBy4(L, H);
 end;
 
-function ClassSQLFieldType(info: PRttiInfo): TSQLFieldType;
+function ClassSQLFieldType(info: PRttiInfo): TORMFieldType;
 const
   T_: array[0..6] of TClass = (
     // efficient access to the classes to be recognized
-    TObject, TSQLRecordMany, TSQLRecord, TRawUTF8List, TStrings, TObjectList, TCollection);
+    TObject, TORMMany, TORM, TRawUTF8List, TStrings, TObjectList, TCollection);
 var
   CT: PRttiClass;
   C: TClass;
@@ -12475,13 +12506,13 @@ begin
         end
       else
       begin
-        // T[2]=TSQLRecord
-        result := sftID; // TSQLRecord field is pointer(RecordID), not an Instance
+        // T[2]=TORM
+        result := sftID; // TORM field is pointer(RecordID), not an Instance
         break;
       end
     else
     begin
-      // T[1]=TSQLRecordMany
+      // T[1]=TORMMany
       result := sftMany; // no data is stored here, but in a pivot table
       break;
     end;
@@ -12493,7 +12524,7 @@ end;
 
 { RecordRef }
 
-function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass;
+function RecordReference(Model: TORMModel; aTable: TORMClass;
   aID: TID): TRecordReference;
 begin
   if aID = 0 then
@@ -12524,7 +12555,7 @@ begin
     aArray[i] := aArray[i] shr 6;
 end;
 
-procedure RecordRef.From(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID);
+procedure RecordRef.From(Model: TORMModel; aTable: TORMClass; aID: TID);
 begin
   Value := Model.GetTableIndexExisting(aTable);
   if Value > 63 then // TRecordReference handle up to 64=1 shl 6 tables
@@ -12538,7 +12569,7 @@ begin
   result := Value shr 6;  // 64=1 shl 6
 end;
 
-function RecordRef.Table(Model: TSQLModel): TSQLRecordClass;
+function RecordRef.Table(Model: TORMModel): TORMClass;
 var
   V: integer;
 begin
@@ -12559,9 +12590,9 @@ begin
   result := Value and 63;
 end;
 
-function RecordRef.Text(Model: TSQLModel): RawUTF8;
+function RecordRef.Text(Model: TORMModel): RawUTF8;
 var
-  aTable: TSQLRecordClass;
+  aTable: TORMClass;
 begin
   if ((Value shr 6) = 0) then
     // Value=0 or no valid ID
@@ -12579,9 +12610,9 @@ end;
 
 function RecordRef.Text(const Rest: IRestORM): RawUTF8;
 var
-  T: TSQLRecordClass;
+  T: TORMClass;
   aID: TID;
-  m: TSQLModel;
+  m: TORMModel;
 begin
   result := '';
   if ((Value shr 6) = 0) or (Rest = nil) then
@@ -12605,11 +12636,11 @@ begin
 end;
 
 
-{ ------------ TSQLTable TSQLTableJSON Definitions }
+{ ------------ TORMTable TORMTableJSON Definitions }
 
-{ TSQLTable }
+{ TORMTable }
 
-function TSQLTable.FieldIndex(FieldName: PUTF8Char): integer;
+function TORMTable.FieldIndex(FieldName: PUTF8Char): integer;
 begin
   if (self <> nil) and (fResults <> nil) and (FieldName <> nil) and
      (FieldCount > 0) then
@@ -12635,19 +12666,19 @@ begin
   result := -1;
 end;
 
-function TSQLTable.FieldIndex(const FieldName: RawUTF8): integer;
+function TORMTable.FieldIndex(const FieldName: RawUTF8): integer;
 begin
   result := FieldIndex(Pointer(FieldName));
 end;
 
-function TSQLTable.FieldIndexExisting(const FieldName: RawUTF8): integer;
+function TORMTable.FieldIndexExisting(const FieldName: RawUTF8): integer;
 begin
   result := FieldIndex(Pointer(FieldName));
   if result < 0 then
     raise ESQLTableException.CreateUTF8('%.FieldIndexExisting("%")', [self, FieldName]);
 end;
 
-function TSQLTable.FieldIndex(const FieldNames: array of RawUTF8;
+function TORMTable.FieldIndex(const FieldNames: array of RawUTF8;
   const FieldIndexes: array of PInteger): integer;
 var
   i: PtrInt;
@@ -12669,7 +12700,7 @@ begin
     end;
 end;
 
-procedure TSQLTable.FieldIndexExisting(const FieldNames: array of RawUTF8;
+procedure TORMTable.FieldIndexExisting(const FieldNames: array of RawUTF8;
   const FieldIndexes: array of PInteger);
 var
   i: PtrInt;
@@ -12686,14 +12717,14 @@ begin
       FieldIndexes[i]^ := FieldIndexExisting(FieldNames[i]);
 end;
 
-function TSQLTable.FieldNames: TRawUTF8DynArray;
+function TORMTable.FieldNames: TRawUTF8DynArray;
 begin
   if length(fFieldNames) <> fFieldCount then
     InitFieldNames;
   result := fFieldNames;
 end;
 
-function TSQLTable.FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
+function TORMTable.FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
 var
   Index: integer;
 begin
@@ -12704,7 +12735,7 @@ begin
     result := fResults[Index + Row * FieldCount];
 end;
 
-procedure TSQLTable.SortBitsFirst(var Bits);
+procedure TORMTable.SortBitsFirst(var Bits);
 var
   oldIDColumn, oldResults: TPUTF8CharDynArray;
   i, j, nSet, n: integer;
@@ -12757,7 +12788,7 @@ begin
     SetBitPtr(@Bits, i); // slow but accurate
 end;
 
-function TSQLTable.IDColumnHide: boolean;
+function TORMTable.IDColumnHide: boolean;
 var
   fID, R, F: integer;
   S, D1, D2: PPUTF8Char;
@@ -12793,12 +12824,12 @@ begin
       end;
       inc(S);
     end;
-  // 4. TSQLTable data now points to new values without ID field
+  // 4. TORMTable data now points to new values without ID field
   result := true;
   fResults := @fNotIDColumn[0];
 end;
 
-function TSQLTable.IDColumnHiddenValue(Row: integer): TID;
+function TORMTable.IDColumnHiddenValue(Row: integer): TID;
 begin
   if (self = nil) or (fResults = nil) or (Row <= 0) or (Row > fRowCount) then
     result := 0
@@ -12810,7 +12841,7 @@ begin
     result := 0;
 end;
 
-procedure TSQLTable.IDArrayFromBits(const Bits; var IDs: TIDDynArray);
+procedure TORMTable.IDArrayFromBits(const Bits; var IDs: TIDDynArray);
 var
   n, i, fID: integer;
 begin
@@ -12853,7 +12884,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.IDColumnHiddenValues(var IDs: TIDDynArray);
+procedure TORMTable.IDColumnHiddenValues(var IDs: TIDDynArray);
 var
   n, i, fID: integer;
   U: PPUTF8Char;
@@ -12886,7 +12917,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.IDArrayToBits(var Bits; var IDs: TIDDynArray);
+procedure TORMTable.IDArrayToBits(var Bits; var IDs: TIDDynArray);
 var
   i, fID: integer;
   U: PPUTF8Char;
@@ -12938,7 +12969,7 @@ begin
   assert(comparemem(@AllID[0],@IDs[0],length(AllID)*SizeOf(TID))); }
 end;
 
-function TSQLTable.RowFromID(aID: TID; aNotFoundMinusOne: boolean): integer;
+function TORMTable.RowFromID(aID: TID; aNotFoundMinusOne: boolean): integer;
 var
   ID: RawUTF8;
   fID: integer;
@@ -12979,7 +13010,7 @@ begin
     result := fRowCount; // not found -> return last row index
 end;
 
-function TSQLTable.DeleteRow(Row: integer): boolean;
+function TORMTable.DeleteRow(Row: integer): boolean;
 begin
   if (self = nil) or (Row < 1) or (Row > fRowCount) then
   begin
@@ -13000,7 +13031,7 @@ begin
   result := true;
 end;
 
-procedure TSQLTable.InitFieldNames;
+procedure TORMTable.InitFieldNames;
 var
   f: integer;
   P: PUTF8Char;
@@ -13019,7 +13050,7 @@ end;
 var
   SQLTableRowVariantType: TCustomVariantType = nil;
 
-procedure TSQLTable.GetAsVariant(row, field: integer; out value: variant;
+procedure TORMTable.GetAsVariant(row, field: integer; out value: variant;
   expandTimeLogAsText, expandEnumsAsText, expandHugeIDAsUniqueIdentifier: boolean;
   options: TDocVariantOptions);
 const
@@ -13085,7 +13116,7 @@ begin
     end;
 end;
 
-procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
+procedure TORMTable.ToDocVariant(Row: integer; out doc: variant;
   options: TDocVariantOptions; expandTimeLogAsText, expandEnumsAsText,
   expandHugeIDAsUniqueIdentifier: boolean);
 var
@@ -13103,7 +13134,7 @@ begin
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames, v, JSON_OPTIONS_FAST);
 end;
 
-procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
+procedure TORMTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
 var
   r: PtrInt;
 begin
@@ -13113,9 +13144,9 @@ begin
   if readonly then
   begin
     if SQLTableRowVariantType = nil then
-      SQLTableRowVariantType := SynRegisterCustomVariantType(TSQLTableRowVariant);
+      SQLTableRowVariantType := SynRegisterCustomVariantType(TORMTableRowVariant);
     for r := 0 to fRowCount - 1 do
-      with TSQLTableRowVariantData(docs[r]) do
+      with TORMTableRowVariantData(docs[r]) do
       begin
         VType := SQLTableRowVariantType.VarType;
         VTable := self;
@@ -13127,7 +13158,7 @@ begin
       ToDocVariant(r + 1, docs[r]);
 end;
 
-procedure TSQLTable.ToDocVariant(out docarray: variant; readonly: boolean);
+procedure TORMTable.ToDocVariant(out docarray: variant; readonly: boolean);
 var
   Values: TVariantDynArray;
 begin
@@ -13135,7 +13166,7 @@ begin
   TDocVariantData(docarray).InitArrayFromVariants(Values, JSON_OPTIONS_FAST);
 end;
 
-function TSQLTable.DeleteColumnValues(Field: integer): boolean;
+function TORMTable.DeleteColumnValues(Field: integer): boolean;
 var
   i: integer;
   U: PPUTF8Char;
@@ -13154,15 +13185,15 @@ begin
   result := true;
 end;
 
-function TSQLTable.GetQueryTableNameFromSQL: RawUTF8;
+function TORMTable.GetQueryTableNameFromSQL: RawUTF8;
 begin
   if (fQueryTableNameFromSQL = '') and (fQuerySQL <> '') then
     fQueryTableNameFromSQL := GetTableNameFromSQLSelect(fQuerySQL, true);
   result := fQueryTableNameFromSQL;
 end;
 
-function TSQLTable.FieldPropFromTables(const PropName: RawUTF8;
-  out PropInfo: TSQLPropInfo; out TableIndex: integer): TSQLFieldType;
+function TORMTable.FieldPropFromTables(const PropName: RawUTF8;
+  out PropInfo: TORMPropInfo; out TableIndex: integer): TORMFieldType;
 
   procedure SearchInQueryTables(aPropName: PUTF8Char; aTableIndex: integer);
   begin
@@ -13235,7 +13266,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.SetFieldType(Field: integer; FieldType: TSQLFieldType;
+procedure TORMTable.SetFieldType(Field: integer; FieldType: TORMFieldType;
   FieldTypeInfo: PRttiInfo; FieldSize, FieldTableIndex: integer);
 begin
   if (self = nil) or (cardinal(Field) >= cardinal(FieldCount)) then
@@ -13243,7 +13274,7 @@ begin
   if fFieldType = nil then
     InitFieldTypes
   else if Field >= length(fFieldType) then
-    SetLength(fFieldType, Field + 1); // e.g. from TSQLTableWritable.AddField
+    SetLength(fFieldType, Field + 1); // e.g. from TORMTableWritable.AddField
   with fFieldType[Field] do
   begin
     ContentType := FieldType;
@@ -13276,18 +13307,18 @@ begin
   end;
 end;
 
-procedure TSQLTable.SetFieldType(const FieldName: RawUTF8;
-  FieldType: TSQLFieldType; FieldTypeInfo: PRttiInfo; FieldSize: integer);
+procedure TORMTable.SetFieldType(const FieldName: RawUTF8;
+  FieldType: TORMFieldType; FieldTypeInfo: PRttiInfo; FieldSize: integer);
 begin
   SetFieldType(FieldIndex(FieldName), FieldType, FieldTypeInfo, FieldSize);
 end;
 
 const
-  DBTOFIELDTYPE: array[TSQLDBFieldType] of TSQLFieldType = (
+  DBTOFIELDTYPE: array[TSQLDBFieldType] of TORMFieldType = (
     sftUnknown, sftUnknown,
     sftInteger, sftFloat, sftCurrency, sftDateTime, sftUTF8Text, sftBlob);
 
-procedure TSQLTable.SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
+procedure TORMTable.SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
 var
   f: PtrInt;
 begin
@@ -13297,7 +13328,7 @@ begin
     SetFieldType(f, DBTOFIELDTYPE[DBTypes[f]]);
 end;
 
-function TSQLTable.GetRowCount: integer;
+function TORMTable.GetRowCount: integer;
 begin
   if self = nil then
     result := 0
@@ -13305,12 +13336,12 @@ begin
     result := fRowCount;
 end;
 
-procedure TSQLTable.InitFieldTypes;
+procedure TORMTable.InitFieldTypes;
 var
   f, i, len: integer;
-  sft: TSQLFieldType;
+  sft: TORMFieldType;
   info: PRttiInfo;
-  prop: TSQLPropInfo;
+  prop: TORMPropInfo;
   size, tableindex: integer;
   U: PPUTF8Char;
   guessed: boolean;
@@ -13336,8 +13367,8 @@ begin
       sft := FieldPropFromTables(fResults[f], prop, tableindex);
       if prop <> nil then
       begin
-        if prop.InheritsFrom(TSQLPropInfoRTTI) then
-          info := TSQLPropInfoRTTI(prop).PropType;
+        if prop.InheritsFrom(TORMPropInfoRTTI) then
+          info := TORMPropInfoRTTI(prop).PropType;
         size := prop.FieldWidth;
       end;
     end
@@ -13398,7 +13429,7 @@ begin
   end;
 end;
 
-function TSQLTable.FieldType(Field: integer): TSQLFieldType;
+function TORMTable.FieldType(Field: integer): TORMFieldType;
 begin
   if (self <> nil) and (cardinal(Field) < cardinal(FieldCount)) then
   begin
@@ -13410,8 +13441,8 @@ begin
     result := sftUnknown;
 end;
 
-function TSQLTable.FieldType(Field: integer;
-  out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType;
+function TORMTable.FieldType(Field: integer;
+  out FieldTypeInfo: PSQLTableFieldType): TORMFieldType;
 begin
   if (self <> nil) and (cardinal(Field) < cardinal(FieldCount)) then
   begin
@@ -13427,7 +13458,7 @@ begin
   end;
 end;
 
-function TSQLTable.Get(Row, Field: integer): PUTF8Char;
+function TORMTable.Get(Row, Field: integer): PUTF8Char;
 begin
   if (self = nil) or (fResults = nil) or
      (cardinal(Row) > cardinal(fRowCount)) or
@@ -13437,7 +13468,7 @@ begin
     result := fResults[Row * FieldCount + Field];
 end;
 
-function TSQLTable.GetU(Row, Field: integer): RawUTF8;
+function TORMTable.GetU(Row, Field: integer): RawUTF8;
 var
   P: PUTF8Char;
 begin
@@ -13452,62 +13483,62 @@ begin
   end;
 end;
 
-function TSQLTable.Get(Row: integer; const FieldName: RawUTF8): PUTF8Char;
+function TORMTable.Get(Row: integer; const FieldName: RawUTF8): PUTF8Char;
 begin
   result := Get(Row, FieldIndex(FieldName));
 end;
 
-function TSQLTable.GetU(Row: integer; const FieldName: RawUTF8): RawUTF8;
+function TORMTable.GetU(Row: integer; const FieldName: RawUTF8): RawUTF8;
 begin
   result := GetU(Row, FieldIndex(FieldName));
 end;
 
-function TSQLTable.GetA(Row, Field: integer): WinAnsiString;
+function TORMTable.GetA(Row, Field: integer): WinAnsiString;
 begin
   result := Utf8ToWinAnsi(Get(Row, Field));
 end;
 
-function TSQLTable.GetAsInteger(Row, Field: integer): integer;
+function TORMTable.GetAsInteger(Row, Field: integer): integer;
 begin
   result := GetInteger(Get(Row, Field));
 end;
 
-function TSQLTable.GetAsInteger(Row: integer; const FieldName: RawUTF8): integer;
+function TORMTable.GetAsInteger(Row: integer; const FieldName: RawUTF8): integer;
 begin
   result := GetInteger(Get(Row, FieldIndex(FieldName)));
 end;
 
-function TSQLTable.GetAsInt64(Row, Field: integer): Int64;
+function TORMTable.GetAsInt64(Row, Field: integer): Int64;
 begin
   SetInt64(Get(Row, Field), result{%H-});
 end;
 
-function TSQLTable.GetAsInt64(Row: integer; const FieldName: RawUTF8): Int64;
+function TORMTable.GetAsInt64(Row: integer; const FieldName: RawUTF8): Int64;
 begin
   SetInt64(Get(Row, FieldIndex(FieldName)), result{%H-});
 end;
 
-function TSQLTable.GetAsFloat(Row, Field: integer): TSynExtended;
+function TORMTable.GetAsFloat(Row, Field: integer): TSynExtended;
 begin
   result := GetExtended(Get(Row, Field));
 end;
 
-function TSQLTable.GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended;
+function TORMTable.GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended;
 begin
   result := GetExtended(Get(Row, FieldIndex(FieldName)));
 end;
 
-function TSQLTable.GetAsCurrency(Row, Field: integer): currency;
+function TORMTable.GetAsCurrency(Row, Field: integer): currency;
 begin
   PInt64(@result)^ := StrToCurr64(Get(Row, Field), nil);
 end;
 
-function TSQLTable.GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency;
+function TORMTable.GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency;
 begin
   result := GetAsCurrency(Row, FieldIndex(FieldName));
 end;
 
-function TSQLTable.GetAsDateTime(Row, Field: integer): TDateTime;
+function TORMTable.GetAsDateTime(Row, Field: integer): TDateTime;
 var
   P: PUTF8Char;
 begin
@@ -13520,7 +13551,7 @@ begin
   case FieldType(Field) of
     sftCurrency, sftFloat:
       result := GetExtended(P);
-    sftInteger, // TSQLTable.InitFieldTypes may have recognized an integer
+    sftInteger, // TORMTable.InitFieldTypes may have recognized an integer
     sftTimeLog, sftModTime, sftCreateTime:
       result := TimeLogToDateTime(GetInt64(P));
     sftUnixTime:
@@ -13532,17 +13563,17 @@ begin
   end;
 end;
 
-function TSQLTable.GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime;
+function TORMTable.GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime;
 begin
   result := GetAsDateTime(Row, FieldIndex(FieldName));
 end;
 
-function TSQLTable.GetS(Row, Field: integer): shortstring;
+function TORMTable.GetS(Row, Field: integer): shortstring;
 begin
   UTF8ToShortString(result, Get(Row, Field));
 end;
 
-function TSQLTable.GetString(Row, Field: integer): string;
+function TORMTable.GetString(Row, Field: integer): string;
 var
   U: PUTF8Char;
 begin
@@ -13557,7 +13588,7 @@ begin
     {$endif UNICODE}
 end;
 
-function TSQLTable.GetSynUnicode(Row, Field: integer): SynUnicode;
+function TORMTable.GetSynUnicode(Row, Field: integer): SynUnicode;
 var
   U: PUTF8Char;
 begin
@@ -13567,32 +13598,32 @@ begin
     UTF8ToSynUnicode(U, StrLen(U), result);
 end;
 
-function TSQLTable.GetCaption(Row, Field: integer): string;
+function TORMTable.GetCaption(Row, Field: integer): string;
 begin
   GetCaptionFromPCharLen(Get(Row, Field), result);
 end;
 
-function TSQLTable.GetBlob(Row, Field: integer): TSQLRawBlob;
+function TORMTable.GetBlob(Row, Field: integer): TRawBlob;
 begin
-  result := BlobToTSQLRawBlob(Get(Row, Field));
+  result := BlobToTRawBlob(Get(Row, Field));
 end;
 
-function TSQLTable.GetBytes(Row, Field: integer): TBytes;
+function TORMTable.GetBytes(Row, Field: integer): TBytes;
 begin
   result := BlobToBytes(Get(Row, Field));
 end;
 
-function TSQLTable.GetStream(Row, Field: integer): TStream;
+function TORMTable.GetStream(Row, Field: integer): TStream;
 begin
   result := BlobToStream(Get(Row, Field));
 end;
 
-function TSQLTable.GetDateTime(Row, Field: integer): TDateTime;
+function TORMTable.GetDateTime(Row, Field: integer): TDateTime;
 begin
   result := Iso8601ToDateTimePUTF8Char(Get(Row, Field), 0)
 end;
 
-function TSQLTable.GetRowValues(Field: integer; out Values: TRawUTF8DynArray): integer;
+function TORMTable.GetRowValues(Field: integer; out Values: TRawUTF8DynArray): integer;
 var
   i: PtrInt;
   U: PPUTF8Char;
@@ -13610,7 +13641,7 @@ begin
   result := fRowCount;
 end;
 
-function TSQLTable.GetRowValues(Field: integer; out Values: TInt64DynArray): integer;
+function TORMTable.GetRowValues(Field: integer; out Values: TInt64DynArray): integer;
 var
   i: PtrInt;
   U: PPUTF8Char;
@@ -13628,7 +13659,7 @@ begin
   result := fRowCount;
 end;
 
-function TSQLTable.GetRowLengths(Field: integer; var LenStore: TSynTempBuffer): integer;
+function TORMTable.GetRowLengths(Field: integer; var LenStore: TSynTempBuffer): integer;
 var
   len: PInteger;
   i: integer;
@@ -13651,7 +13682,7 @@ begin
   end;
 end;
 
-function TSQLTable.GetRowValues(Field: integer; const Sep, Head, Trail: RawUTF8): RawUTF8;
+function TORMTable.GetRowValues(Field: integer; const Sep, Head, Trail: RawUTF8): RawUTF8;
 var
   i, L, SepLen: integer;
   U: PPUTF8Char;
@@ -13689,7 +13720,7 @@ begin
   tmp.Done;
 end;
 
-procedure TSQLTable.GetJSONValues(W: TJSONWriter; RowFirst, RowLast,
+procedure TORMTable.GetJSONValues(W: TJSONWriter; RowFirst, RowLast,
   IDBinarySize: integer);
 var
   U: PPUTF8Char;
@@ -13775,7 +13806,7 @@ str:          W.Add('"');
   W.EndJSONObject(1, 0, false); // "RowCount": set by W.AddColumns() above
 end;
 
-procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
+procedure TORMTable.GetJSONValues(JSON: TStream; Expand: boolean;
   RowFirst, RowLast, IDBinarySize: integer);
 var
   W: TJSONWriter;
@@ -13790,7 +13821,7 @@ begin
   end;
 end;
 
-function TSQLTable.GetJSONValues(Expand: boolean;
+function TORMTable.GetJSONValues(Expand: boolean;
   IDBinarySize, BufferSize: integer): RawUTF8;
 var
   W: TJSONWriter;
@@ -13809,7 +13840,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar;
+procedure TORMTable.GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar;
   AddBOM: boolean; RowFirst, RowLast: integer);
 var
   U: PPUTF8Char;
@@ -13856,7 +13887,7 @@ begin
   end;
 end;
 
-function TSQLTable.GetCSVValues(Tab: boolean; CommaSep: AnsiChar;
+function TORMTable.GetCSVValues(Tab: boolean; CommaSep: AnsiChar;
   AddBOM: boolean; RowFirst, RowLast: integer): RawUTF8;
 var
   MS: TRawByteStringStream;
@@ -13870,7 +13901,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: integer);
+procedure TORMTable.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: integer);
 const
   FIELDTYPE_TOXML: array[TSQLDBFieldType] of RawUTF8 = (
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency,
@@ -13944,7 +13975,7 @@ begin
   end;
 end;
 
-function TSQLTable.GetMSRowSetValues: RawUTF8;
+function TORMTable.GetMSRowSetValues: RawUTF8;
 var
   MS: TRawByteStringStream;
 begin
@@ -13957,7 +13988,7 @@ begin
   end;
 end;
 
-function TSQLTable.GetODSDocument(withColumnTypes: boolean): RawByteString;
+function TORMTable.GetODSDocument(withColumnTypes: boolean): RawByteString;
 const
   ODSmimetype: RawUTF8 =
     'application/vnd.oasis.opendocument.spreadsheet';
@@ -14076,7 +14107,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.GetHtmlTable(Dest: TTextWriter);
+procedure TORMTable.GetHtmlTable(Dest: TTextWriter);
 var
   R, F: integer;
   U: PPUTF8Char;
@@ -14107,7 +14138,7 @@ begin
   Dest.AddShort('</table>');
 end;
 
-function TSQLTable.GetHtmlTable(const Header: RawUTF8): RawUTF8;
+function TORMTable.GetHtmlTable(const Header: RawUTF8): RawUTF8;
 var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
@@ -14125,12 +14156,12 @@ begin
   end;
 end;
 
-function TSQLTable.GetW(Row, Field: integer): RawUnicode;
+function TORMTable.GetW(Row, Field: integer): RawUnicode;
 begin
   result := UTF8DecodeToRawUnicode(Get(Row, Field), 0);
 end;
 
-function TSQLTable.GetWP(Row, Field: integer; Dest: PWideChar; MaxDestChars:
+function TORMTable.GetWP(Row, Field: integer; Dest: PWideChar; MaxDestChars:
   cardinal): integer;
 var
   P: PUTF8Char;
@@ -14139,18 +14170,18 @@ begin
   result := UTF8ToWideChar(Dest, P, MaxDestChars, 0) shr 1; // bytes div 2
 end;
 
-function TSQLTable.LengthW(Row, Field: integer): integer;
+function TORMTable.LengthW(Row, Field: integer): integer;
 begin // nil -> fast calculate unicode length, without any memory allocation
   result := Utf8ToUnicodeLength(Get(Row, Field));
 end;
 
 var
   /// simple wrapper to UTF-8 compare function for the SQLite3 field datatypes
-  // - used internaly for field sorting (see TSQLTable.SortFields() method)
+  // - used internaly for field sorting (see TORMTable.SortFields() method)
   // and for default User Interface Query (see TRest.QueryIsTrue() method)
   // - some functions do not match exactly the TUTF8Compare signature, so will
   // be set in the initialization section of this unit
-  SQLFieldTypeComp: array[TSQLFieldType] of TUTF8Compare  =
+  SQLFieldTypeComp: array[TORMFieldType] of TUTF8Compare  =
    (nil,                  // unknown
     nil,                 // AnsiText = AnsiIComp (in initialization below)
     UTF8IComp,           // UTF8Text, 8 bits case insensitive compared
@@ -14194,7 +14225,7 @@ type
     // sort parameters
     Results: PPUtf8CharArray;
     IDColumn: PPUtf8CharArray;
-    Params: TSQLTableSortParams;
+    Params: TORMTableSortParams;
     CurrentRow: PtrInt;
     // avoid multiplications to calculate data memory position from index
     FieldCountNextPtr, FieldFirstPtr, FieldIDPtr: PtrUInt;
@@ -14387,14 +14418,14 @@ begin
     until L >= R;
 end;
 
-procedure TSQLTable.SortFields(const FieldName: RawUTF8; Asc: boolean;
-  PCurrentRow: PInteger; FieldType: TSQLFieldType; CustomCompare: TUTF8Compare);
+procedure TORMTable.SortFields(const FieldName: RawUTF8; Asc: boolean;
+  PCurrentRow: PInteger; FieldType: TORMFieldType; CustomCompare: TUTF8Compare);
 begin
   SortFields(FieldIndex(FieldName), Asc, PCurrentRow, FieldType, CustomCompare);
 end;
 
-procedure TSQLTable.SortFields(Field: integer; Asc: boolean;
-  PCurrentRow: PInteger; FieldType: TSQLFieldType; CustomCompare: TUTF8Compare);
+procedure TORMTable.SortFields(Field: integer; Asc: boolean;
+  PCurrentRow: PInteger; FieldType: TORMFieldType; CustomCompare: TUTF8Compare);
 var
   quicksort: TUTF8QuickSort; // fast static object for sorting
 begin
@@ -14402,7 +14433,7 @@ begin
     exit;
   if FieldType = sftUnknown then // guess the field type from first row
     FieldType := self.FieldType(Field);
-  // store sorting parameters for re-sort in TSQLTableJSON.FillFrom()
+  // store sorting parameters for re-sort in TORMTableJSON.FillFrom()
   if Assigned(CustomCompare) then
     fSortParams.Comp := CustomCompare
   else
@@ -14435,13 +14466,13 @@ begin
     PCurrentRow^ := quicksort.CurrentRow;
 end;
 
-function TSQLTable.SearchFieldSorted(const Value: RawUTF8; FieldIndex: integer;
+function TORMTable.SearchFieldSorted(const Value: RawUTF8; FieldIndex: integer;
   CustomCompare: TUTF8Compare): integer;
 begin
   result := SearchFieldSorted(pointer(Value), FieldIndex, CustomCompare);
 end;
 
-function TSQLTable.SearchFieldSorted(Value: PUTF8Char; FieldIndex: integer;
+function TORMTable.SearchFieldSorted(Value: PUTF8Char; FieldIndex: integer;
   CustomCompare: TUTF8Compare): integer;
 var
   L, R, cmp: integer;
@@ -14563,7 +14594,7 @@ begin
     until L >= R;
 end;
 
-procedure TSQLTable.SortFields(const Fields: array of integer;
+procedure TORMTable.SortFields(const Fields: array of integer;
   const Asc: array of boolean; const CustomCompare: array of TUTF8Compare);
 var
   quicksort: TUTF8QuickSortMulti;
@@ -14605,26 +14636,26 @@ begin
   quicksort.Sort(1, fRowCount); // ignore first row = field names -> (1,RowCount)
 end;
 
-function TSQLTable.SortCompare(Field: integer): TUTF8Compare;
+function TORMTable.SortCompare(Field: integer): TUTF8Compare;
 begin
   result := SQLFieldTypeComp[FieldType(Field)];
 end;
 
-procedure TSQLTable.Assign(source: TSQLTable);
+procedure TORMTable.Assign(source: TORMTable);
 begin
   fResults := source.fResults;
   fRowCount := source.fRowCount;
   fFieldCount := source.fFieldCount;
 end;
 
-constructor TSQLTable.Create(const aSQL: RawUTF8);
+constructor TORMTable.Create(const aSQL: RawUTF8);
 begin
   fQuerySQL := aSQL;
   fFieldIndexID := -1;
   fQueryTableIndexFromSQL := -2; // indicates not searched
 end;
 
-constructor TSQLTable.CreateFromTables(const Tables: array of TSQLRecordClass;
+constructor TORMTable.CreateFromTables(const Tables: array of TORMClass;
   const aSQL: RawUTF8);
 var
   n: integer;
@@ -14638,21 +14669,21 @@ begin
   end;
 end;
 
-constructor TSQLTable.CreateWithColumnTypes(
-  const ColumnTypes: array of TSQLFieldType; const aSQL: RawUTF8);
+constructor TORMTable.CreateWithColumnTypes(
+  const ColumnTypes: array of TORMFieldType; const aSQL: RawUTF8);
 begin
   Create(aSQL);
   SetLength(fQueryColumnTypes, length(ColumnTypes));
-  MoveFast(ColumnTypes[0], fQueryColumnTypes[0], length(ColumnTypes) * SizeOf(TSQLFieldType));
+  MoveFast(ColumnTypes[0], fQueryColumnTypes[0], length(ColumnTypes) * SizeOf(TORMFieldType));
 end;
 
-destructor TSQLTable.Destroy;
+destructor TORMTable.Destroy;
 begin
   fOwnedRecords.Free;
   inherited Destroy;
 end;
 
-function TSQLTable.QueryRecordType: TSQLRecordClass;
+function TORMTable.QueryRecordType: TORMClass;
 begin
   if (self <> nil) and (pointer(fQueryTables) <> nil) then
     result := fQueryTables[0]
@@ -14660,7 +14691,7 @@ begin
     result := nil;
 end;
 
-function TSQLTable.NewRecord(RecordType: TSQLRecordClass): TSQLRecord;
+function TORMTable.NewRecord(RecordType: TORMClass): TORM;
 begin
   result := nil;
   if self = nil then
@@ -14679,9 +14710,9 @@ end;
 
 {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
 
-function TSQLTable.ToObjectList<T>: TObjectList<T>;
+function TORMTable.ToObjectList<T>: TObjectList<T>;
 var
-  R, Item: TSQLRecord;
+  R, Item: TORM;
   row: PPUtf8Char;
   i: integer;
   {$ifdef ISDELPHIXE3}
@@ -14691,7 +14722,7 @@ begin
   result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
   if (self = nil) or (fRowCount = 0) then
     exit;
-  R := TSQLRecordClass(T).Create;
+  R := TORMClass(T).Create;
   try
     R.FillPrepare(self);
     row := @fResults[FieldCount]; // row^ points to first row of data
@@ -14700,12 +14731,12 @@ begin
     rec := pointer(result.List);
     for i := 0 to fRowCount - 1 do
     begin
-      Item := TSQLRecordClass(T).Create;
+      Item := TORMClass(T).Create;
       rec[i] := Item;
     {$else}
     for i := 1 to fRowCount do
     begin
-      Item := TSQLRecordClass(T).Create;
+      Item := TORMClass(T).Create;
       result.Add(Item);
     {$endif ISDELPHIXE3}
       R.fFill.Fill(pointer(row), Item);
@@ -14719,9 +14750,9 @@ end;
 
 {$endif ISDELPHI2010}
 
-procedure TSQLTable.ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass);
+procedure TORMTable.ToObjectList(DestList: TObjectList; RecordType: TORMClass);
 var
-  R: TSQLRecord;
+  R: TORM;
   row: PPUtf8Char;
   rec: PSQLRecord;
   i: integer;
@@ -14756,12 +14787,12 @@ begin
   end;
 end;
 
-function TSQLTable.ToObjArray(var ObjArray; RecordType: TSQLRecordClass): boolean;
+function TORMTable.ToObjArray(var ObjArray; RecordType: TORMClass): boolean;
 var
-  R: TSQLRecord;
+  R: TORM;
   Row: PPUtf8Char;
   i: integer;
-  arr: TSQLRecordObjArray absolute ObjArray;
+  arr: TORMObjArray absolute ObjArray;
 begin
   result := false;
   ObjArrayClear(arr);
@@ -14792,13 +14823,13 @@ begin
   end;
 end;
 
-function TSQLTable.ToObjectList(RecordType: TSQLRecordClass): TObjectList;
+function TORMTable.ToObjectList(RecordType: TORMClass): TObjectList;
 begin
   result := TObjectList.Create;
   ToObjectList(result, RecordType);
 end;
 
-function TSQLTable.Step(SeekFirst: boolean; RowVariant: PVariant): boolean;
+function TORMTable.Step(SeekFirst: boolean; RowVariant: PVariant): boolean;
 begin
   result := false;
   if (self = nil) or (fRowCount <= 0) then
@@ -14813,7 +14844,7 @@ begin
   if RowVariant = nil then
     exit;
   if SQLTableRowVariantType = nil then
-    SQLTableRowVariantType := SynRegisterCustomVariantType(TSQLTableRowVariant);
+    SQLTableRowVariantType := SynRegisterCustomVariantType(TORMTableRowVariant);
   if (PVarData(RowVariant)^.VType = SQLTableRowVariantType.VarType) and
      (PSQLTableRowVariantData(RowVariant)^.VTable = self) and
      (PSQLTableRowVariantData(RowVariant)^.VRow < 0) then
@@ -14824,7 +14855,7 @@ begin
   PSQLTableRowVariantData(RowVariant)^.VRow := -1; // follow fStepRow
 end;
 
-function TSQLTable.FieldBuffer(FieldIndex: Integer): PUTF8Char;
+function TORMTable.FieldBuffer(FieldIndex: Integer): PUTF8Char;
 begin
   if (self = nil) or (cardinal(FieldIndex) >= cardinal(fFieldCount)) then
     raise ESQLTableException.CreateUTF8('%.FieldBuffer(%): invalid index',
@@ -14835,7 +14866,7 @@ begin
   result := fResults[fStepRow * FieldCount + FieldIndex];
 end;
 
-function TSQLTable.FieldBuffer(const FieldName: RawUTF8): PUTF8Char;
+function TORMTable.FieldBuffer(const FieldName: RawUTF8): PUTF8Char;
 var
   i: integer;
 begin
@@ -14849,27 +14880,27 @@ begin
   result := fResults[fStepRow * FieldCount + i];
 end;
 
-function TSQLTable.FieldAsInteger(FieldIndex: Integer): Int64;
+function TORMTable.FieldAsInteger(FieldIndex: Integer): Int64;
 begin
   SetInt64(FieldBuffer(FieldIndex), result{%H-});
 end;
 
-function TSQLTable.FieldAsInteger(const FieldName: RawUTF8): Int64;
+function TORMTable.FieldAsInteger(const FieldName: RawUTF8): Int64;
 begin
   SetInt64(FieldBuffer(FieldName), result{%H-});
 end;
 
-function TSQLTable.FieldAsFloat(FieldIndex: Integer): TSynExtended;
+function TORMTable.FieldAsFloat(FieldIndex: Integer): TSynExtended;
 begin
   result := GetExtended(FieldBuffer(FieldIndex));
 end;
 
-function TSQLTable.FieldAsFloat(const FieldName: RawUTF8): TSynExtended;
+function TORMTable.FieldAsFloat(const FieldName: RawUTF8): TSynExtended;
 begin
   result := GetExtended(FieldBuffer(FieldName));
 end;
 
-function TSQLTable.FieldAsRawUTF8(FieldIndex: Integer): RawUTF8;
+function TORMTable.FieldAsRawUTF8(FieldIndex: Integer): RawUTF8;
 var
   buf: PUTF8Char;
 begin
@@ -14877,7 +14908,7 @@ begin
   FastSetString(result, buf, StrLen(buf));
 end;
 
-function TSQLTable.FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8;
+function TORMTable.FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8;
 var
   buf: PUTF8Char;
 begin
@@ -14885,7 +14916,7 @@ begin
   FastSetString(result, buf, StrLen(buf));
 end;
 
-function TSQLTable.FieldAsString(FieldIndex: Integer): string;
+function TORMTable.FieldAsString(FieldIndex: Integer): string;
 var
   buf: PUTF8Char;
 begin
@@ -14893,7 +14924,7 @@ begin
   UTF8DecodeToString(buf, StrLen(buf), result);
 end;
 
-function TSQLTable.FieldAsString(const FieldName: RawUTF8): string;
+function TORMTable.FieldAsString(const FieldName: RawUTF8): string;
 var
   buf: PUTF8Char;
 begin
@@ -14901,7 +14932,7 @@ begin
   UTF8DecodeToString(buf, StrLen(buf), result);
 end;
 
-function TSQLTable.field(FieldIndex: integer): variant;
+function TORMTable.field(FieldIndex: integer): variant;
 begin
   if (self = nil) or (cardinal(FieldIndex) >= cardinal(fFieldCount)) then
     raise ESQLTableException.CreateUTF8('%.Field(%): invalid index', [self, FieldIndex]);
@@ -14911,7 +14942,7 @@ begin
   GetVariant(fStepRow, FieldIndex, result);
 end;
 
-function TSQLTable.field(const FieldName: RawUTF8): variant;
+function TORMTable.field(const FieldName: RawUTF8): variant;
 var
   i: integer;
 begin
@@ -14921,7 +14952,7 @@ begin
   result := field(i);
 end;
 
-function TSQLTable.CalculateFieldLengthMean(var aResult: TIntegerDynArray;
+function TORMTable.CalculateFieldLengthMean(var aResult: TIntegerDynArray;
   FromDisplay: boolean = false): integer;
 
   procedure CalculateEnumerates(F: integer; P: PRttiEnumType);
@@ -15016,7 +15047,7 @@ begin
   end;
 end;
 
-function TSQLTable.FieldLengthMean(Field: integer): cardinal;
+function TORMTable.FieldLengthMean(Field: integer): cardinal;
 begin
   if (self = nil) or (cardinal(Field) >= cardinal(FieldCount)) or (fResults = nil) then
     result := 0
@@ -15029,7 +15060,7 @@ begin
   end;
 end;
 
-function TSQLTable.FieldLengthMeanSum: cardinal;
+function TORMTable.FieldLengthMeanSum: cardinal;
 begin
   if self = nil then
     result := 0
@@ -15041,7 +15072,7 @@ begin
   end;
 end;
 
-function TSQLTable.FieldLengthMax(Field: integer; NeverReturnsZero: boolean): cardinal;
+function TORMTable.FieldLengthMax(Field: integer; NeverReturnsZero: boolean): cardinal;
 var
   i: integer;
   len: cardinal;
@@ -15087,7 +15118,7 @@ begin
     result := 1; // minimal not null length
 end;
 
-function TSQLTable.FieldTable(Field: integer): TSQLRecordClass;
+function TORMTable.FieldTable(Field: integer): TORMClass;
 begin
   if (self = nil) or (cardinal(Field) >= cardinal(FieldCount)) or
      (fQueryTables = nil) then
@@ -15104,7 +15135,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.SetFieldLengthMean(const Lengths: array of cardinal);
+procedure TORMTable.SetFieldLengthMean(const Lengths: array of cardinal);
 var
   F: integer;
   n: cardinal;
@@ -15124,7 +15155,7 @@ begin
   end;
 end;
 
-procedure TSQLTable.FieldLengthMeanIncrease(aField, aIncrease: integer);
+procedure TORMTable.FieldLengthMeanIncrease(aField, aIncrease: integer);
 begin
   if (self = nil) or (cardinal(aField) >= cardinal(FieldCount)) then
     exit; // avoid GPF
@@ -15134,12 +15165,12 @@ begin
   inc(fFieldLengthMeanSum, aIncrease);
 end;
 
-function TSQLTable.SearchValue(const UpperValue: RawUTF8;
+function TORMTable.SearchValue(const UpperValue: RawUTF8;
   StartRow, FieldIndex: integer; const Client: IRestORM;
   Lang: TSynSoundExPronunciation; UnicodeComparison: boolean): integer;
 var
   U: PPUTF8Char;
-  Kind: TSQLFieldType;
+  Kind: TORMFieldType;
   Search: PAnsiChar;
   UpperUnicode: RawUnicode;
   UpperUnicodeLen: integer;
@@ -15152,7 +15183,7 @@ var
   P: PShortString;
   EnumValues: set of 0..63;
   Soundex: TSynSoundEx;
-  M: TSQLModel;
+  M: TORMModel;
   tmp: array[0..23] of AnsiChar;
 begin
   result := 0;
@@ -15294,7 +15325,7 @@ begin
   result := 0; // not found
 end;
 
-function TSQLTable.SearchValue(const UpperValue: RawUTF8; StartRow: integer;
+function TORMTable.SearchValue(const UpperValue: RawUTF8; StartRow: integer;
   FieldIndex: PInteger; const Client: IRestORM; Lang: TSynSoundExPronunciation;
   UnicodeComparison: boolean): integer;
 var
@@ -15316,13 +15347,13 @@ begin
   end;
 end;
 
-function TSQLTable.SearchFieldEquals(const Value: RawUTF8;
+function TORMTable.SearchFieldEquals(const Value: RawUTF8;
   FieldIndex, StartRow: integer; CaseSensitive: boolean): integer;
 begin
   result := SearchFieldEquals(pointer(Value), FieldIndex, StartRow, CaseSensitive);
 end;
 
-function TSQLTable.SearchFieldEquals(Value: PUTF8Char;
+function TORMTable.SearchFieldEquals(Value: PUTF8Char;
   FieldIndex, StartRow: integer; CaseSensitive: boolean): integer;
 var
   U: PPUTF8Char;
@@ -15347,7 +15378,7 @@ begin
   result := 0;
 end;
 
-function TSQLTable.SearchFieldIdemPChar(const Value: RawUTF8;
+function TORMTable.SearchFieldIdemPChar(const Value: RawUTF8;
   FieldIndex, StartRow: integer): integer;
 var
   U: PPUTF8Char;
@@ -15367,14 +15398,14 @@ begin
   result := 0;
 end;
 
-function TSQLTable.GetVariant(Row, Field: integer): Variant;
+function TORMTable.GetVariant(Row, Field: integer): Variant;
 begin
   GetVariant(Row, Field, result);
 end;
 
-procedure TSQLTable.GetVariant(Row, Field: integer; var result: variant);
+procedure TORMTable.GetVariant(Row, Field: integer; var result: variant);
 var
-  aType: TSQLFieldType;
+  aType: TORMFieldType;
   info: PSQLTableFieldType;
   U: PUTF8Char;
 begin
@@ -15388,7 +15419,7 @@ begin
   end;
 end;
 
-function TSQLTable.GetValue(const aLookupFieldName, aLookupValue,
+function TORMTable.GetValue(const aLookupFieldName, aLookupValue,
   aValueFieldName: RawUTF8): variant;
 var
   f, r, v: integer;
@@ -15403,8 +15434,8 @@ begin
     GetVariant(r, v, result);
 end;
 
-function TSQLTable.ExpandAsString(Row, Field: integer; const Client: IRestORM;
-  out Text: string; const CustomFormat: string): TSQLFieldType;
+function TORMTable.ExpandAsString(Row, Field: integer; const Client: IRestORM;
+  out Text: string; const CustomFormat: string): TORMFieldType;
 var
   info: PSQLTableFieldType;
   err: integer;
@@ -15520,8 +15551,8 @@ IsDateTime:
     Text := GetString(Row, Field);
 end;
 
-function TSQLTable.ExpandAsSynUnicode(Row, Field: integer;
-  const Client: IRestORM; out Text: SynUnicode): TSQLFieldType;
+function TORMTable.ExpandAsSynUnicode(Row, Field: integer;
+  const Client: IRestORM; out Text: SynUnicode): TORMFieldType;
 var
   s: string;
 begin
@@ -15529,7 +15560,7 @@ begin
   StringToSynUnicode(s, Text);
 end;
 
-function TSQLTable.GetTimeLog(Row, Field: integer; Expanded: boolean;
+function TORMTable.GetTimeLog(Row, Field: integer; Expanded: boolean;
   FirstTimeChar: AnsiChar): RawUTF8;
 var
   Value: TTimeLogBits;
@@ -15539,13 +15570,13 @@ begin
 end;
 
 
-{ TSQLTableRowVariant }
+{ TORMTableRowVariant }
 
-function TSQLTableRowVariant.IntGet(var Dest: TVarData; const Instance: TVarData;
+function TORMTableRowVariant.IntGet(var Dest: TVarData; const Instance: TVarData;
   Name: PAnsiChar; NameLen: PtrInt): boolean;
 var
   r, f: integer;
-  rv: TSQLTableRowVariantData absolute Instance;
+  rv: TORMTableRowVariantData absolute Instance;
 begin
   if rv.VTable = nil then
     raise ESQLTableException.CreateUTF8('Invalid %.% call', [self, Name]);
@@ -15562,12 +15593,12 @@ begin
     rv.VTable.GetVariant(r, f, Variant(Dest));
 end;
 
-procedure TSQLTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
+procedure TORMTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
 begin
   CastTo(Dest, Source, VarType);
 end;
 
-procedure TSQLTableRowVariant.CastTo(var Dest: TVarData; const Source: TVarData;
+procedure TORMTableRowVariant.CastTo(var Dest: TVarData; const Source: TVarData;
   const AVarType: TVarType);
 var
   r: integer;
@@ -15581,10 +15612,10 @@ begin
   begin
     if Source.VType <> VarType then
       RaiseCastError;
-    r := TSQLTableRowVariantData(Source).VRow;
+    r := TORMTableRowVariantData(Source).VRow;
     if r < 0 then
-      r := TSQLTableRowVariantData(Source).VTable.fStepRow;
-    TSQLTableRowVariantData(Source).VTable.ToDocVariant(r, tmp);
+      r := TORMTableRowVariantData(Source).VTable.fStepRow;
+    TORMTableRowVariantData(Source).VTable.ToDocVariant(r, tmp);
     if AVarType = DocVariantVType then
     begin
       VarClear(variant(Dest));
@@ -15595,23 +15626,23 @@ begin
   end;
 end;
 
-procedure TSQLTableRowVariant.ToJSON(W: TTextWriter; const Value: variant;
+procedure TORMTableRowVariant.ToJSON(W: TTextWriter; const Value: variant;
   Escape: TTextWriterKind);
 var
   r: integer;
   tmp: variant; // write row via a TDocVariant
 begin
-  r := TSQLTableRowVariantData(Value).VRow;
+  r := TORMTableRowVariantData(Value).VRow;
   if r < 0 then
-    r := TSQLTableRowVariantData(Value).VTable.fStepRow;
-  TSQLTableRowVariantData(Value).VTable.ToDocVariant(r, tmp);
+    r := TORMTableRowVariantData(Value).VTable.fStepRow;
+  TORMTableRowVariantData(Value).VTable.ToDocVariant(r, tmp);
   W.AddVariant(tmp, Escape);
 end;
 
 
-{ TSQLTableJSON }
+{ TORMTableJSON }
 
-function TSQLTableJSON.PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer;
+function TORMTableJSON.PrivateCopyChanged(aJSON: PUTF8Char; aLen: integer;
   aUpdateHash: boolean): boolean;
 var
   Hash: cardinal;
@@ -15648,7 +15679,7 @@ begin
   until false;
 end;
 
-function TSQLTableJSON.ParseAndConvert(Buffer: PUTF8Char; BufferLen: integer): boolean;
+function TORMTableJSON.ParseAndConvert(Buffer: PUTF8Char; BufferLen: integer): boolean;
 var
   i, max, nfield, nrow, resmax, f: integer;
   EndOfObject: AnsiChar;
@@ -15807,7 +15838,7 @@ begin
   result := true; // if we reached here, means successfull conversion from P^
 end;
 
-function TSQLTableJSON.UpdateFrom(const aJSON: RawUTF8; var Refreshed: boolean;
+function TORMTableJSON.UpdateFrom(const aJSON: RawUTF8; var Refreshed: boolean;
   PCurrentRow: PInteger): boolean;
 var
   len: Integer;
@@ -15825,7 +15856,7 @@ begin
       end;
       with fSortParams do
         if FieldCount <> 0 then
-          // TSQLTable.SortFields() was called -> do it again
+          // TORMTable.SortFields() was called -> do it again
           SortFields(FieldIndex, Asc, PCurrentRow, FieldType);
       Refreshed := true;
       result := true;
@@ -15838,14 +15869,14 @@ begin
     result := true;
 end;
 
-constructor TSQLTableJSON.Create(const aSQL: RawUTF8; JSONBuffer: PUTF8Char;
+constructor TORMTableJSON.Create(const aSQL: RawUTF8; JSONBuffer: PUTF8Char;
   JSONBufferLen: integer);
 begin // don't raise exception on error parsing
   inherited Create(aSQL);
   ParseAndConvert(JSONBuffer, JSONBufferLen);
 end;
 
-constructor TSQLTableJSON.Create(const aSQL, aJSON: RawUTF8);
+constructor TORMTableJSON.Create(const aSQL, aJSON: RawUTF8);
 var
   len: integer;
 begin
@@ -15854,8 +15885,8 @@ begin
   Create(aSQL, pointer(fPrivateCopy), len);
 end;
 
-constructor TSQLTableJSON.CreateFromTables(
-  const Tables: array of TSQLRecordClass; const aSQL: RawUTF8;
+constructor TORMTableJSON.CreateFromTables(
+  const Tables: array of TORMClass; const aSQL: RawUTF8;
   JSONBuffer: PUTF8Char; JSONBufferLen: integer);
 begin
   // don't raise exception on error parsing
@@ -15863,7 +15894,7 @@ begin
   ParseAndConvert(JSONBuffer, JSONBufferLen);
 end;
 
-constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClass;
+constructor TORMTableJSON.CreateFromTables(const Tables: array of TORMClass;
   const aSQL, aJSON: RawUTF8);
 var
   len: integer;
@@ -15873,8 +15904,8 @@ begin
   CreateFromTables(Tables, aSQL, pointer(fPrivateCopy), len);
 end;
 
-constructor TSQLTableJSON.CreateWithColumnTypes(
-  const ColumnTypes: array of TSQLFieldType; const aSQL: RawUTF8;
+constructor TORMTableJSON.CreateWithColumnTypes(
+  const ColumnTypes: array of TORMFieldType; const aSQL: RawUTF8;
   JSONBuffer: PUTF8Char; JSONBufferLen: integer);
 begin
   // don't raise exception on error parsing
@@ -15882,8 +15913,8 @@ begin
   ParseAndConvert(JSONBuffer, JSONBufferLen);
 end;
 
-constructor TSQLTableJSON.CreateWithColumnTypes(
-  const ColumnTypes: array of TSQLFieldType; const aSQL, aJSON: RawUTF8);
+constructor TORMTableJSON.CreateWithColumnTypes(
+  const ColumnTypes: array of TORMFieldType; const aSQL, aJSON: RawUTF8);
 var
   len: integer;
 begin
@@ -15893,11 +15924,11 @@ begin
 end;
 
 
-{ ------------ TSQLRecord Definition }
+{ ------------ TORM Definition }
 
-{ TSQLRecordFill }
+{ TORMFill }
 
-function TSQLRecordFill.GetJoinedFields: boolean;
+function TORMFill.GetJoinedFields: boolean;
 begin
   if self = nil then
     result := false
@@ -15905,7 +15936,7 @@ begin
     result := fJoinedFields;
 end;
 
-function TSQLRecordFill.TableMapFields: TSQLFieldBits;
+function TORMFill.TableMapFields: TFieldBits;
 begin
   if self = nil then
     FillZero(result{%H-})
@@ -15913,7 +15944,7 @@ begin
     result := fTableMapFields;
 end;
 
-procedure TSQLRecordFill.AddMap(aRecord: TSQLRecord; aField: TSQLPropInfo;
+procedure TORMFill.AddMap(aRecord: TORM; aField: TORMPropInfo;
   aIndex: integer);
 begin
   if (self = nil) or (aRecord = nil) then
@@ -15929,7 +15960,7 @@ begin
   end;
 end;
 
-procedure TSQLRecordFill.AddMap(aRecord: TSQLRecord; const aFieldName: RawUTF8;
+procedure TORMFill.AddMap(aRecord: TORM; const aFieldName: RawUTF8;
   aIndex: integer);
 var
   aFieldIndex: integer;
@@ -15949,8 +15980,8 @@ begin
       end;
 end;
 
-procedure TSQLRecordFill.AddMapSimpleFields(aRecord: TSQLRecord;
-  const aProps: array of TSQLPropInfo; var aIndex: integer);
+procedure TORMFill.AddMapSimpleFields(aRecord: TORM;
+  const aProps: array of TORMPropInfo; var aIndex: integer);
 var
   i: integer;
 begin
@@ -15964,7 +15995,7 @@ begin
     end;
 end;
 
-destructor TSQLRecordFill.Destroy;
+destructor TORMFill.Destroy;
 begin
   try
     UnMap; // release fTable instance if necessary
@@ -15973,7 +16004,7 @@ begin
   end;
 end;
 
-function TSQLRecordFill.Fill(aRow: integer): boolean;
+function TORMFill.Fill(aRow: integer): boolean;
 begin
   if (self = nil) or (Table = nil) or
      (cardinal(aRow) > cardinal(Table.fRowCount)) then
@@ -15985,7 +16016,7 @@ begin
   end;
 end;
 
-function TSQLRecordFill.Fill(aRow: integer; aDest: TSQLRecord): boolean;
+function TORMFill.Fill(aRow: integer; aDest: TORM): boolean;
 begin
   if (self = nil) or (aDest = nil) or (Table = nil) or
      (cardinal(aRow) > cardinal(Table.fRowCount)) then
@@ -15997,7 +16028,7 @@ begin
   end;
 end;
 
-procedure TSQLRecordFill.Fill(aTableRow: PPUtf8CharArray);
+procedure TORMFill.Fill(aTableRow: PPUtf8CharArray);
 var
   f: PtrInt;
 begin
@@ -16011,7 +16042,7 @@ begin
            TableIndex in fTable.fFieldParsedAsString);
 end;
 
-procedure TSQLRecordFill.Fill(aTableRow: PPUtf8CharArray; aDest: TSQLRecord);
+procedure TORMFill.Fill(aTableRow: PPUtf8CharArray; aDest: TORM);
 var
   f: PtrInt;
 begin
@@ -16025,8 +16056,8 @@ begin
             TableIndex in fTable.fFieldParsedAsString);
 end;
 
-procedure TSQLRecordFill.ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
-  out Bits: TSQLFieldBits);
+procedure TORMFill.ComputeSetUpdatedFieldBits(Props: TORMProperties;
+  out Bits: TFieldBits);
 begin
   if (self <> nil) and (fTable <> nil) and
      (fTableMapRecordManyInstances = nil) then
@@ -16034,16 +16065,16 @@ begin
     Bits := fTableMapFields + Props.ComputeBeforeUpdateFieldsBits
   else
     // update all simple/custom fields (also for FillPrepareMany)
-    Bits := Props.SimpleFieldsBits[soUpdate];
+    Bits := Props.SimpleFieldsBits[ooUpdate];
 end;
 
-procedure TSQLRecordFill.Map(aRecord: TSQLRecord; aTable: TSQLTable;
-  aCheckTableName: TSQLCheckTableName);
+procedure TORMFill.Map(aRecord: TORM; aTable: TORMTable;
+  aCheckTableName: TORMCheckTableName);
 var
   f: PtrInt;
   ColumnName: PUTF8Char;
   FieldName: RawUTF8;
-  Props: TSQLRecordProperties;
+  Props: TORMProperties;
 begin
   if aTable = nil then // avoid any GPF
     exit;
@@ -16067,7 +16098,7 @@ begin
   fFillCurrentRow := 1; // point to first data row (0 is field names)
 end;
 
-procedure TSQLRecordFill.UnMap;
+procedure TORMFill.UnMap;
 var
   i: PtrInt;
 begin
@@ -16075,7 +16106,7 @@ begin
     exit;
   fTableMapCount := 0;
   fFillCurrentRow := 0;
-  // release TSQLRecordMany.fDestID^ instances set by TSQLRecord.FillPrepareMany()
+  // release TORMMany.fDestID^ instances set by TORM.FillPrepareMany()
   for i := 0 to length(fTableMapRecordManyInstances) - 1 do
     with fTableMapRecordManyInstances[i] do
     begin
@@ -16096,7 +16127,7 @@ begin
 end;
 
 
-{ TSQLRecord }
+{ TORM }
 
 // since "var class" are not available in Delphi 6-7, and is inherited by
 // the children classes under latest Delphi versions (i.e. the "var class" is
@@ -16108,7 +16139,7 @@ end;
 var
   vmtAutoTableLock: TRTLCriticalSection; // atomic set of the VMT AutoTable entry
 
-class function TSQLRecord.PropsCreate: TSQLRecordProperties;
+class function TORM.PropsCreate: TORMProperties;
 var
   rtticustom: TRttiCustom;
   vmt: TObject;
@@ -16117,14 +16148,14 @@ begin
   rtticustom := Rtti.RegisterClass(self);
   vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
   if (rtticustom = nil) or (vmt <> rtticustom) then
-    // TSQLRecord.RecordProps expects TRttiCustom in the first slot
+    // TORM.RecordProps expects TRttiCustom in the first slot
     raise EModelException.CreateUTF8('%.RecordProps: vmtAutoTable=% not %',
       [self, vmt, rtticustom]);
   EnterCriticalSection(vmtAutoTableLock);
   try
-    result := TSQLRecordProperties(rtticustom.Private);
+    result := TORMProperties(rtticustom.Private);
     if Assigned(result) then
-      if result.InheritsFrom(TSQLRecordProperties) then
+      if result.InheritsFrom(TORMProperties) then
         // registered by a background thread
         exit
       else
@@ -16132,7 +16163,7 @@ begin
         raise EModelException.CreateUTF8('%.RecordProps: vmtAutoTable=%',
           [self, result]);
     // create the properties information from RTTI
-    result := TSQLRecordProperties.Create(self);
+    result := TORMProperties.Create(self);
     rtticustom.Private := result; // will be owned by this TRttiCustom
     self.InternalDefineModel(result);
   finally
@@ -16140,18 +16171,18 @@ begin
   end;
 end;
 
-class function TSQLRecord.RecordProps: TSQLRecordProperties;
+class function TORM.RecordProps: TORMProperties;
 begin
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if result <> nil then
-    // we know TRttiCustom is the first slot, and Private is TSQLRecordProperties
-    result := TSQLRecordProperties(PRttiCustom(result)^.Private)
+    // we know TRttiCustom is the first slot, and Private is TORMProperties
+    result := TORMProperties(PRttiCustom(result)^.Private)
   else
-    // first time we use this TSQLRecord: generate information from RTTI
+    // first time we use this TORM: generate information from RTTI
     result := PropsCreate;
 end;
 
-function TSQLRecord.RecordClass: TSQLRecordClass;
+function TORM.RecordClass: TORMClass;
 begin
   if self = nil then
     result := nil
@@ -16159,35 +16190,35 @@ begin
     result := PSQLRecordClass(self)^;
 end;
 
-constructor TSQLRecord.Create;
+constructor TORM.Create;
 var
   i: PtrInt;
 begin
   // no TSynPersistent.Create call since vmtAutoTable is set by RecordProps
   // no inherited Create;
-  // auto-instanciate any TSQLRecordMany instance
+  // auto-instanciate any TORMMany instance
   with RecordProps do
     if pointer(ManyFields) <> nil then
       for i := 0 to length(ManyFields) - 1 do
         ManyFields[i].SetInstance(self,
-          TSQLRecordClass(ManyFields[i].ObjectClass).Create);
+          TORMClass(ManyFields[i].ObjectClass).Create);
 end;
 
-destructor TSQLRecord.Destroy;
+destructor TORM.Destroy;
 var
   i: PtrInt;
-  props: TSQLRecordProperties;
+  props: TORMProperties;
 begin
   props := RecordProps;
   if fFill <> nil then
   begin
     if fFill.fJoinedFields then
-      // free all TSQLRecord instances created by TSQLRecord.CreateJoined
+      // free all TORM instances created by TORM.CreateJoined
       for i := 0 to length(props.JoinedFields) - 1 do
         props.JoinedFields[i].GetInstance(self).Free;
     fFill.Free; // call UnMap -> release fTable instance if necessary
   end;
-  // free all TSQLRecordMany instances created by TSQLRecord.Create
+  // free all TORMMany instances created by TORM.Create
   if props.ManyFields <> nil then
     for i := 0 to length(props.ManyFields) - 1 do
       props.ManyFields[i].GetInstance(self).Free;
@@ -16200,7 +16231,7 @@ begin
   inherited;
 end;
 
-constructor TSQLRecord.Create(const aSimpleFields: array of const; aID: TID);
+constructor TORM.Create(const aSimpleFields: array of const; aID: TID);
 begin
   Create;
   fID := aID;
@@ -16208,7 +16239,7 @@ begin
     raise EORMException.CreateUTF8('Incorrect %.Create(aSimpleFields) call', [self]);
 end;
 
-function TSQLRecord.CreateCopy: TSQLRecord;
+function TORM.CreateCopy: TORM;
 var
   f: PtrInt;
 begin
@@ -16221,7 +16252,7 @@ begin
       CopiableFields[f].CopyValue(self, result);
 end;
 
-function TSQLRecord.CreateCopy(const CustomFields: TSQLFieldBits): TSQLRecord;
+function TORM.CreateCopy(const CustomFields: TFieldBits): TORM;
 var
   f: PtrInt;
 begin
@@ -16234,7 +16265,7 @@ begin
         Fields.List[f].CopyValue(self, result);
 end;
 
-function TSQLRecord.GetNonVoidFields: TSQLFieldBits;
+function TORM.GetNonVoidFields: TFieldBits;
 var
   f: PtrInt;
 begin
@@ -16245,7 +16276,7 @@ begin
         include(result, f);
 end;
 
-constructor TSQLRecord.Create(const aClient: IRestORM; aID: TID;
+constructor TORM.Create(const aClient: IRestORM; aID: TID;
   ForUpdate: boolean);
 begin
   Create;
@@ -16253,22 +16284,22 @@ begin
     aClient.Retrieve(aID, self, ForUpdate);
 end;
 
-constructor TSQLRecord.Create(const aClient: IRestORM;
-  aPublishedRecord: TSQLRecord; ForUpdate: boolean);
+constructor TORM.Create(const aClient: IRestORM;
+  aPublishedRecord: TORM; ForUpdate: boolean);
 begin
   Create;
   if aClient <> nil then
     aClient.Retrieve(aPublishedRecord.ID, self, ForUpdate);
 end;
 
-constructor TSQLRecord.Create(const aClient: IRestORM; const aSQLWhere: RawUTF8);
+constructor TORM.Create(const aClient: IRestORM; const aSQLWhere: RawUTF8);
 begin
   Create;
   if aClient <> nil then
     aClient.Retrieve(aSQLWhere, self);
 end;
 
-constructor TSQLRecord.Create(const aClient: IRestORM;
+constructor TORM.Create(const aClient: IRestORM;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const);
 begin
   Create;
@@ -16276,7 +16307,7 @@ begin
     aClient.Retrieve(FormatUTF8(FormatSQLWhere, [], BoundsSQLWhere), self);
 end;
 
-constructor TSQLRecord.Create(const aClient: IRestORM;
+constructor TORM.Create(const aClient: IRestORM;
   const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const);
 begin
   Create;
@@ -16284,30 +16315,30 @@ begin
     aClient.Retrieve(FormatUTF8(FormatSQLWhere, ParamsSQLWhere, BoundsSQLWhere), self);
 end;
 
-constructor TSQLRecord.CreateFrom(const JSONRecord: RawUTF8);
+constructor TORM.CreateFrom(const JSONRecord: RawUTF8);
 begin
   Create;
   FillFrom(JSONRecord);
 end;
 
-constructor TSQLRecord.CreateFrom(P: PUTF8Char);
+constructor TORM.CreateFrom(P: PUTF8Char);
 begin
   Create;
   FillFrom(P);
 end;
 
-constructor TSQLRecord.CreateFrom(const aDocVariant: variant);
+constructor TORM.CreateFrom(const aDocVariant: variant);
 begin
   Create;
   FillFrom(aDocVariant);
 end;
 
-class procedure TSQLRecord.InitializeTable(const Server: IRestORMServer;
-  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+class procedure TORM.InitializeTable(const Server: IRestORMServer;
+  const FieldName: RawUTF8; Options: TORMInitializeTableOptions);
 var
   f: PtrInt;
 begin
-  // is not part of TSQLRecordProperties because has been declared as virtual
+  // is not part of TORMProperties because has been declared as virtual
   if (self <> nil) and (Server <> nil) and
      (Options * INITIALIZETABLE_NOINDEX <> INITIALIZETABLE_NOINDEX) then
   begin
@@ -16335,17 +16366,17 @@ begin
   // failure in above Server.CreateSQLIndex() are ignored (may already exist)
 end;
 
-procedure TSQLRecord.FillFrom(aRecord: TSQLRecord);
+procedure TORM.FillFrom(aRecord: TORM);
 begin
   if (self <> nil) and (aRecord <> nil) then
     FillFrom(aRecord, aRecord.RecordProps.CopiableFieldsBits);
 end;
 
-procedure TSQLRecord.FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits);
+procedure TORM.FillFrom(aRecord: TORM; const aRecordFieldBits: TFieldBits);
 var
   i, f: PtrInt;
-  S, D: TSQLRecordProperties;
-  SP: TSQLPropInfo;
+  S, D: TORMProperties;
+  SP: TORMPropInfo;
   wasString: boolean;
   tmp: RawUTF8;
 begin
@@ -16381,7 +16412,7 @@ begin
     end;
 end;
 
-procedure TSQLRecord.FillFrom(Table: TSQLTable; Row: integer);
+procedure TORM.FillFrom(Table: TORMTable; Row: integer);
 begin
   try
     FillPrepare(Table);
@@ -16389,18 +16420,18 @@ begin
       fInternalState := Table.InternalState;
     FillRow(Row);
   finally
-    FillClose; // avoid GPF in TSQLRecord.Destroy
+    FillClose; // avoid GPF in TORM.Destroy
   end;
 end;
 
-procedure TSQLRecord.FillFrom(const JSONTable: RawUTF8; Row: integer);
+procedure TORM.FillFrom(const JSONTable: RawUTF8; Row: integer);
 var
-  Table: TSQLTableJSON;
+  Table: TORMTableJSON;
   tmp: TSynTempBuffer; // work on a private copy
 begin
   tmp.Init(JSONTable);
   try
-    Table := TSQLTableJSON.Create('', tmp.buf, tmp.len);
+    Table := TORMTableJSON.Create('', tmp.buf, tmp.len);
     try
       FillFrom(Table, Row);
     finally
@@ -16411,7 +16442,7 @@ begin
   end;
 end;
 
-procedure TSQLRecord.FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBits);
+procedure TORM.FillFrom(const JSONRecord: RawUTF8; FieldBits: PFieldBits);
 var
   tmp: TSynTempBuffer; // work on a private copy
 begin
@@ -16423,7 +16454,7 @@ begin
   end;
 end;
 
-procedure TSQLRecord.FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits);
+procedure TORM.FillFrom(P: PUTF8Char; FieldBits: PFieldBits);
 (*
  NOT EXPANDED - optimized format with a JSON array of JSON values, fields first
  {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
@@ -16466,7 +16497,7 @@ begin
       F[i] := GetJSONField(P, P);
     for i := 0 to n do
     begin
-      // set properties from values using efficient TSQLPropInfo.SetValue()
+      // set properties from values using efficient TORMPropInfo.SetValue()
       Value := GetJSONFieldOrObjectOrArray(P, @wasString, nil, true);
       FillValue({%H-}F[i], Value, wasString, FieldBits);
     end;
@@ -16479,14 +16510,14 @@ begin
       Prop := GetJSONPropName(P);
       if (Prop = nil) or (P = nil) then
         break;
-      // set each property from values using efficient TSQLPropInfo.SetValue()
+      // set each property from values using efficient TORMPropInfo.SetValue()
       Value := GetJSONFieldOrObjectOrArray(P, @wasString, nil, true);
       FillValue(Prop, Value, wasString, FieldBits);
     until P = nil;
   end;
 end;
 
-procedure TSQLRecord.FillFrom(const aDocVariant: variant);
+procedure TORM.FillFrom(const aDocVariant: variant);
 var
   json: RawUTF8;
 begin
@@ -16497,22 +16528,22 @@ begin
   end;
 end;
 
-procedure TSQLRecord.FillPrepare(Table: TSQLTable; aCheckTableName: TSQLCheckTableName);
+procedure TORM.FillPrepare(Table: TORMTable; aCheckTableName: TORMCheckTableName);
 begin
   if self = nil then
     exit;
   if fFill = nil then
-    fFill := TSQLRecordFill.Create
+    fFill := TORMFill.Create
   else
     fFill.UnMap;
   fFill.Map(self, Table, aCheckTableName);
 end;
 
-function TSQLRecord.FillPrepare(const aClient: IRestORM;
+function TORM.FillPrepare(const aClient: IRestORM;
   const aSQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8;
-  aCheckTableName: TSQLCheckTableName): boolean;
+  aCheckTableName: TORMCheckTableName): boolean;
 var
-  T: TSQLTable;
+  T: TORMTable;
 begin
   result := false;
   FillClose; // so that no further FillOne will work
@@ -16526,7 +16557,7 @@ begin
   result := true;
 end;
 
-function TSQLRecord.FillPrepare(const aClient: IRestORM;
+function TORM.FillPrepare(const aClient: IRestORM;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var
@@ -16536,7 +16567,7 @@ begin
   result := FillPrepare(aClient, sqlwhere, aCustomFieldsCSV);
 end;
 
-function TSQLRecord.FillPrepare(const aClient: IRestORM;
+function TORM.FillPrepare(const aClient: IRestORM;
   const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var
@@ -16546,7 +16577,7 @@ begin
   result := FillPrepare(aClient, sqlwhere, aCustomFieldsCSV);
 end;
 
-function TSQLRecord.FillPrepare(const aClient: IRestORM;
+function TORM.FillPrepare(const aClient: IRestORM;
   const aIDs: array of Int64; const aCustomFieldsCSV: RawUTF8): boolean;
 begin
   if high(aIDs) < 0 then
@@ -16556,7 +16587,7 @@ begin
       aCustomFieldsCSV);
 end;
 
-function TSQLRecord.FillRow(aRow: integer; aDest: TSQLRecord): boolean;
+function TORM.FillRow(aRow: integer; aDest: TORM): boolean;
 begin
   if self <> nil then
     if aDest = nil then
@@ -16570,7 +16601,7 @@ begin
     result := false;
 end;
 
-function TSQLRecord.FillOne(aDest: TSQLRecord): boolean;
+function TORM.FillOne(aDest: TORM): boolean;
 begin
   if (self = nil) or (fFill = nil) or (fFill.Table = nil) or
      (fFill.Table.fRowCount = 0) or // also check if FillTable is emtpy
@@ -16584,7 +16615,7 @@ begin
   end;
 end;
 
-function TSQLRecord.FillRewind: boolean;
+function TORM.FillRewind: boolean;
 begin
   if (self = nil) or (fFill = nil) or (fFill.Table = nil) or
      (fFill.Table.fRowCount = 0) then
@@ -16596,13 +16627,13 @@ begin
   end;
 end;
 
-procedure TSQLRecord.FillClose;
+procedure TORM.FillClose;
 begin
   if self <> nil then
     fFill.UnMap;
 end;
 
-procedure TSQLRecord.AppendFillAsJsonValues(W: TJSONSerializer);
+procedure TORM.AppendFillAsJsonValues(W: TJSONSerializer);
 begin
   W.Add('[');
   while FillOne do
@@ -16614,10 +16645,10 @@ begin
   W.Add(']');
 end;
 
-procedure TSQLRecord.FillValue(PropName: PUTF8Char; Value: PUTF8Char;
-  wasString: boolean; FieldBits: PSQLFieldBits);
+procedure TORM.FillValue(PropName: PUTF8Char; Value: PUTF8Char;
+  wasString: boolean; FieldBits: PFieldBits);
 var
-  field: TSQLPropInfo;
+  field: TORMPropInfo;
 begin
   if self <> nil then
     if IsRowID(PropName) then
@@ -16634,7 +16665,7 @@ begin
     end;
 end;
 
-function TSQLRecord.SetFieldSQLVars(const Values: TSQLVarDynArray): boolean;
+function TORM.SetFieldSQLVars(const Values: TSQLVarDynArray): boolean;
 var
   max, field: PtrInt;
 begin
@@ -16656,7 +16687,7 @@ begin
   result := true;
 end;
 
-procedure TSQLRecord.GetBinaryValues(W: TBufferWriter);
+procedure TORM.GetBinaryValues(W: TBufferWriter);
 var
   f: PtrInt;
 begin
@@ -16665,7 +16696,7 @@ begin
       Fields.List[f].GetBinary(self, W);
 end;
 
-procedure TSQLRecord.GetBinaryValuesSimpleFields(W: TBufferWriter);
+procedure TORM.GetBinaryValuesSimpleFields(W: TBufferWriter);
 var
   f: PtrInt;
 begin
@@ -16674,8 +16705,8 @@ begin
       SimpleFields[f].GetBinary(self, W);
 end;
 
-procedure TSQLRecord.GetBinaryValues(W: TBufferWriter;
-  const aFields: TSQLFieldBits);
+procedure TORM.GetBinaryValues(W: TBufferWriter;
+  const aFields: TFieldBits);
 var
   f: PtrInt;
 begin
@@ -16685,7 +16716,7 @@ begin
         Fields.List[f].GetBinary(self, W);
 end;
 
-function TSQLRecord.GetBinary: RawByteString;
+function TORM.GetBinary: RawByteString;
 var
   W: TBufferWriter;
 begin
@@ -16699,18 +16730,18 @@ begin
   end;
 end;
 
-function TSQLRecord.SetBinary(P, PEnd: PAnsiChar): boolean;
+function TORM.SetBinary(P, PEnd: PAnsiChar): boolean;
 begin
   P := pointer(FromVarUInt64Safe(pointer(P), pointer(PEnd), PQWord(@fID)^));
   result := SetBinaryValues(P, PEnd);
 end;
 
-function TSQLRecord.SetBinary(const binary: RawByteString): boolean;
+function TORM.SetBinary(const binary: RawByteString): boolean;
 begin
   result := SetBinary(pointer(binary), PAnsiChar(pointer(binary)) + length(binary));
 end;
 
-function TSQLRecord.SetBinaryValues(var P: PAnsiChar; PEnd: PAnsiChar): boolean;
+function TORM.SetBinaryValues(var P: PAnsiChar; PEnd: PAnsiChar): boolean;
 var
   f: PtrInt;
 begin
@@ -16727,7 +16758,7 @@ begin
   result := true;
 end;
 
-function TSQLRecord.SetBinaryValuesSimpleFields(var P: PAnsiChar;
+function TORM.SetBinaryValuesSimpleFields(var P: PAnsiChar;
   PEnd: PAnsiChar): boolean;
 var
   f: PtrInt;
@@ -16743,10 +16774,10 @@ begin
   result := true;
 end;
 
-procedure TSQLRecord.GetJSONValues(W: TJSONSerializer);
+procedure TORM.GetJSONValues(W: TJSONSerializer);
 var
   f, c: PtrInt;
-  Props: TSQLPropInfoList;
+  Props: TORMPropInfoList;
 begin
   if self = nil then
     exit;
@@ -16789,11 +16820,11 @@ begin
     W.Add('}');
 end;
 
-procedure TSQLRecord.AppendAsJsonObject(W: TJSONSerializer; Fields: TSQLFieldBits);
+procedure TORM.AppendAsJsonObject(W: TJSONSerializer; Fields: TFieldBits);
 var // Fields are not "const" since are modified if zero
   i: PtrInt;
-  P: TSQLRecordProperties;
-  Props: TSQLPropInfoList;
+  P: TORMProperties;
+  Props: TORMPropInfoList;
 begin
   if self = nil then
   begin
@@ -16804,7 +16835,7 @@ begin
   W.Add(fID);
   P := RecordProps;
   if IsZero(Fields) then
-    Fields := P.SimpleFieldsBits[soSelect];
+    Fields := P.SimpleFieldsBits[ooSelect];
   Props := P.Fields;
   for i := 0 to Props.Count - 1 do
     if i in Fields then
@@ -16817,8 +16848,8 @@ begin
   W.Add('}');
 end;
 
-procedure TSQLRecord.AppendFillAsJsonArray(const FieldName: RawUTF8;
-  W: TJSONSerializer; const Fields: TSQLFieldBits);
+procedure TORM.AppendFillAsJsonArray(const FieldName: RawUTF8;
+  W: TJSONSerializer; const Fields: TFieldBits);
 begin
   if FieldName <> '' then
     W.AddFieldName(FieldName);
@@ -16834,10 +16865,10 @@ begin
     W.Add(',');
 end;
 
-procedure TSQLRecord.ForceVariantFieldsOptions(aOptions: TDocVariantOptions);
+procedure TORM.ForceVariantFieldsOptions(aOptions: TDocVariantOptions);
 var
   i: PtrInt;
-  p: TSQLPropInfo;
+  p: TORMPropInfo;
 begin
   if self <> nil then
     with RecordProps do
@@ -16846,8 +16877,8 @@ begin
         begin
           p := Fields.List[i];
           if (p.SQLFieldType = sftVariant) and
-             p.InheritsFrom(TSQLPropInfoRTTIVariant) then
-            with TSQLPropInfoRTTIVariant(p) do
+             p.InheritsFrom(TORMPropInfoRTTIVariant) then
+            with TORMPropInfoRTTIVariant(p) do
               if PropInfo.GetterIsField then
                 with _Safe(PVariant(PropInfo.GetterAddr(self))^)^ do
                   if Count > 0 then
@@ -16855,7 +16886,7 @@ begin
         end;
 end;
 
-procedure TSQLRecord.GetJSONValuesAndFree(JSON: TJSONSerializer);
+procedure TORM.GetJSONValuesAndFree(JSON: TJSONSerializer);
 begin
   if JSON <> nil then
   try
@@ -16870,8 +16901,8 @@ begin
   end;
 end;
 
-procedure TSQLRecord.GetJSONValues(JSON: TStream; Expand, withID: boolean;
-  Occasion: TSQLOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions);
+procedure TORM.GetJSONValues(JSON: TStream; Expand, withID: boolean;
+  Occasion: TORMOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions);
 var
   serializer: TJSONSerializer;
 begin
@@ -16884,8 +16915,8 @@ begin
   GetJSONValuesAndFree(serializer);
 end;
 
-function TSQLRecord.GetJSONValues(Expand, withID: boolean;
-  const Fields: TSQLFieldBits; SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
+function TORM.GetJSONValues(Expand, withID: boolean;
+  const Fields: TFieldBits; SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
 var
   J: TRawByteStringStream;
   serializer: TJSONSerializer;
@@ -16901,10 +16932,10 @@ begin
   end;
 end;
 
-function TSQLRecord.GetJSONValues(Expand, withID: boolean;
+function TORM.GetJSONValues(Expand, withID: boolean;
   const FieldsCSV: RawUTF8; SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
 var
-  bits: TSQLFieldBits;
+  bits: TFieldBits;
 begin
   if RecordProps.FieldBitsFromCSV(FieldsCSV, bits) then
     result := GetJSONValues(Expand, withID, bits, SQLRecordOptions)
@@ -16912,8 +16943,8 @@ begin
     result := '';
 end;
 
-function TSQLRecord.GetJSONValues(Expand, withID: boolean;
-  Occasion: TSQLOccasion; UsingStream: TCustomMemoryStream;
+function TORM.GetJSONValues(Expand, withID: boolean;
+  Occasion: TORMOccasion; UsingStream: TCustomMemoryStream;
   SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
 var
   J: TRawByteStringStream;
@@ -16939,12 +16970,12 @@ begin
   end;
 end;
 
-function ToText(vk: TSQLRecordVirtualKind): PShortString;
+function ToText(vk: TORMVirtualKind): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLRecordVirtualKind), ord(vk));
+  result := GetEnumName(TypeInfo(TORMVirtualKind), ord(vk));
 end;
 
-function GetVirtualTableSQLCreate(Props: TSQLRecordProperties): RawUTF8;
+function GetVirtualTableSQLCreate(Props: TORMProperties): RawUTF8;
 var
   i: PtrInt;
   SQL: RawUTF8;
@@ -16964,15 +16995,15 @@ begin
     PWord(@result[length(result) - 1])^ := ord(')') + ord(';') shl 8;
 end;
 
-class function TSQLRecord.GetSQLCreate(aModel: TSQLModel): RawUTF8;
-// not implemented in TSQLRecordProperties since has been made virtual
+class function TORM.GetSQLCreate(aModel: TORMModel): RawUTF8;
+// not implemented in TORMProperties since has been made virtual
 var
   i: PtrInt;
   c: TClass;
   SQL, mname, cname, tokenizer: RawUTF8;
-  M: TClass; // is a TSQLVirtualTableClass
-  Props: TSQLModelRecordProperties;
-  fields: TSQLPropInfoList;
+  M: TClass; // is a TORMVirtualTableClass
+  Props: TORMModelRecordProperties;
+  fields: TORMPropInfoList;
 begin
   if aModel = nil then
     raise EModelException.CreateUTF8('Invalid %.GetSQLCreate(nil) call', [self]);
@@ -17023,16 +17054,16 @@ begin
           tokenizer := 'simple';
           c := self;
           repeat
-            ClassToText(c, cname); // TSQLFTSTest = class(TSQLRecordFTS3Porter)
-            if IdemPChar(pointer(cname), 'TSQLRECORDFTS') and
+            ClassToText(c, cname); // TORMFTSTest = class(TORMFTS3Porter)
+            if IdemPChar(pointer(cname), 'TORMFTS') and
                (cname[14] in ['3', '4', '5']) then
             begin
               if length(cname) > 14 then
-                tokenizer := copy(cname, 15, 100); // e.g. TSQLRecordFTS3Porter -> 'Porter'
+                tokenizer := copy(cname, 15, 100); // e.g. TORMFTS3Porter -> 'Porter'
               break;
             end;
             c := GetClassParent(c);
-          until c = TSQLRecord;
+          until c = TORM;
           result := FormatUTF8('% tokenize=%)', [result, LowerCaseU(tokenizer)]);
         end;
       rRTree, rRTreeInteger:
@@ -17052,7 +17083,7 @@ begin
   end
   else
   begin
-    // inherits from TSQLRecord: create a "normal" SQLite3 table
+    // inherits from TORM: create a "normal" SQLite3 table
     result := 'CREATE TABLE ' + SQLTableName + '(ID INTEGER PRIMARY KEY AUTOINCREMENT, ';
     // we always add an ID field which is an INTEGER PRIMARY KEY
     // column, as it is always created (as hidden RowID) by the SQLite3 engine
@@ -17072,7 +17103,7 @@ begin
   end;
 end;
 
-function TSQLRecord.GetSQLSet: RawUTF8;
+function TORM.GetSQLSet: RawUTF8;
 var
   i: PtrInt;
   V: RawUTF8;
@@ -17095,7 +17126,7 @@ begin
     SetLength(result, length(result) - 2);
 end;
 
-function TSQLRecord.GetSQLValues: RawUTF8;
+function TORM.GetSQLValues: RawUTF8;
 var
   i: PtrInt;
   V: RawUTF8;
@@ -17123,7 +17154,7 @@ begin
       end;
 end;
 
-function TSQLRecord.SameRecord(Reference: TSQLRecord): boolean;
+function TORM.SameRecord(Reference: TORM): boolean;
 var
   i: PtrInt;
 begin
@@ -17133,18 +17164,18 @@ begin
      (Reference.fID <> fID) then
     exit;
   with RecordProps do
-    for i := 0 to length(SimpleFields) - 1 do      // compare not TSQLRawBlob/TSQLRecordMany fields
+    for i := 0 to length(SimpleFields) - 1 do      // compare not TRawBlob/TORMMany fields
       with SimpleFields[i] do
         if CompareValue(self, Reference, false) <> 0 then
           exit; // properties don't have the same value
   result := true;
 end;
 
-function TSQLRecord.SameValues(Reference: TSQLRecord): boolean;
+function TORM.SameValues(Reference: TORM): boolean;
 var
-  O: TSQLPropInfo;
+  O: TORMPropInfo;
   i: PtrInt;
-  This, Ref: TSQLRecordProperties;
+  This, Ref: TORMProperties;
 begin
   result := false;
   if (self = nil) or (Reference = nil) or
@@ -17155,7 +17186,7 @@ begin
     begin
       // faster comparison on same exact class
       with RecordProps do
-        for i := 0 to length(SimpleFields) - 1 do      // compare not TSQLRawBlob/TSQLRecordMany fields
+        for i := 0 to length(SimpleFields) - 1 do      // compare not TRawBlob/TORMMany fields
           with SimpleFields[i] do
             if CompareValue(self, Reference, false) <> 0 then
               exit; // properties don't have the same value
@@ -17168,7 +17199,7 @@ begin
       for i := 0 to length(Ref.SimpleFields) - 1 do
         with Ref.SimpleFields[i] do
         begin
-          // compare not TSQLRawBlob/TSQLRecordMany fields
+          // compare not TRawBlob/TORMMany fields
           O := This.Fields.ByRawUTF8Name(Name);
           if O = nil then
             exit; // this Reference property doesn't exist in current object
@@ -17179,7 +17210,7 @@ begin
   result := true;
 end;
 
-procedure TSQLRecord.ClearProperties;
+procedure TORM.ClearProperties;
 var
   i: PtrInt;
 begin
@@ -17194,8 +17225,8 @@ begin
         if CopiableFields[i].SQLFieldType <> sftID then
           CopiableFields[i].SetValue(self, nil, false)
         else
-          // clear nested allocated TSQLRecord
-          TSQLRecord(TSQLPropInfoRTTIInstance(CopiableFields[i]).GetInstance(self)).
+          // clear nested allocated TORM
+          TORM(TORMPropInfoRTTIInstance(CopiableFields[i]).GetInstance(self)).
             ClearProperties;
     end
     else
@@ -17203,9 +17234,9 @@ begin
         CopiableFields[i].SetValue(self, nil, false);
 end;
 
-procedure TSQLRecord.ClearProperties(const aFieldsCSV: RawUTF8);
+procedure TORM.ClearProperties(const aFieldsCSV: RawUTF8);
 var
-  bits: TSQLFieldBits;
+  bits: TFieldBits;
   f: PtrInt;
 begin
   if (self = nil) or (aFieldsCSV = '') then
@@ -17213,7 +17244,7 @@ begin
   with RecordProps do
   begin
     if aFieldsCSV = '*' then
-      bits := SimpleFieldsBits[soInsert]
+      bits := SimpleFieldsBits[ooInsert]
     else if not FieldBitsFromCSV(aFieldsCSV, bits) then
       exit;
     for f := 0 to Fields.Count - 1 do
@@ -17222,7 +17253,7 @@ begin
   end;
 end;
 
-function TSQLRecord.ClassProp: TRttiJson;
+function TORM.ClassProp: TRttiJson;
 begin
   if self <> nil then
     result := ClassPropertiesGet(PClass(self)^, TRttiJson)
@@ -17230,7 +17261,7 @@ begin
     result := nil; // avoid GPF
 end;
 
-function TSQLRecord.RecordReference(Model: TSQLModel): TRecordReference;
+function TORM.RecordReference(Model: TORMModel): TRecordReference;
 begin
   if (self = nil) or (fID <= 0) then
     result := 0
@@ -17244,7 +17275,7 @@ begin
   end;
 end;
 
-function TSQLRecord.SimplePropertiesFill(const aSimpleFields: array of const): boolean;
+function TORM.SimplePropertiesFill(const aSimpleFields: array of const): boolean;
 var
   i: PtrInt;
   tmp: RawUTF8;
@@ -17266,10 +17297,10 @@ begin
       end;
 end;
 
-constructor TSQLRecord.CreateAndFillPrepare(const aClient: IRestORM;
+constructor TORM.CreateAndFillPrepare(const aClient: IRestORM;
   const aSQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8);
 var
-  aTable: TSQLTable;
+  aTable: TORMTable;
 begin
   Create;
   aTable := aClient.MultiFieldValues(RecordClass, aCustomFieldsCSV, aSQLWhere);
@@ -17279,7 +17310,7 @@ begin
   FillPrepare(aTable);
 end;
 
-constructor TSQLRecord.CreateAndFillPrepare(const aClient: IRestORM;
+constructor TORM.CreateAndFillPrepare(const aClient: IRestORM;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8);
 var
@@ -17289,7 +17320,7 @@ begin
   CreateAndFillPrepare(aClient, where, aCustomFieldsCSV);
 end;
 
-constructor TSQLRecord.CreateAndFillPrepare(const aClient: IRestORM;
+constructor TORM.CreateAndFillPrepare(const aClient: IRestORM;
   const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8);
 var
@@ -17299,54 +17330,54 @@ begin
   CreateAndFillPrepare(aClient, where, aCustomFieldsCSV);
 end;
 
-constructor TSQLRecord.CreateAndFillPrepare(const aClient: IRestORM;
+constructor TORM.CreateAndFillPrepare(const aClient: IRestORM;
   const aIDs: array of Int64; const aCustomFieldsCSV: RawUTF8);
 begin
   Create;
   FillPrepare(aClient, aIDs, aCustomFieldsCSV);
 end;
 
-constructor TSQLRecord.CreateAndFillPrepare(const aJSON: RawUTF8);
+constructor TORM.CreateAndFillPrepare(const aJSON: RawUTF8);
 var
-  aTable: TSQLTable;
+  aTable: TORMTable;
 begin
   Create;
-  aTable := TSQLTableJSON.CreateFromTables([RecordClass], '', aJSON);
+  aTable := TORMTableJSON.CreateFromTables([RecordClass], '', aJSON);
   aTable.OwnerMustFree := true;
   FillPrepare(aTable);
 end;
 
-constructor TSQLRecord.CreateAndFillPrepare(aJSON: PUTF8Char; aJSONLen: integer);
+constructor TORM.CreateAndFillPrepare(aJSON: PUTF8Char; aJSONLen: integer);
 var
-  aTable: TSQLTable;
+  aTable: TORMTable;
 begin
   Create;
-  aTable := TSQLTableJSON.CreateFromTables([RecordClass], '', aJSON, aJSONLen);
+  aTable := TORMTableJSON.CreateFromTables([RecordClass], '', aJSON, aJSONLen);
   aTable.OwnerMustFree := true;
   FillPrepare(aTable);
 end;
 
-constructor TSQLRecord.CreateAndFillPrepareJoined(const aClient: IRestORM;
+constructor TORM.CreateAndFillPrepareJoined(const aClient: IRestORM;
   const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 var
   i: PtrInt;
   n: integer;
-  props: TSQLModelRecordProperties;
-  T: TSQLTable;
-  instance: TSQLRecord;
+  props: TORMModelRecordProperties;
+  T: TORMTable;
+  instance: TORM;
   SQL: RawUTF8;
 begin
   Create;
   props := aClient.Model.Props[PSQLRecordClass(self)^];
   if props.props.JoinedFields = nil then
-    raise EModelException.CreateUTF8('No nested TSQLRecord to JOIN in %', [self]);
+    raise EModelException.CreateUTF8('No nested TORM to JOIN in %', [self]);
   SQL := props.SQL.SelectAllJoined;
   if aFormatSQLJoin <> '' then
     SQL := SQL + FormatUTF8(SQLFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
   T := aClient.ExecuteList(props.props.JoinedFieldsTable, SQL);
   if T = nil then
     exit;
-  fFill := TSQLRecordFill.Create;
+  fFill := TORMFill.Create;
   fFill.fJoinedFields := True;
   fFill.fTable := T;
   fFill.fTable.OwnerMustFree := true;
@@ -17365,13 +17396,13 @@ begin
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)
 end;
 
-constructor TSQLRecord.CreateJoined(const aClient: IRestORM; aID: TID);
+constructor TORM.CreateJoined(const aClient: IRestORM; aID: TID);
 begin
   CreateAndFillPrepareJoined(aClient, '%.RowID=?', [RecordProps.SQLTableName], [aID]);
   FillOne;
 end;
 
-constructor TSQLRecord.CreateAndFillPrepareMany(const aClient: IRestORM;
+constructor TORM.CreateAndFillPrepareMany(const aClient: IRestORM;
   const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 begin
   Create;
@@ -17387,26 +17418,26 @@ end;
   {$warnings off} // avoid paranoid Delphi 2007 warning
 {$endif ISDELPHI20062007}
 
-function TSQLRecord.EnginePrepareMany(const aClient: IRestORM;
+function TORM.EnginePrepareMany(const aClient: IRestORM;
   const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const;
-  out ObjectsClass: TSQLRecordClassDynArray; out SQL: RawUTF8): RawUTF8;
+  out ObjectsClass: TORMClassDynArray; out SQL: RawUTF8): RawUTF8;
 var
   aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
   aField: string[3];
   aMany: RawUTF8;
   f, n, i, SQLFieldsCount: Integer;
-  Props: TSQLRecordProperties;
+  Props: TORMProperties;
   SQLFields: array of record
     SQL: string[3];
-    prop: TSQLPropInfo;
-    Instance: TSQLRecord;
+    prop: TORMPropInfo;
+    Instance: TORM;
   end;
-  M: TSQLRecordMany;
-  D: TSQLRecord;
+  M: TORMMany;
+  D: TORM;
   J, JBeg: PUTF8Char;
-  Objects: array of TSQLRecord;
+  Objects: array of TORM;
 
-  function AddField(aProp: TSQLPropInfo): boolean;
+  function AddField(aProp: TORMPropInfo): boolean;
   begin
     if SQLFieldsCount >= MAX_SQLFIELDS then
       result := false
@@ -17424,9 +17455,9 @@ var
   function ProcessField(var P: PUTF8Char): RawUTF8;
   var
     B: PUTF8Char;
-    field: TSQLPropInfo;
+    field: TORMPropInfo;
     i: PtrInt;
-    M: TSQLRecordMany;
+    M: TORMMany;
     aManyField: string[63];
 
     function GetManyField(F: PUTF8Char): boolean;
@@ -17465,7 +17496,7 @@ var
       field := Props.Fields.List[i];
       if field.SQLFieldType = sftMany then
       begin
-        M := TSQLPropInfoRTTIInstance(field).GetInstance(self) as TSQLRecordMany;
+        M := TORMPropInfoRTTIInstance(field).GetInstance(self) as TORMMany;
         for i := 0 to n - 1 do
           if Objects[i * 2 + 1] = M then
           begin
@@ -17496,9 +17527,9 @@ begin
   FillClose; // so that no further FillOne will work
   if (self = nil) or (aClient = nil) then
     exit;
-  // reset TSQLRecordFill object
+  // reset TORMFill object
   if fFill = nil then
-    fFill := TSQLRecordFill.Create
+    fFill := TORMFill.Create
   else
     fFill.UnMap;
   // compute generic joined SQL statement and initialize Objects*[]+SQLFields[]
@@ -17514,7 +17545,7 @@ begin
   SetLength(fFill.fTableMapRecordManyInstances, n);  // fFill.UnMap will release memory
   for f := 0 to n - 1 do
   begin
-    M := TSQLRecordMany(Props.ManyFields[f].GetInstance(self));
+    M := TORMMany(Props.ManyFields[f].GetInstance(self));
     if M = nil then
       raise EORMException.CreateUTF8('%.Create should have created %:% for EnginePrepareMany',
         [self, Props.ManyFields[f].Name, Props.ManyFields[f].ObjectClass]);
@@ -17527,13 +17558,13 @@ begin
          (fRecordManyDestProp.ObjectClass = nil) then
         raise EORMException.CreateUTF8('%.EnginePrepareMany %:% mismatch',
           [self, Props.ManyFields[f].Name, Props.ManyFields[f].ObjectClass]);
-      ObjectsClass[f * 2 + 2] := TSQLRecordClass(fRecordManyDestProp.ObjectClass);
-      D := TSQLRecordClass(fRecordManyDestProp.ObjectClass).Create;
-      // let TSQLRecordMany.Source and Dest point to real instances
+      ObjectsClass[f * 2 + 2] := TORMClass(fRecordManyDestProp.ObjectClass);
+      D := TORMClass(fRecordManyDestProp.ObjectClass).Create;
+      // let TORMMany.Source and Dest point to real instances
       M.fSourceID^ := PtrInt(self);
       M.fDestID^ := PtrInt(D);
     end;
-    Objects[f * 2 + 2] := TSQLRecord(M.fDestID^);
+    Objects[f * 2 + 2] := TORM(M.fDestID^);
     if Props.fSQLFillPrepareMany = '' then
     begin
       aMany := AnsiChar(f * 2 + 66); // Many=B,D,F...
@@ -17634,20 +17665,20 @@ end;
   {$warnings on} // avoid paranoid Delphi 2007 warning
 {$endif ISDELPHI20062007}
 
-function TSQLRecord.FillPrepareMany(const aClient: IRestORM;
+function TORM.FillPrepareMany(const aClient: IRestORM;
   const aFormatSQLJoin: RawUTF8;
   const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
 var
   JSON, SQL: RawUTF8;
-  ObjectsClass: TSQLRecordClassDynArray;
-  T: TSQLTable;
+  ObjectsClass: TORMClassDynArray;
+  T: TORMTable;
 begin
   result := false;
   JSON := EnginePrepareMany(aClient, aFormatSQLJoin, aParamsSQLJoin,
     aBoundsSQLJoin, ObjectsClass, SQL);
   if JSON = '' then
     exit;
-  T := TSQLTableJSON.CreateFromTables(ObjectsClass, SQL, JSON);
+  T := TORMTableJSON.CreateFromTables(ObjectsClass, SQL, JSON);
   if (T = nil) or (T.fResults = nil) then
   begin
     T.Free;
@@ -17662,16 +17693,16 @@ begin
   result := true;
 end;
 
-function TSQLRecord.GetID: TID;
+function TORM.GetID: TID;
 begin
   {$ifdef MSWINDOWS}
   if PtrUInt(self) < PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
-    // was called from a TSQLRecord property (sftID type)
+    // was called from a TORM property (sftID type)
     // (will return 0 if current instance is nil)
     result := PtrUInt(self)
   else
     result := fID;
-    // was called from a real TSQLRecord instance
+    // was called from a real TORM instance
   {$else}
   if PtrUInt(self) < $100000 then // rough estimation, but works in practice
     result := PtrUInt(self)
@@ -17684,18 +17715,18 @@ begin
   {$endif MSWINDOWS}
 end;
 
-function TSQLRecord.GetIDAsPointer: pointer;
+function TORM.GetIDAsPointer: pointer;
 begin
   {$ifdef MSWINDOWS}
   if PtrUInt(self) < PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
-    // was called from a TSQLRecord property (sftID type)
+    // was called from a TORM property (sftID type)
     // (will return 0 if current instance is nil)
     result := self
-  else    // was called from a real TSQLRecord instance
+  else    // was called from a real TORM instance
   {$ifndef CPU64}
   if fID > MaxInt then
     raise EORMException.CreateUTF8('%.GetIDAsPointer is storing ID=%, which ' +
-      'cannot be stored in a pointer/TSQLRecord 32-bit instance: use ' +
+      'cannot be stored in a pointer/TORM 32-bit instance: use ' +
       'a TID/T*ID published field for 64-bit IDs', [self, fID])
   else
   {$endif CPU64}
@@ -17712,15 +17743,15 @@ begin
   {$endif MSWINDOWS}
 end;
 
-class procedure TSQLRecord.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
+class procedure TORM.InternalRegisterCustomProperties(Props: TORMProperties);
 begin // do nothing by default
 end;
 
-class procedure TSQLRecord.InternalDefineModel(Props: TSQLRecordProperties);
+class procedure TORM.InternalDefineModel(Props: TORMProperties);
 begin // do nothing by default
 end;
 
-function TSQLRecord.GetHasBlob: boolean;
+function TORM.GetHasBlob: boolean;
 begin
   if self = nil then
     result := false
@@ -17728,7 +17759,7 @@ begin
     result := RecordProps.BlobFields <> nil;
 end;
 
-function TSQLRecord.GetSimpleFieldCount: integer;
+function TORM.GetSimpleFieldCount: integer;
 begin
   if self = nil then
     result := 0
@@ -17736,7 +17767,7 @@ begin
     result := length(RecordProps.SimpleFields);
 end;
 
-function TSQLRecord.GetFillCurrentRow: integer;
+function TORM.GetFillCurrentRow: integer;
 begin
   if (self = nil) or (fFill = nil) then
     result := 0
@@ -17744,13 +17775,13 @@ begin
     result := fFill.FillCurrentRow;
 end;
 
-function TSQLRecord.GetFillReachedEnd: boolean;
+function TORM.GetFillReachedEnd: boolean;
 begin
   result := (self = nil) or (fFill = nil) or (fFill.Table.fRowCount = 0) or
          (cardinal(fFill.FillCurrentRow) > cardinal(fFill.Table.fRowCount));
 end;
 
-function TSQLRecord.GetTable: TSQLTable;
+function TORM.GetTable: TORMTable;
 begin
   if (self = nil) or (fFill = nil) then
     result := nil
@@ -17758,9 +17789,9 @@ begin
     result := fFill.Table;
 end;
 
-function TSQLRecord.GetFieldValue(const PropName: RawUTF8): RawUTF8;
+function TORM.GetFieldValue(const PropName: RawUTF8): RawUTF8;
 var
-  P: TSQLPropInfo;
+  P: TORMPropInfo;
 begin
   result := '';
   if self = nil then
@@ -17770,9 +17801,9 @@ begin
     P.GetValueVar(self, False, result, nil);
 end;
 
-procedure TSQLRecord.SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
+procedure TORM.SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
 var
-  P: TSQLPropInfo;
+  P: TORMPropInfo;
 begin
   if self = nil then
     exit;
@@ -17781,21 +17812,21 @@ begin
     P.SetValue(self, Value, false);
 end;
 
-function TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits; options: PDocVariantOptions;
+function TORM.GetAsDocVariant(withID: boolean;
+  const withFields: TFieldBits; options: PDocVariantOptions;
   replaceRowIDWithID: boolean): variant;
 begin
   GetAsDocVariant(withID, withFields, result, options, replaceRowIDWithID);
 end;
 
-procedure TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits; var result: variant; options: PDocVariantOptions;
+procedure TORM.GetAsDocVariant(withID: boolean;
+  const withFields: TFieldBits; var result: variant; options: PDocVariantOptions;
   replaceRowIDWithID: boolean);
 const
   _ID: array[boolean] of RawUTF8 = ('RowID', 'ID');
 var
   f, i: PtrInt;
-  Fields: TSQLPropInfoList;
+  Fields: TORMPropInfoList;
   intvalues: TRawUTF8Interning;
   doc: TDocVariantData absolute result;
 begin
@@ -17826,18 +17857,18 @@ begin
     end;
 end;
 
-function TSQLRecord.GetSimpleFieldsAsDocVariant(withID: boolean;
+function TORM.GetSimpleFieldsAsDocVariant(withID: boolean;
   options: PDocVariantOptions): variant;
 begin
   if self = nil then
     VarClear(result)
   else
-    GetAsDocVariant(withID, RecordProps.SimpleFieldsBits[soSelect], result, options);
+    GetAsDocVariant(withID, RecordProps.SimpleFieldsBits[ooSelect], result, options);
 end;
 
-function TSQLRecord.GetFieldVariant(const PropName: string): variant;
+function TORM.GetFieldVariant(const PropName: string): variant;
 var
-  P: TSQLPropInfo;
+  P: TORMPropInfo;
 begin
   if self = nil then
     P := nil
@@ -17850,9 +17881,9 @@ begin
     P.GetVariant(self, result);
 end;
 
-procedure TSQLRecord.SetFieldVariant(const PropName: string; const Source: Variant);
+procedure TORM.SetFieldVariant(const PropName: string; const Source: Variant);
 var
-  P: TSQLPropInfo;
+  P: TORMPropInfo;
 begin
   if self = nil then
     P := nil
@@ -17863,7 +17894,7 @@ begin
     P.SetVariant(self, Source);
 end;
 
-function TSQLRecord.Filter(const aFields: TSQLFieldBits): boolean;
+function TORM.Filter(const aFields: TFieldBits): boolean;
 var
   f, i: PtrInt;
   Value, Old: RawUTF8;
@@ -17893,9 +17924,9 @@ begin
     end;
 end;
 
-function TSQLRecord.Filter(const aFields: array of RawUTF8): boolean;
+function TORM.Filter(const aFields: array of RawUTF8): boolean;
 var
-  F: TSQLFieldBits;
+  F: TFieldBits;
 begin
   if RecordProps.FieldBitsFromRawUTF8(aFields, F) then
     // must always call the virtual Filter() method
@@ -17904,7 +17935,7 @@ begin
     result := false;
 end;
 
-class function TSQLRecord.SQLTableName: RawUTF8;
+class function TORM.SQLTableName: RawUTF8;
 begin
   if self = nil then
     result := ''
@@ -17912,7 +17943,7 @@ begin
     result := RecordProps.SQLTableName;
 end;
 
-class function TSQLRecord.AutoFree(varClassPairs: array of pointer): IAutoFree;
+class function TORM.AutoFree(varClassPairs: array of pointer): IAutoFree;
 var
   n, i: PtrInt;
 begin
@@ -17922,23 +17953,23 @@ begin
   n := n shr 1;
   if n = 0 then
     exit;
-  for i := 0 to n - 1 do // convert TSQLRecordClass into TSQLRecord instances
-    varClassPairs[i * 2 + 1] := TSQLRecordClass(varClassPairs[i * 2 + 1]).Create;
+  for i := 0 to n - 1 do // convert TORMClass into TORM instances
+    varClassPairs[i * 2 + 1] := TORMClass(varClassPairs[i * 2 + 1]).Create;
   result := TAutoFree.Create(varClassPairs);
 end;
 
-class function TSQLRecord.AutoFree(var localVariable): IAutoFree;
+class function TORM.AutoFree(var localVariable): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable, Create);
 end;
 
-class function TSQLRecord.AutoFree(var localVariable; const Rest: IRestORM;
+class function TORM.AutoFree(var localVariable; const Rest: IRestORM;
   ID: TID): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable, Create(Rest, ID));
 end;
 
-class function TSQLRecord.AutoFree(var localVariable; const Rest: IRestORM;
+class function TORM.AutoFree(var localVariable; const Rest: IRestORM;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): IAutoFree;
 begin
@@ -17946,7 +17977,7 @@ begin
     Rest, FormatSQLWhere, BoundsSQLWhere, aCustomFieldsCSV));
 end;
 
-class function TSQLRecord.AutoFree(var localVariable; const Rest: IRestORM;
+class function TORM.AutoFree(var localVariable; const Rest: IRestORM;
   const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): IAutoFree;
 begin
@@ -17954,13 +17985,13 @@ begin
     Rest, FormatSQLWhere, ParamsSQLWhere, BoundsSQLWhere, aCustomFieldsCSV));
 end;
 
-class procedure TSQLRecord.AddFilterOrValidate(const aFieldName: RawUTF8;
+class procedure TORM.AddFilterOrValidate(const aFieldName: RawUTF8;
   aFilter: TSynFilterOrValidate);
 begin
   RecordProps.AddFilterOrValidate(aFieldName, aFilter);
 end;
 
-class procedure TSQLRecord.AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
+class procedure TORM.AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
 var
   i, f: PtrInt;
 begin
@@ -17973,7 +18004,7 @@ begin
     end;
 end;
 
-class procedure TSQLRecord.AddFilterNotVoidAllTextFields;
+class procedure TORM.AddFilterNotVoidAllTextFields;
 var
   f: PtrInt;
 begin
@@ -17986,7 +18017,7 @@ begin
       end;
 end;
 
-function TSQLRecord.Validate(const aRest: IRestORM; const aFields: TSQLFieldBits;
+function TORM.Validate(const aRest: IRestORM; const aFields: TFieldBits;
   aInvalidFieldIndex: PInteger; aValidator: PSynValidate): string;
 var
   f, i: PtrInt;
@@ -18035,10 +18066,10 @@ begin
         end;
 end;
 
-function TSQLRecord.Validate(const aRest: IRestORM; const aFields: array of RawUTF8;
+function TORM.Validate(const aRest: IRestORM; const aFields: array of RawUTF8;
   aInvalidFieldIndex: PInteger; aValidator: PSynValidate): string;
 var
-  F: TSQLFieldBits;
+  F: TFieldBits;
 begin
   if RecordProps.FieldBitsFromRawUTF8(aFields, F) then
     // must always call the virtual Validate() method
@@ -18047,8 +18078,8 @@ begin
     result := '';
 end;
 
-function TSQLRecord.FilterAndValidate(const aRest: IRestORM;
-  out aErrorMessage: string; const aFields: TSQLFieldBits;
+function TORM.FilterAndValidate(const aRest: IRestORM;
+  out aErrorMessage: string; const aFields: TFieldBits;
   aValidator: PSynValidate): boolean;
 var
   invalidField: Integer;
@@ -18066,8 +18097,8 @@ begin
   end;
 end;
 
-function TSQLRecord.FilterAndValidate(const aRest: IRestORM;
-  const aFields: TSQLFieldBits; aValidator: PSynValidate): RawUTF8;
+function TORM.FilterAndValidate(const aRest: IRestORM;
+  const aFields: TFieldBits; aValidator: PSynValidate): RawUTF8;
 var
   msg: string;
 begin
@@ -18077,7 +18108,7 @@ begin
     StringToUTF8(msg, result);
 end;
 
-function TSQLRecord.DynArray(const DynArrayFieldName: RawUTF8): TDynArray;
+function TORM.DynArray(const DynArrayFieldName: RawUTF8): TDynArray;
 var
   F: PtrInt;
 begin
@@ -18092,7 +18123,7 @@ begin
   result.Void;
 end;
 
-function TSQLRecord.DynArray(DynArrayFieldIndex: integer): TDynArray;
+function TORM.DynArray(DynArrayFieldIndex: integer): TDynArray;
 var
   F: PtrInt;
 begin
@@ -18108,13 +18139,13 @@ begin
   result.Void;
 end;
 
-procedure TSQLRecord.ComputeFieldsBeforeWrite(const aRest: IRestORM;
-  aOccasion: TSQLEvent);
+procedure TORM.ComputeFieldsBeforeWrite(const aRest: IRestORM;
+  aOccasion: TORMEvent);
 var
   F: PtrInt;
-  types: TSQLFieldTypes;
+  types: TORMFieldTypes;
   i64: Int64;
-  p: TSQLPropInfo;
+  p: TORMPropInfo;
 begin
   if (self <> nil) and (aRest <> nil) then
     with RecordProps do
@@ -18122,7 +18153,7 @@ begin
       integer(types) := 0;
       if sftModTime in HasTypeFields then
         include(types, sftModTime);
-      if (sftCreateTime in HasTypeFields) and (aOccasion = seAdd) then
+      if (sftCreateTime in HasTypeFields) and (aOccasion = oeAdd) then
         include(types, sftCreateTime);
       if integer(types) <> 0 then
       begin
@@ -18131,7 +18162,7 @@ begin
         begin
           p := Fields.List[F];
           if p.SQLFieldType in types then
-            TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
+            TORMPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
         end;
       end;
       if sftSessionUserID in HasTypeFields then
@@ -18142,7 +18173,7 @@ begin
           begin
             p := Fields.List[F];
             if p.SQLFieldType = sftSessionUserID then
-              TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
+              TORMPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
           end;
       end;
     end;
@@ -18165,12 +18196,12 @@ end;
 
 function TRestORMGenerics.RetrieveList<T>(const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
-var table: TSQLTable;
+var table: TORMTable;
 begin
   result := nil;
   if self = nil then
     exit;
-  table := MultiFieldValues(TSQLRecordClass(T), aCustomFieldsCSV,
+  table := MultiFieldValues(TORMClass(T), aCustomFieldsCSV,
     FormatSQLWhere, BoundsSQLWhere);
   if table <> nil then
   try
@@ -18183,11 +18214,11 @@ end;
 {$endif ISDELPHI2010}
 
 
-{ ------------ TSQLRecordMany Definition }
+{ ------------ TORMMany Definition }
 
-{ TSQLRecordMany }
+{ TORMMany }
 
-constructor TSQLRecordMany.Create;
+constructor TORMMany.Create;
 begin
   inherited Create;
   with RecordProps do
@@ -18198,7 +18229,7 @@ begin
     end;
 end;
 
-function TSQLRecordMany.ManyAdd(const aClient: IRestORM; aSourceID, aDestID: TID;
+function TORMMany.ManyAdd(const aClient: IRestORM; aSourceID, aDestID: TID;
   NoDuplicates: boolean; aUseBatch: TRestBatch): boolean;
 begin
   result := false;
@@ -18216,7 +18247,7 @@ begin
     result := aClient.Add(self, true) <> 0;
 end;
 
-function TSQLRecordMany.ManyAdd(const aClient: IRestORM; aDestID: TID;
+function TORMMany.ManyAdd(const aClient: IRestORM; aDestID: TID;
   NoDuplicates: boolean): boolean;
 begin
   if (self = nil) or (fSourceID = nil) then
@@ -18225,7 +18256,7 @@ begin
     result := ManyAdd(aClient, fSourceID^, aDestID, NoDuplicates);
 end;
 
-function TSQLRecordMany.DestGet(const aClient: IRestORM; aSourceID: TID;
+function TORMMany.DestGet(const aClient: IRestORM; aSourceID: TID;
   out DestIDs: TIDDynArray): boolean;
 var
   Where: RawUTF8;
@@ -18238,10 +18269,10 @@ begin
       TInt64DynArray(DestIDs));
 end;
 
-function TSQLRecordMany.DestGetJoined(const aClient: IRestORM;
+function TORMMany.DestGetJoined(const aClient: IRestORM;
   const aDestWhereSQL: RawUTF8; aSourceID: TID; out DestIDs: TIDDynArray): boolean;
 var
-  aTable: TSQLTable;
+  aTable: TORMTable;
 begin
   aTable := DestGetJoinedTable(aClient, aDestWhereSQL, aSourceID, jkDestID);
   if aTable = nil then
@@ -18255,30 +18286,30 @@ begin
   end;
 end;
 
-function TSQLRecordMany.DestGetJoined(const aClient: IRestORM;
-  const aDestWhereSQL: RawUTF8; aSourceID: TID): TSQLRecord;
+function TORMMany.DestGetJoined(const aClient: IRestORM;
+  const aDestWhereSQL: RawUTF8; aSourceID: TID): TORM;
 var
-  aTable: TSQLTable;
+  aTable: TORMTable;
 begin
   aTable := DestGetJoinedTable(aClient, aDestWhereSQL, aSourceID, jkDestFields);
   if aTable = nil then
     result := nil
   else
   begin
-    result := TSQLRecordClass(RecordProps.fRecordManyDestProp.ObjectClass).Create;
+    result := TORMClass(RecordProps.fRecordManyDestProp.ObjectClass).Create;
     aTable.OwnerMustFree := true;
     result.FillPrepare(aTable, ctnTrimExisting);
   end;
 end;
 
-function TSQLRecordMany.DestGetJoinedTable(const aClient: IRestORM;
-  const aDestWhereSQL: RawUTF8; aSourceID: TID; JoinKind: TSQLRecordManyJoinKind;
-  const aCustomFieldsCSV: RawUTF8): TSQLTable;
+function TORMMany.DestGetJoinedTable(const aClient: IRestORM;
+  const aDestWhereSQL: RawUTF8; aSourceID: TID; JoinKind: TORMManyJoinKind;
+  const aCustomFieldsCSV: RawUTF8): TORMTable;
 var
   Select, SQL: RawUTF8;
-  SelfProps, DestProps: TSQLModelRecordProperties;
+  SelfProps, DestProps: TORMModelRecordProperties;
 
-  procedure SelectFields(const Classes: array of TSQLModelRecordProperties);
+  procedure SelectFields(const Classes: array of TORMModelRecordProperties);
   var
     i: PtrInt;
   begin
@@ -18303,7 +18334,7 @@ begin
   begin
     SelfProps := Props[PSQLRecordClass(self)^];
     DestProps := Props[
-      TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)];
+      TORMClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)];
   end;
   case JoinKind of
     jkDestID:
@@ -18338,23 +18369,23 @@ begin
     // statement is not globaly inlined -> no caching of prepared statement
     SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
   result := aClient.ExecuteList([PSQLRecordClass(self)^,
-    TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
+    TORMClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
     FormatUTF8(SQL, [{%H-}Select, DestProps.Props.SQLTableName, SelfProps.Props.SQLTableName,
     SelfProps.Props.SQLTableName, aSourceID, SelfProps.Props.SQLTableName,
     DestProps.Props.SQLTableName, aDestWhereSQL]));
 end;
 
-function TSQLRecordMany.DestGet(const aClient: IRestORM;
+function TORMMany.DestGet(const aClient: IRestORM;
   out DestIDs: TIDDynArray): boolean;
 begin
   if fSourceID = nil then
     result := false
   else // avoid GPF
     result := DestGet(aClient, fSourceID^, DestIDs);
-   // fSourceID has been set by TSQLRecord.Create
+   // fSourceID has been set by TORM.Create
 end;
 
-function TSQLRecordMany.ManyDelete(const aClient: IRestORM;
+function TORMMany.ManyDelete(const aClient: IRestORM;
   aSourceID, aDestID: TID; aUseBatch: TRestBatch): boolean;
 var
   aID: TID;
@@ -18370,7 +18401,7 @@ begin
       result := aClient.Delete(RecordClass, aID);
 end;
 
-function TSQLRecordMany.ManyDelete(const aClient: IRestORM; aDestID: TID): boolean;
+function TORMMany.ManyDelete(const aClient: IRestORM; aDestID: TID): boolean;
 begin
   if fSourceID = nil then
     result := false
@@ -18378,7 +18409,7 @@ begin
     result := ManyDelete(aClient, fSourceID^, aDestID, nil);
 end;
 
-function TSQLRecordMany.ManySelect(const aClient: IRestORM;
+function TORMMany.ManySelect(const aClient: IRestORM;
   aSourceID, aDestID: TID): boolean;
 begin
   if (self = nil) or (aClient = nil) or (aSourceID = 0) or (aDestID = 0) then
@@ -18388,7 +18419,7 @@ begin
       [aSourceID, aDestID]), self);
 end;
 
-function TSQLRecordMany.ManySelect(const aClient: IRestORM; aDestID: TID): boolean;
+function TORMMany.ManySelect(const aClient: IRestORM; aDestID: TID): boolean;
 begin
   if (self = nil) or (fSourceID = nil) then
     result := false
@@ -18396,10 +18427,10 @@ begin
     result := ManySelect(aClient, fSourceID^, aDestID);
 end;
 
-function TSQLRecordMany.InternalFillMany(const aClient: IRestORM; aID: TID;
+function TORMMany.InternalFillMany(const aClient: IRestORM; aID: TID;
   const aAndWhereSQL: RawUTF8; isDest: boolean): integer;
 var
-  aTable: TSQLTable;
+  aTable: TORMTable;
   Where: RawUTF8;
 begin
   result := 0;
@@ -18407,7 +18438,7 @@ begin
     exit;
   if not isDest and (aID = 0) then
     if fSourceID <> nil then
-      aID := fSourceID^; // has been set by TSQLRecord.Create
+      aID := fSourceID^; // has been set by TORM.Create
   Where := IDWhereSQL(aClient, aID, isDest, aAndWhereSQL);
   if Where = '' then
     exit;
@@ -18419,19 +18450,19 @@ begin
   result := aTable.fRowCount;
 end;
 
-function TSQLRecordMany.FillMany(const aClient: IRestORM; aSourceID: TID;
+function TORMMany.FillMany(const aClient: IRestORM; aSourceID: TID;
   const aAndWhereSQL: RawUTF8): integer;
 begin
   result := InternalFillMany(aClient, aSourceID, aAndWhereSQL, false);
 end;
 
-function TSQLRecordMany.FillManyFromDest(const aClient: IRestORM; aDestID: TID;
+function TORMMany.FillManyFromDest(const aClient: IRestORM; aDestID: TID;
   const aAndWhereSQL: RawUTF8): integer;
 begin
   result := InternalFillMany(aClient, aDestID, aAndWhereSQL, true);
 end;
 
-function TSQLRecordMany.IDWhereSQL(const aClient: IRestORM; aID: TID;
+function TORMMany.IDWhereSQL(const aClient: IRestORM; aID: TID;
   isDest: boolean; const aAndWhereSQL: RawUTF8): RawUTF8;
 const
   FieldName: array[boolean] of RawUTF8 = ('Source=', 'Dest=');
@@ -18452,7 +18483,7 @@ begin
   end;
 end;
 
-function TSQLRecordMany.SourceGet(const aClient: IRestORM; aDestID: TID;
+function TORMMany.SourceGet(const aClient: IRestORM; aDestID: TID;
   out SourceIDs: TIDDynArray): boolean;
 var
   Where: RawUTF8;
@@ -18465,7 +18496,7 @@ begin
       TInt64DynArray(SourceIDs));
 end;
 
-function TSQLRecordMany.InternalIDFromSourceDest(const aClient: IRestORM;
+function TORMMany.InternalIDFromSourceDest(const aClient: IRestORM;
   aSourceID, aDestID: TID): TID;
 begin
   SetID(aClient.OneFieldValue(RecordClass, 'RowID', FormatUTF8(
@@ -18473,11 +18504,11 @@ begin
 end;
 
 
-{ ------------ Virtual TSQLRecord Definitions }
+{ ------------ Virtual TORM Definitions }
 
-{ TSQLRecordFTS3 }
+{ TORMFTS3 }
 
-class function TSQLRecordFTS3.OptimizeFTS3Index(const Server: IRestORMServer): boolean;
+class function TORMFTS3.OptimizeFTS3Index(const Server: IRestORMServer): boolean;
 begin
   if (self = nil) or (Server = nil) then
     result := false
@@ -18488,13 +18519,13 @@ begin
 end;
 
 
-{ TSQLRecordFTS4 }
+{ TORMFTS4 }
 
-class procedure TSQLRecordFTS4.InitializeTable(const Server: IRestORMServer;
-  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+class procedure TORMFTS4.InitializeTable(const Server: IRestORMServer;
+  const FieldName: RawUTF8; Options: TORMInitializeTableOptions);
 var
-  m: TSQLModel;
-  p: TSQLModelRecordProperties;
+  m: TORMModel;
+  p: TORMModelRecordProperties;
   main, fts, ftsfields: RawUTF8;
 begin
   inherited;
@@ -18546,25 +18577,25 @@ begin
 end;
 
 
-{ TSQLRecordRTreeAbstract }
+{ TORMRTreeAbstract }
 
-class function TSQLRecordRTreeAbstract.RTreeSQLFunctionName: RawUTF8;
+class function TORMRTreeAbstract.RTreeSQLFunctionName: RawUTF8;
 begin
   result := RecordProps.SQLTableName + '_in';
 end;
 
-{ TSQLRecordRTree }
+{ TORMRTree }
 
-class procedure TSQLRecordRTree.BlobToCoord(const InBlob;
-  var OutCoord: TSQLRecordTreeCoords);
+class procedure TORMRTree.BlobToCoord(const InBlob;
+  var OutCoord: TORMTreeCoords);
 begin // direct memory copy with no memory check
   MoveFast(InBlob, OutCoord,
     (RecordProps.RTreeCoordBoundaryFields shr 1) * SizeOf(double));
 end;
 
-class function TSQLRecordRTree.ContainedIn(const BlobA, BlobB): boolean;
+class function TORMRTree.ContainedIn(const BlobA, BlobB): boolean;
 var
-  A, B: TSQLRecordTreeCoords;
+  A, B: TORMTreeCoords;
   i: PtrInt;
 begin
   BlobToCoord(BlobA, A);
@@ -18576,18 +18607,18 @@ begin
   result := true; // box match
 end;
 
-{ TSQLRecordRTreeInteger }
+{ TORMRTreeInteger }
 
-class procedure TSQLRecordRTreeInteger.BlobToCoord(const InBlob;
-  var OutCoord: TSQLRecordTreeCoordsInteger);
+class procedure TORMRTreeInteger.BlobToCoord(const InBlob;
+  var OutCoord: TORMTreeCoordsInteger);
 begin // direct memory copy with no memory check
   MoveFast(InBlob, OutCoord,
     (RecordProps.RTreeCoordBoundaryFields shr 1) * SizeOf(integer));
 end;
 
-class function TSQLRecordRTreeInteger.ContainedIn(const BlobA, BlobB): boolean;
+class function TORMRTreeInteger.ContainedIn(const BlobA, BlobB): boolean;
 var
-  A, B: TSQLRecordTreeCoordsInteger;
+  A, B: TORMTreeCoordsInteger;
   i: PtrInt;
 begin
   BlobToCoord(BlobA, A);
@@ -18600,12 +18631,12 @@ begin
 end;
 
 
-{ ------------ TSQLRecordProperties Definitions }
+{ ------------ TORMProperties Definitions }
 
-{ TSQLRecordProperties }
+{ TORMProperties }
 
-procedure TSQLRecordProperties.InternalRegisterModel(aModel: TSQLModel;
-  aTableIndex: integer; aProperties: TSQLModelRecordProperties);
+procedure TORMProperties.InternalRegisterModel(aModel: TORMModel;
+  aTableIndex: integer; aProperties: TORMModelRecordProperties);
 var
   i: PtrInt;
 begin
@@ -18632,33 +18663,33 @@ end;
 const // the most ambigous keywords - others may be used as column names
   SQLITE3_KEYWORDS = ' from where group in as ';
 
-constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
+constructor TORMProperties.Create(aTable: TORMClass);
 var
   i, j, nProps: PtrInt;
   nMany, nSQLRecord, nSimple, nDynArray, nBlob, nBlobCustom, nCopiableFields: integer;
-  isTSQLRecordMany: boolean;
-  F: TSQLPropInfo;
+  isTORMMany: boolean;
+  F: TORMPropInfo;
 label
   Simple, Small, Copiabl;
 begin
   InitializeCriticalSection(fLock);
   if aTable = nil then
-    raise EModelException.Create('TSQLRecordProperties.Create(nil)');
-  // register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
-  // (should have been done before in TSQLModel.Create/AddTable)
+    raise EModelException.Create('TORMProperties.Create(nil)');
+  // register for JSONToObject() and for TORMPropInfoRTTITID.Create()
+  // (should have been done before in TORMModel.Create/AddTable)
   fTableRtti := rtti.RegisterClass(aTable) as TRttiJson;
   // initialize internal structures
   fModelMax := -1;
   fTable := aTable;
   fSQLTableName := GetDisplayNameFromClass(aTable);
   fSQLTableNameUpperWithDot := UpperCase(SQLTableName) + '.';
-  isTSQLRecordMany := aTable.InheritsFrom(TSQLRecordMany);
+  isTORMMany := aTable.InheritsFrom(TORMMany);
   // add properties to internal Fields list
   nProps := ClassFieldCountWithParents(aTable);
   if nProps > MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8('% has too many fields: %>=%',
       [Table, nProps, MAX_SQLFIELDS]);
-  fFields := TSQLPropInfoList.Create(aTable, [pilRaiseEORMExceptionIfNotHandled]);
+  fFields := TORMPropInfoList.Create(aTable, [pilRaiseEORMExceptionIfNotHandled]);
   aTable.InternalRegisterCustomProperties(self);
   if Fields.Count > MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8(
@@ -18688,7 +18719,7 @@ begin
     F := Fields.List[i];
     // check field name
     if IsRowID(pointer(F.Name)) then
-      raise EModelException.CreateUTF8('ID is already defined in TSQLRecord: ' +
+      raise EModelException.CreateUTF8('ID is already defined in TORM: ' +
         '%.% field name is not allowed as published property', [Table, F.Name]);
     if PosEx(' ' + LowerCase(F.Name) + ' ', SQLITE3_KEYWORDS) > 0 then
       raise EModelException.CreateUTF8(
@@ -18719,38 +18750,38 @@ begin
         end;
       sftBlob:
         begin
-          BlobFields[nBlob] := F as TSQLPropInfoRTTI;
+          BlobFields[nBlob] := F as TORMPropInfoRTTI;
           inc(nBlob);
           fSQLTableUpdateBlobFields := fSQLTableUpdateBlobFields + F.Name + '=?,';
           fSQLTableRetrieveBlobFields := fSQLTableRetrieveBlobFields + F.Name + ',';
           fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields + ',' + F.Name;
           goto Copiabl;
         end;
-      sftID: // = TSQLRecord(aID)
-        if isTSQLRecordMany and (IdemPropNameU(F.Name, 'Source') or
+      sftID: // = TORM(aID)
+        if isTORMMany and (IdemPropNameU(F.Name, 'Source') or
           IdemPropNameU(F.Name, 'Dest')) then
           goto Small
         else
         begin
-          JoinedFields[nSQLRecord] := F as TSQLPropInfoRTTIID;
+          JoinedFields[nSQLRecord] := F as TORMPropInfoRTTIID;
           inc(nSQLRecord);
           goto Small;
         end;
       sftMany:
         begin
-          ManyFields[nMany] := F as TSQLPropInfoRTTIMany;
+          ManyFields[nMany] := F as TORMPropInfoRTTIMany;
           inc(nMany);
         end;
       sftBlobDynArray:
-        with F as TSQLPropInfoRTTIDynArray do
+        with F as TORMPropInfoRTTIDynArray do
         begin
           if DynArrayIndex > 0 then
             for j := 0 to nDynArray - 1 do
               if DynArrayFields[j].DynArrayIndex = DynArrayIndex then
                 raise EModelException.CreateUTF8('dup index % for %.% and %.% properties',
                   [DynArrayIndex, Table, Name, Table, DynArrayFields[j].Name]);
-          DynArrayFields[nDynArray] := TSQLPropInfoRTTIDynArray(F);
-          if TSQLPropInfoRTTIDynArray(F).ObjArray <> nil then
+          DynArrayFields[nDynArray] := TORMPropInfoRTTIDynArray(F);
+          if TORMPropInfoRTTIDynArray(F).ObjArray <> nil then
             fDynArrayFieldsHasObjArray := true;
           inc(nDynArray);
           goto Simple;
@@ -18777,7 +18808,7 @@ begin
           if fRecordVersionField <> nil then
             raise EModelException.CreateUTF8('%: only a single TRecordVersion ' +
               'field is allowed per class', [Table]);
-          fRecordVersionField := F as TSQLPropInfoRTTIRecordVersion;
+          fRecordVersionField := F as TORMPropInfoRTTIRecordVersion;
           fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields + ',' + F.Name;
           goto Copiabl;
         end; // TRecordVersion is a copiable but not a simple field!
@@ -18789,7 +18820,7 @@ Small:  include(SmallFieldsBits, i);
         // this code follows NOT_SIMPLE_FIELDS/COPIABLE_FIELDS constants
 Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
-        include(SimpleFieldsBits[soSelect], i);
+        include(SimpleFieldsBits[ooSelect], i);
         fSQLTableSimpleFieldsNoRowID := fSQLTableSimpleFieldsNoRowID + F.Name + ',';
         fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields + ',' + F.Name;
 Copiabl:include(CopiableFieldsBits, i);
@@ -18812,41 +18843,41 @@ Copiabl:include(CopiableFieldsBits, i);
     SetLength(fJoinedFieldsTable, nSQLRecord + 1);
     fJoinedFieldsTable[0] := aTable;
     for i := 0 to nSQLRecord - 1 do
-      fJoinedFieldsTable[i + 1] := TSQLRecordClass(JoinedFields[i].ObjectClass);
+      fJoinedFieldsTable[i + 1] := TORMClass(JoinedFields[i].ObjectClass);
   end;
   SetLength(fCopiableFields, nCopiableFields);
   SetLength(fDynArrayFields, nDynArray);
   SetLength(fBlobCustomFields, nBlobCustom);
   SetLength(fBlobFields, nBlob);
-  SimpleFieldsBits[soInsert] := SimpleFieldsBits[soSelect];
-  SimpleFieldsBits[soUpdate] := SimpleFieldsBits[soSelect];
-  SimpleFieldsBits[soDelete] := SimpleFieldsBits[soSelect];
-  SimpleFieldsCount[soInsert] := nSimple;
-  SimpleFieldsCount[soUpdate] := nSimple;
-  SimpleFieldsCount[soDelete] := nSimple;
+  SimpleFieldsBits[ooInsert] := SimpleFieldsBits[ooSelect];
+  SimpleFieldsBits[ooUpdate] := SimpleFieldsBits[ooSelect];
+  SimpleFieldsBits[ooDelete] := SimpleFieldsBits[ooSelect];
+  SimpleFieldsCount[ooInsert] := nSimple;
+  SimpleFieldsCount[ooUpdate] := nSimple;
+  SimpleFieldsCount[ooDelete] := nSimple;
   fHasNotSimpleFields := nSimple <> Fields.Count;
   for i := 0 to Fields.Count - 1 do
     if Fields.List[i].SQLFieldType = sftCreateTime then
     begin
-      exclude(SimpleFieldsBits[soUpdate], i);
-      dec(SimpleFieldsCount[soUpdate]);
+      exclude(SimpleFieldsBits[ooUpdate], i);
+      dec(SimpleFieldsCount[ooUpdate]);
     end;
-  if SmallFieldsBits <> SimpleFieldsBits[soSelect] - FieldBits[sftVariant] -
+  if SmallFieldsBits <> SimpleFieldsBits[ooSelect] - FieldBits[sftVariant] -
     FieldBits[sftBlobDynArray] - FieldBits[sftBlobCustom] - FieldBits[sftUTF8Custom] then
-    raise EModelException.CreateUTF8('TSQLRecordProperties.Create(%) Bits?', [Table]);
-  if isTSQLRecordMany then
+    raise EModelException.CreateUTF8('TORMProperties.Create(%) Bits?', [Table]);
+  if isTORMMany then
   begin
-    fRecordManySourceProp := Fields.ByRawUTF8Name('Source') as TSQLPropInfoRTTIInstance;
+    fRecordManySourceProp := Fields.ByRawUTF8Name('Source') as TORMPropInfoRTTIInstance;
     if fRecordManySourceProp = nil then
       raise EModelException.CreateUTF8('% expects a SOURCE field', [Table])
     else
-      fRecordManyDestProp := Fields.ByRawUTF8Name('Dest') as TSQLPropInfoRTTIInstance;
+      fRecordManyDestProp := Fields.ByRawUTF8Name('Dest') as TORMPropInfoRTTIInstance;
     if fRecordManyDestProp = nil then
       raise EModelException.CreateUTF8('% expects a DEST field', [Table]);
   end;
 end;
 
-function TSQLRecordProperties.BlobFieldPropFromRawUTF8(const PropName: RawUTF8): PRttiProp;
+function TORMProperties.BlobFieldPropFromRawUTF8(const PropName: RawUTF8): PRttiProp;
 var
   i: integer;
 begin
@@ -18860,7 +18891,7 @@ begin
   result := nil;
 end;
 
-function TSQLRecordProperties.BlobFieldPropFromUTF8(PropName: PUTF8Char;
+function TORMProperties.BlobFieldPropFromUTF8(PropName: PUTF8Char;
   PropNameLen: integer): PRttiProp;
 var
   i: integer;
@@ -18875,17 +18906,17 @@ begin
   result := nil;
 end;
 
-function TSQLRecordProperties.SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
+function TORMProperties.SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
 const
   /// simple wrapper from each SQL used type into SQLite3 field datatype
   // - set to '' for fields with no column created in the database
-  DEFAULT_SQLFIELDTYPETOSQL: array[TSQLFieldType] of RawUTF8 = ('',                              // sftUnknown
+  DEFAULT_SQLFIELDTYPETOSQL: array[TORMFieldType] of RawUTF8 = ('',                              // sftUnknown
     ' TEXT COLLATE NOCASE, ',        // sftAnsiText
     ' TEXT COLLATE SYSTEMNOCASE, ',  // sftUTF8Text
     ' INTEGER, ',                    // sftEnumerate
     ' INTEGER, ',                    // sftSet
     ' INTEGER, ',                    // sftInteger
-    ' INTEGER, ',                    // sftID = TSQLRecord(aID)
+    ' INTEGER, ',                    // sftID = TORM(aID)
     ' INTEGER, ',                    // sftRecord = TRecordReference
     ' INTEGER, ',                    // sftBoolean
     ' FLOAT, ',                      // sftFloat
@@ -18918,7 +18949,7 @@ begin
     result := DEFAULT_SQLFIELDTYPETOSQL[Fields.List[FieldIndex].SQLFieldTypeStored];
 end;
 
-function TSQLRecordProperties.SetCustomCollation(FieldIndex: integer;
+function TORMProperties.SetCustomCollation(FieldIndex: integer;
   const aCollationName: RawUTF8): boolean;
 begin
   result := (self <> nil) and (cardinal(FieldIndex) < cardinal(Fields.Count));
@@ -18935,13 +18966,13 @@ begin
   end;
 end;
 
-function TSQLRecordProperties.SetCustomCollation(const aFieldName,
+function TORMProperties.SetCustomCollation(const aFieldName,
   aCollationName: RawUTF8): boolean;
 begin
   result := SetCustomCollation(Fields.IndexByNameOrExcept(aFieldName), aCollationName);
 end;
 
-procedure TSQLRecordProperties.SetCustomCollationForAll(aFieldType: TSQLFieldType;
+procedure TORMProperties.SetCustomCollationForAll(aFieldType: TORMFieldType;
   const aCollationName: RawUTF8);
 var
   i: PtrInt;
@@ -18952,7 +18983,7 @@ begin
         SetCustomCollation(i, aCollationName);
 end;
 
-procedure TSQLRecordProperties.SetMaxLengthValidatorForTextFields(
+procedure TORMProperties.SetMaxLengthValidatorForTextFields(
   IndexIsUTF8Length: boolean);
 var
   i: PtrInt;
@@ -18965,7 +18996,7 @@ begin
             [FieldWidth, IndexIsUTF8Length], []));
 end;
 
-procedure TSQLRecordProperties.SetMaxLengthFilterForTextFields(
+procedure TORMProperties.SetMaxLengthFilterForTextFields(
   IndexIsUTF8Length: boolean);
 var
   i: PtrInt;
@@ -18978,7 +19009,7 @@ begin
             [FieldWidth, IndexIsUTF8Length], []));
 end;
 
-procedure TSQLRecordProperties.SetVariantFieldsDocVariantOptions(
+procedure TORMProperties.SetVariantFieldsDocVariantOptions(
   const Options: TDocVariantOptions);
 var
   i: PtrInt;
@@ -18986,11 +19017,11 @@ begin
   if self <> nil then
     for i := 0 to Fields.Count - 1 do
       if (Fields.List[i].SQLFieldType = sftVariant) and
-         Fields.List[i].InheritsFrom(TSQLPropInfoRTTIVariant) then
-        TSQLPropInfoRTTIVariant(Fields.List[i]).DocVariantOptions := Options;
+         Fields.List[i].InheritsFrom(TORMPropInfoRTTIVariant) then
+        TORMPropInfoRTTIVariant(Fields.List[i]).DocVariantOptions := Options;
 end;
 
-function TSQLRecordProperties.SQLAddField(FieldIndex: integer): RawUTF8;
+function TORMProperties.SQLAddField(FieldIndex: integer): RawUTF8;
 begin
   result := SQLFieldTypeToSQL(FieldIndex);
   if result = '' then
@@ -19002,7 +19033,7 @@ begin
   result[length(result) - 1] := ';' // SQLFieldTypeToSQL[] ends with ','
 end;
 
-procedure TSQLRecordProperties.SetJSONWriterColumnNames(W: TJSONSerializer;
+procedure TORMProperties.SetJSONWriterColumnNames(W: TJSONSerializer;
   KnownRowsCount: integer);
 var
   i, n, nf: PtrInt;
@@ -19026,16 +19057,16 @@ begin
   W.AddColumns(KnownRowsCount);
 end;
 
-function TSQLRecordProperties.CreateJSONWriter(JSON: TStream;
-  Expand, withID: boolean; const aFields: TSQLFieldBits;
+function TORMProperties.CreateJSONWriter(JSON: TStream;
+  Expand, withID: boolean; const aFields: TFieldBits;
   KnownRowsCount, aBufSize: integer): TJSONSerializer;
 begin
   result := CreateJSONWriter(JSON, Expand, withID,
     FieldBitsToIndex(aFields, Fields.Count), KnownRowsCount, aBufSize);
 end;
 
-function TSQLRecordProperties.CreateJSONWriter(JSON: TStream;
-  Expand, withID: boolean; const aFields: TSQLFieldIndexDynArray;
+function TORMProperties.CreateJSONWriter(JSON: TStream;
+  Expand, withID: boolean; const aFields: TFieldIndexDynArray;
   KnownRowsCount, aBufSize: integer): TJSONSerializer;
 begin
   if (self = nil) or ((Fields.Count = 0) and not withID) then  // no data
@@ -19047,17 +19078,17 @@ begin
   end;
 end;
 
-function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand: boolean;
+function TORMProperties.CreateJSONWriter(JSON: TStream; Expand: boolean;
   const aFieldsCSV: RawUTF8; KnownRowsCount, aBufSize: integer): TJSONSerializer;
 var
   withID: boolean;
-  bits: TSQLFieldBits;
+  bits: TFieldBits;
 begin
   FieldBitsFromCSV(aFieldsCSV, bits, withID);
   result := CreateJSONWriter(JSON, Expand, withID, bits, KnownRowsCount, aBufSize);
 end;
 
-function TSQLRecordProperties.SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
+function TORMProperties.SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
   var EndOfObject: AnsiChar; ExtendedJSON: boolean): RawUTF8;
 var
   i: PtrInt;
@@ -19114,7 +19145,7 @@ begin
           (P^ = #0);
 end;
 
-procedure TSQLRecordProperties.SaveBinaryHeader(W: TBufferWriter);
+procedure TORMProperties.SaveBinaryHeader(W: TBufferWriter);
 var
   i: PtrInt;
   FieldNames: TRawUTF8DynArray;
@@ -19125,20 +19156,20 @@ begin
     FieldNames[i] := Fields.List[i].Name;
   W.WriteRawUTF8DynArray(FieldNames, Fields.Count);
   for i := 0 to Fields.Count - 1 do
-    W.Write(@Fields.List[i].fSQLFieldType, SizeOf(TSQLFieldType));
+    W.Write(@Fields.List[i].fSQLFieldType, SizeOf(TORMFieldType));
 end;
 
-function TSQLRecordProperties.CheckBinaryHeader(var R: TFastReader): boolean;
+function TORMProperties.CheckBinaryHeader(var R: TFastReader): boolean;
 var
   n, i: integer;
   FieldNames: TRawUTF8DynArray;
-  FieldTypes: array[0..MAX_SQLFIELDS - 1] of TSQLFieldType;
+  FieldTypes: array[0..MAX_SQLFIELDS - 1] of TORMFieldType;
 begin
   result := false;
   if (R.VarUTF8 <> SQLTableName) or
      (R.ReadVarRawUTF8DynArray(FieldNames) <> Fields.Count) then
     exit;
-  n := SizeOf(TSQLFieldType) * Fields.Count;
+  n := SizeOf(TORMFieldType) * Fields.Count;
   if not R.CopySafe(@FieldTypes, n) then
     exit;
   for i := 0 to Fields.Count - 1 do
@@ -19148,13 +19179,13 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.IsFieldName(const PropName: RawUTF8): boolean;
+function TORMProperties.IsFieldName(const PropName: RawUTF8): boolean;
 begin
   result := (PropName <> '') and (isRowID(pointer(PropName)) or
     (Fields.IndexByName(PropName) >= 0));
 end;
 
-function TSQLRecordProperties.IsFieldNameOrFunction(const PropName: RawUTF8): boolean;
+function TORMProperties.IsFieldNameOrFunction(const PropName: RawUTF8): boolean;
 var
   L: integer;
 begin
@@ -19175,7 +19206,7 @@ begin
     result := IsFieldName(PropName);
 end;
 
-function TSQLRecordProperties.AddFilterOrValidate(aFieldIndex: integer;
+function TORMProperties.AddFilterOrValidate(aFieldIndex: integer;
   aFilter: TSynFilterOrValidate): boolean;
 begin
   if (self = nil) or (cardinal(aFieldIndex) >= cardinal(Fields.Count)) or
@@ -19190,13 +19221,13 @@ begin
   end;
 end;
 
-procedure TSQLRecordProperties.AddFilterOrValidate(const aFieldName: RawUTF8;
+procedure TORMProperties.AddFilterOrValidate(const aFieldName: RawUTF8;
   aFilter: TSynFilterOrValidate);
 begin
   AddFilterOrValidate(Fields.IndexByNameOrExcept(aFieldName), aFilter);
 end;
 
-destructor TSQLRecordProperties.Destroy;
+destructor TORMProperties.Destroy;
 var
   f: PtrInt;
 begin
@@ -19207,8 +19238,8 @@ begin
   Fields.Free;
 end;
 
-function TSQLRecordProperties.FieldBitsFromBlobField(aBlobField: PRttiProp;
-  var Bits: TSQLFieldBits): boolean;
+function TORMProperties.FieldBitsFromBlobField(aBlobField: PRttiProp;
+  var Bits: TFieldBits): boolean;
 var
   f: PtrInt;
 begin
@@ -19224,8 +19255,8 @@ begin
   result := false;
 end;
 
-function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
-  var Bits: TSQLFieldBits): boolean;
+function TORMProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
+  var Bits: TFieldBits): boolean;
 var
   ndx: integer;
   P: PUTF8Char;
@@ -19248,8 +19279,8 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
-  var Bits: TSQLFieldBits; out withID: boolean): boolean;
+function TORMProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
+  var Bits: TFieldBits; out withID: boolean): boolean;
 var
   ndx: integer;
   P: PUTF8Char;
@@ -19257,7 +19288,7 @@ var
 begin
   if (aFieldsCSV = '*') and (self <> nil) then
   begin
-    Bits := SimpleFieldsBits[soSelect];
+    Bits := SimpleFieldsBits[ooSelect];
     withID := true;
     result := true;
     exit;
@@ -19285,24 +19316,24 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits;
+function TORMProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TFieldBits;
 begin
   if not FieldBitsFromCSV(aFieldsCSV, result) then
     FillZero(result);
 end;
 
-function TSQLRecordProperties.FieldBitsFromExcludingCSV(
-  const aFieldsCSV: RawUTF8; aOccasion: TSQLOccasion): TSQLFieldBits;
+function TORMProperties.FieldBitsFromExcludingCSV(
+  const aFieldsCSV: RawUTF8; aOccasion: TORMOccasion): TFieldBits;
 var
-  excluded: TSQLFieldBits;
+  excluded: TFieldBits;
 begin
   result := SimpleFieldsBits[aOccasion];
   if FieldBitsFromCSV(aFieldsCSV, excluded) then
     result := result - excluded;
 end;
 
-function TSQLRecordProperties.FieldBitsFromRawUTF8(
-  const aFields: array of RawUTF8; var Bits: TSQLFieldBits): boolean;
+function TORMProperties.FieldBitsFromRawUTF8(
+  const aFields: array of RawUTF8; var Bits: TFieldBits): boolean;
 var
   f, ndx: PtrInt;
 begin
@@ -19320,14 +19351,14 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.FieldBitsFromRawUTF8(
-  const aFields: array of RawUTF8): TSQLFieldBits;
+function TORMProperties.FieldBitsFromRawUTF8(
+  const aFields: array of RawUTF8): TFieldBits;
 begin
   if not FieldBitsFromRawUTF8(aFields, result) then
     FillZero(result);
 end;
 
-function TSQLRecordProperties.CSVFromFieldBits(const Bits: TSQLFieldBits): RawUTF8;
+function TORMProperties.CSVFromFieldBits(const Bits: TFieldBits): RawUTF8;
 var
   f: PtrInt;
   W: TTextWriter;
@@ -19348,8 +19379,8 @@ begin
   end;
 end;
 
-function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(
-  const aFields: array of RawUTF8; var Indexes: TSQLFieldIndexDynArray): boolean;
+function TORMProperties.FieldIndexDynArrayFromRawUTF8(
+  const aFields: array of RawUTF8; var Indexes: TFieldIndexDynArray): boolean;
 var
   f, ndx: PtrInt;
 begin
@@ -19366,15 +19397,15 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(
-  const aFields: array of RawUTF8): TSQLFieldIndexDynArray;
+function TORMProperties.FieldIndexDynArrayFromRawUTF8(
+  const aFields: array of RawUTF8): TFieldIndexDynArray;
 begin
   if not FieldIndexDynArrayFromRawUTF8(aFields, result) then
     result := nil;
 end;
 
-function TSQLRecordProperties.FieldIndexDynArrayFromCSV(
-  const aFieldsCSV: RawUTF8; var Indexes: TSQLFieldIndexDynArray): boolean;
+function TORMProperties.FieldIndexDynArrayFromCSV(
+  const aFieldsCSV: RawUTF8; var Indexes: TFieldIndexDynArray): boolean;
 var
   ndx: integer;
   P: PUTF8Char;
@@ -19396,15 +19427,15 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.FieldIndexDynArrayFromCSV(
-  const aFieldsCSV: RawUTF8): TSQLFieldIndexDynArray;
+function TORMProperties.FieldIndexDynArrayFromCSV(
+  const aFieldsCSV: RawUTF8): TFieldIndexDynArray;
 begin
   if not FieldIndexDynArrayFromCSV(aFieldsCSV, result) then
     result := nil;
 end;
 
-function TSQLRecordProperties.FieldIndexDynArrayFromBlobField(
-  aBlobField: PRttiProp; var Indexes: TSQLFieldIndexDynArray): boolean;
+function TORMProperties.FieldIndexDynArrayFromBlobField(
+  aBlobField: PRttiProp; var Indexes: TFieldIndexDynArray): boolean;
 var
   f: PtrInt;
 begin
@@ -19419,7 +19450,7 @@ begin
   result := false;
 end;
 
-function TSQLRecordProperties.AppendFieldName(FieldIndex: Integer;
+function TORMProperties.AppendFieldName(FieldIndex: Integer;
   var Text: RawUTF8; ForceNoRowID: boolean): boolean;
 begin
   result := false; // success
@@ -19434,7 +19465,7 @@ begin
     Text := Text + Fields.List[FieldIndex].Name;
 end;
 
-function TSQLRecordProperties.MainFieldName(ReturnFirstIfNoUnique: boolean): RawUTF8;
+function TORMProperties.MainFieldName(ReturnFirstIfNoUnique: boolean): RawUTF8;
 begin
   if (self = nil) or (Table = nil) or (MainField[ReturnFirstIfNoUnique] < 0) then
     result := ''
@@ -19442,46 +19473,46 @@ begin
     result := Fields.List[MainField[ReturnFirstIfNoUnique]].Name;
 end;
 
-procedure TSQLRecordProperties.RegisterCustomFixedSizeRecordProperty(
+procedure TORMProperties.RegisterCustomFixedSizeRecordProperty(
   aTable: TClass; aRecordSize: cardinal; const aName: RawUTF8;
-  aPropertyPointer: pointer; aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
+  aPropertyPointer: pointer; aAttributes: TORMPropInfoAttributes; aFieldWidth: integer;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
-  Fields.Add(TSQLPropInfoRecordFixedSize.Create(aRecordSize, aName, Fields.Count,
+  Fields.Add(TORMPropInfoRecordFixedSize.Create(aRecordSize, aName, Fields.Count,
     aPropertyPointer, aAttributes, aFieldWidth, aData2Text, aText2Data));
 end;
 
-procedure TSQLRecordProperties.RegisterCustomRTTIRecordProperty(aTable: TClass;
+procedure TORMProperties.RegisterCustomRTTIRecordProperty(aTable: TClass;
   aRecordInfo: PRttiInfo; const aName: RawUTF8; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
+  aAttributes: TORMPropInfoAttributes; aFieldWidth: integer;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
-  Fields.Add(TSQLPropInfoRecordRTTI.Create(aRecordInfo, aName, Fields.Count,
+  Fields.Add(TORMPropInfoRecordRTTI.Create(aRecordInfo, aName, Fields.Count,
     aPropertyPointer, aAttributes, aFieldWidth, aData2Text, aText2Data));
 end;
 
-procedure TSQLRecordProperties.RegisterCustomPropertyFromRTTI(aTable: TClass;
+procedure TORMProperties.RegisterCustomPropertyFromRTTI(aTable: TClass;
   aTypeInfo: PRttiInfo; const aName: RawUTF8; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
+  aAttributes: TORMPropInfoAttributes; aFieldWidth: integer);
 begin
-  Fields.Add(TSQLPropInfoCustomJSON.Create(aTypeInfo, aName, Fields.Count,
+  Fields.Add(TORMPropInfoCustomJSON.Create(aTypeInfo, aName, Fields.Count,
     aPropertyPointer, aAttributes, aFieldWidth));
 end;
 
-procedure TSQLRecordProperties.RegisterCustomPropertyFromTypeName(aTable: TClass;
+procedure TORMProperties.RegisterCustomPropertyFromTypeName(aTable: TClass;
   const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
+  aAttributes: TORMPropInfoAttributes; aFieldWidth: integer);
 begin
-  Fields.Add(TSQLPropInfoCustomJSON.Create(aTypeName, aName, Fields.Count,
+  Fields.Add(TORMPropInfoCustomJSON.Create(aTypeName, aName, Fields.Count,
     aPropertyPointer, aAttributes, aFieldWidth));
 end;
 
 
-{ ------------ TSQLModel TSQLModelRecordProperties Definitions }
+{ ------------ TORMModel TORMModelRecordProperties Definitions }
 
-{ TSQLModel }
+{ TORMModel }
 
-function TSQLModel.GetTableIndexSafe(aTable: TSQLRecordClass;
+function TORMModel.GetTableIndexSafe(aTable: TORMClass;
   RaiseExceptionIfNotExisting: boolean): PtrInt;
 begin
   for result := 0 to fTablesMax do // manual search: GetTableIndex() may fail
@@ -19492,24 +19523,24 @@ begin
   result := -1;
 end;
 
-procedure TSQLModel.SetTableProps(aIndex: integer);
+procedure TORMModel.SetTableProps(aIndex: integer);
 var
   j, f: PtrInt;
-  t: TSQLFieldType;
-  Kind: TSQLRecordVirtualKind;
-  Table, TableID: TSQLRecordClass;
+  t: TORMFieldType;
+  Kind: TORMVirtualKind;
+  Table, TableID: TORMClass;
   aTableName, aFieldName: RawUTF8;
-  Props: TSQLModelRecordProperties;
-  fields: TSQLPropInfoList;
+  Props: TORMModelRecordProperties;
+  fields: TORMPropInfoList;
   W: TTextWriter;
 
-  procedure RegisterTableForRecordReference(aFieldType: TSQLPropInfo;
+  procedure RegisterTableForRecordReference(aFieldType: TORMPropInfo;
     aFieldTable: TClass);
   var
     R: integer;
   begin
-    if (aFieldTable = nil) or (aFieldTable = TSQLRecord) or
-       not aFieldTable.InheritsFrom(TSQLRecord) then
+    if (aFieldTable = nil) or (aFieldTable = TORM) or
+       not aFieldTable.InheritsFrom(TORM) then
       exit; // no associated table to track deletion
     R := length(fRecordReferences);
     SetLength(fRecordReferences, R + 1);
@@ -19521,32 +19552,32 @@ var
       FieldTableIndex := GetTableIndexSafe(FieldTable, false);
       if FieldTableIndex < 0 then
         FieldTableIndex := -2; // allow lazy table index identification
-      if aFieldType.InheritsFrom(TSQLPropInfoRTTIRecordReference) then
-        CascadeDelete := TSQLPropInfoRTTIRecordReference(aFieldType).CascadeDelete;
+      if aFieldType.InheritsFrom(TORMPropInfoRTTIRecordReference) then
+        CascadeDelete := TORMPropInfoRTTIRecordReference(aFieldType).CascadeDelete;
     end;
   end;
 
 begin
   if (cardinal(aIndex) > cardinal(fTablesMax)) or (fTableProps[aIndex] <> nil) then
-    raise EModelException.Create('TSQLModel.SetTableProps');
+    raise EModelException.Create('TORMModel.SetTableProps');
   Table := fTables[aIndex];
-  if Table.InheritsFrom(TSQLRecordFTS5) then
+  if Table.InheritsFrom(TORMFTS5) then
     Kind := rFTS5
-  else if Table.InheritsFrom(TSQLRecordFTS4) then
+  else if Table.InheritsFrom(TORMFTS4) then
     Kind := rFTS4
-  else if Table.InheritsFrom(TSQLRecordFTS3) then
+  else if Table.InheritsFrom(TORMFTS3) then
     Kind := rFTS3
-  else if Table.InheritsFrom(TSQLRecordVirtualTableForcedID) then
+  else if Table.InheritsFrom(TORMVirtualTableForcedID) then
     Kind := rCustomForcedID
-  else if Table.InheritsFrom(TSQLRecordRTree) then
+  else if Table.InheritsFrom(TORMRTree) then
     Kind := rRTree
-  else if Table.InheritsFrom(TSQLRecordRTreeInteger) then
+  else if Table.InheritsFrom(TORMRTreeInteger) then
     Kind := rRTreeInteger
-  else if Table.InheritsFrom(TSQLRecordVirtual) then
+  else if Table.InheritsFrom(TORMVirtual) then
     Kind := rCustomAutoID
   else
     Kind := rSQLite3;
-  Props := TSQLModelRecordProperties.Create(self, Table, Kind);
+  Props := TORMModelRecordProperties.Create(self, Table, Kind);
   Props.Props.InternalRegisterModel(self, aIndex, Props);
   for t := low(t) to high(t) do
     if fCustomCollationForAll[t] <> '' then
@@ -19562,18 +19593,18 @@ begin
         RegisterTableForRecordReference(fields.List[f], Table); // Table not used
       sftID:
         RegisterTableForRecordReference(fields.List[f],
-          (fields.List[f] as TSQLPropInfoRTTIInstance).ObjectClass);
+          (fields.List[f] as TORMPropInfoRTTIInstance).ObjectClass);
       sftTID:
         begin
-          TableID := (fields.List[f] as TSQLPropInfoRTTITID).RecordClass;
-          if TableID = nil then // T*ID name didn't match any TSQLRecord type
+          TableID := (fields.List[f] as TORMPropInfoRTTITID).RecordClass;
+          if TableID = nil then // T*ID name didn't match any TORM type
             fields.List[f].fSQLFieldType := sftInteger
           else
             RegisterTableForRecordReference(fields.List[f], TableID);
         end;
       sftMany:
         GetTableIndexSafe(
-          pointer((fields.List[f] as TSQLPropInfoRTTIMany).ObjectClass), true);
+          pointer((fields.List[f] as TORMPropInfoRTTIMany).ObjectClass), true);
     end;
   if Props.Props.JoinedFieldsTable <> nil then
   begin
@@ -19617,16 +19648,16 @@ begin
   end;
 end;
 
-function TSQLModel.GetTableProps(aClass: TSQLRecordClass): TSQLModelRecordProperties;
+function TORMModel.GetTableProps(aClass: TORMClass): TORMModelRecordProperties;
 begin
   result := fTableProps[GetTableIndexExisting(aClass)];
 end;
 
-function TSQLModel.AddTable(aTable: TSQLRecordClass; aTableIndexCreated: PInteger): boolean;
+function TORMModel.AddTable(aTable: TORMClass; aTableIndexCreated: PInteger): boolean;
 var
   n: PtrInt;
 begin
-  // first register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
+  // first register for JSONToObject() and for TORMPropInfoRTTITID.Create()
   rtti.RegisterClass(aTable);
   // insert only once
   if GetTableIndex(aTable) >= 0 then
@@ -19649,7 +19680,7 @@ begin
   result := true;
 end;
 
-function TSQLModel.AddTableInherited(aTable: TSQLRecordClass): pointer;
+function TORMModel.AddTableInherited(aTable: TORMClass): pointer;
 var
   ndx: integer;
 begin
@@ -19660,7 +19691,7 @@ begin
   result := Tables[ndx];
 end;
 
-function TSQLModel.GetTableInherited(aTable: TSQLRecordClass): TSQLRecordClass;
+function TORMModel.GetTableInherited(aTable: TORMClass): TORMClass;
 var
   ndx: integer;
 begin
@@ -19671,7 +19702,7 @@ begin
     result := Tables[ndx];
 end;
 
-constructor TSQLModel.Create(CloneFrom: TSQLModel);
+constructor TORMModel.Create(CloneFrom: TORMModel);
 var
   i: PtrInt;
 begin
@@ -19690,17 +19721,17 @@ begin
   fCustomCollationForAll := CloneFrom.fCustomCollationForAll;
   SetLength(fTableProps, fTablesMax + 1);
   for i := 0 to fTablesMax do
-    fTableProps[i] := TSQLModelRecordProperties.CreateFrom(
+    fTableProps[i] := TORMModelRecordProperties.CreateFrom(
       self, CloneFrom.fTableProps[i]);
 end;
 
-constructor TSQLModel.Create;
+constructor TORMModel.Create;
 begin
   raise EModelException.CreateUTF8(
     'Plain %.Create is not allowed: use overloaded Create()', [self]);
 end;
 
-function TSQLModel.SafeRoot: RawUTF8;
+function TORMModel.SafeRoot: RawUTF8;
 begin
   if self = nil then
     result := ''
@@ -19708,7 +19739,7 @@ begin
     result := fRoot;
 end;
 
-procedure TSQLModel.SetRoot(const aRoot: RawUTF8);
+procedure TORMModel.SetRoot(const aRoot: RawUTF8);
 var
   i: integer;
 begin
@@ -19723,21 +19754,21 @@ begin
   UpperCaseCopy(fRoot, fRootUpper);
 end;
 
-constructor TSQLModel.Create(const Tables: array of TSQLRecordClass;
+constructor TORMModel.Create(const Tables: array of TORMClass;
   const aRoot: RawUTF8);
 var
   N, i: PtrInt;
 begin
   N := length(Tables);
-  if N > SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8 then // TSQLAccessRights bits size
+  if N > SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8 then // TORMAccessRights bits size
     raise EModelException.CreateUTF8('% % has too many Tables: %>%',
       [self, aRoot, N, SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8]); // e.g. N>64
-  // set the Tables to be associated with this Model, as TSQLRecord classes
+  // set the Tables to be associated with this Model, as TORM classes
   fTablesMax := N - 1;
   SetLength(fTables, N);
   MoveFast(Tables[0], fTables[0], N * SizeOf(Tables[0]));
   for i := 0 to N - 1 do
-    // first register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
+    // first register for JSONToObject() and for TORMPropInfoRTTITID.Create()
     rtti.RegisterClass(Tables[i]);
   SetLength(fSortedTablesNameUpper, N);
   SetLength(fSortedTablesNameIndex, N);
@@ -19751,7 +19782,7 @@ begin
     SetRoot(aRoot);
 end;
 
-function TSQLModel.GetIsUnique(aTable: TSQLRecordClass; aFieldIndex: integer): boolean;
+function TORMModel.GetIsUnique(aTable: TORMClass; aFieldIndex: integer): boolean;
 var
   i: PtrInt;
 begin
@@ -19825,7 +19856,7 @@ begin
   end;
 end;
 
-function TSQLModel.GetTableIndexFromSQLSelect(const SQL: RawUTF8;
+function TORMModel.GetTableIndexFromSQLSelect(const SQL: RawUTF8;
   EnsureUniqueTableInFrom: boolean): integer;
 var
   TableName: RawUTF8;
@@ -19834,7 +19865,7 @@ begin
   result := GetTableIndex(TableName);
 end;
 
-function TSQLModel.GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDynArray;
+function TORMModel.GetTablesFromSQLSelect(const SQL: RawUTF8): TORMClassDynArray;
 var
   t: TIntegerDynArray;
   n, i: PtrInt;
@@ -19849,7 +19880,7 @@ begin
     result[i] := Tables[t[i]];
 end;
 
-function TSQLModel.GetTableIndexesFromSQLSelect(const SQL: RawUTF8): TIntegerDynArray;
+function TORMModel.GetTableIndexesFromSQLSelect(const SQL: RawUTF8): TIntegerDynArray;
 var
   TableNames: TRawUTF8DynArray;
   i, t, n, ndx: PtrInt;
@@ -19873,7 +19904,7 @@ begin
     SetLength(result, n);
 end;
 
-function TSQLModel.GetTable(const SQLTableName: RawUTF8): TSQLRecordClass;
+function TORMModel.GetTable(const SQLTableName: RawUTF8): TORMClass;
 var
   i: PtrInt;
 begin
@@ -19884,7 +19915,7 @@ begin
     result := nil;
 end;
 
-function TSQLModel.GetTableExactClass(const TableName: RawUTF8): TSQLRecordClass;
+function TORMModel.GetTableExactClass(const TableName: RawUTF8): TORMClass;
 var
   i: PtrInt;
 begin
@@ -19895,10 +19926,10 @@ begin
     result := nil;
 end;
 
-function TSQLModel.GetTableIndex(aTable: TSQLRecordClass): integer;
+function TORMModel.GetTableIndex(aTable: TORMClass): integer;
 var
   i: PtrInt;
-  Props: TSQLRecordProperties;
+  Props: TORMProperties;
   c: PSQLRecordClass;
 begin
   if (self <> nil) and (aTable <> nil) then
@@ -19924,16 +19955,16 @@ begin
   result := -1;
 end;
 
-function TSQLModel.GetTableIndexInheritsFrom(aTable: TSQLRecordClass): integer;
+function TORMModel.GetTableIndexInheritsFrom(aTable: TORMClass): integer;
 begin
-  if (self <> nil) and (aTable <> nil) and (aTable <> TSQLRecord) then
+  if (self <> nil) and (aTable <> nil) and (aTable <> TORM) then
     for result := 0 to fTablesMax do
       if Tables[result].InheritsFrom(aTable) then
         exit;
   result := -1;
 end;
 
-function TSQLModel.GetTableIndexExisting(aTable: TSQLRecordClass): integer;
+function TORMModel.GetTableIndexExisting(aTable: TORMClass): integer;
 begin
   if self = nil then
     raise EModelException.Create('nil.GetTableIndexExisting');
@@ -19944,7 +19975,7 @@ begin
     raise EModelException.CreateUTF8('% is not part of % %', [aTable, self, Root]);
 end;
 
-function TSQLModel.GetTableExactIndex(const TableName: RawUTF8): PtrInt;
+function TORMModel.GetTableExactIndex(const TableName: RawUTF8): PtrInt;
 var
   L: integer;
 begin
@@ -19959,7 +19990,7 @@ begin
   result := -1;
 end;
 
-function TSQLModel.GetTableIndex(const SQLTableName: RawUTF8): integer;
+function TORMModel.GetTableIndex(const SQLTableName: RawUTF8): integer;
 begin
   if (self <> nil) and (SQLTableName <> '') then
   begin
@@ -19973,7 +20004,7 @@ begin
     result := -1;
 end;
 
-function TSQLModel.GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
+function TORMModel.GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
 begin
   if (self <> nil) and (SQLTableName <> nil) then
   begin
@@ -19986,7 +20017,7 @@ begin
     result := -1;
 end;
 
-function TSQLModel.GetURI(aTable: TSQLRecordClass): RawUTF8;
+function TORMModel.GetURI(aTable: TORMClass): RawUTF8;
 begin
   result := '';
   if self = nil then
@@ -20002,20 +20033,20 @@ begin
     result := Root + '/' + result;
 end;
 
-function TSQLModel.GetURIID(aTable: TSQLRecordClass; aID: TID): RawUTF8;
+function TORMModel.GetURIID(aTable: TORMClass; aID: TID): RawUTF8;
 begin
   result := GetURI(aTable);
   if aID > 0 then
     result := result + '/' + Int64ToUtf8(aID);
 end;
 
-function TSQLModel.GetURICallBack(const aMethodName: RawUTF8;
-  aTable: TSQLRecordClass; aID: TID): RawUTF8;
+function TORMModel.GetURICallBack(const aMethodName: RawUTF8;
+  aTable: TORMClass; aID: TID): RawUTF8;
 begin
   result := GetURIID(aTable, aID) + '/' + aMethodName;
 end;
 
-function TSQLModel.URIMatch(const URI: RawUTF8): TRestModelMatch;
+function TORMModel.URIMatch(const URI: RawUTF8): TRestModelMatch;
 var
   URILen: integer;
 begin
@@ -20033,17 +20064,17 @@ begin
   end;
 end;
 
-function TSQLModel.SQLFromSelectWhere(const Tables: array of TSQLRecordClass;
+function TORMModel.SQLFromSelectWhere(const Tables: array of TORMClass;
   const SQLSelect, SQLWhere: RawUTF8): RawUTF8;
 var
   i: PtrInt;
-  aProps: array[0..31] of TSQLModelRecordProperties;
+  aProps: array[0..31] of TORMModelRecordProperties;
 begin
   if self = nil then
     raise EORMException.Create('Model required');
   if high(Tables) = 0 then
   begin
-    // fastest common call with one TSQLRecordClass
+    // fastest common call with one TORMClass
     result := Props[Tables[0]].SQLFromSelectWhere(SQLSelect, SQLWhere);
     exit;
   end;
@@ -20071,7 +20102,7 @@ begin
   result := result + SQLFromWhere(SQLWhere);
 end;
 
-procedure TSQLModel.SetCustomCollationForAll(aFieldType: TSQLFieldType;
+procedure TORMModel.SetCustomCollationForAll(aFieldType: TORMFieldType;
   const aCollationName: RawUTF8);
 var
   i: PtrInt;
@@ -20086,7 +20117,7 @@ begin
     fTableProps[i].fProps.SetCustomCollationForAll(aFieldType, aCollationName);
 end;
 
-procedure TSQLModel.SetMaxLengthValidatorForAllTextFields(IndexIsUTF8Length: boolean);
+procedure TORMModel.SetMaxLengthValidatorForAllTextFields(IndexIsUTF8Length: boolean);
 var
   i: PtrInt;
 begin
@@ -20095,7 +20126,7 @@ begin
       fTableProps[i].fProps.SetMaxLengthValidatorForTextFields(IndexIsUTF8Length);
 end;
 
-procedure TSQLModel.SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean);
+procedure TORMModel.SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean);
 var
   i: PtrInt;
 begin
@@ -20104,7 +20135,7 @@ begin
       fTableProps[i].fProps.SetMaxLengthFilterForTextFields(IndexIsUTF8Length);
 end;
 
-procedure TSQLModel.SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
+procedure TORMModel.SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
 var
   i: PtrInt;
 begin
@@ -20113,7 +20144,7 @@ begin
       fTableProps[i].fProps.SetVariantFieldsDocVariantOptions(Options);
 end;
 
-function TSQLModel.SetIDGenerator(aTable: TSQLRecordClass;
+function TORMModel.SetIDGenerator(aTable: TORMClass;
   aIdentifier: TSynUniqueIdentifierProcess;
   const aSharedObfuscationKey: RawUTF8): TSynUniqueIdentifierGenerator;
 var
@@ -20127,7 +20158,7 @@ begin
   fIDGenerator[i] := result;
 end;
 
-function TSQLModel.GetIDGenerator(aTable: TSQLRecordClass): TSynUniqueIdentifierGenerator;
+function TORMModel.GetIDGenerator(aTable: TORMClass): TSynUniqueIdentifierGenerator;
 var
   i: cardinal;
 begin
@@ -20138,9 +20169,9 @@ begin
     result := nil;
 end;
 
-function TSQLModel.NewRecord(const SQLTableName: RawUTF8): TSQLRecord;
+function TORMModel.NewRecord(const SQLTableName: RawUTF8): TORM;
 var
-  aClass: TSQLRecordClass;
+  aClass: TORMClass;
 begin
   aClass := Table[SQLTableName];
   if aClass = nil then
@@ -20149,7 +20180,7 @@ begin
     result := aClass.Create;
 end;
 
-function TSQLModel.GetSQLCreate(aTableIndex: integer): RawUTF8;
+function TORMModel.GetSQLCreate(aTableIndex: integer): RawUTF8;
 begin
   if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := ''
@@ -20157,7 +20188,7 @@ begin
     result := Tables[aTableIndex].GetSQLCreate(self);
 end;
 
-function TSQLModel.GetSQLAddField(aTableIndex: integer; aFieldIndex: integer): RawUTF8;
+function TORMModel.GetSQLAddField(aTableIndex: integer; aFieldIndex: integer): RawUTF8;
 begin
   if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := ''
@@ -20165,12 +20196,12 @@ begin
     result := TableProps[aTableIndex].Props.SQLAddField(aFieldIndex);
 end;
 
-function TSQLModel.isLocked(aTable: TSQLRecordClass; aID: TID): boolean;
+function TORMModel.isLocked(aTable: TORMClass; aID: TID): boolean;
 begin
   result := GetLocks(aTable)^.isLocked(aID);
 end;
 
-function TSQLModel.isLocked(aRec: TSQLRecord): boolean;
+function TORMModel.isLocked(aRec: TORM): boolean;
 begin
   if aRec = nil then
     result := false
@@ -20178,7 +20209,7 @@ begin
     result := isLocked(PSQLRecordClass(aRec)^, aRec.fID);
 end;
 
-function TSQLModel.Lock(aTable: TSQLRecordClass; aID: TID): boolean;
+function TORMModel.Lock(aTable: TORMClass; aID: TID): boolean;
 begin
   if self = nil then
     result := false
@@ -20190,7 +20221,7 @@ begin
   end;
 end;
 
-function TSQLModel.Lock(aTableIndex: integer; aID: TID): boolean;
+function TORMModel.Lock(aTableIndex: integer; aID: TID): boolean;
 begin
   if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := false
@@ -20202,7 +20233,7 @@ begin
   end;
 end;
 
-function TSQLModel.Lock(aRec: TSQLRecord): boolean;
+function TORMModel.Lock(aRec: TORM): boolean;
 begin
   if aRec = nil then
     result := false
@@ -20210,7 +20241,7 @@ begin
     result := Lock(PSQLRecordClass(aRec)^, aRec.fID);
 end;
 
-procedure TSQLModel.PurgeOlderThan(MinutesFromNow: cardinal);
+procedure TORMModel.PurgeOlderThan(MinutesFromNow: cardinal);
 var
   i: PtrInt;
 begin
@@ -20219,7 +20250,7 @@ begin
       fLocks[i].PurgeOlderThan(MinutesFromNow);
 end;
 
-function TSQLModel.UnLock(aTable: TSQLRecordClass; aID: TID): boolean;
+function TORMModel.UnLock(aTable: TORMClass; aID: TID): boolean;
 begin
   if (self = nil) or (fLocks = nil) then
     result := false
@@ -20227,7 +20258,7 @@ begin
     result := GetLocks(aTable)^.UnLock(aID);
 end;
 
-function TSQLModel.UnLock(aTableIndex: integer; aID: TID): boolean;
+function TORMModel.UnLock(aTableIndex: integer; aID: TID): boolean;
 begin
   if (self = nil) or (cardinal(aTableIndex) >= cardinal(length(fLocks))) then
     result := false
@@ -20235,7 +20266,7 @@ begin
     result := fLocks[aTableIndex].UnLock(aID);
 end;
 
-function TSQLModel.UnLock(aRec: TSQLRecord): boolean;
+function TORMModel.UnLock(aRec: TORM): boolean;
 begin
   if aRec = nil then
     result := false
@@ -20243,7 +20274,7 @@ begin
     result := UnLock(PSQLRecordClass(aRec)^, aRec.fID);
 end;
 
-function TSQLModel.GetLocks(aTable: TSQLRecordClass): PSQLLocks;
+function TORMModel.GetLocks(aTable: TORMClass): PSQLLocks;
 begin
   if (self = nil) or (fLocks = nil) then
     result := nil
@@ -20251,7 +20282,7 @@ begin
     result := @fLocks[GetTableIndexExisting(aTable)];
 end;
 
-procedure TSQLModel.UnLockAll;
+procedure TORMModel.UnLockAll;
 var
   i: PtrInt;
 begin
@@ -20259,7 +20290,7 @@ begin
     fLocks[i].Count := 0;
 end;
 
-function TSQLModel.RecordReference(Table: TSQLRecordClass; ID: TID): TRecordReference;
+function TORMModel.RecordReference(Table: TORMClass; ID: TID): TRecordReference;
 begin
   if (self = nil) or (ID <= 0) then
     result := 0
@@ -20273,7 +20304,7 @@ begin
   end;
 end;
 
-function TSQLModel.RecordReferenceTable(const Ref: TRecordReference): TSQLRecordClass;
+function TORMModel.RecordReferenceTable(const Ref: TRecordReference): TORMClass;
 var
   i: integer;
 begin
@@ -20284,9 +20315,9 @@ begin
     result := nil;
 end;
 
-function TSQLModel.VirtualTableRegister(aClass: TSQLRecordClass; aModule: TClass;
+function TORMModel.VirtualTableRegister(aClass: TORMClass; aModule: TClass;
   const aExternalTableName: RawUTF8; aExternalDataBase: TObject;
-  aMappingOptions: TSQLRecordPropertiesMappingOptions): boolean;
+  aMappingOptions: TORMPropertiesMappingOptions): boolean;
 var
   i: PtrInt;
 begin
@@ -20310,7 +20341,7 @@ begin
   result := true;
 end;
 
-function TSQLModel.VirtualTableModule(aClass: TSQLRecordClass): TClass;
+function TORMModel.VirtualTableModule(aClass: TORMClass): TClass;
 var
   i: PtrInt;
 begin
@@ -20322,7 +20353,7 @@ begin
     result := fVirtualTableModule[i];
 end;
 
-destructor TSQLModel.Destroy;
+destructor TORMModel.Destroy;
 var
   i, j: PtrInt;
 begin
@@ -20335,7 +20366,7 @@ begin
         for j := 0 to fModelMax do
           if fModel[j].Model = self then
           begin
-            // un-associate this TSQLRecord with this model
+            // un-associate this TORM with this model
             MoveFast(fModel[j + 1], fModel[j], (fModelMax - j) * SizeOf(fModel[j]));
             dec(fModelMax);
             break;
@@ -20351,13 +20382,13 @@ begin
 end;
 
 
-{ TSQLModelRecordProperties }
+{ TORMModelRecordProperties }
 
-constructor TSQLModelRecordProperties.Create(aModel: TSQLModel; aTable:
-  TSQLRecordClass; aKind: TSQLRecordVirtualKind);
+constructor TORMModelRecordProperties.Create(aModel: TORMModel; aTable:
+  TORMClass; aKind: TORMVirtualKind);
 var
   f: PtrInt;
-begin // similar to TSQLRecordPropertiesMapping.ComputeSQL
+begin // similar to TORMPropertiesMapping.ComputeSQL
   fModel := aModel;
   fTableIndex := fModel.GetTableIndexExisting(aTable);
   fProps := aTable.RecordProps;
@@ -20370,7 +20401,7 @@ begin // similar to TSQLRecordPropertiesMapping.ComputeSQL
           // pre-computation of SQL statements
           SQL.UpdateSetAll := SQL.UpdateSetAll + Name + '=?,';
           SQL.InsertSet := SQL.InsertSet + Name + ',';
-          if f in SimpleFieldsBits[soUpdate] then
+          if f in SimpleFieldsBits[ooUpdate] then
             SQL.UpdateSetSimple := SQL.UpdateSetSimple + Name + '=?,';
           // filter + validation of unique fields, i.e. if marked as "stored false"
           if f in IsUniqueFieldsBits then
@@ -20389,8 +20420,8 @@ begin // similar to TSQLRecordPropertiesMapping.ComputeSQL
   Props.InternalRegisterModel(aModel, aModel.GetTableIndexExisting(aTable), self);
 end;
 
-constructor TSQLModelRecordProperties.CreateFrom(aModel: TSQLModel;
-  aSource: TSQLModelRecordProperties);
+constructor TORMModelRecordProperties.CreateFrom(aModel: TORMModel;
+  aSource: TORMModelRecordProperties);
 begin
   inherited Create;
   fModel := aModel;
@@ -20404,11 +20435,11 @@ begin
   Props.InternalRegisterModel(fModel, fModel.GetTableIndexExisting(fProps.Table), self);
 end;
 
-procedure TSQLModelRecordProperties.SetKind(Value: TSQLRecordVirtualKind);
+procedure TORMModelRecordProperties.SetKind(Value: TORMVirtualKind);
 
-  function IntSQLTableSimpleFields(withID, withTableName: boolean): RawUTF8;
+  function InTORMTableSimpleFields(withID, withTableName: boolean): RawUTF8;
   const
-    IDComma: array[TSQLRecordVirtualKind] of rawUTF8 = ('ID,', 'RowID,',
+    IDComma: array[TORMVirtualKind] of rawUTF8 = ('ID,', 'RowID,',
       'RowID,', 'RowID,', 'RowID,', 'RowID,', 'RowID,', 'RowID,');
  // rSQLite3,rFTS3,rFTS4,rFTS5,rRTree,rRTreeInteger,rCustomForcedID,rCustomAutoID
   var
@@ -20436,7 +20467,7 @@ procedure TSQLModelRecordProperties.SetKind(Value: TSQLRecordVirtualKind);
 
 var
   f: PtrInt;
-  expected: TSQLFieldType;
+  expected: TORMFieldType;
 begin
   case Value of // validates virtual table fields expectations
     rFTS3, rFTS4, rFTS5:
@@ -20476,10 +20507,10 @@ begin
   end;
   fKind := Value;
   // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-  SQL.TableSimpleFields[false, false] := IntSQLTableSimpleFields(false, false);
-  SQL.TableSimpleFields[false, true] := IntSQLTableSimpleFields(false, true);
-  SQL.TableSimpleFields[true, false] := IntSQLTableSimpleFields(true, false);
-  SQL.TableSimpleFields[true, true] := IntSQLTableSimpleFields(true, true);
+  SQL.TableSimpleFields[false, false] := InTORMTableSimpleFields(false, false);
+  SQL.TableSimpleFields[false, true] := InTORMTableSimpleFields(false, true);
+  SQL.TableSimpleFields[true, false] := InTORMTableSimpleFields(true, false);
+  SQL.TableSimpleFields[true, true] := InTORMTableSimpleFields(true, true);
   if Props.SQLTableSimpleFieldsNoRowID <> SQL.TableSimpleFields[false, false] then
     raise EModelException.CreateUTF8('SetKind(%)', [Props.Table]);
   SQL.SelectAllWithRowID := SQLFromSelectWhere('*', '');
@@ -20488,14 +20519,14 @@ begin
     delete(SQL.SelectAllWithID, 8, 3); // 'SELECT RowID,..' -> 'SELECT ID,'
 end;
 
-function TSQLModelRecordProperties.SQLFromSelectWhere(
+function TORMModelRecordProperties.SQLFromSelectWhere(
   const SelectFields, Where: RawUTF8): RawUTF8;
 begin
   result := SQLFromSelect(Props.SQLTableName, SelectFields, Where,
     SQL.TableSimpleFields[true, false]);
 end;
 
-procedure TSQLModelRecordProperties.FTS4WithoutContent(ContentTable: TSQLRecordClass);
+procedure TORMModelRecordProperties.FTS4WithoutContent(ContentTable: TORMClass);
 var
   i: PtrInt;
   field: RawUTF8;
@@ -20516,7 +20547,7 @@ begin
     raise EModelException.CreateUTF8('FTS4WithoutContent: % has no field', [Props.Table]);
 end;
 
-function TSQLModelRecordProperties.GetProp(const PropName: RawUTF8): TSQLPropInfo;
+function TORMModelRecordProperties.GetProp(const PropName: RawUTF8): TORMPropInfo;
 begin
   if self <> nil then
     result := Props.Fields.ByName(pointer(PropName))
@@ -20526,11 +20557,11 @@ end;
 
 
 
-{ TSQLRecordPropertiesMapping }
+{ TORMPropertiesMapping }
 
-procedure TSQLRecordPropertiesMapping.Init(Table: TSQLRecordClass;
+procedure TORMPropertiesMapping.Init(Table: TORMClass;
   const MappedTableName: RawUTF8; MappedConnection: TObject; AutoComputeSQL: boolean;
-  MappingOptions: TSQLRecordPropertiesMappingOptions);
+  MappingOptions: TORMPropertiesMappingOptions);
 begin
   fOptions := MappingOptions;
   fProps := Table.RecordProps;
@@ -20549,14 +20580,14 @@ begin
     ComputeSQL;
 end;
 
-function TSQLRecordPropertiesMapping.MapField(
+function TORMPropertiesMapping.MapField(
   const InternalName, ExternalName: RawUTF8): PSQLRecordPropertiesMapping;
 begin
   MapFields([InternalName, ExternalName]);
   result := @self;
 end;
 
-function TSQLRecordPropertiesMapping.MapFields(
+function TORMPropertiesMapping.MapFields(
   const InternalExternalPairs: array of RawUTF8): PSQLRecordPropertiesMapping;
 var
   i, int: PtrInt;
@@ -20588,23 +20619,23 @@ begin
   result := @self;
 end;
 
-function TSQLRecordPropertiesMapping.MapAutoKeywordFields: PSQLRecordPropertiesMapping;
+function TORMPropertiesMapping.MapAutoKeywordFields: PSQLRecordPropertiesMapping;
 begin
   if @self <> nil then
     include(fOptions, rpmAutoMapKeywordFields);
   result := @self;
 end;
 
-function TSQLRecordPropertiesMapping.SetOptions(
-  aOptions: TSQLRecordPropertiesMappingOptions): PSQLRecordPropertiesMapping;
+function TORMPropertiesMapping.SetOptions(
+  aOptions: TORMPropertiesMappingOptions): PSQLRecordPropertiesMapping;
 begin
   if @self <> nil then
     fOptions := aOptions;
   result := @self;
 end;
 
-procedure TSQLRecordPropertiesMapping.ComputeSQL;
-type // similar to TSQLModelRecordProperties.Create()/SetKind()
+procedure TORMPropertiesMapping.ComputeSQL;
+type // similar to TORMModelRecordProperties.Create()/SetKind()
   TContent = (TableSimpleFields, UpdateSimple, UpdateSetAll, InsertAll);
 
   procedure SetSQL(W: TTextWriter; withID, withTableName: boolean;
@@ -20629,7 +20660,7 @@ type // similar to TSQLModelRecordProperties.Create()/SetKind()
           if SQLFieldType in COPIABLE_FIELDS then // sftMany fields do not exist
             case content of
               TableSimpleFields:
-                if f in SimpleFieldsBits[soSelect] then
+                if f in SimpleFieldsBits[ooSelect] then
                 begin
                   if withTableName then
                     W.AddStrings([TableName, '.']);
@@ -20640,7 +20671,7 @@ type // similar to TSQLModelRecordProperties.Create()/SetKind()
                   W.Add(',');
                 end;
               UpdateSimple:
-                if f in SimpleFieldsBits[soSelect] then
+                if f in SimpleFieldsBits[ooSelect] then
                   W.AddStrings([ExtFieldNames[f], '=?,']);
               UpdateSetAll:
                 W.AddStrings([ExtFieldNames[f], '=?,']);
@@ -20673,7 +20704,7 @@ begin
   end;
 end;
 
-function TSQLRecordPropertiesMapping.InternalToExternal(
+function TORMPropertiesMapping.InternalToExternal(
   const FieldName: RawUTF8): RawUTF8;
 var
   int: PtrInt;
@@ -20685,7 +20716,7 @@ begin
     result := fExtFieldNames[int];
 end;
 
-function TSQLRecordPropertiesMapping.InternalCSVToExternalCSV(
+function TORMPropertiesMapping.InternalCSVToExternalCSV(
   const CSVFieldNames, Sep, SepEnd: RawUTF8): RawUTF8;
 var
   IntFields, ExtFields: TRawUTF8DynArray;
@@ -20695,7 +20726,7 @@ begin
   result := RawUTF8ArrayToCSV(ExtFields, Sep) + SepEnd;
 end;
 
-procedure TSQLRecordPropertiesMapping.InternalToExternalDynArray(
+procedure TORMPropertiesMapping.InternalToExternalDynArray(
   const IntFieldNames: array of RawUTF8; out result: TRawUTF8DynArray;
   IntFieldIndex: PIntegerDynArray);
 var
@@ -20717,7 +20748,7 @@ begin
   end;
 end;
 
-function TSQLRecordPropertiesMapping.ExternalToInternalIndex(
+function TORMPropertiesMapping.ExternalToInternalIndex(
   const ExtFieldName: RawUTF8): integer;
 begin
   if IdemPropNameU(ExtFieldName, RowIDFieldName) then
@@ -20732,7 +20763,7 @@ begin
   end;
 end;
 
-function TSQLRecordPropertiesMapping.ExternalToInternalOrNull(
+function TORMPropertiesMapping.ExternalToInternalOrNull(
   const ExtFieldName: RawUTF8): RawUTF8;
 var
   i: PtrInt;
@@ -20746,7 +20777,7 @@ begin
     result := ''; // indicates not found
 end;
 
-function TSQLRecordPropertiesMapping.AppendFieldName(FieldIndex: Integer;
+function TORMPropertiesMapping.AppendFieldName(FieldIndex: Integer;
   var Text: RawUTF8): boolean;
 begin
   result := false; // success
@@ -20758,7 +20789,7 @@ begin
     Text := Text + ExtFieldNames[FieldIndex];
 end;
 
-function TSQLRecordPropertiesMapping.FieldNameByIndex(FieldIndex: Integer): RawUTF8;
+function TORMPropertiesMapping.FieldNameByIndex(FieldIndex: Integer): RawUTF8;
 begin
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
     result := RowIDFieldName
@@ -20769,15 +20800,15 @@ begin
 end;
 
 
-{ TSQLLocks }
+{ TORMLocks }
 
-function TSQLLocks.isLocked(aID: TID): boolean;
+function TORMLocks.isLocked(aID: TID): boolean;
 begin
   result := (@self <> nil) and (Count <> 0) and (aID <> 0) and
             Int64ScanExists(pointer(IDs), Count, aID);
 end;
 
-function TSQLLocks.Lock(aID: TID): boolean;
+function TORMLocks.Lock(aID: TID): boolean;
 var
   P: PInt64;
 begin
@@ -20817,7 +20848,7 @@ begin
   end;
 end;
 
-procedure TSQLLocks.PurgeOlderThan(MinutesFromNow: cardinal);
+procedure TORMLocks.PurgeOlderThan(MinutesFromNow: cardinal);
 var
   LastOK64: Int64;
   i, LastEntry: PtrInt;
@@ -20835,7 +20866,7 @@ begin
   Count := LastEntry + 1; // update count (may decrease list length)
 end;
 
-function TSQLLocks.UnLock(aID: TID): boolean;
+function TORMLocks.UnLock(aID: TID): boolean;
 var
   P: PInt64;
 begin
@@ -20963,9 +20994,9 @@ begin
   end;
 end;
 
-procedure TRestCacheEntry.SetJSON(aRecord: TSQLRecord);
-begin  // soInsert = include all fields
-  SetJSON(aRecord.fID, aRecord.GetJSONValues(true, false, soInsert));
+procedure TRestCacheEntry.SetJSON(aRecord: TORM);
+begin  // ooInsert = include all fields
+  SetJSON(aRecord.fID, aRecord.GetJSONValues(true, false, ooInsert));
 end;
 
 function TRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8;
@@ -20995,7 +21026,7 @@ begin
   end;
 end;
 
-function TRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord;
+function TRestCacheEntry.RetrieveJSON(aID: TID; aValue: TORM;
   aTag: PCardinal): boolean;
 var
   JSON: RawUTF8;
@@ -21096,7 +21127,7 @@ begin
       inc(result, fCache[i].CachedMemory(FlushedEntriesCount));
 end;
 
-function TRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: cardinal): boolean;
+function TRestCache.SetTimeOut(aTable: TORMClass; aTimeoutMS: cardinal): boolean;
 var
   i: PtrInt;
 begin
@@ -21118,7 +21149,7 @@ begin
       end;
 end;
 
-function TRestCache.IsCached(aTable: TSQLRecordClass): boolean;
+function TRestCache.IsCached(aTable: TORMClass): boolean;
 var
   i: PtrUInt;
 begin
@@ -21131,7 +21162,7 @@ begin
       result := true;
 end;
 
-function TRestCache.SetCache(aTable: TSQLRecordClass): boolean;
+function TRestCache.SetCache(aTable: TORMClass): boolean;
 var
   i: PtrInt;
 begin
@@ -21156,7 +21187,7 @@ begin
       end;
 end;
 
-function TRestCache.SetCache(aTable: TSQLRecordClass; aID: TID): boolean;
+function TRestCache.SetCache(aTable: TORMClass; aID: TID): boolean;
 var
   i: PtrInt;
 begin
@@ -21171,7 +21202,7 @@ begin
   result := True;
 end;
 
-function TRestCache.SetCache(aTable: TSQLRecordClass;
+function TRestCache.SetCache(aTable: TORMClass;
   const aIDs: array of TID): boolean;
 var
   i: PtrUInt;
@@ -21189,7 +21220,7 @@ begin
   result := True;
 end;
 
-function TRestCache.SetCache(aRecord: TSQLRecord): boolean;
+function TRestCache.SetCache(aRecord: TORM): boolean;
 begin
   if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) then
     result := false
@@ -21206,10 +21237,10 @@ begin
       fCache[i].Clear;
 end;
 
-function TRestCache.FillFromQuery(aTable: TSQLRecordClass;
+function TRestCache.FillFromQuery(aTable: TORMClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): integer;
 var
-  rec: TSQLRecord;
+  rec: TORM;
   cache: ^TRestCacheEntry;
 begin
   result := 0;
@@ -21239,13 +21270,13 @@ begin
       fCache[i].FlushCacheAllEntries; // include *CriticalSection(Mutex)
 end;
 
-procedure TRestCache.Flush(aTable: TSQLRecordClass);
+procedure TRestCache.Flush(aTable: TORMClass);
 begin
   if self <> nil then // includes *CriticalSection(Mutex):
     fCache[fModel.GetTableIndexExisting(aTable)].FlushCacheAllEntries;
 end;
 
-procedure TRestCache.Flush(aTable: TSQLRecordClass; aID: TID);
+procedure TRestCache.Flush(aTable: TORMClass; aID: TID);
 begin
   if self <> nil then
     with fCache[fModel.GetTableIndexExisting(aTable)] do
@@ -21260,7 +21291,7 @@ begin
       end;
 end;
 
-procedure TRestCache.Flush(aTable: TSQLRecordClass; const aIDs: array of TID);
+procedure TRestCache.Flush(aTable: TORMClass; const aIDs: array of TID);
 var
   i: PtrInt;
 begin
@@ -21278,19 +21309,19 @@ begin
       end;
 end;
 
-procedure TRestCache.Notify(aTable: TSQLRecordClass; aID: TID;
-  const aJSON: RawUTF8; aAction: TSQLOccasion);
+procedure TRestCache.Notify(aTable: TORMClass; aID: TID;
+  const aJSON: RawUTF8; aAction: TORMOccasion);
 begin
   if (self <> nil) and (aTable <> nil) and (aID > 0) then
     Notify(fModel.GetTableIndex(aTable), aID, aJSON, aAction);
 end;
 
-procedure TRestCache.Notify(aRecord: TSQLRecord; aAction: TSQLOccasion);
+procedure TRestCache.Notify(aRecord: TORM; aAction: TORMOccasion);
 var
   aTableIndex: cardinal;
 begin
   if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) or
-     not (aAction in [soInsert, soUpdate]) then
+     not (aAction in [ooInsert, ooUpdate]) then
     exit;
   aTableIndex := fModel.GetTableIndex(PSQLRecordClass(aRecord)^);
   if aTableIndex < cardinal(Length(fCache)) then
@@ -21300,10 +21331,10 @@ begin
 end;
 
 procedure TRestCache.Notify(aTableIndex: integer; aID: TID;
-  const aJSON: RawUTF8; aAction: TSQLOccasion);
+  const aJSON: RawUTF8; aAction: TORMOccasion);
 begin
   if (self <> nil) and (aID > 0) and
-     (aAction in [soSelect, soInsert, soUpdate]) and
+     (aAction in [ooSelect, ooInsert, ooUpdate]) and
      (aJSON <> '') and (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -21346,14 +21377,14 @@ begin
       end;
 end;
 
-procedure TRestCache.NotifyDeletion(aTable: TSQLRecordClass; aID: TID);
+procedure TRestCache.NotifyDeletion(aTable: TORMClass; aID: TID);
 begin
   if (self <> nil) and
      (aTable <> nil) and (aID > 0) then
     NotifyDeletion(fModel.GetTableIndex(aTable), aID);
 end;
 
-function TRestCache.Retrieve(aID: TID; aValue: TSQLRecord): boolean;
+function TRestCache.Retrieve(aID: TID; aValue: TORM): boolean;
 var
   TableIndex: cardinal;
 begin
@@ -21385,7 +21416,7 @@ end;
 
 { TRestBatch }
 
-constructor TRestBatch.Create(const aRest: IRestORM; aTable: TSQLRecordClass;
+constructor TRestBatch.Create(const aRest: IRestORM; aTable: TORMClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions;
   InternalBufferSize: cardinal; CalledWithinRest: boolean);
 begin
@@ -21400,7 +21431,7 @@ begin
   Reset(aTable, AutomaticTransactionPerRow, Options);
 end;
 
-procedure TRestBatch.Reset(aTable: TSQLRecordClass;
+procedure TRestBatch.Reset(aTable: TORMClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions);
 begin
   fBatch.Free; // full reset for SetExpandedJSONWriter
@@ -21469,8 +21500,8 @@ begin
     result := fBatch.TextLength;
 end;
 
-procedure TRestBatch.SetExpandedJSONWriter(Props: TSQLRecordProperties;
-  ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
+procedure TRestBatch.SetExpandedJSONWriter(Props: TORMProperties;
+  ForceResetFields, withID: boolean; const WrittenFields: TFieldBits);
 begin
   if (self = nil) or
      (fBatch = nil) then
@@ -21524,11 +21555,11 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   inc(fUpdateCount);
 end;
 
-function TRestBatch.Add(Value: TSQLRecord; SendData, ForceID: boolean;
-  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+function TRestBatch.Add(Value: TORM; SendData, ForceID: boolean;
+  const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 var
-  Props: TSQLRecordProperties;
-  FieldBits: TSQLFieldBits;
+  Props: TORMProperties;
+  FieldBits: TFieldBits;
   PostSimpleFields: boolean;
   f: PtrInt;
 begin
@@ -21566,7 +21597,7 @@ begin
   if SendData then
   begin
     if IsZero(CustomFields) then
-      FieldBits := Props.SimpleFieldsBits[soInsert]
+      FieldBits := Props.SimpleFieldsBits[ooInsert]
     else if DoNotAutoComputeFields then
       FieldBits := CustomFields
     else
@@ -21575,7 +21606,7 @@ begin
       (Value.IDValue <> 0) and ForceID, FieldBits);
     fTablePreviousSendData := PSQLRecordClass(Value)^;
     if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
-      Value.ComputeFieldsBeforeWrite(fRest, seAdd);
+      Value.ComputeFieldsBeforeWrite(fRest, oeAdd);
     if PostSimpleFields then
     begin
       fBatch.Add('[');
@@ -21590,7 +21621,7 @@ begin
     else
       Value.GetJSONValues(fBatch);
     if fCalledWithinRest and ForceID then
-      fRest.CacheOrNil.Notify(Value, soInsert);
+      fRest.CacheOrNil.Notify(Value, ooInsert);
   end
   else
     fBatch.Add('{', '}'); // '{"Table":[...,"POST",{},...]}'
@@ -21599,17 +21630,17 @@ begin
   inc(fBatchCount);
   inc(fAddCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self, soInsert, PSQLRecordClass(Value)^, Value.IDValue, Value,
+    fOnWrite(self, ooInsert, PSQLRecordClass(Value)^, Value.IDValue, Value,
       FieldBits{%H-});
 end;
 
-function TRestBatch.Delete(Table: TSQLRecordClass; ID: TID): integer;
+function TRestBatch.Delete(Table: TORMClass; ID: TID): integer;
 begin
   if (self = nil) or
      (fBatch = nil) or
      (Table = nil) or
      (ID <= 0) or
-     not fRest.RecordCanBeUpdated(Table, ID, seDelete) then
+     not fRest.RecordCanBeUpdated(Table, ID, oeDelete) then
   begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
@@ -21624,14 +21655,14 @@ begin
   inc(fBatchCount);
   inc(fDeleteCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self, soDelete, Table, ID, nil, []);
+    fOnWrite(self, ooDelete, Table, ID, nil, []);
 end;
 
 function TRestBatch.Delete(ID: TID): integer;
 begin
   if (self = nil) or
      (fTable = nil) or (ID <= 0) or
-     not fRest.RecordCanBeUpdated(fTable, ID, seDelete) then
+     not fRest.RecordCanBeUpdated(fTable, ID, oeDelete) then
   begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
@@ -21644,7 +21675,7 @@ begin
   inc(fBatchCount);
   inc(fDeleteCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self, soDelete, fTable, ID, nil, []);
+    fOnWrite(self, ooDelete, fTable, ID, nil, []);
 end;
 
 function TRestBatch.PrepareForSending(out Data: RawUTF8): boolean;
@@ -21672,11 +21703,11 @@ begin
   end;
 end;
 
-function TRestBatch.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+function TRestBatch.Update(Value: TORM; const CustomFields: TFieldBits;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
 var
-  Props: TSQLRecordProperties;
-  FieldBits: TSQLFieldBits;
+  Props: TORMProperties;
+  FieldBits: TFieldBits;
   ID: TID;
   tableIndex: integer;
 begin
@@ -21686,7 +21717,7 @@ begin
     exit;
   ID := Value.IDValue;
   if (ID <= 0) or
-     not fRest.RecordCanBeUpdated(Value.RecordClass, ID, seUpdate) then
+     not fRest.RecordCanBeUpdated(Value.RecordClass, ID, oeUpdate) then
     exit; // invalid parameters, or not opened BATCH sequence
   Props := Value.RecordProps;
   if fTable <> nil then
@@ -21715,13 +21746,13 @@ begin
     {withID=}true, FieldBits);
   fTablePreviousSendData := PSQLRecordClass(Value)^;
   if not DoNotAutoComputeFields then
-    Value.ComputeFieldsBeforeWrite(fRest, seUpdate); // update sftModTime fields
+    Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update sftModTime fields
   Value.GetJSONValues(fBatch);
   fBatch.Add(',');
-  if fCalledWithinRest and (FieldBits - Props.SimpleFieldsBits[soUpdate] = []) then
+  if fCalledWithinRest and (FieldBits - Props.SimpleFieldsBits[ooUpdate] = []) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
-    fRest.CacheOrNil.Notify(Value, soUpdate)
+    fRest.CacheOrNil.Notify(Value, ooUpdate)
   else
     // may not contain all cached fields -> delete from cache
     AddID(fDeletedRecordRef, fDeletedCount, RecordReference(tableIndex, ID));
@@ -21729,10 +21760,10 @@ begin
   inc(fBatchCount);
   inc(fUpdateCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self, soUpdate, PSQLRecordClass(Value)^, Value.IDValue, Value, FieldBits);
+    fOnWrite(self, ooUpdate, PSQLRecordClass(Value)^, Value.IDValue, Value, FieldBits);
 end;
 
-function TRestBatch.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+function TRestBatch.Update(Value: TORM; const CustomCSVFields: RawUTF8;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
 begin
   if (Value = nil) or
@@ -21747,7 +21778,7 @@ end;
 { TRestBatchLocked }
 
 constructor TRestBatchLocked.Create(const aRest: IRestORM;
-  aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal;
+  aTable: TORMClass; AutomaticTransactionPerRow: cardinal;
   Options: TRestBatchOptions; InternalBufferSize: cardinal;
   CalledWithinRest: boolean);
 begin
@@ -21762,7 +21793,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TRestBatchLocked.Reset(aTable: TSQLRecordClass;
+procedure TRestBatchLocked.Reset(aTable: TORMClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions);
 begin
   inherited Reset(aTable, AutomaticTransactionPerRow, Options);
@@ -21782,7 +21813,7 @@ begin
 end;
 
 function TSynValidateRest.Validate(aFieldIndex: integer; const Value: RawUTF8;
-  var ErrorMsg: string; const aProcessRest: IRestORM; aProcessRec: TSQLRecord): boolean;
+  var ErrorMsg: string; const aProcessRest: IRestORM; aProcessRec: TORM): boolean;
 begin
   try
     fProcessRest := aProcessRest;
@@ -21798,7 +21829,7 @@ end;
 
 function TSynValidateUniqueField.DoValidate(aFieldIndex: integer;
   const Value: RawUTF8; var ErrorMsg: string; const aProcessRest: IRestORM;
-  aProcessRec: TSQLRecord): boolean;
+  aProcessRec: TORM): boolean;
 var
   aID: TID;
 begin
@@ -21844,7 +21875,7 @@ end;
 
 function TSynValidateUniqueFields.DoValidate(aFieldIndex: integer;
   const Value: RawUTF8; var ErrorMsg: string; const aProcessRest: IRestORM;
-  aProcessRec: TSQLRecord): boolean;
+  aProcessRec: TORM): boolean;
 var
   where: RawUTF8;
   i: PtrInt;
@@ -21877,11 +21908,11 @@ end;
 
 
 
-{ ------------ TSQLAccessRights Definition }
+{ ------------ TORMAccessRights Definition }
 
-{ TSQLAccessRights }
+{ TORMAccessRights }
 
-procedure TSQLAccessRights.Edit(aTableIndex: integer; C, R, U, D: boolean);
+procedure TORMAccessRights.Edit(aTableIndex: integer; C, R, U, D: boolean);
 begin
   if C then
     Include(POST, aTableIndex)
@@ -21901,37 +21932,37 @@ begin
     Exclude(DELETE, aTableIndex);
 end;
 
-procedure TSQLAccessRights.Edit(aTableIndex: integer; aRights: TSQLOccasions);
+procedure TORMAccessRights.Edit(aTableIndex: integer; aRights: TORMOccasions);
 begin
-  Edit(aTableIndex, soInsert in aRights, soSelect in aRights,
-    soUpdate in aRights, soDelete in aRights);
+  Edit(aTableIndex, ooInsert in aRights, ooSelect in aRights,
+    ooUpdate in aRights, ooDelete in aRights);
 end;
 
-procedure TSQLAccessRights.Edit(aModel: TSQLModel; aTable: TSQLRecordClass;
+procedure TORMAccessRights.Edit(aModel: TORMModel; aTable: TORMClass;
   C, R, U, D: boolean);
 begin
   Edit(aModel.GetTableIndexExisting(aTable), C, R, U, D);
 end;
 
-procedure TSQLAccessRights.Edit(aModel: TSQLModel; aTable: TSQLRecordClass;
-  aRights: TSQLOccasions);
+procedure TORMAccessRights.Edit(aModel: TORMModel; aTable: TORMClass;
+  aRights: TORMOccasions);
 begin
   Edit(aModel.GetTableIndexExisting(aTable), aRights);
 end;
 
-procedure TSQLAccessRights.FromString(P: PUTF8Char);
+procedure TORMAccessRights.FromString(P: PUTF8Char);
 begin
   FillCharFast(self, SizeOf(self), 0);
   if P = nil then
     exit;
-  AllowRemoteExecute := TSQLAllowRemoteExecute(byte(GetNextItemCardinal(P)));
+  AllowRemoteExecute := TORMAllowRemoteExecute(byte(GetNextItemCardinal(P)));
   SetBitCSV(GET, MAX_SQLTABLES, P);
   SetBitCSV(POST, MAX_SQLTABLES, P);
   SetBitCSV(PUT, MAX_SQLTABLES, P);
   SetBitCSV(DELETE, MAX_SQLTABLES, P);
 end;
 
-function TSQLAccessRights.ToString: RawUTF8;
+function TORMAccessRights.ToString: RawUTF8;
 begin
   FormatUTF8('%,%,%,%,%', [Byte(AllowRemoteExecute),
     GetBitCSV(GET, MAX_SQLTABLES), GetBitCSV(POST, MAX_SQLTABLES),
@@ -21939,44 +21970,44 @@ begin
 end;
 
 
-{ ************** TSQLRecord High-Level Parents }
+{ ************** TORM High-Level Parents }
 
-{ TSQLRecordNoCase }
+{ TORMNoCase }
 
-class procedure TSQLRecordNoCase.InternalDefineModel(Props: TSQLRecordProperties);
+class procedure TORMNoCase.InternalDefineModel(Props: TORMProperties);
 begin
   Props.SetCustomCollationForAll(sftUTF8Text, 'NOCASE');
 end;
 
-{ TSQLRecordCaseSensitive }
+{ TORMCaseSensitive }
 
-class procedure TSQLRecordCaseSensitive.InternalDefineModel(Props: TSQLRecordProperties);
+class procedure TORMCaseSensitive.InternalDefineModel(Props: TORMProperties);
 begin
   Props.SetCustomCollationForAll(sftUTF8Text, 'BINARY');
 end;
 
-{ TSQLRecordNoCaseExtended }
+{ TORMNoCaseExtended }
 
-class procedure TSQLRecordNoCaseExtended.InternalDefineModel(Props: TSQLRecordProperties);
+class procedure TORMNoCaseExtended.InternalDefineModel(Props: TORMProperties);
 begin
   inherited InternalDefineModel(Props); // set NOCASE collation
   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
 end;
 
-{ TSQLRecordCaseSensitiveExtended }
+{ TORMCaseSensitiveExtended }
 
-class procedure TSQLRecordCaseSensitiveExtended.InternalDefineModel(
-  Props: TSQLRecordProperties);
+class procedure TORMCaseSensitiveExtended.InternalDefineModel(
+  Props: TORMProperties);
 begin
   inherited InternalDefineModel(Props); // set BINARY collation
   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
 end;
 
-{ TSQLRecordNoCaseExtendedNoID }
+{ TORMNoCaseExtendedNoID }
 
-class procedure TSQLRecordNoCaseExtendedNoID.InitializeTable(
+class procedure TORMNoCaseExtendedNoID.InitializeTable(
   const Server: IRestORMServer; const FieldName: RawUTF8;
-  Options: TSQLInitializeTableOptions);
+  Options: TORMInitializeTableOptions);
 begin
   include(Options, itoNoIndex4TID);
   inherited InitializeTable(Server, FieldName, Options);
@@ -21986,10 +22017,10 @@ procedure InitializeUnit;
 begin
   InitializeCriticalSection(vmtAutoTableLock);
   Rtti.RegisterObjArray(
-    TypeInfo(TSQLModelRecordPropertiesObjArray), TSQLModelRecordProperties);
-  // ensure TSQLRecordObjArray is recognized as a T*ObjArray
+    TypeInfo(TORMModelRecordPropertiesObjArray), TORMModelRecordProperties);
+  // ensure TORMObjArray is recognized as a T*ObjArray
   // - needed e.g. by TRestStorageInMemory.Create
-  Rtti.RegisterObjArray(TypeInfo(TSQLRecordObjArray), TSQLRecord);
+  Rtti.RegisterObjArray(TypeInfo(TORMObjArray), TORM);
   // manual setting of SQLFieldTypeComp[] values which are not TUTF8Compare
   pointer(@SQLFieldTypeComp[sftAnsiText]) := @AnsiIComp;
   pointer(@SQLFieldTypeComp[sftUTF8Custom]) := @AnsiIComp;

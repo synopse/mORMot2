@@ -1517,7 +1517,7 @@ end;
 
 const
   // lpMinimumApplicationAddress retrieved from Windows is very low ($10000)
-  // - i.e. maximum number of ID per table would be 65536 in TSQLRecord.GetID
+  // - i.e. maximum number of ID per table would be 65536 in TORM.GetID
   // - so we'll force an higher and almost "safe" value as 1,048,576
   // (real value from runnning Windows is greater than $400000)
   MIN_PTR_VALUE = $100000;

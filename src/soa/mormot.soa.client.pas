@@ -106,7 +106,7 @@ type
     fNonBlockWithoutAnswer: boolean;
     fSendNotificationsThread: TThread;
     fSendNotificationsRest: TRest;
-    fSendNotificationsLogClass: TSQLRecordServiceNotificationsClass;
+    fSendNotificationsLogClass: TORMServiceNotificationsClass;
     function CreateFakeInstance: TInterfacedObject;
     function InternalInvoke(const aMethod: RawUTF8; const aParams: RawUTF8='';
       aResult: PRawUTF8=nil; aErrorMsg: PRawUTF8=nil; aClientDrivenID: PCardinal=nil;
@@ -158,18 +158,18 @@ type
     /// persist all service calls into a database instead of calling the client
     // - expect a REST instance, which will store all methods without any
     // results (i.e. procedure without any var/out parameters) on the
-    // associated TSQLRecordServiceNotifications class
+    // associated TORMServiceNotifications class
     // - once set, regular fClient.URI() won't be called but a new aLogClass
     // entry will be stored in aRest
     // - to disable this redirection, set aRest and aLogClass to nil
     procedure StoreNotifications(aRest: TRest;
-      aLogClass: TSQLRecordServiceNotificationsClass);
+      aLogClass: TORMServiceNotificationsClass);
     /// allow background process of method with no results, via a temporary
     // database, to be used e.g. for safe notifications transmission
     // - will call StoreNotifications() and start background notification
     // - expect a REST instance, which will store all methods without any
     // results (i.e. procedure without any var/out parameters) on the
-    // associated TSQLRecordServiceNotifications class
+    // associated TORMServiceNotifications class
     // - a background thread will be used to check for pending notifications,
     // and send them to the supplied aRemote TRestClient instance, or
     // to the main TServiceFactoryClient.fClient instance
@@ -179,7 +179,7 @@ type
     // the aRest/aLogClass table, which will be retrieved asynchronously
     // by the background thread
     procedure SendNotifications(aRest: TRest;
-      aLogClass: TSQLRecordServiceNotificationsClass; aRetryPeriodSeconds: Integer = 30;
+      aLogClass: TORMServiceNotificationsClass; aRetryPeriodSeconds: Integer = 30;
       aRemote: TRest = nil);
     /// compute how many pending notifications are waiting for background process
     // initiated by SendNotifications() method
@@ -353,7 +353,7 @@ end;
 
 procedure TServiceFactoryClientNotificationThread.ProcessPendingNotification;
 var
-  pending: TSQLRecordServiceNotifications;
+  pending: TORMServiceNotifications;
   params, error: RawUTF8;
   client: cardinal;
   pendings, count: integer;
@@ -508,7 +508,7 @@ function TServiceFactoryClient.Invoke(const aMethod: TInterfaceMethod;
 
   procedure SendNotificationsLog;
   var
-    pending: TSQLRecordServiceNotifications;
+    pending: TORMServiceNotifications;
     input: TDocVariantData;
     json: RawUTF8;
   begin
@@ -833,7 +833,7 @@ begin
 end;
 
 procedure TServiceFactoryClient.StoreNotifications(aRest: TRest;
-  aLogClass: TSQLRecordServiceNotificationsClass);
+  aLogClass: TORMServiceNotificationsClass);
 var
   c: TClass;
 begin
@@ -851,7 +851,7 @@ begin
 end;
 
 procedure TServiceFactoryClient.SendNotifications(aRest: TRest;
-  aLogClass: TSQLRecordServiceNotificationsClass; aRetryPeriodSeconds: Integer;
+  aLogClass: TORMServiceNotificationsClass; aRetryPeriodSeconds: Integer;
   aRemote: TRest);
 begin
   if (self = nil) or

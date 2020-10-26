@@ -198,7 +198,7 @@ type
   PRttiProp = ^TRttiProp;
 
   /// used to store a chain of properties RTTI
-  // - could be used e.g. by TSQLPropInfo to handled flattened properties
+  // - could be used e.g. by TORMPropInfo to handled flattened properties
   PRttiPropDynArray = array of PRttiProp;
 
   /// pointer to all RTTI class properties definitions
@@ -211,7 +211,7 @@ type
   // use P := PropList to get the first PRttiProp, and iterate with P^.Next
   // - this enumeration is very fast and doesn't require any temporary memory,
   //  as in the TypInfo.GetPropInfos() PPropList usage
-  // - for TSQLRecord, you should better use the RecordProps.Fields[] array,
+  // - for TORM, you should better use the RecordProps.Fields[] array,
   // which is faster and contains the properties published in parent classes
   TRttiProps = object
   public
@@ -522,7 +522,7 @@ type
     function IsBoolean: boolean;          {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property is a currency field
     function IsCurrency: boolean;         {$ifdef HASINLINE}inline;{$endif}
-    /// return true if this property is a BLOB (TSQLRawBlob)
+    /// return true if this property is a BLOB (TRawBlob)
     function IsBlob: boolean;             {$ifdef HASINLINE}inline;{$endif}
     /// for rkFloat: get the storage size and precision
     // - will also properly detect our currency internal type as rfCurr
@@ -584,11 +584,11 @@ type
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
-    // - it will also recognize TSQLRawBlob as the fake CP_SQLRAWBLOB codepage
+    // - it will also recognize TRawBlob as the fake CP_SQLRAWBLOB codepage
     function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
     {$ifdef HASCODEPAGE}
     /// returning the code page stored in the RTTI
-    // - without recognizing e.g. TSQLRawBlob
+    // - without recognizing e.g. TRawBlob
     // - caller should ensure the type is indeed a rkLString
     function AnsiStringCodePageStored: integer; inline;
     {$endif HASCODEPAGE}
@@ -738,7 +738,7 @@ type
     // the following will create a NAME VARCHAR(40) field:
     // ! Name: RawUTF8 index 40 read fName write fName;
     // - is used by a dynamic array property for fast usage of the
-    // TSQLRecord.DynArray(DynArrayFieldIndex) method
+    // TORM.DynArray(DynArrayFieldIndex) method
     function Index: Integer; {$ifdef HASINLINE}inline;{$endif}
     /// contains the default value for an ordinal or set property
     // - NO_DEFAULT=$80000000 indicates none was defined in source code
@@ -769,7 +769,7 @@ type
       {$ifdef FPC} inline; {$endif}
     /// return TRUE if the property is 0/nil/''/null
     function IsVoid(Instance, RttiCustom: TObject): boolean;
-    /// return true if this property is a BLOB (TSQLRawBlob)
+    /// return true if this property is a BLOB (TRawBlob)
     function IsBlob: boolean;
       {$ifdef FPC} inline; {$endif}
     /// compute in how many bytes this property is stored
@@ -1096,7 +1096,7 @@ function GetPublishedMethods(Instance: TObject;
 // dynamic arrays, classes and any string properties (excluding shortstring)
 // - TCollection items can be copied also, if they are of the same exact class
 // - object properties instances are created in aTo if the objects are not
-// TSQLRecord children (in this case, these are not class instances, but
+// TORM children (in this case, these are not class instances, but
 // INTEGER reference to records, so only the integer value is copied), that is
 // for regular classes
 procedure CopyObject(aFrom, aTo: TObject); overload;
@@ -1131,7 +1131,7 @@ function IsObjectDefaultOrVoid(Value: TObject): boolean;
 // all nested class properties values
 // - if FreeAndNilNestedObjects is TRUE, will FreeAndNil() all the nested
 // class properties
-// - for a TSQLRecord, use its ClearProperties method instead, which will
+// - for a TORM, use its ClearProperties method instead, which will
 // handle the ID property, and any nested JOINed instances
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean = false);
 
@@ -1206,13 +1206,13 @@ function GetCaptionFromEnum(aTypeInfo: PRttiInfo; aIndex: integer): string;
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 
 /// will get a class name as UTF-8
-// - will trim 'T', 'TSyn', 'TSQL' or 'TSQLRecord' left side of the class name
+// - will trim 'T', 'TSyn', 'TSQL' or 'TORM' left side of the class name
 // - will encode the class name as UTF-8 (for Unicode Delphi versions)
-// - is used e.g. to extract the SQL table name for a TSQLRecord class
+// - is used e.g. to extract the SQL table name for a TORM class
 function GetDisplayNameFromClass(C: TClass): RawUTF8;
 
 ///  UnCamelCase and translate the class name, triming any left 'T', 'TSyn',
-// 'TSQL' or 'TSQLRecord'
+// 'TSQL', 'TORM' or 'TORM'
 // - return generic VCL string type, i.e. UnicodeString for Delphi 2009+
 function GetCaptionFromClass(C: TClass): string;
 
@@ -1794,7 +1794,7 @@ type
     // - as previously registered by Rtti.RegisterCollection()
     property CollectionItem: TCollectionItemClass read fCollectionItem;
     /// opaque private instance used by mormot.orm.base.pas or mormot.core.log.pas
-    // - stores e.g. the TSQLRecordProperties ORM information of a TSQLRecord,
+    // - stores e.g. the TORMProperties ORM information of a TORM,
     // or the TSynLogFamily of a TSynLog instance
     property Private: TObject read fPrivate write fPrivate;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
@@ -1913,7 +1913,7 @@ type
     procedure RegisterBinaryTypes(const InfoBinarySize: array of const);
     /// register one dynamic array RTTI TypeInfo() to be serialized as T*ObjArray
     // - will allow JSON serialization and unserialization of the registered
-    // dynamic array property defined in any TPersistent or TSQLRecord
+    // dynamic array property defined in any TPersistent or TORM
     // - could be used as such (note the T*ObjArray type naming convention):
     // ! TUserObjArray = array of TUser;
     // ! ...
@@ -2428,7 +2428,7 @@ end;
 
 function TRttiInfo.IsBlob: boolean;
 begin
-  result := @self = TypeInfo(TSQLRawBlob);
+  result := @self = TypeInfo(TRawBlob);
 end;
 
 function TRttiInfo.RttiFloat: TRttiFloat;
@@ -2589,7 +2589,7 @@ end;
 
 function TRttiInfo.AnsiStringCodePage: integer;
 begin
-  if @self = TypeInfo(TSQLRawBlob) then
+  if @self = TypeInfo(TRawBlob) then
     result := CP_SQLRAWBLOB
   else
   {$ifdef HASCODEPAGE}
@@ -2823,7 +2823,7 @@ end;
 
 function TRttiProp.IsBlob: boolean;
 begin
-  result := TypeInfo = system.TypeInfo(TSQLRawBlob);
+  result := TypeInfo = system.TypeInfo(TRawBlob);
 end;
 
 procedure TRttiProp.GetValue(Instance, RttiCustom: TObject;
@@ -4091,8 +4091,8 @@ begin
   end;
 end;
 
-procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value; out result: ShortString;
-  trimlowercase: boolean);
+procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
+  out result: ShortString; trimlowercase: boolean);
 var
   info: PRttiEnumType;
   PS: PShortString;
@@ -4166,16 +4166,17 @@ begin
   DelphiName := ClassNameShort(C);
   TrimLeft := 0;
   if DelphiName^[0] > #4 then
+    // fast case-insensitive compare
     case PInteger(@DelphiName^[1])^ and $DFDFDFDF of
-      // fast case-insensitive compare
       ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24:
         if (DelphiName^[0] <= #10) or
-         (PInteger(@DelphiName^[5])^ and $DFDFDFDF<> // fast case-insensitive compare
-           ord('R') + ord('E') shl 8 + ord('C') shl 16 + ord('O') shl 24) or
-         (PWord(@DelphiName^[9])^ and $DFDF <> ord('R') + ord('D')shl 8) then
+           (PInteger(@DelphiName^[5])^ and $DFDFDFDF <>
+            ord('R') + ord('E') shl 8 + ord('C') shl 16 + ord('O') shl 24) or
+           (PWord(@DelphiName^[9])^ and $DFDF <> ord('R') + ord('D')shl 8) then
           TrimLeft := 4
         else
           TrimLeft := 10;
+      ord('T') + ord('O') shl 8 + ord('R') shl 16 + ord('M') shl 24,
       ord('T') + ord('S') shl 8 + ord('Y') shl 16 + ord('N') shl 24:
         TrimLeft := 4;
     end;
@@ -4196,7 +4197,9 @@ begin
   begin
     tmp := ToText(C);
     P := pointer(tmp);
-    if IdemPChar(P, 'TSQL') or IdemPChar(P, 'TSYN') then
+    if IdemPChar(P, 'TSQL') or
+       IdemPChar(P, 'TORM') or
+       IdemPChar(P, 'TSYN') then
       inc(P, 4)
     else if P^ = 'T' then
        inc(P);
@@ -4877,7 +4880,7 @@ const
     'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD', 'SINGLE', 'STRING', 'SYNUNICODE',
     'TCREATETIME', 'TDATETIME', 'TDATETIMEMS', 'TGUID', 'THASH128', 'THASH256',
     'THASH512', 'TID', 'TMODTIME', 'TRECORDREFERENCE', 'TRECORDREFERENCETOBEDELETED',
-    'TRECORDVERSION', 'TSQLRAWBLOB', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
+    'TRECORDVERSION', 'TRawBlob', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
     'UNICODESTRING', 'UTF8STRING', 'VARIANT', 'WIDESTRING', 'WORD');
   // warning: recognized types should match at binary storage level!
   SORTEDTYPES: array[0..SORTEDMAX] of TRTTIParserType = (

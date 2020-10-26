@@ -636,10 +636,10 @@ type
   // - woDateTimeWithZSuffix will append the Z suffix to the ISO-8601 encoded
   // TDateTime value, to identify the content as strict UTC value
   // - TTimeLog would be serialized as Int64, unless woTimeLogAsText is defined
-  // - since TSQLRecord.ID could be huge Int64 numbers, they may be truncated
+  // - since TORM.ID could be huge Int64 numbers, they may be truncated
   // on client side, e.g. to 53-bit range in JavaScript: you could define
   // woIDAsIDstr to append an additional "ID_str":"##########" field
-  // - by default, TSQLRawBlob properties are serialized as null, unless
+  // - by default, TRawBlob properties are serialized as null, unless
   // woSQLRawBlobAsBase64 is defined
   // - if woHideSensitivePersonalInformation is set, rcfSPI types (e.g. the
   // TSynPersistentWithPassword.Password field) will be serialized as "***"

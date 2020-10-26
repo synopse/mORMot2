@@ -51,18 +51,44 @@ type
   // after registration via a TTextWriter.RegisterCustomJSONSerializer call
   // - smvRawJSON will transmit the raw JSON content, without serialization
   TInterfaceMethodValueType = (
-    imvNone, imvSelf, imvBoolean, imvEnum, imvSet, imvInteger, imvCardinal,
-    imvInt64, imvDouble, imvDateTime, imvCurrency,
-    imvRawUTF8, imvString, imvRawByteString, imvWideString, imvBinary,
-    imvRecord, imvVariant, imvObject, imvRawJSON, imvDynArray, imvInterface);
+    imvNone,
+    imvSelf,
+    imvBoolean,
+    imvEnum,
+    imvSet,
+    imvInteger,
+    imvCardinal,
+    imvInt64,
+    imvDouble,
+    imvDateTime,
+    imvCurrency,
+    imvRawUTF8,
+    imvString,
+    imvRawByteString,
+    imvWideString,
+    imvBinary,
+    imvRecord,
+    imvVariant,
+    imvObject,
+    imvRawJSON,
+    imvDynArray,
+    imvInterface);
 
   /// handled kind of parameters internal variables for an interface-based method
   // - reference-counted variables will have their own storage
   // - all non referenced-counted variables are stored within some 64-bit content
   // - imvVariant kind of parameter will be handled as a special imvvRecord
   TInterfaceMethodValueVar = (
-    imvvNone, imvvSelf, imvv64, imvvRawUTF8, imvvString, imvvWideString,
-    imvvRecord, imvvObject, imvvDynArray, imvvInterface);
+    imvvNone,
+    imvvSelf,
+    imvv64,
+    imvvRawUTF8,
+    imvvString,
+    imvvWideString,
+    imvvRecord,
+    imvvObject,
+    imvvDynArray,
+    imvvInterface);
 
   /// set of parameters for an interface-based service provider method
   TInterfaceMethodValueTypes = set of TInterfaceMethodValueType;
@@ -73,7 +99,10 @@ type
   // kind of parameters will be returned within the "result": JSON array
   // - smdResult is used for a function method, to handle the returned value
   TInterfaceMethodValueDirection = (
-    imdConst, imdVar, imdOut, imdResult);
+    imdConst,
+    imdVar,
+    imdOut,
+    imdResult);
 
   /// set of parameters direction for an interface-based service method
   TInterfaceMethodValueDirections = set of TInterfaceMethodValueDirection;
@@ -94,8 +123,13 @@ type
   // - vIsDynArrayString is set for ValueType=imvDynArray of string values
   // - vIsDateTimeMS is set for ValueType=imvDateTime and TDateTimeMS value
   TInterfaceMethodValueAsm = set of (
-    vIsString, vPassedByReference, vIsObjArray, vIsSPI, vIsQword,
-    vIsDynArrayString, vIsDateTimeMS);
+    vIsString,
+    vPassedByReference,
+    vIsObjArray,
+    vIsSPI,
+    vIsQword,
+    vIsDynArrayString,
+    vIsDateTimeMS);
 
   /// describe a service provider method argument
   {$ifdef USERECORDWITHMETHODS}
@@ -212,7 +246,9 @@ type
   // - returned content could be "normalized" (for any set or enumerate) if
   // Kind is pdvObjectFixed
   TInterfaceMethodParamsDocVariantKind = (
-    pdvArray, pdvObject, pdvObjectFixed);
+    pdvArray,
+    pdvObject,
+    pdvObjectFixed);
 
   /// describe an interface-based service provider method
   {$ifdef USERECORDWITHMETHODS}
@@ -275,7 +311,7 @@ type
     /// true if the result is a TServiceCustomAnswer record
     // - that is, a custom Header+Content BLOB transfert, not a JSON object
     ArgsResultIsServiceCustomAnswer: boolean;
-    /// true if there is a single input parameter as RawByteString/TSQLRawBlob
+    /// true if there is a single input parameter as RawByteString/TRawBlob
     // - TRestRoutingREST.ExecuteSOAByInterface will identify binary input
     // with mime-type 'application/octet-stream' as expected
     ArgsInputIsOctetStream: boolean;
@@ -354,6 +390,7 @@ type
   // - since TInterfaceFactory instances are shared in a global list, we
   // can safely use such pointers in our code to refer to a particular method
   PInterfaceMethod = ^TInterfaceMethod;
+
 
 {$ifndef PUREMORMOT2}
 
@@ -1136,12 +1173,23 @@ type
   // - isUndefined is the first, since it will be a ExpectsCount() weak rule
   // which may be overwritten by the other real run-time rules
   TInterfaceStubRuleKind = (
-    isUndefined, isExecutesJSON, isExecutesVariant, isRaises, isReturns, isFails);
+    isUndefined,
+    isExecutesJSON,
+    isExecutesVariant,
+    isRaises,
+    isReturns,
+    isFails);
 
   /// supported comparison operators for stubbing / mocking rules
   TInterfaceStubRuleOperator = (
-    ioUndefined, ioEqualTo, ioNotEqualTo, ioLessThan, ioLessThanOrEqualTo,
-    ioGreaterThan, ioGreaterThanOrEqualTo, ioTraceMatch);
+    ioUndefined,
+    ioEqualTo,
+    ioNotEqualTo,
+    ioLessThan,
+    ioLessThanOrEqualTo,
+    ioGreaterThan,
+    ioGreaterThanOrEqualTo,
+    ioTraceMatch);
 
   /// define a mocking / stubing rule used internaly by TInterfaceStub
   TInterfaceStubRule = record
@@ -1224,8 +1272,10 @@ type
   // - by default, any TInterfaceMock.Fails() rule execution will notify the
   // TSynTestCase, unless imoMockFailsWillPassTestCase which will let test pass
   TInterfaceStubOption = (
-    imoLogMethodCallsAndResults, imoFakeInstanceWontReleaseTInterfaceStub,
-    imoRaiseExceptionIfNoRuleDefined, imoReturnErrorIfNoRuleDefined,
+    imoLogMethodCallsAndResults,
+    imoFakeInstanceWontReleaseTInterfaceStub,
+    imoRaiseExceptionIfNoRuleDefined,
+    imoReturnErrorIfNoRuleDefined,
     imoMockFailsWillPassTestCase);
 
   /// set of options available to TInterfaceStub
@@ -1445,7 +1495,8 @@ type
     /// add an evaluation rule for a given method
     // - aExpectedResults JSON array will be returned to the caller
     // - raise an Exception if the method name does not exist for this interface
-    function Returns(const aMethodName, aExpectedResults: RawUTF8): TInterfaceStub; overload;
+    function Returns(const aMethodName,
+      aExpectedResults: RawUTF8): TInterfaceStub; overload;
     /// add an evaluation rule for a given method
     // - aExpectedResults will be returned to the caller after conversion to
     // a JSON array
@@ -1619,7 +1670,8 @@ type
   protected
     fTestCase: TSynTestCase;
     function InternalCheck(aValid, aExpectationFailed: boolean;
-      const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean; override;
+      const aErrorMsgFmt: RawUTF8;
+      const aErrorMsgArgs: array of const): boolean; override;
   public
     /// initialize an interface mock from TypeInfo(IMyInterface)
     // - aTestCase.Check() will be called in case of mocking failure
@@ -1733,11 +1785,19 @@ type
   /// possible service provider method options, e.g. about logging or execution
   // - see TServiceMethodOptions for a description of each available option
   TInterfaceMethodOption = (
-    optExecLockedPerInterface, optExecInPerInterfaceThread,
-    optFreeInPerInterfaceThread, optExecInMainThread, optFreeInMainThread,
-    optVariantCopiedByReference, optInterceptInputOutput, optNoLogInput,
-    optNoLogOutput, optErrorOnMissingParam, optForceStandardJSON,
-    optDontStoreVoidJSON, optIgnoreException);
+    optExecLockedPerInterface,
+    optExecInPerInterfaceThread,
+    optFreeInPerInterfaceThread,
+    optExecInMainThread,
+    optFreeInMainThread,
+    optVariantCopiedByReference,
+    optInterceptInputOutput,
+    optNoLogInput,
+    optNoLogOutput,
+    optErrorOnMissingParam,
+    optForceStandardJSON,
+    optDontStoreVoidJSON,
+    optIgnoreException);
 
   /// set of per-method execution options for an interface-based service provider
   // - by default, mehthod executions are concurrent, for better server
@@ -1786,7 +1846,10 @@ type
 
   /// the current step of a TInterfaceMethodExecute.OnExecute call
   TInterfaceMethodExecuteEventStep = (
-    smsUndefined, smsBefore, smsAfter, smsError);
+    smsUndefined,
+    smsBefore,
+    smsAfter,
+    smsError);
 
   /// the TInterfaceMethodExecute.OnExecute signature
   TInterfaceMethodExecuteEvent = procedure(Sender: TInterfaceMethodExecute;
@@ -1934,7 +1997,8 @@ type
   // - ifoDontStoreVoidJSON will ensure objects and records won't include
   // default void fields in JSON serialization
   TInterfacedObjectFromFactoryOption = (
-    ifoJsonAsExtended, ifoDontStoreVoidJSON);
+    ifoJsonAsExtended,
+    ifoDontStoreVoidJSON);
 
   /// defines how TInterfacedObjectFromFactory will perform its execution
   TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;

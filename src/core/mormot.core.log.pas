@@ -337,7 +337,7 @@ type
     /// call this method to add the content of most low-level types to the log
     // at a specified level
     // - TSynLog will handle enumerations and dynamic array; TSQLLog will be
-    // able to write TObject/TSQLRecord and sets content as JSON
+    // able to write TObject/TORM and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: pointer;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
@@ -1030,7 +1030,7 @@ type
     // - this overridden implementation will write the value content,
     // written as human readable JSON: handle dynamic arrays and enumerations
     // - TSQLLog from mORMot.pas unit will be able to write
-    // TObject/TSQLRecord and sets content as JSON
+    // TObject/TORM and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: pointer;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
@@ -4584,14 +4584,27 @@ procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 var
   name: RawUTF8;
-  i, L: integer;
+  i, L: PtrInt;
   n: TShort31;
 begin
   FormatUTF8(Format, Args, name);
-  name := StringReplaceAll(name, ['TSQLRest', '', 'TRest', '', 'TSQL', '',
-    'TWebSocket', 'WS', 'TSyn', '', 'Thread', '', 'Process', '',
-    'Background', 'Bgd', 'Server', 'Svr', 'Client', 'Clt', 'WebSocket', 'WS',
-    'Parallel', 'Par', 'Timer', 'Tmr', 'Thread', 'Thd']);
+  name := StringReplaceAll(name, [
+    'TSQLRest', '',
+    'TRest', '',
+    'TSQL', '',
+    'TORMRest', '',
+    'TORM', '',
+    'TWebSocket', 'WS',
+    'TSyn', '',
+    'Thread', '',
+    'Process', '',
+    'Background', 'Bgd',
+    'Server', 'Svr',
+    'Client', 'Clt',
+    'WebSocket', 'WS',
+    'Parallel', 'Par',
+    'Timer', 'Tmr',
+    'Thread', 'Thd']);
   for i := 1 to length(name) do
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line

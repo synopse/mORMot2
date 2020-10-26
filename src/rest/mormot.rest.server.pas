@@ -166,7 +166,7 @@ type
     fRemoteIP: RawUTF8;
     fAuthSession: TAuthSession;
     fClientKind: TRestServerURIContextClientKind;
-    fSessionAccessRights: TSQLAccessRights; // fSession may be deleted meanwhile
+    fSessionAccessRights: TORMAccessRights; // fSession may be deleted meanwhile
     fServiceListInterfaceMethodIndex: integer;
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
@@ -252,7 +252,7 @@ type
     /// the used Client-Server method (matching the corresponding HTTP Verb)
     // - this property will be set from incoming URI, even if RESTful
     // authentication is not enabled
-    Method: TSQLURIMethod;
+    Method: TURIMethod;
     /// the URI address, excluding trailing /info and ?par1=.... parameters
     // - can be either the table name (in RESTful protocol), or a service name
     URI: RawUTF8;
@@ -266,16 +266,16 @@ type
     /// position of the &session_signature=... text in Call^.url string
     URISessionSignaturePos: integer;
     /// the Table as specified at the URI level (if any)
-    Table: TSQLRecordClass;
+    Table: TORMClass;
     /// the index in the Model of the Table specified at the URI level (if any)
     TableIndex: integer;
     /// the RTTI properties of the Table specified at the URI level (if any)
-    TableRecordProps: TSQLModelRecordProperties;
+    TableRecordProps: TORMModelRecordProperties;
     /// the RESTful instance implementing the Table specified at the URI level (if any)
     // - equals the Server field most of the time, but may be an TRestStorage
     // for any in-memory/MongoDB/virtual instance
     TableEngine: TRestORM;
-    /// the associated TSQLRecord.ID, as decoded from URI scheme
+    /// the associated TORM.ID, as decoded from URI scheme
     // - this property will be set from incoming URI, even if RESTful
     // authentication is not enabled
     TableID: TID;
@@ -394,9 +394,9 @@ type
     /// validate mPost/mPut/mDelete action against those access rights
     // - used by TRestServerURIContext.ExecuteORMWrite and
     // TRestServer.EngineBatchSend methods for proper security checks
-    function CanExecuteORMWrite(Method: TSQLURIMethod;
-      Table: TSQLRecordClass; TableIndex: integer; const TableID: TID;
-      const Rights: TSQLAccessRights): boolean;
+    function CanExecuteORMWrite(Method: TURIMethod;
+      Table: TORMClass; TableIndex: integer; const TableID: TID;
+      const Rights: TORMAccessRights): boolean;
     /// extract the input parameters from its URI
     // - you should not have to call this method directly, but rather
     // all the InputInt/InputDouble/InputUTF8/InputExists/... properties
@@ -550,7 +550,7 @@ type
     // set ckFramework on match
     // - either ckAjax for a classic (AJAX) browser, or any other kind of
     // HTTP client
-    // - will be used e.g. by ClientSQLRecordOptions to check if the
+    // - will be used e.g. by ClienTORMOptions to check if the
     // current remote client expects standard JSON in all cases
     function ClientKind: TRestServerURIContextClientKind;
     /// identify if the request is about a Table containing nested objects or
@@ -558,7 +558,7 @@ type
     // of plain JSON string (as stored in the database)
     // - will idenfity ClientKind=ckAjax, or check for rsoGetAsJsonNotAsString
     // in TRestServer.Options
-    function ClientSQLRecordOptions: TJSONSerializerSQLRecordOptions;
+    function ClienTORMOptions: TJSONSerializerSQLRecordOptions;
     /// true if called from TRestServer.AdministrationExecute
     function IsRemoteAdministrationExecute: boolean;
     /// compute the file name corresponding to the URI
@@ -595,7 +595,7 @@ type
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
     // - you can customize SQLRecordOptions, to force the returned JSON
-    // object to have its TSQLRecord nested fields serialized as true JSON
+    // object to have its TORM nested fields serialized as true JSON
     // arrays or objects, or add an "ID_str" string field for JavaScript
     procedure Returns(Value: TObject; Status: integer = HTTP_SUCCESS;
       Handle304NotModified: boolean = false;
@@ -775,13 +775,13 @@ type
   // ! end;
   // - Client-Side can be implemented as you wish. By convention, it could be
   // appropriate to define in either TRestServer (if to be called as
-  // ModelRoot/MethodName), either TSQLRecord (if to be called as
+  // ModelRoot/MethodName), either TORM (if to be called as
   // ModelRoot/TableName[/TableID]/MethodName) a custom public or protected method,
   // calling TRestClientURI.URL with the appropriate parameters, and named
   // (by convention) as MethodName; TRestClientURI has dedicated methods
   // like CallBackGetResult, CallBackGet, CallBackPut and CallBack; see also
-  // TSQLModel.getURICallBack and JSONDecode function
-  // ! function TSQLRecordPeople.Sum(aClient: TRestClientURI; a, b: double): double;
+  // TORMModel.getURICallBack and JSONDecode function
+  // ! function TORMPeople.Sum(aClient: TRestClientURI; a, b: double): double;
   // ! var err: integer;
   // ! begin
   // !   val(aClient.CallBackGetResult('sum', ['a', a, 'b', b]), result, err);
@@ -890,14 +890,14 @@ type
 { ************ TAuthSession for In-Memory User Sessions }
 
   /// class used to maintain in-memory sessions
-  // - this is not a TSQLRecord table so won't be remotely accessible, for
+  // - this is not a TORM table so won't be remotely accessible, for
   // performance and security reasons
   // - the User field is a true instance, copy of the corresponding database
   // content (for better speed)
   // - you can inherit from this class, to add custom session process
   TAuthSession = class(TSynPersistent)
   protected
-    fUser: TSQLAuthUser;
+    fUser: TAuthUser;
     fID: RawUTF8;
     fIDCardinal: cardinal;
     fTimeOutTix: cardinal;
@@ -909,7 +909,7 @@ type
     fPrivateSaltHash: Cardinal;
     fLastTimestamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
-    fAccessRights: TSQLAccessRights;
+    fAccessRights: TORMAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
     function GetUserName: RawUTF8;
@@ -918,12 +918,12 @@ type
     procedure SaveTo(W: TBufferWriter); virtual;
     procedure ComputeProtectedValues; virtual;
   public
-    /// initialize a session instance with the supplied TSQLAuthUser instance
+    /// initialize a session instance with the supplied TAuthUser instance
     // - this aUser instance will be handled by the class until Destroy
     // - raise an exception on any error
     // - on success, will also retrieve the aUser.Data BLOB field content
     constructor Create(aCtxt: TRestServerURIContext;
-      aUser: TSQLAuthUser); reintroduce; virtual;
+      aUser: TAuthUser); reintroduce; virtual;
     /// initialize a session instance from some persisted buffer
     // - following the TRestServer.SessionsSaveToFile binary layout
     constructor CreateFrom(var P: PAnsiChar; PEnd: PAnsiChar;
@@ -939,15 +939,15 @@ type
     // i.e. session still in handshaking phase)
     property IDCardinal: cardinal read fIDCardinal;
     /// the associated User
-    // - this is a true TSQLAuthUser instance, and User.GroupRights will contain
-    // also a true TSQLAuthGroup instance
-    property User: TSQLAuthUser read fUser;
+    // - this is a true TAuthUser instance, and User.GroupRights will contain
+    // also a true TAuthGroup instance
+    property User: TAuthUser read fUser;
     /// set by the Access() method to the current GetTickCount64 shr 10
     // timestamp + TimeoutSecs
     property TimeOutTix: cardinal read fTimeOutTix;
     /// copy of the associated user access rights
-    // - extracted from User.TSQLAuthGroup.SQLAccessRights
-    property AccessRights: TSQLAccessRights read fAccessRights;
+    // - extracted from User.TAuthGroup.SQLAccessRights
+    property AccessRights: TORMAccessRights read fAccessRights;
     /// the hexadecimal private key as returned to the connected client
     // as 'SessionID+PrivateKey'
     property PrivateKey: RawUTF8 read fPrivateKey;
@@ -975,7 +975,7 @@ type
     /// the associated Group ID, as in User.GroupRights.ID
     property GroupID: TID read GetGroupID;
     /// the timestamp (in numbers of 1024 ms) until a session is kept alive
-    // - extracted from User.TSQLAuthGroup.SessionTimeout
+    // - extracted from User.TAuthGroup.SessionTimeout
     // - is used for fast comparison with GetTickCount64 shr 10
     property TimeoutShr10: cardinal read fTimeOutShr10;
     /// the remote IP, if any
@@ -995,11 +995,11 @@ type
 
   /// optional behavior of TRestServerAuthentication class
   // - by default, saoUserByLogonOrID is set, allowing
-  // TRestServerAuthentication.GetUser() to retrieve the TSQLAuthUser by
+  // TRestServerAuthentication.GetUser() to retrieve the TAuthUser by
   // logon name or by ID, if the supplied logon name is an integer
   // - if saoHandleUnknownLogonAsStar is defined, any user successfully
   // authenticated could be logged with the same ID (and authorization)
-  // than TSQLAuthUser.Logon='*' - of course, this is meaningfull only with
+  // than TAuthUser.Logon='*' - of course, this is meaningfull only with
   // an external credential check (e.g. via SSPI or Active Directory)
   TRestServerAuthenticationOption = (
     saoUserByLogonOrID, saoHandleUnknownLogonAsStar);
@@ -1022,31 +1022,31 @@ type
     /// retrieve an User instance from its logon name
     // - should return nil if not found
     // - this default implementation will retrieve it from ORM, and
-    // call TSQLAuthUser.CanUserLog() to ensure authentication is allowed
+    // call TAuthUser.CanUserLog() to ensure authentication is allowed
     // - if aUserName is an integer, it will try to retrieve it from ORM using
-    // the supplied value as its TSQLAuthUser.ID: it may be convenient when the
+    // the supplied value as its TAuthUser.ID: it may be convenient when the
     // client is not an end-user application but a mORMot server (in a cloud
     // architecture), since it will benefit from local ORM cache
     // - you can override this method and return an on-the-fly created value
     // as a TRestServer.SQLAuthUserClass instance (i.e. not persisted
-    // in database nor retrieved by ORM), but the resulting TSQLAuthUser
+    // in database nor retrieved by ORM), but the resulting TAuthUser
     // must have its ID and LogonName properties set with unique values (which
     // will be used to identify it for a later call and session owner
     // identification), and its GroupRights property must not yet contain a real
-    // TSQLAuthGroup instance, just a TSQLAuthGroup(aGroupID) value (as directly
+    // TAuthGroup instance, just a TAuthGroup(aGroupID) value (as directly
     // retrieved from the ORM) - TAuthSession.Create will retrieve the instance
     // - another possibility, orthogonal to all TRestServerAuthentication
     // classes, may be to define a TRestServer.OnAuthenticationUserRetrieve
     // custom event
     function GetUser(Ctxt: TRestServerURIContext;
-      const aUserName: RawUTF8): TSQLAuthUser; virtual;
+      const aUserName: RawUTF8): TAuthUser; virtual;
     /// create a session on the server for a given user
     // - this default implementation will call fServer.SessionCreate() and
     // return a '{"result":"HEXASALT","logonname":"UserName"}' JSON content
     // and will always call User.Free
     // - on failure, will call TRestServerURIContext.AuthenticationFailed()
     // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
-    procedure SessionCreate(Ctxt: TRestServerURIContext; var User: TSQLAuthUser); virtual;
+    procedure SessionCreate(Ctxt: TRestServerURIContext; var User: TAuthUser); virtual;
     /// Ctxt.Returns(['result',result,....[,'data',data]],200,header);
     procedure SessionCreateReturns(Ctxt: TRestServerURIContext;
       Session: TAuthSession; const result, data, header: RawUTF8);
@@ -1138,14 +1138,14 @@ type
   /// mORMot secure RESTful authentication scheme on Server
   // - match TRestClientAuthenticationDefault on Client side
   // - this method will use a password stored via safe SHA-256 hashing in the
-  // TSQLAuthUser ORM table
+  // TAuthUser ORM table
   TRestServerAuthenticationDefault = class(TRestServerAuthenticationSignedURI)
   protected
     /// check a supplied password content
     // - will match ClientComputeSessionKey() algorithm as overridden here, i.e.
     // a SHA-256 based signature with a 10 minutes activation window
     function CheckPassword(Ctxt: TRestServerURIContext;
-      User: TSQLAuthUser; const aClientNonce, aPassWord: RawUTF8): boolean; virtual;
+      User: TAuthUser; const aClientNonce, aPassWord: RawUTF8): boolean; virtual;
   public
     /// will try to handle the Auth RESTful method with mORMot authentication
     // - to be called in a two pass "challenging" algorithm:
@@ -1170,7 +1170,7 @@ type
     // ! with url='ModelRoot/url?A=1&B=2'
     // this query authentication uses crc32 for hashing instead of SHA-256 in
     // in order to lower the Server-side CPU consumption; the salted password
-    // (i.e. TSQLAuthUser.PasswordHashHexa) and client-side Timestamp are
+    // (i.e. TAuthUser.PasswordHashHexa) and client-side Timestamp are
     // inserted inside the session_signature calculation to prevent naive
     // man-in-the-middle attack (MITM)
     // - the session ID will be used to retrieve the rights associated with the
@@ -1240,9 +1240,9 @@ type
     // - this default implementation will use the SHA-256 hash value stored
     // within User.PasswordHashHexa
     // - you can override this method to provide your own password check
-    // mechanism, for the given TSQLAuthUser instance
+    // mechanism, for the given TAuthUser instance
     function CheckPassword(Ctxt: TRestServerURIContext;
-      User: TSQLAuthUser; const aPassWord: RawUTF8): boolean; virtual;
+      User: TAuthUser; const aPassWord: RawUTF8): boolean; virtual;
   public
     /// will check URI-level signature
     // - retrieve the session ID from 'session_signature=...' parameter
@@ -1293,7 +1293,7 @@ type
     function NotifyThreadCount(delta: integer): integer;
     /// update the Created/Read/Updated/Deleted properties
     // - this method is thread-safe
-    procedure NotifyORM(aMethod: TSQLURIMethod);
+    procedure NotifyORM(aMethod: TURIMethod);
     /// update the per-table statistics
     // - this method is thread-safe
     procedure NotifyORMTable(TableIndex, DataSize: integer; Write: boolean;
@@ -1330,7 +1330,7 @@ type
   // - the ID primary field is the TSynMonitorUsageID (accessible from UsageID
   // public property) shifted by 16 bits (by default) to include a
   // TSynUniqueIdentifierProcess value
-  TSQLMonitorUsage = class(TSQLRecordNoCaseExtended)
+  TORMMonitorUsage = class(TORMNoCaseExtended)
   protected
     fGran: TSynMonitorUsageGranularity;
     fProcess: Int64;
@@ -1353,18 +1353,18 @@ type
     /// a custom text, which may be used e.g. by support or developpers
     property Comment: RawUTF8 read fComment write fComment;
   end;
-  /// class-reference type (metaclass) of a TSQLMonitorUsage table
-  TSQLMonitorUsageClass = class of TSQLMonitorUsage;
+  /// class-reference type (metaclass) of a TORMMonitorUsage table
+  TORMMonitorUsageClass = class of TORMMonitorUsage;
 
-  /// will store TSynMonitorUsage information in TSQLMonitorUsage ORM tables
-  // - TSQLRecord.ID will be the TSynMonitorUsageID shifted by ProcessIDShift bits
+  /// will store TSynMonitorUsage information in TORMMonitorUsage ORM tables
+  // - TORM.ID will be the TSynMonitorUsageID shifted by ProcessIDShift bits
   TSynMonitorUsageRest = class(TSynMonitorUsage)
   protected
     fStorage: IRestORM;
     fProcessID: Int64;
     fProcessIDShift: integer;
-    fStoredClass: TSQLMonitorUsageClass;
-    fStoredCache: array[mugHour..mugYear] of TSQLMonitorUsage;
+    fStoredClass: TORMMonitorUsageClass;
+    fStoredCache: array[mugHour..mugYear] of TORMMonitorUsage;
     fSaveBatch: TRestBatch;
     function SaveDB(ID: integer; const Track: variant;
       Gran: TSynMonitorUsageGranularity): boolean; override;
@@ -1375,9 +1375,9 @@ type
     // - if a 16-bit TSynUniqueIdentifierProcess is supplied, it will be used to
     // identify the generating process by shifting TSynMonitorUsageID values
     // by aProcessIDShift bits (default 16 but you may increase it up to 40 bits)
-    // - will use TSQLMonitorUsage table, unless another one is specified
+    // - will use TORMMonitorUsage table, unless another one is specified
     constructor Create(const aStorage: IRestORM; aProcessID: Int64;
-      aStoredClass: TSQLMonitorUsageClass = nil;
+      aStoredClass: TORMMonitorUsageClass = nil;
       aProcessIDShift: integer = 16); reintroduce; virtual;
     /// finalize the process, saving pending changes
     destructor Destroy; override;
@@ -1386,14 +1386,14 @@ type
     property SaveBatch: TRestBatch read fSaveBatch write fSaveBatch;
   published
     /// the actual ORM class used for persistence
-    property StoredClass: TSQLMonitorUsageClass read fStoredClass;
+    property StoredClass: TORMMonitorUsageClass read fStoredClass;
     /// how the information could be stored for several processes
     // - e.g. when several SOA nodes gather monitoring information in a
     // shared (MongoDB) database
     // - is by default a TSynUniqueIdentifierProcess value, but may be
     // any integer up to ProcessIDShift bits as set in Create()
     property ProcessID: Int64 read fProcessID;
-    /// how process ID are stored within the mORMot TSQLRecord.ID
+    /// how process ID are stored within the mORMot TORM.ID
     // - equals 16 bits by default, to match TSynUniqueIdentifierProcess resolution
     property ProcessIDShift: integer read fProcessIDShift;
   end;
@@ -1509,7 +1509,7 @@ type
   // to return as JSON the last inserted/updated record
   // - TModTime / TCreateTime fields are expected to be filled on client side,
   // unless you set rsoComputeFieldsBeforeWriteOnServerSide so that AJAX requests
-  // will set the fields on the server side by calling the TSQLRecord
+  // will set the fields on the server side by calling the TORM
   // ComputeFieldsBeforeWrite virtual method, before writing to the database
   // - rsoSecureConnectionRequired will ensure Call is flagged as llfSecured
   // (i.e. in-process, HTTPS, or encrypted WebSockets) - with the only exception
@@ -1524,7 +1524,7 @@ type
   // - you can switch off root/timestamp/info URI via rsoTimestampInfoURIDisable
   // - URI() header output will be sanitized for any EOL injection, unless
   // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?)
-  // - by default, TSQLAuthUser.Data blob is retrieved from the database,
+  // - by default, TAuthUser.Data blob is retrieved from the database,
   // unless rsoGetUserRetrieveNoBlobData is defined
   // - rsoNoInternalState could be state to avoid transmitting the
   // 'Server-InternalState' header, e.g. if the clients wouldn't need it
@@ -1594,8 +1594,8 @@ type
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-  TNotifySQLEvent = function(Sender: TRestServer; Event: TSQLEvent;
-    aTable: TSQLRecordClass; const aID: TID;
+  TNotifySQLEvent = function(Sender: TRestServer; Event: TORMEvent;
+    aTable: TORMClass; const aID: TID;
     const aSentData: RawUTF8): boolean of object;
 
   ///  used to define how to trigger Events on record field update
@@ -1604,9 +1604,9 @@ type
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-  TNotifyFieldSQLEvent = function(Sender: TRestServer; Event: TSQLEvent;
-    aTable: TSQLRecordClass; const aID: TID;
-    const aAffectedFields: TSQLFieldBits): boolean of object;
+  TNotifyFieldSQLEvent = function(Sender: TRestServer; Event: TORMEvent;
+    aTable: TORMClass; const aID: TID;
+    const aAffectedFields: TFieldBits): boolean of object;
 
   /// session-related callbacks triggered by TRestServer
   // - for OnSessionCreate, returning TRUE will abort the session creation -
@@ -1622,7 +1622,7 @@ type
   // methods won't be called, and the user will be reported as not found
   TOnAuthenticationUserRetrieve = function(Sender: TRestServerAuthentication;
     Ctxt: TRestServerURIContext; aUserID: TID;
-    const aUserName: RawUTF8): TSQLAuthUser of object;
+    const aUserName: RawUTF8): TAuthUser of object;
 
   /// callback raised in case of authentication failure
   // - as used by TRestServerURIContext.AuthenticationFailed event
@@ -1670,10 +1670,10 @@ type
   TRestServer = class(TRest)
   protected
     fHandleAuthentication: boolean;
-    fBypassORMAuthentication: TSQLURIMethods;
-    /// the TSQLAuthUser and TSQLAuthGroup classes, as defined in model
-    fSQLAuthUserClass: TSQLAuthUserClass;
-    fSQLAuthGroupClass: TSQLAuthGroupClass;
+    fBypassORMAuthentication: TURIMethods;
+    /// the TAuthUser and TAuthGroup classes, as defined in model
+    fSQLAuthUserClass: TAuthUserClass;
+    fSQLAuthGroupClass: TAuthGroupClass;
     fAfterCreation: boolean;
     fOptions: TRestServerOptions;
     /// how in-memory sessions are handled
@@ -1719,7 +1719,7 @@ type
     // - will check that the logon name is valid
     // - on failure, will call TRestServerURIContext.AuthenticationFailed()
     // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
-    procedure SessionCreate(var User: TSQLAuthUser; Ctxt: TRestServerURIContext;
+    procedure SessionCreate(var User: TAuthUser; Ctxt: TRestServerURIContext;
       out Session: TAuthSession); virtual;
     /// search for Ctxt.Session ID and fill Ctxt.Session* members if found
     // - returns nil if not found, or fill aContext.User/Group values if matchs
@@ -1736,7 +1736,7 @@ type
     // and you can set Ctxt.Call^.OutStatus to a corresponding error code
     // - it could be used e.g. to limit the number of client sessions
     OnSessionCreate: TNotifySQLSession;
-    /// a custom method to retrieve the TSQLAuthUser instance for authentication
+    /// a custom method to retrieve the TAuthUser instance for authentication
     // - will be called by TRestServerAuthentication.GetUser() instead of
     // plain SQLAuthUserClass.Create()
     OnAuthenticationUserRetrieve: TOnAuthenticationUserRetrieve;
@@ -1815,12 +1815,12 @@ type
     /// Server initialization with a specified Database Model
     // - if HandleUserAuthentication is false, will set URI access rights to
     // 'Supervisor' (i.e. all R/W access) by default
-    // - if HandleUserAuthentication is true, will add TSQLAuthUser and
-    // TSQLAuthGroup to the TSQLModel (if not already there)
-    constructor Create(aModel: TSQLModel;
+    // - if HandleUserAuthentication is true, will add TAuthUser and
+    // TAuthGroup to the TORMModel (if not already there)
+    constructor Create(aModel: TORMModel;
       aHandleUserAuthentication: boolean = false); reintroduce; virtual;
     /// initialize REST server instance from a TSynConnectionDefinition
-    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+    constructor RegisteredClassCreateFrom(aModel: TORMModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); override;
     /// Server finalization
     destructor Destroy; override;
@@ -1829,7 +1829,7 @@ type
     // - if you instantiate a TRestServerFullMemory or TSQLRestServerDB
     // with this constructor, an in-memory engine will be created, with
     // enough abilities to run regression tests, for instance
-    constructor CreateWithOwnModel(const Tables: array of TSQLRecordClass;
+    constructor CreateWithOwnModel(const Tables: array of TORMClass;
       aHandleUserAuthentication: boolean = false;
       const aRoot: RawUTF8 = 'root');
     /// ensure the thread will be taken into account during process
@@ -1886,9 +1886,9 @@ type
       read GetRecordVersionMax write SetRecordVersionMax;
     /// low-level propagation of a record content
     // - used internally by TServiceContainerServer for client/server synchronization
-    procedure RecordVersionHandle(Occasion: TSQLOccasion;
+    procedure RecordVersionHandle(Occasion: TORMOccasion;
       TableIndex: integer; var Decoder: TJSONObjectDecoder;
-      RecordVersionField: TSQLPropInfoRTTIRecordVersion); virtual;
+      RecordVersionField: TORMPropInfoRTTIRecordVersion); virtual;
   public
     /// call this method to add an authentication method to the server
     // - will return the just created TRestServerAuthentication instance,
@@ -1930,13 +1930,13 @@ type
     /// returns a copy of the user associated to a session ID
     // - returns nil if the session does not exist (e.g. if authentication is
     // disabled)
-    // - caller MUST release the TSQLAuthUser instance returned (if not nil)
+    // - caller MUST release the TAuthUser instance returned (if not nil)
     // - this method IS thread-safe, and calls internaly Sessions.Lock
-    // (the returned TSQLAuthUser is a private copy from Sessions[].User instance,
+    // (the returned TAuthUser is a private copy from Sessions[].User instance,
     // in order to be really thread-safe)
-    // - the returned TSQLAuthUser instance will have GroupRights=nil but will
+    // - the returned TAuthUser instance will have GroupRights=nil but will
     // have ID, LogonName, DisplayName, PasswordHashHexa and Data fields available
-    function SessionGetUser(aSessionID: Cardinal): TSQLAuthUser;
+    function SessionGetUser(aSessionID: Cardinal): TAuthUser;
     /// persist all in-memory sessions into a compressed binary file
     // - you should not call this method it directly, but rather use Shutdown()
     // with a StateFileName parameter - to be used e.g. for a short maintainance
@@ -1955,7 +1955,7 @@ type
       andDeleteExistingFileAfterRead: boolean);
     /// retrieve all current session information as a JSON array
     function SessionsAsJson: RawJSON;
-    /// retrieve the current session TSQLAuthUser.ID (if any) from the
+    /// retrieve the current session TAuthUser.ID (if any) from the
     // ServiceRunningContext threadvar
     function GetCurrentSessionUserID: TID; override;
     /// the HTTP server should call this method so that ServicesPublishedInterfaces
@@ -2084,7 +2084,7 @@ type
     // - warning: the public URI should have been set via SetPublicURI()
     function ServicesPublishedInterfaces: RawUTF8;
     /// initiate asynchronous master/slave replication on a master TRest
-    // - allow synchronization of a TSQLRecord table, using its TRecordVersion
+    // - allow synchronization of a TORM table, using its TRecordVersion
     // field, for real-time master/slave replication on the master side
     // - this method will register the IServiceRecordVersion service on the
     // server side, so that RecordVersionSynchronizeStartSlave() will be able
@@ -2094,7 +2094,7 @@ type
     function RecordVersionSynchronizeMasterStart(
       ByPassAuthentication: boolean = false): boolean;
     /// initiate asynchronous master/slave replication on a slave TRest
-    // - start synchronization of a TSQLRecord table, using its TRecordVersion
+    // - start synchronization of a TORM table, using its TRecordVersion
     // field, for real-time master/slave replication on the slave side
     // - this method will first retrieve any pending modification by regular
     // REST calls to RecordVersionSynchronizeSlave, then create and register a
@@ -2104,20 +2104,20 @@ type
     // - the modifications will be pushed by the master, then applied to the
     // slave storage, until RecordVersionSynchronizeSlaveStop method is called
     // - an optional OnNotify event may be defined, which will be triggered
-    // for all incoming change, supllying the updated TSQLRecord instance
-    function RecordVersionSynchronizeSlaveStart(Table: TSQLRecordClass;
+    // for all incoming change, supllying the updated TORM instance
+    function RecordVersionSynchronizeSlaveStart(Table: TORMClass;
       MasterRemoteAccess: TRestClientURI; OnNotify: TOnBatchWrite = nil): boolean;
     /// finalize asynchronous master/slave replication on a slave TRest
-    // - stop synchronization of a TSQLRecord table, using its TRecordVersion
+    // - stop synchronization of a TORM table, using its TRecordVersion
     // field, for real-time master/slave replication on the slave side
     // - expect a previous call to RecordVersionSynchronizeSlaveStart
-    function RecordVersionSynchronizeSlaveStop(Table: TSQLRecordClass): boolean;
+    function RecordVersionSynchronizeSlaveStop(Table: TORMClass): boolean;
     /// low-level callback registration for asynchronous master/slave replication
     // - you should not have to use this method, but rather
     // RecordVersionSynchronizeMasterStart and RecordVersionSynchronizeSlaveStart
     // RecordVersionSynchronizeSlaveStop methods
     // - register a callback interface on the master side, which will be called
-    // each time a write operation is performed on a given TSQLRecord with a
+    // each time a write operation is performed on a given TORM with a
     // TRecordVersion field
     // - the callback parameter could be a TServiceRecordVersionCallback instance,
     // which will perform all update operations as expected
@@ -2130,7 +2130,7 @@ type
     // RecordVersionSynchronize() to avoid any missing update
     // - if the supplied RecordVersion is the latest on the server side,
     // this method will return TRUE and put the Callback notification in place
-    function RecordVersionSynchronizeSubscribeMaster(Table: TSQLRecordClass;
+    function RecordVersionSynchronizeSubscribeMaster(Table: TORMClass;
       RecordVersion: TRecordVersion;
       const SlaveCallback: IServiceRecordVersionCallback): boolean; overload;
     /// set this property to true to transmit the JSON data in a "not expanded" format
@@ -2174,8 +2174,8 @@ type
       read fOptions write fOptions;
     /// set to true if the server will handle per-user authentication and
     // access right management
-    // - i.e. if the associated TSQLModel contains TSQLAuthUser and
-    // TSQLAuthGroup tables (set by constructor)
+    // - i.e. if the associated TORMModel contains TAuthUser and
+    // TAuthGroup tables (set by constructor)
     property HandleAuthentication: boolean
       read fHandleAuthentication;
     /// allow to by-pass Authentication for a given set of HTTP verbs
@@ -2183,7 +2183,7 @@ type
     /// setting: but you could define some HTTP verb to this property, which
     // will by-pass the authentication - may be used e.g. for public GET
     // of the content by an AJAX client
-    property BypassORMAuthentication: TSQLURIMethods
+    property BypassORMAuthentication: TURIMethods
       read fBypassORMAuthentication write fBypassORMAuthentication;
     /// read-only access to the high-level Server statistics
     // - see ServiceMethodStat[] for information about method-based services,
@@ -2207,16 +2207,16 @@ type
     // too much resource (memory or process time)
     property SessionClass: TAuthSessionClass
       read fSessionClass write fSessionClass;
-    /// the class inheriting from TSQLAuthUser, as defined in the model
-    // - during authentication, this class will be used for every TSQLAuthUser
+    /// the class inheriting from TAuthUser, as defined in the model
+    // - during authentication, this class will be used for every TAuthUser
     // table access
     // - see also the OnAuthenticationUserRetrieve optional event handler
-    property SQLAuthUserClass: TSQLAuthUserClass
+    property SQLAuthUserClass: TAuthUserClass
       read fSQLAuthUserClass;
-    /// the class inheriting from TSQLAuthGroup, as defined in the model
-    // - during authentication, this class will be used for every TSQLAuthGroup
+    /// the class inheriting from TAuthGroup, as defined in the model
+    // - during authentication, this class will be used for every TAuthGroup
     // table access
-    property SQLAuthGroupClass: TSQLAuthGroupClass
+    property SQLAuthGroupClass: TAuthGroupClass
       read fSQLAuthGroupClass;
   end;
 
@@ -2461,7 +2461,7 @@ begin
 end;
 
 var // as set by TRestServer.AdministrationExecute()
-  BYPASS_ACCESS_RIGHTS: TSQLAccessRights;
+  BYPASS_ACCESS_RIGHTS: TORMAccessRights;
 
 function TRestServerURIContext.Authenticate: boolean;
 var
@@ -2976,9 +2976,9 @@ begin
   end;
 end;
 
-function TRestServerURIContext.CanExecuteORMWrite(Method: TSQLURIMethod;
-  Table: TSQLRecordClass; TableIndex: integer; const TableID: TID;
-  const Rights: TSQLAccessRights): boolean;
+function TRestServerURIContext.CanExecuteORMWrite(Method: TURIMethod;
+  Table: TORMClass; TableIndex: integer; const TableID: TID;
+  const Rights: TORMAccessRights): boolean;
 begin
   result := true;
   case Method of
@@ -3009,9 +3009,9 @@ procedure TRestServerURIContext.ExecuteORMGet;
   procedure ConvertOutBodyAsPlainJSON(const FieldsCSV: RawUTF8; Options:
     TJSONSerializerSQLRecordOptions);
   var
-    rec: TSQLRecord;
+    rec: TORM;
     W: TJSONSerializer;
-    bits: TSQLFieldBits;
+    bits: TFieldBits;
     withid: boolean;
   begin
     // force plain standard JSON output for AJAX clients
@@ -3044,9 +3044,9 @@ var
   SQLStartIndex, SQLResults, SQLTotalRowsCount: integer;
   NonStandardSQLSelectParameter, NonStandardSQLWhereParameter: boolean;
   SQLisSelect: boolean;
-  ResultList: TSQLTable;
+  ResultList: TORMTable;
   TableIndexes: TIntegerDynArray;
-  rec: TSQLRecord;
+  rec: TORM;
   opt: TJSONSerializerSQLRecordOptions;
   P: PUTF8Char;
   i, j, L: PtrInt;
@@ -3122,14 +3122,14 @@ begin
                      (length(TableIndexes) = 1) then
                   begin
                     InternalSetTableFromTableIndex(TableIndexes[0]);
-                    opt := ClientSQLRecordOptions;
+                    opt := ClienTORMOptions;
                     if opt <> [] then
                       ConvertOutBodyAsPlainJSON(SQLSelect, opt);
                   end;
                   Call.OutStatus := HTTP_SUCCESS;  // 200 OK
                   if not SQLisSelect then
                    // needed for fStats.NotifyORM(Method) below
-                    Method := TSQLURIMethod(IdemPCharArray(SQLBegin(pointer(SQL)),
+                    Method := TURIMethod(IdemPCharArray(SQLBegin(pointer(SQL)),
                       ['INSERT', 'UPDATE', 'DELETE']) + 2); // -1+2 -> mGET=1
                 end;
               end;
@@ -3161,7 +3161,7 @@ begin
                 if Blob <> nil then
                 begin
                   if TableEngine.EngineRetrieveBlob(TableIndex, TableID, Blob,
-                    TSQLRawBlob(Call.OutBody)) then
+                    TRawBlob(Call.OutBody)) then
                   begin
                     Call.OutHead := GetMimeContentTypeHeader(Call.OutBody);
                     Call.OutStatus := HTTP_SUCCESS; // 200 OK
@@ -3188,18 +3188,18 @@ begin
                     if Call.OutBody = '' then
                       cache.NotifyDeletion(TableIndex, TableID)
                     else
-                      cache.Notify(TableIndex, TableID, Call.OutBody, soSelect);
+                      cache.Notify(TableIndex, TableID, Call.OutBody, ooSelect);
                 end;
                 if Call.OutBody <> '' then
                 begin
                   // if something was found
-                  opt := ClientSQLRecordOptions;
+                  opt := ClienTORMOptions;
                   if opt <> [] then
                   begin
                     // cached? -> make private
                     rec := Table.CreateFrom(Call.OutBody);
                     try
-                      Call.OutBody := rec.GetJSONValues(true, true, soSelect, nil, opt);
+                      Call.OutBody := rec.GetJSONValues(true, true, ooSelect, nil, opt);
                     finally
                       rec.Free;
                     end;
@@ -3288,7 +3288,7 @@ begin
             if Call.OutBody <> '' then
             begin
               // got JSON list '[{...}]' ?
-              opt := ClientSQLRecordOptions;
+              opt := ClienTORMOptions;
               if opt <> [] then
                 ConvertOutBodyAsPlainJSON(SQLSelect, opt);
               Call.OutStatus := HTTP_SUCCESS;  // 200 OK
@@ -3362,17 +3362,17 @@ end;
 
 procedure TRestServerURIContext.ExecuteORMWrite;
 
-  procedure ComputeInBodyFields(Occasion: TSQLEvent);
+  procedure ComputeInBodyFields(Occasion: TORMEvent);
   var
-    Rec: TSQLRecord;
-    bits: TSQLFieldBits;
+    Rec: TORM;
+    bits: TFieldBits;
   begin
     Rec := Table.Create;
     try
       Rec.FillFrom(pointer(Call.InBody), @bits);
       Rec.ComputeFieldsBeforeWrite(Server.ORM, Occasion);
       with TableRecordProps.Props do
-        if Occasion = seAdd then
+        if Occasion = oeAdd then
           bits := bits + ComputeBeforeAddFieldsBits
         else
           bits := bits + ComputeBeforeUpdateFieldsBits;
@@ -3421,7 +3421,7 @@ begin
         // ModelRoot/TableName with possible JSON SentData: create a new member
         // here, Table<>nil, TableID<0 and TableIndex in [0..MAX_SQLTABLES-1]
         if rsoComputeFieldsBeforeWriteOnServerSide in Server.Options then
-          ComputeInBodyFields(seAdd);
+          ComputeInBodyFields(oeAdd);
         TableID := TableEngine.EngineAdd(TableIndex, Call.InBody);
         if TableID <> 0 then
         begin
@@ -3433,10 +3433,10 @@ begin
           begin
             cache.NotifyDeletion(TableIndex, TableID);
             Call.OutBody := TableEngine.EngineRetrieve(TableIndex, TableID);
-            cache.Notify(TableIndex, TableID, Call.OutBody, soInsert);
+            cache.Notify(TableIndex, TableID, Call.OutBody, ooInsert);
           end
           else
-            cache.Notify(TableIndex, TableID, Call.InBody, soInsert);
+            cache.Notify(TableIndex, TableID, Call.InBody, ooInsert);
         end;
       end;
     mPUT:
@@ -3444,7 +3444,7 @@ begin
       if TableID > 0 then
       begin
         // PUT ModelRoot/TableName/TableID[/BlobFieldName] to update member/BLOB content
-        if orm.RecordCanBeUpdated(Table, TableID, seUpdate, @CustomErrorMsg) then
+        if orm.RecordCanBeUpdated(Table, TableID, oeUpdate, @CustomErrorMsg) then
         begin
           OK := false;
           if URIBlobFieldName <> '' then
@@ -3458,7 +3458,7 @@ begin
           begin
             // ModelRoot/TableName/TableID with JSON SentData: update a member
             if rsoComputeFieldsBeforeWriteOnServerSide in Server.Options then
-              ComputeInBodyFields(seUpdate);
+              ComputeInBodyFields(oeUpdate);
             OK := TableEngine.EngineUpdate(TableIndex, TableID, Call.InBody);
             if OK then
             begin
@@ -3500,7 +3500,7 @@ begin
       // DELETE
       if TableID > 0 then
         // ModelRoot/TableName/TableID to delete a member
-        if not orm.RecordCanBeUpdated(Table, TableID, seDelete, @CustomErrorMsg) then
+        if not orm.RecordCanBeUpdated(Table, TableID, oeDelete, @CustomErrorMsg) then
           Call.OutStatus := HTTP_FORBIDDEN
         else
         begin
@@ -3530,7 +3530,7 @@ begin
     mBEGIN:
       begin
       // BEGIN TRANSACTION
-      // TSQLVirtualTableJSON/External will rely on SQLite3 module
+      // TORMVirtualTableJSON/External will rely on SQLite3 module
       // and also TRestStorageInMemory, since COMMIT/ROLLBACK have Static=nil
       // mBEGIN logic is just the opposite of mEND/mABORT: Safe.Lock main, then static
         if orm.TransactionBegin(Table, Session) then
@@ -4064,7 +4064,7 @@ begin
   result := (self <> nil) and (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
 end;
 
-function TRestServerURIContext.ClientSQLRecordOptions: TJSONSerializerSQLRecordOptions;
+function TRestServerURIContext.ClienTORMOptions: TJSONSerializerSQLRecordOptions;
 begin
   result := [];
   if (TableRecordProps = nil) or
@@ -4133,8 +4133,8 @@ procedure TRestServerURIContext.Returns(Value: TObject; Status: integer;
 var
   json: RawUTF8;
 begin
-  if Value.InheritsFrom(TSQLRecord) then
-    json := TSQLRecord(Value).GetJSONValues(true, true, soSelect, nil, SQLRecordOptions)
+  if Value.InheritsFrom(TORM) then
+    json := TORM(Value).GetJSONValues(true, true, ooSelect, nil, SQLRecordOptions)
   else
     json := ObjectToJSON(Value);
   Returns(json, Status, CustomHeader, Handle304NotModified);
@@ -4592,18 +4592,18 @@ begin
     pointer(User.PasswordHashHexa), length(User.PasswordHashHexa));
 end;
 
-constructor TAuthSession.Create(aCtxt: TRestServerURIContext; aUser: TSQLAuthUser);
+constructor TAuthSession.Create(aCtxt: TRestServerURIContext; aUser: TAuthUser);
 var
-  GID: TSQLAuthGroup;
+  GID: TAuthGroup;
   rnd: THash256;
-  blob: TSQLRawBlob;
+  blob: TRawBlob;
 begin
   fUser := aUser;
   if (aCtxt <> nil) and
      (User <> nil) and
      (User.IDValue <> 0) then
   begin
-    GID := User.GroupRights; // save pseudo TSQLAuthGroup = ID
+    GID := User.GroupRights; // save pseudo TAuthGroup = ID
     User.GroupRights :=
       aCtxt.Server.fSQLAuthGroupClass.Create(aCtxt.Server.ORM, GID);
     if User.GroupRights.IDValue <> 0 then
@@ -4640,7 +4640,7 @@ begin
          aCtxt.Call^.LowLevelConnectionID, aCtxt.GetUserAgent], self);
       exit; // create successfull
     end;
-    // on error: set GroupRights back to a pseudo TSQLAuthGroup = ID
+    // on error: set GroupRights back to a pseudo TAuthGroup = ID
     User.GroupRights.Free;
     User.GroupRights := GID;
   end;
@@ -4791,7 +4791,7 @@ begin
 end;
 
 function TRestServerAuthentication.GetUser(Ctxt: TRestServerURIContext;
-  const aUserName: RawUTF8): TSQLAuthUser;
+  const aUserName: RawUTF8): TAuthUser;
 var
   UserID: TID;
   err: integer;
@@ -4807,7 +4807,7 @@ begin
   begin
     if UserID <> 0 then
     begin
-      // try if TSQLAuthUser.ID was transmitted
+      // try if TAuthUser.ID was transmitted
       result := fServer.fSQLAuthUserClass.Create(fServer.ORM, UserID); // may use ORM cache :)
       if result.IDValue = 0 then
         FreeAndNil(result);
@@ -4840,7 +4840,7 @@ begin
 end;
 
 procedure TRestServerAuthentication.SessionCreate(Ctxt: TRestServerURIContext;
-  var User: TSQLAuthUser);
+  var User: TAuthUser);
 var
   Session: TAuthSession;
 begin
@@ -5043,7 +5043,7 @@ end;
 function TRestServerAuthenticationDefault.Auth(Ctxt: TRestServerURIContext): boolean;
 var
   aUserName, aPassWord, aClientNonce: RawUTF8;
-  User: TSQLAuthUser;
+  User: TAuthUser;
 begin
   result := true;
   if AuthSessionRelease(Ctxt) then
@@ -5079,7 +5079,7 @@ begin
 end;
 
 function TRestServerAuthenticationDefault.CheckPassword(
-  Ctxt: TRestServerURIContext; User: TSQLAuthUser;
+  Ctxt: TRestServerURIContext; User: TAuthUser;
   const aClientNonce, aPassWord: RawUTF8): boolean;
 var
   aSalt: RawUTF8;
@@ -5099,7 +5099,7 @@ end;
 function TRestServerAuthenticationNone.Auth(Ctxt: TRestServerURIContext): boolean;
 var
   aUserName: RawUTF8;
-  U: TSQLAuthUser;
+  U: TAuthUser;
 begin
   aUserName := Ctxt.InputUTF8OrVoid['UserName'];
   if aUserName = '' then
@@ -5188,7 +5188,7 @@ begin
 end;
 
 function TRestServerAuthenticationHttpBasic.CheckPassword(
-  Ctxt: TRestServerURIContext; User: TSQLAuthUser;
+  Ctxt: TRestServerURIContext; User: TAuthUser;
   const aPassWord: RawUTF8): boolean;
 var
   expectedPass: RawUTF8;
@@ -5201,7 +5201,7 @@ end;
 function TRestServerAuthenticationHttpBasic.Auth(Ctxt: TRestServerURIContext): boolean;
 var
   userPass, user, pass: RawUTF8;
-  U: TSQLAuthUser;
+  U: TAuthUser;
   Session: TAuthSession;
 begin
   if Ctxt.InputExists['UserName'] then
@@ -5282,7 +5282,7 @@ begin
   end;
 end;
 
-procedure TRestServerMonitor.NotifyORM(aMethod: TSQLURIMethod);
+procedure TRestServerMonitor.NotifyORM(aMethod: TURIMethod);
 begin
   fSafe^.Lock;
   try
@@ -5349,9 +5349,9 @@ begin
 end;
 
 
-{ TSQLMonitorUsage }
+{ TORMMonitorUsage }
 
-function TSQLMonitorUsage.UsageID(aProcessIDShift: integer): integer;
+function TORMMonitorUsage.UsageID(aProcessIDShift: integer): integer;
 begin
   result := fID shr aProcessIDShift;
 end;
@@ -5360,7 +5360,7 @@ end;
 { TSynMonitorUsageRest }
 
 constructor TSynMonitorUsageRest.Create(const aStorage: IRestORM;
-  aProcessID: Int64; aStoredClass: TSQLMonitorUsageClass; aProcessIDShift: integer);
+  aProcessID: Int64; aStoredClass: TORMMonitorUsageClass; aProcessIDShift: integer);
 var
   g: TSynMonitorUsageGranularity;
 begin
@@ -5372,7 +5372,7 @@ begin
     aProcessIDShift := 40;
   fProcessIDShift := aProcessIDShift;
   if aStoredClass = nil then
-    fStoredClass := TSQLMonitorUsage
+    fStoredClass := TORMMonitorUsage
   else
     fStoredClass := aStoredClass;
   fStorage := aStorage;
@@ -5396,7 +5396,7 @@ function TSynMonitorUsageRest.LoadDB(ID: integer;
   Gran: TSynMonitorUsageGranularity; out Track: variant): boolean;
 var
   recid: TID;
-  rec: TSQLMonitorUsage;
+  rec: TORMMonitorUsage;
 begin
   if (ID = 0) or
      (Gran < Low(fStoredCache)) or
@@ -5431,7 +5431,7 @@ function TSynMonitorUsageRest.SaveDB(ID: integer; const Track: variant;
 var
   update: boolean;
   recid: TID;
-  rec: TSQLMonitorUsage;
+  rec: TORMMonitorUsage;
 begin
   if (ID = 0) or
      (Gran < Low(fStoredCache)) or
@@ -5549,7 +5549,7 @@ end;
 
 { TRestServer }
 
-constructor TRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: boolean);
+constructor TRestServer.Create(aModel: TORMModel; aHandleUserAuthentication: boolean);
 var
   tmp: RawUTF8;
 begin
@@ -5557,8 +5557,8 @@ begin
     raise EORMException.CreateUTF8('%.Create(Model=nil)', [self]);
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fSessions := TSynObjectListLocked.Create; // needed by AuthenticationRegister() below
-  fSQLAuthUserClass := TSQLAuthUser;
-  fSQLAuthGroupClass := TSQLAuthGroup;
+  fSQLAuthUserClass := TAuthUser;
+  fSQLAuthGroupClass := TAuthGroup;
   fModel := aModel; // we need this property ASAP
   fSessionClass := TAuthSession;
   if aHandleUserAuthentication then
@@ -5604,12 +5604,12 @@ begin
 end;
 
 constructor TRestServer.CreateWithOwnModel(
-  const Tables: array of TSQLRecordClass; aHandleUserAuthentication: boolean;
+  const Tables: array of TORMClass; aHandleUserAuthentication: boolean;
   const aRoot: RawUTF8);
 var
-  Model: TSQLModel;
+  Model: TORMModel;
 begin
-  Model := TSQLModel.Create(Tables, aRoot);
+  Model := TORMModel.Create(Tables, aRoot);
   Create(Model, aHandleUserAuthentication);
   Model.Owner := self;
 end;
@@ -5633,7 +5633,7 @@ begin
   result := (self <> nil) and (rsoNoAJAXJSON in fOptions);
 end;
 
-constructor TRestServer.RegisteredClassCreateFrom(aModel: TSQLModel;
+constructor TRestServer.RegisteredClassCreateFrom(aModel: TORMModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 begin
   Create(aModel, aServerHandleAuthentication);
@@ -5701,9 +5701,9 @@ begin
   TRestORMServer(fORMInstance).RecordVersionMax := Value;
 end;
 
-procedure TRestServer.RecordVersionHandle(Occasion: TSQLOccasion;
+procedure TRestServer.RecordVersionHandle(Occasion: TORMOccasion;
   TableIndex: integer; var Decoder: TJSONObjectDecoder;
-  RecordVersionField: TSQLPropInfoRTTIRecordVersion);
+  RecordVersionField: TORMPropInfoRTTIRecordVersion);
 begin
   if RecordVersionField = nil then
     // no TRecordVersion field to track
@@ -5739,8 +5739,8 @@ begin
     ObjArrayAdd(fSessionAuthentication, result); // will be owned by this array
     fHandleAuthentication := true;
     // we need both AuthUser+AuthGroup tables for authentication -> create now
-    fSQLAuthGroupClass := Model.AddTableInherited(TSQLAuthGroup);
-    fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
+    fSQLAuthGroupClass := Model.AddTableInherited(TAuthGroup);
+    fSQLAuthUserClass := Model.AddTableInherited(TAuthUser);
     if fAfterCreation and
        (not fORM.TableHasRows(fSQLAuthUserClass) or
         not fORM.TableHasRows(fSQLAuthGroupClass)) then
@@ -5854,7 +5854,7 @@ begin
 end;
 
 function TRestServer.RecordVersionSynchronizeSubscribeMaster(
-  Table: TSQLRecordClass; RecordVersion: TRecordVersion;
+  Table: TORMClass; RecordVersion: TRecordVersion;
   const SlaveCallback: IServiceRecordVersionCallback): boolean;
 begin
   if self = nil then
@@ -5891,7 +5891,7 @@ begin
     result := false;
 end;
 
-function TRestServer.RecordVersionSynchronizeSlaveStart(Table: TSQLRecordClass;
+function TRestServer.RecordVersionSynchronizeSlaveStart(Table: TORMClass;
   MasterRemoteAccess: TRestClientURI; OnNotify: TOnBatchWrite): boolean;
 var
   current, previous: TRecordVersion;
@@ -5963,7 +5963,7 @@ begin
 end;
 
 function TRestServer.RecordVersionSynchronizeSlaveStop(
-  Table: TSQLRecordClass): boolean;
+  Table: TORMClass): boolean;
 var
   tableIndex: integer;
 begin
@@ -6201,7 +6201,7 @@ begin
         fServicesRouting := aServicesRouting;
 end;
 
-procedure TRestServer.SessionCreate(var User: TSQLAuthUser;
+procedure TRestServer.SessionCreate(var User: TAuthUser;
   Ctxt: TRestServerURIContext; out Session: TAuthSession);
 var
   i: PtrInt;
@@ -6307,7 +6307,7 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
   result := nil;
 end;
 
-function TRestServer.SessionGetUser(aSessionID: Cardinal): TSQLAuthUser;
+function TRestServer.SessionGetUser(aSessionID: Cardinal): TAuthUser;
 var
   i: PtrInt;
 begin
