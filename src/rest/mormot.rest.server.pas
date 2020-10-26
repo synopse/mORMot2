@@ -3142,7 +3142,7 @@ begin
           end;
         end
         else
-        // here, Table<>nil and TableIndex in [0..MAX_SQLTABLES-1]
+        // here, Table<>nil and TableIndex in [0..MAX_TABLES-1]
         if not (TableIndex in Call.RestAccessRights^.GET) then
           // rejected from User Access
           Call.OutStatus := HTTP_NOTALLOWED
@@ -3426,7 +3426,7 @@ begin
       else
       begin
         // ModelRoot/TableName with possible JSON SentData: create a new member
-        // here, Table<>nil, TableID<0 and TableIndex in [0..MAX_SQLTABLES-1]
+        // here, Table<>nil, TableID<0 and TableIndex in [0..MAX_TABLES-1]
         if rsoComputeFieldsBeforeWriteOnServerSide in Server.Options then
           ComputeInBodyFields(oeAdd);
         TableID := TableEngine.EngineAdd(TableIndex, Call.InBody);

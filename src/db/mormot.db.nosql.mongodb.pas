@@ -65,8 +65,15 @@ type
   // - opKillCursors: notify database client is done with a cursor
   // - opMsg: new OP_MSG layout introduced in MongoDB 3.6
   TMongoOperation = (
-    opReply, opMsgOld, opUpdate, opInsert, opQuery, opGetMore,
-    opDelete, opKillCursors, opMsg);
+    opReply,
+    opMsgOld,
+    opUpdate,
+    opInsert,
+    opQuery,
+    opGetMore,
+    opDelete,
+    opKillCursors,
+    opMsg);
 
   /// define how an opUpdate operation will behave
   // - if mufUpsert is set, the database will insert the supplied object into
@@ -74,7 +81,8 @@ type
   // - if mufMultiUpdate is set, the database will update all matching objects
   // in the collection; otherwise (by default) only updates first matching doc
   TMongoUpdateFlag = (
-    mufUpsert, mufMultiUpdate);
+    mufUpsert,
+    mufMultiUpdate);
 
   /// define how a TMongoRequestUpdate message will behave
   TMongoUpdateFlags = set of TMongoUpdateFlag;
@@ -118,8 +126,13 @@ type
   // - if mqfPartial is set, it will get partial results from a mongos if
   // some shards are down (instead of throwing an error)
   TMongoQueryFlag = (
-    mqfTailableCursor = 1, mqfSlaveOk, mqfOplogReplay,
-    mqfNoCursorTimeout, mqfAwaitData, mqfExhaust, mqfPartial);
+    mqfTailableCursor = 1,
+    mqfSlaveOk,
+    mqfOplogReplay,
+    mqfNoCursorTimeout,
+    mqfAwaitData,
+    mqfExhaust,
+    mqfPartial);
 
   /// define how a TMongoRequestQuery message will behave
   TMongoQueryFlags = set of TMongoQueryFlag;
@@ -355,7 +368,10 @@ type
   // - mrfAwaitCapable is set when the server supports the AwaitData Query
   // option (always set since Mongod version 1.6)
   TMongoReplyCursorFlag = (
-    mrfCursorNotFound, mrfQueryFailure, mrfShardConfigStale, mrfAwaitCapable);
+    mrfCursorNotFound,
+    mrfQueryFailure,
+    mrfShardConfigStale,
+    mrfAwaitCapable);
 
   /// define a TMongoReplyCursor message execution content
   TMongoReplyCursorFlags = set of TMongoReplyCursorFlag;
@@ -570,6 +586,7 @@ type
 function ToText(op: TMongoOperation): PShortString; overload;
 
 
+
 { ************ MongoDB Client Classes }
 
 type
@@ -766,7 +783,10 @@ type
   // secondary members but if no secondary members are available, operations
   // read from the primary
   TMongoClientReplicaSetReadPreference = (
-    rpPrimary, rpPrimaryPreferred, rpSecondary, rpSecondaryPreferred);
+    rpPrimary,
+    rpPrimaryPreferred,
+    rpSecondary,
+    rpSecondaryPreferred);
 
   /// define Write Concern property of a MongoDB connection
   // - Write concern describes the guarantee that MongoDB provides when
@@ -803,8 +823,11 @@ type
   // comes at the cost of significant risks for data persistence and durability.
   // WARNING: Do not use wcErrorsIgnored write concern in normal operation.
   TMongoClientWriteConcern = (
-    wcAcknowledged, wcJournaled, wcReplicaAcknowledged,
-    wcUnacknowledged, wcErrorsIgnored);
+    wcAcknowledged,
+    wcJournaled,
+    wcReplicaAcknowledged,
+    wcUnacknowledged,
+    wcErrorsIgnored);
 
   /// remote access to a MongoDB server
   // - a single server can have several active connections, if some secondary
@@ -1254,7 +1277,8 @@ type
     // method performs an update that replaces ALL fields in the existing
     // document with the fields from the document - and the method returns TRUE
     // - you can optionally retrieve the _id value with the DocumentObjectID pointer
-    function Save(var Document: variant; DocumentObjectID: PBSONObjectID = nil): boolean; overload;
+    function Save(var Document: variant;
+      DocumentObjectID: PBSONObjectID = nil): boolean; overload;
     /// updates an existing document or inserts a new document, depending on
     // its document parameter, supplied as (extended) JSON and parameters
     // - supplied JSON could be either strict or in MongoDB Shell syntax:
@@ -1553,6 +1577,7 @@ implementation
 const
   WIRE_OPCODES: array[TMongoOperation] of integer = (
     1, 1000, 2001, 2002, 2004, 2005, 2006, 2007, 2013);
+
   CLIENT_OPCODES =
     [opUpdate, opInsert, opQuery, opGetMore, opDelete, opKillCursors];
 

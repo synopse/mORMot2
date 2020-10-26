@@ -5169,7 +5169,7 @@ var
 begin
   if Len > 0 then
     case CodePage of
-      CP_UTF8, CP_RAWBYTESTRING, CP_SQLRAWBLOB:
+      CP_UTF8, CP_RAWBYTESTRING, CP_RAWBLOB:
         AddNoJSONEscape(P, Len);
       CP_UTF16:
         AddNoJSONEscapeW(PWord(P), 0);

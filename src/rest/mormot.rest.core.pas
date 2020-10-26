@@ -62,13 +62,20 @@ type
   // - execORMWrite for ORM writes i.e. Add Update Delete TransactionBegin
   // Commit Rollback methods
   TRestServerURIContextCommand = (
-    execNone, execSOAByMethod, execSOAByInterface, execORMGet, execORMWrite);
+    execNone,
+    execSOAByMethod,
+    execSOAByInterface,
+    execORMGet,
+    execORMWrite);
 
   /// how a TRest class may execute read or write operations
   // - used e.g. for TRestServer.AcquireWriteMode or
   // TRestServer.AcquireExecutionMode/AcquireExecutionLockedTimeOut
   TRestServerAcquireMode = (
-    amUnlocked, amLocked, amBackgroundThread, amBackgroundORMSharedThread,
+    amUnlocked,
+    amLocked,
+    amBackgroundThread,
+    amBackgroundORMSharedThread,
     amMainThread);
 
   /// used to store the execution parameters for a TRest instance
@@ -85,7 +92,8 @@ type
   end;
 
   /// define how a TRest class may execute its ORM and SOA operations
-  TRestAcquireExecutions = array[TRestServerURIContextCommand] of TRestAcquireExecution;
+  TRestAcquireExecutions =
+    array[TRestServerURIContextCommand] of TRestAcquireExecution;
 
 
 /// returns a TDocVariant array of the latest intercepted exception texts
@@ -305,10 +313,14 @@ type
     /// compute the server time stamp offset from the given date/time
     procedure SetServerTimestamp(const Value: TTimeLog);
     /// wrapper methods to access fAcquireExecution[]
-    function GetAcquireExecutionMode(Cmd: TRestServerURIContextCommand): TRestServerAcquireMode;
-    procedure SetAcquireExecutionMode(Cmd: TRestServerURIContextCommand; Value: TRestServerAcquireMode);
-    function GetAcquireExecutionLockedTimeOut(Cmd: TRestServerURIContextCommand): cardinal;
-    procedure SetAcquireExecutionLockedTimeOut(Cmd: TRestServerURIContextCommand; Value: cardinal);
+    function GetAcquireExecutionMode(
+      Cmd: TRestServerURIContextCommand): TRestServerAcquireMode;
+    procedure SetAcquireExecutionMode(
+      Cmd: TRestServerURIContextCommand; Value: TRestServerAcquireMode);
+    function GetAcquireExecutionLockedTimeOut(
+      Cmd: TRestServerURIContextCommand): cardinal;
+    procedure SetAcquireExecutionLockedTimeOut(
+      Cmd: TRestServerURIContextCommand; Value: cardinal);
     /// any overriden TRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
   public
@@ -317,7 +329,8 @@ type
     // inherited classes should unserialize the other aDefinition properties by
     // overriding this method, in a reverse logic to overriden DefinitionTo()
     constructor RegisteredClassCreateFrom(aModel: TORMModel;
-      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); virtual;
+      aDefinition: TSynConnectionDefinition;
+      aServerHandleAuthentication: boolean); virtual;
     /// release internal used instances
     // - e.g. release associated TORMModel and TServiceContainer
     destructor Destroy; override;
@@ -901,7 +914,7 @@ type
     /// corresponding TORMAccessRights for this authentication group
     // - content is converted into/from text format via AccessRight DB property
     // (so it will be not fixed e.g. by the binary TORMFieldTables layout, i.e.
-    // the MAX_SQLTABLES constant value)
+    // the MAX_TABLES constant value)
     property SQLAccessRights: TORMAccessRights
       read GetORMAccessRights write SetORMAccessRights;
   published

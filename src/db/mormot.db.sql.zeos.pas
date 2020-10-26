@@ -126,13 +126,15 @@ type
     // maintain one single connection, by setting after Create:
     // ! aExternalDBProperties.ThreadingMode := tmMainConnection;
     // or by adding 'syndb_singleconnection=true' as URI property
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName,
+      aUserID, aPassWord: RawUTF8); override;
     /// initialize raw properties to connect to the ZEOS engine
     // - using Zeos' TZURL detailed class - see: src\core\ZURL.pas
     // - this gives all possibilities to add Properties before a connection is opened
     // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define TSQLDBDefinition
     // to describe the server syntax SynDB and the ORM use behind the abstract driver
-    constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSQLDBDefinition; aOwnsURL: Boolean); virtual;
+    constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSQLDBDefinition;
+      aOwnsURL: Boolean); virtual;
     /// finalize properties internal structures
     destructor Destroy; override;
     /// create a new connection
@@ -142,7 +144,8 @@ type
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use ZDBC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8;
+      out Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use ZDBC metadata to retrieve the information
     // - PostgreSQL note: it was reported that some table names expects to be
@@ -257,7 +260,7 @@ type
     // - this overriden implementation will call fReultSet methods to avoid
     // creating most temporary variable
     procedure ColumnsToJSON(WR: TJSONWriter); override;
-    {$endif}
+    {$endif ZEOS72UP}
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
     /// Reset the previous prepared statement
@@ -310,7 +313,8 @@ type
     // value will be composed into your JSON. For real big JSON contents
     // it saves loads of space. e.g. if you import a JSON into a mongo cluster
     // you'll have a significant space difference if null's are simply ignored.
-    property JSONComposeOptions: TZJSONComposeOptions read fJSONComposeOptions write fJSONComposeOptions 
+    property JSONComposeOptions: TZJSONComposeOptions
+      read fJSONComposeOptions write fJSONComposeOptions
       default [jcoEndJSONObject];
   {$ifend}
   end;
@@ -337,6 +341,7 @@ const
   TableColColumnSizeIndex = 7;
   TableColColumnDecimalDigitsIndex = 9;
   IndexInfoColColumnNameIndex = 9;
+
 
 { ************  TSQLDBZeosConnection* and TSQLDBZeosStatement Classes }
 

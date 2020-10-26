@@ -59,12 +59,24 @@ type
   /// map TOrdType, to specify ordinal (rkInteger and rkEnumeration) storage size and sign
   // - note: on FPC, Int64 is stored as its own TRttiKind, not as rkInteger
   TRttiOrd = (
-    roSByte, roUByte, roSWord, roUWord, roSLong, roULong
-    {$ifdef FPC_NEWRTTI} ,roSQWord, roUQWord {$endif});
+    roSByte,
+    roUByte,
+    roSWord,
+    roUWord,
+    roSLong,
+    roULong
+    {$ifdef FPC_NEWRTTI} ,
+    roSQWord,
+    roUQWord
+    {$endif FPC_NEWRTTI});
 
   /// map TFloatType, to specify floating point (ftFloat) storage size and precision
   TRttiFloat = (
-    rfSingle, rfDouble, rfExtended, rfComp, rfCurr);
+    rfSingle,
+    rfDouble,
+    rfExtended,
+    rfComp,
+    rfCurr);
 
 {$ifdef FPC}
 
@@ -75,12 +87,36 @@ type
   // "Compiler uses internally some LongStrings which is not possible to use
   // for variable declarations" so rkLStringOld seems never used in practice
   TRttiKind = (
-    rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat, rkSet,
-    rkMethod, rkSString, rkLStringOld {=rkLString}, rkLString {=rkAString},
-    rkWString, rkVariant, rkArray, rkRecord, rkInterface,
-    rkClass, rkObject, rkWChar, rkBool, rkInt64, rkQWord,
-    rkDynArray, rkInterfaceRaw, rkProcVar, rkUString, rkUChar,
-    rkHelper, rkFile, rkClassRef, rkPointer);
+    rkUnknown,
+    rkInteger,
+    rkChar,
+    rkEnumeration,
+    rkFloat,
+    rkSet,
+    rkMethod,
+    rkSString,
+    rkLStringOld {=rkLString},
+    rkLString {=rkAString},
+    rkWString,
+    rkVariant,
+    rkArray,
+    rkRecord,
+    rkInterface,
+    rkClass,
+    rkObject,
+    rkWChar,
+    rkBool,
+    rkInt64,
+    rkQWord,
+    rkDynArray,
+    rkInterfaceRaw,
+    rkProcVar,
+    rkUString,
+    rkUChar,
+    rkHelper,
+    rkFile,
+    rkClassRef,
+    rkPointer);
 
 const
   /// potentially managed types in TRttiKind enumerates
@@ -396,7 +432,11 @@ type
 
   /// define the interface abilities
   TRttiIntfFlag = (
-    ifHasGuid, ifDispInterface, ifDispatch {$ifdef FPC} , ifHasStrGUID {$endif});
+    ifHasGuid,
+    ifDispInterface,
+    ifDispatch
+    {$ifdef FPC} , ifHasStrGUID {$endif});
+
   /// define the set of interface abilities
   TRttiIntfFlags = set of TRttiIntfFlag;
 
@@ -584,7 +624,7 @@ type
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
-    // - it will also recognize TRawBlob as the fake CP_SQLRAWBLOB codepage
+    // - it will also recognize TRawBlob as the fake CP_RAWBLOB codepage
     function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
     {$ifdef HASCODEPAGE}
     /// returning the code page stored in the RTTI
@@ -631,7 +671,10 @@ type
   /// how a RTTI property definition access its value
   // - as returned by TPropInfo.Getter/Setter/GetterIs/SetterIs methods
   TRttiPropCall = (
-    rpcNone, rpcField, rpcMethod, rpcIndexed);
+    rpcNone,
+    rpcField,
+    rpcMethod,
+    rpcIndexed);
 
   /// variant-like value as returned by TRttiProp.GetValue()
   // - simple values (integers or floats) are set into Value.Data
@@ -1136,6 +1179,7 @@ function IsObjectDefaultOrVoid(Value: TObject): boolean;
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean = false);
 
 
+
 { *************** Enumerations RTTI }
 
 /// helper to retrieve low-level RTTI information of an enumeration type
@@ -1231,6 +1275,7 @@ type
     rmdVar,
     rmdOut,
     rmdResult);
+
   /// set of parameter directions e.g. for an interface-based service method
   TRttiMethodArgDirections = set of TRttiMethodArgDirection;
 
@@ -1292,6 +1337,7 @@ function GetRttiClassGUID(aClass: TClass): PGUIDDynArray;
 const
   PSEUDO_RESULT_NAME: string[6] = 'Result';
   PSEUDO_SELF_NAME:   string[4] = 'Self';
+
 
 
 { ************* Efficient Dynamic Arrays and Records Process }
@@ -1391,12 +1437,44 @@ type
   // - TDynArrayKind is now an alias to this genuine enumerate
   TRTTIParserType = (
     ptNone,
-    ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
-    ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJSON, ptRawUTF8,
-    ptRecord, ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
-    ptGUID, ptHash128, ptHash256, ptHash512, ptORM, ptTimeLog, ptUnicodeString,
-    ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi, ptWord,
-    ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom);
+    ptArray,
+    ptBoolean,
+    ptByte,
+    ptCardinal,
+    ptCurrency,
+    ptDouble,
+    ptExtended,
+    ptInt64,
+    ptInteger,
+    ptQWord,
+    ptRawByteString,
+    ptRawJSON,
+    ptRawUTF8,
+    ptRecord,
+    ptSingle,
+    ptString,
+    ptSynUnicode,
+    ptDateTime,
+    ptDateTimeMS,
+    ptGUID,
+    ptHash128,
+    ptHash256,
+    ptHash512,
+    ptORM,
+    ptTimeLog,
+    ptUnicodeString,
+    ptUnixTime,
+    ptUnixMSTime,
+    ptVariant,
+    ptWideString,
+    ptWinAnsi,
+    ptWord,
+    ptEnumeration,
+    ptSet,
+    ptClass,
+    ptDynArray,
+    ptInterface,
+    ptCustom);
 
   /// the complex kind of variables for ptTimeLog and ptORM TRTTIParserType
   // - as recognized by TypeNameToStandardParserType/TypeInfoToStandardParserType
@@ -1524,6 +1602,7 @@ function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
 function DynArrayItemTypeLen(const DynArrayTypeName: RawUTF8): PtrInt;
 
 
+
 { ************** RTTI-based Registration for Custom JSON Parsing }
 
 const
@@ -1552,10 +1631,18 @@ type
   // fields for this class/record
   // - rcfAutoCreateFields is defined when AutoCreateFields() has been called
   TRttiCustomFlag = (
-    rcfIsManaged, rcfObjArray, rcfBinary, rcfWithoutRtti,
-    rcfSPI, rcfSynPersistentHook,
-    rcfHasNestedProperties, rcfHasNestedManagedProperties, rcfArrayItemManaged,
-    rcfReadIgnoreUnknownFields, rcfAutoCreateFields);
+    rcfIsManaged,
+    rcfObjArray,
+    rcfBinary,
+    rcfWithoutRtti,
+    rcfSPI,
+    rcfSynPersistentHook,
+    rcfHasNestedProperties,
+    rcfHasNestedManagedProperties,
+    rcfArrayItemManaged,
+    rcfReadIgnoreUnknownFields,
+    rcfAutoCreateFields);
+
   /// define specific behaviors for a given TypeInfo/PRttIinfo
   TRttiCustomFlags = set of TRttiCustomFlag;
 
@@ -1674,7 +1761,10 @@ type
   PRttiCustomProps = ^TRttiCustomProps;
 
   TRttiCustomFromTextExpectedEnd = (
-    eeNothing, eeSquare, eeCurly, eeEndKeyWord);
+    eeNothing,
+    eeSquare,
+    eeCurly,
+    eeEndKeyWord);
 
   /// allow to customize the process of a given TypeInfo/PRttiInfo
   // - a global list of TRttiCustom instances mapping TypeInfo() is maintained
@@ -2590,7 +2680,7 @@ end;
 function TRttiInfo.AnsiStringCodePage: integer;
 begin
   if @self = TypeInfo(TRawBlob) then
-    result := CP_SQLRAWBLOB
+    result := CP_RAWBLOB
   else
   {$ifdef HASCODEPAGE}
   if Kind = rkLString then // has rkLStringOld any codepage? -> UTF-8

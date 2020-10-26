@@ -72,7 +72,7 @@ const
   // generated asm code
   // - you should not change it to a value lower than expected in an existing
   // database (e.g. as expected by TORMAccessRights or such)
-  MAX_SQLTABLES = 256;
+  MAX_TABLES = 256;
 
   /// after how many parameters inlining is not worth it
   INLINED_MAX = 10;
@@ -82,21 +82,7 @@ type
   EORMException = class(ESynException);
 
   /// used to store bit set for all available Tables in a Database Model
-  TORMFieldTables = set of 0..MAX_SQLTABLES - 1;
-
-  /// a String used to store the BLOB content
-  // - equals RawByteString for byte storage, to force no implicit charset
-  // conversion, whatever the codepage of the resulting string is
-  // - will identify a oftBlob field type, if used to define such a published
-  // property
-  // - by default, the BLOB fields are not retrieved or updated with raw
-  // TRest.Retrieve() method, that is "Lazy loading" is enabled by default
-  // for blobs, unless TRestClientURI.ForceBlobTransfert property is TRUE
-  // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
-  // so use RetrieveBlob() methods for handling BLOB fields
-  // - could be defined as value in a TORM property as such:
-  // ! property Blob: TRawBlob read fBlob write fBlob;
-  TRawBlob = type RawByteString;
+  TORMFieldTables = set of 0..MAX_TABLES - 1;
 
   /// a reference to another record in any table in the database Model
   // - stored as a 64-bit signed integer (just like the TID type)
@@ -7338,7 +7324,7 @@ const
     [itoNoIndex4ID.. itoNoIndex4RecordVersion];
 
   /// Supervisor Table access right, i.e. alllmighty over all fields
-  ALL_ACCESS_RIGHTS = [0..MAX_SQLTABLES - 1];
+  ALL_ACCESS_RIGHTS = [0..MAX_TABLES - 1];
 
   /// Complete Database access right, i.e. allmighty over all Tables
   // - WITH the possibility to remotely execute any SQL statement (reSQL right)
@@ -7418,7 +7404,6 @@ procedure RecordRefToID(var aArray: TInt64DynArray);
 // backward compatibility types redirections
 
 type
-  TSQLRawBlob = TRawBlob;
   TSQLRecord = TORM;
   PSQLRecord = PORM;
   TSQLRecordArray = TORMArray;
@@ -18964,7 +18949,7 @@ end;
 const
   /// simple wrapper from each SQL used type into SQLite3 field datatype
   // - set to '' for fields with no column created in the database
-  DEFAULT_SQLFIELDTYPETOSQL: array[TORMFieldType] of RawUTF8 = ('',                              // oftUnknown
+  DEFAULT_ORMFIELDTYPETOSQL: array[TORMFieldType] of RawUTF8 = ('',                              // oftUnknown
     ' TEXT COLLATE NOCASE, ',        // oftAnsiText
     ' TEXT COLLATE SYSTEMNOCASE, ',  // oftUTF8Text
     ' INTEGER, ',                    // oftEnumerate
@@ -19002,7 +18987,7 @@ begin
           (fCustomCollation[FieldIndex] <> '') then
     result := ' TEXT COLLATE ' + fCustomCollation[FieldIndex] + ', '
   else
-    result := DEFAULT_SQLFIELDTYPETOSQL[Fields.List[FieldIndex].ORMFieldTypeStored];
+    result := DEFAULT_ORMFIELDTYPETOSQL[Fields.List[FieldIndex].ORMFieldTypeStored];
 end;
 
 function TORMProperties.SetCustomCollation(FieldIndex: integer;
@@ -22013,17 +21998,17 @@ begin
   if P = nil then
     exit;
   AllowRemoteExecute := TORMAllowRemoteExecute(byte(GetNextItemCardinal(P)));
-  SetBitCSV(GET, MAX_SQLTABLES, P);
-  SetBitCSV(POST, MAX_SQLTABLES, P);
-  SetBitCSV(PUT, MAX_SQLTABLES, P);
-  SetBitCSV(DELETE, MAX_SQLTABLES, P);
+  SetBitCSV(GET, MAX_TABLES, P);
+  SetBitCSV(POST, MAX_TABLES, P);
+  SetBitCSV(PUT, MAX_TABLES, P);
+  SetBitCSV(DELETE, MAX_TABLES, P);
 end;
 
 function TORMAccessRights.ToString: RawUTF8;
 begin
   FormatUTF8('%,%,%,%,%', [Byte(AllowRemoteExecute),
-    GetBitCSV(GET, MAX_SQLTABLES), GetBitCSV(POST, MAX_SQLTABLES),
-    GetBitCSV(PUT, MAX_SQLTABLES), GetBitCSV(DELETE, MAX_SQLTABLES)], result);
+    GetBitCSV(GET, MAX_TABLES), GetBitCSV(POST, MAX_TABLES),
+    GetBitCSV(PUT, MAX_TABLES), GetBitCSV(DELETE, MAX_TABLES)], result);
 end;
 
 

@@ -699,12 +699,18 @@ type
     // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
     // so that redundant text content will be allocated only once on heap
     TDocVariantOption =
-      (dvoIsArray, dvoIsObject,
-       dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
+      (dvoIsArray,
+       dvoIsObject,
+       dvoNameCaseSensitive,
+       dvoCheckForDuplicatedNames,
        dvoReturnNullForUnknownProperty,
-       dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
-       dvoJSONObjectParseWithinString, dvoSerializeAsExtendedJson,
-       dvoAllowDoubleValue, dvoInternNames, dvoInternValues);
+       dvoValueCopiedByReference,
+       dvoJSONParseDoNotTryCustomVariants,
+       dvoJSONObjectParseWithinString,
+       dvoSerializeAsExtendedJson,
+       dvoAllowDoubleValue,
+       dvoInternNames,
+       dvoInternValues);
 
     /// set of options for a TDocVariant storage
     // - defined in this unit to avoid circular reference with mormot.core.variants
@@ -1347,13 +1353,15 @@ type
     // - this method allows to sort only some part of the items
     // - it will change the dynamic array content, and exchange all items
     // in order to be sorted in increasing order according to Compare function
-    procedure SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare = nil);
+    procedure SortRange(aStart, aStop: integer;
+      aCompare: TDynArraySortCompare = nil);
     /// sort the dynamic array items, using a Compare method (not function)
     // - it will change the dynamic array content, and exchange all items
     // in order to be sorted in increasing order according to Compare function,
     // unless aReverse is true
     // - it won't mark the array as Sorted, since the comparer is local
-    procedure Sort(const aCompare: TEventDynArraySortCompare; aReverse: boolean = false); overload;
+    procedure Sort(const aCompare: TEventDynArraySortCompare;
+      aReverse: boolean = false); overload;
     /// search the items range which match a given value in a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - returns TRUE and the matching indexes, or FALSE if none found
@@ -1549,10 +1557,12 @@ type
     // better use direct access to its wrapped variable, and not this (slightly)
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which is designed for TDynArray abtract/internal use
-    function ItemPtr(index: PtrInt): pointer; {$ifdef HASINLINE}inline;{$endif}
+    function ItemPtr(index: PtrInt): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
-    procedure ItemCopyAt(index: PtrInt; Dest: pointer); {$ifdef HASINLINE}inline;{$endif}
+    procedure ItemCopyAt(index: PtrInt; Dest: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// will move one element content from its index into another variable
     // - will erase the internal item after copy
     // - do nothing if index is out of range
@@ -1562,7 +1572,8 @@ type
     // - ClearBeforeCopy will call ItemClear() before the copy, which may be safer
     // if the source item is a copy of Values[index] with some dynamic arrays
     procedure ItemCopyFrom(Source: pointer; index: PtrInt;
-      ClearBeforeCopy: boolean = false); {$ifdef HASINLINE}inline;{$endif}
+      ClearBeforeCopy: boolean = false);
+      {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
     // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
     // if available - and fallbacks to binary comparison
@@ -1572,9 +1583,11 @@ type
     // if available - and fallbacks to binary comparison
     function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
-    procedure ItemClear(Item: pointer);  {$ifdef HASINLINE}inline;{$endif}
+    procedure ItemClear(Item: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content
-    procedure ItemCopy(Source, Dest: pointer); {$ifdef HASINLINE}inline;{$endif}
+    procedure ItemCopy(Source, Dest: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
@@ -1678,7 +1691,8 @@ type
     HashTableSize: integer;
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
     State: set of (hasHasher, canHash);
-    function HashTableIndex(aHashCode: PtrUInt): PtrUInt; {$ifdef HASINLINE}inline;{$endif}
+    function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: integer);
     procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
     procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
@@ -1884,10 +1898,12 @@ type
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
     function AddUniqueName(const aName: RawUTF8; const ExceptionMsg: RawUTF8;
-      const ExceptionArgs: array of const; aNewIndex: PInteger = nil): pointer; overload;
+      const ExceptionArgs: array of const;
+      aNewIndex: PInteger = nil): pointer; overload;
     /// ensure a given element name is unique, then add it to the array
     // - just a wrapper to AddUniqueName(aName,'',[],aNewIndex)
-    function AddUniqueName(const aName: RawUTF8; aNewIndex: PInteger = nil): pointer; overload;
+    function AddUniqueName(const aName: RawUTF8;
+      aNewIndex: PInteger = nil): pointer; overload;
     /// search for a given element name, make it unique, and add it to the array
     // - expected element layout is to have a RawUTF8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -1944,7 +1960,8 @@ type
     // - this object-oriented callback will be used instead of HashItem()
     // on each dynamic array entries - HashItem will still be used on
     // const Item values, since they may be just a sub part of the stored entry
-    property EventHash: TEventDynArrayHashOne read fHash.EventHash write SetEventHash;
+    property EventHash: TEventDynArrayHashOne
+      read fHash.EventHash write SetEventHash;
     /// after how many items the hashing take place
     // - for smallest arrays, O(n) search if faster than O(1) hashing, since
     // maintaining internal hash table has some CPU and memory costs
@@ -1952,7 +1969,8 @@ type
     // may have some benefit, e.g. if Scan() is called 2*HashCountTrigger times
     // - equals 32 by default, i.e. start hashing when Count reaches 32 or
     // manual Scan() is called 64 times
-    property HashCountTrigger: integer read fHash.CountTrigger write fHash.CountTrigger;
+    property HashCountTrigger: integer
+      read fHash.CountTrigger write fHash.CountTrigger;
     /// access to the internal hash table
     // - you can call e.g. Hasher.Clear to invalidate the whole hash table
     property Hasher: TDynArrayHasher read fHash;
@@ -2223,6 +2241,7 @@ function UpdateIniNameValue(var Content: RawUTF8;
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): boolean;
+
 
 
 { ************ RawUTF8 String Values Interning and TRawUTF8List }

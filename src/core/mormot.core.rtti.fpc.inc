@@ -828,7 +828,7 @@ function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): po
 begin
   if (len = 0) or
      (cp = CP_UTF8) or
-     (cp >= CP_SQLRAWBLOB) or
+     (cp >= CP_RAWBLOB) or
      IsAnsiCompatible(p, len) then
   begin
     temp.buf := nil;
@@ -854,7 +854,7 @@ begin
   p1 := ToTempUTF8(t1, pointer(s1), length(s1), cp1);
   p2 := ToTempUTF8(t2, pointer(s2), length(s2), cp2);
   if (cp = CP_UTF8) or
-     (cp >= CP_SQLRAWBLOB) or
+     (cp >= CP_RAWBLOB) or
      ((t1.buf = nil) and
       (t2.buf = nil)) then
   begin
@@ -903,13 +903,13 @@ begin
   cp1 := _lstrcp(s1, cp);
   cp2 := _lstrcp(s2, cp1);
   if (cp1 = cp2) and
-     ((cp >= CP_SQLRAWBLOB) or
+     ((cp >= CP_RAWBLOB) or
       (cp = cp1)) then
     cp := cp1
   else if ((cp1 <> cp) and
-           (cp1 < CP_SQLRAWBLOB)) or
+           (cp1 < CP_RAWBLOB)) or
           ((cp2 <> cp) and
-           (cp2 < CP_SQLRAWBLOB)) then
+           (cp2 < CP_RAWBLOB)) then
   begin
     _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
     exit;
@@ -960,7 +960,7 @@ begin
     t.Free;
   end;
   if (cp = CP_UTF8) or
-     (cp >= CP_SQLRAWBLOB) then
+     (cp >= CP_RAWBLOB) then
     dest := u
   else
     TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u), length(u), dest);
@@ -991,7 +991,7 @@ begin
   len := _lstrlen(RawByteString(p));
   cpf := _lstrcp(RawByteString(p), cp);
   if (cpf <> cp) and
-     (cpf < CP_SQLRAWBLOB) then
+     (cpf < CP_RAWBLOB) then
     cpf := 0
   else
     for i := first + 1 to high(s) do
@@ -1004,7 +1004,7 @@ begin
         if cpi <= CP_OEMCP then
           cpi := CP_UTF8;
         if (cpi <> cpf) and
-           (cpi < CP_SQLRAWBLOB) then
+           (cpi < CP_RAWBLOB) then
         begin
           cpf := 0;
           break;

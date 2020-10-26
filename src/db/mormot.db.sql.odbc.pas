@@ -77,7 +77,8 @@ type
     // !   'Host=localhost;Server=<instance name on host>;Service=<service name
     // !   in ../drivers/etc/services>;Protocol=olsoctcp;UID=<Windows/Linux user account>;
     // !   Pwd=<Windows/Linux user account password>'
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName,
+      aUserID, aPassWord: RawUTF8); override;
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)

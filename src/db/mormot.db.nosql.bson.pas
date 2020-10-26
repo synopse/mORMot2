@@ -70,7 +70,14 @@ type
   // - dsvValue indicates that this is not a known "special" value, but some
   // valid decimal number
   TDecimal128SpecialValue = (
-    dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax);
+    dsvError,
+    dsvValue,
+    dsvNan,
+    dsvZero,
+    dsvPosInf,
+    dsvNegInf,
+    dsvMin,
+    dsvMax);
 
   /// handles a 128-bit decimal value
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
@@ -202,6 +209,7 @@ const
 function ToText(spec: TDecimal128SpecialValue): PShortString; overload;
 
 
+
 { ************ BSON ObjectID Value }
 
 type
@@ -283,6 +291,7 @@ type
 
   {$A+}
 
+
   
 { ************ TBSONVariantData / TBSONVariant Custom Variant Storage }
 
@@ -300,18 +309,39 @@ type
 
   /// element types for BSON internal representation
   TBSONElementType = (
-    betEOF, betFloat, betString, betDoc, betArray, betBinary,
-    betDeprecatedUndefined, betObjectID, betBoolean, betDateTime, betNull,
-    betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol, betJSScope,
-    betInt32, betTimestamp, betInt64, betDecimal128);
+    betEOF,
+    betFloat,
+    betString,
+    betDoc,
+    betArray,
+    betBinary,
+    betDeprecatedUndefined,
+    betObjectID,
+    betBoolean,
+    betDateTime,
+    betNull,
+    betRegEx,
+    betDeprecatedDbptr,
+    betJS,
+    betDeprecatedSymbol,
+    betJSScope,
+    betInt32,
+    betTimestamp,
+    betInt64,
+    betDecimal128);
 
   /// points to an element type for BSON internal representation
   PBSONElementType = ^TBSONElementType;
 
   /// sub-types for betBinary element BSON internal representation
   TBSONElementBinaryType = (
-    bbtGeneric, bbtFunction, bbtOldBinary, bbtOldUUID,
-    bbtUUID, bbtMD5, bbtUser = $80);
+    bbtGeneric,
+    bbtFunction,
+    bbtOldBinary,
+    bbtOldUUID,
+    bbtUUID,
+    bbtMD5,
+    bbtUser = $80);
 
   {$A-}
 
@@ -423,6 +453,7 @@ type
   end;
 
 
+
 { ************ TBSONElement / TBSONIterator for BSON Decoding }
 
 type
@@ -441,8 +472,10 @@ type
   // - asDocVariantInternNamesPerValue and asDocVariantInternNamesPerReference
   // will include dvoInternalNames to the TDocVariant.Options
   TBSONDocArrayConversion = (
-    asBSONVariant, asDocVariantPerValue,
-    asDocVariantPerReference, asDocVariantInternNamesPerValue,
+    asBSONVariant,
+    asDocVariantPerValue,
+    asDocVariantPerReference,
+    asDocVariantInternNamesPerValue,
     asDocVariantInternNamesPerReference);
 
   /// how TBSONElement.AddMongoJSON() method and AddMongoJSON() and
@@ -455,7 +488,9 @@ type
   // string and other MongoDB special objects in WrBase64() format
   // - see http://docs.mongodb.org/manual/reference/mongodb-extended-json
   TMongoJSONMode = (
-    modNoMongo, modMongoStrict, modMongoShell);
+    modNoMongo,
+    modMongoStrict,
+    modMongoShell);
 
   {$A-}
 
@@ -667,6 +702,7 @@ type
   {$A+}
   
 
+
 { ************ TBSONWriter for BSON Encoding }
 
 type
@@ -823,6 +859,7 @@ type
   end;
 
 
+
 { ************ High-Level BSON/JSON Function Helpers }
 
 const
@@ -838,9 +875,9 @@ const
   /// kind of elements which will store a RawByteString/RawUTF8 content
   // within its TBSONVariant kind
   // - i.e. TBSONVariantData.VBlob/VText field is to be managed
-  BSON_ELEMENTVARIANTMANAGED = [betBinary, betDoc, betArray, betRegEx,
-    betDeprecatedDbptr, betTimestamp, betJSScope, betJS, betDeprecatedSymbol,
-    betDecimal128];
+  BSON_ELEMENTVARIANTMANAGED =
+    [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
+     betJSScope, betJS, betDeprecatedSymbol, betDecimal128];
 
   /// by definition, maximum MongoDB document size is 16 MB
   BSON_MAXDOCUMENTSIZE = 16 * 1024 * 1024;
@@ -1179,6 +1216,7 @@ procedure AddMongoJSON(const Value: variant; W: TTextWriter;
 // this function can render the supplied variant with the Mongo Shell syntax
 // or even raw JSON content
 function VariantSaveMongoJSON(const Value: variant; Mode: TMongoJSONMode): RawUTF8;
+
 
 
 implementation

@@ -168,8 +168,13 @@ type
   // may be useful instead of sicShared mode if the service process expects
   // some per-heavy thread initialization, for instance
   TServiceInstanceImplementation = (
-    sicSingle, sicShared, sicClientDriven,
-    sicPerSession, sicPerUser, sicPerGroup, sicPerThread);
+    sicSingle,
+    sicShared,
+    sicClientDriven,
+    sicPerSession,
+    sicPerUser,
+    sicPerGroup,
+    sicPerThread);
 
   /// set of Server-side instance implementation patterns for
   // interface-based services
@@ -177,14 +182,17 @@ type
 
   /// how TServiceFactoryServer.SetOptions() will set the options value
   TServiceMethodOptionsAction = (
-    moaReplace, moaInclude, moaExclude);
+    moaReplace,
+    moaInclude,
+    moaExclude);
 
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
     /// the list of denied TAuthGroup ID(s)
     // - used on server side within TRestServerURIContext.ExecuteSOAByInterface
     // - bit 0 for client TAuthGroup.ID=1 and so on...
-    // - is therefore able to store IDs up to 256
+    // - is therefore able to store IDs up to 256 (maximum bit of 255 is a
+    // limitation of the pascal compiler itself)
     // - void by default, i.e. no denial = all groups allowed for this method
     Denied: set of 0..255;
     /// execution options for this method (about thread safety or logging)
@@ -523,6 +531,7 @@ type
   TServiceContainerInterfaceMethods = array of TServiceContainerInterfaceMethod;
 
   /// used in TServiceContainer to identify fListInterfaceMethod[] entries
+  // - maximum bit of 255 is a limitation of the pascal compiler itself
   TServiceContainerInterfaceMethodBits = set of 0..255;
 
   /// a global services provider class

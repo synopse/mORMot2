@@ -165,7 +165,8 @@ type
   public
     /// search of a registered custom variant type from its low-level VarType
     // - will first compare with its own VarType for efficiency
-    function FindSynVariantType(aVarType: Word; out CustomType: TSynInvokeableVariantType): boolean;
+    function FindSynVariantType(aVarType: Word;
+      out CustomType: TSynInvokeableVariantType): boolean;
     /// customization of JSON parsing into variants
     // - will be called by e.g. by VariantLoadJSON() or GetVariantFromJSON()
     // with Options: PDocVariantOptions parameter not nil
@@ -178,7 +179,8 @@ type
     function TryJSONToVariant(var JSON: PUTF8Char; var Value: variant;
       EndOfObject: PUTF8Char): boolean; virtual;
     /// customization of variant into JSON serialization
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); overload; virtual;
+    procedure ToJSON(W: TTextWriter; const Value: variant;
+      Escape: TTextWriterKind); overload; virtual;
     /// retrieve the field/column value
     // - this method will call protected IntGet abstract method
     function GetProperty(var Dest: TVarData; const V: TVarData;
@@ -231,9 +233,9 @@ type
 /// register a custom variant type to handle properties
 // - this will implement an internal mechanism used to bypass the default
 // _DispInvoke() implementation in Variant.pas, to use a faster version
-// - is called in case of TSynTableVariant, TDocVariant, TBSONVariant or
-// TSQLDBRowVariant
-function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
+// - is called in case of TDocVariant, TBSONVariant or TSQLDBRowVariant
+function SynRegisterCustomVariantType(
+  aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 
 /// try to serialize a custom variant value into JSON
 // - as used e.g. by TTextWriter.AddVariant
@@ -1241,7 +1243,8 @@ type
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - you can optionally apply an additional filter to each reduced item
-    function ReduceAsArray(const aPropName: RawUTF8; OnReduce: TOnReducePerItem = nil): variant; overload;
+    function ReduceAsArray(const aPropName: RawUTF8;
+      OnReduce: TOnReducePerItem = nil): variant; overload;
     /// create a TDocVariant array, from the values of a single properties of
     // this document, specified by name
     // - this overloaded method accepts an additional filter to each reduced item
@@ -1252,7 +1255,8 @@ type
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - this overloaded method accepts an additional filter to each reduced item
-    function ReduceAsArray(const aPropName: RawUTF8; OnReduce: TOnReducePerValue): variant; overload;
+    function ReduceAsArray(const aPropName: RawUTF8;
+      OnReduce: TOnReducePerValue): variant; overload;
     /// rename some properties of a TDocVariant object
     // - returns the number of property names modified
     function Rename(const aFromPropName, aToPropName: TRawUTF8DynArray): integer;
@@ -1359,15 +1363,16 @@ type
     // GetValueOrRaiseException or GetValueOrNull/GetValueOrEmpty
     // - see U[] I[] B[] D[] O[] O_[] A[] A_[] _[] properties for direct access
     // of strong typed values
-    property Value[const aNameOrIndex: Variant]: Variant read GetValueOrItem
-      write SetValueOrItem; default;
+    property Value[const aNameOrIndex: Variant]: Variant
+      read GetValueOrItem write SetValueOrItem; default;
 
     /// direct access to a dvObject UTF-8 stored property value from its name
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsRawUTF8() if you want to check the availability of the field
     // - U['prop'] := 'value' would add a new property, or overwrite an existing
-    property U[const aName: RawUTF8]: RawUTF8 read GetRawUTF8ByName write SetRawUTF8ByName;
+    property U[const aName: RawUTF8]: RawUTF8
+      read GetRawUTF8ByName write SetRawUTF8ByName;
     /// direct string access to a dvObject UTF-8 stored property value from its name
     // - just a wrapper around U[] property, to avoid a compilation warning when
     // using plain string variables (internaly, RawUTF8 will be used for storage)
@@ -1375,47 +1380,55 @@ type
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsRawUTF8() if you want to check the availability of the field
     // - S['prop'] := 'value' would add a new property, or overwrite an existing
-    property S[const aName: RawUTF8]: string read GetStringByName write SetStringByName;
+    property S[const aName: RawUTF8]: string
+      read GetStringByName write SetStringByName;
     /// direct access to a dvObject Integer stored property value from its name
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsInt/GetAsInt64 if you want to check the availability of the field
     // - I['prop'] := 123 would add a new property, or overwrite an existing
-    property I[const aName: RawUTF8]: Int64 read GetInt64ByName write SetInt64ByName;
+    property I[const aName: RawUTF8]: Int64
+      read GetInt64ByName write SetInt64ByName;
     /// direct access to a dvObject Boolean stored property value from its name
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsBoolean if you want to check the availability of the field
     // - B['prop'] := true would add a new property, or overwrite an existing
-    property B[const aName: RawUTF8]: Boolean read GetBooleanByName write SetBooleanByName;
+    property B[const aName: RawUTF8]: Boolean
+      read GetBooleanByName write SetBooleanByName;
     /// direct access to a dvObject floating-point stored property value from its name
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsDouble if you want to check the availability of the field
     // - D['prop'] := 1.23 would add a new property, or overwrite an existing
-    property D[const aName: RawUTF8]: Double read GetDoubleByName write SetDoubleByName;
+    property D[const aName: RawUTF8]: Double
+      read GetDoubleByName write SetDoubleByName;
     /// direct access to a dvObject existing dvObject property from its name
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - O['prop'] would return a fake void TDocVariant if the property is not
     // existing or not a dvObject, just like GetAsDocVariantSafe()
     // - use O_['prop'] to force adding any missing property
-    property O[const aName: RawUTF8]: PDocVariantData read GetObjectExistingByName;
+    property O[const aName: RawUTF8]: PDocVariantData
+      read GetObjectExistingByName;
     /// direct access or add a dvObject's dvObject property from its name
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - O_['prop'] would add a new property if there is none existing, or
     // overwrite an existing property which is not a dvObject
-    property O_[const aName: RawUTF8]: PDocVariantData read GetObjectOrAddByName;
+    property O_[const aName: RawUTF8]: PDocVariantData
+      read GetObjectOrAddByName;
     /// direct access to a dvObject existing dvArray property from its name
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - A['prop'] would return a fake void TDocVariant if the property is not
     // existing or not a dvArray, just like GetAsDocVariantSafe()
     // - use A_['prop'] to force adding any missing property
-    property A[const aName: RawUTF8]: PDocVariantData read GetArrayExistingByName;
+    property A[const aName: RawUTF8]: PDocVariantData
+      read GetArrayExistingByName;
     /// direct access or add a dvObject's dvArray property from its name
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - A_['prop'] would add a new property if there is none existing, or
     // overwrite an existing property which is not a dvArray
-    property A_[const aName: RawUTF8]: PDocVariantData read GetArrayOrAddByName;
+    property A_[const aName: RawUTF8]: PDocVariantData
+      read GetArrayOrAddByName;
     /// direct access to a dvArray's TDocVariant property from its index
     // - simple values may directly use Values[] dynamic array, but to access
     // a TDocVariantData members, this property is safer
@@ -1423,7 +1436,8 @@ type
     // - _[ndx] would return a fake void TDocVariant if aIndex is out of range,
     // if the property is not existing or not a TDocVariantData (just like
     // GetAsDocVariantSafe)
-    property _[aIndex: integer]: PDocVariantData read GetAsDocVariantByIndex;
+    property _[aIndex: integer]: PDocVariantData
+      read GetAsDocVariantByIndex;
   end;
   {$A+} { packet object not allowed since Delphi 2009 :( }
 
@@ -1483,7 +1497,8 @@ function _Safe(const DocVariant: variant): PDocVariantData; overload;
 // instance, which may be of kind varByRef (e.g. when retrieved by late binding)
 // - will check the supplied document kind, i.e. either dvObject or dvArray and
 // raise a EDocVariant exception if it does not match
-function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData; overload;
+function _Safe(const DocVariant: variant;
+  ExpectedKind: TDocVariantKind): PDocVariantData; overload;
 
 /// initialize a variant instance to store some document-based object content
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -1505,13 +1520,15 @@ function _Obj(const NameValuePairs: array of const;
 // initialized with supplied the Name/Value pairs
 // - this function will also ensure that ensure Obj is not stored by reference,
 // but as a true TDocVariantData
-procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant); overload;
+procedure _ObjAddProps(const NameValuePairs: array of const;
+  var Obj: variant); overload;
 
 /// add the property values of a document to a document-based object content
 // - if Document is not a TDocVariant object, will do nothing
 // - if Obj is a TDocVariant object, will add Document fields to its content
 // - if Obj is not a TDocVariant object, Document will be copied to Obj
-procedure _ObjAddProps(const Document: variant; var Obj: variant); overload;
+procedure _ObjAddProps(const Document: variant;
+  var Obj: variant); overload;
 
 /// initialize a variant instance to store some document-based array content
 // - array will be initialized with data supplied as parameters, e.g.
@@ -1647,7 +1664,8 @@ function _JsonFastExt(const JSON: RawUTF8): variant;
 // speed - but you should better write on the resulting variant tree with caution
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID():
-function _JsonFastFmt(const Format: RawUTF8; const Args, Params: array of const): variant;
+function _JsonFastFmt(const Format: RawUTF8;
+   const Args, Params: array of const): variant;
 
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
@@ -1710,7 +1728,8 @@ function _CopyFast(const DocVariant: variant): variant;
 // - note that the content (items or properties) is copied by reference,
 // so consider using _Copy() instead if you expect to safely modify its content
 // - will return null if the supplied variant is not a TDocVariant
-function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant; overload;
+function _ByRef(const DocVariant: variant;
+   Options: TDocVariantOptions): variant; overload;
 
 /// copy a TDocVariant to another variable, changing the options on the fly
 // - note that the content (items or properties) is copied by reference,

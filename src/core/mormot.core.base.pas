@@ -83,9 +83,9 @@ const
 
   /// fake code page used to recognize TRawBlob
   // - TRawBlob internal code page will be CP_RAWBYTESTRING = 65535, but
-  // our ORM will identify TRawBlob and serialize using CP_SQLRAWBLOB instead
+  // our ORM will identify TRawBlob and serialize using CP_RAWBLOB instead
   // - TTextWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
-  CP_SQLRAWBLOB = 65534;
+  CP_RAWBLOB = 65534;
 
   /// US English Windows Code Page, i.e. WinAnsi standard character encoding
   CODEPAGE_US = 1252;
@@ -229,8 +229,15 @@ type
   /// a RawByteString sub-type used to store the BLOB content in our ORM
   // - equals RawByteString for byte storage
   // - TRttiInfo.AnsiStringCodePage will identify this type, and return
-  // CP_SQLRAWBLOB fake codepage for such a published property
+  // CP_RAWBLOB fake codepage for such a published property
   // - our ORM will therefore identify such properties as BLOB
+  // - by default, the BLOB fields are not retrieved or updated with raw
+  // TRest.Retrieve() method, that is "Lazy loading" is enabled by default
+  // for blobs, unless TRestClientURI.ForceBlobTransfert property is TRUE
+  // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
+  // so use RetrieveBlob() methods for handling BLOB fields
+  // - could be defined as value in a TORM property as such:
+  // ! property Blob: TRawBlob read fBlob write fBlob;
   // - is defined here for proper TRttiProp.WriteAsJSON serialization
   TRawBlob = type RawByteString;
 
@@ -705,6 +712,16 @@ function PropNameEquals(const P1, P2: RawUTF8): boolean; overload;
 /// use the RTL to return a date/time as ISO-8601 text
 // - slow function, here to avoid linking mormot.core.datetime
 function DateTimeToIsoString(dt: TDateTime): string;
+
+
+{$ifndef PUREMORMOT2}
+
+// backward compatibility types redirections
+type
+  TSQLRawBlob = TRawBlob;
+
+{$endif PUREMORMOT2}
+
 
 
 { ************ Numbers (floats and integers) Low-level Definitions }

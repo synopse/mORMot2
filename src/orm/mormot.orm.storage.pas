@@ -141,7 +141,10 @@ type
 
   /// abstract planning execution of a query, as set by TORMVirtualTable.Prepare
   TORMVirtualTablePreparedCost = (
-    costFullScan, costScanWhere, costSecondaryIndex, costPrimaryIndex);
+    costFullScan,
+    costScanWhere,
+    costSecondaryIndex,
+    costPrimaryIndex);
 
   /// the WHERE and ORDER BY statements as set by TORMVirtualTable.Prepare
   // - Where[] and OrderBy[] are fixed sized arrays, for fast and easy code
@@ -194,7 +197,10 @@ type
   // - vtWhereIDPrepared if the ID=? WHERE statement will be handled in
   // TORMVirtualTableCursor.Search()
   TORMVirtualTableFeature = (
-    vtWrite, vtTransaction, vtSavePoint, vtWhereIDPrepared);
+    vtWrite,
+    vtTransaction,
+    vtSavePoint,
+    vtWhereIDPrepared);
 
   /// a set of features of a Virtual Table
   TORMVirtualTableFeatures = set of TORMVirtualTableFeature;
@@ -275,8 +281,13 @@ type
 
   /// the available transaction levels
   TORMVirtualTableTransaction = (
-    vttBegin, vttSync, vttCommit, vttRollBack,
-    vttSavePoint, vttRelease, vttRollBackTo);
+    vttBegin,
+    vttSync,
+    vttCommit,
+    vttRollBack,
+    vttSavePoint,
+    vttRelease,
+    vttRollBackTo);
 
   /// abstract class able to access a Virtual Table content
   // - override the Prepare/Structure abstract virtual methods for reading
