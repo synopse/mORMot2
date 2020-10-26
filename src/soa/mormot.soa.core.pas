@@ -9,8 +9,10 @@ unit mormot.soa.core;
    Shared Interface-based Service Oriented Architecture (SOA) Process
     - TSQLRecordServiceLog TSQLRecordServiceNotifications Classes
     - TServiceFactory Abstract Service Provider
+    - TServiceFactoryServerAbstract Abstract Service Provider
     - TServiceContainer Abstract Services Holder
     - SOA Related Interfaces
+    - TServicesPublishedInterfacesList Services Catalog
 
   *****************************************************************************
 }
@@ -35,7 +37,7 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.interfaces,
-  mormot.orm.core; // for IRestORM
+  mormot.orm.core;
 
 
 { ************ TSQLRecordServiceLog TSQLRecordServiceNotifications Classes }
@@ -188,13 +190,17 @@ type
     /// execution options for this method (about thread safety or logging)
     Options: TInterfaceMethodOptions;
     /// where execution information should be written as TSQLRecordServiceLog
-    LogRest: TObject; // TRest
+    // - is a weak pointer to a IRestORM instance to avoid reference counting
+    LogRest: pointer;
     /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
     LogClass: TSQLRecordServiceLogClass;
   end;
 
   /// points to the execution context of one method within TServiceFactory
   PServiceFactoryExecution = ^TServiceFactoryExecution;
+
+  /// several method execution execution contexts
+  TServiceFactoryExecutionDynArray = array of TServiceFactoryExecution;
 
   /// an abstract service provider, as registered in TServiceContainer
   // - each registered interface has its own TServiceFactory instance, available
@@ -228,12 +234,11 @@ type
     fContract: RawUTF8;
     fContractHash: RawUTF8;
     fContractExpected: RawUTF8;
-    // per-method execution rights
-    fExecution: array of TServiceFactoryExecution;
+    fExecution: TServiceFactoryExecutionDynArray;
     /// union of all fExecution[].Options
     fAnyOptions: TInterfaceMethodOptions;
-    procedure ExecutionAction(const aMethod: array of RawUTF8; aOptions:
-      TInterfaceMethodOptions; aAction: TServiceMethodOptionsAction);
+    procedure ExecutionAction(const aMethod: array of RawUTF8;
+      aOptions: TInterfaceMethodOptions; aAction: TServiceMethodOptionsAction);
     function GetInterfaceTypeInfo: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}
     function GetInterfaceIID: TGUID;
@@ -269,19 +274,19 @@ type
     /// the registered Interface GUID
     // - just maps InterfaceFactory.InterfaceIID
     property InterfaceIID: TGUID read GetInterfaceIID;
-    (*/ the service contract, serialized as a JSON object
-    - a "contract" is in fact the used interface signature, i.e. its
-      implementation mode (InstanceCreation) and all its methods definitions
-    - a possible value for a one-method interface defined as such:
-    ! function ICalculator.Add(n1,n2: integer): integer;
-    may be returned as the following JSON object:
-    $ {"contract":"Calculator","implementation":"shared",
-    $  "methods":[{"method":"Add",
-    $  "arguments":[{"argument":"Self","direction":"in","type":"self"},
-    $               {"argument":"n1","direction":"in","type":"integer"},
-    $               {"argument":"n2","direction":"in","type":"integer"},
-    $               {"argument":"Result","direction":"out","type":"integer"}
-    $ ]}]} *)
+    /// the service contract, serialized as a JSON object
+    // - a "contract" is in fact the used interface signature, i.e. its
+    //   implementation mode (InstanceCreation) and all its methods definitions
+    // - a possible value for a one-method interface defined as such:
+    // ! function ICalculator.Add(n1,n2: integer): integer;
+    // may be returned as the following JSON object:
+    // $ {"contract":"Calculator","implementation":"shared",
+    // $  "methods":[{"method":"Add",
+    // $  "arguments":[{"argument":"self","direction":"in","type":"self"},
+    // $               {"argument":"n1","direction":"in","type":"integer"},
+    // $               {"argument":"n2","direction":"in","type":"integer"},
+    // $               {"argument":"Result","direction":"out","type":"integer"}
+    // $ ]}]}
     property Contract: RawUTF8 read fContract;
     /// the published service contract, as expected by both client and server
     // - by default, will contain ContractHash property value (for security)
@@ -300,6 +305,8 @@ type
     // for accessing a plain REST HTTP server which is not based on mORMot,
     // so may not implement POST /root/Interface._contract_
     property ContractExpected: RawUTF8 read fContractExpected write fContractExpected;
+    /// direct access to the low-level per-method execution rights
+    property Execution: TServiceFactoryExecutionDynArray read fExecution;
   published
     /// access to the associated TRest ORM instance
     property ORM: IRestORM read fORM;
@@ -325,7 +332,158 @@ type
     property ContractHash: RawUTF8 read fContractHash;
   end;
 
+const
+  /// the Server-side instance implementation patterns without any ID
+  SERVICE_IMPLEMENTATION_NOID = [sicSingle, sicShared];
+
+
 function ToText(si: TServiceInstanceImplementation): PShortString; overload;
+
+
+
+{ ************ TServiceFactoryServerAbstract Abstract Service Provider }
+
+type
+  /// abstract TServiceFactoryServer parent with a fluent interface for options
+  // - defining methods to customize the service implementation on Server side
+  // - as returned by TRestServer.ServiceDefine and ServiceRegister overloaded methods
+  // - by default, all methods are allowed to execution: you can call AllowAll,
+  // DenyAll, Allow or Deny in order to specify your exact security policy
+  // - those methods returns the self instance to provide a fluent interface
+  // - defined here to avoid circular references between mormot.rest.server.pas
+  // and mormot.soa.server.pas
+  TServiceFactoryServerAbstract = class(TServiceFactory)
+  protected
+    fByPassAuthentication: boolean;
+    function GetAuthGroupIDs(const aGroup: array of RawUTF8;
+      out IDs: TIDDynArray): boolean;
+  public
+    /// allow all methods execution for all TSQLAuthGroup
+    // - all Groups will be affected by this method (on both client and server sides)
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function AllowAll: TServiceFactoryServerAbstract;
+    /// allow all methods execution for the specified TSQLAuthGroup ID(s)
+    // - the specified group ID(s) will be used to authorize remote service
+    // calls from the client side
+    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function AllowAllByID(const aGroupID: array of TID): TServiceFactoryServerAbstract;
+    /// allow all methods execution for the specified TSQLAuthGroup names
+    // - is just a wrapper around the other AllowAllByID() method, retrieving the
+    // Group ID from its main field
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function AllowAllByName(const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    /// deny all methods execution for all TSQLAuthGroup
+    // - all Groups will be affected by this method (on both client and server sides)
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function DenyAll: TServiceFactoryServerAbstract;
+    /// deny all methods execution for the specified TSQLAuthGroup ID(s)
+    // - the specified group ID(s) will be used to authorize remote service
+    // calls from the client side
+    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function DenyAllByID(const aGroupID: array of TID): TServiceFactoryServerAbstract;
+    /// dent all methods execution for the specified TSQLAuthGroup names
+    // - is just a wrapper around the other DenyAllByID() method, retrieving the
+    // Group ID from its main field
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function DenyAllByName(const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    /// allow specific methods execution for the all TSQLAuthGroup
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - all Groups will be affected by this method (on both client and server sides)
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function Allow(const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+    /// allow specific methods execution for the specified TSQLAuthGroup ID(s)
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - the specified group ID(s) will be used to authorize remote service
+    // calls from the client side
+    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function AllowByID(const aMethod: array of RawUTF8;
+      const aGroupID: array of TID): TServiceFactoryServerAbstract;
+    /// allow specific methods execution for the specified TSQLAuthGroup name(s)
+    // - is just a wrapper around the other AllowByID() method, retrieving the
+    // Group ID from its main field
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function AllowByName(const aMethod: array of RawUTF8;
+      const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    /// deny specific methods execution for the all TSQLAuthGroup
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - all Groups will be affected by this method (on both client and server sides)
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function Deny(const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+    /// deny specific methods execution for the specified TSQLAuthGroup ID(s)
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - the specified group ID(s) will be used to unauthorize remote service
+    // calls from the client side
+    // - you can retrieve a TSQLAuthGroup ID from its identifier, as such:
+    // ! UserGroupID := fServer.MainFieldID(TSQLAuthGroup,'User');
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function DenyByID(const aMethod: array of RawUTF8;
+      const aGroupID: array of TID): TServiceFactoryServerAbstract; overload;
+    /// deny specific methods execution for the specified TSQLAuthGroup name(s)
+    // - is just a wrapper around the other DenyByID() method, retrieving the
+    // Group ID from its main field
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function DenyByName(const aMethod: array of RawUTF8;
+      const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    /// define execution options for a given set of methods
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - if no method name is given (i.e. []), option will be set for all methods
+    // - include optExecInMainThread will force the method(s) to be called within
+    // a RunningThread.Synchronize() call - slower, but thread-safe
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function SetOptions(const aMethod: array of RawUTF8;
+      aOptions: TInterfaceMethodOptions;
+      aAction: TServiceMethodOptionsAction = moaReplace): TServiceFactoryServerAbstract;
+    /// define the the instance life time-out, in seconds
+    // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes
+    // - raise an exception for other kind of execution
+    // - this method returns self in order to allow direct chaining of setting
+    // calls for the service, in a fluent interface
+    function SetTimeoutSec(value: cardinal): TServiceFactoryServerAbstract;
+      virtual; abstract;
+    /// log method execution information to a TSQLRecordServiceLog table
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - if no method name is given (i.e. []), option will be set for all methods
+    // - will write to the specified aLogRest instance, and will disable
+    // writing if aLogRest is nil
+    // - will write to a (inherited) TSQLRecordServiceLog table, as available in
+    // TRest's model, unless a dedicated table is specified as aLogClass
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function SetServiceLog(const aMethod: array of RawUTF8;
+      const aLogRest: IRestORM;
+      aLogClass: TSQLRecordServiceLogClass = nil): TServiceFactoryServerAbstract;
+      virtual; abstract;
+    /// set to TRUE disable Authentication method check for the whole interface
+    // - by default (FALSE), all interface-based services will require valid
+    // RESTful authentication (if enabled on the server side); setting TRUE will
+    // disable authentication for all methods of this interface
+    // (e.g. for returning some HTML content from a public URI, or to implement
+    // a public service catalog)
+    property ByPassAuthentication: boolean
+      read fByPassAuthentication write fByPassAuthentication;
+  end;
+
 
 
 { ************ TServiceContainer Abstract Services Holder }
@@ -338,11 +496,11 @@ type
     /// the associated service provider
     Service: TServiceFactory;
   end;
+
   /// pointer to one  lookup in a global list of interface-based services
-
   PServiceContainerInterface = ^TServiceContainerInterface;
-  /// used to store all s in a global list of interface-based services
 
+  /// used to store all s in a global list of interface-based services
   TServiceContainerInterfaces = array of TServiceContainerInterface;
 
   /// used to lookup one method in a global list of interface-based services
@@ -357,11 +515,11 @@ type
     // - then points to InterfaceService.Interface.Methods[InterfaceMethodIndex-3]
     InterfaceMethodIndex: integer;
   end;
+
   /// pointer to one method lookup in a global list of interface-based services
-
   PServiceContainerInterfaceMethod = ^TServiceContainerInterfaceMethod;
-  /// used to store all methods in a global list of interface-based services
 
+  /// used to store all methods in a global list of interface-based services
   TServiceContainerInterfaceMethods = array of TServiceContainerInterfaceMethod;
 
   /// used in TServiceContainer to identify fListInterfaceMethod[] entries
@@ -373,7 +531,7 @@ type
   // compatible with TInjectableObject
   TServiceContainer = class(TInterfaceResolverInjected)
   protected
-    fOwner: TInterfaceResolver;
+    fOwner: TInterfaceResolver; // is a TRest instance
     // list of services ['Calculator',...]
     fInterface: TServiceContainerInterfaces;
     fInterfaces: TDynArrayHashed;
@@ -397,8 +555,14 @@ type
     constructor Create(aOwner: TInterfaceResolver); virtual;
     /// release all registered services
     destructor Destroy; override;
+    /// release all services of a TRest instance before shutdown
+    // - will allow to properly release any pending callbacks
+    // - TRest.Services.Release will call FreeAndNil(fServices)
+    procedure Release;
     /// return the number of registered service interfaces
-    function Count: integer; {$ifdef HASINLINE}inline;{$endif}
+    // - you can use InterfaceList[] to access the instances
+    function Count: integer;
+    {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a service provider from its index in the list
     // - returns nil if out of range index
     function Index(aIndex: integer): TServiceFactory; overload;
@@ -442,15 +606,28 @@ type
     // or 'Calculator', depending on the ExpectMangledURI property
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the URI does not match any registered interface
-    property Services[const aURI: RawUTF8]: TServiceFactory read GetService; default;
+    property Services[const aURI: RawUTF8]: TServiceFactory
+      read GetService; default;
+    /// direct access to the internal list of interfdce services ['Calculator',...]
+    property InterfaceList: TServiceContainerInterfaces
+      read fInterface;
+    /// direct access to the internal list of service.method
+    // - e.g. ['Calculator.Add','Calculator.Multiply',...]
+    property InterfaceMethod: TServiceContainerInterfaceMethods
+      read fInterfaceMethod;
+    /// direct access to the internal list of service.method wrapper
+    property InterfaceMethods: TDynArrayHashed
+      read fInterfaceMethods;
     /// the associated TRest instance, owning these services
-    property Owner: TInterfaceResolver read fOwner;
+    property Owner: TInterfaceResolver
+      read fOwner;
     /// set if the URI is expected to be mangled from the GUID
     // - by default (FALSE), the clear service name is expected to be supplied at
     // the URI level (e.g. 'Calculator')
     // - if this property is set to TRUE, the mangled URI value will be expected
     // instead (may enhance security) - e.g. '00amyWGct0y_ze4lIsj2Mw'
-    property ExpectMangledURI: boolean read fExpectMangledURI write SetExpectMangledURI;
+    property ExpectMangledURI: boolean
+      read fExpectMangledURI write SetExpectMangledURI;
   end;
 
 
@@ -483,8 +660,171 @@ type
       const aMethodsNames: array of RawUTF8; aSubscribe: boolean = true); overload;
   end;
 
+  /// a callback interface used to notify a TSQLRecord modification in real time
+  // - will be used e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster()
+  // - all methods of this interface will be called asynchronously when
+  // transmitted via our WebSockets implementation, since they are defined as
+  // plain procedures
+  // - each callback instance should be private to a specific TSQLRecord
+  IServiceRecordVersionCallback = interface(IInvokable)
+    ['{8598E6BE-3590-4F76-9449-7AF7AF4241B0}']
+    /// this event will be raised on any Add on a versioned record
+    // - the supplied JSON object will contain the TRecordVersion field
+    procedure Added(const NewContent: RawJSON);
+    /// this event will be raised on any Update on a versioned record
+    // - the supplied JSON object will contain the TRecordVersion field
+    procedure Updated(const ModifiedContent: RawJSON);
+    /// this event will be raised on any Delete on a versioned record
+    procedure Deleted(const ID: TID; const Revision: TRecordVersion);
+    /// allow to optimize process for WebSockets "jumbo frame" items
+    // - this method may be called with isLast=false before the first method
+    // call of this interface, then with isLast=true after the call of the
+    // last method of the "jumbo frame"
+    // - match TInterfaceFactory.MethodIndexCurrentFrameCallback signature
+    // - allow e.g. to create a temporary TRestBatch for jumbo frames
+    // - if individual frames are received, this method won't be called
+    procedure CurrentFrame(isLast: boolean);
+  end;
+
+  /// a list of callback interfaces to notify TSQLRecord modifications
+  // - you can use InterfaceArray*() wrapper functions to manage the list
+  IServiceRecordVersionCallbackDynArray = array of IServiceRecordVersionCallback;
+
+
+
+{ ***************** TServicesPublishedInterfacesList Services Catalog }
+
+type
+    /// a specialized UTF-8 string type, used for TRestServerURI storage
+  // - URI format is 'address:port/root', but port or root are optional
+  // - you could use TRestServerURI record to store and process it
+  TRestServerURIString = type RawUTF8;
+
+  /// a list of UTF-8 strings, used for TRestServerURI storage
+  // - URI format is 'address:port/root', but port or root are optional
+  // - you could use TRestServerURI record to store and process each item
+  TRestServerURIStringDynArray = array of TRestServerURIString;
+
+  /// used to access a TRestServer from its TRestServerURIString URI
+  // - URI format is 'address:port/root', and may be transmitted as
+  // TRestServerURIString text instances
+  {$ifdef USERECORDWITHMETHODS}
+  TRestServerURI = record
+  {$else}
+  TRestServerURI = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    function GetURI: TRestServerURIString;
+    procedure SetURI(const Value: TRestServerURIString);
+  public
+    /// the TRestServer IP Address or DNS name
+    Address: RawUTF8;
+    /// the TRestServer IP port
+    Port: RawUTF8;
+    /// the TRestServer model Root
+    Root: RawUTF8;
+    /// returns TRUE if all field values do match, case insensitively
+    function Equals(const other: TRestServerURI): boolean;
+    /// property which allows to read or set the Address/Port/Root fields as
+    // one UTF-8 text field (i.e. a TRestServerURIString instance)
+    // - URI format is 'address:port/root', but port or root are optional
+    property URI: TRestServerURIString read GetURI write SetURI;
+  end;
+
+  /// store a list of TRestServer URIs
+  TRestServerURIDynArray = array of TRestServerURI;
+
+  /// used to publish all Services supported by a TRestServer instance
+  // - as expected by TRestServer.ServicesPublishedInterfaces
+  // - can be serialized as a JSON object via RecordLoadJSON/RecordSaveJSON
+  {$ifdef USERECORDWITHMETHODS}
+  TServicesPublishedInterfaces = record
+  {$else}
+  TServicesPublishedInterfaces = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// how this TRestServer could be accessed
+    PublicURI: TRestServerURI;
+    /// the list of supported services names
+    // - in fact this is the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator
+    Names: TRawUTF8DynArray;
+  end;
+
+  /// store a list of published Services supported by a TRestServer instance
+  TServicesPublishedInterfacesDynArray = array of TServicesPublishedInterfaces;
+
+  /// used e.g. by TRestServer to store a list of TServicesPublishedInterfaces
+  TServicesPublishedInterfacesList = class(TSynPersistentLock)
+  private
+    fDynArray: TDynArray;
+    fDynArrayTimeoutTix: TDynArray;
+    fTimeoutTix: TInt64DynArray;
+    fTimeoutTixCount: integer;
+    fLastPublishedJson: cardinal;
+    fTimeOut: integer;
+  public
+    /// the internal list of published services
+    // - the list is stored in-order, i.e. it will follow the RegisterFromJSON()
+    // execution order: the latest registrations will appear last
+    List: TServicesPublishedInterfacesDynArray;
+    /// how many items are actually stored in List[]
+    Count: Integer;
+    /// initialize the storage
+    // - an optional time out period, in milliseconds, may be defined - but the
+    // clients should ensure that RegisterFromClientJSON() is called in order
+    // to refresh the list (e.g. from _contract_ HTTP body)
+    constructor Create(aTimeoutMS: integer); reintroduce; virtual;
+    /// add the JSON serialized TServicesPublishedInterfaces to the list
+    // - called by TRestServerURIContext.InternalExecuteSOAByInterface when
+    // the client provides its own services as _contract_ HTTP body
+    // - warning: supplied PublishedJson will be parsed in place, so modified
+    procedure RegisterFromClientJSON(var PublishedJson: RawUTF8);
+    /// set the list from JSON serialized TServicesPublishedInterfacesDynArray
+    // - may be used to duplicate the whole TRestServer.AssociatedServices
+    // content, as returned from /root/Stat?findservice=*
+    // - warning: supplied PublishedJson will be parsed in place, so modified
+    procedure RegisterFromServerJSON(var PublishedJson: RawUTF8);
+    /// search for a public URI in the registration list
+    function FindURI(const aPublicURI: TRestServerURI): PtrInt;
+    /// search for the latest registrations of a service, by name
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
+    // - if the service name has been registered several times, all
+    // registration will be returned, the latest in first position
+    function FindService(const aServiceName: RawUTF8): TRestServerURIDynArray;
+    /// return all services URI by name, from the registration list, as URIs
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
+    // - the returned string will contain all matching server URI, the latest
+    // registration being the first to appear, e.g.
+    // $ ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
+    function FindServiceAll(
+      const aServiceName: RawUTF8): TRestServerURIStringDynArray; overload;
+    /// return all services URI by name, from the registration list, as JSON
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
+    // - the returned JSON array will contain all matching server URI, encoded as
+    // a TRestServerURI JSON array, the latest registration being
+    // the first to appear, e.g.
+    // $ [{"Address":"addresslast","Port":"port","Root":"root"},...]
+    // - if aServiceName='*', it will return ALL registration items, encoded as
+    // a TServicesPublishedInterfaces JSON array, e.g.
+    // $ [{"PublicURI":{"Address":"1.2.3.4","Port":"123","Root":"root"},"Names":['Calculator']},...]
+    procedure FindServiceAll(const aServiceName: RawUTF8;
+      aWriter: TTextWriter); overload;
+    /// the number of milliseconds after which an entry expires
+    // - is 0 by default, meaning no expiration
+    // - you can set it to a value so that any service URI registered with
+    // RegisterFromJSON() AFTER this property modification may expire
+    property TimeOut: integer read fTimeOut write fTimeOut;
+  end;
+
 
 implementation
+
+uses
+  mormot.rest.core;
 
 
 { ************ TSQLRecordServiceLog TSQLRecordServiceNotifications Classes }
@@ -496,7 +836,7 @@ class procedure TSQLRecordServiceLog.InitializeTable(const Server: IRestORMServe
 begin
   inherited;
   if FieldName = '' then
-    Server.CreateSQLMultiIndex(Self, ['Method', 'MicroSec'], false);
+    Server.CreateSQLMultiIndex(self, ['Method', 'MicroSec'], false);
 end;
 
 
@@ -507,8 +847,9 @@ class procedure TSQLRecordServiceNotifications.InitializeTable(
   Options: TSQLInitializeTableOptions);
 begin
   inherited;
-  if (FieldName = '') or (FieldName = 'Sent') then
-    Server.CreateSQLMultiIndex(Self, ['Sent'], false);
+  if (FieldName = '') or
+     (FieldName = 'Sent') then
+    Server.CreateSQLMultiIndex(self, ['Sent'], false);
 end;
 
 class function TSQLRecordServiceNotifications.LastEventsAsObjects(
@@ -583,7 +924,8 @@ begin
   fContractHash := '"' + CardinalToHex(Hash32(fContract)) +
     CardinalToHex(CRC32string(fContract)) + '"'; // 2 hashes to avoid collision
   if aContractExpected <> '' then // override default contract
-    if aContractExpected[1] <> '"' then // stored as JSON string
+    if aContractExpected[1] <> '"' then
+      // stored as JSON string
       fContractExpected := '"' + aContractExpected + '"'
     else
       fContractExpected := aContractExpected
@@ -593,7 +935,8 @@ end;
 
 function TServiceFactory.GetInterfaceTypeInfo: PRttiInfo;
 begin
-  if (Self <> nil) and (fInterface <> nil) then
+  if (self <> nil) and
+     (fInterface <> nil) then
     result := fInterface.InterfaceTypeInfo
   else
     result := nil;
@@ -639,6 +982,205 @@ begin
 end;
 
 
+{ ************ TServiceFactoryServerAbstract Abstract Service Provider }
+
+function TServiceFactoryServerAbstract.GetAuthGroupIDs(
+  const aGroup: array of RawUTF8; out IDs: TIDDynArray): boolean;
+var
+  i: PtrInt;
+begin
+  result := (self <> nil) and
+    fORM.MainFieldIDs(fORM.Model.GetTableInherited(TSQLAuthGroup), aGroup, IDs);
+  if result then
+    for i := 0 to high(IDs) do
+      // fExecution[].Denied set is able to store IDs up to 256 only
+      if IDs[i] > 255 then
+        raise EServiceException.CreateUTF8(
+          'Unsupported %.Allow/Deny with GroupID=% >255', [self, IDs[i]]);
+end;
+
+function TServiceFactoryServerAbstract.AllowAll: TServiceFactoryServerAbstract;
+var
+  m: PtrInt;
+begin
+  if self <> nil then
+    for m := 0 to fInterface.MethodsCount - 1 do
+      FillcharFast(fExecution[m].Denied, SizeOf(fExecution[m].Denied), 0);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.AllowAllByID(
+  const aGroupID: array of TID): TServiceFactoryServerAbstract;
+var
+  m, g: PtrInt;
+begin
+  if self <> nil then
+    for m := 0 to fInterface.MethodsCount - 1 do
+      with fExecution[m] do
+        for g := 0 to high(aGroupID) do
+          exclude(Denied, aGroupID[g] - 1);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.AllowAllByName(
+  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+var
+  IDs: TIDDynArray;
+begin
+  if GetAuthGroupIDs(aGroup, IDs) then
+    AllowAllByID(IDs);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.DenyAll: TServiceFactoryServerAbstract;
+var
+  m: PtrInt;
+begin
+  if self <> nil then
+    for m := 0 to fInterface.MethodsCount - 1 do
+      FillcharFast(fExecution[m].Denied, SizeOf(fExecution[m].Denied), 255);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.DenyAllByID(
+  const aGroupID: array of TID): TServiceFactoryServerAbstract;
+var
+  m, g: PtrInt;
+begin
+  if self <> nil then
+    for m := 0 to fInterface.MethodsCount - 1 do
+      with fExecution[m] do
+        for g := 0 to high(aGroupID) do
+          include(Denied, aGroupID[g] - 1);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.DenyAllByName(
+  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+var
+  IDs: TIDDynArray;
+begin
+  if GetAuthGroupIDs(aGroup, IDs) then
+    DenyAllByID(IDs);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.Allow(
+  const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+var
+  m: PtrInt;
+begin
+  if self <> nil then
+    for m := 0 to high(aMethod) do
+      FillcharFast(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
+        SizeOf(fExecution[0].Denied), 0);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.AllowByID(
+  const aMethod: array of RawUTF8;
+  const aGroupID: array of TID): TServiceFactoryServerAbstract;
+var
+  m, g: PtrInt;
+begin
+  if self <> nil then
+    if high(aGroupID) >= 0 then
+      for m := 0 to high(aMethod) do
+        with fExecution[fInterface.CheckMethodIndex(aMethod[m])] do
+          for g := 0 to high(aGroupID) do
+            exclude(Denied, aGroupID[g] - 1);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.AllowByName(
+  const aMethod: array of RawUTF8;
+  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+var
+  IDs: TIDDynArray;
+begin
+  if GetAuthGroupIDs(aGroup, IDs) then
+    AllowByID(aMethod, IDs);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.Deny(
+  const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+var
+  m: PtrInt;
+begin
+  if self <> nil then
+    for m := 0 to high(aMethod) do
+      FillcharFast(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
+        SizeOf(fExecution[0].Denied), 255);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.DenyByID(
+  const aMethod: array of RawUTF8;
+  const aGroupID: array of TID): TServiceFactoryServerAbstract;
+var
+  m, g: PtrInt;
+begin
+  if self <> nil then
+    for m := 0 to high(aMethod) do
+      with fExecution[fInterface.CheckMethodIndex(aMethod[m])] do
+        for g := 0 to high(aGroupID) do
+          include(Denied, aGroupID[g] - 1);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.DenyByName(const aMethod: array of RawUTF8;
+  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+var
+  IDs: TIDDynArray;
+begin
+  if GetAuthGroupIDs(aGroup, IDs) then
+    DenyByID(aMethod, IDs);
+  result := self;
+end;
+
+function TServiceFactoryServerAbstract.SetOptions(
+  const aMethod: array of RawUTF8; aOptions: TInterfaceMethodOptions;
+  aAction: TServiceMethodOptionsAction): TServiceFactoryServerAbstract;
+begin
+  if self <> nil then
+  begin
+    if (fInstanceCreation = sicPerThread) and
+       (optExecLockedPerInterface in aOptions) then
+      raise EServiceException.CreateUTF8(
+        '%.SetOptions(I%,optExecLockedPerInterface) is not compatible ' +
+        ' with sicPerThread', [self, fInterfaceURI]);
+    if (fInstanceCreation = sicPerThread) and
+       ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
+         optFreeInPerInterfaceThread] * aOptions <> []) then
+      raise EServiceException.CreateUTF8(
+        '%.SetOptions(I%,opt*In*Thread) is not compatible with sicPerThread',
+        [self, fInterfaceURI]);
+    if (optExecLockedPerInterface in aOptions) and
+       ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
+         optFreeInPerInterfaceThread] * aOptions <> []) then
+      raise EServiceException.CreateUTF8(
+        '%.SetOptions(I%,optExecLockedPerInterface) with opt*In*Thread options',
+        [self, fInterfaceURI]);
+    ExecutionAction(aMethod, aOptions, aAction);
+    if (optFreeInPerInterfaceThread in fAnyOptions) and
+       not (optExecInPerInterfaceThread in fAnyOptions) then
+      raise EServiceException.CreateUTF8(
+        '%.SetOptions(I%,optFreeInPerInterfaceThread)' +
+        ' without optExecInPerInterfaceThread', [self, fInterfaceURI]);
+    if ([optExecInMainThread, optFreeInMainThread] *
+         fAnyOptions <> []) and
+       ([optExecInPerInterfaceThread, optFreeInPerInterfaceThread] *
+         fAnyOptions <> []) then
+      raise EServiceException.CreateUTF8(
+        '%.SetOptions(I%): concurrent opt*InMainThread and ' +
+        'opt*InPerInterfaceThread', [self, fInterfaceURI]);
+  end;
+  result := self;
+end;
+
+
+
 { ************ TServiceContainer Abstract Services Holder }
 
 { TServiceContainer }
@@ -659,6 +1201,12 @@ begin
   for i := 0 to high(fInterface) do
     fInterface[i].Service.Free;
   inherited;
+end;
+
+procedure TServiceContainer.Release;
+begin
+  if self <> nil then
+    TRest(fOwner).ServicesRelease(self);
 end;
 
 function TServiceContainer.Count: integer;
@@ -688,8 +1236,10 @@ var
   internal: TServiceInternalMethod;
   m: PtrInt;
 begin
-  if (self = nil) or (aService = nil) then
-    raise EServiceException.CreateUTF8('%.AddServiceInternal(%)', [self, aService]);
+  if (self = nil) or
+     (aService = nil) then
+    raise EServiceException.CreateUTF8(
+      '%.AddServiceInternal(%)', [self, aService]);
   // add TServiceFactory to the internal list
   if ExpectMangledURI then
     aURI := aService.fInterfaceMangledURI
@@ -788,9 +1338,10 @@ end;
 
 function TServiceContainer.GetService(const aURI: RawUTF8): TServiceFactory;
 var
-  i: Integer;
+  i: PtrInt;
 begin
-  if (self <> nil) and (aURI <> '') then
+  if (self <> nil) and
+     (aURI <> '') then
   begin
     i := fInterfaces.FindHashed(aURI);
     if i >= 0 then
@@ -845,7 +1396,8 @@ begin
       repeat
         result := p^.Service;
         with PHash128Rec(@result.fInterface.InterfaceIID)^ do
-          if (g.L = L) and (g.H = H) then
+          if (g.L = L) and
+             (g.H = H) then
             exit;
         inc(p);
         dec(n);
@@ -886,7 +1438,8 @@ var
   temp: TTextWriterStackBuffer;
 begin
   result := '';
-  if (self = nil) or (fInterface = nil) then
+  if (self = nil) or
+     (fInterface = nil) then
     exit;
   WR := TJSONSerializer.CreateOwnedStream(temp);
   try
@@ -917,7 +1470,8 @@ end;
 
 function TServiceContainer.Index(aIndex: integer): TServiceFactory;
 begin
-  if (self = nil) or (cardinal(aIndex) > cardinal(high(fInterface))) then
+  if (self = nil) or
+     (cardinal(aIndex) > cardinal(high(fInterface))) then
     result := nil
   else
     result := fInterface[aIndex].Service;
@@ -929,10 +1483,262 @@ begin
 end;
 
 
+{ ***************** TServicesPublishedInterfacesList Services Catalog }
+
+{ TRestServerURI }
+
+function TRestServerURI.GetURI: TRestServerURIString;
+begin
+  result := Address;
+  if Port <> '' then
+    result := result + ':' + Port;
+  if root <> '' then
+    result := result + '/' + root;
+end;
+
+procedure TRestServerURI.SetURI(const Value: TRestServerURIString);
+begin
+  Split(Value, ':', Address, Port);
+  if Port <> '' then
+    Split(Port, '/', Port, root)
+  else
+    Split(Address, '/', Address, root);
+end;
+
+function TRestServerURI.Equals(const other: TRestServerURI): boolean;
+begin
+  result := IdemPropNameU(Address, other.Address) and
+            IdemPropNameU(Port, other.Port) and
+            IdemPropNameU(root, other.Root);
+end;
+
+
+{ TServicesPublishedInterfacesList }
+
+constructor TServicesPublishedInterfacesList.Create(aTimeoutMS: integer);
+begin
+  inherited Create;
+  fTimeOut := aTimeoutMS;
+  fDynArray.Init(TypeInfo(TServicesPublishedInterfacesDynArray), List, @Count);
+  fDynArrayTimeoutTix.Init(TypeInfo(TInt64DynArray), fTimeoutTix, @fTimeoutTixCount);
+end;
+
+function TServicesPublishedInterfacesList.FindURI(
+  const aPublicURI: TRestServerURI): PtrInt;
+var
+  tix: Int64;
+begin
+  tix := GetTickCount64;
+  Safe.Lock;
+  try
+    for result := 0 to Count - 1 do
+      if List[result].PublicURI.Equals(aPublicURI) then
+        if (fTimeOut = 0) or
+           (fTimeoutTix[result] < tix) then
+          exit;
+    result := -1;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TServicesPublishedInterfacesList.FindService(
+  const aServiceName: RawUTF8): TRestServerURIDynArray;
+var
+  i, n: PtrInt;
+  tix: Int64;
+begin
+  tix := GetTickCount64;
+  result := nil;
+  Safe.Lock;
+  try
+    n := 0;
+    for i := Count - 1 downto 0 do
+      // downwards to return the latest first
+      if FindPropName(List[i].Names, aServiceName) >= 0 then
+        if (fTimeOut = 0) or
+           (fTimeoutTix[i] < tix) then
+        begin
+          SetLength(result, n + 1);
+          result[n] := List[i].PublicURI;
+          inc(n);
+        end;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TServicesPublishedInterfacesList.FindServiceAll(
+  const aServiceName: RawUTF8): TRestServerURIStringDynArray;
+var
+  i: PtrInt;
+  n: integer;
+  tix: Int64;
+begin
+  tix := GetTickCount64;
+  result := nil;
+  n := 0;
+  Safe.Lock;
+  try
+    for i := Count - 1 downto 0 do
+      // downwards to return the latest first
+      if FindPropName(List[i].Names, aServiceName) >= 0 then
+        if (fTimeOut = 0) or
+           (fTimeoutTix[i] < tix) then
+          AddRawUTF8(TRawUTF8DynArray(result), n, List[i].PublicURI.URI);
+  finally
+    Safe.UnLock;
+  end;
+  SetLength(result, n);
+end;
+
+procedure TServicesPublishedInterfacesList.FindServiceAll(
+  const aServiceName: RawUTF8; aWriter: TTextWriter);
+var
+  i: PtrInt;
+  tix: Int64;
+begin
+  tix := GetTickCount64;
+  Safe.Lock;
+  try
+    aWriter.Add('[');
+    if aServiceName = '*' then
+    begin
+      // for RegisterFromServer: return all TServicesPublishedInterfaces
+      for i := 0 to Count - 1 do
+        if (fTimeOut = 0) or
+           (fTimeoutTix[i] < tix) then
+        begin
+          aWriter.AddRecordJSON(@List[i], TypeInfo(TServicesPublishedInterfaces));
+          aWriter.Add(',');
+        end;
+    end
+    else
+      // from SQLRestClientURI.ServiceRetrieveAssociated:
+      // search matching (and non deprecated) services as TRestServerURI
+      for i := Count - 1 downto 0 do        // downwards to return the latest first
+        if FindPropName(List[i].Names, aServiceName) >= 0 then
+          if (fTimeOut = 0) or
+             (fTimeoutTix[i] < tix) then
+          begin
+            aWriter.AddRecordJSON(@List[i].PublicURI, TypeInfo(TRestServerURI));
+            aWriter.Add(',');
+          end;
+    aWriter.CancelLastComma;
+    aWriter.Add(']');
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+//TODO : to be implemented in mormot.soa.client
+{
+function TServicesPublishedInterfacesList.RegisterFromServer(Client: TRestClientURI): boolean;
+var json: RawUTF8;
+begin
+  result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
+  if result and (json<>'') then
+    RegisterFromServerJSON(json);
+end;
+}
+
+procedure TServicesPublishedInterfacesList.RegisterFromServerJSON(
+  var PublishedJson: RawUTF8);
+var
+  tix: Int64;
+  i: PtrInt;
+begin
+  Safe.Lock;
+  try
+    fDynArray.LoadFromJSON(pointer(PublishedJson));
+    fDynArrayTimeoutTix.Count := Count;
+    tix := GetTickCount64;
+    if fTimeout = 0 then
+      inc(tix, maxInt)
+    else
+      inc(tix, fTimeout);
+    for i := 0 to Count - 1 do
+      fTimeoutTix[i] := tix;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TServicesPublishedInterfacesList.RegisterFromClientJSON(
+  var PublishedJson: RawUTF8);
+var
+  i: PtrInt;
+  nfo: TServicesPublishedInterfaces;
+  crc: cardinal;
+  tix: Int64;
+  P: PUTF8Char;
+begin
+  if PublishedJson = '' then
+    exit;
+  crc := crc32c(0, pointer(PublishedJson), length(PublishedJson));
+  if (self = nil) or
+     ((fLastPublishedJson <> 0) and
+      (crc = fLastPublishedJson)) then
+    // rough but efficient in practice, when similar _contract_
+    exit;
+  P := pointer(PublishedJson);
+  if P^ = '[' then
+    // when transmitted as [params] in a _contract_ HTTP body content
+    inc(P);
+  if (RecordLoadJSON(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
+     (nfo.PublicURI.Address = '') then
+    // invalid supplied JSON content
+    exit;
+  Safe.Lock;
+  try
+    // store so that the latest updated version is always at the end
+    for i := 0 to Count - 1 do
+      if List[i].PublicURI.Equals(nfo.PublicURI) then
+      begin
+        // we ignore the Timeout here
+        fDynArray.Delete(i);
+        fDynArrayTimeoutTix.Delete(i);
+        break;
+      end;
+    if nfo.Names <> nil then
+    begin
+      fDynArray.Add(nfo);
+      tix := GetTickCount64;
+      if fTimeout = 0 then
+        inc(tix, maxInt)
+      else
+        inc(tix, fTimeout);
+      fDynArrayTimeoutTix.Add(tix);
+    end;
+    fLastPublishedJson := crc;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+
+const
+  // text definitions, registered in unit's initialization block below
+  _TRestServerURI =
+    'Address,Port,Root: RawUTF8';
+  _TServicesPublishedInterfaces =
+    'PublicURI:TRestServerURI Names: array of RawUTF8';
+
+procedure InitializeUnit;
+begin
+  Rtti.RegisterFromText(
+    [TypeInfo(TRestServerURI), _TRestServerURI,
+     TypeInfo(TServicesPublishedInterfaces), _TServicesPublishedInterfaces]);
+end;
+
+procedure FinalizeUnit;
+begin
+end;
+
 
 initialization
-
+  InitializeUnit;
 finalization
-
+  FinalizeUnit;
 end.
 

@@ -106,7 +106,7 @@ type
   // - don't change associated TSQLModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, this property will be set to 0
-  // by TRestServer.AfterDeleteForceCoherency()
+  // by TRestORMServer.AfterDeleteForceCoherency()
   // - could be defined as value in a TSQLRecord property as such:
   // ! property AnotherRecord: TRecordReference read fAnotherRecord write fAnotherRecord;
   TRecordReference = type Int64;
@@ -119,7 +119,7 @@ type
   // - don't change associated TSQLModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, any record containg a matching
-  // property will be deleted by TRestServer.AfterDeleteForceCoherency()
+  // property will be deleted by TRestORMServer.AfterDeleteForceCoherency()
   // - could be defined as value in a TSQLRecord property as such:
   // ! property AnotherRecord: TRecordReferenceToBeDeleted
   // !   read fAnotherRecord write fAnotherRecord;
@@ -419,18 +419,18 @@ procedure AddID(var Values: TIDDynArray; Value: TID); overload;
 /// set the TID (=64-bit integer) value from the numerical text stored in P^
 // - just a redirection to SetInt64()
 procedure SetID(P: PUTF8Char; var result: TID); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// set the TID (=64-bit integer) value from the numerical text stored in U
 // - just a redirection to SetInt64()
 procedure SetID(const U: RawByteString; var result: TID); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -456,7 +456,7 @@ function BlobToStream(P: PUTF8Char): TStream;
 /// creates a TEXT-encoded version of blob data from a TSQLRawBlob
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
 function TSQLRawBlobToBlob(const RawBlob: TSQLRawBlob): RawUTF8; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a TEXT-encoded version of blob data from a memory data
 // - same as TSQLRawBlob, but with direct memory access via a pointer/byte size pair
@@ -469,7 +469,7 @@ procedure Base64MagicToBlob(Base64: PUTF8Char; var result: RawUTF8);
 
 /// return true if the TEXT is encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
 function isBlobHex(P: PUTF8Char): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
 // - if P if nil or 'null', return sftUnknown
@@ -490,7 +490,7 @@ function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 // - will return sftInteger or sftFloat if the supplied text is a number
 // - will return sftUTF8Text for any non numerical content
 function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// special comparison function for sorting ftRecord (TRecordReference/RecordRef)
 // UTF-8 encoded values in the SQLite3 database or JSON content
@@ -691,6 +691,10 @@ function UnJSONFirstField(var P: PUTF8Char): RawUTF8;
 // - i.e. not as '{"fieldCount":3,"values":["ID","FirstName","LastName",...']}
 function IsNotAjaxJSON(P: PUTF8Char): boolean;
 
+/// efficient retrieval of the number of rows in non-expanded layout
+// - search for "rowCount": at the end of the JSON buffer
+function NotExpandedBufferRowCountPos(P, PEnd: PUTF8Char): PUTF8Char;
+
 /// retrieve a JSON '{"Name":Value,....}' object
 // - P is nil in return in case of an invalid object
 // - returns the UTF-8 encoded JSON object, including first '{' and last '}'
@@ -873,7 +877,7 @@ type
     // for JSON ("\uFFF0base64encodedbinary")
     // - handle TPersistent, TCollection, TRawUTF8List or TStrings with ObjectToJSON
     function GetValue(Instance: TObject; ToSQL: boolean; wasSQLString: PBoolean = nil): RawUTF8;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert the property value into an UTF-8 encoded text
     // - this method is the same as GetValue(), but avoid assigning the result
     // string variable (some speed up on multi-core CPUs, since avoid a CPU LOCK)
@@ -977,7 +981,8 @@ type
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); reintroduce; virtual;
+      aSQLFieldType: TSQLFieldType;
+      aOptions: TSQLPropInfoListOptions); reintroduce; virtual;
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // SQLFieldType type
@@ -986,6 +991,9 @@ type
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     /// retrieve the property field offset from RTTI
     function GetFieldAddr(Instance: TObject): pointer; override;
+    /// get the absolute property field offset from RTTI
+    property GetterIsFieldPropOffset: PtrUInt
+      read fGetterIsFieldPropOffset;
     /// for pilSubClassesFlattening properties, compute the actual instance
     // containing the property value
     // - if the property was not flattened, return the instance
@@ -996,6 +1004,8 @@ type
     property FlattenedPropInfo: PRttiPropDynArray read fFlattenedProps;
     /// corresponding type information, as retrieved from PropInfo RTTI
     property PropType: PRttiInfo read fPropType;
+    /// corresponding JSON-aware type information, as retrieved from PropInfo RTTI
+    property PropRtti: TRttiJson read fPropRtti;
   end;
 
   /// class-reference type (metaclass) of a TSQLPropInfoRTTI information
@@ -1288,11 +1298,10 @@ type
   TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
   protected
     fObjArray: TRttiJson;
-    fWrapper: TDynArray;
     procedure GetDynArray(Instance: TObject; var result: TDynArray);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     function GetDynArrayElemType: TRttiCustom;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
     procedure Serialize(Instance: TObject; var data: RawByteString;
       ExtendedJson: boolean); virtual;
@@ -1609,15 +1618,15 @@ type
     /// find an item in the list
     // - returns nil if not found
     function ByRawUTF8Name(const aName: RawUTF8): TSQLPropInfo; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list
     // - returns nil if not found
     function ByName(aName: PUTF8Char): TSQLPropInfo; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list
     // - returns -1 if not found
     function IndexByName(const aName: RawUTF8): integer; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list
     // - returns -1 if not found
     function IndexByName(aName: PUTF8Char): integer; overload;
@@ -1665,10 +1674,10 @@ type
       aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     /// direct access to the property class instance
     function GetInstance(Instance: TObject): TObject;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the property class instance
     procedure SetInstance(Instance, Value: TObject);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the property class
     // - can be used e.g. for TSQLRecordMany properties
     property ObjectClass: TClass read fObjectClass;
@@ -1753,6 +1762,7 @@ const
   RTREE_MAX_DIMENSION = 5;
 
 // most types are defined as a single "type" statement due to classes coupling
+
 type
   {$M+}
   { we expect RTTI information for the published properties of these
@@ -2735,10 +2745,10 @@ type
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Format: RawUTF8; const Args: array of const;
       Level: TSynLogInfo = sllTrace); overload;
-    /// log method enter / auto-leave tracing, with some custom text
-    // - under FPC, "with ORM.Enter" or a local ISynLog variable should be used
-    function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
-      aInstance: TObject = nil): ISynLog;
+    /// access to the associate TSynLog class type
+    function LogClass: TSynLogClass;
+    /// access to the associate TSynLog class familly
+    function LogFamily: TSynLogFamily;
     /// retrieve the current server time stamp as a TTimeLog
     // - used e.g. by TSQLRecord.ComputeFieldsBeforeWrite for sftModTime/sftCreateTime
     // - is safe on both client and server sides
@@ -2797,7 +2807,8 @@ type
     // as in 'SELECT SQLSelect FROM TableName WHERE SQLWhere;'
     // - using inlined parameters via :(...): in SQLWhere is always a good idea
     // - for one TClass, you should better use TRest.MultiFieldValues()
-    function List(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8 = 'RowID';
+    function List(const Tables: array of TSQLRecordClass;
+      const SQLSelect: RawUTF8 = 'RowID';
       const SQLWhere: RawUTF8 = ''): TSQLTable;
     /// retrieve a list of members as a TSQLTable
     // - implements REST GET collection
@@ -2807,7 +2818,8 @@ type
     // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass;
-      const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TSQLTable; overload;
+      const SQLSelect, SQLWhereFormat: RawUTF8;
+      const Args: array of const): TSQLTable; overload;
     /// retrieve a list of members as a TSQLTable
     // - implements REST GET collection
     // - in this version, the WHERE clause can be created with the same format
@@ -2818,7 +2830,8 @@ type
     // - for one TClass, you should better use TRest.MultiFieldValues()
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass;
-      const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TSQLTable; overload;
+      const SQLSelect, SQLWhereFormat: RawUTF8;
+      const Args, Bounds: array of const): TSQLTable; overload;
     /// begin a transaction
     // - implements REST BEGIN collection
     // - in aClient-Server environment with multiple Clients connected at the
@@ -2838,7 +2851,8 @@ type
     // !except
     // !  Client.RollBack; //  in case of error
     // !end;
-    function TransactionBeginRetry(aTable: TSQLRecordClass; Retries: integer = 10): boolean;
+    function TransactionBeginRetry(aTable: TSQLRecordClass;
+      Retries: integer = 10): boolean;
     /// begin a BATCH sequence to speed up huge database change for a given table
     // - is a wrapper around TRestBatch.Create() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
@@ -2919,6 +2933,8 @@ type
       const FieldNames: array of RawUTF8; Unique: boolean; IndexName: RawUTF8 = ''): boolean;
     /// check if the supplied TSQLRecord is not a virtual or static table
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
+    /// returns the maximum BLOB size per record as specified to TrackChanges()
+    function MaxUncompressedBlobSize(Table: TSQLRecordClass): integer;
     /// returns true if the server will handle per-user authentication and
     // access right management
     // - i.e. if the associated TSQLModel contains TSQLAuthUser and
@@ -2965,7 +2981,7 @@ type
     fJoinedFields: boolean;
     /// return fJoinedFields or false if self=nil
     function GetJoinedFields: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// add a property to the fTableMap[] array
     // - aIndex is the column index in TSQLTable
     procedure AddMap(aRecord: TSQLRecord; aField: TSQLPropInfo;
@@ -2994,7 +3010,7 @@ type
     /// fill a TSQLRecord published properties from a TSQLTable row
     // - use the mapping prepared with Map() method
     function Fill(aRow: integer): boolean; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill a TSQLRecord published properties from a TSQLTable row
     // - use the mapping prepared with Map() method
     // - aTableRow will point to the first column of the matching row
@@ -3010,7 +3026,7 @@ type
     // - won't work with cross-reference mapping (FillPrepareMany)
     // - use the mapping prepared with Map() method
     function Fill(aRow: integer; aDest: TSQLRecord): boolean; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// used to compute the updated field bits during a fill
     // - will return Props.SimpleFieldsBits[soUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
@@ -3107,10 +3123,10 @@ type
     class procedure InternalDefineModel(Props: TSQLRecordProperties); virtual;
     /// trick to get the ID even in case of a sftID published property
     function GetID: TID;
-      {$ifdef MSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
+      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// trick to typecast the ID on 64-bit platform
     function GetIDAsPointer: pointer;
-      {$ifdef MSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
+      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
   public
     /// direct access to the TSQLRecord properties from RTTI
     // - TSQLRecordProperties is faster than e.g. the class function FieldProp()
@@ -3121,13 +3137,13 @@ type
     // vmtAutoTable trick if very fast, and works with all versions of Delphi -
     // including 64-bit target)
     class function RecordProps: TSQLRecordProperties;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// the Table name in the database, associated with this TSQLRecord class
     // - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
     // - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
     // - is just a wrapper around RecordProps.SQLTableName
     class function SQLTableName: RawUTF8;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// register a custom filter (transformation) or validate to the
     // TSQLRecord class for a specified field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
@@ -3589,7 +3605,7 @@ type
     class function GetSQLCreate(aModel: TSQLModel): RawUTF8; virtual;
     /// return the Class Type of the current TSQLRecord
     function RecordClass: TSQLRecordClass;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// return the RTTI property information for this record
     function ClassProp: TRttiJson;
     /// return the TRecordReference Int64 value pointing to this record
@@ -3725,7 +3741,7 @@ type
     /// retrieve the record content as a TDocVariant custom variant object
     function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
       options: PDocVariantOptions = nil; replaceRowIDWithID: boolean = false): variant; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the record content as a TDocVariant custom variant object
     procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
       var result: variant; options: PDocVariantOptions = nil;
@@ -4237,12 +4253,12 @@ type
     Value: TID;
     /// return the index of the content Table in the TSQLModel
     function TableIndex: integer;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// return the class of the content in a specified TSQLModel
     function Table(Model: TSQLModel): TSQLRecordClass;
     /// return the ID of the content
     function ID: TID;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill Value with the corresponding parameters
     // - since 6 bits are used for the table index, aTable MUST appear in the
     // first 64 items of the associated TSQLModel.Tables[] array
@@ -4333,7 +4349,8 @@ type
     fFieldParsedAsString: set of 0..255;
     fOnExportValue: TOnSQLTableGetValue;
     /// avoid GPF when TSQLTable is nil
-    function GetRowCount: integer; {$ifdef HASINLINE} inline; {$endif}
+    function GetRowCount: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
     procedure InitFieldTypes;
     /// fill the internal fFieldNames[] array
@@ -4363,7 +4380,7 @@ type
     // or nil if the corresponding JSON was null or ""
     // - if Row and Fields are not correct, returns nil
     function Get(Row, Field: integer): PUTF8Char; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as RawUTF8 text
     function GetU(Row, Field: integer): RawUTF8; overload;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
@@ -4412,22 +4429,22 @@ type
     function GetW(Row, Field: integer): RawUnicode;
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row, Field: integer): integer; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row: integer; const FieldName: RawUTF8): integer; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as Int64 value
     function GetAsInt64(Row, Field: integer): Int64; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as Int64 value
     function GetAsInt64(Row: integer; const FieldName: RawUTF8): Int64; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as extended value
     function GetAsFloat(Row, Field: integer): TSynExtended; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as extended value
     function GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as TDateTime value
     // - sftDateTime/sftDateTimeMS will be converted from ISO-8601 text
     // - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
@@ -4445,10 +4462,10 @@ type
     function GetAsDateTime(Row: integer; const FieldName: RawUTF8): TDateTime; overload;
     /// read-only access to a particular field value, as currency value
     function GetAsCurrency(Row, Field: integer): currency; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as currency value
     function GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, ready to be displayed
     // - mostly used with Row=0, i.e. to get a display value from a field name
     // - use "string" type, i.e. UnicodeString for Delphi 2009+
@@ -4564,7 +4581,7 @@ type
     // may be slightly slower to access than readonly=FALSE, if all values are
     // likely be accessed later in the process
     procedure ToDocVariant(out docarray: variant; readonly: boolean); overload;
-      // {$ifdef HASINLINE} inline; {$endif} won't reset docarray as required
+      // {$ifdef HASINLINE}inline;{$endif} won't reset docarray as required
 
     /// save the table values in JSON format
     // - JSON data is added to TJSONWriter, with UTF-8 encoding, and not flushed
@@ -4625,7 +4642,7 @@ type
     /// get the Field index of a FieldName
     // - return -1 if not found, index (0..FieldCount-1) if found
     function FieldIndex(const FieldName: RawUTF8): integer; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// get the Field index of a FieldName
     // - raise an ESQLTableException if not found, index (0..FieldCount-1) if found
     function FieldIndexExisting(const FieldName: RawUTF8): integer; overload;
@@ -4645,7 +4662,8 @@ type
     //! list.FieldIndexExisting(
     //!   ['FirstName','LastName','YearOfBirth','YearOfDeath','RowID','Data'],
     //!   [@FirstName,@LastName,@YearOfBirth,@YearOfDeath,@RowID,@Data]);
-    //! for i := 1 to list.RowCount do begin
+    //! for i := 1 to list.RowCount do
+    //! begin
     //!   Check(list.Get(i,FirstName)<>nil);
     //!   Check(list.Get(i,LastName)<>nil);
     //!   Check(list.GetAsInteger(i,YearOfBirth)<10000);
@@ -4656,7 +4674,7 @@ type
     /// get the Field content (encoded as UTF-8 text) from a property name
     // - return nil if not found
     function FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// sort result Rows, according to a specific field
     // - default is sorting by ascending order (Asc=true)
     // - you can specify a Row index to be updated during the sort in PCurrentRow
@@ -4926,42 +4944,42 @@ type
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
     function FieldAsInteger(FieldIndex: Integer): Int64; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as Integer
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
     function FieldAsInteger(const FieldName: RawUTF8): Int64; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as floating-point value
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
     function FieldAsFloat(FieldIndex: Integer): TSynExtended; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as floating-point value
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
     function FieldAsFloat(const FieldName: RawUTF8): TSynExtended; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as RawUTF8
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetU() method, but for the current Step
     function FieldAsRawUTF8(FieldIndex: Integer): RawUTF8; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as RawUTF8
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetU() method, but for the current Step
     function FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as VCL String
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
     function FieldAsString(FieldIndex: Integer): string; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as VCL String
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
     function FieldAsString(const FieldName: RawUTF8): string; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as a variant
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - will call GetVariant() method for appropriate data conversion
@@ -6485,13 +6503,11 @@ type
     fIDGenerator: TSynUniqueIdentifierGenerators;
     procedure SetRoot(const aRoot: RawUTF8);
     procedure SetTableProps(aIndex: integer);
-    function GetTableIndexSafe(aTable: TSQLRecordClass;
-      RaiseExceptionIfNotExisting: boolean): integer;
     function GetTableProps(aClass: TSQLRecordClass): TSQLModelRecordProperties;
     /// get the enumerate type information about the possible actions to be
     function GetLocks(aTable: TSQLRecordClass): PSQLLocks;
     function GetTable(const SQLTableName: RawUTF8): TSQLRecordClass;
-    function GetTableExactIndex(const TableName: RawUTF8): integer;
+    function GetTableExactIndex(const TableName: RawUTF8): PtrInt;
     function GetTableExactClass(const TableName: RawUTF8): TSQLRecordClass;
   public
     /// initialize the Database Model
@@ -6540,6 +6556,9 @@ type
     /// get the index of a table in Tables[]
     // - expects SQLTableName to be SQL-like formatted (i.e. without TSQL[Record])
     function GetTableIndex(const SQLTableName: RawUTF8): integer; overload;
+    /// get the index of a table in Tables[], optionally raising EModelException
+    function GetTableIndexSafe(aTable: TSQLRecordClass;
+      RaiseExceptionIfNotExisting: boolean): PtrInt;
     /// get the index of a table in Tables[]
     // - expects SQLTableName to be SQL-like formatted (i.e. without TSQL[Record])
     function GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
@@ -6564,14 +6583,14 @@ type
     // is in the FROM clause, otherwise it will return the first Table specified
     function GetTableIndexFromSQLSelect(const SQL: RawUTF8;
       EnsureUniqueTableInFrom: boolean): integer;
-    /// try to retrieve one or several table index from a SQL statement
-    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
-    // using GetTableNamesFromSQLSelect() function
-    function GetTableIndexesFromSQLSelect(const SQL: RawUTF8): TIntegerDynArray;
     /// try to retrieve one or several TSQLRecordClass from a SQL statement
     // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
     // using GetTableNamesFromSQLSelect() function
     function GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDynArray;
+    /// try to retrieve one or several table index from a SQL statement
+    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
+    // using GetTableNamesFromSQLSelect() function
+    function GetTableIndexesFromSQLSelect(const SQL: RawUTF8): TIntegerDynArray;
     /// check if the supplied URI matches the model's Root property
     // - allows sub-domains, e.g. if Root='root/sub1', then '/root/sub1/toto' and
     // '/root/sub1?n=1' will match, whereas '/root/sub1nope/toto' won't
@@ -7368,10 +7387,13 @@ const
 
 var
   /// late-binding return of TSQLVirtualTableClass.ModuleName
-  // - link mormot.orm.virtual.pas unit for properly set this value
+  // - link mormot.orm.storage.pas unit for properly set this value
   GetVirtualTableModuleName: function(VirtualTableClass: TClass): RawUTF8;
 
 function ToText(vk: TSQLRecordVirtualKind): PShortString; overload;
+
+/// compute the SQL field names, used to create a SQLite3 virtual table
+function GetVirtualTableSQLCreate(Props: TSQLRecordProperties): RawUTF8;
 
 /// TDynArraySortCompare compatible function, sorting by TSQLRecord.ID
 function TSQLRecordDynArrayCompare(const Item1, Item2): integer;
@@ -7385,11 +7407,22 @@ function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass;
 
 /// create a TRecordReference with the corresponding parameters
 function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a dynamic array of TRecordReference into its corresponding IDs
 
 procedure RecordRefToID(var aArray: TInt64DynArray);
+
+
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
+
+type
+  TSQLRestCache = TRestCache;
+  TSQLRestBatch = TRestBatch;
+  TSQLRestBatchLocked = TRestBatchLocked;
+
+{$endif PUREMORMOT2}
 
 
 
@@ -7603,7 +7636,8 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       end;
     rkLString:
       // do not use AnsiStringCodePage since AnsiString = GetAcp may change
-      if (Info = TypeInfo(TSQLRawBlob)) or (Info = TypeInfo(RawByteString)) then
+      if (Info = TypeInfo(TSQLRawBlob)) or
+         (Info = TypeInfo(RawByteString)) then
       begin
         result := sftBlob;
         exit;
@@ -7707,7 +7741,9 @@ begin
   if Len = 0 then
     exit;
   if Len >= 3 then
-    if (P[0] in ['x', 'X']) and (P[1] = '''') and (P[Len - 1] = '''') then
+    if (P[0] in ['x', 'X']) and
+       (P[1] = '''') and
+       (P[Len - 1] = '''') then
     begin
       // BLOB literals are string literals containing hexadecimal data and
       // preceded by a single "x" or "X" character. For example: X'53514C697465'
@@ -7734,7 +7770,9 @@ begin
   Len := length(Blob);
   P := pointer(Blob);
   if Len >= 3 then
-    if (P[0] in ['x', 'X']) and (P[1] = '''') and (P[Len - 1] = '''') then
+    if (P[0] in ['x', 'X']) and
+       (P[1] = '''') and
+       (P[Len - 1] = '''') then
     begin
       // BLOB literals are string literals containing hexadecimal data and
       // preceded by a single "x" or "X" character. For example: X'53514C697465'
@@ -7825,7 +7863,8 @@ begin
     result := false;
     exit;
   end;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if (P[0] in ['x', 'X']) and (P[1] = '''') then
   begin
@@ -7871,7 +7910,8 @@ var
 begin
   if P <> nil then
   begin
-    while (P^ <= ' ') and (P^ <> #0) do
+    while (P^ <= ' ') and
+          (P^ <> #0) do
       inc(P);
     if (PInteger(P)^ = NULL_LOW) and (P[4] = #0) then
       result := sftUnknown
@@ -8629,14 +8669,15 @@ begin
 end;
 
 function Expect(var P: PUTF8Char; Value: PUTF8Char; ValueLen: PtrInt): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   i: PtrInt;
 begin // ValueLen is at least 8 bytes long
   result := false;
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if PPtrInt(P)^ = PPtrInt(Value)^ then
   begin
@@ -8825,7 +8866,8 @@ begin
   result := '';
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ <> '{' then
     exit;
@@ -8986,7 +9028,7 @@ const
 
 function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType;
   aTypeInfo: PRttiInfo): TSQLDBFieldType;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if aSQLFieldType = sftNullable then
     aSQLFieldType := NullableTypeToSQLFieldType(aTypeInfo);
@@ -9000,6 +9042,7 @@ begin
   if aName = '' then
     raise EModelException.CreateUTF8('Void name for %.Create', [self]);
   if aAuxiliaryRTreeField in aAttributes then
+    // '_NormalField' -> 'NormalField'
     fName := copy(aName, 2, MaxInt)
   else
     fName := aName;
@@ -9319,7 +9362,7 @@ var
       result.fNameUnflattened :=
         ToUTF8(aFlattenedProps[i]^.Name^) + '.' + result.fNameUnflattened;
     if (max >= 0) and
-       (aFlattenedProps[max]^.typeInfo^.ClassFieldCount(
+       (aFlattenedProps[max]^.TypeInfo^.ClassFieldCount(
          {withoutgetter=}pilIgnoreIfGetter in aOptions) = 1) then
     begin
       // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
@@ -10388,9 +10431,9 @@ begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
   D := TSQLPropInfoRTTIObject(DestInfo).GetInstance(Dest);
-  if S.InheritsFrom(TCollection) then
+  if fPropRtti.ValueKnownClass = TCollection then
     CopyCollection(TCollection(S), TCollection(D))
-  else if S.InheritsFrom(TStrings) and D.InheritsFrom(TStrings) then
+  else if fPropRtti.ValueKnownClass = TStrings then
     CopyStrings(TStrings(S), TStrings(D))
   else
   begin
@@ -11231,8 +11274,6 @@ end;
 
 constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PRttiProp;
   aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
-var
-  dummy: pointer;
 begin
   inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
   if rcfObjArray in fPropRtti.Flags then
@@ -11243,18 +11284,17 @@ begin
   if fGetterIsFieldPropOffset = 0 then
     raise EModelException.CreateUTF8('%.Create(%) should be a field, not with getter!',
       [self, fPropType^.Name]);
-  dummy := nil;
-  fWrapper.InitRtti(fPropRtti, dummy);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
-begin // fast assignment of fWrapper pre-initialized RTTI
-  result.InitFrom(@fWrapper, pointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^);
+begin
+  // very fast assignment of fWrapper pre-initialized RTTI
+  result.InitRtti(fPropRtti, pointer(PtrUInt(Instance) + fGetterIsFieldPropOffset)^);
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArrayElemType: TRttiCustom;
 begin
-  result := fWrapper.Info.ArrayRtti;
+  result := fPropRtti.ArrayRtti;
 end;
 
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
@@ -14166,10 +14206,10 @@ type
     procedure Sort(L, R: Integer);
     /// compare value at index I with pivot value
     // - sort by ID if values are identical
-    function CompI: integer; {$ifdef HASINLINE} inline; {$endif}
+    function CompI: integer; {$ifdef HASINLINE}inline;{$endif}
     /// compare value at index J with pivot value
     // - sort by ID if values are identical
-    function CompJ: integer; {$ifdef HASINLINE} inline; {$endif}
+    function CompJ: integer; {$ifdef HASINLINE}inline;{$endif}
     /// set the pivot value
     procedure SetPP(aPP: PPUTF8Char; aP: PtrInt);
   end;
@@ -14254,7 +14294,7 @@ begin
 end;
 {$endif CPUX86}
 
-procedure ExchgPointer(p1, p2: PPointer); {$ifdef HASINLINE} inline; {$endif}
+procedure ExchgPointer(p1, p2: PPointer); {$ifdef HASINLINE}inline;{$endif}
 var
   p: pointer;
 begin
@@ -15390,7 +15430,8 @@ IsDateTime:
         if Value <> 0 then
         begin
           ValueDateTime := ValueTimeLog.ToDateTime;
-          if CustomFormat <> '' then begin
+          if CustomFormat <> '' then
+          begin
             Text := FormatDateTime(CustomFormat, ValueDateTime);
             if Text <> CustomFormat then
               exit; // valid conversion
@@ -15733,7 +15774,8 @@ begin
         // data field layout is not consistent: should never happen
         break;
       inc(nrow);
-      while (P^ <> '{') and (P^ <> ']') do
+      while (P^ <> '{') and
+            (P^ <> ']') do
         // go to next object beginning
         if P^ = #0 then
           exit
@@ -16114,7 +16156,7 @@ begin
   if self = nil then
     result := nil
   else
-    result := PSQLRecordClass(Self)^;
+    result := PSQLRecordClass(self)^;
 end;
 
 constructor TSQLRecord.Create;
@@ -16334,7 +16376,7 @@ begin
       if f >= 0 then
       begin
         SP.GetValueVar(aRecord, False, tmp, @wasString);
-        D.Fields.List[f].SetValueVar(Self, tmp, wasString);
+        D.Fields.List[f].SetValueVar(self, tmp, wasString);
       end;
     end;
 end;
@@ -16651,8 +16693,7 @@ begin
   try
     W.WriteVarUInt64(fID);
     GetBinaryValues(W);
-    W.Flush;
-    result := (W.Stream as TRawByteStringStream).DataString;
+    result := W.FlushTo;
   finally
     W.Free;
   end;
@@ -16689,7 +16730,7 @@ end;
 function TSQLRecord.SetBinaryValuesSimpleFields(var P: PAnsiChar;
   PEnd: PAnsiChar): boolean;
 var
-  f: integer;
+  f: PtrInt;
 begin
   result := false;
   with RecordProps do
@@ -16704,7 +16745,7 @@ end;
 
 procedure TSQLRecord.GetJSONValues(W: TJSONSerializer);
 var
-  i, n: integer;
+  f, c: PtrInt;
   Props: TSQLPropInfoList;
 begin
   if self = nil then
@@ -16716,6 +16757,7 @@ begin
     if W.WithID then
       W.AddString(W.ColNames[0]);
   end;
+  c := 0;
   if W.WithID then
   begin
     W.Add(fID);
@@ -16726,21 +16768,19 @@ begin
       W.Add(fID);
       W.Add('"', ',');
     end;
-    n := 1;
-  end
-  else
-    n := 0;
+    inc(c);
+  end;
   if W.Fields <> nil then
   begin
     Props := RecordProps.Fields;
-    for i := 0 to length(W.Fields) - 1 do
+    for f := 0 to length(W.Fields) - 1 do
     begin
       if W.Expand then
       begin
-        W.AddString(W.ColNames[n]); // '"'+ColNames[]+'":'
-        inc(n);
+        W.AddString(W.ColNames[c]); // '"'+ColNames[]+'":'
+        inc(c);
       end;
-      Props.List[W.Fields[i]].GetJSONValues(Self, W);
+      Props.List[W.Fields[f]].GetJSONValues(self, W);
       W.Add(',');
     end;
   end;
@@ -16755,7 +16795,7 @@ var // Fields are not "const" since are modified if zero
   P: TSQLRecordProperties;
   Props: TSQLPropInfoList;
 begin
-  if Self = nil then
+  if self = nil then
   begin
     W.AddShort('null');
     exit;
@@ -16772,7 +16812,7 @@ begin
       W.Add(',', '"');
       W.AddNoJSONEscape(pointer(Props.List[i].Name), length(Props.List[i].Name));
       W.Add('"', ':');
-      Props.List[i].GetJSONValues(Self, W);
+      Props.List[i].GetJSONValues(self, W);
     end;
   W.Add('}');
 end;
@@ -16913,8 +16953,9 @@ begin
   for i := 0 to Props.Fields.Count - 1 do
     with Props.Fields.List[i] do
     begin
-      SQL := Props.SQLFieldTypeToSQL(i); // = '' for field with no matching DB column
+      SQL := Props.SQLFieldTypeToSQL(i);
       if SQL <> '' then
+        // = '' for field with no matching DB column
         result := result + Name + SQL;
     end;
   if result = '' then
@@ -17088,7 +17129,7 @@ var
 begin
   result := false;
   if (self = nil) or (Reference = nil) or
-     (PSQLRecordClass(Reference)^ <> PSQLRecordClass(Self)^) or
+     (PSQLRecordClass(Reference)^ <> PSQLRecordClass(self)^) or
      (Reference.fID <> fID) then
     exit;
   with RecordProps do
@@ -17154,7 +17195,7 @@ begin
           CopiableFields[i].SetValue(self, nil, false)
         else
           // clear nested allocated TSQLRecord
-          TSQLRecord(TSQLPropInfoRTTIInstance(CopiableFields[i]).GetInstance(Self)).
+          TSQLRecord(TSQLPropInfoRTTIInstance(CopiableFields[i]).GetInstance(self)).
             ClearProperties;
     end
     else
@@ -17296,7 +17337,7 @@ var
   SQL: RawUTF8;
 begin
   Create;
-  props := aClient.Model.Props[PSQLRecordClass(Self)^];
+  props := aClient.Model.Props[PSQLRecordClass(self)^];
   if props.props.JoinedFields = nil then
     raise EModelException.CreateUTF8('No nested TSQLRecord to JOIN in %', [self]);
   SQL := props.SQL.SelectAllJoined;
@@ -17312,7 +17353,7 @@ begin
   n := 0;
   with props.props do
   begin // follow SQL.SelectAllJoined columns
-    fFill.AddMapSimpleFields(Self, SimpleFields, n);
+    fFill.AddMapSimpleFields(self, SimpleFields, n);
     for i := 1 to length(JoinedFieldsTable) - 1 do
     begin
       instance := JoinedFieldsTable[i].Create;
@@ -18090,7 +18131,7 @@ begin
         begin
           p := Fields.List[F];
           if p.SQLFieldType in types then
-            TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self, i64);
+            TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
         end;
       end;
       if sftSessionUserID in HasTypeFields then
@@ -18101,7 +18142,7 @@ begin
           begin
             p := Fields.List[F];
             if p.SQLFieldType = sftSessionUserID then
-              TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(Self, i64);
+              TSQLPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
           end;
       end;
     end;
@@ -18152,8 +18193,8 @@ begin
   with RecordProps do
     if (fRecordManySourceProp <> nil) and (fRecordManyDestProp <> nil) then
     begin
-      fSourceID := fRecordManySourceProp.GetFieldAddr(Self);
-      fDestID := fRecordManyDestProp.GetFieldAddr(Self);
+      fSourceID := fRecordManySourceProp.GetFieldAddr(self);
+      fDestID := fRecordManyDestProp.GetFieldAddr(self);
     end;
 end;
 
@@ -18251,7 +18292,7 @@ var
 
 begin
   result := nil;
-  if (Self = nil) or (fSourceID = nil) or (fDestID = nil) or (aClient = nil) then
+  if (self = nil) or (fSourceID = nil) or (fDestID = nil) or (aClient = nil) then
     exit;
   if aSourceID = 0 then
     if fSourceID <> nil then
@@ -18296,7 +18337,7 @@ begin
   else
     // statement is not globaly inlined -> no caching of prepared statement
     SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
-  result := aClient.ExecuteList([PSQLRecordClass(Self)^,
+  result := aClient.ExecuteList([PSQLRecordClass(self)^,
     TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
     FormatUTF8(SQL, [{%H-}Select, DestProps.Props.SQLTableName, SelfProps.Props.SQLTableName,
     SelfProps.Props.SQLTableName, aSourceID, SelfProps.Props.SQLTableName,
@@ -18344,7 +18385,7 @@ begin
     result := false
   else // invalid parameters
     result := aClient.Retrieve(FormatUTF8('Source=:(%): AND Dest=:(%):',
-      [aSourceID, aDestID]), Self);
+      [aSourceID, aDestID]), self);
 end;
 
 function TSQLRecordMany.ManySelect(const aClient: IRestORM; aDestID: TID): boolean;
@@ -19027,13 +19068,15 @@ begin
   result := '';
   if P = nil then
     exit;
-  while (P^ <= ' ') and (P^ <> #0) do
+  while (P^ <= ' ') and
+        (P^ <> #0) do
     inc(P);
   if P^ <> '[' then
     exit;
   repeat
     inc(P)
-  until (P^ > ' ') or (P^ = #0);
+  until (P^ > ' ') or
+        (P^ = #0);
   W := TJSONSerializer.CreateOwnedStream(temp);
   try
     W.Add('{');
@@ -19054,7 +19097,8 @@ begin
       W.Add(',');
       repeat
         inc(P)
-      until (P^ > ' ') or (P^ = #0);
+      until (P^ > ' ') or
+            (P^ = #0);
     end;
     W.CancelLastComma;
     W.Add('}');
@@ -19066,7 +19110,8 @@ begin
   if P^ <> #0 then
     repeat
       inc(P)
-    until (P^ > ' ') or (P^ = #0);
+    until (P^ > ' ') or
+          (P^ = #0);
 end;
 
 procedure TSQLRecordProperties.SaveBinaryHeader(W: TBufferWriter);
@@ -19437,7 +19482,7 @@ end;
 { TSQLModel }
 
 function TSQLModel.GetTableIndexSafe(aTable: TSQLRecordClass;
-  RaiseExceptionIfNotExisting: boolean): integer;
+  RaiseExceptionIfNotExisting: boolean): PtrInt;
 begin
   for result := 0 to fTablesMax do // manual search: GetTableIndex() may fail
     if fTables[result] = aTable then
@@ -19502,7 +19547,7 @@ begin
   else
     Kind := rSQLite3;
   Props := TSQLModelRecordProperties.Create(self, Table, Kind);
-  Props.Props.InternalRegisterModel(Self, aIndex, Props);
+  Props.Props.InternalRegisterModel(self, aIndex, Props);
   for t := low(t) to high(t) do
     if fCustomCollationForAll[t] <> '' then
       Props.Props.SetCustomCollationForAll(t, fCustomCollationForAll[t]);
@@ -19789,6 +19834,21 @@ begin
   result := GetTableIndex(TableName);
 end;
 
+function TSQLModel.GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDynArray;
+var
+  t: TIntegerDynArray;
+  n, i: PtrInt;
+begin
+  result := nil;
+  t := GetTableIndexesFromSQLSelect(SQL);
+  n := length(t);
+  if n = 0 then
+    exit;
+  SetLength(result, n);
+  for i := 0 to n - 1 do
+    result[i] := Tables[t[i]];
+end;
+
 function TSQLModel.GetTableIndexesFromSQLSelect(const SQL: RawUTF8): TIntegerDynArray;
 var
   TableNames: TRawUTF8DynArray;
@@ -19811,21 +19871,6 @@ begin
   end;
   if n <> t then
     SetLength(result, n);
-end;
-
-function TSQLModel.GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDynArray;
-var
-  t: TIntegerDynArray;
-  n, i: PtrInt;
-begin
-  result := nil;
-  t := GetTableIndexesFromSQLSelect(SQL);
-  n := length(t);
-  if n = 0 then
-    exit;
-  SetLength(result, n);
-  for i := 0 to n - 1 do
-    result[i] := Tables[t[i]];
 end;
 
 function TSQLModel.GetTable(const SQLTableName: RawUTF8): TSQLRecordClass;
@@ -19899,7 +19944,7 @@ begin
     raise EModelException.CreateUTF8('% is not part of % %', [aTable, self, Root]);
 end;
 
-function TSQLModel.GetTableExactIndex(const TableName: RawUTF8): integer;
+function TSQLModel.GetTableExactIndex(const TableName: RawUTF8): PtrInt;
 var
   L: integer;
 begin
@@ -19908,11 +19953,7 @@ begin
     L := length(TableName);
     for result := 0 to fTablesMax do
       if Tables[result] <> nil then // avoid GPF
-        if IdemPropName(
-          // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code
-         // using vmtClassName = UTF-8 encoded text stored as shortstring
-          PShortString(PPointer(PtrInt(PtrUInt(Tables[result])) + vmtClassName)^)^,
-            pointer(TableName), L) then
+        if IdemPropName(ClassNameShort(Tables[result])^, pointer(TableName), L) then
           exit;  // case insensitive search
   end;
   result := -1;
@@ -21272,8 +21313,7 @@ end;
 procedure TRestCache.NotifyDeletion(aTableIndex: integer; aID: TID);
 begin
   if (self <> nil) and (aID > 0) and
-     (cardinal(aTableIndex) < cardinal(Length(fCache)))
-    then
+     (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
       begin
@@ -21286,7 +21326,8 @@ begin
       end;
 end;
 
-procedure TRestCache.NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64);
+procedure TRestCache.NotifyDeletions(aTableIndex: integer;
+  const aIDs: array of Int64);
 var
   i: PtrInt;
 begin
@@ -21307,7 +21348,8 @@ end;
 
 procedure TRestCache.NotifyDeletion(aTable: TSQLRecordClass; aID: TID);
 begin
-  if (self <> nil) and (aTable <> nil) and (aID > 0) then
+  if (self <> nil) and
+     (aTable <> nil) and (aID > 0) then
     NotifyDeletion(fModel.GetTableIndex(aTable), aID);
 end;
 
@@ -21316,7 +21358,9 @@ var
   TableIndex: cardinal;
 begin
   result := false;
-  if (self = nil) or (aValue = nil) or (aID <= 0) then
+  if (self = nil) or
+     (aValue = nil) or
+     (aID <= 0) then
     exit;
   TableIndex := fModel.GetTableIndexExisting(PSQLRecordClass(aValue)^);
   if TableIndex < cardinal(Length(fCache)) then
@@ -21328,7 +21372,8 @@ end;
 function TRestCache.Retrieve(aTableIndex: integer; aID: TID): RawUTF8;
 begin
   result := '';
-  if (self <> nil) and (aID > 0) and
+  if (self <> nil) and
+     (aID > 0) and
      (cardinal(aTableIndex) < cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -21427,7 +21472,8 @@ end;
 procedure TRestBatch.SetExpandedJSONWriter(Props: TSQLRecordProperties;
   ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
 begin
-  if (self = nil) or (fBatch = nil) then
+  if (self = nil) or
+     (fBatch = nil) then
     exit;
   if not ForceResetFields then
     if fBatch.Expand and (fBatch.WithID = withID) and
@@ -21448,7 +21494,8 @@ end;
 
 function TRestBatch.RawAdd(const SentData: RawUTF8): integer;
 begin // '{"Table":[...,"POST",{object},...]}'
-  if (fBatch = nil) or (fTable = nil) then
+  if (fBatch = nil) or
+     (fTable = nil) then
     raise EORMException.CreateUTF8('%.RawAdd %', [self, SentData]);
   fBatch.AddShort('"POST",');
   fBatch.AddString(SentData);
@@ -21462,7 +21509,8 @@ function TRestBatch.RawUpdate(const SentData: RawUTF8; ID: TID): integer;
 var
   sentID: TID;
 begin // '{"Table":[...,"PUT",{object},...]}'
-  if (fBatch = nil) or (fTable = nil) then
+  if (fBatch = nil) or
+     (fTable = nil) then
     raise EORMException.CreateUTF8('%.RawUpdate % %', [self, ID, SentData]);
   if JSONGetID(pointer(SentData), sentID) and (sentID <> ID) then
     raise EORMException.CreateUTF8('%.RawUpdate ID=% <> %', [self, ID, SentData]);
@@ -21485,9 +21533,12 @@ var
   f: PtrInt;
 begin
   result := -1;
-  if (self = nil) or (Value = nil) or (fBatch = nil) then
+  if (self = nil) or
+     (Value = nil) or
+     (fBatch = nil) then
     exit; // invalid parameters, or not opened BATCH sequence
-  if (fTable <> nil) and (PSQLRecordClass(Value)^ <> fTable) then
+  if (fTable <> nil) and
+     (PSQLRecordClass(Value)^ <> fTable) then
     exit;
   Props := Value.RecordProps;
   if SendData and
@@ -21554,7 +21605,10 @@ end;
 
 function TRestBatch.Delete(Table: TSQLRecordClass; ID: TID): integer;
 begin
-  if (self = nil) or (fBatch = nil) or (Table = nil) or (ID <= 0) or
+  if (self = nil) or
+     (fBatch = nil) or
+     (Table = nil) or
+     (ID <= 0) or
      not fRest.RecordCanBeUpdated(Table, ID, seDelete) then
   begin
     result := -1; // invalid parameters, or not opened BATCH sequence
@@ -21575,7 +21629,8 @@ end;
 
 function TRestBatch.Delete(ID: TID): integer;
 begin
-  if (self = nil) or (fTable = nil) or (ID <= 0) or
+  if (self = nil) or
+     (fTable = nil) or (ID <= 0) or
      not fRest.RecordCanBeUpdated(fTable, ID, seDelete) then
   begin
     result := -1; // invalid parameters, or not opened BATCH sequence
@@ -21596,7 +21651,8 @@ function TRestBatch.PrepareForSending(out Data: RawUTF8): boolean;
 var
   i: PtrInt;
 begin
-  if (self = nil) or (fBatch = nil) then // no opened BATCH sequence
+  if (self = nil) or
+     (fBatch = nil) then // no opened BATCH sequence
     result := false
   else
   begin
@@ -21625,10 +21681,12 @@ var
   tableIndex: integer;
 begin
   result := -1;
-  if (Value = nil) or (fBatch = nil) then
+  if (Value = nil) or
+     (fBatch = nil) then
     exit;
   ID := Value.IDValue;
-  if (ID <= 0) or not fRest.RecordCanBeUpdated(Value.RecordClass, ID, seUpdate) then
+  if (ID <= 0) or
+     not fRest.RecordCanBeUpdated(Value.RecordClass, ID, seUpdate) then
     exit; // invalid parameters, or not opened BATCH sequence
   Props := Value.RecordProps;
   if fTable <> nil then
@@ -21677,7 +21735,8 @@ end;
 function TRestBatch.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
   DoNotAutoComputeFields, ForceCacheUpdate: boolean): integer;
 begin
-  if (Value = nil) or (fBatch = nil) then
+  if (Value = nil) or
+     (fBatch = nil) then
     result := -1
   else
     result := Update(Value, Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
@@ -21746,7 +21805,8 @@ begin
   result := false;
   if Value = '' then
     ErrorMsg := sValidationFieldVoid
-  else if (aProcessRest = nil) or (aProcessRec = nil) then
+  else if (aProcessRest = nil) or
+          (aProcessRec = nil) then
     result := true
   else
     with aProcessRec.RecordProps do
@@ -21757,7 +21817,8 @@ begin
         SetID(aProcessRest.OneFieldValue(Table, 'RowID',
           Fields.List[aFieldIndex].Name + '=:(' + QuotedStr(Value, '''') + '):'),
           aID{%H-});
-        if (aID > 0) and (aID <> aProcessRec.fID) then
+        if (aID > 0) and
+           (aID <> aProcessRec.fID) then
           ErrorMsg := sValidationFieldDuplicate
         else
           result := true;
@@ -21789,7 +21850,9 @@ var
   i: PtrInt;
   aID: TID;
 begin
-  if (aProcessRest = nil) or (aProcessRec = nil) or (fFieldNames = nil) then
+  if (aProcessRest = nil) or
+     (aProcessRec = nil) or
+     (fFieldNames = nil) then
     result := true
   else
   begin
@@ -21801,7 +21864,8 @@ begin
         QuotedStr(aProcessRec.GetFieldValue(fFieldNames[i]), '''') + '):';
     end;
     SetID(aProcessRest.OneFieldValue(aProcessRec.RecordClass, 'ID', where), aID{%H-});
-    if (aID > 0) and (aID <> aProcessRec.fID) then
+    if (aID > 0) and
+       (aID <> aProcessRec.fID) then
     begin
       ErrorMsg := sValidationFieldDuplicate;
       result := false;
@@ -21914,27 +21978,39 @@ class procedure TSQLRecordNoCaseExtendedNoID.InitializeTable(
   const Server: IRestORMServer; const FieldName: RawUTF8;
   Options: TSQLInitializeTableOptions);
 begin
-  inherited InitializeTable(Server, FieldName, Options + [itoNoIndex4TID]);
+  include(Options, itoNoIndex4TID);
+  inherited InitializeTable(Server, FieldName, Options);
 end;
 
-
-// yes, I know, this is a huge unit, but there are a lot of comments and
-// the core ORM classes are coupled together by design :)
-
-initialization
+procedure InitializeUnit;
+begin
   InitializeCriticalSection(vmtAutoTableLock);
   Rtti.RegisterObjArray(
     TypeInfo(TSQLModelRecordPropertiesObjArray), TSQLModelRecordProperties);
+  // ensure TSQLRecordObjArray is recognized as a T*ObjArray
+  // - needed e.g. by TRestStorageInMemory.Create
+  Rtti.RegisterObjArray(TypeInfo(TSQLRecordObjArray), TSQLRecord);
   // manual setting of SQLFieldTypeComp[] values which are not TUTF8Compare
   pointer(@SQLFieldTypeComp[sftAnsiText]) := @AnsiIComp;
   pointer(@SQLFieldTypeComp[sftUTF8Custom]) := @AnsiIComp;
   pointer(@SQLFieldTypeComp[sftObject]) := @StrComp;
   pointer(@SQLFieldTypeComp[sftVariant]) := @StrComp;
   pointer(@SQLFieldTypeComp[sftNullable]) := @StrComp;
+end;
 
-finalization
+procedure FinalizeUnit;
+begin
   DeleteCriticalSection(vmtAutoTableLock);
   FreeAndNil(SQLPropInfoRegistration);
+end;
 
+// yes, I know, this is a huge unit, but there are a lot of comments and
+// the core ORM classes are coupled together by design :)
+
+initialization
+  InitializeUnit;
+
+finalization
+  FinalizeUnit;
 end.
 

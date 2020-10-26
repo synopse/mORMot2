@@ -66,11 +66,13 @@ function ToText(m: TSQLURIMethod): PShortString; overload;
 { ************ TRestORM Parent Class for abstract REST client/server }
 
 type
+  {$M+}
+
   /// implements TRest.ORM process for abstract REST client/server
   TRestORM = class(TRestORMParent, IRestORM)
   protected
     fRest: TRest;
-    fModel: TSQLModel;
+    fModel: TSQLModel; // owned by the TRest associated instance
     fCache: TRestCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TSQLRecordClass;
@@ -86,24 +88,7 @@ type
       ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass;
       const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
-    /// internal method called by TRestServer.Batch() to process fast sending
-    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
-    // - returns TRUE if this method is handled by the engine, or FALSE if
-    // individual calls to Engine*() are expected
-    // - this default implementation returns FALSE
-    // - an overridden method returning TRUE shall ensure that calls to
-    // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
-    // will properly handle operations until InternalBatchStop() is called
-    function InternalBatchStart(Method: TSQLURIMethod;
-      BatchOptions: TRestBatchOptions): boolean; virtual;
-    /// internal method called by TRestServer.Batch() to process fast sending
-    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
-    // - this default implementation will raise an EORMException (since
-    // InternalBatchStart returns always FALSE at this TRest level)
-    // - InternalBatchStart/Stop may safely use a lock for multithreading:
-    // implementation in TRestServer.Batch use a try..finally block
-    procedure InternalBatchStop; virtual;
-  protected
+  public
     // ------- abstract methods to be overriden by the real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
@@ -204,12 +189,38 @@ type
     // - warning: supplied JSON Data can be parsed in-place, so modified
     function EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
+    /// internal method called by TRestServer.Batch() to process fast sending
+    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
+    // - returns TRUE if this method is handled by the engine, or FALSE if
+    // individual calls to Engine*() are expected
+    // - this default implementation returns FALSE
+    // - an overridden method returning TRUE shall ensure that calls to
+    // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
+    // will properly handle operations until InternalBatchStop() is called
+    function InternalBatchStart(Method: TSQLURIMethod;
+      BatchOptions: TRestBatchOptions): boolean; virtual;
+    /// internal method called by TRestServer.Batch() to process fast sending
+    // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
+    // - this default implementation will raise an EORMException (since
+    // InternalBatchStart returns always FALSE at this TRest level)
+    // - InternalBatchStart/Stop may safely use a lock for multithreading:
+    // implementation in TRestServer.Batch use a try..finally block
+    procedure InternalBatchStop; virtual;
   public
     // ------- TRestORM main methods
     /// initialize the class, and associated to a TRest and its TSQLModel
     constructor Create(aRest: TRest); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
+    /// ensure the current thread will be taken into account during process
+    // - this abstract method won't do anything, but overriden versions may
+    procedure BeginCurrentThread(Sender: TThread); virtual;
+    /// called when thread is finished to ensure
+    // - this abstract method won't do anything, but overriden versions may
+    procedure EndCurrentThread(Sender: TThread); virtual;
+    /// low-level access to the current TSQLRecord class holding a transaction
+    // - equals nil outside of a TransactionBegin/Commit scope
+    property TransactionTable: TSQLRecordClass read fTransactionTable;
   public
     // ------- IRestORM interface implementation methods
     // calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
@@ -374,8 +385,10 @@ type
     function TransactionActiveSession: cardinal;
     procedure Commit(SessionID: cardinal; RaiseException: boolean = false); virtual;
     procedure RollBack(SessionID: cardinal); virtual;
-    procedure WriteLock;    {$ifdef HASINLINE}inline;{$endif}
-    procedure WriteUnLock;  {$ifdef HASINLINE}inline;{$endif}
+    procedure WriteLock;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure WriteUnLock;
+      {$ifdef HASINLINE}inline;{$endif}
     function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
     function BatchSend(Batch: TRestBatch): integer; overload;
     function BatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
@@ -392,21 +405,36 @@ type
     function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
-    function Model: TSQLModel; {$ifdef HASINLINE}inline;{$endif}
+    function Model: TSQLModel;
+      {$ifdef HASINLINE}inline;{$endif}
     function Cache: TRestCache;
-    function CacheOrNil: TRestCache; {$ifdef HASINLINE}inline;{$endif}
+    function CacheOrNil: TRestCache;
+      {$ifdef HASINLINE}inline;{$endif}
     function CacheWorthItForTable(aTableIndex: cardinal): boolean; virtual;
-    function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
-      aInstance: TObject = nil): ISynLog;
+    function LogClass: TSynLogClass;
+      {$ifdef HASINLINE}inline;{$endif}
+    function LogFamily: TSynLogFamily;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure InternalLog(const Format: RawUTF8; const Args: array of const;
       Level: TSynLogInfo = sllTrace); overload;
     function GetServerTimestamp: TTimeLog;
-    function GetCurrentSessionUserID: TID;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetCurrentSessionUserID: TID; virtual;
   end;
+
+  {$M-}
+
+  /// a dynamic array of TRestORM instances
+  TRestORMDynArray = array of TRestORM;
+
+  /// a dynamic array of TRestORM instances, owning the instances
+  TRestORMObjArray = array of TRestORM;
 
 
 implementation
+
 
 { ************ Some definitions Used by TRestORM Implementation }
 
@@ -462,21 +490,22 @@ begin
   inherited Destroy;
 end;
 
-procedure TRestORM.WriteLock;
+procedure TRestORM.BeginCurrentThread(Sender: TThread);
 begin
-  fRest.AcquireExecution[execORMWrite].Safe.Lock;
+  // nothing do to at this level -> see e.g. TRestORMServer.BeginCurrentThread
 end;
 
-procedure TRestORM.WriteUnLock;
+procedure TRestORM.EndCurrentThread(Sender: TThread);
 begin
-  fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+  // nothing do to at this level -> see e.g. TRestORMServer.EndCurrentThread
 end;
 
 function TRestORM.SQLComputeForSelect(Table: TSQLRecordClass;
   const FieldNames, WhereClause: RawUTF8): RawUTF8;
 begin
   result := '';
-  if (self = nil) or (Table = nil) then
+  if (self = nil) or
+     (Table = nil) then
     exit;
   if FieldNames = '' then
     result := fModel.Props[Table].SQLFromSelectWhere('*', WhereClause)
@@ -494,8 +523,8 @@ begin
 end;
 
 procedure TRestORM.GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
-  ForceID, DoNotAutoComputeFields, WithBlobs: boolean; CustomFields:
-  PSQLFieldBits; var result: RawUTF8);
+  ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
+  CustomFields: PSQLFieldBits; var result: RawUTF8);
 var
   fields: TSQLFieldBits;
   props: TSQLRecordProperties;
@@ -504,9 +533,11 @@ begin
     Value.ComputeFieldsBeforeWrite(self, seAdd);
   if fModel.TableProps[TableIndex].Kind in INSERT_WITH_ID then
     ForceID := true;
-  if (fModel.IDGenerator <> nil) and (fModel.IDGenerator[TableIndex] <> nil) then
+  if (fModel.IDGenerator <> nil) and
+     (fModel.IDGenerator[TableIndex] <> nil) then
   begin
-    if (Value.IDValue = 0) or not ForceID then
+    if (Value.IDValue = 0) or
+       not ForceID then
     begin
       Value.IDValue := fModel.IDGenerator[TableIndex].ComputeNew;
       ForceID := true;
@@ -530,8 +561,8 @@ begin
     result := Value.GetJSONValues(true, ForceID, fields);
 end;
 
-function TRestORM.InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields:
-  PSQLFieldBits; ForceID, DoNotAutoComputeFields: boolean): TID;
+function TRestORM.InternalAdd(Value: TSQLRecord; SendData: boolean;
+  CustomFields: PSQLFieldBits; ForceID, DoNotAutoComputeFields: boolean): TID;
 var
   json: RawUTF8;
   t: integer;
@@ -548,11 +579,11 @@ begin
   else
     json := '';
   // on success, returns the new RowID value; on error, returns 0
-  WriteLock;
+  fRest.AcquireExecution[execORMWrite].Safe.Lock;
   try // may be within a batch in another thread
     result := EngineAdd(t, json); // will call static if necessary
   finally
-    WriteUnLock;
+    fRest.AcquireExecution[execORMWrite].Safe.UnLock;
   end;
   // on success, Value.ID is updated with the new RowID
   Value.IDValue := result;
@@ -563,11 +594,52 @@ end;
 
 // ------- IRestORM interface implementation methods
 
+function TRestORM.Model: TSQLModel;
+begin
+  result := fModel;
+end;
+
+function TRestORM.CacheOrNil: TRestCache;
+begin
+  result := fCache;
+end;
+
+function TRestORM.LogClass: TSynLogClass;
+begin
+  result := fRest.LogClass;
+end;
+
+function TRestORM.LogFamily: TSynLogFamily;
+begin
+  result := fRest.LogFamily;
+end;
+
+procedure TRestORM.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
+begin
+  fRest.InternalLog(Text, Level);
+end;
+
+function TRestORM.GetServerTimestamp: TTimeLog;
+begin
+  result := fRest.GetServerTimeStamp;
+end;
+
+procedure TRestORM.WriteLock;
+begin
+  fRest.AcquireExecution[execORMWrite].Safe.Lock;
+end;
+
+procedure TRestORM.WriteUnLock;
+begin
+  fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+end;
+
 function TRestORM.TableRowCount(Table: TSQLRecordClass): Int64;
 var
   T: TSQLTable;
 begin
-  if (self = nil) or (Table = nil) then
+  if (self = nil) or
+     (Table = nil) then
     T := nil
   else
     T := ExecuteList([Table], 'SELECT Count(*) FROM ' +
@@ -586,7 +658,8 @@ function TRestORM.TableHasRows(Table: TSQLRecordClass): boolean;
 var
   T: TSQLTable;
 begin
-  if (self = nil) or (Table = nil) then
+  if (self = nil) or
+     (Table = nil) then
     T := nil
   else
     T := ExecuteList([Table], 'SELECT RowID FROM ' +
@@ -605,7 +678,8 @@ function TRestORM.TableMaxID(Table: TSQLRecordClass): TID;
 var
   T: TSQLTable;
 begin
-  if (self = nil) or (Table = nil) then
+  if (self = nil) or
+     (Table = nil) then
     T := nil
   else
     T := ExecuteList([Table], 'SELECT max(RowID) FROM ' +
@@ -652,14 +726,15 @@ end;
 function TRestORM.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8;
 begin
-  result := OneFieldValue(Table, FieldName, FormatUTF8(FormatSQLWhere, [],
-    BoundsSQLWhere));
+  result := OneFieldValue(Table, FieldName,
+    FormatUTF8(FormatSQLWhere, [], BoundsSQLWhere));
 end;
 
 function TRestORM.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
   const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8;
 begin
-  result := OneFieldValue(Table, FieldName, FormatUTF8(WhereClauseFmt, Args, Bounds));
+  result := OneFieldValue(Table, FieldName,
+    FormatUTF8(WhereClauseFmt, Args, Bounds));
 end;
 
 function TRestORM.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
@@ -705,10 +780,13 @@ var
 begin
   result := false;
   n := length(FieldName);
-  if (self <> nil) and (Table <> nil) and (n = length(FieldValue)) then
+  if (self <> nil) and
+     (Table <> nil) and
+     (n = length(FieldValue)) then
     with Table.RecordProps do
     begin
-      if (n = 1) and IdemPChar(pointer(FieldName[0]), 'COUNT(*)') then
+      if (n = 1) and
+         IdemPChar(pointer(FieldName[0]), 'COUNT(*)') then
         SQL := 'SELECT COUNT(*) FROM ' + SQLTableName + SQLFromWhere(WhereClause)
       else
       begin
@@ -725,7 +803,8 @@ begin
       T := ExecuteList([Table], SQL);
       if T <> nil then
       try
-        if (T.FieldCount <> length(FieldName)) or (T.RowCount <= 0) then
+        if (T.FieldCount <> length(FieldName)) or
+           (T.RowCount <= 0) then
           exit;
         // get field values from the first (and unique) row
         for i := 0 to T.FieldCount - 1 do
@@ -802,7 +881,8 @@ begin
           begin
             // SELECT RowID from Table where RowID in [1,2,3]
             P := GotoNextNotSpace(P + 2);
-            if (P^ = '(') and (GotoNextNotSpace(P + 1)^ in ['0'..'9']) then
+            if (P^ = '(') and
+               (GotoNextNotSpace(P + 1)^ in ['0'..'9']) then
             begin
               CSVToInt64DynArray(P + 1, Data);
               if Data <> nil then
@@ -819,7 +899,8 @@ begin
   T := MultiFieldValues(Table, FieldName, WhereClause);
   if T <> nil then
   try
-    if (T.FieldCount <> 1) or (T.RowCount <= 0) then
+    if (T.FieldCount <> 1) or
+       (T.RowCount <= 0) then
       exit;
     T.GetRowValues(0, Data);
     if SQL <> nil then
@@ -842,7 +923,8 @@ begin
   T := MultiFieldValues(Table, FieldName, WhereClause);
   if T <> nil then
   try
-    if (T.FieldCount <> 1) or (T.RowCount <= 0) then
+    if (T.FieldCount <> 1) or
+       (T.RowCount <= 0) then
       exit;
     // calculate row values CSV needed memory
     SetLength(Lens, T.RowCount);
@@ -886,7 +968,9 @@ var
   T: TSQLTable;
 begin
   result := false;
-  if (Strings <> nil) and (self <> nil) and (Table <> nil) then
+  if (Strings <> nil) and
+     (self <> nil) and
+     (Table <> nil) then
   try
     Strings.BeginUpdate;
     Strings.Clear;
@@ -894,13 +978,15 @@ begin
       'ID,' + FieldName, WhereClause, ''));
     if T <> nil then
     try
-      if (T.FieldCount = 2) and (T.RowCount > 0) then
+      if (T.FieldCount = 2) and
+         (T.RowCount > 0) then
       begin
         for Row := 1 to T.RowCount do
         begin // ignore Row 0 i.e. field names
           aID := GetInt64(T.Get(Row, 0));
           Strings.AddObject(T.GetString(Row, 1), pointer(PtrInt(aID)));
-          if (IDToIndex <> nil) and (aID = IDToIndex^) then
+          if (IDToIndex <> nil) and
+             (aID = IDToIndex^) then
           begin
             IDToIndex^ := Row - 1;
             IDToIndex := nil; // set once
@@ -982,7 +1068,9 @@ end;
 function TRestORM.MainFieldValue(Table: TSQLRecordClass; ID: TID;
   ReturnFirstIfNoUnique: boolean): RawUTF8;
 begin
-  if (self = nil) or (Table = nil) or (ID <= 0) then
+  if (self = nil) or
+     (Table = nil) or
+     (ID <= 0) then
     result := ''
   else
   begin
@@ -997,7 +1085,9 @@ var
   main: integer;
 begin
   result := 0;
-  if (self <> nil) and (Value <> '') and (Table <> nil) then
+  if (self <> nil) and
+     (Value <> '') and
+     (Table <> nil) then
     with Table.RecordProps do
     begin
       main := MainField[false];
@@ -1012,7 +1102,9 @@ function TRestORM.MainFieldIDs(Table: TSQLRecordClass;
 var
   main, id: TID;
 begin
-  if (self <> nil) and (high(Values) >= 0) and (Table <> nil) then
+  if (self <> nil) and
+     (high(Values) >= 0) and
+     (Table <> nil) then
     if high(Values) = 0 then
     begin
       // handle special case of one Values[] item
@@ -1041,7 +1133,8 @@ var
   T: TSQLTable;
 begin
   result := false;
-  if (self = nil) or (Value = nil) then
+  if (self = nil) or
+     (Value = nil) then
     exit;
   T := MultiFieldValues(PSQLRecordClass(Value)^, aCustomFieldsCSV, SQLWhere);
   if T <> nil then
@@ -1078,7 +1171,8 @@ begin
   if Value = nil then
     exit; // avoid GPF
   Value.IDValue := 0;
-  if (self = nil) or (aID = 0) then
+  if (self = nil) or
+     (aID = 0) then
     exit;
   t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
   // try to lock before retrieval (if ForUpdate)
@@ -1108,9 +1202,10 @@ var
   c: TSQLRecordClass;
 begin
   result := nil;
-  if (self = nil) or (RecordRef(Reference).ID = 0) then
+  if (self = nil) or
+     (RecordRef(Reference).ID = 0) then
     exit;
-  c := RecordRef(Reference).Table(Model);
+  c := RecordRef(Reference).Table(fModel);
   if c = nil then
     exit;
   result := c.Create(self, RecordRef(Reference).ID, ForUpdate);
@@ -1130,7 +1225,8 @@ var
   T: TSQLTable;
 begin
   result := nil;
-  if (self = nil) or (Table = nil) then
+  if (self = nil) or
+     (Table = nil) then
     exit;
   T := MultiFieldValues(Table, aCustomFieldsCSV, FormatSQLWhere, BoundsSQLWhere);
   if T <> nil then
@@ -1153,7 +1249,8 @@ begin
 end;
 
 function TRestORM.RetrieveListJSON(Table: TSQLRecordClass;
-  const SQLWhere, aCustomFieldsCSV: RawUTF8; aForceAJAX: boolean): RawJSON;
+  const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8;
+  aForceAJAX: boolean): RawJSON;
 var
   sql: RawUTF8;
 begin
@@ -1173,7 +1270,7 @@ begin
 end;
 
 function TRestORM.RetrieveDocVariantArray(Table: TSQLRecordClass;
-  const ObjectName, FormatSQLWhere: RawUTF8;
+  const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
   FirstRecordID: PID; LastRecordID: PID): variant;
 var
@@ -1181,7 +1278,8 @@ var
   v: variant;
 begin
   TVarData(v).VType := varNull;
-  if (self <> nil) and (Table <> nil) then
+  if (self <> nil) and
+     (Table <> nil) then
   begin
     T := MultiFieldValues(Table, CustomFieldsCSV, FormatSQLWhere, BoundsSQLWhere);
     if T <> nil then
@@ -1210,7 +1308,8 @@ var
   doc: TDocVariantData absolute result;
 begin
   VarClear(result);
-  if (self <> nil) and (Table <> nil) then
+  if (self <> nil) and
+     (Table <> nil) then
   begin
     T := MultiFieldValues(Table, FieldName, FormatSQLWhere, BoundsSQLWhere);
     if T <> nil then
@@ -1236,7 +1335,8 @@ var
   ID: TID;
 begin
   SetVariantNull(result);
-  if (self <> nil) and (Table <> nil) then
+  if (self <> nil) and
+     (Table <> nil) then
   begin
     with Table.RecordProps do
       // handle optimized primary key direct access
@@ -1277,7 +1377,8 @@ var
   T: TSQLTable;
 begin
   result := false;
-  if (self = nil) or (Table = nil) then
+  if (self = nil) or
+     (Table = nil) then
     exit;
   T := MultiFieldValues(Table, aCustomFieldsCSV, FormatSQLWhere, BoundsSQLWhere);
   if T <> nil then
@@ -1294,7 +1395,9 @@ procedure TRestORM.AppendListAsJsonArray(Table: TSQLRecordClass;
 var
   Rec: TSQLRecord;
 begin
-  if (self = nil) or (Table = nil) or (W = nil) then
+  if (self = nil) or
+     (Table = nil) or
+     (W = nil) then
     exit;
   Rec := Table.CreateAndFillPrepare(Self, FormatSQLWhere, BoundsSQLWhere,
     CustomFieldsCSV);
@@ -1318,7 +1421,9 @@ var
   i: PtrInt;
 begin
   result := false;
-  if (self = nil) or (DataTable = nil) or (RTreeTable = nil) or
+  if (self = nil) or
+     (DataTable = nil) or
+     (RTreeTable = nil) or
      (DataTableBlobField = '') then
     exit;
   RTree := RTreeTable.RecordProps;
@@ -1359,7 +1464,8 @@ begin
   T := ExecuteList([DataTable, RTreeTable], SQL);
   if T <> nil then
   try
-    if (T.FieldCount <> 1) or (T.RowCount <= 0) then
+    if (T.FieldCount <> 1) or
+       (T.RowCount <= 0) then
       exit;
     T.GetRowValues(0, TInt64DynArray(DataID));
     result := true;
@@ -1411,7 +1517,9 @@ end;
 
 function TRestORM.UnLock(Rec: TSQLRecord): boolean;
 begin
-  if (self = nil) or (Rec = nil) or (Rec.IDValue <= 0) then
+  if (self = nil) or
+     (Rec = nil) or
+     (Rec.IDValue <= 0) then
     result := false
   else
     result := UnLock(PSQLRecordClass(Rec)^, Rec.IDValue);
@@ -1476,7 +1584,8 @@ var
   Value: TSQLRecord;
 begin
   result := 0; // means error
-  if (self = nil) or (aTable = nil) then
+  if (self = nil) or
+     (aTable = nil) then
     exit;
   Value := aTable.Create;
   try
@@ -1498,7 +1607,9 @@ var
   t: integer;
   FieldBits: TSQLFieldBits;
 begin
-  if (self = nil) or (Value = nil) or (Value.IDValue = 0) or
+  if (self = nil) or
+     (Value = nil) or
+     (Value.IDValue = 0) or
      not RecordCanBeUpdated(PSQLRecordClass(Value)^, Value.IDValue, seUpdate) then
   begin
     result := false; // current user don't have enough right to update this record
@@ -1508,7 +1619,8 @@ begin
   if not DoNotAutoComputeFields then
     Value.ComputeFieldsBeforeWrite(self, seUpdate); // update sftModTime fields
   if IsZero(CustomFields) then
-    if (Value.FillContext <> nil) and (Value.FillContext.Table <> nil) and
+    if (Value.FillContext <> nil) and
+       (Value.FillContext.Table <> nil) and
        (Value.FillContext.TableMapRecordManyInstances = nil) then
       // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
       FieldBits := Value.FillContext.TableMapFields +
@@ -1541,7 +1653,8 @@ end;
 function TRestORM.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
   DoNotAutoComputeFields: boolean): boolean;
 begin
-  if (self = nil) or (Value = nil) then
+  if (self = nil) or
+     (Value = nil) then
     result := false
   else
     result := Update(Value, Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
@@ -1554,7 +1667,9 @@ var
   Value: TSQLRecord;
 begin
   result := false; // means error
-  if (self = nil) or (aTable = nil) or (aID = 0) then
+  if (self = nil) or
+     (aTable = nil) or
+     (aID = 0) then
     exit;
   Value := aTable.Create;
   try
@@ -1569,7 +1684,8 @@ end;
 
 function TRestORM.AddOrUpdate(Value: TSQLRecord; ForceID: boolean): TID;
 begin
-  if (self = nil) or (Value = nil) then
+  if (self = nil) or
+     (Value = nil) then
   begin
     result := 0;
     exit;
@@ -1577,7 +1693,8 @@ begin
   if ForceID or (Value.IDValue = 0) then
   begin
     result := Add(Value, true, ForceID);
-    if (result <> 0) or (Value.IDValue = 0) then
+    if (result <> 0) or
+       (Value.IDValue = 0) then
       exit;
   end;
   if Update(Value) then
@@ -1605,7 +1722,8 @@ var
   SetValue, WhereValue: RawUTF8;
 begin
   result := false;
-  if (length(FieldValue) <> 1) or (WhereFieldName = '') or
+  if (length(FieldValue) <> 1) or
+     (WhereFieldName = '') or
      (length(WhereFieldValue) <> 1) then
     exit;
   VarRecToInlineValue(WhereFieldValue[0], WhereValue);
@@ -1667,7 +1785,8 @@ var
   v: Int64;
   t: TSQLRecordClass;
 begin
-  if (TableModelIndex < 0) or (ID < 0) then
+  if (TableModelIndex < 0) or
+     (ID < 0) then
     result := false
   else if Increment = 0 then
     result := true
@@ -1787,7 +1906,8 @@ var
   blob: PRttiProp;
 begin
   result := false;
-  if (self = nil) or (aID <= 0) then
+  if (self = nil) or
+     (aID <= 0) then
     exit;
   blob := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
   if blob = nil then
@@ -1816,7 +1936,8 @@ var
   blob: PRttiProp;
 begin
   result := false;
-  if (self = nil) or (aID <= 0) or
+  if (self = nil) or
+     (aID <= 0) or
      not RecordCanBeUpdated(Table, aID, seUpdate) then
     exit;
   blob := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
@@ -1833,7 +1954,8 @@ var
   L: integer;
 begin
   result := false;
-  if (self = nil) or (BlobData = nil) then
+  if (self = nil) or
+     (BlobData = nil) then
     exit;
   L := BlobData.Seek(0, soFromEnd);
   SetLength(data, L);
@@ -1848,7 +1970,9 @@ function TRestORM.UpdateBlob(Table: TSQLRecordClass; aID: TID;
 var
   data: TSQLRawBlob;
 begin
-  if (self = nil) or (BlobData = nil) or (BlobSize < 0) then
+  if (self = nil) or
+     (BlobData = nil) or
+     (BlobSize < 0) then
     result := false
   else
   begin
@@ -1863,7 +1987,8 @@ var
   t, i: PtrInt;
 begin
   result := false;
-  if (Value = nil) or (Value.IDValue <= 0) then
+  if (Value = nil) or
+     (Value.IDValue <= 0) then
     exit;
   with Value.RecordProps do
     if BlobFields <> nil then
@@ -1886,7 +2011,9 @@ var
   t, i: PtrInt;
 begin
   result := false;
-  if (Self = nil) or (Value = nil) or (Value.IDValue <= 0) then
+  if (Self = nil) or
+     (Value = nil) or
+     (Value.IDValue <= 0) then
     exit;
   with Value.RecordProps do
     if BlobFields <> nil then
@@ -1908,7 +2035,8 @@ begin
   WriteLock;
   try
     if fTransactionActiveSession = 0 then
-    begin // nested transactions are not allowed
+    begin
+      // nested transactions are not allowed
       fTransactionActiveSession := SessionID;
       fTransactionTable := aTable;
       result := true;
@@ -1974,7 +2102,9 @@ var
   json: RawUTF8; // layout is '{"Table":["cmd":values,...]}'
 begin
   result := HTTP_BADREQUEST;
-  if (self = nil) or (Batch = nil) then // no opened BATCH sequence
+  if (self = nil) or
+     (Batch = nil) then
+    // no opened BATCH sequence
     exit;
   InternalLog('BatchSend %', [Batch]);
   if Batch.PrepareForSending(json) then
@@ -1984,7 +2114,8 @@ begin
     try
       result := BatchSend(Batch.Table, json, Results, Batch.Count);
     except
-      on Exception do // e.g. from TRestServer.BatchSend()
+      on Exception do
+        // e.g. error during TRestServer.BatchSend()
         result := HTTP_SERVERERROR;
     end;
 end;
@@ -2015,17 +2146,20 @@ end;
 
 function TRestORM.AsynchBatchStop(Table: TSQLRecordClass): boolean;
 begin
-  if (self = nil) or (fRest.BackgroundTimer = nil) or
+  if (self = nil) or
+     (fRest.BackgroundTimer = nil) or
      (fRest.BackgroundTimer.BackgroundBatch = nil) then
     result := false
   else
     result := fRest.BackgroundTimer.AsynchBatchStop(Table);
 end;
 
-function TRestORM.AsynchBatchAdd(Value: TSQLRecord; SendData, ForceID: boolean;
-  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+function TRestORM.AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
+  ForceID: boolean; const CustomFields: TSQLFieldBits;
+  DoNotAutoComputeFields: boolean): integer;
 begin
-  if (self = nil) or (fRest.BackgroundTimer = nil) or
+  if (self = nil) or
+     (fRest.BackgroundTimer = nil) or
      (fRest.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
@@ -2033,27 +2167,31 @@ begin
       CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRestORM.AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData:
-  RawUTF8): integer;
+function TRestORM.AsynchBatchRawAdd(Table: TSQLRecordClass;
+  const SentData: RawUTF8): integer;
 begin
-  if (self = nil) or (fRest.BackgroundTimer = nil) or
+  if (self = nil) or
+     (fRest.BackgroundTimer = nil) or
      (fRest.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
     result := fRest.BackgroundTimer.AsynchBatchRawAdd(Table, SentData);
 end;
 
-procedure TRestORM.AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+procedure TRestORM.AsynchBatchRawAppend(Table: TSQLRecordClass;
+  SentData: TTextWriter);
 begin
-  if (self <> nil) and (fRest.BackgroundTimer <> nil) and
+  if (self <> nil) and
+     (fRest.BackgroundTimer <> nil) and
      (fRest.BackgroundTimer.BackgroundBatch <> nil) then
     fRest.BackgroundTimer.AsynchBatchRawAppend(Table, SentData);
 end;
 
-function TRestORM.AsynchBatchUpdate(Value: TSQLRecord; const CustomFields:
-  TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+function TRestORM.AsynchBatchUpdate(Value: TSQLRecord;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
-  if (self = nil) or (fRest.BackgroundTimer = nil) or
+  if (self = nil) or
+     (fRest.BackgroundTimer = nil) or
      (fRest.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
@@ -2063,16 +2201,12 @@ end;
 
 function TRestORM.AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
 begin
-  if (self = nil) or (fRest.BackgroundTimer = nil) or
+  if (self = nil) or
+     (fRest.BackgroundTimer = nil) or
      (fRest.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
     result := fRest.BackgroundTimer.AsynchBatchDelete(Table, ID);
-end;
-
-function TRestORM.Model: TSQLModel;
-begin
-  result := fModel;
 end;
 
 function TRestORM.Cache: TRestCache;
@@ -2082,25 +2216,9 @@ begin
   result := fCache;
 end;
 
-function TRestORM.CacheOrNil: TRestCache;
-begin
-  result := fCache;
-end;
-
 function TRestORM.CacheWorthItForTable(aTableIndex: cardinal): boolean;
 begin
   result := true; // always worth caching by default
-end;
-
-function TRestORM.Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
-  aInstance: TObject): ISynLog;
-begin
-  result := fRest.Enter(TextFmt, TextArgs, aInstance);
-end;
-
-procedure TRestORM.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
-begin
-  fRest.InternalLog(Text, Level);
 end;
 
 procedure TRestORM.InternalLog(const Format: RawUTF8; const Args: array of const;
@@ -2109,21 +2227,11 @@ begin
   fRest.InternalLog(Format, Args, Level);
 end;
 
-function TRestORM.GetServerTimestamp: TTimeLog;
-begin
-  result := fRest.GetServerTimeStamp;
-end;
-
 function TRestORM.GetCurrentSessionUserID: TID;
 begin
   result := fRest.GetCurrentSessionUserID;
 end;
 
-
-
-initialization
-
-finalization
 
 end.
 

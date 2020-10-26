@@ -13,6 +13,7 @@ unit mormot.rest.core;
     - RESTful Authentication Support
     - TRestURIParams REST URI Definitions
     - TRestThread Background Process of a REST instance
+    - TSQLRecordHistory/TSQLRecordTableDeleted Modifications Tracked Persistence
 
   *****************************************************************************
 }
@@ -26,12 +27,9 @@ uses
   classes,
   variants,
   contnrs,
-  {$ifndef FPC}
-  //typinfo, // for proper Delphi inlining
   {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
   Generics.Collections,
   {$endif ISDELPHI2010}
-  {$endif FPC}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -88,6 +86,21 @@ type
 
   /// define how a TRest class may execute its ORM and SOA operations
   TRestAcquireExecutions = array[TRestServerURIContextCommand] of TRestAcquireExecution;
+
+
+/// returns a TDocVariant array of the latest intercepted exception texts
+// - runs ToText() over all information returned by overloaded GetLastExceptions
+// - defined in this unit to have TDocVariant at hand
+function GetLastExceptions(Depth: integer = 0): variant; overload;
+
+/// check the supplied HTTP header to not contain more than one EOL
+// - to avoid unexpected HTTP body injection, e.g. from unsafe business code
+function IsInvalidHttpHeader(head: PUTF8Char; headlen: PtrInt): boolean;
+
+const
+  // log up to 2 KB of JSON response, to save space
+  MAX_SIZE_RESPONSE_LOG = 2 shl 10;
+
 
 
 { ************ TRestBackgroundTimer for Multi-Thread Process }
@@ -273,7 +286,7 @@ type
   TRest = class(TInterfaceResolver)
   protected
     fORM: IRestORM;
-    fORMInstance: TInterfacedObject;
+    fORMInstance: TInterfacedObject; // is a TRestORM
     fModel: TSQLModel;
     fServices: TServiceContainer;
     fLogClass: TSynLogClass;
@@ -298,15 +311,15 @@ type
     procedure SetAcquireExecutionLockedTimeOut(Cmd: TRestServerURIContextCommand; Value: cardinal);
     /// any overriden TRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
-    // inherited classes should unserialize the other aDefinition properties by
-    // overriding this method, in a reverse logic to overriden DefinitionTo()
-    {%H-}constructor RegisteredClassCreateFrom(aModel: TSQLModel;
-      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); virtual;
   public
     /// initialize the class, and associate it to a specified database Model
     constructor Create(aModel: TSQLModel); virtual;
+    // inherited classes should unserialize the other aDefinition properties by
+    // overriding this method, in a reverse logic to overriden DefinitionTo()
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); virtual;
     /// release internal used instances
-    // - e.g. release associated TSQLModel or TServiceContainer
+    // - e.g. release associated TSQLModel and TServiceContainer
     destructor Destroy; override;
     /// called by TRestORM.Create overriden constructor to set fORM from IRestORM
     procedure SetORMInstance(aORM: TInterfacedObject); virtual;
@@ -478,7 +491,8 @@ type
     // ! fSharedCallback: IMyService;
     // ! fSharedCallbacks: IMultiCallbackRedirect;
     // ! ...
-    // !   if fSharedCallbacks=nil then begin
+    // !   if fSharedCallbacks = nil then
+    // !   begin
     // !     fSharedCallbacks := aRest.MultiRedirect(IMyService, fSharedCallback);
     // !     aServices.SubscribeForEvents(fSharedCallback);
     // !   end;
@@ -506,6 +520,19 @@ type
     // ! if fServer.Services.Resolve(ICalculator, Calc) then
     // !   ...
     property Services: TServiceContainer read fServices;
+    /// access or initialize the internal IoC resolver, used for interface-based
+    // remote services, and more generaly any Services.Resolve() call
+    // - create and initialize the internal TServiceContainer if no service
+    // interface has been registered yet
+    // - may be used to inject some dependencies, which are not interface-based
+    // remote services, but internal IoC, without the ServiceRegister()
+    // or ServiceDefine() methods - e.g.
+    // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)], true);
+    // - overriden methods will return TServiceContainerClient or
+    // TServiceContainerServer instances, on TRestClient or TRestServer
+    function ServiceContainer: TServiceContainer; virtual; abstract;
+    /// internal procedure called to implement TServiceContainer.Release
+    procedure ServicesRelease(Caller: TServiceContainer);
     /// low-level access to the associated timer
     property BackgroundTimer: TRestBackgroundTimer read fBackgroundTimer;
     /// how this class execute its internal commands
@@ -564,6 +591,10 @@ type
     // live during the whole TRestServer process
     // - is used internally by the class, but can be used for business code
     property PrivateGarbageCollector: TSynObjectList read fPrivateGarbageCollector;
+    /// access to the associate TSynLog class type
+    property LogClass: TSynLogClass read fLogClass;
+    /// access to the associate TSynLog class familly
+    property LogFamily: TSynLogFamily read fLogFamily;
 
   {$ifndef PUREMORMOT2}
     // backward compatibility redirections to the homonymous IRestORM methods
@@ -760,8 +791,20 @@ type
 type
   TSQLRest = TRest;
   TSQLRestClass = TRestClass;
+  TSQLRestDynArray = TRestDynArray;
 
 {$endif PUREMORMOT2}
+
+function ToText(cmd: TRestServerURIContextCommand): PShortString; overload;
+
+const
+  /// custom contract value to ignore contract validation from client side
+  // - you could set the aContractExpected parameter to this value for
+  // TRestClientURI.ServiceDefine or TRestClientURI.ServiceRegister
+  // so that the contract won't be checked with the server
+  // - it will be used e.g. if the remote server is not a mORMot server,
+  // but a plain REST/HTTP server - e.g. for public API notifications
+  SERVICE_CONTRACT_NONE_EXPECTED = '*';
 
 
 { ************ RESTful Authentication Support }
@@ -886,17 +929,9 @@ type
     fLogonName: RawUTF8;
     fPasswordHashHexa: RawUTF8;
     fDisplayName: RawUTF8;
-    fGroup: TSQLAuthGroup;
+    fGroupRights: TSQLAuthGroup;
     fData: TSQLRawBlob;
     procedure SetPasswordPlain(const Value: RawUTF8);
-    /// check if the user can authenticate in its current state
-    // - Ctxt is a TRestServerURIContext instance
-    // - called by TRestServerAuthentication.GetUser() method
-    // - this default implementation will return TRUE, i.e. allow the user
-    // to log on
-    // - override this method to disable user authentication, e.g. if the
-    // user is disabled via a custom ORM boolean and date/time field
-    function CanUserLog(Ctxt: TObject): boolean; virtual;
   public
     /// static function allowing to compute a hashed password
     // - as expected by this class
@@ -922,6 +957,14 @@ type
     // own higher/slower value, depending on the security level you expect
     procedure SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
       aHashRound: integer = 20000);
+    /// check if the user can authenticate in its current state
+    // - Ctxt is a TRestServerURIContext instance
+    // - called by TRestServerAuthentication.GetUser() method
+    // - this default implementation will return TRUE, i.e. allow the user
+    // to log on
+    // - override this method to disable user authentication, e.g. if the
+    // user is disabled via a custom ORM boolean and date/time field
+    function CanUserLog(Ctxt: TObject): boolean; virtual;
   published
     /// the User identification Name, as entered at log-in
     // - the same identifier can be used only once (this column is marked as
@@ -943,7 +986,7 @@ type
     // REAL TSQLAuthGroup instance for fast retrieval in TRestServer.URI
     // - note that 'Group' field name is not allowed by SQLite
     property GroupRights: TSQLAuthGroup
-      read fGroup write fGroup;
+      read fGroupRights write fGroupRights;
     /// some custom data, associated to the User
     // - Server application may store here custom data
     // - its content is not used by the framework but 'may' be used by your
@@ -1144,6 +1187,191 @@ type
   end;
   {$M-}
 
+
+
+{ ************ TSQLRecordHistory/TSQLRecordTableDeleted Modifications Tracked Persistence }
+
+type
+  /// common ancestor for tracking TSQLRecord modifications
+  // - e.g. TSQLRecordHistory and TSQLRecordVersion will inherit from this class
+  // to track TSQLRecord changes
+  TSQLRecordModification = class(TSQLRecord)
+  protected
+    fModifiedRecord: TID;
+    fTimestamp: TModTime;
+  public
+    /// returns the modified record table, as stored in ModifiedRecord
+    function ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the record table index in the TSQLModel, as stored in ModifiedRecord
+    function ModifiedTableIndex: integer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the modified record ID, as stored in ModifiedRecord
+    function ModifiedID: TID;
+      {$ifdef HASINLINE}inline;{$endif}
+  published
+    /// identifies the modified record
+    // - ID and table index in TSQLModel is stored as one RecordRef integer
+    // - you can use ModifiedTable/ModifiedID to retrieve the TSQLRecord item
+    // - in case of the record deletion, all matching TSQLRecordHistory won't
+    // be touched by TRestORMServer.AfterDeleteForceCoherency(): so this
+    // property is a plain TID/Int64, not a TRecordReference field
+    property ModifiedRecord: TID read fModifiedRecord write fModifiedRecord;
+    /// when the modification was recorded
+    // - even if in most cases, this timestamp may be synchronized over TRest
+    // instances (thanks to TRestClientURI.ServerTimestampSynchronize), it
+    // is not safe to use this field as absolute: you should rather rely on
+    // pure monotonic ID/RowID increasing values (see e.g. TSQLRecordVersion)
+    property Timestamp: TModTime read fTimestamp write fTimestamp;
+  end;
+
+  /// common ancestor for tracking changes on TSQLRecord tables
+  // - used by TRestServer.TrackChanges() method for simple fields history
+  // - TRestServer.InternalUpdateEvent will use this table to store individual
+  // row changes as SentDataJSON, then will compress them in History BLOB
+  // - note that any layout change of the tracked TSQLRecord table (e.g. adding
+  // a new property) will break the internal data format, so will void the table
+  TSQLRecordHistory = class(TSQLRecordModification)
+  protected
+    fEvent: TSQLHistoryEvent;
+    fSentData: RawUTF8;
+    fHistory: TSQLRawBlob;
+    // BLOB storage layout is: RTTIheader + offsets + recordsdata
+    fHistoryModel: TSQLModel;
+    fHistoryTable: TSQLRecordClass;
+    fHistoryTableIndex: integer;
+    fHistoryUncompressed: RawByteString;
+    fHistoryUncompressedCount: integer;
+    fHistoryUncompressedOffset: TIntegerDynArray;
+    fHistoryAdd: TBufferWriter;
+    fHistoryAddCount: integer;
+    fHistoryAddOffset: TIntegerDynArray;
+  public
+    /// load the change history of a given record
+    // - then you can use HistoryGetLast, HistoryCount or HistoryGet() to access
+    // all previous stored versions
+    constructor CreateHistory(const aClient: IRestORM; aTable: TSQLRecordClass;
+      aID: TID);
+    /// finalize any internal memory
+    destructor Destroy; override;
+    /// override this to customize fields intialization
+    class procedure InitializeFields(const Fields: array of const;
+      var JSON: RawUTF8); virtual;
+    /// called when the associated table is created in the database
+    // - create index on History(ModifiedRecord,Event) for process speed-up
+    class procedure InitializeTable(const Server: IRestORMServer;
+      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
+  public
+    /// prepare to access the History BLOB content
+    // - ModifiedRecord should have been set to a proper value
+    // - returns FALSE if the History BLOB is incorrect (e.g. TSQLRecord
+    // layout changed): caller shall flush all previous history
+    function HistoryOpen(Model: TSQLModel): boolean;
+    /// returns how many revisions are stored in the History BLOB
+    // - HistoryOpen() or CreateHistory() should have been called before
+    // - this method will ignore any previous HistoryAdd() call
+    function HistoryCount: integer;
+    /// retrieve an historical version
+    // - HistoryOpen() or CreateHistory() should have been called before
+    // - this method will ignore any previous HistoryAdd() call
+    // - if Rec=nil, will only retrieve Event and Timestamp
+    // - if Rec is set, will fill all simple properties of this TSQLRecord
+    function HistoryGet(Index: integer; out Event: TSQLHistoryEvent;
+      out Timestamp: TModTime; Rec: TSQLRecord): boolean; overload;
+    /// retrieve an historical version
+    // - HistoryOpen() or CreateHistory() should have been called before
+    // - this method will ignore any previous HistoryAdd() call
+    // - will fill all simple properties of the supplied TSQLRecord instance
+    function HistoryGet(Index: integer; Rec: TSQLRecord): boolean; overload;
+    /// retrieve an historical version
+    // - HistoryOpen() or CreateHistory() should have been called before
+    // - this method will ignore any previous HistoryAdd() call
+    // - will return either nil, or a TSQLRecord with all simple properties set
+    function HistoryGet(Index: integer): TSQLRecord; overload;
+    /// retrieve the latest stored historical version
+    // - HistoryOpen() or CreateHistory() should have been called before
+    // - this method will ignore any previous HistoryAdd() call
+    // - you should not have to use it, since a TRest.Retrieve() is faster
+    function HistoryGetLast(Rec: TSQLRecord): boolean; overload;
+    /// retrieve the latest stored historical version
+    // - HistoryOpen() or CreateHistory() should have been called before,
+    // otherwise it will return nil
+    // - this method will ignore any previous HistoryAdd() call
+    // - you should not have to use it, since a TRest.Retrieve() is faster
+    function HistoryGetLast: TSQLRecord; overload;
+    /// add a record content to the History BLOB
+    // - HistoryOpen() should have been called before using this method -
+    // CreateHistory() won't allow history modification
+    // - use then HistorySave() to compress and replace the History field
+    procedure HistoryAdd(Rec: TSQLRecord; Hist: TSQLRecordHistory);
+    /// update the History BLOB field content
+    // - HistoryOpen() should have been called before using this method -
+    // CreateHistory() won't allow history modification
+    // - if HistoryAdd() has not been used, returns false
+    // - ID field should have been set for proper persistence on Server
+    // - otherwise compress the data into History BLOB, deleting the oldest
+    // versions if resulting size is biggger than expected, and returns true
+    // - if Server is set, write save the History BLOB to database
+    // - if Server and LastRec are set, its content will be compared with the
+    // current record in DB (via a Retrieve() call) and stored: it will allow
+    // to circumvent any issue about inconsistent use of tracking, e.g. if the
+    // database has been modified directly, by-passing the ORM
+    function HistorySave(const Server: IRestORMServer;
+      LastRec: TSQLRecord = nil): boolean;
+  published
+    /// the kind of modification stored
+    // - is heArchiveBlob when this record stores the compress BLOB in History
+    // - otherwise, SentDataJSON may contain the latest values as JSON
+    property Event: TSQLHistoryEvent
+      read fEvent write fEvent;
+    /// for heAdd/heUpdate, the data is stored as JSON
+    // - note that we defined a default maximum size of 4KB for this column,
+    // to avoid using a CLOB here - perhaps it may not be enough for huge
+    // records - feedback is welcome...
+    property SentDataJSON: RawUTF8
+      index 4000 read fSentData write fSentData;
+    /// after some events are written as individual SentData content, they
+    // will be gathered and compressed within one BLOB field
+    // - use HistoryOpen/HistoryCount/HistoryGet to access the stored data after
+    // a call to CreateHistory() constructor
+    // - as any BLOB field, this one won't be retrieved by default: use
+    // explicitly TRest.RetrieveBlobFields(aRecordHistory) to get it if you
+    // want to access it directly, and not via CreateHistory()
+    property History: TSQLRawBlob
+      read fHistory write fHistory;
+  end;
+
+  /// class-reference type (metaclass) to specify the storage table to be used
+  // for tracking TSQLRecord changes
+  // - you can create your custom type from TSQLRecordHistory, even for a
+  // particular table, to split the tracked changes storage in several tables:
+  // ! type
+  // !  TSQLRecordMyHistory = class(TSQLRecordHistory);
+  // - as expected by TRestServer.TrackChanges() method
+  TSQLRecordHistoryClass = class of TSQLRecordHistory;
+
+  /// ORM table used to store the deleted items of a versioned table
+  // - the ID/RowID primary key of this table will be the version number
+  // (i.e. value computed by TRestServer.InternalRecordVersionCompute),
+  // mapped with the corresponding 'TableIndex shl 58' (so that e.g.
+  // TRestServer.RecordVersionSynchronizeToBatch() could easily ask for the
+  // deleted rows of a given table with a single WHERE clause on the ID/RowID)
+  TSQLRecordTableDeleted = class(TSQLRecord)
+  protected
+    fDeleted: Int64;
+  published
+    /// this Deleted published field will track the deleted row
+    // - defined as Int64 and not TID, to avoid the generation of the index on
+    // this column, which is not needed here (all requests are about ID/RowID)
+    property Deleted: Int64
+      read fDeleted write fDeleted;
+  end;
+
+  /// class-reference type (metaclass) to specify the storage table to be used
+  // for tracking TSQLRecord deletion
+  TSQLRecordTableDeletedClass = class of TSQLRecordTableDeleted;
+
+
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
@@ -1155,6 +1383,9 @@ type
 
 implementation
 
+uses
+  mormot.orm.rest;
+
 
 { ************ Customize REST Execution }
 
@@ -1164,6 +1395,32 @@ destructor TRestAcquireExecution.Destroy;
 begin
   inherited Destroy;
   Thread.Free;
+end;
+
+function GetLastExceptions(Depth: integer): variant;
+var
+  info: TSynLogExceptionInfoDynArray;
+  i: PtrInt;
+begin
+  VarClear(result);
+  GetLastExceptions(info, Depth);
+  if info = nil then
+    exit;
+  TDocVariantData(result).InitFast(length(info), dvArray);
+  for i := 0 to high(info) do
+    TDocVariantData(result).AddItemText(ToText(info[i]));
+end;
+
+function IsInvalidHttpHeader(head: PUTF8Char; headlen: PtrInt): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to headlen - 3 do
+    if (PInteger(head + i)^ = $0a0d0a0d) or
+       (PWord(head + i)^ = $0d0d) or (PWord(head + i)^ = $0a0a) then
+      exit;
+  result := false;
 end;
 
 
@@ -1228,7 +1485,8 @@ var
 const
   NAM: array[boolean] of string[11] = ('Unsubscribe', 'Subscribe');
 begin
-  if (self = nil) or (fFakeCallback = nil) then
+  if (self = nil) or
+     (fFakeCallback = nil) then
     exit;
   fFakeCallback.fLogClass.Add.Log(sllDebug, '%.Redirect: % % using %',
     [ClassType, NAM[aSubscribe], fFakeCallback.Factory.InterfaceName,
@@ -1255,7 +1513,8 @@ procedure TInterfacedObjectMultiList.Redirect(const aCallback: TInterfacedObject
 var
   dest: IInvokable;
 begin
-  if (self = nil) or (fFakeCallback = nil) then
+  if (self = nil) or
+     (fFakeCallback = nil) then
     exit;
   if aCallback = nil then
     raise EServiceException.CreateUTF8('%.Redirect(nil)', [self]);
@@ -1415,14 +1674,18 @@ end;
 
 procedure TRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
 begin
-  if (self <> nil) and (fLogFamily <> nil) and (Level in fLogFamily.Level) then
+  if (self <> nil) and
+     (fLogFamily <> nil) and
+     (Level in fLogFamily.Level) then
     fLogFamily.SynLog.Log(Level, Text, self);
 end;
 
 procedure TRest.InternalLog(const Format: RawUTF8; const Args: array of const;
   Level: TSynLogInfo);
 begin
-  if (self <> nil) and (fLogFamily <> nil) and (Level in fLogFamily.Level) then
+  if (self <> nil) and
+     (fLogFamily <> nil) and
+     (Level in fLogFamily.Level) then
     fLogFamily.SynLog.Log(Level, Format, Args, self);
 end;
 
@@ -1431,7 +1694,9 @@ function TRest.Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
 begin
   if aInstance = nil then
     aInstance := self;
-  if (self <> nil) and (fLogFamily <> nil) and (sllEnter in fLogFamily.Level) then
+  if (self <> nil) and
+     (fLogFamily <> nil) and
+     (sllEnter in fLogFamily.Level) then
     result := fLogClass.Enter(TextFmt, TextArgs, aInstance)
   else
     result := nil;
@@ -1514,7 +1779,8 @@ end;
 
 function TRest.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
-  if (self = nil) or (fBackgroundTimer = nil) then
+  if (self = nil) or
+     (fBackgroundTimer = nil) then
     result := false
   else
     result := fBackgroundTimer.Disable(aOnProcess);
@@ -1538,13 +1804,15 @@ end;
 
 procedure TRest.BeginCurrentThread(Sender: TThread);
 begin
-  // nothing do to at this level -> see TRestServer.BeginCurrentThread
+  TRestORM(fORMInstance).BeginCurrentThread(Sender);
 end;
 
 procedure TRest.EndCurrentThread(Sender: TThread);
 begin
+  TRestORM(fORMInstance).EndCurrentThread(Sender);
   // most will be done e.g. in TRestServer.EndCurrentThread
-  fLogFamily.OnThreadEnded(Sender);
+  if fLogFamily <> nil then
+    fLogFamily.OnThreadEnded(Sender);
 end;
 
 procedure TRest.AsynchRedirect(const aGUID: TGUID;
@@ -1628,9 +1896,9 @@ begin
     raise ERestException.CreateUTF8('%.SetORMInstance twice', [self]);
   if aORM = nil then
     raise ERestException.CreateUTF8('%.SetORMInstance(nil)', [self]);
+  fORMInstance := aORM;
   if not fORMInstance.GetInterface(IRestORM, fORM) then
     raise ERestException.CreateUTF8('%.Create with invalid %', [self, fORMInstance]);
-  fORMInstance := aORM;
 end;
 
 destructor TRest.Destroy;
@@ -1641,8 +1909,17 @@ begin
   if fORM <> nil then
     fORM.AsynchBatchStop(nil); // abort any pending TRestBatch
   FreeAndNil(fBackgroundTimer);
+  FreeAndNil(fServices);
+  if fORMInstance <> nil then
+    if (fORM = nil) or
+       (fORMInstance.RefCount <> 1) then
+      raise ERestException.CreateUTF8('%.Destroy: RefCount=%',
+        [self, fORMInstance.RefCount])
+    else
+      fORMInstance := nil; // avoid dubious GPF
   fORM := nil;
-  if (fModel <> nil) and (fModel.Owner = self) then
+  if (fModel <> nil) and
+     (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
     FreeAndNil(fModel);
   for cmd := Low(cmd) to high(cmd) do
@@ -1653,6 +1930,7 @@ begin
     fPrivateGarbageCollector.ClearFromLast;
     FreeAndNil(fPrivateGarbageCollector);
   end;
+  // call TObject.Destroy
   inherited Destroy;
 end;
 
@@ -1755,6 +2033,12 @@ begin
     aServerHandleAuthentication, aKey);
 end;
 
+procedure TRest.ServicesRelease(Caller: TServiceContainer);
+begin
+  if (self <> nil) and
+     (self.fServices = Caller) then
+    FreeAndNil(fServices);
+end;
 
 {$ifndef PUREMORMOT2}
 
@@ -1970,7 +2254,8 @@ begin
 end;
 
 function TRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
-  const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PID; LastRecordID: PID): variant;
+  const ObjectName, CustomFieldsCSV: RawUTF8;
+  FirstRecordID: PID; LastRecordID: PID): variant;
 begin
   result := fORM.RetrieveDocVariantArray(Table, ObjectName, CustomFieldsCSV,
     FirstRecordID, LastRecordID);
@@ -2319,6 +2604,11 @@ end;
 {$endif PUREMORMOT2}
 
 
+function ToText(cmd: TRestServerURIContextCommand): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TRestServerURIContextCommand), ord(cmd));
+end;
+
 
 { TInterfacedObjectAsynch }
 
@@ -2418,12 +2708,14 @@ end;
 
 function TRestBackgroundTimer.AsynchBatchIndex(aTable: TSQLRecordClass): integer;
 begin
-  if (self = nil) or (fBackgroundBatch = nil) then
+  if (self = nil) or
+     (fBackgroundBatch = nil) then
     result := -1
   else
   begin
     result := fRest.Model.GetTableIndexExisting(aTable);
-    if (result >= length(fBackgroundBatch)) or (fBackgroundBatch[result] = nil) then
+    if (result >= length(fBackgroundBatch)) or
+       (fBackgroundBatch[result] = nil) then
       result := -1;
   end;
 end;
@@ -2460,7 +2752,8 @@ var
   json, tablename: RawUTF8;
   batch: TRestBatchLocked;
   table: TSQLRecordClass;
-  b, count, status: integer;
+  b: PtrInt;
+  count, status: integer;
   res: TIDDynArray;
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -2479,7 +2772,8 @@ begin
         count := batch.Count;
         if count > 0 then
         try
-          if ({%H-}log = nil) and (fRest.fLogClass <> nil) then
+          if ({%H-}log = nil) and
+             (fRest.fLogClass <> nil) then
             log := fRest.fLogClass.Enter('AsynchBatchExecute % count=%',
               [table, count], self);
           batch.PrepareForSending(json);
@@ -2526,14 +2820,17 @@ function TRestBackgroundTimer.AsynchBatchStart(Table: TSQLRecordClass;
   SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
   Options: TRestBatchOptions): boolean;
 var
-  b: Integer;
+  b: integer;
 begin
   result := false;
-  if (self = nil) or (SendSeconds <= 0) then
+  if (self = nil) or
+     (SendSeconds <= 0) then
     exit;
   b := fRest.Model.GetTableIndexExisting(Table);
-  if (fBackgroundBatch <> nil) and (fBackgroundBatch[b] <> nil) then
-    exit; // already defined for this Table
+  if (fBackgroundBatch <> nil) and
+     (fBackgroundBatch[b] <> nil) then
+    // already defined for this Table
+    exit;
   fRest.InternalLog('AsynchBatchStart(%,%,%)',
     [Table, SendSeconds, PendingRowThreshold], sllDebug);
   Enable(AsynchBatchExecute, SendSeconds);
@@ -2552,7 +2849,8 @@ var
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
   result := false;
-  if (self = nil) or (fBackgroundBatch = nil) then
+  if (self = nil) or
+     (fBackgroundBatch = nil) then
     exit;
   log := fRest.fLogClass.Enter('AsynchBatchStop(%)', [Table], self);
   timeout := mormot.core.os.GetTickCount64 + 5000;
@@ -2563,18 +2861,21 @@ begin
       exit;
     repeat
       SleepHiRes(1); // wait for all batchs to be released
-    until (fBackgroundBatch = nil) or (mormot.core.os.GetTickCount64 > timeout);
+    until (fBackgroundBatch = nil) or
+          (mormot.core.os.GetTickCount64 > timeout);
     result := Disable(AsynchBatchExecute);
   end
   else
   begin
     // wait for regular TRestBatch process
     b := AsynchBatchIndex(Table);
-    if (b < 0) or not EnQueue(AsynchBatchExecute, 'free@' + Table.SQLTableName, true) then
+    if (b < 0) or
+       not EnQueue(AsynchBatchExecute, 'free@' + Table.SQLTableName, true) then
       exit;
     repeat
       SleepHiRes(1); // wait for all pending rows to be sent
-    until (fBackgroundBatch[b] = nil) or (mormot.core.os.GetTickCount64 > timeout);
+    until (fBackgroundBatch[b] = nil) or
+          (mormot.core.os.GetTickCount64 > timeout);
     if ObjArrayCount(fBackgroundBatch) > 0 then
       result := true
     else
@@ -2593,7 +2894,9 @@ var
   b: TRestBatchLocked;
 begin
   result := -1;
-  if (self = nil) or (fBackgroundBatch = nil) or (Value = nil) then
+  if (self = nil) or
+     (fBackgroundBatch = nil) or
+     (Value = nil) then
     exit;
   fRest.InternalLog('AsynchBatchAdd %', [Value], sllDebug);
   if AsynchBatchLocked(Value.RecordClass, b) then
@@ -2610,7 +2913,9 @@ var
   b: TRestBatchLocked;
 begin
   result := -1;
-  if (self = nil) or (fBackgroundBatch = nil) or (Table = nil) then
+  if (self = nil) or
+     (fBackgroundBatch = nil) or
+     (Table = nil) then
     exit;
   fRest.InternalLog('AsynchBatchRawAdd % %', [Table, SentData], sllDebug);
   if AsynchBatchLocked(Table, b) then
@@ -2626,7 +2931,10 @@ procedure TRestBackgroundTimer.AsynchBatchRawAppend(Table: TSQLRecordClass;
 var
   b: TRestBatchLocked;
 begin
-  if (self = nil) or (fBackgroundBatch = nil) or (Table = nil) or (SentData = nil) then
+  if (self = nil) or
+     (fBackgroundBatch = nil) or
+     (Table = nil) or
+     (SentData = nil) then
     exit;
   fRest.InternalLog('AsynchBatchRawAppend %', [Table], sllDebug);
   if AsynchBatchLocked(Table, b) then
@@ -2643,7 +2951,9 @@ var
   b: TRestBatchLocked;
 begin
   result := -1;
-  if (self = nil) or (fBackgroundBatch = nil) or (Value = nil) then
+  if (self = nil) or
+     (fBackgroundBatch = nil) or
+     (Value = nil) then
     exit;
   fRest.InternalLog('AsynchBatchUpdate %', [Value], sllDebug);
   if AsynchBatchLocked(Value.RecordClass, b) then
@@ -2660,7 +2970,8 @@ var
   b: TRestBatchLocked;
 begin
   result := -1;
-  if (self = nil) or (fBackgroundBatch = nil) then
+  if (self = nil) or
+     (fBackgroundBatch = nil) then
     exit;
   fRest.InternalLog('AsynchBatchDelete % %', [Table, ID], sllDebug);
   if AsynchBatchLocked(Table, b) then
@@ -2737,7 +3048,8 @@ end;
 procedure TRestBackgroundTimer.AsynchBackgroundInterning(
   Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
 var
-  i, claimed, total: integer;
+  i: PtrInt;
+  claimed, total: integer;
   timer: TPrecisionTimer;
 begin
   timer.Start;
@@ -2748,20 +3060,23 @@ begin
     exit; // nothing to collect
   total := claimed;
   for i := 0 to high(fBackgroundInterning) do
-    inc(total, fBackgroundInterning[i].count);
-  fRest.InternalLog('%.AsynchInterning: Clean(%) claimed %/% strings from % pools in %',
-    [ClassType, fBackgroundInterningMaxRefCount, claimed, total, length(fBackgroundInterning),
-     timer.Stop], sllDebug);
+    inc(total, fBackgroundInterning[i].Count);
+  fRest.InternalLog(
+    '%.AsynchInterning: Clean(%) claimed %/% strings from % pools in %',
+    [ClassType, fBackgroundInterningMaxRefCount, claimed, total,
+     length(fBackgroundInterning), timer.Stop], sllDebug);
 end;
 
 procedure TRestBackgroundTimer.AsynchInterning(Interning: TRawUTF8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
-  if (self = nil) or (Interning = nil) then
+  if (self = nil) or
+     (Interning = nil) then
     exit;
   fTaskLock.Lock;
   try
-    if (InterningMaxRefCount <= 0) or (PeriodMinutes <= 0) then
+    if (InterningMaxRefCount <= 0) or
+       (PeriodMinutes <= 0) then
       ObjArrayDelete(fBackgroundInterning, Interning)
     else
     begin
@@ -2773,6 +3088,8 @@ begin
     fTaskLock.UnLock;
   end;
 end;
+
+
 
 { ************ RESTful Authentication Support }
 
@@ -2797,12 +3114,15 @@ var
   AdminID, SupervisorID, UserID: PtrInt;
 begin
   inherited; // will create any needed index
-  if (Server <> nil) and (FieldName = '') and Server.HandleAuthentication then
+  if (Server <> nil) and
+     (FieldName = '') and
+     Server.HandleAuthentication then
   begin
     // create default Groups and Users (we are already in a Transaction)
     AuthGroupIndex := Server.Model.GetTableIndex(self);
     AuthUserIndex := Server.Model.GetTableIndexInheritsFrom(TSQLAuthUser);
-    if (AuthGroupIndex < 0) or (AuthUserIndex < 0) then
+    if (AuthGroupIndex < 0) or
+       (AuthUserIndex < 0) then
       raise EModelException.CreateUTF8(
         '%.InitializeTable: Model has missing % or TSQLAuthUser',
         [self, self]);
@@ -2846,7 +3166,8 @@ begin
       finally
         G.Free;
       end;
-      if not (itoNoAutoCreateUsers in Options) and (Server.TableRowCount(UC) = 0) then
+      if not (itoNoAutoCreateUsers in Options) and
+         (Server.TableRowCount(UC) = 0) then
       begin
         U := UC.Create;
         try
@@ -2971,7 +3292,8 @@ end;
 
 function TRestURIParams.HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
 begin
-  if (Store = '') and (@self <> nil) then
+  if (Store = '') and
+     (@self <> nil) then
   begin
     FindNameValue(InHead, UpperName, result);
     if result = '' then
@@ -2998,6 +3320,7 @@ begin
   fRest := aRest;
   fOwnRest := aOwnRest;
   if fThreadName = '' then
+    // if thread name has not been set by the overriden constructor
     FormatUTF8('% %', [self, fRest.Model.Root], fThreadName);
   fEvent := TEvent.Create(nil, false, false, '');
   inherited Create(aCreateSuspended);
@@ -3042,14 +3365,16 @@ var
   endtix: Int64;
 begin
   result := true; // notify Terminated
-  if (self = nil) or Terminated then
+  if (self = nil) or
+     Terminated then
     exit;
   endtix := mormot.core.os.GetTickCount64 + MS;
   repeat
     fEvent.WaitFor(MS);
     if Terminated then
       exit;
-  until (MS < 32) or (mormot.core.os.GetTickCount64 >= endtix);
+  until (MS < 32) or
+        (mormot.core.os.GetTickCount64 >= endtix);
   result := false; // normal delay expiration
 end;
 
@@ -3082,7 +3407,6 @@ end;
 {$endif HASTTHREADSTART}
 
 {$ifndef HASTTHREADTERMINATESET}
-
 procedure TRestThread.Terminate;
 begin
   inherited Terminate; // FTerminated := True
@@ -3095,9 +3419,351 @@ begin
   fEvent.SetEvent;
 end;
 
-initialization
 
-finalization
+{ ************ TSQLRecordHistory Modifications Tracked Persistence }
+
+{ TSQLRecordModification }
+
+function TSQLRecordModification.ModifiedID: TID;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := RecordRef(fModifiedRecord).ID;
+end;
+
+function TSQLRecordModification.ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+begin
+  if (self = nil) or
+     (Model = nil) then
+    result := nil
+  else
+    result := RecordRef(fModifiedRecord).Table(Model);
+end;
+
+function TSQLRecordModification.ModifiedTableIndex: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := RecordRef(fModifiedRecord).TableIndex;
+end;
+
+
+{ TSQLRecordHistory }
+
+class procedure TSQLRecordHistory.InitializeTable(const Server: IRestORMServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+begin
+  inherited InitializeTable(Server, FieldName, Options);
+  if FieldName = '' then
+    Server.CreateSQLMultiIndex(self, ['ModifiedRecord', 'Event'], false);
+end;
+
+destructor TSQLRecordHistory.Destroy;
+begin
+  inherited;
+  fHistoryAdd.Free;
+end;
+
+constructor TSQLRecordHistory.CreateHistory(const aClient: IRestORM;
+  aTable: TSQLRecordClass; aID: TID);
+var
+  ref: RecordRef;
+  rec: TSQLRecord;
+  hist: TSQLRecordHistory;
+begin
+  if (aClient = nil) or
+     (aID <= 0) then
+    raise EORMException.CreateUTF8('Invalid %.CreateHistory(%,%,%) call',
+      [self, aClient, aTable, aID]);
+  // read BLOB changes
+  ref.From(aClient.Model, aTable, aID);
+  fModifiedRecord := ref.Value;
+  fEvent := heArchiveBlob;
+  Create(aClient, 'ModifiedRecord=? and Event=%',
+    [ord(heArchiveBlob)], [fModifiedRecord]);
+  if fID <> 0 then
+    aClient.RetrieveBlobFields(self); // load former fHistory field
+  if not HistoryOpen(aClient.Model) then
+    raise EORMException.CreateUTF8('HistoryOpen in %.CreateHistory(%,%,%)',
+      [self, aClient, aTable, aID]);
+  // append JSON changes
+  hist := RecordClass.CreateAndFillPrepare(aClient,
+    'ModifiedRecord=? and Event<>%', [ord(heArchiveBlob)], [fModifiedRecord])
+    as TSQLRecordHistory;
+  try
+    if hist.FillTable.RowCount = 0 then
+      // no JSON to append
+      exit;
+    rec := HistoryGetLast;
+    try
+      while hist.FillOne do
+      begin
+        rec.FillFrom(pointer(hist.SentDataJSON));
+        HistoryAdd(rec, hist);
+      end;
+      HistorySave(nil); // update internal fHistory field
+    finally
+      rec.Free;
+    end;
+  finally
+    hist.Free;
+  end;
+  // prepare for HistoryCount and HistoryGet() from internal fHistory field
+  HistoryOpen(aClient.Model);
+end;
+
+class procedure TSQLRecordHistory.InitializeFields(const Fields: array of const;
+  var JSON: RawUTF8);
+begin
+  // you may use a TDocVariant to add some custom fields in your own class
+  JSON := JSONEncode(Fields);
+end;
+
+function TSQLRecordHistory.HistoryOpen(Model: TSQLModel): boolean;
+var
+  len: cardinal;
+  start, i: PtrInt;
+  R: TFastReader;
+  tmp: RawByteString;
+begin
+  result := false;
+  fHistoryModel := Model;
+  fHistoryUncompressed := '';
+  fHistoryTable := ModifiedTable(Model);
+  fHistoryUncompressedCount := 0;
+  fHistoryUncompressedOffset := nil;
+  if fHistoryTable = nil then
+    exit; // invalid Model or ModifiedRecord
+  tmp := AlgoSynLZ.Decompress(fHistory);
+  len := length(tmp);
+  if len > 4 then
+  begin
+    R.Init(pointer(tmp), len);
+    if not fHistoryTable.RecordProps.CheckBinaryHeader(R) then
+      // invalid content: TSQLRecord layout may have changed
+      exit;
+    R.ReadVarUInt32Array(fHistoryUncompressedOffset);
+    fHistoryUncompressedCount := length(fHistoryUncompressedOffset);
+    start := R.P - PAnsiChar(pointer(tmp));
+    for i := 0 to fHistoryUncompressedCount - 1 do
+      inc(fHistoryUncompressedOffset[i], start);
+    fHistoryUncompressed := tmp;
+  end;
+  result := true;
+end;
+
+function TSQLRecordHistory.HistoryCount: integer;
+begin
+  if (self = nil) or
+     (fHistoryUncompressed = '') then
+    result := 0
+  else
+    result := fHistoryUncompressedCount;
+end;
+
+function TSQLRecordHistory.HistoryGet(Index: integer;
+  out Event: TSQLHistoryEvent; out Timestamp: TModTime;
+  Rec: TSQLRecord): boolean;
+var
+  P, PEnd: PAnsiChar;
+begin
+  result := false;
+  if cardinal(Index) >= cardinal(HistoryCount) then
+    exit;
+  P := pointer(fHistoryUncompressed);
+  PEnd := P + length(fHistoryUncompressed);
+  inc(P, fHistoryUncompressedOffset[Index]);
+  if P >= PEnd then
+    exit;
+  Event := TSQLHistoryEvent(P^);
+  inc(P);
+  P := pointer(FromVarUInt64Safe(pointer(P), pointer(PEnd), PQWord(@Timestamp)^));
+  if P = nil then
+    exit;
+  if (Rec <> nil) and
+     (Rec.RecordClass = fHistoryTable) then
+  begin
+    if Event = heDelete then
+      Rec.ClearProperties
+    else
+      Rec.SetBinaryValuesSimpleFields(P, PEnd);
+    Rec.IDValue := ModifiedID;
+    if P = nil then
+      exit;
+  end;
+  result := true;
+end;
+
+function TSQLRecordHistory.HistoryGet(Index: integer; Rec: TSQLRecord): boolean;
+var
+  Event: TSQLHistoryEvent;
+  Timestamp: TModTime;
+begin
+  result := HistoryGet(Index, Event, Timestamp, Rec);
+end;
+
+function TSQLRecordHistory.HistoryGet(Index: integer): TSQLRecord;
+var
+  Event: TSQLHistoryEvent;
+  Timestamp: TModTime;
+begin
+  if fHistoryTable = nil then
+    result := nil
+  else
+  begin
+    result := fHistoryTable.Create;
+    if not HistoryGet(Index, Event, Timestamp, result) then
+      FreeAndNil(result);
+  end;
+end;
+
+function TSQLRecordHistory.HistoryGetLast(Rec: TSQLRecord): boolean;
+begin
+  result := HistoryGet(fHistoryUncompressedCount - 1, Rec);
+end;
+
+function TSQLRecordHistory.HistoryGetLast: TSQLRecord;
+var
+  event: TSQLHistoryEvent;
+  modtime: TModTime;
+begin
+  if fHistoryTable = nil then
+    result := nil
+  else
+  begin
+    result := fHistoryTable.Create; // always return an instance
+    HistoryGet(fHistoryUncompressedCount - 1, event, modtime, result);
+  end;
+end;
+
+procedure TSQLRecordHistory.HistoryAdd(Rec: TSQLRecord; Hist: TSQLRecordHistory);
+begin
+  if (self = nil) or
+     (fHistoryModel = nil) or
+     (Rec.RecordClass <> fHistoryTable) then
+    exit;
+  if fHistoryAdd = nil then
+    fHistoryAdd := TBufferWriter.Create(TRawByteStringStream);
+  AddInteger(fHistoryAddOffset, fHistoryAddCount, fHistoryAdd.TotalWritten);
+  fHistoryAdd.Write1(Ord(Hist.Event));
+  fHistoryAdd.WriteVarUInt64(Hist.Timestamp);
+  if Hist.Event <> heDelete then
+    Rec.GetBinaryValuesSimpleFields(fHistoryAdd);
+end;
+
+function TSQLRecordHistory.HistorySave(const Server: IRestORMServer;
+  LastRec: TSQLRecord): boolean;
+var
+  size, i, maxSize: PtrInt;
+  firstOldIndex, firstOldOffset, firstNewIndex, firstNewOffset: integer;
+  newOffset: TIntegerDynArray;
+  rec: TSQLRecord;
+  hist: TSQLRecordHistory;
+  W: TBufferWriter;
+begin
+  result := false;
+  if (self = nil) or
+     (fHistoryTable = nil) or
+     (fModifiedRecord = 0) then
+    exit; // wrong call
+  try
+    // ensure latest item matches "official" one, as read from DB
+    if (Server <> nil) and
+       (LastRec <> nil) and
+       (LastRec.IDValue = ModifiedID) then
+    begin
+      rec := Server.Retrieve(ModifiedRecord);
+      if rec <> nil then
+      try // may be just deleted
+        if not rec.SameRecord(LastRec) then
+        begin
+          hist := RecordClass.Create as TSQLRecordHistory;
+          try
+            hist.fEvent := heUpdate;
+            hist.fTimestamp := Server.GetServerTimestamp;
+            HistoryAdd(rec, hist);
+          finally
+            hist.Free;
+          end;
+        end;
+      finally
+        rec.Free;
+      end;
+    end;
+    if fHistoryAdd = nil then
+      exit; // nothing new
+    // ensure resulting size matches specified criteria
+    firstOldIndex := 0;
+    if Server = nil then
+      maxSize := maxInt
+    else
+      maxSize := Server.MaxUncompressedBlobSize(RecordClass);
+    size := fHistoryAdd.TotalWritten;
+    if (size > maxSize) or
+       (fHistoryUncompressedCount = 0) then
+      // e.g. if fHistory.Add() is already bigger than expected
+      firstOldIndex := fHistoryUncompressedCount
+    else
+    begin
+      inc(size, Length(fHistoryUncompressed) - fHistoryUncompressedOffset[0]);
+      while (firstOldIndex < fHistoryUncompressedCount - 1) and
+            (size > maxSize) do
+      begin
+        dec(size, fHistoryUncompressedOffset[firstOldIndex + 1] -
+          fHistoryUncompressedOffset[firstOldIndex]);
+        inc(firstOldIndex);
+      end;
+    end;
+    // creates and store new History BLOB
+    W := TBufferWriter.Create(TRawByteStringStream);
+    try
+      // compute offsets
+      if firstOldIndex = fHistoryUncompressedCount then
+        firstOldOffset := length(fHistoryUncompressed)
+      else
+        firstOldOffset := fHistoryUncompressedOffset[firstOldIndex];
+      SetLength(newOffset,
+        fHistoryUncompressedCount - firstOldIndex + fHistoryAddCount);
+      for i := firstOldIndex to fHistoryUncompressedCount - 1 do
+        newOffset[i - firstOldIndex] :=
+          fHistoryUncompressedOffset[i] - firstOldOffset;
+      firstNewIndex := fHistoryUncompressedCount - firstOldIndex;
+      firstNewOffset := Length(fHistoryUncompressed) - firstOldOffset;
+      for i := 0 to fHistoryAddCount - 1 do
+        newOffset[firstNewIndex + i] :=
+          fHistoryAddOffset[i] + firstNewOffset;
+      // write header
+      fHistoryTable.RecordProps.SaveBinaryHeader(W);
+      W.WriteVarUInt32Array(newOffset, length(newOffset), wkOffsetU);
+      // write data
+      W.Write(@PByteArray(fHistoryUncompressed)[firstOldOffset], firstNewOffset);
+      W.WriteBinary(fHistoryAdd.FlushTo);
+      fHistoryUncompressed := W.FlushTo;
+      fHistory := AlgoSynLZ.Compress(fHistoryUncompressed);
+      if (Server <> nil) and
+         (fID <> 0) then
+      begin
+        Server.UpdateField(RecordClass,
+          'Timestamp', Int64ToUTF8(Server.GetServerTimestamp),
+          'RowID', Int64ToUtf8(fID));
+        Server.UpdateBlob(RecordClass, fID,
+          RecordProps.BlobFields[0].Name, fHistory);
+      end;
+      result := true;
+    finally
+      W.Free;
+    end;
+  finally
+    fHistoryUncompressed := '';
+    fHistoryUncompressedOffset := nil;
+    FreeAndNil(fHistoryAdd);
+    fHistoryAddOffset := nil;
+    fHistoryAddCount := 0;
+  end;
+end;
+
 
 end.
 
