@@ -180,7 +180,7 @@ type
     // for the CREATE TABLE statement (e.g. for Oracle 1333=4000/3 is used)
     // - for TOleDBStatement: the offset of this column in the IRowSet data,
     // starting with a DBSTATUSENUM, the data, then its length (for inlined
-    // sftUTF8 and sftBlob only)
+    // oftUTF8 and oftBlob only)
     // - for TSQLDBOracleStatement: contains an offset to this column values
     // inside fRowBuffer[] internal buffer
     // - for TSQLDBDatasetStatement: maps TField pointer value
@@ -3086,7 +3086,7 @@ begin
     if i in Nulls then
       Query.BindNull(i + 1)
     else
-      case Types[i] of // returned sftInteger,sftFloat,sftUTF8Text,sftBlob,sftUnknown
+      case Types[i] of // returned oftInteger,oftFloat,oftUTF8Text,oftBlob,oftUnknown
         sptInteger:
           Query.Bind(i + 1, GetInt64(pointer(Values[i])));
         sptFloat:

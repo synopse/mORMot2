@@ -259,8 +259,9 @@ type
   // - the main class may initialize a IAutoLocker property in Create, then call
   // IAutoLocker.ProtectMethod in any method to make its execution thread safe
   // - this class inherits from TInterfacedObjectWithCustomCreate so you
-  // could define one published property of a mORMot.pas' TInjectableObject
-  // as IAutoLocker so that this class may be automatically injected
+  // could define one published property of a mormot.core.interface.pas
+  // TInjectableObject as IAutoLocker so that this class may be automatically
+  // injected
   // - you may use the inherited TAutoLockerDebug class, as defined in SynLog.pas,
   // to debug unexpected race conditions due to such critical sections
   // - consider inherit from high-level TSynPersistentLock or call low-level

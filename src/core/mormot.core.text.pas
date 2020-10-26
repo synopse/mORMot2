@@ -1077,7 +1077,7 @@ type
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// append a T*ObjArray dynamic array as a JSON array
-    // - as expected by RegisterObjArrayForJSON()
+    // - as expected by Rtti.RegisterObjArray()
     procedure AddObjArrayJSON(const aObjArray;
       aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// return the last char appended
@@ -1153,8 +1153,8 @@ var
 // - will write also the properties published in the parent classes
 // - nested properties are serialized as nested JSON objects
 // - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY class, via
-// TJSONSerializer.RegisterCustomSerializer() class method
+// - you can add some custom serializers for ANY class, via mormot.core.json.pas
+// TRttiJson.RegisterCustomSerializer() class method
 // - call internaly TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectToJSON(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
@@ -1186,9 +1186,8 @@ type
 
   /// add optional echoing of the lines to TBaseWriter
   // - as used e.g. by TSynLog writer for log optional redirection
-  // - is defined as a sub-class to reduce plain TBaseWriter scope
-  // - see SynTable.pas for SQL resultset export via TJSONWriter
-  // - see mORMot.pas for proper class serialization via TJSONSerializer.WriteObject
+  // - is defined as a nested class to reduce plain TBaseWriter scope, and
+  // better follow the SOLID principles
   TEchoWriter = class
   protected
     fWriter: TBaseWriter;

@@ -393,6 +393,7 @@ type
 
 
 {$ifndef PUREMORMOT2}
+// backward compatibility types redirections
 
 type
   TServiceMethodValueType = TInterfaceMethodValueType;

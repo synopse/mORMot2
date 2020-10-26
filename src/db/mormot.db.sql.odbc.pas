@@ -248,7 +248,8 @@ type
   end;
 
 
-{$ifndef PUREMORMOT2} // some backward compatibility class names
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
 
 type
   TODBCConnectionProperties = TSQLDBODBCConnectionProperties;
@@ -1556,7 +1557,8 @@ end;
 
 initialization
   TSQLDBODBCConnectionProperties.RegisterClassNameForDefinition;
-  {$ifndef PUREMORMOT2} // backward compatibility class name
+  {$ifndef PUREMORMOT2}
+  // backward compatibility class registration
   TODBCConnectionProperties.RegisterClassNameForDefinition;
   {$endif PUREMORMOT2}
 

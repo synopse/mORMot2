@@ -607,9 +607,9 @@ type
 
 
 {$ifndef PUREMORMOT2}
+// backward compatibility types redirections
 
 type
-  // backward compatibility class names
   TOleDBConnectionProperties = TSQLDBOleDBConnectionProperties;
   TOleDBOracleConnectionProperties = TSQLDBOleDBOracleConnectionProperties;
   TOleDBMSOracleConnectionProperties = TSQLDBOleDBMSOracleConnectionProperties;
@@ -2452,7 +2452,8 @@ initialization
   TSQLDBOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
   TSQLDBOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
 
-  {$ifndef PUREMORMOT2} // backward compatibility class name
+  {$ifndef PUREMORMOT2}
+  // backward compatibility types registration
   TOleDBConnectionProperties.RegisterClassNameForDefinition;
   TOleDBOracleConnectionProperties.RegisterClassNameForDefinition;
   TOleDBMSOracleConnectionProperties.RegisterClassNameForDefinition;

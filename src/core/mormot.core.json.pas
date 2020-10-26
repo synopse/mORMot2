@@ -520,7 +520,7 @@ function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
   IncludeQueryDelimiter: Boolean = true): RawUTF8; overload;
 
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
-// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - as expected by Rtti.RegisterObjArray()
 function ObjArrayToJSON(const aObjArray;
   aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
 
@@ -629,7 +629,7 @@ function QuotedStrJSON(const aText: RawUTF8): RawUTF8; overload;
 /// fast Format() function replacement, handling % and ? parameters
 // - will include Args[] for every % in Format
 // - will inline Params[] for every ? in Format, handling special "inlined"
-// parameters, as exected by mORMot.pas unit, i.e. :(1234): for numerical
+// parameters, as exected by our ORM or DB units, i.e. :(1234): for numerical
 // values, and :('quoted '' string'): for textual values
 // - if optional JSONFormat parameter is TRUE, ? parameters will be written
 // as JSON quoted strings, without :(...): tokens, e.g. "quoted "" string"
@@ -1644,6 +1644,7 @@ var
      jpoIgnoreUnknownProperty, jpoIgnoreStringType, jpoAllowInt64Hex];
 
 {$ifndef PUREMORMOT2}
+// backward compatibility types redirections
 
 type
   TJSONToObjectOption = TJsonParserOption;
@@ -1796,10 +1797,8 @@ function DynArrayBlobSaveJSON(TypeInfo: PRttiInfo; BlobValue: pointer): RawUTF8;
 // - will write also the properties published in the parent classes
 // - nested properties are serialized as nested JSON objects
 // - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY class, via mORMot.pas'
-// TJSONSerializer.RegisterCustomSerializer() class method
-// - call internaly TJSONSerializer.WriteObject() method (or fallback to
-// TJSONWriter if mORMot.pas is not linked to the executable)
+// - you can add some custom serializers for ANY class, via mormot.core.json
+// TRttiJson.RegisterCustomSerializer() class method
 function ObjectToJSON(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
 
@@ -1891,8 +1890,8 @@ function DynArrayLoadJSON(var Value; const JSON: RawUTF8;
 // registered by TJSONSerializer.RegisterClassForJSON() (or Classes.RegisterClass)
 // - will clear any previous TCollection objects, and convert any null JSON
 // basic type into nil - e.g. if From='null', will call FreeAndNil(Value)
-// - you can add some custom (un)serializers for ANY class, via the
-// TJSONSerializer.RegisterCustomSerializer() class method
+// - you can add some custom (un)serializers for ANY class, via mormot.core.json
+// TRttiJson.RegisterCustomSerializer() class method
 // - set Valid=TRUE on success, Valid=FALSE on error, and the main function
 // will point in From at the syntax error place (e.g. on any unknown property name)
 // - caller should explicitely perform a SetDefaultValuesObject(Value) if
@@ -2031,7 +2030,7 @@ type
   // class published properties: any class defined as a published property will
   // be owned by this instance - i.e. with strong reference
   // - will also release any T*ObjArray dynamic array storage of persistents,
-  // previously registered via TJSONSerializer.RegisterObjArrayForJSON()
+  // previously registered via Rtti.RegisterObjArray()
   // - nested published classes (or T*ObjArray) don't need to inherit from
   // TSynAutoCreateFields: they may be from any TPersistent/TSynPersistent type
   // - note that non published (e.g. public) properties won't be instantiated,
@@ -2092,7 +2091,7 @@ type
   // Domain objects in DDD, especially for list of value objects
   // - consider using T*ObjArray dynamic array published properties in your
   // value types instead of TCollection storage: T*ObjArray have a lower overhead
-  // and are easier to work with, once TJSONSerializer.RegisterObjArrayForJSON
+  // and are easier to work with, once Rtti.RegisterObjArray
   // is called to register the T*ObjArray type
   // - note that non published (e.g. public) properties won't be instantiated,
   // serialized, nor released - but may contain weak references to other classes

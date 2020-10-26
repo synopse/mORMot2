@@ -476,7 +476,7 @@ type
     fStoredClass: TORMClass;
     fStoredClassProps: TORMModelRecordProperties;
     fStoredClassRecordProps: TORMProperties;
-    fStoredClassMapping: PSQLRecordPropertiesMapping;
+    fStoredClassMapping: PORMPropertiesMapping;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fStorageLockLogTrace: boolean;
     fModified: boolean;
@@ -2047,7 +2047,7 @@ begin
   end;
 end;
 
-function FindMaxID(p: PSQLRecord; n: integer): TID;
+function FindMaxID(p: PORM; n: integer): TID;
 var
   id: TID;
 begin
@@ -2062,7 +2062,7 @@ begin
     until n = 0;
 end;
 
-function FindMaxIDAndCheckSorted(p: PSQLRecord; n: integer;
+function FindMaxIDAndCheckSorted(p: PORM; n: integer;
   var unsorted: boolean): TID;
 var
   id, prev: TID;
@@ -2346,8 +2346,8 @@ begin
   // handle WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
   dec(WhereField);
   P := fStoredClassRecordProps.Fields.List[WhereField];
-  if not (P.SQLFieldType in COPIABLE_FIELDS) then
-    // nothing to search (e.g. sftUnknown or sftMany)
+  if not (P.ORMFieldType in COPIABLE_FIELDS) then
+    // nothing to search (e.g. oftUnknown or oftMany)
     exit;
   // use fUnique[] hash array for O(1) search if available
   if WhereField in fIsUnique then
@@ -3362,7 +3362,7 @@ var
 begin
   result := false;
   if (Rec = nil) or
-     (PSQLRecordClass(Rec)^ <> fStoredClass) or
+     (PORMClass(Rec)^ <> fStoredClass) or
      (Rec.IDValue <= 0) then
     exit;
   StorageLock(true, 'UpdateOne');
@@ -3456,7 +3456,7 @@ begin
   result := false;
   if (Value <> nil) and
      (Value.IDValue > 0) and
-     (PSQLRecordClass(Value)^ = fStoredClass) then
+     (PORMClass(Value)^ = fStoredClass) then
     with Value.RecordProps do
       if BlobFields <> nil then
       begin
@@ -3513,7 +3513,7 @@ begin
   result := false;
   if (Value <> nil) and
      (Value.IDValue > 0) and
-     (PSQLRecordClass(Value)^ = fStoredClass) then
+     (PORMClass(Value)^ = fStoredClass) then
     with Value.RecordProps do
     if BlobFields <> nil then
     begin
@@ -3527,7 +3527,7 @@ begin
           BlobFields[f].CopyValue(Value, fValue[i]);
         if Owner <> nil then
           Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
-            Value.IDValue, '', @fStoredClassRecordProps.FieldBits[sftBlob]);
+            Value.IDValue, '', @fStoredClassRecordProps.FieldBits[oftBlob]);
         fModified := true;
         result := true;
       finally

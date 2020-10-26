@@ -22,8 +22,9 @@
 
 {.$define PUREMORMOT2}
 // if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
-// - by default, existing projects should compile with mORMot 2 - you may define
-// this conditional to make a perfect code conversion to the new expectations
+// - by default, existing projects should compile with mORMot 2
+// - you should eventually define this conditional to make a perfect code
+// conversion to the new types and methods definitions
 
 {.$define NEWRTTINOTUSED}
 // if defined, the new RTTI (available since Delphi 2010) won't be linked to

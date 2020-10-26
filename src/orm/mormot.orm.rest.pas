@@ -582,7 +582,7 @@ begin
     result := 0;
     exit;
   end;
-  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
   if SendData then
     GetJSONValuesForAdd(t, Value, ForceID, DoNotAutoComputeFields,
       false, CustomFields, json)
@@ -598,7 +598,7 @@ begin
   // on success, Value.ID is updated with the new RowID
   Value.IDValue := result;
   if SendData and (result <> 0) then
-    fCache.Notify(PSQLRecordClass(Value)^, result, json, ooInsert);
+    fCache.Notify(PORMClass(Value)^, result, json, ooInsert);
 end;
 
 
@@ -1146,7 +1146,7 @@ begin
   if (self = nil) or
      (Value = nil) then
     exit;
-  T := MultiFieldValues(PSQLRecordClass(Value)^, aCustomFieldsCSV, SQLWhere);
+  T := MultiFieldValues(PORMClass(Value)^, aCustomFieldsCSV, SQLWhere);
   if T <> nil then
   try
     if T.RowCount >= 1 then
@@ -1184,7 +1184,7 @@ begin
   if (self = nil) or
      (aID = 0) then
     exit;
-  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
   // try to lock before retrieval (if ForUpdate)
   if ForUpdate and not fModel.Lock(t, aID) then
     exit;
@@ -1532,7 +1532,7 @@ begin
      (Rec.IDValue <= 0) then
     result := false
   else
-    result := UnLock(PSQLRecordClass(Rec)^, Rec.IDValue);
+    result := UnLock(PORMClass(Rec)^, Rec.IDValue);
 end;
 
 function TRestORM.Add(Value: TORM; SendData, ForceID,
@@ -1572,7 +1572,7 @@ begin
     result := 0;
     exit;
   end;
-  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
   GetJSONValuesForAdd(t, Value, ForceID, DoNotAutoComputeFields,
     true, nil, json);
   // on success, returns the new RowID value; on error, returns 0
@@ -1620,21 +1620,21 @@ begin
   if (self = nil) or
      (Value = nil) or
      (Value.IDValue = 0) or
-     not RecordCanBeUpdated(PSQLRecordClass(Value)^, Value.IDValue, oeUpdate) then
+     not RecordCanBeUpdated(PORMClass(Value)^, Value.IDValue, oeUpdate) then
   begin
     result := false; // current user don't have enough right to update this record
     exit;
   end;
-  t := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
   if not DoNotAutoComputeFields then
-    Value.ComputeFieldsBeforeWrite(self, oeUpdate); // update sftModTime fields
+    Value.ComputeFieldsBeforeWrite(self, oeUpdate); // update oftModTime fields
   if IsZero(CustomFields) then
     if (Value.FillContext <> nil) and
        (Value.FillContext.Table <> nil) and
        (Value.FillContext.TableMapRecordManyInstances = nil) then
       // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
       FieldBits := Value.FillContext.TableMapFields +
-        Value.RecordProps.FieldBits[sftModTime]
+        Value.RecordProps.FieldBits[oftModTime]
     else
       // update all simple/custom fields (also for FillPrepareMany)
       FieldBits := Value.RecordProps.SimpleFieldsBits[ooUpdate]
@@ -1643,7 +1643,7 @@ begin
     if DoNotAutoComputeFields then
       FieldBits := CustomFields
     else
-      FieldBits := CustomFields + Value.RecordProps.FieldBits[sftModTime];
+      FieldBits := CustomFields + Value.RecordProps.FieldBits[oftModTime];
   if IsZero(FieldBits) then
   begin
     result := true; // a TORM with NO simple fields (e.g. ID/blob pair)
@@ -2003,7 +2003,7 @@ begin
   with Value.RecordProps do
     if BlobFields <> nil then
     begin
-      t := self.fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+      t := self.fModel.GetTableIndexExisting(PORMClass(Value)^);
       for i := 0 to length(BlobFields) - 1 do
       begin
         BlobFields[i].PropInfo.GetLongStrProp(Value, data);
@@ -2028,7 +2028,7 @@ begin
   with Value.RecordProps do
     if BlobFields <> nil then
     begin
-      t := self.fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+      t := self.fModel.GetTableIndexExisting(PORMClass(Value)^);
       for i := 0 to length(BlobFields) - 1 do
         if EngineRetrieveBlob(t, Value.IDValue,
             BlobFields[i].PropInfo, data) then

@@ -127,10 +127,8 @@ type
     // - as previously serialized with the SaveToJSON method
     // - you can specify a custom Key used for password encryption, if the
     // default value is not safe enough for you
-    // - this method won't use JSONToObject() so avoid any dependency to mORMot.pas
     constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal = 0); virtual;
     /// serialize the database definition as JSON
-    // - this method won't use ObjectToJSON() so avoid any dependency to mORMot.pas
     function SaveToJSON: RawUTF8; virtual;
   published
     /// the class name implementing the connection or TRest instance

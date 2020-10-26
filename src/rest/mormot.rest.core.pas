@@ -2049,6 +2049,7 @@ begin
 end;
 
 {$ifndef PUREMORMOT2}
+// backward compatibility methods redirections
 
 function TRest.TableRowCount(Table: TORMClass): Int64;
 begin

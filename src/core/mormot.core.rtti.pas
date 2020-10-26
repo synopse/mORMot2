@@ -734,7 +734,7 @@ type
   public
     /// contains the index value of an indexed class data property
     // - outside SQLite3, this can be used to define a VARCHAR() length value
-    // for the textual field definition (sftUTF8Text/sftAnsiText); e.g.
+    // for the textual field definition (oftUTF8Text/oftAnsiText); e.g.
     // the following will create a NAME VARCHAR(40) field:
     // ! Name: RawUTF8 index 40 read fName write fName;
     // - is used by a dynamic array property for fast usage of the

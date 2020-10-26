@@ -87,7 +87,7 @@ type
   /// a String used to store the BLOB content
   // - equals RawByteString for byte storage, to force no implicit charset
   // conversion, whatever the codepage of the resulting string is
-  // - will identify a sftBlob field type, if used to define such a published
+  // - will identify a oftBlob field type, if used to define such a published
   // property
   // - by default, the BLOB fields are not retrieved or updated with raw
   // TRest.Retrieve() method, that is "Lazy loading" is enabled by default
@@ -126,7 +126,7 @@ type
   TRecordReferenceToBeDeleted = type TRecordReference;
 
   /// an Int64-encoded date and time of the latest update of a record
-  // - can be used as published property field in TORM for sftModTime:
+  // - can be used as published property field in TORM for oftModTime:
   // if any such property is defined in the table, it will be auto-filled with
   // the server timestamp corresponding to the latest record update
   // - use internally for computation an abstract "year" of 16 months of 32 days
@@ -139,7 +139,7 @@ type
   TModTime = type TTimeLog;
 
   /// an Int64-encoded date and time of the record creation
-  // - can be used as published property field in TORM for sftCreateTime:
+  // - can be used as published property field in TORM for oftCreateTime:
   // if any such property is defined in the table, it will be auto-filled with
   // the server timestamp corresponding to the record creation
   // - use internally for computation an abstract "year" of 16 months of 32 days
@@ -152,7 +152,7 @@ type
   TCreateTime = type TTimeLog;
 
   /// the Int64/TID of the TAuthUser currently logged
-  // - can be used as published property field in TORM for sftSessionUserID:
+  // - can be used as published property field in TORM for oftSessionUserID:
   // if any such property is defined in the table, it will be auto-filled with
   // the current TAuthUser.ID value at update, or 0 if no session is running
   // - could be defined as value in a TORM property as such:
@@ -175,77 +175,77 @@ type
 
   /// the available types for any SQL field property, as managed with the
   // database driver
-  // - sftUnknown: unknown or not defined field type
-  // - sftAnsiText: a WinAnsi encoded TEXT, forcing a NOCASE collation
+  // - oftUnknown: unknown or not defined field type
+  // - oftAnsiText: a WinAnsi encoded TEXT, forcing a NOCASE collation
   // (TORM Delphi property was declared as AnsiString or string before
   // Delphi 2009)
-  // - sftUTF8Text is UTF-8 encoded TEXT, forcing a SYSTEMNOCASE collation,
+  // - oftUTF8Text is UTF-8 encoded TEXT, forcing a SYSTEMNOCASE collation,
   // i.e. using UTF8IComp() (TORM property was declared as RawUTF8,
   // RawUnicode or WideString - or string in Delphi 2009+) - you may inherit
   // from TORMNoCase to use the NOCASE standard SQLite3 collation
-  //- sftEnumerate is an INTEGER value corresponding to an index in any
+  //- oftEnumerate is an INTEGER value corresponding to an index in any
   // enumerate Delphi type; storage is an INTEGER value (fast, easy and size
   // efficient); at display, this integer index will be converted into the
   // left-trimed lowercased chars of the enumerated type text conversion:
   // TOpenType(1) = otDone -> 'Done'
-  /// - sftSet is an INTEGER value corresponding to a bitmapped set of
+  /// - oftSet is an INTEGER value corresponding to a bitmapped set of
   // enumeration; storage is an INTEGER value (fast, easy and size efficient);
   // displayed as an integer by default, sets with an enumeration type with
   // up to 64 elements is allowed yet (stored as an Int64)
-  // - sftInteger is an INTEGER (Int64 precision, as expected by SQLite3) field
-  // - sftID is an INTEGER field pointing to the ID/RowID of another record of
+  // - oftInteger is an INTEGER (Int64 precision, as expected by SQLite3) field
+  // - oftID is an INTEGER field pointing to the ID/RowID of another record of
   // a table, defined by the class type of the TORM inherited property;
   // coherency is always ensured: after a delete, all values pointing to
   // it is reset to 0
-  // - sftRecord is an INTEGER field pointing to the ID/RowID of another
+  // - oftRecord is an INTEGER field pointing to the ID/RowID of another
   // record: TRecordReference=Int64 Delphi property which can be typecasted to
   // RecordRef; coherency is always ensured: after a delete, all values
   // pointing to it are reset to 0 by the ORM
-  // - sftBoolean is an INTEGER field for a boolean value: 0 is FALSE,
+  // - oftBoolean is an INTEGER field for a boolean value: 0 is FALSE,
   // anything else TRUE (encoded as JSON 'true' or 'false' constants)
-  // - sftFloat is a FLOAT (floating point double precision, cf. SQLite3)
+  // - oftFloat is a FLOAT (floating point double precision, cf. SQLite3)
   // field, defined as double (or single) published properties definition
-  // - sftDateTime is a ISO 8601 encoded (SQLite3 compatible) TEXT field,
+  // - oftDateTime is a ISO 8601 encoded (SQLite3 compatible) TEXT field,
   // corresponding to a TDateTime Delphi property: a ISO8601 collation is
   // forced for such column, for proper date/time sorting and searching
-  // - sftDateTimeMS is a ISO 8601 encoded (SQLite3 compatible) TEXT field,
+  // - oftDateTimeMS is a ISO 8601 encoded (SQLite3 compatible) TEXT field,
   // corresponding to a TDateTimeMS Delphi property, i.e. a TDateTime with
   // millisecond resolution, serialized with '.sss' suffix: a ISO8601 collation
   // is forced for such column, for proper date/time sorting and searching
-  // - sftTimeLog is an INTEGER field for coding a date and time (not SQLite3
+  // - oftTimeLog is an INTEGER field for coding a date and time (not SQLite3
   // compatible), which should be defined as TTimeLog=Int64 Delphi property,
   // ready to be typecasted to the TTimeLogBits optimized type for efficient
   // timestamp storage, with a second resolution
-  // - sftCurrency is a FLOAT containing a 4 decimals floating point value,
+  // - oftCurrency is a FLOAT containing a 4 decimals floating point value,
   // compatible with the Currency Delphi type, which minimizes rounding errors
-  // in monetary calculations which may occur with sftFloat type
-  // - sftObject is a TEXT containing an ObjectToJSON serialization, able to
+  // in monetary calculations which may occur with oftFloat type
+  // - oftObject is a TEXT containing an ObjectToJSON serialization, able to
   // handle published properties of any not TPersistent as JSON object,
   // TStrings or TRawUTF8List as JSON arrays of strings, TCollection or
   // TObjectList as JSON arrays of JSON objects
-  // - sftVariant is a TEXT containing a variant value encoded as JSON:
+  // - oftVariant is a TEXT containing a variant value encoded as JSON:
   // string values are stored between quotes, numerical values directly stored,
   // and JSON objects or arrays will be handled as TDocVariant custom types
-  // - sftNullable is a INTEGER/DOUBLE/TEXT field containing a NULLable value,
+  // - oftNullable is a INTEGER/DOUBLE/TEXT field containing a NULLable value,
   // stored as a local variant property, identifying TNullableInteger,
   // TNullableBoolean, TNullableFloat, TNullableCurrency,
   // TNullableDateTime, TNullableTimeLog and TNullableUTF8Text types
-  // - sftBlob is a BLOB field (TRawBlob Delphi property), and won't be
+  // - oftBlob is a BLOB field (TRawBlob Delphi property), and won't be
   // retrieved by default (not part of ORM "simple types"), to save bandwidth
-  // - sftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
+  // - oftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
   // property will be retrieved by default, i.e. is recognized as a "simple
   // field", and will use Base64 encoding during JSON transmission, or a true
   // JSON array, depending on the database back-end (e.g. MongoDB)
-  // - sftBlobCustom is a custom property, stored as BLOB field: such
+  // - oftBlobCustom is a custom property, stored as BLOB field: such
   // properties are defined by adding a TORMPropInfoCustom instance, overriding
   // TORM.InternalRegisterCustomProperties virtual method - they will
   // be retrieved by default, i.e. recognized as "simple fields"
-  // - sftUTF8Custom is a custom property, stored as JSON in a TEXT field,
+  // - oftUTF8Custom is a custom property, stored as JSON in a TEXT field,
   // defined by overriding TORM.InternalRegisterCustomProperties
   // virtual method, and adding a TORMPropInfoCustom instance, e.g. via
   // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRTTI();
   // they will be retrieved by default, i.e. recognized as "simple fields"
-  // - sftMany is a 'many to many' field (TORMMany Delphi property);
+  // - oftMany is a 'many to many' field (TORMMany Delphi property);
   // nothing is stored in the table row, but in a separate pivot table: so
   // there is nothing to retrieve here; in contrast to other TORM
   // published properties, which contains an INTEGER ID, the TORM.Create
@@ -253,7 +253,7 @@ type
   // via its dedicated ManyAdd/FillMany/ManySelect methods - as a result, such
   // properties won't be retrieved by default, i.e. not recognized as "simple
   // fields" unless you used the dedicated methods
-  // - sftModTime is an INTEGER field containing the TModTime value, aka time
+  // - oftModTime is an INTEGER field containing the TModTime value, aka time
   // of the record latest update; TModTime (just like TTimeLog or TCreateTime)
   // published property can be typecasted to the TTimeLogBits memory structure;
   // the value of this field is automatically updated with the current
@@ -264,7 +264,7 @@ type
   // 'UPDATE Table SET Column=0') won't change its content; note also that
   // this is automated on Delphi client side, so only within TORM ORM use
   // (a pure AJAX application should fill such fields explicitely before sending)
-  // - sftCreateTime is an INTEGER field containing the TCreateTime time
+  // - oftCreateTime is an INTEGER field containing the TCreateTime time
   // of the record creation; TCreateTime (just like TTimeLog or TModTime)
   // published property can be typecasted to the TTimeLogBits memory structure;
   // the value of this field is automatically updated with the current
@@ -275,42 +275,42 @@ type
   // 'INSERT INTO Table ...') won't set its content; note also that this is
   // automated on Delphi client side, so only within TORM ORM use (a
   // pure AJAX application should fill such fields explicitely before sending)
-  // - sftTID is an INTEGER field containing a TID pointing to another record;
-  // since regular TORM published properties (i.e. sftID kind of field)
+  // - oftTID is an INTEGER field containing a TID pointing to another record;
+  // since regular TORM published properties (i.e. oftID kind of field)
   // can not be greater than 2,147,483,647 (i.e. a signed 32-bit value) under
   // Win32, defining TID published properties will allow to store the ID
   // as signed 64-bit, e.g. up to 9,223,372,036,854,775,808; despite to
-  // sftID kind of record, coherency is NOT ensured: after a deletion, all
+  // oftID kind of record, coherency is NOT ensured: after a deletion, all
   // values pointing to are NOT reset to 0 - it is up to your business logic
   // to ensure data coherency as expected
-  // - sftRecordVersion is an INTEGER field containing a TRecordVersion
+  // - oftRecordVersion is an INTEGER field containing a TRecordVersion
   // monotonic number: adding such a published field to any TORM will
   // allow tracking of record modifications, at storage level; by design,
   // such a field won't be part of "simple types", so won't be transmitted
   // between the clients and the server, but will be updated at any write
   // operation by the low-level Engine*() storage methods - such a field
   // will use a TORMTableDeletion table to track the deleted items
-  // - sftSessionUserID is an INTEGER field containing the TAuthUser.ID
+  // - oftSessionUserID is an INTEGER field containing the TAuthUser.ID
   // of the record modification; the value of this field is automatically
   // updated with the current User ID of the active session; note also that
   // only RESTful PUT/POST access will change this field value: manual SQL
   // statements (like 'UPDATE Table SET Column=0') won't change its content;
   // this is automated on Delphi client side, so only within TORM ORM use
   // (a pure AJAX application should fill such fields explicitely before sending)
-  // - sftUnixTime is an INTEGER field for coding a date and time as second-based
+  // - oftUnixTime is an INTEGER field for coding a date and time as second-based
   // Unix Time (SQLite3 compatible), which should be defined as TUnixTime=Int64
   // TORM property
-  // - sftUnixMSTime is an INTEGER field for coding a date and time as
+  // - oftUnixMSTime is an INTEGER field for coding a date and time as
   // millisecond-based Unix Time (JavaScript compatible), which should be
   // defined as TUnixMSTime=Int64 TORM property
   // - WARNING: do not change the order of items below, otherwise some methods
   // (like TORMProperties.CheckBinaryHeader) may be broken and fail
   TORMFieldType = (
-    sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet, sftInteger,
-    sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    sftObject, sftVariant, sftNullable, sftBlob, sftBlobDynArray, sftBlobCustom,
-    sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID, sftRecordVersion,
-    sftSessionUserID, sftDateTimeMS, sftUnixTime, sftUnixMSTime);
+    oftUnknown, oftAnsiText, oftUTF8Text, oftEnumerate, oftSet, oftInteger,
+    oftID, oftRecord, oftBoolean, oftFloat, oftDateTime, oftTimeLog, oftCurrency,
+    oftObject, oftVariant, oftNullable, oftBlob, oftBlobDynArray, oftBlobCustom,
+    oftUTF8Custom, oftMany, oftModTime, oftCreateTime, oftTID, oftRecordVersion,
+    oftSessionUserID, oftDateTimeMS, oftUnixTime, oftUnixMSTime);
 
   /// set of available SQL field property types
   TORMFieldTypes = set of TORMFieldType;
@@ -320,7 +320,8 @@ type
 
   /// contains the parameters used for sorting
   // - FieldCount is 0 if was never sorted
-  // - used to sort data again after a successfull data update with TORMTableJSON.FillFrom()
+  // - used to sort data again after a successfull data update with
+  // TORMTableJSON.FillFrom()
   TORMTableSortParams = record
     Comp: TUTF8Compare;
     FieldCount, FieldIndex: integer;
@@ -363,11 +364,11 @@ const
   // - by design, TORMMany properties are stored in an external pivot table
   // - by convenience, the TRecordVersion number is for internal use only
   NOT_SIMPLE_FIELDS: TORMFieldTypes =
-    [sftUnknown, sftBlob, sftMany, sftRecordVersion];
+    [oftUnknown, oftBlob, oftMany, oftRecordVersion];
 
   /// kind of fields which can be copied from one TORM instance to another
   COPIABLE_FIELDS: TORMFieldTypes =
-    [low(TORMFieldType)..high(TORMFieldType)] - [sftUnknown, sftMany];
+    [low(TORMFieldType)..high(TORMFieldType)] - [oftUnknown, oftMany];
 
   /// kind of DB fields which will contain TEXT content when converted to JSON
   TEXT_DBFIELDS: TSQLDBFieldTypes =
@@ -377,12 +378,12 @@ const
   // - independently from the actual storage level
   // - i.e. will match RawUTF8, string, UnicodeString, WideString properties
   RAWTEXT_FIELDS: TORMFieldTypes =
-    [sftAnsiText, sftUTF8Text];
+    [oftAnsiText, oftUTF8Text];
 
   /// kind of fields which will be stored as TEXT values
   // - i.e. RAWTEXT_FIELDS and TDateTime/TDateTimeMS
   STRING_FIELDS: TORMFieldTypes =
-    [sftAnsiText, sftUTF8Text, sftUTF8Custom, sftDateTime, sftDateTimeMS];
+    [oftAnsiText, oftUTF8Text, oftUTF8Custom, oftDateTime, oftDateTimeMS];
 
   /// the SQL field property types with their TNullable* equivalency
   // - those types may be stored in a variant published property, e.g.
@@ -390,8 +391,8 @@ const
   // ! property Txt: TNullableUTF8Text read fTxt write fTxt;
   // ! property Txt: TNullableUTF8Text index 32 read fTxt write fTxt;
   NULLABLE_TYPES =
-    [sftInteger, sftBoolean, sftEnumerate, sftFloat, sftCurrency,
-     sftDateTime, sftTimeLog, sftUTF8Text];
+    [oftInteger, oftBoolean, oftEnumerate, oftFloat, oftCurrency,
+     oftDateTime, oftTimeLog, oftUTF8Text];
 
 
 function ToText(ft: TORMFieldType): PShortString; overload;
@@ -400,11 +401,11 @@ function ToText(he: TORMHistoryEvent): PShortString; overload;
 function ToText(o: TORMOccasion): PShortString; overload;
 
 /// get the SQL type of this class type
-// - returns either sftObject, sftID, sftMany or sftUnknown
-function ClassSQLFieldType(info: PRttiInfo): TORMFieldType;
+// - returns either oftObject, oftID, oftMany or oftUnknown
+function ClassORMFieldType(info: PRttiInfo): TORMFieldType;
 
 /// get the SQL type of this type, as managed with the database driver
-function GeTORMFieldType(Info: PRttiInfo): TORMFieldType;
+function GetORMFieldType(Info: PRttiInfo): TORMFieldType;
 
 /// similar to AddInt64() function, but for a TIDDynArray
 // - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
@@ -472,23 +473,23 @@ function isBlobHex(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// guess the content type of an UTF-8 encoded field value, as used in TORMTable.Get()
-// - if P if nil or 'null', return sftUnknown
+// - if P if nil or 'null', return oftUnknown
 // - otherwise, guess its type from its value characters
-// - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
+// - oftBlob is returned if the field is encoded as SQLite3 BLOB literals
 // (X'53514C697465' e.g.) or with '\uFFF0' magic code
-// - since P is PUTF8Char, string type is sftUTF8Text only
-// - sftFloat is returned for any floating point value, even if it was
-// declared as sftCurrency type
-// - sftInteger is returned for any INTEGER stored value, even if it was declared
-// as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftRecordVersion,
-// sftSessionUserID, sftBoolean, sftModTime/sftCreateTime/sftTimeLog or
-// sftUnixTime/sftUnixMSTime type
+// - since P is PUTF8Char, string type is oftUTF8Text only
+// - oftFloat is returned for any floating point value, even if it was
+// declared as oftCurrency type
+// - oftInteger is returned for any INTEGER stored value, even if it was declared
+// as oftEnumerate, oftSet, oftID, oftTID, oftRecord, oftRecordVersion,
+// oftSessionUserID, oftBoolean, oftModTime/oftCreateTime/oftTimeLog or
+// oftUnixTime/oftUnixMSTime type
 function UTF8ContentType(P: PUTF8Char): TORMFieldType;
 
 /// guess the number type of an UTF-8 encoded field value, as used in TORMTable.Get()
-// - if P if nil or 'null', return sftUnknown
-// - will return sftInteger or sftFloat if the supplied text is a number
-// - will return sftUTF8Text for any non numerical content
+// - if P if nil or 'null', return oftUnknown
+// - will return oftInteger or oftFloat if the supplied text is a number
+// - will return oftUTF8Text for any non numerical content
 function UTF8ContentNumberType(P: PUTF8Char): TORMFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -496,28 +497,28 @@ function UTF8ContentNumberType(P: PUTF8Char): TORMFieldType;
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareRecord(P1, P2: PUTF8Char): PtrInt;
 
-/// special comparison function for sorting sftBoolean
+/// special comparison function for sorting oftBoolean
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareBoolean(P1, P2: PUTF8Char): PtrInt;
 
-/// special comparison function for sorting sftEnumerate, sftSet or sftID
+/// special comparison function for sorting oftEnumerate, oftSet or oftID
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareUInt32(P1, P2: PUTF8Char): PtrInt;
 
-/// special comparison function for sorting sftInteger, sftTID, sftRecordVersion
-// sftTimeLog/sftModTime/sftCreateTime or sftUnixTime/sftUnixMSTime UTF-8 encoded
+/// special comparison function for sorting oftInteger, oftTID, oftRecordVersion
+// oftTimeLog/oftModTime/oftCreateTime or oftUnixTime/oftUnixMSTime UTF-8 encoded
 // values in the SQLite3 database or JSON content
 function UTF8CompareInt64(P1, P2: PUTF8Char): PtrInt;
 
-/// special comparison function for sorting sftCurrency
+/// special comparison function for sorting oftCurrency
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareCurr64(P1, P2: PUTF8Char): PtrInt;
 
-/// special comparison function for sorting sftFloat
+/// special comparison function for sorting oftFloat
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareDouble(P1, P2: PUTF8Char): PtrInt;
 
-/// special comparison function for sorting sftDateTime or sftDateTimeMS
+/// special comparison function for sorting oftDateTime or oftDateTimeMS
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareISO8601(P1, P2: PUTF8Char): PtrInt;
 
@@ -714,11 +715,11 @@ function JSONGetID(P: PUTF8Char; out ID: TID): boolean;
 
 /// low-level function used to convert a JSON Value into a variant,
 // according to the property type
-// - for sftObject, sftVariant, sftBlobDynArray and sftUTF8Custom, the
+// - for oftObject, oftVariant, oftBlobDynArray and oftUTF8Custom, the
 // JSON buffer may be an array or an object, so createValueTempCopy can
 // create a temporary copy before parsing it in-place, to preserve the buffer
-// - sftUnknown and sftMany will set a varEmpty (Unassigned) value
-// - typeInfo may be used for sftBlobDynArray conversion to a TDocVariant array
+// - oftUnknown and oftMany will set a varEmpty (Unassigned) value
+// - typeInfo may be used for oftBlobDynArray conversion to a TDocVariant array
 procedure ValueVarToVariant(Value: PUTF8Char; ValueLen: integer;
   fieldType: TORMFieldType; var result: TVarData; createValueTempCopy: boolean;
   typeInfo: PRttiInfo; options: TDocVariantOptions = JSON_OPTIONS_FAST);
@@ -732,19 +733,19 @@ type
   // escaped as a string (which is the default, matching ORM column storage)
   // - if an additional "ID_str":"12345" field should be added to the standard
   // "ID":12345 field, which may exceed 53-bit integer precision of JavsCript
-  TJSONSerializerSQLRecordOption = (
+  TJSONSerializerORMOption = (
     jwoAsJsonNotAsString, jwoID_str);
 
   /// options to customize how TORM will be written by TJSONSerializer
-  TJSONSerializerSQLRecordOptions = set of TJSONSerializerSQLRecordOption;
+  TJSONSerializerORMOptions = set of TJSONSerializerORMOption;
 
   /// simple writer to a Stream, specialized for writing TORM as JSON
   // - in respect to the standard TJSONWriter as defined in mormot.db.core,
   // this class has some options dedicated to our TORM serialization
   TJSONSerializer = class(TJSONWriter)
   protected
-    fSQLRecordOptions: TJSONSerializerSQLRecordOptions;
-    procedure SeTORMOptions(Value: TJSONSerializerSQLRecordOptions);
+    fORMOptions: TJSONSerializerORMOptions;
+    procedure SetORMOptions(Value: TJSONSerializerORMOptions);
   public
     /// customize TORM.GetJSONValues serialization process
     // - jwoAsJsonNotAsString will force TORM.GetJSONValues to serialize
@@ -758,8 +759,8 @@ type
     // if TSynUniqueIdentifier are used to generate the IDs: AJAX clients should
     // better use this "ID_str" string value to identify each record, and ignore
     // the "id" fields
-    property SQLRecordOptions: TJSONSerializerSQLRecordOptions
-      read fSQLRecordOptions write SeTORMOptions;
+    property ORMOptions: TJSONSerializerORMOptions
+      read fORMOptions write SetORMOptions;
   end;
 
 
@@ -781,8 +782,8 @@ type
   protected
     fName: RawUTF8;
     fNameUnflattened: RawUTF8;
-    fSQLFieldType: TORMFieldType;
-    fSQLFieldTypeStored: TORMFieldType;
+    fORMFieldType: TORMFieldType;
+    fORMFieldTypeStored: TORMFieldType;
     fSQLDBFieldType: TSQLDBFieldType;
     fAttributes: TORMPropInfoAttributes;
     fFieldWidth: integer;
@@ -794,7 +795,7 @@ type
     procedure BinaryToText(var Value: RawUTF8; ToSQL: boolean;
       wasSQLString: PBoolean); virtual;
     procedure TextToBinary(Value: PUTF8Char; var result: RawByteString); virtual;
-    function GeTORMFieldTypeName: PShortString;
+    function GetORMFieldTypeName: PShortString;
     function GetSQLFieldRTTITypeName: RawUTF8; virtual;
     // overriden method shall use direct copy of the low-level binary content,
     // to be faster than a DestInfo.SetValue(Dest,GetValue(Source)) call
@@ -804,7 +805,7 @@ type
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
     // class function TORMPropInfoRTTI.CreateFrom() or overridden constructors
-    constructor Create(const aName: RawUTF8; aSQLFieldType: TORMFieldType;
+    constructor Create(const aName: RawUTF8; aORMFieldType: TORMFieldType;
       aAttributes: TORMPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
       reintroduce; virtual;
     /// the property definition Name
@@ -819,22 +820,22 @@ type
     /// the property index in the RTTI
     property PropertyIndex: integer read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
-    property SQLFieldType: TORMFieldType read fSQLFieldType;
+    property ORMFieldType: TORMFieldType read fORMFieldType;
     /// the corresponding column type, as stored by the ORM layer
-    // - match SQLFieldType, unless for SQLFieldType=sftNullable, in which this
+    // - match ORMFieldType, unless for ORMFieldType=oftNullable, in which this
     // field will contain the simple type eventually stored in the database
-    property SQLFieldTypeStored: TORMFieldType read fSQLFieldTypeStored;
+    property ORMFieldTypeStored: TORMFieldType read fORMFieldTypeStored;
     /// the corresponding column type name, as managed by the ORM layer and
     // retrieved by the RTTI
-    // - returns e.g. 'sftTimeLog'
-    property SQLFieldTypeName: PShortString read GeTORMFieldTypeName;
+    // - returns e.g. 'oftTimeLog'
+    property ORMFieldTypeName: PShortString read GetORMFieldTypeName;
     /// the type name, as defined in the RTTI
     // - returns e.g. 'RawUTF8'
     // - will return the TORMPropInfo class name if it is not a TORMPropInfoRTTI
     property SQLFieldRTTITypeName: RawUTF8 read GetSQLFieldRTTITypeName;
     /// the corresponding column type, as managed for abstract database access
     // - TNullable* fields will report here the corresponding simple DB type,
-    // e.g. ftInt64 for TNullableInteger (following SQLFieldTypeStored value)
+    // e.g. ftInt64 for TNullableInteger (following ORMFieldTypeStored value)
     property SQLDBFieldType: TSQLDBFieldType read fSQLDBFieldType;
     /// the corresponding column type name, as managed for abstract database access
     function SQLDBFieldTypeName: PShortString;
@@ -872,7 +873,7 @@ type
     // true, or base-64 encoded stream for JSON ("\uFFF0base64encodedbinary")
     // - getter method (read Get*) is called if available
     // - handle Delphi values into UTF-8 SQL conversion
-    // - sftBlobDynArray, sftBlobCustom or sftBlobRecord are returned as BLOB
+    // - oftBlobDynArray, oftBlobCustom or oftBlobRecord are returned as BLOB
     // litterals ("X'53514C697465'") if ToSQL is true, or base-64 encoded stream
     // for JSON ("\uFFF0base64encodedbinary")
     // - handle TPersistent, TCollection, TRawUTF8List or TStrings with ObjectToJSON
@@ -913,14 +914,14 @@ type
     procedure CopyProp(Source: TObject; DestInfo: TORMPropInfo; Dest: TObject);
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
-    // SQLFieldType type
+    // ORMFieldType type
     // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
     // - dynamic array field is returned as a variant array
     procedure GetVariant(Instance: TObject; var Dest: Variant); virtual;
     /// set the property value from a Variant value
     // - dynamic array field must be set from a variant array
     // - will set the Variant type to the best matching kind according to the
-    // SQLFieldType type
+    // ORMFieldType type
     // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
     procedure SetVariant(Instance: TObject; const Source: Variant); virtual;
     /// compare the content of the property of two objects
@@ -981,11 +982,11 @@ type
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType;
+      aORMFieldType: TORMFieldType;
       aOptions: TORMPropInfoListOptions); reintroduce; virtual;
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
-    // SQLFieldType type
+    // ORMFieldType type
     // - BLOB field returns SQlite3 BLOB textual literals ("x'01234'" e.g.)
     // - dynamic array field is returned as a variant array
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
@@ -1021,7 +1022,7 @@ type
       Dest: TObject); override;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1042,18 +1043,18 @@ type
     fSetEnumType: PRttiEnumType;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     property SetEnumType: PRttiEnumType read fSetEnumType;
   end;
 
   /// information about a enumeration published property
-  // - can be either sftBoolean or sftEnumerate kind of property
+  // - can be either oftBoolean or oftEnumerate kind of property
   TORMPropInfoRTTIEnum = class(TORMPropInfoRTTIInt32)
   protected
     fEnumType: PRttiEnumType;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1080,7 +1081,7 @@ type
       Dest: TObject); override;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1177,7 +1178,7 @@ type
       Dest: TObject); override;
   public
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
@@ -1312,7 +1313,7 @@ type
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
@@ -1334,7 +1335,7 @@ type
     property DynArrayElemType: TRttiCustom read GetDynArrayElemType;
     /// dynamic array item information for a T*ObjArray
     // - equals nil if this dynamic array was not previously registered via
-    // TJSONSerializer.RegisterObjArrayForJSON()
+    // Rtti.RegisterObjArray()
     // - note that if the field is a T*ObjArray, you could create a new item
     // by calling ObjArray^.ClassNewInstance
     // - T*ObjArray database column will be stored as text
@@ -1353,7 +1354,7 @@ type
   public
     /// initialize the internal fields
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure SetValuePtr(Instance: TObject; Value: PUTF8Char; ValueLen: integer;
@@ -1384,24 +1385,24 @@ type
   end;
 
   /// optional event handler used by TORMPropInfoRecord to handle textual storage
-  // - by default, TORMPropInfoRecord content will be stored as sftBlobCustom;
+  // - by default, TORMPropInfoRecord content will be stored as oftBlobCustom;
   // specify such a callback event to allow storage as UTF-8 textual field and
-  // use a sftUTF8Custom kind of column
+  // use a oftUTF8Custom kind of column
   // - event implementation shall convert data/datalen binary value into Text
   TOnSQLPropInfoRecord2Text = procedure(Data: pointer; DataLen: integer;
     var Text: RawUTF8);
 
   /// optional event handler used by TORMPropInfoRecord to handle textual storage
-  // - by default, TORMPropInfoRecord content will be stored as sftBlobCustom;
+  // - by default, TORMPropInfoRecord content will be stored as oftBlobCustom;
   // specify such a callback event to allow storage as UTF-8 textual field and
-  // use a sftUTF8Custom kind of column
+  // use a oftUTF8Custom kind of column
   // - event implementaiton shall convert Text into Data binary value
   TOnSQLPropInfoRecord2Data = procedure(Text: PUTF8Char; var Data: RawByteString);
 
   /// abstract information about a record-like property defined directly in code
   // - do not use this class, but TORMPropInfoRecordRTTI and TORMPropInfoRecordFixedSize
-  // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
-  // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
+  // - will store the content as BLOB by default, and ORMFieldType as oftBlobCustom
+  // - if aData2Text/aText2Data are defined, use TEXT storage and oftUTF8Custom type
   TORMPropInfoCustom = class(TORMPropInfo)
   protected
     fOffset: PtrUInt;
@@ -1414,7 +1415,7 @@ type
     /// define a custom property in code
     // - do not call this constructor directly, but one of its inherited classes,
     // via a call to TORMProperties.RegisterCustom*()
-    constructor Create(const aName: RawUTF8; aSQLFieldType: TORMFieldType;
+    constructor Create(const aName: RawUTF8; aORMFieldType: TORMFieldType;
       aAttributes: TORMPropInfoAttributes; aFieldWidth, aPropIndex: Integer;
       aProperty: pointer; aData2Text: TOnSQLPropInfoRecord2Text;
       aText2Data: TOnSQLPropInfoRecord2Data); reintroduce;
@@ -1433,8 +1434,8 @@ type
   /// information about a record property defined directly in code
   // - Delphi does not publish RTTI for published record properties
   // - you can use this class to register a record property from its RTTI
-  // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
-  // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
+  // - will store the content as BLOB by default, and ORMFieldType as oftBlobCustom
+  // - if aData2Text/aText2Data are defined, use TEXT storage and oftUTF8Custom type
   // - this class will use only binary RecordLoad/RecordSave methods
   TORMPropInfoRecordRTTI = class(TORMPropInfoRecordTyped)
   protected
@@ -1484,8 +1485,8 @@ type
   // - Delphi does not publish RTTI for published record properties
   // - you can use this class to register a record property with no RTTI (i.e.
   // a record with no reference-counted types within)
-  // - will store the content as BLOB by default, and SQLFieldType as sftBlobCustom
-  // - if aData2Text/aText2Data are defined, use TEXT storage and sftUTF8Custom type
+  // - will store the content as BLOB by default, and ORMFieldType as oftBlobCustom
+  // - if aData2Text/aText2Data are defined, use TEXT storage and oftUTF8Custom type
   TORMPropInfoRecordFixedSize = class(TORMPropInfoRecordTyped)
   protected
     fRecordSize: integer;
@@ -1522,7 +1523,7 @@ type
   /// information about a custom property defined directly in code
   // - you can define any kind of property, either a record or any type
   // - this class will use JSON serialization, by type name or TypeInfo() pointer
-  // - will store the content as TEXT by default, and SQLFieldType as sftUTF8Custom
+  // - will store the content as TEXT by default, and ORMFieldType as oftUTF8Custom
   TORMPropInfoCustomJSON = class(TORMPropInfoRecordTyped)
   protected
     fCustomParser: TRttiJson;
@@ -1660,18 +1661,18 @@ type
   end;
 
   /// information about a TORM class property
-  // - sftID for TORM properties, which are pointer(RecordID), not
+  // - oftID for TORM properties, which are pointer(RecordID), not
   // any true class instance
-  // - sftMany for TORMMany properties, for which no data is
+  // - oftMany for TORMMany properties, for which no data is
   // stored in the table itself, but in a pivot table
-  // - sftObject for e.g. TStrings TRawUTF8List TCollection instances
+  // - oftObject for e.g. TStrings TRawUTF8List TCollection instances
   TORMPropInfoRTTIInstance = class(TORMPropInfoRTTIPtrInt)
   protected
     fObjectClass: TClass;
   public
     /// will setup the corresponding ObjectClass property
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     /// direct access to the property class instance
     function GetInstance(Instance: TObject): TObject;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1685,7 +1686,7 @@ type
 
   /// information about a TRecordReference/TRecordReferenceToBeDeleted
   // published property
-  // - identified as a sftRecord kind of property
+  // - identified as a oftRecord kind of property
   TORMPropInfoRTTIRecordReference = class(TORMPropInfoRTTIInt64)
   protected
     fCascadeDelete: boolean;
@@ -1693,17 +1694,17 @@ type
     /// will identify TRecordReferenceToBeDeleted kind of field, and
     // setup the corresponding CascadeDelete property
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
-    /// TRUE if this sftRecord is a TRecordReferenceToBeDeleted
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+    /// TRUE if this oftRecord is a TRecordReferenceToBeDeleted
     property CascadeDelete: boolean read fCascadeDelete;
   end;
 
   /// information about a TRecordVersion published property
-  // - identified as a sftRecordVersion kind of property, to track changes
+  // - identified as a oftRecordVersion kind of property, to track changes
   TORMPropInfoRTTIRecordVersion = class(TORMPropInfoRTTIInt64);
 
   /// information about a TORM class TORM property
-  // - kind sftID, which are pointer(RecordID), not any true class instance
+  // - kind oftID, which are pointer(RecordID), not any true class instance
   // - will store the content just as an integer value
   // - will recognize any instance pre-allocated via Create*Joined() constructor
   TORMPropInfoRTTIID = class(TORMPropInfoRTTIInstance)
@@ -1720,7 +1721,7 @@ type
 
   /// information about a TORM class TStrings/TRawUTF8List/TCollection
   // property
-  // - kind sftObject e.g. for TStrings TRawUTF8List TCollection TObjectList instances
+  // - kind oftObject e.g. for TStrings TRawUTF8List TCollection TObjectList instances
   // - binary serialization will store textual JSON serialization of the
   // object, including custom serialization
   TORMPropInfoRTTIObject = class(TORMPropInfoRTTIInstance)
@@ -1739,7 +1740,7 @@ type
   end;
 
   /// information about a TORM class TORMMany property
-  // - kind sftMany, for which no data is stored in the table itself, but in
+  // - kind oftMany, for which no data is stored in the table itself, but in
   // a separated pivot table
   TORMPropInfoRTTIMany = class(TORMPropInfoRTTIInstance)
   public
@@ -1784,8 +1785,8 @@ type
   TORMClass = class of TORM;
 
   /// pointer-level redirection of a TORM metaclass
-  // - used for efficient PSQLRecordClass(aRecord)^ access to the class info
-  PSQLRecordClass = ^TORMClass;
+  // - used for efficient PORMClass(aRecord)^ access to the class info
+  PORMClass = ^TORMClass;
 
   /// class-reference type (metaclass) of a FTS3/FTS4/FTS5 virtual table
   // - either a TORMFTS3 TORMFTS4 or TORMFTS5 class
@@ -2750,11 +2751,11 @@ type
     /// access to the associate TSynLog class familly
     function LogFamily: TSynLogFamily;
     /// retrieve the current server time stamp as a TTimeLog
-    // - used e.g. by TORM.ComputeFieldsBeforeWrite for sftModTime/sftCreateTime
+    // - used e.g. by TORM.ComputeFieldsBeforeWrite for oftModTime/oftCreateTime
     // - is safe on both client and server sides
     function GetServerTimestamp: TTimeLog;
     /// retrieve the logged session User ID
-    // - used e.g. by TORM.ComputeFieldsBeforeWrite for sftSessionUserID
+    // - used e.g. by TORM.ComputeFieldsBeforeWrite for oftSessionUserID
     // - returns 0 if no session/authentication was currently initiated
     function GetCurrentSessionUserID: TID;
   end;
@@ -3083,7 +3084,7 @@ type
   // source with GetSQLValues or GetSQLSet or into JSON format with GetJSONValues
   // - BLOB fields are decoded to auto-freeing TRawBlob properties
   // - any published property defined as a T*ObjArray dynamic array storage
-  // of persistents (via TJSONSerializer.RegisterObjArrayForJSON) will be freed
+  // of persistents (via Rtti.RegisterObjArray) will be freed
   // - consider inherit from TORMNoCase and TORMNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence
@@ -3121,7 +3122,7 @@ type
     // want those to be written "in stone", and not manually when creating the
     // TORMModel instance, or to call Props.SetCustomCollationForAll
     class procedure InternalDefineModel(Props: TORMProperties); virtual;
-    /// trick to get the ID even in case of a sftID published property
+    /// trick to get the ID even in case of a oftID published property
     function GetID: TID;
       {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// trick to typecast the ID on 64-bit platform
@@ -3230,7 +3231,7 @@ type
     // if FieldName is specified, initialization regarding this field must be processed
     // - override this method in order to initialize indexs or create default records
     // - by default, create indexes for all TRecordReference properties, and
-    // for all TORM inherited properties (i.e. of sftID type, that is
+    // for all TORM inherited properties (i.e. of oftID type, that is
     // an INTEGER field containing the ID of the pointing record)
     // - the options specified at CreateMissingTables() are passed to this method,
     // within the context of an opened DB transaction, in which missing tables
@@ -3293,8 +3294,8 @@ type
       const aFields: TFieldBits = [0..MAX_SQLFIELDS - 1];
       aValidator: PSynValidate = nil): RawUTF8; overload;
     /// should modify the record content before writing to the Server
-    // - this default implementation will update any sftModTime / TModTime,
-    // sftCreateTime / TCreateTime and sftSessionUserID / TSessionUserID
+    // - this default implementation will update any oftModTime / TModTime,
+    // oftCreateTime / TCreateTime and oftSessionUserID / TSessionUserID
     // properties content with the exact server time stamp
     // - you may override this method e.g. for custom calculated fields
     // - note that this is computed only on the Client side, before sending
@@ -3650,25 +3651,25 @@ type
     // - if Expand is false, JSON data is serialized (as used in TORMTableJSON)
     // $ { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - if withID is true, then the first ID field value is included
-    // - you can customize SQLRecordOptions, e.g. if sftObject/sftBlobDynArray
+    // - you can customize ORMOptions, e.g. if oftObject/oftBlobDynArray
     // property instance will be serialized as a JSON object or array, not a
     // JSON string (which is the default, as expected by the database storage),
     // or if an "ID_str" string field should be added for JavaScript
     procedure GetJSONValues(JSON: TStream; Expand, withID: boolean;
-      Occasion: TORMOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions = []); overload;
+      Occasion: TORMOccasion; ORMOptions: TJSONSerializerORMOptions = []); overload;
     /// same as overloaded GetJSONValues(), but returning result into a RawUTF8
     // - if UsingStream is not set, it will use a temporary THeapMemoryStream instance
     function GetJSONValues(Expand, withID: boolean;
       Occasion: TORMOccasion; UsingStream: TCustomMemoryStream = nil;
-      SQLRecordOptions: TJSONSerializerSQLRecordOptions = []): RawUTF8; overload;
+      ORMOptions: TJSONSerializerORMOptions = []): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
     function GetJSONValues(Expand, withID: boolean; const Fields: TFieldBits;
-      SQLRecordOptions: TJSONSerializerSQLRecordOptions = []): RawUTF8; overload;
+      ORMOptions: TJSONSerializerORMOptions = []): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
     function GetJSONValues(Expand, withID: boolean; const FieldsCSV: RawUTF8;
-      SQLRecordOptions: TJSONSerializerSQLRecordOptions = []): RawUTF8; overload;
+      ORMOptions: TJSONSerializerORMOptions = []): RawUTF8; overload;
     /// will append the record fields as an expanded JSON object
     // - GetJsonValues() will expect a dedicated TJSONSerializer, whereas this
     // method will add the JSON object directly to any TJSONSerializer
@@ -4042,7 +4043,7 @@ type
 
     /// this property stores the record's integer ID
     // - if this TORM is not a instance, but a field value in a published
-    //  property of type sftID (i.e. TORM(aID)), this method will try
+    //  property of type oftID (i.e. TORM(aID)), this method will try
     //  to retrieve it; but prefered method is to typecast it via PtrInt(aProperty),
     //  because GetID() relies on some low-level Windows memory mapping trick, and
     //  will recognize an ID value up to 1,048,576 (i.e. $100000)
@@ -4101,13 +4102,13 @@ type
     { published properties in inherited classes will be interpreted as SQL fields }
   end;
 
-  PSQLRecord = ^TORM;
+  PORM = ^TORM;
 
   TORMArray = array[0..MaxInt div SizeOf(TORM) - 1] of TORM;
-  PSQLRecordArray = ^TORMArray;
+  PORMArray = ^TORMArray;
 
   /// information about a TID published property
-  // - identified as a sftTID kind of property, optionally tied to a TORM
+  // - identified as a oftTID kind of property, optionally tied to a TORM
   // class, via its custom type name, e.g.
   // ! TORMClientID = type TID;  ->  TORMClient class
   TORMPropInfoRTTITID = class(TORMPropInfoRTTIRecordReference)
@@ -4120,7 +4121,7 @@ type
     // that e.g. 'TORMClientID' type name will match TORMClient
     // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
-      aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
+      aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions); override;
     /// the TORM class associated to this TID
     // - is computed from its type name - for instance, if you define:
     // ! type
@@ -4135,7 +4136,7 @@ type
     // - equals TORM for plain TID field
     // - equals nil if T*ID type name doesn't match any registered class
     property RecordClass: TORMClass read fRecordClass;
-    /// TRUE if this sftTID type name follows the '...ToBeDeletedID' pattern
+    /// TRUE if this oftTID type name follows the '...ToBeDeletedID' pattern
     // - e.g. 'TORMClientToBeDeletedID' type name will match
     // TORMClient and set CascadeDelete
     // - is computed from its type name - for instance, if you define:
@@ -4286,16 +4287,16 @@ type
 
   /// store TORMFieldType and RTTI for a given TORMTable field
   TORMTableFieldType = record
-    /// the field kind, as in JSON (match TORMPropInfo.SQLFieldTypeStored)
+    /// the field kind, as in JSON (match TORMPropInfo.ORMFieldTypeStored)
     ContentType: TORMFieldType;
     /// how this field could be stored in a database
-    // - equals ftUnknown if InitFields guessed the field type, or for sftVariant
+    // - equals ftUnknown if InitFields guessed the field type, or for oftVariant
     ContentDB: TSQLDBFieldType;
     /// the field size in bytes; -1 means not computed yet
     ContentSize: integer;
     /// the field low-level RTTI information
-    // - is the PRttiInfo for sftBlobDynArray/sftNullable, PRttiEnumType for
-    // sftEnumerate/sftSet, or nil
+    // - is the PRttiInfo for oftBlobDynArray/oftNullable, PRttiEnumType for
+    // oftEnumerate/oftSet, or nil
     ContentTypeInfo: pointer;
     /// the corresponding index in fQueryTables[]
     TableIndex: integer;
@@ -4395,15 +4396,15 @@ type
     /// read-only access to a particular field value, as a Variant
     // - text will be stored as RawUTF8 (as varString type)
     // - will try to use the most approriate Variant type for conversion (will
-    // use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
-    // in a sftVariant column) - so you should better set the exact field types
+    // use e.g. TDateTime for oftDateTime, or a TDocVariant for JSON objects
+    // in a oftVariant column) - so you should better set the exact field types
     // (e.g. from ORM) before calling this method
     function GetVariant(Row, Field: integer): variant; overload;
     /// read-only access to a particular field value, as a Variant
     // - text will be stored as RawUTF8 (as varString type)
     // - will try to use the most approriate Variant type for conversion (will
-    // use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
-    // in a sftVariant column) - so you should better set the exact field types
+    // use e.g. TDateTime for oftDateTime, or a TDocVariant for JSON objects
+    // in a oftVariant column) - so you should better set the exact field types
     // (e.g. from ORM) before calling this method
     procedure GetVariant(Row, Field: integer; var result: variant); overload;
     /// read-only access to a particular field, via a lookup field name
@@ -4446,16 +4447,16 @@ type
     function GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as TDateTime value
-    // - sftDateTime/sftDateTimeMS will be converted from ISO-8601 text
-    // - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
-    // encoded as a TTimeLog Int64 value - as sftInteger may have been
+    // - oftDateTime/oftDateTimeMS will be converted from ISO-8601 text
+    // - oftTimeLog, oftModTime, oftCreateTime will expect the content to be
+    // encoded as a TTimeLog Int64 value - as oftInteger may have been
     // identified by TORMTable.InitFieldTypes
-    // - sftUnixTime/sftUnixMSTime field will call UnixTimeToDateTime/UnixMSTimeToDateTime
-    // - for sftTimeLog, sftModTime, sftCreateTime or sftUnixTime fields, you
-    // may have to force the column type, since it may be identified as sftInteger
-    // or sftCurrency by default from its JSON number content, e.g. via:
-    // ! aTable.SetFieldType('FieldName', sftModTime);
-    // - sftCurrency,sftFloat will return the corresponding double value
+    // - oftUnixTime/oftUnixMSTime field will call UnixTimeToDateTime/UnixMSTimeToDateTime
+    // - for oftTimeLog, oftModTime, oftCreateTime or oftUnixTime fields, you
+    // may have to force the column type, since it may be identified as oftInteger
+    // or oftCurrency by default from its JSON number content, e.g. via:
+    // ! aTable.SetFieldType('FieldName', oftModTime);
+    // - oftCurrency,oftFloat will return the corresponding double value
     // - any other types will try to convert ISO-8601 text }
     function GetAsDateTime(Row, Field: integer): TDateTime; overload;
     /// read-only access to a particular field value, as TDateTime value
@@ -4494,19 +4495,19 @@ type
     // - Client is used to display TRecordReference via the associated TORMModel
     // - returns the Field Type
     // - return generic string Text, i.e. UnicodeString for Delphi 2009+, ready
-    // to be displayed to the VCL, for sftEnumerate, sftTimeLog,
-    // sftUnixTime/sftUnixMSTime and sftRecord/sftRecordVersion/sftID/sftTID
+    // to be displayed to the VCL, for oftEnumerate, oftTimeLog,
+    // oftUnixTime/oftUnixMSTime and oftRecord/oftRecordVersion/oftID/oftTID
     // - returns '' as string Text, if text can by displayed directly
     // with Get*() methods above
     // - returns '' for other properties kind, if UTF8ToString is nil,
     // or the ready to be displayed value if UTF8ToString event is set
     // (to be used mostly with Language.UTF8ToString)
     // - CustomFormat can optionaly set a custom format string, e.g. '%f' or '%n'
-    // or complex FormatFloat()/FormatCurr() syntax (as '#,##0.00') for sftFloat
-    // and sftCurrency columns (instead of plain JSON float value), or
+    // or complex FormatFloat()/FormatCurr() syntax (as '#,##0.00') for oftFloat
+    // and oftCurrency columns (instead of plain JSON float value), or
     // date/time format as expected by FormatDateTime() for all date time kind
-    // of fields (as sftDateTime, sftDateTimeMS, sftTimeLog, sftModTime,
-    // sftCreateTime, sftUnixTime, sftUnixMSTime)
+    // of fields (as oftDateTime, oftDateTimeMS, oftTimeLog, oftModTime,
+    // oftCreateTime, oftUnixTime, oftUnixMSTime)
     function ExpandAsString(Row, Field: integer; const Client: IRestORM;
       out Text: string; const CustomFormat: string = ''): TORMFieldType;
     /// read-only access to a particular field value, as VCL text
@@ -4682,12 +4683,12 @@ type
     // designed field, and, if the field value is identical, the ID value is
     // used (it will therefore sort by time all identical values)
     procedure SortFields(Field: integer; Asc: boolean = true;
-      PCurrentRow: PInteger = nil; FieldType: TORMFieldType = sftUnknown;
+      PCurrentRow: PInteger = nil; FieldType: TORMFieldType = oftUnknown;
       CustomCompare: TUTF8Compare = nil); overload;
     /// sort result Rows, according to a specific field
     // - overloaded method allowing to specify the field by its name
     procedure SortFields(const FieldName: RawUTF8; Asc: boolean = true;
-      PCurrentRow: PInteger = nil; FieldType: TORMFieldType = sftUnknown;
+      PCurrentRow: PInteger = nil; FieldType: TORMFieldType = oftUnknown;
       CustomCompare: TUTF8Compare = nil); overload;
     /// sort result Rows, according to some specific fields
     // - is able to make multi-field sort
@@ -4705,18 +4706,18 @@ type
     /// guess the field type from first non null data row
     // - if QueryTables[] are set, exact field type and enumerate TypeInfo() is
     // retrieved from the Delphi RTTI; otherwise, get from the cells content
-    // - return sftUnknown is all data fields are null
-    // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
+    // - return oftUnknown is all data fields are null
+    // - oftBlob is returned if the field is encoded as SQLite3 BLOB literals
     // (X'53514C697465' e.g.)
-    // - since TORMTable data is PUTF8Char, string type is sftUTF8Text only
+    // - since TORMTable data is PUTF8Char, string type is oftUTF8Text only
     function FieldType(Field: integer): TORMFieldType; overload;
     /// guess the field type from first non null data row
     // - if QueryTables[] are set, exact field type and (enumerate) TypeInfo() is
     // retrieved from the Delphi RTTI; otherwise, get from the cells content
-    // - return sftUnknown is all data fields are null
-    // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
+    // - return oftUnknown is all data fields are null
+    // - oftBlob is returned if the field is encoded as SQLite3 BLOB literals
     // (X'53514C697465' e.g.)
-    // - since TORMTable data is PUTF8Char, string type is sftUTF8Text only
+    // - since TORMTable data is PUTF8Char, string type is oftUTF8Text only
     function FieldType(Field: integer;
       out FieldTypeInfo: PSQLTableFieldType): TORMFieldType; overload;
     /// get the appropriate Sort comparison function for a field,
@@ -4753,8 +4754,8 @@ type
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
     // - FieldTypeInfo can be specified for sets or enumerations, as such:
-    // ! aTable.SetFieldType(0, sftEnumerate, TypeInfo(TEnumSample));
-    // ! aTable.SetFieldType(1, sftSet, TypeInfo(TSetSamples));
+    // ! aTable.SetFieldType(0, oftEnumerate, TypeInfo(TEnumSample));
+    // ! aTable.SetFieldType(1, oftSet, TypeInfo(TSetSamples));
     // or for dynamic arrays
     procedure SetFieldType(Field: integer; FieldType: TORMFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1;
@@ -4765,8 +4766,8 @@ type
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
     // - FieldTypeInfo can be specified for sets or enumerations, as such:
-    // ! aTable.SetFieldType('Sample', sftEnumerate, TypeInfo(TEnumSample));
-    // ! aTable.SetFieldType('Samples', sftSet, TypeInfo(TSetSamples));
+    // ! aTable.SetFieldType('Sample', oftEnumerate, TypeInfo(TEnumSample));
+    // ! aTable.SetFieldType('Samples', oftSet, TypeInfo(TSetSamples));
     procedure SetFieldType(const FieldName: RawUTF8; FieldType: TORMFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1); overload;
     /// set the exact type of all fields, from the DB-like information
@@ -5020,7 +5021,7 @@ type
     property OwnerMustFree: boolean
       read fOwnerMustFree write fOwnerMustFree;
     /// by default, if field types are not set, only the content of the first
-    // row will be checked, to make a difference between a sftInteger and sftFloat
+    // row will be checked, to make a difference between a oftInteger and oftFloat
     // - you can set this property to TRUE so that all non string rows will
     // be checked for the exact number precision
     // - note that the safest is to provide the column type, either by supplying
@@ -5411,7 +5412,7 @@ type
   // particular time interval, or all events that both started and ended within
   // a given time interval. And so forth. See http:// www.sqlite.org/rtree.html
   // - any record which inherits from this class as TORMRTree must have
-  // only sftFloat (double) fields (or integer fields for TORMRTreeInteger)
+  // only oftFloat (double) fields (or integer fields for TORMRTreeInteger)
   // grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions
   // (i.e. 11 columns, including the ID property)
   // - since SQLite version 3.24.0 (2018-06-04), R-Tree tables can have
@@ -5540,7 +5541,7 @@ type
   // into a phrase, and the full-text query system finds the set of documents
   // that best matches those terms considering the operators and groupings the
   // user has specified. See http:// sqlite.org/fts3.html
-  // - any record which inherits from this class must have only sftUTF8Text
+  // - any record which inherits from this class must have only oftUTF8Text
   // (RawUTF8) fields - with Delphi 2009+, you can have string fields
   // - this record has its fID: TID property which may be published
   // as DocID, to be consistent with SQLite3 praxis, and reflect that it
@@ -5791,9 +5792,9 @@ type
     // - returns '' if no matching field was found
     function MainFieldName(ReturnFirstIfNoUnique: boolean = false): RawUTF8;
     /// return the SQLite3 field datatype for each specified field
-    // - set to '' for fields with no column created in the database (e.g. sftMany)
+    // - set to '' for fields with no column created in the database (e.g. oftMany)
     // - returns e.g. ' INTEGER, ' or ' TEXT COLLATE SYSTEMNOCASE, '
-    function SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
+    function ORMFieldTypeToSQL(FieldIndex: integer): RawUTF8;
     /// set a custom SQlite3 text column collation for a specified field
     // - can be used e.g. to override the default COLLATE SYSTEMNOCASE of RawUTF8
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
@@ -5845,6 +5846,7 @@ type
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     /// return the UTF-8 encoded SQL statement source to alter the table for
     //  adding the specified field
+    // - returns something like 'ALTER TABLE tablename ADD COLUMN coldef UNIQUE'
     function SQLAddField(FieldIndex: integer): RawUTF8;
 
     /// create a TJSONWriter, ready to be filled with TORM.GetJSONValues
@@ -5983,31 +5985,31 @@ type
     // - match inverted NOT_SIMPLE_FIELDS mask
     property SimpleFields: TORMPropInfoObjArray read fSimpleFields;
     /// list all fields which can be copied from one TORM instance to another
-    // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
+    // - match COPIABLE_FIELDS mask, i.e. all fields except oftMany
     property CopiableFields: TORMPropInfoObjArray read fCopiableFields;
     /// list all TORMMany fields of this TORM
     property ManyFields: TORMPropInfoRTTIManyObjArray read fManyFields;
     /// list all TORM fields of this TORM
     // - ready to be used by TORMTableJSON.CreateFromTables()
-    // - i.e. the class itself then, all fields of type sftID (excluding sftMany)
+    // - i.e. the class itself then, all fields of type oftID (excluding oftMany)
     property JoinedFields: TORMPropInfoRTTIIDObjArray read fJoinedFields;
     /// wrapper of all nested TORM class of this TORM
     // - ready to be used by TORMTableJSON.CreateFromTables()
     // - i.e. the class itself as JoinedFieldsTable[0], then, all nested
-    // TORM published properties (of type sftID, ergo excluding sftMany)
+    // TORM published properties (of type oftID, ergo excluding oftMany)
     // - equals nil if there is no nested TORM property (i.e. JoinedFields=nil)
     property JoinedFieldsTable: TORMClassDynArray read fJoinedFieldsTable;
-    /// list of all sftBlobDynArray fields of this TORM
+    /// list of all oftBlobDynArray fields of this TORM
     property DynArrayFields: TORMPropInfoRTTIDynArrayObjArray read fDynArrayFields;
-    /// TRUE if any of the sftBlobDynArray fields of this TORM is a T*ObjArray
+    /// TRUE if any of the oftBlobDynArray fields of this TORM is a T*ObjArray
     // - used e.g. by TORM.Destroy to release all owned nested instances
     property DynArrayFieldsHasObjArray: boolean read fDynArrayFieldsHasObjArray;
-    /// list of all sftBlobCustom fields of this TORM
+    /// list of all oftBlobCustom fields of this TORM
     // - have been defined e.g. as TORMPropInfoCustom custom definition
     property BlobCustomFields: TORMPropInfoObjArray read fBlobCustomFields;
     /// list all BLOB fields of this TORM
-    // - i.e. generic sftBlob fields (not sftBlobDynArray, sftBlobCustom nor
-    // sftBlobRecord)
+    // - i.e. generic oftBlob fields (not oftBlobDynArray, oftBlobCustom nor
+    // oftBlobRecord)
     property BlobFields: TORMPropInfoRTTIObjArray read fBlobFields;
     /// all TSynFilter or TSynValidate instances registered per each field
     // - since validation and filtering are used within some CPU-consuming
@@ -6020,7 +6022,7 @@ type
     /// for a TORMMany class, points to the Dest property RTTI
     property RecordManyDestProp: TORMPropInfoRTTIInstance read fRecordManyDestProp;
     /// points to any TRecordVersion field
-    // - contains nil if no such sftRecordVersion field do exist
+    // - contains nil if no such oftRecordVersion field do exist
     // - will be used by low-level storage engine to compute and store the
     // monotonic version number during any write operation
     property RecordVersionField: TORMPropInfoRTTIRecordVersion read fRecordVersionField;
@@ -6046,12 +6048,12 @@ type
     /// bit set to 1 for indicating TModTime/TSessionUserID fields
     // of this TORM (leaving TCreateTime untouched)
     // - as applied before an UPDATE
-    // - i.e. sftModTime and sftSessionUserID fields
+    // - i.e. oftModTime and oftSessionUserID fields
     ComputeBeforeUpdateFieldsBits: TFieldBits;
     /// bit set to 1 for indicating TModTime/TCreateTime/TSessionUserID fields
     // of this TORM
     // - as applied before an INSERT
-    // - i.e. sftModTime, sftCreateTime and sftSessionUserID fields
+    // - i.e. oftModTime, oftCreateTime and oftSessionUserID fields
     ComputeBeforeAddFieldsBits: TFieldBits;
     /// bit set to 1 for indicating fields to export, i.e. "simple" fields
     // - this array will handle special cases, like the TCreateTime fields
@@ -6066,13 +6068,13 @@ type
     // in its property definition
     IsUniqueFieldsBits: TFieldBits;
     /// bit set to 1 for the smallest simple fields
-    // - i.e. excluding non only sftBlob and sftMany, but also sftVariant,
-    // sftBlobDynArray, sftBlobCustom and sftUTF8Custom fields
+    // - i.e. excluding non only oftBlob and oftMany, but also oftVariant,
+    // oftBlobDynArray, oftBlobCustom and oftUTF8Custom fields
     // - may be used to minimize the transmitted content, e.g. when serializing
     // to JSON for the most
     SmallFieldsBits: TFieldBits;
     /// bit set to 1 for the all fields storing some data
-    // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
+    // - match COPIABLE_FIELDS mask, i.e. all fields except oftMany
     CopiableFieldsBits: TFieldBits;
     /// contains the main field index (e.g. mostly 'Name')
     // - the [boolean] is for [ReturnFirstIfNoUnique] version
@@ -6168,7 +6170,7 @@ type
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
-  PSQLRecordPropertiesMapping = ^TORMPropertiesMapping;
+  PORMPropertiesMapping = ^TORMPropertiesMapping;
 
   /// allow custom field mapping of a TORM
   // - used e.g. for external database process, including SQL generation,
@@ -6202,10 +6204,10 @@ type
     // fSortedFieldsName[] and fSortedFieldsIndex[] internal sorted arrays
     // - can be used e.g. as
     // ! aModel.Props[TORMMyExternal].ExternalDB.MapField('IntField', 'ExtField');
-    // - since it returns a PSQLRecordPropertiesMapping instance, you can
+    // - since it returns a PORMPropertiesMapping instance, you can
     // chain MapField().MapField().MapField(); calls to map several fields
     function MapField(
-      const InternalName, ExternalName: RawUTF8): PSQLRecordPropertiesMapping;
+      const InternalName, ExternalName: RawUTF8): PORMPropertiesMapping;
     /// call this method to ensure that all fields won't conflict with a SQL
     // keyword for the given database
     // - by default, no check is performed: you can use this method to ensure
@@ -6216,19 +6218,19 @@ type
     // !   MapField('IntField', 'ExtField').
     // !   MapAutoKeywordFields;
     // - will in fact include the rpmAutoMapKeywordFields flag in Options
-    // - since it returns a PSQLRecordPropertiesMapping instance, you can
+    // - since it returns a PORMPropertiesMapping instance, you can
     // chain MapField().MapAutoKeywordFields.MapField(); calls to map several fields
-    function MapAutoKeywordFields: PSQLRecordPropertiesMapping;
+    function MapAutoKeywordFields: PORMPropertiesMapping;
     /// specify some advanced options for the field mapping
     // - see TORMPropertiesMappingOptions for all possibilities
     // - can be used e.g. as
     // ! aModel.Props[TORMMyExternal].ExternalDB.
     // !   MapField('IntField', 'ExtField').
     // !   SetOptions([rpmNoCreateMissingTable, rpmNoCreateMissingField]);
-    // - since it returns a PSQLRecordPropertiesMapping instance, you can
+    // - since it returns a PORMPropertiesMapping instance, you can
     // chain MapField().SetOptions().MapField(); calls to map several fields
     function SetOptions(
-      aOptions: TORMPropertiesMappingOptions): PSQLRecordPropertiesMapping;
+      aOptions: TORMPropertiesMappingOptions): PORMPropertiesMapping;
     /// add several custom field mappings
     // - can be used e.g. as
     // ! aModel.Props[TORMMyExternal].ExternalDB.
@@ -6238,7 +6240,7 @@ type
     // - is slightly faster than several chained MapField() calls, since SQL
     // will be computed only once
     function MapFields(
-      const InternalExternalPairs: array of RawUTF8): PSQLRecordPropertiesMapping;
+      const InternalExternalPairs: array of RawUTF8): PORMPropertiesMapping;
   public
     /// initialize the field mapping for a given TORM
     // - if AutoComputeSQL is true, will pre-compute all needed SQL from the
@@ -6616,7 +6618,7 @@ type
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE: if
     // you want to use the slow but Unicode ready Windows API, set for each model:
-    // ! SetCustomCollationForAll(sftUTF8Text, 'WIN32CASE');
+    // ! SetCustomCollationForAll(oftUTF8Text, 'WIN32CASE');
     // - shall be set on both Client and Server sides, otherwise some issues
     // may occur
     procedure SetCustomCollationForAll(aFieldType: TORMFieldType;
@@ -7418,7 +7420,13 @@ procedure RecordRefToID(var aArray: TInt64DynArray);
 type
   TSQLRawBlob = TRawBlob;
   TSQLRecord = TORM;
+  PSQLRecord = PORM;
+  TSQLRecordArray = TORMArray;
+  PSQLRecordArray = PORMArray;
+  TSQLRecordObjArray = TORMObjArray;
   TSQLRecordClass = TORMClass;
+  TSQLRecordClassDynArray = TORMClassDynArray;
+  PSQLClass = PORMClass;
   TSQLTable = TORMTable;
   TSQLTableJSON = TORMTableJSON;
   TSQLInitializeTableOption = TORMInitializeTableOption;
@@ -7444,6 +7452,37 @@ type
   TSQLOccasions = TORMOccasions;
 
 const
+  // TORMFieldType into TSQLFieldType
+  sftUnknown       = oftUnknown;
+  sftAnsiText      = oftAnsiText;
+  sftUTF8Text      = oftUTF8Text;
+  sftEnumerate     = oftEnumerate;
+  sftSet           = oftSet;
+  sftInteger       = oftInteger;
+  sftID            = oftID;
+  sftRecord        = oftRecord;
+  sftBoolean       = oftBoolean;
+  sftFloat         = oftFloat;
+  sftDateTime      = oftDateTime;
+  sftTimeLog       = oftTimeLog;
+  sftCurrency      = oftCurrency;
+  sftObject        = oftObject;
+  sftVariant       = oftVariant;
+  sftNullable      = oftNullable;
+  sftBlob          = oftBlob;
+  sftBlobDynArray  = oftBlobDynArray;
+  sftBlobCustom    = oftBlobCustom;
+  sftUTF8Custom    = oftUTF8Custom;
+  sftMany          = oftMany;
+  sftModTime       = oftModTime;
+  sftCreateTime    = oftCreateTime;
+  sftTID           = oftTID;
+  sftRecordVersion = oftRecordVersion;
+  sftSessionUserID = oftSessionUserID;
+  sftDateTimeMS    = oftDateTimeMS;
+  sftUnixTime      = oftUnixTime;
+  sftUnixMSTime    = oftUnixMSTime;
+  // TORMEvent/TORMOccasion into TSQLEvent/TSQLOccasion
   seAdd        =  oeAdd;
   seUpdate     =  oeUpdate;
   seDelete     =  oeDelete;
@@ -7463,7 +7502,7 @@ type
   /// root class for defining and mapping database records with case-insensitive
   // NOCASE collation
   // - abstract ancestor, from which you may inherit your own ORM classes
-  // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
+  // - by default, any oftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
   // UTF8ILComp() to handle most western languages, but is not standard
   // - you may inherit from this class to ensure any text field will use the
@@ -7474,14 +7513,14 @@ type
   // SynSQLite3.pas/SynDBExplorer)
   TORMNoCase = class(TORM)
   protected
-    /// will call Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE')
+    /// will call Props.SetCustomCollationForAll(oftUTF8Text,'NOCASE')
     class procedure InternalDefineModel(Props: TORMProperties); override;
   end;
 
   /// root class for defining and mapping database records with case-sensitive
   // BINARY collation
   // - abstract ancestor, from which you may inherit your own ORM classes
-  // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
+  // - by default, any oftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
   // UTF8ILComp() to handle most western languages, but is not standard
   // - you may inherit from this class to ensure any text field will use the
@@ -7492,7 +7531,7 @@ type
   // SynSQLite3.pas/SynDBExplorer)
   TORMCaseSensitive = class(TORM)
   protected
-    /// will call Props.SetCustomCollationForAll(sftUTF8Text,'BINARY')
+    /// will call Props.SetCustomCollationForAll(oftUTF8Text,'BINARY')
     class procedure InternalDefineModel(Props: TORMProperties); override;
   end;
 
@@ -7548,59 +7587,59 @@ begin
   result := GetEnumName(TypeInfo(TORMOccasion), ord(o));
 end;
 
-function GeTORMFieldType(Info: PRttiInfo): TORMFieldType;
+function GetORMFieldType(Info: PRttiInfo): TORMFieldType;
 begin // very fast, thanks to the TypeInfo() compiler-generated function
   case Info^.Kind of
     rkInteger:
       begin
-        result := sftInteger; // works also for otSQWord,otUQWord
+        result := oftInteger; // works also for otSQWord,otUQWord
         exit; // direct exit is faster in generated asm code
       end;
     rkInt64:
       if (Info = TypeInfo(TRecordReference)) or
          (Info = TypeInfo(TRecordReferenceToBeDeleted)) then
       begin
-        result := sftRecord;
+        result := oftRecord;
         exit;
       end
       else if Info = TypeInfo(TCreateTime) then
       begin
-        result := sftCreateTime;
+        result := oftCreateTime;
         exit;
       end
       else if Info = TypeInfo(TModTime) then
       begin
-        result := sftModTime;
+        result := oftModTime;
         exit;
       end
       else if Info = TypeInfo(TTimeLog) then
       begin
-        result := sftTimeLog;
+        result := oftTimeLog;
         exit;
       end
       else if Info = TypeInfo(TUnixTime) then
       begin
-        result := sftUnixTime;
+        result := oftUnixTime;
         exit;
       end
       else if Info = TypeInfo(TUnixMSTime) then
       begin
-        result := sftUnixMSTime;
+        result := oftUnixMSTime;
         exit;
       end
       else if Info = TypeInfo(TID) then
       begin
-        result := sftTID;
+        result := oftTID;
         exit;
       end
       else if Info = TypeInfo(TSessionUserID) then
       begin
-        result := sftSessionUserID;
+        result := oftSessionUserID;
         exit;
       end
       else if Info = TypeInfo(TRecordVersion) then
       begin
-        result := sftRecordVersion;
+        result := oftRecordVersion;
         exit;
       end
       else if (ord(Info^.RawName[1]) and $df = ord('T')) and
@@ -7608,61 +7647,61 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf =
          ord('I') + ord('D') shl 8) then
       begin
-        result := sftTID;
+        result := oftTID;
         exit;
       end
       else
       begin
-        result := sftInteger;
+        result := oftInteger;
         exit;
       end;
     {$ifdef FPC}
     rkBool:
       begin
-        result := sftBoolean;
+        result := oftBoolean;
         exit;
       end;
     rkQWord:
       begin
-        result := sftInteger;
+        result := oftInteger;
         exit;
       end;
     {$endif FPC}
     rkSet:
       begin
-        result := sftSet;
+        result := oftSet;
         exit;
       end;
     rkEnumeration:
       if Info.IsBoolean then
       begin // also circumvent a Delphi RTTI bug
-        result := sftBoolean;
+        result := oftBoolean;
         exit;
       end
       else
       begin
-        result := sftEnumerate;
+        result := oftEnumerate;
         exit;
       end;
     rkFloat:
       if Info.IsCurrency then
       begin
-        result := sftCurrency;
+        result := oftCurrency;
         exit;
       end
       else if Info = TypeInfo(TDateTime) then
       begin
-        result := sftDateTime;
+        result := oftDateTime;
         exit;
       end
       else if Info = TypeInfo(TDateTimeMS) then
       begin
-        result := sftDateTimeMS;
+        result := oftDateTimeMS;
         exit;
       end
       else
       begin
-        result := sftFloat;
+        result := oftFloat;
         exit;
       end;
     rkLString:
@@ -7670,50 +7709,50 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       if (Info = TypeInfo(TRawBlob)) or
          (Info = TypeInfo(RawByteString)) then
       begin
-        result := sftBlob;
+        result := oftBlob;
         exit;
       end
       else if Info = TypeInfo(WinAnsiString) then
       begin
-        result := sftAnsiText;
+        result := oftAnsiText;
         exit;
       end
       else
       begin
-        result := sftUTF8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
+        result := oftUTF8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
         exit;
       end;
     {$ifdef HASVARUSTRING} rkUString, {$endif} rkChar, rkWChar, rkWString:
       begin
-        result := sftUTF8Text;
+        result := oftUTF8Text;
         exit;
       end;
     rkDynArray:
       begin
-        result := sftBlobDynArray;
+        result := oftBlobDynArray;
         exit;
       end;
     {$ifdef PUBLISHRECORD}
     rkRecord {$ifdef FPC}, rkObject{$endif}:
       begin
-        result := sftUTF8Custom;
+        result := oftUTF8Custom;
         exit;
       end;
     {$endif PUBLISHRECORD}
     rkVariant:
-      begin // this function does not need to handle sftNullable
-        result := sftVariant;
+      begin // this function does not need to handle oftNullable
+        result := oftVariant;
         exit;
       end;
     rkClass:
       begin
-        result := ClassSQLFieldType(Info);
+        result := ClassORMFieldType(Info);
         exit;
       end;
     // note: tkString (shortstring) and tkInterface not handled
   else
     begin
-      result := sftUnknown;
+      result := oftUnknown;
       exit;
     end;
   end;
@@ -7921,17 +7960,17 @@ begin
   if (P = nil) or
      ((PInteger(P)^ = ord('n') + ord('u') shl 8 + ord('l') shl 16 +
        ord('l') shl 24) and (P[4] = #0)) then
-    result := sftUnknown
+    result := oftUnknown
   else
     case TextToVariantNumberType(P) of
       varInt64:
-        result := sftInteger;
+        result := oftInteger;
       varDouble:
-        result := sftFloat;
+        result := oftFloat;
       varCurrency:
-        result := sftCurrency;
+        result := oftCurrency;
     else
-      result := sftUTF8Text;
+      result := oftUTF8Text;
     end;
 end;
 
@@ -7945,39 +7984,39 @@ begin
           (P^ <> #0) do
       inc(P);
     if (PInteger(P)^ = NULL_LOW) and (P[4] = #0) then
-      result := sftUnknown
+      result := oftUnknown
     else
     // don't check for 'false' or 'true' here, since their UTF-8 value is 0/1
     if P^ in ['-', '0'..'9'] then
       case TextToVariantNumberType(P) of
         varInt64:
-          result := sftInteger;
+          result := oftInteger;
         varDouble:
-          result := sftFloat;
+          result := oftFloat;
         varCurrency:
-          result := sftCurrency;
+          result := oftCurrency;
       else
         begin
           len := StrLen(P);
           if (len > 15) and (Iso8601ToTimeLogPUTF8Char(P, len) <> 0) then
-            result := sftDateTime
+            result := oftDateTime
           else
-            result := sftUTF8Text;
+            result := oftUTF8Text;
         end;
       end
     else
     begin
       c := PInteger(P)^ and $00ffffff;
       if (c = JSON_BASE64_MAGIC) or ((P^ = '''') and isBlobHex(P)) then
-        result := sftBlob
+        result := oftBlob
       else if c = JSON_SQLDATE_MAGIC then
-        result := sftDateTime
+        result := oftDateTime
       else
-        result := sftUTF8Text;
+        result := oftUTF8Text;
     end;
   end
   else
-    result := sftUnknown;
+    result := oftUnknown;
 end;
 
 function UTF8CompareCurr64(P1, P2: PUTF8Char): PtrInt;
@@ -8929,9 +8968,9 @@ end;
 
 { TJSONSerializer }
 
-procedure TJSONSerializer.SeTORMOptions(Value: TJSONSerializerSQLRecordOptions);
+procedure TJSONSerializer.SetORMOptions(Value: TJSONSerializerORMOptions);
 begin
-  fSQLRecordOptions := Value;
+  fORMOptions := Value;
   if Value * [jwoAsJsonNotAsString, jwoID_str] <> [] then
     if (ColNames <> nil) and (ColNames[0] = '"RowID":') then
       ColNames[0] := '"ID":'; // as expected by AJAX
@@ -8946,12 +8985,12 @@ end;
 const
   NULL_SHORTSTRING: string[1] = '';
 
-function TORMPropInfo.GeTORMFieldTypeName: PShortString;
+function TORMPropInfo.GetORMFieldTypeName: PShortString;
 begin
   if self = nil then
     result := @NULL_SHORTSTRING
   else
-    result := ToText(fSQLFieldType);
+    result := ToText(fORMFieldType);
 end;
 
 function TORMPropInfo.GetSQLFieldRTTITypeName: RawUTF8;
@@ -8993,7 +9032,7 @@ begin
   end;
 end;
 
-function NullableTypeToSQLFieldType(aType: PRttiInfo): TORMFieldType;
+function NullableTypeToORMFieldType(aType: PRttiInfo): TORMFieldType;
 begin
   if aType <> nil then
     if aType <> TypeInfo(TNullableInteger) then
@@ -9004,69 +9043,69 @@ begin
               if aType <> TypeInfo(TNullableDateTime) then
                 if aType <> TypeInfo(TNullableTimeLog) then
                 begin
-                  result := sftUnknown;
+                  result := oftUnknown;
                   exit;
                 end
                 else
-                  result := sftTimeLog
+                  result := oftTimeLog
               else
-                result := sftDateTime
+                result := oftDateTime
             else
-              result := sftCurrency
+              result := oftCurrency
           else
-            result := sftFloat
+            result := oftFloat
         else
-          result := sftBoolean
+          result := oftBoolean
       else
-        result := sftUTF8Text
+        result := oftUTF8Text
     else
-      result := sftInteger
+      result := oftInteger
   else
-    result := sftUnknown;
+    result := oftUnknown;
 end;
 
 const
   SQLFIELDTYPETODBFIELDTYPE: array[TORMFieldType] of TSQLDBFieldType = (
-    ftUnknown,   // sftUnknown
-    ftUTF8,      // sftAnsiText
-    ftUTF8,      // sftUTF8Text
-    ftInt64,     // sftEnumerate
-    ftInt64,     // sftSet
-    ftInt64,     // sftInteger
-    ftInt64,     // sftID = TORM(aID)
-    ftInt64,     // sftRecord = TRecordReference = RecordRef
-    ftInt64,     // sftBoolean
-    ftDouble,    // sftFloat
-    ftDate,      // sftDateTime
-    ftInt64,     // sftTimeLog
-    ftCurrency,  // sftCurrency
-    ftUTF8,      // sftObject
-    ftUTF8,      // sftVariant
-    ftNull,      // sftNullable
-    ftBlob,      // sftBlob
-    ftBlob,      // sftBlobDynArray
-    ftBlob,      // sftBlobCustom
-    ftUTF8,      // sftUTF8Custom
-    ftUnknown,   // sftMany
-    ftInt64,     // sftModTime
-    ftInt64,     // sftCreateTime
-    ftInt64,     // sftTID
-    ftInt64,     // sftRecordVersion = TRecordVersion
-    ftInt64,     // sftSessionUserID
-    ftDate,      // sftDateTimeMS
-    ftInt64,     // sftUnixTime = TUnixTime
-    ftInt64);    // sftUnixMSTime = TUnixMSTime
+    ftUnknown,   // oftUnknown
+    ftUTF8,      // oftAnsiText
+    ftUTF8,      // oftUTF8Text
+    ftInt64,     // oftEnumerate
+    ftInt64,     // oftSet
+    ftInt64,     // oftInteger
+    ftInt64,     // oftID = TORM(aID)
+    ftInt64,     // oftRecord = TRecordReference = RecordRef
+    ftInt64,     // oftBoolean
+    ftDouble,    // oftFloat
+    ftDate,      // oftDateTime
+    ftInt64,     // oftTimeLog
+    ftCurrency,  // oftCurrency
+    ftUTF8,      // oftObject
+    ftUTF8,      // oftVariant
+    ftNull,      // oftNullable
+    ftBlob,      // oftBlob
+    ftBlob,      // oftBlobDynArray
+    ftBlob,      // oftBlobCustom
+    ftUTF8,      // oftUTF8Custom
+    ftUnknown,   // oftMany
+    ftInt64,     // oftModTime
+    ftInt64,     // oftCreateTime
+    ftInt64,     // oftTID
+    ftInt64,     // oftRecordVersion = TRecordVersion
+    ftInt64,     // oftSessionUserID
+    ftDate,      // oftDateTimeMS
+    ftInt64,     // oftUnixTime = TUnixTime
+    ftInt64);    // oftUnixMSTime = TUnixMSTime
 
-function SQLFieldTypeToDBField(aSQLFieldType: TORMFieldType;
+function ORMFieldTypeToDBField(aORMFieldType: TORMFieldType;
   aTypeInfo: PRttiInfo): TSQLDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  if aSQLFieldType = sftNullable then
-    aSQLFieldType := NullableTypeToSQLFieldType(aTypeInfo);
-  result := SQLFIELDTYPETODBFIELDTYPE[aSQLFieldType];
+  if aORMFieldType = oftNullable then
+    aORMFieldType := NullableTypeToORMFieldType(aTypeInfo);
+  result := SQLFIELDTYPETODBFIELDTYPE[aORMFieldType];
 end;
 
-constructor TORMPropInfo.Create(const aName: RawUTF8; aSQLFieldType:
+constructor TORMPropInfo.Create(const aName: RawUTF8; aORMFieldType:
   TORMFieldType; aAttributes: TORMPropInfoAttributes;
   aFieldWidth, aPropertyIndex: integer);
 begin
@@ -9078,9 +9117,9 @@ begin
   else
     fName := aName;
   fNameUnflattened := fName;
-  fSQLFieldType := aSQLFieldType;
-  fSQLFieldTypeStored := aSQLFieldType;
-  fSQLDBFieldType := SQLFIELDTYPETODBFIELDTYPE[fSQLFieldTypeStored];
+  fORMFieldType := aORMFieldType;
+  fORMFieldTypeStored := aORMFieldType;
+  fSQLDBFieldType := SQLFIELDTYPETODBFIELDTYPE[fORMFieldTypeStored];
   fAttributes := aAttributes;
   fFieldWidth := aFieldWidth;
   fPropertyIndex := aPropertyIndex;
@@ -9205,24 +9244,24 @@ const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
   SQL_ELEMENTTYPES: array[TORMFieldType] of word = (
- // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
+ // oftUnknown, oftAnsiText, oftUTF8Text, oftEnumerate, oftSet,   oftInteger,
     varEmpty, varString, varString, varInteger, varInt64, varInt64,
- // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime,
+ // oftID, oftRecord, oftBoolean, oftFloat, oftDateTime,
     varInt64, varInt64, varBoolean, varDouble, varDate,
- //  sftTimeLog, sftCurrency,  sftObject,
+ //  oftTimeLog, oftCurrency,  oftObject,
     varInt64, varCurrency, varNull,
- // sftVariant, sftNullable, sftBlob, sftBlobDynArray,
+ // oftVariant, oftNullable, oftBlob, oftBlobDynArray,
     varNull, varNull, varString, varNull,
- // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
+ // oftBlobCustom, oftUTF8Custom, oftMany, oftModTime, oftCreateTime, oftTID,
     varString, varString, varEmpty, varInt64, varInt64, varInt64,
- // sftRecordVersion, sftSessionUserID, sftDateTimeMS, sftUnixTime, sftUnixMSTime
+ // oftRecordVersion, oftSessionUserID, oftDateTimeMS, oftUnixTime, oftUnixMSTime
     varInt64, varInt64, varDate, varInt64, varInt64);
 
   procedure Complex;
   var
     tmp: TSynTempBuffer;
   begin
-    if (fieldType = sftBlobDynArray) and (typeInfo <> nil) and (Value <> nil) and
+    if (fieldType = oftBlobDynArray) and (typeInfo <> nil) and (Value <> nil) and
        (Value^ <> '[') and Base64MagicCheckAndDecode(Value, tmp) then
       Value := pointer(DynArrayBlobSaveJSON(typeInfo, tmp.buf))
     else if createValueTempCopy then
@@ -9240,9 +9279,9 @@ begin
   result.VType := SQL_ELEMENTTYPES[fieldType];
   result.VAny := nil; // avoid GPF
   case fieldType of
-    sftCurrency:
+    oftCurrency:
       result.VInt64 := StrToCurr64(Value);
-    sftFloat:
+    oftFloat:
       begin
         result.VDouble := GetExtended(Value, err);
         if err <> 0 then
@@ -9251,21 +9290,21 @@ begin
           FastSetString(RawUTF8(result.VAny), Value, ValueLen);
         end;
       end;
-    sftDateTime, sftDateTimeMS:
+    oftDateTime, oftDateTimeMS:
       Iso8601ToDateTimePUTF8CharVar(Value, 0, result.VDate);
-    sftBoolean:
+    oftBoolean:
       result.VBoolean := not ((Value = nil) or (PWord(Value)^ = ord('0')) or
         (PInteger(Value)^ = FALSE_LOW));
-    sftEnumerate:
+    oftEnumerate:
       result.VInteger := GetInteger(Value);
-    sftInteger, sftID, sftTID, sftRecord, sftSet, sftRecordVersion, sftSessionUserID,
-    sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
+    oftInteger, oftID, oftTID, oftRecord, oftSet, oftRecordVersion, oftSessionUserID,
+    oftTimeLog, oftModTime, oftCreateTime, oftUnixTime, oftUnixMSTime:
       SetInt64(Value, result.VInt64);
-    sftAnsiText, sftUTF8Text:
+    oftAnsiText, oftUTF8Text:
       FastSetString(RawUTF8(result.VAny), Value, ValueLen);
-    sftBlobCustom, sftBlob:
+    oftBlobCustom, oftBlob:
       BlobToTRawBlob(Value, TRawBlob(result.VAny));
-    sftVariant, sftNullable, sftBlobDynArray, sftObject, sftUTF8Custom:
+    oftVariant, oftNullable, oftBlobDynArray, oftObject, oftUTF8Custom:
       Complex;
   end;
 end;
@@ -9275,7 +9314,7 @@ var
   temp: RawUTF8;
 begin
   GetValueVar(Instance, true, temp, nil);
-  ValueVarToVariant(pointer(temp), Length(temp), fSQLFieldTypeStored,
+  ValueVarToVariant(pointer(temp), Length(temp), fORMFieldTypeStored,
     TVarData(Dest), false, nil);
 end;
 
@@ -9316,7 +9355,8 @@ procedure TORMPropInfo.CopyProp(Source: TObject; DestInfo: TORMPropInfo; Dest: T
     val: variant;
   begin
     // force JSON serialization, e.g. for dynamic arrays
-    if (DestInfo.SQLFieldType = sftVariant) or (SQLfieldType = sftVariant) then
+    if (DestInfo.ORMFieldType = oftVariant) or
+       (ORMFieldType = oftVariant) then
     begin
       GetVariant(Source, val);
       DestInfo.SetVariant(Dest, val);
@@ -9364,21 +9404,21 @@ end;
 { TORMPropInfoRTTI }
 
 var
-  SQLPropInfoRegistration: TSynDictionary = nil;
+  ORMPropInfoRegistration: TSynDictionary = nil;
 
 class procedure TORMPropInfoRTTI.RegisterTypeInfo(aTypeInfo: PRttiInfo);
 begin
-  if SQLPropInfoRegistration = nil then
-    SQLPropInfoRegistration := TSynDictionary.Create(
+  if ORMPropInfoRegistration = nil then
+    ORMPropInfoRegistration := TSynDictionary.Create(
       TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray));
-  SQLPropInfoRegistration.AddOrUpdate(aTypeInfo, self);
+  ORMPropInfoRegistration.AddOrUpdate(aTypeInfo, self);
 end;
 
 class function TORMPropInfoRTTI.CreateFrom(aPropInfo: PRttiProp;
   aPropIndex: integer; aOptions: TORMPropInfoListOptions;
   const aFlattenedProps: PRttiPropDynArray): TORMPropInfo;
 var
-  aSQLFieldType: TORMFieldType;
+  aORMFieldType: TORMFieldType;
   aType: PRttiInfo;
   C: TORMPropInfoRTTIClass;
 
@@ -9408,61 +9448,61 @@ begin
   if aPropInfo = nil then
     raise EModelException.CreateUTF8('Invalid %.CreateFrom(nil) call', [self]);
   result := nil;
-  aSQLFieldType := sftUnknown;
+  aORMFieldType := oftUnknown;
   aType := aPropInfo^.typeInfo;
   if aType^.Kind = rkVariant then
   begin
-    aSQLFieldType := NullableTypeToSQLFieldType(aType);
-    if aSQLFieldType <> sftUnknown then // handle sftNullable type
+    aORMFieldType := NullableTypeToORMFieldType(aType);
+    if aORMFieldType <> oftUnknown then // handle oftNullable type
       result := TORMPropInfoRTTIVariant.Create(aPropInfo, aPropIndex,
-        aSQLFieldType, aOptions);
+        aORMFieldType, aOptions);
   end;
   if result = nil then
   begin
-    aSQLFieldType := GeTORMFieldType(aType);
+    aORMFieldType := GetORMFieldType(aType);
     C := nil;
-    if (SQLPropInfoRegistration = nil) or
-       not SQLPropInfoRegistration.FindAndCopy(aType, C) then
-      case aSQLFieldType of
-        sftUnknown, sftBlobCustom:
+    if (ORMPropInfoRegistration = nil) or
+       not ORMPropInfoRegistration.FindAndCopy(aType, C) then
+      case aORMFieldType of
+        oftUnknown, oftBlobCustom:
           ; // will raise an EORMException
-        sftBoolean, sftEnumerate:
+        oftBoolean, oftEnumerate:
           C := TORMPropInfoRTTIEnum;
-        sftTimeLog, sftModTime, sftCreateTime:
+        oftTimeLog, oftModTime, oftCreateTime:
           // specific class for further use
           C := TORMPropInfoRTTITimeLog;
-        sftUnixTime:
+        oftUnixTime:
           // specific class for further use
           C := TORMPropInfoRTTIUnixTime;
-        sftUnixMSTime:
+        oftUnixMSTime:
           C := TORMPropInfoRTTIUnixMSTime;
-        sftCurrency:
+        oftCurrency:
           C := TORMPropInfoRTTICurrency;
-        sftDateTime, sftDateTimeMS:
+        oftDateTime, oftDateTimeMS:
           C := TORMPropInfoRTTIDateTime;
-        sftID: // = TORM(aID)
+        oftID: // = TORM(aID)
           C := TORMPropInfoRTTIID;
-        sftTID:
+        oftTID:
           // = TID or T*ID
           C := TORMPropInfoRTTITID;
-        sftSessionUserID:
+        oftSessionUserID:
           C := TORMPropInfoRTTIInt64;
-        sftRecord:
+        oftRecord:
           // = TRecordReference/TRecordReferenceToBeDeleted
           C := TORMPropInfoRTTIRecordReference;
-        sftRecordVersion:
+        oftRecordVersion:
           C := TORMPropInfoRTTIRecordVersion;
-        sftMany:
+        oftMany:
           C := TORMPropInfoRTTIMany;
-        sftObject:
+        oftObject:
           C := TORMPropInfoRTTIObject;
-        sftVariant:
-          C := TORMPropInfoRTTIVariant;  // sftNullable already handle above
-        sftBlob:
+        oftVariant:
+          C := TORMPropInfoRTTIVariant;  // oftNullable already handle above
+        oftBlob:
           C := TORMPropInfoRTTIRawBlob;
-        sftBlobDynArray:
+        oftBlobDynArray:
           C := TORMPropInfoRTTIDynArray;
-        sftUTF8Custom:
+        oftUTF8Custom:
           // will happen only for DELPHI XE5 and up
           result := TORMPropInfoCustomJSON.Create(aPropInfo, aPropIndex);
       else
@@ -9496,7 +9536,7 @@ begin
         end;
       end;
     if C <> nil then
-      result := C.Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+      result := C.Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   end;
   if result <> nil then
   begin
@@ -9505,7 +9545,7 @@ begin
   end
   else if pilRaiseEORMExceptionIfNotHandled in aOptions then
     raise EModelException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
-      [self, ToText(aSQLFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name]);
+      [self, ToText(aORMFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name]);
 end;
 
 function TORMPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
@@ -9535,12 +9575,12 @@ var
   temp: RawUTF8;
 begin
   GetValueVar(Instance, true, temp, nil);
-  ValueVarToVariant(pointer(temp), length(temp), fSQLFieldTypeStored,
+  ValueVarToVariant(pointer(temp), length(temp), fORMFieldTypeStored,
     TVarData(Dest), false, fPropInfo^.TypeInfo);
 end;
 
 constructor TORMPropInfoRTTI.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 var
   attrib: TORMPropInfoAttributes;
 begin
@@ -9549,7 +9589,7 @@ begin
     Include(attrib, aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;
   if (pilAuxiliaryFields in aOptions) and (aPropInfo^.Name^[1] = '_') then
     Include(attrib, aAuxiliaryRTreeField);
-  inherited Create(ToUTF8(aPropInfo^.Name^), aSQLFieldType, attrib, aPropInfo^.Index,
+  inherited Create(ToUTF8(aPropInfo^.Name^), aORMFieldType, attrib, aPropInfo^.Index,
     aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.typeInfo;
@@ -9572,9 +9612,9 @@ end;
 { TORMPropInfoRTTIInt32 }
 
 constructor TORMPropInfoRTTIInt32.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   fUnsigned := fPropType^.RttiOrd in [roUByte, roUWord, roULong];
 end;
 
@@ -9705,9 +9745,9 @@ end;
 { TORMPropInfoRTTISet }
 
 constructor TORMPropInfoRTTISet.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   fSetEnumType := fPropType^.SetEnumType;
 end;
 
@@ -9715,9 +9755,9 @@ end;
 { TORMPropInfoRTTIEnum }
 
 constructor TORMPropInfoRTTIEnum.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   fEnumType := fPropType^.EnumBaseType;
 end;
 
@@ -9726,7 +9766,7 @@ var
   i: PtrInt;
 begin
   i := fPropInfo.GetOrdProp(Instance);
-  if fSQLFieldType = sftBoolean then
+  if fORMFieldType = oftBoolean then
     W.Add(i <> 0)
   else
     W.Add(i);
@@ -9750,7 +9790,7 @@ begin
   if wasSQLString <> nil then
     wasSQLString^ := false;
   i := fPropInfo.GetOrdProp(Instance);
-  if (fSQLFieldType = sftBoolean) and not ToSQL then
+  if (fORMFieldType = oftBoolean) and not ToSQL then
     result := BOOL_UTF8[i <> 0]
   else
     UInt32ToUtf8(i, result);
@@ -9763,11 +9803,11 @@ begin
   i := GetInteger(pointer(Value), err);
   if err <> 0 then
     // we allow a value stated as text
-    if fSQLFieldType = sftBoolean then
+    if fORMFieldType = oftBoolean then
       i := Ord(IdemPropNameU(Value, 'TRUE') or IdemPropNameU(Value, 'YES'))
     else
       i := fEnumType^.GetEnumNameValue(pointer(Value), length(Value))
-  else if fSQLFieldType = sftBoolean then // normalize boolean values range to 0,1
+  else if fORMFieldType = oftBoolean then // normalize boolean values range to 0,1
     if i <> 0 then
       i := 1;
   if cardinal(i) > cardinal(fEnumType^.MaxValue) then
@@ -9789,7 +9829,7 @@ begin
     i := GetInteger(Value, err);
     if err <> 0 then
     begin // we allow a value stated as text
-      if fSQLFieldType = sftBoolean then
+      if fORMFieldType = oftBoolean then
       begin
         len := StrLen(Value);
         i := ord(IdemPropName('TRUE', Value, len) or IdemPropName('YES', Value, len));
@@ -9799,7 +9839,7 @@ begin
       if cardinal(i) > cardinal(fEnumType^.MaxValue) then
         i := 0;  // only set a valid text value
     end
-    else if fSQLFieldType = sftBoolean then // normalize boolean values range to 0,1
+    else if fORMFieldType = oftBoolean then // normalize boolean values range to 0,1
       if i <> 0 then
         i := 1;
   end;
@@ -9850,9 +9890,9 @@ end;
 { TORMPropInfoRTTIInt64 }
 
 constructor TORMPropInfoRTTIInt64.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   fIsQWord := fPropType^.IsQword;
 end;
 
@@ -10280,7 +10320,7 @@ end;
 procedure TORMPropInfoRTTIDateTime.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
   W.Add('"');
-  W.AddDateTime(fPropInfo.GetDoubleProp(Instance), fSQLFieldType = sftDateTimeMS);
+  W.AddDateTime(fPropInfo.GetDoubleProp(Instance), fORMFieldType = oftDateTimeMS);
   W.Add('"');
 end;
 
@@ -10301,7 +10341,7 @@ begin
   begin
     V1 := fPropInfo.GetDoubleProp(Item1);
     V2 := fPropInfo.GetDoubleProp(Item2);
-    if mormot.core.base.SameValue(V1, V2, PRECISION[fSQLFieldType = sftDateTimeMS]) then
+    if mormot.core.base.SameValue(V1, V2, PRECISION[fORMFieldType = oftDateTimeMS]) then
       result := 0
     else if V1 > V2 then
       result := 1
@@ -10316,13 +10356,13 @@ begin
   if wasSQLString <> nil then
     wasSQLString^ := true;
   DateTimeToIso8601TextVar(fPropInfo.GetDoubleProp(Instance), 'T', result,
-    fSQLFieldType = sftDateTimeMS);
+    fORMFieldType = oftDateTimeMS);
 end;
 
 procedure TORMPropInfoRTTIDateTime.NormalizeValue(var Value: RawUTF8);
 begin
   DateTimeToIso8601TextVar(Iso8601ToDateTime(Value), 'T', Value,
-    {withms=}fSQLFieldType = sftDateTimeMS);
+    {withms=}fORMFieldType = oftDateTimeMS);
 end;
 
 procedure TORMPropInfoRTTIDateTime.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -10337,7 +10377,7 @@ end;
 procedure TORMPropInfoRTTIDateTime.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
-  if fSQLFieldType = sftDateTimeMS then
+  if fORMFieldType = oftDateTimeMS then
     aValue.Options := [svoDateWithMS]
   else
     aValue.Options := [];
@@ -10374,9 +10414,9 @@ end;
 { TORMPropInfoRTTIInstance }
 
 constructor TORMPropInfoRTTIInstance.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   fObjectClass := fPropType^.RttiClass^.RttiClass;
 end;
 
@@ -10394,9 +10434,9 @@ end;
 { TORMPropInfoRTTIRecordReference }
 
 constructor TORMPropInfoRTTIRecordReference.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   fCascadeDelete := IdemPropName(fPropType^.Name^, 'TRecordReferenceToBeDeleted')
 end;
 
@@ -10404,12 +10444,12 @@ end;
 { TORMPropInfoRTTITID }
 
 constructor TORMPropInfoRTTITID.Create(aPropInfo: PRttiProp; aPropIndex: integer;
-  aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 var
   TypeName: PShortString;
   Found: TRttiCustom;
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   TypeName := fPropType^.Name;
   if IdemPropName(TypeName^, 'TID') or
      (ord(TypeName^[1]) and $df <> ord('T')) or // expect T...ID pattern
@@ -10537,7 +10577,7 @@ end;
 
 procedure TORMPropInfoRTTIObject.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  if jwoAsJsonNotAsString in W.fSQLRecordOptions then
+  if jwoAsJsonNotAsString in W.fORMOptions then
     W.WriteObject(GetInstance(Instance))
   else
     W.WriteObjectAsString(GetInstance(Instance));
@@ -10547,7 +10587,7 @@ end;
 { TORMPropInfoRTTIAnsi }
 
 constructor TORMPropInfoRTTIAnsi.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited;
   fEngine := TSynAnsiConvert.Engine(aPropInfo^.typeInfo^.AnsiStringCodePage);
@@ -11304,9 +11344,9 @@ end;
 { TORMPropInfoRTTIDynArray }
 
 constructor TORMPropInfoRTTIDynArray.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
-  inherited Create(aPropInfo, aPropIndex, aSQLFieldType, aOptions);
+  inherited Create(aPropInfo, aPropIndex, aORMFieldType, aOptions);
   if rcfObjArray in fPropRtti.Flags then
   begin
     fObjArray := fPropRtti.ArrayRtti as TRttiJson;
@@ -11513,7 +11553,7 @@ procedure TORMPropInfoRTTIDynArray.GetJSONValues(Instance: TObject; W: TJSONSeri
 var
   tmp: RawByteString;
 begin
-  if jwoAsJsonNotAsString in W.fSQLRecordOptions then
+  if jwoAsJsonNotAsString in W.fORMOptions then
     W.AddDynArrayJSON(GetFieldAddr(Instance), fPropRtti)
   else if fObjArray <> nil then
     W.AddDynArrayJSONAsString(fPropType, GetFieldAddr(Instance)^)
@@ -11548,13 +11588,13 @@ end;
 { TORMPropInfoRTTIVariant }
 
 constructor TORMPropInfoRTTIVariant.Create(aPropInfo: PRttiProp;
-  aPropIndex: integer; aSQLFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
+  aPropIndex: integer; aORMFieldType: TORMFieldType; aOptions: TORMPropInfoListOptions);
 begin
   inherited;
-  if aSQLFieldType = sftVariant then
+  if aORMFieldType = oftVariant then
     fDocVariantOptions := JSON_OPTIONS_FAST
   else
-    fSQLFieldType := sftNullable; // TNullable* will use fSQLFieldTypeStored
+    fORMFieldType := oftNullable; // TNullable* will use fORMFieldTypeStored
 end;
 
 procedure TORMPropInfoRTTIVariant.CopySameClassProp(Source: TObject;
@@ -11590,9 +11630,9 @@ var
 begin
   fPropInfo.GetVariantProp(Instance, value, {byref=}true);
   backup := W.CustomOptions;
-  if jwoAsJsonNotAsString in W.fSQLRecordOptions then
+  if jwoAsJsonNotAsString in W.fORMOptions then
     W.CustomOptions := backup + [twoForceJSONStandard] - [twoForceJSONExtended];
-  W.AddVariant(value, twJSONEscape); // even sftNullable should escape strings
+  W.AddVariant(value, twJSONEscape); // even oftNullable should escape strings
   W.CustomOptions := backup;
 end;
 
@@ -11605,7 +11645,7 @@ begin
   fPropInfo.GetVariantProp(Instance, value, {byref=}true);
   VariantToUTF8(value, result, wasString);
   if wasSQLString <> nil then
-    if fSQLFieldType = sftNullable then
+    if fORMFieldType = oftNullable then
       // only TNullableUTF8Text and TNullableDateTime will be actual text
       wasSQLString^ := (fSQLDBFieldType in TEXT_DBFIELDS) and not VarIsEmptyOrNull(value)
     else
@@ -11655,7 +11695,7 @@ var
   value: Variant;
   opt: PDocVariantOptions;
 begin
-  if fSQLFieldType = sftNullable then
+  if fORMFieldType = oftNullable then
     opt := nil
   else
     opt := @DocVariantOptions;
@@ -11686,7 +11726,7 @@ begin
   begin
     tmp.Init(Value, ValueLen);
     try
-      if fSQLFieldType = sftNullable then
+      if fORMFieldType = oftNullable then
         if fSQLDBFieldType = ftDate then
         begin // decode as date/time variant
           TVarData(V).VType := varDate;
@@ -11729,11 +11769,11 @@ begin
 end;
 
 constructor TORMPropInfoCustom.Create(const aName: RawUTF8;
-  aSQLFieldType: TORMFieldType; aAttributes: TORMPropInfoAttributes;
+  aORMFieldType: TORMFieldType; aAttributes: TORMPropInfoAttributes;
   aFieldWidth, aPropIndex: integer; aProperty: pointer;
   aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
-  inherited Create(aName, aSQLFieldType, aAttributes, aFieldWidth, aPropIndex);
+  inherited Create(aName, aORMFieldType, aAttributes, aFieldWidth, aPropIndex);
   fOffset := PtrUInt(aProperty);
   if (Assigned(aData2Text) and not Assigned(aText2Data)) or
      (Assigned(aText2Data) and not Assigned(aData2Text)) then
@@ -11789,7 +11829,7 @@ begin
   if (aRecordInfo = nil) or not (aRecordInfo^.Kind in rkRecordTypes) then
     raise EModelException.CreateUTF8(
       '%.Create: Invalid type information for %', [self, aName]);
-  inherited Create(aName, sftBlobCustom, aAttributes, aFieldWidth,
+  inherited Create(aName, oftBlobCustom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
   fTypeInfo := aRecordInfo;
 end;
@@ -11909,7 +11949,7 @@ begin
     raise EModelException.CreateUTF8('%.Create: invalid % record size',
       [self, aRecordSize]);
   fRecordSize := aRecordSize;
-  inherited Create(aName, sftBlobCustom, aAttributes, aFieldWidth,
+  inherited Create(aName, oftBlobCustom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, aData2Text, aText2Data);
 end;
 
@@ -12042,7 +12082,7 @@ constructor TORMPropInfoCustomJSON.Create(aTypeInfo: PRttiInfo;
   const aName: RawUTF8; aPropertyIndex: integer; aPropertyPointer: pointer;
   aAttributes: TORMPropInfoAttributes; aFieldWidth: integer);
 begin
-  inherited Create(aName, sftUTF8Custom, aAttributes, aFieldWidth,
+  inherited Create(aName, oftUTF8Custom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, nil, nil);
   fTypeInfo := aTypeInfo;
   SetCustomParser(rtti.RegisterType(aTypeInfo) as TRttiJson);
@@ -12052,7 +12092,7 @@ constructor TORMPropInfoCustomJSON.Create(const aTypeName, aName: RawUTF8;
   aPropertyIndex: integer; aPropertyPointer: pointer;
   aAttributes: TORMPropInfoAttributes; aFieldWidth: integer);
 begin
-  inherited Create(aName, sftUTF8Custom, aAttributes, aFieldWidth,
+  inherited Create(aName, oftUTF8Custom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, nil, nil);
   SetCustomParser(rtti.Find(pointer(aTypeName), length(aTypeName)) as TRttiJson);
 end;
@@ -12201,7 +12241,7 @@ begin
   for i := 1 to GetRttiProp(aClassType, p) do
   begin
     if (p^.typeInfo^.Kind = rkClass) and
-       (ClassSQLFieldType(p^.typeInfo) in [sftObject, sftUnknown]) then
+       (ClassORMFieldType(p^.typeInfo) in [oftObject, oftUnknown]) then
     begin
       prev := PtrArrayAdd(aFlattenedProps, p);
       InternalAddParentsFirst(p^.typeInfo^.RttiClass^.RttiClass, aFlattenedProps);
@@ -12468,7 +12508,7 @@ begin
     result := crc32cBy4(L, H);
 end;
 
-function ClassSQLFieldType(info: PRttiInfo): TORMFieldType;
+function ClassORMFieldType(info: PRttiInfo): TORMFieldType;
 const
   T_: array[0..6] of TClass = (
     // efficient access to the classes to be recognized
@@ -12480,7 +12520,7 @@ var
 begin
   CT := info.RttiClass;
   T := @T_;
-  result := sftUnknown;
+  result := oftUnknown;
   repeat
     // unrolled several InheritsFrom() calls
     C := CT^.RttiClass;
@@ -12492,8 +12532,8 @@ begin
         if (C <> T[3]) and (C <> T[4]) and (C <> T[5]) and (C <> T[6]) then
         begin
           if CT^.PropCount > 0 then
-            // identify any class with published properties as sftObject
-            result := sftObject;
+            // identify any class with published properties as oftObject
+            result := oftObject;
             // but continue searching for any known class
           CT := CT^.ParentInfo.RttiClass;
           continue;
@@ -12501,19 +12541,19 @@ begin
         else
         begin
           // T[3..6]=TRawUTF8List,TStrings,TObjectList,TCollection
-          result := sftObject;
+          result := oftObject;
           break;
         end
       else
       begin
         // T[2]=TORM
-        result := sftID; // TORM field is pointer(RecordID), not an Instance
+        result := oftID; // TORM field is pointer(RecordID), not an Instance
         break;
       end
     else
     begin
       // T[1]=TORMMany
-      result := sftMany; // no data is stored here, but in a pivot table
+      result := oftMany; // no data is stored here, but in a pivot table
       break;
     end;
   until false;
@@ -13079,7 +13119,7 @@ begin
     end
     else
     begin
-      if expandEnumsAsText and (ContentType = sftEnumerate) then
+      if expandEnumsAsText and (ContentType = oftEnumerate) then
       begin
         enum := GetInteger(V, err);
         if (err = 0) and (ContentTypeInfo <> nil) then
@@ -13090,16 +13130,16 @@ begin
       end
       else if expandTimeLogAsText then
         case ContentType of
-          sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
+          oftTimeLog, oftModTime, oftCreateTime, oftUnixTime, oftUnixMSTime:
             begin
               SetInt64(V, {%H-}t.Value);
               if t.Value = 0 then
                 value := 0
               else
               begin
-                if ContentType = sftUnixTime then
+                if ContentType = oftUnixTime then
                   t.FromUnixTime(t.Value);
-                if ContentType <> sftUnixMSTime then
+                if ContentType <> oftUnixMSTime then
                   time := t.Text(true)
                 else
                   // no TTimeLog use for milliseconds resolution
@@ -13199,7 +13239,7 @@ function TORMTable.FieldPropFromTables(const PropName: RawUTF8;
   begin
     if IsRowID(aPropName) then
     begin
-      result := sftInteger;
+      result := oftInteger;
       PropInfo := nil;
       TableIndex := aTableIndex;
       exit;
@@ -13209,12 +13249,12 @@ function TORMTable.FieldPropFromTables(const PropName: RawUTF8;
       PropInfo := fQueryTables[aTableIndex].RecordProps.Fields.ByName(aPropName);
       if PropInfo <> nil then
       begin
-        result := PropInfo.SQLFieldTypeStored;
-        if result <> sftUnknown then
+        result := PropInfo.ORMFieldTypeStored;
+        if result <> oftUnknown then
           TableIndex := aTableIndex;
         exit;
       end;
-      result := sftUnknown;
+      result := oftUnknown;
     end;
   end;
 
@@ -13222,7 +13262,7 @@ var
   i, t: PtrInt;
 begin
   TableIndex := -1;
-  result := sftUnknown;
+  result := oftUnknown;
   if fQueryTableIndexFromSQL = -2 then
   begin
     fQueryTableIndexFromSQL := -1;
@@ -13237,7 +13277,7 @@ begin
   if fQueryTableIndexFromSQL >= 0 then
   begin
     SearchInQueryTables(pointer(PropName), fQueryTableIndexFromSQL);
-    if result <> sftUnknown then
+    if result <> oftUnknown then
       exit;
   end;
   if length(fQueryTables) = 1 then
@@ -13250,7 +13290,7 @@ begin
       for t := 0 to high(fQueryTables) do
       begin
         SearchInQueryTables(pointer(PropName), t);
-        if result <> sftUnknown then
+        if result <> oftUnknown then
           exit;
       end
     else
@@ -13282,23 +13322,23 @@ begin
     ContentTypeInfo := nil;
     if FieldTypeInfo <> nil then
       case FieldType of
-        sftEnumerate:
+        oftEnumerate:
           if FieldTypeInfo^.Kind = rkEnumeration then
             ContentTypeInfo := FieldTypeInfo^.EnumBaseType;
-        sftSet:
+        oftSet:
           if FieldTypeInfo^.Kind = rkSet then
             ContentTypeInfo := FieldTypeInfo^.SetEnumType;
-        sftBlobDynArray:
+        oftBlobDynArray:
           ContentTypeInfo := FieldTypeInfo;
-        sftNullable:
+        oftNullable:
           begin
             ContentTypeInfo := FieldTypeInfo;
-            ContentType := NullableTypeToSQLFieldType(FieldTypeInfo);
-            if ContentType = sftUnknown then
-              ContentType := sftNullable;
+            ContentType := NullableTypeToORMFieldType(FieldTypeInfo);
+            if ContentType = oftUnknown then
+              ContentType := oftNullable;
           end;
       end;
-    if ContentType in [sftVariant, sftNullable] then
+    if ContentType in [oftVariant, oftNullable] then
       // ftUTF8/ftNull are not precise enough
       ContentDB := ftUnknown
     else
@@ -13315,8 +13355,8 @@ end;
 
 const
   DBTOFIELDTYPE: array[TSQLDBFieldType] of TORMFieldType = (
-    sftUnknown, sftUnknown,
-    sftInteger, sftFloat, sftCurrency, sftDateTime, sftUTF8Text, sftBlob);
+    oftUnknown, oftUnknown,
+    oftInteger, oftFloat, oftCurrency, oftDateTime, oftUTF8Text, oftBlob);
 
 procedure TORMTable.SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
 var
@@ -13339,7 +13379,7 @@ end;
 procedure TORMTable.InitFieldTypes;
 var
   f, i, len: integer;
-  sft: TORMFieldType;
+  oft: TORMFieldType;
   info: PRttiInfo;
   prop: TORMPropInfo;
   size, tableindex: integer;
@@ -13361,10 +13401,10 @@ begin
     guessed := false;
     // init fFieldType[] from fQueryTables/fQueryColumnTypes[]
     if Assigned(fQueryColumnTypes) then
-      sft := fQueryColumnTypes[f]
+      oft := fQueryColumnTypes[f]
     else if Assigned(QueryTables) then
     begin // retrieve column info from field name
-      sft := FieldPropFromTables(fResults[f], prop, tableindex);
+      oft := FieldPropFromTables(fResults[f], prop, tableindex);
       if prop <> nil then
       begin
         if prop.InheritsFrom(TORMPropInfoRTTI) then
@@ -13373,18 +13413,18 @@ begin
       end;
     end
     else
-      sft := sftUnknown;
-    if sft = sftUnknown then
+      oft := oftUnknown;
+    if oft = oftUnknown then
       // not found in fQueryTables/fQueryColumnTypes[]: guess from content
       if IsRowID(fResults[f]) then
-        sft := sftInteger
+        oft := oftInteger
       else
       begin
         guessed := true;
         if f in fFieldParsedAsString then
         begin
-          // the parser identified string values -> check if was sftDateTime
-          sft := sftUTF8Text;
+          // the parser identified string values -> check if was oftDateTime
+          oft := oftUTF8Text;
           U := @fResults[FieldCount + f];
           for i := 1 to fRowCount do
             if U^ = nil then  // search for a non void column
@@ -13396,10 +13436,10 @@ begin
               if tlog <> 0 then
                 if (len in [8, 10]) and (cardinal(tlog shr 26) - 1800 < 300) then
                   // e.g. YYYYMMDD date (Y=1800..2100)
-                  sft := sftDateTime
+                  oft := oftDateTime
                 else if len >= 15 then
                   // e.g. YYYYMMDDThhmmss date/time value
-                  sft := sftDateTime;
+                  oft := oftDateTime;
               break;
             end;
         end
@@ -13408,22 +13448,22 @@ begin
           U := @fResults[FieldCount + f];
           for i := 1 to fRowCount do
           begin
-            sft := UTF8ContentNumberType(U^);
+            oft := UTF8ContentNumberType(U^);
             inc(U, FieldCount);
-            if sft = sftUnknown then
+            if oft = oftUnknown then
               // null -> search for next non-void column
               continue
-            else if sft = sftInteger then // may be a floating point with no decimal
+            else if oft = oftInteger then // may be a floating point with no decimal
               if FieldTypeIntegerDetectionOnAllRows then
                 continue
               else
                 // we only checked the first field -> best guess...
-                sft := sftCurrency;
-            break; // found a non-integer content (e.g. sftFloat/sftUtf8Text)
+                oft := oftCurrency;
+            break; // found a non-integer content (e.g. oftFloat/oftUtf8Text)
           end;
         end;
       end;
-    SetFieldType(f, sft, info, size, tableindex);
+    SetFieldType(f, oft, info, size, tableindex);
     if guessed then
       fFieldType[f].ContentDB := ftUnknown; // may fail on some later row
   end;
@@ -13438,7 +13478,7 @@ begin
     result := fFieldType[Field].ContentType;
   end
   else
-    result := sftUnknown;
+    result := oftUnknown;
 end;
 
 function TORMTable.FieldType(Field: integer;
@@ -13454,7 +13494,7 @@ begin
   else
   begin
     FieldTypeInfo := nil;
-    result := sftUnknown;
+    result := oftUnknown;
   end;
 end;
 
@@ -13549,16 +13589,16 @@ begin
   if P = nil then
     exit;
   case FieldType(Field) of
-    sftCurrency, sftFloat:
+    oftCurrency, oftFloat:
       result := GetExtended(P);
-    sftInteger, // TORMTable.InitFieldTypes may have recognized an integer
-    sftTimeLog, sftModTime, sftCreateTime:
+    oftInteger, // TORMTable.InitFieldTypes may have recognized an integer
+    oftTimeLog, oftModTime, oftCreateTime:
       result := TimeLogToDateTime(GetInt64(P));
-    sftUnixTime:
+    oftUnixTime:
       result := UnixTimeToDateTime(GetInt64(P));
-    sftUnixMSTime:
+    oftUnixMSTime:
       result := UnixMSTimeToDateTime(GetInt64(P));
-  else // sftDateTime and any other kind will try from ISO-8601 text
+  else // oftDateTime and any other kind will try from ISO-8601 text
     result := Iso8601ToDateTimePUTF8Char(P);
   end;
 end;
@@ -14181,7 +14221,7 @@ var
   // and for default User Interface Query (see TRest.QueryIsTrue() method)
   // - some functions do not match exactly the TUTF8Compare signature, so will
   // be set in the initialization section of this unit
-  SQLFieldTypeComp: array[TORMFieldType] of TUTF8Compare  =
+  ORMFieldTypeComp: array[TORMFieldType] of TUTF8Compare  =
    (nil,                  // unknown
     nil,                 // AnsiText = AnsiIComp (in initialization below)
     UTF8IComp,           // UTF8Text, 8 bits case insensitive compared
@@ -14431,14 +14471,14 @@ var
 begin
   if (FieldCount = 0) or (cardinal(Field) >= cardinal(FieldCount)) then
     exit;
-  if FieldType = sftUnknown then // guess the field type from first row
+  if FieldType = oftUnknown then // guess the field type from first row
     FieldType := self.FieldType(Field);
   // store sorting parameters for re-sort in TORMTableJSON.FillFrom()
   if Assigned(CustomCompare) then
     fSortParams.Comp := CustomCompare
   else
   begin
-    fSortParams.Comp := SQLFieldTypeComp[FieldType];
+    fSortParams.Comp := ORMFieldTypeComp[FieldType];
     if @fSortParams.Comp = nil then
       exit;
   end;
@@ -14638,7 +14678,7 @@ end;
 
 function TORMTable.SortCompare(Field: integer): TUTF8Compare;
 begin
-  result := SQLFieldTypeComp[FieldType(Field)];
+  result := ORMFieldTypeComp[FieldType(Field)];
 end;
 
 procedure TORMTable.Assign(source: TORMTable);
@@ -14716,7 +14756,7 @@ var
   row: PPUtf8Char;
   i: integer;
   {$ifdef ISDELPHIXE3}
-  rec: PSQLRecordArray;
+  rec: PORMArray;
   {$endif ISDELPHIXE3}
 begin
   result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
@@ -14754,7 +14794,7 @@ procedure TORMTable.ToObjectList(DestList: TObjectList; RecordType: TORMClass);
 var
   R: TORM;
   row: PPUtf8Char;
-  rec: PSQLRecord;
+  rec: PORM;
   i: integer;
 begin
   if DestList = nil then
@@ -15016,8 +15056,8 @@ begin
       for F := 0 to FieldCount - 1 do
       begin
         case fFieldType[F].ContentType of
-          sftInteger, sftBlob, sftBlobCustom, sftUTF8Custom, sftRecord,
-          sftRecordVersion, sftID, sftTID, sftSet, sftCurrency:
+          oftInteger, oftBlob, oftBlobCustom, oftUTF8Custom, oftRecord,
+          oftRecordVersion, oftID, oftTID, oftSet, oftCurrency:
             inc(aResult[F], 8);
         else
           inc(aResult[F], Utf8FirstLineToUnicodeLength(U^));
@@ -15030,7 +15070,7 @@ begin
       for F := 0 to FieldCount - 1 do
         with fFieldType[F] do
           case ContentType of
-            sftEnumerate:
+            oftEnumerate:
               CalculateEnumerates(F, ContentTypeInfo);
           end;
     end;
@@ -15089,7 +15129,7 @@ begin
         result := ContentSize
       else
       begin
-        if (ContentTypeInfo <> nil) and (ContentType = sftEnumerate) then
+        if (ContentTypeInfo <> nil) and (ContentType = oftEnumerate) then
         begin
           // compute maximum size from available captions
           for i := 0 to PRttiEnumType(ContentTypeInfo)^.MaxValue do
@@ -15214,7 +15254,7 @@ begin
   Kind := FieldType(FieldIndex, info);
   U := @fResults[FieldCount * StartRow + FieldIndex];
   // search in one specified field value
-  if (Kind = sftEnumerate) and (info.ContentTypeInfo <> nil) then
+  if (Kind = oftEnumerate) and (info.ContentTypeInfo <> nil) then
   begin
     // for enumerates: first search in all available values
     Int64(EnumValues) := 0;
@@ -15243,16 +15283,16 @@ begin
     exit;
   end;
   // special cases: conversion from INTEGER to text before search
-  if Kind in [sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime] then
+  if Kind in [oftTimeLog, oftModTime, oftCreateTime, oftUnixTime, oftUnixMSTime] then
     while cardinal(result) <= cardinal(fRowCount) do
     begin
       SetInt64(U^, Val64{%H-});
       if Val64 <> 0 then
       begin
         case Kind of
-          sftUnixTime:
+          oftUnixTime:
             ValTimeLog.FromUnixTime(Val64);
-          sftUnixMSTime: // seconds resolution is enough for value search
+          oftUnixMSTime: // seconds resolution is enough for value search
             ValTimeLog.FromUnixMSTime(Val64);
         end;
         ValTimeLog.Text(tmp{%H-}, true, ' ')^ := #0;
@@ -15262,7 +15302,7 @@ begin
       inc(U, FieldCount); // ignore all other fields -> jump to next row data
       inc(result);
     end
-  else if ((Kind in [sftRecord, sftID, sftTID, sftSessionUserID]) and
+  else if ((Kind in [oftRecord, oftID, oftTID, oftSessionUserID]) and
           (Client <> nil) and (Client.Model <> nil)) then
   begin
     M := Client.Model;
@@ -15271,10 +15311,10 @@ begin
       SetInt64(U^, Val64);
       if Val64 <> 0 then
       begin
-        if Kind = sftRecord then
+        if Kind = oftRecord then
           EnumValue := RecordRef(Val64).Text(M)
         else
-          EnumValue := U^; // sftID/sftTID -> display ID number -> no sounded
+          EnumValue := U^; // oftID/oftTID -> display ID number -> no sounded
         if Lang = sndxNone then
         begin
           if FindUTF8(pointer(EnumValue), Search) then
@@ -15448,13 +15488,13 @@ label
 begin // Text was already forced to '' because was defined as "out" parameter
   if Row = 0 then
   begin // Field Name
-    result := sftUnknown;
+    result := oftUnknown;
     Text := GetCaption(0, Field);
     exit;
   end;
   result := FieldType(Field, info);
   case result of
-    sftDateTime, sftDateTimeMS:
+    oftDateTime, oftDateTimeMS:
       begin
         Value := Iso8601ToTimeLogPUTF8Char(Get(Row, Field), 0);
 IsDateTime:
@@ -15471,9 +15511,9 @@ IsDateTime:
           exit;
         end;
       end;
-    sftBlob:
+    oftBlob:
       Text := '???';
-    sftFloat:
+    oftFloat:
       if CustomFormat <> '' then
       try
         if pos('%', CustomFormat)>0 then
@@ -15485,7 +15525,7 @@ IsDateTime:
         on Exception do
           Text := '';
       end;
-    sftCurrency:
+    oftCurrency:
       if CustomFormat <> '' then
       try
         if pos('%', CustomFormat)>0 then
@@ -15497,29 +15537,29 @@ IsDateTime:
         on Exception do
           Text := '';
       end;
-    sftEnumerate, sftSet, sftRecord, sftID, sftTID, sftRecordVersion, sftSessionUserID,
-    sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
+    oftEnumerate, oftSet, oftRecord, oftID, oftTID, oftRecordVersion, oftSessionUserID,
+    oftTimeLog, oftModTime, oftCreateTime, oftUnixTime, oftUnixMSTime:
       begin
         Value := GetInt64(Get(Row, Field), err);
         if err <> 0 then
-          // not an integer -> to be displayed as sftUTF8Text
-          result := sftUTF8Text
+          // not an integer -> to be displayed as oftUTF8Text
+          result := oftUTF8Text
         else
           case result of
-            sftEnumerate:
+            oftEnumerate:
               if info.ContentTypeInfo <> nil then
               begin
                 Text := PRttiEnumType(info.ContentTypeInfo)^.GetCaption(Value);
                 exit;
               end;
-            sftTimeLog, sftModTime, sftCreateTime:
+            oftTimeLog, oftModTime, oftCreateTime:
               goto IsDateTime;
-            sftUnixTime:
+            oftUnixTime:
               begin
                 ValueTimeLog.FromUnixTime(Value);
                 goto IsDateTime;
               end;
-            sftUnixMSTime:
+            oftUnixMSTime:
               if Value <> 0 then
               begin
                 ValueDateTime := UnixMSTimeToDateTime(Value);
@@ -15532,9 +15572,9 @@ IsDateTime:
                 Text := DateTimeToStr(ValueDateTime); // was DateTimeToi18n()
                 exit;
               end;
-      {      sftID, sftTID, sftSet, sftRecordVersion:
-              result := sftUTF8Text; // will display INTEGER field as number }
-            sftRecord:
+      {      oftID, oftTID, oftSet, oftRecordVersion:
+              result := oftUTF8Text; // will display INTEGER field as number }
+            oftRecord:
               if (Value <> 0) and (Client <> nil) then // 'TableName ID'
                 {$ifdef UNICODE}
                 Text := Ansi7ToString(Ref.Text(Client.Model))
@@ -15542,7 +15582,7 @@ IsDateTime:
                 Text := Ref.Text(Client.Model)
                 {$endif UNICODE}
               else
-                result := sftUTF8Text; // display ID number if no table model
+                result := oftUTF8Text; // display ID number if no table model
           end;
       end;
   end;
@@ -15988,7 +16028,7 @@ begin
   AddMap(aRecord, nil, aIndex);
   inc(aIndex);
   for i := 0 to high(aProps) do
-    if aProps[i].SQLFieldTypeStored <> sftID then
+    if aProps[i].ORMFieldTypeStored <> oftID then
     begin
       AddMap(aRecord, aProps[i], aIndex);
       inc(aIndex);
@@ -16187,7 +16227,7 @@ begin
   if self = nil then
     result := nil
   else
-    result := PSQLRecordClass(self)^;
+    result := PORMClass(self)^;
 end;
 
 constructor TORM.Create;
@@ -16353,13 +16393,13 @@ begin
           if (FieldName = '') or IdemPropNameU(FieldName, Name) then
             if ((aIsUnique in Attributes) and
                 not (itoNoIndex4UniqueField in Options)) or
-               ((SQLFieldType = sftRecord) and
+               ((ORMFieldType = oftRecord) and
                 not (itoNoIndex4RecordReference in Options)) or
-               ((SQLFieldType = sftRecordVersion) and
+               ((ORMFieldType = oftRecordVersion) and
                 not (itoNoIndex4RecordVersion in Options)) or
-               ((SQLFieldType = sftID) and
+               ((ORMFieldType = oftID) and
                 not (itoNoIndex4NestedRecord in Options)) or
-               ((SQLFieldType = sftTID) and
+               ((ORMFieldType = oftTID) and
                 not (itoNoIndex4TID in Options)) then
               Server.CreateSQLIndex(self, Name, false);
   end;
@@ -16383,10 +16423,10 @@ begin
   if (self = nil) or (aRecord = nil) or IsZero(aRecordFieldBits) then
     exit;
   D := RecordProps;
-  if PSQLRecordClass(aRecord)^.InheritsFrom(PSQLRecordClass(self)^) then
+  if PORMClass(aRecord)^.InheritsFrom(PORMClass(self)^) then
   begin
     // fast atttribution for two sibbling classes
-    if PSQLRecordClass(aRecord)^ = PSQLRecordClass(self)^ then
+    if PORMClass(aRecord)^ = PORMClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
     for f := 0 to D.Fields.Count - 1 do
       if f in aRecordFieldBits then
@@ -16793,7 +16833,7 @@ begin
   begin
     W.Add(fID);
     W.Add(',');
-    if (jwoID_str in W.fSQLRecordOptions) and W.Expand then
+    if (jwoID_str in W.fORMOptions) and W.Expand then
     begin
       W.AddShort('"ID_str":"');
       W.Add(fID);
@@ -16872,11 +16912,11 @@ var
 begin
   if self <> nil then
     with RecordProps do
-      if sftVariant in HasTypeFields then
+      if oftVariant in HasTypeFields then
         for i := 0 to Fields.Count - 1 do
         begin
           p := Fields.List[i];
-          if (p.SQLFieldType = sftVariant) and
+          if (p.ORMFieldType = oftVariant) and
              p.InheritsFrom(TORMPropInfoRTTIVariant) then
             with TORMPropInfoRTTIVariant(p) do
               if PropInfo.GetterIsField then
@@ -16902,7 +16942,7 @@ begin
 end;
 
 procedure TORM.GetJSONValues(JSON: TStream; Expand, withID: boolean;
-  Occasion: TORMOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions);
+  Occasion: TORMOccasion; ORMOptions: TJSONSerializerORMOptions);
 var
   serializer: TJSONSerializer;
 begin
@@ -16911,12 +16951,12 @@ begin
   with RecordProps do
     serializer := CreateJSONWriter(JSON, Expand, withID, SimpleFieldsBits[Occasion],
       {knownrows=}0);
-  serializer.SQLRecordOptions := SQLRecordOptions;
+  serializer.ORMOptions := ORMOptions;
   GetJSONValuesAndFree(serializer);
 end;
 
 function TORM.GetJSONValues(Expand, withID: boolean;
-  const Fields: TFieldBits; SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
+  const Fields: TFieldBits; ORMOptions: TJSONSerializerORMOptions): RawUTF8;
 var
   J: TRawByteStringStream;
   serializer: TJSONSerializer;
@@ -16924,7 +16964,7 @@ begin
   J := TRawByteStringStream.Create;
   try
     serializer := RecordProps.CreateJSONWriter(J, Expand, withID, Fields, {knownrows=}0);
-    serializer.SQLRecordOptions := SQLRecordOptions;
+    serializer.ORMOptions := ORMOptions;
     GetJSONValuesAndFree(serializer);
     result := J.DataString;
   finally
@@ -16933,19 +16973,19 @@ begin
 end;
 
 function TORM.GetJSONValues(Expand, withID: boolean;
-  const FieldsCSV: RawUTF8; SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
+  const FieldsCSV: RawUTF8; ORMOptions: TJSONSerializerORMOptions): RawUTF8;
 var
   bits: TFieldBits;
 begin
   if RecordProps.FieldBitsFromCSV(FieldsCSV, bits) then
-    result := GetJSONValues(Expand, withID, bits, SQLRecordOptions)
+    result := GetJSONValues(Expand, withID, bits, ORMOptions)
   else
     result := '';
 end;
 
 function TORM.GetJSONValues(Expand, withID: boolean;
   Occasion: TORMOccasion; UsingStream: TCustomMemoryStream;
-  SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
+  ORMOptions: TJSONSerializerORMOptions): RawUTF8;
 var
   J: TRawByteStringStream;
 begin
@@ -16955,14 +16995,14 @@ begin
   else if UsingStream <> nil then
   begin
     UsingStream.Seek(0, soFromBeginning);
-    GetJSONValues(UsingStream, Expand, withID, Occasion, SQLRecordOptions);
+    GetJSONValues(UsingStream, Expand, withID, Occasion, ORMOptions);
     FastSetString(result, UsingStream.Memory, UsingStream.Seek(0, soFromCurrent));
   end
   else
   begin
     J := TRawByteStringStream.Create;
     try
-      GetJSONValues(J, Expand, withID, Occasion, SQLRecordOptions);
+      GetJSONValues(J, Expand, withID, Occasion, ORMOptions);
       result := J.DataString;
     finally
       J.Free;
@@ -16984,7 +17024,7 @@ begin
   for i := 0 to Props.Fields.Count - 1 do
     with Props.Fields.List[i] do
     begin
-      SQL := Props.SQLFieldTypeToSQL(i);
+      SQL := Props.ORMFieldTypeToSQL(i);
       if SQL <> '' then
         // = '' for field with no matching DB column
         result := result + Name + SQL;
@@ -17072,7 +17112,7 @@ begin
             with fields.List[i] do
               if aAuxiliaryRTreeField in Attributes then // for SQlite3 >= 3.24.0
                 result := FormatUTF8('%+% %', [result, Name,
-                  Props.Props.SQLFieldTypeToSQL(i)])
+                  Props.Props.ORMFieldTypeToSQL(i)])
               else
                 result := result + Name + ',';
           result[length(result)] := ')';
@@ -17091,7 +17131,7 @@ begin
       for i := 0 to fields.Count - 1 do
         with fields.List[i] do
         begin
-          SQL := SQLFieldTypeToSQL(i); // = '' for field with no matching DB column
+          SQL := ORMFieldTypeToSQL(i); // = '' for field with no matching DB column
           if SQL <> '' then
           begin
             result := result + Name + SQL;
@@ -17160,7 +17200,7 @@ var
 begin
   result := false;
   if (self = nil) or (Reference = nil) or
-     (PSQLRecordClass(Reference)^ <> PSQLRecordClass(self)^) or
+     (PORMClass(Reference)^ <> PORMClass(self)^) or
      (Reference.fID <> fID) then
     exit;
   with RecordProps do
@@ -17182,7 +17222,7 @@ begin
      (Reference.fID <> fID) then // ID field must be tested by hand
     exit;
   if self <> Reference then
-    if PSQLRecordClass(Reference)^ = PSQLRecordClass(self)^ then
+    if PORMClass(Reference)^ = PORMClass(self)^ then
     begin
       // faster comparison on same exact class
       with RecordProps do
@@ -17222,7 +17262,7 @@ begin
     if fFill.JoinedFields then
     begin
       for i := 0 to length(CopiableFields) - 1 do
-        if CopiableFields[i].SQLFieldType <> sftID then
+        if CopiableFields[i].ORMFieldType <> oftID then
           CopiableFields[i].SetValue(self, nil, false)
         else
           // clear nested allocated TORM
@@ -17248,7 +17288,7 @@ begin
     else if not FieldBitsFromCSV(aFieldsCSV, bits) then
       exit;
     for f := 0 to Fields.Count - 1 do
-      if (f in bits) and (Fields.List[f].SQLFieldType in COPIABLE_FIELDS) then
+      if (f in bits) and (Fields.List[f].ORMFieldType in COPIABLE_FIELDS) then
         Fields.List[f].SetValue(self, nil, false); // clear field value
   end;
 end;
@@ -17267,7 +17307,7 @@ begin
     result := 0
   else
   begin
-    result := Model.GetTableIndexExisting(PSQLRecordClass(self)^);
+    result := Model.GetTableIndexExisting(PORMClass(self)^);
     if result > 63 then // TRecordReference handle up to 64=1 shl 6 tables
       result := 0
     else
@@ -17368,7 +17408,7 @@ var
   SQL: RawUTF8;
 begin
   Create;
-  props := aClient.Model.Props[PSQLRecordClass(self)^];
+  props := aClient.Model.Props[PORMClass(self)^];
   if props.props.JoinedFields = nil then
     raise EModelException.CreateUTF8('No nested TORM to JOIN in %', [self]);
   SQL := props.SQL.SelectAllJoined;
@@ -17494,7 +17534,7 @@ var
       if i < 0 then
         exit;
       field := Props.Fields.List[i];
-      if field.SQLFieldType = sftMany then
+      if field.ORMFieldType = oftMany then
       begin
         M := TORMPropInfoRTTIInstance(field).GetInstance(self) as TORMMany;
         for i := 0 to n - 1 do
@@ -17541,7 +17581,7 @@ begin
   SetLength(Objects, n * 2 + 1);
   SetLength(ObjectsClass, n * 2 + 1);
   Objects[0] := self;
-  ObjectsClass[0] := PSQLRecordClass(self)^;
+  ObjectsClass[0] := PORMClass(self)^;
   SetLength(fFill.fTableMapRecordManyInstances, n);  // fFill.UnMap will release memory
   for f := 0 to n - 1 do
   begin
@@ -17551,7 +17591,7 @@ begin
         [self, Props.ManyFields[f].Name, Props.ManyFields[f].ObjectClass]);
     fFill.fTableMapRecordManyInstances[f] := M;
     Objects[f * 2 + 1] := M;
-    ObjectsClass[f * 2 + 1] := PSQLRecordClass(M)^;
+    ObjectsClass[f * 2 + 1] := PORMClass(M)^;
     with M.RecordProps do
     begin
       if (fRecordManySourceProp.ObjectClass <> PClass(self)^) or
@@ -17697,7 +17737,7 @@ function TORM.GetID: TID;
 begin
   {$ifdef MSWINDOWS}
   if PtrUInt(self) < PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
-    // was called from a TORM property (sftID type)
+    // was called from a TORM property (oftID type)
     // (will return 0 if current instance is nil)
     result := PtrUInt(self)
   else
@@ -17719,7 +17759,7 @@ function TORM.GetIDAsPointer: pointer;
 begin
   {$ifdef MSWINDOWS}
   if PtrUInt(self) < PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
-    // was called from a TORM property (sftID type)
+    // was called from a TORM property (oftID type)
     // (will return 0 if current instance is nil)
     result := self
   else    // was called from a real TORM instance
@@ -17910,7 +17950,7 @@ begin
     else
     begin
       for f := 0 to Fields.Count - 1 do
-        if (Fields.List[f].SQLFieldType in COPIABLE_FIELDS) then
+        if (Fields.List[f].ORMFieldType in COPIABLE_FIELDS) then
           for i := 0 to length(Filters[f]) - 1 do
             if Filters[f, i].InheritsFrom(TSynFilter) then
             begin
@@ -18010,7 +18050,7 @@ var
 begin
   with RecordProps, Fields do
     for f := 0 to Count - 1 do
-      if List[f].SQLFieldType in RAWTEXT_FIELDS then
+      if List[f].ORMFieldType in RAWTEXT_FIELDS then
       begin
         AddFilterOrValidate(f, TSynFilterTrim.Create);
         AddFilterOrValidate(f, TSynValidateNonVoidText.Create);
@@ -18033,7 +18073,7 @@ begin
   with RecordProps do
     if Filters <> nil then
       for f := 0 to Fields.Count - 1 do
-        if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then
+        if Fields.List[f].ORMFieldType in COPIABLE_FIELDS then
         begin
           for i := 0 to length(Filters[f]) - 1 do
           begin
@@ -18151,28 +18191,28 @@ begin
     with RecordProps do
     begin
       integer(types) := 0;
-      if sftModTime in HasTypeFields then
-        include(types, sftModTime);
-      if (sftCreateTime in HasTypeFields) and (aOccasion = oeAdd) then
-        include(types, sftCreateTime);
+      if oftModTime in HasTypeFields then
+        include(types, oftModTime);
+      if (oftCreateTime in HasTypeFields) and (aOccasion = oeAdd) then
+        include(types, oftCreateTime);
       if integer(types) <> 0 then
       begin
         i64 := aRest.GetServerTimestamp;
         for F := 0 to Fields.Count - 1 do
         begin
           p := Fields.List[F];
-          if p.SQLFieldType in types then
+          if p.ORMFieldType in types then
             TORMPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
         end;
       end;
-      if sftSessionUserID in HasTypeFields then
+      if oftSessionUserID in HasTypeFields then
       begin
         i64 := aRest.GetCurrentSessionUserID;
         if i64 <> 0 then
           for F := 0 to Fields.Count - 1 do
           begin
             p := Fields.List[F];
-            if p.SQLFieldType = sftSessionUserID then
+            if p.ORMFieldType = oftSessionUserID then
               TORMPropInfoRTTIInt64(p).fPropInfo.SetInt64Prop(self, i64);
           end;
       end;
@@ -18332,7 +18372,7 @@ begin
     exit;
   with aClient.Model do
   begin
-    SelfProps := Props[PSQLRecordClass(self)^];
+    SelfProps := Props[PORMClass(self)^];
     DestProps := Props[
       TORMClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)];
   end;
@@ -18368,7 +18408,7 @@ begin
   else
     // statement is not globaly inlined -> no caching of prepared statement
     SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
-  result := aClient.ExecuteList([PSQLRecordClass(self)^,
+  result := aClient.ExecuteList([PORMClass(self)^,
     TORMClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
     FormatUTF8(SQL, [{%H-}Select, DestProps.Props.SQLTableName, SelfProps.Props.SQLTableName,
     SelfProps.Props.SQLTableName, aSourceID, SelfProps.Props.SQLTableName,
@@ -18666,7 +18706,7 @@ const // the most ambigous keywords - others may be used as column names
 constructor TORMProperties.Create(aTable: TORMClass);
 var
   i, j, nProps: PtrInt;
-  nMany, nSQLRecord, nSimple, nDynArray, nBlob, nBlobCustom, nCopiableFields: integer;
+  nMany, nORM, nSimple, nDynArray, nBlob, nBlobCustom, nCopiableFields: integer;
   isTORMMany: boolean;
   F: TORMPropInfo;
 label
@@ -18709,7 +18749,7 @@ begin
   MainField[true] := -1;
   nMany := 0;
   nSimple := 0;
-  nSQLRecord := 0;
+  nORM := 0;
   nCopiableFields := 0;
   nDynArray := 0;
   nBlob := 0;
@@ -18729,17 +18769,17 @@ begin
     begin
       include(IsUniqueFieldsBits, i);
       // must trim() text value before storage, and validate for unicity
-      if F.SQLFieldType in [sftUTF8Text, sftAnsiText] then
+      if F.ORMFieldType in [oftUTF8Text, oftAnsiText] then
         AddFilterOrValidate(i, TSynFilterTrim.Create);
       AddFilterOrValidate(i, TSynValidateUniqueField.Create);
     end;
     // get corresponding properties content
-    include(fHasTypeFields, F.SQLFieldType);
-    include(FieldBits[F.SQLFieldType], i);
-    case F.SQLFieldType of
-      sftUnknown:
+    include(fHasTypeFields, F.ORMFieldType);
+    include(FieldBits[F.ORMFieldType], i);
+    case F.ORMFieldType of
+      oftUnknown:
         ;
-      sftUTF8Text:
+      oftUTF8Text:
         begin
           if aIsUnique in F.Attributes then
             if MainField[false] < 0 then
@@ -18748,7 +18788,7 @@ begin
             MainField[true] := i;
           goto Small;
         end;
-      sftBlob:
+      oftBlob:
         begin
           BlobFields[nBlob] := F as TORMPropInfoRTTI;
           inc(nBlob);
@@ -18757,22 +18797,22 @@ begin
           fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields + ',' + F.Name;
           goto Copiabl;
         end;
-      sftID: // = TORM(aID)
+      oftID: // = TORM(aID)
         if isTORMMany and (IdemPropNameU(F.Name, 'Source') or
           IdemPropNameU(F.Name, 'Dest')) then
           goto Small
         else
         begin
-          JoinedFields[nSQLRecord] := F as TORMPropInfoRTTIID;
-          inc(nSQLRecord);
+          JoinedFields[nORM] := F as TORMPropInfoRTTIID;
+          inc(nORM);
           goto Small;
         end;
-      sftMany:
+      oftMany:
         begin
           ManyFields[nMany] := F as TORMPropInfoRTTIMany;
           inc(nMany);
         end;
-      sftBlobDynArray:
+      oftBlobDynArray:
         with F as TORMPropInfoRTTIDynArray do
         begin
           if DynArrayIndex > 0 then
@@ -18786,24 +18826,24 @@ begin
           inc(nDynArray);
           goto Simple;
         end;
-      sftBlobCustom, sftUTF8Custom:
+      oftBlobCustom, oftUTF8Custom:
         begin
           BlobCustomFields[nBlobCustom] := F;
           inc(nBlobCustom);
           goto Simple;
         end;
-      sftCreateTime:
+      oftCreateTime:
         begin
           include(ComputeBeforeAddFieldsBits, i);
           goto Small;
         end;
-      sftModTime, sftSessionUserID:
+      oftModTime, oftSessionUserID:
         begin
           include(ComputeBeforeAddFieldsBits, i);
           include(ComputeBeforeUpdateFieldsBits, i);
           goto Small;
         end;
-      sftRecordVersion:
+      oftRecordVersion:
         begin
           if fRecordVersionField <> nil then
             raise EModelException.CreateUTF8('%: only a single TRecordVersion ' +
@@ -18812,7 +18852,7 @@ begin
           fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields + ',' + F.Name;
           goto Copiabl;
         end; // TRecordVersion is a copiable but not a simple field!
-      sftVariant: // sftNullable are included in SmallfieldsBits
+      oftVariant: // oftNullable are included in SmallfieldsBits
         goto Simple;
     else
       begin
@@ -18837,12 +18877,12 @@ Copiabl:include(CopiableFieldsBits, i);
     SetLength(fSQLTableRetrieveBlobFields, length(fSQLTableRetrieveBlobFields) - 1);
   SetLength(fManyFields, nMany);
   SetLength(fSimpleFields, nSimple);
-  SetLength(fJoinedFields, nSQLRecord);
-  if nSQLRecord > 0 then
+  SetLength(fJoinedFields, nORM);
+  if nORM > 0 then
   begin
-    SetLength(fJoinedFieldsTable, nSQLRecord + 1);
+    SetLength(fJoinedFieldsTable, nORM + 1);
     fJoinedFieldsTable[0] := aTable;
-    for i := 0 to nSQLRecord - 1 do
+    for i := 0 to nORM - 1 do
       fJoinedFieldsTable[i + 1] := TORMClass(JoinedFields[i].ObjectClass);
   end;
   SetLength(fCopiableFields, nCopiableFields);
@@ -18857,13 +18897,13 @@ Copiabl:include(CopiableFieldsBits, i);
   SimpleFieldsCount[ooDelete] := nSimple;
   fHasNotSimpleFields := nSimple <> Fields.Count;
   for i := 0 to Fields.Count - 1 do
-    if Fields.List[i].SQLFieldType = sftCreateTime then
+    if Fields.List[i].ORMFieldType = oftCreateTime then
     begin
       exclude(SimpleFieldsBits[ooUpdate], i);
       dec(SimpleFieldsCount[ooUpdate]);
     end;
-  if SmallFieldsBits <> SimpleFieldsBits[ooSelect] - FieldBits[sftVariant] -
-    FieldBits[sftBlobDynArray] - FieldBits[sftBlobCustom] - FieldBits[sftUTF8Custom] then
+  if SmallFieldsBits <> SimpleFieldsBits[ooSelect] - FieldBits[oftVariant] -
+    FieldBits[oftBlobDynArray] - FieldBits[oftBlobCustom] - FieldBits[oftUTF8Custom] then
     raise EModelException.CreateUTF8('TORMProperties.Create(%) Bits?', [Table]);
   if isTORMMany then
   begin
@@ -18906,39 +18946,40 @@ begin
   result := nil;
 end;
 
-function TORMProperties.SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
 const
   /// simple wrapper from each SQL used type into SQLite3 field datatype
   // - set to '' for fields with no column created in the database
-  DEFAULT_SQLFIELDTYPETOSQL: array[TORMFieldType] of RawUTF8 = ('',                              // sftUnknown
-    ' TEXT COLLATE NOCASE, ',        // sftAnsiText
-    ' TEXT COLLATE SYSTEMNOCASE, ',  // sftUTF8Text
-    ' INTEGER, ',                    // sftEnumerate
-    ' INTEGER, ',                    // sftSet
-    ' INTEGER, ',                    // sftInteger
-    ' INTEGER, ',                    // sftID = TORM(aID)
-    ' INTEGER, ',                    // sftRecord = TRecordReference
-    ' INTEGER, ',                    // sftBoolean
-    ' FLOAT, ',                      // sftFloat
-    ' TEXT COLLATE ISO8601, ',       // sftDateTime
-    ' INTEGER, ',                    // sftTimeLog
-    ' FLOAT, ',                      // sftCurrency
-    ' TEXT COLLATE BINARY, ',        // sftObject
-    ' TEXT COLLATE BINARY, ',        // sftVariant
-    ' TEXT COLLATE NOCASE, ',        // sftNullable (from SQLFieldTypeStored)
-    ' BLOB, ',                       // sftBlob
-    ' BLOB, ',                       // sftBlobDynArray
-    ' BLOB, ',                       // sftBlobCustom
-    ' TEXT COLLATE NOCASE, ',        // sftUTF8Custom
-    '',                              // sftMany
-    ' INTEGER, ',                    // sftModTime
-    ' INTEGER, ',                    // sftCreateTime
-    ' INTEGER, ',                    // sftTID
-    ' INTEGER, ',                    // sftRecordVersion
-    ' INTEGER, ',                    // sftSessionUserID
-    ' TEXT COLLATE ISO8601, ',       // sftDateTimeMS
-    ' INTEGER, ',                    // sftUnixTime
-    ' INTEGER, ');                   // sftUnixMSTime
+  DEFAULT_SQLFIELDTYPETOSQL: array[TORMFieldType] of RawUTF8 = ('',                              // oftUnknown
+    ' TEXT COLLATE NOCASE, ',        // oftAnsiText
+    ' TEXT COLLATE SYSTEMNOCASE, ',  // oftUTF8Text
+    ' INTEGER, ',                    // oftEnumerate
+    ' INTEGER, ',                    // oftSet
+    ' INTEGER, ',                    // oftInteger
+    ' INTEGER, ',                    // oftID = TORM(aID)
+    ' INTEGER, ',                    // oftRecord = TRecordReference
+    ' INTEGER, ',                    // oftBoolean
+    ' FLOAT, ',                      // oftFloat
+    ' TEXT COLLATE ISO8601, ',       // oftDateTime
+    ' INTEGER, ',                    // oftTimeLog
+    ' FLOAT, ',                      // oftCurrency
+    ' TEXT COLLATE BINARY, ',        // oftObject
+    ' TEXT COLLATE BINARY, ',        // oftVariant
+    ' TEXT COLLATE NOCASE, ',        // oftNullable (from ORMFieldTypeStored)
+    ' BLOB, ',                       // oftBlob
+    ' BLOB, ',                       // oftBlobDynArray
+    ' BLOB, ',                       // oftBlobCustom
+    ' TEXT COLLATE NOCASE, ',        // oftUTF8Custom
+    '',                              // oftMany
+    ' INTEGER, ',                    // oftModTime
+    ' INTEGER, ',                    // oftCreateTime
+    ' INTEGER, ',                    // oftTID
+    ' INTEGER, ',                    // oftRecordVersion
+    ' INTEGER, ',                    // oftSessionUserID
+    ' TEXT COLLATE ISO8601, ',       // oftDateTimeMS
+    ' INTEGER, ',                    // oftUnixTime
+    ' INTEGER, ');                   // oftUnixMSTime
+
+function TORMProperties.ORMFieldTypeToSQL(FieldIndex: integer): RawUTF8;
 begin
   if (self = nil) or (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
     result := ''
@@ -18946,7 +18987,7 @@ begin
           (fCustomCollation[FieldIndex] <> '') then
     result := ' TEXT COLLATE ' + fCustomCollation[FieldIndex] + ', '
   else
-    result := DEFAULT_SQLFIELDTYPETOSQL[Fields.List[FieldIndex].SQLFieldTypeStored];
+    result := DEFAULT_SQLFIELDTYPETOSQL[Fields.List[FieldIndex].ORMFieldTypeStored];
 end;
 
 function TORMProperties.SetCustomCollation(FieldIndex: integer;
@@ -18966,8 +19007,8 @@ begin
   end;
 end;
 
-function TORMProperties.SetCustomCollation(const aFieldName,
-  aCollationName: RawUTF8): boolean;
+function TORMProperties.SetCustomCollation(
+  const aFieldName, aCollationName: RawUTF8): boolean;
 begin
   result := SetCustomCollation(Fields.IndexByNameOrExcept(aFieldName), aCollationName);
 end;
@@ -18977,9 +19018,9 @@ procedure TORMProperties.SetCustomCollationForAll(aFieldType: TORMFieldType;
 var
   i: PtrInt;
 begin
-  if (self <> nil) and not (aFieldType in [sftUnknown, sftMany]) then
+  if (self <> nil) and not (aFieldType in [oftUnknown, oftMany]) then
     for i := 0 to Fields.Count - 1 do
-      if Fields.List[i].SQLFieldTypeStored = aFieldType then
+      if Fields.List[i].ORMFieldTypeStored = aFieldType then
         SetCustomCollation(i, aCollationName);
 end;
 
@@ -19016,21 +19057,21 @@ var
 begin
   if self <> nil then
     for i := 0 to Fields.Count - 1 do
-      if (Fields.List[i].SQLFieldType = sftVariant) and
+      if (Fields.List[i].ORMFieldType = oftVariant) and
          Fields.List[i].InheritsFrom(TORMPropInfoRTTIVariant) then
         TORMPropInfoRTTIVariant(Fields.List[i]).DocVariantOptions := Options;
 end;
 
 function TORMProperties.SQLAddField(FieldIndex: integer): RawUTF8;
 begin
-  result := SQLFieldTypeToSQL(FieldIndex);
+  result := ORMFieldTypeToSQL(FieldIndex);
   if result = '' then
     exit; // some fields won't have any column created in the database
   result := FormatUTF8('ALTER TABLE % ADD COLUMN %%',
     [SQLTableName, Fields.List[FieldIndex].Name, result]);
   if FieldIndex in IsUniqueFieldsBits then
     insert(' UNIQUE', result, length(result) - 1);
-  result[length(result) - 1] := ';' // SQLFieldTypeToSQL[] ends with ','
+  result[length(result) - 1] := ';' // ORMFieldTypeToSQL[] ends with ','
 end;
 
 procedure TORMProperties.SetJSONWriterColumnNames(W: TJSONSerializer;
@@ -19156,7 +19197,7 @@ begin
     FieldNames[i] := Fields.List[i].Name;
   W.WriteRawUTF8DynArray(FieldNames, Fields.Count);
   for i := 0 to Fields.Count - 1 do
-    W.Write(@Fields.List[i].fSQLFieldType, SizeOf(TORMFieldType));
+    W.Write(@Fields.List[i].fORMFieldType, SizeOf(TORMFieldType));
 end;
 
 function TORMProperties.CheckBinaryHeader(var R: TFastReader): boolean;
@@ -19174,7 +19215,7 @@ begin
     exit;
   for i := 0 to Fields.Count - 1 do
     with Fields.List[i] do
-      if (Name <> FieldNames[i]) or (SQLFieldType <> FieldTypes[i]) then
+      if (Name <> FieldNames[i]) or (ORMFieldType <> FieldTypes[i]) then
         exit;
   result := true;
 end;
@@ -19588,21 +19629,21 @@ begin
   fSortedTablesNameIndex[aIndex] := aIndex;
   fields := Props.Props.Fields;
   for f := 0 to fields.Count - 1 do
-    case fields.List[f].SQLFieldType of
-      sftRecord:
+    case fields.List[f].ORMFieldType of
+      oftRecord:
         RegisterTableForRecordReference(fields.List[f], Table); // Table not used
-      sftID:
+      oftID:
         RegisterTableForRecordReference(fields.List[f],
           (fields.List[f] as TORMPropInfoRTTIInstance).ObjectClass);
-      sftTID:
+      oftTID:
         begin
           TableID := (fields.List[f] as TORMPropInfoRTTITID).RecordClass;
           if TableID = nil then // T*ID name didn't match any TORM type
-            fields.List[f].fSQLFieldType := sftInteger
+            fields.List[f].fORMFieldType := oftInteger
           else
             RegisterTableForRecordReference(fields.List[f], TableID);
         end;
-      sftMany:
+      oftMany:
         GetTableIndexSafe(
           pointer((fields.List[f] as TORMPropInfoRTTIMany).ObjectClass), true);
     end;
@@ -19616,7 +19657,7 @@ begin
       begin
         W.Add('%.RowID as `%.RowID`,', [SQLTableName, SQLTableName]);
         for f := 0 to length(SimpleFields) - 1 do
-          if SimpleFields[f].SQLFieldType <> sftID then
+          if SimpleFields[f].ORMFieldType <> oftID then
             W.Add('%.% as `%.%`,', [SQLTableName, SimpleFields[f].Name,
               SQLTableName, SimpleFields[f].Name]);
       end;
@@ -19627,7 +19668,7 @@ begin
         W.Add('%.RowID as `%.RowID`,', [aFieldName, aFieldName]);
         with Props.Props.JoinedFieldsTable[j].RecordProps do
           for f := 0 to High(SimpleFields) do
-            if SimpleFields[f].SQLFieldType <> sftID then
+            if SimpleFields[f].ORMFieldType <> oftID then
               W.Add('%.% as `%.%`,', [aFieldName, SimpleFields[f].Name,
                 aFieldName, SimpleFields[f].Name]);
       end;
@@ -19930,7 +19971,7 @@ function TORMModel.GetTableIndex(aTable: TORMClass): integer;
 var
   i: PtrInt;
   Props: TORMProperties;
-  c: PSQLRecordClass;
+  c: PORMClass;
 begin
   if (self <> nil) and (aTable <> nil) then
   begin
@@ -20206,7 +20247,7 @@ begin
   if aRec = nil then
     result := false
   else
-    result := isLocked(PSQLRecordClass(aRec)^, aRec.fID);
+    result := isLocked(PORMClass(aRec)^, aRec.fID);
 end;
 
 function TORMModel.Lock(aTable: TORMClass; aID: TID): boolean;
@@ -20238,7 +20279,7 @@ begin
   if aRec = nil then
     result := false
   else
-    result := Lock(PSQLRecordClass(aRec)^, aRec.fID);
+    result := Lock(PORMClass(aRec)^, aRec.fID);
 end;
 
 procedure TORMModel.PurgeOlderThan(MinutesFromNow: cardinal);
@@ -20271,7 +20312,7 @@ begin
   if aRec = nil then
     result := false
   else
-    result := UnLock(PSQLRecordClass(aRec)^, aRec.fID);
+    result := UnLock(PORMClass(aRec)^, aRec.fID);
 end;
 
 function TORMModel.GetLocks(aTable: TORMClass): PSQLLocks;
@@ -20396,8 +20437,8 @@ begin // similar to TORMPropertiesMapping.ComputeSQL
   with Props do
     for f := 0 to Fields.Count - 1 do
       with Fields.List[f] do
-        if SQLFieldType in COPIABLE_FIELDS then
-        begin // sftMany fields do not exist
+        if ORMFieldType in COPIABLE_FIELDS then
+        begin // oftMany fields do not exist
           // pre-computation of SQL statements
           SQL.UpdateSetAll := SQL.UpdateSetAll + Name + '=?,';
           SQL.InsertSet := SQL.InsertSet + Name + ',';
@@ -20407,7 +20448,7 @@ begin // similar to TORMPropertiesMapping.ComputeSQL
           if f in IsUniqueFieldsBits then
           begin
             // must trim() text value before storage, and validate for unicity
-            if SQLFieldType in [sftUTF8Text, sftAnsiText] then
+            if ORMFieldType in [oftUTF8Text, oftAnsiText] then
               AddFilterOrValidate(f, TSynFilterTrim.Create);
             // register unique field pre-validation
             AddFilterOrValidate(f, TSynValidateUniqueField.Create);
@@ -20477,7 +20518,7 @@ begin
             'Virtual FTS class % should have published properties', [Props.Table]);
         for f := 0 to Props.Fields.Count - 1 do
           with Props.Fields.List[f] do
-            if SQLFieldTypeStored <> sftUTF8Text then
+            if ORMFieldTypeStored <> oftUTF8Text then
               raise EModelException.CreateUTF8('%.%: FTS field must be RawUTF8',
                 [Props.Table, Name])
       end;
@@ -20485,14 +20526,14 @@ begin
       begin
         Props.RTreeCoordBoundaryFields := 0;
         if Value = rRTree then
-          expected := sftFloat
+          expected := oftFloat
         else
-          expected := sftInteger;
+          expected := oftInteger;
         for f := 0 to Props.Fields.Count - 1 do
           with Props.Fields.List[f] do
             if aAuxiliaryRTreeField in Attributes then // https://sqlite.org/rtree.html#auxiliary_columns
-              expected := sftUnknown // will expect further columns to be auxiliary
-            else if SQLFieldTypeStored <> expected then
+              expected := oftUnknown // will expect further columns to be auxiliary
+            else if ORMFieldTypeStored <> expected then
               raise EModelException.CreateUTF8('%.%: RTREE field must be %',
                 [Props.Table, Name, ToText(expected)^])
             else
@@ -20581,14 +20622,14 @@ begin
 end;
 
 function TORMPropertiesMapping.MapField(
-  const InternalName, ExternalName: RawUTF8): PSQLRecordPropertiesMapping;
+  const InternalName, ExternalName: RawUTF8): PORMPropertiesMapping;
 begin
   MapFields([InternalName, ExternalName]);
   result := @self;
 end;
 
 function TORMPropertiesMapping.MapFields(
-  const InternalExternalPairs: array of RawUTF8): PSQLRecordPropertiesMapping;
+  const InternalExternalPairs: array of RawUTF8): PORMPropertiesMapping;
 var
   i, int: PtrInt;
 begin
@@ -20619,7 +20660,7 @@ begin
   result := @self;
 end;
 
-function TORMPropertiesMapping.MapAutoKeywordFields: PSQLRecordPropertiesMapping;
+function TORMPropertiesMapping.MapAutoKeywordFields: PORMPropertiesMapping;
 begin
   if @self <> nil then
     include(fOptions, rpmAutoMapKeywordFields);
@@ -20627,7 +20668,7 @@ begin
 end;
 
 function TORMPropertiesMapping.SetOptions(
-  aOptions: TORMPropertiesMappingOptions): PSQLRecordPropertiesMapping;
+  aOptions: TORMPropertiesMappingOptions): PORMPropertiesMapping;
 begin
   if @self <> nil then
     fOptions := aOptions;
@@ -20657,7 +20698,7 @@ type // similar to TORMModelRecordProperties.Create()/SetKind()
     with fProps do
       for f := 0 to Fields.Count - 1 do
         with Fields.List[f] do
-          if SQLFieldType in COPIABLE_FIELDS then // sftMany fields do not exist
+          if ORMFieldType in COPIABLE_FIELDS then // oftMany fields do not exist
             case content of
               TableSimpleFields:
                 if f in SimpleFieldsBits[ooSelect] then
@@ -21225,7 +21266,7 @@ begin
   if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) then
     result := false
   else
-    result := SetCache(PSQLRecordClass(aRecord)^, aRecord.fID);
+    result := SetCache(PORMClass(aRecord)^, aRecord.fID);
 end;
 
 procedure TRestCache.Clear;
@@ -21323,7 +21364,7 @@ begin
   if (self = nil) or (aRecord = nil) or (aRecord.fID <= 0) or
      not (aAction in [ooInsert, ooUpdate]) then
     exit;
-  aTableIndex := fModel.GetTableIndex(PSQLRecordClass(aRecord)^);
+  aTableIndex := fModel.GetTableIndex(PORMClass(aRecord)^);
   if aTableIndex < cardinal(Length(fCache)) then
     with fCache[aTableIndex] do
       if CacheEnable then
@@ -21393,7 +21434,7 @@ begin
      (aValue = nil) or
      (aID <= 0) then
     exit;
-  TableIndex := fModel.GetTableIndexExisting(PSQLRecordClass(aValue)^);
+  TableIndex := fModel.GetTableIndexExisting(PORMClass(aValue)^);
   if TableIndex < cardinal(Length(fCache)) then
     with fCache[TableIndex] do
       if CacheEnable and RetrieveJSON(aID, aValue) then
@@ -21569,11 +21610,11 @@ begin
      (fBatch = nil) then
     exit; // invalid parameters, or not opened BATCH sequence
   if (fTable <> nil) and
-     (PSQLRecordClass(Value)^ <> fTable) then
+     (PORMClass(Value)^ <> fTable) then
     exit;
   Props := Value.RecordProps;
   if SendData and
-     (fModel.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID) then
+     (fModel.Props[PORMClass(Value)^].Kind in INSERT_WITH_ID) then
     ForceID := true; // same format as TRestClient.Add
   if SendData and not ForceID and IsZero(CustomFields) and
      not (boPostNoSimpleFields in fOptions) then
@@ -21602,9 +21643,9 @@ begin
       FieldBits := CustomFields
     else
       FieldBits := CustomFields + Props.ComputeBeforeAddFieldsBits;
-    SetExpandedJSONWriter(Props, fTablePreviousSendData <> PSQLRecordClass(Value)^,
+    SetExpandedJSONWriter(Props, fTablePreviousSendData <> PORMClass(Value)^,
       (Value.IDValue <> 0) and ForceID, FieldBits);
-    fTablePreviousSendData := PSQLRecordClass(Value)^;
+    fTablePreviousSendData := PORMClass(Value)^;
     if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
       Value.ComputeFieldsBeforeWrite(fRest, oeAdd);
     if PostSimpleFields then
@@ -21630,7 +21671,7 @@ begin
   inc(fBatchCount);
   inc(fAddCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self, ooInsert, PSQLRecordClass(Value)^, Value.IDValue, Value,
+    fOnWrite(self, ooInsert, PORMClass(Value)^, Value.IDValue, Value,
       FieldBits{%H-});
 end;
 
@@ -21721,7 +21762,7 @@ begin
     exit; // invalid parameters, or not opened BATCH sequence
   Props := Value.RecordProps;
   if fTable <> nil then
-    if PSQLRecordClass(Value)^ <> fTable then
+    if PORMClass(Value)^ <> fTable then
       exit
     else
     begin // '{"Table":[...,"PUT",{object},...]}'
@@ -21741,12 +21782,12 @@ begin
   else if DoNotAutoComputeFields then
     FieldBits := CustomFields * Props.CopiableFieldsBits
   else
-    FieldBits := CustomFields * Props.CopiableFieldsBits + Props.FieldBits[sftModTime];
-  SetExpandedJSONWriter(Props, fTablePreviousSendData <> PSQLRecordClass(Value)^,
+    FieldBits := CustomFields * Props.CopiableFieldsBits + Props.FieldBits[oftModTime];
+  SetExpandedJSONWriter(Props, fTablePreviousSendData <> PORMClass(Value)^,
     {withID=}true, FieldBits);
-  fTablePreviousSendData := PSQLRecordClass(Value)^;
+  fTablePreviousSendData := PORMClass(Value)^;
   if not DoNotAutoComputeFields then
-    Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update sftModTime fields
+    Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update oftModTime fields
   Value.GetJSONValues(fBatch);
   fBatch.Add(',');
   if fCalledWithinRest and (FieldBits - Props.SimpleFieldsBits[ooUpdate] = []) then
@@ -21760,7 +21801,7 @@ begin
   inc(fBatchCount);
   inc(fUpdateCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self, ooUpdate, PSQLRecordClass(Value)^, Value.IDValue, Value, FieldBits);
+    fOnWrite(self, ooUpdate, PORMClass(Value)^, Value.IDValue, Value, FieldBits);
 end;
 
 function TRestBatch.Update(Value: TORM; const CustomCSVFields: RawUTF8;
@@ -21976,14 +22017,14 @@ end;
 
 class procedure TORMNoCase.InternalDefineModel(Props: TORMProperties);
 begin
-  Props.SetCustomCollationForAll(sftUTF8Text, 'NOCASE');
+  Props.SetCustomCollationForAll(oftUTF8Text, 'NOCASE');
 end;
 
 { TORMCaseSensitive }
 
 class procedure TORMCaseSensitive.InternalDefineModel(Props: TORMProperties);
 begin
-  Props.SetCustomCollationForAll(sftUTF8Text, 'BINARY');
+  Props.SetCustomCollationForAll(oftUTF8Text, 'BINARY');
 end;
 
 { TORMNoCaseExtended }
@@ -22021,22 +22062,22 @@ begin
   // ensure TORMObjArray is recognized as a T*ObjArray
   // - needed e.g. by TRestStorageInMemory.Create
   Rtti.RegisterObjArray(TypeInfo(TORMObjArray), TORM);
-  // manual setting of SQLFieldTypeComp[] values which are not TUTF8Compare
-  pointer(@SQLFieldTypeComp[sftAnsiText]) := @AnsiIComp;
-  pointer(@SQLFieldTypeComp[sftUTF8Custom]) := @AnsiIComp;
-  pointer(@SQLFieldTypeComp[sftObject]) := @StrComp;
-  pointer(@SQLFieldTypeComp[sftVariant]) := @StrComp;
-  pointer(@SQLFieldTypeComp[sftNullable]) := @StrComp;
+  // manual setting of ORMFieldTypeComp[] values which are not TUTF8Compare
+  pointer(@ORMFieldTypeComp[oftAnsiText]) := @AnsiIComp;
+  pointer(@ORMFieldTypeComp[oftUTF8Custom]) := @AnsiIComp;
+  pointer(@ORMFieldTypeComp[oftObject]) := @StrComp;
+  pointer(@ORMFieldTypeComp[oftVariant]) := @StrComp;
+  pointer(@ORMFieldTypeComp[oftNullable]) := @StrComp;
 end;
 
 procedure FinalizeUnit;
 begin
   DeleteCriticalSection(vmtAutoTableLock);
-  FreeAndNil(SQLPropInfoRegistration);
+  FreeAndNil(ORMPropInfoRegistration);
 end;
 
 // yes, I know, this is a huge unit, but there are a lot of comments and
-// the core ORM classes are coupled together by design :)
+// the core ORM types are coupled together by design :)
 
 initialization
   InitializeUnit;

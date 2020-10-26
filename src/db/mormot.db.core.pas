@@ -146,7 +146,7 @@ type
   /// used to store bit set for all available fields in a Table
   // - with current MAX_SQLFIELDS value, 64 bits uses 8 bytes of memory
   // - see also IsZero() and IsEqual() functions
-  // - you can also use ALL_FIELDS as defined in mORMot.pas
+  // - you can also use ALL_FIELDS as defined in this unit
   TFieldBits = set of 0..MAX_SQLFIELDS - 1;
 
   /// points to a bit set used for all available fields in a Table
@@ -310,6 +310,7 @@ const
 
 
 {$ifndef PUREMORMOT2}
+// backward compatibility types redirections
 
 type
   TSQLFieldBits = TFieldBits;
@@ -585,7 +586,7 @@ function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
 
 /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
 // - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
-// ':("\uFFF12012-05-04"):' pattern will be recognized as a sftDateTime
+// ':("\uFFF12012-05-04"):' pattern will be recognized as a oftDateTime
 // inline parameter in  SQLParamContent() / ExtractInlineParameters() functions
 // (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
@@ -594,7 +595,7 @@ function DateToSQL(Date: TDateTime): RawUTF8; overload;
 
 /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
 // - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
-// ':("\uFFF12012-05-04"):' pattern will be recognized as a sftDateTime
+// ':("\uFFF12012-05-04"):' pattern will be recognized as a oftDateTime
 // inline parameter in  SQLParamContent() / ExtractInlineParameters() functions
 // (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
@@ -623,7 +624,7 @@ function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
 // - follows the same pattern as DateToSQL or DateTimeToSQL functions, i.e.
 // will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
 // therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
-// sftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
+// oftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
 // (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
 // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(TimeLogNow)]);
@@ -634,7 +635,7 @@ function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
 // - follows the same pattern as DateToSQL or DateTimeToSQL functions, i.e.
 // will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
 // therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
-// sftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
+// oftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
 // (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
 // - in practice, just append the JSON_SQLDATE_MAGIC prefix to the supplied text
 function Iso8601ToSQL(const S: RawByteString): RawUTF8;
@@ -645,20 +646,20 @@ function Iso8601ToSQL(const S: RawByteString): RawUTF8;
 
 /// guess the content type of an UTF-8 SQL value, in :(....): format
 // - will be used e.g. by ExtractInlineParameters() to un-inline a SQL statement
-// - sftInteger is returned for an INTEGER value, e.g. :(1234):
-// - sftFloat is returned for any floating point value (i.e. some digits
+// - oftInteger is returned for an INTEGER value, e.g. :(1234):
+// - oftFloat is returned for any floating point value (i.e. some digits
 // separated by a '.' character), e.g. :(12.34): or :(12E-34):
-// - sftUTF8Text is returned for :("text"): or :('text'):, with double quoting
+// - oftUTF8Text is returned for :("text"): or :('text'):, with double quoting
 // inside the value
-// - sftBlob will be recognized from the ':("\uFFF0base64encodedbinary"):'
+// - oftBlob will be recognized from the ':("\uFFF0base64encodedbinary"):'
 // pattern, and return raw binary (for direct blob parameter assignment)
-// - sftDateTime will be recognized from ':(\uFFF1"2012-05-04"):' pattern,
+// - oftDateTime will be recognized from ':(\uFFF1"2012-05-04"):' pattern,
 // i.e. JSON_SQLDATE_MAGIC-prefixed string as returned by DateToSQL() or
 // DateTimeToSQL() functions
-// - sftUnknown is returned on invalid content, or if wasNull is set to TRUE
+// - oftUnknown is returned on invalid content, or if wasNull is set to TRUE
 // - if ParamValue is not nil, the pointing RawUTF8 string is set with the
-// value inside :(...): without double quoting in case of sftUTF8Text
-// - wasNull is set to TRUE if P was ':(null):' and ParamType is sftUnknwown
+// value inside :(...): without double quoting in case of oftUTF8Text
+// - wasNull is set to TRUE if P was ':(null):' and ParamType is oftUnknwown
 function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType;
   out ParamValue: RawUTF8; out wasNull: boolean): PUTF8Char;
 

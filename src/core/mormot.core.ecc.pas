@@ -285,8 +285,6 @@ type
 
   /// used to store a list of TECCCertificate instances
   // - e.g. in TECCCertificateChain.Items
-  // - TJSONSerializer.RegisterObjArrayForJSON done in dddInfraApps and not
-  // in this unit to avoid dependency to mORMot.pas
   TECCCertificateObjArray = array of TECCCertificate;
 
   /// a public/private certificate using ECC secp256r1 cryptography
@@ -682,8 +680,6 @@ type
   /// manage PKI certificates using ECC secp256r1 cryptography
   // - will implement a simple and efficient public-key infrastructure (PKI),
   // based on JSON objects or even plain base-64 encoded JSON strings
-  // - consider using TECCCertificateChainFile from mORMot.pas if you want
-  // to use convenient human-readable JSON serialization in files
   TECCCertificateChain = class(TSynPersistentLock)
   protected
     fItems: TECCCertificateObjArray;
@@ -2100,9 +2096,10 @@ begin
   result := LoadFromSecureBinary(StringFromFile(FN), PassWord, PBKDF2Rounds, AES);
 end;
 
-function TECCCertificateSecret.SaveToSource(const ConstName, Comment, PassWord:
-  RawUTF8; IncludePassword: boolean; AFStripes, PBKDF2Rounds: integer; AES:
-  TAESAbstractClass; IncludeRaw: boolean): RawUTF8;
+function TECCCertificateSecret.SaveToSource(
+  const ConstName, Comment, PassWord: RawUTF8; IncludePassword: boolean;
+  AFStripes, PBKDF2Rounds: integer; AES: TAESAbstractClass;
+  IncludeRaw: boolean): RawUTF8;
 var
   data: RawByteString;
   name, suffix: RawUTF8;
@@ -2119,14 +2116,17 @@ begin
   else
     name := UpperCase(ConstName);
   if IncludePassword then
-    suffix := FormatUTF8('  %_PASS = %;'#13#10'  %_CYPH = ''%'';'#13#10, [name,
-      QuotedStr(PassWord), name, TSynPersistentWithPassword.ComputePassword(PassWord)]);
+    suffix := FormatUTF8('  %_PASS = %;'#13#10'  %_CYPH = ''%'';'#13#10,
+      [name, QuotedStr(PassWord), name,
+       TSynPersistentWithPassword.ComputePassword(PassWord)]);
   if ConstName <> '' then
-    suffix := FormatUTF8('  %_SERIAL = ''%'';'#13#10'%', [name, Serial, {%H-}suffix]);
-  suffix := FormatUTF8('  %_ROUNDS = %;'#13#10'%', [name, PBKDF2Rounds, suffix]);
+    suffix := FormatUTF8('  %_SERIAL = ''%'';'#13#10'%',
+      [name, Serial, {%H-}suffix]);
+  suffix := FormatUTF8('  %_ROUNDS = %;'#13#10'%',
+    [name, PBKDF2Rounds, suffix]);
   if IncludeRaw then
-    suffix := FormatUTF8('  %_RAW = ''%'';'#13#10'%', [name, mormot.core.text.BinToHex
-      (@fPrivateKey, sizeof(fPrivateKey)), suffix]);
+    suffix := FormatUTF8('  %_RAW = ''%'';'#13#10'%',
+      [name, mormot.core.text.BinToHex(@fPrivateKey, sizeof(fPrivateKey)), suffix]);
   result := BinToSource(name, Comment, pointer(data), length(data), 16, suffix)
 end;
 
@@ -2155,8 +2155,8 @@ begin
   end;
 end;
 
-function TECCCertificateSecret.SignFile(const FileToSign: TFileName; const
-  MetaNameValuePairs: array of const): TFileName;
+function TECCCertificateSecret.SignFile(const FileToSign: TFileName;
+  const MetaNameValuePairs: array of const): TFileName;
 var
   content: RawByteString;
   sign: RawUTF8;
@@ -2165,22 +2165,28 @@ var
 begin
   content := StringFromFile(FileToSign);
   if content = '' then
-    raise EECCException.CreateUTF8('%.SignFile: file [%] not found', [self, FileToSign]);
+    raise EECCException.CreateUTF8(
+      '%.SignFile: file [%] not found', [self, FileToSign]);
   sha := SHA256Digest(pointer(content), length(content));
   sign := SignToBase64(sha);
-  meta.InitObject(['name', ExtractFileName(FileToSign), 'date',
-    DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))], JSON_OPTIONS_FAST);
+  meta.InitObject([
+    'name', ExtractFileName(FileToSign),
+    'date', DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))], JSON_OPTIONS_FAST);
   meta.AddNameValuesToObject(MetaNameValuePairs);
-  doc.InitObject(['meta', variant(meta), 'size', length(content), 'md5', MD5(content),
-    'sha256', SHA256DigestToString(sha), 'sign', sign], JSON_OPTIONS_FAST);
+  doc.InitObject([
+    'meta', variant(meta),
+    'size', length(content),
+    'md5', MD5(content),
+    'sha256', SHA256DigestToString(sha),
+    'sign', sign], JSON_OPTIONS_FAST);
   result := FileToSign + ECCCERTIFICATESIGN_FILEEXT;
   FileFromString(doc.ToJSON('', '', jsonHumanReadable), result);
 end;
 
-function TECCCertificateSecret.Decrypt(const Encrypted: RawByteString; out
-  Decrypted: RawByteString; Signature: PECCSignatureCertifiedContent; MetaData:
-  PRawJSON; FileDateTime: PDateTime; const KDFSalt: RawUTF8; KDFRounds: integer;
-  const MACSalt: RawUTF8; MACRounds: integer): TECCDecrypt;
+function TECCCertificateSecret.Decrypt(const Encrypted: RawByteString;
+  out Decrypted: RawByteString; Signature: PECCSignatureCertifiedContent;
+  MetaData: PRawJSON; FileDateTime: PDateTime; const KDFSalt: RawUTF8;
+  KDFRounds: integer; const MACSalt: RawUTF8; MACRounds: integer): TECCDecrypt;
 var
   head: TECIESHeader;
   features: TECIESFeatures;
@@ -2213,8 +2219,8 @@ begin
       exit;
     PBKDF2_HMAC_SHA256(secret, KDFSalt, KDFRounds, aeskey, 'salt');
     SetString(enc, data, datalen);
-    dec := ECIES_AES[head.Algo].SimpleEncrypt(enc, aeskey, ECIES_AESSIZE[head.Algo],
-      false, true);
+    dec := ECIES_AES[head.Algo].SimpleEncrypt(
+      enc, aeskey, ECIES_AESSIZE[head.Algo], false, true);
     if head.Algo in [low(ECIES_NOSYNLZ)..high(ECIES_NOSYNLZ)] then
       AlgoSynLZ.Decompress(pointer(dec), length(dec), Decrypted)
     else
@@ -2261,9 +2267,9 @@ begin
     result := ecdNoPrivateKey;
 end;
 
-function TECCCertificateSecret.DecryptFile(const FileToDecrypt, DestFile:
-  TFileName; const Salt: RawUTF8; SaltRounds: integer; Signature:
-  PECCSignatureCertifiedContent; MetaData: PRawJSON): TECCDecrypt;
+function TECCCertificateSecret.DecryptFile(const FileToDecrypt,
+  DestFile: TFileName; const Salt: RawUTF8; SaltRounds: integer;
+  Signature: PECCSignatureCertifiedContent; MetaData: PRawJSON): TECCDecrypt;
 var
   content, plain: RawByteString;
   dest: TFileName;
@@ -2280,7 +2286,8 @@ begin
       dest := GetFileNameWithoutExt(FileToDecrypt)
     else
       dest := DestFile;
-    result := Decrypt(content, plain, Signature, MetaData, @filetime, Salt, SaltRounds);
+    result := Decrypt(
+      content, plain, Signature, MetaData, @filetime, Salt, SaltRounds);
     if result in ECC_VALIDDECRYPT then
       if not FileFromString(plain, dest, false, filetime) then
         result := ecdWriteFileError;
@@ -2292,19 +2299,19 @@ end;
 
 { TECCCertificateSecretSetting }
 
-function TECCCertificateSecretSetting.CertificateSecret(const FolderName:
-  TFileName): TECCCertificateSecret;
+function TECCCertificateSecretSetting.CertificateSecret(
+  const FolderName: TFileName): TECCCertificateSecret;
 begin
   if self = nil then
     result := nil
   else if filename <> '' then
-    result := TECCCertificateSecret.CreateFromSecureFile(filename,
-      GetPassWordPlain, PasswordRounds)
+    result := TECCCertificateSecret.CreateFromSecureFile(
+      filename, GetPassWordPlain, PasswordRounds)
   else if Serial = '' then
     result := nil
   else
-    result := TECCCertificateSecret.CreateFromSecureFile(FolderName, Serial,
-      GetPassWordPlain, PasswordRounds);
+    result := TECCCertificateSecret.CreateFromSecureFile(
+      FolderName, Serial, GetPassWordPlain, PasswordRounds);
 end;
 
 constructor TECCCertificateSecretSetting.Create;
@@ -2339,7 +2346,8 @@ begin
   if ECCCheck(binary) then
     fContent := binary
   else if not NoException then
-    raise EECCException.CreateUTF8('Invalid %.CreateFrom', [self]);
+    raise EECCException.CreateUTF8(
+      'Invalid %.CreateFrom', [self]);
 end;
 
 constructor TECCSignatureCertified.CreateFromBase64(const base64: RawUTF8;
@@ -2348,7 +2356,8 @@ begin
   Create;
   if not FromBase64(base64) then
     if not NoException then
-      raise EECCException.CreateUTF8('Invalid %.CreateFromBase64', [self]);
+      raise EECCException.CreateUTF8(
+        'Invalid %.CreateFromBase64', [self]);
 end;
 
 constructor TECCSignatureCertified.CreateFromFile(const signfilename: TFileName;
@@ -2357,8 +2366,8 @@ begin
   Create;
   if not FromFile(signfilename) then
     if not NoException then
-      raise EECCException.CreateUTF8('Invalid %.CreateFromFile("%")', [self,
-        signfilename]);
+      raise EECCException.CreateUTF8(
+        'Invalid %.CreateFromFile("%")', [self, signfilename]);
 end;
 
 constructor TECCSignatureCertified.CreateNew(Authority: TECCCertificateSecret;
@@ -2372,9 +2381,11 @@ constructor TECCSignatureCertified.CreateNew(Authority: TECCCertificateSecret;
 begin
   Create;
   if not Authority.HasSecret then
-    raise EECCException.CreateUTF8('%.CreateNew: secret=0 %', [self, Authority]);
+    raise EECCException.CreateUTF8(
+      '%.CreateNew: secret=0 %', [self, Authority]);
   if IsZero(Hash) then
-    raise EECCException.CreateUTF8('%.CreateNew(Hash=0)', [self]);
+    raise EECCException.CreateUTF8(
+      '%.CreateNew(Hash=0)', [self]);
   fContent.Date := NowECCDate;
   fContent.AuthoritySerial := Authority.Content.Signed.Serial;
   fContent.AuthorityIssuer := Authority.Content.Signed.Issuer;
@@ -2399,8 +2410,9 @@ end;
 
 function TECCSignatureCertified.FromBase64(const base64: RawUTF8): boolean;
 begin
-  result := (self <> nil) and Base64ToBin(pointer(base64), @fContent, length(base64),
-    sizeof(fContent), false) and ECCCheck(fContent);
+  result := (self <> nil) and
+    Base64ToBin(pointer(base64), @fContent, length(base64), sizeof(fContent), false) and
+    ECCCheck(fContent);
 end;
 
 function TECCSignatureCertified.FromFile(const signfilename: TFileName): boolean;
@@ -2424,8 +2436,11 @@ end;
 
 function TECCSignatureCertified.ToVariant: variant;
 begin
-  result := _ObjFast(['Version', Version, 'Date', Date, 'AuthoritySerial',
-    AuthoritySerial, 'AuthorityIssuer', AuthorityIssuer]);
+  result := _ObjFast([
+    'Version', Version,
+    'Date', Date,
+    'AuthoritySerial', AuthoritySerial,
+    'AuthorityIssuer', AuthorityIssuer]);
 end;
 
 function TECCSignatureCertified.Check: boolean;
@@ -2433,8 +2448,8 @@ begin
   result := (self <> nil) and ECCCheck(fContent);
 end;
 
-function TECCSignatureCertified.Verify(Authority: TECCCertificate; const hash:
-  THash256): TECCValidity;
+function TECCSignatureCertified.Verify(Authority: TECCCertificate;
+  const hash: THash256): TECCValidity;
 begin
   if self = nil then
     result := ecvBadParameter
@@ -2444,8 +2459,8 @@ begin
     result := ECCVerify(fContent, hash, Authority.fContent);
 end;
 
-function TECCSignatureCertified.Verify(Authority: TECCCertificate; Data: pointer;
-  Len: integer): TECCValidity;
+function TECCSignatureCertified.Verify(Authority: TECCCertificate;
+  Data: pointer; Len: integer): TECCValidity;
 begin
   result := Verify(Authority, SHA256Digest(Data, Len));
 end;
@@ -2520,9 +2535,10 @@ begin
     fSHA256Digest) and FromBase64(fLowLevelInfo.U['sign']);
 end;
 
-function TECCSignatureCertifiedFile.FromDecryptedFile(const aDecryptedContent:
-  RawByteString; const Signature: TECCSignatureCertifiedContent; const MetaData:
-  RawJSON): boolean;
+function TECCSignatureCertifiedFile.FromDecryptedFile(
+  const aDecryptedContent: RawByteString;
+  const Signature: TECCSignatureCertifiedContent;
+  const MetaData: RawJSON): boolean;
 var
   MD5: TMD5;
   SHA256: TSHA256;
@@ -2538,18 +2554,23 @@ begin
   fMetaData := _JsonFast(MetaData);
   fContent := Signature;
   fLowLevelInfo.Clear;
-  fLowLevelInfo.InitObject(['size', fSize, 'md5', fMD5, 'sha256', fSHA256,
-    'sign', ToBase64, 'meta', fMetaData]);
+  fLowLevelInfo.InitObject([
+    'size', fSize,
+    'md5', fMD5,
+    'sha256', fSHA256,
+    'sign', ToBase64,
+    'meta', fMetaData]);
 end;
 
-constructor TECCSignatureCertifiedFile.CreateFromDecryptedFile(const
-  aDecryptedContent: RawByteString; const Signature:
-  TECCSignatureCertifiedContent; const MetaData: RawJSON);
+constructor TECCSignatureCertifiedFile.CreateFromDecryptedFile(
+  const aDecryptedContent: RawByteString;
+  const Signature: TECCSignatureCertifiedContent;
+  const MetaData: RawJSON);
 begin
   inherited Create;
   if not FromDecryptedFile(aDecryptedContent, Signature, MetaData) then
-    raise EECCException.CreateUTF8('Invalid Signature for %.CreateFromDecryptedFile',
-      [self]);
+    raise EECCException.CreateUTF8(
+      'Invalid Signature for %.CreateFromDecryptedFile', [self]);
 end;
 
 
@@ -2809,8 +2830,8 @@ function TECCCertificateChain.IsAuthorized(const sign:
 var
   content: TECCCertificateContent;
 begin
-  result := GetBySerial(sign.AuthoritySerial, content) and IsEqual(content.Signed.AuthorityIssuer,
-    sign.AuthorityIssuer);
+  result := GetBySerial(sign.AuthoritySerial, content) and
+            IsEqual(content.Signed.AuthorityIssuer, sign.AuthorityIssuer);
 end;
 
 function TECCCertificateChain.IsAuthorized(const base64sign: RawUTF8): boolean;
@@ -2823,8 +2844,8 @@ begin
     result := false;
 end;
 
-function TECCCertificateChain.IsSigned(sign: TECCSignatureCertified; Data:
-  pointer; Len: integer): TECCValidity;
+function TECCCertificateChain.IsSigned(sign: TECCSignatureCertified;
+  Data: pointer; Len: integer): TECCValidity;
 var
   hash: TSHA256Digest;
 begin
@@ -2858,8 +2879,8 @@ begin
     result := ecvBadParameter;
 end;
 
-function TECCCertificateChain.IsSigned(sign: TECCSignatureCertified; const hash:
-  THash256): TECCValidity;
+function TECCCertificateChain.IsSigned(sign: TECCSignatureCertified;
+  const hash: THash256): TECCValidity;
 begin
   if (self <> nil) and
      (sign <> nil) then
@@ -2878,8 +2899,8 @@ begin
     result := IsSigned(sign, SHA256Digest(Data, Len));
 end;
 
-function TECCCertificateChain.IsSigned(const base64sign: RawUTF8; const hash:
-  THash256): TECCValidity;
+function TECCCertificateChain.IsSigned(const base64sign: RawUTF8;
+  const hash: THash256): TECCValidity;
 var
   sign: TECCSignatureCertifiedContent;
 begin
@@ -2889,8 +2910,8 @@ begin
     result := ecvBadParameter;
 end;
 
-function TECCCertificateChain.IsSigned(const base64sign: RawUTF8; Data: pointer;
-  Len: integer): TECCValidity;
+function TECCCertificateChain.IsSigned(const base64sign: RawUTF8;
+  Data: pointer; Len: integer): TECCValidity;
 var
   sign: TECCSignatureCertifiedContent;
 begin
@@ -2920,7 +2941,7 @@ end;
 
 function TECCCertificateChain.SaveToArray: TRawUTF8DynArray;
 var
-  i: integer;
+  i: PtrInt;
 begin
   fSafe.Lock;
   try
@@ -2939,8 +2960,9 @@ var
 begin
   tmp.Init(json);
   try
-    result := (DynArrayLoadJSON(values, tmp.buf, TypeInfo(TRawUTF8DynArray)) <>
-      nil) and LoadFromArray(values);
+    result :=
+      (DynArrayLoadJSON(values, tmp.buf, TypeInfo(TRawUTF8DynArray)) <> nil) and
+      LoadFromArray(values);
   finally
     tmp.Done;
   end;
@@ -2948,7 +2970,7 @@ end;
 
 function TECCCertificateChain.LoadFromArray(const values: TRawUTF8DynArray): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if self = nil then
@@ -2974,7 +2996,7 @@ end;
 
 function TECCCertificateChain.ValidateItems: TECCCertificateObjArray;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := nil;
   if self = nil then
@@ -2993,12 +3015,13 @@ constructor TECCCertificateChain.CreateFromFile(const jsonfile: TFileName);
 begin
   Create;
   if not LoadFromFile(jsonfile) then
-    raise EECCException.CreateUTF8('Invalid %.CreateFromFile("%")', [self, jsonfile]);
+    raise EECCException.CreateUTF8(
+      'Invalid %.CreateFromFile("%")', [self, jsonfile]);
 end;
 
 constructor TECCCertificateChain.CreateFromFiles(const files: array of TFileName);
 var
-  i: integer;
+  i: PtrInt;
   auth: TECCCertificate;
 begin
   Create;
@@ -3012,8 +3035,8 @@ begin
         auth := nil;
       end
       else
-        raise EECCException.CreateUTF8('%.CreateFromFiles: invalid file [%]', [self,
-          files[i]]);
+        raise EECCException.CreateUTF8(
+          '%.CreateFromFiles: invalid file [%]', [self, files[i]]);
     finally
       auth.Free;
     end;
@@ -3023,7 +3046,7 @@ end;
 function TECCCertificateChain.SaveToFileVariant: variant;
 var
   pub64, items: TDocVariantData;
-  i, n: integer;
+  i, n: PtrInt;
 begin
   fSafe.Lock;
   try
@@ -3035,7 +3058,9 @@ begin
       pub64.AddItemText(fItems[i].PublicToBase64);
       items.AddItem(fItems[i].ToVariant(false));
     end;
-    result := _ObjFast(['PublicBase64', variant(pub64), 'Items', variant(items)]);
+    result := _ObjFast([
+      'PublicBase64', variant(pub64),
+      'Items', variant(items)]);
   finally
     fSafe.UnLock;
   end;
@@ -3046,7 +3071,8 @@ begin
   VariantSaveJSON(SaveToFileVariant, twJSONEscape, result);
 end;
 
-function TECCCertificateChain.LoadFromFileContent(const cajsoncontent: RawUTF8): boolean;
+function TECCCertificateChain.LoadFromFileContent(
+  const cajsoncontent: RawUTF8): boolean;
 var
   doc: TDocVariantData;
   values: TRawUTF8DynArray;
@@ -3132,8 +3158,8 @@ begin
   begin
     res := aPKI.IsValid(aPrivate);
     if not (res in ECC_VALIDSIGN) then
-      raise EECCException.CreateUTF8('%.Create failed: aPKI.IsValid(%)=%', [self,
-        aPrivate.Serial, ToText(res)^]);
+      raise EECCException.CreateUTF8('%.Create failed: aPKI.IsValid(%)=%',
+        [self, aPrivate.Serial, ToText(res)^]);
   end;
   inherited Create;
   fAlgo.auth := aAuth;
@@ -3176,7 +3202,8 @@ class procedure TECDHEProtocol.FromKeySetCA(aPKI: TECCCertificateChain);
 begin
   if _FromKeySetCA <> nil then
     if _FromKeySetCARefCount > 0 then
-      raise EECCException.CreateUTF8('%.FromKeySetCA: % is still used by % instance(s)',
+      raise EECCException.CreateUTF8(
+        '%.FromKeySetCA: % is still used by % instance(s)',
         [self, _FromKeySetCA, _FromKeySetCARefCount])
     else
       _FromKeySetCA.Free;
@@ -3186,8 +3213,8 @@ end;
 class function TECDHEProtocol.FromKey(const aKey: RawUTF8; aServer: boolean):
   TECDHEProtocol;
 const
-  CL: array[boolean] of TECDHEProtocolClass = (TECDHEProtocolServer,
-    TECDHEProtocolClient);
+  CL: array[boolean] of TECDHEProtocolClass = (
+    TECDHEProtocolServer, TECDHEProtocolClient);
 var
   sw: TSynNameValue;
   pw, c: RawUTF8;
@@ -3252,9 +3279,10 @@ begin
     include(result.fOwned, ownPrivate);
 end;
 
-class function TECDHEProtocol.FromKeyCompute(const privkey, privpassword:
-  RawUTF8; privrounds: integer; const pki: RawUTF8; auth: TECDHEAuth; kdf:
-  TECDHEKDF; ef: TECDHEEF; mac: TECDHEMAC; customkey: cardinal): RawUTF8;
+class function TECDHEProtocol.FromKeyCompute(
+  const privkey, privpassword: RawUTF8; privrounds: integer;
+  const pki: RawUTF8; auth: TECDHEAuth; kdf: TECDHEKDF; ef: TECDHEEF;
+  mac: TECDHEMAC; customkey: cardinal): RawUTF8;
 begin
   FormatUTF8('a=%', [ord(auth)], result);
   if kdf <> low(kdf) then
@@ -3269,34 +3297,40 @@ begin
   if privkey <> '' then
   begin
     result := FormatUTF8('%;p=%;pw=%', [result, privkey, privpassword]);
-    if privrounds <> 60000 then // DEFAULT_ECCROUNDS may change
+    if privrounds <> 60000 then
+      // DEFAULT_ECCROUNDS may change
       result := FormatUTF8('%;pr=%', [result, privrounds]);
   end;
   result := TSynPersistentWithPassword.ComputePassword(result, customkey);
 end;
 
 const
-  ED: array[boolean] of string[7] = ('Decrypt', 'Encrypt');
+  ED: array[boolean] of string[7] = (
+    'Decrypt', 'Encrypt');
 
 procedure TECDHEProtocol.SetKey(aEncrypt: boolean);
 begin
   if fAES[aEncrypt] = nil then
-    raise EECCException.CreateUTF8('%.% with no handshake', [self, ED[aEncrypt]]);
+    raise EECCException.CreateUTF8(
+      '%.% with no handshake', [self, ED[aEncrypt]]);
   fAES[aEncrypt].IV := fkM[aEncrypt].Lo; // kM is a CTR -> IV unicity
   if fAlgo.mac = macDuringEF then
     if not fAES[aEncrypt].MACSetNonce(fkM[aEncrypt].b) then
-      raise EECCException.CreateUTF8('%.%: macDuringEF not available in %/%', [self,
-        ED[aEncrypt], ToText(fAlgo.ef)^, fAES[aEncrypt]]);
+      raise EECCException.CreateUTF8(
+        '%.%: macDuringEF not available in %/%',
+        [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAES[aEncrypt]]);
 end;
 
-procedure TECDHEProtocol.ComputeMAC(aEncrypt: boolean; aEncrypted: pointer; aLen:
-  integer; out aMAC: THash256Rec);
+procedure TECDHEProtocol.ComputeMAC(aEncrypt: boolean;
+  aEncrypted: pointer; aLen: integer; out aMAC: THash256Rec);
 var
-  i, c: cardinal;
+  i: PtrInt;
+  c: cardinal;
 begin
   case fAlgo.mac of
     macDuringEF:
-      if not fAES[aEncrypt].MACGetLast(aMAC.b) then // computed during EF process
+      if not fAES[aEncrypt].MACGetLast(aMAC.b) then
+        // computed during EF process
         raise EECCException.CreateUTF8('%.%: macDuringEF not available in %/%',
           [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAES[aEncrypt]]);
     macHmacCrc256c:
@@ -3318,8 +3352,8 @@ begin
     macNone:
       crc256c(@fkM[aEncrypt], sizeof(THash256), aMAC.b); // replay attack only
   else
-    raise EECCException.CreateUTF8('%.%: ComputeMAC %?', [self, ED[aEncrypt],
-      ToText(fAlgo.mac)^]);
+    raise EECCException.CreateUTF8(
+      '%.%: ComputeMAC %?', [self, ED[aEncrypt], ToText(fAlgo.mac)^]);
   end;
   with fkM[aEncrypt] do
     for i := 0 to 3 do
@@ -3340,20 +3374,20 @@ begin
     SetKey(true);
     len := fAES[true].EncryptPKCS7Length(length(aPlain), false);
     SetString(aEncrypted, nil, len + sizeof(THash256));
-    fAES[true].EncryptPKCS7Buffer(Pointer(aPlain), pointer(aEncrypted), length(aPlain),
-      len, false);
-    ComputeMac(true, pointer(aEncrypted), len, PHash256Rec(@PByteArray(aEncrypted)
-      [len])^);
+    fAES[true].EncryptPKCS7Buffer(
+      Pointer(aPlain), pointer(aEncrypted), length(aPlain), len, false);
+    ComputeMac(true, pointer(aEncrypted), len,
+      PHash256Rec(@PByteArray(aEncrypted)[len])^);
   finally
     fSafe.UnLock;
   end;
 end;
 
-function TECDHEProtocol.Decrypt(const aEncrypted: RawByteString; out aPlain:
-  RawByteString): TProtocolResult;
+function TECDHEProtocol.Decrypt(const aEncrypted: RawByteString;
+  out aPlain: RawByteString): TProtocolResult;
 var
   P: PAnsiChar absolute aEncrypted;
-  len, i: integer;
+  len, i: PtrInt;
   mac: THash256Rec;
 begin
   result := sprInvalidMAC;
@@ -3445,8 +3479,8 @@ begin
   end;
 end;
 
-function TECDHEProtocol.Verify(frame: PByteArray; len: integer; const QC:
-  TECCCertificateContent; out res: TProtocolResult): boolean;
+function TECDHEProtocol.Verify(frame: PByteArray; len: integer;
+  const QC: TECCCertificateContent; out res: TProtocolResult): boolean;
 var
   hash: TSHA256Digest;
   sha: TSHA256;
@@ -3470,8 +3504,8 @@ begin
   result := true;
 end;
 
-procedure TECDHEProtocol.sign(frame: PByteArray; len: integer; out QC:
-  TECCCertificateContent);
+procedure TECDHEProtocol.sign(frame: PByteArray; len: integer;
+  out QC: TECCCertificateContent);
 var
   hash: TSHA256Digest;
   sha: TSHA256;
@@ -3491,8 +3525,8 @@ end;
 
 { TECDHEProtocolClient }
 
-constructor TECDHEProtocolClient.Create(aAuth: TECDHEAuth; aPKI:
-  TECCCertificateChain; aPrivate: TECCCertificateSecret);
+constructor TECDHEProtocolClient.Create(aAuth: TECDHEAuth;
+  aPKI: TECCCertificateChain; aPrivate: TECCCertificateSecret);
 begin
   if (aAuth <> authServer) and
      not aPrivate.CheckCRC then
@@ -3528,8 +3562,10 @@ begin
   if cardinal(aServer.algo) <> cardinal(fAlgo) then
     exit;
   result := sprBadRequest;
-  if IsZero(fRndA) or not IsEqual(aServer.RndA, fRndA) or IsZero(aServer.RndB)
-    or IsEqual(aServer.RndA, aServer.RndB) then
+  if IsZero(fRndA) or
+     not IsEqual(aServer.RndA, fRndA) or
+     IsZero(aServer.RndB) or
+     IsEqual(aServer.RndA, aServer.RndB) then
     exit;
   fRndB := aServer.RndB;
   if fAlgo.auth <> authClient then
@@ -3553,8 +3589,8 @@ begin
   result := sprSuccess;
 end;
 
-function TECDHEProtocolClient.ProcessHandshake(const MsgIn: RawUTF8; out MsgOut:
-  RawUTF8): TProtocolResult;
+function TECDHEProtocolClient.ProcessHandshake(const MsgIn: RawUTF8;
+  out MsgOut: RawUTF8): TProtocolResult;
 var
   out1: TECDHEFrameClient;
   in2: TECDHEFrameServer;
@@ -3624,7 +3660,8 @@ begin
   aServer.RndB := fRndB;
   if fAlgo.auth <> authServer then
     if not ecc_make_key(aServer.QF, dF) then
-      raise EECCException.CreateUTF8('%.ComputeHandshake: ecc_make_key?', [self]);
+      raise EECCException.CreateUTF8(
+        '%.ComputeHandshake: ecc_make_key?', [self]);
   try
     result := sprInvalidPublicKey;
     if fAlgo.auth <> authServer then
@@ -3645,8 +3682,8 @@ begin
   result := sprSuccess;
 end;
 
-function TECDHEProtocolServer.ProcessHandshake(const MsgIn: RawUTF8; out MsgOut:
-  RawUTF8): TProtocolResult;
+function TECDHEProtocolServer.ProcessHandshake(const MsgIn: RawUTF8;
+  out MsgOut: RawUTF8): TProtocolResult;
 var
   in1: TECDHEFrameClient;
   out1: TECDHEFrameServer;
@@ -3663,6 +3700,7 @@ end;
 initialization
   assert(sizeof(TECDHEFrameClient) = 290); // on all platforms/compilers
   assert(sizeof(TECDHEFrameServer) = 306);
+  Rtti.RegisterObjArray(TypeInfo(TECCCertificateObjArray), TECCCertificate);
 
 end.
 

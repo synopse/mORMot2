@@ -558,7 +558,7 @@ type
     // of plain JSON string (as stored in the database)
     // - will idenfity ClientKind=ckAjax, or check for rsoGetAsJsonNotAsString
     // in TRestServer.Options
-    function ClienTORMOptions: TJSONSerializerSQLRecordOptions;
+    function ClienTORMOptions: TJSONSerializerORMOptions;
     /// true if called from TRestServer.AdministrationExecute
     function IsRemoteAdministrationExecute: boolean;
     /// compute the file name corresponding to the URI
@@ -594,12 +594,12 @@ type
       const CustomHeader: RawUTF8 = ''); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
-    // - you can customize SQLRecordOptions, to force the returned JSON
+    // - you can customize ORMOptions, to force the returned JSON
     // object to have its TORM nested fields serialized as true JSON
     // arrays or objects, or add an "ID_str" string field for JavaScript
     procedure Returns(Value: TObject; Status: integer = HTTP_SUCCESS;
       Handle304NotModified: boolean = false;
-      SQLRecordOptions: TJSONSerializerSQLRecordOptions = [];
+      ORMOptions: TJSONSerializerORMOptions = [];
       const CustomHeader: RawUTF8 = ''); overload;
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJSON() to compute the returned content
@@ -3007,7 +3007,7 @@ end;
 procedure TRestServerURIContext.ExecuteORMGet;
 
   procedure ConvertOutBodyAsPlainJSON(const FieldsCSV: RawUTF8; Options:
-    TJSONSerializerSQLRecordOptions);
+    TJSONSerializerORMOptions);
   var
     rec: TORM;
     W: TJSONSerializer;
@@ -3027,7 +3027,7 @@ procedure TRestServerURIContext.ExecuteORMGet;
         true, FieldsCSV, {knownrows=}0);
       try
         W.CustomOptions := W.CustomOptions + [twoForceJSONStandard]; // force regular JSON
-        W.SQLRecordOptions := Options; // will do the magic
+        W.ORMOptions := Options; // will do the magic
         rec.AppendFillAsJsonValues(W);
         W.SetText(Call.OutBody);
       finally
@@ -3047,7 +3047,7 @@ var
   ResultList: TORMTable;
   TableIndexes: TIntegerDynArray;
   rec: TORM;
-  opt: TJSONSerializerSQLRecordOptions;
+  opt: TJSONSerializerORMOptions;
   P: PUTF8Char;
   i, j, L: PtrInt;
   cache: TRestCache;
@@ -4064,7 +4064,7 @@ begin
   result := (self <> nil) and (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
 end;
 
-function TRestServerURIContext.ClienTORMOptions: TJSONSerializerSQLRecordOptions;
+function TRestServerURIContext.ClienTORMOptions: TJSONSerializerORMOptions;
 begin
   result := [];
   if (TableRecordProps = nil) or
@@ -4072,7 +4072,7 @@ begin
     exit;
   if rsoGetID_str in Server.Options then
     include(result, jwoID_str);
-  if ([sftObject, sftBlobDynArray, sftVariant] *
+  if ([oftObject, oftBlobDynArray, oftVariant] *
       TableRecordProps.Props.HasTypeFields <> []) and
      (rsoGetAsJsonNotAsString in Server.Options) then
     include(result, jwoAsJsonNotAsString);
@@ -4128,13 +4128,13 @@ begin
 end;
 
 procedure TRestServerURIContext.Returns(Value: TObject; Status: integer;
-  Handle304NotModified: boolean; SQLRecordOptions: TJSONSerializerSQLRecordOptions;
+  Handle304NotModified: boolean; ORMOptions: TJSONSerializerORMOptions;
   const CustomHeader: RawUTF8);
 var
   json: RawUTF8;
 begin
   if Value.InheritsFrom(TORM) then
-    json := TORM(Value).GetJSONValues(true, true, ooSelect, nil, SQLRecordOptions)
+    json := TORM(Value).GetJSONValues(true, true, ooSelect, nil, ORMOptions)
   else
     json := ObjectToJSON(Value);
   Returns(json, Status, CustomHeader, Handle304NotModified);

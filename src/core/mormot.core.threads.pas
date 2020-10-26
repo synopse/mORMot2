@@ -209,7 +209,7 @@ type
   /// abstract TThread able to run a method in its own execution content
   // - typical use is a background thread for processing data or remote access,
   // while the UI will be still responsive by running OnIdle event in loop: see
-  // e.g. how TRestClientURI.OnIdle handle this in mORMot.pas unit
+  // e.g. how TRestClientURI.OnIdle handle this in mormot.rest.client.pas unit
   // - you should not use this class directly, but inherit from it and override
   // the Process method, or use either TSynBackgroundThreadEvent /
   // TSynBackgroundThreadMethod and provide a much more convenient callback
@@ -486,7 +486,7 @@ type
 
   {$M+}
   /// a semaphore used to wait for some process to be finished
-  // - used e.g. by TBlockingCallback in mORMot.pas
+  // - used e.g. by TBlockingCallback in mormot.rest.server.pas
   // - once created, process would block via a WaitFor call, which would be
   // released when NotifyFinished is called by the process background thread
   TBlockingProcess = class(TEvent)

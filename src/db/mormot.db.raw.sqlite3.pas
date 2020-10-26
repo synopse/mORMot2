@@ -2278,7 +2278,7 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data (no conversion into TEXT, as with
-    // TORMTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
+    // TORMTableDB) - so will work for oftBlob, oftBlobDynArray and oftBlobRecord
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
       Expand: boolean = false): PtrInt; overload;
@@ -2815,7 +2815,7 @@ type
     // - database is closed, VACCUUMed, copied, then reopened: it's very fast for
     // small databases, but is blocking and should be an issue
     // - if you use some virtual tables, they won't be restored after backup:
-    // this method would probably fail e.g. in the context of mORMot.pas
+    // this method would probably fail e.g. in the context of our ORM
     function Backup(const BackupFileName: TFileName): boolean;
     /// backup of the opened Database into an external file name
     // - this method will use the SQLite Online Backup API and a dedicated
@@ -2840,7 +2840,7 @@ type
     // - if only one connection to the database does exist (e.g. if you use only
     // one TSQLDataBase instance on the same database file), any modification
     // to the source database during the background process will be included in
-    // the backup - so this method will work perfectly e.g. for mORMot.pas
+    // the backup - so this method will work perfectly e.g. for our ORM
     // - if specified, a password will be used to cypher BackupFileName on disk
     // (it will work only with SynSQLite3Static) - you can uncypher the resulting
     // encrypted database file later via ChangeSQLEncryptTablePassWord()

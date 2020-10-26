@@ -127,10 +127,8 @@ const
 begin
   Check(SingleTest('abc', D1));
   Check(SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2));
-  {$ifndef PUREMORMOT2}
   {%H-}SHA256Weak('lagrangehommage', Digest); // test with len=256>64
   Check(IsEqual(Digest, D3));
-  {$endif PUREMORMOT2}
   {$ifdef ASMX64}
   if cfSSE41 in CpuFeatures then
   begin
@@ -144,14 +142,14 @@ end;
 
 procedure TTestCoreCrypto._TRC4;
 const
-  key: array[0..4] of byte = ($61, $8A, $63, $D2, $FB);
-  InDat: array[0..4] of byte = ($DC, $EE, $4C, $F9, $2C);
+  key:    array[0..4] of byte = ($61, $8A, $63, $D2, $FB);
+  InDat:  array[0..4] of byte = ($DC, $EE, $4C, $F9, $2C);
   OutDat: array[0..4] of byte = ($F1, $38, $29, $C9, $DE);
-  Test1: array[0..7] of byte = ($01, $23, $45, $67, $89, $ab, $cd, $ef);
-  Res1: array[0..7] of byte = ($75, $b7, $87, $80, $99, $e0, $c5, $96);
-  Key2: array[0..3] of byte = ($ef, $01, $23, $45);
-  Test2: array[0..9] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-  Res2: array[0..9] of byte = ($d6, $a1, $41, $a7, $ec, $3c, $38, $df, $bd, $61);
+  Test1:  array[0..7] of byte = ($01, $23, $45, $67, $89, $ab, $cd, $ef);
+  Res1:   array[0..7] of byte = ($75, $b7, $87, $80, $99, $e0, $c5, $96);
+  Key2:   array[0..3] of byte = ($ef, $01, $23, $45);
+  Test2:  array[0..9] of byte = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  Res2:   array[0..9] of byte = ($d6, $a1, $41, $a7, $ec, $3c, $38, $df, $bd, $61);
 var
   RC4: TRC4;
   Dat: array[0..9] of byte;
@@ -190,7 +188,7 @@ begin
   PInteger(UniqueRawUTF8(st))^ := Random32;
   for k := 0 to 2 do
   begin
-    ks := 128 + k * 64; // test keysize of 128,192 and 256 bits
+    ks := 128 + k * 64; // test keysize of 128, 192 and 256 bits
     for i := 1 to 100 do
     begin
       PBKDF2_HMAC_SHA256(st, 'salt', 10, Key);

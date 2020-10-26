@@ -119,7 +119,7 @@ function VariantToString(const V: Variant): string;
 
 type
   /// function prototype used internally for variant comparison
-  // - used in mORMot.pas unit e.g. by TDocVariantData.SortByValue
+  // - used in mormot.core.variants.pas unit e.g. by TDocVariantData.SortByValue
   TVariantCompare = function(const V1, V2: variant): PtrInt;
 
 /// TVariantCompare-compatible case-sensitive comparison function
@@ -1840,8 +1840,9 @@ type
 
   /// allows thread-safe access to a TDocVariant document
   // - this class inherits from TInterfacedObjectWithCustomCreate so you
-  // could define one published property of a mORMot.pas' TInjectableObject
-  // as ILockedDocVariant so that this class may be automatically injected
+  // could define one published property of a mormot.core.interfaces.pas
+  // TInjectableObject as ILockedDocVariant so that this class may be
+  // automatically injected
   TLockedDocVariant = class(TInterfacedObjectWithCustomCreate, ILockedDocVariant)
   protected
     fValue: TDocVariantData;

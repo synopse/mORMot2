@@ -391,7 +391,7 @@ begin
     DoNotAutoComputeFields);
   if (result > 0) and
      (fForceBlobTransfert <> nil) and
-     fForceBlobTransfert[fModel.GetTableIndexExisting(PSQLRecordClass(Value)^)] then
+     fForceBlobTransfert[fModel.GetTableIndexExisting(PORMClass(Value)^)] then
     UpdateBlobFields(Value);
 end;
 
@@ -504,7 +504,7 @@ begin
      (aID <= 0) or
      (Value = nil) then
     exit;
-  TableIndex := fModel.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  TableIndex := fModel.GetTableIndexExisting(PORMClass(Value)^);
   if ForUpdate then
   begin
     if not fModel.Lock(TableIndex, aID) then
@@ -552,7 +552,7 @@ begin
   begin
     if (fForceBlobTransfert <> nil) and
        IsZero(CustomFields) and
-       fForceBlobTransfert[fModel.GetTableIndexExisting(PSQLRecordClass(Value)^)] then
+       fForceBlobTransfert[fModel.GetTableIndexExisting(PORMClass(Value)^)] then
       result := UpdateBlobFields(Value);
     if result and assigned(OnRecordUpdate) then
       OnRecordUpdate(Value);
@@ -576,7 +576,7 @@ begin
      (Value <> nil) then
   begin
     state := Value.InternalState;
-    if ClientRetrieve(fModel.GetTableIndexExisting(PSQLRecordClass(Value)^),
+    if ClientRetrieve(fModel.GetTableIndexExisting(PORMClass(Value)^),
         aID, False, state, Resp) then
     begin
       Value.InternalState := state;

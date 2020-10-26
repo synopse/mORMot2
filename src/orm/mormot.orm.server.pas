@@ -76,7 +76,7 @@ type
     fCreateMissingTablesOptions: TORMInitializeTableOptions;
     fRecordVersionMax: TRecordVersion;
     fRecordVersionDeleteIgnore: boolean;
-    fSQLRecordVersionDeleteTable: TORMTableDeletedClass;
+    fORMVersionDeleteTable: TORMTableDeletedClass;
     // TORMHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistoryTableIndexCount: cardinal;
@@ -474,11 +474,11 @@ begin
   SetLength(fTrackChangesHistoryTableIndex, fTrackChangesHistoryTableIndexCount);
   for t := 0 to fTrackChangesHistoryTableIndexCount - 1 do
     fTrackChangesHistoryTableIndex[t] := -1;
-  fSQLRecordVersionDeleteTable := TORMTableDeleted;
+  fORMVersionDeleteTable := TORMTableDeleted;
   for t := 0 to high(fModel.Tables) do
     if fModel.Tables[t].RecordProps.RecordVersionField <> nil then
     begin
-      fSQLRecordVersionDeleteTable := fModel.AddTableInherited(TORMTableDeleted);
+      fORMVersionDeleteTable := fModel.AddTableInherited(TORMTableDeleted);
       break;
     end;
 end;
@@ -639,7 +639,7 @@ begin
             if max > current then
               current := max;
           mDeleted := Int64(m) shl SQLRECORDVERSION_DELETEID_SHIFT;
-          if OneFieldValue(fSQLRecordVersionDeleteTable, 'max(ID)', 'ID>? and ID<?',
+          if OneFieldValue(fORMVersionDeleteTable, 'max(ID)', 'ID>? and ID<?',
               [], [mDeleted, mDeleted + SQLRECORDVERSION_DELETEID_RANGE], max) then
           begin
             max := max and pred(SQLRECORDVERSION_DELETEID_RANGE);
@@ -670,7 +670,7 @@ var
 begin
   if fRecordVersionDeleteIgnore then
     exit;
-  deleted := fSQLRecordVersionDeleteTable.Create;
+  deleted := fORMVersionDeleteTable.Create;
   try
     revision := RecordVersionCompute;
     deleted.IDValue := revision +
@@ -707,7 +707,7 @@ begin
   if result >= SQLRECORDVERSION_DELETEID_RANGE then
     raise EORMException.CreateUTF8(
      '%.InternalRecordVersionCompute=% overflow: %.ID should be < 2^%)',
-     [self, result, fSQLRecordVersionDeleteTable, SQLRECORDVERSION_DELETEID_SHIFT]);
+     [self, result, fORMVersionDeleteTable, SQLRECORDVERSION_DELETEID_SHIFT]);
 end;
 
 function TRestORMServer.RecordVersionCurrent: TRecordVersion;
@@ -822,7 +822,7 @@ begin
       Where := 'ID>? and ID<? order by ID';
       if MaxRowLimit > 0 then
         Where := FormatUTF8('% limit %', [Where, MaxRowLimit]);
-      ListDeleted := Master.ORM.MultiFieldValues(fSQLRecordVersionDeleteTable,
+      ListDeleted := Master.ORM.MultiFieldValues(fORMVersionDeleteTable,
         'ID,Deleted', Where, [DeletedMinID + RecordVersion,
          DeletedMinID + SQLRECORDVERSION_DELETEID_RANGE]);
       if ListDeleted = nil then
@@ -834,7 +834,7 @@ begin
         // nothing new -> returns void TRestBach with Count=0
         exit;
       Rec := Table.Create;
-      Deleted := fSQLRecordVersionDeleteTable.Create;
+      Deleted := fORMVersionDeleteTable.Create;
       try
         Rec.FillPrepare(ListUpdated);
         Deleted.FillPrepare(ListDeleted);
@@ -1869,15 +1869,15 @@ begin
       if Ref^.FieldTableIndex = -2 then
         // lazy initialization
         Ref^.FieldTableIndex := fModel.GetTableIndexSafe(Ref^.FieldTable, false);
-      case Ref^.FieldType.SQLFieldType of
-        sftRecord:
+      case Ref^.FieldType.ORMFieldType of
+        oftRecord:
           // TRecordReference published field
           PerformCascade(RecordReference(aTableIndex, aID), Ref);
-        sftID:
+        oftID:
           // TORM published field
           if Ref^.FieldTableIndex = aTableIndex then
             PerformCascade(aID, Ref);
-        sftTID:
+        oftTID:
           // TTableID = type TID published field
           if Ref^.FieldTableIndex = aTableIndex then
             PerformCascade(aID, Ref);
@@ -2103,7 +2103,7 @@ begin
     result := false
   else
   begin
-    rest := GetStaticTable(PSQLRecordClass(Value)^);
+    rest := GetStaticTable(PORMClass(Value)^);
     if rest <> nil then
       // faster direct call
       result := rest.UpdateBlobFields(Value)
@@ -2121,7 +2121,7 @@ begin
     result := false
   else
   begin
-    rest := GetStaticTable(PSQLRecordClass(Value)^);
+    rest := GetStaticTable(PORMClass(Value)^);
     if rest <> nil then
       // faster direct call
       result := rest.RetrieveBlobFields(Value)
