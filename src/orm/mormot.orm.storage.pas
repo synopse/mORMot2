@@ -124,7 +124,7 @@ type
     OmitCheck: boolean;
   end;
 
-  PSQLVirtualTablePreparedConstraint = ^TOrmVirtualTablePreparedConstraint;
+  POrmVirtualTablePreparedConstraint = ^TOrmVirtualTablePreparedConstraint;
 
   /// an ORDER BY clause as set by the TOrmVirtualTable.Prepare() method
   // - warning: this structure should match exactly TSQLite3IndexOrderBy as
@@ -183,7 +183,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  PSQLVirtualTablePrepared = ^TOrmVirtualTablePrepared;
+  POrmVirtualTablePrepared = ^TOrmVirtualTablePrepared;
 
   TOrmVirtualTableCursor = class;
 

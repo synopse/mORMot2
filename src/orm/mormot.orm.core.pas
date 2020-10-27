@@ -6358,7 +6358,7 @@ type
     procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
   end;
 
-  PSQLLocks = ^TOrmLocks;
+  POrmLocks = ^TOrmLocks;
 
   TOrmLocksDynArray = array of TOrmLocks;
 
@@ -6490,7 +6490,7 @@ type
     procedure SetTableProps(aIndex: integer);
     function GetTableProps(aClass: TOrmClass): TOrmModelProperties;
     /// get the enumerate type information about the possible actions to be
-    function GetLocks(aTable: TOrmClass): PSQLLocks;
+    function GetLocks(aTable: TOrmClass): POrmLocks;
     function GetTable(const SQLTableName: RawUTF8): TOrmClass;
     function GetTableExactIndex(const TableName: RawUTF8): PtrInt;
     function GetTableExactClass(const TableName: RawUTF8): TOrmClass;
@@ -20316,7 +20316,7 @@ begin
     result := UnLock(POrmClass(aRec)^, aRec.fID);
 end;
 
-function TOrmModel.GetLocks(aTable: TOrmClass): PSQLLocks;
+function TOrmModel.GetLocks(aTable: TOrmClass): POrmLocks;
 begin
   if (self = nil) or (fLocks = nil) then
     result := nil
