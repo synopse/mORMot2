@@ -1594,7 +1594,7 @@ begin
     else
       inc(fLastCounter);
     result.Value := Int64(fLastCounter or fIdentifierShifted) or
-                   (Int64(fUnixCreateTime) shl 31);
+                    (Int64(fUnixCreateTime) shl 31);
     inc(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64);
   finally
     fSafe.UnLock;

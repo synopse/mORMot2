@@ -252,7 +252,8 @@ type
   TRttiProps = object
   public
     /// number of published properties in this object
-    function PropCount: integer; {$ifdef HASINLINE}inline;{$endif}
+    function PropCount: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// point to a TPropInfo packed array
     // - layout is as such, with variable TPropInfo storage size:
     // ! PropList: array[1..PropCount] of TPropInfo
@@ -262,7 +263,8 @@ type
     // !   // ... do something with P
     // !   P := P^.Next;
     // ! end;
-    function PropList: PRttiProp; {$ifdef HASINLINE}inline;{$endif}
+    function PropList: PRttiProp;
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a Field property RTTI information from a Property Name
     function FieldProp(const PropName: shortstring): PRttiProp;
   end;
@@ -280,17 +282,21 @@ type
     // - not defined as an inlined function, since first field is always aligned
     RttiClass: TClass;
     /// the parent class type information
-    function ParentInfo: PRttiInfo; {$ifdef HASINLINE}inline;{$endif}
+    function ParentInfo: PRttiInfo;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the number of published properties of this class and all parents
     // - use RttiProps if you want to properties only published in this class 
-    function PropCount: integer; {$ifdef HASINLINE}inline;{$endif}
+    function PropCount: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the name (without .pas extension) of the unit were the class was defined
     // - then the PRttiProps information follows: use the method
     // RttiProps to retrieve its address
-    function UnitName: PShortString; {$ifdef HASINLINE}inline;{$endif}
+    function UnitName: PShortString;
+      {$ifdef HASINLINE}inline;{$endif}
     /// get the information about the published properties of this class
     // - stored after UnitName memory
-    function RttiProps: PRttiProps; {$ifdef HASINLINE}inline;{$endif}
+    function RttiProps: PRttiProps;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fast and easy find if this class inherits from a specific class type
     // - you should rather consider using TRttiInfo.InheritsFrom directly
     function InheritsFrom(AClass: TClass): boolean;
@@ -308,8 +314,10 @@ type
   TRttiEnumType = object
   private
     // as used by TRttiInfo.EnumBaseType/SetBaseType
-    function EnumBaseType: PRttiEnumType; {$ifdef HASINLINE}inline;{$endif}
-    function SetBaseType: PRttiEnumType;  {$ifdef HASINLINE}inline;{$endif}
+    function EnumBaseType: PRttiEnumType;
+      {$ifdef HASINLINE}inline;{$endif}
+    function SetBaseType: PRttiEnumType;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
@@ -317,13 +325,16 @@ type
     RttiOrd: TRttiOrd;
     /// first value of enumeration type, typicaly 0
     // - may be < 0 e.g. for boolean
-    function MinValue: PtrInt;       {$ifdef HASINLINE}inline;{$endif}
+    function MinValue: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// same as ord(high(type)): not the enumeration count, but the highest index
-    function MaxValue: PtrInt;       {$ifdef HASINLINE}inline;{$endif}
+    function MaxValue: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// a concatenation of shortstrings, containing the enumeration names
     // - those shortstrings are not aligned whatsoever (even if
     // FPC_REQUIRES_PROPER_ALIGNMENT is set)
-    function NameList: PShortString; {$ifdef HASINLINE}inline;{$endif}
+    function NameList: PShortString;
+      {$ifdef HASINLINE}inline;{$endif}
     /// get the corresponding enumeration name
     // - return the first one if Value is invalid (>MaxValue)
     function GetEnumNameOrd(Value: cardinal): PShortString;
@@ -443,13 +454,17 @@ type
   /// a wrapper to interface type information, as defined by the the compiler RTTI
   TRttiInterfaceTypeData = object
     /// ancestor interface type
-    function IntfParent: PRttiInfo; {$ifdef HASINLINE}inline;{$endif}
+    function IntfParent: PRttiInfo;
+      {$ifdef HASINLINE}inline;{$endif}
     /// interface abilities
-    function IntfFlags: TRttiIntfFlags; {$ifdef HASINLINE}inline;{$endif}
+    function IntfFlags: TRttiIntfFlags;
+      {$ifdef HASINLINE}inline;{$endif}
     /// interface 128-bit GUID
-    function IntfGuid: PGUID; {$ifdef HASINLINE}inline;{$endif}
+    function IntfGuid: PGUID;
+      {$ifdef HASINLINE}inline;{$endif}
     /// where the interface has been defined
-    function IntfUnit: PShortString; {$ifdef HASINLINE}inline;{$endif}
+    function IntfUnit: PShortString;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// pointer to a wrapper to interface type information
@@ -555,51 +570,65 @@ type
     RawName: ShortString;
     /// the declared name of the type ('String','Word','RawUnicode'...)
     // - on FPC, will adjust 'integer'/'cardinal' from 'longint'/'longword' RTTI
-    function Name: PShortString;          {$ifdef HASINLINE}inline;{$endif}
+    function Name: PShortString;
+      {$ifdef HASINLINE}inline;{$endif}
     /// efficiently finalize any (managed) type value
     // - do nothing for unmanaged types (e.g. integer)
     // - if you are sure that your type is managed, you may call directly
     // $ RTTI_FINALIZE[Info^.Kind](Data, Info);
-    procedure Clear(Data: pointer);       {$ifdef HASINLINE}inline;{$endif}
+    procedure Clear(Data: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// efficiently copy any (managed) type value
     // - do nothing for unmanaged types (e.g. integer)
     // - if you are sure that your type is managed, you may call directly
     // $ RTTI_COPY[Info^.Kind](Dest, Source, Info);
-    procedure Copy(Dest, Source: pointer); {$ifdef HASINLINE}inline;{$endif}
+    procedure Copy(Dest, Source: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// compute extended information about this RTTI type
     procedure ComputeCache(out Cache: TRttiCache);
     /// for ordinal types, get the storage size and sign
-    function RttiOrd: TRttiOrd;           {$ifdef HASINLINE}inline;{$endif}
+    function RttiOrd: TRttiOrd;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property is an unsigned 64-bit field (QWord/UInt64)
-    function IsQWord: boolean;            {$ifdef HASINLINE}inline;{$endif}
+    function IsQWord: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property is a boolean field
-    function IsBoolean: boolean;          {$ifdef HASINLINE}inline;{$endif}
+    function IsBoolean: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property is a currency field
-    function IsCurrency: boolean;         {$ifdef HASINLINE}inline;{$endif}
+    function IsCurrency: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return true if this property is a BLOB (RawBlob)
-    function IsBlob: boolean;             {$ifdef HASINLINE}inline;{$endif}
+    function IsRawBlob: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkFloat: get the storage size and precision
     // - will also properly detect our currency internal type as rfCurr
-    function RttiFloat: TRttiFloat;       {$ifdef HASINLINE}inline;{$endif}
+    function RttiFloat: TRttiFloat;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkEnumeration: get the enumeration type information
-    function EnumBaseType: PRttiEnumType; overload; {$ifdef HASINLINE}inline;{$endif}
+    function EnumBaseType: PRttiEnumType; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkEnumeration: get the enumeration values information
     function EnumBaseType(out NameList: PShortString;
-      out Max: integer): PRttiEnumType;   overload; {$ifdef HASINLINE}inline;{$endif}
+      out Max: integer): PRttiEnumType; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkSet: get the type information of its associated enumeration
-    function SetEnumType: PRttiEnumType;  overload; {$ifdef HASINLINE}inline;{$endif}
+    function SetEnumType: PRttiEnumType; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkSet: get the associated enumeration values information
     function SetEnumType(out NameList: PShortString;
-      out Max: integer): PRttiEnumType;   overload; {$ifdef HASINLINE}inline;{$endif}
+      out Max: integer): PRttiEnumType; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkSet: in how many bytes this type is stored
     // - is very efficient on latest FPC only - i.e. ifdef ISFPC32
-    function SetEnumSize: PtrInt; {$ifdef HASINLINE2} inline; {$endif}
+    function SetEnumSize: PtrInt; {$ifdef ISFPC32} inline; {$endif}
     /// compute in how many bytes this type is stored
     // - will use Kind (and RttiOrd/RttiFloat) to return the exact value
     function RttiSize: PtrInt;
     /// for rkRecordTypes: get the record size
     // - returns 0 if the type is not a record/object
-    function RecordSize: PtrInt;  {$ifdef HASINLINE}inline;{$endif}
+    function RecordSize: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkRecordTypes: retrieve RTTI information about all managed fields
     // of this record
     // - non managed fields (e.g. integers, double...) are not listed here
@@ -622,7 +651,8 @@ type
     function DynArrayItemType(out aDataSize: PtrInt): PRttiInfo; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkDynArray: get the dynamic array size (in bytes) of the stored item
-    function DynArrayItemSize: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function DynArrayItemSize: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkArray: get the static array type information of the stored item
     // - returns nil if the array type is unmanaged (i.e. behave like Delphi)
     // - aDataSize is the size in bytes of all aDataCount static items (not
@@ -632,14 +662,16 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkArray: get the size in bytes of all the static array items
     // - caller should ensure the type is indeed a static array
-    function ArrayItemSize: PtrInt;       {$ifdef HASINLINE}inline;{$endif}
+    function ArrayItemSize: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// recognize most used string types, returning their code page
     // - will return the exact code page on FPC and since Delphi 2009, from RTTI
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
     // - it will also recognize RawBlob as the fake CP_RAWBLOB codepage
-    function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
+    function AnsiStringCodePage: integer;
+      {$ifdef HASCODEPAGE}inline;{$endif}
     {$ifdef HASCODEPAGE}
     /// returning the code page stored in the RTTI
     // - without recognizing e.g. RawBlob
@@ -651,7 +683,8 @@ type
     // - makes heap allocations and encoding conversion, so may be slow
     procedure StringToUTF8(Data: pointer; var Value: RawUTF8);
     /// for rkClass: get the class type information
-    function RttiClass: PRttiClass;       {$ifdef HASINLINE}inline;{$endif}
+    function RttiClass: PRttiClass;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkClass: return the number of published properties in this class
     // - you can count the plain fields without any getter function, if you
     // do need only the published properties corresponding to some value
@@ -660,7 +693,8 @@ type
     /// for rkClass: fast and easy check if a class inherits from this RTTI
     function InheritsFrom(AClass: TClass): boolean;
     /// for rkInterface: get the interface type information
-    function InterfaceType: PRttiInterfaceTypeData; {$ifdef HASINLINE}inline;{$endif}
+    function InterfaceType: PRttiInterfaceTypeData;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkInterface: get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
     function InterfaceGUID: PGUID;
@@ -796,28 +830,35 @@ type
     // ! Name: RawUTF8 index 40 read fName write fName;
     // - is used by a dynamic array property for fast usage of the
     // TOrm.DynArray(DynArrayFieldIndex) method
-    function Index: Integer; {$ifdef HASINLINE}inline;{$endif}
+    function Index: Integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// contains the default value for an ordinal or set property
     // - NO_DEFAULT=$80000000 indicates none was defined in source code
     // - see also TPropInfo.DefaultOr0
-    function Default: Longint; {$ifdef HASINLINE}inline;{$endif}
+    function Default: Longint;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return the Default RTTI value defined for this property, or 0 if not set
-    function DefaultOr0: integer; {$ifdef HASINLINE}inline;{$endif}
+    function DefaultOr0: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// index of the property in the current inherited class definition
     // - first name index at a given class level is 0
     // - index is reset to 0 at every inherited class level
-    function NameIndex: integer; {$ifdef HASINLINE}inline;{$endif}
+    function NameIndex: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the property Name, directly returned from RTTI
-    function Name: PShortString; {$ifdef HASINLINE}inline;{$endif}
+    function Name: PShortString;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the property Name, converted as a RawUTF8
     function NameUTF8: RawUTF8;
     /// the type information of this property
     // - will de-reference the PropType pointer on Delphi and newer FPC compilers
-    function TypeInfo: PRttiInfo; {$ifdef HASINLINE}inline;{$endif}
+    function TypeInfo: PRttiInfo;
+      {$ifdef HASINLINE}inline;{$endif}
     /// get the next property information
     // - no range check: use RttiProps()^.PropCount to determine the properties count
     // - get the first PRttiProp with RttiProps()^.PropList
-    function Next: PRttiProp; {$ifdef HASINLINE}inline;{$endif}
+    function Next: PRttiProp;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return FALSE (AS_UNIQUE) if was marked as "stored AS_UNIQUE"
     //  (i.e. "stored false"), or TRUE by default
     // - if Instance=nil, will work only at RTTI level, not with field or method
@@ -827,18 +868,21 @@ type
     /// return TRUE if the property is 0/nil/''/null
     function IsVoid(Instance, RttiCustom: TObject): boolean;
     /// return true if this property is a BLOB (RawBlob)
-    function IsBlob: boolean;
+    function IsRawBlob: boolean;
       {$ifdef FPC} inline; {$endif}
     /// compute in how many bytes this property is stored
-    function FieldSize: PtrInt;      {$ifdef HASINLINE}inline;{$endif}
+    function FieldSize: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property has no getter but direct field read
     // - returns FALSE if no "read" attribute was specified: use GetterCall
     // if you want to mimic how Get*() methods could use the "write" field
-    function GetterIsField: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function GetterIsField: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property has no setter but direct field write
     // - returns FALSE if no "write" attribute is specified: use SetterCall
     // if you want to mimic how Set*() methods could use the "read" field
-    function SetterIsField: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function SetterIsField: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns how a property should be retrieved
     // - no "read" attribute specified will return rpcField if "write" is a
     // direct field access - just like any Get*() method would do
@@ -848,20 +892,25 @@ type
     // direct field access - just like any Set*() method would do
     function SetterCall: TRttiPropCall;
     /// return TRUE if the property has a write setter or direct field
-    function WriteIsDefined: boolean;   {$ifdef HASINLINE}inline;{$endif}
+    function WriteIsDefined: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the low-level field read address, if GetterIsField is TRUE
-    function GetterAddr(Instance: pointer): pointer; {$ifdef HASINLINE}inline;{$endif}
+    function GetterAddr(Instance: pointer): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the low-level field write address, if SetterIsField is TRUE
-    function SetterAddr(Instance: pointer): pointer; {$ifdef HASINLINE}inline;{$endif}
+    function SetterAddr(Instance: pointer): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level getter of the field value memory pointer
     // - return NIL if both getter and setter are methods
-    function GetFieldAddr(Instance: TObject): pointer; {$ifdef HASINLINE}inline;{$endif}
+    function GetFieldAddr(Instance: TObject): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
 
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     // - returns an Int64 to properly support cardinal values
     // - return -1 on any error
-    function GetOrdValue(Instance: TObject): Int64; {$ifdef HASINLINE}inline;{$endif}
+    function GetOrdValue(Instance: TObject): Int64;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     // - ordinal properties smaller than rkInt64 will return an Int64-converted
@@ -1602,7 +1651,8 @@ function TypeNameToStandardParserType(const Name: RawUTF8;
 /// recognize a simple value type from a supplied type information
 // - if FirstSearchByName=true, will first call TypeNameToStandardParserType(Info^.Name^)
 // - will return ptNone for any unknown type
-function TypeInfoToStandardParserType(Info: PRttiInfo; FirstSearchByName: boolean = true;
+function TypeInfoToStandardParserType(Info: PRttiInfo;
+  FirstSearchByName: boolean = true;
   Complex: PRTTIParserComplexType = nil): TRTTIParserType; overload;
 
 /// recognize a simple value type from a dynamic array RTTI
@@ -1658,6 +1708,7 @@ type
     rcfAutoCreateFields);
 
   /// define specific behaviors for a given TypeInfo/PRttIinfo
+  // - as stored in TRttiCustom.Flags
   TRttiCustomFlags = set of TRttiCustomFlag;
 
   /// store information about one property/field of a given TypeInfo/PRttIinfo
@@ -1722,6 +1773,8 @@ type
     /// total size, in bytes, of all properties/fields
     // - equals the sum of List[].Value.Size
     Size: integer;
+    /// List[NotInheritedIndex]..List[Count-1] store the last level of properties
+    NotInheritedIndex: integer;
     /// reset all properties
     procedure Clear;
     /// locate a property/field by name
@@ -1756,7 +1809,8 @@ type
     // as set by SetAutoCreateFields
     AutoCreateClasses, AutoCreateObjArrays: array of PRttiCustomProp;
   private
-    fFromTextPropNames: TRawUTF8DynArray; // store AddFromText() ShortStrings
+    // store AddFromText() ShortStrings
+    fFromTextPropNames: TRawUTF8DynArray;
     /// points to List[] items which are managed
     fManaged: array of PRttiCustomProp;
     /// finalize the managed properties of this instance
@@ -5641,6 +5695,7 @@ begin
   List := nil;
   Count := 0;
   Size := 0;
+  NotInheritedIndex := 0;
   fFromTextPropNames := nil;
   fManaged := nil;
 end;
@@ -5658,12 +5713,14 @@ begin
     exit;
   rc := ClassInfo^.RttiClass;
   if IncludeParents then
-    AddFromClass(rc^.ParentInfo, true); // put parent properties first
+    // put parent properties first
+    AddFromClass(rc^.ParentInfo, true);
   rs := rc^.RttiProps;
   p := rs^.PropCount;
   if p = 0 then
     exit;
   n := Count;
+  NotInheritedIndex := n;
   inc(Count, p);
   SetLength(List, Count);
   rp := rs^.PropList;

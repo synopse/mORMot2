@@ -1651,6 +1651,7 @@ type
   TJSONToObjectOptions = TJsonParserOptions;
 
 const
+  woSQLRawBlobAsBase64 = woRawBlobAsBase64;
   j2oIgnoreUnknownProperty = jpoIgnoreUnknownProperty;
   j2oIgnoreStringType = jpoIgnoreStringType;
   j2oIgnoreUnknownEnum = jpoIgnoreUnknownEnum;
@@ -4987,7 +4988,15 @@ begin
           c.W.BlockAfterItem(c.Options);
       end;
     end;
-    n := Ctxt.Info.Props.Count;
+    with Ctxt.Info.Props do
+      if woDontStoreInherited in c.Options then
+      begin
+        // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
+        n := Count - NotInheritedIndex;
+        inc(c.Prop, NotInheritedIndex);
+      end
+      else
+        n := Count;
     if n > 0 then
       // this is the main loop serializing Info.Props[]
       repeat
