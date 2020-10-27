@@ -1631,6 +1631,16 @@ end;
 
 
 
+function _GetVirtualTableModuleName(VirtualTableClass: TClass): RawUTF8;
+begin
+  if VirtualTableClass.InheritsFrom(TOrmVirtualTable) then
+    result := TOrmVirtualTableClass(VirtualTableClass).ModuleName
+  else
+    result := '';
+end;
+
+
+
 { ************ TRestStorage Abstract Class for ORM/REST Storage }
 
 { TRestStorage }
@@ -4665,5 +4675,7 @@ begin
   end;
 end;
 
+initialization
+  GetVirtualTableModuleName := @_GetVirtualTableModuleName;
 end.
 

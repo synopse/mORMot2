@@ -1703,7 +1703,7 @@ type
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
   end;
 
-  TOrmPropInfoRTTIIDObjArray = array of TOrmPropInfoRTTIID;
+  TOrmPropInfoRTTIIObjArray = array of TOrmPropInfoRTTIID;
 
   /// information about a TOrm class TStrings/TRawUTF8List/TCollection
   // property
@@ -1738,6 +1738,8 @@ type
   end;
 
   TOrmPropInfoRTTIManyObjArray = array of TOrmPropInfoRTTIMany;
+
+  POrmPropInfoRTTIMany = ^TOrmPropInfoRTTIMany;
 
 
 
@@ -5660,7 +5662,7 @@ type
     fSQLTableName: RawUTF8;
     fCopiableFields: TOrmPropInfoObjArray;
     fManyFields: TOrmPropInfoRTTIManyObjArray;
-    fJoinedFields: TOrmPropInfoRTTIIDObjArray;
+    fJoinedFields: TOrmPropInfoRTTIIObjArray;
     fJoinedFieldsTable: TOrmClassDynArray;
     fDynArrayFields: TOrmPropInfoRTTIDynArrayObjArray;
     fDynArrayFieldsHasObjArray: boolean;
@@ -5978,7 +5980,7 @@ type
     /// list all TOrm fields of this TOrm
     // - ready to be used by TOrmTableJSON.CreateFromTables()
     // - i.e. the class itself then, all fields of type oftID (excluding oftMany)
-    property JoinedFields: TOrmPropInfoRTTIIDObjArray read fJoinedFields;
+    property JoinedFields: TOrmPropInfoRTTIIObjArray read fJoinedFields;
     /// wrapper of all nested TOrm class of this TOrm
     // - ready to be used by TOrmTableJSON.CreateFromTables()
     // - i.e. the class itself as JoinedFieldsTable[0], then, all nested
@@ -12558,10 +12560,34 @@ begin
   until false;
 end;
 
+function ToText(vk: TOrmVirtualKind): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TOrmVirtualKind), ord(vk));
+end;
+
+function GetVirtualTableSQLCreate(Props: TOrmProperties): RawUTF8;
+var
+  i: PtrInt;
+  SQL: RawUTF8;
+begin
+  result := ''; // RowID is added by sqlite3_declare_vtab() for a Virtual Table
+  for i := 0 to Props.Fields.Count - 1 do
+    with Props.Fields.List[i] do
+    begin
+      SQL := Props.OrmFieldTypeToSQL(i);
+      if SQL <> '' then
+        // = '' for field with no matching DB column
+        result := result + Name + SQL;
+    end;
+  if result = '' then
+    result := ');'
+  else
+    PWord(@result[length(result) - 1])^ := ord(')') + ord(';') shl 8;
+end;
+
+
 
 { ------------ RecordRef Wrapper Definition }
-
-{ RecordRef }
 
 function RecordReference(Model: TOrmModel; aTable: TOrmClass;
   aID: TID): TRecordReference;
@@ -12593,6 +12619,9 @@ begin
   for i := 0 to high(aArray) do
     aArray[i] := aArray[i] shr 6;
 end;
+
+
+{ RecordRef }
 
 procedure RecordRef.From(Model: TOrmModel; aTable: TOrmClass; aID: TID);
 begin
@@ -16170,10 +16199,11 @@ end;
 
 // since "var class" are not available in Delphi 6-7, and is inherited by
 // the children classes under latest Delphi versions (i.e. the "var class" is
-// shared by all inherited classes, whereas we want one var per class), we reused
-// one of the unused magic VMT slots (i.e. the one for automated methods,
+// shared by all inherited classes, whereas we want one var per class), we
+// reused one of the magic VMT slots (i.e. the one for automated methods,
 // AutoTable, a relic from Delphi 2 that is generally not used anymore) - see
 // http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
+// [a slower alternative may have been to use a global TSynDictionary]
 
 var
   vmtAutoTableLock: TRTLCriticalSection; // atomic set of the VMT AutoTable entry
@@ -16192,7 +16222,7 @@ begin
       [self, vmt, rtticustom]);
   EnterCriticalSection(vmtAutoTableLock);
   try
-    result := TOrmProperties(rtticustom.Private);
+    result := TOrmProperties(rtticustom.Private); // Private is TOrmProperties
     if Assigned(result) then
       if result.InheritsFrom(TOrmProperties) then
         // registered by a background thread
@@ -16229,18 +16259,25 @@ begin
     result := POrmClass(self)^;
 end;
 
-constructor TOrm.Create;
+procedure ManyFieldsCreate(self: TOrm; many: POrmPropInfoRTTIMany);
 var
-  i: PtrInt;
+  n: TDALen;
 begin
-  // no TSynPersistent.Create call since vmtAutoTable is set by RecordProps
-  // no inherited Create;
-  // auto-instanciate any TOrmMany instance
+  n := PDALen(PAnsiChar(many) - _DALEN)^ + _DAOFF;
+  repeat
+    many^.SetInstance(self, TOrmClass(many^.ObjectClass).Create);
+    inc(many);
+    dec(n);
+  until n = 0;
+end;
+
+constructor TOrm.Create;
+begin
+  // no inherited TSynPersistent.Create since vmtAutoTable is set by RecordProps
   with RecordProps do
     if pointer(ManyFields) <> nil then
-      for i := 0 to length(ManyFields) - 1 do
-        ManyFields[i].SetInstance(self,
-          TOrmClass(ManyFields[i].ObjectClass).Create);
+      // auto-instanciate any TOrmMany instance
+      ManyFieldsCreate(self, pointer(ManyFields));
 end;
 
 destructor TOrm.Destroy;
@@ -16259,7 +16296,7 @@ begin
   end;
   // free all TOrmMany instances created by TOrm.Create
   if props.ManyFields <> nil then
-    for i := 0 to length(props.ManyFields) - 1 do
+    for i := 0 to PDALen(PAnsiChar(props.ManyFields) - _DALEN)^ + (_DAOFF - 1) do
       props.ManyFields[i].GetInstance(self).Free;
   // free any registered T*ObjArray
   if props.DynArrayFieldsHasObjArray then
@@ -16267,7 +16304,7 @@ begin
       with props.DynArrayFields[i] do
         if ObjArray <> nil then
           ObjArrayClear(fPropInfo^.GetFieldAddr(self)^);
-  inherited;
+  inherited Destroy;
 end;
 
 constructor TOrm.Create(const aSimpleFields: array of const; aID: TID);
@@ -17009,31 +17046,6 @@ begin
   end;
 end;
 
-function ToText(vk: TOrmVirtualKind): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TOrmVirtualKind), ord(vk));
-end;
-
-function GetVirtualTableSQLCreate(Props: TOrmProperties): RawUTF8;
-var
-  i: PtrInt;
-  SQL: RawUTF8;
-begin
-  result := ''; // RowID is added by sqlite3_declare_vtab() for a Virtual Table
-  for i := 0 to Props.Fields.Count - 1 do
-    with Props.Fields.List[i] do
-    begin
-      SQL := Props.OrmFieldTypeToSQL(i);
-      if SQL <> '' then
-        // = '' for field with no matching DB column
-        result := result + Name + SQL;
-    end;
-  if result = '' then
-    result := ');'
-  else
-    PWord(@result[length(result) - 1])^ := ord(')') + ord(';') shl 8;
-end;
-
 class function TOrm.GetSQLCreate(aModel: TOrmModel): RawUTF8;
 // not implemented in TOrmProperties since has been made virtual
 var
@@ -17070,7 +17082,7 @@ begin
           mname := GetVirtualTableModuleName(M);
           if Props.Props.Fields.Count = 0 then
             raise EModelException.CreateUTF8(
-              'Virtual % class % should have published properties', [mname, self]);
+              'Virtual % % should have published properties', [mname, self]);
           result := result + mname + '(';
         end;
     else
@@ -20366,13 +20378,17 @@ begin
   result := false;
   if aClass = nil then
     exit;
+  if (aModule = nil) or not Assigned(GetVirtualTableModuleName) or
+     (GetVirtualTableModuleName(aModule) = '') then
+    raise EModelException.CreateUTF8('Unexpected %.VirtualTableRegister(%,%)',
+      [self, aClass, aModule]);
   i := GetTableIndexExisting(aClass);
   with TableProps[i] do
   begin
     if not (Kind in IS_CUSTOM_VIRTUAL) then
       if Kind = rSQLite3 then
-        SetKind(rCustomAutoID)
-      else // SetKind() recompute all SQL
+        SetKind(rCustomAutoID) // SetKind() recompute all SQL
+      else
         raise EModelException.CreateUTF8('Invalid %.VirtualTableRegister(%) call: ' +
           'impossible to set class as virtual', [self, aClass]);
     ExternalDB.Init(aClass, aExternalTableName, aExternalDataBase, true, aMappingOptions);
@@ -20677,16 +20693,19 @@ begin
 end;
 
 procedure TOrmPropertiesMapping.ComputeSQL;
-type // similar to TOrmModelProperties.Create()/SetKind()
-  TContent = (TableSimpleFields, UpdateSimple, UpdateSetAll, InsertAll);
+
+type
+  // similar to TOrmModelProperties.Create()/SetKind()
+  TComputeSQLContent = (
+    cTableSimpleFields, cUpdateSimple, cUpdateSetAll, cInsertAll);
 
   procedure SetSQL(W: TTextWriter; withID, withTableName: boolean;
-    var result: RawUTF8; content: TContent = TableSimpleFields);
+    var result: RawUTF8; content: TComputeSQLContent = cTableSimpleFields);
   var
     f: PtrInt;
   begin
     W.CancelAll;
-    if withID and (content = TableSimpleFields) then
+    if withID and (content = cTableSimpleFields) then
     begin
       if withTableName then
         W.AddStrings([TableName, '.']);
@@ -20701,7 +20720,7 @@ type // similar to TOrmModelProperties.Create()/SetKind()
         with Fields.List[f] do
           if OrmFieldType in COPIABLE_FIELDS then // oftMany fields do not exist
             case content of
-              TableSimpleFields:
+              cTableSimpleFields:
                 if f in SimpleFieldsBits[ooSelect] then
                 begin
                   if withTableName then
@@ -20712,12 +20731,12 @@ type // similar to TOrmModelProperties.Create()/SetKind()
                     W.AddStrings([' as ', Name]);
                   W.Add(',');
                 end;
-              UpdateSimple:
+              cUpdateSimple:
                 if f in SimpleFieldsBits[ooSelect] then
                   W.AddStrings([ExtFieldNames[f], '=?,']);
-              UpdateSetAll:
+              cUpdateSetAll:
                 W.AddStrings([ExtFieldNames[f], '=?,']);
-              InsertAll:
+              cInsertAll:
                 W.AddStrings([ExtFieldNames[f], ',']);
             end;
     W.CancelLastComma;
@@ -20735,12 +20754,12 @@ begin
     SetSQL(W, true, false, fSQL.TableSimpleFields[true, false]);
     SetSQL(W, true, true, fSQL.TableSimpleFields[true, true]);
     // SQL.SelectAll: array[withRowID: boolean]
-    fSQL.SelectAllWithRowID := SQLFromSelect(TableName, '*', '', fSQL.TableSimpleFields
-      [true, false]);
+    fSQL.SelectAllWithRowID := SQLFromSelect(
+      TableName, '*', '', fSQL.TableSimpleFields[true, false]);
     fSQL.SelectAllWithID := fSQL.SelectAllWithRowID;
-    SetSQL(W, false, false, fSQL.UpdateSetSimple, UpdateSimple);
-    SetSQL(W, false, false, fSQL.UpdateSetAll, UpdateSetAll);
-    SetSQL(W, false, false, fSQL.InsertSet, InsertAll);
+    SetSQL(W, false, false, fSQL.UpdateSetSimple, cUpdateSimple);
+    SetSQL(W, false, false, fSQL.UpdateSetAll, cUpdateSetAll);
+    SetSQL(W, false, false, fSQL.InsertSet, cInsertAll);
   finally
     W.Free;
   end;
