@@ -1078,7 +1078,7 @@ type
     // to the Application Security Policy (user logging, authentification and
     // rights management) - making access rights a parameter allows this method
     // to be handled as pure stateless, thread-safe and session-free
-    RestAccessRights: PSQLAccessRights;
+    RestAccessRights: POrmAccessRights;
     /// opaque reference to the protocol context which made this request
     // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
     // a THttpApiServer, a TRestClientURI, a TFastCGIServer or a

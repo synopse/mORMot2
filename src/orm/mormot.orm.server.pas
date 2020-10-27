@@ -1831,7 +1831,7 @@ end;
 function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
   aID: TID): boolean;
 
-  procedure PerformCascade(const Where: Int64; Ref: PSQLModelRecordReference);
+  procedure PerformCascade(const Where: Int64; Ref: POrmModelReference);
   var
     W: RawUTF8;
     cascadeOK: boolean;
@@ -1861,7 +1861,7 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
 
 var
   i: integer;
-  Ref: PSQLModelRecordReference;
+  Ref: POrmModelReference;
 begin
   Ref := pointer(fModel.RecordReferences);
   if Ref <> nil then

@@ -18,7 +18,7 @@ unit mormot.orm.core;
     - TOrmMany Definition
     - Virtual TOrm Definitions
     - TOrmProperties Definitions
-    - TOrmModel TOrmModelRecordProperties Definitions
+    - TOrmModel TOrmModelProperties Definitions
     - TRestCache Definition
     - TRestBatch TRestBatchLocked Definitions
     - TSynValidateRest TSynValidateUniqueField Definitions
@@ -1762,7 +1762,7 @@ type
   TOrmRTree = class;
   TOrmProperties = class;
   TOrmModel = class;
-  TOrmModelRecordProperties = class;
+  TOrmModelProperties = class;
   TRestCache = class;
   TRestBatch = class;
   {$M-}
@@ -5685,13 +5685,13 @@ type
       /// the index in the Model.Tables[] array
       TableIndex: PtrInt;
       /// associated ORM parameters
-      Properties: TOrmModelRecordProperties;
+      Properties: TOrmModelProperties;
     end;
     fModelMax: integer;
     fCustomCollation: TRawUTF8DynArray;
     /// add an entry in fModel[] / fModelMax
     procedure InternalRegisterModel(aModel: TOrmModel; aTableIndex: integer;
-      aProperties: TOrmModelRecordProperties);
+      aProperties: TOrmModelProperties);
   public
     /// initialize the properties content
     constructor Create(aTable: TOrmClass);
@@ -6018,7 +6018,7 @@ type
     /// returns 'COL1,COL2' with all COL* set to simple field names
     // - same value as SQLTableSimpleFields[false,false]
     // - this won't change depending on the ORM settings: so it can be safely
-    // computed here and not in TOrmModelRecordProperties
+    // computed here and not in TOrmModelProperties
     // - used e.g. by TOrm.GetSQLValues
     property SQLTableSimpleFieldsNoRowID: RawUTF8 read fSQLTableSimpleFieldsNoRowID;
     /// returns 'COL1=?,COL2=?' with all BLOB columns names
@@ -6077,7 +6077,7 @@ type
     /// returns 'COL1,COL2' with all COL* set to all field names, including
     // RowID, TRecordVersion and BLOBs
     // - this won't change depending on the ORM settings: so it can be safely
-    // computed here and not in TOrmModelRecordProperties
+    // computed here and not in TOrmModelProperties
     // - used e.g. by TRest.InternalListJSON()
     property SQLTableRetrieveAllFields: RawUTF8 read fSQLTableRetrieveAllFields;
   end;
@@ -6100,8 +6100,8 @@ type
     rCustomForcedID, rCustomAutoID);
 
   /// pre-computed SQL statements for ORM operations for a given
-  // TOrmModelRecordProperties instance
-  TOrmModelRecordPropertiesSQL = record
+  // TOrmModelProperties instance
+  TOrmModelPropertiesSQL = record
     /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
     // - format is
     // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
@@ -6176,7 +6176,7 @@ type
     fRowIDFieldName: RawUTF8;
     fExtFieldNames: TRawUTF8DynArray;
     fExtFieldNamesUnQuotedSQL: TRawUTF8DynArray;
-    fSQL: TOrmModelRecordPropertiesSQL;
+    fSQL: TOrmModelPropertiesSQL;
     fFieldNamesMatchInternal: TFieldBits;
     fOptions: TOrmPropertiesMappingOptions;
     fAutoComputeSQL: boolean;
@@ -6296,7 +6296,7 @@ type
     /// pre-computed SQL statements for this external TOrm in this model
     // - you can use those SQL statements directly with the external engine
     // - filled if AutoComputeSQL was set to true in Init() method
-    property SQL: TOrmModelRecordPropertiesSQL read fSQL;
+    property SQL: TOrmModelPropertiesSQL read fSQL;
     /// the ID/RowID customized external field name, if any
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
     // database engines (e.g. Oracle)
@@ -6323,7 +6323,7 @@ type
 
 
 
-  { -------------------- TOrmModel TOrmModelRecordProperties Definitions }
+  { -------------------- TOrmModel TOrmModelProperties Definitions }
 
   /// used to store the locked record list, in a specified table
   // - the maximum count of the locked list if fixed to 512 by default,
@@ -6362,9 +6362,9 @@ type
 
   TOrmLocksDynArray = array of TOrmLocks;
 
-  /// dynamic array of TOrmModelRecordProperties
+  /// dynamic array of TOrmModelProperties
   // - used by TOrmModel to store the non-shared information of all its tables
-  TOrmModelRecordPropertiesObjArray = array of TOrmModelRecordProperties;
+  TOrmModelPropertiesObjArray = array of TOrmModelProperties;
 
   /// ORM properties associated to a TOrm within a given model
   // - "stable" / common properties derivated from RTTI are shared in the
@@ -6373,7 +6373,7 @@ type
   // implementation patterns (e.g. internal in one, external in another),
   // this class is used to regroup all model-specific settings, like SQL
   // pre-generated patterns or external DB properties
-  TOrmModelRecordProperties = class
+  TOrmModelProperties = class
   protected
     fProps: TOrmProperties;
     fKind: TOrmVirtualKind;
@@ -6387,7 +6387,7 @@ type
     /// pre-computed SQL statements for this TOrm in this model
     // - those statements will work for internal tables, not for external
     // tables with mapped table or fields names
-    SQL: TOrmModelRecordPropertiesSQL;
+    SQL: TOrmModelPropertiesSQL;
     /// allow SQL process for one external TOrm in this model
     ExternalDB: TOrmPropertiesMapping;
     /// will by-pass automated table and field creation for this TOrm
@@ -6399,9 +6399,9 @@ type
     // TOrmModel
     constructor Create(aModel: TOrmModel; aTable: TOrmClass;
       aKind: TOrmVirtualKind);
-    /// clone ORM properties from an existing TOrmModelRecordProperties to
+    /// clone ORM properties from an existing TOrmModelProperties to
     // another model
-    constructor CreateFrom(aModel: TOrmModel; aSource: TOrmModelRecordProperties);
+    constructor CreateFrom(aModel: TOrmModel; aSource: TOrmModelProperties);
 
     /// compute the SQL statement to be executed for a specific SELECT
     // - non simple fields (e.g. BLOBs) will be excluded if SelectFields='*'
@@ -6439,7 +6439,7 @@ type
   end;
 
   /// how a TOrmModel stores a foreign link to be cascaded
-  TOrmModelRecordReference = record
+  TOrmModelReference = record
     /// refers to the source TOrmClass as model Tables[] index
     TableIndex: integer;
     /// the property
@@ -6452,9 +6452,9 @@ type
     CascadeDelete: boolean;
   end;
 
-  PSQLModelRecordReference = ^TOrmModelRecordReference;
+  POrmModelReference = ^TOrmModelReference;
 
-  TOrmModelRecordReferenceDynArray = array of TOrmModelRecordReference;
+  TOrmModelReferenceDynArray = array of TOrmModelReference;
 
   /// a Database Model (in a MVC-driven way), for storing some tables types
   // as TOrm classes
@@ -6470,7 +6470,7 @@ type
     fRoot: RawUTF8;
     fRootUpper: RawUTF8;
     fTablesMax: integer;
-    fTableProps: TOrmModelRecordPropertiesObjArray;
+    fTableProps: TOrmModelPropertiesObjArray;
     fCustomCollationForAll: array[TOrmFieldType] of RawUTF8;
     fOnClientIdle: TOnIdleSynBackgroundThread;
     /// contains the TRest caller of CreateOwnedStream()
@@ -6484,11 +6484,11 @@ type
     /// will contain the registered TOrmVirtualTableClass modules
     fVirtualTableModule: array of TClass;
     /// all TRecordReference and TOrm properties of the model
-    fRecordReferences: TOrmModelRecordReferenceDynArray;
+    fRecordReferences: TOrmModelReferenceDynArray;
     fIDGenerator: TSynUniqueIdentifierGenerators;
     procedure SetRoot(const aRoot: RawUTF8);
     procedure SetTableProps(aIndex: integer);
-    function GetTableProps(aClass: TOrmClass): TOrmModelRecordProperties;
+    function GetTableProps(aClass: TOrmClass): TOrmModelProperties;
     /// get the enumerate type information about the possible actions to be
     function GetLocks(aTable: TOrmClass): PSQLLocks;
     function GetTable(const SQLTableName: RawUTF8): TOrmClass;
@@ -6706,7 +6706,7 @@ type
     /// the associated ORM information for a given TOrm class
     // - raise an EModelException if aClass is not declared within this model
     // - returns the corresponding TableProps[] item if the class is known
-    property Props[aClass: TOrmClass]: TOrmModelRecordProperties
+    property Props[aClass: TOrmClass]: TOrmModelProperties
       read GetTableProps;
     /// get the classes list (TOrm descendent) of all available tables
     property Tables: TOrmClassDynArray read fTables;
@@ -6738,7 +6738,7 @@ type
     // - used in TRestServer.Delete() to enforce relational database coherency
     // after deletion of a record: all other records pointing to it will be
     // reset to 0 or deleted (if CascadeDelete is true)
-    property RecordReferences: TOrmModelRecordReferenceDynArray read fRecordReferences;
+    property RecordReferences: TOrmModelReferenceDynArray read fRecordReferences;
     /// set a callback event to be executed in loop during client remote
     // blocking process, e.g. to refresh the UI during a somewhat long request
     // - will be passed to TRestClientURI.OnIdle property by
@@ -6756,7 +6756,7 @@ type
     /// the associated ORM information about all handled TOrm class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].RecordProps values
-    property TableProps: TOrmModelRecordPropertiesObjArray read fTableProps;
+    property TableProps: TOrmModelPropertiesObjArray read fTableProps;
   end;
 
 
@@ -7310,7 +7310,7 @@ type
     procedure FromString(P: PUTF8Char);
   end;
 
-  PSQLAccessRights = ^TOrmAccessRights;
+  POrmAccessRights = ^TOrmAccessRights;
 
 
 const
@@ -7418,8 +7418,8 @@ type
   TSQLAccessRights = TOrmAccessRights;
   TSQLFieldTables = TOrmFieldTables;
   TSQLModel = TOrmModel;
-  TSQLModelRecordProperties = TOrmModelRecordProperties;
-  TSQLModelRecordPropertiesObjArray = TOrmModelRecordPropertiesObjArray;
+  TSQLModelProperties = TOrmModelProperties;
+  TSQLModelPropertiesObjArray = TOrmModelPropertiesObjArray;
   TSQLProperties = TOrmProperties;
   TSQLPropInfo = TOrmPropInfo;
   TSQLPropInfoObjArray = TOrmPropInfoObjArray;
@@ -17041,7 +17041,7 @@ var
   c: TClass;
   SQL, mname, cname, tokenizer: RawUTF8;
   M: TClass; // is a TOrmVirtualTableClass
-  Props: TOrmModelRecordProperties;
+  Props: TOrmModelProperties;
   fields: TOrmPropInfoList;
 begin
   if aModel = nil then
@@ -17401,7 +17401,7 @@ constructor TOrm.CreateAndFillPrepareJoined(const aClient: IRestOrm;
 var
   i: PtrInt;
   n: integer;
-  props: TOrmModelRecordProperties;
+  props: TOrmModelProperties;
   T: TOrmTable;
   instance: TOrm;
   SQL: RawUTF8;
@@ -18346,9 +18346,9 @@ function TOrmMany.DestGetJoinedTable(const aClient: IRestOrm;
   const aCustomFieldsCSV: RawUTF8): TOrmTable;
 var
   Select, SQL: RawUTF8;
-  SelfProps, DestProps: TOrmModelRecordProperties;
+  SelfProps, DestProps: TOrmModelProperties;
 
-  procedure SelectFields(const Classes: array of TOrmModelRecordProperties);
+  procedure SelectFields(const Classes: array of TOrmModelProperties);
   var
     i: PtrInt;
   begin
@@ -18565,7 +18565,7 @@ class procedure TOrmFts4.InitializeTable(const Server: IRestOrmServer;
   const FieldName: RawUTF8; Options: TOrmInitializeTableOptions);
 var
   m: TOrmModel;
-  p: TOrmModelRecordProperties;
+  p: TOrmModelProperties;
   main, fts, ftsfields: RawUTF8;
 begin
   inherited;
@@ -18676,7 +18676,7 @@ end;
 { TOrmProperties }
 
 procedure TOrmProperties.InternalRegisterModel(aModel: TOrmModel;
-  aTableIndex: integer; aProperties: TOrmModelRecordProperties);
+  aTableIndex: integer; aProperties: TOrmModelProperties);
 var
   i: PtrInt;
 begin
@@ -19550,7 +19550,7 @@ begin
 end;
 
 
-{ ------------ TOrmModel TOrmModelRecordProperties Definitions }
+{ ------------ TOrmModel TOrmModelProperties Definitions }
 
 { TOrmModel }
 
@@ -19572,7 +19572,7 @@ var
   Kind: TOrmVirtualKind;
   Table, TableID: TOrmClass;
   aTableName, aFieldName: RawUTF8;
-  Props: TOrmModelRecordProperties;
+  Props: TOrmModelProperties;
   fields: TOrmPropInfoList;
   W: TTextWriter;
 
@@ -19619,7 +19619,7 @@ begin
     Kind := rCustomAutoID
   else
     Kind := rSQLite3;
-  Props := TOrmModelRecordProperties.Create(self, Table, Kind);
+  Props := TOrmModelProperties.Create(self, Table, Kind);
   Props.Props.InternalRegisterModel(self, aIndex, Props);
   for t := low(t) to high(t) do
     if fCustomCollationForAll[t] <> '' then
@@ -19690,7 +19690,7 @@ begin
   end;
 end;
 
-function TOrmModel.GetTableProps(aClass: TOrmClass): TOrmModelRecordProperties;
+function TOrmModel.GetTableProps(aClass: TOrmClass): TOrmModelProperties;
 begin
   result := fTableProps[GetTableIndexExisting(aClass)];
 end;
@@ -19763,7 +19763,7 @@ begin
   fCustomCollationForAll := CloneFrom.fCustomCollationForAll;
   SetLength(fTableProps, fTablesMax + 1);
   for i := 0 to fTablesMax do
-    fTableProps[i] := TOrmModelRecordProperties.CreateFrom(
+    fTableProps[i] := TOrmModelProperties.CreateFrom(
       self, CloneFrom.fTableProps[i]);
 end;
 
@@ -20110,7 +20110,7 @@ function TOrmModel.SQLFromSelectWhere(const Tables: array of TOrmClass;
   const SQLSelect, SQLWhere: RawUTF8): RawUTF8;
 var
   i: PtrInt;
-  aProps: array[0..31] of TOrmModelRecordProperties;
+  aProps: array[0..31] of TOrmModelProperties;
 begin
   if self = nil then
     raise EOrmException.Create('Model required');
@@ -20424,9 +20424,9 @@ begin
 end;
 
 
-{ TOrmModelRecordProperties }
+{ TOrmModelProperties }
 
-constructor TOrmModelRecordProperties.Create(aModel: TOrmModel; aTable:
+constructor TOrmModelProperties.Create(aModel: TOrmModel; aTable:
   TOrmClass; aKind: TOrmVirtualKind);
 var
   f: PtrInt;
@@ -20462,8 +20462,8 @@ begin // similar to TOrmPropertiesMapping.ComputeSQL
   Props.InternalRegisterModel(aModel, aModel.GetTableIndexExisting(aTable), self);
 end;
 
-constructor TOrmModelRecordProperties.CreateFrom(aModel: TOrmModel;
-  aSource: TOrmModelRecordProperties);
+constructor TOrmModelProperties.CreateFrom(aModel: TOrmModel;
+  aSource: TOrmModelProperties);
 begin
   inherited Create;
   fModel := aModel;
@@ -20477,7 +20477,7 @@ begin
   Props.InternalRegisterModel(fModel, fModel.GetTableIndexExisting(fProps.Table), self);
 end;
 
-procedure TOrmModelRecordProperties.SetKind(Value: TOrmVirtualKind);
+procedure TOrmModelProperties.SetKind(Value: TOrmVirtualKind);
 
   function InTOrmTableSimpleFields(withID, withTableName: boolean): RawUTF8;
   const
@@ -20561,14 +20561,14 @@ begin
     delete(SQL.SelectAllWithID, 8, 3); // 'SELECT RowID,..' -> 'SELECT ID,'
 end;
 
-function TOrmModelRecordProperties.SQLFromSelectWhere(
+function TOrmModelProperties.SQLFromSelectWhere(
   const SelectFields, Where: RawUTF8): RawUTF8;
 begin
   result := SQLFromSelect(Props.SQLTableName, SelectFields, Where,
     SQL.TableSimpleFields[true, false]);
 end;
 
-procedure TOrmModelRecordProperties.FTS4WithoutContent(ContentTable: TOrmClass);
+procedure TOrmModelProperties.FTS4WithoutContent(ContentTable: TOrmClass);
 var
   i: PtrInt;
   field: RawUTF8;
@@ -20589,7 +20589,7 @@ begin
     raise EModelException.CreateUTF8('FTS4WithoutContent: % has no field', [Props.Table]);
 end;
 
-function TOrmModelRecordProperties.GetProp(const PropName: RawUTF8): TOrmPropInfo;
+function TOrmModelProperties.GetProp(const PropName: RawUTF8): TOrmPropInfo;
 begin
   if self <> nil then
     result := Props.Fields.ByName(pointer(PropName))
@@ -20677,7 +20677,7 @@ begin
 end;
 
 procedure TOrmPropertiesMapping.ComputeSQL;
-type // similar to TOrmModelRecordProperties.Create()/SetKind()
+type // similar to TOrmModelProperties.Create()/SetKind()
   TContent = (TableSimpleFields, UpdateSimple, UpdateSetAll, InsertAll);
 
   procedure SetSQL(W: TTextWriter; withID, withTableName: boolean;
@@ -22059,7 +22059,7 @@ procedure InitializeUnit;
 begin
   InitializeCriticalSection(vmtAutoTableLock);
   Rtti.RegisterObjArray(
-    TypeInfo(TOrmModelRecordPropertiesObjArray), TOrmModelRecordProperties);
+    TypeInfo(TOrmModelPropertiesObjArray), TOrmModelProperties);
   // ensure TOrmObjArray is recognized as a T*ObjArray
   // - needed e.g. by TRestStorageInMemory.Create
   Rtti.RegisterObjArray(TypeInfo(TOrmObjArray), TOrm);

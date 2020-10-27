@@ -485,7 +485,7 @@ type
   TRestStorage = class(TRestOrm)
   protected
     fStoredClass: TOrmClass;
-    fStoredClassProps: TOrmModelRecordProperties;
+    fStoredClassProps: TOrmModelProperties;
     fStoredClassRecordProps: TOrmProperties;
     fStoredClassMapping: POrmPropertiesMapping;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
@@ -567,7 +567,7 @@ type
       read fModified write fModified;
     /// read only access to the ORM properties of the associated record type
     // - may be nil if this instance is not associated with a TOrmModel
-    property StoredClassProps: TOrmModelRecordProperties
+    property StoredClassProps: TOrmModelProperties
       read fStoredClassProps;
     /// read only access to the RTTI properties of the associated record type
     property StoredClassRecordProps: TOrmProperties

@@ -270,7 +270,7 @@ type
     /// the index in the Model of the Table specified at the URI level (if any)
     TableIndex: integer;
     /// the RTTI properties of the Table specified at the URI level (if any)
-    TableRecordProps: TOrmModelRecordProperties;
+    TableModelProps: TOrmModelProperties;
     /// the RESTful instance implementing the Table specified at the URI level (if any)
     // - equals the Server field most of the time, but may be an TRestStorage
     // for any in-memory/MongoDB/virtual instance
@@ -805,7 +805,7 @@ type
   TRestServerMethods = array of TRestServerMethod;
 
   /// pointer to a description of a method-based service
-  PSQLRestServerMethod = ^TRestServerMethod;
+  PRestServerMethod = ^TRestServerMethod;
 
 
 { ************ TRestServerRoutingREST/TRestServerRoutingJSON_RPC Requests Parsing Scheme }
@@ -2360,7 +2360,7 @@ begin
     with Server.fModel do
     begin
       self.Table := Tables[TableIndex];
-      self.TableRecordProps := TableProps[TableIndex];
+      self.TableModelProps := TableProps[TableIndex];
     end;
 end;
 
@@ -3024,11 +3024,11 @@ procedure TRestServerURIContext.ExecuteORMGet;
        (IsRowID(pointer(FieldsCSV)) and
         not (jwoID_str in Options)) or
        // we won't handle min()/max() functions
-       not TableRecordProps.Props.FieldBitsFromCSV(FieldsCSV, bits, withid) then
+       not TableModelProps.Props.FieldBitsFromCSV(FieldsCSV, bits, withid) then
       exit;
     rec := Table.CreateAndFillPrepare(Call.OutBody);
     try
-      W := TableRecordProps.Props.CreateJSONWriter(TRawByteStringStream.Create,
+      W := TableModelProps.Props.CreateJSONWriter(TRawByteStringStream.Create,
         true, FieldsCSV, {knownrows=}0);
       try
         W.CustomOptions := W.CustomOptions + [twoForceJSONStandard]; // force regular JSON
@@ -3378,7 +3378,7 @@ procedure TRestServerURIContext.ExecuteORMWrite;
     try
       Rec.FillFrom(pointer(Call.InBody), @bits);
       Rec.ComputeFieldsBeforeWrite(Server.ORM, Occasion);
-      with TableRecordProps.Props do
+      with TableModelProps.Props do
         if Occasion = oeAdd then
           bits := bits + ComputeBeforeAddFieldsBits
         else
@@ -4079,13 +4079,13 @@ end;
 function TRestServerURIContext.ClienTOrmOptions: TJSONSerializerOrmOptions;
 begin
   result := [];
-  if (TableRecordProps = nil) or
+  if (TableModelProps = nil) or
      (ClientKind <> ckAjax) then
     exit;
   if rsoGetID_str in Server.Options then
     include(result, jwoID_str);
   if ([oftObject, oftBlobDynArray, oftVariant] *
-      TableRecordProps.Props.HasTypeFields <> []) and
+      TableModelProps.Props.HasTypeFields <> []) and
      (rsoGetAsJsonNotAsString in Server.Options) then
     include(result, jwoAsJsonNotAsString);
 end;
@@ -6440,7 +6440,7 @@ begin
   if Model.GetTableIndex(aMethodName) >= 0 then
     raise EServiceException.CreateUTF8('Published method name %.% ' +
       'conflicts with a Table in the Model!', [self, aMethodName]);
-  with PSQLRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
+  with PRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
     'Duplicated published method name %.%', [self, aMethodName]))^ do
   begin
     callback := aEvent;
