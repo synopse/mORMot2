@@ -337,7 +337,7 @@ type
     /// call this method to add the content of most low-level types to the log
     // at a specified level
     // - TSynLog will handle enumerations and dynamic array; TSQLLog will be
-    // able to write TObject/TORM and sets content as JSON
+    // able to write TObject/TOrm and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: pointer;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
@@ -1030,7 +1030,7 @@ type
     // - this overridden implementation will write the value content,
     // written as human readable JSON: handle dynamic arrays and enumerations
     // - TSQLLog from mORMot.pas unit will be able to write
-    // TObject/TORM and sets content as JSON
+    // TObject/TOrm and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: pointer;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
@@ -4601,8 +4601,8 @@ begin
     'TSQLRest', '',
     'TRest', '',
     'TSQL', '',
-    'TORMRest', '',
-    'TORM', '',
+    'TOrmRest', '',
+    'TOrm', '',
     'TWebSocket', 'WS',
     'TSyn', '',
     'Thread', '',

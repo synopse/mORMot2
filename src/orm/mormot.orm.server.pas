@@ -7,7 +7,7 @@ unit mormot.orm.server;
   *****************************************************************************
 
    Server-Side Object-Relational-Mapping (ORM) Process
-    - TRestORMServer Abstract Server
+    - TRestOrmServer Abstract Server
 
   *****************************************************************************
 }
@@ -50,34 +50,34 @@ uses
   mormot.rest.server;
 
 
-{ ************ TRestORMServer Abstract Server }
+{ ************ TRestOrmServer Abstract Server }
 
 type
   /// implements TRestServer.ORM process for REST server with abstract storage
   // - works in conjunction with TRestClientURI from mormot.rest.client.pas
   // - you should inherit it to provide its main storage capabilities
-  // - is able to register and redirect some TORM classes to their own
+  // - is able to register and redirect some TOrm classes to their own
   // dedicated TRestStorage
-  TRestORMServer = class(TRestORM, IRestORMServer)
+  TRestOrmServer = class(TRestOrm, IRestOrmServer)
   protected
     fOwner: TRestServer;
     /// will contain the in-memory representation of some static tables
     // - this array has the same length as the associated Model.Tables[]
     // - fStaticData[] will contain pure in-memory tables, not declared as
     // SQLite3 virtual tables, therefore not available from joined SQL statements
-    fStaticData: TRestORMDynArray;
+    fStaticData: TRestOrmDynArray;
     /// map TRestStorageInMemory or TRestStorageExternal engines
     // - this array has the same length as the associated Model.Tables[]
     // - fStaticVirtualTable[] will contain in-memory or external tables declared
     // as SQLite3 virtual tables, therefore available from joined SQL statements
     // - the very same TRestStorage is handled in fStaticData
-    fStaticVirtualTable: TRestORMDynArray;
+    fStaticVirtualTable: TRestOrmDynArray;
     fVirtualTableDirect: boolean;
-    fCreateMissingTablesOptions: TORMInitializeTableOptions;
+    fCreateMissingTablesOptions: TOrmInitializeTableOptions;
     fRecordVersionMax: TRecordVersion;
     fRecordVersionDeleteIgnore: boolean;
-    fORMVersionDeleteTable: TORMTableDeletedClass;
-    // TORMHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
+    fOrmVersionDeleteTable: TOrmTableDeletedClass;
+    // TOrmHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistoryTableIndexCount: cardinal;
     fTrackChangesHistory: array of record
@@ -86,11 +86,11 @@ type
       MaxRevisionJSON: integer;
       MaxUncompressedBlobSize: integer;
     end;
-    function GetStaticDataServer(aClass: TORMClass): TRestORM;
-    function GetVirtualTable(aClass: TORMClass): TRestORM;
-    function GetStaticTable(aClass: TORMClass): TRestORM;
+    function GetStaticDataServer(aClass: TOrmClass): TRestOrm;
+    function GetVirtualTable(aClass: TOrmClass): TRestOrm;
+    function GetStaticTable(aClass: TOrmClass): TRestOrm;
       {$ifdef HASINLINE}inline;{$endif}
-    function MaxUncompressedBlobSize(Table: TORMClass): integer;
+    function MaxUncompressedBlobSize(Table: TOrmClass): integer;
     /// will retrieve the monotonic value of a TRecordVersion field from the DB
     procedure InternalRecordVersionMaxFromExisting(RetrieveNext: PID); virtual;
     procedure InternalRecordVersionDelete(TableIndex: integer; ID: TID;
@@ -121,7 +121,7 @@ type
       SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUTF8; Increment: Int64): boolean; override;
-    function EngineBatchSend(Table: TORMClass; var Data: RawUTF8;
+    function EngineBatchSend(Table: TOrmClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
   public
     /// virtual abstract methods which will perform CRUD operations on the main DB
@@ -172,7 +172,7 @@ type
     // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
     OnBlobUpdateEvent: TNotifyFieldSQLEvent;
 
-    /// initialize the class, and associated to a TRest and its TORMModel
+    /// initialize the class, and associated to a TRest and its TOrmModel
     constructor Create(aRest: TRest); override;
     /// release memory and any existing associated resource
     destructor Destroy; override;
@@ -184,50 +184,50 @@ type
     // - this default implementation will call the EndCurrentThread methods
     // of all its internal TRestStorage instances
     procedure EndCurrentThread(Sender: TThread); override;
-    /// Missing tables are created if they don't exist yet for every TORM
+    /// Missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
     // - you must call explicitely this before having called StaticDataCreate()
     // - all table description (even Unique feature) is retrieved from the Model
-    // - this method should also create additional fields, if the TORM definition
+    // - this method should also create additional fields, if the TOrm definition
     // has been modified; only field adding is mandatory, field renaming or
     // field deleting are not allowed in the FrameWork (in such cases, you must
-    // create a new TORM type)
+    // create a new TOrm type)
     // - this virtual method do nothing by default - overridden versions should
     // implement it as expected by the underlying storage engine (e.g. SQLite3
     // or TRestServerFullInMemory)
-    // - you can tune some options transmitted to the TORM.InitializeTable
+    // - you can tune some options transmitted to the TOrm.InitializeTable
     // virtual methods, e.g. to avoid the automatic create of indexes
     procedure CreateMissingTables(user_version: cardinal = 0;
-      options: TORMInitializeTableOptions = []); virtual;
-    /// run the TORM.InitializeTable methods for all void tables of the model
+      options: TOrmInitializeTableOptions = []); virtual;
+    /// run the TOrm.InitializeTable methods for all void tables of the model
     // - can be used instead of CreateMissingTables e.g. for MongoDB storage
     // - you can specify the creation options, e.g. INITIALIZETABLE_NOINDEX
-    procedure InitializeTables(Options: TORMInitializeTableOptions);
+    procedure InitializeTables(Options: TOrmInitializeTableOptions);
     /// check on which storage instance a SQL SELECT statement is to be executed
     // - returns nil if the main engine is to be used
     // - or returns the target TRestStorage instance, with the adapted SQL
     // statement, ready to be run on it
-    function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TRestORM;
+    function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TRestOrm;
     /// retrieve a list of members as JSON encoded data
     // - used by OneFieldValue() and MultiFieldValue() methods
     function InternalListRawUTF8(TableIndex: integer; const SQL: RawUTF8): RawUTF8;
     /// virtual method called when a record is updated
     // - default implementation will call the OnUpdateEvent/OnBlobUpdateEvent
     // methods, if defined
-    // - will also handle TORMHistory tables, as defined by TrackChanges()
+    // - will also handle TOrmHistory tables, as defined by TrackChanges()
     // - returns true on success, false if an error occured (but action must continue)
     // - you can override this method to implement a server-wide notification,
     // but be aware it may be the first step to break the stateless architecture
     // of the framework
-    function InternalUpdateEvent(aEvent: TORMEvent; aTableIndex: integer; aID: TID;
+    function InternalUpdateEvent(aEvent: TOrmEvent; aTableIndex: integer; aID: TID;
       const aSentData: RawUTF8; aIsBlobFields: PFieldBits): boolean; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
     // for database coherency, into 0
     // - delete all records containing a matched TRecordReferenceToBeDeleted
-    // property value in the database Model (e.g. TORMHistory)
-    // - reset all matching TORM properties in the database Model,
+    // property value in the database Model (e.g. TOrmHistory)
+    // - reset all matching TOrm properties in the database Model,
     // for database coherency, into 0
     // - important notice: we don't use FOREIGN KEY constraints in this framework,
     // and handle all integrity check within this method (it's therefore less
@@ -244,26 +244,26 @@ type
     procedure FlushInternalDBCache; virtual;
     /// called from STATE remote HTTP method
     procedure RefreshInternalStateFromStatic;
-    /// assign a TRestORM instance for a given slot
-    // - called e.g. by TORMVirtualTable.Create or StaticDataCreate
-    procedure StaticTableSetup(aTableIndex: integer; aStatic: TRestORM;
+    /// assign a TRestOrm instance for a given slot
+    // - called e.g. by TOrmVirtualTable.Create or StaticDataCreate
+    procedure StaticTableSetup(aTableIndex: integer; aStatic: TRestOrm;
       aKind: TRestServerKind);
     /// fast get the associated static server or virtual table from its index, if any
-    // - returns nil if aTableIndex is invalid or is not assigned to a TRestORM
-    function GetStaticTableIndex(aTableIndex: integer): TRestORM; overload;
+    // - returns nil if aTableIndex is invalid or is not assigned to a TRestOrm
+    function GetStaticTableIndex(aTableIndex: integer): TRestOrm; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// fast get the associated static server or virtual table from its index, if any
-    // - returns nil if aTableIndex is invalid or is not assigned to a TRestORM
+    // - returns nil if aTableIndex is invalid or is not assigned to a TRestOrm
     function GetStaticTableIndex(aTableIndex: integer;
-      out Kind: TRestServerKind): TRestORM; overload;
+      out Kind: TRestServerKind): TRestOrm; overload;
        {$ifdef HASINLINE}inline;{$endif}
     /// fast get the associated TRestStorageRemote from its index, if any
     // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
-    function GetRemoteTable(TableIndex: Integer): TRestORM;
+    function GetRemoteTable(TableIndex: Integer): TRestOrm;
     /// initialize change tracking for the given tables
-    // - by default, it will use the TORMHistory table to store the
+    // - by default, it will use the TOrmHistory table to store the
     // changes - you can specify a dedicated class as aTableHistory parameter
-    // - if aTableHistory is not already part of the TORMModel, it will be added
+    // - if aTableHistory is not already part of the TOrmModel, it will be added
     // - note that this setting should be consistent in time: if you disable
     // tracking for a while, or did not enable tracking before adding a record,
     // then the content history won't be consistent (or disabled) for this record
@@ -280,8 +280,8 @@ type
     // - note that change tracking may slow down the writing process, and
     // may increase storage space a lot (even if BLOB maximum size can be set),
     // so should be defined only when necessary
-    procedure TrackChanges(const aTable: array of TORMClass;
-      aTableHistory: TORMHistoryClass = nil;
+    procedure TrackChanges(const aTable: array of TOrmClass;
+      aTableHistory: TOrmHistoryClass = nil;
       aMaxHistoryRowBeforeBlob: integer = 1000;
       aMaxHistoryRowPerRecord: integer = 10;
       aMaxUncompressedBlobSize: integer = 64*1024); virtual;
@@ -290,7 +290,7 @@ type
     // aMaxHistoryRowBeforeBlob - as set by TrackChanges() method - is reached
     // - you can manually call this method to force History BLOB update, e.g.
     // when the server is in Idle state, and ready for process
-    procedure TrackChangesFlush(aTableHistory: TORMHistoryClass); virtual;
+    procedure TrackChangesFlush(aTableHistory: TOrmHistoryClass); virtual;
     /// check if OnUpdateEvent or change tracked has been defined for this table
     // - is used internally e.g. by TRestServerDB.MainEngineUpdateField to
     // ensure that the updated ID fields will be computed as expected
@@ -300,8 +300,8 @@ type
     /// read only access to the current monotonic value for a TRecordVersion field
     function RecordVersionCurrent: TRecordVersion;
     /// synchronous master/slave replication from a slave TRest
-    // - apply all the updates from another (distant) master TRestORM for a given
-    // TORM table, using its TRecordVersion field, to the calling slave
+    // - apply all the updates from another (distant) master TRestOrm for a given
+    // TOrm table, using its TRecordVersion field, to the calling slave
     // - both remote Master and local slave TRestServer should have the supplied
     // Table class in their data model (maybe in diverse order)
     // - by default, all pending updates are retrieved, but you can define a value
@@ -314,12 +314,12 @@ type
     // over a bidirectionnal communication channel like WebSockets
     // - you can use RecordVersionSynchronizeSlaveToBatch if your purpose is
     // to access the updates before applying to the current slave storage
-    function RecordVersionSynchronizeSlave(Table: TORMClass;
+    function RecordVersionSynchronizeSlave(Table: TOrmClass;
       Master: TRest; ChunkRowLimit: integer = 0;
       OnWrite: TOnBatchWrite = nil): TRecordVersion;
     /// synchronous master/slave replication from a slave TRest into a Batch
     // - will retrieve all the updates from a (distant) master TRest for a
-    // given TORM table, using its TRecordVersion field, and a supplied
+    // given TOrm table, using its TRecordVersion field, and a supplied
     // TRecordVersion monotonic value, into a TRestBatch instance
     // - both remote Source and local TRestServer should have the supplied
     // Table class in each of their data model
@@ -332,7 +332,7 @@ type
     // TRecordVersion fields will be forced from the supplied value
     // - usually, you should not need to use this method, but rather the more
     // straightforward RecordVersionSynchronizeSlave()
-    function RecordVersionSynchronizeSlaveToBatch(Table: TORMClass;
+    function RecordVersionSynchronizeSlaveToBatch(Table: TOrmClass;
       Master: TRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer = 0;
       OnWrite: TOnBatchWrite = nil): TRestBatch; virtual;
     /// access to the associated TRestServer main instance
@@ -342,79 +342,79 @@ type
     property RecordVersionMax: TRecordVersion
       read fRecordVersionMax write fRecordVersionMax;
     /// retrieve the TRestStorage instance used to store and manage
-    // a specified TORMClass in memory
+    // a specified TOrmClass in memory
     // - raise an EModelException if aClass is not part of the database Model
-    // - returns nil if this TORMClass is handled by the main engine
-    property StaticDataServer[aClass: TORMClass]: TRestORM
+    // - returns nil if this TOrmClass is handled by the main engine
+    property StaticDataServer[aClass: TOrmClass]: TRestOrm
       read GetStaticDataServer;
     /// retrieve a running TRestStorage virtual table
     // - associated e.g. to a 'JSON' or 'Binary' virtual table module, or may
     // return a TRestStorageExternal instance (as defined in mORMotDB)
     // - this property will return nil if there is no Virtual Table associated
-    // or if the corresponding module is not a TORMVirtualTable
+    // or if the corresponding module is not a TOrmVirtualTable
     // (e.g. "pure" static tables registered by StaticDataCreate will be
     // accessible only via StaticDataServer[], not via StaticVirtualTable[])
-    // - has been associated by the TORMModel.VirtualTableRegister method or
+    // - has been associated by the TOrmModel.VirtualTableRegister method or
     // the VirtualTableExternalRegister() global function
-    property StaticVirtualTable[aClass: TORMClass]: TRestORM
+    property StaticVirtualTable[aClass: TOrmClass]: TRestOrm
       read GetVirtualTable;
     /// fast get the associated static server or virtual table, if any
     // - same as a dual call to StaticDataServer[aClass] + StaticVirtualTable[aClass]
-    property StaticTable[aClass: TORMClass]: TRestORM
+    property StaticTable[aClass: TOrmClass]: TRestOrm
       read GetStaticTable;
     /// you can force this property to TRUE so that any Delete() will not
-    // write to the TORMTableDelete table for TRecordVersion tables
+    // write to the TOrmTableDelete table for TRecordVersion tables
     // - to be used when applying a TRestBatch instance as returned by
     // RecordVersionSynchronizeToBatch()
     property RecordVersionDeleteIgnore: boolean
       read fRecordVersionDeleteIgnore write fRecordVersionDeleteIgnore;
     /// the options specified to TRestServer.CreateMissingTables
-    // - as expected by TORM.InitializeTable methods
-    property CreateMissingTablesOptions: TORMInitializeTableOptions
+    // - as expected by TOrm.InitializeTable methods
+    property CreateMissingTablesOptions: TOrmInitializeTableOptions
       read fCreateMissingTablesOptions;
   public
-    { IRestORM overriden methods }
+    { IRestOrm overriden methods }
     /// implement Server-Side TRest deletion
     // - uses internally EngineDelete() function for calling the database engine
     // - call corresponding fStaticData[] if necessary
     // - this record is also erased in all available TRecordReference properties
     // in the database Model, for relational database coherency
-    function Delete(Table: TORMClass; ID: TID): boolean; override;
+    function Delete(Table: TOrmClass; ID: TID): boolean; override;
     /// implement Server-Side TRest deletion with a WHERE clause
     // - will process all ORM-level validation, coherency checking and
     // notifications together with a low-level SQL deletion work (if possible)
-    function Delete(Table: TORMClass; const SQLWhere: RawUTF8): boolean; override;
+    function Delete(Table: TOrmClass; const SQLWhere: RawUTF8): boolean; override;
     /// overridden method for direct static class call (if any)
-    function TableRowCount(Table: TORMClass): Int64; override;
+    function TableRowCount(Table: TOrmClass): Int64; override;
     /// overridden method for direct static class call (if any)
-    function TableHasRows(Table: TORMClass): boolean; override;
+    function TableHasRows(Table: TOrmClass): boolean; override;
     /// overridden method for direct static class call (if any)
-    function MemberExists(Table: TORMClass; ID: TID): boolean; override;
+    function MemberExists(Table: TOrmClass; ID: TID): boolean; override;
     /// update all BLOB fields of the supplied Value
     // - this overridden method will execute the direct static class, if any
-    function UpdateBlobFields(Value: TORM): boolean; override;
+    function UpdateBlobFields(Value: TOrm): boolean; override;
     /// get all BLOB fields of the supplied value from the remote server
     // - this overridden method will execute the direct static class, if any
-    function RetrieveBlobFields(Value: TORM): boolean; override;
+    function RetrieveBlobFields(Value: TOrm): boolean; override;
     /// implement Server-Side TRest unlocking
     // - to be called e.g. after a Retrieve() with forupdate=TRUE
     // - implements our custom UNLOCK REST-like verb
-    // - locking is handled by TRestORMServer.Model
+    // - locking is handled by TRestOrmServer.Model
     // - returns true on success
-    function UnLock(Table: TORMClass; aID: TID): boolean; override;
+    function UnLock(Table: TOrmClass; aID: TID): boolean; override;
     /// end a transaction
     // - implements REST END collection
-    // - write all pending TORMVirtualTableJSON data to the disk
+    // - write all pending TOrmVirtualTableJSON data to the disk
     procedure Commit(SessionID: cardinal; RaiseException: boolean); override;
   public
-    { IRestORMServer methods }
+    { IRestOrmServer methods }
     /// create an index for the specific FieldName
     // - will call CreateSQLMultiIndex() internaly
-    function CreateSQLIndex(Table: TORMClass;
+    function CreateSQLIndex(Table: TOrmClass;
       const FieldName: RawUTF8; Unique: boolean;
       const IndexName: RawUTF8 = ''): boolean; overload;
     /// create one or multiple index(es) for the specific FieldName(s)
-    function CreateSQLIndex(Table: TORMClass;
+    function CreateSQLIndex(Table: TOrmClass;
       const FieldNames: array of RawUTF8; Unique: boolean): boolean; overload;
     /// create one index for all specific FieldNames at once
     // - will call any static engine for the index creation of such tables, or
@@ -425,17 +425,17 @@ type
     // Then the following index is not mandatory for SQLite3:
     // ! aServer.CreateSQLIndex(TEmails, 'Email', False);
     // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
-    function CreateSQLMultiIndex(Table: TORMClass;
+    function CreateSQLMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUTF8;
       Unique: boolean; IndexName: RawUTF8 = ''): boolean; virtual;
-    /// check if the supplied TORM is not a virtual or static table
+    /// check if the supplied TOrm is not a virtual or static table
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// returns true if the server will handle per-user authentication and
     // access right management
     function HandleAuthentication: boolean;
   published
     /// this property can be left to its TRUE default value, to handle any
-    // TORMVirtualTableJSON static tables (module JSON or BINARY) with direct
+    // TOrmVirtualTableJSON static tables (module JSON or BINARY) with direct
     // calls to the storage instance
     // - is set to TRUE by default to enable faster Direct mode
     // - in Direct mode, GET/POST/PUT/DELETE of individual records (or BLOB fields)
@@ -455,11 +455,11 @@ implementation
 uses
   mormot.orm.storage;
 
-{ ************ TRestORMServer Abstract Server}
+{ ************ TRestOrmServer Abstract Server}
 
-{ TRestORMServer }
+{ TRestOrmServer }
 
-constructor TRestORMServer.Create(aRest: TRest);
+constructor TRestOrmServer.Create(aRest: TRest);
 var
   t: PtrInt;
 begin
@@ -474,16 +474,16 @@ begin
   SetLength(fTrackChangesHistoryTableIndex, fTrackChangesHistoryTableIndexCount);
   for t := 0 to fTrackChangesHistoryTableIndexCount - 1 do
     fTrackChangesHistoryTableIndex[t] := -1;
-  fORMVersionDeleteTable := TORMTableDeleted;
+  fOrmVersionDeleteTable := TOrmTableDeleted;
   for t := 0 to high(fModel.Tables) do
     if fModel.Tables[t].RecordProps.RecordVersionField <> nil then
     begin
-      fORMVersionDeleteTable := fModel.AddTableInherited(TORMTableDeleted);
+      fOrmVersionDeleteTable := fModel.AddTableInherited(TOrmTableDeleted);
       break;
     end;
 end;
 
-destructor TRestORMServer.Destroy;
+destructor TRestOrmServer.Destroy;
 var
   i: PtrInt;
 begin
@@ -502,7 +502,7 @@ begin
   inherited Destroy; // fCache.Free
 end;
 
-procedure TRestORMServer.BeginCurrentThread(Sender: TThread);
+procedure TRestOrmServer.BeginCurrentThread(Sender: TThread);
 var
   i: PtrInt;
 begin
@@ -511,7 +511,7 @@ begin
       fStaticVirtualTable[i].BeginCurrentThread(Sender);
 end;
 
-procedure TRestORMServer.EndCurrentThread(Sender: TThread);
+procedure TRestOrmServer.EndCurrentThread(Sender: TThread);
 var
   i: PtrInt;
 begin
@@ -520,13 +520,13 @@ begin
       fStaticVirtualTable[i].EndCurrentThread(Sender);
 end;
 
-procedure TRestORMServer.CreateMissingTables(user_version: cardinal;
-  options: TORMInitializeTableOptions);
+procedure TRestOrmServer.CreateMissingTables(user_version: cardinal;
+  options: TOrmInitializeTableOptions);
 begin
   fCreateMissingTablesOptions := options;
 end;
 
-procedure TRestORMServer.InitializeTables(Options: TORMInitializeTableOptions);
+procedure TRestOrmServer.InitializeTables(Options: TOrmInitializeTableOptions);
 var
   t: PtrInt;
 begin
@@ -537,12 +537,12 @@ begin
         fModel.Tables[t].InitializeTable(self, '', Options);
 end;
 
-procedure TRestORMServer.SetNoAJAXJSON(const Value: boolean);
+procedure TRestOrmServer.SetNoAJAXJSON(const Value: boolean);
 begin
   // do nothing at this level
 end;
 
-function TRestORMServer.GetStaticDataServer(aClass: TORMClass): TRestORM;
+function TRestOrmServer.GetStaticDataServer(aClass: TOrmClass): TRestOrm;
 var
   i: cardinal;
 begin
@@ -559,7 +559,7 @@ begin
     result := nil;
 end;
 
-function TRestORMServer.GetVirtualTable(aClass: TORMClass): TRestORM;
+function TRestOrmServer.GetVirtualTable(aClass: TOrmClass): TRestOrm;
 var
   i: PtrInt;
 begin
@@ -573,7 +573,7 @@ begin
   end;
 end;
 
-function TRestORMServer.GetStaticTable(aClass: TORMClass): TRestORM;
+function TRestOrmServer.GetStaticTable(aClass: TOrmClass): TRestOrm;
 begin
   if (aClass = nil) or
      ((fStaticData = nil) and
@@ -583,7 +583,7 @@ begin
     result := GetStaticTableIndex(fModel.GetTableIndexExisting(aClass));
 end;
 
-function TRestORMServer.GetStaticTableIndex(aTableIndex: integer): TRestORM;
+function TRestOrmServer.GetStaticTableIndex(aTableIndex: integer): TRestOrm;
 begin
   result := nil;
   if aTableIndex >= 0 then
@@ -597,7 +597,7 @@ begin
   end;
 end;
 
-function TRestORMServer.GetRemoteTable(TableIndex: Integer): TRestORM;
+function TRestOrmServer.GetRemoteTable(TableIndex: Integer): TRestOrm;
 begin
   if (cardinal(TableIndex) >= cardinal(length(fStaticData))) or
      (fStaticData[TableIndex] = nil) or
@@ -607,7 +607,7 @@ begin
     result := TRestStorageRemote(fStaticData[TableIndex]).RemoteRest;
 end;
 
-function TRestORMServer.MaxUncompressedBlobSize(Table: TORMClass): integer;
+function TRestOrmServer.MaxUncompressedBlobSize(Table: TOrmClass): integer;
 var
   i: integer;
 begin
@@ -619,13 +619,13 @@ begin
     result := 0;
 end;
 
-procedure TRestORMServer.InternalRecordVersionMaxFromExisting(RetrieveNext: PID);
+procedure TRestOrmServer.InternalRecordVersionMaxFromExisting(RetrieveNext: PID);
 var
   m: PtrInt;
-  field: TORMPropInfoRTTIRecordVersion;
+  field: TOrmPropInfoRTTIRecordVersion;
   current, max, mDeleted: Int64;
 begin
-  fRest.AcquireExecution[execORMWrite].Safe.Lock;
+  fRest.AcquireExecution[execOrmWrite].Safe.Lock;
   try
     if fRecordVersionMax = 0 then
     begin // check twice to avoid race condition
@@ -640,7 +640,7 @@ begin
             if max > current then
               current := max;
           mDeleted := Int64(m) shl ORMVERSION_DELETEID_SHIFT;
-          if OneFieldValue(fORMVersionDeleteTable, 'max(ID)', 'ID>? and ID<?',
+          if OneFieldValue(fOrmVersionDeleteTable, 'max(ID)', 'ID>? and ID<?',
               [], [mDeleted, mDeleted + ORMVERSION_DELETEID_RANGE], max) then
           begin
             max := max and pred(ORMVERSION_DELETEID_RANGE);
@@ -659,19 +659,19 @@ begin
     end;
     fRecordVersionMax := current;
   finally
-    fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
 end;
 
-procedure TRestORMServer.InternalRecordVersionDelete(TableIndex: integer;
+procedure TRestOrmServer.InternalRecordVersionDelete(TableIndex: integer;
   ID: TID; Batch: TRestBatch);
 var
-  deleted: TORMTableDeleted;
+  deleted: TOrmTableDeleted;
   revision: TRecordVersion;
 begin
   if fRecordVersionDeleteIgnore then
     exit;
-  deleted := fORMVersionDeleteTable.Create;
+  deleted := fOrmVersionDeleteTable.Create;
   try
     revision := RecordVersionCompute;
     deleted.IDValue := revision +
@@ -689,29 +689,29 @@ begin
   end;
 end;
 
-function TRestORMServer.InternalRecordVersionComputeNext: TRecordVersion;
+function TRestOrmServer.InternalRecordVersionComputeNext: TRecordVersion;
 begin
   if fRecordVersionMax = 0 then
     InternalRecordVersionMaxFromExisting(@result)
   else
   begin
-    fRest.AcquireExecution[execORMWrite].Safe.Lock;
+    fRest.AcquireExecution[execOrmWrite].Safe.Lock;
     inc(fRecordVersionMax);
     result := fRecordVersionMax;
-    fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
 end;
 
-function TRestORMServer.RecordVersionCompute: TRecordVersion;
+function TRestOrmServer.RecordVersionCompute: TRecordVersion;
 begin
   result := InternalRecordVersionComputeNext;
   if result >= ORMVERSION_DELETEID_RANGE then
-    raise EORMException.CreateUTF8(
+    raise EOrmException.CreateUTF8(
      '%.InternalRecordVersionCompute=% overflow: %.ID should be < 2^%)',
-     [self, result, fORMVersionDeleteTable, ORMVERSION_DELETEID_SHIFT]);
+     [self, result, fOrmVersionDeleteTable, ORMVERSION_DELETEID_SHIFT]);
 end;
 
-function TRestORMServer.RecordVersionCurrent: TRecordVersion;
+function TRestOrmServer.RecordVersionCurrent: TRecordVersion;
 begin
   if self = nil then
     result := 0
@@ -723,7 +723,7 @@ begin
   end;
 end;
 
-function TRestORMServer.RecordVersionSynchronizeSlave(Table: TORMClass;
+function TRestOrmServer.RecordVersionSynchronizeSlave(Table: TOrmClass;
   Master: TRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
 var
   Writer: TRestBatch;
@@ -749,7 +749,7 @@ begin
       break;
     end;
     try
-      fRest.AcquireExecution[execORMWrite].Safe.Lock;
+      fRest.AcquireExecution[execOrmWrite].Safe.Lock;
       fRecordVersionDeleteIgnore := true;
       status := BatchSend(Writer, IDs);
       if status = HTTP_SUCCESS then
@@ -773,40 +773,40 @@ begin
       end;
     finally
       fRecordVersionDeleteIgnore := false;
-      fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+      fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
       Writer.Free;
     end;
   until false; // continue synch until nothing new is found
 end;
 
-function TRestORMServer.RecordVersionSynchronizeSlaveToBatch(
-  Table: TORMClass; Master: TRest; var RecordVersion: TRecordVersion;
+function TRestOrmServer.RecordVersionSynchronizeSlaveToBatch(
+  Table: TOrmClass; Master: TRest; var RecordVersion: TRecordVersion;
   MaxRowLimit: integer; OnWrite: TOnBatchWrite): TRestBatch;
 var
   TableIndex, SourceTableIndex, UpdatedRow, DeletedRow: integer;
-  Props: TORMProperties;
+  Props: TOrmProperties;
   Where: RawUTF8;
   UpdatedVersion, DeletedVersion: TRecordVersion;
-  ListUpdated, ListDeleted: TORMTable;
-  Rec: TORM;
+  ListUpdated, ListDeleted: TOrmTable;
+  Rec: TOrm;
   DeletedMinID: TID;
-  Deleted: TORMTableDeleted;
+  Deleted: TOrmTableDeleted;
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
   log := fRest.LogClass.Enter('RecordVersionSynchronizeSlaveToBatch %',
     [Table], self);
   result := nil;
   if Master = nil then
-    raise EORMException.CreateUTF8(
+    raise EOrmException.CreateUTF8(
       '%.RecordVersionSynchronizeSlaveToBatch(Master=nil)', [self]);
   TableIndex := Model.GetTableIndexExisting(Table);
   SourceTableIndex := Master.Model.GetTableIndexExisting(Table); // <>TableIndex?
   Props := Model.TableProps[TableIndex].Props;
   if Props.RecordVersionField = nil then
-    raise EORMException.CreateUTF8(
+    raise EOrmException.CreateUTF8(
       '%.RecordVersionSynchronizeSlaveToBatch(%) with no TRecordVersion field',
       [self, Table]);
-  fRest.AcquireExecution[execORMWrite].Safe.Lock;
+  fRest.AcquireExecution[execOrmWrite].Safe.Lock;
   try
     Where := '%>? order by %';
     if MaxRowLimit > 0 then
@@ -823,7 +823,7 @@ begin
       Where := 'ID>? and ID<? order by ID';
       if MaxRowLimit > 0 then
         Where := FormatUTF8('% limit %', [Where, MaxRowLimit]);
-      ListDeleted := Master.ORM.MultiFieldValues(fORMVersionDeleteTable,
+      ListDeleted := Master.ORM.MultiFieldValues(fOrmVersionDeleteTable,
         'ID,Deleted', Where, [DeletedMinID + RecordVersion,
          DeletedMinID + ORMVERSION_DELETEID_RANGE]);
       if ListDeleted = nil then
@@ -835,7 +835,7 @@ begin
         // nothing new -> returns void TRestBach with Count=0
         exit;
       Rec := Table.Create;
-      Deleted := fORMVersionDeleteTable.Create;
+      Deleted := fOrmVersionDeleteTable.Create;
       try
         Rec.FillPrepare(ListUpdated);
         Deleted.FillPrepare(ListDeleted);
@@ -894,17 +894,17 @@ begin
       ListDeleted.Free;
     end;
   finally
-    fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
 end;
 
 
 { overridden methods which will perform CRUD operations }
 
-function TRestORMServer.EngineAdd(TableModelIndex: integer;
+function TRestOrmServer.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -913,10 +913,10 @@ begin
     result := rest.EngineAdd(TableModelIndex, SentData);
 end;
 
-function TRestORMServer.EngineRetrieve(TableModelIndex: integer;
+function TRestOrmServer.EngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUTF8;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -925,10 +925,10 @@ begin
     result := rest.EngineRetrieve(TableModelIndex, ID);
 end;
 
-function TRestORMServer.EngineList(const SQL: RawUTF8; ForceAJAX: boolean;
+function TRestOrmServer.EngineList(const SQL: RawUTF8; ForceAJAX: boolean;
   ReturnedRowCount: PPtrInt): RawUTF8;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
   sqladapted: RawUTF8;
 begin
   sqladapted := SQL;
@@ -939,10 +939,10 @@ begin
     result := rest.EngineList(sqladapted, ForceAJAX, ReturnedRowCount);
 end;
 
-function TRestORMServer.EngineUpdate(TableModelIndex: integer;
+function TRestOrmServer.EngineUpdate(TableModelIndex: integer;
   ID: TID; const SentData: RawUTF8): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -951,10 +951,10 @@ begin
     result := rest.EngineUpdate(TableModelIndex, ID, SentData);
 end;
 
-function TRestORMServer.EngineDelete(TableModelIndex: integer;
+function TRestOrmServer.EngineDelete(TableModelIndex: integer;
   ID: TID): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -966,10 +966,10 @@ begin
       InternalRecordVersionDelete(TableModelIndex, ID, nil);
 end;
 
-function TRestORMServer.EngineDeleteWhere(TableModelIndex: integer;
+function TRestOrmServer.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
   batch: TRestBatch;
   i: PtrInt;
 begin
@@ -1000,10 +1000,10 @@ begin
   end;
 end;
 
-function TRestORMServer.EngineRetrieveBlob(TableModelIndex: integer;
+function TRestOrmServer.EngineRetrieveBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -1014,10 +1014,10 @@ begin
       aID, BlobField, BlobData);
 end;
 
-function TRestORMServer.EngineUpdateBlob(TableModelIndex: integer;
+function TRestOrmServer.EngineUpdateBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -1028,10 +1028,10 @@ begin
       aID, BlobField, BlobData);
 end;
 
-function TRestORMServer.EngineUpdateField(TableModelIndex: integer;
+function TRestOrmServer.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -1042,10 +1042,10 @@ begin
       SetFieldName, SetValue, WhereFieldName, WhereValue);
 end;
 
-function TRestORMServer.EngineUpdateFieldIncrement(TableModelIndex: integer;
+function TRestOrmServer.EngineUpdateFieldIncrement(TableModelIndex: integer;
   ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTableIndex(TableModelIndex);
   if rest = nil then
@@ -1056,7 +1056,7 @@ begin
       ID, FieldName, Increment);
 end;
 
-function TRestORMServer.EngineBatchSend(Table: TORMClass;
+function TRestOrmServer.EngineBatchSend(Table: TOrmClass;
   var Data: RawUTF8; var Results: TIDDynArray;
   ExpectedResultsCount: integer): integer;
 var
@@ -1064,19 +1064,19 @@ var
   wasString, OK: boolean;
   TableName, Value, ErrMsg: RawUTF8;
   URIMethod, RunningBatchURIMethod: TURIMethod;
-  RunningBatchRest, RunningRest: TRestORM;
+  RunningBatchRest, RunningRest: TRestOrm;
   Sent, Method, MethodTable: PUTF8Char;
   AutomaticTransactionPerRow: cardinal;
   RowCountForCurrentTransaction: cardinal;
-  RunTableTransactions: array of TRestORM;
+  RunTableTransactions: array of TRestOrm;
   RunMainTransaction: boolean;
   ID: TID;
   Count: integer;
   timeoutTix: Int64;
   batchOptions: TRestBatchOptions;
-  RunTable, RunningBatchTable: TORMClass;
+  RunTable, RunningBatchTable: TOrmClass;
   RunTableIndex, i, TableIndex: integer;
-  RunStatic: TRestORM;
+  RunStatic: TRestOrm;
   RunStaticKind: TRestServerKind;
   CurrentContext: TRestServerURIContext;
   counts: array[mPOST..mDELETE] of cardinal;
@@ -1105,7 +1105,7 @@ var
   function IsNotAllowed: boolean;
   begin
     result := (CurrentContext <> nil) and
-              (CurrentContext.Command = execORMWrite) and
+              (CurrentContext.Command = execOrmWrite) and
               not CurrentContext.CanExecuteORMWrite(URIMethod, RunTable,
                 RunTableIndex, ID, CurrentContext.Call.RestAccessRights^);
   end;
@@ -1117,27 +1117,27 @@ begin
     [Table, length(Data)], self);
   Sent := UniqueRawUTF8(Data); // parsed, therefore modified in-placed
   if Sent = nil then
-    raise EORMBatchException.CreateUTF8(
+    raise EOrmBatchException.CreateUTF8(
       '%.EngineBatchSend(%,"")', [self, Table]);
   if Table <> nil then
   begin
     TableIndex := fModel.GetTableIndexExisting(Table);
     // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
     if not NextNotSpaceCharIs(Sent, '{') then
-      raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing {', [self]);
+      raise EOrmBatchException.CreateUTF8('%.EngineBatchSend: Missing {', [self]);
     TableName := GetJSONPropName(Sent);
     if (TableName = '') or
        (Sent = nil) or
        not IdemPropNameU(TableName,
          fModel.TableProps[TableIndex].Props.SQLTableName) then
-      raise EORMBatchException.CreateUTF8(
+      raise EOrmBatchException.CreateUTF8(
         '%.EngineBatchSend(%): Wrong "Table":"%"', [self, Table, TableName]);
   end
   else
     // or '["cmd@Table":values,...]'
     TableIndex := -1;
   if not NextNotSpaceCharIs(Sent, '[') then
-    raise EORMBatchException.CreateUTF8(
+    raise EOrmBatchException.CreateUTF8(
       '%.EngineBatchSend: Missing [', [self]);
   if IdemPChar(Sent, '"AUTOMATICTRANSACTIONPERROW",') then
   begin
@@ -1163,7 +1163,7 @@ begin
   RunningBatchURIMethod := mNone;
   Count := 0;
   FillCharFast(counts, SizeOf(counts), 0);
-  fRest.AcquireExecution[execORMWrite].Safe.Lock; // multi thread protection
+  fRest.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
   try // to protect automatic transactions and global write lock
     try // to protect InternalBatchStart/Stop locking
       // main loop: process one POST/PUT/DELETE per iteration
@@ -1173,14 +1173,14 @@ begin
         if (Sent = nil) or
            (Method = nil) or
            not wasString then
-          raise EORMBatchException.CreateUTF8(
+          raise EOrmBatchException.CreateUTF8(
             '%.EngineBatchSend: Missing CMD', [self]);
         MethodTable := PosChar(Method, '@');
         if MethodTable = nil then
         begin
           // e.g. '{"Table":[...,"POST",{object},...]}'
           if TableIndex < 0 then
-            raise EORMBatchException.CreateUTF8(
+            raise EOrmBatchException.CreateUTF8(
               '%.EngineBatchSend: "..@Table" expected', [self]);
           RunTableIndex := TableIndex;
           RunTable := Table;
@@ -1190,7 +1190,7 @@ begin
           // e.g. '[...,"POST@Table",{object},...]'
           RunTableIndex := fModel.GetTableIndexPtr(MethodTable + 1);
           if RunTableIndex < 0 then
-            raise EORMBatchException.CreateUTF8(
+            raise EOrmBatchException.CreateUTF8(
               '%.EngineBatchSend: Unknown %', [self, MethodTable]);
           RunTable := fModel.Tables[RunTableIndex];
         end;
@@ -1209,14 +1209,14 @@ begin
               URIMethod := mPOST;
               Value := JSONGetObject(Sent, @ID, EndOfObject, true);
               if Sent = nil then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: Wrong POST', [self]);
               if IsNotAllowed then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: POST/Add not allowed on %',
                   [self, RunTable]);
               if not RecordCanBeUpdated(RunTable, ID, oeAdd, @ErrMsg) then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: POST impossible: %', [self, ErrMsg]);
             end;
           1:
@@ -1228,10 +1228,10 @@ begin
               if (Sent = nil) or
                  (Value = '') or
                  (ID <= 0) then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: Wrong PUT', [self]);
               if IsNotAllowed then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: PUT/Update not allowed on %',
                   [self, RunTable]);
             end;
@@ -1243,14 +1243,14 @@ begin
               ID := GetInt64(GetJSONField(Sent, Sent, @wasString, @EndOfObject));
               if (ID <= 0) or
                  wasString then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: Wrong DELETE', [self]);
               if IsNotAllowed then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: DELETE not allowed on %',
                   [self, RunTable]);
               if not RecordCanBeUpdated(RunTable, ID, oeDelete, @ErrMsg) then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: DELETE impossible [%]', [self, ErrMsg]);
             end;
           3:
@@ -1263,18 +1263,18 @@ begin
               ID := 0; // no ID is never transmitted with simple fields
               if (Sent = nil) or
                  (Value = '') then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: Wrong SIMPLE', [self]);
               if IsNotAllowed then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: SIMPLE/Add not allowed on %',
                   [self, RunTable]);
               if not RecordCanBeUpdated(RunTable, 0, oeAdd, @ErrMsg) then
-                raise EORMBatchException.CreateUTF8(
+                raise EOrmBatchException.CreateUTF8(
                   '%.EngineBatchSend: SIMPLE/Add impossible: %', [self, ErrMsg]);
             end;
         else
-          raise EORMBatchException.CreateUTF8(
+          raise EOrmBatchException.CreateUTF8(
             '%.EngineBatchSend: Unknown [%] method', [self, Method]);
         end;
         if (Count = 0) and
@@ -1310,7 +1310,7 @@ begin
                     Break;
                   end;
                   if GetTickCount64 > timeoutTix then
-                    raise EORMBatchException.CreateUTF8(
+                    raise EOrmBatchException.CreateUTF8(
                       '%.EngineBatchSend: %.TransactionBegin timeout',
                       [self, RunningRest]);
                   SleepHiRes(1); // retry in 1 ms
@@ -1388,7 +1388,7 @@ begin
         end;
         if (boRollbackOnError in batchOptions) and
            not OK then
-          raise EORMBatchException.CreateUTF8(
+          raise EOrmBatchException.CreateUTF8(
             '%.EngineBatchSend: Results[%]=% on % %',
             [self, Count, Results[Count], Method, RunTable]);
         inc(Count);
@@ -1404,7 +1404,7 @@ begin
           // send pending rows, and release Safe.Lock
           RunningBatchRest.InternalBatchStop;
       finally
-        fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+        fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
         InternalLog('EngineBatchSend json=% add=% update=% delete=% %%',
           [KB(Data), counts[mPOST], counts[mPUT], counts[mDELETE],
            MethodTable, Table]);
@@ -1430,12 +1430,12 @@ begin
   begin
     // '{"Table":["cmd":values,...]}' format
     if Sent = nil then
-      raise EORMBatchException.CreateUTF8(
+      raise EOrmBatchException.CreateUTF8(
         '%.EngineBatchSend: % Truncated', [self, Table]);
     while not (Sent^ in ['}', #0]) do
       inc(Sent);
     if Sent^ <> '}' then
-      raise EORMBatchException.CreateUTF8(
+      raise EOrmBatchException.CreateUTF8(
         '%.EngineBatchSend(%): Missing }', [self, Table]);
   end;
   // if we reached here, process was OK
@@ -1443,8 +1443,8 @@ begin
   result := HTTP_SUCCESS;
 end;
 
-function TRestORMServer.GetStaticTableIndex(aTableIndex: integer;
-  out Kind: TRestServerKind): TRestORM;
+function TRestOrmServer.GetStaticTableIndex(aTableIndex: integer;
+  out Kind: TRestServerKind): TRestOrm;
 begin
   result := nil;
   Kind := sMainEngine;
@@ -1469,8 +1469,8 @@ begin
   end;
 end;
 
-procedure TRestORMServer.TrackChanges(const aTable: array of TORMClass;
-  aTableHistory: TORMHistoryClass; aMaxHistoryRowBeforeBlob,
+procedure TRestOrmServer.TrackChanges(const aTable: array of TOrmClass;
+  aTableHistory: TOrmHistoryClass; aMaxHistoryRowBeforeBlob,
   aMaxHistoryRowPerRecord, aMaxUncompressedBlobSize: integer);
 var
   t, tableIndex, TableHistoryIndex: PtrInt;
@@ -1484,14 +1484,14 @@ begin
   else
   begin
     if aTableHistory = nil then
-      aTableHistory := TORMHistory;
+      aTableHistory := TOrmHistory;
     TableHistoryIndex := fModel.GetTableIndexExisting(aTableHistory);
   end;
   for t := 0 to high(aTable) do
   begin
     tableIndex := fModel.GetTableIndexExisting(aTable[t]);
-    if aTable[t].InheritsFrom(TORMHistory) then
-      raise EORMException.CreateUTF8(
+    if aTable[t].InheritsFrom(TOrmHistory) then
+      raise EOrmException.CreateUTF8(
         '%.TrackChanges([%]) not allowed', [self, aTable[t]]);
     if cardinal(tableIndex) < fTrackChangesHistoryTableIndexCount then
     begin
@@ -1509,23 +1509,23 @@ begin
   end;
 end;
 
-procedure TRestORMServer.TrackChangesFlush(
-  aTableHistory: TORMHistoryClass);
+procedure TRestOrmServer.TrackChangesFlush(
+  aTableHistory: TOrmHistoryClass);
 var
-  HistBlob: TORMHistory;
-  Rec: TORM;
-  HistJson: TORMHistory;
+  HistBlob: TOrmHistory;
+  Rec: TOrm;
+  HistJson: TOrmHistory;
   WhereClause, JSON: RawUTF8;
   HistID, ModifiedRecord: TInt64DynArray;
   TableHistoryIndex, i, HistIDCount, n: PtrInt;
   ModifRecord, ModifRecordCount, MaxRevisionJSON: integer;
-  T: TORMTable;
+  T: TOrmTable;
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
   log := fRest.LogClass.Enter('TrackChangesFlush(%)', [aTableHistory], self);
-  fRest.AcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
+  fRest.AcquireExecution[execOrmWrite].Safe.Lock; // avoid race condition
   try
-    // low-level Add(TORMHistory) without cache
+    // low-level Add(TOrmHistory) without cache
     TableHistoryIndex := fModel.GetTableIndexExisting(aTableHistory);
     MaxRevisionJSON := fTrackChangesHistory[TableHistoryIndex].MaxRevisionJSON;
     if MaxRevisionJSON <= 0 then
@@ -1549,7 +1549,7 @@ begin
     begin
       if (ModifiedRecord[i] = 0) or
          (HistID[i] = 0) then
-        raise EORMException.CreateUTF8('%.TrackChangesFlush: Invalid %.ID=%',
+        raise EOrmException.CreateUTF8('%.TrackChangesFlush: Invalid %.ID=%',
           [self, aTableHistory, HistID[i]]);
       if ModifiedRecord[i] <> ModifRecord then
       begin
@@ -1655,11 +1655,11 @@ begin
       Rec.Free;
     end;
   finally
-    fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
 end;
 
-function TRestORMServer.InternalUpdateEventNeeded(aTableIndex: integer): boolean;
+function TRestOrmServer.InternalUpdateEventNeeded(aTableIndex: integer): boolean;
 begin
   result := (self <> nil) and
     (Assigned(OnUpdateEvent) or
@@ -1667,8 +1667,8 @@ begin
       (fTrackChangesHistoryTableIndex[aTableIndex] >= 0)));
 end;
 
-procedure SetStaticTable(aTableIndex, aTableCount: integer; aStatic: TRestORM;
-  var aStatics: TRestORMDynArray);
+procedure SetStaticTable(aTableIndex, aTableCount: integer; aStatic: TRestOrm;
+  var aStatics: TRestOrmDynArray);
 begin
   if (aStatic = nil) and
      (aStatics = nil) then
@@ -1687,8 +1687,8 @@ begin
     aStatics := nil;
 end;
 
-procedure TRestORMServer.StaticTableSetup(aTableIndex: integer;
-  aStatic: TRestORM; aKind: TRestServerKind);
+procedure TRestOrmServer.StaticTableSetup(aTableIndex: integer;
+  aStatic: TRestOrm; aKind: TRestServerKind);
 var
   n: cardinal;
 begin
@@ -1707,8 +1707,8 @@ begin
   end;
 end;
 
-function TRestORMServer.InternalAdaptSQL(TableIndex: integer;
-  var SQL: RawUTF8): TRestORM;
+function TRestOrmServer.InternalAdaptSQL(TableIndex: integer;
+  var SQL: RawUTF8): TRestOrm;
 begin
   result := nil;
   if (self <> nil) and
@@ -1734,11 +1734,11 @@ begin
   end;
 end;
 
-function TRestORMServer.InternalListRawUTF8(TableIndex: integer;
+function TRestOrmServer.InternalListRawUTF8(TableIndex: integer;
   const SQL: RawUTF8): RawUTF8;
 var
   aSQL: RawUTF8; // use a private copy for InternalAdaptSQL()
-  Rest: TRestORM;
+  Rest: TRestOrm;
 begin
   aSQL := SQL;
   Rest := InternalAdaptSQL(TableIndex, aSQL);
@@ -1746,21 +1746,21 @@ begin
      // this SQL statement is handled by direct connection, faster adaptation
     result := Rest.EngineList(aSQL)
   else
-    // complex TORMVirtualTableJSON/External queries will rely on virtual table
+    // complex TOrmVirtualTableJSON/External queries will rely on virtual table
     result := MainEngineList(SQL, false, nil);
   if result = '[]'#$A then
     result := '';
 end;
 
-function TRestORMServer.InternalUpdateEvent(aEvent: TORMEvent;
+function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
   aTableIndex: integer; aID: TID; const aSentData: RawUTF8;
   aIsBlobFields: PFieldBits): boolean;
 
   procedure DoTrackChanges(TableHistoryIndex: integer);
   var
-    TableHistoryClass: TORMHistoryClass;
+    TableHistoryClass: TOrmHistoryClass;
     JSON: RawUTF8;
-    Event: TORMHistoryEvent;
+    Event: TOrmHistoryEvent;
   begin
     case aEvent of
       oeAdd:
@@ -1772,21 +1772,21 @@ function TRestORMServer.InternalUpdateEvent(aEvent: TORMEvent;
     else
       exit;
     end;
-    TableHistoryClass := TORMHistoryClass(
+    TableHistoryClass := TOrmHistoryClass(
       fModel.Tables[TableHistoryIndex]);
     TableHistoryClass.InitializeFields([
       'ModifiedRecord', aTableIndex + aID shl 6,
       'Event', ord(Event),
       'SentDataJSON', aSentData,
       'Timestamp', GetServerTimestamp], JSON);
-    fRest.AcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
-    try // low-level Add(TORMHistory) without cache
+    fRest.AcquireExecution[execOrmWrite].Safe.Lock; // avoid race condition
+    try // low-level Add(TOrmHistory) without cache
       EngineAdd(TableHistoryIndex, JSON);
-      { TODO: use a BATCH (in background thread) to speed up TORMHistory storage? }
+      { TODO: use a BATCH (in background thread) to speed up TOrmHistory storage? }
       if fTrackChangesHistory[TableHistoryIndex].CurrentRow >
            fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then
       begin
-        // gather & compress TORMHistory.SentDataJson into History BLOB
+        // gather & compress TOrmHistory.SentDataJson into History BLOB
         TrackChangesFlush(TableHistoryClass);
         fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
       end
@@ -1794,7 +1794,7 @@ function TRestORMServer.InternalUpdateEvent(aEvent: TORMEvent;
         // fast append as JSON until reached MaxSentDataJsonRow
         inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
     finally
-      fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+      fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
     end;
   end;
 
@@ -1828,14 +1828,14 @@ begin
   end;
 end;
 
-function TRestORMServer.AfterDeleteForceCoherency(aTableIndex: integer;
+function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
   aID: TID): boolean;
 
   procedure PerformCascade(const Where: Int64; Ref: PSQLModelRecordReference);
   var
     W: RawUTF8;
     cascadeOK: boolean;
-    Rest: TRestORM;
+    Rest: TRestOrm;
   begin
     // set Field=0 or delete row where Field references aID
     if Where = 0 then
@@ -1871,12 +1871,12 @@ begin
       if Ref^.FieldTableIndex = -2 then
         // lazy initialization
         Ref^.FieldTableIndex := fModel.GetTableIndexSafe(Ref^.FieldTable, false);
-      case Ref^.FieldType.ORMFieldType of
+      case Ref^.FieldType.OrmFieldType of
         oftRecord:
           // TRecordReference published field
           PerformCascade(RecordReference(aTableIndex, aID), Ref);
         oftID:
-          // TORM published field
+          // TOrm published field
           if Ref^.FieldTableIndex = aTableIndex then
             PerformCascade(aID, Ref);
         oftTID:
@@ -1890,11 +1890,11 @@ begin
   result := true; // success even if no match found, or some cascade warnings
 end;
 
-procedure TRestORMServer.FlushInternalDBCache;
+procedure TRestOrmServer.FlushInternalDBCache;
 begin // do nothing by default
 end;
 
-procedure TRestORMServer.RefreshInternalStateFromStatic;
+procedure TRestOrmServer.RefreshInternalStateFromStatic;
 var
   i: PtrInt;
 begin
@@ -1909,15 +1909,15 @@ begin
       end;
 end;
 
-{ IRestORMServer overriden methods }
+{ IRestOrmServer overriden methods }
 
-function TRestORMServer.CreateSQLIndex(Table: TORMClass;
+function TRestOrmServer.CreateSQLIndex(Table: TOrmClass;
   const FieldName: RawUTF8; Unique: boolean; const IndexName: RawUTF8): boolean;
 begin
   result := CreateSQLMultiIndex(Table, [FieldName], Unique, IndexName);
 end;
 
-function TRestORMServer.CreateSQLIndex(Table: TORMClass;
+function TRestOrmServer.CreateSQLIndex(Table: TOrmClass;
   const FieldNames: array of RawUTF8; Unique: boolean): boolean;
 var
   i: PtrInt;
@@ -1928,14 +1928,14 @@ begin
       result := false;
 end;
 
-function TRestORMServer.CreateSQLMultiIndex(Table: TORMClass;
+function TRestOrmServer.CreateSQLMultiIndex(Table: TOrmClass;
   const FieldNames: array of RawUTF8; Unique: boolean;
   IndexName: RawUTF8): boolean;
 var
   SQL: RawUTF8;
   i, TableIndex: PtrInt;
-  Props: TORMProperties;
-  Rest: TRestORM;
+  Props: TOrmProperties;
+  Rest: TRestOrm;
 begin
   result := false;
   if high(FieldNames) < 0 then
@@ -1991,7 +1991,7 @@ begin
   result := EngineExecute(SQL);
 end;
 
-function TRestORMServer.IsInternalSQLite3Table(aTableIndex: integer): boolean;
+function TRestOrmServer.IsInternalSQLite3Table(aTableIndex: integer): boolean;
 begin
   result := ((cardinal(aTableIndex) >= cardinal(length(fStaticData))) or
              (fStaticData[aTableIndex] = nil)) and
@@ -1999,20 +1999,20 @@ begin
              (fStaticVirtualTable[aTableIndex] = nil));
 end;
 
-function TRestORMServer.HandleAuthentication: boolean;
+function TRestOrmServer.HandleAuthentication: boolean;
 begin
   // the main TRestServer is responsible of sessions and authentication
   result := fOwner.HandleAuthentication;
 end;
 
-{ IRestORM overriden methods }
+{ IRestOrm overriden methods }
 
-function TRestORMServer.UnLock(Table: TORMClass; aID: TID): boolean;
+function TRestOrmServer.UnLock(Table: TOrmClass; aID: TID): boolean;
 begin
   result := Model.UnLock(Table, aID);
 end;
 
-procedure TRestORMServer.Commit(SessionID: cardinal; RaiseException: boolean);
+procedure TRestOrmServer.Commit(SessionID: cardinal; RaiseException: boolean);
 var
   i: PtrInt;
 begin
@@ -2026,7 +2026,7 @@ begin
             UpdateFile; // will do nothing if not Modified
 end;
 
-function TRestORMServer.Delete(Table: TORMClass; ID: TID): boolean;
+function TRestOrmServer.Delete(Table: TOrmClass; ID: TID): boolean;
 begin
   result := inherited Delete(Table, ID); // call EngineDelete
   if result then
@@ -2034,7 +2034,7 @@ begin
     AfterDeleteForceCoherency(Model.GetTableIndex(Table), ID);
 end;
 
-function TRestORMServer.Delete(Table: TORMClass;
+function TRestOrmServer.Delete(Table: TOrmClass;
   const SQLWhere: RawUTF8): boolean;
 var
   IDs: TIDDynArray;
@@ -2046,12 +2046,12 @@ begin
     // nothing to delete
     exit;
   TableIndex := Model.GetTableIndexExisting(Table);
-  fRest.AcquireExecution[execORMWrite].Safe.Lock;
+  fRest.AcquireExecution[execOrmWrite].Safe.Lock;
   try
     // may be within a batch in another thread
     result := EngineDeleteWhere(TableIndex, SQLWhere, IDs);
   finally
-    fRest.AcquireExecution[execORMWrite].Safe.Unlock;
+    fRest.AcquireExecution[execOrmWrite].Safe.Unlock;
   end;
   if result then
     // force relational database coherency (i.e. our FOREIGN KEY implementation)
@@ -2059,9 +2059,9 @@ begin
       AfterDeleteForceCoherency(TableIndex, IDs[i]);
 end;
 
-function TRestORMServer.TableRowCount(Table: TORMClass): Int64;
+function TRestOrmServer.TableRowCount(Table: TOrmClass): Int64;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTable(Table);
   if rest <> nil then
@@ -2071,9 +2071,9 @@ begin
     result := inherited TableRowCount(Table);
 end;
 
-function TRestORMServer.TableHasRows(Table: TORMClass): boolean;
+function TRestOrmServer.TableHasRows(Table: TOrmClass): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTable(Table);
   if rest <> nil then
@@ -2083,9 +2083,9 @@ begin
     result := inherited TableHasRows(Table);
 end;
 
-function TRestORMServer.MemberExists(Table: TORMClass; ID: TID): boolean;
+function TRestOrmServer.MemberExists(Table: TOrmClass; ID: TID): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   rest := GetStaticTable(Table);
   if rest <> nil then
@@ -2095,9 +2095,9 @@ begin
     result := inherited MemberExists(Table, ID);
 end;
 
-function TRestORMServer.UpdateBlobFields(Value: TORM): boolean;
+function TRestOrmServer.UpdateBlobFields(Value: TOrm): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   // overridden method to update all BLOB fields at once
   if (Value = nil) or
@@ -2105,7 +2105,7 @@ begin
     result := false
   else
   begin
-    rest := GetStaticTable(PORMClass(Value)^);
+    rest := GetStaticTable(POrmClass(Value)^);
     if rest <> nil then
       // faster direct call
       result := rest.UpdateBlobFields(Value)
@@ -2114,16 +2114,16 @@ begin
   end;
 end;
 
-function TRestORMServer.RetrieveBlobFields(Value: TORM): boolean;
+function TRestOrmServer.RetrieveBlobFields(Value: TOrm): boolean;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   // overridden method to update all BLOB fields at once
   if Value = nil then
     result := false
   else
   begin
-    rest := GetStaticTable(PORMClass(Value)^);
+    rest := GetStaticTable(POrmClass(Value)^);
     if rest <> nil then
       // faster direct call
       result := rest.RetrieveBlobFields(Value)

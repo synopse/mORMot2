@@ -69,7 +69,7 @@ const
 type
   /// handled field/parameter/column types for abstract database access
   // - this will map JSON-compatible low-level database-level access types, not
-  // high-level object pascal types as TORMFieldType defined in
+  // high-level object pascal types as TOrmFieldType defined in
   // mormot.orm.core.pas
   // - it does not map either all potential types as defined in DB.pas (which
   // are there for compatibility with old RDBMS, and are not abstract enough)
@@ -303,7 +303,7 @@ const
   ALL_FIELDS: TFieldBits = [0 .. MAX_SQLFIELDS - 1];
 
   /// convert identified field types into high-level ORM types
-  // - as will be implemented in TORM classes
+  // - as will be implemented in TOrm classes
   SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
     '???','???',
     'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'RawBlob');
@@ -750,9 +750,9 @@ type
   protected
     /// used to store output format
     fExpand: boolean;
-    /// used to store output format for TORM.GetJSONValues()
+    /// used to store output format for TOrm.GetJSONValues()
     fWithID: boolean;
-    /// used to store field for TORM.GetJSONValues()
+    /// used to store field for TOrm.GetJSONValues()
     fFields: TFieldIndexDynArray;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
@@ -800,8 +800,8 @@ type
     property Expand: boolean
       read fExpand write fExpand;
     /// is set to TRUE if the ID field must be appended to the resulting JSON
-    // - this field is used only by TORM.GetJSONValues
-    // - this field is ignored by TORMTable.GetJSONValues
+    // - this field is used only by TOrm.GetJSONValues
+    // - this field is ignored by TOrmTable.GetJSONValues
     property WithID: boolean
       read fWithID;
     /// Read-Only access to the field bits set for each column to be stored
@@ -2520,7 +2520,7 @@ begin
   if P^ = #0 then
     exit; // no SQL statement
   if P^ = '*' then
-  begin // all simple (not RawBlob/TORMMany) fields
+  begin // all simple (not RawBlob/TOrmMany) fields
     inc(P);
     len := GetBitsCount(SimpleFieldsBits, MAX_SQLFIELDS) + 1;
     SetLength(fSelect, len);

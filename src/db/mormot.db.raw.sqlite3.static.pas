@@ -1249,7 +1249,7 @@ begin
       '.' + CRLF + CRLF + 'Please download latest SQLite3 ' + EXPECTED_SQLITE3_VERSION +
       ' revision from'+ CRLF + EXPECTED_STATIC_DOWNLOAD,
       [ExeVersion.ProgramName, fVersionText], error);
-    // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
+    // SQLite3Log.Add.Log() would do nothing: we are in .exe initialization
     DisplayFatalError(' WARNING: deprecated SQLite3 engine', error);
   end;
 end;

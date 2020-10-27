@@ -6,9 +6,9 @@ unit mormot.orm.rest;
 {
   *****************************************************************************
 
-   IRestORM Implementation as used by TRest
-    - Some definitions Used by TRestORM Implementation
-    - TRestORM Parent Class for abstract REST client/server
+   IRestOrm Implementation as used by TRest
+    - Some definitions Used by TRestOrm Implementation
+    - TRestOrm Parent Class for abstract REST client/server
    
   *****************************************************************************
 }
@@ -39,7 +39,7 @@ uses
   mormot.db.core;
 
 
-{ ************ Some definitions Used by TRestORM Implementation }
+{ ************ Some definitions Used by TRestOrm Implementation }
 
 type
   /// the available HTTP methods transmitted between client and server
@@ -73,30 +73,30 @@ type
 
 
 
-{ ************ TRestORM Parent Class for abstract REST client/server }
+{ ************ TRestOrm Parent Class for abstract REST client/server }
 
 type
   {$M+}
 
   /// implements TRest.ORM process for abstract REST client/server
-  TRestORM = class(TRestORMParent, IRestORM)
+  TRestOrm = class(TRestOrmParent, IRestOrm)
   protected
     fRest: TRest;
-    fModel: TORMModel; // owned by the TRest associated instance
+    fModel: TOrmModel; // owned by the TRest associated instance
     fCache: TRestCache;
     fTransactionActiveSession: cardinal;
-    fTransactionTable: TORMClass;
+    fTransactionTable: TOrmClass;
     /// compute SELECT ... FROM TABLE WHERE ...
-    function SQLComputeForSelect(Table: TORMClass;
+    function SQLComputeForSelect(Table: TOrmClass;
       const FieldNames, WhereClause: RawUTF8): RawUTF8;
     /// used by all overloaded Add/Delete methods
-    procedure GetJSONValuesForAdd(TableIndex: integer; Value: TORM;
+    procedure GetJSONValuesForAdd(TableIndex: integer; Value: TOrm;
       ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
       CustomFields: PFieldBits; var result: RawUTF8);
-    function InternalAdd(Value: TORM; SendData: boolean;
+    function InternalAdd(Value: TOrm; SendData: boolean;
       CustomFields: PFieldBits;
       ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
-    function InternalDeleteNotifyAndGetIDs(Table: TORMClass;
+    function InternalDeleteNotifyAndGetIDs(Table: TOrmClass;
       const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
   public
     // ------- abstract methods to be overriden by the real database engine
@@ -104,7 +104,7 @@ type
     // - implements REST GET collection
     // - returns '' on error, or JSON data, even with no result rows
     // - override this method for direct data retrieval from the database engine
-    // and direct JSON export, avoiding a TORMTable which allocates memory for every
+    // and direct JSON export, avoiding a TOrmTable which allocates memory for every
     // field values before the JSON export
     // - can be called for a single Table (ModelRoot/Table), or with low level SQL
     // query (ModelRoot + SQL sent as request body)
@@ -130,7 +130,7 @@ type
     // - implements REST POST collection
     // - SentData can contain the JSON object with field values to be added
     // - class is taken from Model.Tables[TableModelIndex]
-    // - returns the TORM ID/RowID value, 0 on error
+    // - returns the TOrm ID/RowID value, 0 on error
     // - if a "RowID":.. or "ID":.. member is set in SentData, it shall force
     // this value as insertion ID
     // - override this method for proper calling the database engine
@@ -179,7 +179,7 @@ type
     // $ UPDATE tablename SET setfieldname=setvalue WHERE wherefieldname=wherevalue
     // - SetValue and WhereValue parameters must match our inline format, i.e.
     // by double quoted with " for strings, or be plain text for numbers - e.g.
-    // $ Client.EngineUpdateField(TORMMyRecord,'FirstName','"Smith"','RowID','10')
+    // $ Client.EngineUpdateField(TOrmMyRecord,'FirstName','"Smith"','RowID','10')
     // but you should better use the UpdateField() overload methods instead
     // - WhereFieldName and WhereValue must be set: for security reasons,
     // implementations of this method will reject an UPDATE without any WHERE
@@ -195,9 +195,9 @@ type
       const FieldName: RawUTF8; Increment: Int64): boolean; virtual;
     /// send/execute the supplied JSON BATCH content, and return the expected array
     // - this method will be implemented for TRestClient and TRestServer only
-    // - this default implementation will trigger an EORMException
+    // - this default implementation will trigger an EOrmException
     // - warning: supplied JSON Data can be parsed in-place, so modified
-    function EngineBatchSend(Table: TORMClass; var Data: RawUTF8;
+    function EngineBatchSend(Table: TOrmClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
     /// internal method called by TRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
@@ -211,14 +211,14 @@ type
       BatchOptions: TRestBatchOptions): boolean; virtual;
     /// internal method called by TRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
-    // - this default implementation will raise an EORMException (since
+    // - this default implementation will raise an EOrmException (since
     // InternalBatchStart returns always FALSE at this TRest level)
     // - InternalBatchStart/Stop may safely use a lock for multithreading:
     // implementation in TRestServer.Batch use a try..finally block
     procedure InternalBatchStop; virtual;
   public
-    // ------- TRestORM main methods
-    /// initialize the class, and associated to a TRest and its TORMModel
+    // ------- TRestOrm main methods
+    /// initialize the class, and associated to a TRest and its TOrmModel
     constructor Create(aRest: TRest); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
@@ -228,111 +228,111 @@ type
     /// called when thread is finished to ensure
     // - this abstract method won't do anything, but overriden versions may
     procedure EndCurrentThread(Sender: TThread); virtual;
-    /// low-level access to the current TORM class holding a transaction
+    /// low-level access to the current TOrm class holding a transaction
     // - equals nil outside of a TransactionBegin/Commit scope
-    property TransactionTable: TORMClass read fTransactionTable;
+    property TransactionTable: TOrmClass read fTransactionTable;
   public
-    // ------- IRestORM interface implementation methods
+    // ------- IRestOrm interface implementation methods
     // calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
-    function TableRowCount(Table: TORMClass): Int64; virtual;
+    function TableRowCount(Table: TOrmClass): Int64; virtual;
     // calls internaly a "SELECT RowID FROM TableName LIMIT 1" SQL statement,
     // which is much faster than testing if "SELECT count(*)" equals 0 - see
     // @http://stackoverflow.com/questions/8988915
-    function TableHasRows(Table: TORMClass): boolean; virtual;
+    function TableHasRows(Table: TOrmClass): boolean; virtual;
     // executes by default "SELECT max(rowid) FROM TableName"
-    function TableMaxID(Table: TORMClass): TID; virtual;
+    function TableMaxID(Table: TOrmClass): TID; virtual;
     // try from cache, then from DB
-    function MemberExists(Table: TORMClass; ID: TID): boolean; virtual;
-    function OneFieldValue(Table: TORMClass;
+    function MemberExists(Table: TOrmClass; ID: TID): boolean; virtual;
+    function OneFieldValue(Table: TOrmClass;
       const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
-    function OneFieldValueInt64(Table: TORMClass;
+    function OneFieldValueInt64(Table: TOrmClass;
       const FieldName, WhereClause: RawUTF8; Default: Int64 = 0): Int64;
-    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8; overload;
-    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
       const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8; overload;
-    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
       const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
       out Data: Int64): boolean; overload;
-    function OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
       WhereID: TID): RawUTF8; overload;
-    function MultiFieldValue(Table: TORMClass;
+    function MultiFieldValue(Table: TOrmClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       const WhereClause: RawUTF8): boolean; overload;
-    function MultiFieldValue(Table: TORMClass;
+    function MultiFieldValue(Table: TOrmClass;
       const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
       WhereID: TID): boolean; overload;
-    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TOrmClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean; overload;
-    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TOrmClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; var Data: TInt64DynArray;
       SQL: PRawUTF8 = nil): boolean; overload;
-    function OneFieldValues(Table: TORMClass; const FieldName: RawUTF8;
+    function OneFieldValues(Table: TOrmClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8 = ''; const Separator: RawUTF8 = ','): RawUTF8; overload;
-    function OneFieldValues(Table: TORMClass; const FieldName, WhereClause:
+    function OneFieldValues(Table: TOrmClass; const FieldName, WhereClause:
       RawUTF8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
-    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
-      const WhereClause: RawUTF8 = ''): TORMTable; overload;
-    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TORMTable;
+    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUTF8;
+      const WhereClause: RawUTF8 = ''): TOrmTable; overload;
+    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TOrmTable;
       overload; {$ifdef ISDELPHI2010} override; {$else} virtual; {$endif}
-    function MultiFieldValues(Table: TORMClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TORMTable; overload;
-    function FTSMatch(Table: TORMFTS3Class; const WhereClause: RawUTF8;
+    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUTF8;
+      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable; overload;
+    function FTSMatch(Table: TOrmFts3Class; const WhereClause: RawUTF8;
       var DocID: TIDDynArray): boolean; overload;
-    function FTSMatch(Table: TORMFTS3Class; const MatchClause: RawUTF8;
+    function FTSMatch(Table: TOrmFts3Class; const MatchClause: RawUTF8;
       var DocID: TIDDynArray; const PerFieldWeight: array of double;
       limit: integer = 0; offset: integer = 0): boolean; overload;
-    function MainFieldValue(Table: TORMClass; ID: TID;
+    function MainFieldValue(Table: TOrmClass; ID: TID;
       ReturnFirstIfNoUnique: boolean = false): RawUTF8;
-    function MainFieldID(Table: TORMClass; const Value: RawUTF8): TID;
-    function MainFieldIDs(Table: TORMClass; const Values: array of RawUTF8;
+    function MainFieldID(Table: TOrmClass; const Value: RawUTF8): TID;
+    function MainFieldIDs(Table: TOrmClass; const Values: array of RawUTF8;
       out IDs: TIDDynArray): boolean;
-    function Retrieve(const SQLWhere: RawUTF8; Value: TORM;
+    function Retrieve(const SQLWhere: RawUTF8; Value: TOrm;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload; virtual;
     function Retrieve(const WhereClauseFmt: RawUTF8;
-      const Args, Bounds: array of const; Value: TORM;
+      const Args, Bounds: array of const; Value: TOrm;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
-    function Retrieve(aID: TID; Value: TORM;
+    function Retrieve(aID: TID; Value: TOrm;
       ForUpdate: boolean = false): boolean; overload; virtual;
     function Retrieve(Reference: TRecordReference;
-      ForUpdate: boolean = false): TORM; overload;
-    function Retrieve(aPublishedRecord, aValue: TORM): boolean; overload;
-    function RetrieveList(Table: TORMClass;
+      ForUpdate: boolean = false): TOrm; overload;
+    function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
+    function RetrieveList(Table: TOrmClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): TObjectList; overload;
-    function RetrieveListJSON(Table: TORMClass;
+    function RetrieveListJSON(Table: TOrmClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''; aForceAJAX: boolean = false): RawJSON; overload;
-    function RetrieveListJSON(Table: TORMClass;
+    function RetrieveListJSON(Table: TOrmClass;
       const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8 = '';
       aForceAJAX: boolean = false): RawJSON; overload;
-    function RetrieveDocVariantArray(Table: TORMClass;
+    function RetrieveDocVariantArray(Table: TOrmClass;
       const ObjectName, CustomFieldsCSV: RawUTF8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
-    function RetrieveDocVariantArray(Table: TORMClass;
+    function RetrieveDocVariantArray(Table: TOrmClass;
       const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
-    function RetrieveOneFieldDocVariantArray(Table: TORMClass;
+    function RetrieveOneFieldDocVariantArray(Table: TOrmClass;
       const FieldName, FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): variant;
-    function RetrieveDocVariant(Table: TORMClass;
+    function RetrieveDocVariant(Table: TOrmClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8): variant;
-    function RetrieveListObjArray(var ObjArray; Table: TORMClass;
+    function RetrieveListObjArray(var ObjArray; Table: TOrmClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): boolean;
-    procedure AppendListAsJsonArray(Table: TORMClass;
+    procedure AppendListAsJsonArray(Table: TOrmClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const OutputFieldName: RawUTF8; W: TJSONSerializer;
       const CustomFieldsCSV: RawUTF8 = '');
-    function RTreeMatch(DataTable: TORMClass;
-      const DataTableBlobFieldName: RawUTF8; RTreeTable: TORMRTreeClass;
+    function RTreeMatch(DataTable: TOrmClass;
+      const DataTableBlobFieldName: RawUTF8; RTreeTable: TOrmRTreeClass;
       const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
-    function ExecuteList(const Tables: array of TORMClass;
-      const SQL: RawUTF8): TORMTable; virtual;
-    function ExecuteJson(const Tables: array of TORMClass;
+    function ExecuteList(const Tables: array of TOrmClass;
+      const SQL: RawUTF8): TOrmTable; virtual;
+    function ExecuteJson(const Tables: array of TOrmClass;
       const SQL: RawUTF8; ForceAJAX: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawJSON; virtual;
     function Execute(const aSQL: RawUTF8): boolean; virtual;
@@ -340,58 +340,58 @@ type
       const Args: array of const): boolean; overload;
     function ExecuteFmt(const SQLFormat: RawUTF8;
       const Args, Bounds: array of const): boolean; overload;
-    function UnLock(Table: TORMClass; aID: TID): boolean; overload; virtual; abstract;
-    function UnLock(Rec: TORM): boolean; overload;
-    function Add(Value: TORM; SendData: boolean;
+    function UnLock(Table: TOrmClass; aID: TID): boolean; overload; virtual; abstract;
+    function UnLock(Rec: TOrm): boolean; overload;
+    function Add(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
-    function Add(Value: TORM; const CustomCSVFields: RawUTF8;
+    function Add(Value: TOrm; const CustomCSVFields: RawUTF8;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
-    function Add(Value: TORM; const CustomFields: TFieldBits;
+    function Add(Value: TOrm; const CustomFields: TFieldBits;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
-    function AddWithBlobs(Value: TORM;
+    function AddWithBlobs(Value: TOrm;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; virtual;
-    function AddSimple(aTable: TORMClass;
+    function AddSimple(aTable: TOrmClass;
       const aSimpleFields: array of const; ForcedID: TID = 0): TID;
-    function Update(Value: TORM; const CustomFields: TFieldBits = [];
+    function Update(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): boolean; overload; virtual;
-    function Update(Value: TORM; const CustomCSVFields: RawUTF8;
+    function Update(Value: TOrm; const CustomCSVFields: RawUTF8;
       DoNotAutoComputeFields: boolean = false): boolean; overload;
-    function Update(aTable: TORMClass; aID: TID;
+    function Update(aTable: TOrmClass; aID: TID;
       const aSimpleFields: array of const): boolean; overload;
-    function AddOrUpdate(Value: TORM; ForceID: boolean = false): TID;
-    function UpdateField(Table: TORMClass; ID: TID;
+    function AddOrUpdate(Value: TOrm; ForceID: boolean = false): TID;
+    function UpdateField(Table: TOrmClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload;
-    function UpdateField(Table: TORMClass; const WhereFieldName: RawUTF8;
+    function UpdateField(Table: TOrmClass; const WhereFieldName: RawUTF8;
       const WhereFieldValue: array of const; const FieldName: RawUTF8;
       const FieldValue: array of const): boolean; overload;
-    function UpdateField(Table: TORMClass; ID: TID;
+    function UpdateField(Table: TOrmClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
-    function UpdateField(Table: TORMClass;
+    function UpdateField(Table: TOrmClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
-    function UpdateField(Table: TORMClass; const IDs: array of Int64;
+    function UpdateField(Table: TOrmClass; const IDs: array of Int64;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
-    function UpdateFieldIncrement(Table: TORMClass; ID: TID;
+    function UpdateFieldIncrement(Table: TOrmClass; ID: TID;
       const FieldName: RawUTF8; Increment: Int64 = 1): boolean;
-    function RecordCanBeUpdated(Table: TORMClass; ID: TID;
-      Action: TORMEvent; ErrorMsg: PRawUTF8 = nil): boolean; virtual;
-    function Delete(Table: TORMClass; ID: TID): boolean; overload; virtual;
-    function Delete(Table: TORMClass; const SQLWhere: RawUTF8): boolean; overload; virtual;
-    function Delete(Table: TORMClass; const FormatSQLWhere: RawUTF8;
+    function RecordCanBeUpdated(Table: TOrmClass; ID: TID;
+      Action: TOrmEvent; ErrorMsg: PRawUTF8 = nil): boolean; virtual;
+    function Delete(Table: TOrmClass; ID: TID): boolean; overload; virtual;
+    function Delete(Table: TOrmClass; const SQLWhere: RawUTF8): boolean; overload; virtual;
+    function Delete(Table: TOrmClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): boolean; overload;
-    function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
+    function RetrieveBlob(Table: TOrmClass; aID: TID; const BlobFieldName: RawUTF8;
       out BlobData: RawBlob): boolean; overload;
-    function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
+    function RetrieveBlob(Table: TOrmClass; aID: TID; const BlobFieldName: RawUTF8;
       out BlobStream: TCustomMemoryStream): boolean; overload; virtual;
-    function UpdateBlob(Table: TORMClass; aID: TID;
+    function UpdateBlob(Table: TOrmClass; aID: TID;
       const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean; overload; virtual;
-    function UpdateBlob(Table: TORMClass; aID: TID;
+    function UpdateBlob(Table: TOrmClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
-    function UpdateBlob(Table: TORMClass; aID: TID;
+    function UpdateBlob(Table: TOrmClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean; overload;
-    function UpdateBlobFields(Value: TORM): boolean; virtual;
-    function RetrieveBlobFields(Value: TORM): boolean; virtual;
-    function TransactionBegin(aTable: TORMClass; SessionID: cardinal): boolean; virtual;
+    function UpdateBlobFields(Value: TOrm): boolean; virtual;
+    function RetrieveBlobFields(Value: TOrm): boolean; virtual;
+    function TransactionBegin(aTable: TOrmClass; SessionID: cardinal): boolean; virtual;
     function TransactionActiveSession: cardinal;
     procedure Commit(SessionID: cardinal; RaiseException: boolean = false); virtual;
     procedure RollBack(SessionID: cardinal); virtual;
@@ -401,21 +401,21 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
     function BatchSend(Batch: TRestBatch): integer; overload;
-    function BatchSend(Table: TORMClass; var Data: RawUTF8;
+    function BatchSend(Table: TOrmClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; overload;
-    function AsynchBatchStart(Table: TORMClass; SendSeconds: integer;
+    function AsynchBatchStart(Table: TOrmClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJSON]): boolean;
-    function AsynchBatchStop(Table: TORMClass): boolean;
-    function AsynchBatchAdd(Value: TORM; SendData: boolean;
+    function AsynchBatchStop(Table: TOrmClass): boolean;
+    function AsynchBatchAdd(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchRawAdd(Table: TORMClass; const SentData: RawUTF8): integer;
-    procedure AsynchBatchRawAppend(Table: TORMClass; SentData: TTextWriter);
-    function AsynchBatchUpdate(Value: TORM; const CustomFields: TFieldBits = [];
+    function AsynchBatchRawAdd(Table: TOrmClass; const SentData: RawUTF8): integer;
+    procedure AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    function AsynchBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchDelete(Table: TORMClass; ID: TID): integer;
-    function Model: TORMModel;
+    function AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+    function Model: TOrmModel;
       {$ifdef HASINLINE}inline;{$endif}
     function Cache: TRestCache;
     function CacheOrNil: TRestCache;
@@ -436,17 +436,17 @@ type
 
   {$M-}
 
-  /// a dynamic array of TRestORM instances
-  TRestORMDynArray = array of TRestORM;
+  /// a dynamic array of TRestOrm instances
+  TRestOrmDynArray = array of TRestOrm;
 
-  /// a dynamic array of TRestORM instances, owning the instances
-  TRestORMObjArray = array of TRestORM;
+  /// a dynamic array of TRestOrm instances, owning the instances
+  TRestOrmObjArray = array of TRestOrm;
 
 
 implementation
 
 
-{ ************ Some definitions Used by TRestORM Implementation }
+{ ************ Some definitions Used by TRestOrm Implementation }
 
 function ToMethod(const method: RawUTF8): TURIMethod;
 const
@@ -480,37 +480,37 @@ begin
 end;
 
 
-{ ************ TRestORM Parent Class for abstract REST client/server }
+{ ************ TRestOrm Parent Class for abstract REST client/server }
 
-{ TRestORM }
+{ TRestOrm }
 
-// ------- TRestORM main methods
+// ------- TRestOrm main methods
 
-constructor TRestORM.Create(aRest: TRest);
+constructor TRestOrm.Create(aRest: TRest);
 begin
   inherited Create;
   fRest := aRest;
   fModel := fRest.Model;
-  fRest.SetORMInstance(self);
+  fRest.SetOrmInstance(self);
 end;
 
-destructor TRestORM.Destroy;
+destructor TRestOrm.Destroy;
 begin
   FreeAndNil(fCache);
   inherited Destroy;
 end;
 
-procedure TRestORM.BeginCurrentThread(Sender: TThread);
+procedure TRestOrm.BeginCurrentThread(Sender: TThread);
 begin
-  // nothing do to at this level -> see e.g. TRestORMServer.BeginCurrentThread
+  // nothing do to at this level -> see e.g. TRestOrmServer.BeginCurrentThread
 end;
 
-procedure TRestORM.EndCurrentThread(Sender: TThread);
+procedure TRestOrm.EndCurrentThread(Sender: TThread);
 begin
-  // nothing do to at this level -> see e.g. TRestORMServer.EndCurrentThread
+  // nothing do to at this level -> see e.g. TRestOrmServer.EndCurrentThread
 end;
 
-function TRestORM.SQLComputeForSelect(Table: TORMClass;
+function TRestOrm.SQLComputeForSelect(Table: TOrmClass;
   const FieldNames, WhereClause: RawUTF8): RawUTF8;
 begin
   result := '';
@@ -532,12 +532,12 @@ begin
         result := SQLFromSelect(SQLTableName, FieldNames, WhereClause, '');
 end;
 
-procedure TRestORM.GetJSONValuesForAdd(TableIndex: integer; Value: TORM;
+procedure TRestOrm.GetJSONValuesForAdd(TableIndex: integer; Value: TOrm;
   ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
   CustomFields: PFieldBits; var result: RawUTF8);
 var
   fields: TFieldBits;
-  props: TORMProperties;
+  props: TOrmProperties;
 begin
   if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
     Value.ComputeFieldsBeforeWrite(self, oeAdd);
@@ -571,7 +571,7 @@ begin
     result := Value.GetJSONValues(true, ForceID, fields);
 end;
 
-function TRestORM.InternalAdd(Value: TORM; SendData: boolean;
+function TRestOrm.InternalAdd(Value: TOrm; SendData: boolean;
   CustomFields: PFieldBits; ForceID, DoNotAutoComputeFields: boolean): TID;
 var
   json: RawUTF8;
@@ -582,72 +582,72 @@ begin
     result := 0;
     exit;
   end;
-  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
+  t := fModel.GetTableIndexExisting(POrmClass(Value)^);
   if SendData then
     GetJSONValuesForAdd(t, Value, ForceID, DoNotAutoComputeFields,
       false, CustomFields, json)
   else
     json := '';
   // on success, returns the new RowID value; on error, returns 0
-  fRest.AcquireExecution[execORMWrite].Safe.Lock;
+  fRest.AcquireExecution[execOrmWrite].Safe.Lock;
   try // may be within a batch in another thread
     result := EngineAdd(t, json); // will call static if necessary
   finally
-    fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+    fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
   // on success, Value.ID is updated with the new RowID
   Value.IDValue := result;
   if SendData and
      (result <> 0) then
-    fCache.Notify(PORMClass(Value)^, result, json, ooInsert);
+    fCache.Notify(POrmClass(Value)^, result, json, ooInsert);
 end;
 
 
-// ------- IRestORM interface implementation methods
+// ------- IRestOrm interface implementation methods
 
-function TRestORM.Model: TORMModel;
+function TRestOrm.Model: TOrmModel;
 begin
   result := fModel;
 end;
 
-function TRestORM.CacheOrNil: TRestCache;
+function TRestOrm.CacheOrNil: TRestCache;
 begin
   result := fCache;
 end;
 
-function TRestORM.LogClass: TSynLogClass;
+function TRestOrm.LogClass: TSynLogClass;
 begin
   result := fRest.LogClass;
 end;
 
-function TRestORM.LogFamily: TSynLogFamily;
+function TRestOrm.LogFamily: TSynLogFamily;
 begin
   result := fRest.LogFamily;
 end;
 
-procedure TRestORM.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
+procedure TRestOrm.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
 begin
   fRest.InternalLog(Text, Level);
 end;
 
-function TRestORM.GetServerTimestamp: TTimeLog;
+function TRestOrm.GetServerTimestamp: TTimeLog;
 begin
   result := fRest.GetServerTimeStamp;
 end;
 
-procedure TRestORM.WriteLock;
+procedure TRestOrm.WriteLock;
 begin
-  fRest.AcquireExecution[execORMWrite].Safe.Lock;
+  fRest.AcquireExecution[execOrmWrite].Safe.Lock;
 end;
 
-procedure TRestORM.WriteUnLock;
+procedure TRestOrm.WriteUnLock;
 begin
-  fRest.AcquireExecution[execORMWrite].Safe.UnLock;
+  fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
 end;
 
-function TRestORM.TableRowCount(Table: TORMClass): Int64;
+function TRestOrm.TableRowCount(Table: TOrmClass): Int64;
 var
-  T: TORMTable;
+  T: TOrmTable;
 begin
   if (self = nil) or
      (Table = nil) then
@@ -665,9 +665,9 @@ begin
     result := -1;
 end;
 
-function TRestORM.TableHasRows(Table: TORMClass): boolean;
+function TRestOrm.TableHasRows(Table: TOrmClass): boolean;
 var
-  T: TORMTable;
+  T: TOrmTable;
 begin
   if (self = nil) or
      (Table = nil) then
@@ -685,9 +685,9 @@ begin
     result := false;
 end;
 
-function TRestORM.TableMaxID(Table: TORMClass): TID;
+function TRestOrm.TableMaxID(Table: TOrmClass): TID;
 var
-  T: TORMTable;
+  T: TOrmTable;
 begin
   if (self = nil) or
      (Table = nil) then
@@ -705,7 +705,7 @@ begin
     result := -1;
 end;
 
-function TRestORM.MemberExists(Table: TORMClass; ID: TID): boolean;
+function TRestOrm.MemberExists(Table: TOrmClass; ID: TID): boolean;
 begin
   if fCache.Retrieve(fModel.GetTableIndexExisting(Table), ID) <> '' then
     result := true
@@ -713,7 +713,7 @@ begin
     result := OneFieldValue(Table, 'RowID', ID) <> ''; // try from DB
 end;
 
-function TRestORM.OneFieldValue(Table: TORMClass; const FieldName,
+function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName,
   WhereClause: RawUTF8): RawUTF8;
 var
   res: array[0..0] of RawUTF8;
@@ -724,7 +724,7 @@ begin
     result := '';
 end;
 
-function TRestORM.OneFieldValueInt64(Table: TORMClass; const FieldName,
+function TRestOrm.OneFieldValueInt64(Table: TOrmClass; const FieldName,
   WhereClause: RawUTF8; Default: Int64): Int64;
 var
   res: array[0..0] of RawUTF8;
@@ -734,21 +734,21 @@ begin
     result := Default;
 end;
 
-function TRestORM.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8;
 begin
   result := OneFieldValue(Table, FieldName,
     FormatUTF8(FormatSQLWhere, [], BoundsSQLWhere));
 end;
 
-function TRestORM.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
   const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8;
 begin
   result := OneFieldValue(Table, FieldName,
     FormatUTF8(WhereClauseFmt, Args, Bounds));
 end;
 
-function TRestORM.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
   const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
   out Data: Int64): boolean;
 var
@@ -767,7 +767,7 @@ begin
     end;
 end;
 
-function TRestORM.OneFieldValue(Table: TORMClass; const FieldName: RawUTF8;
+function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
   WhereID: TID): RawUTF8;
 var
   res: array[0..0] of RawUTF8;
@@ -780,13 +780,13 @@ begin
     result := '';
 end;
 
-function TRestORM.MultiFieldValue(Table: TORMClass;
+function TRestOrm.MultiFieldValue(Table: TOrmClass;
   const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
   const WhereClause: RawUTF8): boolean;
 var
   SQL: RawUTF8;
   n, i: PtrInt;
-  T: TORMTable;
+  T: TOrmTable;
   P: PUTF8Char;
 begin
   result := false;
@@ -830,7 +830,7 @@ begin
     end;
 end;
 
-function TRestORM.MultiFieldValue(Table: TORMClass;
+function TRestOrm.MultiFieldValue(Table: TOrmClass;
   const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
   WhereID: TID): boolean;
 begin
@@ -838,11 +838,11 @@ begin
     Int64ToUtf8(WhereID) + '):');
 end;
 
-function TRestORM.OneFieldValues(Table: TORMClass;
+function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause: RawUTF8;
   out Data: TRawUTF8DynArray): boolean;
 var
-  T: TORMTable;
+  T: TOrmTable;
 begin
   result := false;
   T := MultiFieldValues(Table, FieldName, WhereClause);
@@ -854,11 +854,11 @@ begin
   end;
 end;
 
-function TRestORM.OneFieldValues(Table: TORMClass;
+function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause: RawUTF8; var Data: TInt64DynArray;
   SQL: PRawUTF8): boolean;
 var
-  T: TORMTable;
+  T: TOrmTable;
   V: Int64;
   prop: RawUTF8;
   P: PUTF8Char;
@@ -924,12 +924,12 @@ begin
   end;
 end;
 
-function TRestORM.OneFieldValues(Table: TORMClass;
+function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause, Separator: RawUTF8): RawUTF8;
 var
   i, Len, SepLen, L: PtrInt;
   Lens: TIntegerDynArray;
-  T: TORMTable;
+  T: TOrmTable;
   P: PUTF8Char;
 begin
   result := '';
@@ -972,13 +972,13 @@ begin
   end;
 end;
 
-function TRestORM.OneFieldValues(Table: TORMClass;
+function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause: RawUTF8; Strings: TStrings;
   IDToIndex: PID): boolean;
 var
   Row: integer;
   aID: TID;
-  T: TORMTable;
+  T: TOrmTable;
 begin
   result := false;
   if (Strings <> nil) and
@@ -1017,8 +1017,8 @@ begin
     IDToIndex^ := -1; // ID not found
 end;
 
-function TRestORM.MultiFieldValues(Table: TORMClass;
-  const FieldNames, WhereClause: RawUTF8): TORMTable;
+function TRestOrm.MultiFieldValues(Table: TOrmClass;
+  const FieldNames, WhereClause: RawUTF8): TOrmTable;
 var
   sql: RawUTF8;
 begin
@@ -1029,9 +1029,9 @@ begin
     result := ExecuteList([Table], sql);
 end;
 
-function TRestORM.MultiFieldValues(Table: TORMClass;
+function TRestOrm.MultiFieldValues(Table: TOrmClass;
   const FieldNames, WhereClauseFormat: RawUTF8;
-  const BoundsSQLWhere: array of const): TORMTable;
+  const BoundsSQLWhere: array of const): TOrmTable;
 var
   where: RawUTF8;
 begin
@@ -1039,9 +1039,9 @@ begin
   result := MultiFieldValues(Table, FieldNames, where);
 end;
 
-function TRestORM.MultiFieldValues(Table: TORMClass;
+function TRestOrm.MultiFieldValues(Table: TOrmClass;
   const FieldNames, WhereClauseFormat: RawUTF8;
-  const Args, Bounds: array of const): TORMTable;
+  const Args, Bounds: array of const): TOrmTable;
 var
   where: RawUTF8;
 begin
@@ -1049,14 +1049,14 @@ begin
   result := MultiFieldValues(Table, FieldNames, where);
 end;
 
-function TRestORM.FTSMatch(Table: TORMFTS3Class;
+function TRestOrm.FTSMatch(Table: TOrmFts3Class;
   const WhereClause: RawUTF8; var DocID: TIDDynArray): boolean;
 begin
   // FTS3 tables don't have any ID, but RowID or DocID
   result := OneFieldValues(Table, 'RowID', WhereClause, TInt64DynArray(DocID));
 end;
 
-function TRestORM.FTSMatch(Table: TORMFTS3Class;
+function TRestOrm.FTSMatch(Table: TOrmFts3Class;
   const MatchClause: RawUTF8; var DocID: TIDDynArray;
   const PerFieldWeight: array of double; limit, offset: integer): boolean;
 var
@@ -1078,7 +1078,7 @@ begin
   result := FTSMatch(Table, WhereClause, DocID);
 end;
 
-function TRestORM.MainFieldValue(Table: TORMClass; ID: TID;
+function TRestOrm.MainFieldValue(Table: TOrmClass; ID: TID;
   ReturnFirstIfNoUnique: boolean): RawUTF8;
 begin
   if (self = nil) or
@@ -1093,7 +1093,7 @@ begin
   end;
 end;
 
-function TRestORM.MainFieldID(Table: TORMClass; const Value: RawUTF8): TID;
+function TRestOrm.MainFieldID(Table: TOrmClass; const Value: RawUTF8): TID;
 var
   main: integer;
 begin
@@ -1110,7 +1110,7 @@ begin
     end;
 end;
 
-function TRestORM.MainFieldIDs(Table: TORMClass;
+function TRestOrm.MainFieldIDs(Table: TOrmClass;
   const Values: array of RawUTF8; out IDs: TIDDynArray): boolean;
 var
   main, id: TID;
@@ -1140,16 +1140,16 @@ begin
   result := {%H-}IDs <> nil;
 end;
 
-function TRestORM.Retrieve(const SQLWhere: RawUTF8; Value: TORM;
+function TRestOrm.Retrieve(const SQLWhere: RawUTF8; Value: TOrm;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var
-  T: TORMTable;
+  T: TOrmTable;
 begin
   result := false;
   if (self = nil) or
      (Value = nil) then
     exit;
-  T := MultiFieldValues(PORMClass(Value)^, aCustomFieldsCSV, SQLWhere);
+  T := MultiFieldValues(POrmClass(Value)^, aCustomFieldsCSV, SQLWhere);
   if T <> nil then
   try
     if T.RowCount >= 1 then
@@ -1164,8 +1164,8 @@ begin
   end;
 end;
 
-function TRestORM.Retrieve(const WhereClauseFmt: RawUTF8;
-  const Args, Bounds: array of const; Value: TORM;
+function TRestOrm.Retrieve(const WhereClauseFmt: RawUTF8;
+  const Args, Bounds: array of const; Value: TOrm;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var
   where: RawUTF8;
@@ -1174,7 +1174,7 @@ begin
   result := Retrieve(where, Value, aCustomFieldsCSV);
 end;
 
-function TRestORM.Retrieve(aID: TID; Value: TORM; ForUpdate: boolean): boolean;
+function TRestOrm.Retrieve(aID: TID; Value: TOrm; ForUpdate: boolean): boolean;
 var
   t: integer; // used by EngineRetrieve() for SQL statement caching
   resp: RawUTF8;
@@ -1187,7 +1187,7 @@ begin
   if (self = nil) or
      (aID = 0) then
     exit;
-  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
+  t := fModel.GetTableIndexExisting(POrmClass(Value)^);
   // try to lock before retrieval (if ForUpdate)
   if ForUpdate and
      not fModel.Lock(t, aID) then
@@ -1211,9 +1211,9 @@ begin
   result := true;
 end;
 
-function TRestORM.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TORM;
+function TRestOrm.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TOrm;
 var
-  c: TORMClass;
+  c: TOrmClass;
 begin
   result := nil;
   if (self = nil) or
@@ -1227,16 +1227,16 @@ begin
     FreeAndNil(result); // error during value retrieval
 end;
 
-function TRestORM.Retrieve(aPublishedRecord, aValue: TORM): boolean;
+function TRestOrm.Retrieve(aPublishedRecord, aValue: TOrm): boolean;
 begin
   result := Retrieve(aPublishedRecord.ID, aValue);
 end;
 
-function TRestORM.RetrieveList(Table: TORMClass;
+function TRestOrm.RetrieveList(Table: TOrmClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): TObjectList;
 var
-  T: TORMTable;
+  T: TOrmTable;
 begin
   result := nil;
   if (self = nil) or
@@ -1252,7 +1252,7 @@ begin
   end;
 end;
 
-function TRestORM.RetrieveListJSON(Table: TORMClass;
+function TRestOrm.RetrieveListJSON(Table: TOrmClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8; aForceAJAX: boolean): RawJSON;
 var
@@ -1262,7 +1262,7 @@ begin
   result := RetrieveListJSON(Table, where, aCustomFieldsCSV, aForceAJAX)
 end;
 
-function TRestORM.RetrieveListJSON(Table: TORMClass;
+function TRestOrm.RetrieveListJSON(Table: TOrmClass;
   const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8;
   aForceAJAX: boolean): RawJSON;
 var
@@ -1275,7 +1275,7 @@ begin
     result := EngineList(sql, aForceAJAX);
 end;
 
-function TRestORM.RetrieveDocVariantArray(Table: TORMClass;
+function TRestOrm.RetrieveDocVariantArray(Table: TOrmClass;
   const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PID;
   LastRecordID: PID): variant;
 begin
@@ -1283,12 +1283,12 @@ begin
     FirstRecordID, LastRecordID);
 end;
 
-function TRestORM.RetrieveDocVariantArray(Table: TORMClass;
+function TRestOrm.RetrieveDocVariantArray(Table: TOrmClass;
   const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
   FirstRecordID: PID; LastRecordID: PID): variant;
 var
-  T: TORMTable;
+  T: TOrmTable;
   v: variant;
 begin
   TVarData(v).VType := varNull;
@@ -1313,11 +1313,11 @@ begin
     result := v;
 end;
 
-function TRestORM.RetrieveOneFieldDocVariantArray(Table: TORMClass;
+function TRestOrm.RetrieveOneFieldDocVariantArray(Table: TOrmClass;
   const FieldName, FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const): variant;
 var
-  T: TORMTable;
+  T: TOrmTable;
   row: Integer;
   doc: TDocVariantData absolute result;
 begin
@@ -1339,13 +1339,13 @@ begin
   end;
 end;
 
-function TRestORM.RetrieveDocVariant(Table: TORMClass;
+function TRestOrm.RetrieveDocVariant(Table: TOrmClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const CustomFieldsCSV: RawUTF8): variant;
 var
-  T: TORMTable;
+  T: TOrmTable;
   bits: TFieldBits;
-  Rec: TORM;
+  Rec: TOrm;
   ID: TID;
 begin
   SetVariantNull(result);
@@ -1385,11 +1385,11 @@ begin
   end;
 end;
 
-function TRestORM.RetrieveListObjArray(var ObjArray; Table: TORMClass;
+function TRestOrm.RetrieveListObjArray(var ObjArray; Table: TOrmClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var
-  T: TORMTable;
+  T: TOrmTable;
 begin
   result := false;
   if (self = nil) or
@@ -1404,11 +1404,11 @@ begin
   end;
 end;
 
-procedure TRestORM.AppendListAsJsonArray(Table: TORMClass;
+procedure TRestOrm.AppendListAsJsonArray(Table: TOrmClass;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const OutputFieldName: RawUTF8; W: TJSONSerializer; const CustomFieldsCSV: RawUTF8);
 var
-  Rec: TORM;
+  Rec: TOrm;
 begin
   if (self = nil) or
      (Table = nil) or
@@ -1423,16 +1423,16 @@ begin
   end;
 end;
 
-function TRestORM.RTreeMatch(DataTable: TORMClass;
-  const DataTableBlobFieldName: RawUTF8; RTreeTable: TORMRTreeClass;
+function TRestOrm.RTreeMatch(DataTable: TOrmClass;
+  const DataTableBlobFieldName: RawUTF8; RTreeTable: TOrmRTreeClass;
   const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
 var
   Blob: PRttiProp;
-  T: TORMTable;
-  BDouble: TORMTreeCoords;
-  BInteger: TORMTreeCoordsInteger absolute BDouble;
+  T: TOrmTable;
+  BDouble: TOrmTreeCoords;
+  BInteger: TOrmTreeCoordsInteger absolute BDouble;
   Where, SQL: RawUTF8;
-  Data, RTree: TORMProperties;
+  Data, RTree: TOrmProperties;
   i: PtrInt;
 begin
   result := false;
@@ -1446,9 +1446,9 @@ begin
   Blob := Data.BlobFieldPropFromRawUTF8(DataTableBlobFieldName);
   if Blob = nil then
     exit;
-  if RTreeTable.InheritsFrom(TORMRTree) then
+  if RTreeTable.InheritsFrom(TOrmRTree) then
   begin
-    TORMRTree(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^, BDouble);
+    TOrmRTree(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^, BDouble);
     for i := 0 to (RTree.RTreeCoordBoundaryFields shr 1) - 1 do
       Where := FormatUTF8('%%>=:(%): and %<=:(%): and ', [{%H-}Where,
         RTree.Fields.List[i * 2].Name, BDouble[i].Min * (1 - 0.00000012),
@@ -1461,9 +1461,9 @@ begin
       query boxes slightly (by 0.000012%) by rounding down the lower coordinates
       and rounding up the top coordinates, in each dimension. }
   end
-  else if RTreeTable.InheritsFrom(TORMRTreeInteger) then
+  else if RTreeTable.InheritsFrom(TOrmRTreeInteger) then
   begin
-    TORMRTreeInteger(RTreeTable).BlobToCoord(
+    TOrmRTreeInteger(RTreeTable).BlobToCoord(
       pointer(DataTableBlobField)^, BInteger);
     for i := 0 to (RTree.RTreeCoordBoundaryFields shr 1) - 1 do
       Where := FormatUTF8('%%>=:(%): and %<=:(%): and ', [Where,
@@ -1489,30 +1489,30 @@ begin
   end;
 end;
 
-function TRestORM.ExecuteList(const Tables: array of TORMClass;
-  const SQL: RawUTF8): TORMTable;
+function TRestOrm.ExecuteList(const Tables: array of TOrmClass;
+  const SQL: RawUTF8): TOrmTable;
 var
   JSON: RawUTF8;
 begin
   JSON := EngineList(SQL, false);
   if JSON <> '' then
-    result := TORMTableJSON.CreateFromTables(Tables, SQL, JSON)
+    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON)
   else
     result := nil;
 end;
 
-function TRestORM.ExecuteJson(const Tables: array of TORMClass;
+function TRestOrm.ExecuteJson(const Tables: array of TOrmClass;
   const SQL: RawUTF8; ForceAJAX: boolean; ReturnedRowCount: PPtrInt): RawJSON;
 begin
   result := EngineList(SQL, ForceAJAX, ReturnedRowCount);
 end;
 
-function TRestORM.Execute(const aSQL: RawUTF8): boolean;
+function TRestOrm.Execute(const aSQL: RawUTF8): boolean;
 begin
   result := EngineExecute(aSQL);
 end;
 
-function TRestORM.ExecuteFmt(const SQLFormat: RawUTF8;
+function TRestOrm.ExecuteFmt(const SQLFormat: RawUTF8;
   const Args: array of const): boolean;
 var
   SQL: RawUTF8;
@@ -1521,7 +1521,7 @@ begin
   result := EngineExecute(SQL);
 end;
 
-function TRestORM.ExecuteFmt(const SQLFormat: RawUTF8;
+function TRestOrm.ExecuteFmt(const SQLFormat: RawUTF8;
   const Args, Bounds: array of const): boolean;
 var
   SQL: RawUTF8;
@@ -1530,23 +1530,23 @@ begin
   result := EngineExecute(SQL);
 end;
 
-function TRestORM.UnLock(Rec: TORM): boolean;
+function TRestOrm.UnLock(Rec: TOrm): boolean;
 begin
   if (self = nil) or
      (Rec = nil) or
      (Rec.IDValue <= 0) then
     result := false
   else
-    result := UnLock(PORMClass(Rec)^, Rec.IDValue);
+    result := UnLock(POrmClass(Rec)^, Rec.IDValue);
 end;
 
-function TRestORM.Add(Value: TORM; SendData, ForceID,
+function TRestOrm.Add(Value: TOrm; SendData, ForceID,
   DoNotAutoComputeFields: boolean): TID;
 begin
   result := InternalAdd(Value, SendData, nil, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRestORM.Add(Value: TORM; const CustomCSVFields: RawUTF8;
+function TRestOrm.Add(Value: TOrm; const CustomCSVFields: RawUTF8;
   ForceID, DoNotAutoComputeFields: boolean): TID;
 var
   f: TFieldBits;
@@ -1560,13 +1560,13 @@ begin
   result := InternalAdd(Value, true, @f, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRestORM.Add(Value: TORM; const CustomFields: TFieldBits;
+function TRestOrm.Add(Value: TOrm; const CustomFields: TFieldBits;
   ForceID, DoNotAutoComputeFields: boolean): TID;
 begin
   result := InternalAdd(Value, true, @CustomFields, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRestORM.AddWithBlobs(Value: TORM; ForceID: boolean;
+function TRestOrm.AddWithBlobs(Value: TOrm; ForceID: boolean;
   DoNotAutoComputeFields: boolean): TID;
 var
   t: integer;
@@ -1577,7 +1577,7 @@ begin
     result := 0;
     exit;
   end;
-  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
+  t := fModel.GetTableIndexExisting(POrmClass(Value)^);
   GetJSONValuesForAdd(t, Value, ForceID, DoNotAutoComputeFields,
     true, nil, json);
   // on success, returns the new RowID value; on error, returns 0
@@ -1593,10 +1593,10 @@ begin
   // here fCache.Notify is not called, since the JSONValues is verbose
 end;
 
-function TRestORM.AddSimple(aTable: TORMClass;
+function TRestOrm.AddSimple(aTable: TOrmClass;
   const aSimpleFields: array of const; ForcedID: TID): TID;
 var
-  Value: TORM;
+  Value: TOrm;
 begin
   result := 0; // means error
   if (self = nil) or
@@ -1615,7 +1615,7 @@ begin
   end;
 end;
 
-function TRestORM.Update(Value: TORM; const CustomFields: TFieldBits;
+function TRestOrm.Update(Value: TOrm; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): boolean;
 var
   JSONValues: RawUTF8;
@@ -1625,12 +1625,12 @@ begin
   if (self = nil) or
      (Value = nil) or
      (Value.IDValue = 0) or
-     not RecordCanBeUpdated(PORMClass(Value)^, Value.IDValue, oeUpdate) then
+     not RecordCanBeUpdated(POrmClass(Value)^, Value.IDValue, oeUpdate) then
   begin
     result := false; // current user don't have enough right to update this record
     exit;
   end;
-  t := fModel.GetTableIndexExisting(PORMClass(Value)^);
+  t := fModel.GetTableIndexExisting(POrmClass(Value)^);
   if not DoNotAutoComputeFields then
     Value.ComputeFieldsBeforeWrite(self, oeUpdate); // update oftModTime fields
   if IsZero(CustomFields) then
@@ -1651,7 +1651,7 @@ begin
       FieldBits := CustomFields + Value.RecordProps.FieldBits[oftModTime];
   if IsZero(FieldBits) then
   begin
-    result := true; // a TORM with NO simple fields (e.g. ID/blob pair)
+    result := true; // a TOrm with NO simple fields (e.g. ID/blob pair)
     exit;
   end;
   fCache.Notify(Value, ooUpdate); // will serialize Value (JSONValues may not be enough)
@@ -1665,7 +1665,7 @@ begin
   end;
 end;
 
-function TRestORM.Update(Value: TORM; const CustomCSVFields: RawUTF8;
+function TRestOrm.Update(Value: TOrm; const CustomCSVFields: RawUTF8;
   DoNotAutoComputeFields: boolean): boolean;
 begin
   if (self = nil) or
@@ -1676,10 +1676,10 @@ begin
       DoNotAutoComputeFields);
 end;
 
-function TRestORM.Update(aTable: TORMClass; aID: TID;
+function TRestOrm.Update(aTable: TOrmClass; aID: TID;
   const aSimpleFields: array of const): boolean;
 var
-  Value: TORM;
+  Value: TOrm;
 begin
   result := false; // means error
   if (self = nil) or
@@ -1697,7 +1697,7 @@ begin
   end;
 end;
 
-function TRestORM.AddOrUpdate(Value: TORM; ForceID: boolean): TID;
+function TRestOrm.AddOrUpdate(Value: TOrm; ForceID: boolean): TID;
 begin
   if (self = nil) or
      (Value = nil) then
@@ -1719,7 +1719,7 @@ begin
     result := 0;
 end;
 
-function TRestORM.UpdateField(Table: TORMClass; ID: TID;
+function TRestOrm.UpdateField(Table: TOrmClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 var
   t: integer;
@@ -1730,7 +1730,7 @@ begin
     fCache.NotifyDeletion(t, ID);
 end;
 
-function TRestORM.UpdateField(Table: TORMClass;
+function TRestOrm.UpdateField(Table: TOrmClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
 var
@@ -1750,7 +1750,7 @@ begin
   // warning: this may not update the internal cache
 end;
 
-function TRestORM.UpdateField(Table: TORMClass; ID: TID;
+function TRestOrm.UpdateField(Table: TOrmClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 var
   t: integer;
@@ -1761,7 +1761,7 @@ begin
     fCache.NotifyDeletion(t, ID);
 end;
 
-function TRestORM.UpdateField(Table: TORMClass;
+function TRestOrm.UpdateField(Table: TOrmClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 var
@@ -1775,7 +1775,7 @@ begin
   // warning: this may not update the internal cache
 end;
 
-function TRestORM.UpdateField(Table: TORMClass; const IDs: array of Int64;
+function TRestOrm.UpdateField(Table: TOrmClass; const IDs: array of Int64;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 var
   value, where: RawUTF8;
@@ -1795,11 +1795,11 @@ begin
     fCache.NotifyDeletions(t, IDs);
 end;
 
-function TRestORM.EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+function TRestOrm.EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
   const FieldName: RawUTF8; Increment: Int64): boolean;
 var
   v: Int64;
-  t: TORMClass;
+  t: TOrmClass;
 begin
   if (TableModelIndex < 0) or
      (ID < 0) then
@@ -1814,13 +1814,13 @@ begin
   end;
 end;
 
-function TRestORM.{%H-}EngineBatchSend(Table: TORMClass; var Data: RawUTF8;
+function TRestOrm.{%H-}EngineBatchSend(Table: TOrmClass; var Data: RawUTF8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
-  raise EORMException.CreateUTF8('BATCH not supported by %', [self]);
+  raise EOrmException.CreateUTF8('BATCH not supported by %', [self]);
 end;
 
-function TRestORM.UpdateFieldIncrement(Table: TORMClass; ID: TID;
+function TRestOrm.UpdateFieldIncrement(Table: TOrmClass; ID: TID;
   const FieldName: RawUTF8; Increment: Int64): boolean;
 var
   t: integer;
@@ -1836,13 +1836,13 @@ begin
     result := false;
 end;
 
-function TRestORM.RecordCanBeUpdated(Table: TORMClass; ID: TID;
-  Action: TORMEvent; ErrorMsg: PRawUTF8): boolean;
+function TRestOrm.RecordCanBeUpdated(Table: TOrmClass; ID: TID;
+  Action: TOrmEvent; ErrorMsg: PRawUTF8): boolean;
 begin
   result := true; // accept by default -> override this method to customize this
 end;
 
-function TRestORM.Delete(Table: TORMClass; ID: TID): boolean;
+function TRestOrm.Delete(Table: TOrmClass; ID: TID): boolean;
 var
   t: integer;
 begin
@@ -1861,7 +1861,7 @@ begin
   end;
 end;
 
-function TRestORM.InternalDeleteNotifyAndGetIDs(Table: TORMClass;
+function TRestOrm.InternalDeleteNotifyAndGetIDs(Table: TOrmClass;
   const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
 var
   t, i: PtrInt;
@@ -1879,18 +1879,18 @@ begin
   result := true;
 end;
 
-function TRestORM.InternalBatchStart(Method: TURIMethod;
+function TRestOrm.InternalBatchStart(Method: TURIMethod;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false;
 end;
 
-procedure TRestORM.InternalBatchStop;
+procedure TRestOrm.InternalBatchStop;
 begin
-  raise EORMException.CreateUTF8('Unexpected %.InternalBatchStop',[self]);
+  raise EOrmException.CreateUTF8('Unexpected %.InternalBatchStop',[self]);
 end;
 
-function TRestORM.Delete(Table: TORMClass; const SQLWhere: RawUTF8): boolean;
+function TRestOrm.Delete(Table: TOrmClass; const SQLWhere: RawUTF8): boolean;
 var
   IDs: TIDDynArray;
 begin
@@ -1907,7 +1907,7 @@ begin
     result := false;
 end;
 
-function TRestORM.Delete(Table: TORMClass; const FormatSQLWhere: RawUTF8;
+function TRestOrm.Delete(Table: TOrmClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const): boolean;
 var
   where: RawUTF8;
@@ -1916,7 +1916,7 @@ begin
   result := Delete(Table, where);
 end;
 
-function TRestORM.RetrieveBlob(Table: TORMClass; aID: TID;
+function TRestOrm.RetrieveBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobData: RawBlob): boolean;
 var
   blob: PRttiProp;
@@ -1932,7 +1932,7 @@ begin
     blob, BlobData);
 end;
 
-function TRestORM.RetrieveBlob(Table: TORMClass; aID: TID;
+function TRestOrm.RetrieveBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobStream: TCustomMemoryStream): boolean;
 var
   data: RawBlob;
@@ -1947,7 +1947,7 @@ begin
   BlobStream.Seek(0, soFromBeginning); // rewind
 end;
 
-function TRestORM.UpdateBlob(Table: TORMClass; aID: TID;
+function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean;
 var
   blob: PRttiProp;
@@ -1964,7 +1964,7 @@ begin
     BlobData);
 end;
 
-function TRestORM.UpdateBlob(Table: TORMClass; aID: TID;
+function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: TStream): boolean;
 var
   data: RawBlob;
@@ -1982,7 +1982,7 @@ begin
   result := UpdateBlob(Table, aID, BlobFieldName, data);
 end;
 
-function TRestORM.UpdateBlob(Table: TORMClass; aID: TID;
+function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean;
 var
   data: RawBlob;
@@ -1998,7 +1998,7 @@ begin
   end;
 end;
 
-function TRestORM.UpdateBlobFields(Value: TORM): boolean;
+function TRestOrm.UpdateBlobFields(Value: TOrm): boolean;
 var
   data: RawByteString;
   t, i: PtrInt;
@@ -2010,7 +2010,7 @@ begin
   with Value.RecordProps do
     if BlobFields <> nil then
     begin
-      t := self.fModel.GetTableIndexExisting(PORMClass(Value)^);
+      t := self.fModel.GetTableIndexExisting(POrmClass(Value)^);
       for i := 0 to length(BlobFields) - 1 do
       begin
         BlobFields[i].PropInfo.GetLongStrProp(Value, data);
@@ -2022,7 +2022,7 @@ begin
   result := true;
 end;
 
-function TRestORM.RetrieveBlobFields(Value: TORM): boolean;
+function TRestOrm.RetrieveBlobFields(Value: TOrm): boolean;
 var
   data: RawBlob;
   t, i: PtrInt;
@@ -2035,7 +2035,7 @@ begin
   with Value.RecordProps do
     if BlobFields <> nil then
     begin
-      t := self.fModel.GetTableIndexExisting(PORMClass(Value)^);
+      t := self.fModel.GetTableIndexExisting(POrmClass(Value)^);
       for i := 0 to length(BlobFields) - 1 do
         if EngineRetrieveBlob(t, Value.IDValue,
             BlobFields[i].PropInfo, data) then
@@ -2046,7 +2046,7 @@ begin
   result := true;
 end;
 
-function TRestORM.TransactionBegin(aTable: TORMClass; SessionID: cardinal): boolean;
+function TRestOrm.TransactionBegin(aTable: TOrmClass; SessionID: cardinal): boolean;
 begin
   result := false;
   WriteLock;
@@ -2063,7 +2063,7 @@ begin
   end;
 end;
 
-function TRestORM.TransactionActiveSession: cardinal;
+function TRestOrm.TransactionActiveSession: cardinal;
 begin
   if self = nil then
     result := 0
@@ -2078,7 +2078,7 @@ begin
   end;
 end;
 
-procedure TRestORM.Commit(SessionID: cardinal; RaiseException: boolean);
+procedure TRestOrm.Commit(SessionID: cardinal; RaiseException: boolean);
 begin
   if self <> nil then
   begin
@@ -2096,7 +2096,7 @@ begin
   end;
 end;
 
-procedure TRestORM.RollBack(SessionID: cardinal);
+procedure TRestOrm.RollBack(SessionID: cardinal);
 begin
   if self <> nil then
   begin
@@ -2114,7 +2114,7 @@ begin
   end;
 end;
 
-function TRestORM.BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer;
+function TRestOrm.BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer;
 var
   json: RawUTF8; // layout is '{"Table":["cmd":values,...]}'
 begin
@@ -2137,20 +2137,20 @@ begin
     end;
 end;
 
-function TRestORM.BatchSend(Batch: TRestBatch): integer;
+function TRestOrm.BatchSend(Batch: TRestBatch): integer;
 var
   dummyRes: TIDDynArray;
 begin
   result := BatchSend(Batch, dummyRes);
 end;
 
-function TRestORM.{%H-}BatchSend(Table: TORMClass; var Data: RawUTF8;
+function TRestOrm.{%H-}BatchSend(Table: TOrmClass; var Data: RawUTF8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
-  raise EORMException.CreateUTF8('BATCH not supported by %', [self]);
+  raise EOrmException.CreateUTF8('BATCH not supported by %', [self]);
 end;
 
-function TRestORM.AsynchBatchStart(Table: TORMClass;
+function TRestOrm.AsynchBatchStart(Table: TOrmClass;
   SendSeconds: integer; PendingRowThreshold: integer;
   AutomaticTransactionPerRow: integer; Options: TRestBatchOptions): boolean;
 begin
@@ -2161,7 +2161,7 @@ begin
       SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow, Options);
 end;
 
-function TRestORM.AsynchBatchStop(Table: TORMClass): boolean;
+function TRestOrm.AsynchBatchStop(Table: TOrmClass): boolean;
 begin
   if (self = nil) or
      (fRest.BackgroundTimer = nil) or
@@ -2171,7 +2171,7 @@ begin
     result := fRest.BackgroundTimer.AsynchBatchStop(Table);
 end;
 
-function TRestORM.AsynchBatchAdd(Value: TORM; SendData: boolean;
+function TRestOrm.AsynchBatchAdd(Value: TOrm; SendData: boolean;
   ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 begin
@@ -2184,7 +2184,7 @@ begin
       CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRestORM.AsynchBatchRawAdd(Table: TORMClass;
+function TRestOrm.AsynchBatchRawAdd(Table: TOrmClass;
   const SentData: RawUTF8): integer;
 begin
   if (self = nil) or
@@ -2195,7 +2195,7 @@ begin
     result := fRest.BackgroundTimer.AsynchBatchRawAdd(Table, SentData);
 end;
 
-procedure TRestORM.AsynchBatchRawAppend(Table: TORMClass;
+procedure TRestOrm.AsynchBatchRawAppend(Table: TOrmClass;
   SentData: TTextWriter);
 begin
   if (self <> nil) and
@@ -2204,7 +2204,7 @@ begin
     fRest.BackgroundTimer.AsynchBatchRawAppend(Table, SentData);
 end;
 
-function TRestORM.AsynchBatchUpdate(Value: TORM;
+function TRestOrm.AsynchBatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   if (self = nil) or
@@ -2216,7 +2216,7 @@ begin
       DoNotAutoComputeFields);
 end;
 
-function TRestORM.AsynchBatchDelete(Table: TORMClass; ID: TID): integer;
+function TRestOrm.AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
   if (self = nil) or
      (fRest.BackgroundTimer = nil) or
@@ -2226,25 +2226,25 @@ begin
     result := fRest.BackgroundTimer.AsynchBatchDelete(Table, ID);
 end;
 
-function TRestORM.Cache: TRestCache;
+function TRestOrm.Cache: TRestCache;
 begin
   if fCache = nil then
     fCache := TRestCache.Create(self);
   result := fCache;
 end;
 
-function TRestORM.CacheWorthItForTable(aTableIndex: cardinal): boolean;
+function TRestOrm.CacheWorthItForTable(aTableIndex: cardinal): boolean;
 begin
   result := true; // always worth caching by default
 end;
 
-procedure TRestORM.InternalLog(const Format: RawUTF8; const Args: array of const;
+procedure TRestOrm.InternalLog(const Format: RawUTF8; const Args: array of const;
   Level: TSynLogInfo);
 begin
   fRest.InternalLog(Format, Args, Level);
 end;
 
-function TRestORM.GetCurrentSessionUserID: TID;
+function TRestOrm.GetCurrentSessionUserID: TID;
 begin
   result := fRest.GetCurrentSessionUserID;
 end;

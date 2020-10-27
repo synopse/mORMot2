@@ -224,7 +224,7 @@ type
   // - i.e. won't be serialized into values
   // - could be any JSON content: number, string, object or array
   // - e.g. interface-based service will use it for efficient and AJAX-ready
-  // transmission of TORMTableJSON result
+  // transmission of TOrmTableJSON result
   RawJSON = type RawUTF8;
 
   /// a RawUTF8 value which may contain Sensitive Personal Information
@@ -243,7 +243,7 @@ type
   // for blobs, unless TRestClientURI.ForceBlobTransfert property is TRUE
   // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
   // so use RetrieveBlob() methods for handling BLOB fields
-  // - could be defined as value in a TORM property as such:
+  // - could be defined as value in a TOrm property as such:
   // ! property Blob: RawBlob read fBlob write fBlob;
   // - is defined here for proper TRttiProp.WriteAsJSON serialization
   RawBlob = type RawByteString;
@@ -3408,7 +3408,7 @@ type
   /// fast bit-encoded date and time value
   // - see TTimeLog helper functions and types in mormot.core.datetime
   // - faster than Iso-8601 text and TDateTime, e.g. can be used as published
-  // property field in mORMot's TORM (see also TModTime and TCreateTime)
+  // property field in mORMot's TOrm (see also TModTime and TCreateTime)
   // - use internally for computation an abstract "year" of 16 months of 32 days
   // of 32 hours of 64 minutes of 64 seconds - same as Iso8601ToTimeLog()
   // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow functions, or
@@ -3432,14 +3432,14 @@ type
   PDateTimeMSDynArray = ^TDateTimeMSDynArray;
 
   /// a 64-bit identifier, defined for TSynPersistentWithID
-  // - type used for our ORM primary key, i.e. TORM.ID
+  // - type used for our ORM primary key, i.e. TOrm.ID
   // - also maps the SQLite3 64-bit RowID definition
   TID = type Int64;
   /// a pointer to TSynPersistentWithID.ID, i.e. our ORM primary key
   PID = ^TID;
-  /// used to store a dynamic array of ORM primary keys, i.e. TORM.ID
+  /// used to store a dynamic array of ORM primary keys, i.e. TOrm.ID
   TIDDynArray = array of TID;
-  /// pointer to a dynamic array of ORM primary keys, i.e. TORM.ID
+  /// pointer to a dynamic array of ORM primary keys, i.e. TOrm.ID
   PIDDynArray = ^TIDDynArray;
 
   /// timestamp stored as second-based Unix Time

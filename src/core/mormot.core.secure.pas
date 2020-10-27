@@ -278,7 +278,7 @@ type
   // than UUID/GUID), and contain generation time and a 16-bit process ID
   // - mapped by TSynUniqueIdentifierBits memory structure
   // - may be used on client side for something similar to a MongoDB ObjectID,
-  // but compatible with TORM.ID: TID properties
+  // but compatible with TOrm.ID: TID properties
   TSynUniqueIdentifier = type Int64;
 
   /// 16-bit unique process identifier, used to compute TSynUniqueIdentifier
@@ -366,7 +366,7 @@ type
 
   /// thread-safe 64-bit integer unique identifier computation
   // - may be used on client side for something similar to a MongoDB ObjectID,
-  // but compatible with TORM.ID: TID properties, since it will contain
+  // but compatible with TOrm.ID: TID properties, since it will contain
   // a 63-bit unsigned integer, following our ORM expectations
   // - each identifier would contain a 16-bit process identifier, which is
   // supplied by the application, and should be unique for this process at a

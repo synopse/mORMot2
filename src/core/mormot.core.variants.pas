@@ -289,19 +289,19 @@ const
 
   /// TDocVariant options to be used so that JSON serialization would
   // use the unquoted JSON syntax for field names
-  // - you could use it e.g. on a TORM variant published field to
+  // - you could use it e.g. on a TOrm variant published field to
   // reduce the JSON escape process during storage in the database, by
-  // customizing your TORMModel instance:
-  // !  (aModel.Props[TORMMyRecord]['VariantProp'] as TORMPropInfoRTTIVariant).
+  // customizing your TOrmModel instance:
+  // !  (aModel.Props[TOrmMyRecord]['VariantProp'] as TOrmPropInfoRTTIVariant).
   // !    DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
-  // or - in a cleaner way - by overriding TORM.InternalDefineModel():
-  // ! class procedure TORMMyRecord.InternalDefineModel(Props: TORMProperties);
+  // or - in a cleaner way - by overriding TOrm.InternalDefineModel():
+  // ! class procedure TOrmMyRecord.InternalDefineModel(Props: TOrmProperties);
   // ! begin
-  // !   (Props.Fields.ByName('VariantProp') as TORMPropInfoRTTIVariant).
+  // !   (Props.Fields.ByName('VariantProp') as TOrmPropInfoRTTIVariant).
   // !     DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
   // ! end;
   // or to set all variant fields at once:
-  // ! class procedure TORMMyRecord.InternalDefineModel(Props: TORMProperties);
+  // ! class procedure TOrmMyRecord.InternalDefineModel(Props: TOrmProperties);
   // ! begin
   // !   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
   // ! end;
@@ -821,7 +821,7 @@ type
     function ToJSON(const Prefix: RawUTF8 = ''; const Suffix: RawUTF8 = '';
       Format: TTextWriterJSONFormat = jsonCompact): RawUTF8;
     /// save an array of objects as UTF-8 encoded non expanded layout JSON
-    // - returned content would be a JSON object in mORMot's TORMTable non
+    // - returned content would be a JSON object in mORMot's TOrmTable non
     // expanded format, with reduced JSON size, i.e.
     // $ {"fieldCount":3,"values":["ID","FirstName","LastName",...']}
     // - will write '' if Kind is dvUndefined or dvObject
@@ -6444,7 +6444,7 @@ procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: Boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
 begin
   // first handle any strict-JSON syntax objects or arrays into custom variants
-  // (e.g. when called directly from TORMPropInfoRTTIVariant.SetValue)
+  // (e.g. when called directly from TOrmPropInfoRTTIVariant.SetValue)
   if (TryCustomVariants <> nil) and
      (JSON <> nil) then
     if (GotoNextNotSpace(JSON)^ in ['{', '[']) and

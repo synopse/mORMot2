@@ -200,7 +200,7 @@ type
     /// will finalize the associated TObject instances
     // - note that releasing the TObject instances won't be protected, so
     // any exception here may induce a memory leak: use only with "safe"
-    // simple objects, e.g. mORMot's TORM
+    // simple objects, e.g. mORMot's TOrm
     destructor Destroy; override;
   end;
 
@@ -360,7 +360,7 @@ type
       var Options: TTextWriterWriteObjectOptions): boolean; virtual;
     // called by TTextWriter.WriteObject() to serialize one published property value
     // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
-    // - is overriden in TORM/TORMMany to detect "fake" instances
+    // - is overriden in TOrm/TOrmMany to detect "fake" instances
     // or by TSynPersistentWithPassword to hide the password field value
     // - should return true if a property has been written, false (which is the
     // default) if the property is to be serialized as usual
@@ -559,7 +559,7 @@ type
   end;
 
   /// abstract persistent class with a 64-bit TID field
-  // - class is e.g. the parent of our TORM ORM classes
+  // - class is e.g. the parent of our TOrm ORM classes
   // - defined here for proper class serialization in mormot.core.json.pas,
   //  without the need of linking the ORM code to the executable
   TSynPersistentWithID = class(TSynPersistent)

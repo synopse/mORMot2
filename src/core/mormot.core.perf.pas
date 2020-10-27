@@ -582,7 +582,7 @@ type
   TSynMonitorUsageGranularities = set of TSynMonitorUsageGranularity;
 
   /// how the TSynMonitorUsage storage IDs are computed
-  // - stored e.g. in TORMMonitorUsage.ID primary key (after a shift)
+  // - stored e.g. in TOrmMonitorUsage.ID primary key (after a shift)
   // - it follows a 23 bit pattern of hour (5 bit), day (5 bit), month (4 bit),
   // year (9 bit - starting at 2016) so that it is monotonic over time
   // - by default, will store the information using mugHour granularity (i.e.

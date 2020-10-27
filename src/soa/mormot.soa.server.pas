@@ -171,7 +171,7 @@ type
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: array of TInterfaceMethodExecuteEvent;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
-      const aLogRest: IRestORM; aLogClass: TORMServiceLogClass);
+      const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
     function GetTimeoutSec: cardinal;
     function GetStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
@@ -267,10 +267,10 @@ type
       aMethodIndex, aSession: integer): integer;
     /// define the the instance life time-out, in seconds
     function SetTimeoutSec(value: cardinal): TServiceFactoryServerAbstract; override;
-    /// log method execution information to a TORMServiceLog table
+    /// log method execution information to a TOrmServiceLog table
     function SetServiceLog(const aMethod: array of RawUTF8;
-      const aLogRest: IRestORM;
-      aLogClass: TORMServiceLogClass = nil): TServiceFactoryServerAbstract; override;
+      const aLogRest: IRestOrm;
+      aLogClass: TOrmServiceLogClass = nil): TServiceFactoryServerAbstract; override;
 
     /// the associated TRestServer instance
     property RestServer: TRestServer read fRestServer;
@@ -340,7 +340,7 @@ type
     // </content> around the generated XML data
     property ResultAsXMLObjectNameSpace: RawUTF8
       read fResultAsXMLObjectNameSpace write fResultAsXMLObjectNameSpace;
-    /// disable base64-encoded TORMServiceLog.Output for methods
+    /// disable base64-encoded TOrmServiceLog.Output for methods
     // returning TServiceCustomAnswer record (to reduce storage size)
     property ExcludeServiceLogCustomAnswer: boolean read fExcludeServiceLogCustomAnswer
       write fExcludeServiceLogCustomAnswer;
@@ -418,7 +418,7 @@ type
     procedure FakeCallbackRemove(aFakeInstance: TObject);
     procedure FakeCallbackRelease(Ctxt: TRestServerURIContext);
     procedure RecordVersionCallbackNotify(TableIndex: integer;
-      Occasion: TORMOccasion; const DeletedID: TID;
+      Occasion: TOrmOccasion; const DeletedID: TID;
       const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUTF8);
   public
     /// initialize the list
@@ -453,7 +453,7 @@ type
     class function CallbackReleasedOnClientSide(const callback: IInterface;
       callbacktext: PShortString = nil): boolean; overload;
     /// register a callback interface which will be called each time a write
-    // operation is performed on a given TORM with a TRecordVersion field
+    // operation is performed on a given TOrm with a TRecordVersion field
     // - called e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster
     function RecordVersionSynchronizeSubscribeMaster(
       TableIndex: integer; RecordVersion: TRecordVersion;
@@ -461,30 +461,30 @@ type
     /// notify any TRecordVersion callback for a table Add/Update from a
     // TDocVariant content
     // - used e.g. by TRestStorageMongoDB.DocFromJSON()
-    procedure RecordVersionNotifyAddUpdate(Occasion: TORMOccasion;
+    procedure RecordVersionNotifyAddUpdate(Occasion: TOrmOccasion;
       TableIndex: integer; const Document: TDocVariantData); overload;
     /// notify any TRecordVersion callback for a table Add/Update from a
     // TJSONObjectDecoder content
     // - used e.g. by TRestStorageMongoDB.DocFromJSON()
-    procedure RecordVersionNotifyAddUpdate(Occasion: TORMOccasion;
+    procedure RecordVersionNotifyAddUpdate(Occasion: TOrmOccasion;
       TableIndex: integer; const Decoder: TJSONObjectDecoder); overload;
     /// notify any TRecordVersion callback for a table Delete
     procedure RecordVersionNotifyDelete(TableIndex: integer;
       const ID: TID; const Revision: TRecordVersion);
     /// make some garbage collection when session is finished
     procedure OnCloseSession(aSessionID: cardinal); virtual;
-    /// log method execution information to a TORMServiceLog table
+    /// log method execution information to a TOrmServiceLog table
     // - TServiceFactoryServer.SetServiceLog() will be called for all registered
     // interfaced-based services of this container
     // - will write to the specified aLogRest instance, and will disable
     // writing if aLogRest is nil
-    // - will write to a (inherited) TORMServiceLog table, as available in
+    // - will write to a (inherited) TOrmServiceLog table, as available in
     // TRest's model, unless a dedicated table is specified as aLogClass
     // - you could specify a CSV list of method names to be excluded from logging
     // (containing e.g. a password or a credit card number), containing either
     // the interface name (as 'ICalculator.Add'), or not (as 'Add')
-    procedure SetServiceLog(const aLogRest: IRestORM;
-      aLogClass: TORMServiceLogClass = nil;
+    procedure SetServiceLog(const aLogRest: IRestOrm;
+      aLogClass: TOrmServiceLogClass = nil;
       const aExcludedMethodNamesCSV: RawUTF8 = '');
     /// defines if the "method":"_signature_" or /root/Interface._signature
     // pseudo method is available to retrieve the whole interface signature,
@@ -538,22 +538,22 @@ type
   // transmission, to TRestServer.RecordVersionSynchronizeSubscribeMaster()
   TServiceRecordVersionCallback = class(TInterfacedCallback, IServiceRecordVersionCallback)
   protected
-    fTable: TORMClass;
-    fRecordVersionField: TORMPropInfoRTTIRecordVersion;
+    fTable: TOrmClass;
+    fRecordVersionField: TOrmPropInfoRTTIRecordVersion;
     fBatch: TRestBatch;
     fSlave: TRestServer; // fRest is master remote access
     fOnNotify: TOnBatchWrite;
-    // local TORMTableDeleted.ID follows current Model -> pre-compute offset
+    // local TOrmTableDeleted.ID follows current Model -> pre-compute offset
     fTableDeletedIDOffset: Int64;
     procedure SetCurrentRevision(const Revision: TRecordVersion;
-      Event: TORMOccasion);
+      Event: TOrmOccasion);
   public
     /// initialize the instance able to apply callbacks for a given table on
     // a local slave REST server from a remote master REST server
     // - the optional low-level aOnNotify callback will be triggerred for each
     // incoming notification, to track the object changes in real-time
     constructor Create(aSlave: TRestServer; aMaster: TRestClientURI;
-      aTable: TORMClass; aOnNotify: TOnBatchWrite); reintroduce;
+      aTable: TOrmClass; aOnNotify: TOnBatchWrite); reintroduce;
     /// finalize this callback instance
     destructor Destroy; override;
     /// this event will be raised on any Add on a versioned record
@@ -1036,7 +1036,7 @@ begin
           W.CancelAll;
           W.AddShort('"POST",{Method:"');
           W.AddString(InterfaceDotMethodName);
-          W.AddShort('",Input:{'); // as TORMPropInfoRTTIVariant.GetJSONValues
+          W.AddShort('",Input:{'); // as TOrmPropInfoRTTIVariant.GetJSONValues
           if not (optNoLogInput in Sender.Options) then
           begin
             for a := ArgsInFirst to ArgsInLast do
@@ -1163,7 +1163,7 @@ var
     else
       W.Add(',IP:"%"},', [Ctxt.RemoteIP]);
     with Ctxt.ServiceExecution^ do
-      IRestORM(LogRest).AsynchBatchRawAppend(LogClass, W);
+      IRestOrm(LogRest).AsynchBatchRawAppend(LogClass, W);
   end;
 
 begin
@@ -1412,8 +1412,8 @@ begin
 end;
 
 procedure TServiceFactoryServer.SetServiceLogByIndex(
-  const aMethods: TInterfaceFactoryMethodBits; const aLogRest: IRestORM;
-  aLogClass: TORMServiceLogClass);
+  const aMethods: TInterfaceFactoryMethodBits; const aLogRest: IRestOrm;
+  aLogClass: TOrmServiceLogClass);
 var
   m: PtrInt;
 begin
@@ -1422,7 +1422,7 @@ begin
   else
   begin
     if aLogClass = nil then
-      aLogClass := TORMServiceLog;
+      aLogClass := TOrmServiceLog;
     aLogRest.Model.GetTableIndexExisting(aLogClass);
   end;
   for m := 0 to fInterface.MethodsCount - 1 do
@@ -1438,7 +1438,7 @@ begin
 end;
 
 function TServiceFactoryServer.SetServiceLog(const aMethod: array of RawUTF8;
-  const aLogRest: IRestORM; aLogClass: TORMServiceLogClass): TServiceFactoryServerAbstract;
+  const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass): TServiceFactoryServerAbstract;
 var
   bits: TInterfaceFactoryMethodBits;
 begin
@@ -1815,7 +1815,7 @@ begin
   if (self = nil) or
     (cardinal(TableIndex) > cardinal(fRestServer.Model.TablesMax)) then
     exit;
-  fRestServer.AcquireExecution[execORMWrite].Safe.Lock;
+  fRestServer.AcquireExecution[execOrmWrite].Safe.Lock;
   try
     if RecordVersion <> fRestServer.RecordVersionMax then
       // there are some missing items on the client side -> synch not possible
@@ -1828,7 +1828,7 @@ begin
        (instance.ClassType = TInterfacedObjectFakeServer) then
       TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := True;
   finally
-    fRestServer.AcquireExecution[execORMWrite].Safe.UnLock;
+    fRestServer.AcquireExecution[execOrmWrite].Safe.UnLock;
   end;
   result := true;
 end;
@@ -1878,14 +1878,14 @@ begin
 end;
 
 procedure TServiceContainerServer.RecordVersionCallbackNotify(
-  TableIndex: integer; Occasion: TORMOccasion; const DeletedID: TID;
+  TableIndex: integer; Occasion: TOrmOccasion; const DeletedID: TID;
   const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUTF8);
 var
   i: PtrInt;
   arr: ^IServiceRecordVersionCallbackDynArray;
 begin
   try
-    fRestServer.AcquireExecution[execORMWrite].Safe.Lock;
+    fRestServer.AcquireExecution[execOrmWrite].Safe.Lock;
     try
       arr := @fRecordVersionCallback[TableIndex];
       for i := length(arr^) - 1 downto 0 do
@@ -1908,7 +1908,7 @@ begin
           InterfaceArrayDelete(arr^, i);
         end;
     finally
-      fRestServer.AcquireExecution[execORMWrite].Safe.UnLock;
+      fRestServer.AcquireExecution[execOrmWrite].Safe.UnLock;
     end;
   except
     // ignore any exception here
@@ -1916,7 +1916,7 @@ begin
 end;
 
 procedure TServiceContainerServer.RecordVersionNotifyAddUpdate(
-  Occasion: TORMOccasion; TableIndex: integer; const Document: TDocVariantData);
+  Occasion: TOrmOccasion; TableIndex: integer; const Document: TDocVariantData);
 var
   json: RawUTF8;
 begin
@@ -1930,7 +1930,7 @@ begin
 end;
 
 procedure TServiceContainerServer.RecordVersionNotifyAddUpdate(
-  Occasion: TORMOccasion; TableIndex: integer; const Decoder: TJSONObjectDecoder);
+  Occasion: TOrmOccasion; TableIndex: integer; const Decoder: TJSONObjectDecoder);
 var
   json: RawUTF8;
 begin
@@ -1951,8 +1951,8 @@ begin
     RecordVersionCallbackNotify(TableIndex, ooDelete, ID, Revision, '');
 end;
 
-procedure TServiceContainerServer.SetServiceLog(const aLogRest: IRestORM;
-  aLogClass: TORMServiceLogClass; const aExcludedMethodNamesCSV: RawUTF8);
+procedure TServiceContainerServer.SetServiceLog(const aLogRest: IRestOrm;
+  aLogClass: TOrmServiceLogClass; const aExcludedMethodNamesCSV: RawUTF8);
 var
   i, n: PtrInt;
   fact: TServiceFactory;
@@ -2002,7 +2002,7 @@ function TServiceRecordVersion.Subscribe(const SQLTableName: RawUTF8;
   const revision: TRecordVersion;
   const callback: IServiceRecordVersionCallback): boolean;
 var
-  table: TORMClass;
+  table: TOrmClass;
 begin
   result := false;
   if Server <> nil then
@@ -2018,7 +2018,7 @@ end;
 { TServiceRecordVersionCallback }
 
 constructor TServiceRecordVersionCallback.Create(aSlave: TRestServer;
-  aMaster: TRestClientURI; aTable: TORMClass; aOnNotify: TOnBatchWrite);
+  aMaster: TRestClientURI; aTable: TOrmClass; aOnNotify: TOnBatchWrite);
 begin
   if aSlave = nil then
     raise EServiceException.CreateUTF8('%.Create(%): Slave=nil',
@@ -2036,7 +2036,7 @@ begin
 end;
 
 procedure TServiceRecordVersionCallback.SetCurrentRevision(
-  const Revision: TRecordVersion; Event: TORMOccasion);
+  const Revision: TRecordVersion; Event: TOrmOccasion);
 var
   current: TRecordVersion;
 begin
@@ -2052,7 +2052,7 @@ end;
 
 procedure TServiceRecordVersionCallback.Added(const NewContent: RawJSON);
 var
-  rec: TORM;
+  rec: TOrm;
   fields: TFieldBits;
 begin
   rec := fTable.Create;
@@ -2072,7 +2072,7 @@ end;
 
 procedure TServiceRecordVersionCallback.Updated(const ModifiedContent: RawJSON);
 var
-  rec: TORM;
+  rec: TOrm;
   fields: TFieldBits;
 begin
   rec := fTable.Create;
@@ -2093,21 +2093,21 @@ end;
 procedure TServiceRecordVersionCallback.Deleted(const ID: TID;
   const Revision: TRecordVersion);
 var
-  del: TORMTableDeleted;
+  del: TOrmTableDeleted;
 begin
-  del := TORMTableDeleted.Create;
+  del := TOrmTableDeleted.Create;
   try
     del.IDValue := fTableDeletedIDOffset + Revision;
     del.Deleted := ID;
     if fBatch = nil then
     try
-      fSlave.AcquireExecution[execORMWrite].Safe.Lock;
-      TRestORMServer(fSlave.ORMInstance).RecordVersionDeleteIgnore := true;
+      fSlave.AcquireExecution[execOrmWrite].Safe.Lock;
+      TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := true;
       fSlave.ORM.Add(del, true, true, true);
       fSlave.ORM.Delete(fTable, ID);
     finally
-      TRestORMServer(fSlave.ORMInstance).RecordVersionDeleteIgnore := false;
-      fSlave.AcquireExecution[execORMWrite].Safe.UnLock;
+      TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := false;
+      fSlave.AcquireExecution[execOrmWrite].Safe.UnLock;
     end
     else
     begin
@@ -2140,16 +2140,16 @@ begin
     Error('previous active BATCH -> send pending');
   if fBatch <> nil then
   try
-    fSlave.AcquireExecution[execORMWrite].Safe.Lock;
-    TRestORMServer(fSlave.ORMInstance).RecordVersionDeleteIgnore := true;
+    fSlave.AcquireExecution[execOrmWrite].Safe.Lock;
+    TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := true;
     fSlave.ORM.BatchSend(fBatch);
   finally
-    TRestORMServer(fSlave.ORMInstance).RecordVersionDeleteIgnore := false;
-    fSlave.AcquireExecution[execORMWrite].Safe.UnLock;
+    TRestOrmServer(fSlave.OrmInstance).RecordVersionDeleteIgnore := false;
+    fSlave.AcquireExecution[execOrmWrite].Safe.UnLock;
     FreeAndNil(fBatch);
   end;
   if not isLast then
-    fBatch := TRestBatch.Create(fSlave.ORMInstance, nil, 10000);
+    fBatch := TRestBatch.Create(fSlave.OrmInstance, nil, 10000);
 end;
 
 destructor TServiceRecordVersionCallback.Destroy;

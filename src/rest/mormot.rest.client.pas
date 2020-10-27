@@ -496,7 +496,7 @@ type
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
   TRestClientURI = class(TRest)
   protected
-    fORMClient: IRestORMClient;
+    fOrmClient: IRestOrmClient;
     fSession: TRestClientSession;
     fComputeSignature: TRestAuthenticationSignedURIComputeSignature;
     fOnIdle: TOnIdleSynBackgroundThread;
@@ -552,43 +552,43 @@ type
     // - a next call to InternalCheckOpen method shall re-open the connection
     procedure InternalClose; virtual; abstract;
   {$ifndef PUREMORMOT2}
-    // backward compatibility redirections to the homonymous IRestORMClient methods
-    // see IRestORMClient documentation for the proper use information
+    // backward compatibility redirections to the homonymous IRestOrmClient methods
+    // see IRestOrmClient documentation for the proper use information
   public
-    function Refresh(aID: TID; Value: TORM; var Refreshed: boolean): boolean;
-    function List(const Tables: array of TORMClass; const SQLSelect: RawUTF8 = 'RowID';
-      const SQLWhere: RawUTF8 = ''): TORMTable;
-    function ListFmt(const Tables: array of TORMClass;
-      const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TORMTable; overload;
-    function ListFmt(const Tables: array of TORMClass;
-      const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TORMTable; overload;
-    function TransactionBeginRetry(aTable: TORMClass; Retries: integer = 10): boolean;
-    function BatchStart(aTable: TORMClass;
+    function Refresh(aID: TID; Value: TOrm; var Refreshed: boolean): boolean;
+    function List(const Tables: array of TOrmClass; const SQLSelect: RawUTF8 = 'RowID';
+      const SQLWhere: RawUTF8 = ''): TOrmTable;
+    function ListFmt(const Tables: array of TOrmClass;
+      const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TOrmTable; overload;
+    function ListFmt(const Tables: array of TOrmClass;
+      const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable; overload;
+    function TransactionBeginRetry(aTable: TOrmClass; Retries: integer = 10): boolean;
+    function BatchStart(aTable: TOrmClass;
       AutomaticTransactionPerRow: cardinal = 0;
       Options: TRestBatchOptions = []): boolean;
     function BatchStartAny(AutomaticTransactionPerRow: cardinal;
       Options: TRestBatchOptions = []): boolean;
-    function BatchAdd(Value: TORM; SendData: boolean; ForceID: boolean = false;
+    function BatchAdd(Value: TOrm; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TFieldBits = []): integer;
-    function BatchUpdate(Value: TORM; const CustomFields: TFieldBits = [];
+    function BatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     function BatchDelete(ID: TID): integer; overload;
-    function BatchDelete(Table: TORMClass; ID: TID): integer; overload;
+    function BatchDelete(Table: TOrmClass; ID: TID): integer; overload;
     function BatchCount: integer;
     function BatchSend(var Results: TIDDynArray): integer; overload;
     procedure BatchAbort;
   {$endif PUREMORMOT2}
   public
     /// initialize REST client instance
-    constructor Create(aModel: TORMModel); override;
+    constructor Create(aModel: TOrmModel); override;
     /// initialize REST client instance from a TSynConnectionDefinition
-    constructor RegisteredClassCreateFrom(aModel: TORMModel;
+    constructor RegisteredClassCreateFrom(aModel: TOrmModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); override;
     /// release memory and close client connection
     // - also unlock all still locked records by this client
     destructor Destroy; override;
-    /// called by TRestORM.Create overriden constructor to set fORM from IRestORM
-    procedure SetORMInstance(aORM: TInterfacedObject); override;
+    /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
+    procedure SetOrmInstance(aORM: TInterfacedObject); override;
     /// main method calling the remote Server via a RESTful command
     // - redirect to the InternalURI() abstract method, which should be
     // overridden for local, pipe, HTTP/1.1 or WebSockets actual communication
@@ -606,7 +606,7 @@ type
     // with the URL)
     function CallBackGet(const aMethodName: RawUTF8;
       const aNameValueParameters: array of const;
-      out aResponse: RawUTF8; aTable: TORMClass = nil; aID: TID = 0;
+      out aResponse: RawUTF8; aTable: TOrmClass = nil; aID: TID = 0;
       aResponseHead: PRawUTF8 = nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
@@ -616,20 +616,20 @@ type
     // with the URL)
     function CallBackGetResult(const aMethodName: RawUTF8;
       const aNameValueParameters: array of const;
-      aTable: TORMClass = nil; aID: TID = 0): RawUTF8;
+      aTable: TOrmClass = nil; aID: TID = 0): RawUTF8;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful PUT request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - this version will use a PUT with the supplied raw UTF-8 data
     function CallBackPut(const aMethodName, aSentData: RawUTF8;
-      out aResponse: RawUTF8; aTable: TORMClass = nil; aID: TID = 0;
+      out aResponse: RawUTF8; aTable: TOrmClass = nil; aID: TID = 0;
       aResponseHead: PRawUTF8 = nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful with any kind of request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - for GET/PUT methods, you should better use CallBackGet/CallBackPut
     function CallBack(method: TURIMethod; const aMethodName,aSentData: RawUTF8;
-      out aResponse: RawUTF8; aTable: TORMClass = nil; aID: TID = 0;
+      out aResponse: RawUTF8; aTable: TOrmClass = nil; aID: TID = 0;
       aResponseHead: PRawUTF8 = nil): integer;
     /// to be called before CallBack() if the client could ignore the answer
     // - do nothing by default, but overriden e.g. in TSQLHttpClientWebsockets
@@ -943,7 +943,7 @@ function ToText(a: TRestAuthenticationSignedURIAlgo): PShortString; overload;
 implementation
 
 uses
-  mormot.orm.client; // for injection of TRestORMClientURI.URI field
+  mormot.orm.client; // for injection of TRestOrmClientURI.URI field
 
 
 { ************ Client Authentication and Authorization Logic }
@@ -1695,7 +1695,7 @@ begin
     [self, Factory.InterfaceName]);
 end;
 
-constructor TRestClientURI.RegisteredClassCreateFrom(aModel: TORMModel;
+constructor TRestClientURI.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 begin
   if fModel = nil then // if not already created with a reintroduced constructor
@@ -1777,7 +1777,7 @@ begin
      fSession.Version, fSession.ServerTimeout], sllUserAuth);
 end;
 
-constructor TRestClientURI.Create(aModel: TORMModel);
+constructor TRestClientURI.Create(aModel: TOrmModel);
 begin
   inherited Create(aModel);
   fMaximumAuthentificationRetry := 1;
@@ -1795,7 +1795,7 @@ destructor TRestClientURI.Destroy;
 var
   t, i: PtrInt;
   aID: TID;
-  Table: TORMClass;
+  Table: TOrmClass;
 begin
   include(fInternalState, isDestroying);
   if SynLogFileFreeing then // may be owned by a TSynLogFamily
@@ -1815,7 +1815,7 @@ begin
           begin
             aID := IDs[i];
             if aID <> 0 then // 0 is empty after unlock
-              fORM.UnLock(Table, aID);
+              fOrm.UnLock(Table, aID);
           end;
       end;
     SessionClose; // if not already notified
@@ -1837,13 +1837,13 @@ begin
   end;
 end;
 
-procedure TRestClientURI.SetORMInstance(aORM: TInterfacedObject);
+procedure TRestClientURI.SetOrmInstance(aORM: TInterfacedObject);
 begin
-  inherited SetORMInstance(aORM); // set fORM
-  if not fORMInstance.GetInterface(IRestORMClient, fORMClient) then
-    raise ERestException.CreateUTF8('%.Create with invalid %', [self, fORMInstance]);
-  // enable redirection of URI() from IRestORM/IRestORMClient into this class
-  (fORMInstance as TRestORMClientURI).URI := URI;
+  inherited SetOrmInstance(aORM); // set fOrm
+  if not fOrmInstance.GetInterface(IRestOrmClient, fOrmClient) then
+    raise ERestException.CreateUTF8('%.Create with invalid %', [self, fOrmInstance]);
+  // enable redirection of URI() from IRestOrm/IRestOrmClient into this class
+  (fOrmInstance as TRestOrmClientURI).URI := URI;
 end;
 
 procedure TRestClientURI.SessionClose;
@@ -2149,7 +2149,7 @@ end;
 
 function TRestClientURI.CallBackGet(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; out aResponse: RawUTF8;
-  aTable: TORMClass; aID: TID; aResponseHead: PRawUTF8): integer;
+  aTable: TOrmClass; aID: TID; aResponseHead: PRawUTF8): integer;
 var
   url, header: RawUTF8;
   log: ISynLog; // for Enter auto-leave to work with FPC
@@ -2176,7 +2176,7 @@ begin
 end;
 
 function TRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
-  const aNameValueParameters: array of const; aTable: TORMClass;
+  const aNameValueParameters: array of const; aTable: TOrmClass;
   aID: TID): RawUTF8;
 var
   resp: RawUTF8;
@@ -2188,14 +2188,14 @@ begin
 end;
 
 function TRestClientURI.CallBackPut(const aMethodName, aSentData: RawUTF8;
-  out aResponse: RawUTF8; aTable: TORMClass; aID: TID;
+  out aResponse: RawUTF8; aTable: TOrmClass; aID: TID;
   aResponseHead: PRawUTF8): integer;
 begin
   result := callback(mPUT, aMethodName, aSentData, aResponse, aTable, aID, aResponseHead);
 end;
 
 function TRestClientURI.CallBack(method: TURIMethod; const aMethodName,
-  aSentData: RawUTF8; out aResponse: RawUTF8; aTable: TORMClass;
+  aSentData: RawUTF8; out aResponse: RawUTF8; aTable: TOrmClass;
   aID: TID; aResponseHead: PRawUTF8): integer;
 var
   u, m: RawUTF8;
@@ -2422,83 +2422,83 @@ end;
 
 {$ifndef PUREMORMOT2}
 
-function TRestClientURI.Refresh(aID: TID; Value: TORM;
+function TRestClientURI.Refresh(aID: TID; Value: TOrm;
   var Refreshed: boolean): boolean;
 begin
-  result := fORMClient.Refresh(aID, Value, Refreshed);
+  result := fOrmClient.Refresh(aID, Value, Refreshed);
 end;
 
-function TRestClientURI.List(const Tables: array of TORMClass;
-  const SQLSelect: RawUTF8; const SQLWhere: RawUTF8): TORMTable;
+function TRestClientURI.List(const Tables: array of TOrmClass;
+  const SQLSelect: RawUTF8; const SQLWhere: RawUTF8): TOrmTable;
 begin
-  result := fORMClient.List(Tables, SQLSelect, SQLWhere);
+  result := fOrmClient.List(Tables, SQLSelect, SQLWhere);
 end;
 
-function TRestClientURI.ListFmt(const Tables: array of TORMClass;
-  const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TORMTable;
+function TRestClientURI.ListFmt(const Tables: array of TOrmClass;
+  const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TOrmTable;
 begin
-  result := fORMClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args);
+  result := fOrmClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args);
 end;
 
-function TRestClientURI.ListFmt(const Tables: array of TORMClass;
-  const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TORMTable;
+function TRestClientURI.ListFmt(const Tables: array of TOrmClass;
+  const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable;
 begin
-  result := fORMClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args, Bounds);
+  result := fOrmClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args, Bounds);
 end;
 
-function TRestClientURI.TransactionBeginRetry(aTable: TORMClass;
+function TRestClientURI.TransactionBeginRetry(aTable: TOrmClass;
   Retries: integer): boolean;
 begin
-  result := fORMClient.TransactionBeginRetry(aTable, Retries);
+  result := fOrmClient.TransactionBeginRetry(aTable, Retries);
 end;
 
-function TRestClientURI.BatchStart(aTable: TORMClass;
+function TRestClientURI.BatchStart(aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions): boolean;
 begin
-  result := fORMClient.BatchStart(aTable, AutomaticTransactionPerRow, Options);
+  result := fOrmClient.BatchStart(aTable, AutomaticTransactionPerRow, Options);
 end;
 
 function TRestClientURI.BatchStartAny(AutomaticTransactionPerRow: cardinal;
   Options: TRestBatchOptions): boolean;
 begin
-  result := fORMClient.BatchStartAny(AutomaticTransactionPerRow, Options);
+  result := fOrmClient.BatchStartAny(AutomaticTransactionPerRow, Options);
 end;
 
-function TRestClientURI.BatchAdd(Value: TORM; SendData: boolean;
+function TRestClientURI.BatchAdd(Value: TOrm; SendData: boolean;
   ForceID: boolean; const CustomFields: TFieldBits): integer;
 begin
-  result := fORMClient.BatchAdd(Value, SendData, ForceID, CustomFields);
+  result := fOrmClient.BatchAdd(Value, SendData, ForceID, CustomFields);
 end;
 
-function TRestClientURI.BatchUpdate(Value: TORM;
+function TRestClientURI.BatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
-  result := fORMClient.BatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
+  result := fOrmClient.BatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
 function TRestClientURI.BatchDelete(ID: TID): integer;
 begin
-  result := fORMClient.BatchDelete(ID);
+  result := fOrmClient.BatchDelete(ID);
 end;
 
-function TRestClientURI.BatchDelete(Table: TORMClass; ID: TID): integer;
+function TRestClientURI.BatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
-  result := fORMClient.BatchDelete(Table, ID);
+  result := fOrmClient.BatchDelete(Table, ID);
 end;
 
 function TRestClientURI.BatchCount: integer;
 begin
-  result := fORMClient.BatchCount;
+  result := fOrmClient.BatchCount;
 end;
 
 function TRestClientURI.BatchSend(var Results: TIDDynArray): integer;
 begin
-  result := fORMClient.BatchSend(Results);
+  result := fOrmClient.BatchSend(Results);
 end;
 
 procedure TRestClientURI.BatchAbort;
 begin
-  fORMClient.BatchAbort;
+  fOrmClient.BatchAbort;
 end;
 
 {$endif PUREMORMOT2}

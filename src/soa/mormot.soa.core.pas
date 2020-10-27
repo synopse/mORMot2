@@ -7,7 +7,7 @@ unit mormot.soa.core;
   *****************************************************************************
 
    Shared Interface-based Service Oriented Architecture (SOA) Process
-    - TORMServiceLog TORMServiceNotifications Classes
+    - TOrmServiceLog TOrmServiceNotifications Classes
     - TServiceFactory Abstract Service Provider
     - TServiceFactoryServerAbstract Abstract Service Provider
     - TServiceContainer Abstract Services Holder
@@ -40,7 +40,7 @@ uses
   mormot.orm.core;
 
 
-{ ************ TORMServiceLog TORMServiceNotifications Classes }
+{ ************ TOrmServiceLog TOrmServiceNotifications Classes }
 
 type
   /// common ancestor for storing interface-based service execution statistics
@@ -48,7 +48,7 @@ type
   // - TServiceMethodExecute could store all its calls in such a table
   // - enabled on server side via either TServiceFactoryServer.SetServiceLog or
   // TServiceContainerServer.SetServiceLog method
-  TORMServiceLog = class(TORMNoCaseExtended)
+  TOrmServiceLog = class(TOrmNoCaseExtended)
   protected
     fMethod: RawUTF8;
     fInput: variant;
@@ -60,8 +60,8 @@ type
     fIP: RawUTF8;
   public
     /// overriden method creating an index on the Method/MicroSec columns
-    class procedure InitializeTable(const Server: IRestORMServer;
-      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
+    class procedure InitializeTable(const Server: IRestOrmServer;
+      const FieldName: RawUTF8; Options: TOrmInitializeTableOptions); override;
   published
     /// the 'interface.method' identifier of this call
     // - this column will be indexed, for fast SQL queries, with the MicroSec
@@ -95,18 +95,18 @@ type
   // - as used by TServiceFactoryClient.SendNotifications
   // - here, the Output column may contain the information about an error
   // occurred during process
-  TORMServiceNotifications = class(TORMServiceLog)
+  TOrmServiceNotifications = class(TOrmServiceLog)
   protected
     fSent: TTimeLog;
   public
     /// this overriden method will create an index on the 'Sent' column
-    class procedure InitializeTable(const Server: IRestORMServer;
-      const FieldName: RawUTF8; Options: TORMInitializeTableOptions); override;
+    class procedure InitializeTable(const Server: IRestOrmServer;
+      const FieldName: RawUTF8; Options: TOrmInitializeTableOptions); override;
     /// search for pending events since a supplied ID
     // - returns FALSE if no notification was found
     // - returns TRUE ad fill a TDocVariant array of JSON Objects, including
     // "ID": field, and Method as "MethodName": field
-    class function LastEventsAsObjects(const Rest: IRestORM; LastKnownID: TID;
+    class function LastEventsAsObjects(const Rest: IRestOrm; LastKnownID: TID;
       Limit: integer; Service: TInterfaceFactory; out Dest: TDocVariantData;
       const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false): boolean;
     /// allows to convert the Input array into a proper single JSON Object
@@ -126,14 +126,14 @@ type
 
   /// class-reference type (metaclass) for storing interface-based service
   // execution statistics
-  // - you could inherit from TORMServiceLog, and specify additional
+  // - you could inherit from TOrmServiceLog, and specify additional
   // fields corresponding to the execution context
-  TORMServiceLogClass = class of TORMServiceLog;
+  TOrmServiceLogClass = class of TOrmServiceLog;
 
   /// class-reference type (metaclass) for storing interface-based service
   // execution statistics used for DB-based asynchronous notifications
   // - as used by TServiceFactoryClient.SendNotifications
-  TORMServiceNotificationsClass = class of TORMServiceNotifications;
+  TOrmServiceNotificationsClass = class of TOrmServiceNotifications;
 
 
 { ************ TServiceFactory Abstract Service Provider }
@@ -197,11 +197,11 @@ type
     Denied: set of 0..255;
     /// execution options for this method (about thread safety or logging)
     Options: TInterfaceMethodOptions;
-    /// where execution information should be written as TORMServiceLog
-    // - is a weak pointer to a IRestORM instance to avoid reference counting
+    /// where execution information should be written as TOrmServiceLog
+    // - is a weak pointer to a IRestOrm instance to avoid reference counting
     LogRest: pointer;
-    /// the TORMServiceLog class to use, as defined in LogRest.Model
-    LogClass: TORMServiceLogClass;
+    /// the TOrmServiceLog class to use, as defined in LogRest.Model
+    LogClass: TOrmServiceLogClass;
   end;
 
   /// points to the execution context of one method within TServiceFactory
@@ -237,7 +237,7 @@ type
     fInterfaceURI: RawUTF8;
     fInterfaceMangledURI: RawUTF8;
     fInstanceCreation: TServiceInstanceImplementation;
-    fORM: IRestORM;
+    fOrm: IRestOrm;
     fSharedInstance: TInterfacedObject;
     fContract: RawUTF8;
     fContractHash: RawUTF8;
@@ -255,7 +255,7 @@ type
     /// initialize the service provider parameters
     // - it will check and retrieve all methods of the supplied interface,
     // and prepare all internal structures for its serialized execution
-    // - supplied TInterfaceResolver should be able to resolve IRestORM,
+    // - supplied TInterfaceResolver should be able to resolve IRestOrm,
     // and is typically a TRest instance
     constructor Create(aOwner: TInterfaceResolver; aInterface: PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation;
@@ -317,7 +317,7 @@ type
     property Execution: TServiceFactoryExecutionDynArray read fExecution;
   published
     /// access to the associated TRest ORM instance
-    property ORM: IRestORM read fORM;
+    property ORM: IRestOrm read fOrm;
   published
     /// the registered Interface URI
     // - in fact this is the Interface name without the initial 'I', e.g.
@@ -469,18 +469,18 @@ type
     // calls for the service, in a fluent interface
     function SetTimeoutSec(value: cardinal): TServiceFactoryServerAbstract;
       virtual; abstract;
-    /// log method execution information to a TORMServiceLog table
+    /// log method execution information to a TOrmServiceLog table
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - if no method name is given (i.e. []), option will be set for all methods
     // - will write to the specified aLogRest instance, and will disable
     // writing if aLogRest is nil
-    // - will write to a (inherited) TORMServiceLog table, as available in
+    // - will write to a (inherited) TOrmServiceLog table, as available in
     // TRest's model, unless a dedicated table is specified as aLogClass
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function SetServiceLog(const aMethod: array of RawUTF8;
-      const aLogRest: IRestORM;
-      aLogClass: TORMServiceLogClass = nil): TServiceFactoryServerAbstract;
+      const aLogRest: IRestOrm;
+      aLogClass: TOrmServiceLogClass = nil): TServiceFactoryServerAbstract;
       virtual; abstract;
     /// set to TRUE disable Authentication method check for the whole interface
     // - by default (FALSE), all interface-based services will require valid
@@ -559,7 +559,7 @@ type
     function GetService(const aURI: RawUTF8): TServiceFactory;
   public
     /// initialize the Services list
-    // - supplied TInterfaceResolver should be able to resolve IRestORM,
+    // - supplied TInterfaceResolver should be able to resolve IRestOrm,
     // and is typically a TRest instance
     constructor Create(aOwner: TInterfaceResolver); virtual;
     /// release all registered services
@@ -669,12 +669,12 @@ type
       const aMethodsNames: array of RawUTF8; aSubscribe: boolean = true); overload;
   end;
 
-  /// a callback interface used to notify a TORM modification in real time
+  /// a callback interface used to notify a TOrm modification in real time
   // - will be used e.g. by TRestServer.RecordVersionSynchronizeSubscribeMaster()
   // - all methods of this interface will be called asynchronously when
   // transmitted via our WebSockets implementation, since they are defined as
   // plain procedures
-  // - each callback instance should be private to a specific TORM
+  // - each callback instance should be private to a specific TOrm
   IServiceRecordVersionCallback = interface(IInvokable)
     ['{8598E6BE-3590-4F76-9449-7AF7AF4241B0}']
     /// this event will be raised on any Add on a versioned record
@@ -695,7 +695,7 @@ type
     procedure CurrentFrame(isLast: boolean);
   end;
 
-  /// a list of callback interfaces to notify TORM modifications
+  /// a list of callback interfaces to notify TOrm modifications
   // - you can use InterfaceArray*() wrapper functions to manage the list
   IServiceRecordVersionCallbackDynArray = array of IServiceRecordVersionCallback;
 
@@ -836,12 +836,12 @@ uses
   mormot.rest.core;
 
 
-{ ************ TORMServiceLog TORMServiceNotifications Classes }
+{ ************ TOrmServiceLog TOrmServiceNotifications Classes }
 
-{ TORMServiceLog }
+{ TOrmServiceLog }
 
-class procedure TORMServiceLog.InitializeTable(const Server: IRestORMServer;
-  const FieldName: RawUTF8; Options: TORMInitializeTableOptions);
+class procedure TOrmServiceLog.InitializeTable(const Server: IRestOrmServer;
+  const FieldName: RawUTF8; Options: TOrmInitializeTableOptions);
 begin
   inherited;
   if FieldName = '' then
@@ -849,11 +849,11 @@ begin
 end;
 
 
-{ TORMServiceNotifications }
+{ TOrmServiceNotifications }
 
-class procedure TORMServiceNotifications.InitializeTable(
-  const Server: IRestORMServer; const FieldName: RawUTF8;
-  Options: TORMInitializeTableOptions);
+class procedure TOrmServiceNotifications.InitializeTable(
+  const Server: IRestOrmServer; const FieldName: RawUTF8;
+  Options: TOrmInitializeTableOptions);
 begin
   inherited;
   if (FieldName = '') or
@@ -861,11 +861,11 @@ begin
     Server.CreateSQLMultiIndex(self, ['Sent'], false);
 end;
 
-class function TORMServiceNotifications.LastEventsAsObjects(
-  const Rest: IRestORM; LastKnownID: TID; Limit: integer; Service: TInterfaceFactory;
+class function TOrmServiceNotifications.LastEventsAsObjects(
+  const Rest: IRestOrm; LastKnownID: TID; Limit: integer; Service: TInterfaceFactory;
   out Dest: TDocVariantData; const MethodName: RawUTF8; IDAsHexa: boolean): boolean;
 var
-  res: TORMServiceNotifications;
+  res: TOrmServiceNotifications;
 begin
   res := CreateAndFillPrepare(Rest, 'ID > ? order by ID limit %',
     [Limit], [LastKnownID], 'ID,Method,Input');
@@ -882,7 +882,7 @@ begin
   end;
 end;
 
-function TORMServiceNotifications.SaveInputAsObject(
+function TOrmServiceNotifications.SaveInputAsObject(
   Service: TInterfaceFactory; const MethodName: RawUTF8; IDAsHexa: boolean): variant;
 var
   m: integer;
@@ -899,7 +899,7 @@ begin
       _Safe(fInput)^, TDocVariantData(result), true);
 end;
 
-procedure TORMServiceNotifications.SaveFillInputsAsObjects(
+procedure TOrmServiceNotifications.SaveFillInputsAsObjects(
   Service: TInterfaceFactory; out Dest: TDocVariantData; const MethodName: RawUTF8;
   IDAsHexa: boolean);
 begin
@@ -922,7 +922,7 @@ begin
   fInstanceCreation := aInstanceCreation;
   fInterfaceMangledURI := BinToBase64URI(@fInterface.InterfaceIID, SizeOf(TGUID));
   fInterfaceURI := fInterface.InterfaceURI;
-  if fORM.Model.GetTableIndex(fInterfaceURI) >= 0 then
+  if fOrm.Model.GetTableIndex(fInterfaceURI) >= 0 then
     raise EServiceException.CreateUTF8('%.Create: I% routing name is ' +
       'already used by a % SQL table name', [self, fInterfaceURI, fInterfaceURI]);
   SetLength(fExecution, fInterface.MethodsCount);
@@ -999,7 +999,7 @@ var
   i: PtrInt;
 begin
   result := (self <> nil) and
-    fORM.MainFieldIDs(fORM.Model.GetTableInherited(TAuthGroup), aGroup, IDs);
+    fOrm.MainFieldIDs(fOrm.Model.GetTableInherited(TAuthGroup), aGroup, IDs);
   if result then
     for i := 0 to high(IDs) do
       // fExecution[].Denied set is able to store IDs up to 256 only

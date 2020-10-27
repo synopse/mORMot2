@@ -117,7 +117,7 @@ type
   // - sStaticDataTable will identify a TRestStorageInMemory - i.e.
   // TRestServer.fStaticData[] which can work without SQLite3
   // - sVirtualTable will identify virtual TRestStorage classes - i.e.
-  // TRestORMServer.fStaticVirtualTable[] which points to SQLite3 virtual tables
+  // TRestOrmServer.fStaticVirtualTable[] which points to SQLite3 virtual tables
   // (e.g. TObjectList or external databases)
   TRestServerKind = (
     sMainEngine, sStaticDataTable, sVirtualTable);
@@ -166,7 +166,7 @@ type
     fRemoteIP: RawUTF8;
     fAuthSession: TAuthSession;
     fClientKind: TRestServerURIContextClientKind;
-    fSessionAccessRights: TORMAccessRights; // fSession may be deleted meanwhile
+    fSessionAccessRights: TOrmAccessRights; // fSession may be deleted meanwhile
     fServiceListInterfaceMethodIndex: integer;
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
@@ -266,16 +266,16 @@ type
     /// position of the &session_signature=... text in Call^.url string
     URISessionSignaturePos: integer;
     /// the Table as specified at the URI level (if any)
-    Table: TORMClass;
+    Table: TOrmClass;
     /// the index in the Model of the Table specified at the URI level (if any)
     TableIndex: integer;
     /// the RTTI properties of the Table specified at the URI level (if any)
-    TableRecordProps: TORMModelRecordProperties;
+    TableRecordProps: TOrmModelRecordProperties;
     /// the RESTful instance implementing the Table specified at the URI level (if any)
     // - equals the Server field most of the time, but may be an TRestStorage
     // for any in-memory/MongoDB/virtual instance
-    TableEngine: TRestORM;
-    /// the associated TORM.ID, as decoded from URI scheme
+    TableEngine: TRestOrm;
+    /// the associated TOrm.ID, as decoded from URI scheme
     // - this property will be set from incoming URI, even if RESTful
     // authentication is not enabled
     TableID: TID;
@@ -368,7 +368,7 @@ type
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionUserName: RawUTF8;
     /// the static instance corresponding to the associated Table (if any)
-    StaticORM: TRestORM;
+    StaticOrm: TRestOrm;
     /// the kind of static instance corresponding to the associated Table (if any)
     StaticKind: TRestServerKind;
     /// optional error message which will be transmitted as JSON error (if set)
@@ -395,8 +395,8 @@ type
     // - used by TRestServerURIContext.ExecuteORMWrite and
     // TRestServer.EngineBatchSend methods for proper security checks
     function CanExecuteORMWrite(Method: TURIMethod;
-      Table: TORMClass; TableIndex: integer; const TableID: TID;
-      const Rights: TORMAccessRights): boolean;
+      Table: TOrmClass; TableIndex: integer; const TableID: TID;
+      const Rights: TOrmAccessRights): boolean;
     /// extract the input parameters from its URI
     // - you should not have to call this method directly, but rather
     // all the InputInt/InputDouble/InputUTF8/InputExists/... properties
@@ -550,7 +550,7 @@ type
     // set ckFramework on match
     // - either ckAjax for a classic (AJAX) browser, or any other kind of
     // HTTP client
-    // - will be used e.g. by ClienTORMOptions to check if the
+    // - will be used e.g. by ClienTOrmOptions to check if the
     // current remote client expects standard JSON in all cases
     function ClientKind: TRestServerURIContextClientKind;
     /// identify if the request is about a Table containing nested objects or
@@ -558,7 +558,7 @@ type
     // of plain JSON string (as stored in the database)
     // - will idenfity ClientKind=ckAjax, or check for rsoGetAsJsonNotAsString
     // in TRestServer.Options
-    function ClienTORMOptions: TJSONSerializerORMOptions;
+    function ClienTOrmOptions: TJSONSerializerOrmOptions;
     /// true if called from TRestServer.AdministrationExecute
     function IsRemoteAdministrationExecute: boolean;
     /// compute the file name corresponding to the URI
@@ -594,12 +594,12 @@ type
       const CustomHeader: RawUTF8 = ''); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
-    // - you can customize ORMOptions, to force the returned JSON
-    // object to have its TORM nested fields serialized as true JSON
+    // - you can customize OrmOptions, to force the returned JSON
+    // object to have its TOrm nested fields serialized as true JSON
     // arrays or objects, or add an "ID_str" string field for JavaScript
     procedure Returns(Value: TObject; Status: integer = HTTP_SUCCESS;
       Handle304NotModified: boolean = false;
-      ORMOptions: TJSONSerializerORMOptions = [];
+      OrmOptions: TJSONSerializerOrmOptions = [];
       const CustomHeader: RawUTF8 = ''); overload;
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJSON() to compute the returned content
@@ -775,13 +775,13 @@ type
   // ! end;
   // - Client-Side can be implemented as you wish. By convention, it could be
   // appropriate to define in either TRestServer (if to be called as
-  // ModelRoot/MethodName), either TORM (if to be called as
+  // ModelRoot/MethodName), either TOrm (if to be called as
   // ModelRoot/TableName[/TableID]/MethodName) a custom public or protected method,
   // calling TRestClientURI.URL with the appropriate parameters, and named
   // (by convention) as MethodName; TRestClientURI has dedicated methods
   // like CallBackGetResult, CallBackGet, CallBackPut and CallBack; see also
-  // TORMModel.getURICallBack and JSONDecode function
-  // ! function TORMPeople.Sum(aClient: TRestClientURI; a, b: double): double;
+  // TOrmModel.getURICallBack and JSONDecode function
+  // ! function TOrmPeople.Sum(aClient: TRestClientURI; a, b: double): double;
   // ! var err: integer;
   // ! begin
   // !   val(aClient.CallBackGetResult('sum', ['a', a, 'b', b]), result, err);
@@ -890,7 +890,7 @@ type
 { ************ TAuthSession for In-Memory User Sessions }
 
   /// class used to maintain in-memory sessions
-  // - this is not a TORM table so won't be remotely accessible, for
+  // - this is not a TOrm table so won't be remotely accessible, for
   // performance and security reasons
   // - the User field is a true instance, copy of the corresponding database
   // content (for better speed)
@@ -909,7 +909,7 @@ type
     fPrivateSaltHash: Cardinal;
     fLastTimestamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
-    fAccessRights: TORMAccessRights;
+    fAccessRights: TOrmAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
     function GetUserName: RawUTF8;
@@ -947,7 +947,7 @@ type
     property TimeOutTix: cardinal read fTimeOutTix;
     /// copy of the associated user access rights
     // - extracted from User.TAuthGroup.SQLAccessRights
-    property AccessRights: TORMAccessRights read fAccessRights;
+    property AccessRights: TOrmAccessRights read fAccessRights;
     /// the hexadecimal private key as returned to the connected client
     // as 'SessionID+PrivateKey'
     property PrivateKey: RawUTF8 read fPrivateKey;
@@ -1296,7 +1296,7 @@ type
     procedure NotifyORM(aMethod: TURIMethod);
     /// update the per-table statistics
     // - this method is thread-safe
-    procedure NotifyORMTable(TableIndex, DataSize: integer; Write: boolean;
+    procedure NotifyOrmTable(TableIndex, DataSize: integer; Write: boolean;
       const MicroSecondsElapsed: QWord);
   published
     /// when this monitoring instance (therefore the server) was created
@@ -1330,7 +1330,7 @@ type
   // - the ID primary field is the TSynMonitorUsageID (accessible from UsageID
   // public property) shifted by 16 bits (by default) to include a
   // TSynUniqueIdentifierProcess value
-  TORMMonitorUsage = class(TORMNoCaseExtended)
+  TOrmMonitorUsage = class(TOrmNoCaseExtended)
   protected
     fGran: TSynMonitorUsageGranularity;
     fProcess: Int64;
@@ -1353,18 +1353,18 @@ type
     /// a custom text, which may be used e.g. by support or developpers
     property Comment: RawUTF8 read fComment write fComment;
   end;
-  /// class-reference type (metaclass) of a TORMMonitorUsage table
-  TORMMonitorUsageClass = class of TORMMonitorUsage;
+  /// class-reference type (metaclass) of a TOrmMonitorUsage table
+  TOrmMonitorUsageClass = class of TOrmMonitorUsage;
 
-  /// will store TSynMonitorUsage information in TORMMonitorUsage ORM tables
-  // - TORM.ID will be the TSynMonitorUsageID shifted by ProcessIDShift bits
+  /// will store TSynMonitorUsage information in TOrmMonitorUsage ORM tables
+  // - TOrm.ID will be the TSynMonitorUsageID shifted by ProcessIDShift bits
   TSynMonitorUsageRest = class(TSynMonitorUsage)
   protected
-    fStorage: IRestORM;
+    fStorage: IRestOrm;
     fProcessID: Int64;
     fProcessIDShift: integer;
-    fStoredClass: TORMMonitorUsageClass;
-    fStoredCache: array[mugHour..mugYear] of TORMMonitorUsage;
+    fStoredClass: TOrmMonitorUsageClass;
+    fStoredCache: array[mugHour..mugYear] of TOrmMonitorUsage;
     fSaveBatch: TRestBatch;
     function SaveDB(ID: integer; const Track: variant;
       Gran: TSynMonitorUsageGranularity): boolean; override;
@@ -1375,9 +1375,9 @@ type
     // - if a 16-bit TSynUniqueIdentifierProcess is supplied, it will be used to
     // identify the generating process by shifting TSynMonitorUsageID values
     // by aProcessIDShift bits (default 16 but you may increase it up to 40 bits)
-    // - will use TORMMonitorUsage table, unless another one is specified
-    constructor Create(const aStorage: IRestORM; aProcessID: Int64;
-      aStoredClass: TORMMonitorUsageClass = nil;
+    // - will use TOrmMonitorUsage table, unless another one is specified
+    constructor Create(const aStorage: IRestOrm; aProcessID: Int64;
+      aStoredClass: TOrmMonitorUsageClass = nil;
       aProcessIDShift: integer = 16); reintroduce; virtual;
     /// finalize the process, saving pending changes
     destructor Destroy; override;
@@ -1386,14 +1386,14 @@ type
     property SaveBatch: TRestBatch read fSaveBatch write fSaveBatch;
   published
     /// the actual ORM class used for persistence
-    property StoredClass: TORMMonitorUsageClass read fStoredClass;
+    property StoredClass: TOrmMonitorUsageClass read fStoredClass;
     /// how the information could be stored for several processes
     // - e.g. when several SOA nodes gather monitoring information in a
     // shared (MongoDB) database
     // - is by default a TSynUniqueIdentifierProcess value, but may be
     // any integer up to ProcessIDShift bits as set in Create()
     property ProcessID: Int64 read fProcessID;
-    /// how process ID are stored within the mORMot TORM.ID
+    /// how process ID are stored within the mORMot TOrm.ID
     // - equals 16 bits by default, to match TSynUniqueIdentifierProcess resolution
     property ProcessIDShift: integer read fProcessIDShift;
   end;
@@ -1462,7 +1462,7 @@ type
     // notify the server that the callback is no longer needed
     // - will optionally log all published properties values to the log class
     // of the supplied REST instance
-    procedure CallbackFinished(aRestForLog: TRestORM;
+    procedure CallbackFinished(aRestForLog: TRestOrm;
       aServerUnregister: boolean = false); virtual;
     /// just a wrapper to reset the internal Event state to evNone
     // - may be used to re-use the same TBlockingCallback instance, after
@@ -1509,7 +1509,7 @@ type
   // to return as JSON the last inserted/updated record
   // - TModTime / TCreateTime fields are expected to be filled on client side,
   // unless you set rsoComputeFieldsBeforeWriteOnServerSide so that AJAX requests
-  // will set the fields on the server side by calling the TORM
+  // will set the fields on the server side by calling the TOrm
   // ComputeFieldsBeforeWrite virtual method, before writing to the database
   // - rsoSecureConnectionRequired will ensure Call is flagged as llfSecured
   // (i.e. in-process, HTTPS, or encrypted WebSockets) - with the only exception
@@ -1594,8 +1594,8 @@ type
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-  TNotifySQLEvent = function(Sender: TRestServer; Event: TORMEvent;
-    aTable: TORMClass; const aID: TID;
+  TNotifySQLEvent = function(Sender: TRestServer; Event: TOrmEvent;
+    aTable: TOrmClass; const aID: TID;
     const aSentData: RawUTF8): boolean of object;
 
   ///  used to define how to trigger Events on record field update
@@ -1604,8 +1604,8 @@ type
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-  TNotifyFieldSQLEvent = function(Sender: TRestServer; Event: TORMEvent;
-    aTable: TORMClass; const aID: TID;
+  TNotifyFieldSQLEvent = function(Sender: TRestServer; Event: TOrmEvent;
+    aTable: TOrmClass; const aID: TID;
     const aAffectedFields: TFieldBits): boolean of object;
 
   /// session-related callbacks triggered by TRestServer
@@ -1816,11 +1816,11 @@ type
     // - if HandleUserAuthentication is false, will set URI access rights to
     // 'Supervisor' (i.e. all R/W access) by default
     // - if HandleUserAuthentication is true, will add TAuthUser and
-    // TAuthGroup to the TORMModel (if not already there)
-    constructor Create(aModel: TORMModel;
+    // TAuthGroup to the TOrmModel (if not already there)
+    constructor Create(aModel: TOrmModel;
       aHandleUserAuthentication: boolean = false); reintroduce; virtual;
     /// initialize REST server instance from a TSynConnectionDefinition
-    constructor RegisteredClassCreateFrom(aModel: TORMModel;
+    constructor RegisteredClassCreateFrom(aModel: TOrmModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); override;
     /// Server finalization
     destructor Destroy; override;
@@ -1829,7 +1829,7 @@ type
     // - if you instantiate a TRestServerFullMemory or TSQLRestServerDB
     // with this constructor, an in-memory engine will be created, with
     // enough abilities to run regression tests, for instance
-    constructor CreateWithOwnModel(const Tables: array of TORMClass;
+    constructor CreateWithOwnModel(const Tables: array of TOrmClass;
       aHandleUserAuthentication: boolean = false;
       const aRoot: RawUTF8 = 'root');
     /// ensure the thread will be taken into account during process
@@ -1875,20 +1875,20 @@ type
     // - if Shutdown is called in-between, returns true
     // - if the thread waited the supplied time, returns false
     function SleepOrShutdown(MS: integer): boolean;
-    /// main access to the class implementing IRestORM methods for this instance
-    // - used internally to avoid ORM: IRestORM reference counting and
+    /// main access to the class implementing IRestOrm methods for this instance
+    // - used internally to avoid ORM: IRestOrm reference counting and
     // enable inlining of most simple methods, if possible
-    function ORMInstance: TRestORM;
+    function OrmInstance: TRestOrm;
       {$ifdef HASINLINE}inline;{$endif}
-    /// access TRestORMServer.RecordVersionMax property
+    /// access TRestOrmServer.RecordVersionMax property
     // - used internally by TServiceContainerServer for client/server synchronization
     property RecordVersionMax: TRecordVersion
       read GetRecordVersionMax write SetRecordVersionMax;
     /// low-level propagation of a record content
     // - used internally by TServiceContainerServer for client/server synchronization
-    procedure RecordVersionHandle(Occasion: TORMOccasion;
+    procedure RecordVersionHandle(Occasion: TOrmOccasion;
       TableIndex: integer; var Decoder: TJSONObjectDecoder;
-      RecordVersionField: TORMPropInfoRTTIRecordVersion); virtual;
+      RecordVersionField: TOrmPropInfoRTTIRecordVersion); virtual;
   public
     /// call this method to add an authentication method to the server
     // - will return the just created TRestServerAuthentication instance,
@@ -2084,7 +2084,7 @@ type
     // - warning: the public URI should have been set via SetPublicURI()
     function ServicesPublishedInterfaces: RawUTF8;
     /// initiate asynchronous master/slave replication on a master TRest
-    // - allow synchronization of a TORM table, using its TRecordVersion
+    // - allow synchronization of a TOrm table, using its TRecordVersion
     // field, for real-time master/slave replication on the master side
     // - this method will register the IServiceRecordVersion service on the
     // server side, so that RecordVersionSynchronizeStartSlave() will be able
@@ -2094,7 +2094,7 @@ type
     function RecordVersionSynchronizeMasterStart(
       ByPassAuthentication: boolean = false): boolean;
     /// initiate asynchronous master/slave replication on a slave TRest
-    // - start synchronization of a TORM table, using its TRecordVersion
+    // - start synchronization of a TOrm table, using its TRecordVersion
     // field, for real-time master/slave replication on the slave side
     // - this method will first retrieve any pending modification by regular
     // REST calls to RecordVersionSynchronizeSlave, then create and register a
@@ -2104,20 +2104,20 @@ type
     // - the modifications will be pushed by the master, then applied to the
     // slave storage, until RecordVersionSynchronizeSlaveStop method is called
     // - an optional OnNotify event may be defined, which will be triggered
-    // for all incoming change, supllying the updated TORM instance
-    function RecordVersionSynchronizeSlaveStart(Table: TORMClass;
+    // for all incoming change, supllying the updated TOrm instance
+    function RecordVersionSynchronizeSlaveStart(Table: TOrmClass;
       MasterRemoteAccess: TRestClientURI; OnNotify: TOnBatchWrite = nil): boolean;
     /// finalize asynchronous master/slave replication on a slave TRest
-    // - stop synchronization of a TORM table, using its TRecordVersion
+    // - stop synchronization of a TOrm table, using its TRecordVersion
     // field, for real-time master/slave replication on the slave side
     // - expect a previous call to RecordVersionSynchronizeSlaveStart
-    function RecordVersionSynchronizeSlaveStop(Table: TORMClass): boolean;
+    function RecordVersionSynchronizeSlaveStop(Table: TOrmClass): boolean;
     /// low-level callback registration for asynchronous master/slave replication
     // - you should not have to use this method, but rather
     // RecordVersionSynchronizeMasterStart and RecordVersionSynchronizeSlaveStart
     // RecordVersionSynchronizeSlaveStop methods
     // - register a callback interface on the master side, which will be called
-    // each time a write operation is performed on a given TORM with a
+    // each time a write operation is performed on a given TOrm with a
     // TRecordVersion field
     // - the callback parameter could be a TServiceRecordVersionCallback instance,
     // which will perform all update operations as expected
@@ -2130,7 +2130,7 @@ type
     // RecordVersionSynchronize() to avoid any missing update
     // - if the supplied RecordVersion is the latest on the server side,
     // this method will return TRUE and put the Callback notification in place
-    function RecordVersionSynchronizeSubscribeMaster(Table: TORMClass;
+    function RecordVersionSynchronizeSubscribeMaster(Table: TOrmClass;
       RecordVersion: TRecordVersion;
       const SlaveCallback: IServiceRecordVersionCallback): boolean; overload;
     /// set this property to true to transmit the JSON data in a "not expanded" format
@@ -2174,7 +2174,7 @@ type
       read fOptions write fOptions;
     /// set to true if the server will handle per-user authentication and
     // access right management
-    // - i.e. if the associated TORMModel contains TAuthUser and
+    // - i.e. if the associated TOrmModel contains TAuthUser and
     // TAuthGroup tables (set by constructor)
     property HandleAuthentication: boolean
       read fHandleAuthentication;
@@ -2343,14 +2343,14 @@ end;
 procedure TRestServerURIContext.InternalSetTableFromTableName(
   TableName: PUTF8Char);
 begin
-  TableEngine := TRestORM(Server.fORMInstance);
+  TableEngine := TRestOrm(Server.fOrmInstance);
   InternalSetTableFromTableIndex(Server.fModel.GetTableIndexPtr(TableName));
   if TableIndex < 0 then
     exit;
-  StaticORM := TRestORMServer(Server.fORMInstance).
+  StaticOrm := TRestOrmServer(Server.fOrmInstance).
     GetStaticTableIndex(TableIndex, StaticKind);
-  if StaticORM <> nil then
-    TableEngine := StaticORM;
+  if StaticOrm <> nil then
+    TableEngine := StaticOrm;
 end;
 
 procedure TRestServerURIContext.InternalSetTableFromTableIndex(Index: integer);
@@ -2461,7 +2461,7 @@ begin
 end;
 
 var // as set by TRestServer.AdministrationExecute()
-  BYPASS_ACCESS_RIGHTS: TORMAccessRights;
+  BYPASS_ACCESS_RIGHTS: TOrmAccessRights;
 
 function TRestServerURIContext.Authenticate: boolean;
 var
@@ -2551,9 +2551,9 @@ begin
         Method := ExecuteSOAByMethod;
       execSOAByInterface:
         Method := ExecuteSOAByInterface;
-      execORMGet:
+      execOrmGet:
         Method := ExecuteORMGet;
-      execORMWrite:
+      execOrmWrite:
         begin
           // special behavior to handle transactions at writing
           Method := ExecuteORMWrite;
@@ -2561,7 +2561,7 @@ begin
           repeat
             if Safe.TryLock then
             try
-              current := TRestORM(Server.fORMInstance).TransactionActiveSession;
+              current := TRestOrm(Server.fOrmInstance).TransactionActiveSession;
               if (current = 0) or
                  (current = Session) then
               begin
@@ -2586,13 +2586,13 @@ begin
           until Server.fShutdownRequested;
         end;
     else
-      raise EORMException.CreateUTF8('Unexpected Command=% in %.Execute',
+      raise EOrmException.CreateUTF8('Unexpected Command=% in %.Execute',
         [ord(Command), self]);
     end;
     if Mode = amBackgroundORMSharedThread then
-      if (Command = execORMWrite) and
-         (Server.fAcquireExecution[execORMGet].Mode = amBackgroundORMSharedThread) then
-        Command := execORMGet; // for share same thread for ORM read/write
+      if (Command = execOrmWrite) and
+         (Server.fAcquireExecution[execOrmGet].Mode = amBackgroundORMSharedThread) then
+        Command := execOrmGet; // for share same thread for ORM read/write
   end;
   with Server.fAcquireExecution[Command] do
     case Mode of
@@ -2981,8 +2981,8 @@ begin
 end;
 
 function TRestServerURIContext.CanExecuteORMWrite(Method: TURIMethod;
-  Table: TORMClass; TableIndex: integer; const TableID: TID;
-  const Rights: TORMAccessRights): boolean;
+  Table: TOrmClass; TableIndex: integer; const TableID: TID;
+  const Rights: TOrmAccessRights): boolean;
 begin
   result := true;
   case Method of
@@ -3011,9 +3011,9 @@ end;
 procedure TRestServerURIContext.ExecuteORMGet;
 
   procedure ConvertOutBodyAsPlainJSON(const FieldsCSV: RawUTF8; Options:
-    TJSONSerializerORMOptions);
+    TJSONSerializerOrmOptions);
   var
-    rec: TORM;
+    rec: TOrm;
     W: TJSONSerializer;
     bits: TFieldBits;
     withid: boolean;
@@ -3032,7 +3032,7 @@ procedure TRestServerURIContext.ExecuteORMGet;
         true, FieldsCSV, {knownrows=}0);
       try
         W.CustomOptions := W.CustomOptions + [twoForceJSONStandard]; // force regular JSON
-        W.ORMOptions := Options; // will do the magic
+        W.OrmOptions := Options; // will do the magic
         rec.AppendFillAsJsonValues(W);
         W.SetText(Call.OutBody);
       finally
@@ -3049,10 +3049,10 @@ var
   SQLStartIndex, SQLResults, SQLTotalRowsCount: integer;
   NonStandardSQLSelectParameter, NonStandardSQLWhereParameter: boolean;
   SQLisSelect: boolean;
-  ResultList: TORMTable;
+  ResultList: TOrmTable;
   TableIndexes: TIntegerDynArray;
-  rec: TORM;
-  opt: TJSONSerializerORMOptions;
+  rec: TOrm;
+  opt: TJSONSerializerOrmOptions;
   P: PUTF8Char;
   i, j, L: PtrInt;
   cache: TRestCache;
@@ -3083,7 +3083,7 @@ begin
               if SQLisSelect or
                  (reSQL in Call.RestAccessRights^.AllowRemoteExecute) then
               begin
-                StaticORM := nil;
+                StaticOrm := nil;
                 if SQLisSelect then
                 begin
                   TableIndexes := Server.fModel.GetTableIndexesFromSQLSelect(SQL);
@@ -3107,17 +3107,17 @@ begin
                         exit;
                       end;
                     // use the first static table (poorman's JOIN)
-                    StaticORM := TRestORMServer(Server.fORMInstance).
+                    StaticOrm := TRestOrmServer(Server.fOrmInstance).
                       InternalAdaptSQL(TableIndexes[0], SQL);
                   end;
                 end;
-                if StaticORM <> nil then
+                if StaticOrm <> nil then
                 begin
-                  TableEngine := StaticORM;
+                  TableEngine := StaticOrm;
                   Call.OutBody := TableEngine.EngineList(SQL);
                 end
                 else
-                  Call.OutBody := TRestORMServer(Server.fORMInstance).
+                  Call.OutBody := TRestOrmServer(Server.fOrmInstance).
                     MainEngineList(SQL, false, nil);
                 // security note: only first statement is run by EngineList()
                 if Call.OutBody <> '' then
@@ -3127,7 +3127,7 @@ begin
                      (length(TableIndexes) = 1) then
                   begin
                     InternalSetTableFromTableIndex(TableIndexes[0]);
-                    opt := ClienTORMOptions;
+                    opt := ClienTOrmOptions;
                     if opt <> [] then
                       ConvertOutBodyAsPlainJSON(SQLSelect, opt);
                   end;
@@ -3178,15 +3178,15 @@ begin
               else
               begin
                 // GET ModelRoot/TableName/TableID: retrieve a member content, JSON encoded
-                cache := TRestORM(Server.fORMInstance).CacheOrNil;
+                cache := TRestOrm(Server.fOrmInstance).CacheOrNil;
                 Call.OutBody := cache.Retrieve(TableIndex, TableID);
                 if Call.OutBody = '' then
                 begin
                   // get JSON object '{...}'
-                  if StaticORM <> nil then
-                    Call.OutBody := StaticORM.EngineRetrieve(TableIndex, TableID)
+                  if StaticOrm <> nil then
+                    Call.OutBody := StaticOrm.EngineRetrieve(TableIndex, TableID)
                   else
-                    Call.OutBody := TRestORMServer(Server.fORMInstance).MainEngineRetrieve
+                    Call.OutBody := TRestOrmServer(Server.fOrmInstance).MainEngineRetrieve
                       (TableIndex, TableID);
                   // cache if expected
                   if cache <> nil then
@@ -3198,7 +3198,7 @@ begin
                 if Call.OutBody <> '' then
                 begin
                   // if something was found
-                  opt := ClienTORMOptions;
+                  opt := ClienTOrmOptions;
                   if opt <> [] then
                   begin
                     // cached? -> make private
@@ -3274,7 +3274,7 @@ begin
                       // if ORDER BY already in the SQLWhere clause
                       SetLength(SQLWhereCount, i - 1);
                   end;
-                  ResultList := TRestORMServer(Server.fORMInstance).ExecuteList([Table],
+                  ResultList := TRestOrmServer(Server.fOrmInstance).ExecuteList([Table],
                     Server.fModel.TableProps[TableIndex].SQLFromSelectWhere('Count(*)',
                     SQLWhereCount));
                   if ResultList <> nil then
@@ -3290,12 +3290,12 @@ begin
             end;
             SQL := Server.fModel.TableProps[TableIndex].SQLFromSelectWhere(
               SQLSelect, trim(SQLWhere));
-            Call.OutBody := TRestORMServer(Server.fORMInstance).
+            Call.OutBody := TRestOrmServer(Server.fOrmInstance).
               InternalListRawUTF8(TableIndex, SQL);
             if Call.OutBody <> '' then
             begin
               // got JSON list '[{...}]' ?
-              opt := ClienTORMOptions;
+              opt := ClienTOrmOptions;
               if opt <> [] then
                 ConvertOutBodyAsPlainJSON(SQLSelect, opt);
               Call.OutStatus := HTTP_SUCCESS;  // 200 OK
@@ -3359,19 +3359,19 @@ begin
         // this method is called with Root (-> Table=nil -> Static=nil)
         // we need a specialized method in order to avoid fStats.Invalid increase
         Call.OutStatus := HTTP_SUCCESS;
-        TRestORMServer(Server.fORMInstance).RefreshInternalStateFromStatic;
+        TRestOrmServer(Server.fOrmInstance).RefreshInternalStateFromStatic;
       end
   else
-    raise EORMException.CreateUTF8('%.ExecuteORMGet(method=%)',
+    raise EOrmException.CreateUTF8('%.ExecuteORMGet(method=%)',
       [self, ord(Method)]);
   end;
 end;
 
 procedure TRestServerURIContext.ExecuteORMWrite;
 
-  procedure ComputeInBodyFields(Occasion: TORMEvent);
+  procedure ComputeInBodyFields(Occasion: TOrmEvent);
   var
-    Rec: TORM;
+    Rec: TOrm;
     bits: TFieldBits;
   begin
     Rec := Table.Create;
@@ -3393,12 +3393,12 @@ var
   OK: boolean;
   Blob: PRttiProp;
   cache: TRestCache;
-  orm: TRestORMServer;
+  orm: TRestOrmServer;
   SQLSelect, SQLWhere, SQLSort, SQLDir: RawUTF8;
 begin
   if MethodIndex = Server.fPublishedMethodBatchIndex then
   begin
-    // run the BATCH process in execORMWrite context
+    // run the BATCH process in execOrmWrite context
     ExecuteSOAByMethod;
     exit;
   end;
@@ -3407,7 +3407,7 @@ begin
     Call.OutStatus := HTTP_FORBIDDEN;
     exit;
   end;
-  orm := Server.fORMInstance as TRestORMServer;
+  orm := Server.fOrmInstance as TRestOrmServer;
   case Method of
     mPOST:
       // POST=ADD=INSERT
@@ -3537,20 +3537,20 @@ begin
     mBEGIN:
       begin
       // BEGIN TRANSACTION
-      // TORMVirtualTableJSON/External will rely on SQLite3 module
+      // TOrmVirtualTableJSON/External will rely on SQLite3 module
       // and also TRestStorageInMemory, since COMMIT/ROLLBACK have Static=nil
       // mBEGIN logic is just the opposite of mEND/mABORT: Safe.Lock main, then static
         if orm.TransactionBegin(Table, Session) then
         begin
-          if (StaticORM <> nil) and
+          if (StaticOrm <> nil) and
              (StaticKind = sVirtualTable) then
-            StaticORM.TransactionBegin(Table, Session)
-          else if (StaticORM = nil) and
+            StaticOrm.TransactionBegin(Table, Session)
+          else if (StaticOrm = nil) and
                   (orm.TransactionTable <> nil) then
           begin
-            StaticORM := orm.StaticVirtualTable[orm.TransactionTable];
-            if StaticORM <> nil then
-              StaticORM.TransactionBegin(Table, Session);
+            StaticOrm := orm.StaticVirtualTable[orm.TransactionTable];
+            if StaticOrm <> nil then
+              StaticOrm.TransactionBegin(Table, Session);
           end;
           Call.OutStatus := HTTP_SUCCESS; // 200 OK
         end;
@@ -3558,17 +3558,17 @@ begin
     mEND:
       begin
         // END=COMMIT
-        // this method is called with Root (-> Table=nil -> StaticORM=nil)
-        // mEND logic is just the opposite of mBEGIN: release StaticORM, then main
-        if (StaticORM <> nil) and
+        // this method is called with Root (-> Table=nil -> StaticOrm=nil)
+        // mEND logic is just the opposite of mBEGIN: release StaticOrm, then main
+        if (StaticOrm <> nil) and
            (StaticKind = sVirtualTable) then
-          StaticORM.Commit(Session, false)
-        else if (StaticORM = nil) and
+          StaticOrm.Commit(Session, false)
+        else if (StaticOrm = nil) and
                 (orm.TransactionTable <> nil) then
         begin
-          StaticORM := orm.StaticVirtualTable[orm.TransactionTable];
-          if StaticORM <> nil then
-            StaticORM.Commit(Session, false);
+          StaticOrm := orm.StaticVirtualTable[orm.TransactionTable];
+          if StaticOrm <> nil then
+            StaticOrm.Commit(Session, false);
         end;
         orm.Commit(Session, false);
         Call.OutStatus := HTTP_SUCCESS; // 200 OK
@@ -3576,17 +3576,17 @@ begin
     mABORT:
       begin
         // ABORT=ROLLBACK
-        // this method is called with Root (-> Table=nil -> StaticORM=nil)
-        // mABORT logic is just the opposite of mBEGIN: release StaticORM, then main
-        if (StaticORM <> nil) and
+        // this method is called with Root (-> Table=nil -> StaticOrm=nil)
+        // mABORT logic is just the opposite of mBEGIN: release StaticOrm, then main
+        if (StaticOrm <> nil) and
            (StaticKind = sVirtualTable) then
-          StaticORM.RollBack(Session)
-        else if (StaticORM = nil) and
+          StaticOrm.RollBack(Session)
+        else if (StaticOrm = nil) and
                 (orm.TransactionTable <> nil) then
         begin
-          StaticORM := orm.StaticVirtualTable[orm.TransactionTable];
-          if StaticORM <> nil then
-            StaticORM.RollBack(Session);
+          StaticOrm := orm.StaticVirtualTable[orm.TransactionTable];
+          if StaticOrm <> nil then
+            StaticOrm.RollBack(Session);
         end;
         orm.RollBack(Session);
         Call.OutStatus := HTTP_SUCCESS; // 200 OK
@@ -4076,7 +4076,7 @@ begin
             (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
 end;
 
-function TRestServerURIContext.ClienTORMOptions: TJSONSerializerORMOptions;
+function TRestServerURIContext.ClienTOrmOptions: TJSONSerializerOrmOptions;
 begin
   result := [];
   if (TableRecordProps = nil) or
@@ -4141,13 +4141,13 @@ begin
 end;
 
 procedure TRestServerURIContext.Returns(Value: TObject; Status: integer;
-  Handle304NotModified: boolean; ORMOptions: TJSONSerializerORMOptions;
+  Handle304NotModified: boolean; OrmOptions: TJSONSerializerOrmOptions;
   const CustomHeader: RawUTF8);
 var
   json: RawUTF8;
 begin
-  if Value.InheritsFrom(TORM) then
-    json := TORM(Value).GetJSONValues(true, true, ooSelect, nil, ORMOptions)
+  if Value.InheritsFrom(TOrm) then
+    json := TOrm(Value).GetJSONValues(true, true, ooSelect, nil, OrmOptions)
   else
     json := ObjectToJSON(Value);
   Returns(json, Status, CustomHeader, Handle304NotModified);
@@ -4640,7 +4640,7 @@ begin
       fPrivateKey := BinToHex(@rnd, SizeOf(rnd));
       if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
       begin
-        aCtxt.Server.ORMInstance.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,
+        aCtxt.Server.OrmInstance.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,
           User.IDValue, 'Data', blob);
         User.Data := blob;
       end;
@@ -4832,7 +4832,7 @@ begin
       result := fServer.fSQLAuthUserClass.Create(fServer.ORM, 'LogonName=?', [aUserName]);
     if (result.IDValue = 0) and
        (saoHandleUnknownLogonAsStar in fOptions) then
-      if fServer.ORMInstance.Retrieve('LogonName=?', [], ['*'], result) then
+      if fServer.OrmInstance.Retrieve('LogonName=?', [], ['*'], result) then
       begin
         result.LogonName := aUserName;
         result.DisplayName := aUserName;
@@ -5268,7 +5268,7 @@ end;
 constructor TRestServerMonitor.Create(aServer: TRestServer);
 begin
   if aServer = nil then
-    raise EORMException.CreateUTF8('%.Create(nil)', [self]);
+    raise EOrmException.CreateUTF8('%.Create(nil)', [self]);
   inherited Create(aServer.Model.Root);
   fServer := aServer;
   SetLength(fPerTable[false], length(aServer.Model.Tables));
@@ -5316,7 +5316,7 @@ begin
   end;
 end;
 
-procedure TRestServerMonitor.NotifyORMTable(TableIndex, DataSize: integer;
+procedure TRestServerMonitor.NotifyOrmTable(TableIndex, DataSize: integer;
   Write: boolean; const MicroSecondsElapsed: QWord);
 const
   RW: array[boolean] of RawUTF8 = (
@@ -5363,9 +5363,9 @@ begin
 end;
 
 
-{ TORMMonitorUsage }
+{ TOrmMonitorUsage }
 
-function TORMMonitorUsage.UsageID(aProcessIDShift: integer): integer;
+function TOrmMonitorUsage.UsageID(aProcessIDShift: integer): integer;
 begin
   result := fID shr aProcessIDShift;
 end;
@@ -5373,8 +5373,8 @@ end;
 
 { TSynMonitorUsageRest }
 
-constructor TSynMonitorUsageRest.Create(const aStorage: IRestORM;
-  aProcessID: Int64; aStoredClass: TORMMonitorUsageClass; aProcessIDShift: integer);
+constructor TSynMonitorUsageRest.Create(const aStorage: IRestOrm;
+  aProcessID: Int64; aStoredClass: TOrmMonitorUsageClass; aProcessIDShift: integer);
 var
   g: TSynMonitorUsageGranularity;
 begin
@@ -5386,7 +5386,7 @@ begin
     aProcessIDShift := 40;
   fProcessIDShift := aProcessIDShift;
   if aStoredClass = nil then
-    fStoredClass := TORMMonitorUsage
+    fStoredClass := TOrmMonitorUsage
   else
     fStoredClass := aStoredClass;
   fStorage := aStorage;
@@ -5410,7 +5410,7 @@ function TSynMonitorUsageRest.LoadDB(ID: integer;
   Gran: TSynMonitorUsageGranularity; out Track: variant): boolean;
 var
   recid: TID;
-  rec: TORMMonitorUsage;
+  rec: TOrmMonitorUsage;
 begin
   if (ID = 0) or
      (Gran < Low(fStoredCache)) or
@@ -5445,7 +5445,7 @@ function TSynMonitorUsageRest.SaveDB(ID: integer; const Track: variant;
 var
   update: boolean;
   recid: TID;
-  rec: TORMMonitorUsage;
+  rec: TOrmMonitorUsage;
 begin
   if (ID = 0) or
      (Gran < Low(fStoredCache)) or
@@ -5530,7 +5530,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TBlockingCallback.CallbackFinished(aRestForLog: TRestORM;
+procedure TBlockingCallback.CallbackFinished(aRestForLog: TRestOrm;
   aServerUnregister: boolean);
 begin
   if fProcess.NotifyFinished then
@@ -5563,12 +5563,12 @@ end;
 
 { TRestServer }
 
-constructor TRestServer.Create(aModel: TORMModel; aHandleUserAuthentication: boolean);
+constructor TRestServer.Create(aModel: TOrmModel; aHandleUserAuthentication: boolean);
 var
   tmp: RawUTF8;
 begin
   if aModel = nil then
-    raise EORMException.CreateUTF8('%.Create(Model=nil)', [self]);
+    raise EOrmException.CreateUTF8('%.Create(Model=nil)', [self]);
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fSessions := TSynObjectListLocked.Create; // needed by AuthenticationRegister() below
   fSQLAuthUserClass := TAuthUser;
@@ -5598,7 +5598,7 @@ begin
   fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
   if (fPublishedMethodBatchIndex < 0) or
      (fPublishedMethodTimestampIndex < 0) then
-    raise EORMException.CreateUTF8('%.Create: missing method!', [self]);
+    raise EOrmException.CreateUTF8('%.Create: missing method!', [self]);
 end;
 
 destructor TRestServer.Destroy;
@@ -5606,7 +5606,7 @@ var
   i: PtrInt;
 begin
   Shutdown;
-  fORM.AsynchBatchStop(nil); // release all existing batch instances
+  fOrm.AsynchBatchStop(nil); // release all existing batch instances
   FreeAndNil(fBackgroundTimer); // do it ASAP
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
   for i := 0 to fPublishedMethods.Count - 1 do
@@ -5618,19 +5618,19 @@ begin
 end;
 
 constructor TRestServer.CreateWithOwnModel(
-  const Tables: array of TORMClass; aHandleUserAuthentication: boolean;
+  const Tables: array of TOrmClass; aHandleUserAuthentication: boolean;
   const aRoot: RawUTF8);
 var
-  Model: TORMModel;
+  Model: TOrmModel;
 begin
-  Model := TORMModel.Create(Tables, aRoot);
+  Model := TOrmModel.Create(Tables, aRoot);
   Create(Model, aHandleUserAuthentication);
   Model.Owner := self;
 end;
 
-function TRestServer.ORMInstance: TRestORM;
+function TRestServer.OrmInstance: TRestOrm;
 begin
-  result := TRestORM(fORMInstance);
+  result := TRestOrm(fOrmInstance);
 end;
 
 procedure TRestServer.SetNoAJAXJSON(const Value: boolean);
@@ -5639,7 +5639,7 @@ begin
     include(fOptions, rsoNoAJAXJSON)
   else
     exclude(fOptions, rsoNoAJAXJSON);
-  (fORMInstance as TRestORMServer).SetNoAJAXJSON(Value);
+  (fOrmInstance as TRestOrmServer).SetNoAJAXJSON(Value);
 end;
 
 function TRestServer.GetNoAJAXJSON: boolean;
@@ -5648,7 +5648,7 @@ begin
             (rsoNoAJAXJSON in fOptions);
 end;
 
-constructor TRestServer.RegisteredClassCreateFrom(aModel: TORMModel;
+constructor TRestServer.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 begin
   Create(aModel, aServerHandleAuthentication);
@@ -5708,17 +5708,17 @@ end;
 
 function TRestServer.GetRecordVersionMax: TRecordVersion;
 begin
-  result := TRestORMServer(fORMInstance).RecordVersionMax;
+  result := TRestOrmServer(fOrmInstance).RecordVersionMax;
 end;
 
 procedure TRestServer.SetRecordVersionMax(Value: TRecordVersion);
 begin
-  TRestORMServer(fORMInstance).RecordVersionMax := Value;
+  TRestOrmServer(fOrmInstance).RecordVersionMax := Value;
 end;
 
-procedure TRestServer.RecordVersionHandle(Occasion: TORMOccasion;
+procedure TRestServer.RecordVersionHandle(Occasion: TOrmOccasion;
   TableIndex: integer; var Decoder: TJSONObjectDecoder;
-  RecordVersionField: TORMPropInfoRTTIRecordVersion);
+  RecordVersionField: TOrmPropInfoRTTIRecordVersion);
 begin
   if RecordVersionField = nil then
     // no TRecordVersion field to track
@@ -5726,7 +5726,7 @@ begin
   if Decoder.FindFieldName(RecordVersionField.Name) < 0 then
     // only compute new monotonic TRecordVersion if not already supplied by sender
     Decoder.AddFieldValue(RecordVersionField.Name,
-      Int64ToUtf8(TRestORMServer(fORMInstance).RecordVersionCompute), ftaNumber);
+      Int64ToUtf8(TRestOrmServer(fOrmInstance).RecordVersionCompute), ftaNumber);
   if fServices <> nil then
     (fServices as TServiceContainerServer).RecordVersionNotifyAddUpdate(
       Occasion, TableIndex, Decoder);
@@ -5757,9 +5757,9 @@ begin
     fSQLAuthGroupClass := Model.AddTableInherited(TAuthGroup);
     fSQLAuthUserClass := Model.AddTableInherited(TAuthUser);
     if fAfterCreation and
-       (not fORM.TableHasRows(fSQLAuthUserClass) or
-        not fORM.TableHasRows(fSQLAuthGroupClass)) then
-      with fORMInstance as TRestORMServer do
+       (not fOrm.TableHasRows(fSQLAuthUserClass) or
+        not fOrm.TableHasRows(fSQLAuthGroupClass)) then
+      with fOrmInstance as TRestOrmServer do
         CreateMissingTables(0, CreateMissingTablesOptions);
   finally
     fSessions.Safe.UnLock;
@@ -5869,7 +5869,7 @@ begin
 end;
 
 function TRestServer.RecordVersionSynchronizeSubscribeMaster(
-  Table: TORMClass; RecordVersion: TRecordVersion;
+  Table: TOrmClass; RecordVersion: TRecordVersion;
   const SlaveCallback: IServiceRecordVersionCallback): boolean;
 begin
   if self = nil then
@@ -5906,7 +5906,7 @@ begin
     result := false;
 end;
 
-function TRestServer.RecordVersionSynchronizeSlaveStart(Table: TORMClass;
+function TRestServer.RecordVersionSynchronizeSlaveStart(Table: TOrmClass;
   MasterRemoteAccess: TRestClientURI; OnNotify: TOnBatchWrite): boolean;
 var
   current, previous: TRecordVersion;
@@ -5945,7 +5945,7 @@ begin
     repeat
       // retrieve all pending versions (may retry up to 5 times)
       previous := current;
-      current := (fORMInstance as TRestORMServer).RecordVersionSynchronizeSlave(
+      current := (fOrmInstance as TRestOrmServer).RecordVersionSynchronizeSlave(
         Table, MasterRemoteAccess, 10000, OnNotify);
       if current < 0 then
       begin
@@ -5978,7 +5978,7 @@ begin
 end;
 
 function TRestServer.RecordVersionSynchronizeSlaveStop(
-  Table: TORMClass): boolean;
+  Table: TOrmClass): boolean;
 var
   tableIndex: integer;
 begin
@@ -6071,10 +6071,10 @@ var
 begin
   Stats.ComputeDetailsTo(W);
   W.CancelLastChar('}');
-  if fORM.CacheOrNil <> nil then
+  if fOrm.CacheOrNil <> nil then
   begin
     W.AddShort(',"cachedMemoryBytes":');
-    W.AddU(fORM.CacheOrNil.CachedMemory); // will also flush outdated JSON
+    W.AddU(fOrm.CacheOrNil.CachedMemory); // will also flush outdated JSON
     W.Add(',');
   end;
   if (fBackgroundTimer <> nil) and
@@ -6566,7 +6566,7 @@ begin
     try
       fSessions.Safe.Lock;
       try
-        W.WriteVarUInt32((fORMInstance as TRestORMServer).InternalState);
+        W.WriteVarUInt32((fOrmInstance as TRestOrmServer).InternalState);
         SQLAuthUserClass.RecordProps.SaveBinaryHeader(W);
         SQLAuthGroupClass.RecordProps.SaveBinaryHeader(W);
         W.WriteVarUInt32(fSessions.Count);
@@ -6612,7 +6612,7 @@ begin
   R.Init(pointer(s), length(s));
   fSessions.Safe.Lock;
   try
-    (fORMInstance as TRestORMServer).InternalState := R.VarUInt32;
+    (fOrmInstance as TRestOrmServer).InternalState := R.VarUInt32;
     if not SQLAuthUserClass.RecordProps.CheckBinaryHeader(R) or
        not SQLAuthGroupClass.RecordProps.CheckBinaryHeader(R) then
       ContentError;
@@ -6657,7 +6657,7 @@ begin
       else
         // set the current TThread info
         RunningThread := Sender;
-  // call TRestORMServer.BeginCurrentThread
+  // call TRestOrmServer.BeginCurrentThread
   inherited BeginCurrentThread(Sender);
 end;
 
@@ -6695,7 +6695,7 @@ begin
           [self, Sender, RunningThread])
       else        // reset the TThread info
         RunningThread := nil;
-  // call TRestORMServer.EndCurrentThread
+  // call TRestOrmServer.EndCurrentThread
   inherited EndCurrentThread(Sender);
 end;
 
@@ -6764,17 +6764,17 @@ begin
       try
         if Ctxt.MethodIndex >= 0 then
           if Ctxt.MethodIndex = fPublishedMethodBatchIndex then
-            Ctxt.Command := execORMWrite
+            Ctxt.Command := execOrmWrite
           else
             Ctxt.Command := execSOAByMethod
         else if Ctxt.Service <> nil then
           Ctxt.Command := execSOAByInterface
         else if Ctxt.Method in [mLOCK, mGET, mUNLOCK, mSTATE] then
           // handle read methods
-          Ctxt.Command := execORMGet
+          Ctxt.Command := execOrmGet
         else
           // write methods (mPOST, mPUT, mDELETE...)
-          Ctxt.Command := execORMWrite;
+          Ctxt.Command := execOrmWrite;
         if not Assigned(OnBeforeURI) or OnBeforeURI(Ctxt) then
           Ctxt.ExecuteCommand;
       except
@@ -6817,14 +6817,14 @@ begin
        (Ctxt.Method <> mSTATE) then
       // reduce headers verbosity
       Call.OutInternalState := 0
-    else if (Ctxt.StaticORM <> nil) and
-            Ctxt.StaticORM.InheritsFrom(TRestStorage) and
-            TRestStorage(Ctxt.StaticORM).OutInternalStateForcedRefresh then
+    else if (Ctxt.StaticOrm <> nil) and
+            Ctxt.StaticOrm.InheritsFrom(TRestStorage) and
+            TRestStorage(Ctxt.StaticOrm).OutInternalStateForcedRefresh then
       // force always refresh for Static table which demands it
       Call.OutInternalState := cardinal(-1)
     else
       // database state may have changed above
-      Call.OutInternalState := TRestORMServer(fORMInstance).InternalState;
+      Call.OutInternalState := TRestOrmServer(fOrmInstance).InternalState;
     if Ctxt.OutSetCookie <> '' then
     begin
       Call.OutHead := Trim(Call.OutHead + #13#10'Set-Cookie: ' + Ctxt.OutSetCookie);
@@ -6852,11 +6852,11 @@ begin
             MAX_SIZE_RESPONSE_LOG);
     if mlTables in StatLevels then
       case Ctxt.Command of
-        execORMGet:
-          fStats.NotifyORMTable(Ctxt.TableIndex, length(Call.OutBody), false,
+        execOrmGet:
+          fStats.NotifyOrmTable(Ctxt.TableIndex, length(Call.OutBody), false,
             Ctxt.MicroSecondsElapsed);
-        execORMWrite:
-          fStats.NotifyORMTable(Ctxt.TableIndex, length(Call.InBody), true,
+        execOrmWrite:
+          fStats.NotifyOrmTable(Ctxt.TableIndex, length(Call.InBody), true,
             Ctxt.MicroSecondsElapsed);
       end;
     fStats.AddCurrentRequestCount(-1);

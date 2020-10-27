@@ -10,7 +10,7 @@ unit mormot.orm.storage;
     - Virtual Table ORM Support
     - TRestStorage Abstract Class for ORM/REST Storage
     - TRestStorageInMemory as Stand-Alone JSON/Binary Storage
-    - TORMVirtualTableJSON/TORMVirtualTableBinary Virtual Tables
+    - TOrmVirtualTableJSON/TOrmVirtualTableBinary Virtual Tables
     - TRestStorageRemote for CRUD Redirection
     - TRestStorageShard as Abstract Sharded Storage Engine
 
@@ -62,7 +62,7 @@ uses
 type
   // some forward class definitions
   TRestStorage = class;
-  TORMVirtualTable = class;
+  TOrmVirtualTable = class;
   TRestStorageInMemory = class;
 
 
@@ -70,23 +70,23 @@ type
 
   /// Record associated to a Virtual Table implemented in Delphi, with ID
   // forced at INSERT
-  // - will use TORMVirtualTableModule / TORMVirtualTable / TORMVirtualTableCursor
+  // - will use TOrmVirtualTableModule / TOrmVirtualTable / TOrmVirtualTableCursor
   // classes for a generic Virtual table mechanism on the Server side
-  // - call Model.VirtualTableRegister() before TRestORMServer.Create on the
+  // - call Model.VirtualTableRegister() before TRestOrmServer.Create on the
   // Server side (not needed for Client) to associate such a record with a
   // particular Virtual Table module, otherwise an exception will be raised:
-  // ! Model.VirtualTableRegister(TORMDali1,TORMVirtualTableJSON);
-  TORMVirtualTableForcedID = class(TORMVirtual);
+  // ! Model.VirtualTableRegister(TOrmDali1,TOrmVirtualTableJSON);
+  TOrmVirtualTableForcedID = class(TOrmVirtual);
 
   /// Record associated to Virtual Table implemented in Delphi, with ID
   // generated automatically at INSERT
-  // - will use TORMVirtualTableModule / TORMVirtualTable / TORMVirtualTableCursor
+  // - will use TOrmVirtualTableModule / TOrmVirtualTable / TOrmVirtualTableCursor
   // classes for a generic Virtual table mechanism
-  // - call Model.VirtualTableRegister() before TRestORMServer.Create on the
+  // - call Model.VirtualTableRegister() before TRestOrmServer.Create on the
   // Server side (not needed for Client) to associate such a record with a
   // particular Virtual Table module, otherwise an exception will be raised:
-  // ! Model.VirtualTableRegister(TORMDali1,TORMVirtualTableJSON);
-  TORMVirtualTableAutoID = class(TORMVirtual);
+  // ! Model.VirtualTableRegister(TOrmDali1,TOrmVirtualTableJSON);
+  TOrmVirtualTableAutoID = class(TOrmVirtual);
 
   /// class-reference type (metaclass) of our abstract table storage
   // - may be e.g. TRestStorageInMemory, TRestStorageInMemoryExternal,
@@ -94,24 +94,24 @@ type
   TRestStorageClass = class of TRestStorage;
 
   /// class-reference type (metaclass) of a virtual table implementation
-  TORMVirtualTableClass = class of TORMVirtualTable;
+  TOrmVirtualTableClass = class of TOrmVirtualTable;
 
-  /// a WHERE constraint as set by the TORMVirtualTable.Prepare() method
-  TORMVirtualTablePreparedConstraint = packed record
+  /// a WHERE constraint as set by the TOrmVirtualTable.Prepare() method
+  TOrmVirtualTablePreparedConstraint = packed record
     /// Column on left-hand side of constraint
     // - The first column of the virtual table is column 0
     // - The RowID of the virtual table is column -1
     // - Hidden columns are counted when determining the column index
-    // - if this field contains VIRTUAL_TABLE_IGNORE_COLUMN (-2), TORMVirtualTable.
+    // - if this field contains VIRTUAL_TABLE_IGNORE_COLUMN (-2), TOrmVirtualTable.
     // Prepare() should ignore this entry
     Column: integer;
     /// The associated expression
-    // - TORMVirtualTable.Prepare() must set Value.VType to not svtUnknown
+    // - TOrmVirtualTable.Prepare() must set Value.VType to not svtUnknown
     // (e.g. to svtNull), if an expression is expected at vt_BestIndex() call
-    // - TORMVirtualTableCursor.Search() will receive an expression value,
+    // - TOrmVirtualTableCursor.Search() will receive an expression value,
     // to be retrieved e.g. via sqlite3_value_*() functions
     Value: TSQLVar;
-    /// Constraint operator
+    /// Constraint operator to be transmitted at SQL level
     // - MATCH keyword is parsed into soBeginWith, and should be handled as
     // soBeginWith, soContains or soSoundsLike* according to the effective
     // expression text value ('text*', '%text'...)
@@ -120,16 +120,16 @@ type
     // by the virtual table and is not checked again by SQLite
     // - By default (OmitCheck=false), the SQLite core double checks all
     // constraints on each row of the virtual table that it receives
-    // - TORMVirtualTable.Prepare() can set this property to true
+    // - TOrmVirtualTable.Prepare() can set this property to true
     OmitCheck: boolean;
   end;
 
-  PSQLVirtualTablePreparedConstraint = ^TORMVirtualTablePreparedConstraint;
+  PSQLVirtualTablePreparedConstraint = ^TOrmVirtualTablePreparedConstraint;
 
-  /// an ORDER BY clause as set by the TORMVirtualTable.Prepare() method
+  /// an ORDER BY clause as set by the TOrmVirtualTable.Prepare() method
   // - warning: this structure should match exactly TSQLite3IndexOrderBy as
-  // defined in SynSQLite3
-  TORMVirtualTablePreparedOrderBy = record
+  // defined in mormot.db.raw.sqlite3
+  TOrmVirtualTablePreparedOrderBy = record
     /// Column number
     // - The first column of the virtual table is column 0
     // - The RowID of the virtual table is column -1
@@ -139,17 +139,17 @@ type
     Desc: boolean;
   end;
 
-  /// abstract planning execution of a query, as set by TORMVirtualTable.Prepare
-  TORMVirtualTablePreparedCost = (
+  /// abstract planning execution of a query, as set by TOrmVirtualTable.Prepare
+  TOrmVirtualTablePreparedCost = (
     costFullScan,
     costScanWhere,
     costSecondaryIndex,
     costPrimaryIndex);
 
-  /// the WHERE and ORDER BY statements as set by TORMVirtualTable.Prepare
+  /// the WHERE and ORDER BY statements as set by TOrmVirtualTable.Prepare
   // - Where[] and OrderBy[] are fixed sized arrays, for fast and easy code
-  //{$ifdef USERECORDWITHMETHODS}TORMVirtualTablePrepared = record{$else}
-    TORMVirtualTablePrepared = object
+  //{$ifdef USERECORDWITHMETHODS}TOrmVirtualTablePrepared = record{$else}
+    TOrmVirtualTablePrepared = object
   //{$endif USERECORDWITHMETHODS}
   public
     /// number of WHERE statement parameters in Where[] array
@@ -163,18 +163,18 @@ type
     OmitOrderBy: boolean;
     ///  Estimated cost of using this prepared index
     // - SQLite uses this value to make a choice between several calls to
-    // the TORMVirtualTable.Prepare() method with several expressions
-    EstimatedCost: TORMVirtualTablePreparedCost;
+    // the TOrmVirtualTable.Prepare() method with several expressions
+    EstimatedCost: TOrmVirtualTablePreparedCost;
     ///  Estimated number of rows of using this prepared index
     // - does make sense only if EstimatedCost=costFullScan
     // - SQLite uses this value to make a choice between several calls to
-    // the TORMVirtualTable.Prepare() method with several expressions
+    // the TOrmVirtualTable.Prepare() method with several expressions
     // - is used only starting with SQLite 3.8.2
     EstimatedRows: Int64;
-    /// WHERE statement parameters, in TORMVirtualTableCursor.Search() order
-    Where: array[0 .. MAX_SQLFIELDS - 1] of TORMVirtualTablePreparedConstraint;
+    /// WHERE statement parameters, in TOrmVirtualTableCursor.Search() order
+    Where: array[0 .. MAX_SQLFIELDS - 1] of TOrmVirtualTablePreparedConstraint;
     /// ORDER BY statement parameters
-    OrderBy: array[0 .. MAX_SQLFIELDS - 1] of TORMVirtualTablePreparedOrderBy;
+    OrderBy: array[0 .. MAX_SQLFIELDS - 1] of TOrmVirtualTablePreparedOrderBy;
     /// returns TRUE if there is only one ID=? statement in this search
     function IsWhereIDEquals(CalledFromPrepare: boolean): boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -183,41 +183,41 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  PSQLVirtualTablePrepared = ^TORMVirtualTablePrepared;
+  PSQLVirtualTablePrepared = ^TOrmVirtualTablePrepared;
 
-  TORMVirtualTableCursor = class;
+  TOrmVirtualTableCursor = class;
 
   /// class-reference type (metaclass) of a cursor on an abstract Virtual Table
-  TORMVirtualTableCursorClass = class of TORMVirtualTableCursor;
+  TOrmVirtualTableCursorClass = class of TOrmVirtualTableCursor;
 
   /// the possible features of a Virtual Table
   // - vtWrite is to be set if the table is not Read/Only
   // - vtTransaction if handles vttBegin, vttSync, vttCommit, vttRollBack
   // - vtSavePoint if handles vttSavePoint, vttRelease, vttRollBackTo
   // - vtWhereIDPrepared if the ID=? WHERE statement will be handled in
-  // TORMVirtualTableCursor.Search()
-  TORMVirtualTableFeature = (
+  // TOrmVirtualTableCursor.Search()
+  TOrmVirtualTableFeature = (
     vtWrite,
     vtTransaction,
     vtSavePoint,
     vtWhereIDPrepared);
 
   /// a set of features of a Virtual Table
-  TORMVirtualTableFeatures = set of TORMVirtualTableFeature;
+  TOrmVirtualTableFeatures = set of TOrmVirtualTableFeature;
 
-  /// used to store and handle the main specifications of a TORMVirtualTableModule
+  /// used to store and handle the main specifications of a TOrmVirtualTableModule
   TVirtualTableModuleProperties = record
     /// a set of features of a Virtual Table
-    Features: TORMVirtualTableFeatures;
+    Features: TOrmVirtualTableFeatures;
     /// the associated cursor class
-    CursorClass: TORMVirtualTableCursorClass;
-    /// the associated TORM class
+    CursorClass: TOrmVirtualTableCursorClass;
+    /// the associated TOrm class
     // - used to retrieve the field structure with all collations
-    RecordClass: TORMClass;
+    RecordClass: TOrmClass;
     /// the associated TRestStorage class used for storage
-    // - is e.g. TRestStorageInMemory for TORMVirtualTableJSON,
-    // TRestStorageExternal for TORMVirtualTableExternal, or nil for
-    // TORMVirtualTableLog
+    // - is e.g. TRestStorageInMemory for TOrmVirtualTableJSON,
+    // TRestStorageExternal for TOrmVirtualTableExternal, or nil for
+    // TOrmVirtualTableLog
     StaticClass: TRestStorageClass;
     /// can be used to customize the extension of the filename
     // - the '.' is not to be included
@@ -227,44 +227,44 @@ type
   /// parent class able to define a Virtual Table module
   // - in order to implement a new Virtual Table type, you'll have to define a so
   // called "Module" to handle the fields and data access and an associated
-  // TORMVirtualTableCursorClass for handling the SELECT statements
+  // TOrmVirtualTableCursorClass for handling the SELECT statements
   // - for our framework, the SQLite3 unit will inherit from this class to define
-  // a TORMVirtualTableModuleSQLite3 class, which will register the associated
+  // a TOrmVirtualTableModuleSQLite3 class, which will register the associated
   // virtual table definition into a SQLite3 connection, on the server side
   // - children should override abstract methods in order to implement the
   // association with the database engine itself
-  TORMVirtualTableModule = class
+  TOrmVirtualTableModule = class
   protected
     fModuleName: RawUTF8;
-    fTableClass: TORMVirtualTableClass;
-    fServer: TRestORMServer;
+    fTableClass: TOrmVirtualTableClass;
+    fServer: TRestOrmServer;
     fFeatures: TVirtualTableModuleProperties;
     fFilePath: TFileName;
   public
     /// create the Virtual Table instance according to the supplied class
     // - inherited constructors may register the Virtual Table to the specified
     // database connection
-    constructor Create(aTableClass: TORMVirtualTableClass;
-      aServer: TRestORMServer); virtual;
+    constructor Create(aTableClass: TOrmVirtualTableClass;
+      aServer: TRestOrmServer); virtual;
     /// retrieve the file name to be used for a specific Virtual Table
     // - returns by default a file located in the executable folder, with the
     // table name as file name, and module name as extension
     function FileName(const aTableName: RawUTF8): TFileName; virtual;
     /// the Virtual Table module features
-    property Features: TORMVirtualTableFeatures read fFeatures.Features;
+    property Features: TOrmVirtualTableFeatures read fFeatures.Features;
     /// the associated virtual table class
-    property TableClass: TORMVirtualTableClass read fTableClass;
+    property TableClass: TOrmVirtualTableClass read fTableClass;
     /// the associated virtual table cursor class
-    property CursorClass: TORMVirtualTableCursorClass read fFeatures.CursorClass;
+    property CursorClass: TOrmVirtualTableCursorClass read fFeatures.CursorClass;
     /// the associated TRestStorage class used for storage
-    // - e.g. returns TRestStorageInMemory for TORMVirtualTableJSON,
-    // or TRestStorageExternal for TORMVirtualTableExternal, or
-    // either nil for TORMVirtualTableLog
+    // - e.g. returns TRestStorageInMemory for TOrmVirtualTableJSON,
+    // or TRestStorageExternal for TOrmVirtualTableExternal, or
+    // either nil for TOrmVirtualTableLog
     property StaticClass: TRestStorageClass read fFeatures.StaticClass;
-    /// the associated TORM class
-    // - is mostly nil, e.g. for TORMVirtualTableJSON
-    // - used to retrieve the field structure for TORMVirtualTableLog e.g.
-    property RecordClass: TORMClass read fFeatures.RecordClass;
+    /// the associated TOrm class
+    // - is mostly nil, e.g. for TOrmVirtualTableJSON
+    // - used to retrieve the field structure for TOrmVirtualTableLog e.g.
+    property RecordClass: TOrmClass read fFeatures.RecordClass;
     /// the extension of the filename (without any left '.')
     property FileExtension: TFileName read fFeatures.FileExtension;
     /// the full path to be used for the filename
@@ -274,13 +274,13 @@ type
     property FilePath: TFileName read fFilePath write fFilePath;
     /// the associated Server instance
     // - may be nil, in case of direct access to the virtual table
-    property Server: TRestORMServer read fServer;
+    property Server: TRestOrmServer read fServer;
     /// the corresponding module name
     property ModuleName: RawUTF8 read fModuleName;
   end;
 
   /// the available transaction levels
-  TORMVirtualTableTransaction = (
+  TOrmVirtualTableTransaction = (
     vttBegin,
     vttSync,
     vttCommit,
@@ -296,61 +296,61 @@ type
   // virtual methods to allow content writing to the virtual table
   // - the same virtual table mechanism can be used with several database module,
   // with diverse database engines
-  TORMVirtualTable = class
+  TOrmVirtualTable = class
   protected
-    fModule: TORMVirtualTableModule;
+    fModule: TOrmVirtualTableModule;
     fTableName: RawUTF8;
-    fStatic: TRestORM;
+    fStatic: TRestOrm;
     fStaticStorage: TRestStorage;
-    fStaticTable: TORMClass;
+    fStaticTable: TOrmClass;
     fStaticTableIndex: integer;
   public
     /// create the virtual table access instance
     // - the created instance will be released when the virtual table will be
     // disconnected from the DB connection (e.g. xDisconnect method for SQLite3)
     // - shall raise an exception in case of invalid parameters (e.g. if the
-    // supplied module is not associated to a TRestORMServer instance)
+    // supplied module is not associated to a TRestOrmServer instance)
     // - aTableName will be checked against the current aModule.Server.Model
-    // to retrieve the corresponding TORMVirtualTableAutoID class and
+    // to retrieve the corresponding TOrmVirtualTableAutoID class and
     // create any associated Static: TRestStorage instance
-    constructor Create(aModule: TORMVirtualTableModule; const aTableName: RawUTF8;
+    constructor Create(aModule: TOrmVirtualTableModule; const aTableName: RawUTF8;
       FieldCount: integer; Fields: PPUTF8CharArray); virtual;
     /// release the associated memory, especially the Static instance
     destructor Destroy; override;
     /// retrieve the corresponding module name
-    // - will use the class name, triming any T/TSQL/TSQLVirtual/TORMVirtualTable*
+    // - will use the class name, triming any T/TSQL/TSQLVirtual/TOrmVirtualTable*
     // - when the class is instanciated, it will be faster to retrieve the same
     // value via Module.ModuleName
     class function ModuleName: RawUTF8;
     /// a generic method to get a 'CREATE TABLE' structure from a supplied
-    // TORM class
+    // TOrm class
     // - is called e.g. by the Structure method
-    class function StructureFromClass(aClass: TORMClass;
+    class function StructureFromClass(aClass: TOrmClass;
       const aTableName: RawUTF8): RawUTF8;
     /// the associated Virtual Table module
-    property Module: TORMVirtualTableModule read fModule;
+    property Module: TOrmVirtualTableModule read fModule;
     /// the name of the Virtual Table, as specified following the TABLE keyword
     // in the CREATE VIRTUAL TABLE statement
     property TableName: RawUTF8 read fTableName;
   public { virtual methods to be overridden }
-    /// should return the main specifications of the associated TORMVirtualTableModule
+    /// should return the main specifications of the associated TOrmVirtualTableModule
     class procedure GetTableModuleProperties(
       var aProperties: TVirtualTableModuleProperties); virtual; abstract;
     /// called to determine the best way to access the virtual table
-    // - will prepare the request for TORMVirtualTableCursor.Search()
+    // - will prepare the request for TOrmVirtualTableCursor.Search()
     // - in Where[], Expr must be set to not 0 if needed for Search method,
     // and OmitCheck to true if double check is not necessary
     // - OmitOrderBy must be set to true if double sort is not necessary
     // - EstimatedCost and EstimatedRows should receive the estimated cost
     // - default implementation will let the DB engine perform the search,
     // and prepare for ID=? statement if vtWhereIDPrepared was set
-    function Prepare(var Prepared: TORMVirtualTablePrepared): boolean; virtual;
+    function Prepare(var Prepared: TOrmVirtualTablePrepared): boolean; virtual;
     /// should retrieve the format (the names and datatypes of the columns) of
     // the virtual table, as expected by sqlite3_declare_vtab()
     // - default implementation is to retrieve the structure for the associated
     // Module.RecordClass property (as set by GetTableModuleProperties) or
     // the Static.StoredClass: in both cases, column numbering will follow
-    // the TORM published field order (TORM.RecordProps.Fields[])
+    // the TOrm published field order (TOrm.RecordProps.Fields[])
     function Structure: RawUTF8; virtual;
     /// called when a DROP TABLE statement is executed against the virtual table
     // - should return true on success, false otherwise
@@ -378,20 +378,20 @@ type
     // will call vttCommit for each INSERT/UPDATE/DELETE, just like a regular
     // SQLite database - it could make bad written code slow even with Virtual
     // Tables
-    function Transaction(aState: TORMVirtualTableTransaction;
+    function Transaction(aState: TOrmVirtualTableTransaction;
       aSavePoint: integer): boolean; virtual;
     /// called to rename the virtual table
     // - by default, returns false, i.e. always fails
     function Rename(const NewName: RawUTF8): boolean; virtual;
     /// the associated virtual table storage instance
-    // - can be e.g. a TRestStorageInMemory for TORMVirtualTableJSON,
-    // or a TRestStorageExternal for TORMVirtualTableExternal, or nil
-    // for TORMVirtualTableLog
-    property Static: TRestORM read fStatic;
+    // - can be e.g. a TRestStorageInMemory for TOrmVirtualTableJSON,
+    // or a TRestStorageExternal for TOrmVirtualTableExternal, or nil
+    // for TOrmVirtualTableLog
+    property Static: TRestOrm read fStatic;
     /// the associated virtual table storage instance, if is a TRestStorage
     property StaticStorage: TRestStorage read fStaticStorage;
     /// the associated virtual table storage table
-    property StaticTable: TORMClass read fStaticTable;
+    property StaticTable: TOrmClass read fStaticTable;
     /// the associated virtual table storage index in its Model.Tables[] array
     property StaticTableIndex: integer read fStaticTableIndex;
   end;
@@ -399,9 +399,9 @@ type
   /// abstract class able to define a Virtual Table cursor
   // - override the Search/HasData/Column/Next abstract virtual methods to
   // implement the search process
-  TORMVirtualTableCursor = class
+  TOrmVirtualTableCursor = class
   protected
-    fTable: TORMVirtualTable;
+    fTable: TOrmVirtualTable;
     /// used internaly between two Column() method calls for GetFieldSQLVar()
     fColumnTemp: RawByteString;
     /// easy set a TSQLVar content for the Column() method
@@ -422,20 +422,20 @@ type
   public
     /// create the cursor instance
     // - it will be destroyed when by the DB engine (e.g. via xClose in SQLite3)
-    constructor Create(aTable: TORMVirtualTable); virtual;
+    constructor Create(aTable: TOrmVirtualTable); virtual;
     /// the associated Virtual Table class instance
-    property Table: TORMVirtualTable read fTable;
+    property Table: TOrmVirtualTable read fTable;
   public { abstract methods to be overridden }
     /// called to begin a search in the virtual table
-    // - the TORMVirtualTablePrepared parameters were set by
-    // TORMVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
+    // - the TOrmVirtualTablePrepared parameters were set by
+    // TOrmVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
     // (retrieved e.g. by x_BestIndex() from a TSQLite3IndexInfo structure)
     // - Prepared will contain all prepared constraints and the corresponding
     // expressions in the Where[].Value field
     // - should move cursor to first row of matching data
     // - should return false on low-level database error (but true in case of a
     // valid call, even if HasData will return false, i.e. no data match)
-    function Search(const Prepared: TORMVirtualTablePrepared): boolean; virtual; abstract;
+    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; virtual; abstract;
     /// called after Search() to check if there is data to be retrieved
     // - should return false if reached the end of matching data
     function HasData: boolean; virtual; abstract;
@@ -450,7 +450,7 @@ type
   end;
 
   /// A generic Virtual Table cursor associated to Current/Max index properties
-  TORMVirtualTableCursorIndex = class(TORMVirtualTableCursor)
+  TOrmVirtualTableCursorIndex = class(TOrmVirtualTableCursor)
   protected
     fCurrent: integer;
     fMax: integer;
@@ -466,7 +466,7 @@ type
     function Next: boolean; override;
     /// called to begin a search in the virtual table
     // - this no-op version will mark EOF, i.e. fCurrent=0 and fMax=-1
-    function Search(const Prepared: TORMVirtualTablePrepared): boolean; override;
+    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
   end;
 
 
@@ -475,37 +475,37 @@ type
 { ************ TRestStorage Abstract Class for ORM/REST Storage }
 
   /// exception raised during ORM/REST Storage process
-  ERestStorage = class(EORMException);
+  ERestStorage = class(EOrmException);
 
   /// REST class with direct access to an external database engine
   // - you can set an alternate per-table database engine by using this class
   // - this abstract class is to be overridden with a proper implementation
   // (e.g. TRestStorageInMemory in this unit, or TRestStorageExternal
   // from mORMotDB unit, or TRestStorageMongoDB from mORMotMongoDB unit)
-  TRestStorage = class(TRestORM)
+  TRestStorage = class(TRestOrm)
   protected
-    fStoredClass: TORMClass;
-    fStoredClassProps: TORMModelRecordProperties;
-    fStoredClassRecordProps: TORMProperties;
-    fStoredClassMapping: PORMPropertiesMapping;
+    fStoredClass: TOrmClass;
+    fStoredClassProps: TOrmModelRecordProperties;
+    fStoredClassRecordProps: TOrmProperties;
+    fStoredClassMapping: POrmPropertiesMapping;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fStorageLockLogTrace: boolean;
     fModified: boolean;
-    fOwner: TRestORMServer;
+    fOwner: TRestOrmServer;
     fStorageCriticalSection: TRTLCriticalSection;
     fStorageCriticalSectionCount: integer;
     fBasicSQLCount: RawUTF8;
     fBasicSQLHasRows: array[boolean] of RawUTF8;
-    fStorageVirtual: TORMVirtualTable;
+    fStorageVirtual: TOrmVirtualTable;
     /// any set bit in this field indicates UNIQUE field value
     fIsUnique: TFieldBits;
     fOutInternalStateForcedRefresh: boolean;
-    procedure RecordVersionFieldHandle(Occasion: TORMOccasion;
+    procedure RecordVersionFieldHandle(Occasion: TOrmOccasion;
       var Decoder: TJSONObjectDecoder);
     function GetStoredClassName: RawUTF8;
   public
     /// initialize the abstract storage data
-    constructor Create(aClass: TORMClass; aServer: TRestORMServer); reintroduce; virtual;
+    constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); reintroduce; virtual;
     /// finalize the storage instance
     destructor Destroy; override;
 
@@ -524,10 +524,10 @@ type
     // - to be called e.g. after a Retrieve() with forupdate=TRUE
     // - locking is handled at (Owner.)Model level
     // - returns true on success
-    function UnLock(Table: TORMClass; aID: TID): boolean; override;
+    function UnLock(Table: TOrmClass; aID: TID): boolean; override;
     /// overridden method calling the owner (if any) to guess if this record
     // can be updated or deleted
-    function RecordCanBeUpdated(Table: TORMClass; ID: TID; Action: TORMEvent;
+    function RecordCanBeUpdated(Table: TOrmClass; ID: TID; Action: TOrmEvent;
       ErrorMsg: PRawUTF8 = nil): boolean; override;
     /// override this method if you want to update the refresh state
     // - returns FALSE if the static table content was not modified (default
@@ -535,7 +535,7 @@ type
     // - returns TRUE if the table has been refreshed and its content was modified:
     // therefore the client will know he'll need to refresh some content
     function RefreshedAndModified: boolean; virtual;
-    /// TRestORMServer.URI use it for Static.EngineList to by-pass virtual table
+    /// TRestOrmServer.URI use it for Static.EngineList to by-pass virtual table
     // - this default implementation will return TRUE and replace SQL with
     // SQLSelectAll[true] if it SQL equals SQLSelectAll[false] (i.e. 'SELECT *')
     // - this method is called only if the WHERE clause of SQL refers to the
@@ -543,7 +543,7 @@ type
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; virtual;
     /// create one index for all specific FieldNames at once
     // - do nothing virtual/abstract method by default: will return FALSE (i.e. error)
-    function CreateSQLMultiIndex(Table: TORMClass; const FieldNames: array of RawUTF8;
+    function CreateSQLMultiIndex(Table: TOrmClass; const FieldNames: array of RawUTF8;
       Unique: boolean; IndexName: RawUTF8=''): boolean; virtual;
     /// search for a numerical field value
     // - return true on success (i.e. if some values have been added to ResultID)
@@ -559,21 +559,21 @@ type
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
       out ResultID: TIDDynArray): boolean; overload; virtual; abstract;
-    /// returns the current authentication session ID from TRestORMServer owner
+    /// returns the current authentication session ID from TRestOrmServer owner
     function GetCurrentSessionUserID: TID; override;
 
     /// read only access to a boolean value set to true if table data was modified
     property Modified: boolean
       read fModified write fModified;
     /// read only access to the ORM properties of the associated record type
-    // - may be nil if this instance is not associated with a TORMModel
-    property StoredClassProps: TORMModelRecordProperties
+    // - may be nil if this instance is not associated with a TOrmModel
+    property StoredClassProps: TOrmModelRecordProperties
       read fStoredClassProps;
     /// read only access to the RTTI properties of the associated record type
-    property StoredClassRecordProps: TORMProperties
+    property StoredClassRecordProps: TOrmProperties
       read fStoredClassRecordProps;
-    /// read only access to the TRestORMServer using this storage engine
-    property Owner: TRestORMServer
+    /// read only access to the TRestOrmServer using this storage engine
+    property Owner: TRestOrmServer
       read fOwner;
     /// enable low-level trace of StorageLock/StorageUnlock methods
     // - may be used to resolve low-level race conditions
@@ -581,10 +581,10 @@ type
       read fStorageLockLogTrace write fStorageLockLogTrace;
     /// read only access to the class defining the record type stored in this
     // REST storage
-    property StoredClass: TORMClass
+    property StoredClass: TOrmClass
       read fStoredClass;
     /// allow to force refresh for a given Static table
-    // - default FALSE means to return the main TRestORMServer.InternalState
+    // - default FALSE means to return the main TRestOrmServer.InternalState
     // - TRUE indicates that OutInternalState := cardinal(-1) will be returned
     property OutInternalStateForcedRefresh: boolean
       read fOutInternalStateForcedRefresh;
@@ -605,23 +605,23 @@ type
   // - aRec will point to the corresponding item
   // - aIndex will identify the item index in the internal list
   TFindWhereEqualEvent = procedure(
-    aDest: pointer; aRec: TORM; aIndex: integer) of object;
+    aDest: pointer; aRec: TOrm; aIndex: integer) of object;
 
-  /// abstract REST storage exposing some internal TORM-based methods
+  /// abstract REST storage exposing some internal TOrm-based methods
   TRestStorageRecordBased = class(TRestStorage)
   public
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUTF8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
       const SentData: RawUTF8): boolean; override;
-    /// manual Add of a TORM
+    /// manual Add of a TOrm
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it
-    function AddOne(Rec: TORM; ForceID: boolean;
+    function AddOne(Rec: TOrm; ForceID: boolean;
       const SentData: RawUTF8): TID; virtual; abstract;
-    /// manual Retrieval of a TORM field values
+    /// manual Retrieval of a TOrm field values
     // - an instance of the associated static class is created
     // - and all its properties are filled from the Items[] values
     // - caller can modify these properties, then use UpdateOne() if the changes
@@ -629,22 +629,22 @@ type
     // - calller must always free the returned instance
     // - returns NIL if any error occured, e.g. if the supplied aID was incorrect
     // - method available since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
-    function GetOne(aID: TID): TORM; virtual; abstract;
-    /// manual Update of a TORM field values
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
+    function GetOne(aID: TID): TOrm; virtual; abstract;
+    /// manual Update of a TOrm field values
     // - Rec.ID specifies which record is to be updated
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
-    function UpdateOne(Rec: TORM;
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
+    function UpdateOne(Rec: TOrm;
       const SentData: RawUTF8): boolean; overload; virtual; abstract;
-    /// manual Update of a TORM field values from an array of TSQLVar
+    /// manual Update of a TOrm field values from an array of TSQLVar
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
-    // - this default implementation will create a temporary TORM instance
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
+    // - this default implementation will create a temporary TOrm instance
     // with the supplied Values[], and will call overloaded UpdateOne() method
     function UpdateOne(ID: TID;
       const Values: TSQLVarDynArray): boolean; overload; virtual;
@@ -656,7 +656,7 @@ type
   protected
     fHasher: TDynArrayHasher;
     fOwner: TRestStorageInMemory;
-    fPropInfo: TORMPropInfo;
+    fPropInfo: TOrmPropInfo;
     fCaseInsensitive: boolean;
     fLastFindHashCode: cardinal;
     function EventCompare(const A,B): integer; // match TEventDynArraySortCompare
@@ -664,14 +664,14 @@ type
   public
     /// initialize a hash for a record array field
     // - aField maps the "stored AS_UNIQUE" published property
-    constructor Create(aOwner: TRestStorageInMemory; aField: TORMPropInfo);
+    constructor Create(aOwner: TRestStorageInMemory; aField: TOrmPropInfo);
     /// fast search using O(1) internal hash table
     // - returns -1 if not found or not indexed (self=nil)
-    function Find(Rec: TORM): integer;
+    function Find(Rec: TOrm): integer;
     /// called by TRestStorageInMemory.AddOne after a precious Find()
-    function AddedAfterFind(Rec: TORM): boolean;
+    function AddedAfterFind(Rec: TOrm): boolean;
     /// the corresponding field RTTI
-    property PropInfo: TORMPropInfo read fPropInfo;
+    property PropInfo: TOrmPropInfo read fPropInfo;
     /// if the string comparison shall be case-insensitive
     property CaseInsensitive: boolean read fCaseInsensitive;
     /// access to the internal hash table
@@ -679,15 +679,15 @@ type
   end;
 
   /// REST storage with direct access to a TObjectList memory-stored table
-  // - store the associated TORM values in memory
-  // - handle one TORM per TRestStorageInMemory instance
-  // - must be registered individualy in a TRestORMServer to access data from a
-  // common client, by using the TRestORMServer.StaticDataCreate method:
+  // - store the associated TOrm values in memory
+  // - handle one TOrm per TRestStorageInMemory instance
+  // - must be registered individualy in a TRestOrmServer to access data from a
+  // common client, by using the TRestOrmServer.StaticDataCreate method:
   // it allows an unique access for both SQLite3 and Static databases
   // - handle basic REST commands, no SQL interpreter is implemented: only
   // valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;", i.e
   // a one Table SELECT with one optional "WHERE fieldname = value" statement;
-  // if used within a TORMVirtualTableJSON, you'll be able to handle any kind of
+  // if used within a TOrmVirtualTableJSON, you'll be able to handle any kind of
   // SQL statement (even joined SELECT or such) with this memory-stored database
   // - data can be stored and retrieved from a file (JSON format is used by
   // default, if BinaryFile parameter is left to false; a proprietary compressed
@@ -699,25 +699,25 @@ type
   // ACID commit on disk is required
   TRestStorageInMemory = class(TRestStorageRecordBased)
   protected
-    fValue: TORMObjArray;
+    fValue: TOrmObjArray;
     fCount: integer;
     fFileName: TFileName;
     fCommitShouldNotUpdateFile: boolean;
     fBinaryFile: boolean;
     fExpandedJSON: boolean;
     fUnSortedID: boolean;
-    fSearchRec: TORM; // temporary record to store the searched value
+    fSearchRec: TOrm; // temporary record to store the searched value
     fBasicUpperSQLSelect: array[boolean] of RawUTF8;
     fUnique: array of TRestStorageInMemoryUnique;
     fMaxID: TID;
     fValues: TDynArrayHashed; // hashed by ID
-    function UniqueFieldsUpdateOK(aRec: TORM; aUpdateIndex: integer): boolean;
-    function GetItem(Index: integer): TORM; {$ifdef HASINLINE}inline;{$endif}
+    function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer): boolean;
+    function GetItem(Index: integer): TOrm; {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): TID;
     procedure SetFileName(const aFileName: TFileName);
     procedure ComputeStateAfterLoad(var loaded: TPrecisionTimer; binary: boolean);
     procedure SetBinaryFile(aBinary: boolean);
-    procedure GetJSONValuesEvent(aDest: pointer; aRec: TORM; aIndex: integer);
+    procedure GetJSONValuesEvent(aDest: pointer; aRec: TOrm; aIndex: integer);
     /// used to create the JSON content from a SELECT parsed command
     // - WhereField index follows FindWhereEqual / TSelectStatement.WhereField
     // - returns the number of data row added (excluding field names)
@@ -725,7 +725,7 @@ type
     function GetJSONValues(Stream: TStream; Expand: boolean;
       Stmt: TSelectStatement): PtrInt;
   public
-    /// TRestORMServer.URI use it for Static.EngineList to by-pass virtual table
+    /// TRestOrmServer.URI use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle basic queries as handled by EngineList()
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     /// overridden methods for direct in-memory database engine thread-safe process
@@ -745,7 +745,7 @@ type
     /// initialize the table storage data, reading it from a file if necessary
     // - data encoding on file is UTF-8 JSON format by default, or
     // should be some binary format if aBinaryFile is set to true
-    constructor Create(aClass: TORMClass; aServer: TRestORMServer;
+    constructor Create(aClass: TOrmClass; aServer: TRestOrmServer;
       const aFileName: TFileName = ''; aBinaryFile: boolean = false); reintroduce; virtual;
     /// free used memory
     // - especially release all fValue[] instances
@@ -777,7 +777,7 @@ type
     // - will return false if the binary content is invalid
     function LoadFromBinary(const Buffer: RawByteString): boolean; overload;
     /// load the values from binary resource
-    // - the resource name is expected to be the TORM class name,
+    // - the resource name is expected to be the TOrm class name,
     // with a resource type of 10
     // - uses the same compressed format as the overloaded stream/file method
     // - you can specify a library (dll) resource instance handle, if needed
@@ -813,7 +813,7 @@ type
     /// retrieve all IDs stored at once
     // - will make a thread-safe copy, for unlocked use
     procedure GetAllIDs(out ID: TIDDynArray);
-    /// low-level Add of a TORM instance
+    /// low-level Add of a TOrm instance
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
@@ -821,9 +821,9 @@ type
     // - in practice, SentData is used only for OnUpdateEvent/OnBlobUpdateEvent
     // and the history feature
     // - warning: this method should be protected via StorageLock/StorageUnlock
-    function AddOne(Rec: TORM; ForceID: boolean;
+    function AddOne(Rec: TOrm; ForceID: boolean;
       const SentData: RawUTF8): TID; override;
-    /// manual Retrieval of a TORM field values
+    /// manual Retrieval of a TOrm field values
     // - an instance of the associated static class is created, and filled with
     // the actual properties values
     // - and all its properties are filled from the Items[] values
@@ -832,50 +832,50 @@ type
     // - calller must always free the returned instance
     // - returns NIL if any error occured, e.g. if the supplied aID was incorrect
     // - method available since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
-    function GetOne(aID: TID): TORM; override;
-    /// manual Update of a TORM field values
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
+    function GetOne(aID: TID): TOrm; override;
+    /// manual Update of a TOrm field values
     // - Rec.ID specifies which record is to be updated
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
-    function UpdateOne(Rec: TORM;
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
+    function UpdateOne(Rec: TOrm;
       const SentData: RawUTF8): boolean; override;
-    /// manual Update of a TORM field values from a TSQLVar array
+    /// manual Update of a TOrm field values from a TSQLVar array
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
     function UpdateOne(ID: TID;
       const Values: TSQLVarDynArray): boolean; override;
-    /// direct deletion of a TORM, from its index in Values[]
+    /// direct deletion of a TOrm, from its index in Values[]
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function DeleteOne(aIndex: integer): boolean; virtual;
     /// overridden method for direct in-memory database engine call
     // - made public since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
     function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
     /// overridden method for direct in-memory database engine call
     // - made public since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     /// overridden method for direct in-memory database engine call
     // - made public since a TRestStorage instance may be created
-    // stand-alone, i.e. without any associated Model/TRestORMServer
+    // stand-alone, i.e. without any associated Model/TRestOrmServer
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUTF8; Increment: Int64): boolean; override;
     /// overridden method for direct in-memory database engine call
-    function UpdateBlobFields(Value: TORM): boolean; override;
+    function UpdateBlobFields(Value: TOrm): boolean; override;
     /// overridden method for direct in-memory database engine call
-    function RetrieveBlobFields(Value: TORM): boolean; override;
+    function RetrieveBlobFields(Value: TOrm): boolean; override;
     /// overridden method for direct in-memory database engine call
-    function TableRowCount(Table: TORMClass): Int64; override;
+    function TableRowCount(Table: TOrmClass): Int64; override;
     /// overridden method for direct in-memory database engine call
-    function TableHasRows(Table: TORMClass): boolean; override;
+    function TableHasRows(Table: TOrmClass): boolean; override;
     /// overridden method for direct in-memory database engine call
-    function MemberExists(Table: TORMClass; ID: TID): boolean; override;
+    function MemberExists(Table: TOrmClass; ID: TID): boolean; override;
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
@@ -883,21 +883,21 @@ type
     function SearchField(const FieldName, FieldValue: RawUTF8;
       out ResultID: TIDDynArray): boolean; override;
     /// search for a field value, according to its SQL content representation
-    // - return the found TORM on success, nil if none did match
+    // - return the found TOrm on success, nil if none did match
     // - warning: it returns a reference to one item of the unlocked internal
     // list, so you should NOT use this on a read/write table, but rather
     // use the slightly slower but safer SearchCopy() method or make explicit
     // ! StorageLock ... try ... SearchInstance ... finally StorageUnlock end
     function SearchInstance(const FieldName, FieldValue: RawUTF8): pointer;
     /// search for a field value, according to its SQL content representation
-    // - return the found TORM index on success, -1 if none did match
+    // - return the found TOrm index on success, -1 if none did match
     // - warning: it returns a reference to the current index of the unlocked
     // internal list, so you should NOT use without StorageLock/StorageUnlock
     function SearchIndex(const FieldName, FieldValue: RawUTF8): integer;
     /// search for a field value, according to its SQL content representation
-    // - return a copy of the found TORM on success, nil if no match
+    // - return a copy of the found TOrm on success, nil if no match
     // - you should use SearchCopy() instead of SearchInstance(), unless you
-    // are sure that the internal TORM list won't change
+    // are sure that the internal TOrm list won't change
     function SearchCopy(const FieldName, FieldValue: RawUTF8): pointer;
     /// search and count for a field value, according to its SQL content representation
     // - return the number of found entries on success, 0 if it was not found
@@ -930,45 +930,45 @@ type
     /// search the maximum value of a given column
     // - will only handle integer/Int64 kind of column
     function FindMax(WhereField: integer; out max: Int64): boolean;
-    /// execute a method on every TORM item
+    /// execute a method on every TOrm item
     // - the loop execution will be protected via StorageLock/StorageUnlock
     procedure ForEach(WillModifyContent: boolean;
       OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
     /// low-level TFindWhereEqualEvent callback doing nothing
     class procedure DoNothingEvent(aDest: pointer;
-      aRec: TORM; aIndex: integer);
+      aRec: TOrm; aIndex: integer);
     /// low-level TFindWhereEqualEvent callback making PPointer(aDest)^ := aRec
     class procedure DoInstanceEvent(aDest: pointer;
-      aRec: TORM; aIndex: integer);
+      aRec: TOrm; aIndex: integer);
     /// low-level TFindWhereEqualEvent callback making PInteger(aDest)^ := aIndex
     class procedure DoIndexEvent(aDest: pointer;
-      aRec: TORM; aIndex: integer);
+      aRec: TOrm; aIndex: integer);
     /// low-level TFindWhereEqualEvent callback making PPointer(aDest)^ := aRec.CreateCopy
     class procedure DoCopyEvent(aDest: pointer;
-      aRec: TORM; aIndex: integer);
+      aRec: TOrm; aIndex: integer);
     /// low-level TFindWhereEqualEvent callback calling TSynList(aDest).Add(aRec)
     class procedure DoAddToListEvent(aDest: pointer;
-      aRec: TORM; aIndex: integer);
-    /// read-only access to the TORM values, storing the data
+      aRec: TOrm; aIndex: integer);
+    /// read-only access to the TOrm values, storing the data
     // - this returns directly the item class instance stored in memory: if you
     // change the content, it will affect the internal data - so for instance
     // DO NOT change the ID values, unless you may have unexpected behavior
     // - warning: this method should be protected via StorageLock/StorageUnlock
-    property Items[Index: integer]: TORM
+    property Items[Index: integer]: TOrm
       read GetItem; default;
     /// direct access to the memory of the internal dynamic array storage
     // - Items[] is preferred, since it will check the index, but is slightly
     // slower, e.g. in a loop or after a IDToIndex() call
     // - warning: this method should be protected via StorageLock/StorageUnlock
-    property Value: TORMObjArray
+    property Value: TOrmObjArray
       read fValue;
-    /// read-only access to the ID of a TORM values
+    /// read-only access to the ID of a TOrm values
     // - warning: this method should be protected via StorageLock/StorageUnlock
     property ID[Index: integer]: TID
       read GetID;
   published
     /// read only access to the file name specified by constructor
-    // - you can call the TRestORMServer.StaticDataCreate method to
+    // - you can call the TRestOrmServer.StaticDataCreate method to
     // update the file name of an already instanciated static table
     // - if you change manually the file name from this property, the storage
     // will be marked as "modified" so that UpdateFile will save the content
@@ -990,15 +990,15 @@ type
     property ExpandedJSON: boolean
       read fExpandedJSON write fExpandedJSON;
     /// set this property to TRUE if you want the COMMIT statement not to
-    // update the associated TORMVirtualTableJSON
+    // update the associated TOrmVirtualTableJSON
     property CommitShouldNotUpdateFile: boolean
       read fCommitShouldNotUpdateFile write fCommitShouldNotUpdateFile;
-    /// read-only access to the number of TORM values
+    /// read-only access to the number of TOrm values
     property Count: integer read fCount;
   end;
 
   /// a dynamic array of TRestStorageInMemory instances
-  // - used e.g. by TRestORMServerFullMemory
+  // - used e.g. by TRestOrmServerFullMemory
   TRestStorageInMemoryDynArray = array of TRestStorageInMemory;
 
   /// class-reference type (metaclass) of our TObjectList memory-stored table storage
@@ -1007,20 +1007,20 @@ type
 
   /// REST storage with direct access to a memory database, to be used as
   // an external SQLite3 Virtual table
-  // - this is the kind of in-memory table expected by TORMVirtualTableJSON,
+  // - this is the kind of in-memory table expected by TOrmVirtualTableJSON,
   // in order to be consistent with the internal DB cache
   TRestStorageInMemoryExternal = class(TRestStorageInMemory)
   public
     /// initialize the table storage data, reading it from a file if necessary
     // - data encoding on file is UTF-8 JSON format by default, or
     // should be some binary format if aBinaryFile is set to true
-    constructor Create(aClass: TORMClass; aServer: TRestORMServer;
+    constructor Create(aClass: TOrmClass; aServer: TRestOrmServer;
       const aFileName: TFileName = ''; aBinaryFile: boolean = false); override;
     /// this overridden method will notify the Owner when the internal DB content
     // is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
-    // cache used at SQLite3 database level; but TORMVirtualTableJSON virtual
+    // cache used at SQLite3 database level; but TOrmVirtualTableJSON virtual
     // tables could flush the database content without proper notification
     // - this overridden implementation will call Owner.FlushInternalDBCache
     procedure StorageLock(WillModifyContent: boolean;
@@ -1029,15 +1029,15 @@ type
 
 
 
-{ ************ TORMVirtualTableJSON/TORMVirtualTableBinary Virtual Tables }
+{ ************ TOrmVirtualTableJSON/TOrmVirtualTableBinary Virtual Tables }
 
   /// A Virtual Table cursor for reading a TRestStorageInMemory content
-  // - this is the cursor class associated to TORMVirtualTableJSON
-  TORMVirtualTableCursorJSON = class(TORMVirtualTableCursorIndex)
+  // - this is the cursor class associated to TOrmVirtualTableJSON
+  TOrmVirtualTableCursorJSON = class(TOrmVirtualTableCursorIndex)
   public
     /// called to begin a search in the virtual table
-    // - the TORMVirtualTablePrepared parameters were set by
-    // TORMVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
+    // - the TOrmVirtualTablePrepared parameters were set by
+    // TOrmVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
     // (retrieved by x_BestIndex from a TSQLite3IndexInfo structure)
     // - Prepared will contain all prepared constraints and the corresponding
     // expressions in the Where[].Value field
@@ -1046,7 +1046,7 @@ type
     // valid call, even if HasData will return false, i.e. no data match)
     // - only handled WHERE clause is for "ID = value" - other request will
     // return all records in ID order, and let the database engine handle it
-    function Search(const Prepared: TORMVirtualTablePrepared): boolean; override;
+    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
     /// called to retrieve a column value of the current data row into a TSQLVar
     // - if aColumn=-1, will return the row ID as varInt64 into aResult
     // - will return false in case of an error, true on success
@@ -1054,13 +1054,13 @@ type
   end;
 
   /// A TRestStorageInMemory-based virtual table using JSON storage
-  // - for ORM access, you should use TORMModel.VirtualTableRegister method to
-  // associated this virtual table module to a TORMVirtualTableAutoID class
+  // - for ORM access, you should use TOrmModel.VirtualTableRegister method to
+  // associated this virtual table module to a TOrmVirtualTableAutoID class
   // - transactions are not handled by this module
   // - by default, no data is written on disk: you will need to call explicitly
   // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
   // - file extension is set to '.json'
-  TORMVirtualTableJSON = class(TORMVirtualTable)
+  TOrmVirtualTableJSON = class(TOrmVirtualTable)
   protected
     fStaticInMemory: TRestStorageInMemory;
   public
@@ -1069,25 +1069,25 @@ type
     // - the created instance will be released when the virtual table will be
     // disconnected from the DB connection (e.g. xDisconnect method for SQLite3)
     // - shall raise an exception in case of invalid parameters (e.g. if the
-    // supplied module is not associated to a TRestORMServer instance)
+    // supplied module is not associated to a TRestOrmServer instance)
     // - aTableName will be checked against the current aModule.Server.Model
-    // to retrieve the corresponding TORMVirtualTableAutoID class and
+    // to retrieve the corresponding TOrmVirtualTableAutoID class and
     // create any associated Static: TRestStorage instance
-    constructor Create(aModule: TORMVirtualTableModule;
+    constructor Create(aModule: TOrmVirtualTableModule;
       const aTableName: RawUTF8; FieldCount: integer;
       Fields: PPUTF8CharArray); override;
-    /// returns the main specifications of the associated TORMVirtualTableModule
+    /// returns the main specifications of the associated TOrmVirtualTableModule
     // - this is a read/write table, without transaction, associated to the
-    // TORMVirtualTableCursorJSON cursor type, with 'JSON' as module name
+    // TOrmVirtualTableCursorJSON cursor type, with 'JSON' as module name
     // - no particular class is supplied here, since it will depend on the
     // associated Static instance
     class procedure GetTableModuleProperties(
       var aProperties: TVirtualTableModuleProperties); override;
     /// called to determine the best way to access the virtual table
-    // - will prepare the request for TORMVirtualTableCursor.Search()
+    // - will prepare the request for TOrmVirtualTableCursor.Search()
     // - only prepared WHERE statement is for "ID = value"
     // - only prepared ORDER BY statement is for ascending IDs
-    function Prepare(var Prepared: TORMVirtualTablePrepared): boolean; override;
+    function Prepare(var Prepared: TOrmVirtualTablePrepared): boolean; override;
     /// called when a DROP TABLE statement is executed against the virtual table
     // - returns true on success, false otherwise
     function Drop: boolean; override;
@@ -1112,51 +1112,51 @@ type
   end;
 
   /// A TRestStorageInMemory-based virtual table using Binary storage
-  // - for ORM access, you should use TORMModel.VirtualTableRegister method to
-  // associated this virtual table module to a TORMVirtualTableAutoID class
+  // - for ORM access, you should use TOrmModel.VirtualTableRegister method to
+  // associated this virtual table module to a TOrmVirtualTableAutoID class
   // - transactions are not handled by this module
   // - by default, no data is written on disk: you will need to call explicitly
   // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
   // - binary format is more efficient in term of speed and disk usage than
-  // the JSON format implemented by TORMVirtualTableJSON
-  // - binary format will be set by TORMVirtualTableJSON.CreateTableInstance
+  // the JSON format implemented by TOrmVirtualTableJSON
+  // - binary format will be set by TOrmVirtualTableJSON.CreateTableInstance
   // - file extension is set to '.data'
-  TORMVirtualTableBinary = class(TORMVirtualTableJSON);
+  TOrmVirtualTableBinary = class(TOrmVirtualTableJSON);
 
 
 
-{ ************ TORMVirtualTableLog Virtual Table }
+{ ************ TOrmVirtualTableLog Virtual Table }
 
   /// Implements a read/only virtual table able to access a .log file, as created
   // by TSynLog
-  // - to be used e.g. by a TORMLog_Log ('Log_' will identify this 'Log' module)
+  // - to be used e.g. by a TOrmLog_Log ('Log_' will identify this 'Log' module)
   // - the .log file name will be specified by the Table Name, to which a '.log'
   // file extension will be appended before loading it from the current directory
-  TORMVirtualTableLog = class(TORMVirtualTable)
+  TOrmVirtualTableLog = class(TOrmVirtualTable)
   protected
     fLogFile: TSynLogFile;
   public
-    /// returns the main specifications of the associated TORMVirtualTableModule
+    /// returns the main specifications of the associated TOrmVirtualTableModule
     // - this is a read only table, with transaction, associated to the
-    // TORMVirtualTableCursorLog cursor type, with 'Log' as module name,
-    // and associated to TORMLog_Log table field layout
+    // TOrmVirtualTableCursorLog cursor type, with 'Log' as module name,
+    // and associated to TOrmLog_Log table field layout
     class procedure GetTableModuleProperties(
       var aProperties: TVirtualTableModuleProperties); override;
-    /// creates the TORMVirtualTable according to the supplied parameters
+    /// creates the TOrmVirtualTable according to the supplied parameters
     // - aTableName will be checked against the current aModule.Server.Model
-    // to retrieve the corresponding TORMVirtualTableAutoID class
-    constructor Create(aModule: TORMVirtualTableModule; const aTableName: RawUTF8;
+    // to retrieve the corresponding TOrmVirtualTableAutoID class
+    constructor Create(aModule: TOrmVirtualTableModule; const aTableName: RawUTF8;
       FieldCount: integer; Fields: PPUTF8CharArray); override;
     /// release the associated .log file mapping and all internal structures
     destructor Destroy; override;
   end;
 
   /// A Virtual Table cursor for reading a TSynLogFile content
-  // - this is the cursor class associated to TORMVirtualTableLog
-  TORMVirtualTableCursorLog = class(TORMVirtualTableCursorIndex)
+  // - this is the cursor class associated to TOrmVirtualTableLog
+  TOrmVirtualTableCursorLog = class(TOrmVirtualTableCursorIndex)
   public
     /// called to begin a search in the virtual table
-    function Search(const Prepared: TORMVirtualTablePrepared): boolean; override;
+    function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
     /// called to retrieve a column value of the current data row as TSQLVar
     function Column(aColumn: integer; var aResult: TSQLVar): boolean; override;
   end;
@@ -1166,11 +1166,11 @@ type
 
   /// REST storage with redirection to another REST instance
   // - allows redirection of all CRUD operations for a table to another
-  // TRestORM instance, may be a remote TRestORMClient or a TRestORMServer
-  // - will be used by TRestORMServer.RemoteDataCreate() method
+  // TRestOrm instance, may be a remote TRestOrmClient or a TRestOrmServer
+  // - will be used by TRestOrmServer.RemoteDataCreate() method
   TRestStorageRemote = class(TRestStorage)
   protected
-    fRemoteRest: TRestORM;
+    fRemoteRest: TRestOrm;
     fRemoteTableIndex: integer;
   public
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
@@ -1195,14 +1195,14 @@ type
   public
     /// initialize the table storage redirection
     // - you should not have to use this constructor, but rather the
-    // TRestORMServer.RemoteDataCreate() method which will create and register
+    // TRestOrmServer.RemoteDataCreate() method which will create and register
     // one TRestStorageRemote instance
-    constructor Create(aClass: TORMClass; aServer: TRestORMServer;
-      aRemoteRest: TRestORM); reintroduce; virtual;
+    constructor Create(aClass: TOrmClass; aServer: TRestOrmServer;
+      aRemoteRest: TRestOrm); reintroduce; virtual;
   published
     /// the remote ORM instance used for data persistence
-    // - may be a TRestORMClient or a TRestORMServer instance
-    property RemoteRest: TRestORM read fRemoteRest;
+    // - may be a TRestOrmClient or a TRestOrmServer instance
+    property RemoteRest: TRestOrm read fRemoteRest;
   end;
 
 
@@ -1227,7 +1227,7 @@ type
   // updates to the server managing this ID (if possible - older shards may
   // be deleted/ignored to release resources)
   // - inherited class should override InitShards/InitNewShard to customize the
-  // kind of TRestORM instances to be used for each shard (which may be local
+  // kind of TRestOrm instances to be used for each shard (which may be local
   // or remote, a SQLite3 engine or an external SQL/NoSQL database)
   // - see inherited TRestStorageShardDB as defined in mORMotSQLite3.pas
   TRestStorageShard = class(TRestStorage)
@@ -1237,7 +1237,7 @@ type
     fMaxShardCount: integer;
     fLastID: TID;
     fOptions: TRestStorageShardOptions;
-    fShards: array of TRestORM;
+    fShards: array of TRestOrm;
     fShardLast: integer;
     fShardLastID: TID;
     fShardNextID: TID;
@@ -1246,7 +1246,7 @@ type
     // will set Shards[],fShardLast,fShardLastID,fShardOffset
     procedure InitShards; virtual; abstract;
     // should always return non nil shard to contain new added IDs
-    function InitNewShard: TRestORM; virtual; abstract;
+    function InitNewShard: TRestOrm; virtual; abstract;
     procedure InternalAddNewShard;
     function InternalShardBatch(ShardIndex: integer): TRestBatch;
   public
@@ -1276,10 +1276,10 @@ type
   public
     /// initialize the table storage redirection for sharding
     // - you should not have to use this constructor, but e.g.
-    // TRestStorageShardDB.Create on a main TRestORMServer.StaticDataAdd()
+    // TRestStorageShardDB.Create on a main TRestOrmServer.StaticDataAdd()
     // - the supplied aShardRange should be < 1000 - and once set, you should NOT
     // change this value on an existing shard, unless process will be broken
-    constructor Create(aClass: TORMClass; aServer: TRestORMServer;
+    constructor Create(aClass: TOrmClass; aServer: TRestOrmServer;
       aShardRange: TID; aOptions: TRestStorageShardOptions;
       aMaxShardCount: integer); reintroduce; virtual;
     /// finalize the table storage, including Shards[] instances
@@ -1296,16 +1296,16 @@ type
     procedure RemoveShard(aShardIndex: integer); virtual;
     /// retrieve the ORM shard instance corresponding to an ID
     // - may return false if the correspondig shard is not available any more
-    // - may return true, and a TRestORMHookClient or a TRestORMHookServer instance
-    // with its associated index in TRestORM.Model.Tables[]
+    // - may return true, and a TRestOrmHookClient or a TRestOrmHookServer instance
+    // with its associated index in TRestOrm.Model.Tables[]
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function ShardFromID(aID: TID; out aShardTableIndex: integer;
-      out aShard: TRestORM; aOccasion: TORMOccasion = ooSelect;
+      out aShard: TRestOrm; aOccasion: TOrmOccasion = ooSelect;
       aShardIndex: PInteger = nil): boolean; virtual;
     /// get the row count of a specified table
-    function TableRowCount(Table: TORMClass): Int64; override;
+    function TableRowCount(Table: TOrmClass): Int64; override;
     /// check if there is some data rows in a specified table
-    function TableHasRows(Table: TORMClass): boolean; override;
+    function TableHasRows(Table: TOrmClass): boolean; override;
   published
     /// how much IDs should store each ORM shard instance
     // - once set, you should NEVER change this value on an existing shard,
@@ -1342,9 +1342,9 @@ uses
 
 { ************ Virtual Table ORM Support }
 
-{ TORMVirtualTablePrepared }
+{ TOrmVirtualTablePrepared }
 
-function TORMVirtualTablePrepared.IsWhereIDEquals(CalledFromPrepare: boolean): boolean;
+function TOrmVirtualTablePrepared.IsWhereIDEquals(CalledFromPrepare: boolean): boolean;
 begin
   result := (WhereCount = 1) and
             (Where[0].Column = VIRTUAL_TABLE_ROWID_COLUMN) and
@@ -1353,7 +1353,7 @@ begin
             (Where[0].Operation = soEqualTo);
 end;
 
-function TORMVirtualTablePrepared.IsWhereOneFieldEquals: boolean;
+function TOrmVirtualTablePrepared.IsWhereOneFieldEquals: boolean;
 begin
   result := (WhereCount = 1) and
             (Where[0].Column >= 0) and
@@ -1361,10 +1361,10 @@ begin
 end;
 
 
-{ TORMVirtualTableModule }
+{ TOrmVirtualTableModule }
 
-constructor TORMVirtualTableModule.Create(aTableClass: TORMVirtualTableClass;
-  aServer: TRestORMServer);
+constructor TOrmVirtualTableModule.Create(aTableClass: TOrmVirtualTableClass;
+  aServer: TRestOrmServer);
 begin
   fTableClass := aTableClass;
   fServer := aServer;
@@ -1374,7 +1374,7 @@ begin
     fFeatures.FileExtension := UTF8ToString(LowerCase(fModuleName));
 end;
 
-function TORMVirtualTableModule.FileName(const aTableName: RawUTF8): TFileName;
+function TOrmVirtualTableModule.FileName(const aTableName: RawUTF8): TFileName;
 begin
   result := UTF8ToString(aTableName) + '.' + FileExtension;
   if fFilePath = '' then
@@ -1384,13 +1384,13 @@ begin
 end;
 
 
-{ TORMVirtualTable }
+{ TOrmVirtualTable }
 
-constructor TORMVirtualTable.Create(aModule: TORMVirtualTableModule;
+constructor TOrmVirtualTable.Create(aModule: TOrmVirtualTableModule;
   const aTableName: RawUTF8; FieldCount: integer; Fields: PPUTF8CharArray);
 var
   aClass: TRestStorageClass;
-  aServer: TRestORMServer;
+  aServer: TRestOrmServer;
 begin
   if (aModule = nil) or
      (aTableName = '') then
@@ -1400,7 +1400,7 @@ begin
   fTableName := aTableName;
   if fModule.fFeatures.StaticClass <> nil then
   begin
-    // create new fStatic instance e.g. for TORMVirtualTableLog
+    // create new fStatic instance e.g. for TOrmVirtualTableLog
     aServer := fModule.Server;
     if aServer = nil then
       raise EModelException.CreateUTF8('%.Server=nil for %.Create', [Module, self])
@@ -1413,7 +1413,7 @@ begin
       if aClass.InheritsFrom(TRestStorageInMemory) then
         fStatic := TRestStorageInMemoryClass(aClass).Create(
           fStaticTable, fModule.Server, fModule.FileName(aTableName),
-          self.InheritsFrom(TORMVirtualTableBinary))
+          self.InheritsFrom(TOrmVirtualTableBinary))
       else
         fStatic := aClass.Create(fStaticTable, fModule.Server);
       aServer.StaticTableSetup(fStaticTableIndex, fStatic, sVirtualTable);
@@ -1423,7 +1423,7 @@ begin
   end;
 end;
 
-destructor TORMVirtualTable.Destroy;
+destructor TOrmVirtualTable.Destroy;
 begin
   if fStatic <> nil then
   begin
@@ -1437,7 +1437,7 @@ begin
   inherited Destroy;
 end;
 
-function TORMVirtualTable.Prepare(var Prepared: TORMVirtualTablePrepared): boolean;
+function TOrmVirtualTable.Prepare(var Prepared: TOrmVirtualTablePrepared): boolean;
 begin
   result := self <> nil;
   if result then
@@ -1446,7 +1446,7 @@ begin
       with Prepared.Where[0] do
       begin
         // optimize for WHERE ID=? clause
-        Value.VType := ftNull; // mark TORMVirtualTableCursorJSON expects it
+        Value.VType := ftNull; // mark TOrmVirtualTableCursorJSON expects it
         OmitCheck := true;
         Prepared.EstimatedCost := costPrimaryIndex;
         Prepared.EstimatedRows := 1;
@@ -1458,29 +1458,29 @@ begin
     end;
 end;
 
-function TORMVirtualTable.Drop: boolean;
+function TOrmVirtualTable.Drop: boolean;
 begin
   result := false;  // no DROP TABLE to be implemented here
 end;
 
-function TORMVirtualTable.Delete(aRowID: Int64): boolean;
+function TOrmVirtualTable.Delete(aRowID: Int64): boolean;
 begin
   result := false;  // no DELETE to be implemented here
 end;
 
-function TORMVirtualTable.Insert(aRowID: Int64; var Values: TSQLVarDynArray;
+function TOrmVirtualTable.Insert(aRowID: Int64; var Values: TSQLVarDynArray;
   out insertedRowID: Int64): boolean;
 begin
   result := false;  // no INSERT to be implemented here
 end;
 
-function TORMVirtualTable.Update(oldRowID, newRowID: Int64;
+function TOrmVirtualTable.Update(oldRowID, newRowID: Int64;
   var Values: TSQLVarDynArray): boolean;
 begin
   result := false;  // no UPDATE to be implemented here
 end;
 
-function TORMVirtualTable.Transaction(aState: TORMVirtualTableTransaction;
+function TOrmVirtualTable.Transaction(aState: TOrmVirtualTableTransaction;
   aSavePoint: integer): boolean;
 begin
   result := (Module <> nil) and
@@ -1488,12 +1488,12 @@ begin
             (aState in [vttBegin, vttSync, vttCommit, vttSavePoint, vttRelease]);
 end;
 
-function TORMVirtualTable.Rename(const NewName: RawUTF8): boolean;
+function TOrmVirtualTable.Rename(const NewName: RawUTF8): boolean;
 begin
   result := false;
 end;
 
-class function TORMVirtualTable.ModuleName: RawUTF8;
+class function TOrmVirtualTable.ModuleName: RawUTF8;
 const
   LEN: array[-1..5] of byte = (
     1, 16, 11, 4, 16, 11, 4);
@@ -1509,42 +1509,42 @@ begin
   end;
 end;
 
-class function TORMVirtualTable.StructureFromClass(aClass: TORMClass;
+class function TOrmVirtualTable.StructureFromClass(aClass: TOrmClass;
   const aTableName: RawUTF8): RawUTF8;
 begin
   FormatUTF8('CREATE TABLE % (%', [aTableName,
     GetVirtualTableSQLCreate(aClass.RecordProps)], result);
 end;
 
-function TORMVirtualTable.Structure: RawUTF8;
+function TOrmVirtualTable.Structure: RawUTF8;
 begin
   result := '';
   if self <> nil then
     if static <> nil then
-      // e.g. for TORMVirtualTableJSON or TORMVirtualTableExternal
+      // e.g. for TOrmVirtualTableJSON or TOrmVirtualTableExternal
       result := StructureFromClass(StaticTable, TableName)
     else if (Module <> nil) and
             (Module.RecordClass <> nil) then
-      // e.g. for TORMVirtualTableLog
+      // e.g. for TOrmVirtualTableLog
       result := StructureFromClass(Module.RecordClass, TableName);
 end;
 
 
-{ TORMVirtualTableCursor }
+{ TOrmVirtualTableCursor }
 
-constructor TORMVirtualTableCursor.Create(aTable: TORMVirtualTable);
+constructor TOrmVirtualTableCursor.Create(aTable: TOrmVirtualTable);
 begin
   fTable := aTable;
 end;
 
-procedure TORMVirtualTableCursor.SetColumn(var aResult: TSQLVar; aValue: Int64);
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar; aValue: Int64);
 begin
   aResult.Options := [];
   aResult.VType := ftInt64;
   aResult.VInt64 := aValue;
 end;
 
-procedure TORMVirtualTableCursor.SetColumn(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar;
   const aValue: double);
 begin
   aResult.Options := [];
@@ -1552,7 +1552,7 @@ begin
   aResult.VDouble := aValue;
 end;
 
-procedure TORMVirtualTableCursor.SetColumn(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar;
   const aValue: RawUTF8);
 begin
   aResult.Options := [];
@@ -1561,7 +1561,7 @@ begin
   aResult.VText := pointer(fColumnTemp);
 end;
 
-procedure TORMVirtualTableCursor.SetColumn(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar;
   aValue: PUTF8Char; aValueLength: integer);
 begin
   aResult.Options := [];
@@ -1570,7 +1570,7 @@ begin
   aResult.VText := pointer(fColumnTemp);
 end;
 
-procedure TORMVirtualTableCursor.SetColumnBlob(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumnBlob(var aResult: TSQLVar;
   aValue: pointer; aValueLength: integer);
 begin
   aResult.Options := [];
@@ -1580,7 +1580,7 @@ begin
   aResult.VBlobLen := aValueLength;
 end;
 
-procedure TORMVirtualTableCursor.SetColumnDate(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumnDate(var aResult: TSQLVar;
   const aValue: TDateTime; aWithMS: boolean);
 begin
   if aWithMS then
@@ -1591,7 +1591,7 @@ begin
   aResult.VDateTime := aValue;
 end;
 
-procedure TORMVirtualTableCursor.SetColumnCurr64(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumnCurr64(var aResult: TSQLVar;
   aValue64: PInt64);
 begin
   aResult.Options := [];
@@ -1601,15 +1601,15 @@ end;
 
 
 
-{ TORMVirtualTableCursorIndex }
+{ TOrmVirtualTableCursorIndex }
 
-function TORMVirtualTableCursorIndex.HasData: boolean;
+function TOrmVirtualTableCursorIndex.HasData: boolean;
 begin
   result := (self <> nil) and
             (fCurrent <= fMax);
 end;
 
-function TORMVirtualTableCursorIndex.Next: boolean;
+function TOrmVirtualTableCursorIndex.Next: boolean;
 begin
   if self = nil then
     result := false
@@ -1621,8 +1621,8 @@ begin
   end;
 end;
 
-function TORMVirtualTableCursorIndex.Search(
-  const Prepared: TORMVirtualTablePrepared): boolean;
+function TOrmVirtualTableCursorIndex.Search(
+  const Prepared: TOrmVirtualTablePrepared): boolean;
 begin
   fCurrent := 0; // mark EOF by default
   fMax := -1;
@@ -1635,7 +1635,7 @@ end;
 
 { TRestStorage }
 
-constructor TRestStorage.Create(aClass: TORMClass; aServer: TRestORMServer);
+constructor TRestStorage.Create(aClass: TOrmClass; aServer: TRestOrmServer);
 begin
   inherited Create(nil);
   if aClass = nil then
@@ -1651,7 +1651,7 @@ begin
   else
   begin
     // fallback to an owned model instance
-    fModel := TORMModel.Create([aClass]);
+    fModel := TOrmModel.Create([aClass]);
     fModel.Owner := self;
   end;
   fStoredClassProps := fModel.Props[aClass];
@@ -1680,7 +1680,7 @@ begin
   end;
 end;
 
-function TRestStorage.CreateSQLMultiIndex(Table: TORMClass;
+function TRestStorage.CreateSQLMultiIndex(Table: TOrmClass;
   const FieldNames: array of RawUTF8; Unique: boolean; IndexName: RawUTF8): boolean;
 begin
   result := false; // not implemented in this basic REST static class
@@ -1692,8 +1692,8 @@ begin
   result := SearchField(FieldName, Int64ToUTF8(FieldValue), ResultID);
 end;
 
-function TRestStorage.RecordCanBeUpdated(Table: TORMClass; ID: TID;
-  Action: TORMEvent; ErrorMsg: PRawUTF8 = nil): boolean;
+function TRestStorage.RecordCanBeUpdated(Table: TOrmClass; ID: TID;
+  Action: TOrmEvent; ErrorMsg: PRawUTF8 = nil): boolean;
 begin
   result := (Owner = nil) or
             Owner.RecordCanBeUpdated(Table, ID, Action, ErrorMsg);
@@ -1739,7 +1739,7 @@ begin
     result := fOwner.GetCurrentSessionUserID;
 end;
 
-procedure TRestStorage.RecordVersionFieldHandle(Occasion: TORMOccasion;
+procedure TRestStorage.RecordVersionFieldHandle(Occasion: TOrmOccasion;
   var Decoder: TJSONObjectDecoder);
 begin
   if fStoredClassRecordProps.RecordVersionField = nil then
@@ -1751,7 +1751,7 @@ begin
     Decoder, fStoredClassRecordProps.RecordVersionField);
 end;
 
-function TRestStorage.UnLock(Table: TORMClass; aID: TID): boolean;
+function TRestStorage.UnLock(Table: TOrmClass; aID: TID): boolean;
 begin
   result := Model.UnLock(Table, aID);
 end;
@@ -1788,7 +1788,7 @@ end;
 function TRestStorageRecordBased.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 var
-  rec: TORM;
+  rec: TOrm;
 begin
   result := 0; // mark error
   if TableModelIndex <> fStoredClassProps.TableIndex then
@@ -1811,7 +1811,7 @@ end;
 function TRestStorageRecordBased.EngineUpdate(TableModelIndex: integer;
   ID: TID; const SentData: RawUTF8): boolean;
 var
-  rec: TORM;
+  rec: TOrm;
 begin
   // this implementation won't handle partial fields update (e.g. BatchUpdate
   // after FillPrepare) - but TRestStorageInMemory.EngineUpdate will
@@ -1839,7 +1839,7 @@ end;
 function TRestStorageRecordBased.UpdateOne(ID: TID;
   const Values: TSQLVarDynArray): boolean;
 var
-  rec: TORM;
+  rec: TOrm;
 begin
   if ID <= 0 then
   begin
@@ -1865,7 +1865,7 @@ end;
 { TRestStorageInMemoryUnique }
 
 constructor TRestStorageInMemoryUnique.Create(aOwner: TRestStorageInMemory;
-  aField: TORMPropInfo);
+  aField: TOrmPropInfo);
 begin
   fOwner := aOwner;
   fPropInfo := aField;
@@ -1876,15 +1876,15 @@ end;
 function TRestStorageInMemoryUnique.EventCompare(const A, B): integer;
 begin
   result := fPropInfo.CompareValue(
-    TORM(A), TORM(B), fCaseInsensitive);
+    TOrm(A), TOrm(B), fCaseInsensitive);
 end;
 
 function TRestStorageInMemoryUnique.EventHash(const Elem): cardinal;
 begin
-  result := fPropInfo.GetHash(TORM(Elem), fCaseInsensitive);
+  result := fPropInfo.GetHash(TOrm(Elem), fCaseInsensitive);
 end;
 
-function TRestStorageInMemoryUnique.Find(Rec: TORM): integer;
+function TRestStorageInMemoryUnique.Find(Rec: TOrm): integer;
 begin
   if self = nil then // no Unique index for this field
     result := -1
@@ -1895,7 +1895,7 @@ begin
   end;
 end;
 
-function TRestStorageInMemoryUnique.AddedAfterFind(Rec: TORM): boolean;
+function TRestStorageInMemoryUnique.AddedAfterFind(Rec: TOrm): boolean;
 begin
   fHasher.FindBeforeAdd(@Rec, result, fLastFindHashCode);
 end;
@@ -1903,8 +1903,8 @@ end;
 
 { TRestStorageInMemory }
 
-constructor TRestStorageInMemory.Create(aClass: TORMClass;
-  aServer: TRestORMServer; const aFileName: TFileName; aBinaryFile: boolean);
+constructor TRestStorageInMemory.Create(aClass: TOrmClass;
+  aServer: TRestOrmServer; const aFileName: TFileName; aBinaryFile: boolean);
 var
   f: PtrInt;
 begin
@@ -1915,8 +1915,8 @@ begin
       [self, aClass]);
   fFileName := aFileName;
   fBinaryFile := aBinaryFile;
-  fValues.Init(TypeInfo(TORMObjArray), fValue, TORMDynArrayHashOne,
-    TORMDynArrayCompare, nil, @fCount); // hashed and compared by ID
+  fValues.Init(TypeInfo(TOrmObjArray), fValue, TOrmDynArrayHashOne,
+    TOrmDynArrayCompare, nil, @fCount); // hashed and compared by ID
   fSearchRec := fStoredClass.Create;
   if (ClassType <> TRestStorageInMemory) and
      (fStoredClassProps <> nil) then
@@ -1944,7 +1944,7 @@ destructor TRestStorageInMemory.Destroy;
 begin
   UpdateFile;
   ObjArrayClear(fUnique);
-  fValues.Clear; // to free all stored TORM instances
+  fValues.Clear; // to free all stored TOrm instances
   fSearchRec.Free;
   inherited Destroy;
 end;
@@ -1960,7 +1960,7 @@ begin
     result := -1;
 end;
 
-function TRestStorageInMemory.AddOne(Rec: TORM; ForceID: boolean;
+function TRestStorageInMemory.AddOne(Rec: TOrm; ForceID: boolean;
   const SentData: RawUTF8): TID;
 var
   ndx, f: PtrInt;
@@ -2021,7 +2021,7 @@ begin
       result, SentData, nil);
 end;
 
-function TRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TORM;
+function TRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TOrm;
   aUpdateIndex: integer): boolean;
 var
   f, ndx: PtrInt;
@@ -2060,7 +2060,7 @@ begin
   end;
 end;
 
-function FindMaxID(p: PORM; n: integer): TID;
+function FindMaxID(p: POrm; n: integer): TID;
 var
   id: TID;
 begin
@@ -2075,7 +2075,7 @@ begin
     until n = 0;
 end;
 
-function FindMaxIDAndCheckSorted(p: PORM; n: integer;
+function FindMaxIDAndCheckSorted(p: POrm; n: integer;
   var unsorted: boolean): TID;
 var
   id, prev: TID;
@@ -2113,7 +2113,7 @@ end;
 function TRestStorageInMemory.DeleteOne(aIndex: integer): boolean;
 var
   f: PtrInt;
-  rec: TORM;
+  rec: TOrm;
 begin
   if cardinal(aIndex) >= cardinal(fCount) then
     result := false
@@ -2185,7 +2185,7 @@ begin
     result := fValue[Index].IDValue;
 end;
 
-function TRestStorageInMemory.GetItem(Index: integer): TORM;
+function TRestStorageInMemory.GetItem(Index: integer): TOrm;
 begin
   if self <> nil then
     if cardinal(Index) >= cardinal(fCount) then
@@ -2197,7 +2197,7 @@ begin
 end;
 
 procedure TRestStorageInMemory.GetJSONValuesEvent(aDest: pointer;
-  aRec: TORM; aIndex: integer);
+  aRec: TOrm; aIndex: integer);
 var
   W: TJSONSerializer absolute aDest;
 begin
@@ -2303,7 +2303,7 @@ var
   i, currentRow, found: PtrInt;
   v: Int64;
   err: integer;
-  P: TORMPropInfo;
+  P: TOrmPropInfo;
   nfo: PRttiProp;
   offs: PtrUInt;
   ot: TRttiOrd;
@@ -2359,7 +2359,7 @@ begin
   // handle WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
   dec(WhereField);
   P := fStoredClassRecordProps.Fields.List[WhereField];
-  if not (P.ORMFieldType in COPIABLE_FIELDS) then
+  if not (P.OrmFieldType in COPIABLE_FIELDS) then
     // nothing to search (e.g. oftUnknown or oftMany)
     exit;
   // use fUnique[] hash array for O(1) search if available
@@ -2382,19 +2382,19 @@ begin
   // full scan optimized search for a specified value
   found := 0;
   currentRow := 0;
-  if P.InheritsFrom(TORMPropInfoRTTIInt32) and
-     (TORMPropInfoRTTIInt32(P).PropRtti.Kind in [rkInteger, rkEnumeration, rkSet]) then
+  if P.InheritsFrom(TOrmPropInfoRTTIInt32) and
+     (TOrmPropInfoRTTIInt32(P).PropRtti.Kind in [rkInteger, rkEnumeration, rkSet]) then
   begin
     // search 8/16/32-bit properties
     v := GetInt64(pointer(WhereValue), err); // 64-bit for cardinal
     if err <> 0 then
       exit;
-    nfo := TORMPropInfoRTTI(P).PropInfo;
-    offs := TORMPropInfoRTTI(P).GetterIsFieldPropOffset;
+    nfo := TOrmPropInfoRTTI(P).PropInfo;
+    offs := TOrmPropInfoRTTI(P).GetterIsFieldPropOffset;
     if offs <> 0 then
     begin
       // plain field with no getter
-      ot := TORMPropInfoRTTI(P).PropRtti.Cache.RttiOrd;
+      ot := TOrmPropInfoRTTI(P).PropRtti.Cache.RttiOrd;
       if ot in [roSLong, roULong] then
       begin
         // handle very common 32-bit integer field
@@ -2420,14 +2420,14 @@ begin
            FoundOneAndReachedLimit then
           break;
   end
-  else if P.InheritsFrom(TORMPropInfoRTTIInt64) then
+  else if P.InheritsFrom(TOrmPropInfoRTTIInt64) then
   begin
     // search 64-bit integer property
     v := GetInt64(pointer(WhereValue), err);
     if err <> 0 then
       exit;
-    nfo := TORMPropInfoRTTI(P).PropInfo;
-    offs := TORMPropInfoRTTI(P).GetterIsFieldPropOffset;
+    nfo := TOrmPropInfoRTTI(P).PropInfo;
+    offs := TOrmPropInfoRTTI(P).GetterIsFieldPropOffset;
     if offs <> 0 then
     begin
       // plain field with no getter
@@ -2461,7 +2461,7 @@ end;
 function TRestStorageInMemory.FindMax(WhereField: integer;
   out max: Int64): boolean;
 var
-  P: TORMPropInfo;
+  P: TOrmPropInfo;
   nfo: PRttiProp;
   i: PtrInt;
   v: Int64;
@@ -2482,9 +2482,9 @@ begin
   // search WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
   dec(WhereField);
   P := fStoredClassRecordProps.Fields.List[WhereField];
-  if P.InheritsFrom(TORMPropInfoRTTIInt32) then
+  if P.InheritsFrom(TOrmPropInfoRTTIInt32) then
   begin
-    nfo := TORMPropInfoRTTI(P).PropInfo;
+    nfo := TOrmPropInfoRTTI(P).PropInfo;
     for i := 0 to fCount - 1 do
     begin
       v := nfo.GetOrdProp(fValue[i]);
@@ -2493,9 +2493,9 @@ begin
     end;
     result := true;
   end
-  else if P.InheritsFrom(TORMPropInfoRTTIInt64) then
+  else if P.InheritsFrom(TOrmPropInfoRTTIInt64) then
   begin
-    nfo := TORMPropInfoRTTI(P).PropInfo;
+    nfo := TOrmPropInfoRTTI(P).PropInfo;
     for i := 0 to fCount - 1 do
     begin
       v := nfo.GetInt64Prop(fValue[i]);
@@ -2532,12 +2532,12 @@ var
   id: Int64;
   W: TJSONSerializer;
   IsNull: boolean;
-  Prop: TORMPropInfo;
+  Prop: TOrmPropInfo;
   bits: TFieldBits;
   withID: boolean;
 label
   err;
-begin // exact same format as TORMTable.GetJSONValues()
+begin // exact same format as TOrmTable.GetJSONValues()
   result := 0;
   if length(Stmt.Where) > 1 then
     raise ERestStorage.CreateUTF8('%.GetJSONValues on % with Stmt.Where[]=%',
@@ -2602,11 +2602,11 @@ begin // exact same format as TORMTable.GetJSONValues()
           if Stmt.Where[0].Field > 0 then
           begin
             Prop := fStoredClassRecordProps.Fields.List[Stmt.Where[0].Field - 1];
-            if Prop.InheritsFrom(TORMPropInfoRTTIRawBlob) then
+            if Prop.InheritsFrom(TOrmPropInfoRTTIRawBlob) then
             begin
               IsNull := Stmt.Where[0].Operation = opIsNull;
               for ndx := 0 to fCount - 1 do
-                if TORMPropInfoRTTIRawBlob(Prop).IsNull(fValue[ndx]) = IsNull then
+                if TOrmPropInfoRTTIRawBlob(Prop).IsNull(fValue[ndx]) = IsNull then
                 begin
                   fValue[ndx].GetJSONValues(W);
                   W.Add(',');
@@ -2854,7 +2854,7 @@ end;
 procedure TRestStorageInMemory.LoadFromJSON(
   JSONBuffer: PUTF8Char; JSONBufferLen: integer);
 var
-  T: TORMTableJSON;
+  T: TOrmTableJSON;
   timer: TPrecisionTimer;
 begin
   StorageLock(true, 'LoadFromJSON');
@@ -2865,7 +2865,7 @@ begin
     fModified := false;
     if JSONBuffer = nil then
       exit;
-    T := TORMTableJSON.CreateFromTables(
+    T := TOrmTableJSON.CreateFromTables(
       [fStoredClass], '', JSONBuffer, JSONBufferLen);
     try
       if T.FieldIndexID < 0 then // no ID field -> load is impossible
@@ -2962,10 +2962,10 @@ var
   MS: TMemoryStream;
   i, n, f: PtrInt;
   ID32: TIntegerDynArray;
-  rec: TORM;
+  rec: TOrm;
   id: TID;
   s: RawUTF8;
-  prop: TORMPropInfo;
+  prop: TOrmPropInfo;
   timer: TPrecisionTimer;
 begin
   result := false;
@@ -2981,7 +2981,7 @@ begin
     R.Init(MS.Memory, MS.Size);
     R.VarUTF8(s);
     if (s <> '') and  // new fixed format
-       not IdemPropNameU(s, 'TORMProperties') then // old buggy format
+       not IdemPropNameU(s, 'TOrmProperties') then // old buggy format
       exit;
     if not fStoredClassRecordProps.CheckBinaryHeader(R) then
       exit;
@@ -3084,7 +3084,7 @@ begin
     StorageLock(false, 'SaveToBinary');
     try
       // primitive magic and fields signature for file type identification
-      W.Write1(0); // ClassName='TORMProperties' in old buggy format
+      W.Write1(0); // ClassName='TOrmProperties' in old buggy format
       fStoredClassRecordProps.SaveBinaryHeader(W);
       // write IDs - in increasing order
       if fUnSortedID then
@@ -3168,7 +3168,7 @@ begin
   end;
 end;
 
-function TRestStorageInMemory.GetOne(aID: TID): TORM;
+function TRestStorageInMemory.GetOne(aID: TID): TOrm;
 var
   i: PtrInt;
 begin
@@ -3194,7 +3194,7 @@ function TRestStorageInMemory.EngineUpdateFieldIncrement(
   Increment: Int64): boolean;
 var
   i, err: integer;
-  P: TORMPropInfo;
+  P: TOrmPropInfo;
   V: RawUTF8;
   wasString: boolean;
   int: Int64;
@@ -3242,12 +3242,12 @@ end;
 function TRestStorageInMemory.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 var
-  P: TORMPropInfo;
+  P: TOrmPropInfo;
   WhereValueString, SetValueString, SetValueJson: RawUTF8;
   i, WhereFieldIndex: PtrInt;
   SetValueWasString: boolean;
   match: TSynList;
-  rec: TORM;
+  rec: TOrm;
 begin
   result := false;
   if (TableModelIndex <> fStoredClassProps.TableIndex) or
@@ -3299,7 +3299,7 @@ begin
     // check that all records can be updated
     for i := 0 to match.Count - 1 do
       if not RecordCanBeUpdated(fStoredClass,
-          TORM(match.List[i]).IDValue, oeUpdate) then
+          TOrm(match.List[i]).IDValue, oeUpdate) then
         // one record update fails -> abort all
         exit;
     // update field value
@@ -3327,7 +3327,7 @@ function TRestStorageInMemory.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var
   i: PtrInt;
-  rec: TORM;
+  rec: TOrm;
 begin
   result := false;
   if (ID < 0) or
@@ -3370,14 +3370,14 @@ begin
   end;
 end;
 
-function TRestStorageInMemory.UpdateOne(Rec: TORM;
+function TRestStorageInMemory.UpdateOne(Rec: TOrm;
   const SentData: RawUTF8): boolean;
 var
   i: PtrInt;
 begin
   result := false;
   if (Rec = nil) or
-     (PORMClass(Rec)^ <> fStoredClass) or
+     (POrmClass(Rec)^ <> fStoredClass) or
      (Rec.IDValue <= 0) then
     exit;
   StorageLock(true, 'UpdateOne');
@@ -3404,7 +3404,7 @@ function TRestStorageInMemory.UpdateOne(ID: TID;
   const Values: TSQLVarDynArray): boolean;
 var
   i: PtrInt;
-  rec: TORM;
+  rec: TOrm;
 begin
   result := false;
   if ID <= 0 then
@@ -3464,14 +3464,14 @@ begin
   end;
 end;
 
-function TRestStorageInMemory.RetrieveBlobFields(Value: TORM): boolean;
+function TRestStorageInMemory.RetrieveBlobFields(Value: TOrm): boolean;
 var
   i, f: integer;
 begin
   result := false;
   if (Value <> nil) and
      (Value.IDValue > 0) and
-     (PORMClass(Value)^ = fStoredClass) then
+     (POrmClass(Value)^ = fStoredClass) then
     with Value.RecordProps do
       if BlobFields <> nil then
       begin
@@ -3521,14 +3521,14 @@ begin
   end;
 end;
 
-function TRestStorageInMemory.UpdateBlobFields(Value: TORM): boolean;
+function TRestStorageInMemory.UpdateBlobFields(Value: TOrm): boolean;
 var
   i, f: integer;
 begin
   result := false;
   if (Value <> nil) and
      (Value.IDValue > 0) and
-     (PORMClass(Value)^ = fStoredClass) then
+     (POrmClass(Value)^ = fStoredClass) then
     with Value.RecordProps do
     if BlobFields <> nil then
     begin
@@ -3550,10 +3550,10 @@ begin
       end;
     end
     else
-      result := true; // as TRestORM.UpdateblobFields()
+      result := true; // as TRestOrm.UpdateblobFields()
 end;
 
-function TRestStorageInMemory.TableRowCount(Table: TORMClass): Int64;
+function TRestStorageInMemory.TableRowCount(Table: TOrmClass): Int64;
 begin
   if Table <> fStoredClass then
     result := 0
@@ -3561,13 +3561,13 @@ begin
     result := fCount;
 end;
 
-function TRestStorageInMemory.TableHasRows(Table: TORMClass): boolean;
+function TRestStorageInMemory.TableHasRows(Table: TOrmClass): boolean;
 begin
   result := (Table = fStoredClass) and
             (fCount > 0);
 end;
 
-function TRestStorageInMemory.MemberExists(Table: TORMClass;
+function TRestStorageInMemory.MemberExists(Table: TOrmClass;
   ID: TID): boolean;
 begin
   StorageLock(false, 'UpdateFile');
@@ -3680,7 +3680,7 @@ begin
         exit;
       SetLength(ResultID, n);
       for i := 0 to n - 1 do
-        ResultID[i] := TORM(match.List[i]).IDValue;
+        ResultID[i] := TOrm(match.List[i]).IDValue;
     finally
       StorageUnLock;
     end;
@@ -3734,33 +3734,33 @@ begin
 end;
 
 class procedure TRestStorageInMemory.DoNothingEvent(
-  aDest: pointer; aRec: TORM; aIndex: integer);
+  aDest: pointer; aRec: TOrm; aIndex: integer);
 begin
 end;
 
 class procedure TRestStorageInMemory.DoCopyEvent(
-  aDest: pointer; aRec: TORM; aIndex: integer);
+  aDest: pointer; aRec: TOrm; aIndex: integer);
 begin
   if aDest <> nil then
     PPointer(aDest)^ := aRec.CreateCopy;
 end;
 
 class procedure TRestStorageInMemory.DoAddToListEvent(
-  aDest: pointer; aRec: TORM; aIndex: integer);
+  aDest: pointer; aRec: TOrm; aIndex: integer);
 begin
   if aDest <> nil then
     TSynList(aDest).Add(aRec);
 end;
 
 class procedure TRestStorageInMemory.DoInstanceEvent(
-  aDest: pointer; aRec: TORM; aIndex: integer);
+  aDest: pointer; aRec: TOrm; aIndex: integer);
 begin
   if aDest <> nil then
     PPointer(aDest)^ := aRec;
 end;
 
 class procedure TRestStorageInMemory.DoIndexEvent(
-  aDest: pointer; aRec: TORM; aIndex: integer);
+  aDest: pointer; aRec: TOrm; aIndex: integer);
 begin
   if aDest <> nil then
     PInteger(aDest)^ := aIndex;
@@ -3769,8 +3769,8 @@ end;
 
 { TRestStorageInMemoryExternal }
 
-constructor TRestStorageInMemoryExternal.Create(aClass: TORMClass;
-  aServer: TRestORMServer; const aFileName: TFileName; aBinaryFile: boolean);
+constructor TRestStorageInMemoryExternal.Create(aClass: TOrmClass;
+  aServer: TRestOrmServer; const aFileName: TFileName; aBinaryFile: boolean);
 begin
   inherited Create(aClass, aServer, aFileName, aBinaryFile);
   fStorageLockShouldIncreaseOwnerInternalState := false; // done by overriden StorageLock()
@@ -3788,24 +3788,24 @@ end;
 
 
 
-{ ************ TORMVirtualTableJSON/TORMVirtualTableBinary Virtual Tables }
+{ ************ TOrmVirtualTableJSON/TOrmVirtualTableBinary Virtual Tables }
 
 
-{ TORMVirtualTableCursorJSON }
+{ TOrmVirtualTableCursorJSON }
 
-function TORMVirtualTableCursorJSON.Column(aColumn: integer;
+function TOrmVirtualTableCursorJSON.Column(aColumn: integer;
   var aResult: TSQLVar): boolean;
 var
   store: TRestStorageInMemory;
 begin
   if (self = nil) or
      (fCurrent > fMax) or
-     (TORMVirtualTableJSON(Table).static = nil) then
+     (TOrmVirtualTableJSON(Table).static = nil) then
   begin
     result := false;
     exit;
   end;
-  store := TORMVirtualTableJSON(Table).fStaticInMemory;
+  store := TOrmVirtualTableJSON(Table).fStaticInMemory;
   if Cardinal(fCurrent) >= Cardinal(store.fCount) then
     result := false
   else
@@ -3826,16 +3826,16 @@ begin
   end;
 end;
 
-function TORMVirtualTableCursorJSON.Search(
-  const Prepared: TORMVirtualTablePrepared): boolean;
+function TOrmVirtualTableCursorJSON.Search(
+  const Prepared: TOrmVirtualTablePrepared): boolean;
 var
   store: TRestStorageInMemory;
 begin
   result := false;
   inherited Search(Prepared); // mark EOF by default
-  if not Table.InheritsFrom(TORMVirtualTableJSON) then
+  if not Table.InheritsFrom(TOrmVirtualTableJSON) then
     exit;
-  store := TORMVirtualTableJSON(Table).fStaticInMemory;
+  store := TOrmVirtualTableJSON(Table).fStaticInMemory;
   if store = nil then
     exit;
   if store.fCount > 0 then
@@ -3867,16 +3867,16 @@ end;
 
 
 
-{ TORMVirtualTableJSON }
+{ TOrmVirtualTableJSON }
 
-constructor TORMVirtualTableJSON.Create(aModule: TORMVirtualTableModule;
+constructor TOrmVirtualTableJSON.Create(aModule: TOrmVirtualTableModule;
   const aTableName: RawUTF8; FieldCount: integer; Fields: PPUTF8CharArray);
 begin
   inherited Create(aModule, aTableName, FieldCount, Fields);
   fStaticInMemory := fStatic as TRestStorageInMemory;
 end;
 
-function TORMVirtualTableJSON.Delete(aRowID: Int64): boolean;
+function TOrmVirtualTableJSON.Delete(aRowID: Int64): boolean;
 begin
   result := (static <> nil) and static.Delete(StaticTable, aRowID);
   if result and
@@ -3885,7 +3885,7 @@ begin
     StaticStorage.Owner.CacheOrNil.NotifyDeletion(StaticTable, aRowID);
 end;
 
-function TORMVirtualTableJSON.Drop: boolean;
+function TOrmVirtualTableJSON.Drop: boolean;
 begin
   if (self <> nil) and
      (static <> nil) then
@@ -3898,21 +3898,21 @@ begin
     result := false;
 end;
 
-class procedure TORMVirtualTableJSON.GetTableModuleProperties(
+class procedure TOrmVirtualTableJSON.GetTableModuleProperties(
   var aProperties: TVirtualTableModuleProperties);
 begin
   aProperties.Features := [vtWrite, vtWhereIDPrepared];
-  aProperties.CursorClass := TORMVirtualTableCursorJSON;
+  aProperties.CursorClass := TOrmVirtualTableCursorJSON;
   aProperties.StaticClass := TRestStorageInMemoryExternal; // will flush Cache
-  if InheritsFrom(TORMVirtualTableBinary) then
+  if InheritsFrom(TOrmVirtualTableBinary) then
     aProperties.FileExtension := 'data';
-  // default will follow the class name, e.g. '.json' for TORMVirtualTableJSON
+  // default will follow the class name, e.g. '.json' for TOrmVirtualTableJSON
 end;
 
-function TORMVirtualTableJSON.Insert(aRowID: Int64;
+function TOrmVirtualTableJSON.Insert(aRowID: Int64;
   var Values: TSQLVarDynArray; out insertedRowID: Int64): boolean;
 var
-  rec: TORM;
+  rec: TOrm;
 begin
   result := false;
   if (self = nil) or
@@ -3939,8 +3939,8 @@ begin
   end;
 end;
 
-function TORMVirtualTableJSON.Prepare(
-  var Prepared: TORMVirtualTablePrepared): boolean;
+function TOrmVirtualTableJSON.Prepare(
+  var Prepared: TOrmVirtualTablePrepared): boolean;
 begin
   result := inherited Prepare(Prepared); // optimize ID=? WHERE clause
   if result and
@@ -3951,7 +3951,7 @@ begin
         if (Column >= 0) and
            (Column in fStaticInMemory.fIsUnique) then
         begin
-          Value.VType := ftNull; // mark TORMVirtualTableCursorJSON expects it
+          Value.VType := ftNull; // mark TOrmVirtualTableCursorJSON expects it
           OmitCheck := true;
           Prepared.EstimatedCost := costSecondaryIndex;
           Prepared.EstimatedRows := 10;
@@ -3961,7 +3961,7 @@ begin
   end;
 end;
 
-function TORMVirtualTableJSON.Update(oldRowID, newRowID: Int64;
+function TOrmVirtualTableJSON.Update(oldRowID, newRowID: Int64;
   var Values: TSQLVarDynArray): boolean;
 var
   i: PtrInt;
@@ -3987,17 +3987,17 @@ end;
 
 
 
-{ ************ TORMVirtualTableLog Virtual Table }
+{ ************ TOrmVirtualTableLog Virtual Table }
 
-{ TORMVirtualTableLog }
+{ TOrmVirtualTableLog }
 
 type
   /// Record associated to Virtual Table implemented in Delphi, for Read/Only
   // access to a .log file, as created by TSynLog
-  // - not used as real instances, but only used by the TORMVirtualTableLog module
+  // - not used as real instances, but only used by the TOrmVirtualTableLog module
   // to provide the field layout needed to create the column layout for the
   // CREATE TABLE statement
-  TORMLogFile = class(TORMVirtualTableAutoID)
+  TOrmLogFile = class(TOrmVirtualTableAutoID)
   protected
     fContent: RawUTF8;
     fDateTime: TDateTime;
@@ -4011,7 +4011,7 @@ type
     property Content: RawUTF8 read fContent;
   end;
 
-constructor TORMVirtualTableLog.Create(aModule: TORMVirtualTableModule;
+constructor TOrmVirtualTableLog.Create(aModule: TOrmVirtualTableModule;
   const aTableName: RawUTF8; FieldCount: integer; Fields: PPUTF8CharArray);
 var
   aFileName: TFileName;
@@ -4024,24 +4024,24 @@ begin
   fLogFile := TSynLogFile.Create(aFileName);
 end;
 
-destructor TORMVirtualTableLog.Destroy;
+destructor TOrmVirtualTableLog.Destroy;
 begin
   fLogFile.Free;
   inherited;
 end;
 
-class procedure TORMVirtualTableLog.GetTableModuleProperties(
+class procedure TOrmVirtualTableLog.GetTableModuleProperties(
   var aProperties: TVirtualTableModuleProperties);
 begin
   aProperties.Features := [vtWhereIDPrepared];
-  aProperties.CursorClass := TORMVirtualTableCursorLog;
-  aProperties.RecordClass := TORMLogFile;
+  aProperties.CursorClass := TOrmVirtualTableCursorLog;
+  aProperties.RecordClass := TOrmLogFile;
 end;
 
 
-{ TORMVirtualTableCursorLog }
+{ TOrmVirtualTableCursorLog }
 
-function TORMVirtualTableCursorLog.Column(aColumn: integer;
+function TOrmVirtualTableCursorLog.Column(aColumn: integer;
   var aResult: TSQLVar): boolean;
 var
   LogFile: TSynLogFile;
@@ -4050,7 +4050,7 @@ begin
   if (self = nil) or
      (fCurrent > fMax) then
     exit;
-  LogFile := TORMVirtualTableLog(Table).fLogFile;
+  LogFile := TOrmVirtualTableLog(Table).fLogFile;
   if LogFile = nil then
     exit;
   case aColumn of
@@ -4069,13 +4069,13 @@ begin
   result := true;
 end;
 
-function TORMVirtualTableCursorLog.Search(
-  const Prepared: TORMVirtualTablePrepared): boolean;
+function TOrmVirtualTableCursorLog.Search(
+  const Prepared: TOrmVirtualTablePrepared): boolean;
 begin
   result := inherited Search(Prepared); // mark EOF by default
   if result then
   begin
-    fMax := TORMVirtualTableLog(Table).fLogFile.Count - 1; // search all range
+    fMax := TOrmVirtualTableLog(Table).fLogFile.Count - 1; // search all range
     if Prepared.IsWhereIDEquals(false) then
     begin
       // handle obvious ID=? case to return index := ID-1
@@ -4097,8 +4097,8 @@ end;
 
 { TRestStorageRemote }
 
-constructor TRestStorageRemote.Create(aClass: TORMClass;
-  aServer: TRestORMServer; aRemoteRest: TRestORM);
+constructor TRestStorageRemote.Create(aClass: TOrmClass;
+  aServer: TRestOrmServer; aRemoteRest: TRestOrm);
 begin
   if aRemoteRest = nil then
     raise ERestStorage.CreateUTF8('%.Create(nil)', [self]);
@@ -4194,8 +4194,8 @@ end;
 const
   MIN_SHARD = 1000;
 
-constructor TRestStorageShard.Create(aClass: TORMClass;
-  aServer: TRestORMServer; aShardRange: TID; aOptions: TRestStorageShardOptions; aMaxShardCount: integer);
+constructor TRestStorageShard.Create(aClass: TOrmClass;
+  aServer: TRestOrmServer; aShardRange: TID; aOptions: TRestStorageShardOptions; aMaxShardCount: integer);
 var
   i, n: PtrInt;
 begin
@@ -4226,7 +4226,7 @@ end;
 destructor TRestStorageShard.Destroy;
 var
   i, j: PtrInt;
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   try
     if not (ssoNoConsolidateAtDestroy in fOptions) then
@@ -4267,7 +4267,7 @@ end;
 
 procedure TRestStorageShard.InternalAddNewShard;
 var
-  rest: TRestORM;
+  rest: TRestOrm;
   i: PtrInt;
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -4290,8 +4290,8 @@ begin
 end;
 
 function TRestStorageShard.ShardFromID(aID: TID;
-  out aShardTableIndex: integer; out aShard: TRestORM;
-  aOccasion: TORMOccasion; aShardIndex: PInteger): boolean;
+  out aShardTableIndex: integer; out aShard: TRestOrm;
+  aOccasion: TOrmOccasion; aShardIndex: PInteger): boolean;
 var
   ndx: cardinal;
 begin
@@ -4376,7 +4376,7 @@ function TRestStorageShard.EngineDelete(TableModelIndex: integer;
   ID: TID): boolean;
 var
   tableIndex, shardIndex: integer;
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   StorageLock(true, 'EngineDelete');
   try
@@ -4447,12 +4447,12 @@ begin
   end;
 end;
 
-function TRestStorageShard.TableHasRows(Table: TORMClass): boolean;
+function TRestStorageShard.TableHasRows(Table: TOrmClass): boolean;
 begin
   result := fShards <> nil;
 end;
 
-function TRestStorageShard.TableRowCount(Table: TORMClass): Int64;
+function TRestStorageShard.TableRowCount(Table: TOrmClass): Int64;
 var
   i: PtrInt;
 begin
@@ -4504,7 +4504,7 @@ function TRestStorageShard.EngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUTF8;
 var
   tableIndex: integer;
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   StorageLock(false, 'EngineRetrieve');
   try
@@ -4521,7 +4521,7 @@ function TRestStorageShard.EngineRetrieveBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
   tableIndex: integer;
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   StorageLock(false, 'EngineRetrieveBlob');
   try
@@ -4538,7 +4538,7 @@ function TRestStorageShard.EngineUpdate(TableModelIndex: integer;
   ID: TID; const SentData: RawUTF8): boolean;
 var
   tableIndex, shardIndex: integer;
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   StorageLock(true, 'EngineUpdate');
   try
@@ -4560,7 +4560,7 @@ function TRestStorageShard.EngineUpdateBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
   tableIndex: integer;
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   result := false;
   StorageLock(true, 'EngineUpdateBlob');
@@ -4591,7 +4591,7 @@ function TRestStorageShard.EngineUpdateFieldIncrement(TableModelIndex: integer;
   ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 var
   tableIndex: integer;
-  rest: TRestORM;
+  rest: TRestOrm;
 begin
   result := false;
   StorageLock(true, 'EngineUpdateFieldIncrement');
@@ -4610,7 +4610,7 @@ begin
   result := false;
   if ssoNoBatch in fOptions then
     exit;
-  // lock is protected by try..finally in TRestORMServer.RunBatch caller method
+  // lock is protected by try..finally in TRestOrmServer.RunBatch caller method
   StorageLock(true, 'InternalBatchStart');
   try
     if fShardBatch <> nil then

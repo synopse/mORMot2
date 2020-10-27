@@ -535,7 +535,7 @@ type
   // implementation. The purpose of this superclass is to define certain fields
   // that are common to all module implementations. This structure therefore
   // contains a pInstance field, which will be used to store a class instance
-  // handling the virtual table as a pure class: the TORMVirtualTableModule
+  // handling the virtual table as a pure class: the TOrmVirtualTableModule
   // class will use it internaly
   TSQLite3VTab = record
     /// The module for this virtual table
@@ -567,7 +567,7 @@ type
   // - This superclass exists in order to define fields of the cursor that are
   // common to all implementationsThis structure therefore contains a pInstance
   // field, which will be used to store a class instance handling the virtual
-  // table as a pure class: the TORMVirtualTableModule class will use
+  // table as a pure class: the TOrmVirtualTableModule class will use
   // it internaly
   TSQLite3VTabCursor = record
     /// Virtual table of this cursor
@@ -1025,8 +1025,8 @@ type
   // (TSQLite3LibrayStatic) or with an external library (TSQLite3LibraryDynamic)
   // - a global sqlite3: TSQLite3Library will be defined in this unit, so
   // you should call sqlite3.open() instead of sqlite3_open() for instance
-  // - if your project refers to SynSQLite3Static unit, it will initialize a
-  // TSQLite3LibrayStatic instance
+  // - if your project refers to mormot.db.raw.sqlite3.static unit, it will
+  // initialize a TSQLite3LibrayStatic instance
   TSQLite3Library = class
   protected
     fUseInternalMM: boolean;
@@ -1075,7 +1075,7 @@ type
 
     ///  specify the encryption key on a newly opened database connection
     // - Assigned(key)=false if encryption is not available for this .dll
-    // - SynSQLite3Static will use its own internal encryption format
+    // - mormot.db.raw.sqlite3.static will use its own internal encryption format
     // - key/keylen may be a JSON-serialized TSynSignerParams object, or will use
     // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
     key: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl;
@@ -1093,12 +1093,12 @@ type
     // associated with the sqlite3 object prior to attempting to close the object
     // (sqlite3.next_stmt() interface can be used for this task)
     // - if invoked while a transaction is open, the transaction is automatically rolled back
-    //  - SynSQLite3Static will use its own internal function for handling properly
-    // its own encryption format
+    // - mormot.db.raw.sqlite3.static will use its own internal function for
+    // handling properly its own encryption format
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.33.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.33.0', when used with our mormot.db.raw.sqlite3.static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
@@ -2092,8 +2092,8 @@ var
   // - you should call sqlite3.open() instead of sqlite3_open() for instance
   // - points either to the statically linked sqlite3.obj, or to an external
   // library (e.g. sqlite3.dll under Windows)
-  // - your project should use EITHER SynSQLite3Static unit OR create a
-  // TSQLite3LibraryDynamic instance:
+  // - your project should use EITHER mormot.db.raw.sqlite3.static unit
+  // OR create a TSQLite3LibraryDynamic instance:
   // ! FreeAndNil(sqlite3); // release any previous instance
   // ! sqlite3 := TSQLite3LibraryDynamic.Create;
   // - caller should free the sqlite3 instance only with
@@ -2274,11 +2274,11 @@ type
     // - if Expand is true, JSON data is an array of objects, for direct use
     // with any Ajax or .NET client:
     // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expand is false, JSON data is serialized (used in TORMTableJSON)
+    // - if Expand is false, JSON data is serialized (used in TOrmTableJSON)
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data (no conversion into TEXT, as with
-    // TORMTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
+    // TOrmTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
       Expand: boolean = false): PtrInt; overload;
@@ -2842,8 +2842,8 @@ type
     // to the source database during the background process will be included in
     // the backup - so this method will work perfectly e.g. for our ORM
     // - if specified, a password will be used to cypher BackupFileName on disk
-    // (it will work only with SynSQLite3Static) - you can uncypher the resulting
-    // encrypted database file later via ChangeSQLEncryptTablePassWord()
+    // (it will work only with mormot.db.raw.sqlite3.static) - you can uncypher
+    // the resulting encrypted database file via ChangeSQLEncryptTablePassWord()
     // - returns TRUE if backup started as expected, or FALSE in case of error
     // (e.g. if there is already another backup started, if the source or
     // destination databases are locked or invalid, or if the sqlite3.dll is too
@@ -2929,7 +2929,7 @@ type
     /// if this property is set, all ExecuteJSON() responses will be cached
     // - cache is flushed on any write access to the DB (any not SELECT statement)
     // - cache is consistent only if ExecuteJSON() Expand parameter is constant
-    // - cache is used by TSQLDataBase.ExecuteJSON() and TORMTableDB.Create()
+    // - cache is used by TSQLDataBase.ExecuteJSON() and TOrmTableDB.Create()
     property UseCache: boolean read GetUseCache write SetUseCache;
     /// return TRUE if a Transaction begun
     property TransactionActive: boolean read fTransactionActive;
@@ -2997,7 +2997,7 @@ type
     // - set to a number of Mega Bytes value of memory for the mapping
     // - expects a SQLite3 engine version >= 3.7.17
     // - Memory-Mapped I/O is NOT compatible with password encryption as
-    // implemented in our SynSQLite3Static unit
+    // implemented in our mormot.db.raw.sqlite3.static unit
     property MemoryMappedMB: cardinal read GetMemoryMappedMB write SetMemoryMappedMB;
     /// retrieve or set the user_version stored in the SQLite3 database file
     // - user-version is a 32-bit signed integer stored in the database header
@@ -3119,7 +3119,7 @@ var
   // - you may override it with TSQLLog, if available from mORMot.pas
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
-  SynSQLite3Log: TSynLogClass = TSynLog;
+  SQLite3Log: TSynLogClass = TSynLog;
 
 
 /// check from the file beginning if sounds like a valid SQLite3 file
@@ -3192,8 +3192,8 @@ begin
   else
     begin
       sqlite3.result_null(Context);
-      SynSQLite3Log.DebuggerNotify(sllWarning, 'SQLVarToSQlite3Context(%)', [ord
-        (Res.VType)]);
+      SQLite3Log.DebuggerNotify(sllWarning, 'SQLVarToSQlite3Context(%)',
+        [ord(Res.VType)]);
       result := false; // not handled type (will set null value)
       exit;
     end;
@@ -3233,7 +3233,8 @@ begin
       end;
   else
     begin
-      SynSQLite3Log.DebuggerNotify(sllWarning, 'SQlite3ValueToSQLVar(%)', [ValueType]);
+      SQLite3Log.DebuggerNotify(sllWarning, 'SQlite3ValueToSQLVar(%)',
+        [ValueType]);
       Res.VType := ftUnknown;
     end;
   end;
@@ -3519,7 +3520,7 @@ begin
     res := SQLITE_INTERNAL;
   end;
   if res <> SQLITE_OK then
-    SynSQLite3Log.Add.Log(sllError, 'SQLITE_CONFIG_MALLOC failed as %', [res])
+    SQLite3Log.Add.Log(sllError, 'SQLITE_CONFIG_MALLOC failed as %', [res])
   else
     fUseInternalMM := true;
 end;
@@ -3610,7 +3611,7 @@ begin
       [self, LibraryName, vers]);
   end; // some APIs like config() key() or trace() may not be available
   inherited Create; // set fVersionNumber/fVersionText
-  SynSQLite3Log.Add.Log(sllInfo, 'Loaded external % version %', [LibraryName, Version]);
+  SQLite3Log.Add.Log(sllInfo, 'Loaded external % version %', [LibraryName, Version]);
 end;
 
 destructor TSQLite3LibraryDynamic.Destroy;
@@ -4094,9 +4095,9 @@ begin
   inherited Create; // initialize fSafe
   if sqlite3 = nil then
     raise ESQLite3Exception.CreateUTF8('%.Create: No SQLite3 libray available' +
-      ' - you shall either add SynSQLite3Static to your project uses clause, ' +
+      ' - you shall either add mormot.db.raw.sqlite3.static to your project uses clause, ' +
       'or run sqlite3 := TSQLite3LibraryDynamic.Create(..)', [self]);
-  fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
+  fLog := SQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
   if SysUtils.Trim(aFileName) = '' then
     raise ESQLite3Exception.CreateUTF8('%.Create('''')', [self]);
@@ -5932,7 +5933,7 @@ var
 begin
   fn := fDestDB.FileName;
   SetCurrentThreadName('% [%] [%]', [self, fSourceDB.FileName, fn]);
-  log := SynSQLite3Log.Enter(self, 'Execute');
+  log := SQLite3Log.Enter(self, 'Execute');
   try
     try
       NotifyProgressAndContinue(backupStart);
@@ -6012,7 +6013,7 @@ begin
     end;
   end;
   log := nil;
-  SynSQLite3Log.Add.NotifyThreadEnded;
+  SQLite3Log.Add.NotifyThreadEnded;
 end;
 
 function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;
@@ -6043,7 +6044,8 @@ function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
 var
   F: THandle;
   Header: THash256Rec;
-begin // see CodecEncrypt/CodecDecrypt in SynSQLite3Static
+begin
+  // see CodecEncrypt/CodecDecrypt in mormot.db.raw.sqlite3.static
   result := false;
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
   if F <= 0 then
