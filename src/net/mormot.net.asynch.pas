@@ -299,8 +299,13 @@ type
   // - acoLastOperationNoRead and acoLastOperationNoWrite could be used to
   // avoid TAsynchConnection.fLastOperation reset at read or write
   TAsynchConnectionsOptions = set of (
-    acoOnErrorContinue, acoOnAcceptFailureStop, acoNoLogRead, acoNoLogWrite,
-    acoVerboseLog, acoLastOperationNoRead, acoLastOperationNoWrite);
+    acoOnErrorContinue,
+    acoOnAcceptFailureStop,
+    acoNoLogRead,
+    acoNoLogWrite,
+    acoVerboseLog,
+    acoLastOperationNoRead,
+    acoLastOperationNoWrite);
 
   /// implements an abstract thread-pooled high-performance TCP clients or server
   // - internal TAsynchConnectionsSockets will handle high-performance process

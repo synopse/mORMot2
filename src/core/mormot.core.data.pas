@@ -500,9 +500,11 @@ type
     // - call Safe.Lock/UnLock to protect multi-thread access on this storage
     property Safe: PSynLocker read fSafe;
     /// could be used as a short-cut to Safe.Lock
-    procedure Lock;   {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
     /// could be used as a short-cut to Safe.UnLock
-    procedure Unlock; {$ifdef HASINLINE}inline;{$endif}
+    procedure Unlock;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// used for backward compatibility only with existing code
@@ -1125,9 +1127,11 @@ type
     fCompare: TDynArraySortCompare;
     fElemSize: cardinal; // equals fInfo.Cache.ItemSize
     fSorted: boolean;
-    function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function GetCount: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
-    function GetCapacity: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function GetCapacity: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(aCapacity: PtrInt);
     procedure SetCompare(const aCompare: TDynArraySortCompare);
       {$ifdef HASINLINE}inline;{$endif}
@@ -1234,7 +1238,8 @@ type
     function Peek(var Dest): boolean;
     /// delete the whole dynamic array content
     // - this method will recognize T*ObjArray types and free all instances
-    procedure Clear; {$ifdef HASINLINE}inline;{$endif}
+    procedure Clear;
+      {$ifdef HASINLINE}inline;{$endif}
     /// delete the whole dynamic array content, ignoring exceptions
     // - returns true if no exception occured when calling Clear, false otherwise
     // - you should better not call this method, which will catch and ignore
@@ -2330,7 +2335,8 @@ type
     procedure UniqueVariantString(var aResult: variant; const aText: string);
     /// ensure a variant contains only RawUTF8 stored within this class
     // - supplied variant should be a varString containing a RawUTF8 value
-    procedure UniqueVariant(var aResult: variant); overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure UniqueVariant(var aResult: variant); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// delete any previous storage pool
     procedure Clear;
     /// reclaim any unique RawUTF8 values
@@ -2348,7 +2354,10 @@ type
 
   /// possible values used by TRawUTF8List.Flags
   TRawUTF8ListFlags = set of (
-    fObjectsOwned, fCaseSensitive, fNoDuplicate, fOnChangeTrigerred);
+    fObjectsOwned,
+    fCaseSensitive,
+    fNoDuplicate,
+    fOnChangeTrigerred);
 
   /// TStringList-class optimized to work with our native UTF-8 string type
   // - can optionally store associated some TObject instances
@@ -2365,12 +2374,15 @@ type
     fNameValueSep: AnsiChar;
     fOnChange, fOnChangeBackupForBeginUpdate: TNotifyEvent;
     fOnChangeLevel: integer;
-    function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function GetCount: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(const capa: PtrInt);
     function GetCapacity: PtrInt;
-    function Get(Index: PtrInt): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
+    function Get(Index: PtrInt): RawUTF8;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure Put(Index: PtrInt; const Value: RawUTF8);
-    function GetObject(Index: PtrInt): pointer; {$ifdef HASINLINE}inline;{$endif}
+    function GetObject(Index: PtrInt): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure PutObject(Index: PtrInt; Value: pointer);
     function GetName(Index: PtrInt): RawUTF8;
     function GetValue(const Name: RawUTF8): RawUTF8;
@@ -2378,10 +2390,14 @@ type
     function GetTextCRLF: RawUTF8;
     procedure SetTextCRLF(const Value: RawUTF8);
     procedure SetTextPtr(P,PEnd: PUTF8Char; const Delimiter: RawUTF8);
-    function GetTextPtr: PPUtf8CharArray; {$ifdef HASINLINE}inline;{$endif}
-    function GetNoDuplicate: boolean;     {$ifdef HASINLINE}inline;{$endif}
-    function GetObjectPtr: PPointerArray; {$ifdef HASINLINE}inline;{$endif}
-    function GetCaseSensitive: boolean;   {$ifdef HASINLINE}inline;{$endif}
+    function GetTextPtr: PPUtf8CharArray;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetNoDuplicate: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetObjectPtr: PPointerArray;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetCaseSensitive: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetCaseSensitive(Value: boolean); virtual;
     procedure Changed; virtual;
     procedure InternalDelete(Index: PtrInt);
@@ -2415,7 +2431,8 @@ type
     // hash table), it will return -1 unless aRaiseExceptionIfExisting is forced
     // - thread-safe method
     function Add(const aText: RawUTF8;
-      aRaiseExceptionIfExisting: boolean = false): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+      aRaiseExceptionIfExisting: boolean = false): PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// store a new RawUTF8 item, and its associated TObject
     // - without the fNoDuplicate flag, it will always add the supplied value
     // - if fNoDuplicate was set and aText already exists (using the internal hash

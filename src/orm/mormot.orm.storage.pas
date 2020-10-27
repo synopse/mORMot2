@@ -712,7 +712,8 @@ type
     fMaxID: TID;
     fValues: TDynArrayHashed; // hashed by ID
     function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer): boolean;
-    function GetItem(Index: integer): TOrm; {$ifdef HASINLINE}inline;{$endif}
+    function GetItem(Index: integer): TOrm;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): TID;
     procedure SetFileName(const aFileName: TFileName);
     procedure ComputeStateAfterLoad(var loaded: TPrecisionTimer; binary: boolean);

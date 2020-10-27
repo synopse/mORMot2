@@ -571,7 +571,7 @@ type
     /// return the number of registered service interfaces
     // - you can use InterfaceList[] to access the instances
     function Count: integer;
-    {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a service provider from its index in the list
     // - returns nil if out of range index
     function Index(aIndex: integer): TServiceFactory; overload;

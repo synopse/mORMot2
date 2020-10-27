@@ -1266,7 +1266,11 @@ type
   /// how TRestServer should maintain its statistical information
   // - used by TRestServer.StatLevels property
   TRestServerMonitorLevels = set of (
-    mlTables, mlMethods, mlInterfaces, mlSessions, mlSQLite3);
+    mlTables,
+    mlMethods,
+    mlInterfaces,
+    mlSessions,
+    mlSQLite3);
 
   /// used for high-level statistics in TRestServer.URI()
   TRestServerMonitor = class(TSynMonitorServer)

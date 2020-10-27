@@ -2001,7 +2001,7 @@ begin
           SetQWord(P, PQWord(@fRemoteConnectionID)^);
       end;
     end;
-    if connectionClose in HeaderFlags then
+    if hfConnectionClose in HeaderFlags then
       fKeepAliveClient := false;
     if (ContentLength < 0) and
        (KeepAliveClient or
@@ -2045,7 +2045,7 @@ begin
       end;
     end;
     if withBody and
-       not (connectionUpgrade in HeaderFlags) then
+       not (hfConnectionUpgrade in HeaderFlags) then
     begin
       if IdemPCharArray(pointer(fMethod), ['HEAD', 'OPTIONS']) < 0 then
         GetBody;
@@ -2296,7 +2296,7 @@ begin
           else
           begin
             // no Keep Alive = multi-connection -> process in the Thread Pool
-            if not (connectionUpgrade in ServerSock.HeaderFlags) and
+            if not (hfConnectionUpgrade in ServerSock.HeaderFlags) and
                (IdemPCharArray(pointer(ServerSock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
             begin
               ServerSock.GetBody; // we need to get it now

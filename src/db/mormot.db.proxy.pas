@@ -111,6 +111,12 @@ type
     cQuit,
     cExceptionRaised);
 
+  /// server-side process flags for TSQLDBProxyConnectionCommandExecute.Force
+  TSQLDBProxyConnectionCommandExecuteForce = set of (
+    fBlobAsNull,
+    fDateWithMS,
+    fNoUpdateCount);
+
   /// structure to embedd all needed parameters to execute a SQL statement
   // - used for cExecute, cExecuteToBinary, cExecuteToJSON and cExecuteToExpandedJSON
   // commands of TSQLDBProxyConnectionProperties.Process()
@@ -128,7 +134,7 @@ type
     // ISQLDBStatement properties
     // - fNoUpdateCount avoids to call ISQLDBStatement.UpdateCount method, e.g.
     // for performance reasons
-    Force: set of (fBlobAsNull, fDateWithMS, fNoUpdateCount);
+    Force: TSQLDBProxyConnectionCommandExecuteForce;
   end;
 
 
@@ -587,8 +593,10 @@ type
   protected
     fKeepAliveMS: cardinal;
     fURI: TURI;
-    function GetServer: RawByteString; {$ifdef HASINLINE}inline;{$endif}
-    function GetPort: RawByteString;   {$ifdef HASINLINE}inline;{$endif}
+    function GetServer: RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetPort: RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
     /// you could inherit from it and set your custom fProtocol instance
     procedure SetInternalProperties; override;
     procedure SetServerName(const aServerName: RawUTF8);

@@ -1308,7 +1308,8 @@ const
     ecaPBKDF2_HMAC_SHA256_AES128_OFB, ecaPBKDF2_HMAC_SHA256_AES128_CTR);
 
 type
-  TECIESFeatures = set of (efMetaData);
+  TECIESFeatures = set of (
+    efMetaData);
 
 function ECIESLevel(const head: TECIESHeader): integer;
   // inline; defeats Delphi optimizer for IsEqual()

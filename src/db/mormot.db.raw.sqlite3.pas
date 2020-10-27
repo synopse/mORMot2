@@ -979,7 +979,11 @@ type
   // - stmClose callback is invoked when a database connection closes. The
   // P argument is a pointer to the database connection object and the X
   // argument is unused.
-  TSQLTraceMask = set of (stmStmt, stmProfile, stmRow, stmClose);
+  TSQLTraceMask = set of (
+    stmStmt,
+    stmProfile,
+    stmRow,
+    stmClose);
 
   /// Callback function registered by sqlite3.trace_v2()
   // - the Trace argument has one of the TSQLTraceMask items set, to indicate

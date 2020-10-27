@@ -938,9 +938,13 @@ type
   /// define how the published properties RTTI is to be interpreted
   // - i.e. how TOrmPropInfoList.Create() and TOrmPropInfoRTTI.CreateFrom()
   // will handle the incoming RTTI
-  TOrmPropInfoListOptions = set of (pilRaiseEOrmExceptionIfNotHandled,
-    pilAllowIDFields, pilSubClassesFlattening, pilIgnoreIfGetter,
-    pilSingleHierarchyLevel, pilAuxiliaryFields);
+  TOrmPropInfoListOptions = set of (
+    pilRaiseEOrmExceptionIfNotHandled,
+    pilAllowIDFields,
+    pilSubClassesFlattening,
+    pilIgnoreIfGetter,
+    pilSingleHierarchyLevel,
+    pilAuxiliaryFields);
 
   /// parent information about a published property retrieved from RTTI
   TOrmPropInfoRTTI = class(TOrmPropInfo)
@@ -6152,8 +6156,12 @@ type
   // FireBird in its Dialect 3
   // - rpmClearPoolOnConnectionIssue will enable detecting connection loss
   TOrmPropertiesMappingOptions = set of (
-    rpmAutoMapKeywordFields, rpmNoCreateMissingTable, rpmNoCreateMissingField,
-    rpmMissingFieldNameCaseSensitive, rpmQuoteFieldName, rpmClearPoolOnConnectionIssue);
+    rpmAutoMapKeywordFields,
+    rpmNoCreateMissingTable,
+    rpmNoCreateMissingField,
+    rpmMissingFieldNameCaseSensitive,
+    rpmQuoteFieldName,
+    rpmClearPoolOnConnectionIssue);
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
@@ -7257,8 +7265,12 @@ type
   // e.g. by TOrmAccessRights.ToString: ensure that new items will always be
   // appended to the list, not inserted within
   TOrmAllowRemoteExecute = set of (
-    reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete,
-    reOneSessionPerUser, reSQLSelectWithoutTable, reUserCanChangeOwnPassword);
+    reSQL, reService,
+    reUrlEncodedSQL,
+    reUrlEncodedDelete,
+    reOneSessionPerUser,
+    reSQLSelectWithoutTable,
+    reUserCanChangeOwnPassword);
 
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)

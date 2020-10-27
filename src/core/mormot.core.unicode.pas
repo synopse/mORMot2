@@ -30,6 +30,7 @@ uses
 
 // some constants used for UTF-8 conversion, including surrogates
 const
+  UTF8_EXTRA_SURROGATE = 3;
   UTF16_HISURROGATE_MIN = $d800;
   UTF16_HISURROGATE_MAX = $dbff;
   UTF16_LOSURROGATE_MIN = $dc00;
@@ -39,9 +40,10 @@ const
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,4,4,4,4,5,5,0,0);
+  // see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
   UTF8_EXTRA: array[0..6] of record
     offset, minimum: cardinal;
-  end = ( // http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
+  end = (
     (offset: $00000000;  minimum: $00010000),
     (offset: $00003080;  minimum: $00000080),
     (offset: $000e2080;  minimum: $00000800),
@@ -49,7 +51,6 @@ const
     (offset: $fa082080;  minimum: $00200000),
     (offset: $82082080;  minimum: $04000000),
     (offset: $00000000;  minimum: $04000000));
-  UTF8_EXTRA_SURROGATE = 3;
   UTF8_FIRSTBYTE: array[2..6] of byte = (
     $c0, $e0, $f0, $f8, $fc);
 
@@ -896,8 +897,15 @@ type
   // than a regular set of AnsiChar which generates much slower BT [MEM], IMM
   // - the same 256-byte memory will also be reused from L1 CPU cache
   // during the parsing of complex input
-  TTextChar = set of (tcNot01013, tc1013, tcCtrlNotLF, tcCtrlNot0Comma,
-    tcWord, tcIdentifierFirstChar, tcIdentifier, tcURIUnreserved);
+  TTextChar = set of (
+    tcNot01013,
+    tc1013,
+    tcCtrlNotLF,
+    tcCtrlNot0Comma,
+    tcWord,
+    tcIdentifierFirstChar,
+    tcIdentifier,
+    tcURIUnreserved);
 
   /// defines an AnsiChar lookup table used for branch-less text parsing
   TTextCharSet = array[AnsiChar] of TTextChar;

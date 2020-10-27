@@ -103,7 +103,8 @@ type
     /// allow low level iterative decompression using an internal TZLib structure
     function ZStreamStart(dest: pointer; destsize: integer): boolean;
     /// return true if ZStreamStart() has been successfully called
-    function ZStreamStarted: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function ZStreamStarted: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// will uncompress into dest/destsize buffer as supplied to ZStreamStart
     // - return the number of bytes uncompressed (<=destsize)
     // - return 0 if the input stream is finished
@@ -145,10 +146,14 @@ type
     function SameAs(aInfo: PFileInfo): boolean;
     // 1..15  (1=SynLZ e.g.) from flags bits 7..10 and method=Z_STORED
     procedure SetAlgoID(Algorithm: integer);
-    function GetAlgoID: integer;       {$ifdef HASINLINE}inline;{$endif}
-    function GetUTF8FileName: boolean; {$ifdef HASINLINE}inline;{$endif}
-    procedure SetUTF8FileName;         {$ifdef HASINLINE}inline;{$endif}
-    procedure UnSetUTF8FileName;       {$ifdef HASINLINE}inline;{$endif}
+    function GetAlgoID: integer;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetUTF8FileName: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure SetUTF8FileName;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure UnSetUTF8FileName;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// directory file information structure, as used in .zip file format
@@ -162,7 +167,8 @@ type
     intFileAttr   : word;            // 0 = binary; 1 = text
     extFileAttr   : cardinal;           // dos file attributes
     localHeadOff  : cardinal;           // @TLocalFileHeader
-    function IsFolder: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function IsFolder: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure Init;
   end;
   PFileHeader = ^TFileHeader;
@@ -494,7 +500,12 @@ end;
 
 type
   // low-level flags used in the .gz file header
-  TGZFlags = set of (gzfText, gzfHCRC, gzfExtra, gzfName, gzfComment);
+  TGZFlags = set of (
+    gzfText,
+    gzfHCRC,
+    gzfExtra,
+    gzfName,
+    gzfComment);
 
 { TGZRead }
 

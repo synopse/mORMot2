@@ -456,6 +456,12 @@ type
     function AnswerToIgnore(incr: integer = 0): integer;
   end;
 
+  /// used by TWebSocketProcessSettings for WebSockets process logging settings
+  TWebSocketProcessSettingsLogDetails = set of (
+    logHeartbeat,
+    logTextFrameContent,
+    logBinaryFrameContent);
+
   /// parameters to be used for WebSockets process
   {$ifdef USERECORDWITHMETHODS}
   TWebSocketProcessSettings = record
@@ -502,7 +508,7 @@ type
     // - set logTextFrameContent if you want the text frame content to be logged
     // - set logBinaryFrameContent if you want the binary frame content to be logged
     // - used only if WebSocketLog global variable is set to a TSynLog class
-    LogDetails: set of (logHeartbeat, logTextFrameContent, logBinaryFrameContent);
+    LogDetails: TWebSocketProcessSettingsLogDetails;
     /// will set the default values
     procedure SetDefaults;
     /// will set LogDetails to its highest level of verbosity
@@ -3000,7 +3006,7 @@ procedure TWebSocketServer.Process(ClientSock: THttpServerSocket; ConnectionID:
 var
   err: integer;
 begin
-  if (connectionUpgrade in ClientSock.HeaderFlags) and
+  if (hfConnectionUpgrade in ClientSock.HeaderFlags) and
      ClientSock.KeepAliveClient and
      IdemPropNameU('GET', ClientSock.Method) and
      IdemPropNameU(ClientSock.Upgrade, 'websocket') and
@@ -3255,7 +3261,7 @@ function TWebSocketServerSocket.GetRequest(withBody: boolean; headerMaxTix:
 begin
   result := inherited GetRequest(withBody, headerMaxTix);
   if (result = grHeaderReceived) and
-     (connectionUpgrade in HeaderFlags) and
+     (hfConnectionUpgrade in HeaderFlags) and
     KeepAliveClient and IdemPropNameU(Method, 'GET') and
     IdemPropNameU(Upgrade, 'websocket') then
     //writeln('!!');
@@ -3419,7 +3425,7 @@ begin
       prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd), 'HTTP/1.1 101') or
-         not (connectionUpgrade in HeaderFlags) or
+         not (hfConnectionUpgrade in HeaderFlags) or
          (ContentLength > 0) or
          not IdemPropNameU(Upgrade, 'websocket') or
          not aProtocol.SetSubprotocol(prot) then

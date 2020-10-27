@@ -114,11 +114,13 @@ function FromVarUInt64Safe(Source, SourceMax: PByte; out Value: QWord): PByte;
 /// convert a 64-bit variable-length integer buffer into a UInt64
 // - will call FromVarUInt64() if SourceMax=nil, or FromVarUInt64Safe() if set
 // - returns false on error, true if Value has been set properly
-function FromVarUInt64(var Source: PByte; SourceMax: PByte; out Value: Qword): boolean; overload;
+function FromVarUInt64(var Source: PByte; SourceMax: PByte;
+  out Value: Qword): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Int64 into a 64-bit variable-length integer buffer
-function ToVarInt64(Value: Int64; Dest: PByte): PByte; {$ifdef HASINLINE}inline;{$endif}
+function ToVarInt64(Value: Int64; Dest: PByte): PByte;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 64-bit variable-length integer buffer into a Int64
 function FromVarInt64(var Source: PByte): Int64;
@@ -128,13 +130,15 @@ function FromVarInt64(var Source: PByte): Int64;
 function FromVarInt64Value(Source: PByte): Int64;
 
 /// jump a value in the 32-bit or 64-bit variable-length integer buffer
-function GotoNextVarInt(Source: PByte): pointer; {$ifdef HASINLINE}inline;{$endif}
+function GotoNextVarInt(Source: PByte): pointer;
+ {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a RawUTF8 into an UTF-8 encoded variable-length buffer
 function ToVarString(const Value: RawUTF8; Dest: PByte): PByte;
 
 /// jump a value in variable-length text buffer
-function GotoNextVarString(Source: PByte): pointer; {$ifdef HASINLINE}inline;{$endif}
+function GotoNextVarString(Source: PByte): pointer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUTF8
 function FromVarString(var Source: PByte): RawUTF8; overload;
@@ -178,7 +182,8 @@ type
   end;
 
 /// retrieve pointer and length to a variable-length text/blob buffer
-function FromVarBlob(Data: PByte): TValueResult; {$ifdef HASINLINE}inline;{$endif}
+function FromVarBlob(Data: PByte): TValueResult;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 
@@ -237,23 +242,29 @@ type
     function CompressDestLen(PlainLen: integer): integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
-    function Compress(const Plain: RawByteString; CompressionSizeTrigger: integer = 100;
-      CheckMagicForCompressed: boolean = false; BufferOffset: integer = 0): RawByteString; overload;
+    function Compress(const Plain: RawByteString;
+      CompressionSizeTrigger: integer = 100;
+      CheckMagicForCompressed: boolean = false;
+      BufferOffset: integer = 0): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
-    function Compress(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer = 100;
-      CheckMagicForCompressed: boolean = false; BufferOffset: integer = 0): RawByteString; overload;
+    function Compress(Plain: PAnsiChar; PlainLen: integer;
+      CompressionSizeTrigger: integer = 100;
+      CheckMagicForCompressed: boolean = false;
+      BufferOffset: integer = 0): RawByteString; overload;
     /// compress a memory buffer with crc32c hashing
     // - supplied Comp buffer should contain at least CompressDestLen(PlainLen) bytes
     function Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
       CompressionSizeTrigger: integer = 100; CheckMagicForCompressed: boolean = false): integer; overload;
     /// compress a memory buffer with crc32c hashing to a TByteDynArray
-    function CompressToBytes(const Plain: RawByteString; CompressionSizeTrigger: integer = 100;
+    function CompressToBytes(const Plain: RawByteString;
+      CompressionSizeTrigger: integer = 100;
       CheckMagicForCompressed: boolean = false): TByteDynArray; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a TByteDynArray
     function CompressToBytes(Plain: PAnsiChar; PlainLen: integer;
-      CompressionSizeTrigger: integer = 100; CheckMagicForCompressed: boolean = false): TByteDynArray; overload;
+      CompressionSizeTrigger: integer = 100;
+      CheckMagicForCompressed: boolean = false): TByteDynArray; overload;
     /// uncompress a RawByteString memory buffer with crc32c hashing
     function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad = aclNormal;
       BufferOffset: integer = 0): RawByteString; overload;
@@ -578,6 +589,7 @@ type
 
   /// event signature to customize TFastReader.ErrorOverflow notification
   TFastReaderOnErrorOverflow = procedure of object;
+
   /// event signature to customize TFastReader.ErrorData notification
   TFastReaderOnErrorData = procedure(const fmt: RawUTF8;
     const args: array of const) of object;
@@ -614,12 +626,14 @@ type
     /// raise a EFastReader with "Incorrect Data: ...." error message
     procedure ErrorData(const fmt: RawUTF8; const args: array of const);
     /// read the next 32-bit signed value from the buffer
-    function VarInt32: integer;    {$ifdef HASINLINE}inline;{$endif}
+    function VarInt32: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
     function VarUInt32: cardinal;
     /// try to read the next 32-bit signed value from the buffer
     // - don't change the current position
-    function PeekVarInt32(out value: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function PeekVarInt32(out value: PtrInt): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// try to read the next 32-bit unsigned value from the buffer
     // - don't change the current position
     function PeekVarUInt32(out value: PtrUInt): boolean;
@@ -628,11 +642,13 @@ type
     // - returns true on read success
     function VarUInt32Safe(out Value: cardinal): boolean;
     /// read the next 64-bit signed value from the buffer
-    function VarInt64: Int64; {$ifdef HASINLINE}inline;{$endif}
+    function VarInt64: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;
     /// read the next RawUTF8 value from the buffer
-    function VarUTF8: RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+    function VarUTF8: RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next RawUTF8 value from the buffer
     procedure VarUTF8(out result: RawUTF8); overload;
     /// read the next RawUTF8 value from the buffer
@@ -640,37 +656,50 @@ type
     // - returns true on read success
     function VarUTF8Safe(out Value: RawUTF8): boolean;
     /// read the next RawByteString value from the buffer
-    function VarString: RawByteString; {$ifdef HASINLINE}inline;{$endif}
+    function VarString: RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
-    procedure VarBlob(out result: TValueResult); overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure VarBlob(out result: TValueResult); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
-    function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
+    function VarBlob: TValueResult; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy the next VarBlob value from the buffer into a TSynTempBuffer
     procedure VarBlob(out Value: TSynTempBuffer); overload;
     /// read the next ShortString value from the buffer
-    function VarShortString: shortstring; {$ifdef HASINLINE}inline;{$endif}
+    function VarShortString: shortstring;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fast ignore the next VarUInt32/VarInt32/VarUInt64/VarInt64 value
     // - don't raise any exception, so caller could check explicitly for any EOF
-    procedure VarNextInt; overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure VarNextInt; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fast ignore the next count VarUInt32/VarInt32/VarUInt64/VarInt64 values
     // - don't raise any exception, so caller could check explicitly for any EOF
     procedure VarNextInt(count: integer); overload;
     /// read the next byte from the buffer
-    function NextByte: byte;  {$ifdef HASINLINE}inline;{$endif}
+    function NextByte: byte;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next byte from the buffer, checking
-    function NextByteSafe(dest: pointer): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function NextByteSafe(dest: pointer): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 4 bytes from the buffer as a 32-bit unsigned value
-    function Next4: cardinal; {$ifdef HASINLINE}inline;{$endif}
+    function Next4: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 8 bytes from the buffer as a 64-bit unsigned value
-    function Next8: Qword;    {$ifdef HASINLINE}inline;{$endif}
+    function Next8: Qword;
+      {$ifdef HASINLINE}inline;{$endif}
     /// consumes the next byte from the buffer, if matches a given value
-    function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function NextByteEquals(Value: byte): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the current position, and move ahead the specified bytes
-    function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
+    function Next(DataLen: PtrInt): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the current position, and move ahead the specified bytes
-    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
-    procedure Copy(Dest: Pointer; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+    procedure Copy(Dest: Pointer; DataLen: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
@@ -692,9 +721,11 @@ type
     function ReadCompressed(Load: TAlgoCompressLoad = aclNormal;
       BufferOffset: integer = 0): RawByteString;
     /// returns TRUE if the current position is the end of the input stream
-    function EOF: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function EOF: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns remaining length (difference between Last and P)
-    function RemainingLength: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
+    function RemainingLength: PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// available kind of integer array storage, corresponding to the data layout
@@ -736,7 +767,8 @@ type
     fInternalStream: boolean;
     fTag: PtrInt;
     procedure InternalFlush;
-    function GetTotalWritten: Int64; {$ifdef HASINLINE}inline;{$endif}
+    function GetTotalWritten: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure FlushAndWrite(Data: pointer; DataLen: PtrInt);
   public
     /// initialize the buffer, and specify a file handle to use for writing
@@ -774,17 +806,23 @@ type
     // in internal buffer
     destructor Destroy; override;
     /// append 1 byte of data at the current position
-    procedure Write1(Data: Byte); {$ifdef HASINLINE}inline;{$endif}
+    procedure Write1(Data: Byte);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append 2 bytes of data at the current position
-    procedure Write2(Data: cardinal); {$ifdef HASINLINE}inline;{$endif}
+    procedure Write2(Data: cardinal);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
-    procedure Write4(Data: integer); {$ifdef HASINLINE}inline;{$endif}
+    procedure Write4(Data: integer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data, encoded as BigEndian, at the current position
-    procedure Write4BigEndian(Data: integer); {$ifdef HASINLINE}inline;{$endif}
+    procedure Write4BigEndian(Data: integer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append 8 bytes of data at the current position
-    procedure Write8(Data8Bytes: pointer); {$ifdef HASINLINE}inline;{$endif}
+    procedure Write8(Data8Bytes: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append 8 bytes of 64-bit integer at the current position
-    procedure WriteI64(Data: Int64); {$ifdef HASINLINE}inline;{$endif}
+    procedure WriteI64(Data: Int64);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append the same byte a given number of occurences at the current position
     procedure WriteN(Data: Byte; Count: integer);
     /// append some content (may be text or binary) prefixed by its encoded length
@@ -794,15 +832,18 @@ type
     /// append some UTF-8 encoded text at the current position
     // - will write the string length (as VarUInt32), then the string content
     // - is just a wrapper around WriteVar()
-    procedure WriteShort(const Text: ShortString); {$ifdef HASINLINE}inline;{$endif}
+    procedure WriteShort(const Text: ShortString);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some length-prefixed UTF-8 text at the current position
     // - will write the string length (as VarUInt32), then the string content, as expected
     // by the FromVarString() function
     // - is just a wrapper around WriteVar()
-    procedure Write(const Text: RawByteString); overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure Write(const Text: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some data at the current position
     // - will be inlined as a MoveFast() most of the time
-    procedure Write(Data: pointer; DataLen: PtrInt); overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure Write(Data: pointer; DataLen: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some content at the current position
     // - will write the binary data, without any length prefix
     procedure WriteBinary(const Data: RawByteString);
@@ -1387,8 +1428,10 @@ type
     fFileName: TFileName;
     fAppendedLines: TRawUTF8DynArray;
     fAppendedLinesCount: integer;
-    function GetLine(aIndex: integer): RawUTF8;  {$ifdef HASINLINE}inline;{$endif}
-    function GetString(aIndex: integer): string; {$ifdef HASINLINE}inline;{$endif}
+    function GetLine(aIndex: integer): RawUTF8;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetString(aIndex: integer): string;
+      {$ifdef HASINLINE}inline;{$endif}
     /// call once by Create constructors when fMap has been initialized
     procedure LoadFromMap(AverageLineLength: integer = 32); virtual;
     /// call once per line, from LoadFromMap method
@@ -1594,7 +1637,9 @@ type
   // - heHtmlEscape will escape any HTML special chars, e.g. & into &amp;
   // - heEmojiToUTF8 will convert any Emoji text into UTF-8 Unicode character,
   // recognizing e.g. :joy: or :) in the text
-  TTextWriterHTMLEscape = set of (heHtmlEscape, heEmojiToUTF8);
+  TTextWriterHTMLEscape = set of (
+    heHtmlEscape,
+    heEmojiToUTF8);
 
 /// convert some wiki-like text into proper HTML
 // - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, +..+ into
@@ -1633,34 +1678,103 @@ type
   /// map the first Unicode page of Emojis, from U+1F600 to U+1F64F
   // - naming comes from github/Markdown :identifiers:
   TEmoji = (
-    eNone, eGrinning, eGrin, eJoy, eSmiley, eSmile, eSweat_smile, eLaughing,
-    eInnocent, eSmiling_imp, eWink, eBlush, eYum, eRelieved, eHeart_eyes,
-    eSunglasses, eSmirk, eNeutral_face, eExpressionless, eUnamused, eSweat,
-    ePensive, eConfused, eConfounded, eKissing, eKissing_heart,
-    eKissing_smiling_eyes, eKissing_closed_eyes, eStuck_out_tongue,
-    eStuck_out_tongue_winking_eye, eStuck_out_tongue_closed_eyes,
-    eDisappointed, eWorried, eAngry, ePout, eCry, ePersevere, eTriumph,
-    eDisappointed_relieved, eFrowning, eAnguished, eFearful, eWeary,
-    eSleepy, eTired_face, eGrimacing, eSob, eOpen_mouth, eHushed,
-    eCold_sweat, eScream, eAstonished, eFlushed, eSleeping, eDizzy_face,
-    eNo_mouth, eMask, eSmile_cat, eJoy_cat, eSmiley_cat, eHeart_eyes_cat,
-    eSmirk_cat, eKissing_cat, ePouting_cat, eCrying_cat_face, eScream_cat,
-    eSlightly_frowning_face, eSlightly_smiling_face, eUpside_down_face,
-    eRoll_eyes, eNo_good, oOk_woman, eBow, eSee_no_evil, eHear_no_evil,
-    eSpeak_no_evil, eRaising_hand, eRaised_hands, eFrowning_woman,
-    ePerson_with_pouting_face, ePray);
+    eNone,
+    eGrinning,
+    eGrin,
+    eJoy,
+    eSmiley,
+    eSmile,
+    eSweat_smile,
+    eLaughing,
+    eInnocent,
+    eSmiling_imp,
+    eWink,
+    eBlush,
+    eYum,
+    eRelieved,
+    eHeart_eyes,
+    eSunglasses,
+    eSmirk,
+    eNeutral_face,
+    eExpressionless,
+    eUnamused,
+    eSweat,
+    ePensive,
+    eConfused,
+    eConfounded,
+    eKissing,
+    eKissing_heart,
+    eKissing_smiling_eyes,
+    eKissing_closed_eyes,
+    eStuck_out_tongue,
+    eStuck_out_tongue_winking_eye,
+    eStuck_out_tongue_closed_eyes,
+    eDisappointed,
+    eWorried,
+    eAngry,
+    ePout,
+    eCry,
+    ePersevere,
+    eTriumph,
+    eDisappointed_relieved,
+    eFrowning,
+    eAnguished,
+    eFearful,
+    eWeary,
+    eSleepy,
+    eTired_face,
+    eGrimacing,
+    eSob,
+    eOpen_mouth,
+    eHushed,
+    eCold_sweat,
+    eScream,
+    eAstonished,
+    eFlushed,
+    eSleeping,
+    eDizzy_face,
+    eNo_mouth,
+    eMask,
+    eSmile_cat,
+    eJoy_cat,
+    eSmiley_cat,
+    eHeart_eyes_cat,
+    eSmirk_cat,
+    eKissing_cat,
+    ePouting_cat,
+    eCrying_cat_face,
+    eScream_cat,
+    eSlightly_frowning_face,
+    eSlightly_smiling_face,
+    eUpside_down_face,
+    eRoll_eyes,
+    eNo_good,
+    oOk_woman,
+    eBow,
+    eSee_no_evil,
+    eHear_no_evil,
+    eSpeak_no_evil,
+    eRaising_hand,
+    eRaised_hands,
+    eFrowning_woman,
+    ePerson_with_pouting_face,
+    ePray);
 
 var
   /// github/Markdown compatible text of Emojis
   // - e.g. 'grinning' or 'person_with_pouting_face'
   EMOJI_TEXT: array[TEmoji] of RawUTF8;
+
   /// github/Markdown compatible tag of Emojis, including trailing and ending :
   // - e.g. ':grinning:' or ':person_with_pouting_face:'
   EMOJI_TAG: array[TEmoji] of RawUTF8;
+
   /// the Unicode character matching a given Emoji, after UTF-8 encoding
   EMOJI_UTF8: array[TEmoji] of RawUTF8;
+
   /// low-level access to TEmoji RTTI - used when inlining EmojiFromText()
   EMOJI_RTTI: PShortString;
+
   /// to recognize simple :) :( :| :/ :D :o :p :s characters as smilleys
   EMOJI_AFTERDOTS: array['('..'|'] of TEmoji;
 
@@ -1693,6 +1807,7 @@ function EmojiFromDots(const text: RawUTF8): RawUTF8; overload;
 
 
 implementation
+
 
 { ************ Variable Length Integer Encoding / Decoding }
 
@@ -4044,7 +4159,8 @@ begin
   end;
 end;
 
-function TAlgoCompress.AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal;
+function TAlgoCompress.AlgoHash(Previous: cardinal;
+  Data: pointer; DataLen: integer): cardinal;
 begin
   result := crc32c(Previous, Data, DataLen);
 end;
@@ -4108,7 +4224,8 @@ begin
     PCardinal(R)^ := crc;
     len := AlgoCompress(Plain, PlainLen, R + 9);
     if len + 64 >= PlainLen then
-    begin // store if compression was not worth it
+    begin
+      // store if compression was not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R + 5)^ := crc;
       MoveFast(Plain^, R[9], PlainLen);
@@ -4138,7 +4255,8 @@ begin
     exit;
   PCardinal(Comp)^ := AlgoHash(0, Plain, PlainLen);
   if (PlainLen >= CompressionSizeTrigger) and
-     not (CheckMagicForCompressed and IsContentCompressed(Plain, PlainLen)) then
+     not (CheckMagicForCompressed and
+          IsContentCompressed(Plain, PlainLen)) then
   begin
     len := CompressDestLen(PlainLen);
     if CompLen < len then
@@ -4194,7 +4312,8 @@ begin
     PCardinal(R)^ := crc;
     len := AlgoCompress(Plain, PlainLen, R + 9);
     if len >= PlainLen then
-    begin // store if compression not worth it
+    begin
+      // store if compression not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R + 5)^ := crc;
       MoveFast(Plain^, R[9], PlainLen);
@@ -4242,8 +4361,8 @@ begin
   Decompress(pointer(Comp), length(Comp), result, Load, BufferOffset);
 end;
 
-function TAlgoCompress.TryDecompress(const Comp: RawByteString; out Dest: RawByteString;
-  Load: TAlgoCompressLoad): boolean;
+function TAlgoCompress.TryDecompress(const Comp: RawByteString;
+  out Dest: RawByteString; Load: TAlgoCompressLoad): boolean;
 var
   len: integer;
 begin
@@ -4260,8 +4379,9 @@ begin
     Dest := '';
 end;
 
-function TAlgoCompress.Decompress(const Comp: RawByteString; out PlainLen: integer;
-  var tmp: RawByteString; Load: TAlgoCompressLoad): pointer;
+function TAlgoCompress.Decompress(const Comp: RawByteString;
+  out PlainLen: integer; var tmp: RawByteString;
+  Load: TAlgoCompressLoad): pointer;
 begin
   result := Decompress(pointer(Comp), length(Comp), PlainLen, tmp, Load);
 end;
@@ -4584,9 +4704,12 @@ begin
           Head.UnCompressedSize := S.Read(pointer(src)^, Head.UnCompressedSize);
           if Head.UnCompressedSize <= 0 then
             exit; // read error
-          Head.HashUncompressed := AlgoHash(ForceHash32, pointer(src), Head.UnCompressedSize);
-          Head.CompressedSize := AlgoCompress(pointer(src), Head.UnCompressedSize, pointer(dst));
-          Head.HashCompressed := AlgoHash(ForceHash32, pointer(dst), Head.CompressedSize);
+          Head.HashUncompressed :=
+            AlgoHash(ForceHash32, pointer(src), Head.UnCompressedSize);
+          Head.CompressedSize :=
+            AlgoCompress(pointer(src), Head.UnCompressedSize, pointer(dst));
+          Head.HashCompressed :=
+            AlgoHash(ForceHash32, pointer(dst), Head.CompressedSize);
           if (D.Write(Head, SizeOf(Head)) <> SizeOf(Head)) or
              (D.Write(pointer(dst)^, Head.CompressedSize) <> Head.CompressedSize) then
             exit;
@@ -4886,7 +5009,6 @@ function StreamUnSynLZ(Source: TStream; Magic: cardinal): TMemoryStream;
 begin
   result := AlgoSynLZ.StreamUnCompress(Source, Magic, {hash32=}true);
 end;
-
 
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer;
   CheckMagicForCompressed: boolean): RawByteString;
@@ -7455,7 +7577,8 @@ type
     function ProcessText(const stopchars: TSynByteSet): AnsiChar;
     procedure ProcessHRef;
     function ProcessLink: boolean;
-    procedure ProcessEmoji; {$ifdef HASINLINE}inline;{$endif}
+    procedure ProcessEmoji;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure Toggle(style: TTextWriterEscapeStyle);
     procedure SetLine(style: TTextWriterEscapeLineStyle);
     procedure EndOfParagraph;
@@ -7480,7 +7603,8 @@ begin
   lst := twlNone;
 end;
 
-function IsHttpOrHttps(P: PUTF8Char): boolean; {$ifdef HASINLINE}inline;{$endif}
+function IsHttpOrHttps(P: PUTF8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   result := (PCardinal(P)^ =
              ord('h') + ord('t') shl 8 + ord('t') shl 16 + ord('p') shl 24) and

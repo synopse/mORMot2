@@ -1822,7 +1822,8 @@ type
     function GetForceDateWithMS: boolean;
     procedure SetForceDateWithMS(value: boolean);
     /// raise an exception if Col is out of range according to fColumnCount
-    procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
+    procedure CheckCol(Col: integer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
     // from a given column value
     // - internal conversion will use a temporary Variant and ColumnToVariant method

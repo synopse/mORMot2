@@ -98,21 +98,46 @@ type
   // errors or success logging
   // - match low-level HTTP_LOGGING_FLAG_* constants as defined in HTTP 2.0 API
   THttpApiLoggingFlags = set of (
-    hlfLocalTimeRollover, hlfUseUTF8Conversion, hlfLogErrorsOnly, hlfLogSuccessOnly);
+    hlfLocalTimeRollover,
+    hlfUseUTF8Conversion,
+    hlfLogErrorsOnly,
+    hlfLogSuccessOnly);
 
   /// http.sys API 2.0 fields used for W3C logging
   // - match low-level HTTP_LOG_FIELD_* constants as defined in HTTP 2.0 API
   THttpApiLogFields = set of (
-    hlfDate, hlfTime, hlfClientIP, hlfUserName, hlfSiteName, hlfComputerName,
-    hlfServerIP, hlfMethod, hlfURIStem, hlfURIQuery, hlfStatus, hlfWIN32Status,
-    hlfBytesSent, hlfBytesRecv, hlfTimeTaken, hlfServerPort, hlfUserAgent,
-    hlfCookie, hlfReferer, hlfVersion, hlfHost, hlfSubStatus);
+    hlfDate,
+    hlfTime,
+    hlfClientIP,
+    hlfUserName,
+    hlfSiteName,
+    hlfComputerName,
+    hlfServerIP,
+    hlfMethod,
+    hlfURIStem,
+    hlfURIQuery,
+    hlfStatus,
+    hlfWIN32Status,
+    hlfBytesSent,
+    hlfBytesRecv,
+    hlfTimeTaken,
+    hlfServerPort,
+    hlfUserAgent,
+    hlfCookie,
+    hlfReferer,
+    hlfVersion,
+    hlfHost,
+    hlfSubStatus);
 
   /// http.sys API 2.0 fields used for server-side authentication
   // - as used by THttpApiServer.SetAuthenticationSchemes/AuthenticationSchemes
   // - match low-level HTTP_AUTH_ENABLE_* constants as defined in HTTP 2.0 API
   THttpApiRequestAuthentications = set of (
-    haBasic, haDigest, haNtlm, haNegotiate, haKerberos);
+    haBasic,
+    haDigest,
+    haNtlm,
+    haNegotiate,
+    haKerberos);
 
 type
   // HTTP version used

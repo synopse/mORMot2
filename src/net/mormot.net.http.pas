@@ -108,6 +108,14 @@ type
   // - filled from ACCEPT-ENCODING: header value
   THttpSocketCompressSet = set of 0..31;
 
+  /// map the presence of some HTTP headers for THttpSocket.HeaderFlags
+  THttpSocketHeaderFlags = set of (
+    hfTransferChuked,
+    hfConnectionClose,
+    hfConnectionUpgrade,
+    hfConnectionKeepAlive,
+    hfHasRemoteIP);
+
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
@@ -163,8 +171,7 @@ type
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: RawUTF8;
     /// map the presence of some HTTP headers, but retrieved during Request
-    HeaderFlags: set of (transferChuked, connectionClose, connectionUpgrade,
-      connectionKeepAlive, hasRemoteIP);
+    HeaderFlags: THttpSocketHeaderFlags;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     // - only relevant headers are retrieved, unless HeadersUnFiltered is set
     procedure GetHeader(HeadersUnFiltered: boolean = false);
@@ -491,23 +498,23 @@ begin
           P := nil;
         end;
       1:
-        include(HeaderFlags, transferChuked);
+        include(HeaderFlags, hfTransferChuked);
       2:
         case IdemPCharArray(P + 12, ['CLOSE', 'UPGRADE', 'KEEP-ALIVE']) of
           0:
-            include(HeaderFlags, connectionClose);
+            include(HeaderFlags, hfConnectionClose);
           1:
-            include(HeaderFlags, connectionUpgrade);
+            include(HeaderFlags, hfConnectionUpgrade);
           2:
             begin
-              include(HeaderFlags, connectionKeepAlive);
+              include(HeaderFlags, hfConnectionKeepAlive);
               if P[22] = ',' then
               begin
                 inc(P, 23);
                 if P^ = ' ' then
                   inc(P);
                 if IdemPChar(P, 'UPGRADE') then
-                  include(HeaderFlags, connectionUpgrade);
+                  include(HeaderFlags, hfConnectionUpgrade);
               end;
             end;
         else
@@ -555,7 +562,7 @@ begin
   Content := '';
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
-  if transferChuked in HeaderFlags then
+  if hfTransferChuked in HeaderFlags then
   begin // we ignore the Length
     LContent := 0; // current read position in Content
     repeat
@@ -645,10 +652,10 @@ end;
 function THttpSocket.HeaderGetText(const aRemoteIP: RawUTF8): RawUTF8;
 begin
   if (aRemoteIP <> '') and
-     not (hasRemoteIP in HeaderFlags) then
+     not (hfHasRemoteIP in HeaderFlags) then
   begin
     Headers := Headers + 'RemoteIP: ' + aRemoteIP + #13#10;
-    include(HeaderFlags, hasRemoteIP);
+    include(HeaderFlags, hfHasRemoteIP);
   end;
   result := Headers;
 end;

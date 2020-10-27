@@ -128,7 +128,8 @@ type
     /// initialize the timer
     // - will fill all internal state with 0
     // - not necessary e.g. if TPrecisionTimer is defined as a class field
-    procedure Init; {$ifdef HASINLINE}inline;{$endif}
+    procedure Init;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize and start the high resolution timer
     // - similar to Init + Resume
     procedure Start;
@@ -136,11 +137,13 @@ type
     // - with appended time resolution (us,ms,s) - from MicroSecToString()
     // - is just a wrapper around Pause + Time
     // - you can call Resume to continue adding time to this timer
-    function Stop: TShort16; {$ifdef HASINLINE}inline;{$endif}
+    function Stop: TShort16;
+      {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, returning the total time elapsed as microseconds
     // - is just a wrapper around Pause + Time
     // - you can call Resume to continue adding time to this timer
-    function StopInMicroSec: TSynMonitorTotalMicroSec; {$ifdef HASINLINE}inline;{$endif}
+    function StopInMicroSec: TSynMonitorTotalMicroSec;
+      {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, ready to continue its time measurement via Resume
     // - will also compute the global Time value
     // - do nothing if no previous Start/Resume call is pending
@@ -149,7 +152,8 @@ type
     // - do nothing if no timer has been initialized or paused just before
     // - if the previous method called was Init, will act like Start
     // - if the previous method called was Pause, it will continue counting
-    procedure Resume; {$ifdef HASINLINE}inline;{$endif}
+    procedure Resume;
+      {$ifdef HASINLINE}inline;{$endif}
     /// resume a paused timer until the method ends
     // - will internaly create a TInterfaceObject class to let the compiler
     // generate a try..finally block as expected to call Pause at method ending
@@ -379,10 +383,12 @@ type
     destructor Destroy; override;
     /// lock the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure Lock; {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
     /// release the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
+    procedure UnLock;
+      {$ifdef HASINLINE}inline;{$endif}
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
     /// should be called when the process starts, to resume the internal timer

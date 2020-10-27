@@ -53,7 +53,8 @@ type
   protected
     fPassWord: SPIUTF8;
     fKey: cardinal;
-    function GetKey: cardinal; {$ifdef HASINLINE}inline;{$endif}
+    function GetKey: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetPassWordPlain: SPIUTF8;
     function GetPassWordPlainInternal(AppSecret: RawUTF8): SPIUTF8;
     procedure SetPassWordPlain(const Value: SPIUTF8);
@@ -318,7 +319,8 @@ type
     // - returns e.g.
     // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
     // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
-    function AsVariant: variant; {$ifdef HASINLINE}inline;{$endif}
+    function AsVariant: variant;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert this identifier to an explicit TDocVariant JSON object
     // - returns e.g.
     // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,

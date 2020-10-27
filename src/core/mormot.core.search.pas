@@ -153,9 +153,11 @@ type
     function Equals(const aAnother: TMatch): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// access to the pattern length as stored in PMax + 1
-    function PatternLength: integer; {$ifdef HASINLINE}inline;{$endif}
+    function PatternLength: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// access to the pattern text as stored in Pattern
-    function PatternText: PUTF8Char; {$ifdef HASINLINE}inline;{$endif}
+    function PatternText: PUTF8Char;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// stores an array of GLOB search engines
@@ -424,7 +426,8 @@ type
     procedure Initialize; virtual; abstract;
     /// perform the expression search over TExprNodeWord.fFound flags
     // - warning: caller should check that fFirstNode<>nil (e.g. WordCount>0)
-    function Execute: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function Execute: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize an expression parser
     constructor Create; override;

@@ -250,7 +250,8 @@ type
     // - used to avoid collision
     Counter: TBSON24;
     /// set all internal fields to zero
-    procedure Init; {$ifdef HASINLINE}inline;{$endif}
+    procedure Init;
+      {$ifdef HASINLINE}inline;{$endif}
     /// ObjectID content be filled with some unique values
     // - this implementation is thread-safe
     procedure ComputeNew;

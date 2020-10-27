@@ -153,7 +153,8 @@ type
     function RecvPending(out pending: integer): TNetResult;
     function ShutdownAndClose(rdwr: boolean): TNetResult;
     function Close: TNetResult;
-    function Socket: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function Socket: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
 
@@ -498,7 +499,8 @@ type
     function SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket: boolean = false): integer;
     /// checks if the low-level socket handle has been assigned
     // - just a wrapper around PtrInt(fSock)>0
-    function SockIsDefined: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function SockIsDefined: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10

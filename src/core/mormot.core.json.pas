@@ -46,9 +46,15 @@ type
   // than a regular set of AnsiChar which generates much slower BT [MEM], IMM
   // - the same 256-byte memory will also be reused from L1 CPU cache
   // during the parsing of complex JSON input
-  TJsonChar = set of (jcJsonIdentifierFirstChar, jcJsonIdentifier,
-    jcEndOfJSONFieldOr0, jcEndOfJSONValueField,
-    jcJSONStringMarker, jcDigitFirstChar, jcDigitFloatChar, jcUTF8Char);
+  TJsonChar = set of (
+    jcJsonIdentifierFirstChar,
+    jcJsonIdentifier,
+    jcEndOfJSONFieldOr0,
+    jcEndOfJSONValueField,
+    jcJSONStringMarker,
+    jcDigitFirstChar,
+    jcDigitFloatChar,
+    jcUTF8Char);
 
   /// defines a lookup table used for branch-less JSON parsing
   TJsonCharSet = array[AnsiChar] of TJsonChar;
@@ -398,17 +404,22 @@ type
     /// how many UTF-8 bytes are stored in Value
     ValueLen: PtrInt;
     /// convert the value into a UTF-8 string
-    procedure ToUTF8(var Text: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure ToUTF8(var Text: RawUTF8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into a UTF-8 string
-    function ToUTF8: RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+    function ToUTF8: RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into a VCL/generic string
     function ToString: string;
     /// convert the value into a signed integer
-    function ToInteger: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function ToInteger: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into an unsigned integer
-    function ToCardinal: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
+    function ToCardinal: PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// will call IdemPropNameU() over the stored text Value
-    function Idem(const Text: RawUTF8): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function Idem(const Text: RawUTF8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
   /// used e.g. by JSONDecode() overloaded function to returns values
   TValuePUTF8CharArray = array[0..maxInt div SizeOf(TValuePUTF8Char)-1] of TValuePUTF8Char;
@@ -840,7 +851,8 @@ type
     /// append some UTF-8 encoded chars to the buffer, from a generic string type
     // - faster than AddJSONEscape(pointer(StringToUTF8(string))
     // - escapes chars according to the JSON RFC
-    procedure AddJSONEscapeString(const s: string);  {$ifdef HASINLINE}inline;{$endif}
+    procedure AddJSONEscapeString(const s: string);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - escapes chars according to the JSON RFC
     procedure AddJSONEscapeAnsiString(const s: AnsiString);
@@ -948,9 +960,12 @@ type
     fOnAdd: TOnSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
-    function GetStr(const aName: RawUTF8): RawUTF8;  {$ifdef HASINLINE}inline;{$endif}
-    function GetInt(const aName: RawUTF8): Int64;    {$ifdef HASINLINE}inline;{$endif}
-    function GetBool(const aName: RawUTF8): Boolean; {$ifdef HASINLINE}inline;{$endif}
+    function GetStr(const aName: RawUTF8): RawUTF8;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetInt(const aName: RawUTF8): Int64;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetBool(const aName: RawUTF8): Boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// the internal Name/Value storage
     List: TSynNameValueItemDynArray;
@@ -1033,7 +1048,8 @@ type
       AllowVarDouble: boolean = false); overload;
     /// compute a TDocVariant document from the stored values
     function AsDocVariant(ExtendedJson: boolean = false;
-      ValueAsString: boolean = true): variant; overload; {$ifdef HASINLINE}inline;{$endif}
+      ValueAsString: boolean = true): variant; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// merge the stored values into a TDocVariant document
     // - existing properties would be updated, then new values will be added to
     // the supplied TDocVariant instance, ready to be serialized as a JSON object
@@ -1169,7 +1185,8 @@ type
     /// append the blob at a given position in Values[], base-64 encoded
     // - text should be in a single Values[] entry
     procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
-    withMagic: boolean); {$ifdef HASINLINE}inline;{$endif}
+      withMagic: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindMove(aPosition, aLength: integer; aDest: pointer);
@@ -1497,7 +1514,8 @@ type
     function Count: integer;
     /// fast returns how many items are currently stored in this dictionary
     // - this method is NOT thread-safe so should be protected by fSafe.Lock/UnLock
-    function RawCount: integer; {$ifdef HASINLINE}inline;{$endif}
+    function RawCount: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
     property Keys: TDynArrayHashed read fKeys;
@@ -1540,7 +1558,8 @@ type
   public
     /// initialize this low-level context
     procedure Init(WR: TTextWriter; WriteOptions: TTextWriterWriteObjectOptions;
-      TypeInfo: TRttiCustom); {$ifdef HASINLINE}inline;{$endif}
+      TypeInfo: TRttiCustom);
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// internal function handler for JSON persistence of any TRTTIParserType value
@@ -1624,11 +1643,15 @@ type
     Value: PUTF8Char;
     ValueLen: integer;
     DVO: TDocVariantOptions;
-    function ParseNext: boolean;      {$ifdef HASINLINE}inline;{$endif}
-    procedure ParseEnd;               {$ifdef HASINLINE}inline;{$endif}
-    function ParseNull: boolean;      {$ifdef HASINLINE}inline;{$endif}
+    function ParseNext: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure ParseEnd;
+      {$ifdef HASINLINE}inline;{$endif}
+    function ParseNull: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     function ParseArray: boolean;
-    function ParseNewObject: TObject; {$ifdef HASINLINE}inline;{$endif}
+    function ParseNewObject: TObject;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   PJsonParserContext = ^TJsonParserContext;

@@ -257,11 +257,14 @@ type
     procedure DoBlocksOFB(const iv: TAESBlock; src, dst: pointer;
       blockcount: PtrUInt);
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
-    function Initialized: boolean; {$ifdef FPC}inline;{$endif}
+    function Initialized: boolean;
+      {$ifdef FPC}inline;{$endif}
     /// return TRUE if the AES-NI instruction sets are available on this CPU
-    function UsesAESNI: boolean;   {$ifdef HASINLINE}inline;{$endif}
+    function UsesAESNI: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the key size in bits (128/192/256)
-    function KeyBits: integer;     {$ifdef FPC}inline;{$endif}
+    function KeyBits: integer;
+      {$ifdef FPC}inline;{$endif}
   end;
 
   /// points to a TAES encryption/decryption instance
@@ -965,7 +968,8 @@ type
     fAESKeySize: integer;
     fSeedPBKDF2Rounds: cardinal;
     fTotalBytes: QWord;
-    procedure IncrementCTR; {$ifdef HASINLINE}inline;{$endif}
+    procedure IncrementCTR;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the internal secret key, using Operating System entropy
     // - entropy is gathered from the OS, using GetEntropy() method

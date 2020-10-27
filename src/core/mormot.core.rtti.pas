@@ -2355,7 +2355,7 @@ end;
 procedure TRttiEnumType.GetEnumNameAll(var result: TRawUTF8DynArray;
   TrimLeftLowerCase: boolean);
 var
-  max, i: integer;
+  max, i: PtrInt;
   V: PShortString;
 begin
   Finalize(result);
@@ -2367,7 +2367,7 @@ begin
     if TrimLeftLowerCase then
       result[i] := TrimLeftLowerCaseShort(V)
     else
-      result[i] := RawUTF8(V^);
+      ShortStringToAnsi7String(V^, result[i]);
     inc(PByte(V), length(V^) + 1);
   end;
 end;
