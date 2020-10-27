@@ -416,18 +416,18 @@ procedure SetID(const U: RawByteString; var result: TID); overload;
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToTRawBlob(P: PUTF8Char): RawBlob; overload;
+function BlobToRawBlob(P: PUTF8Char): RawBlob; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-procedure BlobToTRawBlob(P: PUTF8Char; var result: RawBlob); overload;
+procedure BlobToRawBlob(P: PUTF8Char; var result: RawBlob); overload;
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToTRawBlob(const Blob: RawByteString): RawBlob; overload;
+function BlobToRawBlob(const Blob: RawByteString): RawBlob; overload;
 
 /// create a TBytes from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -442,13 +442,13 @@ function BlobToStream(P: PUTF8Char): TStream;
 
 /// creates a TEXT-encoded version of blob data from a RawBlob
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
-function TRawBlobToBlob(const RawBlob: RawBlob): RawUTF8; overload;
+function RawBlobToBlob(const RawBlob: RawBlob): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a TEXT-encoded version of blob data from a memory data
 // - same as RawBlob, but with direct memory access via a pointer/byte size pair
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
-function TRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; overload;
+function RawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; overload;
 
 /// convert a Base64-encoded content into binary hexadecimal ready for SQL
 // - returns e.g. X'53514C697465'
@@ -841,7 +841,7 @@ type
     // - handle UTF-8 SQL to Delphi values conversion
     // - expect BLOB fields encoded as SQlite3 BLOB literals ("x'01234'" e.g.)
     // or base-64 encoded stream for JSON ("\uFFF0base64encodedbinary") - i.e.
-    // both format supported by BlobToTRawBlob() function
+    // both format supported by BlobToRawBlob() function
     // - handle TPersistent, TCollection, TRawUTF8List or TStrings with JSONToObject
     // - note that the supplied Value buffer won't be modified by this method:
     // overriden implementation should create their own temporary copy
@@ -3088,7 +3088,7 @@ type
     function GetTable: TOrmTable;
   protected
     fInternalState: cardinal;
-    /// defined here for proper RecordProps inlining
+    /// defined as a protected class function for RecordProps method inlining
     class function PropsCreate: TOrmProperties;
     /// virtual class method to be overridden to register some custom properties
     // - do nothing by default, but allow inherited classes to define some
@@ -4531,7 +4531,7 @@ type
     // - returns 0 if Field is invalid or no data is stored in this TOrmTable -
     // don't call LenStore.Done in this case
     function GetRowLengths(Field: integer; var LenStore: TSynTempBuffer): integer;
-    /// retrieve a field value in a variant
+    /// retrieve a field value as a variant
     // - returns null if the row/field is incorrect
     // - expand* methods will allow to return human-friendly representations
     procedure GetAsVariant(row, field: integer; out value: variant;
@@ -7781,12 +7781,12 @@ begin
 {$endif CPU64}
 end;
 
-function BlobToTRawBlob(P: PUTF8Char): RawBlob;
+function BlobToRawBlob(P: PUTF8Char): RawBlob;
 begin
-  BlobToTRawBlob(P, result);
+  BlobToRawBlob(P, result);
 end;
 
-procedure BlobToTRawBlob(P: PUTF8Char; var result: RawBlob);
+procedure BlobToRawBlob(P: PUTF8Char; var result: RawBlob);
 var
   Len, LenHex: integer;
 begin
@@ -7813,7 +7813,7 @@ begin
   SetString(result, PAnsiChar(P), Len);
 end;
 
-function BlobToTRawBlob(const Blob: RawByteString): RawBlob;
+function BlobToRawBlob(const Blob: RawByteString): RawBlob;
 var
   Len, LenHex: integer;
   P: PUTF8Char;
@@ -7844,7 +7844,7 @@ end;
 
 function BlobToStream(P: PUTF8Char): TStream;
 begin
-  result := TRawByteStringStream.Create(BlobToTRawBlob(P));
+  result := TRawByteStringStream.Create(BlobToRawBlob(P));
 end;
 
 function BlobToBytes(P: PUTF8Char): TBytes;
@@ -7883,14 +7883,14 @@ begin
   MoveFast(P^, pointer(result)^, Len);
 end;
 
-function TRawBlobToBlob(const RawBlob: RawBlob): RawUTF8;
+function RawBlobToBlob(const RawBlob: RawBlob): RawUTF8;
 // BLOB literals are string literals containing hexadecimal data and
 //  preceded by a single "x" or "X" character. For example: X'53514C697465'
 begin
-  result := TRawBlobToBlob(pointer(RawBlob), length(RawBlob));
+  result := RawBlobToBlob(pointer(RawBlob), length(RawBlob));
 end;
 
-function TRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8;
+function RawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8;
 // BLOB literals are string literals containing hexadecimal data and
 //  preceded by a single "x" or "X" character. For example: X'53514C697465'
 var
@@ -7940,7 +7940,7 @@ end;
 procedure Base64MagicToBlob(Base64: PUTF8Char; var result: RawUTF8);
 begin
   // do not escape the result: returns e.g. X'53514C697465'
-  result := TRawBlobToBlob(Base64ToBin(PAnsiChar(Base64), StrLen(Base64)));
+  result := RawBlobToBlob(Base64ToBin(PAnsiChar(Base64), StrLen(Base64)));
 end;
 
 function UTF8ContentNumberType(P: PUTF8Char): TOrmFieldType;
@@ -9003,7 +9003,7 @@ end;
 
 procedure TOrmPropInfo.TextToBinary(Value: PUTF8Char; var result: RawByteString);
 begin
-  result := BlobToTRawBlob(Value);
+  result := BlobToRawBlob(Value);
 end;
 
 procedure TOrmPropInfo.BinaryToText(var Value: RawUTF8; ToSQL: boolean;
@@ -9021,7 +9021,7 @@ begin
       wasSQLString^ := true;
     if ToSQL then
       // encode as BLOB literals (e.g. "X'53514C697465'")
-      Value := TRawBlobToBlob(RawBlob(Value))
+      Value := RawBlobToBlob(RawBlob(Value))
     else
       // JSON content is e.g. '\uFFF0base64encodedbinary'
       Value := BinToBase64WithMagic(Value);
@@ -9183,7 +9183,7 @@ begin
         aValue.VType := ftNull
       else
       begin
-        temp := BlobToTRawBlob(temp);
+        temp := BlobToRawBlob(temp);
         aValue.VBlob := pointer(temp);
         aValue.VBlobLen := length(temp);
       end;
@@ -9219,7 +9219,7 @@ begin
       SetValueVar(Instance, DateTimeToIso8601Text(aValue.VDateTime, 'T',
         svoDateWithMS in aValue.Options), true);
     ftBlob:
-      SetValueVar(Instance, TRawBlobToBlob(aValue.VBlob, aValue.VBlobLen), true);
+      SetValueVar(Instance, RawBlobToBlob(aValue.VBlob, aValue.VBlobLen), true);
     ftUTF8:
       SetValue(Instance, aValue.VText, true);
   else
@@ -9300,7 +9300,7 @@ begin
     oftAnsiText, oftUTF8Text:
       FastSetString(RawUTF8(result.VAny), Value, ValueLen);
     oftBlobCustom, oftBlob:
-      BlobToTRawBlob(Value, RawBlob(result.VAny));
+      BlobToRawBlob(Value, RawBlob(result.VAny));
     oftVariant, oftNullable, oftBlobDynArray, oftObject, oftUTF8Custom:
       Complex;
   end;
@@ -11041,13 +11041,13 @@ end;
 procedure TOrmPropInfoRTTIRawBlob.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
-  fPropInfo.SetLongStrProp(Instance, BlobToTRawBlob(Value));
+  fPropInfo.SetLongStrProp(Instance, BlobToRawBlob(Value));
 end;
 
 procedure TOrmPropInfoRTTIRawBlob.SetValueVar(Instance: TObject;
   const Value: RawUTF8; wasString: boolean);
 begin
-  fPropInfo.SetLongStrProp(Instance, BlobToTRawBlob(Value));
+  fPropInfo.SetLongStrProp(Instance, BlobToRawBlob(Value));
 end;
 
 function TOrmPropInfoRTTIRawBlob.SetFieldSQLVar(Instance: TObject;
@@ -11786,7 +11786,7 @@ begin
   if Assigned(fText2Data) then
     fText2Data(Value, result)
   else
-    result := BlobToTRawBlob(Value);
+    result := BlobToRawBlob(Value);
 end;
 
 procedure TOrmPropInfoCustom.BinaryToText(var Value: RawUTF8; ToSQL: boolean;
@@ -13086,9 +13086,6 @@ begin
   end;
 end;
 
-var
-  OrmTableRowVariantType: TCustomVariantType = nil;
-
 procedure TOrmTable.GetAsVariant(row, field: integer; out value: variant;
   expandTimeLogAsText, expandEnumsAsText, expandHugeIDAsUniqueIdentifier: boolean;
   options: TDocVariantOptions);
@@ -13172,6 +13169,9 @@ begin
     InitFieldNames;
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames, v, JSON_OPTIONS_FAST);
 end;
+
+var
+  OrmTableRowVariantType: TCustomVariantType = nil;
 
 procedure TOrmTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
 var
@@ -13644,7 +13644,7 @@ end;
 
 function TOrmTable.GetBlob(Row, Field: integer): RawBlob;
 begin
-  result := BlobToTRawBlob(Get(Row, Field));
+  result := BlobToRawBlob(Get(Row, Field));
 end;
 
 function TOrmTable.GetBytes(Row, Field: integer): TBytes;
@@ -16183,7 +16183,7 @@ var
   rtticustom: TRttiCustom;
   vmt: TObject;
 begin
-  // private sub function for proper inlining
+  // private sub function for proper TOrm.RecordProps method inlining
   rtticustom := Rtti.RegisterClass(self);
   vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
   if (rtticustom = nil) or (vmt <> rtticustom) then
@@ -22054,6 +22054,7 @@ begin
   include(Options, itoNoIndex4TID);
   inherited InitializeTable(Server, FieldName, Options);
 end;
+
 
 procedure InitializeUnit;
 begin

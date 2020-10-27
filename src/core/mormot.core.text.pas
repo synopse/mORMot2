@@ -640,7 +640,7 @@ type
   // on client side, e.g. to 53-bit range in JavaScript: you could define
   // woIDAsIDstr to append an additional "ID_str":"##########" field
   // - by default, RawBlob properties are serialized as null, unless
-  // woSQLRawBlobAsBase64 is defined
+  // woRawBlobAsBase64 is defined
   // - if woHideSensitivePersonalInformation is set, rcfSPI types (e.g. the
   // TSynPersistentWithPassword.Password field) will be serialized as "***"
   // to prevent security issues (e.g. in log)
@@ -656,13 +656,26 @@ type
   // - woPersistentLock paranoid setting will call TSynPersistentLock.Lock/Unlock
   // during serialization
   TTextWriterWriteObjectOption = (
-    woHumanReadable, woDontStoreDefault, woFullExpand,
-    woStoreClassName, woStorePointer, woStoreStoredFalse,
-    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
-    woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix, woTimeLogAsText,
-    woIDAsIDstr, woSQLRawBlobAsBase64, woHideSensitivePersonalInformation,
-    woObjectListWontStoreClassName, woDontStoreInherited, woInt64AsHex,
-    woDontStoreVoid, woPersistentLock);
+    woHumanReadable,
+    woDontStoreDefault,
+    woFullExpand,
+    woStoreClassName,
+    woStorePointer,
+    woStoreStoredFalse,
+    woHumanReadableFullSetsAsStar,
+    woHumanReadableEnumSetAsComment,
+    woEnumSetsAsText,
+    woDateTimeWithMagic,
+    woDateTimeWithZSuffix,
+    woTimeLogAsText,
+    woIDAsIDstr,
+    woRawBlobAsBase64,
+    woHideSensitivePersonalInformation,
+    woObjectListWontStoreClassName,
+    woDontStoreInherited,
+    woInt64AsHex,
+    woDontStoreVoid,
+    woPersistentLock);
 
   /// options set for TBaseWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;

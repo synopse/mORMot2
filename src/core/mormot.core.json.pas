@@ -1729,8 +1729,8 @@ var
   // - used as DEFAULT_WRITEOPTIONS[DontStoreVoidJSON]
   // - you can modify this global variable to customize the whole process
   DEFAULT_WRITEOPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
-    [woDontStoreDefault, woSQLRawBlobAsBase64],
-    [woDontStoreDefault, woDontStoreVoid, woSQLRawBlobAsBase64]);
+    [woDontStoreDefault, woRawBlobAsBase64],
+    [woDontStoreDefault, woDontStoreVoid, woRawBlobAsBase64]);
 
   /// the options used by TSynJsonFileSettings.SaveIfNeeded
   // - you can modify this global variable to customize the whole process
@@ -4659,7 +4659,11 @@ end;
 
 procedure _JS_RawByteString(Data: PRawByteString; const Ctxt: TJsonSaveContext);
 begin
-  Ctxt.W.WrBase64(pointer(Data^), length(Data^), {withmagic=}true);
+  if (rcfIsRawBlob in Ctxt.Info.Cache.Flags) and
+     (woRawBlobAsBase64 in Ctxt.Options) then
+    Ctxt.W.AddNull
+  else
+    Ctxt.W.WrBase64(pointer(Data^), length(Data^), {withmagic=}true);
 end;
 
 procedure _JS_RawJSON(Data: PRawJSON; const Ctxt: TJsonSaveContext);

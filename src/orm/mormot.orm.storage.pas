@@ -3449,7 +3449,7 @@ var
 begin
   result := false;
   if (TableModelIndex <> fStoredClassProps.TableIndex) or
-     not BlobField^.IsBlob then
+     not BlobField^.IsRawBlob then
     exit;
   StorageLock(false, 'EngineRetrieveBlob');
   try
@@ -3498,7 +3498,7 @@ begin
   result := false;
   if (aID < 0) or
      (TableModelIndex <> fStoredClassProps.TableIndex) or
-     not BlobField^.IsBlob then
+     not BlobField^.IsRawBlob then
     exit;
   StorageLock(true, 'EngineUpdateBlob');
   try

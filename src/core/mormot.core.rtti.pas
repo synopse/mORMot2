@@ -481,6 +481,22 @@ type
   /// as returned by TRttiInfo.RecordAllFields
   TRttiRecordAllFields = array of TRttiRecordAllField;
 
+  /// quick identification of a RTTI value types
+  TRttiCacheFlag = (
+    rcfQWord,
+    rcfBoolean,
+    rcfOrdinal,
+    rcfGetOrdProp,
+    rcfGetInt64Prop,
+    rcfIsRawBlob,
+    rcfIsCurrency);
+
+  /// as used by TRttiCache.Flags
+  // - rcfQWord/rcfBoolean map Info^.IsQWord/IsBoolean
+  // - rcfIsRawBlob/rcfIsCurrency map Info^.IsRawBlob/IsCurrency
+  // - set rcfGetOrdProp/rcfGetInt64Prop to call the right Get*Prop() method
+  TRttiCacheFlags = set of TRttiCacheFlag;
+
   /// convenient wrapper about PRttiInfo content and its more precise information
   // - may be cached between use for more efficient process
   TRttiCache = record
@@ -490,10 +506,8 @@ type
     Size: integer;
     /// equals Info^.Kind
     Kind: TRttiKind;
-    /// quick identification of specific rkOrdinalTypes
-    // - map Info^.IsQWord / IsBoolean results into rcfQWord / rcfBoolean
-    // - also check rkGetOrdProp or rkGetInt64Prop ordinals
-    Flags: set of (rcfQWord, rcfBoolean, rcfOrdinal, rcfGetOrdProp, rcfGetInt64Prop);
+    /// quick identification of specific types, e.g. rkOrdinalTypes
+    Flags: TRttiCacheFlags;
     /// for rkOrdinalTypes, equals Info^.RttiOrd
     RttiOrd: TRttiOrd;
     /// corresponding TRttiVarData.VType
@@ -2516,7 +2530,7 @@ begin
   result := TRttiFloat(GetTypeData(@self)^.FloatType) = rfCurr;
 end;
 
-function TRttiInfo.IsBlob: boolean;
+function TRttiInfo.IsRawBlob: boolean;
 begin
   result := @self = TypeInfo(RawBlob);
 end;
@@ -2642,7 +2656,10 @@ begin
       begin
         Cache.RttiFloat := RttiFloat;
         if Cache.RttiFloat = rfCurr then
+        begin
           Cache.RttiVarDataVType := varCurrency;
+          include(Cache.Flags, rcfIsCurrency);
+        end;
       end;
     rkEnumeration:
       begin
@@ -2669,7 +2686,10 @@ begin
         Cache.ItemSize := siz;
         Cache.ItemCount := cnt;
       end;
-  end;
+    rkLString:
+      if IsRawBlob then
+        include(Cache.Flags, rcfIsRawBlob);
+   end;
 end;
 
 function TRttiInfo.InterfaceType: PRttiInterfaceTypeData;
@@ -2911,7 +2931,7 @@ begin
   end;
 end;
 
-function TRttiProp.IsBlob: boolean;
+function TRttiProp.IsRawBlob: boolean;
 begin
   result := TypeInfo = system.TypeInfo(RawBlob);
 end;
@@ -4971,18 +4991,19 @@ const
   SORTEDNAMES: array[0..SORTEDMAX] of PUTF8Char = (
     'ARRAY', 'BOOLEAN', 'BYTE', 'CARDINAL', 'CURRENCY', 'DOUBLE', 'EXTENDED',
     'INT64', 'INTEGER', 'INTERFACE', 'LONGINT', 'LONGWORD', 'PTRINT', 'PTRUINT', 'QWORD',
-    'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD', 'SINGLE', 'STRING', 'SYNUNICODE',
+    'RAWBLOB', 'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD', 'SINGLE', 'STRING', 'SYNUNICODE',
     'TCREATETIME', 'TDATETIME', 'TDATETIMEMS', 'TGUID', 'THASH128', 'THASH256',
     'THASH512', 'TID', 'TMODTIME', 'TRECORDREFERENCE', 'TRECORDREFERENCETOBEDELETED',
-    'TRECORDVERSION', 'RawBlob', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
+    'TRECORDVERSION', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
     'UNICODESTRING', 'UTF8STRING', 'VARIANT', 'WIDESTRING', 'WORD');
   // warning: recognized types should match at binary storage level!
   SORTEDTYPES: array[0..SORTEDMAX] of TRTTIParserType = (
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt, ptQWord,
-    ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord, ptSingle, ptString, ptSynUnicode,
+    ptRawByteString, ptRawByteString, ptRawJSON, ptRawUTF8,
+    ptRecord, ptSingle, ptString, ptSynUnicode,
     ptTimeLog, ptDateTime, ptDateTimeMS, ptGUID, ptHash128, ptHash256, ptHash512,
-    ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptRawByteString, ptUnixMSTime,
+    ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptUnixMSTime,
     ptUnixTime, ptTimeLog, ptUnicodeString,
     ptRawUTF8, ptVariant, ptWideString, ptWord);
   SORTEDCOMPLEX: array[0..SORTEDMAX] of TRTTIParserComplexType = (
@@ -5001,8 +5022,8 @@ var
 begin
   UpperCopy255Buf(@tmp, Name, NameLen);
   up := @tmp;
-{  for ndx := 1 to SORTEDMAX do if StrComp(SORTEDNAMES[ndx],SORTEDNAMES[ndx-1])<=0
-    then writeln(SORTEDNAMES[ndx]); }
+  //for ndx := 1 to SORTEDMAX do if StrComp(SORTEDNAMES[ndx], SORTEDNAMES[ndx-1])<=0 then
+  //writeln(SORTEDNAMES[ndx]);
   ndx := FastFindPUTF8CharSorted(@SORTEDNAMES, SORTEDMAX, up);
   if ndx >= 0 then
   begin
@@ -5039,6 +5060,8 @@ end;
 
 function TypeInfoToStandardParserType(Info: PRttiInfo; FirstSearchByName: boolean;
   Complex: PRTTIParserComplexType): TRTTIParserType;
+var
+  cp: integer;
 begin
   result := ptNone;
   if Info = nil then
@@ -5049,13 +5072,24 @@ begin
     if result <> ptNone then
       if (result = ptORM) and
          (Info^.Kind <> rkInt64) then
-        result := ptNone // paranoid check e.g. for T...ID false positives
+        // paranoid check e.g. for T...ID false positives
+        result := ptNone
       else
         exit;
   end;
   case Info^.Kind of // FPC and Delphi will use a fast jmp table
     {$ifdef FPC} rkLStringOld, {$endif} rkLString:
-      result := ptRawUTF8;
+    begin
+      cp := Info^.AnsiStringCodePage;
+      if cp >= CP_RAWBLOB then
+        result := ptRawByteString
+      {$ifndef UNICODE}
+      else if cp <> CP_UTF8 then
+        result := ptString
+      {$endif UNICODE}
+      else
+        result := ptRawUTF8;
+    end;
     rkWString:
       result := ptWideString;
   {$ifdef HASVARUSTRING}
