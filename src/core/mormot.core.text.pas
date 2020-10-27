@@ -639,7 +639,7 @@ type
   // - since TORM.ID could be huge Int64 numbers, they may be truncated
   // on client side, e.g. to 53-bit range in JavaScript: you could define
   // woIDAsIDstr to append an additional "ID_str":"##########" field
-  // - by default, TRawBlob properties are serialized as null, unless
+  // - by default, RawBlob properties are serialized as null, unless
   // woSQLRawBlobAsBase64 is defined
   // - if woHideSensitivePersonalInformation is set, rcfSPI types (e.g. the
   // TSynPersistentWithPassword.Password field) will be serialized as "***"

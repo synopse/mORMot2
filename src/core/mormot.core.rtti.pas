@@ -562,7 +562,7 @@ type
     function IsBoolean: boolean;          {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the property is a currency field
     function IsCurrency: boolean;         {$ifdef HASINLINE}inline;{$endif}
-    /// return true if this property is a BLOB (TRawBlob)
+    /// return true if this property is a BLOB (RawBlob)
     function IsBlob: boolean;             {$ifdef HASINLINE}inline;{$endif}
     /// for rkFloat: get the storage size and precision
     // - will also properly detect our currency internal type as rfCurr
@@ -624,11 +624,11 @@ type
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
-    // - it will also recognize TRawBlob as the fake CP_RAWBLOB codepage
+    // - it will also recognize RawBlob as the fake CP_RAWBLOB codepage
     function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
     {$ifdef HASCODEPAGE}
     /// returning the code page stored in the RTTI
-    // - without recognizing e.g. TRawBlob
+    // - without recognizing e.g. RawBlob
     // - caller should ensure the type is indeed a rkLString
     function AnsiStringCodePageStored: integer; inline;
     {$endif HASCODEPAGE}
@@ -812,7 +812,7 @@ type
       {$ifdef FPC} inline; {$endif}
     /// return TRUE if the property is 0/nil/''/null
     function IsVoid(Instance, RttiCustom: TObject): boolean;
-    /// return true if this property is a BLOB (TRawBlob)
+    /// return true if this property is a BLOB (RawBlob)
     function IsBlob: boolean;
       {$ifdef FPC} inline; {$endif}
     /// compute in how many bytes this property is stored
@@ -2518,7 +2518,7 @@ end;
 
 function TRttiInfo.IsBlob: boolean;
 begin
-  result := @self = TypeInfo(TRawBlob);
+  result := @self = TypeInfo(RawBlob);
 end;
 
 function TRttiInfo.RttiFloat: TRttiFloat;
@@ -2679,7 +2679,7 @@ end;
 
 function TRttiInfo.AnsiStringCodePage: integer;
 begin
-  if @self = TypeInfo(TRawBlob) then
+  if @self = TypeInfo(RawBlob) then
     result := CP_RAWBLOB
   else
   {$ifdef HASCODEPAGE}
@@ -2913,7 +2913,7 @@ end;
 
 function TRttiProp.IsBlob: boolean;
 begin
-  result := TypeInfo = system.TypeInfo(TRawBlob);
+  result := TypeInfo = system.TypeInfo(RawBlob);
 end;
 
 procedure TRttiProp.GetValue(Instance, RttiCustom: TObject;
@@ -4971,7 +4971,7 @@ const
     'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD', 'SINGLE', 'STRING', 'SYNUNICODE',
     'TCREATETIME', 'TDATETIME', 'TDATETIMEMS', 'TGUID', 'THASH128', 'THASH256',
     'THASH512', 'TID', 'TMODTIME', 'TRECORDREFERENCE', 'TRECORDREFERENCETOBEDELETED',
-    'TRECORDVERSION', 'TRawBlob', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
+    'TRECORDVERSION', 'RawBlob', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
     'UNICODESTRING', 'UTF8STRING', 'VARIANT', 'WIDESTRING', 'WORD');
   // warning: recognized types should match at binary storage level!
   SORTEDTYPES: array[0..SORTEDMAX] of TRTTIParserType = (

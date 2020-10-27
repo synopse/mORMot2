@@ -58,16 +58,23 @@ const
   // - usefull for low-level debugging purpose
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
     {$ifdef FPC}
-      {$ifdef FPC_X64MM} + ' x64MM' {$ifdef FPCMM_BOOST} + 'b' {$endif}
-        {$ifdef FPCMM_SERVER} + 's' {$endif}{$else}
-      {$ifdef FPC_FASTMM4} + ' FMM4' {$else}
-        {$ifdef FPC_SYNTBB} + ' TBB' {$else}
-          {$ifdef FPC_SYNJEMALLOC} + ' JM' {$else}
-            {$ifdef FPC_SYNCMEM} + ' GM' {$else}
-              {$ifdef FPC_CMEM} + ' CM' {$endif}
-      {$endif}{$endif}{$endif}{$endif}{$endif}
+      {$ifdef FPC_X64MM}             + ' x64MM'
+        {$ifdef FPCMM_BOOST}         + 'b' {$endif}
+        {$ifdef FPCMM_SERVER}        + 's' {$endif}
+      {$else}
+        {$ifdef FPC_FASTMM4}         + ' FMM4' {$else}
+          {$ifdef FPC_SYNTBB}        + ' TBB' {$else}
+            {$ifdef FPC_SYNJEMALLOC} + ' JM' {$else}
+              {$ifdef FPC_SYNCMEM}   + ' GM' {$else}
+                {$ifdef FPC_CMEM}    + ' CM'
+                {$endif FPC_CMEM}
+              {$endif FPC_SYNCMEM}
+            {$endif FPC_SYNJEMALLOC}
+          {$endif FPC_SYNTBB}
+        {$endif FPC_FASTMM4}
+      {$endif FPC_X64MM}
     {$else}
-      {$ifdef FullDebugMode} + ' FDM'{$endif}
+      {$ifdef FullDebugMode}         + ' FDM'{$endif}
     {$endif FPC};
 
 
@@ -81,9 +88,9 @@ const
   /// internal Code Page for RawByteString undefined string
   CP_RAWBYTESTRING = 65535;
 
-  /// fake code page used to recognize TRawBlob
-  // - TRawBlob internal code page will be CP_RAWBYTESTRING = 65535, but
-  // our ORM will identify TRawBlob and serialize using CP_RAWBLOB instead
+  /// fake code page used to recognize RawBlob
+  // - RawBlob internal code page will be CP_RAWBYTESTRING = 65535, but
+  // our ORM will identify RawBlob and serialize using CP_RAWBLOB instead
   // - TTextWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
   CP_RAWBLOB = 65534;
 
@@ -237,9 +244,9 @@ type
   // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
   // so use RetrieveBlob() methods for handling BLOB fields
   // - could be defined as value in a TORM property as such:
-  // ! property Blob: TRawBlob read fBlob write fBlob;
+  // ! property Blob: RawBlob read fBlob write fBlob;
   // - is defined here for proper TRttiProp.WriteAsJSON serialization
-  TRawBlob = type RawByteString;
+  RawBlob = type RawByteString;
 
   /// SynUnicode is the fastest available Unicode native string type, depending
   //  on the compiler used
@@ -718,7 +725,7 @@ function DateTimeToIsoString(dt: TDateTime): string;
 
 // backward compatibility types redirections
 type
-  TSQLRawBlob = TRawBlob;
+  TSQLRawBlob = RawBlob;
 
 {$endif PUREMORMOT2}
 
@@ -2025,15 +2032,15 @@ var GetBitsCountPtrInt: function(value: PtrInt): PtrInt = GetBitsCountPas;
 
 const
   /// could be used to compute the index in a pointer list from its byte position
-  POINTERSHR = {$ifdef CPU64} 3 {$else} 2 {$endif};
+  POINTERSHR =     {$ifdef CPU64}  3 {$else}  2 {$endif};
   /// could be used to compute the bitmask of a pointer integer
-  POINTERAND = {$ifdef CPU64} 7 {$else} 3 {$endif};
+  POINTERAND =     {$ifdef CPU64}  7 {$else}  3 {$endif};
   /// could be used to check all bits on a pointer
-  POINTERBITS = {$ifdef CPU64} 64 {$else} 32 {$endif};
+  POINTERBITS =    {$ifdef CPU64} 64 {$else} 32 {$endif};
   /// could be used to check all bytes on a pointer
-  POINTERBYTES = {$ifdef CPU64} 8 {$else} 4 {$endif};
+  POINTERBYTES =   {$ifdef CPU64}  8 {$else}  4 {$endif};
   /// could be used to compute the index in a pointer list from its bits position
-  POINTERSHRBITS = {$ifdef CPU64} 6 {$else} 5 {$endif};
+  POINTERSHRBITS = {$ifdef CPU64}  6 {$else}  5 {$endif};
 
   /// constant array used by GetAllBits() function (when inlined)
   ALLBITS_CARDINAL: array[1..32] of Cardinal = (
@@ -5077,7 +5084,7 @@ begin
   result := Int64Scan(pointer(P), Count, Value);
   {$else}
   result := IntegerScan(pointer(P), Count, Value);
-  {$endif}
+  {$endif CPU64}
 end;
 
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
@@ -5086,7 +5093,7 @@ begin
   result := Int64ScanExists(pointer(P), Count, Value);
   {$else}
   result := IntegerScanExists(pointer(P), Count, Value);
-  {$endif}
+  {$endif CPU64}
 end;
 
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
@@ -5095,7 +5102,7 @@ begin
   result := Int64ScanIndex(pointer(P), Count, Value);
   {$else}
   result := IntegerScanIndex(pointer(P), Count, Value);
-  {$endif}
+  {$endif CPU64}
 end;
 
 {$ifdef FPC}
@@ -6001,7 +6008,7 @@ begin
           inc(I);
         while ID[J] > ID[P] do
           dec(J);
-      {$endif}
+      {$endif CPU64}
         if I <= J then
         begin
           tmp := ID[J];
@@ -6167,7 +6174,7 @@ begin
   result := FastFindInt64Sorted(PInt64Array(P), R, Value);
   {$else}
   result := FastFindIntegerSorted(PIntegerArray(P), R, Value);
-  {$endif}
+  {$endif CPU64}
 end;
 
 function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
@@ -9424,7 +9431,8 @@ begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
     PtrInt(PtrUInt(P1)) := PtrInt(PtrUInt(P1)) and  - SizeOf(PtrInt); // align
     inc(PtrInt(P2), PtrInt(PtrUInt(P1)));
     if Length >= PtrInt(PtrUInt(P1)) then
-      repeat // compare 4 aligned PtrInt per loop
+      repeat
+        // compare 4 aligned PtrInt per loop
         if (PPtrInt(PtrUInt(P1))^ <> PPtrInt(P2)^) or
            (PPtrIntArray(P1)[1] <> PPtrIntArray(P2)[1]) then
           goto zero;

@@ -3166,7 +3166,7 @@ begin
                 if Blob <> nil then
                 begin
                   if TableEngine.EngineRetrieveBlob(TableIndex, TableID, Blob,
-                    TRawBlob(Call.OutBody)) then
+                    RawBlob(Call.OutBody)) then
                   begin
                     Call.OutHead := GetMimeContentTypeHeader(Call.OutBody);
                     Call.OutStatus := HTTP_SUCCESS; // 200 OK
@@ -4610,7 +4610,7 @@ constructor TAuthSession.Create(aCtxt: TRestServerURIContext; aUser: TAuthUser);
 var
   GID: TAuthGroup;
   rnd: THash256;
-  blob: TRawBlob;
+  blob: RawBlob;
 begin
   fUser := aUser;
   if (aCtxt <> nil) and

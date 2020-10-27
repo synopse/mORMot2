@@ -305,9 +305,9 @@ type
     function EngineDeleteWhere(TableModelIndex: integer;
       const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue,
       WhereFieldName, WhereValue: RawUTF8): boolean; override;
@@ -790,7 +790,7 @@ begin
 end;
 
 function TRestORMClientURI.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-  BlobField: PRttiProp; out BlobData: TRawBlob): boolean;
+  BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
   url: RawUTF8;
 begin
@@ -808,7 +808,7 @@ begin
 end;
 
 function TRestORMClientURI.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-  BlobField: PRttiProp; const BlobData: TRawBlob): boolean;
+  BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
   url, Head: RawUTF8;
 begin

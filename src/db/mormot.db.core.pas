@@ -306,7 +306,7 @@ const
   // - as will be implemented in TORM classes
   SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
     '???','???',
-    'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TRawBlob');
+    'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'RawBlob');
 
 
 {$ifndef PUREMORMOT2}
@@ -2520,7 +2520,7 @@ begin
   if P^ = #0 then
     exit; // no SQL statement
   if P^ = '*' then
-  begin // all simple (not TRawBlob/TORMMany) fields
+  begin // all simple (not RawBlob/TORMMany) fields
     inc(P);
     len := GetBitsCount(SimpleFieldsBits, MAX_SQLFIELDS) + 1;
     SetLength(fSelect, len);

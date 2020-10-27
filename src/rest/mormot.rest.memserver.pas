@@ -81,9 +81,9 @@ type
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
@@ -99,9 +99,9 @@ type
     function MainEngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
     function MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function MainEngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
@@ -516,14 +516,14 @@ begin
 end;
 
 function TRestORMServerFullMemory.EngineRetrieveBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; out BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineRetrieveBlob(
     TableModelIndex, aID, BlobField, BlobData);
 end;
 
 function TRestORMServerFullMemory.EngineUpdateBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; const BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineUpdateBlob(
     TableModelIndex, aID, BlobField, BlobData);
@@ -585,14 +585,14 @@ end;
 
 function TRestORMServerFullMemory.MainEngineRetrieveBlob(
   TableModelIndex: integer; aID: TID; BlobField: PRttiProp;
-  out BlobData: TRawBlob): boolean;
+  out BlobData: RawBlob): boolean;
 begin
   result := false;
 end;
 
 function TRestORMServerFullMemory.MainEngineUpdateBlob(
   TableModelIndex: integer; aID: TID; BlobField: PRttiProp;
-  const BlobData: TRawBlob): boolean;
+  const BlobData: RawBlob): boolean;
 begin
   result := false;
 end;

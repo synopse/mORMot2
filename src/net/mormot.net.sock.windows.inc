@@ -970,7 +970,8 @@ begin
   inc(DataCount, aBuffer.cbBuffer);
 end;
 
-procedure TSChannelClient.AfterConnection(aSocket: TNetSocket; const aServerAddress: RawUTF8);
+procedure TSChannelClient.AfterConnection(aSocket: TNetSocket;
+  const aServerAddress: RawUTF8);
 var
   buf: THandshakeBuf;
   res, f: cardinal;

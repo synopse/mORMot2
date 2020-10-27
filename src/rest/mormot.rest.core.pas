@@ -761,11 +761,11 @@ type
     function Delete(Table: TORMClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): boolean; overload;
     function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
-      out BlobData: TRawBlob): boolean; overload;
+      out BlobData: RawBlob): boolean; overload;
     function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
       out BlobStream: TCustomMemoryStream): boolean; overload;
     function UpdateBlob(Table: TORMClass; aID: TID;
-      const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean; overload;
+      const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean; overload;
     function UpdateBlob(Table: TORMClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
     function UpdateBlob(Table: TORMClass; aID: TID;
@@ -947,7 +947,7 @@ type
     fPasswordHashHexa: RawUTF8;
     fDisplayName: RawUTF8;
     fGroupRights: TAuthGroup;
-    fData: TRawBlob;
+    fData: RawBlob;
     procedure SetPasswordPlain(const Value: RawUTF8);
   public
     /// static function allowing to compute a hashed password
@@ -1008,7 +1008,7 @@ type
     // - Server application may store here custom data
     // - its content is not used by the framework but 'may' be used by your
     // application
-    property Data: TRawBlob
+    property Data: RawBlob
       read fData write fData;
   end;
 
@@ -1256,7 +1256,7 @@ type
   protected
     fEvent: TORMHistoryEvent;
     fSentData: RawUTF8;
-    fHistory: TRawBlob;
+    fHistory: RawBlob;
     // BLOB storage layout is: RTTIheader + offsets + recordsdata
     fHistoryModel: TORMModel;
     fHistoryTable: TORMClass;
@@ -1358,7 +1358,7 @@ type
     // - as any BLOB field, this one won't be retrieved by default: use
     // explicitly TRest.RetrieveBlobFields(aRecordHistory) to get it if you
     // want to access it directly, and not via CreateHistory()
-    property History: TRawBlob
+    property History: RawBlob
       read fHistory write fHistory;
   end;
 
@@ -2488,7 +2488,7 @@ begin
 end;
 
 function TRest.RetrieveBlob(Table: TORMClass; aID: TID;
-  const BlobFieldName: RawUTF8; out BlobData: TRawBlob): boolean;
+  const BlobFieldName: RawUTF8; out BlobData: RawBlob): boolean;
 begin
   result := fORM.RetrieveBlob(Table, aID, BlobFieldName, BlobData);
 end;
@@ -2500,7 +2500,7 @@ begin
 end;
 
 function TRest.UpdateBlob(Table: TORMClass; aID: TID;
-  const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean;
+  const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean;
 begin
   result := fORM.UpdateBlob(Table, aID, BlobFieldName, BlobData);
 end;

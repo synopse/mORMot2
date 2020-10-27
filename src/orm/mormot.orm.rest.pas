@@ -164,7 +164,7 @@ type
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; virtual; abstract;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; virtual; abstract;
     /// update a blob field content from its member ID and field name
     // - implements REST PUT member with a supplied blob field name
     // - returns TRUE on success
@@ -172,7 +172,7 @@ type
     // - override this method for proper data retrieval from the database engine
     // - this method must be implemented in a thread-safe manner
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; virtual; abstract;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; virtual; abstract;
     /// update an individual record field value from a specified ID or Value
     // - return true on success
     // - will allow execution of requests like
@@ -380,11 +380,11 @@ type
     function Delete(Table: TORMClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): boolean; overload;
     function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
-      out BlobData: TRawBlob): boolean; overload;
+      out BlobData: RawBlob): boolean; overload;
     function RetrieveBlob(Table: TORMClass; aID: TID; const BlobFieldName: RawUTF8;
       out BlobStream: TCustomMemoryStream): boolean; overload; virtual;
     function UpdateBlob(Table: TORMClass; aID: TID;
-      const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean; overload; virtual;
+      const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean; overload; virtual;
     function UpdateBlob(Table: TORMClass; aID: TID;
       const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
     function UpdateBlob(Table: TORMClass; aID: TID;
@@ -1917,7 +1917,7 @@ begin
 end;
 
 function TRestORM.RetrieveBlob(Table: TORMClass; aID: TID;
-  const BlobFieldName: RawUTF8; out BlobData: TRawBlob): boolean;
+  const BlobFieldName: RawUTF8; out BlobData: RawBlob): boolean;
 var
   blob: PRttiProp;
 begin
@@ -1935,7 +1935,7 @@ end;
 function TRestORM.RetrieveBlob(Table: TORMClass; aID: TID;
   const BlobFieldName: RawUTF8; out BlobStream: TCustomMemoryStream): boolean;
 var
-  data: TRawBlob;
+  data: RawBlob;
 begin
   BlobStream := TMemoryStream.Create;
   result := RetrieveBlob(Table, aID, BlobFieldName, data);
@@ -1948,7 +1948,7 @@ begin
 end;
 
 function TRestORM.UpdateBlob(Table: TORMClass; aID: TID;
-  const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean;
+  const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean;
 var
   blob: PRttiProp;
 begin
@@ -1967,7 +1967,7 @@ end;
 function TRestORM.UpdateBlob(Table: TORMClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: TStream): boolean;
 var
-  data: TRawBlob;
+  data: RawBlob;
   L: integer;
 begin
   result := false;
@@ -1985,7 +1985,7 @@ end;
 function TRestORM.UpdateBlob(Table: TORMClass; aID: TID;
   const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean;
 var
-  data: TRawBlob;
+  data: RawBlob;
 begin
   if (self = nil) or
      (BlobData = nil) or
@@ -2024,7 +2024,7 @@ end;
 
 function TRestORM.RetrieveBlobFields(Value: TORM): boolean;
 var
-  data: TRawBlob;
+  data: RawBlob;
   t, i: PtrInt;
 begin
   result := false;

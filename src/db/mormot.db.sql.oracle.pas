@@ -421,7 +421,8 @@ begin
   result := TSQLDBOracleConnection.Create(self);
 end;
 
-procedure TSQLDBOracleConnectionProperties.PasswordChanged(const ANewPassword: RawUTF8);
+procedure TSQLDBOracleConnectionProperties.PasswordChanged(
+  const ANewPassword: RawUTF8);
 begin
   SynDBLog.Add.Log(sllDB, 'PasswordChanged method called', self);
   fPassWord := ANewPassword;
@@ -429,8 +430,8 @@ begin
     FOnPasswordChanged(Self);
 end;
 
-function TSQLDBOracleConnectionProperties.SQLLimitClause(AStmt:
-  TSelectStatement): TSQLDBDefinitionLimitClause;
+function TSQLDBOracleConnectionProperties.SQLLimitClause(
+  AStmt: TSelectStatement): TSQLDBDefinitionLimitClause;
 begin
   if AStmt.OrderByField <> nil then
   begin

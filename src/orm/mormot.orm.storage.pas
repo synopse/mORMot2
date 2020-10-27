@@ -735,9 +735,9 @@ type
     function EngineUpdate(TableModelIndex: integer; ID: TID;
       const SentData: RawUTF8): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
@@ -1185,9 +1185,9 @@ type
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
@@ -1263,9 +1263,9 @@ type
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
@@ -3443,7 +3443,7 @@ begin
 end;
 
 function TRestStorageInMemory.EngineRetrieveBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; out BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
   i: integer;
 begin
@@ -3490,7 +3490,7 @@ begin
 end;
 
 function TRestStorageInMemory.EngineUpdateBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; const BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
   i: integer;
   AffectedField: TFieldBits;
@@ -4143,7 +4143,7 @@ begin
 end;
 
 function TRestStorageRemote.EngineRetrieveBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; out BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 begin
   if (self = nil) or
      (BlobField = nil) then
@@ -4160,7 +4160,7 @@ begin
 end;
 
 function TRestStorageRemote.EngineUpdateBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; const BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 begin
   if (self = nil) or
      (BlobField = nil) then
@@ -4518,7 +4518,7 @@ begin
 end;
 
 function TRestStorageShard.EngineRetrieveBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; out BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
   tableIndex: integer;
   rest: TRestORM;
@@ -4557,7 +4557,7 @@ begin
 end;
 
 function TRestStorageShard.EngineUpdateBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; const BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
   tableIndex: integer;
   rest: TRestORM;

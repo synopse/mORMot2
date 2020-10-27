@@ -216,7 +216,7 @@ type
   // stored as a local variant property, identifying TNullableInteger,
   // TNullableBoolean, TNullableFloat, TNullableCurrency,
   // TNullableDateTime, TNullableTimeLog and TNullableUTF8Text types
-  // - oftBlob is a BLOB field (TRawBlob Delphi property), and won't be
+  // - oftBlob is a BLOB field (RawBlob Delphi property), and won't be
   // retrieved by default (not part of ORM "simple types"), to save bandwidth
   // - oftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
   // property will be retrieved by default, i.e. is recognized as a "simple
@@ -413,21 +413,21 @@ procedure SetID(P: PUTF8Char; var result: TID); overload;
 procedure SetID(const U: RawByteString; var result: TID); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fill a TRawBlob from TEXT-encoded blob data
+/// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToTRawBlob(P: PUTF8Char): TRawBlob; overload;
+function BlobToTRawBlob(P: PUTF8Char): RawBlob; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fill a TRawBlob from TEXT-encoded blob data
+/// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-procedure BlobToTRawBlob(P: PUTF8Char; var result: TRawBlob); overload;
+procedure BlobToTRawBlob(P: PUTF8Char; var result: RawBlob); overload;
 
-/// fill a TRawBlob from TEXT-encoded blob data
+/// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-function BlobToTRawBlob(const Blob: RawByteString): TRawBlob; overload;
+function BlobToTRawBlob(const Blob: RawByteString): RawBlob; overload;
 
 /// create a TBytes from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -440,13 +440,13 @@ function BlobToBytes(P: PUTF8Char): TBytes;
 // - the caller must free the stream instance after use
 function BlobToStream(P: PUTF8Char): TStream;
 
-/// creates a TEXT-encoded version of blob data from a TRawBlob
+/// creates a TEXT-encoded version of blob data from a RawBlob
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
-function TRawBlobToBlob(const RawBlob: TRawBlob): RawUTF8; overload;
+function TRawBlobToBlob(const RawBlob: RawBlob): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a TEXT-encoded version of blob data from a memory data
-// - same as TRawBlob, but with direct memory access via a pointer/byte size pair
+// - same as RawBlob, but with direct memory access via a pointer/byte size pair
 // - TEXT will be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.)
 function TRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; overload;
 
@@ -1217,7 +1217,7 @@ type
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
-  /// information about a TRawBlob published property
+  /// information about a RawBlob published property
   TORMPropInfoRTTIRawBlob = class(TORMPropInfoRTTIAnsi)
   protected
     procedure CopySameClassProp(Source: TObject; DestInfo: TORMPropInfo;
@@ -2046,7 +2046,7 @@ type
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
     // - this method will call EngineRetrieve() abstract method
-    // - the TRawBlob (BLOB) fields are not retrieved by this method, to
+    // - the RawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
     // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
     // or TRestClientURI.ForceBlobTransfertTable[] properties
@@ -2062,7 +2062,7 @@ type
     // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
-    // - the TRawBlob (BLOB) fields are not retrieved by this method, to
+    // - the RawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
     // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
     // or TRestClientURI.ForceBlobTransfertTable[] properties
@@ -2303,7 +2303,7 @@ type
     // adding the record (instead of a database-generated ID)
     // - on success, returns the new RowID value; on error, returns 0
     // - on success, Value.ID is updated with the new RowID
-    // - the TRawBlob(BLOB) fields values are not set by this method, to
+    // - the RawBlob(BLOB) fields values are not set by this method, to
     // preserve bandwidth - see UpdateBlobFields() and AddWithBlobs() methods
     // - the TORMMany fields are not set either: they are separate
     // instances created by TORMMany.Create, with dedicated methods to
@@ -2337,7 +2337,7 @@ type
     /// create a new member, from a supplied list of field values
     // - implements REST POST collection
     // - the aSimpleFields parameters must follow explicitely the order of published
-    // properties of the supplied aTable class, excepting the TRawBlob and
+    // properties of the supplied aTable class, excepting the RawBlob and
     // TORMMany kind (i.e. only so called "simple fields")
     // - the aSimpleFields must have exactly the same count of parameters as
     // there are "simple fields" in the published properties
@@ -2350,7 +2350,7 @@ type
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
-    // - the TRawBlob(BLOB) fields values are not updated by this method, to
+    // - the RawBlob(BLOB) fields values are not updated by this method, to
     // preserve bandwidth: use the UpdateBlob() methods for handling BLOB fields
     // - the TORMMany fields are not set either: they are separate
     // instances created by TORMMany.Create, with dedicated methods to
@@ -2375,7 +2375,7 @@ type
     // - implements REST PUT collection
     // - the aSimpleFields parameters MUST follow explicitely both count and
     // order of published properties of the supplied aTable class, excepting the
-    // TRawBlob and TORMMany kind (i.e. only so called "simple fields")
+    // RawBlob and TORMMany kind (i.e. only so called "simple fields")
     // - return true on success
     // - call internaly the Update() / EngineUpdate() virtual methods
     function Update(aTable: TORMClass; aID: TID;
@@ -2491,11 +2491,11 @@ type
     // - this method is defined as abstract, i.e. there is no default implementation:
     // it must be implemented 100% RestFul with a
     // GET ModelRoot/TableName/TableID/BlobFieldName request for example
-    // - this method retrieve the blob data as a TRawBlob string using
+    // - this method retrieve the blob data as a RawBlob string using
     // EngineRetrieveBlob()
     function RetrieveBlob(Table: TORMClass;
       aID: TID; const BlobFieldName: RawUTF8;
-      out BlobData: TRawBlob): boolean; overload;
+      out BlobData: RawBlob): boolean; overload;
     /// get a blob field content from its record ID and supplied blob field name
     // - implements REST GET collection with a supplied member ID and field name
     // - return true on success
@@ -2508,10 +2508,10 @@ type
     // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
     // - call internaly the EngineUpdateBlob() abstract method
-    // - this method expect the Blob data to be supplied as TRawBlob, using
+    // - this method expect the Blob data to be supplied as RawBlob, using
     // EngineUpdateBlob()
     function UpdateBlob(Table: TORMClass;
-      aID: TID; const BlobFieldName: RawUTF8; const BlobData: TRawBlob): boolean; overload;
+      aID: TID; const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean; overload;
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
@@ -3068,7 +3068,7 @@ type
   // FillPrepare() and FillRow(), or FillFrom() with TORMTable or JSON data
   // - these published properties can be converted back into UTF-8 encoded SQL
   // source with GetSQLValues or GetSQLSet or into JSON format with GetJSONValues
-  // - BLOB fields are decoded to auto-freeing TRawBlob properties
+  // - BLOB fields are decoded to auto-freeing RawBlob properties
   // - any published property defined as a T*ObjArray dynamic array storage
   // of persistents (via Rtti.RegisterObjArray) will be freed
   // - consider inherit from TORMNoCase and TORMNoCaseExtended if
@@ -3298,7 +3298,7 @@ type
     /// this constructor initializes the record and set the simple fields
     // with the supplied values
     // - the aSimpleFields parameters must follow explicitely the order of
-    // published properties of the aTable class, excepting the TRawBlob and
+    // published properties of the aTable class, excepting the RawBlob and
     // TORMMany kind (i.e. only so called "simple fields") - in
     // particular, parent properties must appear first in the list
     // - the aSimpleFields must have exactly the same count of parameters as
@@ -3600,7 +3600,7 @@ type
 
     /// return the UTF-8 encoded SQL source to INSERT the values contained
     // in the current published fields of a TORM child
-    // - only simple fields name (i.e. not TRawBlob/TORMMany) are updated:
+    // - only simple fields name (i.e. not RawBlob/TORMMany) are updated:
     // BLOB fields are ignored (use direct update via dedicated methods instead)
     // - format is '(COL1, COL2) VALUES ('VAL1', 'VAL2')' if some column was ignored
     // (BLOB e.g.)
@@ -3610,7 +3610,7 @@ type
     function GetSQLValues: RawUTF8;
     /// return the UTF-8 encoded SQL source to UPDATE the values contained
     // in the current published fields of a TORM child
-    // - only simple fields name (i.e. not TRawBlob/TORMMany) are retrieved:
+    // - only simple fields name (i.e. not RawBlob/TORMMany) are retrieved:
     // BLOB fields are ignored (use direct access via dedicated methods instead)
     // - format is 'COL1='VAL1', COL2='VAL2''
     // - is not used by the ORM (do not use prepared statements) - only here
@@ -3630,7 +3630,7 @@ type
     procedure GetJSONValuesAndFree(JSON: TJSONSerializer); overload;
     /// return the UTF-8 encoded JSON objects for the values contained
     // in the current published fields of a TORM child
-    // - only simple fields (i.e. not TRawBlob/TORMMany) are retrieved:
+    // - only simple fields (i.e. not RawBlob/TORMMany) are retrieved:
     //   BLOB fields are ignored (use direct access via dedicated methods instead)
     // - if Expand is true, JSON data is an object, for direct use with any Ajax or .NET client:
     // $ {"col1":val11,"col2":"val12"}
@@ -3978,7 +3978,7 @@ type
     /// fill a published property value of this object from a UTF-8 encoded value
     // - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
     // - use this method to fill a BLOB property, i.e. a property defined with
-    // type TRawBlob, since by default all BLOB properties are not
+    // type RawBlob, since by default all BLOB properties are not
     // set by the standard Retrieve() method (to save bandwidth)
     // - if FieldBits is defined, it will store the identified field index
     procedure FillValue(PropName, Value: PUTF8Char; wasString: boolean;
@@ -3987,14 +3987,14 @@ type
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
     // - instances must be of the same class type
-    // - only simple fields (i.e. not TRawBlob/TORMMany) are compared
+    // - only simple fields (i.e. not RawBlob/TORMMany) are compared
     // - comparison is much faster than SameValues() below
     function SameRecord(Reference: TORM): boolean;
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
     // - work with different classes: Reference properties name must just be
     // present in the calling object
-    // - only simple fields (i.e. not TRawBlob/TORMMany) are compared
+    // - only simple fields (i.e. not RawBlob/TORMMany) are compared
     // - compare the text representation of the values: fields may be of different
     // type, encoding or precision, but still have same values
     function SameValues(Reference: TORM): boolean;
@@ -4005,7 +4005,7 @@ type
     procedure ClearProperties(const aFieldsCSV: RawUTF8); overload;
     /// set the simple fields with the supplied values
     // - the aSimpleFields parameters must follow explicitely the order of published
-    // properties of the supplied aTable class, excepting the TRawBlob and
+    // properties of the supplied aTable class, excepting the RawBlob and
     // TORMMany kind (i.e. only so called "simple fields") - in particular,
     // parent properties must appear first in the list
     // - the aSimpleFields must have exactly the same count of parameters as there are
@@ -4061,11 +4061,11 @@ type
     // published property, and not a TORM, which is limited to the
     // pointer size
     property AsTORM: pointer read GetIDAsPointer;
-    /// this property is set to true, if any published property is a BLOB (TRawBlob)
+    /// this property is set to true, if any published property is a BLOB (RawBlob)
     property HasBlob: boolean read GetHasBlob;
     /// this property returns the published property count with any valid
-    // database field except TRawBlob/TORMMany
-    // - by default, the TRawBlob (BLOB) fields are not included into this set:
+    // database field except RawBlob/TORMMany
+    // - by default, the RawBlob (BLOB) fields are not included into this set:
     // they must be read specificaly (in order to spare bandwidth)
     // - TORMMany fields are not accessible directly, but as instances
     // created by TORM.Create
@@ -4460,11 +4460,11 @@ type
     // - then System.LoadResStringTranslate() is called if available
     function GetCaption(Row, Field: integer): string;
     /// read-only access to a particular Blob value
-    // - a new TRawBlob is created
+    // - a new RawBlob is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
     // or Base-64 encoded content ('\uFFF0base64encodedbinary')
     // - prefered manner is to directly use REST protocol to retrieve a blob field
-    function GetBlob(Row, Field: integer): TRawBlob;
+    function GetBlob(Row, Field: integer): RawBlob;
     /// read-only access to a particular Blob value
     // - a new TBytes is created
     // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
@@ -5963,7 +5963,7 @@ type
     /// list all fields, as retrieved from RTTI
     property Fields: TORMPropInfoList read fFields;
     /// list all "simple" fields of this TORM
-    // - by default, the TRawBlob and TORMMany fields are not included
+    // - by default, the RawBlob and TORMMany fields are not included
     // into this set: they must be read specificaly (in order to spare
     // bandwidth for BLOBs)
     // - dynamic arrays belong to simple fields: they are sent with other
@@ -6105,7 +6105,7 @@ type
     /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
     // - format is
     // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-    // - returns '*' if no field is of TRawBlob/TORMMany kind
+    // - returns '*' if no field is of RawBlob/TORMMany kind
     // - returns 'COL1,COL2' with all COL* set to simple field names if withID is false
     // - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true
     // - returns 'Table.ID,Table.COL1,Table.COL2' if withTableName and withID are true
@@ -7690,7 +7690,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       end;
     rkLString:
       // do not use AnsiStringCodePage since AnsiString = GetAcp may change
-      if (Info = TypeInfo(TRawBlob)) or
+      if (Info = TypeInfo(RawBlob)) or
          (Info = TypeInfo(RawByteString)) then
       begin
         result := oftBlob;
@@ -7781,12 +7781,12 @@ begin
 {$endif CPU64}
 end;
 
-function BlobToTRawBlob(P: PUTF8Char): TRawBlob;
+function BlobToTRawBlob(P: PUTF8Char): RawBlob;
 begin
   BlobToTRawBlob(P, result);
 end;
 
-procedure BlobToTRawBlob(P: PUTF8Char; var result: TRawBlob);
+procedure BlobToTRawBlob(P: PUTF8Char; var result: RawBlob);
 var
   Len, LenHex: integer;
 begin
@@ -7813,7 +7813,7 @@ begin
   SetString(result, PAnsiChar(P), Len);
 end;
 
-function BlobToTRawBlob(const Blob: RawByteString): TRawBlob;
+function BlobToTRawBlob(const Blob: RawByteString): RawBlob;
 var
   Len, LenHex: integer;
   P: PUTF8Char;
@@ -7883,7 +7883,7 @@ begin
   MoveFast(P^, pointer(result)^, Len);
 end;
 
-function TRawBlobToBlob(const RawBlob: TRawBlob): RawUTF8;
+function TRawBlobToBlob(const RawBlob: RawBlob): RawUTF8;
 // BLOB literals are string literals containing hexadecimal data and
 //  preceded by a single "x" or "X" character. For example: X'53514C697465'
 begin
@@ -9021,7 +9021,7 @@ begin
       wasSQLString^ := true;
     if ToSQL then
       // encode as BLOB literals (e.g. "X'53514C697465'")
-      Value := TRawBlobToBlob(TRawBlob(Value))
+      Value := TRawBlobToBlob(RawBlob(Value))
     else
       // JSON content is e.g. '\uFFF0base64encodedbinary'
       Value := BinToBase64WithMagic(Value);
@@ -9300,7 +9300,7 @@ begin
     oftAnsiText, oftUTF8Text:
       FastSetString(RawUTF8(result.VAny), Value, ValueLen);
     oftBlobCustom, oftBlob:
-      BlobToTRawBlob(Value, TRawBlob(result.VAny));
+      BlobToTRawBlob(Value, RawBlob(result.VAny));
     oftVariant, oftNullable, oftBlobDynArray, oftObject, oftUTF8Custom:
       Complex;
   end;
@@ -13642,7 +13642,7 @@ begin
   GetCaptionFromPCharLen(Get(Row, Field), result);
 end;
 
-function TORMTable.GetBlob(Row, Field: integer): TRawBlob;
+function TORMTable.GetBlob(Row, Field: integer): RawBlob;
 begin
   result := BlobToTRawBlob(Get(Row, Field));
 end;
@@ -17203,7 +17203,7 @@ begin
      (Reference.fID <> fID) then
     exit;
   with RecordProps do
-    for i := 0 to length(SimpleFields) - 1 do      // compare not TRawBlob/TORMMany fields
+    for i := 0 to length(SimpleFields) - 1 do      // compare not RawBlob/TORMMany fields
       with SimpleFields[i] do
         if CompareValue(self, Reference, false) <> 0 then
           exit; // properties don't have the same value
@@ -17225,7 +17225,7 @@ begin
     begin
       // faster comparison on same exact class
       with RecordProps do
-        for i := 0 to length(SimpleFields) - 1 do      // compare not TRawBlob/TORMMany fields
+        for i := 0 to length(SimpleFields) - 1 do      // compare not RawBlob/TORMMany fields
           with SimpleFields[i] do
             if CompareValue(self, Reference, false) <> 0 then
               exit; // properties don't have the same value
@@ -17238,7 +17238,7 @@ begin
       for i := 0 to length(Ref.SimpleFields) - 1 do
         with Ref.SimpleFields[i] do
         begin
-          // compare not TRawBlob/TORMMany fields
+          // compare not RawBlob/TORMMany fields
           O := This.Fields.ByRawUTF8Name(Name);
           if O = nil then
             exit; // this Reference property doesn't exist in current object

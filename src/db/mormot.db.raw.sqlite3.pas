@@ -2388,7 +2388,7 @@ type
     function FieldA(Col: integer): WinAnsiString;
     /// return a field RawUnicode encoded text value, first Col is 0
     function FieldW(Col: integer): RawUnicode;
-    /// return a field as a blob value (RawByteString/TRawBlob is an AnsiString),
+    /// return a field as a blob value (RawByteString/RawBlob is an AnsiString),
     // first Col is 0
     function FieldBlob(Col: integer): RawByteString;
     /// return a field as a TStream blob value, first Col is 0

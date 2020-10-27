@@ -5435,7 +5435,7 @@ begin
         Add(PUTF8Char(P), Len, Escape);
       CP_UTF16:         // direct write of UTF-16 content
         AddW(PWord(P), 0, Escape);
-      CP_RAWBLOB:    // TRawBlob written with Base-64 encoding
+      CP_RAWBLOB:    // RawBlob written with Base-64 encoding
         begin
           AddNoJSONEscape(@PByteArray(@JSON_BASE64_MAGIC_QUOTE_VAR)[1], 3);
           WrBase64(P, Len, {withMagic=}false);

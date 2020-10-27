@@ -311,7 +311,7 @@ type
     /// true if the result is a TServiceCustomAnswer record
     // - that is, a custom Header+Content BLOB transfert, not a JSON object
     ArgsResultIsServiceCustomAnswer: boolean;
-    /// true if there is a single input parameter as RawByteString/TRawBlob
+    /// true if there is a single input parameter as RawByteString/RawBlob
     // - TRestRoutingREST.ExecuteSOAByInterface will identify binary input
     // with mime-type 'application/octet-stream' as expected
     ArgsInputIsOctetStream: boolean;

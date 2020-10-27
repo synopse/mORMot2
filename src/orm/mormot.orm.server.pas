@@ -114,9 +114,9 @@ type
     function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; override;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer; const SetFieldName,
       SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
@@ -138,9 +138,9 @@ type
     function MainEngineDeleteWhere(TableModelIndex: integer;
       const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean; virtual; abstract;
     function MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; out BlobData: TRawBlob): boolean; virtual; abstract;
+      BlobField: PRttiProp; out BlobData: RawBlob): boolean; virtual; abstract;
     function MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
-      BlobField: PRttiProp; const BlobData: TRawBlob): boolean; virtual; abstract;
+      BlobField: PRttiProp; const BlobData: RawBlob): boolean; virtual; abstract;
     function MainEngineUpdateField(TableModelIndex: integer; const SetFieldName,
         SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; virtual; abstract;
     function MainEngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
@@ -1001,7 +1001,7 @@ begin
 end;
 
 function TRestORMServer.EngineRetrieveBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; out BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
   rest: TRestORM;
 begin
@@ -1015,7 +1015,7 @@ begin
 end;
 
 function TRestORMServer.EngineUpdateBlob(TableModelIndex: integer;
-  aID: TID; BlobField: PRttiProp; const BlobData: TRawBlob): boolean;
+  aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
   rest: TRestORM;
 begin
