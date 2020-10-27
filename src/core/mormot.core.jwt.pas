@@ -65,8 +65,13 @@ type
   // TJWTAbstract.Compute will set an obfuscated TSynUniqueIdentifierGenerator
   // hexadecimal value
   TJWTClaim = (
-    jrcIssuer, jrcSubject, jrcAudience, jrcExpirationTime,
-    jrcNotBefore, jrcIssuedAt, jrcJwtID);
+    jrcIssuer,
+    jrcSubject,
+    jrcAudience,
+    jrcExpirationTime,
+    jrcNotBefore,
+    jrcIssuedAt,
+    jrcJwtID);
 
   /// set of JWT Registered Claims, as in TJWTAbstract.Claims
   TJWTClaims = set of TJWTClaim;
@@ -76,10 +81,19 @@ type
 
   /// TJWTContent.result codes after TJWTAbstract.Verify method call
   TJWTResult = (
-    jwtValid, jwtNoToken, jwtWrongFormat, jwtInvalidAlgorithm,
-    jwtInvalidPayload, jwtUnexpectedClaim, jwtMissingClaim,
-    jwtUnknownAudience, jwtExpired, jwtNotBeforeFailed,
-    jwtInvalidIssuedAt, jwtInvalidID, jwtInvalidSignature);
+    jwtValid,
+    jwtNoToken,
+    jwtWrongFormat,
+    jwtInvalidAlgorithm,
+    jwtInvalidPayload,
+    jwtUnexpectedClaim,
+    jwtMissingClaim,
+    jwtUnknownAudience,
+    jwtExpired,
+    jwtNotBeforeFailed,
+    jwtInvalidIssuedAt,
+    jwtInvalidID,
+    jwtInvalidSignature);
 
   //// set of TJWTContent.result codes
   TJWTResults = set of TJWTResult;
@@ -114,8 +128,12 @@ type
 
   /// available options for TJWTAbstract process
   TJWTOption = (
-    joHeaderParse, joAllowUnexpectedClaims, joAllowUnexpectedAudience,
-    joNoJwtIDGenerate, joNoJwtIDCheck, joDoubleInData);
+    joHeaderParse,
+    joAllowUnexpectedClaims,
+    joAllowUnexpectedAudience,
+    joNoJwtIDGenerate,
+    joNoJwtIDCheck,
+    joDoubleInData);
 
   /// store options for TJWTAbstract process
   TJWTOptions = set of TJWTOption;

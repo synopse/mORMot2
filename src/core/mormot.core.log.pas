@@ -163,8 +163,16 @@ type
 type
   /// a list of lof events families, used to gather events by type
   TSynLogFilter = (
-    lfNone, lfAll, lfErrors, lfExceptions, lfProfile,
-    lfDatabase, lfClientServer, lfDebug, lfCustom, lfDDD);
+    lfNone,
+    lfAll,
+    lfErrors,
+    lfExceptions,
+    lfProfile,
+    lfDatabase,
+    lfClientServer,
+    lfDebug,
+    lfCustom,
+    lfDDD);
 
 const
   /// up to 16 TSynLogFamily, i.e. TSynLog children classes can be defined
@@ -243,13 +251,16 @@ const
   LOG_MAGIC = $ABA51051;
 
   /// may be used to log as Debug or Error event, depending on an Error: boolean
-  LOG_DEBUGERROR: array[boolean] of TSynLogInfo = (sllDebug, sllError);
+  LOG_DEBUGERROR: array[boolean] of TSynLogInfo = (
+    sllDebug, sllError);
 
   /// may be used to log as Trace or Warning event, depending on an Error: boolean
-  LOG_TRACEWARNING: array[boolean] of TSynLogInfo = (sllTrace, sllWarning);
+  LOG_TRACEWARNING: array[boolean] of TSynLogInfo = (
+    sllTrace, sllWarning);
 
   /// may be used to log as Info or Warning event, depending on an Error: boolean
-  LOG_INFOWARNING: array[boolean] of TSynLogInfo = (sllInfo, sllWarning);
+  LOG_INFOWARNING: array[boolean] of TSynLogInfo = (
+    sllInfo, sllWarning);
 
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
@@ -394,13 +405,21 @@ type
   // to use this option if TSynLog.NotifyThreadEnded is not called (e.g. from
   // legacy code), and that your process experiment instability issues
   TSynLogPerThreadMode = (
-    ptMergedInOneFile, ptOneFilePerThread, ptIdentifiedInOnFile, ptNoThreadProcess);
+    ptMergedInOneFile,
+    ptOneFilePerThread,
+    ptIdentifiedInOnFile,
+    ptNoThreadProcess);
 
   /// how stack trace shall be computed during logging
-  TSynLogStackTraceUse = (stManualAndAPI, stOnlyAPI, stOnlyManual);
+  TSynLogStackTraceUse = (
+    stManualAndAPI,
+    stOnlyAPI,
+    stOnlyManual);
 
   /// how file existing shall be handled during logging
-  TSynLogExistsAction = (acOverwrite, acAppend);
+  TSynLogExistsAction = (
+    acOverwrite,
+    acAppend);
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
@@ -1242,7 +1261,11 @@ type
 
   /// used by TSynLogFile.LogProcSort method
   TLogProcSortOrder = (
-    soNone, soByName, soByOccurrence, soByTime, soByProperTime);
+    soNone,
+    soByName,
+    soByOccurrence,
+    soByTime,
+    soByProperTime);
 
   /// used to parse a .log file, as created by TSynLog, into high-level data
   // - this particular TMemoryMapText class will retrieve only valid event lines
@@ -5934,9 +5957,10 @@ end;
 
 function TSynLogFileView.SearchNextSelected(aIndex: integer): PtrInt;
 begin
+  // TODO: use faster binary search instead of this rough O(n) loop?
   for result := 0 to fSelectedCount - 1 do
     if fSelected[result] >= aIndex then
-      exit; // TODO: use faster binary search instead of this O(n) value?
+      exit;
   result := -1;
 end;
 
@@ -5959,7 +5983,8 @@ begin
         begin
           if search <= i then
           begin
-            result := fSelectedCount; // found the closed selected index
+            // found the closed selected index
+            result := fSelectedCount;
             search := maxInt;
           end;
           if fSelectedCount = length(fSelected) then

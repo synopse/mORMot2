@@ -5268,7 +5268,7 @@ begin
       else if DynArrayInfo = TypeInfo(TSingleDynArray) then
         result := ptSingle
     {$ifdef CPU64} ;
-    8: {$else} else {$endif}
+    8: {$else} else {$endif CPU64}
       if DynArrayInfo = TypeInfo(TRawUTF8DynArray) then
         result := ptRawUTF8
       else if DynArrayInfo = TypeInfo(TStringDynArray) then
@@ -5285,7 +5285,7 @@ begin
       else
       {$ifdef CPU64}
       else {$else} ;
-    8: {$endif}
+    8: {$endif CPU64}
       case ElemInfo^.Kind of
         rkFloat:
           if DynArrayInfo = TypeInfo(TDoubleDynArray) then
@@ -5474,7 +5474,8 @@ function TRttiCustomProp.ValueIsDefault(Data: pointer): boolean;
 begin
   if rcfGetOrdProp in Value.Cache.Flags then
     if OffsetGet >= 0 then
-      result := FromRttiOrd(Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet) = PropDefault
+      result := FromRttiOrd(
+        Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet) = PropDefault
     else
       result := Prop.GetOrdProp(Data) = PropDefault
   else if rcfGetInt64Prop in Value.Cache.Flags then
@@ -6138,8 +6139,8 @@ end;
 
 function TRttiCustom.{%H-}ClassNewInstance: pointer;
 begin
-  raise ERttiException.CreateUTF8('%.ClassNewInstance not implemented -> please ' +
-    'include mormot.core.json unit to register TRttiJson', [self]);
+  raise ERttiException.CreateUTF8('%.ClassNewInstance not implemented -> ' +
+    'please include mormot.core.json unit to register TRttiJson', [self]);
 end;
 
 function TRttiCustom.SetObjArray(Item: TClass): TRttiCustom;
@@ -6151,13 +6152,15 @@ begin
   begin
     fObjArrayClass := Item;
     if Item = nil then
-    begin  // unregister
+    begin
+      // unregister
       exclude(fFlags, rcfObjArray);
       fArrayRtti := nil;
       fFinalize := @_DynArrayClear;
     end
     else
-    begin  // register
+    begin
+      // register
       include(fFlags, rcfObjArray);
       fArrayRtti := Rtti.RegisterClass(Item); // will call _ObjClear()
       fFinalize := @_ObjArrayClear; // calls RawObjectsClear()

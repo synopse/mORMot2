@@ -73,12 +73,19 @@ type
   /// http.sys API 2.0 logging file supported layouts
   // - match low-level HTTP_LOGGING_TYPE as defined in HTTP 2.0 API
   THttpApiLoggingType = (
-    hltW3C, hltIIS, hltNCSA, hltRaw);
+    hltW3C,
+    hltIIS,
+    hltNCSA,
+    hltRaw);
 
   /// http.sys API 2.0 logging file rollover types
   // - match low-level HTTP_LOGGING_ROLLOVER_TYPE as defined in HTTP 2.0 API
   THttpApiLoggingRollOver = (
-    hlrSize, hlrDaily, hlrWeekly, hlrMonthly, hlrHourly);
+    hlrSize,
+    hlrDaily,
+    hlrWeekly,
+    hlrMonthly,
+    hlrHourly);
 
   /// http.sys API 2.0 logging option flags
   // - used to alter the default logging behavior
@@ -116,33 +123,96 @@ type
 
   // the req* values identify Request Headers, and resp* Response Headers
   THttpHeader = (
-    reqCacheControl, reqConnection, reqDate, reqKeepAlive,
-    reqPragma, reqTrailer, reqTransferEncoding, reqUpgrade, reqVia, reqWarning,
-    reqAllow, reqContentLength, reqContentType, reqContentEncoding,
-    reqContentLanguage, reqContentLocation, reqContentMd5, reqContentRange,
-    reqExpires, reqLastModified, reqAccept, reqAcceptCharset, reqAcceptEncoding,
-    reqAcceptLanguage, reqAuthorization, reqCookie, reqExpect, reqFrom, reqHost,
-    reqIfMatch, reqIfModifiedSince, reqIfNoneMatch, reqIfRange,
-    reqIfUnmodifiedSince, reqMaxForwards, reqProxyAuthorization, reqReferrer,
-    reqRange, reqTe, reqTranslate, reqUserAgent, respAcceptRanges = 20, respAge,
-    respEtag, respLocation, respProxyAuthenticate, respRetryAfter, respServer,
-    respSetCookie, respVary, respWwwAuthenticate);
+    reqCacheControl,
+    reqConnection,
+    reqDate,
+    reqKeepAlive,
+    reqPragma,
+    reqTrailer,
+    reqTransferEncoding,
+    reqUpgrade,
+    reqVia,
+    reqWarning,
+    reqAllow,
+    reqContentLength,
+    reqContentType,
+    reqContentEncoding,
+    reqContentLanguage,
+    reqContentLocation,
+    reqContentMd5,
+    reqContentRange,
+    reqExpires,
+    reqLastModified,
+    reqAccept,
+    reqAcceptCharset,
+    reqAcceptEncoding,
+    reqAcceptLanguage,
+    reqAuthorization,
+    reqCookie,
+    reqExpect,
+    reqFrom,
+    reqHost,
+    reqIfMatch,
+    reqIfModifiedSince,
+    reqIfNoneMatch,
+    reqIfRange,
+    reqIfUnmodifiedSince,
+    reqMaxForwards,
+    reqProxyAuthorization,
+    reqReferrer,
+    reqRange,
+    reqTe,
+    reqTranslate,
+    reqUserAgent,
+    respAcceptRanges = 20,
+    respAge,
+    respEtag,
+    respLocation,
+    respProxyAuthenticate,
+    respRetryAfter,
+    respServer,
+    respSetCookie,
+    respVary,
+    respWwwAuthenticate);
 
   THttpVerb = (
-    hvUnparsed, hvUnknown, hvInvalid,
-    hvOPTIONS, hvGET, hvHEAD, hvPOST, hvPUT, hvDELETE, hvTRACE, hvCONNECT,
+    hvUnparsed,
+    hvUnknown,
+    hvInvalid,
+    hvOPTIONS,
+    hvGET,
+    hvHEAD,
+    hvPOST,
+    hvPUT,
+    hvDELETE,
+    hvTRACE,
+    hvCONNECT,
     hvTRACK,  // used by Microsoft Cluster Server for a non-logged trace
-    hvMOVE, hvCOPY, hvPROPFIND, hvPROPPATCH, hvMKCOL, hvLOCK, hvUNLOCK, hvSEARCH,
+    hvMOVE,
+    hvCOPY,
+    hvPROPFIND,
+    hvPROPPATCH,
+    hvMKCOL,
+    hvLOCK,
+    hvUNLOCK,
+    hvSEARCH,
     hvMaximum);
 
   THttpChunkType = (
-    hctFromMemory, hctFromFileHandle, hctFromFragmentCache);
+    hctFromMemory,
+    hctFromFileHandle,
+    hctFromFragmentCache);
 
   THttpServiceConfigID = (
-    hscIPListenList, hscSSLCertInfo, hscUrlAclInfo, hscMax);
+    hscIPListenList,
+    hscSSLCertInfo,
+    hscUrlAclInfo,
+    hscMax);
 
   THttpServiceConfigQueryType = (
-    hscQueryExact, hscQueryNext, hscQueryMax);
+    hscQueryExact,
+    hscQueryNext,
+    hscQueryMax);
 
   HTTP_URL_CONTEXT = HTTP_OPAQUE_ID;
 
@@ -284,22 +354,31 @@ type
   end;
 
   HTTP_REQUEST_INFO_TYPE = (
-    HttpRequestInfoTypeAuth, HttpRequestInfoTypeChannelBind,
-    HttpRequestInfoTypeSslProtocol, HttpRequestInfoTypeSslTokenBindingDraft,
-    HttpRequestInfoTypeSslTokenBinding, HttpRequestInfoTypeRequestTiming,
-    HttpRequestInfoTypeTcpInfoV0, HttpRequestInfoTypeRequestSizing,
-    HttpRequestInfoTypeQuicStats, HttpRequestInfoTypeTcpInfoV1);
+    HttpRequestInfoTypeAuth,
+    HttpRequestInfoTypeChannelBind,
+    HttpRequestInfoTypeSslProtocol,
+    HttpRequestInfoTypeSslTokenBindingDraft,
+    HttpRequestInfoTypeSslTokenBinding,
+    HttpRequestInfoTypeRequestTiming,
+    HttpRequestInfoTypeTcpInfoV0,
+    HttpRequestInfoTypeRequestSizing,
+    HttpRequestInfoTypeQuicStats,
+    HttpRequestInfoTypeTcpInfoV1);
 
   // about Authentication in HTTP Version 2.0
   // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
   HTTP_AUTH_STATUS = (
-    HttpAuthStatusSuccess, HttpAuthStatusNotAuthenticated,
+    HttpAuthStatusSuccess,
+    HttpAuthStatusNotAuthenticated,
     HttpAuthStatusFailure);
 
   HTTP_REQUEST_AUTH_TYPE = (
-    HttpRequestAuthTypeNone, HttpRequestAuthTypeBasic,
-    HttpRequestAuthTypeDigest, HttpRequestAuthTypeNTLM,
-    HttpRequestAuthTypeNegotiate, HttpRequestAuthTypeKerberos);
+    HttpRequestAuthTypeNone,
+    HttpRequestAuthTypeBasic,
+    HttpRequestAuthTypeDigest,
+    HttpRequestAuthTypeNTLM,
+    HttpRequestAuthTypeNegotiate,
+    HttpRequestAuthTypeKerberos);
 
   SECURITY_STATUS = ULONG;
 
@@ -383,7 +462,8 @@ type
 
   HTTP_RESPONSE_INFO_TYPE = (
     HttpResponseInfoTypeMultipleKnownHeaders,
-    HttpResponseInfoTypeAuthenticationProperty, HttpResponseInfoTypeQosProperty,
+    HttpResponseInfoTypeAuthenticationProperty,
+    HttpResponseInfoTypeQosProperty,
     HttpResponseInfoTypeChannelBind);
 
   HTTP_RESPONSE_INFO = record
@@ -440,7 +520,8 @@ type
   HTTP_PROPERTY_FLAGS = ULONG;
 
   HTTP_ENABLED_STATE = (
-    HttpEnabledStateActive, HttpEnabledStateInactive);
+    HttpEnabledStateActive,
+    HttpEnabledStateInactive);
 
   PHTTP_ENABLED_STATE = ^HTTP_ENABLED_STATE;
 
@@ -452,13 +533,15 @@ type
   PHTTP_STATE_INFO = ^HTTP_STATE_INFO;
 
   THTTP_503_RESPONSE_VERBOSITY = (
-    Http503ResponseVerbosityBasic, Http503ResponseVerbosityLimited,
+    Http503ResponseVerbosityBasic,
+    Http503ResponseVerbosityLimited,
     Http503ResponseVerbosityFull);
 
   PHTTP_503_RESPONSE_VERBOSITY = ^THTTP_503_RESPONSE_VERBOSITY;
 
   HTTP_QOS_SETTING_TYPE = (
-    HttpQosSettingTypeBandwidth, HttpQosSettingTypeConnectionLimit,
+    HttpQosSettingTypeBandwidth,
+    HttpQosSettingTypeConnectionLimit,
     HttpQosSettingTypeFlowRate // Windows Server 2008 R2 and Windows 7 only
   );
 
@@ -500,7 +583,8 @@ const
 
 type
   HTTP_SERVICE_CONFIG_TIMEOUT_KEY = (
-    IdleConnectionTimeout, HeaderWaitTimeout);
+    IdleConnectionTimeout,
+    HeaderWaitTimeout);
 
   PHTTP_SERVICE_CONFIG_TIMEOUT_KEY = ^HTTP_SERVICE_CONFIG_TIMEOUT_KEY;
 
@@ -576,7 +660,8 @@ type
 
   HTTP_SERVICE_BINDING_TYPE = (
     HttpServiceBindingTypeNone,
-    HttpServiceBindingTypeW, HttpServiceBindingTypeA);
+    HttpServiceBindingTypeW,
+    HttpServiceBindingTypeA);
 
   HTTP_SERVICE_BINDING_BASE = record
     BindingType: HTTP_SERVICE_BINDING_TYPE;
@@ -602,7 +687,8 @@ type
 
   HTTP_AUTHENTICATION_HARDENING_LEVELS = (
     HttpAuthenticationHardeningLegacy,
-    HttpAuthenticationHardeningMedium, HttpAuthenticationHardeningStrict);
+    HttpAuthenticationHardeningMedium,
+    HttpAuthenticationHardeningStrict);
 
 const
   HTTP_CHANNEL_BIND_PROXY = $1;
@@ -689,12 +775,17 @@ const
 
 type
   HTTP_LOGGING_TYPE = (
-    HttpLoggingTypeW3C, HttpLoggingTypeIIS,
-    HttpLoggingTypeNCSA, HttpLoggingTypeRaw);
+    HttpLoggingTypeW3C,
+    HttpLoggingTypeIIS,
+    HttpLoggingTypeNCSA,
+    HttpLoggingTypeRaw);
 
   HTTP_LOGGING_ROLLOVER_TYPE = (
-    HttpLoggingRolloverSize, HttpLoggingRolloverDaily, HttpLoggingRolloverWeekly,
-    HttpLoggingRolloverMonthly, HttpLoggingRolloverHourly);
+    HttpLoggingRolloverSize,
+    HttpLoggingRolloverDaily,
+    HttpLoggingRolloverWeekly,
+    HttpLoggingRolloverMonthly,
+    HttpLoggingRolloverHourly);
 
   HTTP_LOGGING_INFO = record
     Flags: HTTP_PROPERTY_FLAGS;
@@ -766,7 +857,8 @@ type
 
   HTTP_PROTECTION_LEVEL_TYPE = (
     HttpProtectionLevelUnrestricted,
-    HttpProtectionLevelEdgeRestricted, HttpProtectionLevelRestricted);
+    HttpProtectionLevelEdgeRestricted,
+    HttpProtectionLevelRestricted);
 
   HTTP_PROTECTION_LEVEL_INFO = record
     Flags: HTTP_PROPERTY_FLAGS;

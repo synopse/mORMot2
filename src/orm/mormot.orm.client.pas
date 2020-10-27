@@ -50,7 +50,9 @@ uses
 type
   /// possible call parameters for TOnTableUpdate Event
   TOnTableUpdateState = (
-    tusPrepare, tusChanged, tusNoChange);
+    tusPrepare,
+    tusChanged,
+    tusNoChange);
 
   /// used by TRestOrmClientURI.UpdateFromServer() to let the client
   // perform the rows update (for Marked[] e.g.)

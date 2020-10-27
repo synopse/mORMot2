@@ -50,10 +50,22 @@ type
   /// defines the interpretation of the WebSockets frame data
   // - match order expected by the WebSockets RFC
   TWebSocketFrameOpCode = (
-    focContinuation, focText, focBinary,
-    focReserved3, focReserved4, focReserved5, focReserved6, focReserved7,
-    focConnectionClose, focPing, focPong,
-    focReservedB, focReservedC, focReservedD, focReservedE, focReservedF);
+    focContinuation,
+    focText,
+    focBinary,
+    focReserved3,
+    focReserved4,
+    focReserved5,
+    focReserved6,
+    focReserved7,
+    focConnectionClose,
+    focPing,
+    focPong,
+    focReservedB,
+    focReservedC,
+    focReservedD,
+    focReservedE,
+    focReservedF);
 
   /// set of WebSockets frame interpretation
   TWebSocketFrameOpCodes = set of TWebSocketFrameOpCode;
@@ -402,11 +414,18 @@ type
 
   /// indicates which kind of process did occur in the main WebSockets loop
   TWebSocketProcessOne = (
-    wspNone, wspPing, wspDone, wspAnswer, wspError, wspClosed);
+    wspNone,
+    wspPing,
+    wspDone,
+    wspAnswer,
+    wspError,
+    wspClosed);
 
   /// indicates how TWebSocketProcess.NotifyCallback() will work
   TWebSocketProcessNotifyCallback = (
-    wscBlockWithAnswer, wscBlockWithoutAnswer, wscNonBlockWithoutAnswer);
+    wscBlockWithAnswer,
+    wscBlockWithoutAnswer,
+    wscNonBlockWithoutAnswer);
 
   /// used to manage a thread-safe list of WebSockets frames
   TWebSocketFrameList = class(TSynPersistentLock)
@@ -499,7 +518,10 @@ type
 
   /// the current state of the WebSockets process
   TWebSocketProcessState = (
-    wpsCreate, wpsRun, wpsClose, wpsDestroy);
+    wpsCreate,
+    wpsRun,
+    wpsClose,
+    wpsDestroy);
 
   /// abstract WebSockets process, used on both client or server sides
   // - CanGetFrame/ReceiveBytes/SendBytes abstract methods should be overriden with
@@ -842,7 +864,10 @@ type
 
   /// the current state of the client side processing thread
   TWebSocketProcessClientThreadState = (
-    sCreate, sRun, sFinished, sClosed);
+    sCreate,
+    sRun,
+    sFinished,
+    sClosed);
 
   /// WebSockets processing thread used on client side
   // - will handle any incoming callback
@@ -2542,7 +2567,12 @@ end;
 type
   // asynchronous state machine to process incoming frames
   TWebProcessInFrameState = (
-    pfsHeader1, pfsData1, pfsHeaderN, pfsDataN, pfsDone, pfsError);
+    pfsHeader1,
+    pfsData1,
+    pfsHeaderN,
+    pfsDataN,
+    pfsDone,
+    pfsError);
 
   TWebProcessInFrame = object
     hdr: TFrameHeader;

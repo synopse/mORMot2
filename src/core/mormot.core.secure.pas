@@ -446,8 +446,16 @@ type
 type
   /// the HMAC/SHA-3 algorithms known by TSynSigner
   TSignAlgo = (
-    saSha1, saSha256, saSha384, saSha512,
-    saSha3224, saSha3256, saSha3384, saSha3512, saSha3S128, saSha3S256);
+    saSha1,
+    saSha256,
+    saSha384,
+    saSha512,
+    saSha3224,
+    saSha3256,
+    saSha3384,
+    saSha3512,
+    saSha3S128,
+    saSha3S256);
 
   /// JSON-serialization ready object as used by TSynSigner.PBKDF2 overloaded methods
   // - default value for unspecified parameters will be SHAKE_128 with
@@ -528,7 +536,13 @@ type
   /// hash algorithms available for HashFile/HashFull functions
   // and TSynHasher object
   THashAlgo = (
-    hfMD5, hfSHA1, hfSHA256, hfSHA384, hfSHA512, hfSHA3_256, hfSHA3_512);
+    hfMD5,
+    hfSHA1,
+    hfSHA256,
+    hfSHA384,
+    hfSHA512,
+    hfSHA3_256,
+    hfSHA3_512);
 
   /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgos = set of THashAlgo;
@@ -580,9 +594,16 @@ function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
 type
   /// possible return codes by IProtocol classes
   TProtocolResult = (
-    sprSuccess, sprBadRequest, sprUnsupported, sprUnexpectedAlgorithm,
-    sprInvalidCertificate, sprInvalidSignature, sprInvalidEphemeralKey,
-    sprInvalidPublicKey, sprInvalidPrivateKey, sprInvalidMAC);
+    sprSuccess,
+    sprBadRequest,
+    sprUnsupported,
+    sprUnexpectedAlgorithm,
+    sprInvalidCertificate,
+    sprInvalidSignature,
+    sprInvalidEphemeralKey,
+    sprInvalidPublicKey,
+    sprInvalidPrivateKey,
+    sprInvalidMAC);
 
   /// perform safe communication after unilateral or mutual authentication
   // - see e.g. TProtocolNone or SynEcc's TECDHEProtocolClient and

@@ -300,7 +300,9 @@ type
   // versions of the protocol, but repMandatory will reject any encryption
   // without the TAESIVCTR algorithm
   TAESIVReplayAttackCheck = (
-    repNoCheck, repCheckedIfAvailable, repMandatory);
+    repNoCheck,
+    repCheckedIfAvailable,
+    repMandatory);
 
   {$M+}
 
@@ -1342,7 +1344,12 @@ type
 type
   /// SHA-3 instances, as defined by NIST Standard for Keccak sponge construction
   TSHA3Algo = (
-    SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
+    SHA3_224,
+    SHA3_256,
+    SHA3_384,
+    SHA3_512,
+    SHAKE_128,
+    SHAKE_256);
 
   /// implements SHA-3 (Keccak) hashing
   // - Keccak was the winner of the NIST hashing competition for a new hashing

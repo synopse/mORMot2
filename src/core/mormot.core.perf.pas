@@ -54,8 +54,15 @@ type
   // - TSynMonitorUsage.Track() would use MonitorPropUsageValue() to guess
   // the tracked properties type from class RTTI
   TSynMonitorType = (
-    smvUndefined, smvOneMicroSec, smvOneBytes, smvOneCount, smvBytesPerSec,
-    smvMicroSec, smvBytes, smvCount, smvCount64);
+    smvUndefined,
+    smvOneMicroSec,
+    smvOneBytes,
+    smvOneCount,
+    smvBytesPerSec,
+    smvMicroSec,
+    smvBytes,
+    smvCount,
+    smvCount64);
 
   /// value types as stored in TSynMonitor / TSynMonitorUsage
   TSynMonitorTypes = set of TSynMonitorType;

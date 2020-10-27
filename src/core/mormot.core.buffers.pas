@@ -189,7 +189,10 @@ type
   EAlgoCompress = class(ESynException);
 
   /// define the implementation used by TAlgoCompress.Decompress()
-  TAlgoCompressLoad = (aclNormal, aclSafeSlow, aclNoCrcFast);
+  TAlgoCompressLoad = (
+    aclNormal,
+    aclSafeSlow,
+    aclNoCrcFast);
 
   /// abstract low-level parent class for generic compression/decompression algorithms
   // - will encapsulate the compression algorithm with crc32c hashing
@@ -414,7 +417,10 @@ type
       Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
-  TAlgoCompressWithNoDestLenProcess = (doCompress, doUnCompress, doUncompressPartial);
+  TAlgoCompressWithNoDestLenProcess = (
+    doCompress,
+    doUnCompress,
+    doUncompressPartial);
 
   /// abstract class storing the plain length before calling compression API
   // - some libraries (e.g. Deflate or Lizard) don't provide the uncompressed
@@ -447,9 +453,12 @@ var
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
   // SynLZCompress() compression
-  SYNLZTRIG: array[boolean] of integer = (100, maxInt);
+  SYNLZTRIG: array[boolean] of integer = (
+    100, maxInt);
+
   /// used e.g. as when ALGO_SAFE[SafeDecompression] for TAlgoCompress.Decompress
-  ALGO_SAFE: array[boolean] of TAlgoCompressLoad = (aclNormal, aclSafeSlow);
+  ALGO_SAFE: array[boolean] of TAlgoCompressLoad = (
+    aclNormal, aclSafeSlow);
 
 
 /// fast concatenation of several AnsiStrings
@@ -704,7 +713,13 @@ type
   // - wkFakeMarker won't be used by WriteVarUInt32Array, but to notify a
   // custom encoding
   TBufferWriterKind = (
-    wkUInt32, wkVarUInt32, wkVarInt32, wkSorted, wkOffsetU, wkOffsetI, wkFakeMarker);
+    wkUInt32,
+    wkVarUInt32,
+    wkVarInt32,
+    wkSorted,
+    wkOffsetU,
+    wkOffsetI,
+    wkFakeMarker);
 
   /// this class can be used to speed up writing to a file or a stream
   // - big speed up if data is written in small blocks
@@ -3987,14 +4002,13 @@ begin
   else
   begin
     ptr := pointer(SynCompressAlgos);
-    n := PDALen(PAnsiChar(ptr) - _DALEN)^ + ( _DAOFF - 1 );
+    n := PDALen(PAnsiChar(ptr) - _DALEN)^ + ( _DAOFF - 1 ); // - 1 for List[0]
     if n > 0 then
       repeat
         inc(ptr); // ignore List[0] = AlgoSynLZ
         result := ptr^;
         if result.AlgoID = AlgoID then
           exit;
-        inc(ptr);
         dec(n);
       until n = 0;
     result := nil;

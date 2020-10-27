@@ -63,7 +63,9 @@ type
   // - could be set to paramOut or paramInOut if must be refereshed after
   // execution (for calling a stored procedure expecting such parameters)
   TSQLDBParamInOutType = (
-    paramIn, paramOut, paramInOut);
+    paramIn,
+    paramOut,
+    paramInOut);
 
   /// used to define a field/column layout in a table schema
   // - for TSQLDBConnectionProperties.SQLCreate to describe the new table
@@ -165,7 +167,11 @@ type
   /// possible column retrieval patterns
   // - used by TSQLDBColumnProperty.ColumnValueState
   TSQLDBStatementGetCol = (
-    colNone, colNull, colWrongType, colDataFilled, colDataTruncated);
+    colNone,
+    colNull,
+    colWrongType,
+    colDataFilled,
+    colDataTruncated);
 
   /// used to define a field/column layout
   // - for TSQLDBConnectionProperties.SQLCreate to describe the table
@@ -265,7 +271,11 @@ type
   // should generate unnested/any bound array statements - currently only
   // supported by mormot.db.sql.postgres for bulk insert/update/delete
   TSQLDBStatementCRUD = (
-    cCreate, cRead, cUpdate, cDelete, cPostgreBulkArray);
+    cCreate,
+    cRead,
+    cUpdate,
+    cDelete,
+    cPostgreBulkArray);
 
   /// identify the CRUD modes of a statement
   // - used e.g. for batch send abilities of a DB engine
@@ -284,8 +294,18 @@ type
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate(), or
   // for OleDB/ODBC/ZDBC tuning according to the connected database engine
   TSQLDBDefinition = (
-    dUnknown, dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
-    dFirebird, dNexusDB, dPostgreSQL, dDB2, dInformix);
+    dUnknown,
+    dDefault,
+    dOracle,
+    dMSSQL,
+    dJet,
+    dMySQL,
+    dSQLite,
+    dFirebird,
+    dNexusDB,
+    dPostgreSQL,
+    dDB2,
+    dInformix);
 
   /// set of the available database definitions
   TSQLDBDefinitions = set of TSQLDBDefinition;
@@ -293,7 +313,11 @@ type
   /// where the LIMIT clause should be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
   TSQLDBDefinitionLimitPosition = (
-    posNone, posWhere, posSelect, posAfter, posOuter);
+    posNone,
+    posWhere,
+    posSelect,
+    posAfter,
+    posOuter);
 
   /// defines the LIMIT clause to be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
@@ -944,8 +968,15 @@ type
   // corresponding TSQLDBConnection.StartTransaction, TSQLDBConnection.Commit
   // and TSQLDBConnection.Rollback methods
   TOnSQLDBProcessEvent = (
-    speConnected, speDisconnected, speNonActive, speActive, speConnectionLost,
-    speReconnected, speStartTransaction, speCommit, speRollback);
+    speConnected,
+    speDisconnected,
+    speNonActive,
+    speActive,
+    speConnectionLost,
+    speReconnected,
+    speStartTransaction,
+    speCommit,
+    speRollback);
 
   /// event handler called during all external DB process
   // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
@@ -964,7 +995,9 @@ type
 
   /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
   TSQLDBSharedTransactionAction = (
-    transBegin, transCommitWithoutException, transCommitWithException,
+    transBegin,
+    transCommitWithoutException,
+    transCommitWithException,
     transRollback);
 
   /// defines a callback signature able to handle multiple INSERT
@@ -2325,7 +2358,9 @@ type
   // when multiple connections may break stability, consume too much resources
   // and/or decrease performance
   TSQLDBConnectionPropertiesThreadSafeThreadingMode = (
-    tmThreadPool, tmMainConnection, tmBackgroundThread);
+    tmThreadPool,
+    tmMainConnection,
+    tmBackgroundThread);
 
   /// connection properties which will implement an internal Thread-Safe
   // connection pool

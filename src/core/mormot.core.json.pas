@@ -1260,7 +1260,11 @@ type
 
   // internal flag, used only by TSynDictionary.InArray protected method
   TSynDictionaryInArray = (
-    iaFind, iaFindAndDelete, iaFindAndUpdate, iaFindAndAddIfNotExisting, iaAdd);
+    iaFind,
+    iaFindAndDelete,
+    iaFindAndUpdate,
+    iaFindAndAddIfNotExisting,
+    iaAdd);
 
   /// event called by TSynDictionary.ForEach methods to iterate over stored items
   // - if the implementation method returns TRUE, will continue the loop
@@ -1577,10 +1581,16 @@ type
   // - null will release any class instance, unless jpoNullDontReleaseObjectInstance
   // is set which will leave the instance untouched
   TJsonParserOption = (
-    jpoIgnoreUnknownProperty, jpoIgnoreStringType, jpoIgnoreUnknownEnum,
-    jpoHandleCustomVariants, jpoHandleCustomVariantsWithinString,
-    jpoSetterExpectsToFreeTempInstance, jpoSetterNoCreate,
-    jpoAllowInt64Hex, jpoAllowDouble, jpoObjectListClassNameGlobalFindClass,
+    jpoIgnoreUnknownProperty,
+    jpoIgnoreStringType,
+    jpoIgnoreUnknownEnum,
+    jpoHandleCustomVariants,
+    jpoHandleCustomVariantsWithinString,
+    jpoSetterExpectsToFreeTempInstance,
+    jpoSetterNoCreate,
+    jpoAllowInt64Hex,
+    jpoAllowDouble,
+    jpoObjectListClassNameGlobalFindClass,
     jpoNullDontReleaseObjectInstance);
 
   /// set of options for JsonParser() parsing process
@@ -5016,23 +5026,23 @@ begin
           c.W.WriteObjectPropName(c.Prop^.Name^, c.Options);
           if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
              not TSPHook(Data).RttiWritePropertyValue(c.W, c.Prop, c.Options) then
-          if (woHideSensitivePersonalInformation in c.Options) and
-             (rcfSPI in c.Prop^.Value.Flags) then
-            c.W.AddShorter('"***"')
-          else if c.Prop^.OffsetGet >= 0 then
-          begin
-            // direct value write (record field or plain class property)
-            c.Info := c.Prop^.Value;
-            TRttiJsonSave(TRttiJson(c.Info).fJsonSave)(Data + c.Prop^.OffsetGet, c);
-          end
-          else
-          begin
-            // need to call a getter method
-            c.Prop^.Prop.GetValue(pointer(Data), c.Prop^.Value, rvd);
-            c.W.AddVariant(variant(rvd), twJSONEscape, c.Options);
-            if rvd.NeedsClear then
-              VarClearProc(rvd.Data);
-          end;
+            if (woHideSensitivePersonalInformation in c.Options) and
+               (rcfSPI in c.Prop^.Value.Flags) then
+              c.W.AddShorter('"***"')
+            else if c.Prop^.OffsetGet >= 0 then
+            begin
+              // direct value write (record field or plain class property)
+              c.Info := c.Prop^.Value;
+              TRttiJsonSave(TRttiJson(c.Info).fJsonSave)(Data + c.Prop^.OffsetGet, c);
+            end
+            else
+            begin
+              // need to call a getter method
+              c.Prop^.Prop.GetValue(pointer(Data), c.Prop^.Value, rvd);
+              c.W.AddVariant(variant(rvd), twJSONEscape, c.Options);
+              if rvd.NeedsClear then
+                VarClearProc(rvd.Data);
+            end;
         end;
         dec(n);
         if n = 0 then

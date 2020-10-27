@@ -263,7 +263,10 @@ function IsMatchString(const Pattern, Text: string;
 type
   /// available pronunciations for our fast Soundex implementation
   TSynSoundExPronunciation = (
-    sndxEnglish, sndxFrench, sndxSpanish, sndxNone);
+    sndxEnglish,
+    sndxFrench,
+    sndxSpanish,
+    sndxNone);
 
   TSoundExValues = array[0..ord('Z') - ord('B')] of byte;
 
@@ -345,13 +348,21 @@ type
 
   /// identify an expression search engine node type, as used by TExprParser
   TExprNodeType = (
-    entWord, entNot, entOr, entAnd);
+    entWord,
+    entNot,
+    entOr,
+    entAnd);
 
   /// results returned by TExprParserAbstract.Parse method
   TExprParserResult = (
-    eprSuccess, eprNoExpression,
-    eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord,
-    eprInvalidExpression, eprUnknownVariable, eprUnsupportedOperator,
+    eprSuccess,
+    eprNoExpression,
+    eprMissingParenthesis,
+    eprTooManyParenthesis,
+    eprMissingFinalWord,
+    eprInvalidExpression,
+    eprUnknownVariable,
+    eprUnsupportedOperator,
     eprInvalidConstantOrVariable);
 
   TParserAbstract = class;
@@ -694,8 +705,14 @@ function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
 type
   /// result of function DeltaExtract()
   TDeltaError = (
-    dsSuccess, dsCrcCopy, dsCrcComp, dsCrcBegin, dsCrcEnd, dsCrcExtract,
-    dsFlag, dsLen);
+    dsSuccess,
+    dsCrcCopy,
+    dsCrcComp,
+    dsCrcBegin,
+    dsCrcEnd,
+    dsCrcExtract,
+    dsFlag,
+    dsLen);
 
 /// returns how many bytes a DeltaCompress() result will expand to
 function DeltaExtractSize(const Delta: RawByteString): integer; overload;
@@ -3533,8 +3550,9 @@ end;
 { TSynBloomFilterDiff }
 
 type
+  TBloomDiffHeaderKind = (bdDiff, bdFull, bdUpToDate);
   TBloomDiffHeader = packed record
-    kind: (bdDiff, bdFull, bdUpToDate);
+    kind: TBloomDiffHeaderKind;
     size: cardinal;
     inserted: cardinal;
     revision: Int64;
@@ -3646,7 +3664,7 @@ var
   head: ^TBloomDiffHeader absolute aDiff;
 begin
   if (length(aDiff) < SizeOf(head^)) or
-     (head.kind > high(head.kind)) or
+     (head.kind > high(TBloomDiffHeaderKind)) or
      (head.size <> cardinal(length(fStore))) or
      (head.crc <> crc32c(0, pointer(head), SizeOf(head^) - SizeOf(head.crc))) then
     result := 0
@@ -4016,7 +4034,7 @@ begin
   // 4. main loop: identify longest sequences using hash, and store reference
   if NewBufSize >= 8 then
     repeat
-    // hash 4 next bytes from NewBuf, and find longest match in OldBuf
+      // hash 4 next bytes from NewBuf, and find longest match in OldBuf
       ofs := PCardinal(@HTab^[hash(NewBuf) and HTabMask])^ and HListMask;
       if ofs <> HListMask then
       begin // brute force search loop of best hash match
@@ -4035,7 +4053,8 @@ begin
               match := Comp(@PHash128Rec(NewBuf)^.c2, @c2,
                          Min(PtrUInt(OldBufSize) - ofs, NewBufSize) - 8);
               if match > curlen then
-              begin // found a longer sequence
+              begin
+                // found a longer sequence
                 curlen := match;
                 curofs := ofs;
               end;

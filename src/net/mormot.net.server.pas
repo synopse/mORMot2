@@ -88,7 +88,13 @@ type
   // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
   // defined in HTTP 2.0 API and
   THttpServerRequestAuthentication = (
-    hraNone, hraFailed, hraBasic, hraDigest, hraNtlm, hraNegotiate, hraKerberos);
+    hraNone,
+    hraFailed,
+    hraBasic,
+    hraDigest,
+    hraNtlm,
+    hraNegotiate,
+    hraKerberos);
 
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
@@ -412,8 +418,14 @@ type
   // - grOwned indicates that this connection is now handled by another thread,
   // e.g. asynchronous WebSockets
   THttpServerSocketGetRequestResult = (
-    grError, grException, grOversizedPayload, grRejected,
-    grTimeout, grHeaderReceived, grBodyReceived, grOwned);
+    grError,
+    grException,
+    grOversizedPayload,
+    grRejected,
+    grTimeout,
+    grHeaderReceived,
+    grBodyReceived,
+    grOwned);
 
   {$M+} // to have existing RTTI for published properties
   THttpServer = class;
@@ -951,8 +963,13 @@ type
 
   /// current state of a THttpApiWebSocketConnection
   TWebSocketState = (
-    wsConnecting, wsOpen, wsClosing, wsClosedByClient, wsClosedByServer,
-    wsClosedByGuard, wsClosedByShutdown);
+    wsConnecting,
+    wsOpen,
+    wsClosing,
+    wsClosedByClient,
+    wsClosedByServer,
+    wsClosedByGuard,
+    wsClosedByShutdown);
 
   /// structure representing a single WebSocket connection
   {$ifdef USERECORDWITHMETHODS}

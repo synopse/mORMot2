@@ -92,12 +92,24 @@ type
   // - cExceptionRaised is a pseudo-command, used only for sending an exception
   // to the client in case of execution problem on the server side
   TSQLDBProxyConnectionCommand = (
-    cGetToken,cGetDBMS,
-    cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
+    cGetToken,
+    cGetDBMS,
+    cConnect,
+    cDisconnect,
+    cTryStartTransaction,
+    cCommit,
+    cRollback,
     cServerTimestamp,
-    cGetFields, cGetIndexes, cGetTableNames, cGetForeignKeys,
-    cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON,
-    cQuit, cExceptionRaised);
+    cGetFields,
+    cGetIndexes,
+    cGetTableNames,
+    cGetForeignKeys,
+    cExecute,
+    cExecuteToBinary,
+    cExecuteToJSON,
+    cExecuteToExpandedJSON,
+    cQuit,
+    cExceptionRaised);
 
   /// structure to embedd all needed parameters to execute a SQL statement
   // - used for cExecute, cExecuteToBinary, cExecuteToJSON and cExecuteToExpandedJSON

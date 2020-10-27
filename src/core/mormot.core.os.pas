@@ -48,21 +48,62 @@ type
   /// the recognized operating systems
   // - it will also recognize most Linux distributions
   TOperatingSystem = (
-    osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX,
-    osArch, osAurox, osDebian, osFedora, osGentoo, osKnoppix, osMint, osMandrake,
-    osMandriva, osNovell, osUbuntu, osSlackware, osSolaris, osSuse, osSynology,
-    osTrustix, osClear, osUnited, osRedHat, osLFS, osOracle, osMageia, osCentOS,
-    osCloud, osXen, osAmazon, osCoreOS, osAlpine, osAndroid);
+    osUnknown,
+    osWindows,
+    osLinux,
+    osOSX,
+    osBSD,
+    osPOSIX,
+    osArch,
+    osAurox,
+    osDebian,
+    osFedora,
+    osGentoo,
+    osKnoppix,
+    osMint,
+    osMandrake,
+    osMandriva,
+    osNovell,
+    osUbuntu,
+    osSlackware,
+    osSolaris,
+    osSuse,
+    osSynology,
+    osTrustix,
+    osClear,
+    osUnited,
+    osRedHat,
+    osLFS,
+    osOracle,
+    osMageia,
+    osCentOS,
+    osCloud,
+    osXen,
+    osAmazon,
+    osCoreOS,
+    osAlpine,
+    osAndroid);
 
   /// the recognized Windows versions
   // - defined even outside MSWINDOWS to access e.g. from monitoring tools
   TWindowsVersion = (
-    wUnknown, w2000, wXP, wXP_64, wServer2003, wServer2003_R2,
-    wVista, wVista_64, wServer2008, wServer2008_64,
-    wSeven, wSeven_64, wServer2008_R2, wServer2008_R2_64,
-    wEight, wEight_64, wServer2012, wServer2012_64,
-    wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
-    wTen, wTen_64, wServer2016, wServer2016_64, wServer2019_64);
+    wUnknown,
+    w2000,
+    wXP,
+    wXP_64,
+    wServer2003,
+    wServer2003_R2,
+    wVista, wVista_64,
+    wServer2008, wServer2008_64,
+    wSeven, wSeven_64,
+    wServer2008_R2, wServer2008_R2_64,
+    wEight, wEight_64,
+    wServer2012, wServer2012_64,
+    wEightOne, wEightOne_64,
+    wServer2012R2, wServer2012R2_64,
+    wTen, wTen_64,
+    wServer2016, wServer2016_64,
+    wServer2019_64);
 
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
@@ -420,7 +461,12 @@ procedure SetExecutableVersion(const aVersionText: RawUTF8); overload;
 type
   /// identify an operating system folder
   TSystemPath = (
-    spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder, spLog);
+    spCommonData,
+    spUserData,
+    spCommonDocuments,
+    spUserDocuments,
+    spTempFolder,
+    spLog);
 
 /// returns an operating system folder
 // - will return the full path of a given kind of private or shared folder,
@@ -444,7 +490,10 @@ type
 
   /// the known Windows Registry Root key used by TWinRegistry.Open
   TWinRegistryRoot = (
-    wrClasses, wrCurrentUser, wrLocalMachine, wrUsers);
+    wrClasses,
+    wrCurrentUser,
+    wrLocalMachine,
+    wrUsers);
 
   /// direct access to the Windows Registry
   // - could be used as alternative to TRegistry, which doesn't behave the same on
@@ -1097,7 +1146,10 @@ function IsDirectoryWritable(const Directory: TFileName): boolean;
 
 type
   /// text file layout, as recognized by TMemoryMap.TextFileKind
-  TTextFileKind = (isUnicode, isUTF8, isAnsi);
+  TTextFileKind = (
+    isUnicode,
+    isUTF8,
+    isAnsi);
 
   /// cross-platform memory mapping of a file content
   TMemoryMap = object
@@ -1310,9 +1362,22 @@ function GetDiskPartitions: TDiskPartitions;
 type
   /// available console colors
   TConsoleColor = (
-    ccBlack, ccBlue, ccGreen, ccCyan, ccRed, ccMagenta, ccBrown, ccLightGray,
-    ccDarkGray, ccLightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
-    ccYellow, ccWhite);
+    ccBlack,
+    ccBlue,
+    ccGreen,
+    ccCyan,
+    ccRed,
+    ccMagenta,
+    ccBrown,
+    ccLightGray,
+    ccDarkGray,
+    ccLightBlue,
+    ccLightGreen,
+    ccLightCyan,
+    ccLightRed,
+    ccLightMagenta,
+    ccYellow,
+    ccWhite);
 
 {$ifdef LINUX}
 var

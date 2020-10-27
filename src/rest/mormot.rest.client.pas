@@ -74,7 +74,9 @@ type
   // TAuthUser.PasswordHashHexa i.e. SHA256('salt'+Value)
   // - passKerberosSPN indicates that the password is the Kerberos SPN domain
   TRestClientSetUserPassword = (
-    passClear, passHashed, passKerberosSPN);
+    passClear,
+    passHashed,
+    passKerberosSPN);
 
   /// algorithms known by TRestClientAuthenticationSignedURI and
   // TRestServerAuthenticationSignedURI to digitaly compute the
@@ -93,7 +95,13 @@ type
   // higher security than suaMD5
   // - note that SynCrossPlatformRest clients only implements suaCRC32 yet
   TRestAuthenticationSignedURIAlgo = (
-    suaCRC32, suaCRC32C, suaXXHASH, suaMD5, suaSHA1, suaSHA256, suaSHA512);
+    suaCRC32,
+    suaCRC32C,
+    suaXXHASH,
+    suaMD5,
+    suaSHA1,
+    suaSHA256,
+    suaSHA512);
 
   /// function prototype for TRestClientAuthenticationSignedURI and
   // TRestServerAuthenticationSignedURI computation of the session_signature

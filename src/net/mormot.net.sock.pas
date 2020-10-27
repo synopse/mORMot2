@@ -60,8 +60,15 @@ var
 type
   /// the error codes returned by TNetSocket wrapper
   TNetResult = (
-    nrOK, nrRetry, nrNoSocket, nrNotFound, nrNotImplemented, nrClosed,
-    nrFatalError, nrUnknownError, nrTooManyConnections);
+    nrOK,
+    nrRetry,
+    nrNoSocket,
+    nrNotFound,
+    nrNotImplemented,
+    nrClosed,
+    nrFatalError,
+    nrUnknownError,
+    nrTooManyConnections);
 
   {$M+}
   /// exception class raise by this unit
@@ -77,7 +84,10 @@ type
 
   /// one data state on a given socket
   TNetEvent = (
-    neRead, neWrite, neError, neClosed);
+    neRead,
+    neWrite,
+    neError,
+    neClosed);
 
   /// the current whole read/write state on a given socket
   TNetEvents = set of TNetEvent;
@@ -85,11 +95,16 @@ type
   /// the available socket protocol layers
   // - by definition, nlUNIX will return nrNotImplemented on Windows
   TNetLayer = (
-    nlTCP, nlUDP, nlUNIX);
+    nlTCP,
+    nlUDP,
+    nlUNIX);
 
   /// the available socket families - mapping AF_INET/AF_INET6/AF_UNIX
   TNetFamily = (
-    nfUnknown, nfIP4, nfIP6, nfUNIX);
+    nfUnknown,
+    nfIP4,
+    nfIP6,
+    nfUNIX);
 
   /// internal mapping of an address, in any supported socket layer
   TNetAddr = object
@@ -207,7 +222,10 @@ type
   /// the events monitored by TPollSocketAbstract
   // - we don't make any difference between urgent or normal read/write events
   TPollSocketEvent = (
-    pseRead, pseWrite, pseError, pseClosed);
+    pseRead,
+    pseWrite,
+    pseError,
+    pseClosed);
 
   /// set of events monitored by TPollSocketAbstract
   TPollSocketEvents = set of TPollSocketEvent;
@@ -361,7 +379,9 @@ type
 
   /// identify the incoming data availability in TCrtSocket.SockReceivePending
   TCrtSocketPending = (
-    cspSocketError, cspNoData, cspDataAvailable);
+    cspSocketError,
+    cspNoData,
+    cspDataAvailable);
 
   {$M+}
   /// Fast low-level Socket implementation

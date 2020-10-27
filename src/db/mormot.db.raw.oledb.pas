@@ -170,20 +170,45 @@ type
   // - see http://msdn.microsoft.com/en-us/library/ms722617
   // and http://msdn.microsoft.com/en-us/library/windows/desktop/ms716934
   TSQLDBOleDBStatus = (
-    stOK, stBadAccessor, stCanNotConvertValue, stIsNull, stTruncated,
-    stSignMismatch, stDataoverFlow, stCanNotCreateValue, stUnavailable,
-    stPermissionDenied, stIntegrityViolation, stSchemaViolation, stBadStatus,
-    stDefault, stCellEmpty, stIgnoreColumn, stDoesNotExist, stInvalidURL,
-    stResourceLocked, stResoruceExists, stCannotComplete, stVolumeNotFound,
-    stOutOfSpace, stCannotDeleteSource, stAlreadyExists, stCanceled,
-    stNotCollection, stRowSetColumn);
+    stOK,
+    stBadAccessor,
+    stCanNotConvertValue,
+    stIsNull,
+    stTruncated,
+    stSignMismatch,
+    stDataoverFlow,
+    stCanNotCreateValue,
+    stUnavailable,
+    stPermissionDenied,
+    stIntegrityViolation,
+    stSchemaViolation,
+    stBadStatus,
+    stDefault,
+    stCellEmpty,
+    stIgnoreColumn,
+    stDoesNotExist,
+    stInvalidURL,
+    stResourceLocked,
+    stResoruceExists,
+    stCannotComplete,
+    stVolumeNotFound,
+    stOutOfSpace,
+    stCannotDeleteSource,
+    stAlreadyExists,
+    stCanceled,
+    stNotCollection,
+    stRowSetColumn);
 
   /// binding status of a given column
   // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms720969
   // and http://msdn.microsoft.com/en-us/library/windows/desktop/ms716934
   TSQLDBOleDBBindStatus = (
-    bsOK, bsBadOrdinal, bsUnsupportedConversion, bsBadBindInfo,
-    bsBadStorageFlags, bsNoInterface, bsMultipleStorage);
+    bsOK, bsBadOrdinal,
+    bsUnsupportedConversion,
+    bsBadBindInfo,
+    bsBadStorageFlags,
+    bsNoInterface,
+    bsMultipleStorage);
 
   PIUnknown = ^IUnknown;
   HACCESSOR = PtrUInt;

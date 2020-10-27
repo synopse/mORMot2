@@ -1211,9 +1211,15 @@ type
 
   /// defines how TRestStorageShard will handle its partioned process
   TRestStorageShardOption = (
-    ssoNoUpdate, ssoNoUpdateButLastShard,
-    ssoNoDelete, ssoNoDeleteButLastShard, ssoNoBatch,
-    ssoNoList, ssoNoExecute, ssoNoUpdateField, ssoNoConsolidateAtDestroy);
+    ssoNoUpdate,
+    ssoNoUpdateButLastShard,
+    ssoNoDelete,
+    ssoNoDeleteButLastShard,
+    ssoNoBatch,
+    ssoNoList,
+    ssoNoExecute,
+    ssoNoUpdateField,
+    ssoNoConsolidateAtDestroy);
 
   /// how TRestStorageShard will handle its partioned process
   TRestStorageShardOptions = set of TRestStorageShardOption;

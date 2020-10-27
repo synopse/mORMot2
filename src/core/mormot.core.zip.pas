@@ -31,7 +31,9 @@ uses
 type
   /// the format used for storing data
   TSynZipCompressorFormat = (
-    szcfRaw, szcfZip, szcfGZ);
+    szcfRaw,
+    szcfZip,
+    szcfGZ);
 
   /// a TStream descendant for compressing data into a stream using Zip/Deflate
   TSynZipCompressor = class(TStream)

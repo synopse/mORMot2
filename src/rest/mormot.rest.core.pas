@@ -1031,7 +1031,9 @@ type
   // using e.g. HTTPS/SSL/TLS or our proprietary AES/ECDHE algorithms
   // - llfWebsockets communication was made using WebSockets
   TRestURIParamsLowLevelFlag = (
-    llfHttps, llfSecured, llfWebsockets);
+    llfHttps,
+    llfSecured,
+    llfWebsockets);
 
   /// some flags set by the caller to notify low-level context
   TRestURIParamsLowLevelFlags = set of TRestURIParamsLowLevelFlag;

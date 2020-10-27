@@ -120,12 +120,16 @@ type
   // TRestOrmServer.fStaticVirtualTable[] which points to SQLite3 virtual tables
   // (e.g. TObjectList or external databases)
   TRestServerKind = (
-    sMainEngine, sStaticDataTable, sVirtualTable);
+    sMainEngine,
+    sStaticDataTable,
+    sVirtualTable);
 
   /// used by TRestServerURIContext.ClientKind to identify the currently
   // connected client
   TRestServerURIContextClientKind = (
-    ckUnknown, ckFramework, ckAJAX);
+    ckUnknown,
+    ckFramework,
+    ckAJAX);
 
   /// used to identify the authentication failure reason
   // - as transmitted e.g. by TRestServerURIContext.AuthenticationFailed or
@@ -1002,7 +1006,8 @@ type
   // than TAuthUser.Logon='*' - of course, this is meaningfull only with
   // an external credential check (e.g. via SSPI or Active Directory)
   TRestServerAuthenticationOption = (
-    saoUserByLogonOrID, saoHandleUnknownLogonAsStar);
+    saoUserByLogonOrID,
+    saoHandleUnknownLogonAsStar);
 
   /// defines the optional behavior of TRestServerAuthentication class
   TRestServerAuthenticationOptions =
@@ -1400,7 +1405,10 @@ type
 
   /// the flags used for TRestServer.AddStats
   TRestServerAddStat = (
-    withTables, withMethods, withInterfaces, withSessions);
+    withTables,
+    withMethods,
+    withInterfaces,
+    withSessions);
 
   /// some flags used for TRestServer.AddStats
   TRestServerAddStats = set of TRestServerAddStat;

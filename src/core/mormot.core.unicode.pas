@@ -93,7 +93,8 @@ function UCS4ToUTF8(ucs4: cardinal; Dest: PUTF8Char): integer;
 type
   /// option set for RawUnicodeToUtf8() conversion
   TCharConversionFlags = set of (
-    ccfNoTrailingZero, ccfReplacementCharacterForUnmatchedSurrogate);
+    ccfNoTrailingZero,
+    ccfReplacementCharacterForUnmatchedSurrogate);
 
 /// convert a RawUnicode PWideChar into a UTF-8 string
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;

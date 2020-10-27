@@ -886,35 +886,43 @@ const
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
   BSON_JSON_UNDEFINED: array[boolean] of string[23] = (
     '{"$undefined":true}', 'undefined');
+
   /// special JSON string content which will be used to store a betMinKey item
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
   BSON_JSON_MINKEY: array[boolean] of string[15] = (
     '{"$minKey":1}', 'MinKey');
+
   /// special JSON string content which will be used to store a betMaxKey item
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
   BSON_JSON_MAXKEY: array[boolean] of string[15] = (
     '{"$maxKey":1}', 'MaxKey');
+
   /// special JSON patterns which will be used to format a betObjectID item
   // - *[false,*] is to be written before the hexadecimal ID, *[true,*] after
   BSON_JSON_OBJECTID: array[boolean, TMongoJSONMode] of string[15] = (
     ('"', '{"$oid":"', 'ObjectId("'),
     ('"', '"}', '")'));
+
   /// special JSON patterns which will be used to format a betBinary item
   // - *[false,*] is for strict JSON, *[true,*] for MongoDB Extended JSON
   BSON_JSON_BINARY: array[boolean, boolean] of string[15] = (
     ('{"$binary":"', '","$type":"'), ('BinData(', ',"'));
+
   /// special JSON string content which will be used to store a betDeprecatedDbptr
   // - *[false,*] is for strict JSON, *[true,*] for MongoDB Extended JSON
   // - (not used by now for this deprecated content)
   BSON_JSON_DBREF: array[boolean, 0..2] of string[15] = (
     ('{"$ref":"', '","$id":"', '"}'), ('DBRef("', '","', '")'));
+
   /// special JSON string content which will be used to store a betRegEx
   BSON_JSON_REGEX: array[0..2] of string[15] = (
     '{"$regex":"', '","$options":"', '"}');
+
   /// special JSON patterns which will be used to format a betDateTime item
   // - *[*,false] is to be written before the date value, *[*,true] after
   BSON_JSON_DATE: array[TMongoJSONMode, boolean] of string[15] = (
     ('"', '"'), ('{"$date":"', '"}'), ('ISODate("', '")'));
+
   /// special JSON patterns which will be used to format a betDecimal128 item
   // - *[false,*] is to be written before the decimal value, *[true,*] after
   BSON_JSON_DECIMAL: array[boolean, TMongoJSONMode] of string[23] = (

@@ -964,7 +964,9 @@ type
   /// the Authentication schemes recognized by TECDHEProtocol
   // - specifying the authentication allows a safe one-way handshake
   TECDHEAuth = (
-    authMutual, authServer, authClient);
+    authMutual,
+    authServer,
+    authClient);
 
   /// set of Authentication schemes recognized by TECDHEProtocolServer
   TECDHEAuths = set of TECDHEAuth;
@@ -988,8 +990,16 @@ type
   // efAesOfb128 will potentially give the best performance
   // - of course, weack ECB mode is not available
   TECDHEEF = (
-    efAesCrc128, efAesCfb128, efAesOfb128, efAesCtr128, efAesCbc128,
-    efAesCrc256, efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256);
+    efAesCrc128,
+    efAesCfb128,
+    efAesOfb128,
+    efAesCtr128,
+    efAesCbc128,
+    efAesCrc256,
+    efAesCfb256,
+    efAesOfb256,
+    efAesCtr256,
+    efAesCbc256);
 
   /// the Message Authentication Codes recognized by TECDHEProtocol
   // - default macDuringEF (680MB/s for efAesCrc128 with SSE4.2 and AES-NI)
@@ -1006,8 +1016,12 @@ type
   // - macNone (800MB/s, which is the speed of AES-NI encryption itself for a
   // random set of small messages) won't check errors, but only replay attacks
   TECDHEMAC = (
-    macDuringEF, macHmacSha256, macHmacCrc256c, macHmacCrc32c,
-    macXxHash32, macNone);
+    macDuringEF,
+    macHmacSha256,
+    macHmacCrc256c,
+    macHmacCrc32c,
+    macXxHash32,
+    macNone);
 
   /// defines one protocol Algorithm recognized by TECDHEProtocol
   // - only safe and strong parameters are allowed, and the default values

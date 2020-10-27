@@ -177,27 +177,81 @@ type
 
   /// low-level result codes for libcurl library API calls
   TCurlResult = (
-    crOK, crUnsupportedProtocol, crFailedInit, crURLMalformat, crURLMalformatUser,
-    crCouldNotResolveProxy, crCouldNotResolveHost, crCouldNotConnect,
-    crFTPWeirdServerReply, crFTPAccessDenied, crFTPUserPasswordIncorrect,
-    crFTPWeirdPassReply, crFTPWeirdUserReply, crFTPWeirdPASVReply,
-    crFTPWeird227Format, crFTPCantGetHost, crFTPCantReconnect, crFTPCouldNotSetBINARY,
-    crPartialFile, crFTPCouldNotRetrFile, crFTPWriteError, crFTPQuoteError,
-    crHTTPReturnedError, crWriteError, crMalFormatUser, crFTPCouldNotStorFile,
-    crReadError, crOutOfMemory, crOperationTimeouted,
-    crFTPCouldNotSetASCII, crFTPPortFailed, crFTPCouldNotUseREST, crFTPCouldNotGetSize,
-    crHTTPRangeError, crHTTPPostError, crSSLConnectError, crBadDownloadResume,
-    crFileCouldNotReadFile, crLDAPCannotBind, crLDAPSearchFailed,
-    crLibraryNotFound, crFunctionNotFound, crAbortedByCallback,
-    crBadFunctionArgument, crBadCallingOrder, crInterfaceFailed,
-    crBadPasswordEntered, crTooManyRedirects, crUnknownTelnetOption,
-    crTelnetOptionSyntax, crObsolete, crSSLPeerCertificate, crGotNothing,
-    crSSLEngineNotFound, crSSLEngineSetFailed, crSendError, crRecvError,
-    crShareInUse, crSSLCertProblem, crSSLCipher, crSSLCACert, crBadContentEncoding,
-    crLDAPInvalidURL, crFileSizeExceeded, crFTPSSLFailed, crSendFailRewind,
-    crSSLEngineInitFailed, crLoginDenied, crTFTPNotFound, crTFTPPerm,
-    crTFTPDiskFull, crTFTPIllegal, crTFTPUnknownID, crTFTPExists, crTFTPNoSuchUser
-  );
+    crOK,
+    crUnsupportedProtocol,
+    crFailedInit,
+    crURLMalformat,
+    crURLMalformatUser,
+    crCouldNotResolveProxy,
+    crCouldNotResolveHost,
+    crCouldNotConnect,
+    crFTPWeirdServerReply,
+    crFTPAccessDenied,
+    crFTPUserPasswordIncorrect,
+    crFTPWeirdPassReply,
+    crFTPWeirdUserReply,
+    crFTPWeirdPASVReply,
+    crFTPWeird227Format,
+    crFTPCantGetHost,
+    crFTPCantReconnect,
+    crFTPCouldNotSetBINARY,
+    crPartialFile,
+    crFTPCouldNotRetrFile,
+    crFTPWriteError,
+    crFTPQuoteError,
+    crHTTPReturnedError,
+    crWriteError,
+    crMalFormatUser,
+    crFTPCouldNotStorFile,
+    crReadError,
+    crOutOfMemory,
+    crOperationTimeouted,
+    crFTPCouldNotSetASCII,
+    crFTPPortFailed,
+    crFTPCouldNotUseREST,
+    crFTPCouldNotGetSize,
+    crHTTPRangeError,
+    crHTTPPostError,
+    crSSLConnectError,
+    crBadDownloadResume,
+    crFileCouldNotReadFile,
+    crLDAPCannotBind,
+    crLDAPSearchFailed,
+    crLibraryNotFound,
+    crFunctionNotFound,
+    crAbortedByCallback,
+    crBadFunctionArgument,
+    crBadCallingOrder,
+    crInterfaceFailed,
+    crBadPasswordEntered,
+    crTooManyRedirects,
+    crUnknownTelnetOption,
+    crTelnetOptionSyntax,
+    crObsolete,
+    crSSLPeerCertificate,
+    crGotNothing,
+    crSSLEngineNotFound,
+    crSSLEngineSetFailed,
+    crSendError,
+    crRecvError,
+    crShareInUse,
+    crSSLCertProblem,
+    crSSLCipher,
+    crSSLCACert,
+    crBadContentEncoding,
+    crLDAPInvalidURL,
+    crFileSizeExceeded,
+    crFTPSSLFailed,
+    crSendFailRewind,
+    crSSLEngineInitFailed,
+    crLoginDenied,
+    crTFTPNotFound,
+    crTFTPPerm,
+    crTFTPDiskFull,
+    crTFTPIllegal,
+    crTFTPUnknownID,
+    crTFTPExists,
+    crTFTPNoSuchUser);
 
   /// low-level information enumeration for libcurl library API calls
   TCurlInfo = (
@@ -286,16 +340,24 @@ type
 
   /// low-level version identifier of the libcurl library
   TCurlVersion = (
-    cvFirst, cvSecond, cvThird, cvFour, cvLast);
+    cvFirst,
+    cvSecond,
+    cvThird,
+    cvFour,
+    cvLast);
 
   /// low-level initialization option for libcurl library API
   // - currently, only giSSL is set, since giWin32 is redundant with WinHTTP
   TCurlGlobalInit = set of (
-    giNone, giSSL, giWin32, giAll);
+    giNone,
+    giSSL,
+    giWin32,
+    giAll);
 
   /// low-level message state for libcurl library API
   TCurlMsg = (
-    cmNone, cmDone);
+    cmNone,
+    cmDone);
 
   /// low-level version information for libcurl library
   TCurlVersionInfo = record

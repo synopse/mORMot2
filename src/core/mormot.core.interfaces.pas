@@ -477,7 +477,10 @@ type
   /// internal pseudo methods when an interface is used as remote service
   // - match TInterfaceFactory MethodIndex 0..3
   TServiceInternalMethod = (
-    imFree, imContract, imSignature, imInstance);
+    imFree,
+    imContract,
+    imSignature,
+    imInstance);
 
 const
   /// URI of some pseudo methods when an interface is used as remote service
@@ -1284,7 +1287,9 @@ type
 
   /// every potential part of TInterfaceStubLog.AddAsText() log entry
   TInterfaceStubLogLayout = (
-    wName, wParams, wResults);
+    wName,
+    wParams,
+    wResults);
 
   /// set the output layout of TInterfaceStubLog.AddAsText() log entry
   TInterfaceStubLogLayouts = set of TInterfaceStubLogLayout;
@@ -1717,7 +1722,9 @@ type
 
   /// how TInterfaceMockSpy.Verify() shall generate the calls trace
   TInterfaceMockSpyCheck = (
-    chkName, chkNameParams, chkNameParamsResults);
+    chkName,
+    chkNameParams,
+    chkNameParamsResults);
 
   /// used to mock an interface implementation via run-verify pattern
   // - this class will implement a so called "test-spy" mocking pattern, i.e.

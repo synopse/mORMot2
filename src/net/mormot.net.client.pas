@@ -117,7 +117,10 @@ type
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHTTP class yet
   THttpRequestAuthentication = (
-    wraNone, wraBasic, wraDigest, wraNegotiate);
+    wraNone,
+    wraBasic,
+    wraDigest,
+    wraNegotiate);
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to

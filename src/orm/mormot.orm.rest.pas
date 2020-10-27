@@ -49,10 +49,35 @@ type
   // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
   // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
   TURIMethod = (
-    mNone, mGET, mPOST, mPUT, mDELETE, mHEAD, mBEGIN, mEND, mABORT,
-    mLOCK, mUNLOCK, mSTATE, mOPTIONS, mPROPFIND, mPROPPATCH, mTRACE,
-    mCOPY, mMKCOL, mMOVE, mPURGE, mREPORT, mMKACTIVITY, mMKCALENDAR,
-    mCHECKOUT, mMERGE, mNOTIFY, mPATCH, mSEARCH, mCONNECT);
+    mNone,
+    mGET,
+    mPOST,
+    mPUT,
+    mDELETE,
+    mHEAD,
+    mBEGIN,
+    mEND,
+    mABORT,
+    mLOCK,
+    mUNLOCK,
+    mSTATE,
+    mOPTIONS,
+    mPROPFIND,
+    mPROPPATCH,
+    mTRACE,
+    mCOPY,
+    mMKCOL,
+    mMOVE,
+    mPURGE,
+    mREPORT,
+    mMKACTIVITY,
+    mMKCALENDAR,
+    mCHECKOUT,
+    mMERGE,
+    mNOTIFY,
+    mPATCH,
+    mSEARCH,
+    mCONNECT);
 
   /// set of available HTTP methods transmitted between client and server
   TURIMethods = set of TURIMethod;

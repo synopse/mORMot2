@@ -548,7 +548,10 @@ type
   /// define the TDocVariant storage layout
   // - if it has one or more named properties, it is a dvObject
   // - if it has no name property, it is a dvArray
-  TDocVariantKind = (dvUndefined, dvObject, dvArray);
+  TDocVariantKind = (
+    dvUndefined,
+    dvObject,
+    dvArray);
 
   /// method used by TDocVariantData.ReduceAsArray to filter each object
   // - should return TRUE if the item match the expectations

@@ -556,7 +556,10 @@ type
   // - twNone will write the supplied text with no escaping
   // - twJSONEscape will properly escape " and \ as expected by JSON
   // - twOnSameLine will convert any line feeds or control chars into spaces
-  TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
+  TTextWriterKind = (
+    twNone,
+    twJSONEscape,
+    twOnSameLine);
 
   /// available global options for a TBaseWriter / TBaseWriter instance
   // - TBaseWriter.WriteObject() method behavior would be set via their own
@@ -689,7 +692,10 @@ type
   // $  & "  ->   &amp; &quote;
   // within HTML attributes (hfWithinAttributes)
   TTextWriterHTMLFormat = (
-    hfNone, hfAnyWhere, hfOutsideAttributes, hfWithinAttributes);
+    hfNone,
+    hfAnyWhere,
+    hfOutsideAttributes,
+    hfWithinAttributes);
 
   /// the available JSON format, for TBaseWriter.AddJSONReformat() and its
   // JSONBufferReformat() and JSONReformat() wrappers

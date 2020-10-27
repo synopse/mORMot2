@@ -38,7 +38,8 @@ type
 
   /// allows to tune TSynTest process
   // - tcoLogEachCheck will log as sllCustom4 each non void Check() message
-  TSynTestOption = (tcoLogEachCheck);
+  TSynTestOption = (
+    tcoLogEachCheck);
 
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
@@ -571,7 +572,8 @@ end;
 
 procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
 const
-  LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
+  LEV: array[boolean] of TSynLogInfo = (
+    sllFail, sllCustom4);
 var
   tix, crc: cardinal; // use a crc since strings are not thread-safe
 begin
@@ -809,7 +811,8 @@ class procedure TSynTestCase.AddRandomTextParagraph(WR: TBaseWriter;
   WordCount: Integer; LastPunctuation: AnsiChar; const RandomInclude: RawUTF8;
   NoLineFeed: boolean);
 type
-  TKind = (space, comma, dot, question, paragraph);
+  TKind = (
+    space, comma, dot, question, paragraph);
 const
   bla: array[0..7] of string[3] = (
     'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');

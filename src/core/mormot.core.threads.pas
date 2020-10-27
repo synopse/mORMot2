@@ -201,7 +201,10 @@ type
 
   /// state machine status of the TSynBackgroundThreadAbstract process
   TSynBackgroundThreadProcessStep = (
-    flagIdle, flagStarted, flagFinished, flagDestroying);
+    flagIdle,
+    flagStarted,
+    flagFinished,
+    flagDestroying);
 
   /// state machine statuses of the TSynBackgroundThreadAbstract process
   TSynBackgroundThreadProcessSteps = set of TSynBackgroundThreadProcessStep;
@@ -482,7 +485,10 @@ type
 type
   /// the current state of a TBlockingProcess instance
   TBlockingEvent = (
-    evNone, evWaiting, evTimeOut, evRaised);
+    evNone,
+    evWaiting,
+    evTimeOut,
+    evRaised);
 
   {$M+}
   /// a semaphore used to wait for some process to be finished

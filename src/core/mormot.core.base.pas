@@ -6951,7 +6951,9 @@ var
 begin
   if a = nil then
     exit;
-  RawObjectsClear(pointer(aObjArray), length(a));
+  // release all owned TObject instances
+  RawObjectsClear(pointer(aObjArray), PDALen(PAnsiChar(a) - _DALEN)^ + _DAOFF);
+  // release the dynamic array itself
   a := nil;
 end;
 

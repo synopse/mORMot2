@@ -2049,10 +2049,35 @@ type
   /// the main possible return codes, including error codes
   TSQLite3ErrorCode = (
     secUnknown,
-    secOK,secERROR,secINTERNAL,secPERM,secABORT,secBUSY,secLOCKED,secNOMEM,
-    secREADONLY,secINTERRUPT,secIOERR,secCORRUPT,secNOTFOUND,secFULL,secCANTOPEN,
-    secPROTOCOL,secEMPTY,secSCHEMA,secTOOBIG,secCONSTRAINT,secMISMATCH,secMISUSE,
-    secNOLFS,secAUTH,secFORMAT,secRANGE,secNOTADB, secROW,secDONE);
+    secOK,
+    secERROR,
+    secINTERNAL,
+    secPERM,
+    secABORT,
+    secBUSY,
+    secLOCKED,
+    secNOMEM,
+    secREADONLY,
+    secINTERRUPT,
+    secIOERR,
+    secCORRUPT,
+    secNOTFOUND,
+    secFULL,
+    secCANTOPEN,
+    secPROTOCOL,
+    secEMPTY,
+    secSCHEMA,
+    secTOOBIG,
+    secCONSTRAINT,
+    secMISMATCH,
+    secMISUSE,
+    secNOLFS,
+    secAUTH,
+    secFORMAT,
+    secRANGE,
+    secNOTADB,
+    secROW,
+    secDONE);
 
   /// custom SQLite3 dedicated Exception type
   ESQLite3Exception = class(ESynException)
@@ -2124,7 +2149,9 @@ type
   // before that data has been written to the disk surface. On the other hand,
   // some operations are as much as 50 or more times faster with synchronous OFF.
   TSQLSynchronousMode = (
-    smOff, smNormal, smFull);
+    smOff,
+    smNormal,
+    smFull);
 
   /// available file-level database connection locking-mode
   // - lmNormal locking-mode (the default unless overridden at compile-time using
@@ -2142,7 +2169,8 @@ type
   // - lmExclusive gives much better write performance, and could be used when
   // needed, in case of a heavy loaded mORMot server
   TSQLLockingMode = (
-    lmNormal, lmExclusive);
+    lmNormal,
+    lmExclusive);
 
   /// available Run-Time limit categories
   // - as expected by sqlite3.limit() function and TSQLDatabase.Limit property
@@ -2163,9 +2191,17 @@ type
   // - lcVariableNumber The maximum number of parameters in an SQL statement.
   // - lcTriggerDepth The maximum depth of recursion for triggers.
   TSQLLimitCategory = (
-    lcLength, lcSQLLength, lcColumn, lcExprDepth, lcCompoundSelect,
-    lcVDBEop, lcFunctionArg, lcAttached, lcLikePatternLength,
-    lcVariableNumber, lcTriggerDepth);
+    lcLength,
+    lcSQLLength,
+    lcColumn,
+    lcExprDepth,
+    lcCompoundSelect,
+    lcVDBEop,
+    lcFunctionArg,
+    lcAttached,
+    lcLikePatternLength,
+    lcVariableNumber,
+    lcTriggerDepth);
 
   {$M+}
   TSQLDatabase = class;
@@ -3055,8 +3091,14 @@ type
   // - you can use (Sender.Step in backupAnyStep), to check for normal step,
   // or (Sender.Step in backupFinished) to check for process end
   TSQLDatabaseBackupEventStep = (
-    backupNone, backupStart, backupSuccess, backupFailure,
-    backupStepOk, backupStepBusy, backupStepLocked, backupStepSynLz);
+    backupNone,
+    backupStart,
+    backupSuccess,
+    backupFailure,
+    backupStepOk,
+    backupStepBusy,
+    backupStepLocked,
+    backupStepSynLz);
 
   /// background thread used for TSQLDatabase.BackupBackground() process
   TSQLDatabaseBackupThread = class(TThread)

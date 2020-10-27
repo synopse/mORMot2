@@ -80,7 +80,8 @@ type
 
   /// let TPollAsynchSockets.OnRead shutdown the socket if needed
   TPollAsynchSocketOnRead = (
-    sorContinue, sorClose);
+    sorContinue,
+    sorClose);
 
   {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections

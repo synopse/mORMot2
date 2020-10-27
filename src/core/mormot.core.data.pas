@@ -1092,8 +1092,6 @@ var
     nil, nil, nil, nil, nil, nil));
 
 type
-  TDynArrayObjArray = (oaUnknown, oaFalse, oaTrue);
-
   /// the kind of exceptions raised during TDynArray/TDynArrayHashed process
   EDynArray = class(ESynException);
 
