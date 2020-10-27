@@ -22,7 +22,6 @@ uses
   classes,
   variants,
   contnrs,
-  mormot.lib.z,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -153,27 +152,6 @@ type
       read fBinaryFile write fBinaryFile;
   end;
 
-/// create an external static in-memory database for a specific class
-// - call it after TRestServer.Create, before TRestServer.CreateMissingTables;
-// warning: if you don't call this method before CreateMissingTable method
-// is called, the table will be created as a regular table by the main
-// database engine, and won't be static
-// - can load the table content from a file if a file name is specified
-// (could be either JSON or compressed Binary format on disk)
-// - you can define a particular external engine by using a custom class -
-// by default, it will create a TSQLRestStorageInMemory instance
-// - this data handles basic REST commands, since no complete SQL interpreter
-// can be implemented by TSQLRestStorage; to provide full SQL process,
-// you should better use a Virtual Table class, inheriting e.g. from
-// TOrmVirtualTableAutoID associated with TOrmVirtualTableJSON/Binary
-// via a Model.VirtualTableRegister() call before TRestServer.Create
-// - you can use this method to change the filename of an existing storage
-// - return nil on any error, or an EModelException if the class is not in
-// the aServer database model
-function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
-  const aFileName: TFileName = ''; aBinaryFile: boolean = false;
-  aStorageClass: TRestStorageInMemoryClass = nil): TRestStorageInMemory;
-
 
 
 { ************ TRestServerFullMemory Standalone REST Server }
@@ -223,9 +201,32 @@ type
     procedure Flush(Ctxt: TRestServerURIContext);
   end;
 
+
+/// create an external static in-memory database for a specific class
+// - call it after TRestServer.Create, before TRestServer.CreateMissingTables;
+// warning: if you don't call this method before CreateMissingTable method
+// is called, the table will be created as a regular table by the main
+// database engine, and won't be static
+// - can load the table content from a file if a file name is specified
+// (could be either JSON or compressed Binary format on disk)
+// - you can define a particular external engine by using a custom class -
+// by default, it will create a TSQLRestStorageInMemory instance
+// - this data handles basic REST commands, since no complete SQL interpreter
+// can be implemented by TSQLRestStorage; to provide full SQL process,
+// you should better use a Virtual Table class, inheriting e.g. from
+// TOrmVirtualTableAutoID associated with TOrmVirtualTableJSON/Binary
+// via a Model.VirtualTableRegister() call before TRestServer.Create
+// - you can use this method to change the filename of an existing storage
+// - return nil on any error, or an EModelException if the class is not in
+// the aServer database model
+function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
+  const aFileName: TFileName = ''; aBinaryFile: boolean = false;
+  aStorageClass: TRestStorageInMemoryClass = nil): TRestStorageInMemory;
+
+
 /// create a new minimal TRestServer instance, to be used with
 // external SQL or NoSQL storage
-// - will try to instantiate an in-memory TRestServerDB, and if
+// - will try to instantiate an in-memory (':memory:') TRestServerDB, and if
 // mormot.orm.sqlite3.pas is not linked, fallback to a TRestServerFullMemory
 // - used e.g. by TRestMongoDBCreate() and TRestExternalDBCreate()
 function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
@@ -245,30 +246,6 @@ implementation
 
 
 { ************ TRestOrmServerFullMemory Standalone REST ORM Engine }
-
-function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
-  const aFileName: TFileName; aBinaryFile: boolean;
-  aStorageClass: TRestStorageInMemoryClass): TRestStorageInMemory;
-var
-  t: PtrInt;
-begin
-  if aStorageClass = nil then
-    // default in-memory engine
-    aStorageClass := TRestStorageInMemory;
-  t := aServer.Model.GetTableIndexExisting(aClass);
-  result := TRestStorageInMemory(aServer.GetStaticTableIndex(t));
-  if result <> nil then
-    // class already registered -> check aStorageClass, and update file name
-    (result as aStorageClass).FileName := aFileName
-  else
-  begin
-    // class not already registered -> create and register now
-    result := aStorageClass.Create(aClass, aServer, aFileName, aBinaryFile);
-    result.StorageLockShouldIncreaseOwnerInternalState := true;
-    aServer.StaticTableSetup(t, result, sStaticDataTable);
-  end;
-end;
-
 
 { TRestOrmServerFullMemory }
 
@@ -614,6 +591,63 @@ end;
 
 { ************ TRestServerFullMemory Standalone REST Server }
 
+function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
+  const aFileName: TFileName; aBinaryFile: boolean;
+  aStorageClass: TRestStorageInMemoryClass): TRestStorageInMemory;
+var
+  t: PtrInt;
+begin
+  if aStorageClass = nil then
+    // default in-memory engine
+    aStorageClass := TRestStorageInMemory;
+  t := aServer.Model.GetTableIndexExisting(aClass);
+  result := TRestStorageInMemory(aServer.GetStaticTableIndex(t));
+  if result <> nil then
+    // class already registered -> check aStorageClass, and update file name
+    (result as aStorageClass).FileName := aFileName
+  else
+  begin
+    // class not already registered -> create and register now
+    result := aStorageClass.Create(aClass, aServer, aFileName, aBinaryFile);
+    result.StorageLockShouldIncreaseOwnerInternalState := true;
+    aServer.StaticTableSetup(t, result, sStaticDataTable);
+  end;
+end;
+
+function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
+  aHandleUserAuthentication: boolean): TRestServer;
+var
+  c: TRestClass;
+  fake: TSynConnectionDefinition;
+begin
+  fake := TSynConnectionDefinition.Create;
+  try
+    // search SQLite3 by name, available if mormot.orm.sqlite3 is linked
+    fake.Kind := 'TRestServerDB';
+    c := TRest.ClassFrom(fake);
+    if (c = nil) or
+       not c.InheritsFrom(TRestServer) then
+    begin
+      fake.Kind := 'TSQLRestServerDB';
+      c := TRest.ClassFrom(fake);
+    end;
+    if (c = nil) or
+       not c.InheritsFrom(TRestServer) then
+    begin
+      // fallback if SQLite3 not linked
+      result := TRestServerFullMemory.Create(aModel, aHandleUserAuthentication);
+      exit;
+    end;
+    // we have the SQLite3 engine at hand
+    fake.ServerName := ':memory:';
+    result := TRestServerClass(c).RegisteredClassCreateFrom(aModel, fake,
+      aHandleUserAuthentication);
+  finally
+    fake.Free;
+  end;
+end;
+
+
 { TRestServerFullMemory }
 
 constructor TRestServerFullMemory.Create(aModel: TOrmModel;
@@ -652,39 +686,6 @@ begin
   begin
     (fOrmInstance as TRestOrmServerFullMemory).UpdateToFile;
     Ctxt.Success;
-  end;
-end;
-
-function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
-  aHandleUserAuthentication: boolean): TRestServer;
-var
-  c: TRestClass;
-  fake: TSynConnectionDefinition;
-begin
-  fake := TSynConnectionDefinition.Create;
-  try
-    // search SQLite3 by name, available if mormot.orm.sqlite3 is linked
-    fake.Kind := 'TRestServerDB';
-    c := TRest.ClassFrom(fake);
-    if (c = nil) or
-       not c.InheritsFrom(TRestServer) then
-    begin
-      fake.Kind := 'TSQLRestServerDB';
-      c := TRest.ClassFrom(fake);
-    end;
-    if (c = nil) or
-       not c.InheritsFrom(TRestServer) then
-    begin
-      // fallback if SQLLite3 not linked
-      result := TRestServerFullMemory.Create(aModel, aHandleUserAuthentication);
-      exit;
-    end;
-    // we have the SQLite3 engine at hand
-    fake.ServerName := ':memory:';
-    result := TRestServerClass(c).RegisteredClassCreateFrom(aModel, fake,
-      aHandleUserAuthentication);
-  finally
-    fake.Free;
   end;
 end;
 

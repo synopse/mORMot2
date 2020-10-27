@@ -1750,10 +1750,16 @@ end;
 
 function TECCCertificate.ToVariant(withBase64: boolean): variant;
 begin
-  result := _ObjFast(['Version', Version, 'Serial', Serial, 'Issuer', Issuer,
-    'IssueDate', IssueDate, 'ValidityStart', ValidityStart, 'ValidityEnd',
-    ValidityEnd, 'AuthoritySerial', AuthoritySerial, 'AuthorityIssuer',
-    AuthorityIssuer, 'IsSelfSigned', IsSelfSigned]);
+  result := _ObjFast([
+    'Version', Version,
+    'Serial', Serial,
+    'Issuer', Issuer,
+    'IssueDate', IssueDate,
+    'ValidityStart', ValidityStart,
+    'ValidityEnd', ValidityEnd,
+    'AuthoritySerial', AuthoritySerial,
+    'AuthorityIssuer', AuthorityIssuer,
+    'IsSelfSigned', IsSelfSigned]);
   if withBase64 then
     TDocVariantData(result).AddValue('Base64', RawUTF8ToVariant(ToBase64));
 end;

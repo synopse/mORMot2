@@ -23,7 +23,7 @@ uses
   classes,
   variants,
   contnrs,
-  mormot.lib.z,
+  mormot.lib.z, // we use zlib crc32 as default URI signature
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,

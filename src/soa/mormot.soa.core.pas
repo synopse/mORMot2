@@ -890,9 +890,13 @@ begin
   VarClear(result);
   with TDocVariantData(result) do
     if IDAsHexa then
-      InitObject(['ID', Int64ToHex(fID), MethodName, Method], JSON_OPTIONS_FAST)
+      InitObject([
+        'ID', Int64ToHex(fID),
+        MethodName, Method], JSON_OPTIONS_FAST)
     else
-      InitObject(['ID', fID, MethodName, Method], JSON_OPTIONS_FAST);
+      InitObject([
+        'ID', fID,
+        MethodName, Method], JSON_OPTIONS_FAST);
   m := Service.FindMethodIndex(Method);
   if m >= 0 then
     Service.Methods[m].ArgsAsDocVariantObject(

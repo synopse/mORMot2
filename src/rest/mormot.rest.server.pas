@@ -27,7 +27,7 @@ uses
   classes,
   variants,
   contnrs,
-  mormot.lib.z,
+  mormot.lib.z, // zlib's crc32 for private hash
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -3870,8 +3870,10 @@ begin
         end
         else
           // append binary file as an object, with Base64-encoded data
-          res.AddValue(name, _ObjFast(['data', BinToBase64(Content), 'filename',
-            FileName, 'contenttype', ContentType]));
+          res.AddValue(name, _ObjFast([
+            'data', BinToBase64(Content),
+            'filename', FileName,
+            'contenttype', ContentType]));
   end;
 end;
 

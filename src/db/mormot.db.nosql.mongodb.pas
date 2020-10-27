@@ -3067,8 +3067,10 @@ var
   res: variant;
   usr: TDocVariantData;
 begin
-  usr.InitObject(['createUser', UserName,
-    'pwd', PasswordDigest(UserName, Password), 'digestPassword', false,
+  usr.InitObject([
+    'createUser', UserName,
+    'pwd', PasswordDigest(UserName, Password),
+    'digestPassword', false,
     'roles', roles], JSON_OPTIONS_FAST);
   // note: passwordDigestor:"client" fails
   if client.ServerBuildInfoNumber >= 4000000 then
