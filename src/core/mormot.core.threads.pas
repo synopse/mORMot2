@@ -131,7 +131,7 @@ type
     ElapsedMS: Integer) of object;
 
   /// event prototype used e.g. by TSynBackgroundThreadAbstract and TSynThread callbacks
-  TNotifyThreadEvent = procedure(Sender: TThread) of object;
+  TOnNotifyThread = procedure(Sender: TThread) of object;
 
   /// abstract TThread with its own execution content
   // - you should not use this class directly, but use either
@@ -140,8 +140,8 @@ type
   TSynBackgroundThreadAbstract = class(TThread)
   protected
     fProcessEvent: TEvent;
-    fOnBeforeExecute: TNotifyThreadEvent;
-    fOnAfterExecute: TNotifyThreadEvent;
+    fOnBeforeExecute: TOnNotifyThread;
+    fOnAfterExecute: TOnNotifyThread;
     fThreadName: RawUTF8;
     fExecute: (exCreated, exRun, exFinished);
     fExecuteLoopPause: boolean;
@@ -155,8 +155,8 @@ type
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, or
     // at least set OnAfterExecute to TSynLogFamily.OnThreadEnded
     constructor Create(const aThreadName: RawUTF8;
-      OnBeforeExecute: TNotifyThreadEvent = nil;
-      OnAfterExecute: TNotifyThreadEvent = nil;
+      OnBeforeExecute: TOnNotifyThread = nil;
+      OnAfterExecute: TOnNotifyThread = nil;
       CreateSuspended: boolean = false); reintroduce;
     /// release used resources
     // - calls WaitForNotExecuting(100) for proper finalization
@@ -223,8 +223,8 @@ type
     fCallerThreadID: TThreadID;
     fBackgroundException: Exception;
     fOnIdle: TOnIdleSynBackgroundThread;
-    fOnBeforeProcess: TNotifyThreadEvent;
-    fOnAfterProcess: TNotifyThreadEvent;
+    fOnBeforeProcess: TOnNotifyThread;
+    fOnAfterProcess: TOnNotifyThread;
     fPendingProcessFlag: TSynBackgroundThreadProcessStep;
     fPendingProcessLock: TSynLocker;
     procedure ExecuteLoop; override;
@@ -244,8 +244,8 @@ type
     // - you could define some callbacks to nest the thread execution, e.g.
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(aOnIdle: TOnIdleSynBackgroundThread;
-      const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent = nil;
-      OnAfterExecute: TNotifyThreadEvent = nil); reintroduce;
+      const aThreadName: RawUTF8; OnBeforeExecute: TOnNotifyThread = nil;
+      OnAfterExecute: TOnNotifyThread = nil); reintroduce;
     /// finalize the thread
     destructor Destroy; override;
     /// launch Process abstract method asynchronously in the background thread
@@ -278,9 +278,9 @@ type
     // - to be used e.g. to ensure no re-entrance from User Interface messages
     property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
     /// optional callback event triggered in Execute before each Process
-    property OnBeforeProcess: TNotifyThreadEvent read fOnBeforeProcess write fOnBeforeProcess;
+    property OnBeforeProcess: TOnNotifyThread read fOnBeforeProcess write fOnBeforeProcess;
     /// optional callback event triggered in Execute after each Process
-    property OnAfterProcess: TNotifyThreadEvent read fOnAfterProcess write fOnAfterProcess;
+    property OnAfterProcess: TOnNotifyThread read fOnAfterProcess write fOnAfterProcess;
   end;
 
   /// background process method called by TSynBackgroundThreadEvent
@@ -368,8 +368,8 @@ type
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(const aThreadName: RawUTF8;
       aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-      aOnBeforeExecute: TNotifyThreadEvent = nil;
-      aOnAfterExecute: TNotifyThreadEvent = nil; aStats: TSynMonitorClass = nil;
+      aOnBeforeExecute: TOnNotifyThread = nil;
+      aOnAfterExecute: TOnNotifyThread = nil; aStats: TSynMonitorClass = nil;
       CreateSuspended: boolean = false); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
@@ -430,8 +430,8 @@ type
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, as
     // made by TRestBackgroundTimer.Create
     constructor Create(const aThreadName: RawUTF8;
-      aOnBeforeExecute: TNotifyThreadEvent = nil;
-      aOnAfterExecute: TNotifyThreadEvent = nil;
+      aOnBeforeExecute: TOnNotifyThread = nil;
+      aOnAfterExecute: TOnNotifyThread = nil;
       aStats: TSynMonitorClass = nil); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
@@ -605,14 +605,14 @@ type
 type
   /// callback implementing some parallelized process for TSynParallelProcess
   // - if 0<=IndexStart<=IndexStop, it should execute some process
-  TSynParallelProcessMethod = procedure(IndexStart, IndexStop: integer) of object;
+  TOnSynParallelProcess = procedure(IndexStart, IndexStop: integer) of object;
 
   /// thread executing process for TSynParallelProcess
   TSynParallelProcessThread = class(TSynBackgroundThreadMethodAbstract)
   protected
-    fMethod: TSynParallelProcessMethod;
+    fMethod: TOnSynParallelProcess;
     fIndexStart, fIndexStop: integer;
-    procedure Start(Method: TSynParallelProcessMethod; IndexStart, IndexStop: integer);
+    procedure Start(Method: TOnSynParallelProcess; IndexStart, IndexStop: integer);
     /// executes fMethod(fIndexStart,fIndexStop)
     procedure Process; override;
   public
@@ -637,8 +637,8 @@ type
     // - if ThreadPoolCount is 0, no thread would be created, and process
     // would take place in the current thread
     constructor Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
-      OnBeforeExecute: TNotifyThreadEvent = nil;
-      OnAfterExecute: TNotifyThreadEvent = nil;
+      OnBeforeExecute: TOnNotifyThread = nil;
+      OnAfterExecute: TOnNotifyThread = nil;
       MaxThreadPoolCount: integer = 32); reintroduce; virtual;
     /// finalize the thread pool
     destructor Destroy; override;
@@ -649,7 +649,7 @@ type
     // - if OnMainThreadIdle is set, the current thread (which is expected to be
     // e.g. the main UI thread) won't process anything, but call this event
     // during waiting for the background threads
-    procedure ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+    procedure ParallelRunAndWait(const Method: TOnSynParallelProcess;
       MethodCount: integer; const OnMainThreadIdle: TNotifyEvent = nil);
   published
     /// how many threads have been activated
@@ -680,7 +680,7 @@ type
     // we defined an fOnThreadTerminate event which would be run in the terminated
     // thread context (whereas TThread.OnTerminate is called in the main thread)
     // -> see THttpServerGeneric.OnHttpThreadTerminate event property
-    fOnThreadTerminate: TNotifyThreadEvent;
+    fOnThreadTerminate: TOnNotifyThread;
     procedure DoTerminate; override;
   public
     /// initialize the server instance, in non suspended state
@@ -734,8 +734,8 @@ type
     fSubThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
-    fOnThreadTerminate: TNotifyThreadEvent;
-    fOnThreadStart: TNotifyThreadEvent;
+    fOnThreadTerminate: TOnNotifyThread;
+    fOnThreadStart: TOnNotifyThread;
     fTerminated: boolean;
     fContentionAbortCount: cardinal;
     fContentionTime: Int64;
@@ -950,7 +950,7 @@ end;
 { TSynBackgroundThreadAbstract }
 
 constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
-  OnBeforeExecute: TNotifyThreadEvent; OnAfterExecute: TNotifyThreadEvent;
+  OnBeforeExecute: TOnNotifyThread; OnAfterExecute: TOnNotifyThread;
   CreateSuspended: boolean);
 begin
   fProcessEvent := TEvent.Create(nil, false, false, '');
@@ -1067,7 +1067,7 @@ end;
 
 constructor TSynBackgroundThreadMethodAbstract.Create(
   aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8;
-  OnBeforeExecute, OnAfterExecute: TNotifyThreadEvent);
+  OnBeforeExecute, OnAfterExecute: TOnNotifyThread);
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fCallerEvent := TEvent.Create(nil, false, false, '');
@@ -1314,7 +1314,7 @@ end;
 
 constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
   aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass;
+  aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass;
   CreateSuspended: boolean);
 begin
   if not Assigned(aOnProcess) then
@@ -1376,7 +1376,7 @@ var
   ProcessSystemUse: TSystemUse;
 
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
-  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass);
+  aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
 begin
   fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask);
   fTaskLock.Init;
@@ -1820,7 +1820,7 @@ begin
   fMethod := nil;
 end;
 
-procedure TSynParallelProcessThread.Start(Method: TSynParallelProcessMethod;
+procedure TSynParallelProcessThread.Start(Method: TOnSynParallelProcess;
   IndexStart, IndexStop: integer);
 begin
   fMethod := Method;
@@ -1833,7 +1833,7 @@ end;
 { TSynParallelProcess }
 
 constructor TSynParallelProcess.Create(ThreadPoolCount: integer;
-  const ThreadName: RawUTF8; OnBeforeExecute, OnAfterExecute: TNotifyThreadEvent;
+  const ThreadName: RawUTF8; OnBeforeExecute, OnAfterExecute: TOnNotifyThread;
   MaxThreadPoolCount: integer);
 var
   i: PtrInt;
@@ -1859,7 +1859,7 @@ begin
   inherited;
 end;
 
-procedure TSynParallelProcess.ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+procedure TSynParallelProcess.ParallelRunAndWait(const Method: TOnSynParallelProcess;
   MethodCount: integer; const OnMainThreadIdle: TNotifyEvent);
 var
   use, t, n, perthread: integer;

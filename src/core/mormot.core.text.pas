@@ -9484,9 +9484,9 @@ begin
   end
   else if Context.ECode <> 0 then
   begin
-    WR.AddShort(' (');
+    WR.Add(' ', '(');
     WR.AddPointer(Context.ECode);
-    WR.AddShort(')');
+    WR.Add(')');
   end;
   result := false; // caller should append "at EAddr" and the stack trace
 end;

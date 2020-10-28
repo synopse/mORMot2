@@ -1131,7 +1131,7 @@ Write:    case ColumnType of
               end;
             ftBlob:
               if fForceBlobAsNull then
-                WR.AddShort('null')
+                WR.AddNull
               else
               begin
                 if ColumnValueInlined then
@@ -1141,10 +1141,10 @@ Write:    case ColumnType of
                 WR.WrBase64(P, V^.Length, true); // withMagic=true
               end;
           else
-            WR.AddShort('null');
+            WR.AddNull;
           end;
         stIsNull:
-          WR.AddShort('null');
+          WR.AddNull;
         stTruncated:
           begin
             LogTruncatedColumn(fColumns[col]);
@@ -1152,7 +1152,7 @@ Write:    case ColumnType of
           end;
       else
         begin
-          WR.AddShort('null');
+          WR.AddNull;
           LogStatusError(V^.Status, @fColumns[col]);
         end;
       end;

@@ -984,6 +984,11 @@ type
   TOnSQLDBProcess = procedure(Sender: TSQLDBConnection; Event:
     TOnSQLDBProcessEvent) of object;
 
+  /// event triggered when an expired password is detected
+  // - will allow to provide a new password
+  TOnPasswordExpired = function (Sender: TSQLDBConnection;
+    var APassword: RawUTF8): boolean of object;
+
   /// event handler called when the low-level driver send some warning information
   // - errors will trigger Exceptions, but sometimes the database driver returns
   // some non critical information, which is logged and may be intercepted using
@@ -4600,7 +4605,7 @@ var
                   else
                     AddString(DB_FIELDS[dFirebird, FieldTypes[f]]);
                   end;
-                AddShort('=?,');
+                AddShorter('=?,');
               end;
               CancelLastComma;
               Add(#10, ',');
@@ -4628,9 +4633,9 @@ var
                 Add(',');
               end;
               CancelLastComma;
-              AddShort(');'#10);
+              AddShorter(');'#10);
             end;
-            AddShort('end');
+            AddShorter('end');
             if TextLength > 32700 then
               raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert: Firebird Execute Block length=%',
                 [self, TextLength]);
@@ -4641,7 +4646,7 @@ var
             AddShort('insert all'#10); // see http://stackoverflow.com/a/93724
             for r := 1 to rowcount do
             begin
-              AddShort('into ');
+              AddShorter('into ');
               AddString(TableName);
               Add(' ', '(');
               for f := 0 to maxf do
@@ -4654,7 +4659,7 @@ var
               for f := 0 to maxf do
                 Add('?', ',');
               CancelLastComma;
-              AddShort(')'#10);
+              AddShorter(')'#10);
             end;
             AddShort('select 1 from dual');
             SQLCached := true;
@@ -4843,10 +4848,10 @@ begin
           v := FieldValues[f, r]; // includes single quotes (#39)
           if (v = '') or
              (v = 'null') then
-            W.AddShort('null')
+            W.AddNull
           else if FieldTypes[f] = ftDate then
             if v = #39#39 then
-              W.AddShort('null')
+              W.AddNull
             else
             begin
               W.AddShort('timestamp ');
@@ -4868,10 +4873,10 @@ begin
           W.Add(',');
         end;
         W.CancelLastComma;
-        W.AddShort(');'#10);
+        W.AddShorter(');'#10);
         inc(r);
       until r = RowCount;
-      W.AddShort('end');
+      W.AddShorter('end');
       with Props.NewThreadSafeStatement do
         try
           Execute(W.Text, false);
@@ -5508,11 +5513,11 @@ begin
     if WR.Expand then
       WR.AddFieldName(ColumnName(col)); // add '"ColumnName":'
     if ColumnNull(col) then
-      WR.AddShort('null')
+      WR.AddNull
     else
       case ColumnType(col) of
         ftNull:
-          WR.AddShort('null');
+          WR.AddNull;
         ftInt64:
           WR.Add(ColumnInt(col));
         ftDouble:
@@ -5533,7 +5538,7 @@ begin
           end;
         ftBlob:
           if fForceBlobAsNull then
-            WR.AddShort('null')
+            WR.AddNull
           else
           begin
             blob := ColumnBlob(col);
@@ -5709,7 +5714,7 @@ begin
   W := TTextWriter.Create(Dest, 65536);
   try
     if AddBOM then
-      W.AddShort(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
+      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
     // add CSV header
     for F := 0 to FMax do
     begin
@@ -5734,7 +5739,7 @@ begin
         ColumnToSQLVar(F, V, tmp);
         case V.VType of
           ftNull:
-            W.AddShort(NULL[Tab]);
+            W.AddShorter(NULL[Tab]);
           ftInt64:
             W.Add(V.VInt64);
           ftDouble:
@@ -5761,7 +5766,7 @@ begin
                 W.AddNoJSONEscape(V.VText);
             end;
           ftBlob:
-            W.AddShort(blob[Tab]);  // ForceBlobAsNull should be true
+            W.AddShorter(blob[Tab]);  // ForceBlobAsNull should be true
         else
           raise ESQLDBException.CreateUTF8('%.FetchAllToCSVValues: Invalid ColumnType(%) %',
             [self, F, ToText(ColumnType(F))^]);
@@ -7096,7 +7101,7 @@ procedure TSQLDBStatementWithParams.AddParamValueAsText(Param: integer;
 begin
   dec(Param);
   if cardinal(Param) >= cardinal(fParamCount) then
-    Dest.AddShort('null')
+    Dest.AddNull
   else
     with fParams[Param] do
       if VArray = nil then
@@ -7114,7 +7119,7 @@ begin
           ftBlob:
             Dest.AddU(length(VData));
         else
-          Dest.AddShort('null');
+          Dest.AddNull;
         end
       else
         Dest.AddString(VArray[0]); // first item is enough in the logs

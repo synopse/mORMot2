@@ -36,10 +36,6 @@ uses
 { ************ TSQLDBOracleConnection* and TSQLDBOracleStatement Classes }
 
 type
-  /// event triggered when an expired password is detected
-  // - will allow to provide a new password
-  TOnPasswordExpired = function (Sender: TSQLDBConnection; var APassword: RawUTF8): boolean of object;
-
   /// will implement properties shared by native Oracle Client Interface connections
   TSQLDBOracleConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
   protected
@@ -922,7 +918,7 @@ begin
         fRowFetchedCurrent];
       if (indicator = -1) or
          (ColumnType = ftNull) then // ftNull for SQLT_RSET
-        WR.AddShort('null')
+        WR.AddNull
       else
       begin
         if indicator <> 0 then
@@ -961,7 +957,7 @@ begin
             end;
           ftBlob:
             if fForceBlobAsNull then
-              WR.AddShort('null')
+              WR.AddNull
             else if ColumnValueInlined then
               SetString(U, PAnsiChar(V), ColumnValueDBSize)
             else

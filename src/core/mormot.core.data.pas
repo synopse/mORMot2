@@ -1019,7 +1019,7 @@ type
   TDynArraySortCompare = function(const A, B): integer;
 
   /// event oriented version of TDynArraySortCompare
-  TEventDynArraySortCompare = function(const A, B): integer of object;
+  TOnDynArraySortCompare = function(const A, B): integer of object;
 
 {$ifndef PUREMORMOT2}
 
@@ -1363,7 +1363,7 @@ type
     // in order to be sorted in increasing order according to Compare function,
     // unless aReverse is true
     // - it won't mark the array as Sorted, since the comparer is local
-    procedure Sort(const aCompare: TEventDynArraySortCompare;
+    procedure Sort(const aCompare: TOnDynArraySortCompare;
       aReverse: boolean = false); overload;
     /// search the items range which match a given value in a sorted dynamic array
     // - this method will use the Compare property function for the search
@@ -1672,7 +1672,7 @@ type
 
   /// event handler to be used for hashing of a dynamic array element
   // - can be set as an alternative to TDynArrayHashOne
-  TEventDynArrayHashOne = function(const Item): cardinal of object;
+  TOnDynArrayHashOne = function(const Item): cardinal of object;
 
   {.$define DYNARRAYHASHCOLLISIONCOUNT}
 
@@ -1689,7 +1689,7 @@ type
   private
     DynArray: PDynArray;
     HashItem: TDynArrayHashOne;
-    EventHash: TEventDynArrayHashOne;
+    EventHash: TOnDynArrayHashOne;
     HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
     HashTableSize: integer;
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
@@ -1703,7 +1703,7 @@ type
     /// associated item comparison - may differ from DynArray^.Compare
     Compare: TDynArraySortCompare;
     /// custom method-based comparison function
-    EventCompare: TEventDynArraySortCompare;
+    EventCompare: TOnDynArraySortCompare;
     /// associated item hasher
     Hasher: THasher;
     /// after how many FindBeforeAdd() or Scan() the hashing starts - default 32
@@ -1715,14 +1715,14 @@ type
     /// initialize the hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
-     aEventHash: TEventDynArrayHashOne; aHasher: THasher; aCompare: TDynArraySortCompare;
-     aEventCompare: TEventDynArraySortCompare; aCaseInsensitive: boolean);
+     aEventHash: TOnDynArrayHashOne; aHasher: THasher; aCompare: TDynArraySortCompare;
+     aEventCompare: TOnDynArraySortCompare; aCaseInsensitive: boolean);
     /// initialize a known hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
     procedure InitSpecific(aDynArray: PDynArray; aKind: TRttiParserType;
       aCaseInsensitive: boolean; aHasher: THasher);
     /// allow custom hashing via a method event
-    procedure SetEventHash(const event: TEventDynArrayHashOne);
+    procedure SetEventHash(const event: TOnDynArrayHashOne);
     /// search for an element value inside the dynamic array without hashing
     // - trigger hashing if ScanCounter reaches CountTrigger*2
     function Scan(Item: pointer): integer;
@@ -1812,7 +1812,7 @@ type
   protected
   {$endif UNDIRECTDYNARRAY}
     fHash: TDynArrayHasher;
-    procedure SetEventHash(const event: TEventDynArrayHashOne);
+    procedure SetEventHash(const event: TOnDynArrayHashOne);
       {$ifdef HASINLINE}inline;{$endif}
     function GetHashFromIndex(aIndex: PtrInt): Cardinal;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1955,7 +1955,7 @@ type
     property Hash[aIndex: PtrInt]: Cardinal read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
     // - will be used instead of Compare, to allow object-oriented callbacks
-    property EventCompare: TEventDynArraySortCompare
+    property EventCompare: TOnDynArraySortCompare
       read fHash.EventCompare write fHash.EventCompare;
     /// custom hash function to be used for hashing of a dynamic array element
     property HashItem: TDynArrayHashOne read fHash.HashItem;
@@ -1963,7 +1963,7 @@ type
     // - this object-oriented callback will be used instead of HashItem()
     // on each dynamic array entries - HashItem will still be used on
     // const Item values, since they may be just a sub part of the stored entry
-    property EventHash: TEventDynArrayHashOne
+    property EventHash: TOnDynArrayHashOne
       read fHash.EventHash write SetEventHash;
     /// after how many items the hashing take place
     // - for smallest arrays, O(n) search if faster than O(1) hashing, since
@@ -6603,7 +6603,7 @@ type
   // internal structure used to make QuickSort faster & with less stack usage
   TDynArrayQuickSort = object
     Compare: TDynArraySortCompare;
-    CompareEvent: TEventDynArraySortCompare;
+    CompareEvent: TOnDynArraySortCompare;
     Pivot: pointer;
     index: PCardinalArray;
     ElemSize: cardinal;
@@ -6916,7 +6916,7 @@ begin
     end;
 end;
 
-procedure TDynArray.Sort(const aCompare: TEventDynArraySortCompare; aReverse: boolean);
+procedure TDynArray.Sort(const aCompare: TOnDynArraySortCompare; aReverse: boolean);
 var
   QuickSort: TDynArrayQuickSort;
   R: PtrInt;
@@ -7682,8 +7682,8 @@ const
     nil, nil, nil, nil, nil, nil));
 
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
-  aEventHash: TEventDynArrayHashOne; aHasher: THasher;
-  aCompare: TDynArraySortCompare; aEventCompare: TEventDynArraySortCompare;
+  aEventHash: TOnDynArrayHashOne; aHasher: THasher;
+  aCompare: TDynArraySortCompare; aEventCompare: TOnDynArraySortCompare;
   aCaseInsensitive: boolean);
 begin
   DynArray := aDynArray;
@@ -8027,7 +8027,7 @@ begin
     result := 0;
 end;
 
-procedure TDynArrayHasher.SetEventHash(const event: TEventDynArrayHashOne);
+procedure TDynArrayHasher.SetEventHash(const event: TOnDynArrayHashOne);
 begin
   EventHash := event;
   Clear;
@@ -8389,7 +8389,7 @@ begin
     ItemCopy(PAnsiChar(Value^) + cardinal(result) * ElemSize, @ItemToFill);
 end;
 
-procedure TDynArrayHashed.SetEventHash(const event: TEventDynArrayHashOne);
+procedure TDynArrayHashed.SetEventHash(const event: TOnDynArrayHashOne);
 begin
   fHash.SetEventHash(event);
 end;

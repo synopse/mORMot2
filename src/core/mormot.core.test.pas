@@ -34,7 +34,7 @@ uses
 type
   /// the prototype of an individual test
   // - to be used with TSynTest descendants
-  TSynTestEvent = procedure of object;
+  TOnSynTest = procedure of object;
 
   /// allows to tune TSynTest process
   // - tcoLogEachCheck will log as sllCustom4 each non void Check() message
@@ -55,7 +55,7 @@ type
     /// raw method name, as defined in pascal code (not uncamelcased)
     MethodName: RawUTF8;
     /// direct access to the method execution
-    Method: TSynTestEvent;
+    Method: TOnSynTest;
     /// the test case holding this method
     Test: TSynTest;
     /// the index of this method in the TSynTestCase
@@ -89,7 +89,7 @@ type
     /// register a specified test to this class instance
     // - Create will register all published methods of this class, but
     // your code may initialize its own set of methods on need
-    procedure Add(const aMethod: TSynTestEvent; const aMethodName: RawUTF8; const aIdent: string);
+    procedure Add(const aMethod: TOnSynTest; const aMethodName: RawUTF8; const aIdent: string);
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
@@ -292,7 +292,7 @@ type
   TSynTestFaileds = array of TSynTestFailed;
 
   /// event signature for TSynTests.CustomOutput callback
-  TSynTestOutput = procedure(const value: RawUTF8) of object;
+  TOnSynTestOutput = procedure(const value: RawUTF8) of object;
 
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
@@ -335,7 +335,7 @@ type
     CustomVersions: string;
     /// allow redirection to any kind of output
     // - will be called in addition to default console write()
-    CustomOutput: TSynTestOutput;
+    CustomOutput: TOnSynTestOutput;
     /// contains the run elapsed time
     RunTimer, TestTimer, TotalTimer: TPrecisionTimer;
     /// create the test suit
@@ -462,7 +462,7 @@ uses
 
 { TSynTest }
 
-procedure TSynTest.Add(const aMethod: TSynTestEvent; const aMethodName: RawUTF8;
+procedure TSynTest.Add(const aMethod: TOnSynTest; const aMethodName: RawUTF8;
   const aIdent: string);
 var
   n: integer;
@@ -514,7 +514,7 @@ begin
         s := Ansi7ToString(copy(Name, 2, 100))
       else
         s := Ansi7ToString(UnCamelCase(Name));
-      Add(TSynTestEvent(Method), Name, s);
+      Add(TOnSynTest(Method), Name, s);
     end;
 end;
 

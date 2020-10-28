@@ -315,7 +315,7 @@ type
     Asc: boolean;
   end;
 
-  /// used to define the triggered Event types for TNotifySQLEvent
+  /// used to define the triggered Event types for TOnOrmEvent
   // - some Events can be triggered via TRestServer.OnUpdateEvent when
   // a Table is modified, and actions can be authorized via overriding the
   // TRest.RecordCanBeUpdated method
@@ -1625,6 +1625,11 @@ type
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EOrmException if not found in the internal list
     function IndexByNameOrExcept(const aName: RawUTF8): integer;
+    /// find an item by name in the list, including RowID/ID
+    // - will identify 'ID' / 'RowID' field name as -1
+    // - raise an EOrmException if not found in the internal list
+    // - aName is not defined as "const aName" since it is made an ASCIIZ
+    function IndexByNameOrExceptShort(aName: ShortString): integer;
     /// find one or several items by name in the list, including RowID/ID
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EOrmException if not found in the internal list
@@ -6248,7 +6253,15 @@ type
     /// map a field name from its internal name to its external name
     // - raise an EOrmException if the supplied field name is not defined in
     // the TOrm as ID or a published property
-    function InternalToExternal(const FieldName: RawUTF8): RawUTF8;
+    function InternalToExternal(const FieldName: RawUTF8): RawUTF8; overload;
+    /// map a field name from its internal name to its external name
+    // - raise an EOrmException if the supplied field name is not defined in
+    // the TOrm as ID or a published property
+    function InternalToExternal(FieldName: PShortString): RawUTF8; overload;
+    /// map a field name from its internal name to its external name
+    // - raise an EOrmException if the supplied field name is not defined in
+    // the TOrm as ID or a published property
+    function InternalToExternal(BlobField: PRttiProp): RawUTF8; overload;
     /// map a CSV list of field names from its internals to its externals values
     // - raise an EOrmException if any of the supplied field name is not defined
     // in the TOrm as ID or as property (RowIDFieldName or FieldNames[])
@@ -8521,7 +8534,7 @@ begin
         begin
           if FieldCount = 0 then
             raise EJSONObjectDecoder.Create('Invalid EncodeAsSQLPrepared(0)');
-          W.AddShort('update ');
+          W.AddShorter('update ');
           W.AddString(TableName);
           if DecodedFieldTypesToUnnest <> nil then
           begin
@@ -8530,7 +8543,7 @@ begin
             for F := 0 to FieldCount - 1 do
             begin
               W.AddString(DecodedFieldNames^[F]);
-              W.AddShort('=v.');
+              W.AddShorter('=v.');
               W.AddString(DecodedFieldNames^[F]);
               W.Add(',');
             end;
@@ -8540,7 +8553,7 @@ begin
             begin
               W.AddShort(' unnest(?::');
               W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[F]]);
-              W.AddShort('[]),');
+              W.AddShorter('[]),');
             end;
             W.AddShort(' unnest(?::int8[]) ) as v('); // last param is ID
             for F := 0 to FieldCount - 1 do
@@ -8551,17 +8564,17 @@ begin
             W.AddString(UpdateIDFieldName);
             W.AddShort(') where t.');
             W.AddString(UpdateIDFieldName);
-            W.AddShort('=v.');
+            W.AddShorter('=v.');
             W.AddString(UpdateIDFieldName);
           end
           else
           begin
             // regular UPDATE statement
-            W.AddShort(' set ');
+            W.AddShorter(' set ');
             for F := 0 to FieldCount - 1 do
             begin // append 'COL1=?,COL2=?'
               W.AddString(DecodedFieldNames^[F]);
-              W.AddShort('=?,');
+              W.AddShorter('=?,');
             end;
             W.CancelLastComma;
             W.AddShort(' where ');
@@ -8596,7 +8609,7 @@ begin
               begin
                 W.AddShort('unnest(?::');
                 W.AddShort(PG_FT[DecodedFieldTypesToUnnest^[F]]);
-                W.AddShort('[]),');
+                W.AddShorter('[]),');
               end
             else
               // regular INSERT statement
@@ -8628,10 +8641,10 @@ var
   procedure AddValue;
   begin
     if InlinedParams = pInlined then
-      W.AddShort(':(');
+      W.AddShorter(':(');
     W.AddString(FieldValues[F]);
     if InlinedParams = pInlined then
-      W.AddShort('):,')
+      W.AddShorter('):,')
     else
       W.Add(',');
   end;
@@ -12429,6 +12442,21 @@ begin
   result := IndexByName(pointer(aName));
 end;
 
+function TOrmPropInfoList.IndexByNameOrExceptShort(aName: ShortString): integer;
+begin
+  if IsRowIDShort(aName) then
+    result := -1
+  else
+  begin
+    inc(aName[0]);
+    aName[ord(aName[0])] := #0; // make ASCIIZ
+    result := IndexByName(@aName[0]); // fast O(log(n)) binary search
+    if result < 0 then
+      raise EOrmException.CreateUTF8(
+        '%.IndexByNameOrExceptShort(%): unkwnown in %', [self, aName, fTable]);
+  end;
+end;
+
 function TOrmPropInfoList.IndexByNameOrExcept(const aName: RawUTF8): integer;
 begin
   if IsRowID(pointer(aName)) then
@@ -13853,7 +13881,7 @@ begin
         W.AddBinToHexDisplayQuoted(@i64, IDBinarySize);
       end
       else if U^ = nil then
-        W.AddShort('null')
+        W.AddNull
       else
         case fFieldType[f].ContentDB of
           ftInt64, ftDouble, ftCurrency:
@@ -13937,7 +13965,7 @@ begin
   W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
   try
     if AddBOM then
-      W.AddShort(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
+      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
     if Tab then
       CommaSep := #9;
     FMax := FieldCount - 1;
@@ -14031,7 +14059,7 @@ begin
       W.AddShort('<rs:data>');
       for r := RowFirst to RowLast do
       begin
-        W.AddShort('<z:row ');
+        W.AddShorter('<z:row ');
         for f := 0 to FieldCount - 1 do
         begin
           if U^ <> nil then
@@ -14048,7 +14076,7 @@ begin
       end;
       W.AddShort('</rs:data>');
     end;
-    W.AddShort('</xml>');
+    W.AddShorter('</xml>');
     W.FlushFinal;
   finally
     W.Free;
@@ -14123,7 +14151,7 @@ begin
         W.AddShort(XMLUTF8_HEADER);
         W.AddString(ODSContentHeader);
         W.Add(FieldCount);
-        W.AddShort('" />');
+        W.AddShorter('" />');
         if (self <> nil) and ((FieldCount > 0) or (fRowCount > 0)) then
         begin
           if withColumnTypes and (fFieldType = nil) then
@@ -14142,13 +14170,13 @@ begin
                     begin
                       W.AddShort('float" office:value="');
                       W.AddXmlEscape(U^);
-                      W.AddShort('" />');
+                      W.AddShorter('" />');
                     end;
                   ftDate:
                     begin
                       W.AddShort('date" office:date-value="');
                       W.AddXmlEscape(U^);
-                      W.AddShort('" />');
+                      W.AddShorter('" />');
                     end;
                 else
                   begin
@@ -14196,26 +14224,26 @@ begin
   U := pointer(fResults);
   for R := 0 to fRowCount do
   begin
-    Dest.AddShort('<tr>');
+    Dest.AddShorter('<tr>');
     for F := 0 to FieldCount - 1 do
     begin
       if R = 0 then
-        Dest.AddShort('<th>')
+        Dest.AddShorter('<th>')
       else
-        Dest.AddShort('<td>');
+        Dest.AddShorter('<td>');
       if Assigned(OnExportValue) and (R > 0) then
         Dest.AddHtmlEscapeUTF8(OnExportValue(self, R, F, true), hfOutsideAttributes)
       else
         Dest.AddHtmlEscape(U^, hfOutsideAttributes);
       if R = 0 then
-        Dest.AddShort('</th>')
+        Dest.AddShorter('</th>')
       else
-        Dest.AddShort('</td>');
+        Dest.AddShorter('</td>');
       inc(U); // points to next value
     end;
-    Dest.AddShort('</tr>'#10);
+    Dest.AddShorter('</tr>'#10);
   end;
-  Dest.AddShort('</table>');
+  Dest.AddShorter('</table>');
 end;
 
 function TOrmTable.GetHtmlTable(const Header: RawUTF8): RawUTF8;
@@ -14225,9 +14253,9 @@ var
 begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
-    W.AddShort('<html>');
+    W.AddShorter('<html>');
     W.AddString(Header);
-    W.AddShort('<body>'#10);
+    W.AddShorter('<body>'#10);
     GetHtmlTable(W);
     W.AddShort(#10'</body></html>');
     W.SetText(result);
@@ -16916,10 +16944,10 @@ var // Fields are not "const" since are modified if zero
 begin
   if self = nil then
   begin
-    W.AddShort('null');
+    W.AddNull;
     exit;
   end;
-  W.AddShort('{"ID":');
+  W.AddShorter('{"ID":');
   W.Add(fID);
   P := RecordProps;
   if IsZero(Fields) then
@@ -19676,7 +19704,7 @@ begin
   begin
     W := TTextWriter.CreateOwnedStream;
     try
-      W.AddShort('SELECT ');
+      W.AddShorter('SELECT ');
       // JoinedFieldsTable[0] is the class itself
       with Props.Props do
       begin
@@ -20725,7 +20753,7 @@ type
       if 0 in FieldNamesMatchInternal then
         W.Add(',')
       else
-        W.AddShort(' as ID,');
+        W.AddShorter(' as ID,');
     end;
     with fProps do
       for f := 0 to Fields.Count - 1 do
@@ -20787,6 +20815,23 @@ begin
     result := RowIDFieldName
   else
     result := fExtFieldNames[int];
+end;
+
+function TOrmPropertiesMapping.InternalToExternal(
+  FieldName: PShortString): RawUTF8;
+var
+  int: PtrInt;
+begin
+  int := fProps.Fields.IndexByNameOrExceptShort(FieldName^);
+  if int < 0 then
+    result := RowIDFieldName
+  else
+    result := fExtFieldNames[int];
+end;
+
+function TOrmPropertiesMapping.InternalToExternal(BlobField: PRttiProp): RawUTF8;
+begin
+  result := InternalToExternal(BlobField^.Name);
 end;
 
 function TOrmPropertiesMapping.InternalCSVToExternalCSV(
@@ -21601,7 +21646,7 @@ begin // '{"Table":[...,"POST",{object},...]}'
   if (fBatch = nil) or
      (fTable = nil) then
     raise EOrmException.CreateUTF8('%.RawAdd %', [self, SentData]);
-  fBatch.AddShort('"POST",');
+  fBatch.AddShorter('"POST",');
   fBatch.AddString(SentData);
   fBatch.Add(',');
   result := fBatchCount;
@@ -21652,15 +21697,15 @@ begin
      not (boPostNoSimpleFields in fOptions) then
   begin
     PostSimpleFields := true;
-    fBatch.AddShort('"SIMPLE');
+    fBatch.AddShorter('"SIMPLE');
   end
   else
   begin
     PostSimpleFields := false;
-    fBatch.AddShort('"POST');
+    fBatch.AddShorter('"POST');
   end;
   if fTable <> nil then  // '{"Table":[...,"POST",{object},...]}'
-    fBatch.AddShort('",')
+    fBatch.AddShorter('",')
   else
   begin
     fBatch.Add('@'); // '[...,"POST@Table",{object}',...]'
@@ -21799,12 +21844,12 @@ begin
     else
     begin // '{"Table":[...,"PUT",{object},...]}'
       tableIndex := fTableIndex;
-      fBatch.AddShort('"PUT",');
+      fBatch.AddShorter('"PUT",');
     end
   else
   begin
     tableIndex := fModel.GetTableIndexExisting(Props.Table);
-    fBatch.AddShort('"PUT@'); // '[...,"PUT@Table",{object}',...]'
+    fBatch.AddShorter('"PUT@'); // '[...,"PUT@Table",{object}',...]'
     fBatch.AddString(Props.SQLTableName);
     fBatch.Add('"', ',');
   end;

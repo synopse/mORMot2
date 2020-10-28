@@ -1359,7 +1359,7 @@ begin
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
     Data := fDataCurrentRowValues[col];
     if Data = nil then
-      WR.AddShort('null')
+      WR.AddNull
     else
       case fDataCurrentRowColTypes[col] of
         ftInt64:
@@ -1383,7 +1383,7 @@ begin
           end;
         ftBlob:
           if fForceBlobAsNull then
-            WR.AddShort('null')
+            WR.AddNull
           else
           begin
             DataLen := FromVarUInt32(Data);

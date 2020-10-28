@@ -169,7 +169,7 @@ type
     fExcludeServiceLogCustomAnswer: boolean;
     fBackgroundThread: TSynBackgroundThreadMethod;
     fOnMethodExecute: TOnServiceCanExecute;
-    fOnExecute: array of TInterfaceMethodExecuteEvent;
+    fOnExecute: array of TOnInterfaceMethodExecute;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
@@ -214,7 +214,7 @@ type
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
     // fields will contain the execution data context when Hook is called
     // - see OnMethodExecute if you want to implement security features
-    procedure AddInterceptor(const Hook: TInterfaceMethodExecuteEvent);
+    procedure AddInterceptor(const Hook: TOnInterfaceMethodExecute);
 
     /// retrieve an instance of this interface from the server side
     // - sicShared mode will retrieve the shared instance
@@ -1048,7 +1048,7 @@ begin
                   W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
                   W.Add(':');
                   if vIsSPI in ValueKindAsm then
-                    W.AddShort('"****",')
+                    W.AddShorter('"****",')
                   else
                     AddJSON(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
                 end;
@@ -1063,12 +1063,12 @@ begin
               with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do
               begin
                 len := length(Content);
-                W.AddShort('len:');
+                W.AddShorter('len:');
                 W.AddU(len);
                 if (Status <> 0) and
                    (Status <> HTTP_SUCCESS) then
                 begin
-                  W.AddShort(',status:');
+                  W.AddShorter(',status:');
                   W.AddU(Status);
                 end;
                 if not fExcludeServiceLogCustomAnswer and
@@ -1091,7 +1091,7 @@ begin
                     W.AddShort(ParamName^);
                     W.Add(':');
                     if vIsSPI in ValueKindAsm then
-                      W.AddShort('"****",')
+                      W.AddShorter('"****",')
                     else
                       AddJSON(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
                   end;
@@ -1451,7 +1451,7 @@ begin
 end;
 
 procedure TServiceFactoryServer.AddInterceptor(
-  const Hook: TInterfaceMethodExecuteEvent);
+  const Hook: TOnInterfaceMethodExecute);
 begin
   MultiEventAdd(fOnExecute, TMethod(Hook));
 end;

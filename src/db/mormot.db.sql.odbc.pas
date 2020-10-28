@@ -791,7 +791,7 @@ begin
         WR.AddFieldName(ColumnName); // add '"ColumnName":'
       res := GetCol(col, ColumnType);
       if res = colNull then
-        WR.AddShort('null')
+        WR.AddNull
       else
         case ColumnType of
           ftInt64:
@@ -811,7 +811,7 @@ begin
             end;
           ftBlob:
             if fForceBlobAsNull then
-              WR.AddShort('null')
+              WR.AddNull
             else
               WR.WrBase64(pointer(fColData[col]), ColumnDataSize, true);
         else

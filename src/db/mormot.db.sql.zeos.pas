@@ -1313,12 +1313,12 @@ begin // take care of the layout of internal ZDBC buffers for each provider
     if WR.Expand then
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
     if fResultSet.IsNull(col + FirstDbcIndex) then
-      WR.AddShort('null')
+      WR.AddNull
     else
     begin
       case fColumns[col].ColumnType of
         ftNull:
-          WR.AddShort('null');
+          WR.AddNull;
         ftInt64:
           if fDBMS in [dMySQL, dPostgreSQL] then
           begin
@@ -1364,7 +1364,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           end;
         ftBlob:
           if fForceBlobAsNull then
-            WR.AddShort('null')
+            WR.AddNull
           else if fDBMS in [dMySQL, dSQLite] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);

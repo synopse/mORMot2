@@ -960,7 +960,7 @@ begin
         W.AddString(W.ColNames[f]);
         with Data.Fields[f] do
           if IsNull then
-            W.AddShort('null')
+            W.AddNull
           else
             case DataType of
               ftBoolean:
@@ -1028,7 +1028,7 @@ begin
                 W.Add(AsFloat, SINGLE_PRECISION);
             {$endif UNICODE}
             else
-              W.AddShort('null'); // unhandled field type
+              W.AddNull; // unhandled field type
             end;
         W.Add(',');
       end;
@@ -1524,11 +1524,11 @@ begin
       if WR.Expand then
         WR.AddFieldName(ColumnName); // add '"ColumnName":'
       if TField(ColumnAttr).IsNull then
-        WR.AddShort('null')
+        WR.AddNull
       else
         case ColumnType of
           mormot.db.core.ftNull:
-            WR.AddShort('null');
+            WR.AddNull;
           mormot.db.core.ftInt64:
             if TField(ColumnAttr).DataType = ftBoolean then
               WR.Add(ord(TField(ColumnAttr).AsBoolean))
@@ -1567,7 +1567,7 @@ begin
             end;
           mormot.db.core.ftBlob:
             if fForceBlobAsNull then
-              WR.AddShort('null')
+              WR.AddNull
             else
             begin
               blob := ColumnBlob(col);

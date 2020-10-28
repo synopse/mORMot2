@@ -134,7 +134,7 @@ type
   /// used to identify the authentication failure reason
   // - as transmitted e.g. by TRestServerURIContext.AuthenticationFailed or
   // TRestServer.OnAuthenticationFailed
-  TNotifyAuthenticationFailedReason = (
+  TOnAuthenticationFailedReason = (
     afInvalidSignature,
     afRemoteServiceExecutionNotAllowed,
     afUnknownUser,afInvalidPassword,
@@ -143,10 +143,10 @@ type
     afSecureConnectionRequired,
     afJWTRequired);
 
-  /// abstract calling context for a TRestServerCallBack event handler
+  /// abstract calling context for a TOnRestServerCallBack event handler
   // - having a dedicated class avoid changing the implementation methods
   // signature if the framework add some parameters or behavior to it
-  // - see TRestServerCallBack for general code use
+  // - see TOnRestServerCallBack for general code use
   // - most of the internal methods are declared as virtual, so it allows any
   // kind of custom routing or execution scheme
   // - instantiated by the TRestServer.URI() method using its ServicesRouting
@@ -230,7 +230,7 @@ type
     // - the failure origin is stated by the Reason parameter
     // - this default implementation will just set OutStatus := HTTP_FORBIDDEN
     // and call TRestServer.OnAuthenticationFailed event (if any)
-    procedure AuthenticationFailed(Reason: TNotifyAuthenticationFailedReason); virtual;
+    procedure AuthenticationFailed(Reason: TOnAuthenticationFailedReason); virtual;
     /// direct launch of a method-based service
     // - URI() will ensure that MethodIndex>=0 before calling it
     procedure ExecuteSOAByMethod; virtual;
@@ -376,7 +376,7 @@ type
     /// the kind of static instance corresponding to the associated Table (if any)
     StaticKind: TRestServerKind;
     /// optional error message which will be transmitted as JSON error (if set)
-    // - contains e.g. TNotifyAuthenticationFailedReason text during
+    // - contains e.g. TOnAuthenticationFailedReason text during
     // TRestServer.OnAuthenticationFailed event call, or the reason of a
     // TRestServer.RecordCanBeUpdated failure
     CustomErrorMsg: RawUTF8;
@@ -720,7 +720,7 @@ type
   // - just add a published method of this type to any TRestServer descendant
   // - when TRestServer.URI receive a request for ModelRoot/MethodName
   // or ModelRoot/TableName/TableID/MethodName, it will check for a published method
-  // in its self instance named MethodName which MUST be of TRestServerCallBack
+  // in its self instance named MethodName which MUST be of TOnRestServerCallBack
   // type (not checked neither at compile time neither at runtime: beware!) and
   // call it to handle the request
   // - important warning: the method implementation MUST be thread-safe
@@ -790,14 +790,14 @@ type
   // ! begin
   // !   val(aClient.CallBackGetResult('sum', ['a', a, 'b', b]), result, err);
   // ! end;
-  TRestServerCallBack = procedure(Ctxt: TRestServerURIContext) of object;
+  TOnRestServerCallBack = procedure(Ctxt: TRestServerURIContext) of object;
 
   /// description of a method-based service
   TRestServerMethod = record
     /// the method name
     Name: RawUTF8;
     /// the event which will be executed for this method
-    CallBack: TRestServerCallBack;
+    CallBack: TOnRestServerCallBack;
     /// set to TRUE disable Authentication check for this method
     // - use TRestServer.ServiceMethodByPassAuthentication() method
     ByPassAuthentication: boolean;
@@ -814,7 +814,7 @@ type
 
 { ************ TRestServerRoutingREST/TRestServerRoutingJSON_RPC Requests Parsing Scheme }
 
-  /// calling context for a TRestServerCallBack using simple REST for
+  /// calling context for a TOnRestServerCallBack using simple REST for
   // interface-based services
   // - match TRestClientRoutingREST reciprocal class
   // - this class will use RESTful routing for interface-based services:
@@ -854,7 +854,7 @@ type
     procedure ExecuteSOAByInterface; override;
   end;
 
-  /// calling context for a TRestServerCallBack using JSON/RPC for
+  /// calling context for a TOnRestServerCallBack using JSON/RPC for
   // interface-based services
   // - match TRestClientRoutingJSON_RPC reciprocal class
   // - in this routing scheme, the URI will define the interface, then the
@@ -1098,7 +1098,7 @@ type
     fNoTimestampCoherencyCheck: Boolean;
     fTimestampCoherencySeconds: cardinal;
     fTimestampCoherencyTicks: cardinal;
-    fComputeSignature: TRestAuthenticationSignedURIComputeSignature;
+    fComputeSignature: TOnRestAuthenticationSignedURIComputeSignature;
     procedure SetNoTimestampCoherencyCheck(value: boolean);
     procedure SetTimestampCoherencySeconds(value: cardinal);
     procedure SetAlgorithm(value: TRestAuthenticationSignedURIAlgo);
@@ -1131,7 +1131,7 @@ type
     /// customize the session_signature signing algorithm with a specific function
     // - the very same function should be set on TRestClientURI
     // - to select a known hash algorithm, you may change the Algorithm property
-    property ComputeSignature: TRestAuthenticationSignedURIComputeSignature
+    property ComputeSignature: TOnRestAuthenticationSignedURIComputeSignature
       read fComputeSignature write fComputeSignature;
     /// customize the session_signature signing algorithm
     // - you need to set this value on the server side only; those known algorithms
@@ -1606,7 +1606,7 @@ type
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-  TNotifySQLEvent = function(Sender: TRestServer; Event: TOrmEvent;
+  TOnOrmEvent = function(Sender: TRestServer; Event: TOrmEvent;
     aTable: TOrmClass; const aID: TID;
     const aSentData: RawUTF8): boolean of object;
 
@@ -1616,14 +1616,14 @@ type
   // - to be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
   // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-  TNotifyFieldSQLEvent = function(Sender: TRestServer; Event: TOrmEvent;
+  TOnOrmFieldEvent = function(Sender: TRestServer; Event: TOrmEvent;
     aTable: TOrmClass; const aID: TID;
     const aAffectedFields: TFieldBits): boolean of object;
 
   /// session-related callbacks triggered by TRestServer
   // - for OnSessionCreate, returning TRUE will abort the session creation -
   // and you can set Ctxt.Call^.OutStatus to a corresponding error code
-  TNotifySQLSession = function(Sender: TRestServer; Session: TAuthSession;
+  TOnOrmSession = function(Sender: TRestServer; Session: TAuthSession;
     Ctxt: TRestServerURIContext): boolean of object;
 
   /// callback allowing to customize the retrieval of an authenticated user
@@ -1638,16 +1638,16 @@ type
 
   /// callback raised in case of authentication failure
   // - as used by TRestServerURIContext.AuthenticationFailed event
-  TNotifyAuthenticationFailed = procedure(Sender: TRestServer;
-    Reason: TNotifyAuthenticationFailedReason; Session: TAuthSession;
+  TOnAuthenticationFailed = procedure(Sender: TRestServer;
+    Reason: TOnAuthenticationFailedReason; Session: TAuthSession;
     Ctxt: TRestServerURIContext) of object;
 
   /// callback raised before TRestServer.URI execution
   // - should return TRUE to execute the command, FALSE to cancel it
-  TNotifyBeforeURI = function(Ctxt: TRestServerURIContext): boolean of object;
+  TOnBeforeURI = function(Ctxt: TRestServerURIContext): boolean of object;
 
   /// callback raised after TRestServer.URI execution
-  TNotifyAfterURI = procedure(Ctxt: TRestServerURIContext) of object;
+  TOnAfterURI = procedure(Ctxt: TRestServerURIContext) of object;
 
   /// callback raised if TRestServer.URI execution failed
   // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
@@ -1657,7 +1657,7 @@ type
 
   /// event signature used to notify a client callback
   // - implemented e.g. by TSQLHttpServer.NotifyCallback
-  TRestServerNotifyCallback = function(aSender: TRestServer;
+  TOnRestServerClientCallback = function(aSender: TRestServer;
     const aInterfaceDotMethodName, aParams: RawUTF8;
     aConnectionID: Int64; aFakeCallID: integer;
     aResult, aErrorMsg: PRawUTF8): boolean of object;
@@ -1677,7 +1677,7 @@ type
   // - descendent must implement the protected EngineList() Retrieve() Add()
   // Update() Delete() methods
   // - automatic call of this methods by a generic URI() RESTful function
-  // - any published method of descendants must match TRestServerCallBack
+  // - any published method of descendants must match TOnRestServerCallBack
   // prototype, and is expected to be thread-safe
   TRestServer = class(TRest)
   protected
@@ -1747,7 +1747,7 @@ type
     // - for OnSessionCreate, returning TRUE will abort the session creation -
     // and you can set Ctxt.Call^.OutStatus to a corresponding error code
     // - it could be used e.g. to limit the number of client sessions
-    OnSessionCreate: TNotifySQLSession;
+    OnSessionCreate: TOnOrmSession;
     /// a custom method to retrieve the TAuthUser instance for authentication
     // - will be called by TRestServerAuthentication.GetUser() instead of
     // plain SQLAuthUserClass.Create()
@@ -1760,16 +1760,16 @@ type
     // - you can access the current execution context from the Ctxt parameter,
     // e.g. to retrieve the caller's IP and ban aggressive users in Ctxt.RemoteIP
     // or the text error message corresponding to Reason in Ctxt.CustomErrorMsg
-    OnAuthenticationFailed: TNotifyAuthenticationFailed;
+    OnAuthenticationFailed: TOnAuthenticationFailed;
     /// a method can be specified to be notified when a session is closed
     // - for OnSessionClosed, the returning boolean value is ignored
     // - Ctxt is nil if the session is closed due to a timeout
     // - Ctxt is not nil if the session is closed explicitly by the client
-    OnSessionClosed: TNotifySQLSession;
+    OnSessionClosed: TOnOrmSession;
     /// this event will be executed to push notifications from the server to
     // a remote client, using a (fake) interface parameter
     // - is nil by default, but may point e.g. to TSQLHttpServer.NotifyCallback
-    OnNotifyCallback: TRestServerNotifyCallback;
+    OnNotifyCallback: TOnRestServerClientCallback;
     /// this event will be executed by TServiceFactoryServer.CreateInstance
     // - you may set a callback to customize a server-side service instance,
     // i.e. inject class-level dependencies:
@@ -1794,7 +1794,7 @@ type
     // it should better not make any slow process (like writing to a remote DB)
     // - see also TRest.OnDecryptBody, which is common to the client side, so
     // may be a better place for implementing shared process (e.g. encryption)
-    OnBeforeURI: TNotifyBeforeURI;
+    OnBeforeURI: TOnBeforeURI;
     /// event trigerred when URI() finished to process a request
     // - the supplied Ctxt parameter will give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
@@ -1802,7 +1802,7 @@ type
     // it should better not make any slow process (like writing to a remote DB)
     // - see also TRest.OnDecryptBody/OnEncryptBody, which is common to the
     // client side, so may be better to implement shared process (e.g. encryption)
-    OnAfterURI: TNotifyAfterURI;
+    OnAfterURI: TOnAfterURI;
     /// event trigerred when URI() failed to process a request
     // - if Ctxt.ExecuteCommand raised an execption, this callback will be
     // run with all neeed information
@@ -1976,12 +1976,12 @@ type
 
     /// add all published methods of a given object instance to the method-based
     // list of services
-    // - all those published method signature should match TRestServerCallBack
+    // - all those published method signature should match TOnRestServerCallBack
     procedure ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8;
       aInstance: TObject);
     /// direct registration of a method for a given low-level event handler
     procedure ServiceMethodRegister(aMethodName: RawUTF8;
-      const aEvent: TRestServerCallBack;
+      const aEvent: TOnRestServerCallBack;
       aByPassAuthentication: boolean = false);
     /// call this method to disable Authentication method check for a given
     // published method-based service name
@@ -2254,7 +2254,7 @@ const
     [mlTables, mlMethods, mlInterfaces, mlSQLite3];
 
 
-function ToText(res: TNotifyAuthenticationFailedReason): PShortString; overload;
+function ToText(res: TOnAuthenticationFailedReason): PShortString; overload;
 
 /// returns the thread-specific service context execution currently running
 // on the server side
@@ -2319,9 +2319,9 @@ uses
 
 { ************ TRestServerURIContext Access to the Server-Side Execution }
 
-function ToText(res: TNotifyAuthenticationFailedReason): PShortString;
+function ToText(res: TOnAuthenticationFailedReason): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TNotifyAuthenticationFailedReason), ord(res));
+  result := GetEnumName(TypeInfo(TOnAuthenticationFailedReason), ord(res));
 end;
 
 function ServiceRunningContext: PServiceRunningContext;
@@ -2524,7 +2524,7 @@ begin
 end;
 
 procedure TRestServerURIContext.AuthenticationFailed(
-  Reason: TNotifyAuthenticationFailedReason);
+  Reason: TOnAuthenticationFailedReason);
 var
   txt: PShortString;
 begin
@@ -4389,13 +4389,13 @@ begin
     begin
       AddShort(','#13#10'"error":'#13#10);
       AddNoJSONEscape(pointer(ErrorMsg), length(ErrorMsg));
-      AddShort(#13#10'}');
+      AddShorter(#13#10'}');
     end
     else
     begin
       AddShort(','#13#10'"errorText":"');
       AddJSONEscape(pointer(ErrorMsg));
-      AddShort('"'#13#10'}');
+      AddShorter('"'#13#10'}');
     end;
     SetText(Call.OutBody);
   finally
@@ -6118,7 +6118,7 @@ begin
             W.Add('}', ',');
           end;
         W.CancelLastComma;
-        W.AddShort(']},');
+        W.AddShorter(']},');
       end;
     finally
       Stats.UnLock;
@@ -6189,7 +6189,7 @@ begin
               W.Add('}', ',');
             end;
           W.CancelLastComma;
-          W.AddShort(']},');
+          W.AddShorter(']},');
         end;
       end;
     finally
@@ -6442,11 +6442,11 @@ begin
       '("%"): prefix should not contain "/"', [self, aPrefix]);
   for i := 0 to GetPublishedMethods(aInstance, methods) - 1 do
     with methods[i] do
-      ServiceMethodRegister(aPrefix + Name, TRestServerCallBack(Method));
+      ServiceMethodRegister(aPrefix + Name, TOnRestServerCallBack(Method));
 end;
 
 procedure TRestServer.ServiceMethodRegister(aMethodName: RawUTF8;
-  const aEvent: TRestServerCallBack; aByPassAuthentication: boolean);
+  const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean);
 begin
   aMethodName := trim(aMethodName);
   if aMethodName = '' then

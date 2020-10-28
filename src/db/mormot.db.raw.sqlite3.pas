@@ -2599,7 +2599,7 @@ type
   // TSQLDatabaseBackupThread properties (especialy the Step property)
   // - this method will be executed in the context of the associated
   // TSQLDatabaseBackupThread: so you should use Synchronize() to update the UI
-  TSQLDatabaseBackupEvent = function(Sender: TSQLDatabaseBackupThread): boolean of object;
+  TOnSQLDatabaseBackup = function(Sender: TSQLDatabaseBackupThread): boolean of object;
 
   /// simple wrapper for direct SQLite3 database manipulation
   // - embed the SQLite3 database calls into a common object
@@ -2891,14 +2891,14 @@ type
     // - you can also use this method to save an SQLite3 ':memory:' database,
     // perhaps in conjunction with the BackupBackgroundWaitUntilFinished method
     function BackupBackground(const BackupFileName: TFileName;
-      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
+      StepPageNumber, StepSleepMS: Integer; OnProgress: TOnSQLDatabaseBackup;
       SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean;
     /// background backup to another opened database instance
     // - in respect to BackupBackground method, it will use an existing database
     // the actual process
     // - by design, SynLZCompress or aPassword parameters are unavailable
     function BackupBackgroundToDB(BackupDB: TSQLDatabase;
-      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
+      StepPageNumber, StepSleepMS: Integer; OnProgress: TOnSQLDatabaseBackup): boolean;
     /// wait until any previous BackupBackground() is finished
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
@@ -3094,7 +3094,7 @@ type
   /// kind of event triggerred during TSQLDatabase.BackupBackground() process
   // - you can use (Sender.Step in backupAnyStep), to check for normal step,
   // or (Sender.Step in backupFinished) to check for process end
-  TSQLDatabaseBackupEventStep = (
+  TOnSQLDatabaseBackupStep = (
     backupNone,
     backupStart,
     backupSuccess,
@@ -3112,10 +3112,10 @@ type
     fDestDB: TSQLDatabase;
     fStepPageNumber, fStepSleepMS: Integer;
     fBackup: TSQLite3Backup;
-    fStep: TSQLDatabaseBackupEventStep;
+    fStep: TOnSQLDatabaseBackupStep;
     fStepNumberToFinish, fStepNumberTotal: integer;
     fStepSynLzCompress: boolean;
-    fOnProgress: TSQLDatabaseBackupEvent;
+    fOnProgress: TOnSQLDatabaseBackup;
     fError: Exception;
     fTimer: TPrecisionTimer;
     fOwnerDest: boolean;
@@ -3127,7 +3127,7 @@ type
     // inherited method to run the process in blocking mode
     constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
       StepPageNumber,StepSleepMS: Integer; SynLzCompress: boolean;
-      OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean=true); reintroduce;
+      OnProgress: TOnSQLDatabaseBackup; OwnerDest: boolean=true); reintroduce;
     /// the source database of the backup process
     property SourceDB: TSQLDatabase read fSourceDB;
     /// the destination database of the backup process
@@ -3138,13 +3138,13 @@ type
     property BackupDestFile: TFileName read fBackupDestFile;
   published
     /// the current state of the backup process
-    // - only set before a call to TSQLDatabaseBackupEvent
-    property Step: TSQLDatabaseBackupEventStep read fStep;
+    // - only set before a call to TOnSQLDatabaseBackup
+    property Step: TOnSQLDatabaseBackupStep read fStep;
     /// the number of pages which remain before end of backup
-    // - only set before a call to TSQLDatabaseBackupEvent with backupStep* event
+    // - only set before a call to TOnSQLDatabaseBackup with backupStep* event
     property StepNumberToFinish: integer read fStepNumberToFinish;
     /// the number of pages for the whole database
-    // - only set before a call to TSQLDatabaseBackupEvent with backupStep* event
+    // - only set before a call to TOnSQLDatabaseBackup with backupStep* event
     property StepNumberTotal: integer read fStepNumberTotal;
     /// if .dbsynlz compression would be done on the backup file
     // - would use FileSynLZ(), so compress in chunks of 128 MB
@@ -4642,7 +4642,7 @@ begin // class function may be better, but fails on Delphi 2005
 end;
 
 function TSQLDataBase.BackupBackground(const BackupFileName: TFileName;
-  StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
+  StepPageNumber, StepSleepMS: Integer; OnProgress: TOnSQLDatabaseBackup;
   SynLzCompress: boolean; const aPassword: RawUTF8): boolean;
 var
   Dest: TSQLDatabase;
@@ -4677,7 +4677,7 @@ begin
 end;
 
 function TSQLDataBase.BackupBackgroundToDB(BackupDB: TSQLDatabase;
-  StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
+  StepPageNumber, StepSleepMS: Integer; OnProgress: TOnSQLDatabaseBackup): boolean;
 var Backup: TSQLite3Backup;
 begin
   result := false;
@@ -5675,12 +5675,12 @@ begin
     case sqlite3.column_type(Request, i) of // fast evaluation: type may vary
       SQLITE_BLOB:
         if DoNotFetchBlobs then
-          WR.AddShort('null')
+          WR.AddNull
         else
           WR.WrBase64(sqlite3.column_blob(Request, i),
             sqlite3.column_bytes(Request, i), {withMagic=}true);
       SQLITE_NULL:
-        WR.AddShort('null'); // returned also for ""
+        WR.AddNull; // returned also for ""
       SQLITE_INTEGER:
         WR.Add(sqlite3.column_int64(Request, i));
       SQLITE_FLOAT:
@@ -5937,7 +5937,7 @@ end;
 
 constructor TSQLDatabaseBackupThread.Create(Backup: TSQLite3Backup;
   Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: Integer;
-  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean);
+  SynLzCompress: boolean; OnProgress: TOnSQLDatabaseBackup; OwnerDest: boolean);
 begin
   fTimer.Start;
   fBackup := Backup;
@@ -5962,7 +5962,7 @@ procedure TSQLDatabaseBackupThread.Execute;
 var
   log: ISynLog;
 
-  procedure NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep);
+  procedure NotifyProgressAndContinue(aStep: TOnSQLDatabaseBackupStep);
   begin
     fStep := aStep;
     if Assigned(log) then

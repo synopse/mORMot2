@@ -1636,7 +1636,7 @@ procedure TMongoRequest.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
 begin
   if self = nil then
   begin
-    W.AddShort('null');
+    W.AddNull;
     exit;
   end;
   W.Add('{');
@@ -2038,7 +2038,7 @@ begin
   if (fReply = '') or
      (DocumentCount <= 0) then
   begin
-    W.AddShort('null');
+    W.AddNull;
     exit;
   end;
   if WithHeader and
@@ -2055,7 +2055,7 @@ begin
     if (MaxSize > 0) and
        (W.TextLength > MaxSize) then
     begin
-      W.AddShort('...');
+      W.AddShorter('...');
       break;
     end;
   end;

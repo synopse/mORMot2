@@ -588,10 +588,10 @@ type
   EFastReader = class(ESynException);
 
   /// event signature to customize TFastReader.ErrorOverflow notification
-  TFastReaderOnErrorOverflow = procedure of object;
+  TOnFastReaderErrorOverflow = procedure of object;
 
   /// event signature to customize TFastReader.ErrorData notification
-  TFastReaderOnErrorData = procedure(const fmt: RawUTF8;
+  TOnFastReaderErrorData = procedure(const fmt: RawUTF8;
     const args: array of const) of object;
 
   /// safe decoding of a TBufferWriter content from an in-memory buffer
@@ -608,9 +608,9 @@ type
     /// the last position in the buffer
     Last: PAnsiChar;
     /// use this event to customize the ErrorOverflow process
-    OnErrorOverflow: TFastReaderOnErrorOverflow;
+    OnErrorOverflow: TOnFastReaderErrorOverflow;
     /// use this event to customize the ErrorData process
-    OnErrorData: TFastReaderOnErrorData;
+    OnErrorData: TOnFastReaderErrorData;
     /// when used to unserialize variants, stores options for TDocVariant creation
     // - contains a PDocVariantOptions reference pointer as defined in the
     // mormot.core.data unit

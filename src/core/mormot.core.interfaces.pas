@@ -237,7 +237,7 @@ type
   // callback parameter
   // - implementation should set the Obj local variable to an instance of
   // a fake class implementing the aParamInfo interface
-  TInterfaceMethodExecuteCallback = procedure(var Par: PUTF8Char;
+  TOnInterfaceMethodExecuteCallback = procedure(var Par: PUTF8Char;
     ParamInterfaceInfo: TRttiJson; out Obj) of object;
 
   /// how TInterfaceMethod.TInterfaceMethod method will return the generated document
@@ -1849,7 +1849,7 @@ type
   // callback parameter
   // - implementation should set the Obj local variable to an instance of
   // a fake class implementing the aParamInfo interface
-  TServiceMethodExecuteCallback =
+  TOnServiceMethodExecuteCallback =
     procedure(var Par: PUTF8Char; ParamInterfaceInfo: TRttiCustom; out Obj) of object;
 
   /// the current step of a TInterfaceMethodExecute.OnExecute call
@@ -1860,11 +1860,11 @@ type
     smsError);
 
   /// the TInterfaceMethodExecute.OnExecute signature
-  TInterfaceMethodExecuteEvent = procedure(Sender: TInterfaceMethodExecute;
+  TOnInterfaceMethodExecute = procedure(Sender: TInterfaceMethodExecute;
     Step: TInterfaceMethodExecuteEventStep) of object;
 
   /// store one or several TInterfaceMethodExecute.OnExecute signatures
-  TInterfaceMethodExecuteEventDynArray = array of TInterfaceMethodExecuteEvent;
+  TInterfaceMethodExecuteEventDynArray = array of TOnInterfaceMethodExecute;
 
   /// execute a method of a TInterfacedObject instance, from/to JSON
   TInterfaceMethodExecute = class
@@ -1886,7 +1886,7 @@ type
     fTempTextWriter: TTextWriter;
     fOnExecute: TInterfaceMethodExecuteEventDynArray;
     fBackgroundExecutionThread: TSynBackgroundThreadMethod;
-    fOnCallback: TInterfaceMethodExecuteCallback;
+    fOnCallback: TOnInterfaceMethodExecuteCallback;
     fOptions: TInterfaceMethodOptions;
     fServiceCustomAnswerHead: RawUTF8;
     fServiceCustomAnswerStatus: cardinal;
@@ -1906,7 +1906,7 @@ type
     /// allow to hook method execution
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
     // fields will contain the execution data context when Hook is called
-    procedure AddInterceptor(const Hook: TInterfaceMethodExecuteEvent);
+    procedure AddInterceptor(const Hook: TOnInterfaceMethodExecute);
     /// allow to hook method execution
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
     // fields will contain the execution data context when Hook[] are called
@@ -1964,7 +1964,7 @@ type
     property BackgroundExecutionThread: TSynBackgroundThreadMethod
       read fBackgroundExecutionThread write fBackgroundExecutionThread;
     /// points e.g. to TRestServerURIContext.ExecuteCallback
-    property OnCallback: TInterfaceMethodExecuteCallback
+    property OnCallback: TOnInterfaceMethodExecuteCallback
       read fOnCallback write fOnCallback;
     /// contains exception serialization after ExecuteJson of multiple instances
     // - follows the Instances[] order as supplied to RawExecute/ExecuteJson
@@ -2154,7 +2154,7 @@ begin
   WR.AddString(GetSetNameCSV(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.AddShort('},');
 {$else}
-  WR.AddShort('"},');
+  WR.AddShorter('"},');
 {$endif SOA_DEBUG}
 end;
 
@@ -2299,25 +2299,25 @@ procedure TInterfaceMethodArgument.AddDefaultJSON(WR: TTextWriter);
 begin
   case ValueType of
     imvBoolean:
-      WR.AddShort('false,');
+      WR.AddShorter('false,');
     imvObject:
-      WR.AddShort('null,'); // may raise an error on the client side
+      WR.AddShorter('null,'); // may raise an error on the client side
     imvInterface:
-      WR.AddShort('0,');
+      WR.AddShorter('0,');
     imvDynArray:
-      WR.AddShort('[],');
+      WR.AddShorter('[],');
     imvRecord:
       begin
         WR.AddVoidRecordJSON(ArgRtti);
         WR.Add(',');
       end;
     imvVariant:
-      WR.AddShort('null,');
+      WR.AddShorter('null,');
   else
     if vIsString in ValueKindAsm then
-      WR.AddShort('"",')
+      WR.AddShorter('"",')
     else
-      WR.AddShort('0,');
+      WR.AddShorter('0,');
   end;
 end;
 
@@ -3231,11 +3231,11 @@ const
   imvUnicodeString = imvNone;
   {$endif UNICODE}
 
-  /// which TRTTIParserType are actually serialized as JSON Strings
+  /// which TRttiParserType are actually serialized as JSON Strings
   _SMV_STRING =
     [imvRawUTF8..imvBinary, imvDateTime];
 
-  _FROM_RTTI: array[TRTTIParserType] of TInterfaceMethodValueType = (
+  _FROM_RTTI: array[TRttiParserType] of TInterfaceMethodValueType = (
   // ptNone, ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     imvNone, imvNone, imvBoolean, imvNone, imvCardinal, imvCurrency, imvDouble, imvNone,
   // ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJSON, ptRawUTF8,
@@ -3825,7 +3825,7 @@ begin
       for a := 0 to High(Args) do
         Args[a].SerializeToContract(WR);
       WR.CancelLastComma;
-      WR.AddShort(']},');
+      WR.AddShorter(']},');
     end;
     WR.CancelLastComma;
     WR.Add(']');
@@ -6586,7 +6586,7 @@ begin
 end;
 
 procedure TInterfaceMethodExecute.AddInterceptor(
-  const Hook: TInterfaceMethodExecuteEvent);
+  const Hook: TOnInterfaceMethodExecute);
 begin
   MultiEventAdd(fOnExecute, TMethod(Hook));
 end;

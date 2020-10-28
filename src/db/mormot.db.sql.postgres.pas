@@ -718,13 +718,13 @@ begin
     if WR.Expand then
       WR.AddFieldName(ColumnName); // add '"ColumnName":'
     if PQ.GetIsNull(fRes, fCurrentRow, col) = 1 then
-      WR.AddShort('null')
+      WR.AddNull
     else
     begin
       P := PQ.GetValue(fRes, fCurrentRow, col);
       case ColumnType of
         ftNull:
-          WR.AddShort('null');
+          WR.AddNull;
         ftInt64, ftDouble, ftCurrency:
           WR.AddNoJSONEscape(P, PQ.GetLength(fRes, fCurrentRow, col));
         ftUTF8:
@@ -748,7 +748,7 @@ begin
           end;
         ftBlob:
           if fForceBlobAsNull then
-            WR.AddShort('null')
+            WR.AddNull
           else
             WR.WrBase64(P, BlobInPlaceDecode(P,
               PQ.GetLength(fRes, fCurrentRow, col)), {withmagic=}true);

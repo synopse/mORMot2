@@ -199,13 +199,13 @@ type
   TServerGeneric = class(TSynThread)
   protected
     fProcessName: RawUTF8;
-    fOnHttpThreadStart: TNotifyThreadEvent;
-    procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
+    fOnHttpThreadStart: TOnNotifyThread;
+    procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
     procedure NotifyThreadStart(Sender: TSynThread);
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean;
-      const OnStart, OnStop: TNotifyThreadEvent;
+      const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUTF8); reintroduce; virtual;
   end;
 
@@ -250,7 +250,7 @@ type
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean; 
-      const OnStart, OnStop: TNotifyThreadEvent;
+      const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUTF8); reintroduce; virtual;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
@@ -326,7 +326,7 @@ type
       read fOnAfterResponse write SetOnAfterResponse;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
-    property OnHttpThreadStart: TNotifyThreadEvent
+    property OnHttpThreadStart: TOnNotifyThread
       read fOnHttpThreadStart write fOnHttpThreadStart;
     /// event handler called when a working Thread is terminating
     // - called in the corresponding thread context
@@ -339,7 +339,7 @@ type
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
     // - is used e.g. by TRest.EndCurrentThread for proper multi-threading
-    property OnHttpThreadTerminate: TNotifyThreadEvent
+    property OnHttpThreadTerminate: TOnNotifyThread
       read fOnThreadTerminate write SetOnTerminate;
     /// reject any incoming request with a body size bigger than this value
     // - default to 0, meaning any input size is allowed
@@ -611,7 +611,7 @@ type
     // the background thread: caller should therefore call WaitStarted after
     // THttpServer.Create()
     constructor Create(const aPort: RawUTF8;
-      const OnStart, OnStop: TNotifyThreadEvent;
+      const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUTF8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; HeadersUnFiltered: boolean = false;
       CreateSuspended: boolean = false); reintroduce; virtual;
@@ -755,7 +755,7 @@ type
     procedure SetMaxBandwidth(aValue: Cardinal);
     function GetMaxConnections: Cardinal;
     procedure SetMaxConnections(aValue: Cardinal);
-    procedure SetOnTerminate(const Event: TNotifyThreadEvent); override;
+    procedure SetOnTerminate(const Event: TOnNotifyThread); override;
     function GetAPIVersion: RawUTF8; override;
     function GetLogging: boolean;
     procedure SetServerName(const aName: RawUTF8); override;
@@ -787,7 +787,7 @@ type
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
     constructor Create(CreateSuspended: boolean; QueueName: SynUnicode = '';
-      OnStart: TNotifyThreadEvent = nil; OnStop: TNotifyThreadEvent = nil;
+      OnStart: TOnNotifyThread = nil; OnStop: TOnNotifyThread = nil;
       const ProcessName: RawUTF8 = ''); reintroduce;
     /// create a HTTP/1.1 processing clone from the main thread
     // - do not use directly - is called during thread pool creation
@@ -1027,12 +1027,12 @@ type
   PHttpApiWebSocketConnectionVector = ^THttpApiWebSocketConnectionVector;
 
   /// Event handlers for WebSocket
-  THttpApiWebSocketServerOnAcceptEvent = function(Ctxt: THttpServerRequest;
+  TOnHttpApiWebSocketServerAcceptEvent = function(Ctxt: THttpServerRequest;
     var Conn: THttpApiWebSocketConnection): Boolean of object;
-  THttpApiWebSocketServerOnMessageEvent = procedure(const Conn: THttpApiWebSocketConnection;
+  TOnHttpApiWebSocketServerMessageEvent = procedure(const Conn: THttpApiWebSocketConnection;
     aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG) of object;
-  THttpApiWebSocketServerOnConnectEvent = procedure(const Conn: THttpApiWebSocketConnection) of object;
-  THttpApiWebSocketServerOnDisconnectEvent = procedure(const Conn: THttpApiWebSocketConnection;
+  TOnHttpApiWebSocketServerConnectEvent = procedure(const Conn: THttpApiWebSocketConnection) of object;
+  TOnHttpApiWebSocketServerDisconnectEvent = procedure(const Conn: THttpApiWebSocketConnection;
     aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG) of object;
 
   /// Protocol Handler of websocket endpoints events
@@ -1041,11 +1041,11 @@ type
   private
     fName: RawUTF8;
     fManualFragmentManagement: Boolean;
-    fOnAccept: THttpApiWebSocketServerOnAcceptEvent;
-    fOnMessage: THttpApiWebSocketServerOnMessageEvent;
-    fOnFragment: THttpApiWebSocketServerOnMessageEvent;
-    fOnConnect: THttpApiWebSocketServerOnConnectEvent;
-    fOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
+    fOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
+    fOnMessage: TOnHttpApiWebSocketServerMessageEvent;
+    fOnFragment: TOnHttpApiWebSocketServerMessageEvent;
+    fOnConnect: TOnHttpApiWebSocketServerConnectEvent;
+    fOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
     fConnections: PHttpApiWebSocketConnectionVector;
     fConnectionsCapacity: Integer;
     //Count of used connections. Some of them can be nil(if not used more)
@@ -1065,11 +1065,11 @@ type
     // broadcast, for example)
     constructor Create(const aName: RawUTF8; aManualFragmentManagement: Boolean;
       aServer: THttpApiWebSocketServer;
-      const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
-      const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
-      const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
-      const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
-      const aOnFragment: THttpApiWebSocketServerOnMessageEvent = nil);
+      const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
+      const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;
+      const aOnConnect: TOnHttpApiWebSocketServerConnectEvent;
+      const aOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
+      const aOnFragment: TOnHttpApiWebSocketServerMessageEvent = nil);
     /// finalize the process
     destructor Destroy; override;
     /// text identifier
@@ -1079,16 +1079,16 @@ type
     /// OnFragment event will be called for each fragment
     property ManualFragmentManagement: Boolean read fManualFragmentManagement;
     /// event triggerred when a WebSockets client is initiated
-    property OnAccept: THttpApiWebSocketServerOnAcceptEvent read fOnAccept;
+    property OnAccept: TOnHttpApiWebSocketServerAcceptEvent read fOnAccept;
     /// event triggerred when a WebSockets message is received
-    property OnMessage: THttpApiWebSocketServerOnMessageEvent read fOnMessage;
+    property OnMessage: TOnHttpApiWebSocketServerMessageEvent read fOnMessage;
     /// event triggerred when a WebSockets client is connected
-    property OnConnect: THttpApiWebSocketServerOnConnectEvent read fOnConnect;
+    property OnConnect: TOnHttpApiWebSocketServerConnectEvent read fOnConnect;
     /// event triggerred when a WebSockets client is gracefully disconnected
-    property OnDisconnect: THttpApiWebSocketServerOnDisconnectEvent read fOnDisconnect;
+    property OnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent read fOnDisconnect;
     /// event triggerred when a non complete frame is received
     // - required if ManualFragmentManagement is true
-    property OnFragment: THttpApiWebSocketServerOnMessageEvent read fOnFragment;
+    property OnFragment: TOnHttpApiWebSocketServerMessageEvent read fOnFragment;
 
     /// Send message to the WebSocket connection identified by its index
     function Send(index: Integer; aBufferType: ULONG; aBuffer: Pointer; aBufferSize: ULONG): boolean;
@@ -1113,15 +1113,15 @@ type
     fLastConnection: PHttpApiWebSocketConnection;
     fPingTimeout: integer;
     fRegisteredProtocols: PHttpApiWebSocketServerProtocolDynArray;
-    fOnWSThreadStart: TNotifyThreadEvent;
-    fOnWSThreadTerminate: TNotifyThreadEvent;
+    fOnWSThreadStart: TOnNotifyThread;
+    fOnWSThreadTerminate: TOnNotifyThread;
     fSendOverlaped: TOverlapped;
     fServiceOverlaped: TOverlapped;
     fOnServiceMessage: TThreadMethod;
-    procedure SetOnWSThreadTerminate(const Value: TNotifyThreadEvent);
+    procedure SetOnWSThreadTerminate(const Value: TOnNotifyThread);
     function GetProtocol(index: integer): THttpApiWebSocketServerProtocol;
     function getProtocolsCount: Integer;
-    procedure SetOnWSThreadStart(const Value: TNotifyThreadEvent);
+    procedure SetOnWSThreadStart(const Value: TOnNotifyThread);
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequest): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest;
@@ -1135,18 +1135,18 @@ type
     // - for aPingTimeout explanation see PingTimeout property documentation
     constructor Create(CreateSuspended: Boolean; aSocketThreadsCount: integer = 1;
       aPingTimeout: integer = 0; const QueueName: SynUnicode = '';
-      const aOnWSThreadStart: TNotifyThreadEvent=nil;
-      const aOnWSThreadTerminate: TNotifyThreadEvent=nil); reintroduce;
+      const aOnWSThreadStart: TOnNotifyThread=nil;
+      const aOnWSThreadTerminate: TOnNotifyThread=nil); reintroduce;
     /// create a WebSockets processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); override;
     /// prepare the process for a given THttpApiWebSocketServerProtocol
     procedure RegisterProtocol(const aName: RawUTF8; aManualFragmentManagement: Boolean;
-      const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
-      const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
-      const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
-      const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
-      const aOnFragment: THttpApiWebSocketServerOnMessageEvent = nil);
+      const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
+      const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;
+      const aOnConnect: TOnHttpApiWebSocketServerConnectEvent;
+      const aOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
+      const aOnFragment: TOnHttpApiWebSocketServerMessageEvent = nil);
     /// register the URLs to Listen on using WebSocket
     // - aProtocols is an array of a recond with callbacks, server call during
     // WebSocket activity
@@ -1165,10 +1165,10 @@ type
     /// access to the associated endpoints count
     property ProtocolsCount: Integer read getProtocolsCount;
     /// event called when the processing thread starts
-    property OnWSThreadStart: TNotifyThreadEvent read FOnWSThreadStart
+    property OnWSThreadStart: TOnNotifyThread read FOnWSThreadStart
       write SetOnWSThreadStart;
     /// event called when the processing thread termintes
-    property OnWSThreadTerminate: TNotifyThreadEvent read FOnWSThreadTerminate
+    property OnWSThreadTerminate: TOnNotifyThread read FOnWSThreadTerminate
       write SetOnWSThreadTerminate;
     /// send a "service" message to a WebSocketServer to wake up a WebSocket thread
     // - can be called from any thread
@@ -1273,7 +1273,7 @@ end;
 { TServerGeneric }
 
 constructor TServerGeneric.Create(CreateSuspended: boolean;
-  const OnStart, OnStop: TNotifyThreadEvent; const ProcessName: RawUTF8);
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8);
 begin
   fProcessName := ProcessName;
   fOnHttpThreadStart := OnStart;
@@ -1293,7 +1293,7 @@ begin
   end;
 end;
 
-procedure TServerGeneric.SetOnTerminate(const Event: TNotifyThreadEvent);
+procedure TServerGeneric.SetOnTerminate(const Event: TOnNotifyThread);
 begin
   fOnThreadTerminate := Event;
 end;
@@ -1302,7 +1302,7 @@ end;
 { THttpServerGeneric }
 
 constructor THttpServerGeneric.Create(CreateSuspended: boolean;
-  const OnStart, OnStop: TNotifyThreadEvent; const ProcessName: RawUTF8);
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8);
 begin
   SetServerName('mORMot (' + OS_TEXT + ')');
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
@@ -1425,7 +1425,7 @@ end;
 { THttpServer }
 
 constructor THttpServer.Create(const aPort: RawUTF8;
-  const OnStart, OnStop: TNotifyThreadEvent; const ProcessName: RawUTF8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer;
   HeadersUnFiltered, CreateSuspended: boolean);
 begin
@@ -2463,7 +2463,7 @@ begin
 end;
 
 constructor THttpApiServer.Create(CreateSuspended: boolean; QueueName:
-  SynUnicode; OnStart, OnStop: TNotifyThreadEvent; const ProcessName: RawUTF8);
+  SynUnicode; OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8);
 var
   bindInfo: HTTP_BINDING_INFO;
 begin
@@ -3225,7 +3225,7 @@ begin
     fClones[i].RegisterCompress(aFunction, aCompressMinSize);
 end;
 
-procedure THttpApiServer.SetOnTerminate(const Event: TNotifyThreadEvent);
+procedure THttpApiServer.SetOnTerminate(const Event: TOnNotifyThread);
 var
   i: integer;
 begin
@@ -3481,11 +3481,11 @@ end;
 
 constructor THttpApiWebSocketServerProtocol.Create(const aName: RawUTF8;
   aManualFragmentManagement: Boolean; aServer: THttpApiWebSocketServer;
-  const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
-  const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
-  const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
-  const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
-  const aOnFragment: THttpApiWebSocketServerOnMessageEvent);
+  const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
+  const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;
+  const aOnConnect: TOnHttpApiWebSocketServerConnectEvent;
+  const aOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
+  const aOnFragment: TOnHttpApiWebSocketServerMessageEvent);
 begin
   if aManualFragmentManagement and
      not Assigned(aOnFragment) then
@@ -3969,7 +3969,7 @@ end;
 
 constructor THttpApiWebSocketServer.Create(CreateSuspended: Boolean;
   aSocketThreadsCount, aPingTimeout: integer; const QueueName: SynUnicode;
-  const aOnWSThreadStart, aOnWSThreadTerminate: TNotifyThreadEvent);
+  const aOnWSThreadStart, aOnWSThreadTerminate: TOnNotifyThread);
 begin
   inherited Create(CreateSuspended, QueueName);
   if not (WebSocketAPI.WebSocketEnabled) then
@@ -4126,11 +4126,11 @@ end;
 
 procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUTF8;
   aManualFragmentManagement: Boolean;
-  const aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
-  const aOnMessage: THttpApiWebSocketServerOnMessageEvent;
-  const aOnConnect: THttpApiWebSocketServerOnConnectEvent;
-  const aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
-  const aOnFragment: THttpApiWebSocketServerOnMessageEvent);
+  const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
+  const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;
+  const aOnConnect: TOnHttpApiWebSocketServerConnectEvent;
+  const aOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
+  const aOnFragment: TOnHttpApiWebSocketServerMessageEvent);
 var
   protocol: THttpApiWebSocketServerProtocol;
 begin
@@ -4160,12 +4160,12 @@ begin
   PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
 end;
 
-procedure THttpApiWebSocketServer.SetOnWSThreadStart(const Value: TNotifyThreadEvent);
+procedure THttpApiWebSocketServer.SetOnWSThreadStart(const Value: TOnNotifyThread);
 begin
   FOnWSThreadStart := Value;
 end;
 
-procedure THttpApiWebSocketServer.SetOnWSThreadTerminate(const Value: TNotifyThreadEvent);
+procedure THttpApiWebSocketServer.SetOnWSThreadTerminate(const Value: TOnNotifyThread);
 begin
   FOnWSThreadTerminate := Value;
 end;

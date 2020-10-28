@@ -425,7 +425,7 @@ type
 
   /// callback signature used by TSynLogFamilly.OnBeforeException
   // - should return false to log the exception, or true to ignore it
-  TSynLogOnBeforeException = function(const Context: TSynLogExceptionContext;
+  TOnBeforeException = function(const Context: TSynLogExceptionContext;
     const ThreadName: RawUTF8): boolean of object;
 
 {$endif NOEXCEPTIONINTERCEPT}
@@ -475,7 +475,7 @@ type
     {$endif MSWINDOWS}
     {$ifndef NOEXCEPTIONINTERCEPT}
     fHandleExceptions: boolean;
-    fOnBeforeException: TSynLogOnBeforeException;
+    fOnBeforeException: TOnBeforeException;
     {$endif NOEXCEPTIONINTERCEPT}
     fStackTraceLevel: byte;
     fStackTraceUse: TSynLogStackTraceUse;
@@ -535,7 +535,7 @@ type
     // text up to the specified number of KB (an up to 128 MB at most)
     function GetExistingLog(MaximumKB: cardinal): RawUTF8;
     /// callback to notify the current logger that its thread is finished
-    // - method follows TNotifyThreadEvent signature, which can be assigned to
+    // - method follows TOnNotifyThread signature, which can be assigned to
     // TSynBackgroundThreadAbstract.OnAfterExecute
     // - is called e.g. by TRest.EndCurrentThread
     // - just a wrapper around TSynLog.NotifyThreadEnded
@@ -563,7 +563,7 @@ type
     // - execution of this event handler is protected via the logs global lock
     // - may be handy e.g. when working with code triggerring a lot of
     // exceptions (e.g. Indy), where ExceptionIgnore could be refined
-    property OnBeforeException: TSynLogOnBeforeException
+    property OnBeforeException: TOnBeforeException
       read fOnBeforeException write fOnBeforeException;
     {$endif NOEXCEPTIONINTERCEPT}
     /// event called to archive the .log content after a defined delay

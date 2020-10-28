@@ -98,6 +98,7 @@ type
   /// array of field/parameter/column types for abstract database access
   // - this array as a fixed size, ready to handle up to MAX_SQLFIELDS items
   TSQLDBFieldTypeArray = array[0..MAX_SQLFIELDS - 1] of TSQLDBFieldType;
+
   PSQLDBFieldTypeArray = ^TSQLDBFieldTypeArray;
 
   /// how TSQLVar may be processed
@@ -1926,23 +1927,23 @@ begin
       if n = 1 then
       begin
         if ValuesInlinedMax > 1 then
-          AddShort('=:(')
+          AddShorter('=:(')
         else
           Add('=');
         AddQuotedStr(pointer(Values[0]), '''');
         if ValuesInlinedMax > 1 then
-          AddShort('):');
+          AddShorter('):');
       end
       else
       begin
-        AddShort(' in (');
+        AddShorter(' in (');
         for i := 0 to n - 1 do
         begin
           if ValuesInlinedMax > n then
             Add(':', '(');
           AddQuotedStr(pointer(Values[i]), '''');
           if ValuesInlinedMax > n then
-            AddShort('):,')
+            AddShorter('):,')
           else
             Add(',');
         end;
@@ -1972,23 +1973,23 @@ begin
       if n = 1 then
       begin
         if ValuesInlinedMax > 1 then
-          AddShort('=:(')
+          AddShorter('=:(')
         else
           Add('=');
         Add(Values[0]);
         if ValuesInlinedMax > 1 then
-          AddShort('):');
+          AddShorter('):');
       end
       else
       begin
-        AddShort(' in (');
+        AddShorter(' in (');
         for i := 0 to n - 1 do
         begin
           if ValuesInlinedMax > n then
             Add(':', '(');
           Add(Values[i]);
           if ValuesInlinedMax > n then
-            AddShort('):,')
+            AddShorter('):,')
           else
             Add(',');
         end;

@@ -196,8 +196,8 @@ const
   /// maps records or dynamic arrays
   rkRecordOrDynArrayTypes = rkRecordTypes + [rkDynArray];
 
-  /// all recognized TRTTIKind enumerates, i.e. all but rkUnknown
-  rkAllTypes = [succ(low(TRTTIKind))..high(TRTTIKind)];
+  /// all recognized TRttiKind enumerates, i.e. all but rkUnknown
+  rkAllTypes = [succ(low(TRttiKind))..high(TRttiKind)];
 
   /// quick retrieve how many bytes an ordinal consist in
   ORDTYPE_SIZE: array[TRttiOrd] of byte =
@@ -1498,7 +1498,7 @@ type
   // - ptUnicodeString is defined even if not available prior to Delphi 2009
   // - replace deprecated TJSONCustomParserRTTIType type from old mORMot 1.18
   // - TDynArrayKind is now an alias to this genuine enumerate
-  TRTTIParserType = (
+  TRttiParserType = (
     ptNone,
     ptArray,
     ptBoolean,
@@ -1539,9 +1539,9 @@ type
     ptInterface,
     ptCustom);
 
-  /// the complex kind of variables for ptTimeLog and ptORM TRTTIParserType
+  /// the complex kind of variables for ptTimeLog and ptORM TRttiParserType
   // - as recognized by TypeNameToStandardParserType/TypeInfoToStandardParserType
-  TRTTIParserComplexType = (
+  TRttiParserComplexType = (
     pctNone,
     pctTimeLog,
     pctCreateTime,
@@ -1552,30 +1552,30 @@ type
     pctRecordReferenceToBeDeleted,
     pctRecordVersion);
 
-  PRTTIParserType = ^TRTTIParserType;
-  TRTTIParserTypes = set of TRTTIParserType;
-  PRTTIParserComplexType = ^TRTTIParserComplexType;
+  PRTTIParserType = ^TRttiParserType;
+  TRttiParserTypes = set of TRttiParserType;
+  PRTTIParserComplexType = ^TRttiParserComplexType;
 
 const
-  /// map a PtrInt type to the TRTTIParserType set
+  /// map a PtrInt type to the TRttiParserType set
   ptPtrInt  = {$ifdef CPU64} ptInt64 {$else} ptInteger {$endif};
 
-  /// map a PtrUInt type to the TRTTIParserType set
+  /// map a PtrUInt type to the TRttiParserType set
   ptPtrUInt = {$ifdef CPU64} ptQWord {$else} ptCardinal {$endif};
 
-  /// which TRTTIParserType are not simple types
+  /// which TRttiParserType are not simple types
   // - ptTimeLog and ptORM are complex, since more than one TypeInfo() may
-  // map to their TRTTIParserType - see also TRTTIParserComplexType
+  // map to their TRttiParserType - see also TRttiParserComplexType
   ptComplexTypes =
     [ptArray, ptRecord, ptCustom, ptTimeLog, ptORM,
      ptDynArray, ptEnumeration, ptSet, ptClass, ptInterface];
 
-  /// which TRTTIParserType types don't need memory management
+  /// which TRttiParserType types don't need memory management
   ptUnmanagedTypes =
     [ptBoolean..ptQWord, ptSingle, ptDateTime..ptTimeLog,
      ptUnixTime, ptUnixMSTime, ptWord..ptClass];
 
-  /// which TRTTIParserType types are (usually) serialized as JSON "text"
+  /// which TRttiParserType types are (usually) serialized as JSON "text"
   // - actual serialization may depend e.g. on TTextWriterWriteObjectOptions
   ptStringTypes =
     [ptRawByteString .. ptRawUTF8, ptString .. ptHash512, ptTimeLog,
@@ -1585,16 +1585,16 @@ var
   /// simple lookup to the plain RTTI type of most simple managed types
   // - nil for unmanaged types (e.g. rkOrdinals) or for more complex types
   // requering additional PRttiInfo (rkRecord, rkDynArray, rkArray...)
-  PT_INFO: array[TRTTIParserType] of PRttiInfo;
+  PT_INFO: array[TRttiParserType] of PRttiInfo;
 
   /// simple lookup to the plain RTTI type of most simple managed types
   // - nil if the complex type is not known
   // - mormot.orm.base may set the exact TypeInfo(TRecordReference) value - this
   // unit set plain TypeInfo(QWord) which is enough for JSON Serialization
-  PTC_INFO: array[TRTTIParserComplexType] of PRttiInfo;
+  PTC_INFO: array[TRttiParserComplexType] of PRttiInfo;
 
-  /// simple lookup to the size in bytes of TRTTIParserType values
-  PT_SIZE: array[TRTTIParserType] of byte = (
+  /// simple lookup to the size in bytes of TRttiParserType values
+  PT_SIZE: array[TRttiParserType] of byte = (
     0, 0, 1, 1, 4, 8, 8, 8,
     8, 4, 8, SizeOf(pointer), SizeOf(pointer), SizeOf(pointer),
     0, 4, SizeOf(pointer), SizeOf(pointer), 8, 8,
@@ -1603,9 +1603,9 @@ var
     0, 0, SizeOf(pointer), SizeOf(pointer), SizeOf(pointer), 0);
 
 const
-  /// type definition name lookup to the TRTTIParserType values
+  /// type definition name lookup to the TRttiParserType values
   // - ptComplexTypes types should see PTC_NAME[] constant
-  PT_NAME: array[TRTTIParserType] of RawUTF8 = (
+  PT_NAME: array[TRttiParserType] of RawUTF8 = (
     '', '', 'boolean', 'byte', 'cardinal', 'currency', 'double', 'extended',
     'Int64', 'integer', 'QWord', 'RawByteString', 'RawJSON', 'RawUTF8',
     '', 'single', 'string', 'SynUnicode', 'TDateTime', 'TDateTimeMS',
@@ -1613,32 +1613,32 @@ const
     'TUnixTime', 'TUnixMSTime', 'variant', 'WideString', 'WinAnsi', 'word',
     '', '', '', '', '', '');
 
-  /// type definition name lookup to the TRTTIParserComplexType values
+  /// type definition name lookup to the TRttiParserComplexType values
   // - for ptComplexTypes types, with PT_NAME[]=''
   // - ptcSpecificClassID returns '' since T....ID types are variable
-  PTC_NAME: array[TRTTIParserComplexType] of RawUTF8 = (
+  PTC_NAME: array[TRttiParserComplexType] of RawUTF8 = (
     '', 'TTimeLog', 'TCreateTime', 'TModTime', 'TID', '',
     'TRecordReference', 'TRecordReferenceToBeDeleted', 'TRecordVersion');
 
-/// retrieve the text name of one TRTTIParserType enumerate
-function ToText(t: TRTTIParserType): PShortString; overload;
+/// retrieve the text name of one TRttiParserType enumerate
+function ToText(t: TRttiParserType): PShortString; overload;
 
 /// retrieve the TypeInfo() from PT_INFO[] PTC_INFO[] constant arrays
-function ParserTypeToTypeInfo(pt: TRTTIParserType;
-  pct: TRTTIParserComplexType): PRttiInfo;
+function ParserTypeToTypeInfo(pt: TRttiParserType;
+  pct: TRttiParserComplexType): PRttiInfo;
 
 /// recognize a simple value type from a supplied type name
 // - from known ('byte', 'string', 'RawUTF8', 'TGUID'...) type names
 // - will return ptNone for any unknown type
 // - for ptORM and ptTimeLog, optional Complex will contain the specific type found
 function TypeNameToStandardParserType(Name: PUTF8Char; NameLen: integer;
-  Complex: PRTTIParserComplexType = nil): TRTTIParserType; overload;
+  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a supplied type name
 // - from known ('byte', 'string', 'RawUTF8', 'TGUID'...) type names
 // - will return ptNone for any unknown type
 function TypeNameToStandardParserType(Name: PShortString;
-  Complex: PRTTIParserComplexType = nil): TRTTIParserType; overload;
+  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// recognize a simple value type from a supplied type name
@@ -1646,20 +1646,20 @@ function TypeNameToStandardParserType(Name: PShortString;
 // calling Rtti.Find() if CheckRttiCustomTypes=true
 // - will return ptNone for any unknown type
 function TypeNameToStandardParserType(const Name: RawUTF8;
-  Complex: PRTTIParserComplexType = nil): TRTTIParserType; overload;
+  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a supplied type information
 // - if FirstSearchByName=true, will first call TypeNameToStandardParserType(Info^.Name^)
 // - will return ptNone for any unknown type
 function TypeInfoToStandardParserType(Info: PRttiInfo;
   FirstSearchByName: boolean = true;
-  Complex: PRTTIParserComplexType = nil): TRTTIParserType; overload;
+  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a dynamic array RTTI
 // - if ExactType=false, will approximate the first field
 function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
   ElemSize: integer; ExactType: boolean; out FieldSize: integer;
-  Complex: PRTTIParserComplexType = nil): TRTTIParserType;
+  Complex: PRTTIParserComplexType = nil): TRttiParserType;
 
 /// trim ending 'DynArray' or 's' chars from a dynamic array type name
 // - used internally to guess the associated item type name
@@ -1841,8 +1841,8 @@ type
   TRttiCustom = class
   protected
     fCache: TRttiCache;
-    fParser: TRTTIParserType;
-    fParserComplex: TRTTIParserComplexType;
+    fParser: TRttiParserType;
+    fParserComplex: TRttiParserComplexType;
     fFlags: TRttiCustomFlags;
     fPrivate: TObject; // used e.g. by mormot.orm.base.pas or mormot.core.log.pas
     fArrayRtti: TRttiCustom;
@@ -1850,7 +1850,7 @@ type
     fCopy: TRttiCopier;
     fName: RawUTF8;
     fProps: TRttiCustomProps;
-    fArrayFirstField: TRTTIParserType;
+    fArrayFirstField: TRttiParserType;
     // used by mormot.core.json.pas
     fBinarySize: integer;
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
@@ -1870,7 +1870,7 @@ type
       ExpectedEnd: TRttiCustomFromTextExpectedEnd);
     // initialize from fProps, with no associated RTTI - and calls DoRegister()
     // - will create a "fake" rkRecord/rkDynArray PRttiInfo (TypeName may be '')
-    procedure NoRttiSetAndRegister(ParserType: TRTTIParserType;
+    procedure NoRttiSetAndRegister(ParserType: TRttiParserType;
       const TypeName: RawUTF8; DynArrayElemType: TRttiCustom);
     // called by ValueFinalize() for dynamic array defined from text
     procedure NoRttiArrayFinalize(Data: PAnsiChar);
@@ -1878,8 +1878,8 @@ type
     // - this default method will set Name and Flags according to Props[]
     // - overriden in mormot.core.json for proper JSON process setup
     // - returns self to allow cascaded calls as a fluent interface
-    function SetParserType(aParser: TRTTIParserType;
-      aParserComplex: TRTTIParserComplexType): TRttiCustom; virtual;
+    function SetParserType(aParser: TRttiParserType;
+      aParserComplex: TRttiParserComplexType): TRttiCustom; virtual;
   public
     /// initialize the customizer class from known RTTI
     constructor Create(aInfo: PRttiInfo); virtual;
@@ -1923,9 +1923,9 @@ type
     /// define specific behavior for this type
     property Flags: TRttiCustomFlags read fFlags write fFlags;
     /// high-level Parser kind
-    property Parser: TRTTIParserType read fParser;
+    property Parser: TRttiParserType read fParser;
     /// high-level Parser Complex kind
-    property ParserComplex: TRTTIParserComplexType read fParserComplex;
+    property ParserComplex: TRttiParserComplexType read fParserComplex;
     /// store information about the properties/fields of this type
     // - only set for rkClass and rkRecord/rkObject
     property Props: TRttiCustomProps read fProps;
@@ -1936,7 +1936,7 @@ type
     property ArrayRtti: TRttiCustom read fArrayRtti;
     /// best guess of first field type for a rkDynArray
     // - equals ArrayRtti.Parser if ArrayRtti.Kind is not rkRecordTypes
-    property ArrayFirstField: TRTTIParserType read fArrayFirstField;
+    property ArrayFirstField: TRttiParserType read fArrayFirstField;
     /// store the number of bytes for hexadecimal serialization for rcfBinary
     // - used when rcfBinary is defined in Flags; equals 0 if disabled (default)
     property BinarySize: integer read fBinarySize;
@@ -3799,9 +3799,9 @@ begin
   result := GetEnumName(TypeInfo(TRttiKind), ord(k));
 end;
 
-function ToText(t: TRTTIParserType): PShortString;
+function ToText(t: TRttiParserType): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TRTTIParserType), ord(t));
+  result := GetEnumName(TypeInfo(TRttiParserType), ord(t));
 end;
 
 
@@ -5029,8 +5029,8 @@ end;
 
 { ************** RTTI Value Types used for JSON Parsing }
 
-function ParserTypeToTypeInfo(pt: TRTTIParserType;
-  pct: TRTTIParserComplexType): PRttiInfo;
+function ParserTypeToTypeInfo(pt: TRttiParserType;
+  pct: TRttiParserComplexType): PRttiInfo;
 begin
   result := PTC_INFO[pct];
   if result = nil then
@@ -5038,7 +5038,7 @@ begin
 end;
 
 function TypeNameToStandardParserType(Name: PUTF8Char; NameLen: integer;
-  Complex: PRTTIParserComplexType): TRTTIParserType;
+  Complex: PRTTIParserComplexType): TRttiParserType;
 const
   SORTEDMAX = 42;
   // fast branchless O(log(N)) binary search on x86_64
@@ -5051,7 +5051,7 @@ const
     'TRECORDVERSION', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
     'UNICODESTRING', 'UTF8STRING', 'VARIANT', 'WIDESTRING', 'WORD');
   // warning: recognized types should match at binary storage level!
-  SORTEDTYPES: array[0..SORTEDMAX] of TRTTIParserType = (
+  SORTEDTYPES: array[0..SORTEDMAX] of TRttiParserType = (
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt, ptQWord,
     ptRawByteString, ptRawByteString, ptRawJSON, ptRawUTF8,
@@ -5060,7 +5060,7 @@ const
     ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptUnixMSTime,
     ptUnixTime, ptTimeLog, ptUnicodeString,
     ptRawUTF8, ptVariant, ptWideString, ptWord);
-  SORTEDCOMPLEX: array[0..SORTEDMAX] of TRTTIParserComplexType = (
+  SORTEDCOMPLEX: array[0..SORTEDMAX] of TRttiParserComplexType = (
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
@@ -5072,7 +5072,7 @@ var
   ndx: PtrInt;
   up: PUTF8Char;
   tmp: array[byte] of AnsiChar; // avoid unneeded memory allocation
-  c: TRTTIParserComplexType;
+  c: TRttiParserComplexType;
 begin
   UpperCopy255Buf(@tmp, Name, NameLen);
   up := @tmp;
@@ -5101,19 +5101,19 @@ begin
 end;
 
 function TypeNameToStandardParserType(Name: PShortString;
-  Complex: PRTTIParserComplexType): TRTTIParserType;
+  Complex: PRTTIParserComplexType): TRttiParserType;
 begin
   result := TypeNameToStandardParserType(@Name^[1], ord(Name^[0]), Complex);
 end;
 
 function TypeNameToStandardParserType(const Name: RawUTF8;
-  Complex: PRTTIParserComplexType): TRTTIParserType;
+  Complex: PRTTIParserComplexType): TRttiParserType;
 begin
   result := TypeNameToStandardParserType(pointer(Name), length(Name), Complex);
 end;
 
 function TypeInfoToStandardParserType(Info: PRttiInfo; FirstSearchByName: boolean;
-  Complex: PRTTIParserComplexType): TRTTIParserType;
+  Complex: PRTTIParserComplexType): TRttiParserType;
 var
   cp: integer;
 begin
@@ -5249,7 +5249,7 @@ end;
 
 function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
   ElemSize: integer; ExactType: boolean; out FieldSize: integer;
-  Complex: PRTTIParserComplexType): TRTTIParserType;
+  Complex: PRTTIParserComplexType): TRttiParserType;
 // warning: we can't use TRttiInfo.RecordAllFields since it would break
 // backward compatibility and code expectations
 var
@@ -5932,8 +5932,8 @@ end;
 constructor TRttiCustom.Create(aInfo: PRttiInfo);
 var
   dummy: integer;
-  pt: TRTTIParserType;
-  pct: TRTTIParserComplexType;
+  pt: TRttiParserType;
+  pct: TRttiParserComplexType;
 begin
   if aInfo = nil then
   begin
@@ -6001,7 +6001,7 @@ begin
   fPrivate.Free;
 end;
 
-procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRTTIParserType;
+procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRttiParserType;
   const TypeName: RawUTF8; DynArrayElemType: TRttiCustom);
 begin
   if (fNoRttiInfo <> nil) or
@@ -6048,8 +6048,8 @@ begin
   Rtti.DoRegister(self);
 end;
 
-function TRttiCustom.SetParserType(aParser: TRTTIParserType;
-  aParserComplex: TRTTIParserComplexType): TRttiCustom;
+function TRttiCustom.SetParserType(aParser: TRttiParserType;
+  aParserComplex: TRttiParserComplexType): TRttiCustom;
 begin
   fParser := aParser;
   fParserComplex := aParserComplex;
@@ -6199,7 +6199,7 @@ var
   propname, typname, atypname: RawUTF8;
   ee: TRttiCustomFromTextExpectedEnd;
   alen, i: PtrInt;
-  pt, apt: TRTTIParserType;
+  pt, apt: TRttiParserType;
   c, ac, nested: TRttiCustom;
   cp: PRttiCustomProp;
 begin
@@ -6570,8 +6570,8 @@ end;
 function TRttiCustomList.RegisterTypeFromName(Name: PUTF8Char;
   NameLen: PtrInt; ParserType: PRTTIParserType): TRttiCustom;
 var
-  pt: TRTTIParserType;
-  pct: TRTTIParserComplexType;
+  pt: TRttiParserType;
+  pct: TRttiParserComplexType;
 begin
   result := Find(Name, NameLen);
   if result = nil then
@@ -6897,7 +6897,7 @@ end;
 procedure InitializeUnit;
 var
   k: TRttiKind;
-  t: TRTTIParserType;
+  t: TRttiParserType;
 begin
   RTTI_FINALIZE[rkLString]   := @_StringClear;
   RTTI_FINALIZE[rkWString]   := @_WStringClear;

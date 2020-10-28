@@ -1287,12 +1287,12 @@ type
   // - if the implementation method returns TRUE, will continue the loop
   // - if the implementation method returns FALSE, will stop values browsing
   // - aOpaque is a custom value specified at ForEach() method call
-  TSynDictionaryEvent = function(const aKey; var aValue;
+  TOnSynDictionary = function(const aKey; var aValue;
     aIndex, aCount: integer; aOpaque: pointer): boolean of object;
 
   /// event called by TSynDictionary.DeleteDeprecated
   // - called just before deletion: return false to by-pass this item
-  TSynDictionaryCanDeleteEvent = function(const aKey, aValue;
+  TOnSynDictionaryCanDelete = function(const aKey, aValue;
     aIndex: integer): boolean of object;
 
   /// thread-safe dictionary to store some values from associated keys
@@ -1309,7 +1309,7 @@ type
     fTimeOut: TCardinalDynArray;
     fTimeOuts: TDynArray;
     fCompressAlgo: TAlgoCompress;
-    fOnCanDelete: TSynDictionaryCanDeleteEvent;
+    fOnCanDelete: TOnSynDictionaryCanDelete;
     function InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray;
       aCompare: TDynArraySortCompare): boolean;
     procedure SetTimeouts;
@@ -1407,7 +1407,7 @@ type
     // - would browse the list in the adding order
     // - returns the number of times OnEach has been called
     // - this method is thread-safe, since it will lock the instance
-    function ForEach(const OnEach: TSynDictionaryEvent;
+    function ForEach(const OnEach: TOnSynDictionary;
       Opaque: pointer = nil): integer; overload;
     /// apply a specified event over matching items stored in this dictionnary
     // - would browse the list in the adding order, comparing each key and/or
@@ -1415,12 +1415,12 @@ type
     // - returns the number of times OnMatch has been called, i.e. how many times
     // KeyCompare(aKey,Keys[#])=0 or ValueCompare(aValue,Values[#])=0
     // - this method is thread-safe, since it will lock the instance
-    function ForEach(const OnMatch: TSynDictionaryEvent;
+    function ForEach(const OnMatch: TOnSynDictionary;
       KeyCompare, ValueCompare: TDynArraySortCompare; const aKey, aValue;
       Opaque: pointer = nil): integer; overload;
     /// touch the entry timeout field so that it won't be deprecated sooner
     // - this method is not thread-safe, and is expected to be execute e.g.
-    // from a ForEach() TSynDictionaryEvent callback
+    // from a ForEach() TOnSynDictionary callback
     procedure SetTimeoutAtIndex(aIndex: integer);
     /// search aArrayValue item in a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
@@ -1534,7 +1534,7 @@ type
     /// callback to by-pass DeleteDeprecated deletion by returning false
     // - can be assigned e.g. to OnCanDeleteSynPersistentLock if Value is a
     // TSynPersistentLock instance, to avoid any potential access violation
-    property OnCanDeleteDeprecated: TSynDictionaryCanDeleteEvent
+    property OnCanDeleteDeprecated: TOnSynDictionaryCanDelete
       read fOnCanDelete write fOnCanDelete;
   end;
 
@@ -1562,7 +1562,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  /// internal function handler for JSON persistence of any TRTTIParserType value
+  /// internal function handler for JSON persistence of any TRttiParserType value
   // - i.e. the kind of functions called via PT_JSONSAVE[] lookup table
   TRttiJsonSave = procedure(Data: pointer; const Ctxt: TJsonSaveContext);
 
@@ -1656,7 +1656,7 @@ type
 
   PJsonParserContext = ^TJsonParserContext;
 
-  /// internal function handler for JSON reading of any TRTTIParserType value
+  /// internal function handler for JSON reading of any TRttiParserType value
   TRttiJsonLoad = procedure(Data: pointer; var Ctxt: TJsonParserContext);
 
 
@@ -1726,8 +1726,8 @@ type
     fClassNewInstance: TRttiJsonNewInstance;
     fCompare: array[boolean] of TRttiCompare;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
-    function SetParserType(aParser: TRTTIParserType;
-      aParserComplex: TRTTIParserComplexType): TRttiCustom; override;
+    function SetParserType(aParser: TRttiParserType;
+      aParserComplex: TRttiParserComplexType): TRttiCustom; override;
   public
     /// create a new TObject instance of this rkClass
     // - ensure the proper virtual constructor is called (if any)
@@ -4588,7 +4588,7 @@ end;
 
 
 
-{ ********** Low-Level JSON Serialization for all TRTTIParserType }
+{ ********** Low-Level JSON Serialization for all TRttiParserType }
 
 { TJsonSaveContext }
 
@@ -4951,7 +4951,7 @@ const
   /// use pointer to allow any kind of Data^ type in above functions
   // - typecast to TRttiJsonSave for proper function call
   // - rkRecord, rkArray and rkClass are handled in TRttiJson
-  PT_JSONSAVE: array[TRTTIParserType] of pointer = (
+  PT_JSONSAVE: array[TRttiParserType] of pointer = (
     nil, nil, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
     @_JS_RawByteString, @_JS_RawJSON, @_JS_RawUTF8, nil, @_JS_Single,
@@ -4963,7 +4963,7 @@ const
 
   /// use pointer to allow any complex kind of Data^ type in above functions
   // - typecast to TRttiJsonSave for proper function call
-  PTC_JSONSAVE: array[TRTTIParserComplexType] of pointer = (
+  PTC_JSONSAVE: array[TRttiParserComplexType] of pointer = (
     nil, nil, nil, nil, @_JS_ID, @_JS_ID, @_JS_QWord, @_JS_QWord, @_JS_QWord);
 
 type
@@ -6064,7 +6064,7 @@ begin
     begin
       Value := GetJSONField(JSON, result, nil, EndOfObject); // let wasString=nil
       if Value = nil then
-        AddShort('null')
+        AddNull
       else
       begin
         c := PInteger(Value)^ and $ffffff;
@@ -6518,7 +6518,7 @@ begin
 end;
 
 
-{ ********** Low-Level JSON UnSerialization for all TRTTIParserType }
+{ ********** Low-Level JSON UnSerialization for all TRttiParserType }
 
 { TJsonParserContext }
 
@@ -7227,7 +7227,7 @@ var
   /// use pointer to allow any kind of Data^ type in above functions
   // - typecast to TRttiJsonSave for proper function call
   // - rkRecord, rkArray and rkClass are handled in TRttiJson
-  PT_JSONLOAD: array[TRTTIParserType] of pointer = (
+  PT_JSONLOAD: array[TRttiParserType] of pointer = (
     nil, nil, @_JL_Boolean, @_JL_Byte, @_JL_Cardinal, @_JL_Currency,
     @_JL_Double, @_JL_Extended, @_JL_Int64, @_JL_Integer, @_JL_QWord,
     @_JL_RawByteString, @_JL_RawJSON, @_JL_RawUTF8, nil,
@@ -8566,7 +8566,7 @@ begin
   end;
 end;
 
-function TSynDictionary.ForEach(const OnEach: TSynDictionaryEvent;
+function TSynDictionary.ForEach(const OnEach: TOnSynDictionary;
   Opaque: pointer): integer;
 var
   k, v: PAnsiChar;
@@ -8596,7 +8596,7 @@ begin
   end;
 end;
 
-function TSynDictionary.ForEach(const OnMatch: TSynDictionaryEvent;
+function TSynDictionary.ForEach(const OnMatch: TOnSynDictionary;
   KeyCompare, ValueCompare: TDynArraySortCompare; const aKey, aValue;
   Opaque: pointer): integer;
 var
@@ -8852,8 +8852,8 @@ begin
   result := Rtti.ValueClass.Create;
 end;
 
-function TRttiJson.SetParserType(aParser: TRTTIParserType;
-  aParserComplex: TRTTIParserComplexType): TRttiCustom;
+function TRttiJson.SetParserType(aParser: TRttiParserType;
+  aParserComplex: TRttiParserComplexType): TRttiCustom;
 var
   C: TClass;
 begin

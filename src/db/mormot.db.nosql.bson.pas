@@ -2774,7 +2774,7 @@ begin
             W.WrBase64(Data.Blob, Data.BlobLen, false);
             W.AddShort(BSON_JSON_BINARY[false, true]);
             W.AddBinToHex(@Data.BlobSubType, 1);
-            W.AddShort('"}');
+            W.AddShorter('"}');
           end;
         modMongoShell:
           begin
@@ -2782,7 +2782,7 @@ begin
             W.AddBinToHex(@Data.BlobSubType, 1);
             W.AddShort(BSON_JSON_BINARY[true, true]);
             W.WrBase64(Data.Blob, Data.BlobLen, false);
-            W.AddShort('")');
+            W.AddShorter('")');
           end;
       end;
     ord(betRegEx):
@@ -2824,7 +2824,7 @@ regex:      W.AddShort(BSON_JSON_REGEX[0]);
         W.AddShort(BSON_JSON_DATE[Mode, true]);
       end;
     ord(betNull):
-      W.AddShort('null');
+      W.AddNull;
     ord(betInt32):
       W.Add(PInteger(Element)^);
     ord(betInt64):

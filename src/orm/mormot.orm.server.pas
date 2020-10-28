@@ -164,13 +164,13 @@ type
     // - to be used only server-side, not to synchronize some clients: the framework
     // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
     // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-    OnUpdateEvent: TNotifySQLEvent;
+    OnUpdateEvent: TOnOrmEvent;
     /// a method can be specified here to trigger events after any blob update
     // - is called AFTER update of one or several blobs, never on delete nor insert
     // - to be used only server-side, not to synchronize some clients: the framework
     // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
     // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
-    OnBlobUpdateEvent: TNotifyFieldSQLEvent;
+    OnBlobUpdateEvent: TOnOrmFieldEvent;
 
     /// initialize the class, and associated to a TRest and its TOrmModel
     constructor Create(aRest: TRest); override;

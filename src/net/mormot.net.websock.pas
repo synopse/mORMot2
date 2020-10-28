@@ -751,7 +751,7 @@ type
     // - by design, the KeepAliveTimeOut value is ignored with this server
     // once it has been upgraded to WebSockets
     constructor Create(const aPort: RawUTF8;
-      const OnStart, OnStop: TNotifyThreadEvent; const ProcessName: RawUTF8;
+      const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8;
       ServerThreadPoolCount: integer = 2; KeepAliveTimeOut: integer = 30000;
       HeadersUnFiltered: boolean = false; CreateSuspended: boolean = false); override;
     /// close the server
@@ -804,7 +804,7 @@ type
     // so that AJAX applications would be able to connect to this server
     // - warning: WaitStarted should be called after Create() to check for
     // for actual port binding in the background thread
-    constructor Create(const aPort: RawUTF8; const OnStart, OnStop: TNotifyThreadEvent;
+    constructor Create(const aPort: RawUTF8; const OnStart, OnStop: TOnNotifyThread;
       const aProcessName, aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean = false); reintroduce; overload;
     /// defines the WebSockets protocols to be used for this Server
@@ -2963,7 +2963,7 @@ end;
 { TWebSocketServer }
 
 constructor TWebSocketServer.Create(const aPort: RawUTF8;
-  const OnStart, OnStop: TNotifyThreadEvent; const ProcessName: RawUTF8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer; HeadersUnFiltered, CreateSuspended: boolean);
 begin
   // override with custom processing classes
@@ -3157,7 +3157,7 @@ end;
 { TWebSocketServerRest }
 
 constructor TWebSocketServerRest.Create(const aPort: RawUTF8;
-  const OnStart, OnStop: TNotifyThreadEvent; const aProcessName, aWebSocketsURI,
+  const OnStart, OnStop: TOnNotifyThread; const aProcessName, aWebSocketsURI,
   aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
 begin
   Create(aPort, OnStart, OnStop, aProcessName);

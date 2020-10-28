@@ -773,7 +773,8 @@ type
   // - called just after the measurement of each process CPU and RAM consumption
   // - run from the background thread, so should not directly make VCL calls,
   // unless BackgroundExecute is run from a VCL timer
-  TOnSystemUseMeasured = procedure(ProcessID: integer; const Data: TSystemUseData) of object;
+  TOnSystemUseMeasured = procedure(ProcessID: integer;
+    const Data: TSystemUseData) of object;
 
   /// internal storage of CPU and RAM usage for one process
   TSystemUseProcess = record

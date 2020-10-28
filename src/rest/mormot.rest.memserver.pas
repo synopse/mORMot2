@@ -163,7 +163,7 @@ type
   // binary files
   // - so it will not handle all SQL requests, just basic CRUD commands and
   // most simple SELECT with a single where clause, on a single table
-  // - at least, it will compile as a TSQLRestServer without complaining for
+  // - at least, it will compile as a TRestServer without complaining for
   // pure abstract methods; it can be used to host some services if database
   // and ORM needs are basic (e.g. if only authentication and CRUD are needed),
   // without the need to link the SQLite3 engine
@@ -176,7 +176,7 @@ type
     constructor Create(aModel: TOrmModel;
       aHandleUserAuthentication: boolean = false); overload; override;
     /// initialize an in-memory REST server with a database file
-    // - all classes of the model will be created as TSQLRestStorageInMemory
+    // - all classes of the model will be created as TRestStorageInMemory
     // - then data persistence will be initialized using aFileName, but no
     // file will be written to disk, unless you call explicitly UpdateToFile
     // - if aFileName is left void (''), data will not be persistent
@@ -193,7 +193,7 @@ type
   published
     /// this method-base service will be accessible from ModelRoot/Flush URI,
     // and will write any modification into file
-    // - method parameters signature matches TSQLRestServerCallBack type
+    // - method parameters signature matches TOnRestServerCallBack type
     // - do nothing if file name was not assigned
     // - can be used from a remote client to ensure that any Add/Update/Delete
     // will be stored to disk, via
@@ -210,9 +210,9 @@ type
 // - can load the table content from a file if a file name is specified
 // (could be either JSON or compressed Binary format on disk)
 // - you can define a particular external engine by using a custom class -
-// by default, it will create a TSQLRestStorageInMemory instance
+// by default, it will create a TRestStorageInMemory instance
 // - this data handles basic REST commands, since no complete SQL interpreter
-// can be implemented by TSQLRestStorage; to provide full SQL process,
+// can be implemented by TRestStorage; to provide full SQL process,
 // you should better use a Virtual Table class, inheriting e.g. from
 // TOrmVirtualTableAutoID associated with TOrmVirtualTableJSON/Binary
 // via a Model.VirtualTableRegister() call before TRestServer.Create
@@ -446,8 +446,8 @@ begin
   result := false; // not implemented in this basic REST server class
 end;
 
-function TRestOrmServerFullMemory.GetStorage(aTable: TOrmClass):
-  TRestStorageInMemory;
+function TRestOrmServerFullMemory.GetStorage(
+  aTable: TOrmClass): TRestStorageInMemory;
 var
   i: cardinal;
 begin

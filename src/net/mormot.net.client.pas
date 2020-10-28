@@ -326,7 +326,7 @@ type
   // - used in TWinHttpAPI.OnProgress property
   // - CurrentSize is the current total number of downloaded bytes
   // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
-  TWinHttpProgress = procedure(Sender: TWinHttpAPI;
+  TOnWinHttpProgress = procedure(Sender: TWinHttpAPI;
     CurrentSize, ContentLength: cardinal) of object;
 
   /// event callback to process the download by chunks, not in memory
@@ -355,7 +355,7 @@ type
   // implemented by TWinINet or TWinHttp with the proper API calls
   TWinHttpAPI = class(THttpRequest)
   protected
-    fOnProgress: TWinHttpProgress;
+    fOnProgress: TOnWinHttpProgress;
     fOnDownload: TWinHttpDownload;
     fOnUpload: TWinHttpUpload;
     fOnDownloadChunkSize: cardinal;
@@ -376,7 +376,7 @@ type
     /// do not add "Accept: */*" HTTP header by default
     property NoAllAccept: boolean read fNoAllAccept write fNoAllAccept;
     /// download would call this method to notify progress of incoming data
-    property OnProgress: TWinHttpProgress read fOnProgress write fOnProgress;
+    property OnProgress: TOnWinHttpProgress read fOnProgress write fOnProgress;
     /// download would call this method instead of filling Data: RawByteString value
     // - may be used e.g. when downloading huge content, and saving directly
     // the incoming data on disk or database

@@ -106,7 +106,7 @@ type
   /// function prototype for TRestClientAuthenticationSignedURI and
   // TRestServerAuthenticationSignedURI computation of the session_signature
   // parameter value
-  TRestAuthenticationSignedURIComputeSignature = function(
+  TOnRestAuthenticationSignedURIComputeSignature = function(
     privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal of object;
 
   /// abstract class used to implement client-side authentication
@@ -186,7 +186,7 @@ type
   public
     /// retrieve the method to compute the session_signature=.... value
     class function GetComputeSignature(
-      algo: TRestAuthenticationSignedURIAlgo): TRestAuthenticationSignedURIComputeSignature;
+      algo: TRestAuthenticationSignedURIAlgo): TOnRestAuthenticationSignedURIComputeSignature;
     /// class method to be called on client side to sign an URI
     // - generate the digital signature as expected by overridden RetrieveSession()
     // - timestamp resolution is about 256 ms in the current implementation
@@ -358,7 +358,7 @@ type
   TSQLRestServerAuthenticationClientSetUserPassword = TRestClientSetUserPassword;
   TSQLRestServerAuthenticationSignedURIAlgo = TRestAuthenticationSignedURIAlgo;
   TSQLRestServerAuthenticationSignedURIComputeSignature  =
-    TRestAuthenticationSignedURIComputeSignature;
+    TOnRestAuthenticationSignedURIComputeSignature;
   // TRestServerAuthentication* classes have client-side only corresponding
   // types named as TRestClientAuthentication*
 
@@ -506,7 +506,7 @@ type
   protected
     fOrmClient: IRestOrmClient;
     fSession: TRestClientSession;
-    fComputeSignature: TRestAuthenticationSignedURIComputeSignature;
+    fComputeSignature: TOnRestAuthenticationSignedURIComputeSignature;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnFailed: TOnClientFailed;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
@@ -809,7 +809,7 @@ type
     // - will be used by TRestServerAuthenticationSignedURI classes,
     // e.g. TRestServerAuthenticationDefault instead of the algorithm
     // specified by the server at session handshake
-    property ComputeSignature: TRestAuthenticationSignedURIComputeSignature
+    property ComputeSignature: TOnRestAuthenticationSignedURIComputeSignature
       read fComputeSignature write fComputeSignature;
     /// the current session information as set by a successfull SetUser() call
     property Session: TRestClientSession read fSession;
@@ -1166,7 +1166,7 @@ begin
 end;
 
 class function TRestClientAuthenticationSignedURI.GetComputeSignature(
-  algo: TRestAuthenticationSignedURIAlgo): TRestAuthenticationSignedURIComputeSignature;
+  algo: TRestAuthenticationSignedURIAlgo): TOnRestAuthenticationSignedURIComputeSignature;
 begin
   // FPC doesn't allow to use constants for procedure of object
   case algo of

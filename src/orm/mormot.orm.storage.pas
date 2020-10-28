@@ -27,9 +27,6 @@ uses
   classes,
   variants,
   contnrs,
-  {$ifndef FPC}
-//  typinfo, // for proper Delphi inlining
-  {$endif FPC}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -604,7 +601,7 @@ type
   // point e.g. to a result list, or a shared variable to apply the process
   // - aRec will point to the corresponding item
   // - aIndex will identify the item index in the internal list
-  TFindWhereEqualEvent = procedure(
+  TOnFindWhereEqual = procedure(
     aDest: pointer; aRec: TOrm; aIndex: integer) of object;
 
   /// abstract REST storage exposing some internal TOrm-based methods
@@ -659,8 +656,8 @@ type
     fPropInfo: TOrmPropInfo;
     fCaseInsensitive: boolean;
     fLastFindHashCode: cardinal;
-    function EventCompare(const A,B): integer; // match TEventDynArraySortCompare
-    function EventHash(const Elem): cardinal;  // match TEventDynArrayHashOne
+    function EventCompare(const A,B): integer; // match TOnDynArraySortCompare
+    function EventHash(const Elem): cardinal;  // match TOnDynArrayHashOne
   public
     /// initialize a hash for a record array field
     // - aField maps the "stored AS_UNIQUE" published property
@@ -908,7 +905,7 @@ type
     // - returns the number of found entries
     // - is just a wrapper around FindWhereEqual() with StorageLock protection
     function SearchEvent(const FieldName, FieldValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer;
+      const OnFind: TOnFindWhereEqual; Dest: pointer;
       FoundLimit, FoundOffset: PtrInt): integer;
     /// optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
     // - will use fast O(1) hash for fUnique[] fields
@@ -916,7 +913,7 @@ type
     // CaseInsensitive is set to FALSE
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer;
+      const OnFind: TOnFindWhereEqual; Dest: pointer;
       FoundLimit, FoundOffset: PtrInt;
       CaseInsensitive: boolean = true): PtrInt; overload;
     /// optimized search of WhereValue in a field, specified by name
@@ -925,7 +922,7 @@ type
     // CaseInsensitive is set to FALSE
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhereEqual(const WhereFieldName, WhereValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer;
+      const OnFind: TOnFindWhereEqual; Dest: pointer;
       FoundLimit, FoundOffset: integer;
       CaseInsensitive: boolean = true): PtrInt; overload;
     /// search the maximum value of a given column
@@ -934,20 +931,20 @@ type
     /// execute a method on every TOrm item
     // - the loop execution will be protected via StorageLock/StorageUnlock
     procedure ForEach(WillModifyContent: boolean;
-      OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
-    /// low-level TFindWhereEqualEvent callback doing nothing
+      const OnEachProcess: TOnFindWhereEqual; Dest: pointer);
+    /// low-level TOnFindWhereEqual callback doing nothing
     class procedure DoNothingEvent(aDest: pointer;
       aRec: TOrm; aIndex: integer);
-    /// low-level TFindWhereEqualEvent callback making PPointer(aDest)^ := aRec
+    /// low-level TOnFindWhereEqual callback making PPointer(aDest)^ := aRec
     class procedure DoInstanceEvent(aDest: pointer;
       aRec: TOrm; aIndex: integer);
-    /// low-level TFindWhereEqualEvent callback making PInteger(aDest)^ := aIndex
+    /// low-level TOnFindWhereEqual callback making PInteger(aDest)^ := aIndex
     class procedure DoIndexEvent(aDest: pointer;
       aRec: TOrm; aIndex: integer);
-    /// low-level TFindWhereEqualEvent callback making PPointer(aDest)^ := aRec.CreateCopy
+    /// low-level TOnFindWhereEqual callback making PPointer(aDest)^ := aRec.CreateCopy
     class procedure DoCopyEvent(aDest: pointer;
       aRec: TOrm; aIndex: integer);
-    /// low-level TFindWhereEqualEvent callback calling TSynList(aDest).Add(aRec)
+    /// low-level TOnFindWhereEqual callback calling TSynList(aDest).Add(aRec)
     class procedure DoAddToListEvent(aDest: pointer;
       aRec: TOrm; aIndex: integer);
     /// read-only access to the TOrm values, storing the data
@@ -2290,7 +2287,7 @@ begin
 end;
 
 function TRestStorageInMemory.FindWhereEqual(
-  const WhereFieldName, WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent;
+  const WhereFieldName, WhereValue: RawUTF8; const OnFind: TOnFindWhereEqual;
   Dest: pointer; FoundLimit, FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
 var
   WhereFieldIndex: integer;
@@ -2314,7 +2311,7 @@ begin
 end;
 
 function TRestStorageInMemory.FindWhereEqual(WhereField: integer;
-  const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
+  const WhereValue: RawUTF8; const OnFind: TOnFindWhereEqual; Dest: pointer;
   FoundLimit, FoundOffset: PtrInt; CaseInsensitive: boolean): PtrInt;
 var
   i, currentRow, found: PtrInt;
@@ -2524,7 +2521,7 @@ begin
 end;
 
 procedure TRestStorageInMemory.ForEach(WillModifyContent: boolean;
-  OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
+  const OnEachProcess: TOnFindWhereEqual; Dest: pointer);
 var
   i: PtrInt;
 begin
@@ -3707,7 +3704,7 @@ begin
 end;
 
 function TRestStorageInMemory.SearchEvent(const FieldName, FieldValue: RawUTF8;
-  OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit, FoundOffset: PtrInt): integer;
+  const OnFind: TOnFindWhereEqual; Dest: pointer; FoundLimit, FoundOffset: PtrInt): integer;
 begin
   result := 0;
   if (self = nil) or
