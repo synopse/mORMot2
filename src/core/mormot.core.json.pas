@@ -9594,7 +9594,8 @@ begin
   JSON_ESCAPE[ord('\')] := ord('\');
   JSON_ESCAPE[ord('"')] := ord('"');
   // branchless JSON parsing
-  for c := low(c) to high(c) do begin
+  for c := low(c) to high(c) do
+  begin
     if c in [#0, ',', ']', '}', ':'] then
       include(JSON_CHARS[c], jcEndOfJSONFieldOr0);
     if c in [#0, #9, #10, #13, ' ',  ',', '}', ']'] then

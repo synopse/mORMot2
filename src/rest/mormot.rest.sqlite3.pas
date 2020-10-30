@@ -202,8 +202,8 @@ constructor TRestServerDB.CreateWithOwnModel(const aTables: array of TOrmClass;
   const aRoot: RawUTF8; const aPassword: RawUTF8; aDefaultCacheSize: integer;
   aDefaultPageSize: integer);
 begin
-  Create(TOrmModel.Create(aTables, aRoot), aDBFileName, aHandleUserAuthentication,
-    aPassword, aDefaultCacheSize, aDefaultPageSize);
+  Create(TOrmModel.Create(aTables, aRoot), aDBFileName,
+    aHandleUserAuthentication, aPassword, aDefaultCacheSize, aDefaultPageSize);
 end;
 
 constructor TRestServerDB.Create(aModel: TOrmModel;
@@ -222,8 +222,8 @@ constructor TRestServerDB.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition;
   aServerHandleAuthentication: boolean);
 begin
-  Create(aModel,UTF8ToString(aDefinition.ServerName),aServerHandleAuthentication,
-    aDefinition.PasswordPlain);
+  Create(aModel, UTF8ToString(aDefinition.ServerName),
+    aServerHandleAuthentication, aDefinition.PasswordPlain);
 end;
 
 procedure TRestServerDB.DefinitionTo(Definition: TSynConnectionDefinition);
@@ -232,17 +232,18 @@ begin
     exit;
   inherited DefinitionTo(Definition); // set Kind
   with fOrmInstance as TRestOrmServerDB do
-  if DB<>nil then begin
-    Definition.ServerName := StringToUTF8(DB.FileName);
-    Definition.PasswordPlain := DB.Password;
-  end;
+    if DB <> nil then
+    begin
+      Definition.ServerName := StringToUTF8(DB.FileName);
+      Definition.PasswordPlain := DB.Password;
+    end;
 end;
 
 procedure TRestServerDB.SetLogClass(aClass: TSynLogClass);
 begin
   inherited SetLogClass(aClass);
   with fOrmInstance as TRestOrmServerDB do
-    if DB<>nil then
+    if DB <> nil then
       // ensure the low-level SQLite3 engine will share the same log
       DB.Log := aClass;
 end;
@@ -272,7 +273,8 @@ begin
       StatementCache.SortCacheByTotalTime(ndx);
       with StatementCache do
       for i := 0 to Count-1 do
-        with Cache[ndx[i]] do begin
+        with Cache[ndx[i]] do
+        begin
           W.AddJSONEscape([StatementSQL,Timer]);
           W.Add(',');
         end;
@@ -337,7 +339,7 @@ begin
   // next line will create aModel tables if necessary
   fOwnedServer := aServerClass.Create(aServerModel, aDB, aHandleUserAuthentication);
   fServer := fOwnedServer;
-  fServer.NoAJAXJSON := true; // use smaller JSON size in this local use (never AJAX)
+  fServer.NoAJAXJSON := true; // use smaller JSON size in this local use
 end;
 
 constructor TRestClientDB.Create(aClientModel, aServerModel: TOrmModel;

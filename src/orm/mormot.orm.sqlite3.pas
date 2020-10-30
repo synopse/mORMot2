@@ -2307,7 +2307,8 @@ begin
       valuesCount := 0;
       rowCount := 0;
       Fields := nil; // force new SQL statement and Values[]
-    until DecodeSaved and (ndx = fBatchValuesCount);
+    until DecodeSaved and
+          (ndx = fBatchValuesCount);
     if valuesFirstRow <> fBatchValuesCount then
       raise EORMBatchException.CreateUTF8(
         '%.InternalBatchStop(valuesFirstRow)', [self]);

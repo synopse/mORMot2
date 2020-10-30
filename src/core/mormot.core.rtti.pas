@@ -4013,7 +4013,8 @@ var
   i: integer;
 begin
   if aSearchedOffset <> nil then
-    while aClassType <> nil do begin
+    while aClassType <> nil do
+    begin
       for i := 1 to GetRttiProp(aClassType, result) do
         if result^.GetFieldAddr(nil) = aSearchedOffset then
           exit

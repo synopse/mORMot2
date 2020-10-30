@@ -3419,7 +3419,8 @@ begin
     ExecuteSOAByMethod;
     exit;
   end;
-  if not CanExecuteORMWrite(Method, Table, TableIndex, TableID, Call.RestAccessRights^) then
+  if not CanExecuteORMWrite(Method, Table, TableIndex, TableID,
+      Call.RestAccessRights^) then
   begin
     Call.OutStatus := HTTP_FORBIDDEN;
     exit;
@@ -3524,7 +3525,8 @@ begin
       // DELETE
       if TableID > 0 then
         // ModelRoot/TableName/TableID to delete a member
-        if not orm.RecordCanBeUpdated(Table, TableID, oeDelete, @CustomErrorMsg) then
+        if not orm.RecordCanBeUpdated(Table, TableID, oeDelete,
+            @CustomErrorMsg) then
           Call.OutStatus := HTTP_FORBIDDEN
         else
         begin
@@ -5679,14 +5681,16 @@ var
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
   if fSessions = nil then
-    exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
+    // avoid GPF e.g. in case of missing sqlite3-64.dll
+    exit;
   log := fLogClass.Enter('Shutdown(%) % CurrentRequestCount=%',
     [aStateFileName, fModel.Root, fStats.AddCurrentRequestCount(0)], self);
   OnNotifyCallback := nil;
   fSessions.Safe.Lock;
   try
     if fShutdownRequested then
-      exit; // Shutdown method already called
+      // Shutdown method already called
+      exit;
     fShutdownRequested := true; // will be identified by TRestServer.URI()
   finally
     fSessions.Safe.UnLock;
@@ -6729,7 +6733,8 @@ var
   outcomingfile: boolean;
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  log := fLogClass.Enter('URI % % in=%', [Call.Method, Call.Url, KB(Call.InBody)], self);
+  log := fLogClass.Enter('URI % % in=%',
+    [Call.Method, Call.Url, KB(Call.InBody)], self);
   QueryPerformanceMicroSeconds(timeStart);
   fStats.AddCurrentRequestCount(1);
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
@@ -6777,8 +6782,9 @@ begin
               (fJWTForUnauthenticatedRequest = nil) or
               (Ctxt.MethodIndex = fPublishedMethodTimestampIndex) or
               ((llfSecured in Call.LowLevelFlags) and
-               not (llfHttps in Call.LowLevelFlags)) or // HTTPS does not authenticate
-             Ctxt.AuthenticationCheck(fJWTForUnauthenticatedRequest) then
+               // HTTPS does not authenticate by itself
+               not (llfHttps in Call.LowLevelFlags)) or
+              Ctxt.AuthenticationCheck(fJWTForUnauthenticatedRequest) then
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex >= 0 then
@@ -6794,11 +6800,13 @@ begin
         else
           // write methods (mPOST, mPUT, mDELETE...)
           Ctxt.Command := execOrmWrite;
-        if not Assigned(OnBeforeURI) or OnBeforeURI(Ctxt) then
+        if not Assigned(OnBeforeURI) or
+           OnBeforeURI(Ctxt) then
           Ctxt.ExecuteCommand;
       except
         on E: Exception do
-          if not Assigned(OnErrorURI) or OnErrorURI(Ctxt, E) then
+          if not Assigned(OnErrorURI) or
+             OnErrorURI(Ctxt, E) then
             if E.ClassType = EInterfaceFactory then
               Ctxt.Error(E, '', [], HTTP_NOTACCEPTABLE)
             else

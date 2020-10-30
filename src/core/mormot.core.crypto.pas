@@ -4955,7 +4955,8 @@ const
 var i: integer;
     c: cardinal;
 begin
-  for i := 1 to len div 3 do begin
+  for i := 1 to len div 3 do
+  begin
     c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
     rp[0] := b64[(c shr 18) and $3f];
     rp[1] := b64[(c shr 12) and $3f];

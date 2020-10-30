@@ -6753,7 +6753,8 @@ begin
       end;
     end;
     // execute the method
-    for i := 0 to InstancesLast do begin
+    for i := 0 to InstancesLast do
+    begin
       // handle method execution interception
       fCurrentStep := smsBefore;
       if fOnExecute <> nil then
