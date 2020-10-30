@@ -42,6 +42,7 @@ uses
   mormot.db.core,
   mormot.db.sql,
   mormot.rest.core,
+  mormot.rest.server,
   mormot.rest.memserver;
 
 

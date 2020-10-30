@@ -171,6 +171,17 @@ type
   end;
 
 
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
+
+type
+  TSQLRestClientDB = TRestClientDB;
+  // should be a proper type for RegisterClassNameForDefinition
+  TSQLRestServerDB = type TRestServerDB;
+
+{$endif PUREMORMOT2}
+
+
 implementation
 
 
@@ -398,5 +409,9 @@ end;
 
 initialization
   TRestServerDB.RegisterClassNameForDefinition;
+  {$ifndef PUREMORMOT2}
+  TSQLRestServerDB.RegisterClassNameForDefinition;
+  {$endif PUREMORMOT2}
+
 end.
 

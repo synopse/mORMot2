@@ -237,6 +237,7 @@ function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
 // backward compatibility types redirections
 
 type
+  // should be a proper type for RegisterClassNameForDefinition
   TSQLRestServerFullMemory = TRestServerFullMemory;
 
 {$endif PUREMORMOT2}
@@ -692,5 +693,9 @@ end;
 
 initialization
   TRestServerFullMemory.RegisterClassNameForDefinition;
+  {$ifndef PUREMORMOT2}
+  TSQLRestServerFullMemory.RegisterClassNameForDefinition;
+  {$endif PUREMORMOT2}
+
 end.
 

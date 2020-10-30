@@ -1743,7 +1743,7 @@ begin
   // retrieve the BLOB using SQL
   try
     SQL := FormatUTF8('SELECT % FROM % WHERE RowID=?',
-      [BlobField^.Name, model.TableProps[TableModelIndex].Props.SQLTableName],
+      [BlobField^.NameUTF8, model.TableProps[TableModelIndex].Props.SQLTableName],
       [aID]);
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
@@ -1867,7 +1867,7 @@ begin
   Props := model.TableProps[TableModelIndex].Props;
   try
     FormatUTF8('UPDATE % SET %=? WHERE RowID=?',
-      [Props.SQLTableName, BlobField^.Name], SQL);
+      [Props.SQLTableName, BlobField^.NameUTF8], SQL);
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
       GetAndPrepareStatement(SQL, true);
