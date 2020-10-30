@@ -222,7 +222,8 @@
             <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_X64MM
 -dFPCMM_DEBUG
--dFPCMM_REPORTMEMORYLEAKS"/>
+-dFPCMM_REPORTMEMORYLEAKS
+-dPUREMORMOT2"/>
             <OtherDefines Count="5">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -541,7 +542,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="62">
+    <Units Count="65">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -790,6 +791,18 @@
         <Filename Value="..\src\rest\mormot.rest.memserver.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit61>
+      <Unit62>
+        <Filename Value="..\src\orm\mormot.orm.sql.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit62>
+      <Unit63>
+        <Filename Value="..\src\orm\mormot.orm.sqlite3.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit63>
+      <Unit64>
+        <Filename Value="..\src\rest\mormot.rest.sqlite3.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit64>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
