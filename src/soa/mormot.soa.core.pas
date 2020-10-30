@@ -268,7 +268,7 @@ type
     // ! begin
     // !   if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
-    function Get(out Obj): Boolean; virtual; abstract;
+    function Get(out Obj): boolean; virtual; abstract;
     /// retrieve the published signature of this interface
     // - is always available on TServiceFactoryServer, but TServiceFactoryClient
     // will be able to retrieve it only if TServiceContainerServer.PublishSignature
@@ -548,7 +548,7 @@ type
     fInterfaceMethod: TServiceContainerInterfaceMethods;
     fInterfaceMethods: TDynArrayHashed;
     fExpectMangledURI: boolean;
-    procedure SetExpectMangledURI(aValue: Boolean);
+    procedure SetExpectMangledURI(aValue: boolean);
     procedure SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
     function GetMethodName(ListInterfaceMethodIndex: integer): RawUTF8;
@@ -778,7 +778,7 @@ type
     // execution order: the latest registrations will appear last
     List: TServicesPublishedInterfacesDynArray;
     /// how many items are actually stored in List[]
-    Count: Integer;
+    Count: integer;
     /// initialize the storage
     // - an optional time out period, in milliseconds, may be defined - but the
     // clients should ensure that RegisterFromClientJSON() is called in order
@@ -1286,7 +1286,7 @@ begin
           raise EServiceException.CreateUTF8('%: % GUID already registered', [self, Name^]);
 end;
 
-procedure TServiceContainer.SetExpectMangledURI(aValue: Boolean);
+procedure TServiceContainer.SetExpectMangledURI(aValue: boolean);
 var
   i: PtrInt;
   toregisteragain: TServiceContainerInterfaces;

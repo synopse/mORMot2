@@ -255,7 +255,7 @@ type
 
   TXactTransInfo = record
     uow: PBoid;
-    isoLevel: Integer;
+    isoLevel: integer;
     isoFlags: UINT;
     grfTCSupported: UINT;
     grfRMSupported: UINT;
@@ -269,7 +269,7 @@ type
     dwMinor: UINT;
     clsid: TGUID;
     iid: TGUID;
-    dispid: Integer;
+    dispid: integer;
   end;
 
   PDBParams = ^TDBParams;
@@ -314,13 +314,13 @@ type
   TDBBindingDynArray = array of TDBBinding;
 
   DBIDGUID = record
-    case Integer of
+    case integer of
       0: (guid: TGUID);
       1: (pguid: ^TGUID);
   end;
 
   DBIDNAME = record
-    case Integer of
+    case integer of
       0: (pwszName: PWideChar);
       1: (ulPropid: UINT);
   end;
@@ -371,7 +371,7 @@ type
   TDBPropSetArray = array[0..MAXBOUND] of TDBPropSet;
   TDBSchemaRec = record
     SchemaGuid: TGuid;
-    SupportedRestrictions: Integer;
+    SupportedRestrictions: integer;
   end;
 
   TSSPARAMPROPS = record
@@ -448,7 +448,7 @@ type
       pwszInitializationString: POleStr; const riid: TIID;
       var DataSource: IUnknown): HRESULT; stdcall;
     function GetInitializationString(const DataSource: IUnknown;
-      fIncludePassword: Boolean; out pwszInitString: POleStr): HRESULT; stdcall;
+      fIncludePassword: boolean; out pwszInitString: POleStr): HRESULT; stdcall;
     function CreateDBInstance(const clsidProvider: TGUID;
       const pUnkOuter: IUnknown; dwClsCtx: DWORD; pwszReserved: POleStr;
       riid: TIID; var DataSource: IUnknown): HRESULT; stdcall;
@@ -487,7 +487,7 @@ type
   ITransactionLocal = interface(ITransaction)
     ['{0C733A5F-2A1C-11CE-ADE5-00AA0044773D}']
     function GetOptionsObject(out ppOptions: ITransactionOptions): HRESULT; stdcall;
-    function StartTransaction(isoLevel: Integer; isoFlags: UINT;
+    function StartTransaction(isoLevel: integer; isoFlags: UINT;
       const pOtherOptions: ITransactionOptions; pulTransactionLevel: PUINT): HRESULT; stdcall;
   end;
 
@@ -626,10 +626,10 @@ type
   IDBSchemaRowset = interface(IUnknown)
     ['{0c733a7b-2a1c-11ce-ade5-00aa0044773d}']
     function GetRowset(pUnkOuter: IUnknown; const rguidSchema: TGUID;
-      cRestrictions: Integer; rgRestrictions: pointer;
-      const riid: TIID; cPropertySets: Integer; rgPropertySets: PDBPROPSET;
+      cRestrictions: integer; rgRestrictions: pointer;
+      const riid: TIID; cPropertySets: integer; rgPropertySets: PDBPROPSET;
       var ppRowset: IRowset): HRESULT; stdcall;
-    function GetSchemas(var pcSchemas: Integer; var prgSchemas: PGUID;
+    function GetSchemas(var pcSchemas: integer; var prgSchemas: PGUID;
       var prgRestrictionSupport: PInteger): HRESULT; stdcall;
   end;
 
@@ -687,8 +687,8 @@ type
     function _Release : longint;{$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
     {$else}
     function QueryInterface(const IID: TGUID; out Obj): HRESULT; stdcall;
-    function _AddRef: Integer; stdcall;
-    function _Release: Integer; stdcall;
+    function _AddRef: integer; stdcall;
+    function _Release: integer; stdcall;
     {$endif FPC}
     /// Adds a reference count to an existing row handle
     function AddRefRows(cRows: PtrUInt; rghRows: PPtrUIntArray;
@@ -867,7 +867,7 @@ end;
 function TBaseAggregatingRowset._AddRef: longint;
   {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
 {$else}
-function TBaseAggregatingRowset._AddRef: Integer;
+function TBaseAggregatingRowset._AddRef: integer;
 {$endif FPC}
 begin
   result := 1;
@@ -877,7 +877,7 @@ end;
 function TBaseAggregatingRowset._Release: longint;
   {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
 {$else}
-function TBaseAggregatingRowset._Release: Integer;
+function TBaseAggregatingRowset._Release: integer;
 {$endif FPC}
 begin
   result := 1;
@@ -895,7 +895,7 @@ end;
 
 procedure TIDListRowset.FillBindingsAndSetupRowBuffer(pBindingsList: PDBBindingArray);
 var
-  i: Integer;
+  i: integer;
   rec: TIDListRec; // pseudo record to compute offset within TIDListRec
 begin
   FillcharFast(rec, sizeof(rec), 0); // makes Win64 compiler happy
@@ -918,7 +918,7 @@ begin
       begin
         pBindingsList[0].cbMaxLen := sizeof(PWideChar); //Check bind ''
         for i := 0 to Length(farr) - 1 do
-          if Length(farr[i]) * SizeOf(WideChar) > Integer(pBindingsList[0].cbMaxLen) then
+          if Length(farr[i]) * SizeOf(WideChar) > integer(pBindingsList[0].cbMaxLen) then
             pBindingsList[0].cbMaxLen := Length(farr[i]) * SizeOf(WideChar);
         pBindingsList[0].obValue := PAnsiChar(@rec.StrVal) - pointer(@rec);
         pBindingsList[0].wType := DBTYPE_BSTR
@@ -930,7 +930,7 @@ end;
 
 procedure TIDListRowset.FillRowData(pCurrentRec: PIDListRec);
 var
-  curInd: Integer;
+  curInd: integer;
   tmp: RawUTF8;
 begin
   curInd := fidxRow - 2;

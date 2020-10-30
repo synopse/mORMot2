@@ -133,7 +133,7 @@ type
     // - e.g. the shared fake implementation instance
     destructor Destroy; override;
     /// retrieve an instance of this interface from the client side
-    function Get(out Obj): Boolean; override;
+    function Get(out Obj): boolean; override;
     /// retrieve the published signature of this interface
     // - TServiceFactoryClient will be able to retrieve it only if
     // TServiceContainerServer.PublishSignature is set to TRUE (which is not the
@@ -179,7 +179,7 @@ type
     // the aRest/aLogClass table, which will be retrieved asynchronously
     // by the background thread
     procedure SendNotifications(aRest: TRest;
-      aLogClass: TOrmServiceNotificationsClass; aRetryPeriodSeconds: Integer = 30;
+      aLogClass: TOrmServiceNotificationsClass; aRetryPeriodSeconds: integer = 30;
       aRemote: TRest = nil);
     /// compute how many pending notifications are waiting for background process
     // initiated by SendNotifications() method
@@ -315,17 +315,17 @@ type
   protected
     fClient: TServiceFactoryClient;
     fRemote: TRest;
-    fRetryPeriodSeconds: Integer;
+    fRetryPeriodSeconds: integer;
     procedure InternalExecute; override;
     procedure ProcessPendingNotification;
     function GetPendingCountFromDB: Int64;
   public
     constructor Create(aClient: TServiceFactoryClient; aRemote: TRest;
-      aRetryPeriodSeconds: Integer); reintroduce;
+      aRetryPeriodSeconds: integer); reintroduce;
   end;
 
 constructor TServiceFactoryClientNotificationThread.Create(
-  aClient: TServiceFactoryClient; aRemote: TRest; aRetryPeriodSeconds: Integer);
+  aClient: TServiceFactoryClient; aRemote: TRest; aRetryPeriodSeconds: integer);
 begin
   fClient := aClient; // cross-platform may run Execute as soon as Create is called
   if (fClient = nil) or
@@ -815,7 +815,7 @@ begin
       result := copy(result, 14, length(result) - 14);
 end;
 
-function TServiceFactoryClient.Get(out Obj): Boolean;
+function TServiceFactoryClient.Get(out Obj): boolean;
 var
   O: TInterfacedObjectFake;
 begin
@@ -854,7 +854,7 @@ begin
 end;
 
 procedure TServiceFactoryClient.SendNotifications(aRest: TRest;
-  aLogClass: TOrmServiceNotificationsClass; aRetryPeriodSeconds: Integer;
+  aLogClass: TOrmServiceNotificationsClass; aRetryPeriodSeconds: integer;
   aRemote: TRest);
 begin
   if (self = nil) or

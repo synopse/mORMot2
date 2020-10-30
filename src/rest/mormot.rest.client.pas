@@ -479,7 +479,7 @@ type
     /// register a callback event interface instance from a new computed ID
     function DoRegister(aInstance: pointer; aFactory: TInterfaceFactory): integer; overload;
     /// register a callback event interface instance from its supplied ID
-    procedure DoRegister(aID: Integer; aInstance: pointer; aFactory: TInterfaceFactory); overload;
+    procedure DoRegister(aID: integer; aInstance: pointer; aFactory: TInterfaceFactory); overload;
     /// delete all callback events from the internal list, as specified by its instance
     // - note that the same IInvokable instance may be registered for several IDs
     function UnRegister(aInstance: pointer): boolean; overload;
@@ -512,7 +512,7 @@ type
     fOnAuthentificationFailed: TOnAuthentificationFailed;
     fOnSetUser: TOnRestClientNotify;
     fBackgroundThread: TSynBackgroundThreadEvent;
-    fMaximumAuthentificationRetry: Integer;
+    fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
     fInternalState: set of (isOpened, isDestroying, isInAuth);
     fLastErrorCode: integer;
@@ -903,7 +903,7 @@ type
     /// maximum additional retry occurence
     // - defaut is 1, i.e. will retry once
     // - set OnAuthentificationFailed to nil in order to avoid any retry
-    property MaximumAuthentificationRetry: Integer
+    property MaximumAuthentificationRetry: integer
       read fMaximumAuthentificationRetry write fMaximumAuthentificationRetry;
     /// if the client shall retry once in case of "408 REQUEST TIMEOUT" error
     property RetryOnceOnTimeout: boolean
@@ -1937,7 +1937,7 @@ var
   temp: TTextWriterStackBuffer;
   ok: boolean;
 
-  procedure Call(methodIndex: Integer; const par: RawUTF8; res: TTextWriter);
+  procedure Call(methodIndex: integer; const par: RawUTF8; res: TTextWriter);
   var
     method: PInterfaceMethod;
     exec: TInterfaceMethodExecute;
@@ -2049,7 +2049,7 @@ end;
 function TRestClientURI.URI(const url, method: RawUTF8; Resp: PRawUTF8;
   Head: PRawUTF8; SendData: PRawUTF8): Int64Rec;
 var
-  retry: Integer;
+  retry: integer;
   aUserName, aPassword: string;
   StatusMsg: RawUTF8;
   Call: TRestURIParams;

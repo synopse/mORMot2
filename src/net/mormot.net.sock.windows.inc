@@ -907,7 +907,7 @@ const
 
 procedure ESChannelRaiseLastError; // not defined e.g. with Delphi 5
 var
-  LastError: Integer;
+  LastError: integer;
 begin
   LastError := GetLastError;
   raise ESChannel.CreateFmt('System Error %d [%s]', [LastError, SysErrorMessage(LastError)]);

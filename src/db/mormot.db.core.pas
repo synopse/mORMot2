@@ -138,7 +138,7 @@ type
         VText: PUTF8Char);
       ftBlob: (
         VBlob: pointer;
-        VBlobLen: Integer)
+        VBlobLen: integer)
   end;
 
   /// dynamic array of database values by reference storage
@@ -395,16 +395,16 @@ function NullableInteger(const Value: Int64): TNullableInteger;
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableInteger = type variant variable: use this
 // function to circumvent those limitations
-function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
+function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableInteger is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the Integer value
-function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
+// - returns FALSE if V is null or empty, or TRUE and set the integer value
+function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableInteger is null, or return its value
-// - returns 0 if V is null or empty, or the stored Integer value
+// - returns 0 if V is null or empty, or the stored integer value
 function NullableIntegerToValue(const V: TNullableInteger): Int64;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
@@ -413,7 +413,7 @@ var
   /// a nullable boolean value containing null
   NullableBooleanNull: TNullableBoolean absolute NullVarData;
 
-/// creates a nullable Boolean value from a supplied constant
+/// creates a nullable boolean value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableBoolean = type variant
 // variable: use this function to circumvent it
 function NullableBoolean(Value: boolean): TNullableBoolean;
@@ -423,17 +423,17 @@ function NullableBoolean(Value: boolean): TNullableBoolean;
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableBoolean = type variant variant: use this
 // function to circumvent those limitations
-function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
+function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableBoolean is null, or return its value
-// - returns FALSE if V is null or empty, or TRUE and set the Boolean value
-function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
+// - returns FALSE if V is null or empty, or TRUE and set the boolean value
+function NullableBooleanToValue(const V: TNullableBoolean; out Value: boolean): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableBoolean is null, or return its value
-// - returns false if V is null or empty, or the stored Boolean value
-function NullableBooleanToValue(const V: TNullableBoolean): Boolean;
+// - returns false if V is null or empty, or the stored boolean value
+function NullableBooleanToValue(const V: TNullableBoolean): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -451,7 +451,7 @@ function NullableFloat(const Value: double): TNullableFloat;
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableFloat = type variant variable: use this
 // function to circumvent those limitations
-function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
+function NullableFloatIsEmptyOrNull(const V: TNullableFloat): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableFloat is null, or return its value
@@ -481,7 +481,7 @@ function NullableCurrency(const Value: currency): TNullableCurrency;
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableCurrency = type variant variable: use this
 // function to circumvent those limitations
-function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
+function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableCurrency is null, or return its value
@@ -513,7 +513,7 @@ function NullableDateTime(const Value: TDateTime): TNullableDateTime;
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableDateTime = type variant variable: use this
 // function to circumvent those limitations
-function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
+function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableDateTime is null, or return its value
@@ -541,7 +541,7 @@ function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableTimeLog = type variant variable: use this
 // function to circumvent those limitations
-function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
+function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableTimeLog is null, or return its value
@@ -569,7 +569,7 @@ function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableUTF8Text = type variant variable: use this
 // function to circumvent those limitations
-function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
+function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableUTF8Text is null, or return its value
@@ -1406,12 +1406,12 @@ begin
   PVariant(@result)^ := Value;
 end;
 
-function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
+function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
-function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
+function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): boolean;
 begin
   Value := 0;
   result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^, Value);
@@ -1429,18 +1429,18 @@ begin
   PVariant(@result)^ := Value;
 end;
 
-function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
+function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
-function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
+function NullableBooleanToValue(const V: TNullableBoolean; out Value: boolean): boolean;
 begin
   Value := false;
   result := not VarDataIsEmptyOrNull(@V) and VariantToBoolean(PVariant(@V)^, Value);
 end;
 
-function NullableBooleanToValue(const V: TNullableBoolean): Boolean;
+function NullableBooleanToValue(const V: TNullableBoolean): boolean;
 begin
   VariantToBoolean(PVariant(@V)^, result);
 end;
@@ -1452,12 +1452,12 @@ begin
   PVariant(@result)^ := Value;
 end;
 
-function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
+function NullableFloatIsEmptyOrNull(const V: TNullableFloat): boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
-function NullableFloatToValue(const V: TNullableFloat; out Value: Double): Boolean;
+function NullableFloatToValue(const V: TNullableFloat; out Value: Double): boolean;
 begin
   PInt64(@Value)^ := 0;
   result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^, Value);
@@ -1475,13 +1475,13 @@ begin
   CurrencyToVariant(Value, PVariant(@result)^);
 end;
 
-function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
+function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
 function NullableCurrencyToValue(const V: TNullableCurrency;
-  out Value: currency): Boolean;
+  out Value: currency): boolean;
 begin
   PInt64(@Value)^ := 0;
   result := not VarDataIsEmptyOrNull(@V) and VariantToCurrency(PVariant(@V)^, Value);
@@ -1499,12 +1499,12 @@ begin
   PVariant(@result)^ := Value;
 end;
 
-function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
+function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
-function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): Boolean;
+function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): boolean;
 begin
   Value := 0;
   result := not VarDataIsEmptyOrNull(@V) and
@@ -1523,12 +1523,12 @@ begin
   PVariant(@result)^ := Value;
 end;
 
-function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
+function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
-function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): Boolean;
+function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): boolean;
 begin
   Value := 0;
   result := not VarDataIsEmptyOrNull(@V) and
@@ -1548,7 +1548,7 @@ begin
   RawUTF8(TVarData(result).VAny) := Value;
 end;
 
-function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
+function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
 end;

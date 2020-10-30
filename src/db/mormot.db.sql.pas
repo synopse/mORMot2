@@ -637,7 +637,7 @@ type
     /// return a Column as a TSQLVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
-    procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar; var Temp: RawByteString);
+    procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar; var Temp: RawByteString);
     /// return a Column as a variant
     // - a ftUTF8 TEXT content will be mapped into a generic WideString variant
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
@@ -778,64 +778,64 @@ type
     // - the leftmost SQL parameter has an index of 1
     // - some providers (e.g. OleDB during MULTI INSERT statements) expect the
     // proper column type to be set in BoundType, even for NULL values
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType = paramIn;
+    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
       BoundType: TSQLDBFieldType = ftNull);
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: Int64;
+    procedure Bind(Param: integer; Value: Int64;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: double;
+    procedure Bind(Param: integer; Value: double;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindDateTime(Param: Integer; Value: TDateTime;
+    procedure BindDateTime(Param: integer; Value: TDateTime;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: currency;
+    procedure BindCurrency(Param: integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextU(Param: Integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextP(Param: Integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextS(Param: Integer; const Value: string;
+    procedure BindTextS(Param: integer; const Value: string;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextW(Param: Integer; const Value: WideString;
+    procedure BindTextW(Param: integer; const Value: WideString;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
+    procedure BindBlob(Param: integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; const Data: RawByteString;
+    procedure BindBlob(Param: integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind a Variant value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - will call all virtual Bind*() methods from the Data type
     // - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
     // of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes
-    procedure BindVariant(Param: Integer; const Data: Variant;
+    procedure BindVariant(Param: integer; const Data: Variant;
       DataIsBlob: boolean; IO: TSQLDBParamInOutType = paramIn);
     /// bind one TSQLVar value
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; const Data: TSQLVar;
+    procedure Bind(Param: integer; const Data: TSQLVar;
       IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind one RawUTF8 encoded value
     // - the leftmost SQL parameter has an index of 1
     // - the value should match the BindArray() format, i.e. be stored as in SQL
     // (i.e. number, 'quoted string', 'YYYY-MM-DD hh:mm:ss', null)
-    procedure Bind(Param: Integer; ParamType: TSQLDBFieldType; const Value: RawUTF8;
+    procedure Bind(Param: integer; ParamType: TSQLDBFieldType; const Value: RawUTF8;
       ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType = paramIn); overload;
     /// bind an array of const values
     // - parameters marked as ? should be specified as method parameter in Params[]
@@ -862,7 +862,7 @@ type
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
     // - this method allow direct access to the data rows after execution
-    function BoundCursor(Param: Integer): ISQLDBRows;
+    function BoundCursor(Param: integer): ISQLDBRows;
 
     /// bind an array of values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -870,35 +870,35 @@ type
     // 'YYYY-MM-DD hh:mm:ss', null)
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer; ParamType: TSQLDBFieldType;
+    procedure BindArray(Param: integer; ParamType: TSQLDBFieldType;
       const Values: TRawUTF8DynArray; ValuesCount: integer); overload;
     /// bind an array of integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer; const Values: array of Int64); overload;
+    procedure BindArray(Param: integer; const Values: array of Int64); overload;
     /// bind an array of double values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer; const Values: array of double); overload;
+    procedure BindArray(Param: integer; const Values: array of double); overload;
     /// bind an array of TDateTime values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'YYYY-MM-DD hh:mm:ss')
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArrayDateTime(Param: Integer; const Values: array of TDateTime);
+    procedure BindArrayDateTime(Param: integer; const Values: array of TDateTime);
     /// bind an array of currency values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArrayCurrency(Param: Integer; const Values: array of currency);
+    procedure BindArrayCurrency(Param: integer; const Values: array of currency);
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'quoted string')
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer; const Values: array of RawUTF8); overload;
+    procedure BindArray(Param: integer; const Values: array of RawUTF8); overload;
 
     /// retrieve the parameter content, after SQL execution
     // - the leftmost SQL parameter has an index of 1
@@ -915,7 +915,7 @@ type
     // ! stmt.ParamToVariant(5, out2, true);
     // - the parameter should have been bound with IO=paramOut or IO=paramInOut
     // if CheckIsOutParameter is TRUE
-    function ParamToVariant(Param: Integer; var Value: Variant;
+    function ParamToVariant(Param: integer; var Value: Variant;
       CheckIsOutParameter: boolean = true): TSQLDBFieldType;
 
     /// execute a prepared SQL statement
@@ -947,7 +947,7 @@ type
     // on data definition (e.g. ORM TDateTime/TDateTimeMS)
     property ForceDateWithMS: boolean read GetForceDateWithMS write SetForceDateWithMS;
     /// gets a number of updates made by latest executed statement
-    function UpdateCount: Integer;
+    function UpdateCount: integer;
   end;
 
   /// possible events notified to TOnSQLDBProcess callback method
@@ -1806,8 +1806,8 @@ type
     fExpectResults: boolean;
     fParamCount: integer;
     fColumnCount: integer;
-    fTotalRowsRetrieved: Integer;
-    fCurrentRow: Integer;
+    fTotalRowsRetrieved: integer;
+    fCurrentRow: integer;
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
     fDBMS: TSQLDBDefinition;
@@ -1832,7 +1832,7 @@ type
     /// will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
     // from a given column value
     // - internal conversion will use a temporary Variant and ColumnToVariant method
-    // - expects Dest to be of the exact type (e.g. Int64, not Integer)
+    // - expects Dest to be of the exact type (e.g. Int64, not integer)
     function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType;
       var Dest): TSQLDBFieldType;
     /// append the inlined value of a given parameter, mainly for GetSQLWithInlinedParams
@@ -1855,66 +1855,66 @@ type
     // - the leftmost SQL parameter has an index of 1
     // - some providers (e.g. OleDB during MULTI INSERT statements) expect the
     // proper column type to be set in BoundType, even for NULL values
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType = paramIn;
+    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
       BoundType: TSQLDBFieldType = ftNull); virtual; abstract;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: Int64;
+    procedure Bind(Param: integer; Value: Int64;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: double;
+    procedure Bind(Param: integer; Value: double;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindDateTime(Param: Integer; Value: TDateTime;
+    procedure BindDateTime(Param: integer; Value: TDateTime;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: currency;
+    procedure BindCurrency(Param: integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextU(Param: Integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextP(Param: Integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextS(Param: Integer; const Value: string;
+    procedure BindTextS(Param: integer; const Value: string;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextW(Param: Integer; const Value: WideString;
+    procedure BindTextW(Param: integer; const Value: WideString;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
+    procedure BindBlob(Param: integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; const Data: RawByteString;
+    procedure BindBlob(Param: integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a Variant value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - will call all virtual Bind*() methods from the Data type
     // - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
     // of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes
-    procedure BindVariant(Param: Integer; const Data: Variant;
+    procedure BindVariant(Param: integer; const Data: Variant;
       DataIsBlob: boolean; IO: TSQLDBParamInOutType = paramIn); virtual;
     /// bind one TSQLVar value
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will call corresponding Bind*() method
-    procedure Bind(Param: Integer; const Data: TSQLVar;
+    procedure Bind(Param: integer; const Data: TSQLVar;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual;
     /// bind one RawUTF8 encoded value
     // - the leftmost SQL parameter has an index of 1
     // - the value should match the BindArray() format, i.e. be stored as in SQL
     // (i.e. number, 'quoted string', 'YYYY-MM-DD hh:mm:ss', null) - e.g. as
     // computed by TJSONObjectDecoder.Decode()
-    procedure Bind(Param: Integer; ParamType: TSQLDBFieldType;
+    procedure Bind(Param: integer; ParamType: TSQLDBFieldType;
       const Value: RawUTF8; ValueAlreadyUnquoted: boolean;
       IO: TSQLDBParamInOutType = paramIn); overload; virtual;
     /// bind an array of const values
@@ -1947,7 +1947,7 @@ type
     // Oracle) usually use such structures to get data from strored procedures
     // - this method allow direct access to the data rows after execution
     // - this default method will raise an exception about unexpected behavior
-    function BoundCursor(Param: Integer): ISQLDBRows; virtual;
+    function BoundCursor(Param: integer): ISQLDBRows; virtual;
 
     /// bind an array of values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -1955,39 +1955,39 @@ type
     // 'YYYY-MM-DD hh:mm:ss', null)
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer; ParamType: TSQLDBFieldType;
+    procedure BindArray(Param: integer; ParamType: TSQLDBFieldType;
       const Values: TRawUTF8DynArray; ValuesCount: integer); overload; virtual;
     /// bind an array of integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of Int64); overload; virtual;
     /// bind an array of double values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of double); overload; virtual;
     /// bind an array of TDateTime values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'YYYY-MM-DD hh:mm:ss')
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArrayDateTime(Param: Integer;
+    procedure BindArrayDateTime(Param: integer;
       const Values: array of TDateTime); virtual;
     /// bind an array of currency values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArrayCurrency(Param: Integer;
+    procedure BindArrayCurrency(Param: integer;
       const Values: array of currency); virtual;
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. 'quoted string')
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of RawUTF8); overload; virtual;
 
     /// Prepare an UTF-8 encoded SQL statement
@@ -2078,7 +2078,7 @@ type
     // if CheckIsOutParameter is TRUE
     // - this implementation just check that Param is correct: overridden method
     // should fill Value content
-    function ParamToVariant(Param: Integer; var Value: Variant;
+    function ParamToVariant(Param: integer; var Value: Variant;
       CheckIsOutParameter: boolean = true): TSQLDBFieldType; virtual;
 
     /// After a statement has been prepared via Prepare() + ExecutePrepared() or
@@ -2172,7 +2172,7 @@ type
     /// return a Column as a TSQLVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
-    procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar; var Temp:
+    procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar; var Temp:
       RawByteString); virtual;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -2330,11 +2330,11 @@ type
     property SQLWithInlinedParams: RawUTF8 read GetSQLWithInlinedParams;
     /// the current row after Execute/Step call, corresponding to Column*() methods
     // - contains 0 before initial Step call, or a number >=1 during data retrieval
-    property CurrentRow: Integer read fCurrentRow;
+    property CurrentRow: integer read fCurrentRow;
     /// the total number of data rows retrieved by this instance
     // - is not reset when there is no more row of available data (Step returns
     // false), or when Step() is called with SeekFirst=true
-    property TotalRowsRetrieved: Integer read fTotalRowsRetrieved;
+    property TotalRowsRetrieved: integer read fTotalRowsRetrieved;
     /// the associated database connection
     property Connection: TSQLDBConnection read fConnection;
     /// strip last semicolon in query
@@ -2376,7 +2376,7 @@ type
     fLatestConnectionRetrievedInPool: integer;
     fThreadingMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
     /// returns -1 if none was defined yet
-    function CurrentThreadConnectionIndex: Integer;
+    function CurrentThreadConnectionIndex: integer;
     /// overridden method to properly handle multi-thread
     function GetMainConnection: TSQLDBConnection; override;
   public
@@ -2465,9 +2465,9 @@ type
     fParams: TSQLDBParamDynArray;
     fParam: TDynArray;
     fParamsArrayCount: integer;
-    function CheckParam(Param: Integer; NewType: TSQLDBFieldType;
+    function CheckParam(Param: integer; NewType: TSQLDBFieldType;
       IO: TSQLDBParamInOutType): PSQLDBParam; overload;
-    function CheckParam(Param: Integer; NewType: TSQLDBFieldType;
+    function CheckParam(Param: integer; NewType: TSQLDBFieldType;
       IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam; overload;
     /// append the inlined value of a given parameter
     // - faster overridden method
@@ -2482,56 +2482,56 @@ type
     // - raise an Exception on any error
     // - some providers (only OleDB during MULTI INSERT statements, so never used
     // in this class) expect the  proper column type to be set in BoundType
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType = paramIn;
+    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
       BoundType: TSQLDBFieldType = ftNull); override;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure Bind(Param: Integer; Value: Int64;
+    procedure Bind(Param: integer; Value: Int64;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure Bind(Param: Integer; Value: double;
+    procedure Bind(Param: integer; Value: double;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure BindDateTime(Param: Integer; Value: TDateTime;
+    procedure BindDateTime(Param: integer; Value: TDateTime;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure BindCurrency(Param: Integer; Value: currency;
+    procedure BindCurrency(Param: integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure BindTextU(Param: Integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextP(Param: Integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a VCL string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure BindTextS(Param: Integer; const Value: string;
+    procedure BindTextS(Param: integer; const Value: string;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind an OLE WideString to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error }
-    procedure BindTextW(Param: Integer; const Value: WideString;
+    procedure BindTextW(Param: integer; const Value: WideString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
-    procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
+    procedure BindBlob(Param: integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error M
-    procedure BindBlob(Param: Integer; const Data: RawByteString;
+    procedure BindBlob(Param: integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
 
     /// bind an array of values to a parameter using OCI bind array feature
@@ -2539,13 +2539,13 @@ type
     // - values are stored as in SQL (i.e. number, 'quoted string',
     // 'YYYY-MM-DD hh:mm:ss', null)
     // - values are stored as in SQL (i.e. 'YYYY-MM-DD hh:mm:ss')
-    procedure BindArray(Param: Integer; ParamType: TSQLDBFieldType;
+    procedure BindArray(Param: integer; ParamType: TSQLDBFieldType;
       const Values: TRawUTF8DynArray; ValuesCount: integer); overload; override;
     /// bind an array of integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will call BindArray() after conversion into
     // RawUTF8 items, stored in TSQLDBParam.VArray
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of Int64); overload; override;
     /// bind an array of double values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -2553,7 +2553,7 @@ type
     // does not support array binding
     // - this default implementation will call BindArray() after conversion into
     // RawUTF8 items, stored in TSQLDBParam.VArray
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of double); overload; override;
     /// bind an array of TDateTime values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -2562,7 +2562,7 @@ type
     // does not support array binding
     // - this default implementation will call BindArray() after conversion into
     // RawUTF8 items, stored in TSQLDBParam.VArray
-    procedure BindArrayDateTime(Param: Integer;
+    procedure BindArrayDateTime(Param: integer;
       const Values: array of TDateTime); override;
     /// bind an array of currency values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -2570,14 +2570,14 @@ type
     // does not support array binding
     // - this default implementation will call BindArray() after conversion into
     // RawUTF8 items, stored in TSQLDBParam.VArray
-    procedure BindArrayCurrency(Param: Integer;
+    procedure BindArrayCurrency(Param: integer;
       const Values: array of currency); override;
     /// bind an array of RawUTF8 values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as 'quoted string'
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of RawUTF8); overload; override;
 
     /// start parameter array binding per-row process
@@ -2589,13 +2589,13 @@ type
       aExpectedMinimalRowCount: integer = 0);
     /// bind a set of parameters for further array binding
     // - supplied parameters shall follow the BindArrayRowPrepare() supplied
-    // types (i.e. RawUTF8, Integer/Int64, double);  you can also bind directly
+    // types (i.e. RawUTF8, integer/Int64, double);  you can also bind directly
     // a TDateTime value if the corresponding binding has been defined as ftDate
     // by BindArrayRowPrepare()
     procedure BindArrayRow(const aValues: array of const);
     /// bind an array of fields from an existing SQL statement for array binding
     // - supplied Rows columns shall follow the BindArrayRowPrepare() supplied
-    // types (i.e. RawUTF8, Integer/Int64, double, date)
+    // types (i.e. RawUTF8, integer/Int64, double, date)
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
     procedure BindFromRows(Rows: TSQLDBStatement); virtual;
@@ -2606,7 +2606,7 @@ type
     // - this overridden function will retrieve the value stored in the protected
     // fParams[] array: the ExecutePrepared method should have updated its
     // content as exepcted
-    function ParamToVariant(Param: Integer; var Value: Variant;
+    function ParamToVariant(Param: integer; var Value: Variant;
       CheckIsOutParameter: boolean = true): TSQLDBFieldType; override;
 
     /// Reset the previous prepared statement
@@ -3846,7 +3846,7 @@ end;
 procedure TSQLDBConnectionProperties.SQLSplitProcedureName(
   const aProcName: RawUTF8; out Owner, package, ProcName: RawUTF8);
 var
-  lOccur, i: Integer;
+  lOccur, i: integer;
 begin
   lOccur := 0;
   for i := 1 to length(aProcName) do
@@ -5067,7 +5067,7 @@ end;
 
 { TSQLDBStatement }
 
-procedure TSQLDBStatement.Bind(Param: Integer; const Data: TSQLVar;
+procedure TSQLDBStatement.Bind(Param: integer; const Data: TSQLVar;
   IO: TSQLDBParamInOutType);
 begin
   with Data do
@@ -5092,7 +5092,7 @@ begin
     end;
 end;
 
-procedure TSQLDBStatement.Bind(Param: Integer; ParamType: TSQLDBFieldType;
+procedure TSQLDBStatement.Bind(Param: integer; ParamType: TSQLDBFieldType;
   const Value: RawUTF8; ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType);
 var
   tmp: RawUTF8;
@@ -5225,7 +5225,7 @@ begin
       end;
 end;
 
-procedure TSQLDBStatement.BindVariant(Param: Integer; const Data: Variant;
+procedure TSQLDBStatement.BindVariant(Param: integer; const Data: Variant;
   DataIsBlob: boolean; IO: TSQLDBParamInOutType);
 var
   I64: Int64Rec;
@@ -5304,7 +5304,7 @@ begin
     end;
 end;
 
-procedure TSQLDBStatement.BindArray(Param: Integer; ParamType: TSQLDBFieldType;
+procedure TSQLDBStatement.BindArray(Param: integer; ParamType: TSQLDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
   if (Param <= 0) or
@@ -5319,28 +5319,28 @@ begin
       [self, Param, ToText(ParamType)^]);
 end;
 
-procedure TSQLDBStatement.BindArray(Param: Integer; const Values: array of Int64);
+procedure TSQLDBStatement.BindArray(Param: integer; const Values: array of Int64);
 begin
   BindArray(Param, ftInt64, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArray(Param: Integer; const Values: array of RawUTF8);
+procedure TSQLDBStatement.BindArray(Param: integer; const Values: array of RawUTF8);
 begin
   BindArray(Param, ftUTF8, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArray(Param: Integer; const Values: array of double);
+procedure TSQLDBStatement.BindArray(Param: integer; const Values: array of double);
 begin
   BindArray(Param, ftDouble, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArrayCurrency(Param: Integer;
+procedure TSQLDBStatement.BindArrayCurrency(Param: integer;
   const Values: array of currency);
 begin
   BindArray(Param, ftCurrency, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArrayDateTime(Param: Integer;
+procedure TSQLDBStatement.BindArrayDateTime(Param: integer;
   const Values: array of TDateTime);
 begin
   BindArray(Param, ftDate, nil, 0); // will raise an exception (Values=nil)
@@ -5555,7 +5555,7 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
+procedure TSQLDBStatement.ColumnToSQLVar(Col: integer; var Value: TSQLVar;
   var Temp: RawByteString);
 begin
   Value.Options := [];
@@ -5618,7 +5618,7 @@ begin
   end;
 end;
 
-function TSQLDBStatement.ParamToVariant(Param: Integer; var Value: Variant;
+function TSQLDBStatement.ParamToVariant(Param: integer; var Value: Variant;
   CheckIsOutParameter: boolean = true): TSQLDBFieldType;
 begin
   dec(Param); // start at #1
@@ -6405,7 +6405,7 @@ begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
 
-function TSQLDBStatement.{%H-}BoundCursor(Param: Integer): ISQLDBRows;
+function TSQLDBStatement.{%H-}BoundCursor(Param: integer): ISQLDBRows;
 begin
   raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
@@ -6839,7 +6839,7 @@ begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
-function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Integer;
+function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: integer;
 var
   id: TThreadID;
   tix: Int64;
@@ -6938,7 +6938,7 @@ end;
 
 { TSQLDBStatementWithParams }
 
-function TSQLDBStatementWithParams.CheckParam(Param: Integer;
+function TSQLDBStatementWithParams.CheckParam(Param: integer;
   NewType: TSQLDBFieldType; IO: TSQLDBParamInOutType): PSQLDBParam;
 begin
   if self = nil then
@@ -6950,7 +6950,7 @@ begin
   result^.VInOut := IO;
 end;
 
-function TSQLDBStatementWithParams.CheckParam(Param: Integer; NewType:
+function TSQLDBStatementWithParams.CheckParam(Param: integer; NewType:
   TSQLDBFieldType; IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam;
 begin
   result := CheckParam(Param, NewType, IO);
@@ -6972,49 +6972,49 @@ begin
   fParam.Init(TypeInfo(TSQLDBParamDynArray), fParams, @fParamCount);
 end;
 
-procedure TSQLDBStatementWithParams.Bind(Param: Integer; Value: double;
+procedure TSQLDBStatementWithParams.Bind(Param: integer; Value: double;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftDouble, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBStatementWithParams.Bind(Param: Integer; Value: Int64;
+procedure TSQLDBStatementWithParams.Bind(Param: integer; Value: Int64;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftInt64, IO)^.VInt64 := Value;
 end;
 
-procedure TSQLDBStatementWithParams.BindBlob(Param: Integer;
+procedure TSQLDBStatementWithParams.BindBlob(Param: integer;
   const Data: RawByteString; IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftBlob, IO)^.VData := Data;
 end;
 
-procedure TSQLDBStatementWithParams.BindBlob(Param: Integer; Data: pointer;
+procedure TSQLDBStatementWithParams.BindBlob(Param: integer; Data: pointer;
   Size: integer; IO: TSQLDBParamInOutType);
 begin
   SetString(CheckParam(Param, ftBlob, IO)^.VData, PAnsiChar(Data), Size);
 end;
 
-procedure TSQLDBStatementWithParams.BindCurrency(Param: Integer;
+procedure TSQLDBStatementWithParams.BindCurrency(Param: integer;
   Value: currency; IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftCurrency, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBStatementWithParams.BindDateTime(Param: Integer;
+procedure TSQLDBStatementWithParams.BindDateTime(Param: integer;
   Value: TDateTime; IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftDate, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBStatementWithParams.BindNull(Param: Integer;
+procedure TSQLDBStatementWithParams.BindNull(Param: integer;
   IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
   CheckParam(Param, ftNull, IO);
 end;
 
-procedure TSQLDBStatementWithParams.BindTextS(Param: Integer;
+procedure TSQLDBStatementWithParams.BindTextS(Param: integer;
   const Value: string; IO: TSQLDBParamInOutType);
 begin
   if (Value = '') and
@@ -7025,7 +7025,7 @@ begin
     CheckParam(Param, ftUTF8, IO)^.VData := StringToUTF8(Value);
 end;
 
-procedure TSQLDBStatementWithParams.BindTextU(Param: Integer;
+procedure TSQLDBStatementWithParams.BindTextU(Param: integer;
   const Value: RawUTF8; IO: TSQLDBParamInOutType);
 begin
   if (Value = '') and
@@ -7036,7 +7036,7 @@ begin
     CheckParam(Param, ftUTF8, IO)^.VData := Value;
 end;
 
-procedure TSQLDBStatementWithParams.BindTextP(Param: Integer; Value: PUTF8Char;
+procedure TSQLDBStatementWithParams.BindTextP(Param: integer; Value: PUTF8Char;
   IO: TSQLDBParamInOutType);
 begin
   if (Value = nil) and
@@ -7047,7 +7047,7 @@ begin
     FastSetString(RawUTF8(CheckParam(Param, ftUTF8, IO)^.VData), Value, StrLen(Value));
 end;
 
-procedure TSQLDBStatementWithParams.BindTextW(Param: Integer; const Value:
+procedure TSQLDBStatementWithParams.BindTextW(Param: integer; const Value:
   WideString; IO: TSQLDBParamInOutType);
 begin
   if (Value = '') and
@@ -7059,7 +7059,7 @@ begin
       length(Value));
 end;
 
-function TSQLDBStatementWithParams.ParamToVariant(Param: Integer;
+function TSQLDBStatementWithParams.ParamToVariant(Param: integer;
   var Value: Variant; CheckIsOutParameter: boolean): TSQLDBFieldType;
 begin
   inherited ParamToVariant(Param, Value); // raise exception if Param incorrect
@@ -7125,7 +7125,7 @@ begin
         Dest.AddString(VArray[0]); // first item is enough in the logs
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
+procedure TSQLDBStatementWithParams.BindArray(Param: integer;
   const Values: array of double);
 var
   i: PtrInt;
@@ -7135,7 +7135,7 @@ begin
       VArray[i] := DoubleToStr(Values[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
+procedure TSQLDBStatementWithParams.BindArray(Param: integer;
   const Values: array of Int64);
 var
   i: PtrInt;
@@ -7145,7 +7145,7 @@ begin
       VArray[i] := Int64ToUtf8(Values[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
+procedure TSQLDBStatementWithParams.BindArray(Param: integer;
   ParamType: TSQLDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
 var
   i: PtrInt;
@@ -7173,7 +7173,7 @@ begin
   fParamsArrayCount := ValuesCount;
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
+procedure TSQLDBStatementWithParams.BindArray(Param: integer;
   const Values: array of RawUTF8);
 var
   i: PtrInt;
@@ -7190,7 +7190,7 @@ begin
         QuotedStr(Values[i], '''', VArray[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArrayCurrency(Param: Integer;
+procedure TSQLDBStatementWithParams.BindArrayCurrency(Param: integer;
   const Values: array of currency);
 var
   i: PtrInt;
@@ -7200,7 +7200,7 @@ begin
       VArray[i] := Curr64ToStr(PInt64(@Values[i])^);
 end;
 
-procedure TSQLDBStatementWithParams.BindArrayDateTime(Param: Integer;
+procedure TSQLDBStatementWithParams.BindArrayDateTime(Param: integer;
   const Values: array of TDateTime);
 var
   i: PtrInt;

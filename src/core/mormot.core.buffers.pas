@@ -7,7 +7,7 @@ unit mormot.core.buffers;
   *****************************************************************************
 
    Low-Level Memory Buffers Processing Functions shared by all framework units
-   - Variable Length Integer Encoding / Decoding
+   - Variable Length integer Encoding / Decoding
    - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
    - TFastReader / TBufferWriter Binary Streams
    - Base64, Base64URI and Baudot Encoding / Decoding
@@ -33,7 +33,7 @@ uses
   mormot.core.rtti;
 
 
-{ ************ Variable Length Integer Encoding / Decoding }
+{ ************ Variable Length integer Encoding / Decoding }
 
 /// convert a cardinal into a 32-bit variable-length integer buffer
 function ToVarUInt32(Value: cardinal; Dest: PByte): PByte;
@@ -740,7 +740,7 @@ type
   // case of a difference of similar value (e.g. 1) between two values - note
   // that this encoding is efficient only if the difference is mainly < 253
   // - wkOffsetU and wkOffsetI will write the difference between two successive
-  // values, with detection of any constant difference (Unsigned or Integer)
+  // values, with detection of any constant difference (Unsigned or integer)
   // - wkFakeMarker won't be used by WriteVarUInt32Array, but to notify a
   // custom encoding
   TBufferWriterKind = (
@@ -754,7 +754,7 @@ type
 
   /// this class can be used to speed up writing to a file or a stream
   // - big speed up if data is written in small blocks
-  // - also handle optimized storage of any Integer/Int64/RawUTF8 values
+  // - also handle optimized storage of any integer/Int64/RawUTF8 values
   // - use TFileBufferReader or TFastReader for decoding of the stored binary
   TBufferWriter = class
   private
@@ -888,7 +888,7 @@ type
     /// append a TStream content
     // - is StreamSize is left as -1, the Stream.Size is used
     // - the size of the content is stored in the resulting stream
-    procedure WriteStream(aStream: TCustomMemoryStream; aStreamSize: Integer = -1);
+    procedure WriteStream(aStream: TCustomMemoryStream; aStreamSize: integer = -1);
     /// allows to write directly to a memory buffer
     // - caller should specify the maximum possible number of bytes to be written
     // - then write the data to the returned pointer, and call DirectWriteFlush
@@ -971,7 +971,7 @@ function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: RawByteString): b
 /// check and decode '\uFFF0base64encodedbinary' content into binary
 // - this method will check the supplied value to match the expected
 // JSON_BASE64_MAGIC pattern, decode and set Blob and return TRUE
-function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: Integer;
+function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: integer;
   var Blob: RawByteString): boolean; overload;
 
 /// check and decode '\uFFF0base64encodedbinary' content into binary
@@ -1476,7 +1476,7 @@ type
     function LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): boolean; virtual;
+    function LineContains(const aUpperSearch: RawUTF8; aIndex: integer): boolean; virtual;
     /// retrieve a line content as UTF-8
     // - a temporary UTF-8 string is created
     // - will return '' if aIndex is out of range
@@ -1809,7 +1809,7 @@ function EmojiFromDots(const text: RawUTF8): RawUTF8; overload;
 implementation
 
 
-{ ************ Variable Length Integer Encoding / Decoding }
+{ ************ Variable Length integer Encoding / Decoding }
 
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
@@ -3020,7 +3020,7 @@ var
 begin
   result := PtrUInt(V);
   i := PInteger(p)^;
-  inc(p, 4); // Integer: firstValue
+  inc(p, 4); // integer: firstValue
   V^ := i;
   inc(V);
   if PtrUInt(p) < PtrUInt(e) then
@@ -3672,7 +3672,7 @@ begin
 end;
 
 procedure TBufferWriter.WriteStream(aStream: TCustomMemoryStream;
-  aStreamSize: Integer);
+  aStreamSize: integer);
 begin
   if aStreamSize < 0 then
     if aStream = nil then
@@ -3718,7 +3718,7 @@ end;
 function CleverStoreInteger(p: PInteger; V, VEnd: PAnsiChar; pCount: integer;
   var StoredCount: integer): PAnsiChar;
 // Clever = store Values[i+1]-Values[i] (with special diff=1 count)
-// format:  Integer: firstValue, then:
+// format:  integer: firstValue, then:
 //          B:0 W:difference with previous
 //          B:1..253 = difference with previous
 //          B:254 W:byOne
@@ -4928,7 +4928,7 @@ end;
 
 procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
 var
-  L: Integer;
+  L: integer;
 begin
   L := Length(buf);
   if L <> 0 then
@@ -7079,7 +7079,7 @@ begin
 end;
 
 function TMemoryMapText.LineContains(const aUpperSearch: RawUTF8;
-  aIndex: Integer): boolean;
+  aIndex: integer): boolean;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) or

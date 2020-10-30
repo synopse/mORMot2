@@ -156,7 +156,7 @@ type
     // be sent in the responseTo field from the database
     // - responseTo is the requestID taken from previous opQuery or opGetMore
     constructor Create(const FullCollectionName: RawUTF8;
-      opCode: TMongoOperation; requestID, responseTo: Integer); reintroduce;
+      opCode: TMongoOperation; requestID, responseTo: integer); reintroduce;
     /// append a query parameter as a BSON document
     // - param can be a TDocVariant, e.g. created with:
     // ! _JsonFast('{name:"John",age:{$gt:21}}');
@@ -312,7 +312,7 @@ type
     // $ { ReturnFieldsSelector: 1 }
     constructor Create(const FullCollectionName: RawUTF8;
       const Query, ReturnFieldsSelector: variant; NumberToReturn: integer;
-      NumberToSkip: Integer = 0; Flags: TMongoQueryFlags = []); reintroduce;
+      NumberToSkip: integer = 0; Flags: TMongoQueryFlags = []); reintroduce;
     /// write the main parameters of the request as JSON
     procedure ToJSON(W: TTextWriter; Mode: TMongoJSONMode); override;
     /// retrieve the NumberToReturn parameter as set to the constructor
@@ -559,7 +559,7 @@ type
     /// where in the cursor this reply is starting
     property StartingFrom: integer read fStartingFrom;
     /// number of documents in the reply
-    property DocumentCount: Integer read fNumberReturned;
+    property DocumentCount: integer read fNumberReturned;
     /// points to the first document binary
     // - i.e. just after the Reply header
     property FirstDocument: PAnsiChar read fFirstDocument;
@@ -866,7 +866,7 @@ type
     // is called
     // - you can specify multiple hosts, as CSV values, if necessary
     // - depending on the platform, you may request for a TLS secured connection
-    constructor Create(const Host: RawUTF8; Port: Integer = MONGODB_DEFAULTPORT;
+    constructor Create(const Host: RawUTF8; Port: integer = MONGODB_DEFAULTPORT;
       aTLS: boolean = false; const SecondaryHostCSV: RawUTF8 = ''; const
       SecondaryPortCSV: RawUTF8 = ''); overload;
     /// connect to a database on a remote MongoDB primary server
@@ -1031,7 +1031,7 @@ type
     /// create the user with a read or read/write role on the current database
     // - returns '' on sucess, an error message otherwise
     function CreateUserForThisDatabase(const UserName, Password: RawUTF8;
-      allowWrite: Boolean = true): RawUTF8;
+      allowWrite: boolean = true): RawUTF8;
     /// deletes the supplied user on the current database
     // - returns '' on sucess, an error message otherwise
     function DropUser(const UserName: RawUTF8): RawUTF8;
@@ -1090,7 +1090,7 @@ type
     // either null or the single returned document)
     // - if the query does not have any matching record, it will return null
     function FindDoc(const Criteria, Projection: Variant;
-      NumberToReturn:  integer = 1; NumberToSkip: Integer = 0;
+      NumberToReturn:  integer = 1; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []): variant; overload;
     /// select documents in a collection and returns a dvArray TDocVariant
     // instance containing the selected documents
@@ -1107,7 +1107,7 @@ type
     // either null or the single returned document)
     // - if the query does not have any matching record, it will return null
     function FindDoc(Criteria: PUTF8Char; const Params: array of const;
-      NumberToReturn: integer = maxInt; NumberToSkip: Integer = 0;
+      NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []): variant; overload;
     /// find an existing document in a collection, by its _id field
     // - _id will identify the unique document to be retrieved
@@ -1131,7 +1131,7 @@ type
     // field names to retrieve, or a TDocVariant or TBSONVariant with
     // projection operators
     procedure FindDocs(var result: TVariantDynArray; const Projection: variant;
-      NumberToReturn: integer = maxInt; NumberToSkip: Integer = 0;
+      NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
@@ -1142,7 +1142,7 @@ type
     // projection operators
     procedure FindDocs(Criteria: PUTF8Char; const Params: array of const;
       var result: TVariantDynArray; const Projection: variant;
-      NumberToReturn: integer = maxInt; NumberToSkip: Integer = 0;
+      NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
@@ -1154,7 +1154,7 @@ type
     // projection operators
     function FindDocs(Criteria: PUTF8Char; const Params: array of const;
       const Projection: variant; NumberToReturn: integer = maxInt;
-      NumberToSkip: Integer = 0; Flags: TMongoQueryFlags = []): TVariantDynArray; overload;
+      NumberToSkip: integer = 0; Flags: TMongoQueryFlags = []): TVariantDynArray; overload;
 
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
@@ -1176,7 +1176,7 @@ type
     // directly into JSON, in either modMongoStrict or modMongoShell layout
     // (modNoMongo will do the same as modMongoStrict)
     function FindJSON(const Criteria, Projection: Variant;
-      NumberToReturn: integer = maxInt; NumberToSkip: Integer = 0;
+      NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = [];
       Mode: TMongoJSONMode = modMongoStrict): RawUTF8; overload;
     /// select documents in a collection and returns a JSON array of documents
@@ -1193,7 +1193,7 @@ type
     // for one document - in this case, the returned instance won't be a '[..]'
     // JSON array, but either 'null' or a single '{..}' JSON object)
     function FindJSON(Criteria: PUTF8Char; const Params: array of const;
-      NumberToReturn: integer = maxInt; NumberToSkip: Integer = 0;
+      NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = [];
       Mode: TMongoJSONMode = modMongoStrict): RawUTF8; overload;
     /// select documents in a collection and returns a JSON array of documents
@@ -1202,7 +1202,7 @@ type
     // JSON and parameters
     function FindJSON(Criteria: PUTF8Char; const CriteriaParams: array of const;
       const Projection: variant; NumberToReturn: integer = maxInt;
-      NumberToSkip: Integer = 0; Flags: TMongoQueryFlags = [];
+      NumberToSkip: integer = 0; Flags: TMongoQueryFlags = [];
       Mode: TMongoJSONMode = modMongoStrict): RawUTF8; overload;
 
     /// select documents in a collection and returns a TBSONDocument instance
@@ -1219,7 +1219,7 @@ type
     // - NumberToReturn can be left to its default maxInt value to return all
     // matching documents, or specify a limit (e.g. 1 for one document)
     function FindBSON(const Criteria, Projection: Variant;
-      NumberToReturn: integer = maxInt; NumberToSkip: Integer = 0;
+      NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []): TBSONDocument;
 
     /// insert one document, supplied as (extended) JSON and parameters,
@@ -1404,7 +1404,7 @@ type
     // - optional NumberToSkip can specify the number of matching documents
     // to skip before counting
     function FindCount(Criteria: PUTF8Char; const Args, Params: array of const;
-      MaxNumberToReturn: integer = 0; NumberToSkip: Integer = 0): Int64; overload;
+      MaxNumberToReturn: integer = 0; NumberToSkip: integer = 0): Int64; overload;
     /// returns TRUE if the collection has no document, FALSE otherwise
     // - is much faster than Count, especially for huge collections
     function IsEmpty: boolean;
@@ -1582,10 +1582,10 @@ const
     [opUpdate, opInsert, opQuery, opGetMore, opDelete, opKillCursors];
 
 var
-  GlobalRequestID: Integer;
+  GlobalRequestID: integer;
 
 constructor TMongoRequest.Create(const FullCollectionName: RawUTF8;
-  opCode: TMongoOperation; requestID, responseTo: Integer);
+  opCode: TMongoOperation; requestID, responseTo: integer);
 begin
   if not (opCode in CLIENT_OPCODES) then
     raise EMongoException.CreateUTF8('Unexpected %.Create(opCode=%)',
@@ -1755,7 +1755,7 @@ end;
 
 constructor TMongoRequestQuery.Create(const FullCollectionName: RawUTF8;
   const Query, ReturnFieldsSelector: variant;
-  NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags);
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags);
 begin
   inherited Create(FullCollectionName, opQuery, 0, 0);
   fNumberToReturn := NumberToReturn;
@@ -2625,7 +2625,7 @@ end;
 
 { TMongoClient }
 
-constructor TMongoClient.Create(const Host: RawUTF8; Port: Integer;
+constructor TMongoClient.Create(const Host: RawUTF8; Port: integer;
   aTLS: boolean; const SecondaryHostCSV, SecondaryPortCSV: RawUTF8);
 const
   PROT: array[boolean] of string[1] = (
@@ -3016,7 +3016,7 @@ var
   full, db, coll: RawUTF8;
   resp, batch: variant;
   mc: TMongoCollection;
-  ndx: Integer;
+  ndx: integer;
 begin
   fClient := aClient;
   fName := aDatabaseName;
@@ -3079,7 +3079,7 @@ begin
 end;
 
 function TMongoDatabase.CreateUserForThisDatabase(
-  const UserName, Password: RawUTF8; allowWrite: Boolean): RawUTF8;
+  const UserName, Password: RawUTF8; allowWrite: boolean): RawUTF8;
 const
   RW: array[boolean] of RawUTF8 = (
     'read', 'readWrite');
@@ -3274,7 +3274,7 @@ var
   doc, res: variant;
   indexName: RawUTF8;
   ndx, order: integer;
-  useCommand: Boolean;
+  useCommand: boolean;
 begin
   if (self = nil) or
      (Database = nil) then
@@ -3325,7 +3325,7 @@ end;
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUTF8;
   Ascending, Unique: boolean);
 const
-  order: array[boolean] of Integer = (
+  order: array[boolean] of integer = (
     -1, 1);
 var
   k, opt: variant;
@@ -3358,7 +3358,7 @@ begin
 end;
 
 function TMongoCollection.FindCount(Criteria: PUTF8Char;
-  const Args, Params: array of const; MaxNumberToReturn, NumberToSkip: Integer): Int64;
+  const Args, Params: array of const; MaxNumberToReturn, NumberToSkip: integer): Int64;
 var
   cmd, query: RawUTF8;
   res: variant;
@@ -3383,21 +3383,21 @@ begin
 end;
 
 function TMongoCollection.FindBSON(const Criteria, Projection: Variant;
-  NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags): TBSONDocument;
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags): TBSONDocument;
 begin
   result := Database.Client.GetOneReadConnection.GetBSONAndFree(TMongoRequestQuery.Create(
     fFullCollectionName, Criteria, Projection, NumberToReturn, NumberToSkip, Flags));
 end;
 
 function TMongoCollection.FindDoc(const Criteria, Projection: Variant;
-  NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags): variant;
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags): variant;
 begin
   Database.Client.GetOneReadConnection.GetDocumentsAndFree(TMongoRequestQuery.Create(
     fFullCollectionName, Criteria, Projection, NumberToReturn, NumberToSkip, Flags), result);
 end;
 
 function TMongoCollection.FindDoc(Criteria: PUTF8Char;
-  const Params: array of const; NumberToReturn, NumberToSkip: Integer;
+  const Params: array of const; NumberToReturn, NumberToSkip: integer;
   Flags: TMongoQueryFlags): variant;
 begin
   result := FindDoc(
@@ -3406,7 +3406,7 @@ end;
 
 procedure TMongoCollection.FindDocs(Criteria: PUTF8Char;
   const Params: array of const; var result: TVariantDynArray;
-  const Projection: variant; NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags);
+  const Projection: variant; NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags);
 begin
   Database.Client.GetOneReadConnection.GetDocumentsAndFree(TMongoRequestQuery.Create(
     fFullCollectionName, BSONVariant(Criteria, [], Params), Projection,
@@ -3415,7 +3415,7 @@ end;
 
 function TMongoCollection.FindDocs(Criteria: PUTF8Char;
   const Params: array of const; const Projection: variant;
-  NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags): TVariantDynArray;
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags): TVariantDynArray;
 begin
   FindDocs(Criteria, Params, result, Projection, NumberToReturn, NumberToSkip, Flags);
 end;
@@ -3439,14 +3439,14 @@ begin
 end;
 
 procedure TMongoCollection.FindDocs(var result: TVariantDynArray;
-  const Projection: variant; NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags);
+  const Projection: variant; NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags);
 begin
   Database.Client.GetOneReadConnection.GetDocumentsAndFree(TMongoRequestQuery.Create(
     fFullCollectionName, null, Projection, NumberToReturn, NumberToSkip, Flags), result);
 end;
 
 function TMongoCollection.FindJSON(const Criteria, Projection: Variant;
-  NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags; Mode:
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags; Mode:
   TMongoJSONMode): RawUTF8;
 begin
   result := Database.Client.GetOneReadConnection.GetJSONAndFree(TMongoRequestQuery.Create(
@@ -3454,7 +3454,7 @@ begin
 end;
 
 function TMongoCollection.FindJSON(Criteria: PUTF8Char;
-  const Params: array of const; NumberToReturn, NumberToSkip: Integer;
+  const Params: array of const; NumberToReturn, NumberToSkip: integer;
   Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
 begin
   result := FindJSON(BSONVariant(Criteria, [], Params), null, NumberToReturn,
@@ -3463,7 +3463,7 @@ end;
 
 function TMongoCollection.FindJSON(Criteria: PUTF8Char;
   const CriteriaParams: array of const; const Projection: variant;
-  NumberToReturn, NumberToSkip: Integer; Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
 begin
   result := FindJSON(BSONVariant(Criteria, [], CriteriaParams), Projection,
     NumberToReturn, NumberToSkip, Flags, Mode);

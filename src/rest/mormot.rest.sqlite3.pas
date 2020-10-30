@@ -396,5 +396,7 @@ end;
 
 
 
+initialization
+  TRestServerDB.RegisterClassNameForDefinition;
 end.
 

@@ -51,7 +51,7 @@ type
     /// the matching file name, including its folder name
     Name: TFileName;
     /// the matching file attributes
-    Attr: Integer;
+    Attr: integer;
     /// the matching file size
     Size: Int64;
     /// the matching file date/time
@@ -71,7 +71,7 @@ type
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
 function FindFiles(const Directory,Mask: TFileName;
   const IgnoreFileName: TFileName = ''; SortByName: boolean = false;
-  IncludesDir: boolean = true; SubFolder: Boolean = false): TFindFilesDynArray;
+  IncludesDir: boolean = true; SubFolder: boolean = false): TFindFilesDynArray;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
@@ -184,15 +184,15 @@ type
     /// add once some glob patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
     constructor Create(const aPatterns: TRawUTF8DynArray;
-      CaseInsensitive: Boolean); reintroduce; overload;
+      CaseInsensitive: boolean); reintroduce; overload;
     /// add once some glob patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
     procedure Subscribe(const aPatterns: TRawUTF8DynArray;
-      CaseInsensitive: Boolean); overload; virtual;
+      CaseInsensitive: boolean); overload; virtual;
     /// add once some glob patterns to the internal TMach list
     // - each CSV item in aPatterns follows the IsMatch() syntax
     procedure Subscribe(const aPatternsCSV: RawUTF8;
-      CaseInsensitive: Boolean); overload;
+      CaseInsensitive: boolean); overload;
     /// search patterns in the supplied UTF-8 text
     // - returns -1 if no filter has been subscribed
     // - returns -2 if there is no match on any previous pattern subscription
@@ -751,7 +751,7 @@ function ToText(err: TDeltaError): PShortString; overload;
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: PRttiInfo;
   out Count, ElemSize: PtrInt; NoHash32Check: boolean = false): pointer;
 
-/// wrap an Integer dynamic array BLOB content as stored by TDynArray.SaveTo
+/// wrap an integer dynamic array BLOB content as stored by TDynArray.SaveTo
 // - same as TDynArray.LoadFrom() with no memory allocation nor memory copy: so
 // is much faster than creating a temporary dynamic array to load the data
 // - will return nil if no or invalid data, or a pointer to the integer
@@ -1981,7 +1981,7 @@ end;
 
 {$endif CPUX86}
 
-function CompareMemU(P1, P2: PUTF8Char; len: PtrInt; U: PNormTable): Boolean;
+function CompareMemU(P1, P2: PUTF8Char; len: PtrInt; U: PNormTable): boolean;
   {$ifdef FPC} inline;{$endif}
 begin // here we know that len>0
   result := false;
@@ -2558,7 +2558,7 @@ end;
 
 { TMatchs }
 
-constructor TMatchs.Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+constructor TMatchs.Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: boolean);
 begin
   inherited Create;
   Subscribe(aPatterns, CaseInsensitive);
@@ -2616,7 +2616,7 @@ begin
   temp.Done;
 end;
 
-procedure TMatchs.Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean);
+procedure TMatchs.Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: boolean);
 var
   patterns: TRawUTF8DynArray;
 begin
@@ -2624,7 +2624,7 @@ begin
   Subscribe(patterns, CaseInsensitive);
 end;
 
-procedure TMatchs.Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+procedure TMatchs.Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: boolean);
 var
   i, j, m, n: integer;
   found: ^TMatchStore;
@@ -4207,7 +4207,7 @@ var
 
   procedure CreateCopied;
   begin
-    Getmem(Delta, NewSizeSave + 17);  // 17 = 4*Integer + 1*Byte
+    Getmem(Delta, NewSizeSave + 17);  // 17 = 4*integer + 1*Byte
     d := Delta;
     db := ToVarUInt32(0, ToVarUInt32(NewSizeSave, db));
     WriteByte(d, FLAG_COPIED); // block copied flag

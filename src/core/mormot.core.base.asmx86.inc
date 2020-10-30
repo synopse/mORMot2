@@ -177,7 +177,7 @@ asm
         mov     [edx + 4], eax
 end;
 
-function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=P1 edx=P2 ecx=Length
@@ -1005,7 +1005,7 @@ asm
         pop     ebx
 end;
 
-function InterlockedIncrement(var I: Integer): Integer;
+function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         mov     edx, 1
@@ -1014,7 +1014,7 @@ asm
         inc     eax
 end;
 
-function InterlockedDecrement(var I: Integer): Integer;
+function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         mov     edx, -1

@@ -334,13 +334,13 @@ type
     procedure SetVersion(aMajor, aMinor, aRelease, aBuild: integer);
   public
     /// executable major version number
-    Major: Integer;
+    Major: integer;
     /// executable minor version number
-    Minor: Integer;
+    Minor: integer;
     /// executable release version number
-    Release: Integer;
+    Release: integer;
     /// executable release build number
-    Build: Integer;
+    Build: integer;
     /// build year of this exe file
     BuildYear: word;
     /// version info of the exe file as '3.1'
@@ -1115,7 +1115,7 @@ function SearchRecValidFolder(const F: TSearchRec): boolean;
 // so it would use regular FileOpen() on this deprecated OS
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
-function FileOpenSequentialRead(const FileName: string): Integer;
+function FileOpenSequentialRead(const FileName: string): integer;
   {$ifdef FPC}inline;{$endif}
 
 /// returns a TFileStream optimized for one pass file reading
@@ -1978,7 +1978,7 @@ end;
 
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 var
-  LastError: Integer;
+  LastError: integer;
   Error: Exception;
 begin
   LastError := GetLastError;

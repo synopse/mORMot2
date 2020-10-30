@@ -755,13 +755,13 @@ type
     constructor Create;
     /// raise an exception on error
     procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status: SqlReturn;
-      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: Boolean = false;
+      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
       {$ifdef HASINLINE}inline;{$endif}
     /// generic process of error handle
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-      InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+      InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
     /// wrapper around SQLGetDiagField() API call
     function GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
     /// wrapper around GetInfo() API call
@@ -780,7 +780,7 @@ var
 // create a new TStringList), or any existing TStrings instance (may be from VCL
 // - aIncludeVersion: include the DLL driver version as <driver name>=<dll version>
 // in aDrivers (somewhat slower)
-function ODBCInstalledDriversList(const aIncludeVersion: Boolean; var aDrivers: TStrings): boolean;
+function ODBCInstalledDriversList(const aIncludeVersion: boolean; var aDrivers: TStrings): boolean;
 
 {$endif MSWINDOWS}
 
@@ -905,8 +905,8 @@ const
 
 
 {$ifdef MSWINDOWS}
-function ODBCInstalledDriversList(const aIncludeVersion: Boolean;
-  var aDrivers: TStrings): Boolean;
+function ODBCInstalledDriversList(const aIncludeVersion: boolean;
+  var aDrivers: TStrings): boolean;
 
   function GetFullFileVersion(const aFileName: TFileName): string;
   begin
@@ -958,7 +958,7 @@ end;
 
 procedure TODBCLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status:
   SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-  InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 begin
   if Status <> SQL_SUCCESS then
     HandleError(Conn, Stmt, Status, HandleType, Handle, InfoRaiseException,
@@ -1003,7 +1003,7 @@ end;
 
 procedure TODBCLib.HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-  InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 const
   FMT: PUTF8Char = '%[%] % (%)'#13#10;
 var

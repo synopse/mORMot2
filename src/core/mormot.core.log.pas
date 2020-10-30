@@ -115,7 +115,7 @@ type
     /// save all debugging information as a JSON file
     // - may be useful from debugging purposes
     procedure SaveToJson(const aJsonFile: TFileName;
-      aHumanReadable: Boolean = false); overload;
+      aHumanReadable: boolean = false); overload;
     /// add some debugging information about the supplied absolute memory address
     // - will create a global TSynMapFile instance for the current process, if
     // necessary
@@ -200,7 +200,7 @@ const
 
   /// RGB colors corresponding to each logging level
   // - matches the TColor values, as used by the VCL
-  LOG_LEVEL_COLORS: array[Boolean, TSynLogInfo] of integer = (
+  LOG_LEVEL_COLORS: array[boolean, TSynLogInfo] of integer = (
   ($FFFFFF, $DCC0C0, $DCDCDC, $C0C0C0, $8080C0, $8080FF, $C0DCC0, $DCDCC0,
  // sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave,
     $C0C0F0, $C080FF, $C080F0, $C080C0, $C080C0,
@@ -451,7 +451,7 @@ type
   TSynLogFamily = class
   protected
     fLevel, fLevelStackTrace: TSynLogInfos;
-    fArchiveAfterDays: Integer;
+    fArchiveAfterDays: integer;
     fArchivePath: TFileName;
     fOnArchive: TSynLogArchiveEvent;
     fOnRotate: TSynLogRotateEvent;
@@ -649,7 +649,7 @@ type
     // or delete deprecated files
     // - will be set by default to 7 days
     // - will be used by Destroy to call OnArchive event handler on time
-    property ArchiveAfterDays: Integer
+    property ArchiveAfterDays: integer
       read fArchiveAfterDays write fArchiveAfterDays;
     /// the internal in-memory buffer size, in bytes
     // - this is the number of bytes kept in memory before flushing to the hard
@@ -1338,7 +1338,7 @@ type
     /// initialize internal structure
     constructor Create; override;
     /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): boolean; override;
+    function LineContains(const aUpperSearch: RawUTF8; aIndex: integer): boolean; override;
     /// retrieve the date and time of an event
     // - returns 0 in case of an invalid supplied index
     function EventDateTime(aIndex: integer): TDateTime;
@@ -1349,7 +1349,7 @@ type
     // - you may specify a text to replace all #9 characters occurences
     // - is used e.g. in TMainLogView.ListDrawCell
     function EventString(index: integer; const replaceTabs: RawUTF8 = '';
-      maxutf8len: Integer = 0; includeFirstColumns: boolean = false): string;
+      maxutf8len: integer = 0; includeFirstColumns: boolean = false): string;
     /// sort the LogProc[] array according to the supplied order
     procedure LogProcSort(Order: TLogProcSortOrder);
     /// return the number of matching events in the log
@@ -2039,7 +2039,7 @@ begin
 end;
 
 procedure TSynMapFile.SaveToJson(const aJsonFile: TFileName;
-  aHumanReadable: Boolean);
+  aHumanReadable: boolean);
 var
   W: TBaseWriter;
   json: RawUTF8;
@@ -3642,7 +3642,7 @@ var
   {$ifdef MSWINDOWS}
   Env: PWideChar;
   P: PWideChar;
-  L: Integer;
+  L: integer;
   {$endif MSWINDOWS}
 
   procedure NewLine;
@@ -4254,7 +4254,7 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 
   procedure AddStackManual(Stack: PPtrUInt);
 
-    function check2(xret: PtrUInt): Boolean;
+    function check2(xret: PtrUInt): boolean;
     var
       i: PtrUInt;
     begin
@@ -4827,7 +4827,7 @@ begin
 end;
 
 function TSynLogFile.LineContains(const aUpperSearch: RawUTF8;
-  aIndex: Integer): boolean;
+  aIndex: integer): boolean;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) or
@@ -5537,7 +5537,7 @@ begin
 end;
 
 function TSynLogFile.EventString(index: integer; const replaceTabs: RawUTF8;
-  maxutf8len: Integer; includeFirstColumns: boolean): string;
+  maxutf8len: integer; includeFirstColumns: boolean): string;
 var
   tmp: RawUTF8;
   header: string;

@@ -1575,7 +1575,7 @@ function Rdtsc: Int64;
         or      rax, rdx
 end;
 
-function InterlockedIncrement(var I: Integer): Integer;
+function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, I
         mov     edx, 1
@@ -1584,7 +1584,7 @@ function InterlockedIncrement(var I: Integer): Integer;
         inc     eax
 end;
 
-function InterlockedDecrement(var I: Integer): Integer;
+function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, I
         mov     edx, -1

@@ -690,5 +690,7 @@ begin
 end;
 
 
+initialization
+  TRestServerFullMemory.RegisterClassNameForDefinition;
 end.
 

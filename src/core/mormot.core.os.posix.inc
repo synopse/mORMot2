@@ -148,7 +148,7 @@ type
 function mach_absolute_time: UInt64;
   cdecl external 'libc.dylib' name 'mach_absolute_time';
 
-function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
+function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
   cdecl external 'libc.dylib' name 'mach_timebase_info';
 
 var
@@ -225,10 +225,10 @@ const // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
   CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
 
-function clock_gettime(ID: cardinal; r: ptimespec): Integer;
+function clock_gettime(ID: cardinal; r: ptimespec): integer;
   cdecl external 'libc.so' name 'clock_gettime';
 
-function clock_getres(ID: cardinal; r: ptimespec): Integer;
+function clock_getres(ID: cardinal; r: ptimespec): integer;
   cdecl external 'libc.so' name 'clock_getres';
 
 {$else}
@@ -544,7 +544,7 @@ begin
 end;
 {$I+}
 
-function FileOpenSequentialRead(const FileName: string): Integer;
+function FileOpenSequentialRead(const FileName: string): integer;
 begin
   // SysUtils.FileOpen = fpOpen + fpFlock
   result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
@@ -967,7 +967,7 @@ var
   M, D: word;
 {$ifdef FPCUSEVERSIONINFO}
   VI: TVersionInfo;
-  TI, I: Integer;
+  TI, I: integer;
 {$endif FPCUSEVERSIONINFO}
 begin
   fFileName := aFileName;
@@ -1345,7 +1345,7 @@ begin
 end;
 
 {$ifdef BSD}
-function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
+function mprotect(Addr: Pointer; Len: size_t; Prot: integer): integer;
   {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
   {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
 {$endif BSD}
@@ -1455,7 +1455,7 @@ end;
 
 { ****************** Gather Operating System Information }
 
-function getpagesize: Integer; cdecl; external 'c';
+function getpagesize: integer; cdecl; external 'c';
 
 {$ifndef BSD}
 

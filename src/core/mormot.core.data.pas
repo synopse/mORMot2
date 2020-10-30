@@ -88,8 +88,8 @@ type
     // returns E_NOINTERFACE
     function VirtualQueryInterface(const IID: TGUID; out Obj): HResult; virtual;
     // always return 1 for a "non allocated" instance (0 triggers release)
-    function VirtualAddRef: Integer; virtual; abstract;
-    function VirtualRelease: Integer; virtual; abstract;
+    function VirtualAddRef: integer; virtual; abstract;
+    function VirtualRelease: integer; virtual; abstract;
     {$ifdef FPC}
     function QueryInterface(
       {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
@@ -98,8 +98,8 @@ type
     function _Release: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
     {$else}
     function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
-    function _AddRef: Integer; stdcall;
-    function _Release: Integer; stdcall;
+    function _AddRef: integer; stdcall;
+    function _Release: integer; stdcall;
     {$endif FPC}
   public
     /// the associated reference count
@@ -417,7 +417,7 @@ type
   protected
     fCount: integer;
     fList: TPointerDynArray;
-    function Get(index: Integer): pointer;
+    function Get(index: integer): pointer;
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// virtual constructor called at instance creation
@@ -441,7 +441,7 @@ type
     /// low-level array-like access to the items stored in this TList instance
     // - warning: if index is out of range, will return nil and won't raise
     // any exception
-    property Items[index: Integer]: pointer read Get; default;
+    property Items[index: integer]: pointer read Get; default;
   end;
   PSynList = ^TSynList;
 
@@ -1142,7 +1142,7 @@ type
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - the dynamic array must have been defined with its own type
-    // (e.g. TIntegerDynArray = array of Integer)
+    // (e.g. TIntegerDynArray = array of integer)
     // - if aCountPointer is set, it will be used instead of length() to store
     // the dynamic array items count - it will be much faster when adding
     // items to the array, because the dynamic array won't need to be
@@ -1196,7 +1196,7 @@ type
     // - Init and InitSpecific methods will reset the aCountPointer to 0: you
     // can use this method to set the external count variable without overriding
     // the current value
-    procedure UseExternalCount(var aCountPointer: Integer);
+    procedure UseExternalCount(var aCountPointer: integer);
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize the wrapper to point to no dynamic array
     procedure Void;
@@ -1369,7 +1369,7 @@ type
     // - this method will use the Compare property function for the search
     // - returns TRUE and the matching indexes, or FALSE if none found
     // - if the array is not sorted, returns FALSE
-    function FindAllSorted(const Item; out FirstIndex, LastIndex: Integer): boolean;
+    function FindAllSorted(const Item; out FirstIndex, LastIndex: integer): boolean;
     /// search for an element value inside a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - will be faster than a manual FindAndAddIfNotExisting+Sort process
@@ -1379,11 +1379,11 @@ type
     // - if the array is not sorted, returns FALSE and Index=-1
     // - warning: Item must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (no FastLocateSorted(i+10) e.g.)
-    function FastLocateSorted(const Item; out Index: Integer): boolean;
+    function FastLocateSorted(const Item; out Index: integer): boolean;
     /// insert a sorted element value at the proper place
     // - the index should have been computed by FastLocateSorted(): false
     // - you may consider using FastLocateOrAddSorted() instead
-    procedure FastAddSorted(Index: Integer; const Item);
+    procedure FastAddSorted(Index: integer; const Item);
     /// search and add an element value inside a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - will be faster than a manual FindAndAddIfNotExisting+Sort process
@@ -1395,7 +1395,7 @@ type
     /// delete a sorted element value at the proper place
     // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
     // this method with a FastLocateSorted/FastAddSorted array
-    procedure FastDeleteSorted(Index: Integer);
+    procedure FastDeleteSorted(Index: integer);
     /// will reverse all array items, in place
     procedure Reverse;
     /// sort the dynamic array items using a lookup array of indexes
@@ -1982,7 +1982,7 @@ type
 
 /// initialize the structure with a one-dimension dynamic array
 // - the dynamic array must have been defined with its own type
-// (e.g. TIntegerDynArray = array of Integer)
+// (e.g. TIntegerDynArray = array of integer)
 // - if aCountPointer is set, it will be used instead of length() to store
 // the dynamic array items count - it will be much faster when adding
 // elements to the array, because the dynamic array won't need to be
@@ -2008,7 +2008,7 @@ function DynArray(aTypeInfo: pointer; var aValue;
 // - this function will use the supplied TSynTempBuffer for index storage,
 // so use PIntegerArray(Indexes.buf) to access the values
 // - caller should always make Indexes.Done once done
-procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
+procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: integer;
   out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
 
 var
@@ -2114,7 +2114,7 @@ type
     procedure Save(out aDynArrayValues; aDynArray: PDynArray = nil); overload;
     /// returns how many items are currently stored in this queue
     // - this method is thread-safe
-    function Count: Integer;
+    function Count: integer;
     /// returns how much slots is currently reserved in memory
     // - the queue has an optimized auto-sizing algorithm, you can use this
     // method to return its current capacity
@@ -2618,7 +2618,7 @@ type
 
 /// sort a dynamic array of PUTF8Char items, via an external array of indexes
 // - you can use FastFindIndexedPUTF8Char() for fast O(log(n)) binary search
-procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
+procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean = false);
 
 
@@ -2903,7 +2903,7 @@ begin
   result := PtrUIntScanExists(pointer(fList), fCount, PtrUInt(item));
 end;
 
-function TSynList.Get(index: Integer): pointer;
+function TSynList.Get(index: integer): pointer;
 begin
   if cardinal(index) < cardinal(fCount) then
     result := fList[index]
@@ -6186,7 +6186,7 @@ begin
         end;
       4:
         begin // optimized version for TIntegerDynArray and such
-          P2 := P1 + n * SizeOf(Integer);
+          P2 := P1 + n * SizeOf(integer);
           while P1 < P2 do
           begin
             i32 := PInteger(P1)^;
@@ -6504,7 +6504,7 @@ begin
   result := -1;
 end;
 
-function TDynArray.FindAllSorted(const Item; out FirstIndex, LastIndex: Integer): boolean;
+function TDynArray.FindAllSorted(const Item; out FirstIndex, LastIndex: integer): boolean;
 var
   found, last: integer;
   P: PAnsiChar;
@@ -6524,7 +6524,7 @@ begin
     inc(LastIndex);
 end;
 
-function TDynArray.FastLocateSorted(const Item; out Index: Integer): boolean;
+function TDynArray.FastLocateSorted(const Item; out Index: integer): boolean;
 var
   n, i, cmp: integer;
   P: PAnsiChar;
@@ -6572,13 +6572,13 @@ begin
     Index := -1; // no fCompare()
 end;
 
-procedure TDynArray.FastAddSorted(Index: Integer; const Item);
+procedure TDynArray.FastAddSorted(Index: integer; const Item);
 begin
   Insert(Index, Item);
   fSorted := true; // Insert -> SetCount -> fSorted := false
 end;
 
-procedure TDynArray.FastDeleteSorted(Index: Integer);
+procedure TDynArray.FastDeleteSorted(Index: integer);
 begin
   Delete(Index);
   fSorted := true; // Delete -> SetCount -> fSorted := false
@@ -6616,7 +6616,7 @@ type
     procedure QuickSortEventReverse(L, R: PtrInt);
   end;
 
-procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
+procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean);
 var
   QS: TDynArrayQuickSort;
@@ -6633,7 +6633,7 @@ begin
   QS.QuickSortIndexed(0, Count - 1);
 end;
 
-procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
+procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: integer;
   out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
 var
   QS: TDynArrayQuickSort;
@@ -7157,7 +7157,7 @@ begin
     result := -1;
 end;
 
-procedure TDynArray.UseExternalCount(var aCountPointer: Integer);
+procedure TDynArray.UseExternalCount(var aCountPointer: integer);
 begin
   fCountP := @aCountPointer;
 end;
@@ -8492,7 +8492,7 @@ begin
   end;
 end;
 
-function TSynQueue.Count: Integer;
+function TSynQueue.Count: integer;
 begin
   if self = nil then
     result := 0

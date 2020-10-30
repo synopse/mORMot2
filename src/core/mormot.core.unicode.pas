@@ -155,25 +155,25 @@ function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will stop when the buffer contains #0
-function IsValidUTF8(source: PUTF8Char): Boolean; overload;
+function IsValidUTF8(source: PUTF8Char): boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
-function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): Boolean; overload;
+function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
-function IsValidUTF8(const source: RawUTF8): Boolean; overload;
+function IsValidUTF8(const source: RawUTF8): boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
 // control characters
 // - supplied input is a pointer to a #0 ended text buffer
-function IsValidUTF8WithoutControlChars(source: PUTF8Char): Boolean; overload;
+function IsValidUTF8WithoutControlChars(source: PUTF8Char): boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #0..#31
 // control characters
 // - supplied input is a RawUTF8 variable
-function IsValidUTF8WithoutControlChars(const source: RawUTF8): Boolean; overload;
+function IsValidUTF8WithoutControlChars(const source: RawUTF8): boolean; overload;
 
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
@@ -495,7 +495,7 @@ var
 // - you can optionally specify a maximum size, in bytes (this won't reallocate
 // the string, but just add a #0 at some point in the UTF8 buffer)
 // - could allow logging of parsed input e.g. after an exception
-procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: Integer = maxInt);
+procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: integer = maxInt);
 
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
 // - return '?' for an unknown WideChar in code page 1252
@@ -637,7 +637,7 @@ function WideStringToWinAnsi(const Wide: WideString): WinAnsiString;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an AnsiChar buffer (of a given code page) into a UTF-8 string
-procedure AnsiCharToUTF8(P: PAnsiChar; L: Integer; var result: RawUTF8; ACP: integer);
+procedure AnsiCharToUTF8(P: PAnsiChar; L: integer; var result: RawUTF8; ACP: integer);
 
 /// convert any Raw Unicode encoded String into a generic SynUnicode Text
 function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload;
@@ -1049,7 +1049,7 @@ function EndWithArray(const text: RawUTF8; const upArray: array of RawUTF8): int
 // - ignore case - extup^ must be already Upper
 // - chars are compared as WinAnsi (codepage 1252), not as UTF-8
 // - could be used e.g. like IdemFileExt(aFileName,'.JP');
-function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar = '.'): Boolean;
+function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar = '.'): boolean;
 
 /// returns matching file name extension index as extup^
 // - ignore case - extup[] must be already Upper
@@ -1255,7 +1255,7 @@ function SortDynArrayUnicodeStringI(const A, B): integer;
 // - fast version using NormToUpper[] array for all Win-Ansi characters
 // - this version will decode each UTF-8 glyph before using NormToUpper[]
 // - current implementation handles UTF-16 surrogates as UTF8IComp()
-function SameTextU(const S1, S2: RawUTF8): Boolean;
+function SameTextU(const S1, S2: RawUTF8): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion of the supplied text into 8 bit uppercase
@@ -1897,7 +1897,7 @@ NoSource:
     dest^ := #0; // always append a WideChar(0) to the end of the buffer
 end;
 
-function IsValidUTF8(source: PUTF8Char): Boolean;
+function IsValidUTF8(source: PUTF8Char): boolean;
 var
   extra, i: integer;
   c: cardinal;
@@ -1925,12 +1925,12 @@ begin
   result := true;
 end;
 
-function IsValidUTF8(const source: RawUTF8): Boolean;
+function IsValidUTF8(const source: RawUTF8): boolean;
 begin
   result := IsValidUTF8(pointer(source), Length(source));
 end;
 
-function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): Boolean;
+function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): boolean;
 var
   extra, i: integer;
   c: cardinal;
@@ -1961,7 +1961,7 @@ begin
   result := true;
 end;
 
-function IsValidUTF8WithoutControlChars(source: PUTF8Char): Boolean;
+function IsValidUTF8WithoutControlChars(source: PUTF8Char): boolean;
 var
   extra, i: integer;
   c: cardinal;
@@ -1993,7 +1993,7 @@ begin
   result := true;
 end;
 
-function IsValidUTF8WithoutControlChars(const source: RawUTF8): Boolean;
+function IsValidUTF8WithoutControlChars(const source: RawUTF8): boolean;
 var
   s, extra, i, len: integer;
   c: cardinal;
@@ -2562,7 +2562,7 @@ end;
 function TSynAnsiFixedWidth.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal; NoTrailingZero: boolean): PWideChar;
 var
-  i: Integer;
+  i: integer;
   tab: PWordArray;
 begin
   // PWord*(Dest)[] is much faster than dest^ := WideChar(c) for FPC
@@ -3335,7 +3335,7 @@ begin
   SetString(result, WideChar, WideCharCount);
 end;
 
-procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: Integer);
+procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: integer);
 begin
   WinAnsiConvert.UnicodeBufferToAnsi(dest, source, WideCharCount);
 end;
@@ -3369,7 +3369,7 @@ begin
   result := RawUnicodeToString(source, StrLenW(source));
 end;
 
-procedure AnsiCharToUTF8(P: PAnsiChar; L: Integer; var result: RawUTF8; ACP: integer);
+procedure AnsiCharToUTF8(P: PAnsiChar; L: integer; var result: RawUTF8; ACP: integer);
 begin
   result := TSynAnsiConvert.Engine(ACP).AnsiBufferToRawUTF8(P, L);
 end;
@@ -4056,7 +4056,7 @@ begin
   result := -1;
 end;
 
-function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar): Boolean;
+function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar): boolean;
 var
   ext: PUTF8Char;
 begin
@@ -4866,7 +4866,7 @@ neg:  result := -1   // u1='' or u1<u2
     result := 0;     // u1=u2
 end;
 
-function SameTextU(const S1, S2: RawUTF8): Boolean;
+function SameTextU(const S1, S2: RawUTF8): boolean;
 // checking UTF-8 lengths is not accurate: surrogates may be confusing
 begin
   result := UTF8IComp(pointer(S1), pointer(S2)) = 0;

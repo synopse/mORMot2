@@ -243,9 +243,9 @@ type
     /// resize fParams[] if necessary, set the VType and return pointer to
     // the corresponding entry in fParams[]
     // - first parameter has Param=1
-    function CheckParam(Param: Integer; NewType: TSQLDBFieldType;
+    function CheckParam(Param: integer; NewType: TSQLDBFieldType;
       IO: TSQLDBParamInOutType): POleDBStatementParam; overload;
-    function CheckParam(Param: Integer; NewType: TSQLDBFieldType;
+    function CheckParam(Param: integer; NewType: TSQLDBFieldType;
       IO: TSQLDBParamInOutType; ArrayCount: integer): POleDBStatementParam; overload;
     /// raise an exception if Col is incorrect or no IRowSet is available
     // - set Column to the corresponding fColumns[] item
@@ -281,7 +281,7 @@ type
     // - OleDB during MULTI INSERT statements expect BoundType to be set in
     // TSQLDBOleDBStatementParam, and its VStatus set to ord(stIsNull)
     // - raise an EOleDBException on any error
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType = paramIn;
+    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
       BoundType: TSQLDBFieldType = ftNull); override;
     /// bind an array of Int64 values to a parameter
     // - using TABLE variable (MSSQl 2008 & UP). Must be created in the database as:
@@ -290,63 +290,63 @@ type
     // $ declare @a dbo.IDList;
     // $ insert into @a (id) values (1), (2), (3);
     // $ SELECT usr.ID   FROM user usr WHERE usr.ID IN  (select id from @a)
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of Int64); overload; override;
     /// bind a array of RawUTF8 (255 length max) values to a parameter
     // - using TABLE variable (MSSQl 2008 & UP). Must be created in the database as:
     // $ CREATE TYPE dbo.StrList AS TABLE(id nvarchar(255) NULL)
     // - must be declareded in the database
-    procedure BindArray(Param: Integer;
+    procedure BindArray(Param: integer;
       const Values: array of RawUTF8); overload; override;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure Bind(Param: Integer; Value: Int64;
+    procedure Bind(Param: integer; Value: Int64;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure Bind(Param: Integer; Value: double;
+    procedure Bind(Param: integer; Value: double;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindDateTime(Param: Integer; Value: TDateTime;
+    procedure BindDateTime(Param: integer; Value: TDateTime;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindCurrency(Param: Integer; Value: currency;
+    procedure BindCurrency(Param: integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindTextU(Param: Integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindTextP(Param: Integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a VCL string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindTextS(Param: Integer; const Value: string;
+    procedure BindTextS(Param: integer; const Value: string;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind an OLE WideString to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindTextW(Param: Integer; const Value: WideString;
+    procedure BindTextW(Param: integer; const Value: WideString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
+    procedure BindBlob(Param: integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindBlob(Param: Integer; const Data: RawByteString;
+    procedure BindBlob(Param: integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
 
     /// Prepare an UTF-8 encoded SQL statement
@@ -372,7 +372,7 @@ type
     // - to be used e.g. with stored procedures
     // - any TEXT parameter will be retrieved as WideString Variant (i.e. as
     // stored in TSQLDBOleDBStatementParam)
-    function ParamToVariant(Param: Integer; var Value: Variant;
+    function ParamToVariant(Param: integer; var Value: Variant;
       CheckIsOutParameter: boolean = true): TSQLDBFieldType; override;
 
     /// after a statement has been prepared via Prepare() + ExecutePrepared() or
@@ -634,7 +634,7 @@ implementation
 
 { TSQLDBOleDBStatement }
 
-procedure TSQLDBOleDBStatement.BindTextU(Param: Integer; const Value: RawUTF8;
+procedure TSQLDBOleDBStatement.BindTextU(Param: integer; const Value: RawUTF8;
   IO: TSQLDBParamInOutType);
 begin
   if (Value = '') and
@@ -644,7 +644,7 @@ begin
     UTF8ToWideString(Value, CheckParam(Param, ftUTF8, IO)^.VText);
 end;
 
-procedure TSQLDBOleDBStatement.BindTextP(Param: Integer; Value: PUTF8Char;
+procedure TSQLDBOleDBStatement.BindTextP(Param: integer; Value: PUTF8Char;
   IO: TSQLDBParamInOutType);
 begin
   if (Value = '') and
@@ -654,7 +654,7 @@ begin
     UTF8ToWideString(Value, StrLen(Value), CheckParam(Param, ftUTF8, IO)^.VText);
 end;
 
-procedure TSQLDBOleDBStatement.BindTextS(Param: Integer; const Value: string;
+procedure TSQLDBOleDBStatement.BindTextS(Param: integer; const Value: string;
   IO: TSQLDBParamInOutType);
 begin
   if (Value = '') and
@@ -664,7 +664,7 @@ begin
     CheckParam(Param, ftUTF8, IO)^.VText := StringToSynUnicode(Value);
 end;
 
-procedure TSQLDBOleDBStatement.BindTextW(Param: Integer; const Value: WideString;
+procedure TSQLDBOleDBStatement.BindTextW(Param: integer; const Value: WideString;
   IO: TSQLDBParamInOutType);
 begin
   if (Value = '') and
@@ -674,25 +674,25 @@ begin
     CheckParam(Param, ftUTF8, IO)^.VText := Value;
 end;
 
-procedure TSQLDBOleDBStatement.BindBlob(Param: Integer;
+procedure TSQLDBOleDBStatement.BindBlob(Param: integer;
   const Data: RawByteString; IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftBlob, IO)^.VBlob := Data;
 end;
 
-procedure TSQLDBOleDBStatement.BindBlob(Param: Integer; Data: pointer;
+procedure TSQLDBOleDBStatement.BindBlob(Param: integer; Data: pointer;
   Size: integer; IO: TSQLDBParamInOutType);
 begin
   SetString(CheckParam(Param, ftBlob, IO)^.VBlob, PAnsiChar(Data), Size);
 end;
 
-procedure TSQLDBOleDBStatement.Bind(Param: Integer; Value: double;
+procedure TSQLDBOleDBStatement.Bind(Param: integer; Value: double;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftDouble, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBOleDBStatement.BindArray(Param: Integer; const Values: array of Int64);
+procedure TSQLDBOleDBStatement.BindArray(Param: integer; const Values: array of Int64);
 var
   i: integer;
 begin
@@ -701,7 +701,7 @@ begin
       VArray[i] := Int64ToUtf8(Values[i]);
 end;
 
-procedure TSQLDBOleDBStatement.BindArray(Param: Integer; const Values: array of RawUTF8);
+procedure TSQLDBOleDBStatement.BindArray(Param: integer; const Values: array of RawUTF8);
 var
   i: integer;
   StoreVoidStringAsNull: boolean;
@@ -716,31 +716,31 @@ begin
         QuotedStr(Values[i], '''', VArray[i]);
 end;
 
-procedure TSQLDBOleDBStatement.Bind(Param: Integer; Value: Int64;
+procedure TSQLDBOleDBStatement.Bind(Param: integer; Value: Int64;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftInt64, IO)^.VInt64 := Value;
 end;
 
-procedure TSQLDBOleDBStatement.BindCurrency(Param: Integer; Value: currency;
+procedure TSQLDBOleDBStatement.BindCurrency(Param: integer; Value: currency;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftCurrency, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBOleDBStatement.BindDateTime(Param: Integer; Value: TDateTime;
+procedure TSQLDBOleDBStatement.BindDateTime(Param: integer; Value: TDateTime;
   IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param, ftDate, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBOleDBStatement.BindNull(Param: Integer; IO: TSQLDBParamInOutType;
+procedure TSQLDBOleDBStatement.BindNull(Param: integer; IO: TSQLDBParamInOutType;
   BoundType: TSQLDBFieldType);
 begin
   CheckParam(Param, BoundType, IO)^.VStatus := ord(stIsNull);
 end;
 
-function TSQLDBOleDBStatement.CheckParam(Param: Integer;
+function TSQLDBOleDBStatement.CheckParam(Param: integer;
   NewType: TSQLDBFieldType; IO: TSQLDBParamInOutType): POleDBStatementParam;
 begin
   if Param <= 0 then
@@ -754,7 +754,7 @@ begin
   result^.VStatus := 0;
 end;
 
-function TSQLDBOleDBStatement.CheckParam(Param: Integer; NewType: TSQLDBFieldType;
+function TSQLDBOleDBStatement.CheckParam(Param: integer; NewType: TSQLDBFieldType;
   IO: TSQLDBParamInOutType; ArrayCount: integer): POleDBStatementParam;
 begin
   result := CheckParam(Param, NewType, IO);
@@ -1163,7 +1163,7 @@ Write:    case ColumnType of
     WR.Add('}');
 end;
 
-function TSQLDBOleDBStatement.ParamToVariant(Param: Integer; var Value: Variant;
+function TSQLDBOleDBStatement.ParamToVariant(Param: integer; var Value: Variant;
   CheckIsOutParameter: boolean): TSQLDBFieldType;
 begin
   inherited ParamToVariant(Param, Value); // raise exception if Param incorrect

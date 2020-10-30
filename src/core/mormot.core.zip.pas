@@ -38,7 +38,7 @@ type
   /// a TStream descendant for compressing data into a stream using Zip/Deflate
   TSynZipCompressor = class(TStream)
   private
-    fInitialized: Boolean;
+    fInitialized: boolean;
     fDestStream: TStream;
     Z: TZLib;
     fCRC: Cardinal;
@@ -49,7 +49,7 @@ type
   public
     /// create a compression stream, writting the compressed data into
     // the specified stream (e.g. a file stream)
-    constructor Create(outStream: TStream; CompressionLevel: Integer;
+    constructor Create(outStream: TStream; CompressionLevel: integer;
       Format: TSynZipCompressorFormat = szcfRaw);
     /// release memory
     destructor Destroy; override;
@@ -121,7 +121,7 @@ function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString;
 
 /// compress a file content into a new .gz file
 // - will use TSynZipCompressor for minimal memory use during file compression
-function GZFile(const orig, destgz: TFileName; CompressionLevel: Integer = 6): boolean;
+function GZFile(const orig, destgz: TFileName; CompressionLevel: integer = 6): boolean;
 
 
 { ************  .ZIP Archive File Support }
@@ -392,7 +392,7 @@ const
 
 { TSynZipCompressor }
 
-constructor TSynZipCompressor.Create(outStream: TStream; CompressionLevel: Integer;
+constructor TSynZipCompressor.Create(outStream: TStream; CompressionLevel: integer;
   Format: TSynZipCompressorFormat = szcfRaw);
 begin
   fDestStream := outStream;
@@ -682,7 +682,7 @@ begin
     result := '';
 end;
 
-function GZFile(const orig, destgz: TFileName; CompressionLevel: Integer = 6): boolean;
+function GZFile(const orig, destgz: TFileName; CompressionLevel: integer = 6): boolean;
 var
   gz: TSynZipCompressor;
   s, d: TFileStream;

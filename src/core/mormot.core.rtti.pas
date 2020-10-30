@@ -368,7 +368,7 @@ type
     // - if Value does not start with lowercases 'a'..'z', they will be ignored:
     // e.g. GetEnumNameValue('Warning') will find sllWarning item
     // - return -1 if not found (don't use directly this value to avoid any GPF)
-    function GetEnumNameValue(const EnumName: ShortString): Integer; overload;
+    function GetEnumNameValue(const EnumName: ShortString): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the corresponding enumeration ordinal value, from its name
     // - if Value does start with lowercases 'a'..'z', they will be searched:
@@ -376,7 +376,7 @@ type
     // - if Value does not start with lowercases 'a'..'z', they will be ignored:
     // e.g. GetEnumNameValue('Warning') will find sllWarning item
     // - return -1 if not found (don't use directly this value to avoid any GPF)
-    function GetEnumNameValue(Value: PUTF8Char): Integer; overload;
+    function GetEnumNameValue(Value: PUTF8Char): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the corresponding enumeration ordinal value, from its name
     // - if Value does start with lowercases 'a'..'z', they will be searched:
@@ -386,10 +386,10 @@ type
     // will find sllWarning item
     // - return -1 if not found (don't use directly this value to avoid any GPF)
     function GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
-      AlsoTrimLowerCase: boolean = true): Integer; overload;
+      AlsoTrimLowerCase: boolean = true): integer; overload;
     /// get the corresponding enumeration ordinal value, from its trimmed name
     function GetEnumNameValueTrimmed(Value: PUTF8Char; ValueLen: integer;
-      ExactCase: boolean): Integer;
+      ExactCase: boolean): integer;
     /// get the corresponding enumeration name, without the first lowercase chars
     // (otDone -> 'Done')
     // - Value will be converted to the matching ordinal value (byte or word)
@@ -404,17 +404,17 @@ type
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
-    function GetEnumNameTrimedValue(const EnumName: ShortString): Integer; overload;
+    function GetEnumNameTrimedValue(const EnumName: ShortString): integer; overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
-    function GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer = 0): Integer; overload;
+    function GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer = 0): integer; overload;
     /// compute how many bytes this type will use to be stored as a enumerate
-    function SizeInStorageAsEnum: Integer;
+    function SizeInStorageAsEnum: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// compute how many bytes (1, 2, 4) this type will use to be stored as a set
     // - consider using TRttiInfo.SetEnumSize if ISFPC32 conditional is defined
-    function SizeInStorageAsSet: Integer;
+    function SizeInStorageAsSet: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// store an enumeration value from its ordinal representation
     procedure SetEnumFromOrdinal(out Value; Ordinal: PtrUInt);
@@ -830,7 +830,7 @@ type
     // ! Name: RawUTF8 index 40 read fName write fName;
     // - is used by a dynamic array property for fast usage of the
     // TOrm.DynArray(DynArrayFieldIndex) method
-    function Index: Integer;
+    function Index: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// contains the default value for an ordinal or set property
     // - NO_DEFAULT=$80000000 indicates none was defined in source code
@@ -1198,7 +1198,7 @@ function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
 /// copy object properties
-// - copy Integer, Int64, enumerates (including boolean), variant, records,
+// - copy integer, Int64, enumerates (including boolean), variant, records,
 // dynamic arrays, classes and any string properties (excluding shortstring)
 // - TCollection items can be copied also, if they are of the same exact class
 // - object properties instances are created in aTo if the objects are not
@@ -1271,7 +1271,7 @@ function GetEnumTrimmedNames(aTypeInfo: PRttiInfo): TRawUTF8DynArray; overload;
 // - will search for the exact text and also trim the lowercase 'a'..'z' chars on
 // left side of the text if no exact match is found and AlsoTrimLowerCase is TRUE
 function GetEnumNameValue(aTypeInfo: PRttiInfo; aValue: PUTF8Char; aValueLen: PtrInt;
-  AlsoTrimLowerCase: boolean = false): Integer; overload;
+  AlsoTrimLowerCase: boolean = false): integer; overload;
 
 /// retrieve the index of an enumerate item from its left-trimmed text
 // - text comparison is case-insensitive for A-Z characters
@@ -1289,7 +1289,7 @@ function GetEnumNameValueTrimmedExact(aTypeInfo: PRttiInfo;
 
 /// helper to retrieve the index of an enumerate item from its text
 function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUTF8;
-  AlsoTrimLowerCase: boolean = false): Integer; overload;
+  AlsoTrimLowerCase: boolean = false): integer; overload;
 
 /// store an enumeration value from its ordinal representation
 procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
@@ -2316,7 +2316,7 @@ begin
   result := @PTypeData(@self).NameList;
 end;
 
-function TRttiEnumType.SizeInStorageAsEnum: Integer;
+function TRttiEnumType.SizeInStorageAsEnum: integer;
 begin
   if @self = nil then
     result := 0
@@ -2324,7 +2324,7 @@ begin
     result := ORDTYPE_SIZE[RttiOrd]; // MaxValue does not work e.g. with WordBool
 end;
 
-function TRttiEnumType.SizeInStorageAsSet: Integer;
+function TRttiEnumType.SizeInStorageAsSet: integer;
 begin
   if @self <> nil then
   begin
@@ -2422,18 +2422,18 @@ begin
   GetEnumNameAll(result, '[', {quoted=}true, ']', TrimLeftLowerCase, UnCamelCased);
 end;
 
-function TRttiEnumType.GetEnumNameValue(const EnumName: ShortString): Integer;
+function TRttiEnumType.GetEnumNameValue(const EnumName: ShortString): integer;
 begin
   result := GetEnumNameValue(@EnumName[1], ord(EnumName[0]));
 end;
 
-function TRttiEnumType.GetEnumNameValue(Value: PUTF8Char): Integer;
+function TRttiEnumType.GetEnumNameValue(Value: PUTF8Char): integer;
 begin
   result := GetEnumNameValue(Value, StrLen(Value));
 end;
 
 function TRttiEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
-  AlsoTrimLowerCase: boolean): Integer;
+  AlsoTrimLowerCase: boolean): integer;
 begin
   if (Value <> nil) and
      (ValueLen > 0) then
@@ -2448,7 +2448,7 @@ begin
 end;
 
 function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUTF8Char; ValueLen: integer;
-  ExactCase: boolean): Integer;
+  ExactCase: boolean): integer;
 begin
   if (Value <> nil) and
      (ValueLen > 0) then
@@ -2510,12 +2510,12 @@ begin
   end;
 end;
 
-function TRttiEnumType.GetEnumNameTrimedValue(const EnumName: ShortString): Integer;
+function TRttiEnumType.GetEnumNameTrimedValue(const EnumName: ShortString): integer;
 begin
   result := GetEnumNameTrimedValue(@EnumName[1], ord(EnumName[0]));
 end;
 
-function TRttiEnumType.GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer): Integer;
+function TRttiEnumType.GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer): integer;
 begin
   if Value = nil then
     result := -1
@@ -2876,7 +2876,7 @@ end;
 
 { TRttiProp }
 
-function TRttiProp.Index: Integer;
+function TRttiProp.Index: integer;
 begin
   result := PPropInfo(@self)^.Index;
 end;
@@ -3119,7 +3119,7 @@ end;
 function TRttiProp.GetOrdProp(Instance: TObject): Int64;
 type
   TGetProc = function: Pointer of object; // pointer result is a PtrInt register
-  TGetIndexed = function(Index: Integer): Pointer of object;
+  TGetIndexed = function(Index: integer): Pointer of object;
 var
   call: TMethod;
 begin
@@ -3165,7 +3165,7 @@ end;
 function TRttiProp.GetObjProp(Instance: TObject): TObject;
 type
   TGetProc = function: TObject of object;
-  TGetIndexed = function(Index: Integer): TObject of object;
+  TGetIndexed = function(Index: integer): TObject of object;
 var
   call: TMethod;
 begin
@@ -3184,7 +3184,7 @@ end;
 function TRttiProp.GetInt64Prop(Instance: TObject): Int64;
 type
   TGetProc = function: Int64 of object;
-  TGetIndexed = function(Index: Integer): Int64 of object;
+  TGetIndexed = function(Index: integer): Int64 of object;
 var
   call: TMethod;
 begin
@@ -3225,7 +3225,7 @@ var
     procedure SubProc(rpc: TRttiPropCall); // avoid try..finally
     type
       TGetProc = function: RawByteString of object;
-      TGetIndexed = function(Index: Integer): RawByteString of object;
+      TGetIndexed = function(Index: integer): RawByteString of object;
     begin
       case rpc of
         rpcMethod:
@@ -3273,7 +3273,7 @@ end;
 procedure TRttiProp.GetShortStrProp(Instance: TObject; var Value: RawUTF8);
 type
   TGetProc = function: ShortString of object;
-  TGetIndexed = function(Index: Integer): ShortString of object;
+  TGetIndexed = function(Index: integer): ShortString of object;
 var
   call: TMethod;
   tmp: ShortString;
@@ -3294,7 +3294,7 @@ end; // no SetShortStrProp() by now
 procedure TRttiProp.GetWideStrProp(Instance: TObject; var Value: WideString);
 type
   TGetProc = function: WideString of object;
-  TGetIndexed = function(Index: Integer): WideString of object;
+  TGetIndexed = function(Index: integer): WideString of object;
 var
   call: TMethod;
 begin
@@ -3337,7 +3337,7 @@ var
     procedure SubProc(rpc: TRttiPropCall); // avoid try..finally
     type
       TGetProc = function: UnicodeString of object;
-      TGetIndexed = function(Index: Integer): UnicodeString of object;
+      TGetIndexed = function(Index: integer): UnicodeString of object;
     begin
       case rpc of
         rpcMethod:
@@ -3379,7 +3379,7 @@ end;
 procedure TRttiProp.GetCurrencyProp(Instance: TObject; var Value: currency);
 type
   TGetProc = function: currency of object;
-  TGetIndexed = function(Index: Integer): currency of object;
+  TGetIndexed = function(Index: integer): currency of object;
 var
   call: TMethod;
 begin
@@ -3415,7 +3415,7 @@ end;
 function TRttiProp.GetDoubleProp(Instance: TObject): double;
 type
   TGetProc = function: double of object;
-  TGetIndexed = function(Index: Integer): double of object;
+  TGetIndexed = function(Index: integer): double of object;
 var
   call: TMethod;
 begin
@@ -3451,13 +3451,13 @@ end;
 function TRttiProp.GetFloatProp(Instance: TObject): double;
 type
   TSingleProc = function: Single of object;
-  TSingleIndexed = function(Index: Integer): Single of object;
+  TSingleIndexed = function(Index: integer): Single of object;
   TDoubleProc = function: Double of object;
-  TDoubleIndexed = function(Index: Integer): Double of object;
+  TDoubleIndexed = function(Index: integer): Double of object;
   TExtendedProc = function: Extended of object;
-  TExtendedIndexed = function(Index: Integer): Extended of object;
+  TExtendedIndexed = function(Index: integer): Extended of object;
   TCurrencyProc = function: currency of object;
-  TCurrencyIndexed = function(Index: Integer): currency of object;
+  TCurrencyIndexed = function(Index: integer): currency of object;
 var
   call: TMethod;
   rf: TRttiFloat;
@@ -3563,7 +3563,7 @@ var
   procedure SubProc(rpc: TRttiPropCall); // avoid try..finally
   type
     TGetProc = function: variant of object;
-    TGetIndexed = function(Index: Integer): variant of object;
+    TGetIndexed = function(Index: integer): variant of object;
   begin
     case rpc of
       rpcMethod:
@@ -4202,7 +4202,7 @@ begin
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; aValue: PUTF8Char;
-  aValueLen: PtrInt; AlsoTrimLowerCase: boolean): Integer;
+  aValueLen: PtrInt; AlsoTrimLowerCase: boolean): integer;
 begin
   result := aTypeInfo^.EnumBaseType^.
     GetEnumNameValue(aValue, aValueLen, AlsoTrimLowerCase);
@@ -4223,7 +4223,7 @@ begin
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUTF8;
-  AlsoTrimLowerCase: boolean): Integer;
+  AlsoTrimLowerCase: boolean): integer;
 begin
   result := aTypeInfo^.EnumBaseType^.
     GetEnumNameValue(pointer(aValue), length(aValue), AlsoTrimLowerCase);
@@ -6298,7 +6298,7 @@ begin
             alen := DynArrayItemTypeLen(typname);
             if alen > 0 then
             begin
-              // try TIntegerDynArray/TIntegers -> Integer
+              // try TIntegerDynArray/TIntegers -> integer
               ac := Rtti.RegisterTypeFromName(@PByteArray(typname)[1], alen - 1);
               if ac = nil then
                 // try TMyTypeDynArray/TMyTypes -> TMyType
@@ -6951,14 +6951,14 @@ begin
     end;
   end;
   RTTI_FINALIZE[rkClass] := @_ObjClear;
-  PT_INFO[ptBoolean] := TypeInfo(Boolean);
+  PT_INFO[ptBoolean] := TypeInfo(boolean);
   PT_INFO[ptByte] := TypeInfo(Byte);
   PT_INFO[ptCardinal] := TypeInfo(Cardinal);
   PT_INFO[ptCurrency] := TypeInfo(Currency);
   PT_INFO[ptDouble] := TypeInfo(Double);
   PT_INFO[ptExtended] := TypeInfo(Extended);
   PT_INFO[ptInt64] := TypeInfo(Int64);
-  PT_INFO[ptInteger] := TypeInfo(Integer);
+  PT_INFO[ptInteger] := TypeInfo(integer);
   PT_INFO[ptQWord] := TypeInfo(QWord);
   PT_INFO[ptRawByteString] := TypeInfo(RawByteString);
   PT_INFO[ptRawJSON] := TypeInfo(RawJSON);

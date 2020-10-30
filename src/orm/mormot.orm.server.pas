@@ -259,7 +259,7 @@ type
        {$ifdef HASINLINE}inline;{$endif}
     /// fast get the associated TRestStorageRemote from its index, if any
     // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
-    function GetRemoteTable(TableIndex: Integer): TRestOrm;
+    function GetRemoteTable(TableIndex: integer): TRestOrm;
     /// initialize change tracking for the given tables
     // - by default, it will use the TOrmHistory table to store the
     // changes - you can specify a dedicated class as aTableHistory parameter
@@ -597,7 +597,7 @@ begin
   end;
 end;
 
-function TRestOrmServer.GetRemoteTable(TableIndex: Integer): TRestOrm;
+function TRestOrmServer.GetRemoteTable(TableIndex: integer): TRestOrm;
 begin
   if (cardinal(TableIndex) >= cardinal(length(fStaticData))) or
      (fStaticData[TableIndex] = nil) or

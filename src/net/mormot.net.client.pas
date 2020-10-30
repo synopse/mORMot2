@@ -498,7 +498,7 @@ type
   TWinHTTPWebSocketClient = class
   protected
     fSocket: HINTERNET;
-    function CheckSocket: Boolean;
+    function CheckSocket: boolean;
   public
     /// initialize the instance
     // - all parameters do match TWinHTTP.Create except url: address of WebSocketServer
@@ -1028,7 +1028,7 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
       Bytes := InternalQueryDataAvailable;
       if Bytes = 0 then
         break;
-      if Integer(Bytes) > Length({%H-}tmp) then
+      if integer(Bytes) > Length({%H-}tmp) then
       begin
         ChunkSize := fOnDownloadChunkSize;
         if ChunkSize <= 0 then
@@ -1188,7 +1188,7 @@ end;
 procedure TWinHTTP.InternalSendRequest(const aMethod: RawUTF8;
   const aData: RawByteString);
 
-  function _SendRequest(L: cardinal): Boolean;
+  function _SendRequest(L: cardinal): boolean;
   var
     Bytes, Current, Max, BytesWritten: cardinal;
   begin
@@ -1510,7 +1510,7 @@ end;
 
 { TWinHTTPWebSocketClient }
 
-function TWinHTTPWebSocketClient.CheckSocket: Boolean;
+function TWinHTTPWebSocketClient.CheckSocket: boolean;
 begin
   result := fSocket <> nil;
 end;

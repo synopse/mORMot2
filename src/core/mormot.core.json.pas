@@ -184,8 +184,8 @@ procedure GetJSONPropName(var P: PUTF8Char; out PropName: shortstring); overload
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
 // - if Len is set, it will contain the length of the returned pointer value
 function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; WasString: PBoolean = nil;
-  EndOfObject: PUTF8Char = nil; HandleValuesAsObjectOrArray: Boolean = false;
-  NormalizeBoolean: Boolean = true; Len: PInteger = nil): PUTF8Char;
+  EndOfObject: PUTF8Char = nil; HandleValuesAsObjectOrArray: boolean = false;
+  NormalizeBoolean: boolean = true; Len: PInteger = nil): PUTF8Char;
 
 /// retrieve the next JSON item as a RawJSON variable
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -454,12 +454,12 @@ type
 // - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
 // just like '{"name":'"John","year":1972}'
 procedure JSONDecode(var JSON: RawUTF8; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean = false); overload;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean = false); overload;
 
 /// decode the supplied UTF-8 JSON content for the supplied names
 // - an overloaded function when the JSON is supplied as a RawJSON variable
 procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean = false); overload;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean = false); overload;
 
 /// decode the supplied UTF-8 JSON content for the supplied names
 // - data will be set in Values, according to the Names supplied e.g.
@@ -473,7 +473,7 @@ procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
 // - if ValuesLen is set, ValuesLen[] will contain the length of each Values[]
 // - returns a pointer to the next content item in the JSON buffer
 function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean = false): PUTF8Char; overload;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean = false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content into an array of name/value pairs
 // - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
@@ -486,13 +486,13 @@ function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
 // - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
 // just like '{"name":'"John","year":1972}'
 function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean = false): PUTF8Char; overload;
+  HandleValuesAsObjectOrArray: boolean = false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content for the one supplied name
 // - this function will decode the JSON content in-memory, so will unescape it
 // in-place: it must be called only once with the same JSON data
 function JSONDecode(var JSON: RawUTF8; const aName: RawUTF8 = 'result';
-  WasString: PBoolean = nil; HandleValuesAsObjectOrArray: Boolean = false): RawUTF8; overload;
+  WasString: PBoolean = nil; HandleValuesAsObjectOrArray: boolean = false): RawUTF8; overload;
 
 /// retrieve a pointer to JSON string field content, without unescaping it
 // - returns either ':' for name field, or } , for value field
@@ -520,7 +520,7 @@ function JSONRetrieveObjectRttiCustom(var JSON: PUTF8Char;
 // - warning: the ParametersJSON input buffer will be modified in-place
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
   const PropNamesToIgnore: array of RawUTF8;
-  IncludeQueryDelimiter: Boolean = true): RawUTF8; overload;
+  IncludeQueryDelimiter: boolean = true): RawUTF8; overload;
 
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
@@ -528,7 +528,7 @@ function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
 // - overloaded function which will make a copy of the input JSON before parsing
 function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
   const PropNamesToIgnore: array of RawUTF8;
-  IncludeQueryDelimiter: Boolean = true): RawUTF8; overload;
+  IncludeQueryDelimiter: boolean = true): RawUTF8; overload;
 
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
 // - as expected by Rtti.RegisterObjArray()
@@ -721,14 +721,14 @@ type
     // versions of Delphi will retrieve the code page from string
     // - if CodePage is defined to a >= 0 value, the encoding will take place
     procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
-      CodePage: Integer = -1);
+      CodePage: integer = -1);
     /// append some UTF-8 encoded chars to the buffer, from any Ansi buffer
     // - the codepage should be specified, e.g. CP_UTF8, CP_RAWBYTESTRING,
     // CODEPAGE_US, or any version supported by the Operating System
     // - if codepage is 0, the current CurrentAnsiConvert.CodePage would be used
     // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
-      Escape: TTextWriterKind; CodePage: Integer);
+      Escape: TTextWriterKind; CodePage: integer);
     /// write some data Base64 encoded
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
     procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
@@ -747,7 +747,7 @@ type
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUTF8 = 'Z');
     /// append an array of integers as CSV
-    procedure AddCSVInteger(const Integers: array of Integer); overload;
+    procedure AddCSVInteger(const Integers: array of integer); overload;
     /// append an array of doubles as CSV
     procedure AddCSVDouble(const Doubles: array of double); overload;
     /// append an array of RawUTF8 as CSV of JSON strings
@@ -964,7 +964,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetInt(const aName: RawUTF8): Int64;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetBool(const aName: RawUTF8): Boolean;
+    function GetBool(const aName: RawUTF8): boolean;
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// the internal Name/Value storage
@@ -1022,7 +1022,7 @@ type
     function ValueInt(const aName: RawUTF8; const aDefaultValue: Int64 = 0): Int64;
     /// search for a Name, return the associated Value as boolean
     // - returns true only if the value is exactly '1'
-    function ValueBool(const aName: RawUTF8): Boolean;
+    function ValueBool(const aName: RawUTF8): boolean;
     /// search for a Name, return the associated Value as an enumerate
     // - returns true and set aEnum if aName was found, and associated value
     // matched an aEnumTypeInfo item
@@ -1079,7 +1079,7 @@ type
     property Int[const aName: RawUTF8]: Int64 read GetInt;
     /// search for a Name, return the associated Value as boolean
     // - returns true if aName stores '1' as associated value
-    property Bool[const aName: RawUTF8]: Boolean read GetBool;
+    property Bool[const aName: RawUTF8]: boolean read GetBool;
   end;
 
   /// a reference pointer to a Name/Value RawUTF8 pairs storage
@@ -1911,7 +1911,7 @@ function DynArrayLoadJSON(var Value; const JSON: RawUTF8;
 // calling JSONToObject(pointer(JSONRawUTF8)) will change the JSONRawUTF8
 // variable content, which may not be what you expect - consider using the
 // ObjectLoadJSON() function instead
-// - handle Integer, Int64, enumerate (including boolean), set, floating point,
+// - handle integer, Int64, enumerate (including boolean), set, floating point,
 // TDateTime, TCollection, TStrings, TRawUTF8List, variant, and string properties
 // (excluding ShortString, but including WideString and UnicodeString under
 // Delphi 2009+)
@@ -2975,19 +2975,19 @@ end;
 
 
 procedure JSONDecode(var JSON: RawUTF8; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean);
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean);
 begin
   JSONDecode(UniqueRawUTF8(JSON), Names, Values, HandleValuesAsObjectOrArray);
 end;
 
 procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean);
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean);
 begin
   JSONDecode(UniqueRawUTF8(RawUTF8(JSON)), Names, Values, HandleValuesAsObjectOrArray);
 end;
 
 function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean): PUTF8Char;
 var
   n, i: PtrInt;
   namelen, valuelen: integer;
@@ -3033,7 +3033,7 @@ begin
 end;
 
 function JSONDecode(var JSON: RawUTF8; const aName: RawUTF8; WasString: PBoolean;
-  HandleValuesAsObjectOrArray: Boolean): RawUTF8;
+  HandleValuesAsObjectOrArray: boolean): RawUTF8;
 var
   P, Name, Value: PUTF8Char;
   NameLen, ValueLen: integer;
@@ -3067,7 +3067,7 @@ begin
 end;
 
 function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
+  HandleValuesAsObjectOrArray: boolean): PUTF8Char;
 var
   n: PtrInt;
   field: TNameValuePUTF8Char;
@@ -3185,8 +3185,8 @@ begin // at input, JSON^ = '{'
 end;
 
 function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; WasString: PBoolean;
-  EndOfObject: PUTF8Char; HandleValuesAsObjectOrArray: Boolean;
-  NormalizeBoolean: Boolean; Len: PInteger): PUTF8Char;
+  EndOfObject: PUTF8Char; HandleValuesAsObjectOrArray: boolean;
+  NormalizeBoolean: boolean; Len: PInteger): PUTF8Char;
 var
   Value: PUTF8Char;
   wStr: boolean;
@@ -4120,7 +4120,7 @@ begin
 end;
 
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
-  const PropNamesToIgnore: array of RawUTF8; IncludeQueryDelimiter: Boolean): RawUTF8;
+  const PropNamesToIgnore: array of RawUTF8; IncludeQueryDelimiter: boolean): RawUTF8;
 var
   i, j: integer;
   sep: AnsiChar;
@@ -4164,7 +4164,7 @@ begin
 end;
 
 function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
-  const PropNamesToIgnore: array of RawUTF8; IncludeQueryDelimiter: Boolean): RawUTF8;
+  const PropNamesToIgnore: array of RawUTF8; IncludeQueryDelimiter: boolean): RawUTF8;
 var
   temp: TSynTempBuffer;
 begin
@@ -4456,7 +4456,7 @@ var
   tmp: TRawUTF8DynArray;
   inlin: set of 0..255;
   F, FDeb: PUTF8Char;
-  WasString: Boolean;
+  WasString: boolean;
 const
   NOTTOQUOTE: array[boolean] of set of 0..31 = (
     [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
@@ -5432,7 +5432,7 @@ begin
 end;
 
 procedure TTextWriter.AddAnyAnsiString(const s: RawByteString;
-  Escape: TTextWriterKind; CodePage: Integer);
+  Escape: TTextWriterKind; CodePage: integer);
 var
   L: integer;
 begin
@@ -5465,7 +5465,7 @@ begin // explicit conversion using a temporary buffer on stack
 end;
 
 procedure TTextWriter.AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
-  Escape: TTextWriterKind; CodePage: Integer);
+  Escape: TTextWriterKind; CodePage: integer);
 var
   B: PUTF8Char;
   engine: TSynAnsiConvert;
@@ -5632,7 +5632,7 @@ begin
 end;
 
 
-procedure TTextWriter.AddCSVInteger(const Integers: array of Integer);
+procedure TTextWriter.AddCSVInteger(const Integers: array of integer);
 var
   i: PtrInt;
 begin
@@ -7245,7 +7245,7 @@ var
 procedure TSynNameValue.Add(const aName, aValue: RawUTF8; aTag: PtrInt);
 var
   added: boolean;
-  i: Integer;
+  i: integer;
 begin
   i := DynArray.FindHashedForAdding(aName, added);
   with List[i] do
@@ -7434,7 +7434,7 @@ begin
   end;
 end;
 
-function TSynNameValue.ValueBool(const aName: RawUTF8): Boolean;
+function TSynNameValue.ValueBool(const aName: RawUTF8): boolean;
 begin
   result := Value(aName) = '1';
 end;
@@ -7493,7 +7493,7 @@ begin
   result := ValueInt(aName, 0);
 end;
 
-function TSynNameValue.GetBool(const aName: RawUTF8): Boolean;
+function TSynNameValue.GetBool(const aName: RawUTF8): boolean;
 begin
   result := Value(aName) = '1';
 end;
@@ -7599,7 +7599,7 @@ end;
 
 function TSynNameValue.MergeDocVariant(var DocVariant: variant;
   ValueAsString: boolean; ChangedProps: PVariant; ExtendedJson,
-  AllowVarDouble: Boolean): integer;
+  AllowVarDouble: boolean): integer;
 var
   dv: TDocVariantData absolute DocVariant;
   i, ndx: PtrInt;

@@ -375,7 +375,7 @@ type
     // ManagedFields: array[0..0] of TManagedField;
     NumOps: Byte;
     // RecOps: array[0..0] of pointer;
-    AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
+    AllCount: integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
     AllFields: array[0..0] of TRecordTypeField; // as defined in TypInfo.pas
   end;
 

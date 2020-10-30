@@ -134,7 +134,7 @@ type
     // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define TSQLDBDefinition
     // to describe the server syntax SynDB and the ORM use behind the abstract driver
     constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSQLDBDefinition;
-      aOwnsURL: Boolean); virtual;
+      aOwnsURL: boolean); virtual;
     /// finalize properties internal structures
     destructor Destroy; override;
     /// create a new connection
@@ -278,19 +278,19 @@ type
     /// free IZResultSet/IZResultSetMetaData when ISQLDBStatement is back in cache
     procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
-    function ColumnInt(Col: Integer): Int64; override;
+    function ColumnInt(Col: integer): Int64; override;
     /// returns TRUE if the column contains NULL
-    function ColumnNull(Col: Integer): boolean; override;
+    function ColumnNull(Col: integer): boolean; override;
     /// return a Column floating point value of the current Row, first Col is 0
-    function ColumnDouble(Col: Integer): double; override;
+    function ColumnDouble(Col: integer): double; override;
     /// return a Column date and time value of the current Row, first Col is 0
-    function ColumnDateTime(Col: Integer): TDateTime; override;
+    function ColumnDateTime(Col: integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: Integer): currency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
-    function ColumnUTF8(Col: Integer): RawUTF8; override;
+    function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
-    function ColumnBlob(Col: Integer): RawByteString; override;
+    function ColumnBlob(Col: integer): RawByteString; override;
   {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
   public
     /// the ColumnsToJSON options provided by ZDBC
@@ -357,7 +357,7 @@ const
     dSQLite, dPostgreSQL, dJet {e.g. ADO[JET]} );
     // expecting Sybase + ASA support in TSQLDBDefinition
 var
-  BrakedPos: Integer;
+  BrakedPos: integer;
 begin
   // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   // make syntax like "ADO[ORACLE]"/"ADO[MSSQL]:"/"ADO[JET]" etc... possible
@@ -400,7 +400,7 @@ begin
 end;
 
 constructor TSQLDBZEOSConnectionProperties.CreateWithZURL(const aURL: TZURL;
-  aDBMS: TSQLDBDefinition; aOwnsURL: Boolean);
+  aDBMS: TSQLDBDefinition; aOwnsURL: boolean);
 {$ifdef ZEOS73UP}
 var
   protocol: RawUTF8;
@@ -900,7 +900,7 @@ type
     fDateDynArray: array of TDateTimeDynArray;
     fUTF8DynArray: array of TRawUTF8DynArray;
     fBlobDynArray: array of TInterfaceDynArray;
-    fDynArraySize: array[ftInt64..ftBlob] of Integer;
+    fDynArraySize: array[ftInt64..ftBlob] of integer;
   public
     constructor Create(aStatement: TSQLDBZEOSStatement);
   end;
@@ -1192,7 +1192,7 @@ begin
 end;
 {$ifend}
 
-function TSQLDBZEOSStatement.ColumnBlob(Col: Integer): RawByteString;
+function TSQLDBZEOSStatement.ColumnBlob(Col: integer): RawByteString;
 var
   blob: IZBlob;
 begin
@@ -1208,7 +1208,7 @@ begin
     result := blob.GetString; // ZAnsiString = RawByteString
 end;
 
-function TSQLDBZEOSStatement.ColumnCurrency(Col: Integer): currency;
+function TSQLDBZEOSStatement.ColumnCurrency(Col: integer): currency;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
@@ -1221,7 +1221,7 @@ begin
   {$endif ZEOS72UP}
 end;
 
-function TSQLDBZEOSStatement.ColumnDateTime(Col: Integer): TDateTime;
+function TSQLDBZEOSStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
@@ -1230,7 +1230,7 @@ begin
   result := fResultSet.GetTimestamp(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnDouble(Col: Integer): double;
+function TSQLDBZEOSStatement.ColumnDouble(Col: integer): double;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
@@ -1239,7 +1239,7 @@ begin
   result := fResultSet.GetDouble(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnInt(Col: Integer): Int64;
+function TSQLDBZEOSStatement.ColumnInt(Col: integer): Int64;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
@@ -1248,7 +1248,7 @@ begin
   result := fResultSet.GetLong(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnNull(Col: Integer): boolean;
+function TSQLDBZEOSStatement.ColumnNull(Col: integer): boolean;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
@@ -1256,7 +1256,7 @@ begin
   result := fResultSet.IsNull(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnUTF8(Col: Integer): RawUTF8;
+function TSQLDBZEOSStatement.ColumnUTF8(Col: integer): RawUTF8;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then

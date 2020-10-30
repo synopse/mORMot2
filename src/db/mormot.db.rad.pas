@@ -139,8 +139,8 @@ type
     function IsCursorOpen: boolean; override;
     procedure SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag); override;
     procedure SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
-    procedure SetRecNo(Value: Integer); override;
-    function GetRecNo: Integer; override;
+    procedure SetRecNo(Value: integer); override;
+    function GetRecNo: integer; override;
 
     // classses should override all those following methods:
     // - to read the data e.g. into memory:
@@ -148,9 +148,9 @@ type
     // - to initialize FieldDefs:
     // procedure InternalInitFieldDefs; override;
     // - to return row count:
-    // function GetRecordCount: Integer; override;
+    // function GetRecordCount: integer; override;
     // - result should point to Int64,Double,Blob,UTF8 data (if ResultLen<>nil)
-    function GetRowFieldData(Field: TField; RowIndex: integer; out ResultLen: Integer;
+    function GetRowFieldData(Field: TField; RowIndex: integer; out ResultLen: integer;
       OnlyCheckNull: boolean): Pointer; virtual; abstract;
     // - to search for a field, returning RecNo (0 = not found by default)
     function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
@@ -226,9 +226,9 @@ type
     fTempUTF8: RawUTF8;
     fTempBlob: RawByteString;
     procedure InternalInitFieldDefs; override;
-    function GetRecordCount: Integer; override;
+    function GetRecordCount: integer; override;
     function GetRowFieldData(Field: TField; RowIndex: integer;
-      out ResultLen: Integer; OnlyCheckNull: boolean): Pointer; override;
+      out ResultLen: integer; OnlyCheckNull: boolean): Pointer; override;
     function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
       aOptions: TLocateOptions): integer; override;
   public
@@ -312,7 +312,7 @@ type
     /// convert DB.TFieldType into mORMot fieldtype
     function ColumnTypeNativeToDB(aNativeType: TFieldType): TSQLDBFieldType; virtual;
     /// retrieve a given column
-    function DatasetField(col: Integer): TField; virtual;
+    function DatasetField(col: integer): TField; virtual;
   protected // inherited classes shall override those abstract virtual methods
     /// should initialize and set fQuery internal field as expected
     procedure DatasetCreate; virtual; abstract;
@@ -366,19 +366,19 @@ type
     /// close the associated TQuery when ISQLDBStatement is back in cache
     procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
-    function ColumnInt(Col: Integer): Int64; override;
+    function ColumnInt(Col: integer): Int64; override;
     /// returns true if the column contains NULL
-    function ColumnNull(Col: Integer): boolean; override;
+    function ColumnNull(Col: integer): boolean; override;
     /// return a Column floating point value of the current Row, first Col is 0
-    function ColumnDouble(Col: Integer): double; override;
+    function ColumnDouble(Col: integer): double; override;
     /// return a Column date and time value of the current Row, first Col is 0
-    function ColumnDateTime(Col: Integer): TDateTime; override;
+    function ColumnDateTime(Col: integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: Integer): TSystemCurrency; override;
+    function ColumnCurrency(Col: integer): TSystemCurrency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
-    function ColumnUTF8(Col: Integer): RawUTF8; override;
+    function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
-    function ColumnBlob(Col: Integer): RawByteString; override;
+    function ColumnBlob(Col: integer): RawByteString; override;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
@@ -710,7 +710,7 @@ begin
     result := TSynMemoryStream.Create; // null BLOB returns a void TStream
 end;
 
-function TSynVirtualDataSet.GetRecNo: Integer;
+function TSynVirtualDataSet.GetRecNo: integer;
 begin
   result := fCurrentRow + 1;
 end;
@@ -825,7 +825,7 @@ begin
   PRecInfo(Buffer)^.BookmarkFlag := Value;
 end;
 
-procedure TSynVirtualDataSet.SetRecNo(Value: Integer);
+procedure TSynVirtualDataSet.SetRecNo(Value: integer);
 begin
   CheckBrowseMode;
   if Value <> RecNo then
@@ -857,7 +857,7 @@ end;
 function TSynVirtualDataSet.Locate(const KeyFields: string;
   const KeyValues: Variant; Options: TLocateOptions): boolean;
 var
-  i, l, h, found: Integer;
+  i, l, h, found: integer;
     {$ifdef ISDELPHIXE4}
   FieldList: TList<TField>;
     {$else}
@@ -1100,13 +1100,13 @@ begin
   inherited Create(Owner);
 end;
 
-function TDocVariantArrayDataSet.GetRecordCount: Integer;
+function TDocVariantArrayDataSet.GetRecordCount: integer;
 begin
   result := length(fValues);
 end;
 
 function TDocVariantArrayDataSet.GetRowFieldData(Field: TField;
-  RowIndex: integer; out ResultLen: Integer; OnlyCheckNull: boolean): Pointer;
+  RowIndex: integer; out ResultLen: integer; OnlyCheckNull: boolean): Pointer;
 var
   F, ndx: integer;
   wasString: boolean;
@@ -1229,7 +1229,7 @@ end;
 
 { TSQLDBDatasetStatementAbstract }
 
-function TSQLDBDatasetStatementAbstract.ColumnBlob(Col: Integer): RawByteString;
+function TSQLDBDatasetStatementAbstract.ColumnBlob(Col: integer): RawByteString;
 var
   Str: TStream;
 begin
@@ -1258,7 +1258,7 @@ begin
     end;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnCurrency(Col: Integer): TSystemCurrency;
+function TSQLDBDatasetStatementAbstract.ColumnCurrency(Col: integer): TSystemCurrency;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1270,7 +1270,7 @@ begin
       result := TField(ColumnAttr).AsCurrency;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnDateTime(Col: Integer): TDateTime;
+function TSQLDBDatasetStatementAbstract.ColumnDateTime(Col: integer): TDateTime;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1280,7 +1280,7 @@ begin
       result := TField(ColumnAttr).AsDateTime;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnDouble(Col: Integer): double;
+function TSQLDBDatasetStatementAbstract.ColumnDouble(Col: integer): double;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1290,7 +1290,7 @@ begin
       result := TField(ColumnAttr).AsFloat;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnInt(Col: Integer): Int64;
+function TSQLDBDatasetStatementAbstract.ColumnInt(Col: integer): Int64;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1309,13 +1309,13 @@ begin
   {$endif UNICODE}
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnNull(Col: Integer): boolean;
+function TSQLDBDatasetStatementAbstract.ColumnNull(Col: integer): boolean;
 begin
   CheckCol(Col);
   result := TField(fColumns[Col].ColumnAttr).IsNull;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnUTF8(Col: Integer): RawUTF8;
+function TSQLDBDatasetStatementAbstract.ColumnUTF8(Col: integer): RawUTF8;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1367,7 +1367,7 @@ end;
 
 procedure TSQLDBDatasetStatementAbstract.ExecutePrepared;
 var
-  i, p: Integer;
+  i, p: integer;
   lArrayIndex: integer;
   Field: TField;
 begin
@@ -1506,7 +1506,7 @@ begin
   end;
 end;
 
-function TSQLDBDatasetStatementAbstract.DatasetField(col: Integer): TField;
+function TSQLDBDatasetStatementAbstract.DatasetField(col: integer): TField;
 begin
   result := fQuery.Fields[col];
 end;

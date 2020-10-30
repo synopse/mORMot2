@@ -895,7 +895,7 @@ type
     fOnCallbackRequestProcess: TOnHttpServerRequest;
     fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
     fOnWebSocketsClosed: TNotifyEvent;
-    procedure SetReceiveTimeout(aReceiveTimeout: Integer); override;
+    procedure SetReceiveTimeout(aReceiveTimeout: integer); override;
   public
     /// low-level initialization of a client WebSockets connection
     // - calls Open() then WebSocketsUpgrade() for a given protocol
@@ -1593,7 +1593,7 @@ function TWebSocketProtocolJSON.FrameDecompress(const frame: TWebSocketFrame;
   const Head: RawUTF8; const values: array of PRawByteString;
   var contentType, content: RawByteString): boolean;
 var
-  i: Integer;
+  i: integer;
   P: PUTF8Char;
   b64: PUTF8Char;
   b64len: integer;
@@ -1968,7 +1968,7 @@ end;
 function TWebSocketProtocolList.CloneByName(const aProtocolName,
   aClientURI: RawUTF8): TWebSocketProtocol;
 var
-  i: Integer;
+  i: integer;
 begin
   result := nil;
   if self = nil then
@@ -2039,7 +2039,7 @@ end;
 
 function TWebSocketProtocolList.Add(aProtocol: TWebSocketProtocol): boolean;
 var
-  i: Integer;
+  i: integer;
 begin
   result := false;
   if aProtocol = nil then
@@ -2059,7 +2059,7 @@ end;
 
 function TWebSocketProtocolList.AddOnce(aProtocol: TWebSocketProtocol): boolean;
 var
-  i: Integer;
+  i: integer;
 begin
   result := false;
   if aProtocol = nil then
@@ -2084,7 +2084,7 @@ end;
 
 function TWebSocketProtocolList.Remove(const aProtocolName, aURI: RawUTF8): boolean;
 var
-  i: Integer;
+  i: integer;
 begin
   fSafe.Lock;
   try
@@ -3044,7 +3044,7 @@ type
 function TWebSocketServer.IsActiveWebSocketThread(
   ConnectionThread: TSynThread): TWebSocketServerResp;
 var
-  i: Integer;
+  i: integer;
   c: PWebSocketServerResp;
 begin // no need to optimize (not called often)
   result := nil;
@@ -3115,7 +3115,7 @@ end;
 procedure TWebSocketServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
   const aClientsConnectionID: THttpServerConnectionIDDynArray);
 var
-  i, len, ids: Integer;
+  i, len, ids: integer;
   c: ^TWebSocketServerResp;
   temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
   sorted: TSynTempBuffer;
@@ -3360,7 +3360,7 @@ begin
     result := inherited request(url, method, KeepAlive, header, Data, DataType, retry);
 end;
 
-procedure THttpClientWebSockets.SetReceiveTimeout(aReceiveTimeout: Integer);
+procedure THttpClientWebSockets.SetReceiveTimeout(aReceiveTimeout: integer);
 begin
   inherited SetReceiveTimeout(aReceiveTimeout);
   fSettings.CallbackAnswerTimeOutMS := aReceiveTimeout;

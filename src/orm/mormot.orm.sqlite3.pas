@@ -227,7 +227,7 @@ type
     procedure PrepareStatement(Cached: boolean);
   public
     /// overridden methods for direct sqlite3 database engine call:
-    function MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
+    function MainEngineList(const SQL: RawUTF8; ForceAJAX: boolean;
       ReturnedRowCount: PPtrInt): RawUTF8; override;
     function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function MainEngineAdd(TableModelIndex: integer;
@@ -1666,7 +1666,7 @@ begin
   ComputeDBStats(result);
 end;
 
-function TRestOrmServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
+function TRestOrmServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: boolean;
   ReturnedRowCount: PPtrInt): RawUTF8;
 var
   MS: TRawByteStringStream;

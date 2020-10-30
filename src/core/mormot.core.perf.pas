@@ -1054,8 +1054,8 @@ type
     {$else}
     fExpectedMXCSR, fSavedMXCSR: word;
     {$endif}
-    function VirtualAddRef: Integer; override;
-    function VirtualRelease: Integer; override;
+    function VirtualAddRef: integer; override;
+    function VirtualRelease: integer; override;
   public
     /// internal constructor
     // - do not call this constructor directly, but rather use

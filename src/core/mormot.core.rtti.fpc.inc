@@ -324,7 +324,8 @@ const
   CARDINAL_NAME: string[8] = 'Cardinal';  // FPC names cardinal as "longword"
 
 function TRttiInfo.Name: PShortString;
-begin // TypeInfo(Integer/Cardinal)=TypeInfo(LongInt/LongWord)
+begin
+  // recognize TypeInfo(integer/Cardinal)=TypeInfo(LongInt/LongWord) on FPC
   result := pointer(@self);
   if result <> nil then
     if result <> TypeInfo(integer) then

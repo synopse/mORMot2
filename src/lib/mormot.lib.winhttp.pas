@@ -1356,7 +1356,7 @@ type
     /// access to the winhttp.dll loaded library
     LibraryHandle: THandle;
     /// depends on the published .dll functions
-    WebSocketEnabled: Boolean;
+    WebSocketEnabled: boolean;
     /// Initializes an application's use of the WinHTTP functions.
     Open: function(pwszUserAgent: PWideChar; dwAccessType: DWORD; pwszProxyName,
       pwszProxyBypass: PWideChar; dwFlags: DWORD): HINTERNET; stdcall;
@@ -1520,7 +1520,7 @@ type
     /// acces to the loaded library handle
     LibraryHandle: THandle;
     /// depends on Windows version
-    WebSocketEnabled: Boolean;
+    WebSocketEnabled: boolean;
     /// aborts a WebSocket session handle created by WebSocketCreateClientHandle
     // or WebSocketCreateServerHandle
     AbortHandle: procedure(hWebSocket: WEB_SOCKET_HANDLE); stdcall;
@@ -1676,7 +1676,7 @@ function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): W
 
 /// retrieve the linefeed separated text from WebSockets array of headers
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
-  const aHeadersCount: Integer): RawUTF8;
+  const aHeadersCount: integer): RawUTF8;
 
 {$endif USEWININET}
 
@@ -2138,7 +2138,7 @@ end;
 function HttpSys2ToWebSocketHeaders(
   const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 var
-  headerCnt: Integer;
+  headerCnt: integer;
   i, idx: PtrInt;
   h: THttpHeader;
   p: PHTTP_UNKNOWN_HEADER;
@@ -2175,11 +2175,11 @@ begin
 end;
 
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER; const
-  aHeadersCount: Integer): RawUTF8;
+  aHeadersCount: integer): RawUTF8;
 var
-  i: Integer;
+  i: integer;
   h: PWEB_SOCKET_HTTP_HEADER;
-  len: Integer;
+  len: integer;
   d: PAnsiChar;
 begin
   len := 0;

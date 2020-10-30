@@ -39,8 +39,8 @@ type
   /// will implement properties shared by native Oracle Client Interface connections
   TSQLDBOracleConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
   protected
-    fRowsPrefetchSize: Integer;
-    fBlobPrefetchSize: Integer;
+    fRowsPrefetchSize: integer;
+    fBlobPrefetchSize: integer;
     fStatementCacheSize: integer;
     fInternalBufferSize: integer;
     fEnvironmentInitializationMode: integer;
@@ -215,7 +215,7 @@ type
     procedure FreeHandles(AfterError: boolean);
     procedure FetchTest(Status: integer);
     /// Col=0...fColumnCount-1
-    function GetCol(Col: Integer; out Column: PSQLDBColumnProperty): pointer;
+    function GetCol(Col: integer; out Column: PSQLDBColumnProperty): pointer;
     // called by Prepare and CreateFromExistingStatement
     procedure SetColumnsForPreparedStatement;
     // called by Step and CreateFromExistingStatement
@@ -306,7 +306,7 @@ type
     // the memory buffers returned by OCI: it will ensure best performance
     // possible when called from TOrmVirtualTableCursorExternal.Column method
     // as defined in mORMotDB unit (i.e. mORMot external DB access)
-    procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
+    procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar;
       var Temp: RawByteString); override;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
@@ -337,7 +337,7 @@ type
     // Oracle) usually use such structures to get data from strored procedures
     // - this method allow direct access to the data rows after execution
     // - this overridden method will allow direct access to the data rows
-    function BoundCursor(Param: Integer): ISQLDBRows; override;
+    function BoundCursor(Param: integer): ISQLDBRows; override;
 
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
@@ -978,7 +978,7 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBOracleStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
+procedure TSQLDBOracleStatement.ColumnToSQLVar(Col: integer; var Value: TSQLVar;
   var Temp: RawByteString);
 var
   C: PSQLDBColumnProperty;
@@ -1177,7 +1177,7 @@ begin
   CheckParam(Param, ftUnknown, paramOut); // ftUnknown+paramOut indicate SQLT_RSET
 end;
 
-function TSQLDBOracleStatement.BoundCursor(Param: Integer): ISQLDBRows;
+function TSQLDBOracleStatement.BoundCursor(Param: integer): ISQLDBRows;
 begin
   dec(Param);
   if (cardinal(Param) >= cardinal(length(fBoundCursor))) or
@@ -1546,7 +1546,7 @@ begin
                       // before 11.2, we will use either SQLT_INT, SQLT_STR or SQLT_FLT
                       if VInOut = paramIn then
                         if (VInt64 > low(integer)) and
-                           (VInt64 < high(Integer)) then
+                           (VInt64 < high(integer)) then
                         begin
                           // map to 32 bit will always work
                           VDBType := SQLT_INT;
@@ -1625,13 +1625,13 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                               'blob length exceeds max size for parameter #%',
                               [self, KB(oLength), i + 1]);
                           UniqueString(VData); // for thread-safety
-                          PInteger(PtrInt(VData) - sizeof(Integer))^ := oLength;
+                          PInteger(PtrInt(VData) - sizeof(integer))^ := oLength;
                           if {%H-}wasStringHacked = nil then
                             SetLength(wasStringHacked, fParamCount shr 3 + 1);
                           SetBitPtr(pointer(wasStringHacked), i); // for unpatching below
                           {$endif FPC_64}
-                          oData := Pointer(PtrInt(VData) - sizeof(Integer));
-                          Inc(oLength, sizeof(Integer));
+                          oData := Pointer(PtrInt(VData) - sizeof(integer));
+                          Inc(oLength, sizeof(integer));
                         end;
                       end;
                   else
@@ -1670,7 +1670,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
       if wasStringHacked <> nil then // restore patched strings length ASAP
         for i := 0 to fParamCount - 1 do
           if GetBitPtr(pointer(wasStringHacked), i) then
-            PInteger(PtrInt(fParams[i].VData) - sizeof(Integer))^ := 0;
+            PInteger(PtrInt(fParams[i].VData) - sizeof(integer))^ := 0;
       {$endif FPC_64}
       for i := 0 to ociArraysCount - 1 do
         OCI.Check(nil, self, OCI.ObjectFree(Env, fError, ociArrays[i],
@@ -1849,7 +1849,7 @@ begin
     fColumn.Clear;
 end;
 
-function TSQLDBOracleStatement.GetCol(Col: Integer; out Column:
+function TSQLDBOracleStatement.GetCol(Col: integer; out Column:
   PSQLDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value  against fColumnCount

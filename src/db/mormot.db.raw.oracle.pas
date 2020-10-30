@@ -37,10 +37,10 @@ uses
 
 type
   { Generic Oracle Types }
-  sword   = Integer;
-  eword   = Integer;
+  sword   = integer;
+  eword   = integer;
   uword   = LongInt;
-  sb4     = Integer;
+  sb4     = integer;
   ub4     = LongInt;
   sb2     = SmallInt;
   ub2     = Word;
@@ -786,7 +786,7 @@ type
   TSQLDBOracleLib = class(TSynLibrary)
   protected
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-      Status: Integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
+      Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
     function BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor): ub4;
@@ -914,11 +914,11 @@ type
     function CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
     /// raise an exception on error
     procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-      Status: Integer; ErrorHandle: POCIError;
+      Status: integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
       {$ifdef HASINLINE}inline;{$endif}
     procedure CheckSession(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-      Status: Integer; ErrorHandle: POCIError;
+      Status: integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
     /// retrieve some BLOB content
     procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
@@ -1461,7 +1461,7 @@ begin
 end;
 
 procedure TSQLDBOracleLib.HandleError(Conn: TSQLDBConnection;
-  Stmt: TSQLDBStatement; Status: Integer; ErrorHandle: POCIError;
+  Stmt: TSQLDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;
@@ -1515,7 +1515,7 @@ begin
 end;
 
 procedure TSQLDBOracleLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-  Status: Integer; ErrorHandle: POCIError; InfoRaiseException: boolean;
+  Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean;
   LogLevelNoRaise: TSynLogInfo);
 begin
   if Status <> OCI_SUCCESS then
@@ -1523,7 +1523,7 @@ begin
 end;
 
 procedure TSQLDBOracleLib.CheckSession(Conn: TSQLDBConnection;
-  Stmt: TSQLDBStatement; Status: Integer; ErrorHandle: POCIError;
+  Stmt: TSQLDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;

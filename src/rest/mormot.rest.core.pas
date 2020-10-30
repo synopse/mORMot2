@@ -141,7 +141,7 @@ type
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUTF8);
     // used by AsynchRedirect/AsynchBatch/AsynchInterning
-    function AsynchBatchIndex(aTable: TOrmClass): integer;
+    function AsynchBatchIndex(aTable: TOrmClass): PtrInt;
     function AsynchBatchLocked(aTable: TOrmClass;
       out aBatch: TRestBatchLocked): boolean;
     procedure AsynchBatchUnLock(aBatch: TRestBatchLocked);
@@ -1994,7 +1994,7 @@ end;
 
 class function TRest.ClassFrom(aDefinition: TSynConnectionDefinition): TRestClass;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   for ndx := 0 to length(GlobalDefinitions) - 1 do
     if GlobalDefinitions[ndx].ClassNameIs(aDefinition.Kind) then
@@ -2732,7 +2732,7 @@ begin
   TSystemUse.Current({createifnone=}false).OnTimerExecute(Sender);
 end;
 
-function TRestBackgroundTimer.AsynchBatchIndex(aTable: TOrmClass): integer;
+function TRestBackgroundTimer.AsynchBatchIndex(aTable: TOrmClass): PtrInt;
 begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
@@ -2749,7 +2749,7 @@ end;
 function TRestBackgroundTimer.AsynchBatchLocked(aTable: TOrmClass;
   out aBatch: TRestBatchLocked): boolean;
 var
-  b: integer;
+  b: PtrInt;
 begin
   b := AsynchBatchIndex(aTable);
   if b >= 0 then
@@ -2846,7 +2846,7 @@ function TRestBackgroundTimer.AsynchBatchStart(Table: TOrmClass;
   SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
   Options: TRestBatchOptions): boolean;
 var
-  b: integer;
+  b: PtrInt;
 begin
   result := false;
   if (self = nil) or
@@ -2870,7 +2870,7 @@ end;
 
 function TRestBackgroundTimer.AsynchBatchStop(Table: TOrmClass): boolean;
 var
-  b: integer;
+  b: PtrInt;
   timeout: Int64;
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin

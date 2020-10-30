@@ -134,7 +134,7 @@ end;
 function ExpandEnvVars(const aStr: string): string;
 // adapted from http://delphidabbler.com/articles?article=6
 var
-  size: Integer;
+  size: integer;
 begin
   // Get required buffer size
   size := ExpandEnvironmentStrings(pointer(aStr), nil, 0);
@@ -198,7 +198,7 @@ begin
 end;
 
 function FileInfoByHandle(aFileHandle: THandle;
-  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+  out FileId, FileSize, LastWriteAccess, FileCreateDateTime: Int64): boolean;
 var
   lastreadaccess: Int64;
   lp: TByHandleFileInformation;
@@ -317,7 +317,7 @@ begin
   result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
 end;
 
-function FileOpenSequentialRead(const FileName: string): Integer;
+function FileOpenSequentialRead(const FileName: string): integer;
 begin
   if OSVersion >= wVista then // don't use the flag on XP
     result := CreateFile(pointer(FileName), GENERIC_READ,
@@ -532,7 +532,7 @@ type
     OuterException: PExceptionRecord;
     ExceptionAddress: PtrUInt;
     NumberParameters: Longint;
-    case {IsOsException:} Boolean of
+    case {IsOsException:} boolean of
       true:
         (ExceptionInformation: array[0..14] of PtrUInt);
       false:
@@ -735,7 +735,7 @@ end;
 
 function GetErrorText(error: longint): RawUTF8;
 var
-  Len: Integer;
+  Len: integer;
   Buffer: array[0..511] of WideChar;
 begin
   Len := FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_ARGUMENT_ARRAY,
@@ -1074,7 +1074,7 @@ begin
     SetConsoleTextAttribute(StdOut, TextAttr);
 end;
 
-function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
+function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 var
   lpNumberOfEvents: DWORD;
   lpBuffer: TInputRecord;
@@ -1234,7 +1234,7 @@ begin
 end;
 
 // avoid unneeded reference to ShlObj.pas
-function SHGetFolderPath(hwnd: hwnd; csidl: Integer; hToken: THandle; dwFlags: DWord;
+function SHGetFolderPath(hwnd: hwnd; csidl: integer; hToken: THandle; dwFlags: DWord;
   pszPath: PChar): HRESULT; stdcall; external 'SHFolder.dll' name
   {$ifdef UNICODE} 'SHGetFolderPathW'; {$else} 'SHGetFolderPathA'; {$endif}
 

@@ -731,7 +731,7 @@ type
     fCustomOptions: TTextWriterOptions;
     fHumanReadableLevel: integer;
     // internal temporary buffer
-    fTempBufSize: Integer;
+    fTempBufSize: integer;
     fTempBuf: PUTF8Char;
     fOnFlushToStream: TOnTextWriterFlush;
     fInternalJSONWriter: TBaseWriter;
@@ -827,10 +827,10 @@ type
     procedure Add(c1,c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
-    /// append a 64-bit signed Integer Value as text
+    /// append a 64-bit signed integer Value as text
     procedure Add(Value: Int64); overload;
     {$endif}
-    /// append a 32-bit signed Integer Value as text
+    /// append a 32-bit signed integer Value as text
     procedure Add(Value: PtrInt); overload;
     /// append a boolean Value as text
     // - write either 'true' or 'false'
@@ -841,11 +841,11 @@ type
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: currency); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append an Unsigned 32-bit Integer Value as a String
+    /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: cardinal);
-    /// append an Unsigned 64-bit Integer Value as a String
+    /// append an Unsigned 64-bit integer Value as a String
     procedure AddQ(Value: QWord);
-    /// append an Unsigned 64-bit Integer Value as a quoted hexadecimal String
+    /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
@@ -884,11 +884,11 @@ type
     procedure AddCRAndIndent; virtual;
     /// write the same character multiple times
     procedure AddChars(aChar: AnsiChar; aCount: integer);
-    /// append an Integer Value as a 2 digits text with comma
+    /// append an integer Value as a 2 digits text with comma
     procedure Add2(Value: PtrUInt);
-    /// append an Integer Value as a 3 digits text without any comma
+    /// append an integer Value as a 3 digits text without any comma
     procedure Add3(Value: PtrUInt);
-    /// append an Integer Value as a 4 digits text with comma
+    /// append an integer Value as a 4 digits text with comma
     procedure Add4(Value: PtrUInt);
     /// append the current UTC date and time, in our log-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
@@ -1361,7 +1361,8 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char
 /// retrieve the index of a PUTF8Char in a PUTF8Char array via a sort indexed
 // - will use fast O(log(n)) binary search algorithm
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
-  var SortedIndexes: TCardinalDynArray; Value: PUTF8Char; ItemComp: TUTF8Compare): PtrInt;
+  var SortedIndexes: TCardinalDynArray; Value: PUTF8Char;
+  ItemComp: TUTF8Compare): PtrInt;
 
 /// add a RawUTF8 value in an alphaticaly sorted dynamic array of RawUTF8
 // - returns the index where the Value was added successfully in Values[]
@@ -1619,19 +1620,19 @@ function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
 /// fast conversion of 2 digit characters into a 0..99 value
 // - returns FALSE on success, TRUE if P^ is not correct
 function Char2ToByte(P: PUTF8Char; out Value: Cardinal;
-   ConvertHexToBinTab: PByteArray): Boolean;
+   ConvertHexToBinTab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion of 3 digit characters into a 0..9999 value
 // - returns FALSE on success, TRUE if P^ is not correct
 function Char3ToWord(P: PUTF8Char; out Value: Cardinal;
-   ConvertHexToBinTab: PByteArray): Boolean;
+   ConvertHexToBinTab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion of 4 digit characters into a 0..9999 value
 // - returns FALSE on success, TRUE if P^ is not correct
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal;
-   ConvertHexToBinTab: PByteArray): Boolean;
+   ConvertHexToBinTab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 
@@ -2032,10 +2033,10 @@ var
 // - return false if any invalid (non hexa) char is found in Hex^
 // - using this function with Bin^ as an integer value will decode in big-endian
 // order (most-signignifican byte first)
-function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean; overload;
+function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean; overload;
 
 /// fast conversion with no validity check from hexa chars into binary data
-procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: integer);
 
 /// fast conversion from one hexa char pair into a 8 bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
@@ -2326,7 +2327,7 @@ function RawByteStringToStream(const aString: RawByteString): TStream;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// read an UTF-8 text from a TStream
-// - format is Length(Integer):Text, i.e. the one used by WriteStringToStream
+// - format is Length(integer):Text, i.e. the one used by WriteStringToStream
 // - will return '' if there is no such text in the stream
 // - you can set a MaxAllowedSize value, if you know how long the size should be
 // - it will read from the current position in S: so if you just write into S,
@@ -2338,7 +2339,7 @@ function ReadStringFromStream(S: TStream;
   MaxAllowedSize: integer = 255): RawUTF8;
 
 /// write an UTF-8 text into a TStream
-// - format is Length(Integer):Text, i.e. the one used by ReadStringFromStream
+// - format is Length(integer):Text, i.e. the one used by ReadStringFromStream
 function WriteStringToStream(S: TStream; const Text: RawUTF8): boolean;
 
 
@@ -3627,7 +3628,7 @@ var
   s: string;
   i, bool: integer;
   P: PChar;
-  first: Boolean;
+  first: boolean;
 begin
   P := pointer(CSV);
   if P = nil then
@@ -4235,7 +4236,7 @@ end;
 
 function RawUTF8ArrayToCSV(const Values: array of RawUTF8; const Sep: RawUTF8): RawUTF8;
 var
-  i, len, seplen, L: Integer;
+  i, len, seplen, L: integer;
   P: PAnsiChar;
 begin
   result := '';
@@ -6292,7 +6293,7 @@ end;
 procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
   var Result: TRawUTF8DynArray);
 var
-  i: Integer;
+  i: integer;
 begin
   Finalize(Result);
   SetLength(Result, length(Source));
@@ -6302,7 +6303,7 @@ end;
 
 procedure StringListToRawUTF8DynArray(Source: TStringList; var Result: TRawUTF8DynArray);
 var
-  i: Integer;
+  i: integer;
 begin
   Finalize(Result);
   SetLength(Result, Source.Count);
@@ -6684,7 +6685,7 @@ begin
     if n > 0 then
     begin
       if CoValues <> nil then
-        MoveFast(CoValues^[Index + 1], CoValues^[Index], n * SizeOf(Integer));
+        MoveFast(CoValues^[Index + 1], CoValues^[Index], n * SizeOf(integer));
       MoveFast(pointer(Values[Index + 1]), pointer(Values[Index]), n * SizeOf(pointer));
       PtrUInt(Values[ValuesCount]) := 0; // avoid GPF
     end;
@@ -7934,7 +7935,7 @@ begin
     p^ := '-';
     inc(p);
   end;
-  // Integer significant digits
+  // integer significant digits
   d := @digits;
   if n_before_dot > 0 then
     repeat
@@ -7943,7 +7944,7 @@ begin
       inc(d);
       dec(n_before_dot);
     until n_before_dot = 0;
-  // Integer 0-padding
+  // integer 0-padding
   if n_before_dot_pad0 > 0 then
     repeat
       p^ := '0';
@@ -7996,7 +7997,7 @@ begin
     p^ := '-';
     inc(p);
   end;
-  // Integer part
+  // integer part
   if n_digits_have > 0 then
   begin
     p^ := AnsiChar(digits^ + ord('0'));
@@ -8400,7 +8401,7 @@ end;
 
 
 function Char2ToByte(P: PUTF8Char; out Value: Cardinal;
-   ConvertHexToBinTab: PByteArray): Boolean;
+   ConvertHexToBinTab: PByteArray): boolean;
 var
   B: PtrUInt;
 begin
@@ -8420,7 +8421,7 @@ begin
 end;
 
 function Char3ToWord(P: PUTF8Char; out Value: Cardinal;
-   ConvertHexToBinTab: PByteArray): Boolean;
+   ConvertHexToBinTab: PByteArray): boolean;
 var
   B: PtrUInt;
 begin
@@ -8445,7 +8446,7 @@ begin
 end;
 
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal;
-   ConvertHexToBinTab: PByteArray): Boolean;
+   ConvertHexToBinTab: PByteArray): boolean;
 var
   B: PtrUInt;
 begin
@@ -9799,7 +9800,7 @@ begin
     result := 0;
 end;
 
-function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
+function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 var
   b, c: byte;
   {$ifdef CPUX86NOTPIC}
@@ -9836,7 +9837,7 @@ begin
   result := true; // conversion OK
 end;
 
-procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer);
+procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: integer);
 var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;

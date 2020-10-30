@@ -169,7 +169,7 @@ type
   TSynAuthenticationAbstract = class
   protected
     fSessions: TIntegerDynArray;
-    fSessionsCount: Integer;
+    fSessionsCount: integer;
     fSessionGenerator: integer;
     fTokenSeed: Int64;
     fSafe: TSynLocker;

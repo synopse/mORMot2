@@ -356,7 +356,7 @@ type
     /// returns a dynamic array list of all parameter names
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
-    function ArgsNames(Input: Boolean): TRawUTF8DynArray;
+    function ArgsNames(Input: boolean): TRawUTF8DynArray;
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should contain the input/output raw values as variant
     // - Kind will specify the expected returned document layout
@@ -380,7 +380,7 @@ type
     // - Values[] should point to the input/output raw binary values, as stored
     // in TInterfaceMethodExecute.Values during execution
     procedure ArgsStackAsDocVariant(const Values: TPPointerDynArray;
-      out Dest: TDocVariantData; Input: Boolean);
+      out Dest: TDocVariantData; Input: boolean);
   end;
 
   /// describe all mtehods of an interface-based service provider
@@ -533,8 +533,8 @@ type
     fDocVariantOptions: TDocVariantOptions;
     fFakeVTable: array of pointer;
     fFakeStub: PByteArray;
-    fMethodIndexCallbackReleased: Integer;
-    fMethodIndexCurrentFrameCallback: Integer;
+    fMethodIndexCallbackReleased: integer;
+    fMethodIndexCurrentFrameCallback: integer;
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); virtual; abstract;
     function GetMethodsVirtualTable: pointer;
   public
@@ -637,7 +637,7 @@ type
     // a callback is released on the client side so that you may be able e.g. to
     // unsubscribe the callback from an interface list (via InterfaceArrayDelete)
     // - contains -1 if no such method do exist in the interface definition
-    property MethodIndexCallbackReleased: Integer
+    property MethodIndexCallbackReleased: integer
       read fMethodIndexCallbackReleased;
     /// identifies a CurrentFrame() method in this interface
     // - i.e. the index in Methods[] of the following signature:
@@ -646,7 +646,7 @@ type
     // for interface callbacks in case of WebSockets jumbo frames, to allow e.g.
     // faster database access via a batch
     // - contains -1 if no such method do exist in the interface definition
-    property MethodIndexCurrentFrameCallback: Integer
+    property MethodIndexCurrentFrameCallback: integer
       read fMethodIndexCurrentFrameCallback;
     /// the registered Interface low-level compiler RTTI type
     property InterfaceTypeInfo: PRttiInfo read fInterfaceTypeInfo;
@@ -692,9 +692,9 @@ type
     fTempStrings: TRawUTF8DynArray;
     /// the overriden AddMethodsFromTypeInfo() method will call e.g. as
     // ! AddMethod('Add',[
-    // !   0,'n1',TypeInfo(Integer),
-    // !   0,'n2',TypeInfo(Integer),
-    // !   3,'result',TypeInfo(Integer)]);
+    // !   0,'n1',TypeInfo(integer),
+    // !   0,'n2',TypeInfo(integer),
+    // !   3,'result',TypeInfo(integer)]);
     // with 0=ord(imdConst) and 3=ord(imdResult)
     procedure AddMethod(const aName: RawUTF8; const aParams: array of const); virtual;
   public
@@ -926,7 +926,7 @@ type
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
     fResolver: TInterfaceResolver;
-    fResolverOwned: Boolean;
+    fResolverOwned: boolean;
     fRtti: TRttiCustom;
     // DI/IoC resolution protected methods
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean;
@@ -1049,8 +1049,8 @@ type
   protected
     fInput: TVariantDynArray;
     fOutput: TVariantDynArray;
-    function GetInput(Index: Integer): variant;
-    procedure SetOutput(Index: Integer; const Value: variant);
+    function GetInput(Index: integer): variant;
+    procedure SetOutput(Index: integer; const Value: variant);
     function GetInNamed(const aParamName: RawUTF8): variant;
     procedure SetOutNamed(const aParamName: RawUTF8; const Value: variant);
     function GetInUTF8(const ParamName: RawUTF8): RawUTF8;
@@ -1074,7 +1074,7 @@ type
     // - order shall follow the method const and var parameters
     // ! Stub.Add(10,20) -> Input[0]=10, Input[1]=20
     // - if the supplied Index is out of range, an EInterfaceStub will be raised
-    property Input[Index: Integer]: variant read GetInput;
+    property Input[Index: integer]: variant read GetInput;
     /// output parameters returned after method process
     // - order shall follow the method var, out parameters and the function
     // result (if method is not a procedure)
@@ -1086,7 +1086,7 @@ type
     // !    Ctxt.Output[1] := 42;               // result := 42;
     // !  end; // Output|0]=i, Output[1]=result
     // to emulate this native implementation:
-    // ! function Bar(var i: Integer): Integer;
+    // ! function Bar(var i: integer): integer;
     // ! begin
     // !    inc(i);
     // !    result := 42;
@@ -1094,7 +1094,7 @@ type
     // - consider using the safest Named[] property, to avoid parameters
     // index matching issue
     // - if an Output[]/Named[] item is not set, a default value will be used
-    property Output[Index: Integer]: variant write SetOutput;
+    property Output[Index: integer]: variant write SetOutput;
     /// access to input/output parameters when calling the method
     // - if the supplied name is incorrect, an EInterfaceStub will be raised
     // - is a bit slower than Input[]/Output[] indexed properties, but easier
@@ -1107,7 +1107,7 @@ type
     // !    Ctxt['result'] := 42;      // result := 42;
     // !  end;
     // to emulate this native implementation:
-    // ! function Bar(var i: Integer): Integer;
+    // ! function Bar(var i: integer): integer;
     // ! begin
     // !    inc(i);
     // !    result := 42;
@@ -1139,7 +1139,7 @@ type
     // !    Ctxt.Returns([GetInteger(pointer(Ctxt.Params))+1,42]);
     // !  end;
     // to emulate this native implementation:
-    // ! function Bar(var i: Integer): Integer;
+    // ! function Bar(var i: integer): integer;
     // ! begin
     // !    inc(i);
     // !    result := 42;
@@ -1657,7 +1657,7 @@ type
     // - you can use the SetOptions() method in a fluent-style interface
     property Options: TInterfaceStubOptions read fOptions write IntSetOptions;
     /// the stubbed method execution trace number of items
-    property LogCount: Integer read fLogCount;
+    property LogCount: integer read fLogCount;
     /// the stubbed method execution trace converted as one numerical hash
     // - returns Hash32(LogAsText)
     property LogHash: cardinal read GetLogHash;
@@ -2068,8 +2068,8 @@ type
     function Fake_Release: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
     {$else}
     function FakeQueryInterface(const IID: TGUID; out obj): HResult; stdcall;
-    function Fake_AddRef: Integer; stdcall;
-    function Fake_Release: Integer; stdcall;
+    function Fake_AddRef: integer; stdcall;
+    function Fake_Release: integer; stdcall;
     {$endif FPC}
   public
     /// create an instance, using the specified interface and factory
@@ -2612,7 +2612,7 @@ begin
   end;
 end;
 
-function TInterfaceMethod.ArgsNames(Input: Boolean): TRawUTF8DynArray;
+function TInterfaceMethod.ArgsNames(Input: boolean): TRawUTF8DynArray;
 var
   a, n: PtrInt;
 begin
@@ -2642,7 +2642,7 @@ begin
 end;
 
 procedure TInterfaceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
-  out Dest: TDocVariantData; Input: Boolean);
+  out Dest: TDocVariantData; Input: boolean);
 var
   a: PtrInt;
 begin
@@ -4307,7 +4307,7 @@ end;
 procedure TInterfaceFactoryGenerated.AddMethod(const aName: RawUTF8;
   const aParams: array of const);
 const
-  ARGPERARG = 3; // aParams = [ 0,'n1',TypeInfo(Integer), ... ]
+  ARGPERARG = 3; // aParams = [ 0,'n1',TypeInfo(integer), ... ]
 var
   meth: PInterfaceMethod;
   arg: ^TInterfaceMethodArgument;
@@ -5209,7 +5209,7 @@ begin
   SetLength(fOutput, fMethod^.ArgsOutputValuesCount);
 end;
 
-function TOnInterfaceStubExecuteParamsVariant.GetInput(Index: Integer): variant;
+function TOnInterfaceStubExecuteParamsVariant.GetInput(Index: integer): variant;
 begin
   if cardinal(Index) >= fMethod^.ArgsInputValuesCount then
     raise EInterfaceStub.Create(fSender, fMethod^, 'Input[%>=%]', [Index,
@@ -5218,7 +5218,7 @@ begin
     result := fInput[Index];
 end;
 
-procedure TOnInterfaceStubExecuteParamsVariant.SetOutput(Index: Integer;
+procedure TOnInterfaceStubExecuteParamsVariant.SetOutput(Index: integer;
   const Value: variant);
 begin
   if cardinal(Index) >= fMethod^.ArgsOutputValuesCount then
@@ -6666,9 +6666,9 @@ procedure TInterfaceMethodExecute.RawExecute(const Instances: PPointerArray;
   InstancesLast: integer);
 var
   Value: pointer;
-  a, i, e: PtrInt;
+  a, e, i: PtrInt;
   call: TCallMethodArgs;
-  Stack: packed array[0..MAX_EXECSTACK-1] of byte;
+  Stack: packed array[0 .. MAX_EXECSTACK - 1] of byte;
 begin
   FillCharFast(call, SizeOf(call), 0);
   with fMethod^ do

@@ -319,7 +319,7 @@ begin
   FreeMem(P);
 end;
 
-function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
+function realloc(P: Pointer; Size: integer): Pointer; cdecl; { always cdecl }
 begin
   result := P;
   ReallocMem(result, Size);
@@ -418,14 +418,14 @@ end;
 {$endif CPU32}
 {$endif MSWINDOWS}
 
-function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
+function memset(P: Pointer; B: integer; count: integer): pointer; cdecl; { always cdecl }
 // a fast full pascal version of the standard C library function
 begin
   FillCharFast(P^, count, B);
   result := P;
 end;
 
-function memmove(dest, source: pointer; count: Integer): pointer; cdecl; { always cdecl }
+function memmove(dest, source: pointer; count: integer): pointer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'memmove'{$else}'_memmove'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
@@ -433,7 +433,7 @@ begin
   result := dest;
 end;
 
-function memcpy(dest, source: Pointer; count: Integer): pointer; cdecl; { always cdecl }
+function memcpy(dest, source: Pointer; count: integer): pointer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
@@ -534,9 +534,9 @@ type
   // this function type is defined for calling termDataCmp() in sqlite3.c
   qsort_compare_func = function(P1, P2: pointer): integer; cdecl; { always cdecl }
 
-procedure QuickSortPtr(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
+procedure QuickSortPtr(base: PPointerArray; L, R: integer; comparF: qsort_compare_func);
 var
-  I, J, P: Integer;
+  I, J, P: integer;
   PP, C: PAnsiChar;
 begin
   repeat // from SQLite (FTS), With=sizeof(PAnsiChar) AFAIK
@@ -568,7 +568,7 @@ begin
   until I >= R;
 end;
 
-procedure QuickSort(baseP: PAnsiChar; Width: integer; L, R: Integer;
+procedure QuickSort(baseP: PAnsiChar; Width: integer; L, R: integer;
   comparF: qsort_compare_func);
 
   procedure Exchg(P1, P2: PAnsiChar; Size: integer);
@@ -585,7 +585,7 @@ procedure QuickSort(baseP: PAnsiChar; Width: integer; L, R: Integer;
   end;
 
 var
-  I, J, P: Integer;
+  I, J, P: integer;
   PP, C: PAnsiChar;
 begin
   repeat // generic sorting algorithm
@@ -641,16 +641,16 @@ var
   Each call of these functions overwrites the content of this structure.
   -> since timing is not thread-dependent, it's OK to share this buffer :) }
   atm: packed record
-    tm_sec: Integer;            { Seconds.      [0-60] (1 leap second) }
-    tm_min: Integer;            { Minutes.      [0-59]  }
-    tm_hour: Integer;           { Hours.        [0-23]  }
-    tm_mday: Integer;           { Day.          [1-31]  }
-    tm_mon: Integer;            { Month.        [0-11]  }
-    tm_year: Integer;           { Year          - 1900. }
-    tm_wday: Integer;           { Day of week.  [0-6]   }
-    tm_yday: Integer;           { Days in year. [0-365] }
-    tm_isdst: Integer;          { DST.          [-1/0/1]}
-    __tm_gmtoff: Integer;       { Seconds east of UTC.  }
+    tm_sec: integer;            { Seconds.      [0-60] (1 leap second) }
+    tm_min: integer;            { Minutes.      [0-59]  }
+    tm_hour: integer;           { Hours.        [0-23]  }
+    tm_mday: integer;           { Day.          [1-31]  }
+    tm_mon: integer;            { Month.        [0-11]  }
+    tm_year: integer;           { Year          - 1900. }
+    tm_wday: integer;           { Day of week.  [0-6]   }
+    tm_yday: integer;           { Days in year. [0-365] }
+    tm_isdst: integer;          { DST.          [-1/0/1]}
+    __tm_gmtoff: integer;       { Seconds east of UTC.  }
     __tm_zone: ^Char;           { Timezone abbreviation.}
   end;
 
@@ -946,7 +946,7 @@ const
     for i := 0 to SQLEncryptTableSize - 1 do
     begin
       Table^[i] := (ord(PassWord[j + 1])) xor byte(k);
-      k := Integer(k * 3 + i); // fast prime-based pseudo random generator
+      k := integer(k * 3 + i); // fast prime-based pseudo random generator
       if j = L then
         j := 0
       else
@@ -1008,19 +1008,19 @@ end;
 function sqlite3_initialize: integer; cdecl; external;
 function sqlite3_shutdown: integer; cdecl; external;
 function sqlite3_open(filename: PUTF8Char; var DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: Integer; vfs: PUTF8Char): integer; cdecl; external;
+function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: integer; vfs: PUTF8Char): integer; cdecl; external;
 function sqlite3_close(DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl; external;
-function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl; external;
+function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
+function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
 function sqlite3_create_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal): Integer; cdecl; external;
+  xFinal: TSQLFunctionFinal): integer; cdecl; external;
 function sqlite3_create_function_v2(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer; cdecl; external;
+  xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): integer; cdecl; external;
 function sqlite3_create_window_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xStep: TSQLFunctionFunc;
-  xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc; xDestroy: TSQLDestroyPtr): Integer;   cdecl; external;
+  xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc; xDestroy: TSQLDestroyPtr): integer;   cdecl; external;
 function sqlite3_create_collation(DB: TSQLite3DB; CollationName: PUTF8Char;
   StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl; external;
 function sqlite3_libversion: PUTF8Char; cdecl; external;
@@ -1060,9 +1060,9 @@ procedure sqlite3_result_null(Context: TSQLite3FunctionContext); cdecl; external
 procedure sqlite3_result_int64(Context: TSQLite3FunctionContext; Value: Int64); cdecl; external;
 procedure sqlite3_result_double(Context: TSQLite3FunctionContext; Value: double); cdecl; external;
 procedure sqlite3_result_blob(Context: TSQLite3FunctionContext; Value: Pointer;
-  Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
+  Value_bytes: integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
 procedure sqlite3_result_text(Context: TSQLite3FunctionContext; Value: PUTF8Char;
-  Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
+  Value_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
 procedure sqlite3_result_value(Context: TSQLite3FunctionContext; Value: TSQLite3Value); cdecl; external;
 procedure sqlite3_result_error(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); cdecl; external;
 function sqlite3_user_data(Context: TSQLite3FunctionContext): pointer; cdecl; external;
@@ -1082,30 +1082,30 @@ function sqlite3_bind_null(S: TSQLite3Statement; Param: integer): integer; cdecl
 function sqlite3_clear_bindings(S: TSQLite3Statement): integer; cdecl; external;
 function sqlite3_bind_parameter_count(S: TSQLite3Statement): integer; cdecl; external;
 function sqlite3_blob_open(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
-  RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl; external;
-function sqlite3_blob_reopen(DB: TSQLite3DB; RowID: Int64): Integer; cdecl; external;
-function sqlite3_blob_close(Blob: TSQLite3Blob): Integer; cdecl; external;
-function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
-function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
-function sqlite3_blob_bytes(Blob: TSQLite3Blob): Integer; cdecl; external;
+  RowID: Int64; Flags: integer; var Blob: TSQLite3Blob): integer; cdecl; external;
+function sqlite3_blob_reopen(DB: TSQLite3DB; RowID: Int64): integer; cdecl; external;
+function sqlite3_blob_close(Blob: TSQLite3Blob): integer; cdecl; external;
+function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
+function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
+function sqlite3_blob_bytes(Blob: TSQLite3Blob): integer; cdecl; external;
 function sqlite3_create_module_v2(DB: TSQLite3DB; const zName: PAnsiChar;
-  var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer; cdecl; external;
-function sqlite3_declare_vtab(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer; cdecl; external;
+  var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): integer; cdecl; external;
+function sqlite3_declare_vtab(DB: TSQLite3DB; const zSQL: PAnsiChar): integer; cdecl; external;
 function sqlite3_set_authorizer(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
-  pUserData: Pointer): Integer;   cdecl; external;
+  pUserData: Pointer): integer;   cdecl; external;
 function sqlite3_update_hook(DB: TSQLite3DB; xCallback: TSQLUpdateCallback;
   pArg: pointer): pointer; cdecl; external;
 function sqlite3_commit_hook(DB: TSQLite3DB; xCallback: TSQLCommitCallback;
   pArg: Pointer): Pointer; cdecl; external;
 function sqlite3_rollback_hook(DB: TSQLite3DB;  xCallback: TSQLCommitCallback;
   pArg: Pointer): Pointer; cdecl; external;
-function sqlite3_changes(DB: TSQLite3DB): Integer; cdecl; external;
-function sqlite3_total_changes(DB: TSQLite3DB): Integer; cdecl; external;
-function sqlite3_malloc(n: Integer): Pointer; cdecl; external;
-function sqlite3_realloc(pOld: Pointer; n: Integer): Pointer; cdecl; external;
+function sqlite3_changes(DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_total_changes(DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_malloc(n: integer): Pointer; cdecl; external;
+function sqlite3_realloc(pOld: Pointer; n: integer): Pointer; cdecl; external;
 procedure sqlite3_free(p: Pointer); cdecl; external;
 function sqlite3_memory_used: Int64; cdecl; external;
-function sqlite3_memory_highwater(resetFlag: Integer): Int64; cdecl; external;
+function sqlite3_memory_highwater(resetFlag: integer): Int64; cdecl; external;
 function sqlite3_limit(DB: TSQLite3DB; id,newValue: integer): integer; cdecl; external;
 function sqlite3_backup_init(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
   SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup; cdecl; external;

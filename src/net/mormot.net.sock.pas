@@ -422,9 +422,9 @@ type
     fPeerAddr: TNetAddr;
     fSecure: INetTLS;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
-    procedure SetLinger(aLinger: Integer); virtual;
-    procedure SetReceiveTimeout(aReceiveTimeout: Integer); virtual;
-    procedure SetSendTimeout(aSendTimeout: Integer); virtual;
+    procedure SetLinger(aLinger: integer); virtual;
+    procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
+    procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTCPNoDelay(aTCPNoDelay: boolean); virtual;
   public
     /// common initialization of all constructors
@@ -458,12 +458,12 @@ type
     // - multithread applications would also use this SockIn pseudo-text file
     // - by default, expect CR+LF as line feed (i.e. the HTTP way)
     procedure CreateSockIn(LineBreak: TTextLineBreakStyle = tlbsCRLF;
-      InputBufferSize: Integer = 1024);
+      InputBufferSize: integer = 1024);
     /// initialize SockOut for sending with write[ln](SockOut^,....)
     // - data is sent (flushed) after each writeln() - it's a compiler feature
     // - use rather SockSend() + SockSendFlush to send headers at once e.g.
     // since writeln(SockOut^,..) flush buffer each time
-    procedure CreateSockOut(OutputBufferSize: Integer = 1024);
+    procedure CreateSockOut(OutputBufferSize: integer = 1024);
     /// finalize SockIn receiving buffer
     // - you may call this method when you are sure that you don't need the
     // input buffering feature on this connection any more (e.g. after having
@@ -506,7 +506,7 @@ type
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
     // - useful on multi-treaded environnement (as in THttpServer.Process)
     // - no temp buffer is used
-    // - handle RawByteString, ShortString, Char, Integer parameters
+    // - handle RawByteString, ShortString, Char, integer parameters
     // - raise ECrtSocket exception on socket error
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with a single line - includes trailing #13#10
@@ -566,7 +566,7 @@ type
     function TrySndLow(P: pointer; Len: integer): boolean;
     /// returns the low-level error number
     // - i.e. returns WSAGetLastError
-    function LastLowSocketError: Integer;
+    function LastLowSocketError: integer;
     /// direct send data through network
     // - raise a ECrtSocket exception on any error
     // - bypass the SndBuf or SockOut^ buffers
@@ -599,11 +599,11 @@ type
     /// set the SO_SNDTIMEO option for the connection
     // - i.e. the timeout, in milliseconds, for blocking send calls
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
-    property SendTimeout: Integer write SetSendTimeout;
+    property SendTimeout: integer write SetSendTimeout;
     /// set the SO_RCVTIMEO option for the connection
     // - i.e. the timeout, in milliseconds, for blocking receive calls
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
-    property ReceiveTimeout: Integer write SetReceiveTimeout;
+    property ReceiveTimeout: integer write SetReceiveTimeout;
     /// set the SO_KEEPALIVE option for the connection
     // - 1 (true) will enable keep-alive packets for the connection
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
@@ -616,7 +616,7 @@ type
     // Darwin, set SO_NOSIGPIPE
     // - Linger = 0 causes the connection to be aborted and any pending data
     // is immediately discarded at Close
-    property Linger: Integer write SetLinger;
+    property Linger: integer write SetLinger;
     /// low-level socket handle, initialized after Open() with socket
     property Sock: TNetSocket read fSock write fSock;
     /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
@@ -1407,17 +1407,17 @@ begin
   fSock.SetKeepAlive(aKeepAlive);
 end;
 
-procedure TCrtSocket.SetLinger(aLinger: Integer);
+procedure TCrtSocket.SetLinger(aLinger: integer);
 begin
   fSock.SetLinger(aLinger);
 end;
 
-procedure TCrtSocket.SetReceiveTimeout(aReceiveTimeout: Integer);
+procedure TCrtSocket.SetReceiveTimeout(aReceiveTimeout: integer);
 begin
   fSock.SetReceiveTimeout(aReceiveTimeout);
 end;
 
-procedure TCrtSocket.SetSendTimeout(aSendTimeout: Integer);
+procedure TCrtSocket.SetSendTimeout(aSendTimeout: integer);
 begin
   fSock.SetSendTimeout(aSendTimeout);
 end;
@@ -1607,7 +1607,7 @@ begin
     result := -1; // on socket error -> raise ioresult error
 end;
 
-function InputSock(var F: TTextRec): Integer;
+function InputSock(var F: TTextRec): integer;
 // SockIn pseudo text file fill its internal buffer only with available data
 // -> no unwanted wait time is added
 // -> very optimized use for readln() in HTTP stream
@@ -1697,7 +1697,7 @@ end;
 {$endif FPC}
 
 procedure TCrtSocket.CreateSockIn(LineBreak: TTextLineBreakStyle;
-  InputBufferSize: Integer);
+  InputBufferSize: integer);
 begin
   if (Self = nil) or
      (SockIn <> nil) then
@@ -1720,7 +1720,7 @@ begin
   Reset(SockIn^);
 end;
 
-procedure TCrtSocket.CreateSockOut(OutputBufferSize: Integer);
+procedure TCrtSocket.CreateSockOut(OutputBufferSize: integer);
 begin
   if SockOut <> nil then
     exit; // initialization already occured
@@ -2278,7 +2278,7 @@ begin
   result := true;
 end;
 
-function TCrtSocket.LastLowSocketError: Integer;
+function TCrtSocket.LastLowSocketError: integer;
 begin
   result := sockerrno;
 end;

@@ -9,7 +9,7 @@ unit mormot.core.base;
     - Framework Version and Information
     - Common Types Used for Compatibility Between Compilers and CPU
     - Numbers (floats and integers) Low-level Definitions
-    - Integer Arrays Manipulation
+    - integer Arrays Manipulation
     - ObjArray PtrArray InterfaceArray Wrapper Functions
     - Low-level Types Mapping Binary or Bits Structures
     - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
@@ -109,7 +109,7 @@ const
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 
 type
-  PBoolean = ^Boolean;
+  PBoolean = ^boolean;
 
 {$else FPC}
 
@@ -382,7 +382,7 @@ type
   PByteArray = ^TByteArray;
   TByteArray = array[0 .. MaxInt - 1] of Byte; // redefine here with {$R-}
   PBooleanArray = ^TBooleanArray;
-  TBooleanArray = array[0 .. MaxInt - 1] of Boolean;
+  TBooleanArray = array[0 .. MaxInt - 1] of boolean;
   PPWord = ^PWord;
   TWordArray  = array[0 .. MaxInt div SizeOf(word) - 1 ] of word;
   PWordArray = ^TWordArray;
@@ -580,11 +580,11 @@ procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endi
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
 function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid1, guid2: TGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+  guid1, guid2: TGUID): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(guid1, guid2: PGUID): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID(guid1, guid2: PGUID): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched
@@ -592,7 +592,7 @@ function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integ
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
-function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): Boolean;
+function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append one TGUID item to a TGUID dynamic array
@@ -1062,7 +1062,7 @@ const
 // - the precision is calculated from the A and B value range
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValue(const A, B: Double; DoublePrec: double = DOUBLE_SAME): Boolean;
+function SameValue(const A, B: Double; DoublePrec: double = DOUBLE_SAME): boolean;
 
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
@@ -1070,7 +1070,7 @@ function SameValue(const A, B: Double; DoublePrec: double = DOUBLE_SAME): Boolea
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
 function SameValueFloat(const A, B: TSynExtended;
-  DoublePrec: TSynExtended = DOUBLE_SAME): Boolean;
+  DoublePrec: TSynExtended = DOUBLE_SAME): boolean;
 
 /// a comparison function for sorting IEEE 754 double precision values
 function CompareFloat(const A, B: double): integer;
@@ -1086,7 +1086,7 @@ procedure KahanSum(const Data: double; var Sum, Carry: double);
   {$ifdef HASINLINE}inline;{$endif}
 
 
-{ ************ Integer Arrays Manipulation }
+{ ************ integer Arrays Manipulation }
 
 /// returns TRUE if Value is nil or all supplied Values[] equal 0
 function IsZero(const Values: TIntegerDynArray): boolean; overload;
@@ -1215,27 +1215,27 @@ function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
 // - Count is the number of entries in P^[]
 function AnyScanExists(P,Elem: pointer; Count,ElemSize: PtrInt): boolean;
 
-/// sort an Integer array, low values first
+/// sort an integer array, low values first
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
 
-/// sort an Integer array, low values first
+/// sort an integer array, low values first
 procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 
-/// sort an Integer array, low values first
+/// sort an integer array, low values first
 procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 
-/// sort a 16 bit unsigned Integer array, low values first
+/// sort a 16 bit unsigned integer array, low values first
 procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
 
-/// sort a 64-bit signed Integer array, low values first
+/// sort a 64-bit signed integer array, low values first
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
 
-/// sort a 64-bit unsigned Integer array, low values first
+/// sort a 64-bit unsigned integer array, low values first
 // - QWord comparison are implemented correctly under FPC or Delphi 2009+ -
 // older compilers will use fast and exact SortDynArrayQWord()
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 
-/// sort a 64-bit Integer array, low values first
+/// sort a 64-bit integer array, low values first
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
 
 /// sort a PtrInt array, low values first
@@ -1330,7 +1330,7 @@ function AddSortedInteger(var Values: TIntegerDynArray;
 // of integers
 // - if Index is invalid, the Value is inserted at the end of the array
 function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: Integer; Index: PtrInt; CoValues: PIntegerDynArray = nil): PtrInt;
+  Value: integer; Index: PtrInt; CoValues: PIntegerDynArray = nil): PtrInt;
 
 /// add an integer value at the end of a dynamic array of integers
 // - returns TRUE if Value was added successfully in Values[], in this case
@@ -1381,19 +1381,19 @@ procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
 /// delete any 32-bit integer in Values[]
-procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
+procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: integer; Index: PtrInt); overload;
 
 /// remove some 32-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process
 // if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
 procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
-  ExcludedSortSize: Integer = 32);
+  ExcludedSortSize: integer = 32);
 
 /// ensure some 32-bit integer from Values[] will only contain Included[]
 // - Included is declared as var, since it will be sorted in-place during process
 // if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
 procedure IncludeInteger(var Values, Included: TIntegerDynArray;
-  IncludedSortSize: Integer = 32);
+  IncludedSortSize: integer = 32);
 
 /// sort and remove any 32-bit duplicated integer from Values[]
 procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
@@ -1415,19 +1415,19 @@ procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 
 /// delete any 64-bit integer in Values[]
-procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Index: PtrInt); overload;
+procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: integer; Index: PtrInt); overload;
 
 /// remove some 64-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process
 // if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
-  ExcludedSortSize: Integer = 32);
+  ExcludedSortSize: integer = 32);
 
 /// ensure some 64-bit integer from Values[] will only contain Included[]
 // - Included is declared as var, since it will be sorted in-place during process
 // if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
 procedure IncludeInt64(var Values, Included: TInt64DynArray;
-  IncludedSortSize: Integer = 32);
+  IncludedSortSize: integer = 32);
 
 /// sort and remove any 64-bit duplicated integer from Values[]
 procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
@@ -1445,7 +1445,7 @@ procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
 
 /// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt;
-  MaxStart: Integer = -1): integer;
+  MaxStart: integer = -1): integer;
 
 /// sum all 32-bit integers in Values[]
 function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
@@ -1543,7 +1543,7 @@ type
 /// compute the median of an integer serie of values, using "Quickselect"
 // - based on the algorithm described in "Numerical recipes in C", Second Edition,
 // translated from Nicolas Devillard's C code: http://ndevilla.free.fr/median/median
-// - warning: the supplied Integer array is modified in-place during the process,
+// - warning: the supplied integer array is modified in-place during the process,
 // and won't be fully sorted on output (this is no QuickSort alternative)
 function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
 
@@ -2143,12 +2143,12 @@ function Rdtsc: Int64;
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function
 // - FPC will define this function as intrinsic for non-Intel CPUs
-function InterlockedIncrement(var I: Integer): Integer;
+function InterlockedIncrement(var I: integer): integer;
 
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function
 // - FPC will define this function as intrinsic for non-Intel CPUs
-function InterlockedDecrement(var I: Integer): Integer;
+function InterlockedDecrement(var I: integer): integer;
 
 {$endif CPUINTEL}
 
@@ -2470,7 +2470,7 @@ procedure MultiEventRemove(var EventList; const Event: TMethod); overload;
 /// low-level wrapper to remove a callback from a dynamic list of events
 // - same as the same overloaded procedure, but accepting an EventList[] index
 // to identify the Event to be suppressed
-procedure MultiEventRemove(var EventList; Index: Integer); overload;
+procedure MultiEventRemove(var EventList; Index: integer); overload;
 
 /// low-level wrapper to check if a callback is in a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -2844,7 +2844,7 @@ procedure SetVariantNull(var Value: variant);
 
 /// convert a raw binary buffer into a variant RawByteString varString
 // - you can then use VariantToRawByteString() to retrieve the binary content
-procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant); overload;
+procedure RawByteStringToVariant(Data: PByte; DataLen: integer; var Value: variant); overload;
 
 /// convert a RawByteString content into a variant varString
 // - you can then use VariantToRawByteString() to retrieve the binary content
@@ -2863,13 +2863,13 @@ function VarDataFromVariant(const Value: variant): PVarData;
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
-function VarIsEmptyOrNull(const V: Variant): Boolean;
+function VarIsEmptyOrNull(const V: Variant): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(PVariant(V)^) or VarIsEmpty(PVariant(V)^), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
-function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+function VarDataIsEmptyOrNull(VarData: pointer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// same as Dest := TVarData(Source) for simple values
@@ -2907,7 +2907,7 @@ function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 
 /// convert any numerical Variant into a boolean value
 // - text content will return true after case-sensitive 'true' comparison
-function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
+function VariantToBoolean(const V: Variant; var Value: boolean): boolean;
 
 /// convert any numerical Variant into an integer
 // - it will expect true numerical Variant and won't convert any string nor
@@ -3655,13 +3655,13 @@ end;
 
 
 function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid1, guid2: TGUID): Boolean;
+  guid1, guid2: TGUID): boolean;
 begin
   result := (PHash128Rec(@guid1).L = PHash128Rec(@guid2).L) and
             (PHash128Rec(@guid1).H = PHash128Rec(@guid2).H);
 end;
 
-function IsEqualGUID(guid1, guid2: PGUID): Boolean;
+function IsEqualGUID(guid1, guid2: PGUID): boolean;
 begin
   result := (PHash128Rec(guid1).L = PHash128Rec(guid2).L) and
             (PHash128Rec(guid1).H = PHash128Rec(guid2).H);
@@ -3672,7 +3672,7 @@ begin
   result := Hash128Index(@guids[0], length(guids), @guid);
 end;
 
-function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): Boolean;
+function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
 var
   a: TPtrIntArray absolute guid;
 begin
@@ -5173,7 +5173,7 @@ end;
 
 // CompareMemSmall/MoveSmall defined now for proper inlining below
 
-function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
 var
   c: AnsiChar;
 label
@@ -5339,7 +5339,7 @@ begin
   if a > 0 then
   begin
     SetLength(Values, v + a);
-    MoveFast(Another[0], Values[v], a * SizeOf(Integer));
+    MoveFast(Another[0], Values[v], a * SizeOf(integer));
   end;
   result := v + a;
 end;
@@ -5433,12 +5433,12 @@ begin
   begin
     if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
-    MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(Integer));
+    MoveFast(Values[Index + 1], Values[Index], (n - Index) * SizeOf(integer));
   end;
   SetLength(Values, n);
 end;
 
-procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt);
+procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: integer; Index: PtrInt);
 var
   n: PtrInt;
 begin
@@ -5450,7 +5450,7 @@ begin
   begin
     if PRefCnt(PtrUInt(Values) - _DAREFCNT)^ > 1 then
       Values := copy(Values); // make unique
-    MoveFast(Values[Index + 1], Values[Index], n * SizeOf(Integer));
+    MoveFast(Values[Index + 1], Values[Index], n * SizeOf(integer));
   end;
   dec(ValuesCount);
 end;
@@ -5472,7 +5472,7 @@ begin
   SetLength(Values, n);
 end;
 
-procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Index: PtrInt);
+procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: integer; Index: PtrInt);
 var
   n: PtrInt;
 begin
@@ -5528,7 +5528,7 @@ begin
     SetLength(Values, n);
 end;
 
-procedure IncludeInteger(var Values, Included: TIntegerDynArray; IncludedSortSize: Integer);
+procedure IncludeInteger(var Values, Included: TIntegerDynArray; IncludedSortSize: integer);
 var
   i, v, x, n: PtrInt;
 begin
@@ -5570,7 +5570,7 @@ begin
     SetLength(Values, n);
 end;
 
-procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: Integer);
+procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: integer);
 var
   i, v, x, n: PtrInt;
 begin
@@ -5745,7 +5745,7 @@ var
 begin
   n := Length(Source);
   SetLength(Dest, n);
-  MoveFast(Source[0], Dest[0], n * SizeOf(Integer));
+  MoveFast(Source[0], Dest[0], n * SizeOf(integer));
 end;
 
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
@@ -6226,7 +6226,7 @@ procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
 begin
   if ValuesCount > Length(Dest) then
     SetLength(Dest, ValuesCount);
-  MoveFast(Values^[0], Dest[0], ValuesCount * SizeOf(Integer));
+  MoveFast(Values^[0], Dest[0], ValuesCount * SizeOf(integer));
   QuickSortInteger(pointer(Dest), 0, ValuesCount - 1);
 end;
 
@@ -6303,7 +6303,7 @@ end;
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt;
 var
   L: PtrInt;
-  cmp: Integer;
+  cmp: integer;
 begin
   L := 0;
   if 0 <= R then
@@ -6333,7 +6333,7 @@ function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): Ptr
 var
   L: PtrInt;
   {$ifdef CPUX86}
-  cmp: Integer;
+  cmp: integer;
   {$endif CPUX86}
 begin
   L := 0;
@@ -6450,7 +6450,7 @@ begin
 end;
 
 function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: Integer; Index: PtrInt; CoValues: PIntegerDynArray): PtrInt;
+  Value: integer; Index: PtrInt; CoValues: PIntegerDynArray): PtrInt;
 var
   n: PtrInt;
 begin
@@ -6466,7 +6466,7 @@ begin
   n := ValuesCount;
   if PtrUInt(result) < PtrUInt(n) then
   begin
-    n := (n - result) * SizeOf(Integer);
+    n := (n - result) * SizeOf(integer);
     MoveFast(Values[result], Values[result + 1], n);
     if CoValues <> nil then
       MoveFast(CoValues^[result], CoValues^[result + 1], n);
@@ -6685,7 +6685,7 @@ end;
 
 { TSortedIntegerArray }
 
-function TSortedIntegerArray.Add(aValue: Integer): PtrInt;
+function TSortedIntegerArray.Add(aValue: integer): PtrInt;
 begin
   result := Count; // optimistic check of perfectly increasing aValue
   if (result > 0) and
@@ -6696,14 +6696,14 @@ begin
   if Count = Length(Values) then
     SetLength(Values, NextGrow(Count));
   if result < Count then
-    MoveFast(Values[result], Values[result + 1], (Count - result) * SizeOf(Integer))
+    MoveFast(Values[result], Values[result + 1], (Count - result) * SizeOf(integer))
   else
     result := Count;
   Values[result] := aValue;
   inc(Count);
 end;
 
-function TSortedIntegerArray.IndexOf(aValue: Integer): PtrInt;
+function TSortedIntegerArray.IndexOf(aValue: integer): PtrInt;
 begin
   result := FastFindIntegerSorted(pointer(Values), Count - 1, aValue);
 end;
@@ -7305,9 +7305,9 @@ end;
 procedure RCU32(var src, dst);
 begin
   repeat
-    Integer(dst) := Integer(src);
+    integer(dst) := integer(src);
     ReadBarrier;
-  until Integer(dst) = Integer(src);
+  until integer(dst) = integer(src);
 end;
 
 procedure RCU64(var src, dst);
@@ -7615,7 +7615,7 @@ begin
     result := IndexByte(pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
   else
   {$else}
-    for result := 1 to PInteger(PtrInt(Str) - sizeof(Integer))^ do
+    for result := 1 to PInteger(PtrInt(Str) - sizeof(integer))^ do
       if Str[result] = Chr then
         exit;
   {$endif FPC}
@@ -8174,7 +8174,7 @@ begin
   MultiEventRemove(EventList, MultiEventFind(EventList, Event));
 end;
 
-procedure MultiEventRemove(var EventList; Index: Integer);
+procedure MultiEventRemove(var EventList; Index: integer);
 var
   Events: TMethodDynArray absolute EventList;
   max: integer;
@@ -9276,7 +9276,7 @@ begin
   result := not result;
 end;
 
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean;
 label
   zero;
 begin // cut-down version of our pure pascal CompareMem() function
@@ -9374,7 +9374,7 @@ end;
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
 var
-  i, j: Integer;
+  i, j: integer;
 begin
   result := $ffff;
   for i := 0 to Len - 1 do
@@ -9418,7 +9418,7 @@ end;
 
 {$else} // those functions have their tuned x86 asm version
 
-function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 label
   zero;
 begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
@@ -9668,7 +9668,7 @@ end;
 
 {$endif ASMX86}
 
-function SameValue(const A, B: Double; DoublePrec: double): Boolean;
+function SameValue(const A, B: Double; DoublePrec: double): boolean;
 var
   AbsA, AbsB, Res: double;
 begin
@@ -9690,7 +9690,7 @@ begin
     result := (A - B) <= DoublePrec;
 end;
 
-function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended): Boolean;
+function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended): boolean;
 var
   AbsA, AbsB, Res: TSynExtended;
 begin
@@ -9795,7 +9795,7 @@ begin
   PPtrInt(@Value)^ := varNull;
 end;
 
-procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
+procedure RawByteStringToVariant(Data: PByte; DataLen: integer; var Value: variant);
 begin
   ClearVariantForString(Value);
   if (Data = nil) or (DataLen <= 0) then
@@ -9841,13 +9841,13 @@ begin
   until false;
 end;
 
-function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+function VarDataIsEmptyOrNull(VarData: pointer): boolean;
 begin
   with VarDataFromVariant(PVariant(VarData)^)^ do
     result := (VType <= varNull) or (VType = varNull or varByRef);
 end;
 
-function VarIsEmptyOrNull(const V: Variant): Boolean;
+function VarIsEmptyOrNull(const V: Variant): boolean;
 begin
   with VarDataFromVariant(V)^ do
     result := (VType <= varNull) or (VType = varNull or varByRef);
@@ -10020,7 +10020,7 @@ begin
   end;
 end;
 
-function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
+function VariantToBoolean(const V: Variant; var Value: boolean): boolean;
 var
   vd: PVarData;
   tmp: TVarData;
@@ -10556,7 +10556,7 @@ begin
   SetPointer(Data, DataLen);
 end;
 
-function TSynMemoryStream.{%H-}Write(const Buffer; Count: Integer): Longint;
+function TSynMemoryStream.{%H-}Write(const Buffer; Count: integer): Longint;
 begin
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
 end;

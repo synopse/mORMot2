@@ -652,7 +652,7 @@ end;
 function TSQLDBODBCStatement.GetCol(Col: integer;
   ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
 var
-  c: Integer;
+  c: integer;
 begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
   if not Assigned(fStatement) or

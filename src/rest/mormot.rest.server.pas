@@ -177,7 +177,7 @@ type
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
     function GetInputNameIndex(const ParamName: RawUTF8): PtrInt;
-    function GetInputExists(const ParamName: RawUTF8): Boolean;
+    function GetInputExists(const ParamName: RawUTF8): boolean;
     function GetInputInt(const ParamName: RawUTF8): Int64;
     function GetInputDouble(const ParamName: RawUTF8): Double;
     procedure GetInputByName(const ParamName,InputName: RawUTF8; var result: RawUTF8);
@@ -461,7 +461,7 @@ type
       out ValueEnum; DefaultEnumOrd: integer = 0): boolean;
     /// return TRUE if the input parameter is available at URI
     // - even if InputUTF8['param']='', there may be '..?param=&another=2'
-    property InputExists[const ParamName: RawUTF8]: Boolean read GetInputExists;
+    property InputExists[const ParamName: RawUTF8]: boolean read GetInputExists;
     /// retrieve one input parameter from its URI name as variant
     // - if the parameter value is text, it is stored in the variant as
     // a generic VCL string content: so before Delphi 2009, you may loose
@@ -498,7 +498,7 @@ type
       InterfaceMethod: pointer): variant;
     /// decode any multipart/form-data POST request input
     // - returns TRUE and set MultiPart array as expected, on success
-    function InputAsMultiPart(var MultiPart: TMultiPartDynArray): Boolean;
+    function InputAsMultiPart(var MultiPart: TMultiPartDynArray): boolean;
     /// low-level access to the input parameters, stored as pairs of UTF-8
     // - even items are parameter names, odd are values
     // - Input*[] properties should have been called previously to fill the
@@ -1097,7 +1097,7 @@ type
   // !            Hexa8(Timestamp)+url))
   TRestServerAuthenticationSignedURI = class(TRestServerAuthenticationURI)
   protected
-    fNoTimestampCoherencyCheck: Boolean;
+    fNoTimestampCoherencyCheck: boolean;
     fTimestampCoherencySeconds: cardinal;
     fTimestampCoherencyTicks: cardinal;
     fComputeSignature: TOnRestAuthenticationSignedURIComputeSignature;
@@ -1120,7 +1120,7 @@ type
     // this property to TRUE to enabled a weaker but more tolerant behavior
     // ! (aServer.AuthenticationRegister(TRestServerAuthenticationDefault) as
     // !   TRestServerAuthenticationSignedURI).NoTimestampCoherencyCheck := true;
-    property NoTimestampCoherencyCheck: Boolean read fNoTimestampCoherencyCheck
+    property NoTimestampCoherencyCheck: boolean read fNoTimestampCoherencyCheck
       write SetNoTimestampCoherencyCheck;
     /// time tolerance in seconds for the signature timestamps coherency check
     // - by default, signed sessions are expected to be sequential, and new
@@ -3770,7 +3770,7 @@ function TRestServerURIContext.InputEnum(const ParamName: RawUTF8;
   EnumType: PRttiInfo; out ValueEnum; DefaultEnumOrd: integer): boolean;
 var
   value: RawUTF8;
-  int, err: Integer;
+  int, err: integer;
 begin
   result := false;
   if (EnumType = nil) or
@@ -3817,7 +3817,7 @@ begin
     result := UTF8ToString(fInput[i * 2 + 1]);
 end;
 
-function TRestServerURIContext.GetInputExists(const ParamName: RawUTF8): Boolean;
+function TRestServerURIContext.GetInputExists(const ParamName: RawUTF8): boolean;
 begin
   result := GetInputNameIndex(ParamName) >= 0;
 end;
@@ -3897,7 +3897,7 @@ begin
 end;
 
 function TRestServerURIContext.InputAsMultiPart(
-  var MultiPart: TMultiPartDynArray): Boolean;
+  var MultiPart: TMultiPartDynArray): boolean;
 begin
   result := (Method = mPOST) and
      IdemPChar(pointer(fInputPostContentType), 'MULTIPART/FORM-DATA') and
@@ -4469,7 +4469,7 @@ var
 
   procedure DecodeUriParametersIntoJSON(const input: TRawUTF8DynArray);
   var
-    a, i, iLow: Integer;
+    a, i, iLow: integer;
     WR: TTextWriter;
     argDone: boolean;
     temp: TTextWriterStackBuffer;
@@ -4982,7 +4982,7 @@ function TRestServerAuthenticationSignedURI.RetrieveSession(
 var
   aTimestamp, aSignature, aMinimalTimestamp, aExpectedSignature: cardinal;
   PTimestamp: PAnsiChar;
-  aURLlength: Integer;
+  aURLlength: integer;
 begin
   result := inherited RetrieveSession(Ctxt);
   if result = nil then

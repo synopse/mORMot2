@@ -832,7 +832,7 @@ var
   msgInput, msgOutput: RawByteString;
   header: PRemoteMessageHeader;
   O: PAnsiChar;
-  i, session: Integer;
+  i, session: integer;
   user: RawUTF8;
   InputExecute: TSQLDBProxyConnectionCommandExecute;
   ExecuteWithResults: boolean;
@@ -1262,7 +1262,7 @@ begin
   repeat
     if DataLen <= 5 then
       break; // to raise ESQLDBRemote
-    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - sizeof(Integer)))^;
+    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - sizeof(integer)))^;
     Magic := FromVarUInt32(Data);
     if Magic <> FETCHALLTOBINARY_MAGIC then
       break; // corrupted
@@ -1296,7 +1296,7 @@ end;
 procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
   IgnoreColumnDataSize: boolean);
 var
-  F, Len: Integer;
+  F, Len: integer;
   ft: TSQLDBFieldType;
 begin
   // format match TSQLDBStatement.FetchAllToBinary()

@@ -227,7 +227,7 @@ type
     // service context currently associated), this method will also update
     // ServiceRunningContext.Factory, so that the implementation method will be able
     // to access the associated TRestServer instance if needed
-    function Get(out Obj): Boolean; override;
+    function Get(out Obj): boolean; override;
     /// retrieve the published signature of this interface
     // - is always available on TServiceFactoryServer, but TServiceFactoryClient
     // will be able to retrieve it only if TServiceContainerServer.PublishSignature
@@ -746,7 +746,7 @@ begin
   inherited Destroy;
 end;
 
-function TServiceFactoryServer.Get(out Obj): Boolean;
+function TServiceFactoryServer.Get(out Obj): boolean;
 var
   Inst: TServiceFactoryServerInstance;
 begin
@@ -1476,12 +1476,12 @@ type
       aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   public
     constructor Create(aRequest: TRestServerURIContext;
-      aFactory: TInterfaceFactory; aFakeID: Integer);
+      aFactory: TInterfaceFactory; aFakeID: integer);
     destructor Destroy; override;
   end;
 
 constructor TInterfacedObjectFakeServer.Create(aRequest: TRestServerURIContext;
-  aFactory: TInterfaceFactory; aFakeID: Integer);
+  aFactory: TInterfaceFactory; aFakeID: integer);
 var
   opt: TInterfacedObjectFromFactoryOptions;
 begin

@@ -434,7 +434,7 @@ end;
 constructor TSQLDBUniDACConnection.Create(aProperties: TSQLDBConnectionProperties);
 var
   options: TStrings;
-  PortNumber, i: Integer;
+  PortNumber, i: integer;
 begin
   inherited Create(aProperties);
   if (aProperties.DBMS = dMSSQL) and

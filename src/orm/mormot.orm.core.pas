@@ -1406,7 +1406,7 @@ type
     // - do not call this constructor directly, but one of its inherited classes,
     // via a call to TOrmProperties.RegisterCustom*()
     constructor Create(const aName: RawUTF8; aOrmFieldType: TOrmFieldType;
-      aAttributes: TOrmPropInfoAttributes; aFieldWidth, aPropIndex: Integer;
+      aAttributes: TOrmPropInfoAttributes; aFieldWidth, aPropIndex: integer;
       aProperty: pointer; aData2Text: TOnSQLPropInfoRecord2Text;
       aText2Data: TOnSQLPropInfoRecord2Data); reintroduce;
   public
@@ -4528,7 +4528,7 @@ type
     // - don't perform any conversion, but just create an array of raw PUTF8Char data
     // - returns the number of rows in Values[]
     function GetRowValues(Field: integer; out Values: TRawUTF8DynArray): integer; overload;
-    /// get all values for a specified field into a dynamic Integer array
+    /// get all values for a specified field into a dynamic integer array
     // - returns the number of rows in Values[]
     function GetRowValues(Field: integer; out Values: TInt64DynArray): integer; overload;
     /// get all values for a specified field as CSV
@@ -4931,17 +4931,17 @@ type
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to Get() method, but for the current Step
-    function FieldBuffer(FieldIndex: Integer): PUTF8Char; overload;
+    function FieldBuffer(FieldIndex: integer): PUTF8Char; overload;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to Get() method, but for the current Step
     function FieldBuffer(const FieldName: RawUTF8): PUTF8Char; overload;
-    /// read-only access to a particular field value, as Integer
+    /// read-only access to a particular field value, as integer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
-    function FieldAsInteger(FieldIndex: Integer): Int64; overload;
+    function FieldAsInteger(FieldIndex: integer): Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// read-only access to a particular field value, as Integer
+    /// read-only access to a particular field value, as integer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
     function FieldAsInteger(const FieldName: RawUTF8): Int64; overload;
@@ -4949,7 +4949,7 @@ type
     /// read-only access to a particular field value, as floating-point value
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
-    function FieldAsFloat(FieldIndex: Integer): TSynExtended; overload;
+    function FieldAsFloat(FieldIndex: integer): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as floating-point value
     // - raise an EOrmTable if called outside valid Step() sequence
@@ -4959,7 +4959,7 @@ type
     /// read-only access to a particular field value, as RawUTF8
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetU() method, but for the current Step
-    function FieldAsRawUTF8(FieldIndex: Integer): RawUTF8; overload;
+    function FieldAsRawUTF8(FieldIndex: integer): RawUTF8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as RawUTF8
     // - raise an EOrmTable if called outside valid Step() sequence
@@ -4969,7 +4969,7 @@ type
     /// read-only access to a particular field value, as VCL String
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
-    function FieldAsString(FieldIndex: Integer): string; overload;
+    function FieldAsString(FieldIndex: integer): string; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as VCL String
     // - raise an EOrmTable if called outside valid Step() sequence
@@ -5779,7 +5779,7 @@ type
     // 'ID' (if ForceNoRowID=TRUE) to Text
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the field name to Text
-    function AppendFieldName(FieldIndex: Integer; var Text: RawUTF8;
+    function AppendFieldName(FieldIndex: integer; var Text: RawUTF8;
       ForceNoRowID: boolean): boolean;
     /// return the first unique property of kind RawUTF8
     // - this property is mainly the "Name" property, i.e. the one with
@@ -6287,11 +6287,11 @@ type
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the external field name to Text
-    function AppendFieldName(FieldIndex: Integer; var Text: RawUTF8): boolean;
+    function AppendFieldName(FieldIndex: integer; var Text: RawUTF8): boolean;
     /// return the field name as RawUTF8 value
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - otherwise, will return the external field name
-    function FieldNameByIndex(FieldIndex: Integer): RawUTF8;
+    function FieldNameByIndex(FieldIndex: integer): RawUTF8;
 
     /// opaque object used on the Server side to specify e.g. the DB connection
     // - will define such a generic TObject, to avoid any unecessary type
@@ -6441,7 +6441,7 @@ type
     procedure FTS4WithoutContent(ContentTable: TOrmClass);
 
     /// the table index of this TOrm in the associated Model
-    property TableIndex: Integer read fTableIndex;
+    property TableIndex: integer read fTableIndex;
     /// direct access to a property RTTI information, by name
     property Prop[const PropName: RawUTF8]: TOrmPropInfo read GetProp; default;
   published
@@ -6550,22 +6550,22 @@ type
     function GetTableInherited(aTable: TOrmClass): TOrmClass;
     /// get the index of aTable in Tables[]
     // - returns -1 if the table is not in the model
-    function GetTableIndex(aTable: TOrmClass): integer; overload;
+    function GetTableIndex(aTable: TOrmClass): PtrInt; overload;
     /// get the index of any class inherithing from aTable in Tables[]
     // - returns -1 if no table is matching in the model
-    function GetTableIndexInheritsFrom(aTable: TOrmClass): integer;
+    function GetTableIndexInheritsFrom(aTable: TOrmClass): PtrInt;
     /// get the index of aTable in Tables[]
     // - raise an EModelException if the table is not in the model
-    function GetTableIndexExisting(aTable: TOrmClass): integer;
+    function GetTableIndexExisting(aTable: TOrmClass): PtrInt;
     /// get the index of a table in Tables[]
     // - expects SQLTableName to be SQL-like formatted (i.e. without TOrm[Record])
-    function GetTableIndex(const SQLTableName: RawUTF8): integer; overload;
+    function GetTableIndex(const SQLTableName: RawUTF8): PtrInt; overload;
     /// get the index of a table in Tables[], optionally raising EModelException
     function GetTableIndexSafe(aTable: TOrmClass;
       RaiseExceptionIfNotExisting: boolean): PtrInt;
     /// get the index of a table in Tables[]
     // - expects SQLTableName to be SQL-like formatted (i.e. without TOrm[Record])
-    function GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
+    function GetTableIndexPtr(SQLTableName: PUTF8Char): PtrInt;
     /// return the UTF-8 encoded SQL source to create the table
     function GetSQLCreate(aTableIndex: integer): RawUTF8;
     /// return the UTF-8 encoded SQL source to add the corresponding field
@@ -6833,7 +6833,7 @@ type
     /// finalize this table cache entry
     procedure Done;
     /// flush cache for a given Value[] index
-    procedure FlushCacheEntry(Index: Integer);
+    procedure FlushCacheEntry(Index: integer);
     /// flush cache for all Value[]
     procedure FlushCacheAllEntries;
     /// add the supplied ID to the Value[] array
@@ -9445,7 +9445,7 @@ var
 
   procedure FlattenedPropNameSet;
   var
-    i, max: Integer;
+    i, max: integer;
   begin // Address.Street1 -> Address_Street1
     (result as TOrmPropInfoRTTI).fFlattenedProps := aFlattenedProps;
     result.fNameUnflattened := result.fName;
@@ -12018,7 +12018,7 @@ end;
 function TOrmPropInfoRecordFixedSize.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var
-  i: Integer;
+  i: integer;
   P1, P2: PByteArray;
 begin
   if (Item1 = Item2) or (fRecordSize = 0) then
@@ -12253,7 +12253,7 @@ procedure TOrmPropInfoList.InternalAddParentsFirst(aClassType: TClass;
   aFlattenedProps: PRttiPropDynArray);
 var
   p: PRttiProp;
-  i, prev: Integer;
+  i, prev: integer;
 begin
   if aClassType = nil then
     exit; // no RTTI information (e.g. reached TObject level)
@@ -12279,7 +12279,7 @@ end;
 procedure TOrmPropInfoList.InternalAddParentsFirst(aClassType: TClass);
 var
   p: PRttiProp;
-  i: Integer;
+  i: integer;
 begin
   if aClassType = nil then
     exit; // no RTTI information (e.g. reached TObject level)
@@ -14292,7 +14292,7 @@ var
     UTF8IComp,           // UTF8Text, 8 bits case insensitive compared
     UTF8CompareUInt32,   // Enumerate
     UTF8CompareUInt32,   // Set
-    UTF8CompareInt64,    // Integer
+    UTF8CompareInt64,    // integer
     UTF8CompareInt64,    // ID
     UTF8CompareRecord,   // Record
     UTF8CompareBoolean,  // boolean
@@ -14339,7 +14339,7 @@ type
     PP, CI, CJ: PPUTF8Char;
     i, J: PtrInt;
     /// recursively perform the sort
-    procedure Sort(L, R: Integer);
+    procedure Sort(L, R: integer);
     /// compare value at index I with pivot value
     // - sort by ID if values are identical
     function CompI: integer; {$ifdef HASINLINE}inline;{$endif}
@@ -14439,7 +14439,7 @@ begin
   p1^ := p;
 end;
 
-procedure TUTF8QuickSort.Sort(L, R: Integer);
+procedure TUTF8QuickSort.Sort(L, R: integer);
 var
   P: PtrInt;
 begin
@@ -14629,7 +14629,7 @@ type
     // used for row content comparison
     function Compare(A, B: integer): integer;
     /// recursively perform the sort
-    procedure Sort(L, R: Integer);
+    procedure Sort(L, R: integer);
   end;
 
 function TUTF8QuickSortMulti.Compare(A, B: integer): integer;
@@ -14653,7 +14653,7 @@ begin
     end;
 end;
 
-procedure TUTF8QuickSortMulti.Sort(L, R: Integer);
+procedure TUTF8QuickSortMulti.Sort(L, R: integer);
 var
   I, J, P: integer;
 begin
@@ -14960,7 +14960,7 @@ begin
   POrmTableRowVariantData(RowVariant)^.VRow := -1; // follow fStepRow
 end;
 
-function TOrmTable.FieldBuffer(FieldIndex: Integer): PUTF8Char;
+function TOrmTable.FieldBuffer(FieldIndex: integer): PUTF8Char;
 begin
   if (self = nil) or (cardinal(FieldIndex) >= cardinal(fFieldCount)) then
     raise EOrmTable.CreateUTF8('%.FieldBuffer(%): invalid index',
@@ -14985,7 +14985,7 @@ begin
   result := fResults[fStepRow * FieldCount + i];
 end;
 
-function TOrmTable.FieldAsInteger(FieldIndex: Integer): Int64;
+function TOrmTable.FieldAsInteger(FieldIndex: integer): Int64;
 begin
   SetInt64(FieldBuffer(FieldIndex), result{%H-});
 end;
@@ -14995,7 +14995,7 @@ begin
   SetInt64(FieldBuffer(FieldName), result{%H-});
 end;
 
-function TOrmTable.FieldAsFloat(FieldIndex: Integer): TSynExtended;
+function TOrmTable.FieldAsFloat(FieldIndex: integer): TSynExtended;
 begin
   result := GetExtended(FieldBuffer(FieldIndex));
 end;
@@ -15005,7 +15005,7 @@ begin
   result := GetExtended(FieldBuffer(FieldName));
 end;
 
-function TOrmTable.FieldAsRawUTF8(FieldIndex: Integer): RawUTF8;
+function TOrmTable.FieldAsRawUTF8(FieldIndex: integer): RawUTF8;
 var
   buf: PUTF8Char;
 begin
@@ -15021,7 +15021,7 @@ begin
   FastSetString(result, buf, StrLen(buf));
 end;
 
-function TOrmTable.FieldAsString(FieldIndex: Integer): string;
+function TOrmTable.FieldAsString(FieldIndex: integer): string;
 var
   buf: PUTF8Char;
 begin
@@ -15946,7 +15946,7 @@ end;
 function TOrmTableJSON.UpdateFrom(const aJSON: RawUTF8; var Refreshed: boolean;
   PCurrentRow: PInteger): boolean;
 var
-  len: Integer;
+  len: integer;
 begin
   len := length(aJSON);
   if PrivateCopyChanged(pointer(aJSON), len, {updatehash=}true) then
@@ -17513,7 +17513,7 @@ var
   aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
   aField: string[3];
   aMany: RawUTF8;
-  f, n, i, SQLFieldsCount: Integer;
+  f, n, i, SQLFieldsCount: integer;
   Props: TOrmProperties;
   SQLFields: array of record
     SQL: string[3];
@@ -18170,7 +18170,7 @@ function TOrm.FilterAndValidate(const aRest: IRestOrm;
   out aErrorMessage: string; const aFields: TFieldBits;
   aValidator: PSynValidate): boolean;
 var
-  invalidField: Integer;
+  invalidField: integer;
 begin
   Filter(aFields);
   aErrorMessage := Validate(aRest, aFields, @invalidField, aValidator);
@@ -19541,7 +19541,7 @@ begin
   result := false;
 end;
 
-function TOrmProperties.AppendFieldName(FieldIndex: Integer;
+function TOrmProperties.AppendFieldName(FieldIndex: integer;
   var Text: RawUTF8; ForceNoRowID: boolean): boolean;
 begin
   result := false; // success
@@ -20017,7 +20017,7 @@ begin
     result := nil;
 end;
 
-function TOrmModel.GetTableIndex(aTable: TOrmClass): integer;
+function TOrmModel.GetTableIndex(aTable: TOrmClass): PtrInt;
 var
   i: PtrInt;
   Props: TOrmProperties;
@@ -20046,7 +20046,7 @@ begin
   result := -1;
 end;
 
-function TOrmModel.GetTableIndexInheritsFrom(aTable: TOrmClass): integer;
+function TOrmModel.GetTableIndexInheritsFrom(aTable: TOrmClass): PtrInt;
 begin
   if (self <> nil) and (aTable <> nil) and (aTable <> TOrm) then
     for result := 0 to fTablesMax do
@@ -20055,7 +20055,7 @@ begin
   result := -1;
 end;
 
-function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): integer;
+function TOrmModel.GetTableIndexExisting(aTable: TOrmClass): PtrInt;
 begin
   if self = nil then
     raise EModelException.Create('nil.GetTableIndexExisting');
@@ -20081,7 +20081,7 @@ begin
   result := -1;
 end;
 
-function TOrmModel.GetTableIndex(const SQLTableName: RawUTF8): integer;
+function TOrmModel.GetTableIndex(const SQLTableName: RawUTF8): PtrInt;
 begin
   if (self <> nil) and (SQLTableName <> '') then
   begin
@@ -20095,7 +20095,7 @@ begin
     result := -1;
 end;
 
-function TOrmModel.GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
+function TOrmModel.GetTableIndexPtr(SQLTableName: PUTF8Char): PtrInt;
 begin
   if (self <> nil) and (SQLTableName <> nil) then
   begin
@@ -20888,7 +20888,7 @@ begin
     result := ''; // indicates not found
 end;
 
-function TOrmPropertiesMapping.AppendFieldName(FieldIndex: Integer;
+function TOrmPropertiesMapping.AppendFieldName(FieldIndex: integer;
   var Text: RawUTF8): boolean;
 begin
   result := false; // success
@@ -20900,7 +20900,7 @@ begin
     Text := Text + ExtFieldNames[FieldIndex];
 end;
 
-function TOrmPropertiesMapping.FieldNameByIndex(FieldIndex: Integer): RawUTF8;
+function TOrmPropertiesMapping.FieldNameByIndex(FieldIndex: integer): RawUTF8;
 begin
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then
     result := RowIDFieldName
@@ -21028,7 +21028,7 @@ begin
   end;
 end;
 
-procedure TRestCacheEntry.FlushCacheEntry(Index: Integer);
+procedure TRestCacheEntry.FlushCacheEntry(Index: integer);
 begin
   if cardinal(Index) < cardinal(Count) then
     if CacheAll then

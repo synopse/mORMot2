@@ -1456,7 +1456,7 @@ end;
 
 {$endif USEAESNI}
 
-function Adler32Asm(Adler: cardinal; p: pointer; Count: Integer): cardinal;
+function Adler32Asm(Adler: cardinal; p: pointer; Count: integer): cardinal;
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx

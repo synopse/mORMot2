@@ -599,13 +599,13 @@ type
     // expressed in Coordinated Universal Time (UTC)
     procedure FromUTCTime;
     /// get the year (e.g. 2015) of the TTimeLog value
-    function Year: Integer;
+    function Year: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the month (1..12) of the TTimeLog value
-    function Month: Integer;
+    function Month: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the day (1..31) of the TTimeLog value
-    function Day: Integer;
+    function Day: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the hour (0..23) of the TTimeLog value
     function Hour: integer;
@@ -2067,32 +2067,32 @@ begin
     result := result + Time;
 end;
 
-function TTimeLogBits.Year: Integer;
+function TTimeLogBits.Year: integer;
 begin
   result := Value shr (6 + 6 + 5 + 5 + 4);
 end;
 
-function TTimeLogBits.Month: Integer;
+function TTimeLogBits.Month: integer;
 begin
   result := 1 + (PCardinal(@Value)^ shr (6 + 6 + 5 + 5)) and 15;
 end;
 
-function TTimeLogBits.Day: Integer;
+function TTimeLogBits.Day: integer;
 begin
   result := 1 + (PCardinal(@Value)^ shr (6 + 6 + 5)) and 31;
 end;
 
-function TTimeLogBits.Hour: Integer;
+function TTimeLogBits.Hour: integer;
 begin
   result := (PCardinal(@Value)^ shr (6 + 6)) and 31;
 end;
 
-function TTimeLogBits.Minute: Integer;
+function TTimeLogBits.Minute: integer;
 begin
   result := (PCardinal(@Value)^ shr 6) and 63;
 end;
 
-function TTimeLogBits.Second: Integer;
+function TTimeLogBits.Second: integer;
 begin
   result := PCardinal(@Value)^ and 63;
 end;

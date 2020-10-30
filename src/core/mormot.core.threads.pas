@@ -69,7 +69,7 @@ type
   // - this implementation is thread-safe, thanks to the Safe internal locker
   TPendingTaskList = class(TSynLocked)
   protected
-    fCount: Integer;
+    fCount: integer;
     fTask: TPendingTaskListItemDynArray;
     fTasks: TDynArray;
     function GetCount: integer;
@@ -128,7 +128,7 @@ type
   // - is call once with ElapsedMS=-1 at request ending
   // - see TLoginForm.OnIdleProcess and OnIdleProcessForm in mORMotUILogin.pas
   TOnIdleSynBackgroundThread = procedure(Sender: TSynBackgroundThreadAbstract;
-    ElapsedMS: Integer) of object;
+    ElapsedMS: integer) of object;
 
   /// event prototype used e.g. by TSynBackgroundThreadAbstract and TSynThread callbacks
   TOnNotifyThread = procedure(Sender: TThread) of object;
@@ -276,7 +276,7 @@ type
     /// TRUE if the background thread is active, and OnIdle event is called
     // during process
     // - to be used e.g. to ensure no re-entrance from User Interface messages
-    property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
+    property OnIdleBackgroundThreadActive: boolean read GetOnIdleBackgroundThreadActive;
     /// optional callback event triggered in Execute before each Process
     property OnBeforeProcess: TOnNotifyThread read fOnBeforeProcess write fOnBeforeProcess;
     /// optional callback event triggered in Execute after each Process
@@ -766,10 +766,10 @@ type
     // - aQueuePendingContext=true will store the pending context into
     // an internal queue, so that Push() always returns true
     {$ifdef USE_WINIOCP}
-    constructor Create(NumberOfThreads: Integer = 32;
+    constructor Create(NumberOfThreads: integer = 32;
       aOverlapHandle: THandle = INVALID_HANDLE_VALUE);
     {$else}
-    constructor Create(NumberOfThreads: Integer = 32;
+    constructor Create(NumberOfThreads: integer = 32;
       aQueuePendingContext: boolean = false);
     {$endif USE_WINIOCP}
     /// shut down the Thread pool, releasing all associated threads
@@ -1997,9 +1997,9 @@ end;
 { TSynThreadPool }
 
 {$ifdef USE_WINIOCP}
-constructor TSynThreadPool.Create(NumberOfThreads: Integer; aOverlapHandle: THandle);
+constructor TSynThreadPool.Create(NumberOfThreads: integer; aOverlapHandle: THandle);
 {$else}
-constructor TSynThreadPool.Create(NumberOfThreads: Integer; aQueuePendingContext: boolean);
+constructor TSynThreadPool.Create(NumberOfThreads: integer; aQueuePendingContext: boolean);
 {$endif USE_WINIOCP}
 var
   i: integer;

@@ -417,7 +417,7 @@ type
     procedure Clear(var V: TVarData); override;
     /// copy one instance
     procedure Copy(var Dest: TVarData; const Source: TVarData;
-      const Indirect: Boolean); override;
+      const Indirect: boolean); override;
     /// compare two variant values
     // - handle comparison of any variant, including TBSONVariant, via a
     // temporary JSON conversion, and case-sensitive comparison
@@ -2262,7 +2262,7 @@ var
 
 var
   Reg, Opt: PUTF8Char;
-  RegLen, OptLen: Integer;
+  RegLen, OptLen: integer;
 
   procedure ReturnRegEx(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   var
@@ -2475,7 +2475,7 @@ begin
 end;
 
 procedure TBSONVariant.Copy(var Dest: TVarData; const Source: TVarData;
-  const Indirect: Boolean);
+  const Indirect: boolean);
 begin
   if Indirect then
     SimplisticCopy(Dest, Source, true)
@@ -2595,7 +2595,7 @@ var
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     0, -1, -1, -1, -1,
     //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
-    -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128));
+    -1, sizeof(integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128));
 
   /// types which do not have an exact equivalency to a standard variant
   // type will be mapped as varUnknown - and will be changed into
@@ -2968,7 +2968,7 @@ end;
 
 function TBSONElement.FromDocument(const doc: TBSONDocument): boolean;
 var
-  n: Integer;
+  n: integer;
 begin
   FillCharFast(self, sizeof(self), 0);
   n := length(doc);
@@ -3846,7 +3846,7 @@ begin
   result := false;
 end;
 
-procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: Integer;
+procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: integer;
   Option: TBSONDocArrayConversion);
 begin
   if Option = asBSONVariant then
@@ -4088,7 +4088,7 @@ function bson(const NameValuePairs: array of const): TBSONDocument;
 var
   W: TBSONWriter;
   name: RawUTF8;
-  a: Integer;
+  a: integer;
 
   procedure WriteValue;
   var

@@ -1357,7 +1357,7 @@ function TRestOrm.RetrieveOneFieldDocVariantArray(Table: TOrmClass;
   const BoundsSQLWhere: array of const): variant;
 var
   T: TOrmTable;
-  row: Integer;
+  row: integer;
   doc: TDocVariantData absolute result;
 begin
   VarClear(result);

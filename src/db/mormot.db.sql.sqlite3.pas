@@ -155,47 +155,47 @@ type
 
     /// bind a NULL value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType = paramIn;
+    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
       BoundType: TSQLDBFieldType = ftNull); override;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: Int64;
+    procedure Bind(Param: integer; Value: Int64;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: double;
+    procedure Bind(Param: integer; Value: double;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindDateTime(Param: Integer; Value: TDateTime;
+    procedure BindDateTime(Param: integer; Value: TDateTime;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: currency;
+    procedure BindCurrency(Param: integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextU(Param: Integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextP(Param: Integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextS(Param: Integer; const Value: string;
+    procedure BindTextS(Param: integer; const Value: string;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextW(Param: Integer; const Value: WideString;
+    procedure BindTextW(Param: integer; const Value: WideString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a  parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
+    procedure BindBlob(Param: integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; const Data: RawByteString;
+    procedure BindBlob(Param: integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
 
     /// Prepare an UTF-8 encoded SQL statement
@@ -455,7 +455,7 @@ end;
 
 { TSQLDBSQLite3Statement }
 
-procedure TSQLDBSQLite3Statement.Bind(Param: Integer; Value: double;
+procedure TSQLDBSQLite3Statement.Bind(Param: integer; Value: double;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -464,7 +464,7 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.Bind(Param: Integer; Value: Int64;
+procedure TSQLDBSQLite3Statement.Bind(Param: integer; Value: Int64;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -473,7 +473,7 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.BindBlob(Param: Integer; Data: pointer;
+procedure TSQLDBSQLite3Statement.BindBlob(Param: integer; Data: pointer;
   Size: integer; IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -482,7 +482,7 @@ begin
   fStatement.Bind(Param, Data, Size);
 end;
 
-procedure TSQLDBSQLite3Statement.BindBlob(Param: Integer; const Data:
+procedure TSQLDBSQLite3Statement.BindBlob(Param: integer; const Data:
   RawByteString; IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -491,7 +491,7 @@ begin
   fStatement.BindBlob(Param, Data);
 end;
 
-procedure TSQLDBSQLite3Statement.BindCurrency(Param: Integer; Value: currency;
+procedure TSQLDBSQLite3Statement.BindCurrency(Param: integer; Value: currency;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -500,19 +500,19 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.BindDateTime(Param: Integer; Value: TDateTime;
+procedure TSQLDBSQLite3Statement.BindDateTime(Param: integer; Value: TDateTime;
   IO: TSQLDBParamInOutType);
 begin // see http://www.sqlite.org/lang_datefunc.html
   BindTextU(Param, DateTimeToIso8601Text(Value, 'T'));
 end;
 
-procedure TSQLDBSQLite3Statement.BindNull(Param: Integer;
+procedure TSQLDBSQLite3Statement.BindNull(Param: integer;
   IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
   fStatement.BindNull(Param);
 end;
 
-procedure TSQLDBSQLite3Statement.BindTextP(Param: Integer; Value: PUTF8Char;
+procedure TSQLDBSQLite3Statement.BindTextP(Param: integer; Value: PUTF8Char;
   IO: TSQLDBParamInOutType);
 var
   V: RawUTF8;
@@ -521,13 +521,13 @@ begin
   BindTextU(Param, V);
 end;
 
-procedure TSQLDBSQLite3Statement.BindTextS(Param: Integer; const Value: string;
+procedure TSQLDBSQLite3Statement.BindTextS(Param: integer; const Value: string;
   IO: TSQLDBParamInOutType);
 begin
   BindTextU(Param, StringToUTF8(Value));
 end;
 
-procedure TSQLDBSQLite3Statement.BindTextU(Param: Integer; const Value: RawUTF8;
+procedure TSQLDBSQLite3Statement.BindTextU(Param: integer; const Value: RawUTF8;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -536,7 +536,7 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.BindTextW(Param: Integer;
+procedure TSQLDBSQLite3Statement.BindTextW(Param: integer;
   const Value: WideString; IO: TSQLDBParamInOutType);
 begin
   BindTextU(Param, WideStringToUTF8(Value));
