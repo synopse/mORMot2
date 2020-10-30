@@ -891,8 +891,9 @@ const
 
   SEC_E_OK = 0;
   SEC_I_CONTINUE_NEEDED = $00090312;
-  SEC_I_RENEGOTIATE = $00090321;
   SEC_I_CONTEXT_EXPIRED	= $00090317;
+  SEC_I_INCOMPLETE_CREDENTIALS = $00090320;
+  SEC_I_RENEGOTIATE = $00090321;
   SEC_E_INCOMPLETE_MESSAGE = $80090318;
   SEC_E_INVALID_TOKEN = $80090308;
 
@@ -932,8 +933,11 @@ const
   TLSRECMAXSIZE = 19000; // stack buffers for TSChannelClient.Receive/Send
 
 type
-  {$ifdef USERECORDWITHMETHODS}THandshakeBuf = record
-    {$else}THandshakeBuf = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  THandshakeBuf = record
+  {$else}
+  THandshakeBuf = object
+  {$endif}
   public
     buf: array[0..2] of TSecBuffer;
     input, output: TSecBufferDesc;
@@ -1021,6 +1025,10 @@ begin
     buf.buf[0].pvBuffer := pointer(tmp);
     res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
       SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
+    if res = SEC_I_INCOMPLETE_CREDENTIALS then
+      // check https://stackoverflow.com/a/47479968/458259
+      res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
+        SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
     if (res = SEC_E_OK) or
        (res = SEC_I_CONTINUE_NEEDED) or
        ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
