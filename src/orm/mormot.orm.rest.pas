@@ -245,6 +245,8 @@ type
     // ------- TRestOrm main methods
     /// initialize the class, and associated to a TRest and its TOrmModel
     constructor Create(aRest: TRest); reintroduce; virtual;
+      /// initialize the class, and associated to TOrmModel with no main TRest
+    constructor CreateWithoutRest(aModel: TOrmModel); reintroduce; virtual;
     /// release internal used instances
     destructor Destroy; override;
     /// ensure the current thread will be taken into account during process
@@ -514,15 +516,27 @@ end;
 constructor TRestOrm.Create(aRest: TRest);
 begin
   inherited Create;
+  if aRest = nil then
+    exit;
   fRest := aRest;
   fModel := fRest.Model;
-  fRest.SetOrmInstance(self);
+  fRest.SetOrmInstance(self); // inject this ORM instance to the main TRest
+end;
+
+constructor TRestOrm.CreateWithoutRest(aModel: TOrmModel);
+begin
+  fModel := aModel;
+  Create(nil);
 end;
 
 destructor TRestOrm.Destroy;
 begin
   FreeAndNil(fCache);
   inherited Destroy;
+  if (fModel <> nil) and
+     (fModel.Owner = self) then
+    // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
+    FreeAndNil(fModel);
 end;
 
 procedure TRestOrm.BeginCurrentThread(Sender: TThread);

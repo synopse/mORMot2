@@ -18,6 +18,8 @@ unit mormot.rest.server;
   *****************************************************************************
 }
 
+  { TODO : implement TRestServer.AdministrationExecute }
+
 interface
 
 {$I ..\mormot.defines.inc}
@@ -1715,7 +1717,9 @@ type
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
     procedure SetNoAJAXJSON(const Value: boolean);
     function GetNoAJAXJSON: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetRecordVersionMax: TRecordVersion;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetRecordVersionMax(Value: TRecordVersion);
     function GetAuthenticationSchemesCount: integer;
     // called by Stat() and Info() method-based services
@@ -1833,7 +1837,8 @@ type
       aHandleUserAuthentication: boolean = false); reintroduce; virtual;
     /// initialize REST server instance from a TSynConnectionDefinition
     constructor RegisteredClassCreateFrom(aModel: TOrmModel;
-      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); override;
+      aDefinition: TSynConnectionDefinition;
+      aServerHandleAuthentication: boolean); override;
     /// Server finalization
     destructor Destroy; override;
     /// Server initialization with a temporary Database Model
@@ -6658,11 +6663,11 @@ begin
   if Sender = nil then
     raise ERestException.CreateUTF8('%.BeginCurrentThread(nil)', [self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ThreadCount=%',
-    [Sender.ClassType, fModel.Root, pointer(id), tc]);
+    [Sender.ClassType, fModel.Root, {%H-}pointer(id), tc]);
   if Sender.ThreadID <> id then
     raise ERestException.CreateUTF8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
-      [self, pointer(Sender.ThreadID), pointer(id)]);
+      [self, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> Sender then
       // e.g. if length(TSQLHttpServer.fDBServers)>1
@@ -6687,11 +6692,11 @@ begin
   if Sender = nil then
     raise ERestException.CreateUTF8('%.EndCurrentThread(nil)', [self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ThreadCount=%',
-    [Sender.ClassType, pointer(id), tc]);
+    [Sender.ClassType, {%H-}pointer(id), tc]);
   if Sender.ThreadID <> id then
     raise ERestException.CreateUTF8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
-      [self, Sender, pointer(Sender.ThreadID), pointer(id)]);
+      [self, Sender, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
   if Services <> nil then
   begin
     Inst.InstanceID := PtrUInt(id);

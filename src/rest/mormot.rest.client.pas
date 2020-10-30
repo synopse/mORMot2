@@ -591,7 +591,8 @@ type
     constructor Create(aModel: TOrmModel); override;
     /// initialize REST client instance from a TSynConnectionDefinition
     constructor RegisteredClassCreateFrom(aModel: TOrmModel;
-      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean); override;
+      aDefinition: TSynConnectionDefinition;
+      aServerHandleAuthentication: boolean); override;
     /// release memory and close client connection
     // - also unlock all still locked records by this client
     destructor Destroy; override;

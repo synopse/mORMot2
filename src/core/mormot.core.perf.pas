@@ -428,6 +428,9 @@ type
     /// appends a JSON content with all published properties information
     // - thread-safe method
     procedure ComputeDetailsTo(W: TBaseWriter); virtual;
+    /// returns a TDocVariant with all published properties information
+    // - thread-safe method
+    function ComputeDetails: variant;
     /// used to allow thread safe timing
     // - by default, the internal TPrecisionTimer is not thread safe: you can
     // use this method to update the timing from many threads
@@ -1596,6 +1599,11 @@ begin
   finally
     W.Free;
   end;
+end;
+
+function TSynMonitor.ComputeDetails: variant;
+begin
+  _Json(ComputeDetailsJSON, result{%H-}, JSON_OPTIONS_FAST);
 end;
 
 

@@ -26,33 +26,22 @@ uses
   contnrs,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.buffers,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
-  mormot.core.variants,
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.threads,
-  mormot.core.crypto,
-  mormot.core.jwt,
-  mormot.core.perf,
-  mormot.core.search,
   mormot.core.secure,
   mormot.core.log,
-  mormot.core.interfaces,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.orm.client,
   mormot.orm.server,
   mormot.orm.storage,
-  mormot.soa.core,
   mormot.db.core,
   mormot.db.sql,
   mormot.rest.core,
-  mormot.rest.client,
-  mormot.rest.server,
   mormot.rest.memserver;
 
 
@@ -1062,7 +1051,7 @@ begin
                     Decode.Decode(P, nil, pQuoted, 0, true);
                 end;
                 RecordVersionFieldHandle(Occasion, Decode);
-                if Fields = nil then
+                if {%H-}Fields = nil then
                 begin
                   Decode.AssignFieldNamesTo(Fields);
                   SQL := JSONDecodedPrepareToSQL(Decode, ExternalFields, Types,

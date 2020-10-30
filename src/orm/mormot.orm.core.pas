@@ -6257,10 +6257,6 @@ type
     /// map a field name from its internal name to its external name
     // - raise an EOrmException if the supplied field name is not defined in
     // the TOrm as ID or a published property
-    function InternalToExternal(FieldName: PShortString): RawUTF8; overload;
-    /// map a field name from its internal name to its external name
-    // - raise an EOrmException if the supplied field name is not defined in
-    // the TOrm as ID or a published property
     function InternalToExternal(BlobField: PRttiProp): RawUTF8; overload;
     /// map a CSV list of field names from its internals to its externals values
     // - raise an EOrmException if any of the supplied field name is not defined
@@ -6751,7 +6747,8 @@ type
 
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
-    // Owner.Destroy autofreeing this (TRest) instance
+    // Owner.Destroy autofreeing this instance
+    // - Owner is typically a TRest or a TRestORM class
     property Owner: TObject read fOwner write fOwner;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TOrmLocks entry by table
@@ -20661,18 +20658,20 @@ procedure TOrmPropertiesMapping.Init(Table: TOrmClass;
   const MappedTableName: RawUTF8; MappedConnection: TObject; AutoComputeSQL: boolean;
   MappingOptions: TOrmPropertiesMappingOptions);
 begin
-  fOptions := MappingOptions;
+  // set associated properties
   fProps := Table.RecordProps;
   if MappedTableName = '' then
     fTableName := fProps.SQLTableName
   else
     fTableName := MappedTableName;
   fConnectionProperties := MappedConnection;
+  fOptions := MappingOptions;
+  fAutoComputeSQL := AutoComputeSQL;
+  // setup default values
   fRowIDFieldName := 'ID';
   fProps.Fields.NamesToRawUTF8DynArray(fExtFieldNames);
   fProps.Fields.NamesToRawUTF8DynArray(fExtFieldNamesUnQuotedSQL);
   FillcharFast(fFieldNamesMatchInternal, SizeOf(fFieldNamesMatchInternal), 255);
-  fAutoComputeSQL := AutoComputeSQL;
   fMappingVersion := 1;
   if fAutoComputeSQL then
     ComputeSQL;
@@ -20817,21 +20816,15 @@ begin
     result := fExtFieldNames[int];
 end;
 
-function TOrmPropertiesMapping.InternalToExternal(
-  FieldName: PShortString): RawUTF8;
+function TOrmPropertiesMapping.InternalToExternal(BlobField: PRttiProp): RawUTF8;
 var
   int: PtrInt;
 begin
-  int := fProps.Fields.IndexByNameOrExceptShort(FieldName^);
+  int := fProps.Fields.IndexByNameOrExceptShort(BlobField.Name^);
   if int < 0 then
     result := RowIDFieldName
   else
     result := fExtFieldNames[int];
-end;
-
-function TOrmPropertiesMapping.InternalToExternal(BlobField: PRttiProp): RawUTF8;
-begin
-  result := InternalToExternal(BlobField^.Name);
 end;
 
 function TOrmPropertiesMapping.InternalCSVToExternalCSV(

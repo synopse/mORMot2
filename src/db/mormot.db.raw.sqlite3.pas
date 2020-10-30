@@ -35,6 +35,7 @@ uses
   mormot.core.log,
   mormot.db.core;
 
+
 { ************ Raw SQLite3 API Constants and Functions }
 
 {$ifdef BSD}
@@ -2461,7 +2462,7 @@ type
     property ParamCount: integer read GetParamCount;
   end;
 
-  /// used to retrieve a prepared statement
+  /// used to retrieve a SQLite3 prepared statement
   TSQLStatementCache = record
     /// associated SQL statement
     StatementSQL: RawUTF8;
@@ -2473,7 +2474,7 @@ type
   /// used to store all prepared statement
   TSQLStatementCacheDynArray = array of TSQLStatementCache;
 
-  /// handle a cache of prepared statements
+  /// handle a cache of SQLite3 prepared statements
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
@@ -2947,7 +2948,8 @@ type
     /// retrieve of define a limit on the current database connection
     // - see TSQLLimitCategory for a details of all available limits
     // - see @http://www.sqlite.org/c3ref/limit.html
-    property Limit[Category: TSQLLimitCategory]: integer read GetLimit write SetLimit;
+    property Limit[Category: TSQLLimitCategory]: integer
+      read GetLimit write SetLimit;
     /// access to the log class associated with this SQLite3 database engine
     // - can be customized, e.g. by overriden TRestServerDB.SetLogClass()
     property Log: TSynLogClass read fLog write fLog;
@@ -2955,11 +2957,13 @@ type
     // - by default, is set to 512 bytes, which sounds a good compromise
     // since it does not make sense to log all the JSON content retrieved from
     // the database engine, when a huge SELECT is executed
-    property LogResultMaximumSize: integer read fLogResultMaximumSize write fLogResultMaximumSize;
+    property LogResultMaximumSize: integer
+      read fLogResultMaximumSize write fLogResultMaximumSize;
     /// this integer pointer (if not nil) is incremented when any SQL statement
     // changes the database contents (i.e. any not SELECT statement)
     // - this pointer is thread-safe updated, inside a critical section
-    property InternalState: PCardinal read fInternalState write fInternalState;
+    property InternalState: PCardinal
+      read fInternalState write fInternalState;
   published
     /// read-only access to the SQLite3 database filename opened
     property FileName: TFileName read fFileName;
@@ -3016,14 +3020,16 @@ type
     // but our SQlite3 framework use locked access to the databse, so there
     // should be no benefit of WAL for the framework; but if you call
     // directly TSQLDatabase instances in your code, it may be useful to you
-    property WALMode: Boolean read GetWALMode write SetWALMode;
+    property WALMode: Boolean
+      read GetWALMode write SetWALMode;
     /// query or change the SQlite3 file-based syncrhonization mode, i.e. the
     // way it waits for the data to be flushed on hard drive
     // - default smFull is very slow, but achieve 100% ACID behavior
     // - smNormal is faster, and safe until a catastrophic hardware failure occurs
     // - smOff is the fastest, data should be safe if the application crashes,
     // but database file may be corrupted in case of failure at the wrong time
-    property Synchronous: TSQLSynchronousMode read GetSynchronous write SetSynchronous;
+    property Synchronous: TSQLSynchronousMode
+      read GetSynchronous write SetSynchronous;
     /// query or change the SQlite3 file-based locking mode, i.e. the
     // way it locks the file
     // - default lmNormal is ACID and safe
@@ -3031,31 +3037,38 @@ type
     // transactions, so can be used to release a mORMot server power: but you
     // won't be able to access the database file from outside the process (like
     // a "normal" database engine)
-    property LockingMode: TSQLLockingMode read GetLockingMode write SetLockingMode;
+    property LockingMode: TSQLLockingMode
+      read GetLockingMode write SetLockingMode;
     /// enables or disables disk content access using memory-mapped I/O
     // - 0 to disable it (the default, because of potential disadvantages)
     // - set to a number of Mega Bytes value of memory for the mapping
     // - expects a SQLite3 engine version >= 3.7.17
     // - Memory-Mapped I/O is NOT compatible with password encryption as
     // implemented in our mormot.db.raw.sqlite3.static unit
-    property MemoryMappedMB: cardinal read GetMemoryMappedMB write SetMemoryMappedMB;
+    property MemoryMappedMB: cardinal
+      read GetMemoryMappedMB write SetMemoryMappedMB;
     /// retrieve or set the user_version stored in the SQLite3 database file
     // - user-version is a 32-bit signed integer stored in the database header
     //- it can be used to change the database in case of format upgrade (e.g.
     // refresh some hand-made triggers)
-    property user_version: cardinal read GetUserVersion write SetUserVersion;
+    property user_version: cardinal
+      read GetUserVersion write SetUserVersion;
     /// reflects how the database connection was created in the constructor
     property OpenV2Flags: Integer read fOpenV2Flags;
     /// is set to TRUE while a BackupBackground() process is still running
     // - see also BackupBackgroundWaitUntilFinished() method
-    property BackupBackgroundInProcess: boolean read GetBackupBackgroundInProcess;
+    property BackupBackgroundInProcess: boolean
+      read GetBackupBackgroundInProcess;
     /// how much time did the latest BackupBackground() finished process take
-    property BackupBackgroundLastTime: RawUTF8 read fBackupBackgroundLastTime;
+    property BackupBackgroundLastTime: RawUTF8
+      read fBackupBackgroundLastTime;
     /// the latest BackupBackground() process file name
-    property BackupBackgroundLastFileName: TFileName read fBackupBackgroundLastFileName;
+    property BackupBackgroundLastFileName: TFileName
+      read fBackupBackgroundLastFileName;
     /// the SQLite3 library which is currently running
     // - part of TSQLDatabase published properties, to publish e.g. Version
-    property SQLite3Library: TSQLite3Library read GetSQLite3Library;
+    property SQLite3Library: TSQLite3Library
+      read GetSQLite3Library;
   end;
 
   /// used to read or write a BLOB Incrementaly
@@ -5675,12 +5688,12 @@ begin
     case sqlite3.column_type(Request, i) of // fast evaluation: type may vary
       SQLITE_BLOB:
         if DoNotFetchBlobs then
-          WR.AddNull
+          WR.AddShort('null')
         else
           WR.WrBase64(sqlite3.column_blob(Request, i),
             sqlite3.column_bytes(Request, i), {withMagic=}true);
       SQLITE_NULL:
-        WR.AddNull; // returned also for ""
+        WR.AddShort('null'); // returned also for ""
       SQLITE_INTEGER:
         WR.Add(sqlite3.column_int64(Request, i));
       SQLITE_FLOAT:

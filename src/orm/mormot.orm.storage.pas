@@ -1336,6 +1336,8 @@ type
 
 
 
+function ToText(t: TORMVirtualTableTransaction): PShortString; overload;
+
 
 implementation
 
@@ -1662,7 +1664,7 @@ begin
     fOwner := aServer;
     fModel := aServer.Model;
   end
-  else
+  else if fModel = nil then
   begin
     // fallback to an owned model instance
     fModel := TOrmModel.Create([aClass]);
@@ -4677,6 +4679,11 @@ begin
     ObjArrayClear(fShardBatch);
     StorageUnLock;
   end;
+end;
+
+function ToText(t: TORMVirtualTableTransaction): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TORMVirtualTableTransaction), ord(t));
 end;
 
 initialization
