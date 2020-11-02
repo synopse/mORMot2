@@ -6812,7 +6812,7 @@ begin
           IdemPChar(pointer(Call.OutHead), STATICFILE_CONTENT_TYPE_HEADER_UPPPER);
       end
       else
-        // Call.OutBody=''
+        // handle Call.OutBody=''
         if (Call.OutStatus = HTTP_SUCCESS) and
            (rsoHttp200WithNoBodyReturns204 in fOptions) then
           Call.OutStatus := HTTP_NOCONTENT;

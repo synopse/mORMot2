@@ -334,6 +334,7 @@ type
     // - do nothing if global TSystemUse.Current was already assigned
     function SystemUseTrack(periodSec: integer = 10): TSystemUse;
     /// low-level access with optional initialization of the associated timer
+    // - this function is thread-safe
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken into account during process
@@ -403,6 +404,7 @@ type
     function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     /// low-level access to the associated timer
+    // - may contain nil if EnsureBackgroundTimerExists has not yet been called
     property BackgroundTimer: TRestBackgroundTimer read fBackgroundTimer;
   end;
 
@@ -3535,9 +3537,14 @@ begin
     result := nil; // paranoid check to avoid any GPF
     exit;
   end;
-  if fBackgroundTimer = nil then
-    fBackgroundTimer := TRestBackgroundTimer.Create(fOwner);
-  result := fBackgroundTimer;
+  fSafe.Lock;
+  try
+    if fBackgroundTimer = nil then
+      fBackgroundTimer := TRestBackgroundTimer.Create(fOwner);
+    result := fBackgroundTimer;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TRestRunThreads.NewBackgroundThreadMethod(const Format: RawUTF8;
