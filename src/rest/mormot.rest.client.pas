@@ -1625,7 +1625,7 @@ begin
      (timeout = fSession.HeartbeatSeconds) then
     exit;
   fSession.HeartbeatSeconds := timeout;
-  TimerEnable(SessionRenewEvent, timeout);
+  fRun.TimerEnable(SessionRenewEvent, timeout);
 end;
 
 function TRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
@@ -1863,7 +1863,7 @@ begin
      (fSession.User <> nil) and
      (fSession.ID <> CONST_AUTHENTICATION_SESSION_NOT_STARTED) then
   try
-    TimerDisable(SessionRenewEvent);
+    fRun.TimerDisable(SessionRenewEvent);
     InternalLog('SessionClose: notify server', sllTrace);
     CallBackGet('Auth', [
       'UserName', fSession.User.LogonName,

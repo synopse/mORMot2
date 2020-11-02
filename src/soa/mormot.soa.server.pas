@@ -1277,7 +1277,7 @@ begin
     opt := Ctxt.ServiceExecution^.Options;
     if optExecInPerInterfaceThread in opt then
       if fBackgroundThread = nil then
-        fBackgroundThread := fRestServer.NewBackgroundThreadMethod(
+        fBackgroundThread := fRestServer.Run.NewBackgroundThreadMethod(
           '% %', [self, fInterface.InterfaceName]);
     WR := TJSONSerializer.CreateOwnedStream(temp);
     try

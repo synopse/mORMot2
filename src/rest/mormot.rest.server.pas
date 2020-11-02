@@ -1722,6 +1722,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetRecordVersionMax(Value: TRecordVersion);
     function GetAuthenticationSchemesCount: integer;
+    /// ensure the thread will be taken into account during process
+    procedure OnBeginCurrentThread(Sender: TThread); override;
+    procedure OnEndCurrentThread(Sender: TThread); override;
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TRestServerURIContext; W: TTextWriter); virtual;
     procedure AddStat(Flags: TRestServerAddStats; W: TTextWriter);
@@ -1849,22 +1852,6 @@ type
     constructor CreateWithOwnModel(const Tables: array of TOrmClass;
       aHandleUserAuthentication: boolean = false;
       const aRoot: RawUTF8 = 'root');
-    /// ensure the thread will be taken into account during process
-    // - used e.g. for optExecInMainThread option in TServiceMethodExecute
-    // - this default implementation will call the methods of all its internal
-    // TRestStorage instances
-    // - this method shall be called from the thread just initiated: e.g.
-    // if you call it from the main thread, it may fail to prepare resources
-    procedure BeginCurrentThread(Sender: TThread); override;
-    /// finalize the thread will be taken into account during process
-    // - this default implementation will call the methods of all its internal
-    // TRestStorage instances, allowing e.g. TRestStorageExternal
-    // instances to clean their thread-specific connections
-    // - this method shall be called from the thread about to be terminated: e.g.
-    // if you call it from the main thread, it may fail to release resources
-    // - it is set e.g. by TSQLite3HttpServer to be called from HTTP threads,
-    // or by TRestServerNamedPipeResponse for named-pipe server cleaning
-    procedure EndCurrentThread(Sender: TThread); override;
 
     /// implement a generic local, piped or HTTP/1.1 provider
     // - this is the main entry point of the server, from the client side
@@ -2646,7 +2633,7 @@ begin
       amBackgroundThread, amBackgroundORMSharedThread:
         begin
           if Thread = nil then
-            Thread := Server.NewBackgroundThreadMethod('% % %',
+            Thread := Server.Run.NewBackgroundThreadMethod('% % %',
               [self, Server.fModel.Root, ToText(Command)^]);
           BackgroundExecuteThreadMethod(Method, Thread);
         end;
@@ -5628,7 +5615,7 @@ var
 begin
   Shutdown;
   fOrm.AsynchBatchStop(nil); // release all existing batch instances
-  FreeAndNil(fBackgroundTimer); // do it ASAP
+  FreeAndNil(fRun); // do it ASAP
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
   for i := 0 to fPublishedMethods.Count - 1 do
     fPublishedMethod[i].Stats.Free;
@@ -6100,12 +6087,12 @@ begin
     W.AddU(fOrm.CacheOrNil.CachedMemory); // will also flush outdated JSON
     W.Add(',');
   end;
-  if (fBackgroundTimer <> nil) and
-     (fBackgroundTimer.Stats <> nil) then
+  if (fRun.BackgroundTimer <> nil) and
+     (fRun.BackgroundTimer.Stats <> nil) then
   begin
     W.CancelLastComma;
     W.AddShort(',"backgroundTimer":');
-    fBackgroundTimer.Stats.ComputeDetailsTo(W);
+    fRun.BackgroundTimer.Stats.ComputeDetailsTo(W);
     W.Add(',');
   end;
   if withtables in Flags then
@@ -6657,7 +6644,7 @@ begin
     DeleteFile(aFileName);
 end;
 
-procedure TRestServer.BeginCurrentThread(Sender: TThread);
+procedure TRestServer.OnBeginCurrentThread(Sender: TThread);
 var
   tc: integer;
   id: TThreadID;
@@ -6681,10 +6668,10 @@ begin
         // set the current TThread info
         RunningThread := Sender;
   // call TRestOrmServer.BeginCurrentThread
-  inherited BeginCurrentThread(Sender);
+  inherited OnBeginCurrentThread(Sender);
 end;
 
-procedure TRestServer.EndCurrentThread(Sender: TThread);
+procedure TRestServer.OnEndCurrentThread(Sender: TThread);
 var
   tc: integer;
   i: PtrInt;
@@ -6719,7 +6706,7 @@ begin
       else        // reset the TThread info
         RunningThread := nil;
   // call TRestOrmServer.EndCurrentThread
-  inherited EndCurrentThread(Sender);
+  inherited OnEndCurrentThread(Sender);
 end;
 
 procedure TRestServer.URI(var Call: TRestURIParams);

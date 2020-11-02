@@ -2196,18 +2196,18 @@ begin
   if self = nil then
     result := false
   else
-    result := fRest.EnsureBackgroundTimerExists.AsynchBatchStart(Table,
+    result := fRest.Run.EnsureBackgroundTimerExists.AsynchBatchStart(Table,
       SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow, Options);
 end;
 
 function TRestOrm.AsynchBatchStop(Table: TOrmClass): boolean;
 begin
   if (self = nil) or
-     (fRest.BackgroundTimer = nil) or
-     (fRest.BackgroundTimer.BackgroundBatch = nil) then
+     (fRest.Run.BackgroundTimer = nil) or
+     (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := false
   else
-    result := fRest.BackgroundTimer.AsynchBatchStop(Table);
+    result := fRest.Run.BackgroundTimer.AsynchBatchStop(Table);
 end;
 
 function TRestOrm.AsynchBatchAdd(Value: TOrm; SendData: boolean;
@@ -2215,11 +2215,11 @@ function TRestOrm.AsynchBatchAdd(Value: TOrm; SendData: boolean;
   DoNotAutoComputeFields: boolean): integer;
 begin
   if (self = nil) or
-     (fRest.BackgroundTimer = nil) or
-     (fRest.BackgroundTimer.BackgroundBatch = nil) then
+     (fRest.Run.BackgroundTimer = nil) or
+     (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.BackgroundTimer.AsynchBatchAdd(Value, SendData, ForceID,
+    result := fRest.Run.BackgroundTimer.AsynchBatchAdd(Value, SendData, ForceID,
       CustomFields, DoNotAutoComputeFields);
 end;
 
@@ -2227,42 +2227,42 @@ function TRestOrm.AsynchBatchRawAdd(Table: TOrmClass;
   const SentData: RawUTF8): integer;
 begin
   if (self = nil) or
-     (fRest.BackgroundTimer = nil) or
-     (fRest.BackgroundTimer.BackgroundBatch = nil) then
+     (fRest.Run.BackgroundTimer = nil) or
+     (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.BackgroundTimer.AsynchBatchRawAdd(Table, SentData);
+    result := fRest.Run.BackgroundTimer.AsynchBatchRawAdd(Table, SentData);
 end;
 
 procedure TRestOrm.AsynchBatchRawAppend(Table: TOrmClass;
   SentData: TTextWriter);
 begin
   if (self <> nil) and
-     (fRest.BackgroundTimer <> nil) and
-     (fRest.BackgroundTimer.BackgroundBatch <> nil) then
-    fRest.BackgroundTimer.AsynchBatchRawAppend(Table, SentData);
+     (fRest.Run.BackgroundTimer <> nil) and
+     (fRest.Run.BackgroundTimer.BackgroundBatch <> nil) then
+    fRest.Run.BackgroundTimer.AsynchBatchRawAppend(Table, SentData);
 end;
 
 function TRestOrm.AsynchBatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   if (self = nil) or
-     (fRest.BackgroundTimer = nil) or
-     (fRest.BackgroundTimer.BackgroundBatch = nil) then
+     (fRest.Run.BackgroundTimer = nil) or
+     (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.BackgroundTimer.AsynchBatchUpdate(Value, CustomFields,
+    result := fRest.Run.BackgroundTimer.AsynchBatchUpdate(Value, CustomFields,
       DoNotAutoComputeFields);
 end;
 
 function TRestOrm.AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
   if (self = nil) or
-     (fRest.BackgroundTimer = nil) or
-     (fRest.BackgroundTimer.BackgroundBatch = nil) then
+     (fRest.Run.BackgroundTimer = nil) or
+     (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.BackgroundTimer.AsynchBatchDelete(Table, ID);
+    result := fRest.Run.BackgroundTimer.AsynchBatchDelete(Table, ID);
 end;
 
 function TRestOrm.Cache: TRestCache;

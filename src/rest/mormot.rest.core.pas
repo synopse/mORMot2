@@ -9,6 +9,7 @@ unit mormot.rest.core;
    Shared Types and Definitions for Abstract REST Process
     - Customize REST Execution
     - TRestBackgroundTimer for Multi-Thread Process
+    - TRestRunThreads Multi-Threading Process of a REST instance
     - TRest Abstract Parent Class
     - RESTful Authentication Support
     - TRestURIParams REST URI Definitions
@@ -275,6 +276,137 @@ type
 {$endif PUREMORMOT2}
 
 
+{ ************ TRestRunThreads Multi-Threading Process of a REST instance }
+
+  /// access to the Multi-Threading process of a TRest instance
+  TRestRunThreads = class(TSynPersistentLock)
+  protected
+    fOwner: TRest;
+    fBackgroundTimer: TRestBackgroundTimer;
+  public
+    /// initialize the threading process
+    constructor Create(aOwner: TRest); reintroduce;
+    /// finalize the threading process
+    destructor Destroy; override;
+    /// allows to safely execute a processing method in a background thread
+    // - returns a TSynBackgroundThreadMethod instance, ready to execute any
+    // background task via its RunAndWait() method
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewBackgroundThreadMethod(const Format: RawUTF8;
+      const Args: array of const): TSynBackgroundThreadMethod;
+    /// allows to safely execute a process at a given pace
+    // - returns a TSynBackgroundThreadProcess instance, ready to execute the
+    // supplied aOnProcess event in a loop, as aOnProcessMS periodic task
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
+      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
+      aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
+    /// allows to safely execute a process in parallel
+    // - returns a TSynParallelProcess instance, ready to execute any task
+    // in parrallel in a thread-pool given by ThreadCount
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+      const Args: array of const): TSynParallelProcess;
+    /// define a task running on a periodic number of seconds in a background thread
+    // - could be used to run background maintenance or monitoring tasks on
+    // this TRest instance, at a low pace (typically every few minutes)
+    // - will instantiate and run a shared TSynBackgroundTimer instance for this
+    // TRest, so all tasks will share the very same thread
+    // - you can run BackgroundTimer.EnQueue or ExecuteNow methods to implement
+    // a FIFO queue, or force immediate execution of the process
+    // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
+    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+      aOnProcessSecs: cardinal): TRestBackgroundTimer;
+    /// undefine a task running on a periodic number of seconds
+    // - should have been registered by a previous call to TimerEnable() method
+    // - returns true on success, false if the supplied task was not registered
+    function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// will gather CPU and RAM information in a background thread
+    // - you can specify the update frequency, in seconds
+    // - access to the information via the returned instance, which maps
+    // the TSystemUse.Current class function
+    // - do nothing if global TSystemUse.Current was already assigned
+    function SystemUseTrack(periodSec: integer = 10): TSystemUse;
+    /// low-level access with optional initialization of the associated timer
+    function EnsureBackgroundTimerExists: TRestBackgroundTimer;
+    /// you can call this method in TThread.Execute to ensure that
+    // the thread will be taken into account during process
+    // - this abstract method won't do anything, but TRestServer's will
+    procedure BeginCurrentThread(Sender: TThread);
+    /// you can call this method just before a thread is finished to ensure
+    // e.g. that the associated external DB connection will be released
+    // - this abstract method will call fLogClass.Add.NotifyThreadEnded
+    // but TRestServer.EndCurrentThread will do the main process
+    procedure EndCurrentThread(Sender: TThread);
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    // - is a wrapper around BackgroundTimer.AsynchRedirect()
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInterface: IInvokable; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    // - is a wrapper around BackgroundTimer.AsynchRedirect()
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    /// allows background garbage collection of specified RawUTF8 interning
+    // - will run Interning.Clean(2) every 5 minutes by default
+    // - set InterningMaxRefCount=0 to disable process of the Interning instance
+    // - note that InterningMaxRefCount and PeriodMinutes parameters (if not 0),
+    // are common for all TRawUTF8Interning instances (the latest value wins)
+    // - you may e.g. run the following to clean up TDocVariant interned RawUTF8:
+    // ! aRest.Run.AsynchInterning(DocVariantType.InternNames);
+    // ! aRest.Run.AsynchInterning(DocVariantType.InternValues);
+    procedure AsynchInterning(Interning: TRawUTF8Interning;
+      InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
+    /// define redirection of interface methods calls in one or several instances
+    // - this class allows to implements any interface via a fake class, which
+    // will redirect all methods calls to one or several other interfaces
+    // - returned aCallbackInterface will redirect all its methods (identified
+    // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
+    // - typical use is thefore:
+    // ! fSharedCallback: IMyService;
+    // ! fSharedCallbacks: IMultiCallbackRedirect;
+    // ! ...
+    // !   if fSharedCallbacks = nil then
+    // !   begin
+    // !     fSharedCallbacks := aRest.Run.MultiRedirect(IMyService, fSharedCallback);
+    // !     aServices.SubscribeForEvents(fSharedCallback);
+    // !   end;
+    // !   fSharedCallbacks.Redirect(TMyCallback.Create,[]);
+    // !   // now each time fSharedCallback receive one event, all callbacks
+    // !   // previously registered via Redirect() will receive it
+    // ! ...
+    // !   fSharedCallbacks := nil; // will stop redirection
+    // !                            // and unregister callbacks, if needed
+    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+      aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
+    /// low-level access to the associated timer
+    property BackgroundTimer: TRestBackgroundTimer read fBackgroundTimer;
+  end;
+
+
 { ************ TRest Abstract Parent Class }
 
   /// Exception class raised on TRest issues
@@ -297,9 +429,9 @@ type
     fOrmInstance: TInterfacedObject; // is a TRestOrm
     fModel: TOrmModel;
     fServices: TServiceContainer;
+    fRun: TRestRunThreads;
     fLogClass: TSynLogClass;
     fLogFamily: TSynLogFamily;
-    fBackgroundTimer: TRestBackgroundTimer;
     fAcquireExecution: TRestAcquireExecutions;
     fPrivateGarbageCollector: TSynObjectList;
     fServerTimestamp: record
@@ -323,6 +455,9 @@ type
       Cmd: TRestServerURIContextCommand; Value: cardinal);
     /// any overriden TRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
+    /// ensure the thread will be taken into account during process
+    procedure OnBeginCurrentThread(Sender: TThread); virtual;
+    procedure OnEndCurrentThread(Sender: TThread); virtual;
   public
     /// initialize the class, and associate it to a specified database Model
     constructor Create(aModel: TOrmModel); virtual;
@@ -403,120 +538,6 @@ type
     // - inherited classes may override this method, or set the appropriate
     // value in Offset field
     function GetServerTimestamp: TTimeLog; virtual;
-    /// allows to safely execute a processing method in a background thread
-    // - returns a TSynBackgroundThreadMethod instance, ready to execute any
-    // background task via its RunAndWait() method
-    // - will properly call BeginCurrentThread/EndCurrentThread methods
-    // - you should supply some runtime information to name the thread, for
-    // proper debugging
-    function NewBackgroundThreadMethod(const Format: RawUTF8;
-      const Args: array of const): TSynBackgroundThreadMethod;
-    /// allows to safely execute a process at a given pace
-    // - returns a TSynBackgroundThreadProcess instance, ready to execute the
-    // supplied aOnProcess event in a loop, as aOnProcessMS periodic task
-    // - will properly call BeginCurrentThread/EndCurrentThread methods
-    // - you should supply some runtime information to name the thread, for
-    // proper debugging
-    function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
-      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
-      aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
-    /// allows to safely execute a process in parallel
-    // - returns a TSynParallelProcess instance, ready to execute any task
-    // in parrallel in a thread-pool given by ThreadCount
-    // - will properly call BeginCurrentThread/EndCurrentThread methods
-    // - you should supply some runtime information to name the thread, for
-    // proper debugging
-    function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
-      const Args: array of const): TSynParallelProcess;
-    /// define a task running on a periodic number of seconds in a background thread
-    // - could be used to run background maintenance or monitoring tasks on
-    // this TRest instance, at a low pace (typically every few minutes)
-    // - will instantiate and run a shared TSynBackgroundTimer instance for this
-    // TRest, so all tasks will share the very same thread
-    // - you can run BackgroundTimer.EnQueue or ExecuteNow methods to implement
-    // a FIFO queue, or force immediate execution of the process
-    // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
-    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
-      aOnProcessSecs: cardinal): TRestBackgroundTimer;
-    /// undefine a task running on a periodic number of seconds
-    // - should have been registered by a previous call to TimerEnable() method
-    // - returns true on success, false if the supplied task was not registered
-    function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
-    /// will gather CPU and RAM information in a background thread
-    // - you can specify the update frequency, in seconds
-    // - access to the information via the returned instance, which maps
-    // the TSystemUse.Current class function
-    // - do nothing if global TSystemUse.Current was already assigned
-    function SystemUseTrack(periodSec: integer = 10): TSystemUse;
-    /// low-level access with optional initialization of the associated timer
-    function EnsureBackgroundTimerExists: TRestBackgroundTimer;
-    /// you can call this method in TThread.Execute to ensure that
-    // the thread will be taken into account during process
-    // - this abstract method won't do anything, but TRestServer's will
-    procedure BeginCurrentThread(Sender: TThread); virtual;
-    /// you can call this method just before a thread is finished to ensure
-    // e.g. that the associated external DB connection will be released
-    // - this abstract method will call fLogClass.Add.NotifyThreadEnded
-    // but TRestServer.EndCurrentThread will do the main process
-    procedure EndCurrentThread(Sender: TThread); virtual;
-    /// define asynchronous execution of interface methods in a background thread
-    // - this class allows to implements any interface via a fake class, which will
-    // redirect all methods calls into calls of another interface, but as a FIFO
-    // in a background thread, shared with TimerEnable/TimerDisable process
-    // - it is an elegant resolution to the most difficult implementation
-    // problem of SOA callbacks, which is to avoid race condition on reentrance,
-    // e.g. if a callback is run from a thread, and then the callback code try
-    // to execute something in the context of the initial thread, protected
-    // by a critical section (mutex)
-    // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGUID: TGUID;
-      const aDestinationInterface: IInvokable; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    /// define asynchronous execution of interface methods in a background thread
-    // - this class allows to implements any interface via a fake class, which will
-    // redirect all methods calls into calls of another interface, but as a FIFO
-    // in a background thread, shared with TimerEnable/TimerDisable process
-    // - it is an elegant resolution to the most difficult implementation
-    // problem of SOA callbacks, which is to avoid race condition on reentrance,
-    // e.g. if a callback is run from a thread, and then the callback code try
-    // to execute something in the context of the initial thread, protected
-    // by a critical section (mutex)
-    // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGUID: TGUID;
-      const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    /// allows background garbage collection of specified RawUTF8 interning
-    // - will run Interning.Clean(2) every 5 minutes by default
-    // - set InterningMaxRefCount=0 to disable process of the Interning instance
-    // - note that InterningMaxRefCount and PeriodMinutes parameters (if not 0),
-    // are common for all TRawUTF8Interning instances (the latest value wins)
-    // - you may e.g. run the following to clean up TDocVariant interned RawUTF8:
-    // ! aRest.AsynchInterning(DocVariantType.InternNames);
-    // ! aRest.AsynchInterning(DocVariantType.InternValues);
-    procedure AsynchInterning(Interning: TRawUTF8Interning;
-      InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
-    /// define redirection of interface methods calls in one or several instances
-    // - this class allows to implements any interface via a fake class, which
-    // will redirect all methods calls to one or several other interfaces
-    // - returned aCallbackInterface will redirect all its methods (identified
-    // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
-    // - typical use is thefore:
-    // ! fSharedCallback: IMyService;
-    // ! fSharedCallbacks: IMultiCallbackRedirect;
-    // ! ...
-    // !   if fSharedCallbacks = nil then
-    // !   begin
-    // !     fSharedCallbacks := aRest.MultiRedirect(IMyService, fSharedCallback);
-    // !     aServices.SubscribeForEvents(fSharedCallback);
-    // !   end;
-    // !   fSharedCallbacks.Redirect(TMyCallback.Create,[]);
-    // !   // now each time fSharedCallback receive one event, all callbacks
-    // !   // previously registered via Redirect() will receive it
-    // ! ...
-    // !   fSharedCallbacks := nil; // will stop redirection
-    // !                            // and unregister callbacks, if needed
-    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
-      aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
 
     /// main access to the IRestOrm methods of this instance
     property ORM: IRestOrm read fOrm;
@@ -546,8 +567,9 @@ type
     function ServiceContainer: TServiceContainer; virtual; abstract;
     /// internal procedure called to implement TServiceContainer.Release
     procedure ServicesRelease(Caller: TServiceContainer);
-    /// low-level access to the associated timer
-    property BackgroundTimer: TRestBackgroundTimer read fBackgroundTimer;
+    /// access to the Multi-Threading process of this instance
+    property Run: TRestRunThreads read fRun;
+
     /// how this class execute its internal commands
     // - by default, TRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execOrmWrite]=amLocked) and
@@ -795,6 +817,34 @@ type
     function Cache: TRestCache;
     function CacheOrNil: TRestCache;
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
+  public
+    // TRestRunThreads compatibility methods
+    function NewBackgroundThreadMethod(const Format: RawUTF8;
+      const Args: array of const): TSynBackgroundThreadMethod;
+    function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
+      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
+      aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
+    function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+      const Args: array of const): TSynParallelProcess;
+    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+      aOnProcessSecs: cardinal): TRestBackgroundTimer;
+    function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    function SystemUseTrack(periodSec: integer = 10): TSystemUse;
+    function EnsureBackgroundTimerExists: TRestBackgroundTimer;
+    procedure BeginCurrentThread(Sender: TThread); virtual;
+    procedure EndCurrentThread(Sender: TThread); virtual;
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInterface: IInvokable; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+    procedure AsynchInterning(Interning: TRawUTF8Interning;
+      InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
+    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+      aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
+    function BackgroundTimer: TRestBackgroundTimer;
+      {$ifdef HASINLINE}inline;{$endif}
   {$endif PUREMORMOT2}
   end;
 
@@ -1410,6 +1460,7 @@ uses
   mormot.orm.rest;
 
 
+
 { ************ Customize REST Execution }
 
 { TRestAcquireExecution }
@@ -1749,135 +1800,6 @@ begin
     fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
 end;
 
-function TRest.EnsureBackgroundTimerExists: TRestBackgroundTimer;
-begin
-  if fBackgroundTimer = nil then
-    fBackgroundTimer := TRestBackgroundTimer.Create(self);
-  result := fBackgroundTimer;
-end;
-
-function TRest.NewBackgroundThreadMethod(const Format: RawUTF8;
-   const Args: array of const): TSynBackgroundThreadMethod;
-begin
-  result := TSynBackgroundThreadMethod.Create(nil, FormatUTF8(Format, Args),
-    BeginCurrentThread, EndCurrentThread);
-end;
-
-function TRest.NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
-  const Args: array of const): TSynParallelProcess;
-begin
-  result := TSynParallelProcess.Create(ThreadCount, FormatUTF8(Format, Args),
-    BeginCurrentThread, EndCurrentThread);
-end;
-
-function TRest.NewBackgroundThreadProcess(
-  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  const Format: RawUTF8; const Args: array of const;
-  aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
-var
-  name: RawUTF8;
-begin
-  FormatUTF8(Format, Args, name);
-  if self = nil then
-    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
-      nil, nil, aStats)
-  else
-    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
-      BeginCurrentThread, EndCurrentThread, aStats);
-end;
-
-function TRest.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
-  aOnProcessSecs: cardinal): TRestBackgroundTimer;
-begin
-  result := nil;
-  if self = nil then
-    exit;
-  if aOnProcessSecs = 0 then
-  begin
-    TimerDisable(aOnProcess);
-    exit;
-  end;
-  result := EnsureBackgroundTimerExists;
-  result.Enable(aOnProcess, aOnProcessSecs);
-end;
-
-function TRest.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
-begin
-  if (self = nil) or
-     (fBackgroundTimer = nil) then
-    result := false
-  else
-    result := fBackgroundTimer.Disable(aOnProcess);
-end;
-
-function TRest.SystemUseTrack(periodSec: integer): TSystemUse;
-begin
-  result := nil;
-  if self = nil then
-    exit;
-  result := TSystemUse.Current;
-  if (result.Timer = nil) or
-     ((BackgroundTimer <> nil) and
-      (result.Timer = BackgroundTimer)) then
-  begin
-    if periodSec > 0 then
-      result.Timer := EnsureBackgroundTimerExists;
-    // TimerEnable() will disable if periodSec=0
-    TimerEnable(BackgroundTimer.SystemUseBackgroundExecute, periodSec);
-  end;
-end;
-
-procedure TRest.BeginCurrentThread(Sender: TThread);
-begin
-  TRestOrm(fOrmInstance).BeginCurrentThread(Sender);
-end;
-
-procedure TRest.EndCurrentThread(Sender: TThread);
-begin
-  TRestOrm(fOrmInstance).EndCurrentThread(Sender);
-  // most will be done e.g. in TRestServer.EndCurrentThread
-  if fLogFamily <> nil then
-    fLogFamily.OnThreadEnded(Sender);
-end;
-
-procedure TRest.AsynchRedirect(const aGUID: TGUID;
-  const aDestinationInterface: IInvokable; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
-begin
-  if self <> nil then
-    EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
-end;
-
-procedure TRest.AsynchRedirect(const aGUID: TGUID;
-  const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
-begin
-  if self <> nil then
-    EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
-end;
-
-procedure TRest.AsynchInterning(Interning: TRawUTF8Interning;
-  InterningMaxRefCount, PeriodMinutes: integer);
-begin
-  if self <> nil then
-    EnsureBackgroundTimerExists.AsynchInterning(
-      Interning, InterningMaxRefCount, PeriodMinutes);
-end;
-
-function TRest.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
-  aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
-var factory: TInterfaceFactory;
-begin
-  factory := TInterfaceFactory.Get(aGUID);
-  if factory = nil then
-    raise EServiceException.CreateUTF8('%.MultiRedirect: unknown %',
-      [self, GUIDToShort(aGUID)]);
-   result := TInterfacedObjectMulti.Create(self, factory,
-     aCallBackUnRegisterNeeded, aCallbackInterface).fList;
-end;
-
 function TRest.GetAcquireExecutionMode(
   Cmd: TRestServerURIContextCommand): TRestServerAcquireMode;
 begin
@@ -1913,6 +1835,7 @@ begin
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 5000; // default 5 seconds
   SetLogClass(TSynLog);
+  fRun := TRestRunThreads.Create(self);
 end;
 
 procedure TRest.SetOrmInstance(aORM: TInterfacedObject);
@@ -1933,7 +1856,7 @@ begin
   InternalLog('TRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
   if fOrm <> nil then
     fOrm.AsynchBatchStop(nil); // abort any pending TRestBatch
-  FreeAndNil(fBackgroundTimer);
+  FreeAndNil(fRun);
   FreeAndNil(fServices);
   if fOrmInstance <> nil then
     if (fOrm = nil) or
@@ -1965,6 +1888,19 @@ var
 class procedure TRest.RegisterClassNameForDefinition;
 begin
   ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
+end;
+
+procedure TRest.OnBeginCurrentThread(Sender: TThread);
+begin
+  TRestOrm(fOrmInstance).BeginCurrentThread(Sender);
+end;
+
+procedure TRest.OnEndCurrentThread(Sender: TThread);
+begin
+  TRestOrm(fOrmInstance).EndCurrentThread(Sender);
+  // most will be done e.g. in TRestRunThreadsServer.EndCurrentThread
+  if fLogFamily <> nil then
+    fLogFamily.OnThreadEnded(Sender);
 end;
 
 procedure TRest.DefinitionTo(Definition: TSynConnectionDefinition);
@@ -2067,6 +2003,9 @@ end;
 
 {$ifndef PUREMORMOT2}
 // backward compatibility methods redirections
+
+
+{ --- redirect to TRestOrm homonymous methods }
 
 function TRest.TableRowCount(Table: TOrmClass): Int64;
 begin
@@ -2627,6 +2566,127 @@ begin
   result := fOrm.CacheWorthItForTable(aTableIndex);
 end;
 
+{ --- redirect to TRestRunThreads methods }
+
+function TRest.EnsureBackgroundTimerExists: TRestBackgroundTimer;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fRun.EnsureBackgroundTimerExists;
+end;
+
+function TRest.NewBackgroundThreadMethod(const Format: RawUTF8;
+   const Args: array of const): TSynBackgroundThreadMethod;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fRun.NewBackgroundThreadMethod(Format, Args);
+end;
+
+function TRest.NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+  const Args: array of const): TSynParallelProcess;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fRun.NewParallelProcess(ThreadCount, Format, Args);
+end;
+
+function TRest.NewBackgroundThreadProcess(
+  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const Format: RawUTF8; const Args: array of const;
+  aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fRun.NewBackgroundThreadProcess(
+      aOnProcess, aOnProcessMS, Format, Args);
+end;
+
+function TRest.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+  aOnProcessSecs: cardinal): TRestBackgroundTimer;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fRun.TimerEnable(aOnProcess, aOnProcessSecs);
+end;
+
+function TRest.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  if self = nil then
+    result := false
+  else
+    result := fRun.TimerDisable(aOnProcess);
+end;
+
+function TRest.SystemUseTrack(periodSec: integer): TSystemUse;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fRun.SystemUseTrack(periodSec);
+end;
+
+procedure TRest.BeginCurrentThread(Sender: TThread);
+begin
+  if self <> nil then
+    fRun.BeginCurrentThread(Sender);
+end;
+
+procedure TRest.EndCurrentThread(Sender: TThread);
+begin
+  if self <> nil then
+    fRun.EndCurrentThread(Sender);
+end;
+
+procedure TRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInterface: IInvokable; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+begin
+  if self <> nil then
+    fRun.AsynchRedirect(
+      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
+end;
+
+procedure TRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+begin
+  if self <> nil then
+    fRun.AsynchRedirect(
+      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
+end;
+
+procedure TRest.AsynchInterning(Interning: TRawUTF8Interning;
+  InterningMaxRefCount, PeriodMinutes: integer);
+begin
+  if self <> nil then
+    fRun.AsynchInterning(
+      Interning, InterningMaxRefCount, PeriodMinutes);
+end;
+
+function TRest.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+  aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := fRun.MultiRedirect(aGUID, aCallbackInterface,
+      aCallBackUnRegisterNeeded);
+end;
+
+function TRest.BackgroundTimer: TRestBackgroundTimer;
+begin
+  if (self = nil) or (fRun = nil) then
+    result := nil
+  else
+    result := fRun.fBackgroundTimer;
+end;
+
 {$endif PUREMORMOT2}
 
 
@@ -2717,7 +2777,8 @@ begin
     aName := aThreadName
   else
     FormatUTF8('% %', [fRest.Model.Root, ClassType], aName);
-  inherited Create(aName, fRest.BeginCurrentThread, fRest.EndCurrentThread, aStats);
+  inherited Create(aName,
+    fRest.fRun.BeginCurrentThread, fRest.fRun.EndCurrentThread, aStats);
 end;
 
 destructor TRestBackgroundTimer.Destroy;
@@ -3412,7 +3473,7 @@ procedure TRestThread.Execute;
 begin
   fLog := fRest.fLogClass.Add;
   SetCurrentThreadName('%', [fThreadName]);
-  fRest.BeginCurrentThread(self);
+  fRest.fRun.BeginCurrentThread(self);
   try
     fExecuting := true;
     try
@@ -3423,7 +3484,7 @@ begin
           [E, ClassType], self);
     end;
   finally
-    fRest.EndCurrentThread(self);
+    fRest.fRun.EndCurrentThread(self);
     fLog := nil; // no log after EndCurrentThread
     fExecuting := false;
   end;
@@ -3448,6 +3509,169 @@ procedure TRestThread.TerminatedSet;
 begin
   fEvent.SetEvent;
 end;
+
+
+
+{ ************ TRestRunThreads Multi-Threading Process of a REST instance }
+
+{ TRestRunThreads }
+
+constructor TRestRunThreads.Create(aOwner: TRest);
+begin
+  inherited Create;
+  fOwner := aOwner;
+end;
+
+destructor TRestRunThreads.Destroy;
+begin
+  inherited Destroy;
+  FreeAndNil(fBackgroundTimer);
+end;
+
+function TRestRunThreads.EnsureBackgroundTimerExists: TRestBackgroundTimer;
+begin
+  if self = nil then
+  begin
+    result := nil; // paranoid check to avoid any GPF
+    exit;
+  end;
+  if fBackgroundTimer = nil then
+    fBackgroundTimer := TRestBackgroundTimer.Create(fOwner);
+  result := fBackgroundTimer;
+end;
+
+function TRestRunThreads.NewBackgroundThreadMethod(const Format: RawUTF8;
+   const Args: array of const): TSynBackgroundThreadMethod;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := TSynBackgroundThreadMethod.Create(nil, FormatUTF8(Format, Args),
+      BeginCurrentThread, EndCurrentThread);
+end;
+
+function TRestRunThreads.NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+  const Args: array of const): TSynParallelProcess;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := TSynParallelProcess.Create(ThreadCount, FormatUTF8(Format, Args),
+      BeginCurrentThread, EndCurrentThread);
+end;
+
+function TRestRunThreads.NewBackgroundThreadProcess(
+  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const Format: RawUTF8; const Args: array of const;
+  aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
+var
+  name: RawUTF8;
+begin
+  FormatUTF8(Format, Args, name);
+  if self = nil then
+    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
+      nil, nil, aStats)
+  else
+    result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
+      BeginCurrentThread, EndCurrentThread, aStats);
+end;
+
+function TRestRunThreads.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+  aOnProcessSecs: cardinal): TRestBackgroundTimer;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  if aOnProcessSecs = 0 then
+  begin
+    TimerDisable(aOnProcess);
+    exit;
+  end;
+  result := EnsureBackgroundTimerExists;
+  result.Enable(aOnProcess, aOnProcessSecs);
+end;
+
+function TRestRunThreads.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  if (self = nil) or
+     (fBackgroundTimer = nil) then
+    result := false
+  else
+    result := fBackgroundTimer.Disable(aOnProcess);
+end;
+
+function TRestRunThreads.SystemUseTrack(periodSec: integer): TSystemUse;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  result := TSystemUse.Current;
+  if (result.Timer = nil) or
+     ((BackgroundTimer <> nil) and
+      (result.Timer = BackgroundTimer)) then
+  begin
+    if periodSec > 0 then
+      result.Timer := EnsureBackgroundTimerExists;
+    // TimerEnable() will disable if periodSec=0
+    TimerEnable(BackgroundTimer.SystemUseBackgroundExecute, periodSec);
+  end;
+end;
+
+procedure TRestRunThreads.BeginCurrentThread(Sender: TThread);
+begin
+  if self <> nil then
+    fOwner.OnBeginCurrentThread(sender);
+end;
+
+procedure TRestRunThreads.EndCurrentThread(Sender: TThread);
+begin
+  if self <> nil then
+    fOwner.OnEndCurrentThread(sender);
+end;
+
+procedure TRestRunThreads.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInterface: IInvokable; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+begin
+  if self <> nil then
+    EnsureBackgroundTimerExists.AsynchRedirect(
+      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
+end;
+
+procedure TRestRunThreads.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
+begin
+  if self <> nil then
+    EnsureBackgroundTimerExists.AsynchRedirect(
+      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
+end;
+
+procedure TRestRunThreads.AsynchInterning(Interning: TRawUTF8Interning;
+  InterningMaxRefCount, PeriodMinutes: integer);
+begin
+  if self <> nil then
+    EnsureBackgroundTimerExists.AsynchInterning(
+      Interning, InterningMaxRefCount, PeriodMinutes);
+end;
+
+function TRestRunThreads.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+  aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
+var factory: TInterfaceFactory;
+begin
+  if self = nil then
+    result := nil
+  else
+  begin
+    factory := TInterfaceFactory.Get(aGUID);
+    if factory = nil then
+      raise EServiceException.CreateUTF8('%.MultiRedirect: unknown %',
+        [self, GUIDToShort(aGUID)]);
+     result := TInterfacedObjectMulti.Create(fOwner, factory,
+       aCallBackUnRegisterNeeded, aCallbackInterface).fList;
+  end;
+end;
+
 
 
 { ************ TOrmHistory Modifications Tracked Persistence }
@@ -3793,6 +4017,7 @@ begin
     fHistoryAddCount := 0;
   end;
 end;
+
 
 
 end.

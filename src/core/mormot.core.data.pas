@@ -507,8 +507,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
+  {$ifndef PUREMORMOT2}
+
   /// used for backward compatibility only with existing code
   TSynPersistentLocked = class(TSynPersistentLock);
+
+  {$endif PUREMORMOT2}
 
   /// adding locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
