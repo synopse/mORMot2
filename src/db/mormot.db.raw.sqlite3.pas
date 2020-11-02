@@ -5201,7 +5201,6 @@ begin
   try
     repeat
       repeat
-
       until Step <> SQLITE_ROW; // all steps of this statement
     until PrepareNext = SQLITE_DONE; // all statements
   finally
@@ -5215,7 +5214,6 @@ begin
     raise ESQLite3Exception.Create(0, SQLITE_CANTOPEN, 'Execute');
   try
     repeat
-
     until Step <> SQLITE_ROW; // Execute all steps of the first statement
   finally
     Close; // always release statement
@@ -5602,8 +5600,13 @@ begin
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL) + 1,
       fRequest, fNextSQL);
     while (result = SQLITE_OK) and
-          (Request = 0) do // comment or white-space
+          (Request = 0) do
+    begin
+      // loop handling comment or white-space
       result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
+      if fNextSQL^ = #0 then // statement contains only comment
+       raise ESQLite3Exception.Create(DB, SQLITE_EMPTY, SQL);
+    end;
     fFieldCount := sqlite3.column_count(fRequest);
     if not NoExcept then
       sqlite3_check(RequestDB, result, SQL);
