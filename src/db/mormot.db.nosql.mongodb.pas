@@ -736,15 +736,17 @@ type
     // instance (since the associated TMongoRequestQuery.NumberToSkip=1)
     // - in case of any error, the error message is returned as text
     // - in case of success, this method will return ''
-    function RunCommand(const aDatabaseName: RawUTF8; const command: variant;
-      var returnedValue: variant): RawUTF8; overload;
+    function RunCommand(const aDatabaseName: RawUTF8;
+      const command: variant; var returnedValue: variant;
+      flags: TMongoQueryFlags = []): RawUTF8; overload;
     /// run a database command, supplied as a TDocVariant, TBSONVariant or a
     // string, and return the raw BSON document array of received items
     // - this overloaded method can be used on huge content to avoid the slower
     // conversion to an array of TDocVariant instances
     // - in case of success, this method will return TRUE, or FALSE on error
-    function RunCommand(const aDatabaseName: RawUTF8; const command: variant;
-      var returnedValue: TBSONDocument): boolean; overload;
+    function RunCommand(const aDatabaseName: RawUTF8;
+      const command: variant; var returnedValue: TBSONDocument;
+      flags: TMongoQueryFlags = []): boolean; overload;
 
     /// return TRUE if the Open method has successfully been called
     property Opened: boolean read GetOpened;
@@ -773,20 +775,24 @@ type
   // data because secondaries replicate operations from the primary with some
   // delay - ensure that your application can tolerate stale data if you choose
   // to use a non-primary mode
-  // - rpPrimary:	Default mode - all operations read from the current replica
+  // - rpPrimary: Default mode - all operations read from the current replica
   // set primary
   // - rpPrimaryPreferred: in most situations, operations read from the primary
   // but if it is unavailable, operations read from secondary members.
   // - rpPsecondary: all operations read from the secondary members
   // of the replica set
-  // - rpPsecondaryPreferred:	in most situations, operations read from
+  // - rpPsecondaryPreferred: in most situations, operations read from
   // secondary members but if no secondary members are available, operations
   // read from the primary
+  // rpNearest: read from the member of the replica set with the least network
+  // latency, irrespective of whether that member is a primary or secondary
+  // (in practice, we won't use latency, just a random distribution)
   TMongoClientReplicaSetReadPreference = (
     rpPrimary,
     rpPrimaryPreferred,
     rpSecondary,
-    rpSecondaryPreferred);
+    rpSecondaryPreferred,
+    rpNearest);
 
   /// define Write Concern property of a MongoDB connection
   // - Write concern describes the guarantee that MongoDB provides when
@@ -852,13 +858,14 @@ type
     fLogReplyEventMaxSize: cardinal;
     fServerBuildInfo: variant;
     fServerBuildInfoNumber: cardinal;
-    fLatestReadConnectionIndex: integer;
-    procedure AfterOpen; virtual;
+    fLatestReadConnectionIndex: PtrInt;
+    procedure AfterOpen(ConnectionIndex: PtrInt); virtual;
     function GetOneReadConnection: TMongoConnection;
     function GetBytesReceived: Int64;
     function GetBytesSent: Int64;
     function GetBytesTransmitted: Int64;
-    procedure Auth(const DatabaseName, UserName, Digest: RawUTF8; ForceMongoDBCR: boolean);
+    procedure Auth(const DatabaseName, UserName, Digest: RawUTF8;
+      ForceMongoDBCR: boolean; ConnectionIndex: PtrInt);
     function ReOpen: boolean;
   public
     /// prepare a connection to a MongoDB server or Replica Set
@@ -1828,7 +1835,7 @@ end;
 
 procedure TMongoRequestKillCursor.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited;
   W.CancelLastChar('}');
@@ -2363,9 +2370,13 @@ begin
           wcAcknowledged:
             cmd := 'getLastError';
           wcJournaled:
-            cmd := BSONVariant(['getLastError', 1, 'j', true]);
+            cmd := BSONVariant([
+              'getLastError', 1,
+              'j', true]);
           wcReplicaAcknowledged:
-            cmd := BSONVariant(['getLastError', 1, 'w', 2]);
+            cmd := BSONVariant([
+              'getLastError', 1,
+              'w', 2]);
         else
           raise EMongoRequestException.CreateUTF8('%.SendAndFree WriteConcern=%',
             [self, ord(Client.WriteConcern)], self, Request);
@@ -2463,10 +2474,11 @@ begin
 end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUTF8;
-  const command: variant; var returnedValue: variant): RawUTF8;
+  const command: variant; var returnedValue: variant;
+  flags: TMongoQueryFlags): RawUTF8;
 begin
   GetDocumentsAndFree(TMongoRequestQuery.Create(
-    aDatabaseName + '.$cmd', command, null, 1), returnedValue);
+    aDatabaseName + '.$cmd', command, null, 1, 0, flags), returnedValue);
   with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok', 1) <> 0 then
       result := ''
@@ -2475,12 +2487,13 @@ begin
 end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUTF8;
-  const command: variant; var returnedValue: TBSONDocument): boolean;
+  const command: variant; var returnedValue: TBSONDocument;
+  flags: TMongoQueryFlags): boolean;
 var
   item: TBSONElement;
 begin
   returnedValue := GetBSONAndFree(TMongoRequestQuery.Create(
-    aDatabaseName + '.$cmd', command, null, 1));
+    aDatabaseName + '.$cmd', command, null, 1, 0, flags));
   result := true;
   item.FromDocument(returnedValue);
   if item.DocItemToInteger('ok', 1) = 0 then
@@ -2633,7 +2646,7 @@ const
 var
   secHost: TRawUTF8DynArray;
   secPort: TIntegerDynArray;
-  nHost, i: integer;
+  nHost, i: PtrInt;
 begin
   fConnectionTimeOut := 30000;
   fConnectionTLS := aTLS;
@@ -2654,7 +2667,8 @@ begin
       else
         Port := secPort[i];
       fConnections[i + 1] := TMongoConnection.Create(self, secHost[i], Port);
-      fConnectionString := FormatUTF8('%,%:%', [fConnectionString, secHost[i], Port]);
+      fConnectionString :=
+        FormatUTF8('%,%:%', [fConnectionString, secHost[i], Port]);
     end;
   end;
   fDatabases := TRawUTF8List.Create([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
@@ -2700,7 +2714,7 @@ end;
 
 function TMongoClient.GetOneReadConnection: TMongoConnection;
 
-  function GetUnlockedSecondaryIndex: integer;
+  function GetUnlockedSecondaryIndex: PtrInt;
   var
     retry: integer;
   begin
@@ -2744,6 +2758,8 @@ function TMongoClient.GetOneReadConnection: TMongoConnection;
     end;
   end;
 
+var
+  n, retry: integer;
 begin
   case ReadPreference of
     rpPrimaryPreferred:
@@ -2753,7 +2769,20 @@ begin
         result := fConnections[0];
     rpSecondary, rpSecondaryPreferred:
       result := fConnections[GetUnlockedSecondaryIndex];
-  else // rpPrimary:
+    rpNearest:
+      begin
+        n := Length(fConnections);
+        for retry := 1 to n * 2 do
+        begin
+          result := fConnections[Random32(n)];
+          if not result.Locked then
+            exit;
+        end;
+        // falback to the main instance
+        result := fConnections[0];
+      end;
+  else
+    // rpPrimary or not handled yet
     result := fConnections[0];
   end;
 end;
@@ -2770,7 +2799,7 @@ begin
       if not fConnections[0].Opened then
       begin
         fConnections[0].Open;
-        AfterOpen;
+        AfterOpen(0);
       end;
       result := TMongoDatabase.Create(Self, DatabaseName);
       fDatabases.AddObjectUnique(DatabaseName, @result);
@@ -2787,6 +2816,7 @@ function TMongoClient.OpenAuth(const DatabaseName, UserName, PassWord: RawUTF8;
   ForceMongoDBCR: boolean): TMongoDatabase;
 var
   digest: RawByteString;
+  i: PtrInt;
 begin
   if (self = nil) or
      (DatabaseName = '') or
@@ -2796,26 +2826,28 @@ begin
       [self, DatabaseName]);
   result := fDatabases.GetObjectFrom(DatabaseName);
   if result = nil then  // not already opened -> try now from primary host
-  try // note: authentication works on a single database per socket connection
-    if not fConnections[0].Opened then
-    try
-      fConnections[0].Open; // socket connection
-      AfterOpen; // need ServerBuildInfoNumber just below
-      digest := PasswordDigest(UserName, PassWord);
-      Auth(DatabaseName, UserName, digest, ForceMongoDBCR);
-      with fGracefulReconnect do
-        if Enabled and
-           (EncryptedDigest = '') then
-        begin
-          ForcedDBCR := ForceMongoDBCR;
-          User := UserName;
-          Database := DatabaseName;
-          EncryptedDigest := CryptDataForCurrentUser(digest, Database, true);
+  try
+    // ensure we are opened and authenticated on all connections
+    for i := 0 to High(fConnections) do
+      if not fConnections[i].Opened then
+        try
+          fConnections[i].Open; // open socket connection
+          AfterOpen(i); // need ServerBuildInfoNumber just below
+          digest := PasswordDigest(UserName, Password);
+          Auth(DatabaseName, UserName, digest, ForceMongoDBCR, i);
+          with fGracefulReconnect do
+            if Enabled and
+               (EncryptedDigest='') then
+            begin
+              ForcedDBCR := ForceMongoDBCR;
+              User := UserName;
+              Database := DatabaseName;
+              EncryptedDigest := CryptDataForCurrentUser(digest, Database, true);
+            end;
+        except
+          fConnections[i].Close;
+          raise;
         end;
-    except
-      fConnections[0].Close;
-      raise;
-    end;
     result := TMongoDatabase.Create(Self, DatabaseName);
     fDatabases.AddObjectUnique(DatabaseName, @result);
   finally
@@ -2824,7 +2856,7 @@ begin
 end;
 
 procedure TMongoClient.Auth(const DatabaseName, UserName, Digest: RawUTF8;
-  ForceMongoDBCR: boolean);
+  ForceMongoDBCR: boolean; ConnectionIndex: PtrInt);
 var
   res, bson: variant;
   err, nonce, first, key, user, msg, rnonce: RawUTF8;
@@ -2847,7 +2879,8 @@ var
       err := 'missing or invalid returned payload';
   end;
 
-begin // caller should have made fConnections[0].Open
+begin
+  // note: caller should have made fConnections[ConnectionIndex].Open
   if (self = nil) or
      (DatabaseName = '') or
      (UserName = '') or
@@ -2859,8 +2892,9 @@ begin // caller should have made fConnections[0].Open
   begin
     // MONGODB-CR
     // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
-    bson := BSONVariant(['getnonce', 1]);
-    err := fConnections[0].RunCommand(DatabaseName, bson, res);
+    bson := BSONVariant([
+      'getnonce', 1]);
+    err := fConnections[ConnectionIndex].RunCommand(DatabaseName, bson, res);
     if (err = '') and
        not _Safe(res)^.GetAsRawUTF8('nonce', nonce) then
       err := 'missing returned nonce';
@@ -2868,9 +2902,12 @@ begin // caller should have made fConnections[0].Open
       raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step1: % - res=%',
         [self, DatabaseName, err, res]);
     key := MD5(nonce + UserName + Digest);
-    bson := BSONVariant(['authenticate', 1, 'user', UserName, 'nonce', nonce,
+    bson := BSONVariant([
+      'authenticate', 1,
+      'user', UserName,
+      'nonce', nonce,
       'key', key]);
-    err := fConnections[0].RunCommand(DatabaseName, bson, res);
+    err := fConnections[ConnectionIndex].RunCommand(DatabaseName, bson, res);
     if err <> '' then
       raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step2: % - res=%',
         [self, DatabaseName, err, res]);
@@ -2884,8 +2921,12 @@ begin // caller should have made fConnections[0].Open
     nonce := BinToBase64(@rnd, sizeof(rnd));
     FormatUTF8('n=%,r=%', [user, nonce], first);
     BSONVariantType.FromBinary('n,,' + first, bbtGeneric, bson);
-    err := fConnections[0].RunCommand(DatabaseName, BSONVariant(['saslStart', 1,
-      'mechanism', 'SCRAM-SHA-1', 'payload', bson, 'autoAuthorize', 1]), res);
+    err := fConnections[ConnectionIndex].RunCommand(DatabaseName,
+      BSONVariant([
+        'saslStart', 1,
+        'mechanism', 'SCRAM-SHA-1',
+        'payload', bson,
+        'autoAuthorize', 1]), res);
     CheckPayload;
     if err = '' then
     begin
@@ -2908,8 +2949,11 @@ begin // caller should have made fConnections[0].Open
     HMAC_SHA1(server, msg, server);
     msg := key + ',p=' + BinToBase64(@client, SizeOf(client));
     BSONVariantType.FromBinary(msg, bbtGeneric, bson);
-    err := fConnections[0].RunCommand(DatabaseName, BSONVariant(['saslContinue',
-      1, 'conversationId', res.conversationId, 'payload', bson]), res);
+    err := fConnections[ConnectionIndex].RunCommand(
+      DatabaseName, BSONVariant([
+        'saslContinue', 1,
+        'conversationId', res.conversationId,
+        'payload', bson]), res);
     resp.Clear;
     CheckPayload;
     if (err = '') and
@@ -2921,8 +2965,11 @@ begin // caller should have made fConnections[0].Open
     if not res.done then
     begin
       // third empty challenge may be required
-      err := fConnections[0].RunCommand(DatabaseName, BSONVariant(['saslContinue',
-        1, 'conversationId', res.conversationId, 'payload', '']), res);
+      err := fConnections[ConnectionIndex].RunCommand(
+        DatabaseName, BSONVariant([
+           'saslContinue', 1,
+           'conversationId', res.conversationId,
+           'payload', '']), res);
       if (err = '') and
          not res.done then
         err := 'SASL conversation failed to complete';
@@ -2960,7 +3007,7 @@ begin
       if EncryptedDigest <> '' then
       try
         digest := CryptDataForCurrentUser(EncryptedDigest, Database, false);
-        Auth(Database, user, digest, ForcedDBCR);
+        Auth(Database, user, digest, ForcedDBCR, 0);
       finally
         FillZero(digest);
       end;
@@ -3153,7 +3200,8 @@ begin
   if fDatabase.Client.ServerBuildInfoNumber >= 3060000 then
   begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
-    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%],cursor:{}}',
+    Database.RunCommand(BSONVariant(
+      '{aggregate:"%",pipeline:[%],cursor:{}}',
       [name, pipelineJSON], []), reply);
     // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
     res := reply.cursor;
@@ -3163,7 +3211,8 @@ begin
   else
   begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',
+    Database.RunCommand(BSONVariant(
+      '{aggregate:"%",pipeline:[%]}',
       [name, pipelineJSON], []), reply);
     // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
     res := reply.result;
@@ -3192,8 +3241,10 @@ begin
   if fDatabase.Client.ServerBuildInfoNumber >= 3060000 then
   begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
-    Database.RunCommand(BSONVariant(['aggregate', name,
-      'pipeline', pipelineArray, 'cursor', '{', '}']), reply);
+    Database.RunCommand(BSONVariant([
+      'aggregate', name,
+      'pipeline', pipelineArray,
+      'cursor', '{', '}']), reply);
     // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
     res := reply.cursor;
     if not VarIsNull(res) then
@@ -3202,7 +3253,8 @@ begin
   else
   begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-    Database.RunCommand(BSONVariant(['aggregate', name,
+    Database.RunCommand(BSONVariant([
+      'aggregate', name,
       'pipeline', pipelineArray]), reply);
     // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
     res := reply.result;
@@ -3345,7 +3397,8 @@ function TMongoCollection.Count: Int64;
 var
   res: variant;
 begin
-  fDatabase.RunCommand(BSONVariant(['count', name]), res);
+  fDatabase.RunCommand(BSONVariant([
+    'count', name]), res);
   result := _Safe(res)^.GetValueOrDefault('n', 0);
 end;
 
@@ -3353,12 +3406,15 @@ function TMongoCollection.FindCount(const Query: variant): Int64;
 var
   res: variant;
 begin
-  fDatabase.RunCommand(BSONVariant(['count', name, 'query', Query]), res);
+  fDatabase.RunCommand(BSONVariant([
+    'count', name,
+    'query', Query]), res);
   result := _Safe(res)^.GetValueOrDefault('n', 0);
 end;
 
 function TMongoCollection.FindCount(Criteria: PUTF8Char;
-  const Args, Params: array of const; MaxNumberToReturn, NumberToSkip: integer): Int64;
+  const Args, Params: array of const;
+  MaxNumberToReturn, NumberToSkip: integer): Int64;
 var
   cmd, query: RawUTF8;
   res: variant;
@@ -3383,17 +3439,20 @@ begin
 end;
 
 function TMongoCollection.FindBSON(const Criteria, Projection: Variant;
-  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags): TBSONDocument;
+  NumberToReturn, NumberToSkip: integer;
+  Flags: TMongoQueryFlags): TBSONDocument;
 begin
-  result := Database.Client.GetOneReadConnection.GetBSONAndFree(TMongoRequestQuery.Create(
-    fFullCollectionName, Criteria, Projection, NumberToReturn, NumberToSkip, Flags));
+  result := Database.Client.GetOneReadConnection.GetBSONAndFree(
+    TMongoRequestQuery.Create(fFullCollectionName,
+      Criteria, Projection, NumberToReturn, NumberToSkip, Flags));
 end;
 
 function TMongoCollection.FindDoc(const Criteria, Projection: Variant;
   NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags): variant;
 begin
-  Database.Client.GetOneReadConnection.GetDocumentsAndFree(TMongoRequestQuery.Create(
-    fFullCollectionName, Criteria, Projection, NumberToReturn, NumberToSkip, Flags), result);
+  Database.Client.GetOneReadConnection.GetDocumentsAndFree(
+    TMongoRequestQuery.Create(fFullCollectionName,
+      Criteria, Projection, NumberToReturn, NumberToSkip, Flags), result);
 end;
 
 function TMongoCollection.FindDoc(Criteria: PUTF8Char;
@@ -3406,18 +3465,22 @@ end;
 
 procedure TMongoCollection.FindDocs(Criteria: PUTF8Char;
   const Params: array of const; var result: TVariantDynArray;
-  const Projection: variant; NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags);
+  const Projection: variant; NumberToReturn, NumberToSkip: integer;
+  Flags: TMongoQueryFlags);
 begin
-  Database.Client.GetOneReadConnection.GetDocumentsAndFree(TMongoRequestQuery.Create(
-    fFullCollectionName, BSONVariant(Criteria, [], Params), Projection,
+  Database.Client.GetOneReadConnection.GetDocumentsAndFree(
+   TMongoRequestQuery.Create(fFullCollectionName,
+      BSONVariant(Criteria, [], Params), Projection,
       NumberToReturn, NumberToSkip, Flags), result);
 end;
 
 function TMongoCollection.FindDocs(Criteria: PUTF8Char;
   const Params: array of const; const Projection: variant;
-  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags): TVariantDynArray;
+  NumberToReturn, NumberToSkip: integer;
+  Flags: TMongoQueryFlags): TVariantDynArray;
 begin
-  FindDocs(Criteria, Params, result, Projection, NumberToReturn, NumberToSkip, Flags);
+  FindDocs(Criteria, Params, result, Projection,
+   NumberToReturn, NumberToSkip, Flags);
 end;
 
 function TMongoCollection.FindOne(const _id: TBSONObjectID): variant;
@@ -3434,60 +3497,70 @@ function TMongoCollection.FindOne(const NameValuePairs: array of const;
   ReturnNewObjectIfNotFound: boolean): variant;
 begin
   result := FindDoc(BSONVariant(NameValuePairs), null, 1);
-  if ReturnNewObjectIfNotFound and VarIsEmptyOrNull(result) then
+  if ReturnNewObjectIfNotFound and
+     VarIsEmptyOrNull(result) then
     TDocVariantData(result).InitObject(NameValuePairs, JSON_OPTIONS_FAST);
 end;
 
 procedure TMongoCollection.FindDocs(var result: TVariantDynArray;
-  const Projection: variant; NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags);
+  const Projection: variant; NumberToReturn, NumberToSkip: integer;
+  Flags: TMongoQueryFlags);
 begin
-  Database.Client.GetOneReadConnection.GetDocumentsAndFree(TMongoRequestQuery.Create(
-    fFullCollectionName, null, Projection, NumberToReturn, NumberToSkip, Flags), result);
+  Database.Client.GetOneReadConnection.GetDocumentsAndFree(
+    TMongoRequestQuery.Create(fFullCollectionName,
+      null, Projection, NumberToReturn, NumberToSkip, Flags), result);
 end;
 
 function TMongoCollection.FindJSON(const Criteria, Projection: Variant;
-  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags; Mode:
-  TMongoJSONMode): RawUTF8;
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags;
+  Mode: TMongoJSONMode): RawUTF8;
 begin
-  result := Database.Client.GetOneReadConnection.GetJSONAndFree(TMongoRequestQuery.Create(
-    fFullCollectionName, Criteria, Projection, NumberToReturn, NumberToSkip, Flags), Mode);
+  result := Database.Client.GetOneReadConnection.GetJSONAndFree(
+    TMongoRequestQuery.Create(fFullCollectionName,
+      Criteria, Projection, NumberToReturn, NumberToSkip, Flags), Mode);
 end;
 
 function TMongoCollection.FindJSON(Criteria: PUTF8Char;
   const Params: array of const; NumberToReturn, NumberToSkip: integer;
   Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
 begin
-  result := FindJSON(BSONVariant(Criteria, [], Params), null, NumberToReturn,
+  result := FindJSON(
+    BSONVariant(Criteria, [], Params), null, NumberToReturn,
     NumberToSkip, Flags, Mode);
 end;
 
 function TMongoCollection.FindJSON(Criteria: PUTF8Char;
   const CriteriaParams: array of const; const Projection: variant;
-  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
+  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags;
+  Mode: TMongoJSONMode): RawUTF8;
 begin
-  result := FindJSON(BSONVariant(Criteria, [], CriteriaParams), Projection,
-    NumberToReturn, NumberToSkip, Flags, Mode);
+  result := FindJSON(
+    BSONVariant(Criteria, [], CriteriaParams), Projection, NumberToReturn,
+    NumberToSkip, Flags, Mode);
 end;
 
 procedure TMongoCollection.Insert(const Documents: array of variant;
   Flags: TMongoInsertFlags; NoAcknowledge: boolean);
 begin
-  Database.Client.Connections[0].SendAndFree(TMongoRequestInsert.Create(
-    fFullCollectionName, Documents, Flags), NoAcknowledge);
+  Database.Client.Connections[0].SendAndFree(
+    TMongoRequestInsert.Create(fFullCollectionName,
+      Documents, Flags), NoAcknowledge);
 end;
 
 procedure TMongoCollection.Insert(const Documents: TBSONDocument; Flags:
   TMongoInsertFlags; NoAcknowledge: boolean);
 begin
-  Database.Client.Connections[0].SendAndFree(TMongoRequestInsert.Create(
-    fFullCollectionName, Documents, Flags), NoAcknowledge);
+  Database.Client.Connections[0].SendAndFree(
+    TMongoRequestInsert.Create(fFullCollectionName,
+      Documents, Flags), NoAcknowledge);
 end;
 
 procedure TMongoCollection.InsertJSON(const JSONDocuments: array of PUTF8Char;
   Flags: TMongoInsertFlags; NoAcknowledge: boolean);
 begin
-  Database.Client.Connections[0].SendAndFree(TMongoRequestInsert.Create(
-    fFullCollectionName, JSONDocuments, Flags), NoAcknowledge);
+  Database.Client.Connections[0].SendAndFree(
+    TMongoRequestInsert.Create(fFullCollectionName,
+      JSONDocuments, Flags), NoAcknowledge);
 end;
 
 function EnsureDocumentHasID(var doc: TDocVariantData; oid: PPVariant;
@@ -3541,7 +3614,8 @@ var
 begin
   if not DocVariantType.IsOfType(Document) then
     Document := _JsonFast(VariantSaveMongoJSON(Document, modMongoShell));
-  result := EnsureDocumentHasID(_Safe(Document, dvObject)^, @oid, DocumentObjectID);
+  result := EnsureDocumentHasID(
+    _Safe(Document, dvObject)^, @oid, DocumentObjectID);
   if result then
     Insert([Document])
   else
@@ -3557,20 +3631,23 @@ begin
   Save(doc, DocumentObjectID);
 end;
 
-procedure TMongoCollection.Update(Query: PUTF8Char; const QueryParams: array of const;
-  const Update: RawUTF8; const UpdateParams: array of const; Flags: TMongoUpdateFlags);
+procedure TMongoCollection.Update(Query: PUTF8Char;
+  const QueryParams: array of const; const Update: RawUTF8;
+  const UpdateParams: array of const; Flags: TMongoUpdateFlags);
 var
   quer, upd: variant;
 begin
   quer := BSONVariant(Query, [], QueryParams);
-  upd := BSONVariant(Update, [], UpdateParams);
+  upd  := BSONVariant(Update, [], UpdateParams);
   self.Update(quer, upd, Flags);
 end;
 
-procedure TMongoCollection.Update(const Query, Update: variant; Flags: TMongoUpdateFlags);
+procedure TMongoCollection.Update(const Query, Update: variant;
+  Flags: TMongoUpdateFlags);
 begin
-  Database.Client.Connections[0].SendAndFree(TMongoRequestUpdate.Create(
-    fFullCollectionName, Query, Update, Flags), false);
+  Database.Client.Connections[0].SendAndFree(
+    TMongoRequestUpdate.Create(fFullCollectionName,
+      Query, Update, Flags), false);
 end;
 
 procedure TMongoCollection.UpdateOne(const _id, UpdatedFields: variant);
@@ -3580,8 +3657,9 @@ end;
 
 procedure TMongoCollection.Remove(const Query: variant; Flags: TMongoDeleteFlags);
 begin
-  Database.Client.Connections[0].SendAndFree(TMongoRequestDelete.Create(
-    fFullCollectionName, Query, Flags), False);
+  Database.Client.Connections[0].SendAndFree(
+    TMongoRequestDelete.Create(fFullCollectionName,
+      Query, Flags), False);
 end;
 
 procedure TMongoCollection.RemoveOne(const _id: TBSONObjectID);
@@ -3609,6 +3687,7 @@ function ToText(pref: TMongoClientReplicaSetReadPreference): PShortString;
 begin
   result := GetEnumName(TypeInfo(TMongoClientReplicaSetReadPreference), ord(pref));
 end;
+
 
 initialization
   Assert(sizeof(TMongoReplyHeader) = 36);
