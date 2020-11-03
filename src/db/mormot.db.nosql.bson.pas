@@ -3082,8 +3082,7 @@ begin
       end;
   else
     raise EBSONException.CreateUTF8(
-      'TBSONElement.FromNext: unexpected type %',
-      [ord(Kind)]);
+      'TBSONElement.FromNext: unexpected type %', [ord(Kind)]);
   end;
 end;
 
@@ -3099,7 +3098,8 @@ end;
 
 { TBSONIterator }
 
-function TBSONIterator.Init(const doc: TBSONDocument; kind: TBSONElementType): boolean;
+function TBSONIterator.Init(const doc: TBSONDocument;
+  kind: TBSONElementType): boolean;
 var
   n: integer;
 begin
@@ -4102,7 +4102,7 @@ function bson(const NameValuePairs: array of const): TBSONDocument;
 var
   W: TBSONWriter;
   name: RawUTF8;
-  a: integer;
+  a: PtrInt;
 
   procedure WriteValue;
   var
@@ -4163,7 +4163,7 @@ end;
 
 function BSONFieldSelector(const FieldNames: array of RawUTF8): TBSONDocument;
 var
-  i: integer;
+  i: PtrInt;
   W: TBSONWriter;
 begin
   W := TBSONWriter.Create(TRawByteStringStream, 512);
@@ -4238,8 +4238,8 @@ begin
   result := true;
 end;
 
-function BSON(const Format: RawUTF8; const Args, Params: array of const; kind:
-  PBSONElementType): TBSONDocument;
+function BSON(const Format: RawUTF8; const Args, Params: array of const;
+  kind: PBSONElementType): TBSONDocument;
 var
   JSON: RawUTF8; // since we use FormatUTF8(), TSynTempBuffer is useless here
   v: variant;
@@ -4346,15 +4346,15 @@ begin
 end;
 
 initialization
-  Assert(sizeof(TDecimal128)=16);
-  Assert(ord(betEof)=$00);
-  Assert(ord(betInt64)=$12);
-  Assert(ord(betDecimal128)=$13);
-  Assert(ord(bbtGeneric)=$00);
-  Assert(ord(bbtMD5)=$05);
-  Assert(ord(bbtUser)=$80);
-  Assert(sizeof(TBSONObjectID)=12);
-  Assert(sizeof(TBSONVariantData)=sizeof(variant));
+  Assert(sizeof(TDecimal128) = 16);
+  Assert(ord(betEof) = $00);
+  Assert(ord(betInt64) = $12);
+  Assert(ord(betDecimal128) = $13);
+  Assert(ord(bbtGeneric) = $00);
+  Assert(ord(bbtMD5) = $05);
+  Assert(ord(bbtUser) = $80);
+  Assert(sizeof(TBSONObjectID) = 12);
+  Assert(sizeof(TBSONVariantData) = sizeof(variant));
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
   InitBSONObjectIDComputeNew;
 

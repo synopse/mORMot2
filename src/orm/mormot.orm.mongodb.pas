@@ -158,6 +158,12 @@ type
     // - made public since a TRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TRestServer
     function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
+    /// search for a field value, according to its SQL content representation
+    // - return true on success (i.e. if some values have been added to ResultID)
+    // - store the results into the ResultID dynamic array
+    // - faster than OneFieldValues method, which creates a temporary JSON content
+    function SearchField(const FieldName, FieldValue: RawUTF8;
+      out ResultID: TIDDynArray): boolean; override;
     /// create one index for all specific FieldNames at once
     function CreateSQLMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUTF8; Unique: boolean;
@@ -885,8 +891,9 @@ begin // here we use the pre-computed IDs[]
     if Owner <> nil then // notify BEFORE deletion
       for i := 0 to high(IDs) do
         Owner.InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil);
-    fCollection.Remove(BSONVariant(['_id', BSONVariant(['$in',
-      BSONVariantFromInt64s(TInt64DynArray(IDs))])]));
+    fCollection.Remove(
+      BSONVariant(['_id',
+        BSONVariant(['$in', BSONVariantFromInt64s(TInt64DynArray(IDs))])]));
     if Owner <> nil then
       Owner.FlushInternalDBCache;
     result := true;
@@ -940,7 +947,8 @@ begin
   if (fCollection = nil) or
      (ID <= 0) then
     exit;
-  doc := fCollection.FindDoc(BSONVariant(['_id', ID]), fBSONProjectionSimpleFields, 1);
+  doc := fCollection.FindDoc(
+    BSONVariant(['_id', ID]), fBSONProjectionSimpleFields, 1);
   JSONFromDoc(_Safe(doc)^, result);
 end;
 
@@ -960,8 +968,8 @@ begin
   else
   try
     FieldName := fStoredClassMapping^.InternalToExternal(BlobField);
-    doc := fCollection.FindDoc(BSONVariant(['_id', aID]),
-      BSONVariant([FieldName, 1]), 1);
+    doc := fCollection.FindDoc(
+      BSONVariant(['_id', aID]), BSONVariant([FieldName, 1]), 1);
     if _Safe(doc)^.GetVarData(FieldName, data) then
       BSONVariantType.ToBlob(variant(data), RawByteString(BlobData));
     result := true;
@@ -985,8 +993,8 @@ begin
   if aID <= 0 then
     exit;
   try
-    doc := fCollection.FindDoc(BSONVariant(['_id', aID]),
-      fBSONProjectionBlobFields, 1);
+    doc := fCollection.FindDoc(
+      BSONVariant(['_id', aID]), fBSONProjectionBlobFields, 1);
     docv := _Safe(doc);
     if docv^.Kind <> dvObject then
       exit; // not found
@@ -1013,6 +1021,38 @@ end;
 function TRestStorageMongoDB.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
 begin
   result := true; // we do not have any Virtual Table yet -> always accept
+end;
+
+function TRestStorageMongoDB.SearchField(const FieldName, FieldValue: RawUTF8;
+  out ResultID: TIDDynArray): boolean;
+var
+  query: variant;
+  id: TBSONIterator;
+  n: integer; // an external count is actually faster
+begin
+  if (fCollection = nil) or
+     (FieldName = '') or
+     (FieldValue = '') then
+    result := false
+  else
+  try
+    // use {%:%} here since FieldValue is already JSON encoded
+    query := BSONVariant('{%:%}',
+      [fStoredClassMapping^.InternalToExternal(FieldName), FieldValue], []);
+    // retrieve the ID for this query
+    if id.Init(fCollection.FindBSON(query, BSONVariant(['_id', 1]))) then
+    begin
+      n := 0;
+      while id.Next do
+        AddInt64(TInt64DynArray(ResultID), n, id.Item.DocItemToInteger('_id'));
+      SetLength(ResultID, n);
+      result := true;
+    end
+    else
+      result := false;
+  except
+    result := false;
+  end;
 end;
 
 function TRestStorageMongoDB.GetJSONValues(const Res: TBSONDocument;
@@ -1455,8 +1495,9 @@ begin
           Res := fCollection.FindBSON(Query, Projection, limit, Stmt.Offset);
           MS := TRawByteStringStream.Create;
           try
-            W := fStoredClassRecordProps.CreateJSONWriter(MS, ForceAJAX or (Owner
-              = nil) or not Owner.Owner.NoAJAXJSON, withID, bits, 0);
+            W := fStoredClassRecordProps.CreateJSONWriter(MS,
+              ForceAJAX or (Owner = nil) or not Owner.Owner.NoAJAXJSON,
+              withID, bits, 0);
             try
               ResCount := GetJSONValues(Res, extFieldNames, W);
               result := MS.DataString;
@@ -1471,8 +1512,8 @@ begin
             with TOrmTableJSON.CreateFromTables([fStoredClass], SQL,
               pointer(result), length(result)) do
             try
-              SortFields(FieldIndex(TextOrderByField), not Stmt.OrderByDesc,
-                nil, oftUTF8Text);
+              SortFields(FieldIndex(TextOrderByField),
+                not Stmt.OrderByDesc, nil, oftUTF8Text);
               result := GetJSONValues(W.Expand);
             finally
               Free;
