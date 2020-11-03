@@ -1285,7 +1285,6 @@ type
   {$endif HASVARUSTRING}
 
   /// information about a dynamic array published property
-
   TOrmPropInfoRTTIDynArray = class(TOrmPropInfoRTTI)
   protected
     fObjArray: TRttiJson;

@@ -2081,7 +2081,7 @@ procedure TBSONVariant.FromBinary(const Bin: RawByteString;
   BinType: TBSONElementBinaryType; var result: variant);
 var
   Len: integer;
-begin // "\x05" e_name int32 subtype (byte*)
+begin
   VarClear(result);
   with TBSONVariantData(result) do
   begin
@@ -2090,6 +2090,7 @@ begin // "\x05" e_name int32 subtype (byte*)
       VType := varNull; // stores a NULL
       exit;
     end;
+    // stored as "\x05" e_name int32 BinType (byte*)
     VType := VarType;
     VKind := betBinary;
     VBlob := nil; // avoid GPF here below
@@ -2178,7 +2179,7 @@ var
   end;
 
   procedure ReturnInt(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar);
-  {$ifdef HASINLINE}inline;{$endif}
+    {$ifdef HASINLINE}inline;{$endif}
   // redirection function to circumvent FPC trunk limitation
   var
     kind: TBSONElementType absolute kindint;
@@ -2350,12 +2351,14 @@ var
 
 var
   P: PUTF8Char;
-begin // here JSON does not start with " or 1..9 (obvious simple types)
+begin
   // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
   result := false;
+  // here JSON does not start with " or 1..9 (obvious simple types)
   case NormToUpperAnsi7[JSON^] of
     '{':
-      begin // strict MongoDB objects e.g. {"$undefined":true} or {"$oid":".."}
+      begin
+        // strict MongoDB objects e.g. {"$undefined":true} or {"$oid":".."}
         P := JSON;
         repeat
           inc(P)
@@ -2391,23 +2394,30 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
       end;
     // MongoDB Shell Mode extended syntax
     'U':
-      if StrCompIL(JSON + 1, @BSON_JSON_UNDEFINED[true][2], 8) = 0 then
+      if StrCompIL(JSON + 1,
+          @BSON_JSON_UNDEFINED[true][2], 8) = 0 then
         Return(betDeprecatedUndefined, JSON + 8, #0);
     'M':
-      if StrCompIL(JSON + 1, @BSON_JSON_MINKEY[true][2], 5) = 0 then
+      if StrCompIL(JSON + 1,
+          @BSON_JSON_MINKEY[true][2], 5) = 0 then
         ReturnInt(betMinKey, JSON + 5, #0)
-      else if StrCompIL(JSON + 1, @BSON_JSON_MAXKEY[true][2], 7) = 0 then
+      else if StrCompIL(JSON + 1,
+               @BSON_JSON_MAXKEY[true][2], 7) = 0 then
         ReturnInt(betMaxKey, JSON + 5, #0);
     'O':
-      if StrCompIL(JSON + 1, @BSON_JSON_OBJECTID[false, modMongoShell][2], 8) = 0 then
+      if StrCompIL(JSON + 1,
+          @BSON_JSON_OBJECTID[false, modMongoShell][2], 8) = 0 then
         TryObjectID(JSON + 9, ')');
     'N':
-      if StrCompIL(JSON + 1, @BSON_JSON_NEWDATE[1], 8) = 0 then
+      if StrCompIL(JSON + 1,
+          @BSON_JSON_NEWDATE[1], 8) = 0 then
         TryDate(JSON + 9, ')')
-      else if StrCompIL(JSON + 1, @BSON_JSON_DECIMAL[false, modMongoShell][2], 13) = 0 then
+      else if StrCompIL(JSON + 1,
+               @BSON_JSON_DECIMAL[false, modMongoShell][2], 13) = 0 then
         TryDecimal(JSON + 14, ')');
     'I':
-      if StrCompIL(JSON + 1, @BSON_JSON_DATE[modMongoShell, false][2], 7) = 0 then
+      if StrCompIL(JSON + 1,
+          @BSON_JSON_DATE[modMongoShell, false][2], 7) = 0 then
         TryDate(JSON + 8, ')');
     '/':
       TryRegExShell(JSON + 1);
@@ -2429,6 +2439,7 @@ var
 begin
   if AVarType = VarType then
   begin
+    // content any variant content into BSONVariant()
     VariantToUTF8(Variant(Source), tmp, wasString);
     if wasString then
     begin
@@ -2452,6 +2463,7 @@ begin
       if (VKind = betObjectID) and
          (AVarType in [varDate, varDouble]) then
       begin
+        // convert an ObjectID to its TDateTime part
         Dest.VType := AVarType;
         Dest.VDate := VObjectID.CreateDateTime;
         exit;
@@ -2459,10 +2471,12 @@ begin
       else
       begin
         if VKind = betObjectID then
+          // convert an ObjectID to its text representation
           VObjectID.ToText(tmp)
         else
+          // convert other values to JSON
           tmp := VariantSaveMongoJSON(variant(Source), modMongoShell);
-        RawUTF8ToVariant(tmp, Dest, AVarType); // convert to JSON text
+        RawUTF8ToVariant(tmp, Dest, AVarType);
       end;
   end;
 end;

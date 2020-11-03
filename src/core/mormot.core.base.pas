@@ -328,7 +328,7 @@ type
   PByteDynArray = ^TByteDynArray;
   {$ifndef ISDELPHI2007ANDUP}
   TBytes = array of byte;
-  {$endif}
+  {$endif ISDELPHI2007ANDUP}
   TObjectDynArray = array of TObject;
   PObjectDynArray = ^TObjectDynArray;
   TPersistentDynArray = array of TPersistent;

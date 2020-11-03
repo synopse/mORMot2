@@ -979,6 +979,7 @@ type
     property Writer: TJSONWriter read fWriter write fWriter;
   end;
 
+function ToText(Op: TSelectStatementOperator): PShortString; overload;
 
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
@@ -2717,6 +2718,11 @@ begin
       SubFields^[f^.Field] := f^.SubField;
     inc(f);
   end;
+end;
+
+function ToText(Op: TSelectStatementOperator): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSelectStatementOperator), ord(Op));
 end;
 
 

@@ -627,8 +627,8 @@ var
 begin
   fRest.AcquireExecution[execOrmWrite].Safe.Lock;
   try
-    if fRecordVersionMax = 0 then
-    begin // check twice to avoid race condition
+    if fRecordVersionMax = 0 then // check twice to avoid race condition
+    begin
       current := 0;
       for m := 0 to fModel.TablesMax do
       begin
