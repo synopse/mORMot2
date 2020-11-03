@@ -50,6 +50,7 @@ uses
   mormot.orm.server        in '..\src\orm\mormot.orm.server.pas',
   mormot.orm.sql           in '..\src\orm\mormot.orm.sql.pas',
   mormot.orm.sqlite3       in '..\src\orm\mormot.orm.sqlite3.pas',
+  mormot.orm.mongodb       in '..\src\orm\mormot.orm.mongodb.pas',
   mormot.soa.core          in '..\src\soa\mormot.soa.core.pas',
   mormot.soa.client        in '..\src\soa\mormot.soa.client.pas',
   mormot.soa.server        in '..\src\soa\mormot.soa.server.pas',
