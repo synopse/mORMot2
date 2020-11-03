@@ -4687,6 +4687,8 @@ begin
 end;
 
 initialization
+  // set late-binding return of TOrmVirtualTableClass.ModuleName
   GetVirtualTableModuleName := @_GetVirtualTableModuleName;
+
 end.
 

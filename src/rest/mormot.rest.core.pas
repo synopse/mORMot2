@@ -1732,7 +1732,7 @@ begin
   if aInterface = TypeInfo(IRestOrm) then
     IRestOrm(Obj) := fOrm
   else
-    result := false;
+    result := fServices.Resolve(aInterface, Obj);
 end;
 
 procedure TRest.SetLogClass(aClass: TSynLogClass);

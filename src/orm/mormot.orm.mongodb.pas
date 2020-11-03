@@ -1039,7 +1039,7 @@ begin
     // use {%:%} here since FieldValue is already JSON encoded
     query := BSONVariant('{%:%}',
       [fStoredClassMapping^.InternalToExternal(FieldName), FieldValue], []);
-    // retrieve the ID for this query
+    // retrieve the IDs for this query
     if id.Init(fCollection.FindBSON(query, BSONVariant(['_id', 1]))) then
     begin
       n := 0;

@@ -362,8 +362,8 @@ type
     // - Kind will specify the expected returned document layout
     procedure ArgsValuesAsDocVariant(Kind: TInterfaceMethodParamsDocVariantKind;
       out Dest: TDocVariantData; const Values: TVariantDynArray; Input: boolean;
-      Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty,
-        dvoValueCopiedByReference]);
+      Options: TDocVariantOptions =
+        [dvoReturnNullForUnknownProperty, dvoValueCopiedByReference]);
     /// normalize a TDocVariant containing the input or output arguments values
     // - "normalization" will ensure sets and enums are seralized as text
     // - if Input is TRUE, will handle const / var arguments
@@ -4707,7 +4707,8 @@ begin
   end;
 end;
 
-function TInterfaceResolverInjected.TryResolve(aInterface: PRttiInfo; out Obj): boolean;
+function TInterfaceResolverInjected.TryResolve(aInterface: PRttiInfo;
+  out Obj): boolean;
 var
   i: PtrInt;
   new: TInterfacedObject;

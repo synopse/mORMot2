@@ -300,7 +300,7 @@ end;
 
 procedure TRestOrmServerFullMemory.DropDatabase;
 var
-  t: integer;
+  t: PtrInt;
 begin
   for t := 0 to fStaticDataCount - 1 do
     TRestStorageInMemory(fStaticData[t]).DropValues;
