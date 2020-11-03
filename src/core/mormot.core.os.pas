@@ -1449,6 +1449,7 @@ type
     function GetProc(ProcName: PChar; Entry: PPointer;
       RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
     /// cross-platform call to FreeLibrary() + set fHandle := 0
+    // - as called by Destroy, but you can use it directly to reload the library
     procedure FreeLib;
     /// same as SafeLoadLibrary() but setting fLibraryPath and cwd on Windows
     function TryLoadLibrary(const aLibrary: array of TFileName;

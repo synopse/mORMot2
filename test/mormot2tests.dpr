@@ -35,6 +35,7 @@ uses
   mormot.core.interfaces   in '..\src\core\mormot.core.interfaces.pas',
   mormot.core.zip          in '..\src\core\mormot.core.zip.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
+  mormot.lib.lizard        in '..\src\lib\mormot.lib.lizard.pas',
   mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
   mormot.net.http          in '..\src\net\mormot.net.http.pas',
   mormot.lib.winhttp       in '..\src\lib\mormot.lib.winhttp.pas',
