@@ -59,13 +59,13 @@ const
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
     {$ifdef FPC}
       {$ifdef FPC_X64MM}             + ' x64MM'
-        {$ifdef FPCMM_BOOST}         + 'b' {$endif}
-        {$ifdef FPCMM_SERVER}        + 's' {$endif}
+        {$ifdef FPCMM_BOOST}         + 'b'     {$endif}
+        {$ifdef FPCMM_SERVER}        + 's'     {$endif}
       {$else}
         {$ifdef FPC_FASTMM4}         + ' FMM4' {$else}
-          {$ifdef FPC_SYNTBB}        + ' TBB' {$else}
-            {$ifdef FPC_SYNJEMALLOC} + ' JM' {$else}
-              {$ifdef FPC_SYNCMEM}   + ' GM' {$else}
+          {$ifdef FPC_SYNTBB}        + ' TBB'  {$else}
+            {$ifdef FPC_SYNJEMALLOC} + ' JM'   {$else}
+              {$ifdef FPC_SYNCMEM}   + ' GM'   {$else}
                 {$ifdef FPC_CMEM}    + ' CM'
                 {$endif FPC_CMEM}
               {$endif FPC_SYNCMEM}
@@ -74,7 +74,7 @@ const
         {$endif FPC_FASTMM4}
       {$endif FPC_X64MM}
     {$else}
-      {$ifdef FullDebugMode}         + ' FDM'{$endif}
+      {$ifdef FullDebugMode}         + ' FDM'  {$endif}
     {$endif FPC};
 
 

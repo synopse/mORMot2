@@ -805,7 +805,7 @@ type
     fOnMeasured: TOnSystemUseMeasured;
     fTimer: TObject;
     fUnsubscribeProcessOnAccessError: boolean;
-    function ProcessIndex(aProcessID: integer): integer;
+    function ProcessIndex(aProcessID: integer): PtrInt;
   public
     /// a VCL's TTimer.OnTimer compatible event
     // - to be run every few seconds and retrieve the CPU and RAM use:
@@ -2385,7 +2385,7 @@ end;
 constructor TSystemUse.Create(const aProcessID: array of integer;
   aHistoryDepth: integer);
 var
-  i: integer;
+  i: PtrInt;
   it, kt, ut: Int64;
 begin
   inherited Create;
@@ -2415,7 +2415,7 @@ end;
 
 procedure TSystemUse.Subscribe(aProcessID: integer);
 var
-  i, n: integer;
+  i, n: PtrInt;
 begin
   if self = nil then
     exit;
@@ -2439,7 +2439,7 @@ end;
 
 function TSystemUse.Unsubscribe(aProcessID: integer): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if self = nil then
@@ -2457,7 +2457,7 @@ begin
   end;
 end;
 
-function TSystemUse.ProcessIndex(aProcessID: integer): integer;
+function TSystemUse.ProcessIndex(aProcessID: integer): PtrInt;
 begin // caller should have made fSafe.Enter
   {$ifdef MSWINDOWS}
   if aProcessID = 0 then
@@ -2472,7 +2472,7 @@ end;
 
 function TSystemUse.Data(out aData: TSystemUseData; aProcessID: integer): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if self <> nil then
@@ -2529,7 +2529,7 @@ end;
 
 function TSystemUse.HistoryData(aProcessID, aDepth: integer): TSystemUseDataDynArray;
 var
-  i, n, last: integer;
+  i, n, last: PtrInt;
 begin
   result := nil;
   if self = nil then
@@ -2569,7 +2569,7 @@ end;
 
 function TSystemUse.History(aProcessID, aDepth: integer): TSingleDynArray;
 var
-  i, n: integer;
+  i, n: PtrInt;
   data: TSystemUseDataDynArray;
 begin
   result := nil;
@@ -2604,7 +2604,7 @@ function TSystemUse.HistoryText(aProcessID, aDepth: integer;
 var
   data: TSystemUseDataDynArray;
   mem: RawUTF8;
-  i: integer;
+  i: PtrInt;
 begin
   result := '';
   mem := '';
@@ -2632,7 +2632,7 @@ function TSystemUse.HistoryVariant(aProcessID, aDepth: integer): variant;
 var
   res: TDocVariantData absolute result;
   data: TSystemUseDataDynArray;
-  i: integer;
+  i: PtrInt;
 begin
   VarClear(result{%H-});
   data := HistoryData(aProcessID, aDepth);
@@ -2651,7 +2651,7 @@ var
 
 function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUTF8;
 var
-  i: integer;
+  i: PtrInt;
   parts: TDiskPartitions;
 
   function GetInfo(var p: TDiskPartition): shortstring;

@@ -1848,7 +1848,8 @@ begin
     raise ERestException.CreateUTF8('%.SetOrmInstance(nil)', [self]);
   fOrmInstance := aORM;
   if not fOrmInstance.GetInterface(IRestOrm, fOrm) then
-    raise ERestException.CreateUTF8('%.Create with invalid %', [self, fOrmInstance]);
+    raise ERestException.CreateUTF8('%.Create with invalid %',
+      [self, fOrmInstance]);
 end;
 
 destructor TRest.Destroy;
@@ -2003,9 +2004,9 @@ begin
     FreeAndNil(fServices);
 end;
 
+
 {$ifndef PUREMORMOT2}
 // backward compatibility methods redirections
-
 
 { --- redirect to TRestOrm homonymous methods }
 
@@ -2567,6 +2568,7 @@ function TRest.CacheWorthItForTable(aTableIndex: cardinal): boolean;
 begin
   result := fOrm.CacheWorthItForTable(aTableIndex);
 end;
+
 
 { --- redirect to TRestRunThreads methods }
 
