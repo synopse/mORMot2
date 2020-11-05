@@ -166,17 +166,17 @@ function Adler32Pas(Adler: cardinal; p: pointer; Count: integer): cardinal;
 function Adler32Asm(Adler: cardinal; p: pointer; Count: integer): cardinal;
  {$ifndef CPUX86} inline; {$endif}
 
- /// entry point of the raw MD5 transform function - may be used for low-level use
- procedure RawMd5Compress(var Hash; Data: pointer);
+/// entry point of the raw MD5 transform function - may be used for low-level use
+procedure RawMd5Compress(var Hash; Data: pointer);
 
- /// entry point of the raw SHA-1 transform function - may be used for low-level use
- procedure RawSha1Compress(var Hash; Data: pointer);
+/// entry point of the raw SHA-1 transform function - may be used for low-level use
+procedure RawSha1Compress(var Hash; Data: pointer);
 
- /// entry point of the raw SHA-256 transform function - may be used for low-level use
- procedure RawSha256Compress(var Hash; Data: pointer);
+/// entry point of the raw SHA-256 transform function - may be used for low-level use
+procedure RawSha256Compress(var Hash; Data: pointer);
 
- /// entry point of the raw SHA-512 transform function - may be used for low-level use
- procedure RawSha512Compress(var Hash; Data: pointer);
+/// entry point of the raw SHA-512 transform function - may be used for low-level use
+procedure RawSha512Compress(var Hash; Data: pointer);
 
 
 
@@ -5200,7 +5200,8 @@ end;
 procedure RawSha256Compress(var Hash; Data: pointer);
 begin
   {$ifdef ASMX64}
-  if K256Aligned <> nil then // use optimized Intel's sha256_sse4.asm
+  if K256Aligned <> nil then
+    // use optimized Intel's sha256_sse4.asm
     sha256_sse4(Data^, Hash, 1)
   else
   {$endif ASMX64}
@@ -5233,6 +5234,18 @@ begin
   if Buffer = nil then
     exit; // avoid GPF
   inc(Data.MLen, QWord(cardinal(Len)) shl 3);
+  {$ifdef CPUX64}
+  if (K256AlignedStore <> '') and
+     (Data.Index = 0) and
+     (Len >= 64) then
+  begin
+    // use optimized Intel's sha256_sse4.asm for whole blocks
+    sha256_sse4(Buffer^, Data.Hash, Len shr 6);
+    inc(PByte(Buffer), Len);
+    Len := Len and 63;
+    dec(PByte(Buffer), Len);
+  end;
+  {$endif CPUX64}
   while Len > 0 do
   begin
     aLen := 64 - Data.Index;
