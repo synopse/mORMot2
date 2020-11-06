@@ -245,7 +245,8 @@ type
     /// called from STATE remote HTTP method
     procedure RefreshInternalStateFromStatic;
     /// assign a TRestOrm instance for a given slot
-    // - called e.g. by TOrmVirtualTable.Create or StaticDataCreate
+    // - called e.g. by TOrmVirtualTable.Create, StaticMongoDBRegister(),
+    // StaticDataCreate() or TRestOrmServer.RemoteDataCreate
     procedure StaticTableSetup(aTableIndex: integer; aStatic: TRestOrm;
       aKind: TRestServerKind);
     /// fast get the associated static server or virtual table from its index, if any
@@ -620,10 +621,13 @@ function TRestOrmServer.RemoteDataCreate(aClass: TOrmClass;
   aRemoteRest: TRestOrm): TRestOrm;
 var
   t: integer;
+  existing: TRestOrm;
 begin
   t := Model.GetTableIndexExisting(aClass);
-  if GetStaticTableIndex(t) <> nil then
-    raise ERestStorage.CreateUTF8('Duplicate %.RemoteDataCreate(%)',[self, aClass]);
+  existing := GetStaticTableIndex(t);
+  if existing <> nil then
+    raise ERestStorage.CreateUTF8('Duplicated %.RemoteDataCreate(%) as %',
+      [self, aClass, existing]);
   result := TRestStorageRemote.Create(aClass, self, aRemoteRest);
   StaticTableSetup(t, result, sStaticDataTable);
 end;

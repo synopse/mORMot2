@@ -256,12 +256,15 @@ type
     procedure AsynchInterning(Interning: TRawUTF8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
     /// direct access to the TRest instance owner
-    property Rest: TRest read fRest;
+    property Rest: TRest
+      read fRest;
     /// direct access to the background thread TRestBatch instances
-    property BackgroundBatch: TRestBatchLockedDynArray read fBackgroundBatch;
+    property BackgroundBatch: TRestBatchLockedDynArray
+      read fBackgroundBatch;
   published
     /// the identifier of the thread, as logged
-    property Name: RawUTF8 read fThreadName;
+    property Name: RawUTF8
+      read fThreadName;
   end;
 
 
@@ -404,7 +407,8 @@ type
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     /// low-level access to the associated timer
     // - may contain nil if EnsureBackgroundTimerExists has not yet been called
-    property BackgroundTimer: TRestBackgroundTimer read fBackgroundTimer;
+    property BackgroundTimer: TRestBackgroundTimer
+      read fBackgroundTimer;
   end;
 
 
@@ -622,15 +626,19 @@ type
     property AcquireWriteTimeOut: cardinal index execOrmWrite
       read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
     /// low-level access to the execution mode of the ORM and SOA process
-    property AcquireExecution: TRestAcquireExecutions read fAcquireExecution;
+    property AcquireExecution: TRestAcquireExecutions
+      read fAcquireExecution;
     /// a local "Garbage collector" list, for some classes instances which must
     // live during the whole TRestServer process
     // - is used internally by the class, but can be used for business code
-    property PrivateGarbageCollector: TSynObjectList read fPrivateGarbageCollector;
+    property PrivateGarbageCollector: TSynObjectList
+      read fPrivateGarbageCollector;
     /// access to the associate TSynLog class type
-    property LogClass: TSynLogClass read fLogClass;
+    property LogClass: TSynLogClass
+      read fLogClass;
     /// access to the associate TSynLog class familly
-    property LogFamily: TSynLogFamily read fLogFamily;
+    property LogFamily: TSynLogFamily
+      read fLogFamily;
 
   {$ifndef PUREMORMOT2}
     // backward compatibility redirections to the homonymous IRestOrm methods
@@ -886,7 +894,8 @@ const
   // - contains TAuthUser.ComputeHashedPassword('synopse')
   // - override AuthAdminDefaultPassword, AuthSupervisorDefaultPassword and
   // AuthUserDefaultPassword values to follow your own application expectations
-  DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
+  DEFAULT_HASH_SYNOPSE =
+    '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
 
 var
   /// default timeout period set by TAuthGroup.InitializeTable for 'Admin' group
@@ -1290,13 +1299,15 @@ type
     // - in case of the record deletion, all matching TOrmHistory won't
     // be touched by TRestOrmServer.AfterDeleteForceCoherency(): so this
     // property is a plain TID/Int64, not a TRecordReference field
-    property ModifiedRecord: TID read fModifiedRecord write fModifiedRecord;
+    property ModifiedRecord: TID
+      read fModifiedRecord write fModifiedRecord;
     /// when the modification was recorded
     // - even if in most cases, this timestamp may be synchronized over TRest
     // instances (thanks to TRestClientURI.ServerTimestampSynchronize), it
     // is not safe to use this field as absolute: you should rather rely on
     // pure monotonic ID/RowID increasing values (see e.g. TOrmVersion)
-    property Timestamp: TModTime read fTimestamp write fTimestamp;
+    property Timestamp: TModTime
+      read fTimestamp write fTimestamp;
   end;
 
   /// common ancestor for tracking changes on TOrm tables
@@ -1459,7 +1470,6 @@ implementation
 
 uses
   mormot.orm.rest;
-
 
 
 { ************ Customize REST Execution }
