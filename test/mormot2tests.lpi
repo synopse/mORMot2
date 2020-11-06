@@ -541,7 +541,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="72">
+    <Units Count="71">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -731,7 +731,7 @@
         <IsPartOfProject Value="True"/>
       </Unit46>
       <Unit47>
-        <Filename Value="..\src\net\mormot.net.websock.pas"/>
+        <Filename Value="..\src\net\mormot.net.ws.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit47>
       <Unit48>
@@ -819,17 +819,13 @@
         <IsPartOfProject Value="True"/>
       </Unit68>
       <Unit69>
-        <Filename Value="..\src\net\mormot.net.websock.core.pas"/>
+        <Filename Value="..\src\net\mormot.net.ws.server.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit69>
       <Unit70>
-        <Filename Value="..\src\net\mormot.net.websock.server.pas"/>
+        <Filename Value="..\src\net\mormot.net.ws.client.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit70>
-      <Unit71>
-        <Filename Value="..\src\net\mormot.net.websock.client.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit71>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

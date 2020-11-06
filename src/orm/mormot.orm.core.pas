@@ -7439,6 +7439,7 @@ type
   TSQLInitializeTableOption = TOrmInitializeTableOption;
   TSQLInitializeTableOptions = TOrmInitializeTableOptions;
   TSQLAccessRights = TOrmAccessRights;
+  PSQLAccessRights = POrmAccessRights;
   TSQLFieldTables = TOrmFieldTables;
   TSQLModel = TOrmModel;
   TSQLModelProperties = TOrmModelProperties;

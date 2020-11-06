@@ -20,7 +20,7 @@ interface
 
 {.$define NOHTTPCLIENTWEBSOCKETS}
 { if defined, TRestHttpClientWebSockets won't be declared
-  - will avoid to link mormot.net.websock.* units }
+  - will avoid to link mormot.net.ws.* units }
 
 {$I ..\mormot.defines.inc}
 
@@ -57,8 +57,8 @@ uses
   mormot.net.sock,
   mormot.net.http,
   {$ifndef NOHTTPCLIENTWEBSOCKETS}
-  mormot.net.websock.core,
-  mormot.net.websock.client,
+  mormot.net.ws.core,
+  mormot.net.ws.client,
   {$endif NOHTTPCLIENTWEBSOCKETS}
   mormot.net.client;
 
@@ -66,7 +66,7 @@ uses
 { ************ TRestHttpClientGeneric and TRestHttpClientRequest Parent Classes }
 
 type
-  ERestHttpClient = class(ERestException);
+  EHttpClient = class(ERestException);
 
   /// available compression algorithms for transmission
   // - SynLZ is faster then Deflate, but not standard: use hcSynLZ for Delphi
@@ -589,7 +589,7 @@ var
   aModel: TOrmModel;
 begin
   if not Assigned(aLogClass) then
-    raise ERestHttpClient.CreateUTF8(
+    raise EHttpClient.CreateUTF8(
       '%.CreateForRemoteLogging(LogClass=nil)', [self]);
   aModel := TOrmModel.Create([], aRoot);
   Create(aServer, UInt32ToUtf8(aPort), aModel, aPort = 443);
@@ -736,9 +736,6 @@ begin
         fSocket.SendTimeout := fSendTimeout;
       if fReceiveTimeout > 0 then
         fSocket.ReceiveTimeout := fReceiveTimeout;
-      {$ifdef USETCPPREFIX}
-      fSocket.TCPPrefix := 'magic';
-      {$endif}
       // note that first registered algo will be the prefered one
       {$ifndef PUREMORMOT2}
       if hcSynShaAes in Compression then
@@ -800,7 +797,7 @@ begin
     begin
       InternalSetClass;
       if fRequestClass = nil then
-        raise ERestHttpClient.CreateUTF8('fRequestClass=nil for %', [self]);
+        raise EHttpClient.CreateUTF8('fRequestClass=nil for %', [self]);
       timeout := GetTickCount64 + fConnectRetrySeconds shl 10;
       repeat
         try
@@ -813,8 +810,8 @@ begin
             if GetTickCount64 >= timeout then
               exit;
             fLogClass.Add.Log(sllTrace,
-              'InternalCheckOpen: % on %:% -> wait and retry up to % seconds', [E.ClassType,
-              fServer, fPort, fConnectRetrySeconds], self);
+              'InternalCheckOpen: % on %:% -> wait and retry up to % seconds',
+              [E.ClassType, fServer, fPort, fConnectRetrySeconds], self);
             SleepHiRes(250);
           end;
         end;
@@ -1037,7 +1034,8 @@ begin
     if result <> '' then
       log.Log(sllWarning, '[%] error upgrading %', [result, sockets], self)
     else
-      log.Log(sllHTTP, 'HTTP link upgraded to WebSockets using %', [sockets], self);
+      log.Log(sllHTTP, 'HTTP link upgraded to WebSockets using %',
+        [sockets], self);
 end;
 
 function TRestHttpClientWebsockets.WebSocketsConnect(
@@ -1057,7 +1055,7 @@ begin
         result := 'ServerTimestampSynchronize';
   end;
   if result <> '' then
-    raise ERestHttpClient.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
+    raise EHttpClient.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
       [self, Server, Port, Model.Root, result]);
 end;
 

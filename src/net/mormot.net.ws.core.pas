@@ -1,7 +1,7 @@
 /// WebSockets Shared Process Classes and Definitions
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.net.websock.core;
+unit mormot.net.ws.core;
 
 {
   *****************************************************************************

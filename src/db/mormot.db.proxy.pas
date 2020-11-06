@@ -1825,10 +1825,6 @@ end;
 
 { TSQLDBServerHttpApi }
 
-const
-  NO_ERROR = 0; // no need to link the Windows unit
-  ERROR_ACCESS_DENIED = 5;
-
 constructor TSQLDBServerHttpApi.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName, aPassword: RawUTF8; aHttps: boolean;
   aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;

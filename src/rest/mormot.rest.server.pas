@@ -14,6 +14,7 @@ unit mormot.rest.server;
     - TRestServerMonitor for High-Level Statistics of a REST Server
     - TInterfacedCallback/TBlockingCallback Classes
     - TRestServer Abstract REST Server
+    - TRestHttpServerDefinition Settings for a HTTP Server
 
   *****************************************************************************
 }
@@ -1658,7 +1659,7 @@ type
     E: Exception): boolean of object;
 
   /// event signature used to notify a client callback
-  // - implemented e.g. by TSQLHttpServer.NotifyCallback
+  // - implemented e.g. by TRestHttpServer.NotifyCallback
   TOnRestServerClientCallback = function(aSender: TRestServer;
     const aInterfaceDotMethodName, aParams: RawUTF8;
     aConnectionID: Int64; aFakeCallID: integer;
@@ -1775,7 +1776,7 @@ type
     OnSessionClosed: TOnOrmSession;
     /// this event will be executed to push notifications from the server to
     // a remote client, using a (fake) interface parameter
-    // - is nil by default, but may point e.g. to TSQLHttpServer.NotifyCallback
+    // - is nil by default, but may point e.g. to TRestHttpServer.NotifyCallback
     OnNotifyCallback: TOnRestServerClientCallback;
     /// this event will be executed by TServiceFactoryServer.CreateInstance
     // - you may set a callback to customize a server-side service instance,
@@ -2094,7 +2095,7 @@ type
     // server side, so that RecordVersionSynchronizeStartSlave() will be able
     // to receive push notifications of any updates
     // - this method expects the communication channel to be bidirectional, e.g.
-    // a mORMotHTTPServer's TSQLHttpServer in useBidirSocket mode
+    // a mORMotHTTPServer's TRestHttpServer in useBidirSocket mode
     function RecordVersionSynchronizeMasterStart(
       ByPassAuthentication: boolean = false): boolean;
     /// initiate asynchronous master/slave replication on a slave TRest
@@ -2104,7 +2105,7 @@ type
     // REST calls to RecordVersionSynchronizeSlave, then create and register a
     // callback instance using RecordVersionSynchronizeSubscribeMaster()
     // - this method expects the communication channel to be bidirectional, e.g.
-    // a TSQLHttpClientWebsockets
+    // a TRestHttpClientWebsockets
     // - the modifications will be pushed by the master, then applied to the
     // slave storage, until RecordVersionSynchronizeSlaveStop method is called
     // - an optional OnNotify event may be defined, which will be triggered
@@ -2128,7 +2129,7 @@ type
     // - the callback process will be blocking for the ORM write point of view:
     // so it should be as fast as possible, or asynchronous - note that regular
     // callbacks using WebSockets, as implemented by SynBidirSock.pas and
-    // mORMotHTTPServer's TSQLHttpServer in useBidirSocket mode, are asynchronous
+    // mORMotHTTPServer's TRestHttpServer in useBidirSocket mode, are asynchronous
     // - if the supplied RecordVersion is not the latest on the server side,
     // this method will return FALSE and the caller should synchronize again via
     // RecordVersionSynchronize() to avoid any missing update
@@ -2282,6 +2283,85 @@ function ServiceRunningContext: PServiceRunningContext;
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, even if cryptographically-level SHA-3 secure
 function CurrentServerNonce(Previous: boolean = false): RawUTF8;
+
+
+
+{ ************ TRestHttpServerDefinition Settings for a HTTP Server }
+
+type
+  /// supported REST authentication schemes
+  // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
+  // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
+  // - asSSPI won't be defined under Linux, since it is a Windows-centric feature
+  TRestHttpServerRestAuthentication = (
+    adDefault,
+    adHttpBasic,
+    adWeak,
+    adSSPI);
+
+  /// parameters supplied to publish a TSQLRestServer via HTTP
+  // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
+  // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
+  TRestHttpServerDefinition = class(TSynPersistentWithPassword)
+  protected
+    fBindPort: RawByteString;
+    fAuthentication: TRestHttpServerRestAuthentication;
+    fEnableCORS: RawUTF8;
+    fThreadCount: byte;
+    fHttps: boolean;
+    fHttpSysQueueName: SynUnicode;
+    fRemoteIPHeader: RawUTF8;
+  published
+    /// defines the port to be used for REST publishing
+    // - may include an optional IP address to bind, e.g. '127.0.0.1:8888'
+    property BindPort: RawByteString
+      read fBindPort write fBindPort;
+    /// which authentication is expected to be published
+    property Authentication: TRestHttpServerRestAuthentication
+      read fAuthentication write fAuthentication;
+    /// allow Cross-origin resource sharing (CORS) access
+    // - set this property to '*' if you want to be able to access the
+    // REST methods from an HTML5 application hosted in another location,
+    // or define a CSV white list of TMatch-compatible origins
+    // - will set e.g. the following HTTP header:
+    // ! Access-Control-Allow-Origin: *
+    property EnableCORS: RawUTF8
+      read fEnableCORS write fEnableCORS;
+    /// how many threads the thread pool associated with this HTTP server
+    // should create
+    // - if set to 0, will use default value 32
+    // - this parameter may be ignored depending on the actual HTTP
+    // server used, which may not have any thread pool
+    property ThreadCount: byte
+      read fThreadCount write fThreadCount;
+    /// defines if https:// protocol should be used
+    // - implemented only by http.sys server under Windows, not by socket servers
+    property Https: boolean
+      read fHttps write fHttps;
+    /// the displayed name in the http.sys queue
+    // - used only by http.sys server under Windows, not by socket-based servers
+    property HttpSysQueueName: SynUnicode
+      read fHttpSysQueueName write fHttpSysQueueName;
+    /// the value of a custom HTTP header containing the real client IP
+    // - by default, the RemoteIP information will be retrieved from the socket
+    // layer - but if the server runs behind some proxy service, you should
+    // define here the HTTP header name which indicates the true remote client
+    // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
+    property RemoteIPHeader: RawUTF8
+      read fRemoteIPHeader write fRemoteIPHeader;
+    /// if defined, this HTTP server will use WebSockets, and our secure
+    // encrypted binary protocol
+    // - when stored in the settings JSON file, the password will be safely
+    // encrypted as defined by TSynPersistentWithPassword
+    // - use the inherited PlainPassword property to set or read its value
+    property WebSocketPassword: SPIUTF8
+      read fPassWord write fPassWord;
+  end;
+
+
+const
+  TRestServerAuthenticationSSPI = nil;
+  { TODO : implement TRestServerAuthenticationSSPI }
 
 
 
@@ -6661,7 +6741,7 @@ begin
       [self, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> Sender then
-      // e.g. if length(TSQLHttpServer.fDBServers)>1
+      // e.g. if length(TRestHttpServer.fDBServers)>1
       if RunningThread <> nil then
         raise ERestException.CreateUTF8('%.BeginCurrentThread() twice', [self])
       else
@@ -6698,7 +6778,7 @@ begin
   end;
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> nil then
-      // e.g. if length(TSQLHttpServer.fDBServers)>1
+      // e.g. if length(TRestHttpServer.fDBServers)>1
       if RunningThread <> Sender then
         raise ERestException.CreateUTF8(
           '%.EndCurrentThread(%) should match RunningThread=%',

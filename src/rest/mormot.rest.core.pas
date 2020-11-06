@@ -338,12 +338,11 @@ type
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken into account during process
-    // - this abstract method won't do anything, but TRestServer's will
+    // - this method will redirect TRestServer.OnBeginCurrentThread
     procedure BeginCurrentThread(Sender: TThread);
     /// you can call this method just before a thread is finished to ensure
     // e.g. that the associated external DB connection will be released
-    // - this abstract method will call fLogClass.Add.NotifyThreadEnded
-    // but TRestServer.EndCurrentThread will do the main process
+    // - this method will redirect TRestServer.OnEndCurrentThread
     procedure EndCurrentThread(Sender: TThread);
     /// define asynchronous execution of interface methods in a background thread
     // - this class allows to implements any interface via a fake class, which will

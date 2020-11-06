@@ -1,7 +1,7 @@
 /// WebSockets Client-Side Process 
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.net.websock.client;
+unit mormot.net.ws.client;
 
 {
   *****************************************************************************
@@ -38,7 +38,7 @@ uses
   mormot.net.http,
   mormot.net.client,
   mormot.net.server,
-  mormot.net.websock.core;
+  mormot.net.ws.core;
 
 
 

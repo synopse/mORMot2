@@ -577,6 +577,9 @@ type
   end;
 
 const
+  NO_ERROR = 0;
+  ERROR_ACCESS_DENIED = 5;
+
   INVALID_HANDLE_VALUE = DWORD(-1);
   
   PROV_RSA_AES = 24;

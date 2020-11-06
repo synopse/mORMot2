@@ -894,7 +894,6 @@ type
 
 const
   // some values to avoid including the Windows unit in mormot.net.server
-  NO_ERROR = Windows.NO_ERROR;
   ERROR_ALREADY_EXISTS = Windows.ERROR_ALREADY_EXISTS;
   ERROR_HANDLE_EOF = Windows.ERROR_HANDLE_EOF;
   ERROR_MORE_DATA = Windows.ERROR_MORE_DATA;
