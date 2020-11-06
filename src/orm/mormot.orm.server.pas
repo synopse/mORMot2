@@ -257,6 +257,25 @@ type
     function GetStaticTableIndex(aTableIndex: integer;
       out Kind: TRestServerKind): TRestOrm; overload;
        {$ifdef HASINLINE}inline;{$endif}
+    /// create an external static redirection for a specific class
+    // - call it just after Create, before TSQLRestServerDB.CreateMissingTables;
+    // warning: if you don't call this method before CreateMissingTable method
+    // is called, the table will be created as a regular table by the main
+    // database engine, and won't be static
+    // - the specified TOrm class will have all its CRUD / ORM methods be
+    // redirected to aRemoteRest, which may be a TRestClient or another
+    // TRestServer instance (e.g. a fast SQLITE_MEMORY_DATABASE_NAME)
+    // - if aRemoteRest is a TRestClient, it should have been authenticated
+    // to the remote TRestServer, so that CRUD / ORM operations will pass
+    // - this will enable easy creation of proxies, or local servers, with they
+    // own cache and data model - e.g. a branch office server which may serve
+    // its local clients over Ethernet, but communicating to a main mORMot
+    // server via Internet, storing the corporate data in the main office server
+    // - you may also share some tables (e.g. TAuthUser and TAuthGroup)
+    // between TRestServer instances in a single service
+    // - returns a newly created TRestStorageRemote instance
+    function RemoteDataCreate(aClass: TOrmClass;
+      aRemoteRest: TRestOrm): TRestOrm; virtual;
     /// fast get the associated TRestStorageRemote from its index, if any
     // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
     function GetRemoteTable(TableIndex: integer): TRestOrm;
@@ -595,6 +614,17 @@ begin
          (fStaticVirtualTable <> nil) then
         result := fStaticVirtualTable[aTableIndex];
   end;
+end;
+
+function TRestOrmServer.RemoteDataCreate(aClass: TOrmClass;
+  aRemoteRest: TRestOrm): TRestOrm;
+var
+  t: integer;
+begin
+  if GetStaticDataServer(aClass)<>nil then
+    raise ERestStorage.CreateUTF8('Duplicate %.RemoteDataCreate(%)',[self,aClass]);
+  result := TRestStorageRemote.Create(aClass, self, aRemoteRest);
+  StaticTableSetup(Model.GetTableIndexExisting(aClass), result, sStaticDataTable);
 end;
 
 function TRestOrmServer.GetRemoteTable(TableIndex: integer): TRestOrm;
