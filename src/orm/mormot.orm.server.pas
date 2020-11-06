@@ -621,10 +621,11 @@ function TRestOrmServer.RemoteDataCreate(aClass: TOrmClass;
 var
   t: integer;
 begin
-  if GetStaticDataServer(aClass)<>nil then
-    raise ERestStorage.CreateUTF8('Duplicate %.RemoteDataCreate(%)',[self,aClass]);
+  t := Model.GetTableIndexExisting(aClass);
+  if GetStaticTableIndex(t) <> nil then
+    raise ERestStorage.CreateUTF8('Duplicate %.RemoteDataCreate(%)',[self, aClass]);
   result := TRestStorageRemote.Create(aClass, self, aRemoteRest);
-  StaticTableSetup(Model.GetTableIndexExisting(aClass), result, sStaticDataTable);
+  StaticTableSetup(t, result, sStaticDataTable);
 end;
 
 function TRestOrmServer.GetRemoteTable(TableIndex: integer): TRestOrm;
