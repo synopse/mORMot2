@@ -695,6 +695,5 @@ begin
     result := crc32(0, pointer(aString), result);
 end;
 
-
 end.
 

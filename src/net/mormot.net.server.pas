@@ -1343,7 +1343,7 @@ end;
 destructor THttpServer.Destroy;
 var
   endtix: Int64;
-  i: integer;
+  i: PtrInt;
   resp: THttpServerResp;
   callback: TNetSocket;
 begin
@@ -1505,7 +1505,7 @@ var
   res: TNetResult;
   {$ifdef MONOTHREAD}
   endtix: Int64;
-  {$endif}
+  {$endif MONOTHREAD}
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
@@ -1563,7 +1563,7 @@ begin
         ClientCrtSock := fSocketClass.Create(self);
         ClientCrtSock.AcceptRequest(ClientSock, @ClientSin);
         if not fThreadPool.Push(pointer(PtrUInt(ClientCrtSock)),
-          {waitoncontention=}true) then
+            {waitoncontention=}true) then
         begin
           // returned false if there is no idle thread in the pool, and queue is full
           ClientCrtSock.Free; // will call DirectShutdown(ClientSock)
@@ -1921,7 +1921,8 @@ begin
         if status <> HTTP_SUCCESS then
         begin
           reason := StatusCodeToReason(status);
-          SockSend(['HTTP/1.0 ', status, ' ', reason, #13#10#13#10, reason, ' ', status]);
+          SockSend(['HTTP/1.0 ', status, ' ', reason, #13#10#13#10,
+            reason, ' ', status]);
           SockSendFlush('');
           result := grRejected;
           exit;
@@ -1960,7 +1961,8 @@ begin
   Create(c.Create(aServer), aServer); // on Linux, Execute raises during Create
 end;
 
-constructor THttpServerResp.Create(aServerSock: THttpServerSocket; aServer: THttpServer);
+constructor THttpServerResp.Create(aServerSock: THttpServerSocket;
+  aServer: THttpServer);
 begin
   fServer := aServer;
   fServerSock := aServerSock;
@@ -2245,7 +2247,7 @@ function THttpApiServer.RemoveUrl(const aRoot, aPort: RawUTF8; Https: boolean;
   const aDomainName: RawUTF8): integer;
 var
   uri: SynUnicode;
-  i, j, n: integer;
+  i, j, n: PtrInt;
 begin
   result := -1;
   if (Self = nil) or
@@ -2272,8 +2274,8 @@ begin
     end;
 end;
 
-class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: RawUTF8; Https:
-  boolean; const aDomainName: RawUTF8; OnlyDelete: boolean): string;
+class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: RawUTF8;
+  Https: boolean; const aDomainName: RawUTF8; OnlyDelete: boolean): string;
 const
   /// will allow AddUrl() registration to everyone
   // - 'GA' (GENERIC_ALL) to grant all access
@@ -2326,7 +2328,7 @@ type
 
 procedure THttpApiServer.Clone(ChildThreadCount: integer);
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (fReqQueue = 0) or
      not Assigned(OnRequest) or
@@ -2495,7 +2497,7 @@ var
   ReqID: HTTP_REQUEST_ID;
   ReqBuf, RespBuf: RawByteString;
   RemoteIP, RemoteConn: RawUTF8;
-  i, L: integer;
+  i, L: PtrInt;
   P: PHTTP_UNKNOWN_HEADER;
   flags, bytesRead, bytesSent: cardinal;
   Err: HRESULT;
@@ -2924,7 +2926,7 @@ end;
 
 function THttpApiServer.GetRegisteredUrl: SynUnicode;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if fRegisteredUnicodeUrl = nil then
     result := ''
@@ -3057,10 +3059,10 @@ begin
   result := (fLogData <> nil);
 end;
 
-procedure THttpApiServer.LogStart(const aLogFolder: TFileName; aType:
-  THttpApiLoggingType; const aSoftwareName: TFileName; aRolloverType:
-  THttpApiLoggingRollOver; aRolloverSize: cardinal; aLogFields:
-  THttpApiLogFields; aFlags: THttpApiLoggingFlags);
+procedure THttpApiServer.LogStart(const aLogFolder: TFileName;
+  aType: THttpApiLoggingType; const aSoftwareName: TFileName;
+  aRolloverType: THttpApiLoggingRollOver; aRolloverSize: cardinal;
+  aLogFields: THttpApiLogFields; aFlags: THttpApiLoggingFlags);
 var
   logInfo: HTTP_LOGGING_INFO;
   folder, software: SynUnicode;
@@ -3100,9 +3102,9 @@ begin
 end;
 
 procedure THttpApiServer.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize: integer = 1024);
+  aCompressMinSize: integer);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited;
   for i := 0 to length(fClones) - 1 do
@@ -3111,7 +3113,7 @@ end;
 
 procedure THttpApiServer.SetOnTerminate(const Event: TOnNotifyThread);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetOnTerminate(Event);
   if fOwner = nil then
@@ -3121,7 +3123,7 @@ end;
 
 procedure THttpApiServer.LogStop;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (self = nil) or
      (fClones = nil) or
@@ -3134,7 +3136,7 @@ end;
 
 procedure THttpApiServer.SetReceiveBufferSize(Value: cardinal);
 var
-  i: integer;
+  i: PtrInt;
 begin
   fReceiveBufferSize := Value;
   for i := 0 to length(fClones) - 1 do
@@ -3143,7 +3145,7 @@ end;
 
 procedure THttpApiServer.SetServerName(const aName: RawUTF8);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetServerName(aName);
   with PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^ do
@@ -3157,7 +3159,7 @@ end;
 
 procedure THttpApiServer.SetOnRequest(const aRequest: TOnHttpServerRequest);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetOnRequest(aRequest);
   for i := 0 to length(fClones) - 1 do
@@ -3166,7 +3168,7 @@ end;
 
 procedure THttpApiServer.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetOnBeforeBody(aEvent);
   for i := 0 to length(fClones) - 1 do
@@ -3175,7 +3177,7 @@ end;
 
 procedure THttpApiServer.SetOnBeforeRequest(const aEvent: TOnHttpServerRequest);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetOnBeforeRequest(aEvent);
   for i := 0 to length(fClones) - 1 do
@@ -3184,7 +3186,7 @@ end;
 
 procedure THttpApiServer.SetOnAfterRequest(const aEvent: TOnHttpServerRequest);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetOnAfterRequest(aEvent);
   for i := 0 to length(fClones) - 1 do
@@ -3193,7 +3195,7 @@ end;
 
 procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetOnAfterResponse(aEvent);
   for i := 0 to length(fClones) - 1 do
@@ -3202,7 +3204,7 @@ end;
 
 procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetMaximumAllowedContentLength(aMax);
   for i := 0 to length(fClones) - 1 do
@@ -3211,7 +3213,7 @@ end;
 
 procedure THttpApiServer.SetRemoteIPHeader(const aHeader: RawUTF8);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetRemoteIPHeader(aHeader);
   for i := 0 to length(fClones) - 1 do
@@ -3220,7 +3222,7 @@ end;
 
 procedure THttpApiServer.SetRemoteConnIDHeader(const aHeader: RawUTF8);
 var
-  i: integer;
+  i: PtrInt;
 begin
   inherited SetRemoteConnIDHeader(aHeader);
   for i := 0 to length(fClones) - 1 do
@@ -3305,7 +3307,7 @@ const
 function THttpApiWebSocketServerProtocol.AddConnection(
   aConn: PHttpApiWebSocketConnection): integer;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if fFirstEmptyConnectionIndex >= fConnectionsCapacity - 1 then
   begin
@@ -3332,7 +3334,7 @@ function THttpApiWebSocketServerProtocol.Broadcast(
   aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer;
   aBufferSize: ULONG): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   EnterCriticalSection(fSafe);
   try
@@ -3394,7 +3396,7 @@ end;
 
 destructor THttpApiWebSocketServerProtocol.Destroy;
 var
-  i: integer;
+  i: PtrInt;
   conn: PHttpApiWebSocketConnection;
 begin
   EnterCriticalSection(fSafe);
@@ -3421,7 +3423,7 @@ end;
 
 procedure THttpApiWebSocketServerProtocol.doShutdown;
 var
-  i: integer;
+  i: PtrInt;
   conn: PHttpApiWebSocketConnection;
 const
   sReason = 'Server shutdown';
@@ -3653,8 +3655,8 @@ begin
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := sCloseReason;
-      PostQueuedCompletionStatus(fProtocol.fServer.fThreadPoolServer.FRequestQueue,
-        0, nil, @fOverlapped);
+      PostQueuedCompletionStatus(
+        fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, nil, @fOverlapped);
     end
     else if elapsed >= fProtocol.fServer.PingTimeout * 1000 then
       Ping;
@@ -3710,7 +3712,7 @@ var
   BufferType: WEB_SOCKET_BUFFER_TYPE;
   ApplicationContext: Pointer;
   ActionContext: Pointer;
-  i: integer;
+  i: PtrInt;
   Err: HRESULT;
   Buffer: TWebSocketBufferDataArr;
 
@@ -3781,14 +3783,14 @@ begin
           end
           else if BufferType = WEB_SOCKET_PING_PONG_BUFFER_TYPE then
           begin
-          // todo: may be answer to client's ping
+            // todo: may be answer to client's ping
             EWebSocketApi.RaiseOnError(hCompleteAction,
               WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
             exit;
           end
           else if BufferType = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then
           begin
-          // todo: may be handle this situation
+            // todo: may be handle this situation
             EWebSocketApi.RaiseOnError(hCompleteAction,
               WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
             exit;
@@ -3935,7 +3937,7 @@ function THttpApiWebSocketServer.UpgradeToWebSocket(
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
   Protocol: THttpApiWebSocketServerProtocol;
-  i, j: integer;
+  i, j: PtrInt;
   req: PHTTP_REQUEST;
   p: PHTTP_UNKNOWN_HEADER;
   ch, chB: PUTF8Char;
@@ -4009,7 +4011,8 @@ end;
 function THttpApiWebSocketServer.AddUrlWebSocket(const aRoot, aPort: RawUTF8;
   Https: boolean; const aDomainName: RawUTF8; aRegisterURI: boolean): integer;
 begin
-  result := AddUrl(aRoot, aPort, Https, aDomainName, aRegisterURI, WEB_SOCKET_URL_CONTEXT);
+  result := AddUrl(
+    aRoot, aPort, Https, aDomainName, aRegisterURI, WEB_SOCKET_URL_CONTEXT);
 end;
 
 procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUTF8;
@@ -4110,8 +4113,8 @@ begin
   if conn.fState in [wsClosedByGuard] then
     EWebSocketApi.RaiseOnError(hCompleteAction,
       WebSocketAPI.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0));
-  if conn.fState in [wsClosedByClient, wsClosedByServer, wsClosedByGuard,
-      wsClosedByShutdown] then
+  if conn.fState in
+       [wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown] then
   begin
     conn.DoOnDisconnect;
     if conn.fState = wsClosedByClient then
@@ -4141,7 +4144,7 @@ end;
 
 procedure TSynWebSocketGuard.Execute;
 var
-  i, j: integer;
+  i, j: PtrInt;
   prot: THttpApiWebSocketServerProtocol;
 begin
   if fServer.fPingTimeout > 0 then
@@ -4177,7 +4180,6 @@ begin
   fServer := Server;
   inherited Create(false);
 end;
-
 
 {$endif USEWININET}
 

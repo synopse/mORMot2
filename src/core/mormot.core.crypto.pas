@@ -927,7 +927,7 @@ procedure CompressShaAesSetKey(const Key: RawByteString;
 // CompressShaAesClass variable to the expected TAES* class name
 // - will store a hash of both cyphered and clear stream: if the
 // data is corrupted during transmission, will instantly return ''
-function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
+function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUTF8;
 
 {$endif PUREMORMOT2}
 
@@ -4410,9 +4410,7 @@ begin
     SHA256Weak(Key, CompressShaAesKey);
 end;
 
-function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
-var
-  Data: RawByteString absolute DataRawByteString;
+function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUTF8;
 begin
   if (Data <> '') and
      (CompressShaAesClass <> nil) then

@@ -379,16 +379,40 @@ function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): bo
 
 
 
+/// (un)compress a data content using the gzip algorithm
+// - as expected by THttpSocket.RegisterCompress
+// - will use internaly a level compression of 1, i.e. fastest available (content
+// of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
+function CompressGZip(var Data: RawByteString; Compress: boolean): RawUTF8;
+
+/// (un)compress a data content using the Deflate algorithm (i.e. "raw deflate")
+// - as expected by THttpSocket.RegisterCompress
+// - will use internaly a level compression of 1, i.e. fastest available (content
+// of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
+// - deflate content encoding is pretty inconsistent in practice, so slightly
+// slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091
+function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUTF8;
+
+/// (un)compress a data content using the zlib algorithm
+// - as expected by THttpSocket.RegisterCompress
+// - will use internaly a level compression of 1, i.e. fastest available (content
+// of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
+// - zlib content encoding is pretty inconsistent in practice, so slightly
+// slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091
+function CompressZLib(var Data: RawByteString; Compress: boolean): RawUTF8;
+
+
+
 implementation
-
-const
-  GZHEAD: array[0..2] of cardinal = (
-    $088B1F, 0, 0);
-
-  GZHEAD_SIZE = 10;
 
 
 { ************ TSynZipCompressor Stream Class }
+
+const
+  GZHEAD_SIZE = 10;
+  GZHEAD: array[0..2] of cardinal = (
+    $088B1F, 0, 0);
+
 
 { TSynZipCompressor }
 
@@ -1480,6 +1504,68 @@ begin
        DeleteFile(aOldLogFileName) then
       result := True;
   end;
+end;
+
+
+const
+  HTTP_LEVEL = 1; // 6 is standard, but 1 is enough and faster
+
+function CompressGZip(var Data: RawByteString; Compress: boolean): RawUTF8;
+var
+  L: integer;
+  P: PAnsiChar;
+begin
+  L := length(Data);
+  if Compress then
+  begin
+    SetString(result, nil, L + 128 + L shr 3); // maximum possible memory required
+    P := pointer(result);
+    MoveFast(GZHEAD, P^, GZHEAD_SIZE);
+    inc(P, GZHEAD_SIZE);
+    inc(P, CompressMem(pointer(Data), P, L ,
+      length(result) - (GZHEAD_SIZE + 8), HTTP_LEVEL));
+    PCardinal(P)^ := crc32(0, pointer(Data), L);
+    inc(P,4);
+    PCardinal(P)^ := L;
+    inc(P,4);
+    SetString(Data, PAnsiChar(pointer(result)), P - pointer(result));
+  end
+  else
+    Data := gzread(pointer(Data), length(Data));
+  result := 'gzip';
+end;
+
+procedure CompressInternal(var Data: RawByteString; Compress, ZLib: boolean);
+var
+  tmp: RawByteString;
+  DataLen: integer;
+begin
+  tmp := Data;
+  DataLen := length(Data);
+  if Compress then
+  begin
+    SetString(Data, nil, DataLen + 256 + DataLen shr 3); // max mem required
+    DataLen := CompressMem(pointer(tmp), pointer(Data), DataLen, length(Data),
+      HTTP_LEVEL, ZLib);
+    if DataLen <= 0 then
+      Data := ''
+    else
+      SetLength(Data, DataLen);
+  end
+  else
+    Data := UnCompressZipString(pointer(tmp), DataLen, nil, ZLib, 0);
+end;
+
+function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUTF8;
+begin
+  CompressInternal(Data, Compress, {zlib=}false);
+  result := 'deflate';
+end;
+
+function CompressZLib(var Data: RawByteString; Compress: boolean): RawUTF8;
+begin
+  CompressInternal(Data, Compress, {zlib=}true);
+  result := 'zlib';
 end;
 
 
