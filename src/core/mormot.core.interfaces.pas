@@ -4978,8 +4978,8 @@ begin
                 [self, P^.Name^, P^.TypeInfo^.RawName]);
         end
         else
-          raise EInterfaceResolver.CreateUTF8(
-            '%.AutoResolve: published property %: % should directly read the field',
+          raise EInterfaceResolver.CreateUTF8('%.AutoResolve: published ' +
+            'property %: % should directly read the field',
             [self, P^.Name^, P^.TypeInfo^.RawName]);
       P := P^.Next;
     end;

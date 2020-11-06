@@ -493,7 +493,7 @@ type
     fSafe: TSynLocker;
     fProcessLocked: boolean;
     // this is where the process would take place
-    function Process(Ctxt: THttpServerRequest): cardinal;
+    function Process(Ctxt: THttpServerRequestAbstract): cardinal;
   public
     /// publish the mormot.db.sql connection on a given HTTP port and URI
     // - this generic constructor won't initialize the HTTP server itself:
@@ -1796,7 +1796,7 @@ begin
   fSafe.Done;
 end;
 
-function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequest): cardinal;
+function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   o: RawByteString;
 begin

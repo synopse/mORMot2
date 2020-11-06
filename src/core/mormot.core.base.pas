@@ -9253,7 +9253,7 @@ var
 begin
   tab := @crc32ctab;
   result := crc xor value;
-  result := tab[3, ToByte(result)] xor tab[2, ToByte(result shr 8)] xor
+  result := tab[3, ToByte(result)]        xor tab[2, ToByte(result shr 8)] xor
             tab[1, ToByte(result shr 16)] xor tab[0, ToByte(result shr 24)];
 end;
 
@@ -9596,16 +9596,16 @@ var
 begin // efficient registers use on 64-bit, ARM or PIC
   tab := @crc32ctab;
   c := crc128^[0] xor data128^[0];
-  crc128^[0] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+  crc128^[0] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                 tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
   c := crc128^[1] xor data128^[1];
-  crc128^[1] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+  crc128^[1] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                 tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
   c := crc128^[2] xor data128^[2];
-  crc128^[2] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+  crc128^[2] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                 tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
   c := crc128^[3] xor data128^[3];
-  crc128^[3] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+  crc128^[3] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                 tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
 end;
 
@@ -9617,16 +9617,16 @@ begin
   if count>0 then
     repeat
       c := crc128^[0] xor data128^[0];
-      crc128^[0] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+      crc128^[0] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                     tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
       c := crc128^[1] xor data128^[1];
-      crc128^[1] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+      crc128^[1] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                     tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
       c := crc128^[2] xor data128^[2];
-      crc128^[2] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+      crc128^[2] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                     tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
       c := crc128^[3] xor data128^[3];
-      crc128^[3] := tab[3, ToByte(c)] xor tab[2, ToByte(c shr 8)] xor
+      crc128^[3] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                     tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
       inc(data128);
       dec(count);

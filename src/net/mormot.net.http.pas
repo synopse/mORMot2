@@ -9,6 +9,7 @@ unit mormot.net.http;
    HTTP/HTTPS Abstract Process Classes and Definitions
    - Shared HTTP Constants and Functions
    - THttpSocket Implementing HTTP over plain sockets
+   - Abstract Server-Side Types used e.g. for Client-Server Protocol
 
   *****************************************************************************
 
@@ -215,7 +216,154 @@ function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
   P: PUTF8Char): THttpSocketCompressSet;
 
 
+{ ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
+
+type
+  {$M+} // to have existing RTTI for published properties
+  THttpServerRequestAbstract = class;
+  {$M-}
+
+  /// a genuine identifier for a given client connection on server side
+  // - maps http.sys ID, or is a genuine 31-bit value from increasing sequence
+  THttpServerConnectionID = Int64;
+
+  /// a dynamic array of client connection identifiers, e.g. for broadcasting
+  THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
+
+  /// event handler used by THttpServerGeneric.OnRequest property
+  // - Ctxt defines both input and output parameters
+  // - result of the function is the HTTP error code (200 if OK, e.g.)
+  // - OutCustomHeader will handle Content-Type/Location
+  // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
+  // then OutContent is the UTF-8 filename of a file to be sent directly
+  // to the client via http.sys or NGINX's X-Accel-Redirect; the
+  // OutCustomHeader should contain the eventual 'Content-type: ....' value
+  TOnHttpServerRequest = function(Ctxt: THttpServerRequestAbstract): cardinal of object;
+
+  /// event handler used by THttpServerGeneric.OnAfterResponse property
+  // - Ctxt defines both input and output parameters
+  // - Code defines the HTTP response code the (200 if OK, e.g.)
+  TOnHttpServerAfterResponse = procedure(Ctxt: THttpServerRequestAbstract;
+    const Code: cardinal) of object;
+
+  /// event handler used by THttpServerGeneric.OnBeforeBody property
+  // - if defined, is called just before the body is retrieved from the client
+  // - supplied parameters reflect the current input state
+  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
+  // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
+  // the request
+  TOnHttpServerBeforeBody = function(const aURL, aMethod, aInHeaders,
+    aInContentType, aRemoteIP: RawUTF8; aContentLength: integer;
+    aUseSSL: boolean): cardinal of object;
+
+  /// the server-side available authentication schemes
+  // - as used by THttpServerRequest.AuthenticationStatus
+  // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
+  // defined in HTTP 2.0 API and
+  THttpServerRequestAuthentication = (
+    hraNone,
+    hraFailed,
+    hraBasic,
+    hraDigest,
+    hraNtlm,
+    hraNegotiate,
+    hraKerberos);
+
+  /// abstract generic input/output structure used for HTTP server requests
+  // - URL/Method/InHeaders/InContent properties are input parameters
+  // - OutContent/OutContentType/OutCustomHeader are output parameters
+  // - this abstract class may be used in communication protocols, without
+  // the need to add mormot.net.server.pas dependency
+  THttpServerRequestAbstract = class
+  protected
+    fRemoteIP,
+    fURL,
+    fMethod,
+    fInHeaders,
+    fInContentType,
+    fAuthenticatedUser,
+    fOutContentType,
+    fOutCustomHeaders: RawUTF8;
+    fInContent, fOutContent: RawByteString;
+    fRequestID: integer;
+    fConnectionID: THttpServerConnectionID;
+    fUseSSL: boolean;
+    fAuthenticationStatus: THttpServerRequestAuthentication;
+  public
+    /// low-level property which may be used during requests processing
+    Status: integer;
+    /// prepare an incoming request
+    // - will set input parameters URL/Method/InHeaders/InContent/InContentType
+    // - will reset output parameters
+    procedure Prepare(const aURL, aMethod, aInHeaders: RawUTF8;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUTF8;
+      aUseSSL: boolean = false); virtual; abstract;
+    /// append some lines to the InHeaders input parameter
+    procedure AddInHeader(additionalHeader: RawUTF8);
+    /// input parameter containing the caller URI
+    property URL: RawUTF8 read fURL;
+    /// input parameter containing the caller method (GET/POST...)
+    property Method: RawUTF8 read fMethod;
+    /// input parameter containing the caller message headers
+    property InHeaders: RawUTF8 read fInHeaders;
+    /// input parameter containing the caller message body
+    // - e.g. some GET/POST/PUT JSON data can be specified here
+    property InContent: RawByteString
+      read fInContent;
+    // input parameter defining the caller message body content type
+    property InContentType: RawUTF8
+      read fInContentType;
+    /// output parameter to be set to the response message body
+    property OutContent: RawByteString
+      read fOutContent write fOutContent;
+    /// output parameter to define the reponse message body content type
+    // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
+    // then OutContent is the UTF-8 file name of a file to be sent to the
+    // client via http.sys or NGINX's X-Accel-Redirect header (faster than
+    // local buffering/sending)
+    // - if OutContentType is NORESPONSE_CONTENT_TYPE (i.e. '!NORESPONSE'), then
+    // the actual transmission protocol may not wait for any answer - used
+    // e.g. for WebSockets
+    property OutContentType: RawUTF8
+      read fOutContentType write fOutContentType;
+    /// output parameter to be sent back as the response message header
+    // - e.g. to set Content-Type/Location
+    property OutCustomHeaders: RawUTF8
+      read fOutCustomHeaders write fOutCustomHeaders;
+    /// the client remote IP, as specified to Prepare()
+    property RemoteIP: RawUTF8
+      read fRemoteIP write fRemoteIP;
+    /// a 31-bit sequential number identifying this instance on the server
+    property RequestID: integer
+      read fRequestID;
+    /// the ID of the connection which called this execution context
+    // - e.g. mormot.net.websocket's TWebSocketProcess.NotifyCallback method
+    // would use this property to specify the client connection to be notified
+    // - is set as an Int64 to match http.sys ID type, but will be an
+    // increasing 31-bit integer sequence for (web)socket-based servers
+    property ConnectionID: THttpServerConnectionID
+      read fConnectionID;
+    /// is TRUE if the caller is connected via HTTPS
+    // - only set for THttpApiServer class yet
+    property UseSSL: boolean
+      read fUseSSL;
+    /// contains the THttpServer-side authentication status
+    // - e.g. when using http.sys authentication with HTTP API 2.0
+    property AuthenticationStatus: THttpServerRequestAuthentication
+      read fAuthenticationStatus;
+    /// contains the THttpServer-side authenticated user name, UTF-8 encoded
+    // - e.g. when using http.sys authentication with HTTP API 2.0, the
+    // domain user name is retrieved from the supplied AccessToken
+    // - could also be set by the THttpServerGeneric.Request() method, after
+    // proper authentication, so that it would be logged as expected
+    property AuthenticatedUser: RawUTF8
+      read fAuthenticatedUser;
+  end;
+
+
+
 implementation
+
 
 { ******************** Shared HTTP Constants and Functions }
 
@@ -399,6 +547,7 @@ begin
     until false;
   end;
 end;
+
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -673,9 +822,20 @@ begin
 end;
 
 
-initialization
+{ ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
 
-finalization
+{ THttpServerRequestAbstract }
+
+procedure THttpServerRequestAbstract.AddInHeader(additionalHeader: RawUTF8);
+begin
+  additionalHeader := Trim(additionalHeader);
+  if additionalHeader <> '' then
+    if fInHeaders = '' then
+      fInHeaders := additionalHeader
+    else
+      fInHeaders := fInHeaders + #13#10 + additionalHeader;
+end;
+
 
 end.
 

@@ -541,7 +541,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="67">
+    <Units Count="69">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -810,6 +810,14 @@
         <Filename Value="..\src\lib\mormot.lib.lizard.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit66>
+      <Unit67>
+        <Filename Value="..\src\rest\mormot.rest.http.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit67>
+      <Unit68>
+        <Filename Value="..\src\rest\mormot.rest.http.server.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit68>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

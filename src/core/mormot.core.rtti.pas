@@ -1762,6 +1762,8 @@ type
   /// store information about the properties/fields of a given TypeInfo/PRttiInfo
   TRttiCustomPropDynArray = array of TRttiCustomProp;
 
+  PRttiCustomPropDynArray = array of PRttiCustomProp;
+
   /// store information about all properties/fields of a given TypeInfo/PRttIinfo
   // - includes parent properties when filled by AddFromClass(IncludeParents=true)
   TRttiCustomProps = object
@@ -1803,16 +1805,17 @@ type
     // - it will individually fill the properties, not the whole memory
     // as TRttiCustom.FinalizeAndClear would on a record
     procedure FinalizeAndClearPublishedProperties(Instance: TObject);
-    // set AutoCreate* internal fields
+    // set AutoCreate* and AutoResolve internal fields
     procedure SetAutoCreateFields;
   public
     // as set by SetAutoCreateFields
-    AutoCreateClasses, AutoCreateObjArrays: array of PRttiCustomProp;
+    AutoCreateClasses,
+    AutoCreateObjArrays: PRttiCustomPropDynArray;
   private
     // store AddFromText() ShortStrings
     fFromTextPropNames: TRawUTF8DynArray;
     /// points to List[] items which are managed
-    fManaged: array of PRttiCustomProp;
+    fManaged: PRttiCustomPropDynArray;
     /// finalize the managed properties of this instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     procedure FinalizeManaged(Data: PAnsiChar);
@@ -5643,7 +5646,7 @@ end;
 
 procedure TRttiCustomProps.SetAutoCreateFields;
 var
-  i: PtrInt;
+  i: integer;
   p: PRttiCustomProp;
 begin
   p := pointer(List);

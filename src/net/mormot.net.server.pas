@@ -45,78 +45,20 @@ type
 
   {$M+} // to have existing RTTI for published properties
   THttpServerGeneric = class;
-
-  THttpServerRequest = class;
   {$M-}
-
-  /// a genuine identifier for a given client connection on server side
-  // - maps http.sys ID, or is a genuine 31-bit value from increasing sequence
-
-  THttpServerConnectionID = Int64;
-
-  /// a dynamic array of client connection identifiers, e.g. for broadcasting
-  THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
-
-  /// event handler used by THttpServerGeneric.OnRequest property
-  // - Ctxt defines both input and output parameters
-  // - result of the function is the HTTP error code (200 if OK, e.g.)
-  // - OutCustomHeader will handle Content-Type/Location
-  // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
-  // then OutContent is the UTF-8 filename of a file to be sent directly
-  // to the client via http.sys or NGINX's X-Accel-Redirect; the
-  // OutCustomHeader should contain the eventual 'Content-type: ....' value
-  TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
-
-  /// event handler used by THttpServerGeneric.OnAfterResponse property
-  // - Ctxt defines both input and output parameters
-  // - Code defines the HTTP response code the (200 if OK, e.g.)
-  TOnHttpServerAfterResponse = procedure(Ctxt: THttpServerRequest;
-    const Code: cardinal) of object;
-
-  /// event handler used by THttpServerGeneric.OnBeforeBody property
-  // - if defined, is called just before the body is retrieved from the client
-  // - supplied parameters reflect the current input state
-  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
-  // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
-  // the request
-  TOnHttpServerBeforeBody = function(const aURL, aMethod, aInHeaders,
-    aInContentType, aRemoteIP: RawUTF8; aContentLength: integer;
-    aUseSSL: boolean): cardinal of object;
-
-  /// the server-side available authentication schemes
-  // - as used by THttpServerRequest.AuthenticationStatus
-  // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
-  // defined in HTTP 2.0 API and
-  THttpServerRequestAuthentication = (
-    hraNone,
-    hraFailed,
-    hraBasic,
-    hraDigest,
-    hraNtlm,
-    hraNegotiate,
-    hraKerberos);
 
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
   // - OutContent/OutContentType/OutCustomHeader are output parameters
-  THttpServerRequest = class
+  THttpServerRequest = class(THttpServerRequestAbstract)
   protected
-    fRemoteIP, fURL, fMethod, fInHeaders, fInContentType, fAuthenticatedUser,
-      fOutContentType, fOutCustomHeaders: RawUTF8;
-    fInContent, fOutContent: RawByteString;
     fServer: THttpServerGeneric;
-    fRequestID: integer;
-    fConnectionID: THttpServerConnectionID;
     fConnectionThread: TSynThread;
-    fUseSSL: boolean;
-    fAuthenticationStatus: THttpServerRequestAuthentication;
     {$ifdef MSWINDOWS}
     fHttpApiRequest: Pointer;
     fFullURL: SynUnicode;
     {$endif MSWINDOWS}
   public
-    /// low-level property which may be used during requests processing
-    Status: integer;
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
       aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread); virtual;
@@ -125,67 +67,17 @@ type
     // - will reset output parameters
     procedure Prepare(const aURL, aMethod, aInHeaders: RawUTF8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUTF8;
-      aUseSSL: boolean = false);
-    /// append some lines to the InHeaders input parameter
-    procedure AddInHeader(additionalHeader: RawUTF8);
+      aUseSSL: boolean = false); override;
     {$ifdef MSWINDOWS}
     /// input parameter containing the caller Full URL
     property FullURL: SynUnicode read fFullURL;
     {$endif MSWINDOWS}
-    /// input parameter containing the caller URI
-    property URL: RawUTF8 read fURL;
-    /// input parameter containing the caller method (GET/POST...)
-    property Method: RawUTF8 read fMethod;
-    /// input parameter containing the caller message headers
-    property InHeaders: RawUTF8 read fInHeaders;
-    /// input parameter containing the caller message body
-    // - e.g. some GET/POST/PUT JSON data can be specified here
-    property InContent: RawByteString read fInContent;
-    // input parameter defining the caller message body content type
-    property InContentType: RawUTF8 read fInContentType;
-    /// output parameter to be set to the response message body
-    property OutContent: RawByteString read fOutContent write fOutContent;
-    /// output parameter to define the reponse message body content type
-    // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
-    // then OutContent is the UTF-8 file name of a file to be sent to the
-    // client via http.sys or NGINX's X-Accel-Redirect header (faster than
-    // local buffering/sending)
-    // - if OutContentType is NORESPONSE_CONTENT_TYPE (i.e. '!NORESPONSE'), then
-    // the actual transmission protocol may not wait for any answer - used
-    // e.g. for WebSockets
-    property OutContentType: RawUTF8 read fOutContentType write fOutContentType;
-    /// output parameter to be sent back as the response message header
-    // - e.g. to set Content-Type/Location
-    property OutCustomHeaders: RawUTF8 read fOutCustomHeaders write fOutCustomHeaders;
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric read fServer;
-    /// the client remote IP, as specified to Prepare()
-    property RemoteIP: RawUTF8 read fRemoteIP write fRemoteIP;
-    /// a 31-bit sequential number identifying this instance on the server
-    property RequestID: integer read fRequestID;
-    /// the ID of the connection which called this execution context
-    // - e.g. mormot.net.websocket's TWebSocketProcess.NotifyCallback method
-    // would use this property to specify the client connection to be notified
-    // - is set as an Int64 to match http.sys ID type, but will be an
-    // increasing 31-bit integer sequence for (web)socket-based servers
-    property ConnectionID: THttpServerConnectionID read fConnectionID;
     /// the thread which owns the connection of this execution context
     // - depending on the HTTP server used, may not follow ConnectionID
     property ConnectionThread: TSynThread read fConnectionThread;
-    /// is TRUE if the caller is connected via HTTPS
-    // - only set for THttpApiServer class yet
-    property UseSSL: boolean read fUseSSL;
-    /// contains the THttpServer-side authentication status
-    // - e.g. when using http.sys authentication with HTTP API 2.0
-    property AuthenticationStatus: THttpServerRequestAuthentication
-      read fAuthenticationStatus;
-    /// contains the THttpServer-side authenticated user name, UTF-8 encoded
-    // - e.g. when using http.sys authentication with HTTP API 2.0, the
-    // domain user name is retrieved from the supplied AccessToken
-    // - could also be set by the THttpServerGeneric.Request() method, after
-    // proper authentication, so that it would be logged as expected
-    property AuthenticatedUser: RawUTF8 read fAuthenticatedUser;
     {$ifdef MSWINDOWS}
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
     // - not used by now for other kind of servers
@@ -265,7 +157,7 @@ type
     // and will return HTTP_NOTFOUND if OnRequest was not set
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously, but with a given Ctxt instance for each)
-    function Request(Ctxt: THttpServerRequest): cardinal; virtual;
+    function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     /// server can send a request back to the client, when the connection has
     // been upgraded e.g. to WebSockets
     // - InURL/InMethod/InContent properties are input parameters (InContentType
@@ -1003,7 +895,8 @@ type
     procedure CheckIsActive;
     // call onAccept Method of protocol, and if protocol not accept connection or
     // can not be accepted from other reasons return false else return true
-    function TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol; Ctxt: THttpServerRequest; aNeedHeader: boolean): boolean;
+    function TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol;
+      Ctxt: THttpServerRequestAbstract; aNeedHeader: boolean): boolean;
   public
     /// Index of connection in protocol's connection list
     property Index: integer read fIndex;
@@ -1123,7 +1016,7 @@ type
     function getProtocolsCount: integer;
     procedure SetOnWSThreadStart(const Value: TOnNotifyThread);
   protected
-    function UpgradeToWebSocket(Ctxt: THttpServerRequest): cardinal;
+    function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest;
       const Code: cardinal); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; override;
@@ -1153,7 +1046,7 @@ type
     function AddUrlWebSocket(const aRoot, aPort: RawUTF8; Https: boolean = false;
       const aDomainName: RawUTF8 = '*'; aRegisterURI: boolean = false): integer;
     /// handle the HTTP request
-    function Request(Ctxt: THttpServerRequest): cardinal; override;
+    function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
     /// Ping timeout in seconds. 0 mean no ping.
     // - if connection not receive messages longer than this timeout
     // TSynWebSocketGuard will send ping frame
@@ -1259,15 +1152,6 @@ begin
   fOutCustomHeaders := '';
 end;
 
-procedure THttpServerRequest.AddInHeader(additionalHeader: RawUTF8);
-begin
-  additionalHeader := Trim(additionalHeader);
-  if additionalHeader <> '' then
-    if fInHeaders = '' then
-      fInHeaders := additionalHeader
-    else
-      fInHeaders := fInHeaders + #13#10 + additionalHeader;
-end;
 
 
 { TServerGeneric }
@@ -1320,14 +1204,14 @@ begin
     fShutdownInProgress := true;
 end;
 
-function THttpServerGeneric.Request(Ctxt: THttpServerRequest): cardinal;
+function THttpServerGeneric.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
   if (self = nil) or
      fShutdownInProgress then
     result := HTTP_NOTFOUND
   else
   begin
-    NotifyThreadStart(Ctxt.ConnectionThread);
+    NotifyThreadStart(THttpServerRequest(Ctxt).ConnectionThread);
     if Assigned(OnRequest) then
       result := OnRequest(Ctxt)
     else
@@ -3595,7 +3479,7 @@ end;
 
 function THttpApiWebSocketConnection.TryAcceptConnection(
   aProtocol: THttpApiWebSocketServerProtocol;
-  Ctxt: THttpServerRequest; aNeedHeader: boolean): boolean;
+  Ctxt: THttpServerRequestAbstract; aNeedHeader: boolean): boolean;
 var
   req: PHTTP_REQUEST;
   wsRequestHeaders: WEB_SOCKET_HTTP_HEADER_ARR;
@@ -3608,12 +3492,12 @@ begin
   fLastActionContext := nil;
   FillcharFast(fOverlapped, SizeOf(fOverlapped), 0);
   fProtocol := aProtocol;
-  req := PHTTP_REQUEST(Ctxt.HttpApiRequest);
+  req := PHTTP_REQUEST((Ctxt as THttpServerRequest).HttpApiRequest);
   fIndex := fProtocol.fFirstEmptyConnectionIndex;
   fOpaqueHTTPRequestId := req^.RequestId;
   if (fProtocol = nil) or
      (Assigned(fProtocol.OnAccept) and
-      not fProtocol.OnAccept(Ctxt, Self)) then
+      not fProtocol.OnAccept(Ctxt as THttpServerRequest, Self)) then
   begin
     result := False;
     exit;
@@ -4047,10 +3931,12 @@ begin
     result := inherited getSendResponseFlags(Ctxt);
 end;
 
-function THttpApiWebSocketServer.UpgradeToWebSocket(Ctxt: THttpServerRequest): cardinal;
+function THttpApiWebSocketServer.UpgradeToWebSocket(
+  Ctxt: THttpServerRequestAbstract): cardinal;
 var
   Protocol: THttpApiWebSocketServerProtocol;
   i, j: integer;
+  req: PHTTP_REQUEST;
   p: PHTTP_UNKNOWN_HEADER;
   ch, chB: PUTF8Char;
   aName: RawUTF8;
@@ -4061,8 +3947,9 @@ begin
   result := 404;
   Protocol := nil;
   ProtocolHeaderFound := false;
-  p := PHTTP_REQUEST(Ctxt.HttpApiRequest)^.headers.pUnknownHeaders;
-  for j := 1 to PHTTP_REQUEST(Ctxt.HttpApiRequest)^.headers.UnknownHeaderCount do
+  req := PHTTP_REQUEST((Ctxt as THttpServerRequest).HttpApiRequest);
+  p := req^.headers.pUnknownHeaders;
+  for j := 1 to req^.headers.UnknownHeaderCount do
   begin
     if (p.NameLength = Length(sProtocolHeader)) and
        IdemPChar(p.pName, Pointer(sProtocolHeader)) then
@@ -4101,7 +3988,8 @@ protocolFound:
     EnterCriticalSection(Protocol.fSafe);
     try
       New(fLastConnection);
-      if fLastConnection.TryAcceptConnection(Protocol, Ctxt, ProtocolHeaderFound) then
+      if fLastConnection.TryAcceptConnection(
+          Protocol, Ctxt, ProtocolHeaderFound) then
       begin
         Protocol.AddConnection(fLastConnection);
         result := 101
@@ -4144,9 +4032,11 @@ begin
   fRegisteredProtocols^[protocol.fIndex] := protocol;
 end;
 
-function THttpApiWebSocketServer.Request(Ctxt: THttpServerRequest): cardinal;
+function THttpApiWebSocketServer.Request(
+  Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  if PHTTP_REQUEST(Ctxt.HttpApiRequest).UrlContext = WEB_SOCKET_URL_CONTEXT then
+  if PHTTP_REQUEST(THttpServerRequest(Ctxt).HttpApiRequest).
+       UrlContext = WEB_SOCKET_URL_CONTEXT then
     result := UpgradeToWebSocket(Ctxt)
   else
   begin
@@ -4157,7 +4047,8 @@ end;
 
 procedure THttpApiWebSocketServer.SendServiceMessage;
 begin
-  PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
+  PostQueuedCompletionStatus(
+    fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
 end;
 
 procedure THttpApiWebSocketServer.SetOnWSThreadStart(const Value: TOnNotifyThread);
