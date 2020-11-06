@@ -352,6 +352,7 @@ type
     HeartbeatSeconds: integer;
   end;
 
+
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 

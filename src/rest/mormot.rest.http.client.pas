@@ -66,7 +66,7 @@ uses
 { ************ TRestHttpClientGeneric and TRestHttpClientRequest Parent Classes }
 
 type
-  EHttpClient = class(ERestException);
+  ERestHttpClient = class(ERestException);
 
   /// available compression algorithms for transmission
   // - SynLZ is faster then Deflate, but not standard: use hcSynLZ for Delphi
@@ -589,7 +589,7 @@ var
   aModel: TOrmModel;
 begin
   if not Assigned(aLogClass) then
-    raise EHttpClient.CreateUTF8(
+    raise ERestHttpClient.CreateUTF8(
       '%.CreateForRemoteLogging(LogClass=nil)', [self]);
   aModel := TOrmModel.Create([], aRoot);
   Create(aServer, UInt32ToUtf8(aPort), aModel, aPort = 443);
@@ -797,7 +797,7 @@ begin
     begin
       InternalSetClass;
       if fRequestClass = nil then
-        raise EHttpClient.CreateUTF8('fRequestClass=nil for %', [self]);
+        raise ERestHttpClient.CreateUTF8('fRequestClass=nil for %', [self]);
       timeout := GetTickCount64 + fConnectRetrySeconds shl 10;
       repeat
         try
@@ -1055,7 +1055,7 @@ begin
         result := 'ServerTimestampSynchronize';
   end;
   if result <> '' then
-    raise EHttpClient.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
+    raise ERestHttpClient.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
       [self, Server, Port, Model.Root, result]);
 end;
 

@@ -79,7 +79,7 @@ uses
 
 type
   /// exception raised in case of a HTTP Server error
-  EHttpServer = class(ERestException);
+  ERestHttpServer = class(ERestException);
 
   /// available running options for TRestHttpServer.Create() constructor
   // - useHttpApi to use kernel-mode HTTP.SYS server (THttpApiServer) with an
@@ -177,7 +177,7 @@ type
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
     procedure HttpThreadTerminate(Sender: TThread); virtual;
-    /// implement the server response - must be thread-safe
+    // implement the server response - must be thread-safe
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     function GetDBServerCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -196,7 +196,7 @@ type
       aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
   public
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
-    // - raise a EHttpServer exception if binding failed
+    // - raise a ERestHttpServer exception if binding failed
     // - specify one or more TRestServer server class to be used: each
     // class must have an unique Model.Root value, to identify which TRestServer
     // instance must handle a particular request from its URI
@@ -237,7 +237,7 @@ type
       const aQueueName: SynUnicode = '';
       aHeadersUnFiltered: boolean = false); reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
-    // - raise a EHttpServer exception if binding failed
+    // - raise a ERestHttpServer exception if binding failed
     // - specify one TRestServer server class to be used
     // - port is an RawUTF8, as expected by the WinSock API - in case of
     // useHttpSocket or useBidirSocket kind of server, you can specify the
@@ -260,7 +260,7 @@ type
       const aAdditionalURL: RawUTF8 = '';
       const aQueueName: SynUnicode = ''); reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
-    // - raise a EHttpServer exception if binding failed
+    // - raise a ERestHttpServer exception if binding failed
     // - specify one TRestServer instance to be published, and the associated
     // transmission definition; other parameters would be the standard one
     // - only the supplied aDefinition.Authentication will be defined
@@ -311,7 +311,7 @@ type
     // ! DomainHostRedirect('blog.project2.com','root2/blog');
     // for the last entry, you may have for instance initialized a MVC web
     // server on the 'blog' sub-URI of the 'root2' TRestServer via:
-    // !constructor TMyMVCApplication.Create(aRestModel: TSQLRest; aInterface: PTypeInfo);
+    // !constructor TMyMVCApplication.Create(aRestModel: TRest; aInterface: PTypeInfo);
     // ! ...
     // ! fMainRunner := TMVCRunOnRestServer.Create(self,nil,'blog');
     // ! ...
@@ -468,6 +468,16 @@ type
   end;
   {$M-}
 
+
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
+
+  TSQLHttpServerOptions = TRestHttpServerOptions;
+  TSQLHttpServerSecurity = TRestHttpServerSecurity;
+  TSQLHttpServer = TRestHttpServer;
+  TSQLHTTPRemoteLogServer = TRestHttpRemoteLogServer;
+
+{$endif PUREMORMOT2}
 
 
 implementation
@@ -643,7 +653,7 @@ begin
                 [Root, aServers[j].Model.Root], ErrMsg);
         end;
     if ErrMsg <> '' then
-      raise EHttpServer.CreateUTF8('%.Create(% ): %', [self, ServersRoot, ErrMsg]);
+      raise ERestHttpServer.CreateUTF8('%.Create(% ): %', [self, ServersRoot, ErrMsg]);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
     SetLength(fDBServers, length(aServers));
     for i := 0 to high(aServers) do
@@ -885,7 +895,7 @@ begin
         ' (you need to register the URI - try to use useHttpApiRegisteringURI)';
   fLog.Add.Log(sllLastError, result, self);
   if aRaiseExceptionOnError then
-    raise EHttpServer.CreateUTF8('%: %', [self, result]);
+    raise ERestHttpServer.CreateUTF8('%: %', [self, result]);
   {$endif ONLYUSEHTTPSOCKET}
 end;
 
@@ -1211,7 +1221,7 @@ var
   websock: TWebSocketServerRest;
 begin
   if aDefinition = nil then
-    raise EHttpServer.CreateUTF8('%.Create(aDefinition=nil)', [self]);
+    raise ERestHttpServer.CreateUTF8('%.Create(aDefinition=nil)', [self]);
   if aDefinition.WebSocketPassword <> '' then
     aForcedKind := useBidirSocket;
   if aDefinition.ThreadCount = 0 then
