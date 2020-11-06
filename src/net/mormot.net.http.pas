@@ -37,17 +37,17 @@ var
   HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
   /// THttpRequest timeout default value for remote connection
   // - default is 60 seconds
-  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
   HTTP_DEFAULT_CONNECTTIMEOUT: integer = 60000;
   /// THttpRequest timeout default value for data sending
   // - default is 30 seconds
-  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
   // THttpRequest.Create() constructor
   HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
   /// THttpRequest timeout default value for data receiving
   // - default is 30 seconds
-  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
   // THttpRequest.Create() constructor
   HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;

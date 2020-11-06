@@ -518,7 +518,7 @@ type
     // - not worth inlining: TSynLog.Add will directly check fGlobalLog
     function SynLog: TSynLog;
     /// register one object and one echo callback for remote logging
-    // - aClient is typically a mORMot's TSQLHttpClient or a TSynLogCallbacks
+    // - aClient is typically a mORMot's TRestHttpClient or a TSynLogCallbacks
     // instance as defined in this unit
     // - if aClientOwnedByFamily is TRUE, its life time will be manage by this
     // TSynLogFamily: it will stay alive until this TSynLogFamily is destroyed,

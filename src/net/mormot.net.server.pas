@@ -264,16 +264,19 @@ type
     // $       proxy_set_header        X-Conn-ID       $connection
     // $ }
     // see https://synopse.info/forum/viewtopic.php?pid=28174#p28174
-    property HTTPQueueLength: cardinal read GetHTTPQueueLength write SetHTTPQueueLength;
+    property HTTPQueueLength: cardinal
+      read GetHTTPQueueLength write SetHTTPQueueLength;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer has this ability by now
-    property CanNotifyCallback: boolean read fCanNotifyCallback;
+    property CanNotifyCallback: boolean
+      read fCanNotifyCallback;
     /// the value of a custom HTTP header containing the real client IP
     // - by default, the RemoteIP information will be retrieved from the socket
     // layer - but if the server runs behind some proxy service, you should
     // define here the HTTP header name which indicates the true remote client
     // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
-    property RemoteIPHeader: RawUTF8 read fRemoteIPHeader write SetRemoteIPHeader;
+    property RemoteIPHeader: RawUTF8
+      read fRemoteIPHeader write SetRemoteIPHeader;
     /// the value of a custom HTTP header containing the real client connection ID
     // - by default, Ctxt.ConnectionID information will be retrieved from our
     // socket layer - but if the server runs behind some proxy service, you should
@@ -284,14 +287,17 @@ type
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
     /// returns the API version used by the inherited implementation
-    property APIVersion: RawUTF8 read GetAPIVersion;
+    property APIVersion: RawUTF8
+      read GetAPIVersion;
     /// the Server name, UTF-8 encoded, e.g. 'mORMot/1.18 (Linux)'
     // - will be served as "Server: ..." HTTP header
     // - for THttpApiServer, when called from the main instance, will propagate
     // the change to all cloned instances, and included in any HTTP API 2.0 log
-    property ServerName: RawUTF8 read fServerName write SetServerName;
+    property ServerName: RawUTF8
+      read fServerName write SetServerName;
     /// the associated process name
-    property ProcessName: RawUTF8 read fProcessName write fProcessName;
+    property ProcessName: RawUTF8
+      read fProcessName write fProcessName;
   end;
 
 
@@ -344,20 +350,24 @@ type
     function GetRequest(withBody: boolean;
       headerMaxTix: Int64): THttpServerSocketGetRequestResult; virtual;
     /// contains the method ('GET','POST'.. e.g.) after GetRequest()
-    property Method: RawUTF8 read fMethod;
+    property Method: RawUTF8
+      read fMethod;
     /// contains the URL ('/' e.g.) after GetRequest()
-    property URL: RawUTF8 read fURL;
+    property URL: RawUTF8
+      read fURL;
     /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
     // - default HTTP/1.1 behavior is "keep alive", unless 'Connection: Close'
     // is specified, cf. RFC 2068 page 108: "HTTP/1.1 applications that do not
     // support persistent connections MUST include the "close" connection option
     // in every message"
-    property KeepAliveClient: boolean read fKeepAliveClient write fKeepAliveClient;
+    property KeepAliveClient: boolean
+      read fKeepAliveClient write fKeepAliveClient;
     /// the recognized connection ID, after a call to GetRequest()
     // - identifies either the raw connection on the current server, or is
     // a custom header value set by a local proxy, e.g.
     // THttpServerGeneric.RemoteConnIDHeader='X-Conn-ID' for nginx
-    property RemoteConnectionID: THttpServerConnectionID read fRemoteConnectionID;
+    property RemoteConnectionID: THttpServerConnectionID
+      read fRemoteConnectionID;
   end;
 
   /// HTTP response Thread as used by THttpServer Socket API based class
@@ -385,11 +395,14 @@ type
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer);
       reintroduce; overload; virtual;
     /// the associated socket to communicate with the client
-    property ServerSock: THttpServerSocket read fServerSock;
+    property ServerSock: THttpServerSocket
+      read fServerSock;
     /// the associated main HTTP server instance
-    property Server: THttpServer read fServer;
+    property Server: THttpServer
+      read fServer;
     /// the unique identifier of this connection
-    property ConnectionID: THttpServerConnectionID read fConnectionID;
+    property ConnectionID: THttpServerConnectionID
+      read fConnectionID;
   end;
 
   /// metaclass of HTTP response Thread
@@ -536,16 +549,19 @@ type
     // - for instance, Content-Length, Content-Type and Content-Encoding are
     // stored as fields in this THttpSocket, but not included in its Headers[]
     // - set this property to true to include all incoming headers
-    property HeadersNotFiltered: boolean read fHeadersNotFiltered;
+    property HeadersNotFiltered: boolean
+      read fHeadersNotFiltered;
     /// access to the main server low-level Socket
     // - it's a raw TCrtSocket, which only need a socket to be bound, listening
     // and accept incoming request
     // - THttpServerSocket are created on the fly for every request, then
     // a THttpServerResp thread is created for handling this THttpServerSocket
-    property Sock: TCrtSocket read fSock;
+    property Sock: TCrtSocket
+      read fSock;
     /// custom event handler used to send a local file for STATICFILE_CONTENT_TYPE
     // - see also NginxSendFileFrom() method
-    property OnSendFile: TOnHttpServerSendFile read fOnSendFile write fOnSendFile;
+    property OnSendFile: TOnHttpServerSendFile
+      read fOnSendFile write fOnSendFile;
   published
     /// will contain the current number of connections to the server
     property ServerConnectionActive: integer
@@ -572,31 +588,41 @@ type
     // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
     // most AntiVirus programs, and increase security - but you won't be able
     // to use an Internet Browser nor AJAX application for remote access any more
-    property TCPPrefix: RawUTF8 read fTCPPrefix write fTCPPrefix;
+    property TCPPrefix: RawUTF8
+      read fTCPPrefix write fTCPPrefix;
     /// the associated thread pool
     // - may be nil if ServerThreadPoolCount was 0 on constructor
-    property ThreadPool: TSynThreadPoolTHttpServer read fThreadPool;
+    property ThreadPool: TSynThreadPoolTHttpServer
+      read fThreadPool;
     /// milliseconds delay to reject a connection due to too long header retrieval
     // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
     property HeaderRetrieveAbortDelay: integer
       read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
     /// how many invalid HTTP headers have been rejected
-    property StatHeaderErrors: integer index grError read GetStat;
+    property StatHeaderErrors: integer
+      index grError read GetStat;
     /// how many invalid HTTP headers raised an exception
-    property StatHeaderException: integer index grException read GetStat;
+    property StatHeaderException: integer
+      index grException read GetStat;
     /// how many HTTP requests pushed more than MaximumAllowedContentLength bytes
-    property StatOversizedPayloads: integer index grOversizedPayload read GetStat;
+    property StatOversizedPayloads: integer
+      index grOversizedPayload read GetStat;
     /// how many HTTP requests were rejected by the OnBeforeBody event handler
-    property StatRejected: integer index grRejected read GetStat;
+    property StatRejected: integer
+      index grRejected read GetStat;
     /// how many HTTP requests were rejected after HeaderRetrieveAbortDelay timeout
-    property StatHeaderTimeout: integer index grTimeout read GetStat;
+    property StatHeaderTimeout: integer
+      index grTimeout read GetStat;
     /// how many HTTP headers have been processed
-    property StatHeaderProcessed: integer index grHeaderReceived read GetStat;
+    property StatHeaderProcessed: integer
+      index grHeaderReceived read GetStat;
     /// how many HTTP bodies have been processed
-    property StatBodyProcessed: integer index grBodyReceived read GetStat;
+    property StatBodyProcessed: integer
+      index grBodyReceived read GetStat;
     /// how many HTTP connections were passed to an asynchronous handler
     // - e.g. for background WebSockets processing after proper upgrade
-    property StatOwnedConnections: integer index grOwned read GetStat;
+    property StatOwnedConnections: integer
+      index grOwned read GetStat;
   end;
 
 
@@ -689,7 +715,7 @@ type
     /// will clone this thread into multiple other threads
     // - could speed up the process on multi-core CPU
     // - will work only if the OnProcess property was set (this is the case
-    // e.g. in TSQLHttpServer.Create() constructor)
+    // e.g. in TRestHttpServer.Create() constructor)
     // - maximum value is 256 - higher should not be worth it
     procedure Clone(ChildThreadCount: integer);
     /// register the URLs to Listen On
@@ -816,32 +842,39 @@ type
     property LoggingServiceName: RawUTF8
       read fLoggingServiceName write SetLoggingServiceName;
     /// read-only access to the low-level HTTP API 2.0 Session ID
-    property ServerSessionID: HTTP_SERVER_SESSION_ID read fServerSessionID;
+    property ServerSessionID: HTTP_SERVER_SESSION_ID
+      read fServerSessionID;
     /// read-only access to the low-level HTTP API 2.0 URI Group ID
-    property UrlGroupID: HTTP_URL_GROUP_ID read fUrlGroupID;
+    property UrlGroupID: HTTP_URL_GROUP_ID
+      read fUrlGroupID;
     /// how many bytes are retrieved in a single call to ReceiveRequestEntityBody
     // - set by default to 1048576, i.e. 1 MB - practical limit is around 20 MB
     // - you may customize this value if you encounter HTTP error HTTP_NOTACCEPTABLE
     // (406) from client, corresponding to an ERROR_NO_SYSTEM_RESOURCES (1450)
     // exception on server side, when uploading huge data content
-    property ReceiveBufferSize: cardinal read fReceiveBufferSize write SetReceiveBufferSize;
+    property ReceiveBufferSize: cardinal
+      read fReceiveBufferSize write SetReceiveBufferSize;
   published
     /// TRUE if this instance is in fact a cloned instance for the thread pool
-    property Cloned: boolean read GetCloned;
+    property Cloned: boolean
+      read GetCloned;
     /// return the list of registered URL on this server instance
-    property RegisteredUrl: SynUnicode read GetRegisteredUrl;
+    property RegisteredUrl: SynUnicode
+      read GetRegisteredUrl;
     /// the maximum allowed bandwidth rate in bytes per second (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited bandwidth
     // - by default Windows not limit bandwidth (actually limited to 4 Gbit/sec).
     // - will return 0 if the system does not support HTTP API 2.0 (i.e.
     // under Windows XP or Server 2003)
-    property MaxBandwidth: Cardinal read GetMaxBandwidth write SetMaxBandwidth;
+    property MaxBandwidth: Cardinal
+      read GetMaxBandwidth write SetMaxBandwidth;
     /// the maximum number of HTTP connections allowed (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited number of connections
     // - by default Windows does not limit number of allowed connections
     // - will return 0 if the system does not support HTTP API 2.0 (i.e.
     // under Windows XP or Server 2003)
-    property MaxConnections: Cardinal read GetMaxConnections write SetMaxConnections;
+    property MaxConnections: Cardinal
+      read GetMaxConnections write SetMaxConnections;
   end;
 
 
@@ -898,24 +931,31 @@ type
     function TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol;
       Ctxt: THttpServerRequestAbstract; aNeedHeader: boolean): boolean;
   public
-    /// Index of connection in protocol's connection list
-    property Index: integer read fIndex;
-    /// Protocol of connection
-    property Protocol: THttpApiWebSocketServerProtocol read fProtocol;
-    /// Custom user data
-    property PrivateData: pointer read fPrivateData write fPrivateData;
-    /// Access to the current state of this connection
-    property State: TWebSocketState read fState;
     /// Send data to client
-    procedure Send(aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG);
+    procedure Send(aBufferType: WEB_SOCKET_BUFFER_TYPE;
+      aBuffer: Pointer; aBufferSize: ULONG);
     /// Close connection
-    procedure Close(aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG);
+    procedure Close(aStatus: WEB_SOCKET_CLOSE_STATUS;
+      aBuffer: Pointer; aBufferSize: ULONG);
+    /// Index of connection in protocol's connection list
+    property Index: integer
+      read fIndex;
+    /// Protocol of connection
+    property Protocol: THttpApiWebSocketServerProtocol
+       read fProtocol;
+    /// Custom user data
+    property PrivateData: pointer
+      read fPrivateData write fPrivateData;
+    /// Access to the current state of this connection
+    property State: TWebSocketState
+      read fState;
   end;
 
   PHttpApiWebSocketConnection = ^THttpApiWebSocketConnection;
 
   THttpApiWebSocketConnectionVector =
-    array[0..MaxInt div SizeOf(PHttpApiWebSocketConnection) - 1] of PHttpApiWebSocketConnection;
+    array[0..MaxInt div SizeOf(PHttpApiWebSocketConnection) - 1] of
+    PHttpApiWebSocketConnection;
 
   PHttpApiWebSocketConnectionVector = ^THttpApiWebSocketConnectionVector;
 
@@ -966,34 +1006,46 @@ type
     /// finalize the process
     destructor Destroy; override;
     /// text identifier
-    property Name: RawUTF8 read fName;
+    property Name: RawUTF8
+      read fName;
     /// identify the endpoint instance
-    property Index: integer read fIndex;
+    property Index: integer
+      read fIndex;
     /// OnFragment event will be called for each fragment
-    property ManualFragmentManagement: boolean read fManualFragmentManagement;
+    property ManualFragmentManagement: boolean
+      read fManualFragmentManagement;
     /// event triggerred when a WebSockets client is initiated
-    property OnAccept: TOnHttpApiWebSocketServerAcceptEvent read fOnAccept;
+    property OnAccept: TOnHttpApiWebSocketServerAcceptEvent
+      read fOnAccept;
     /// event triggerred when a WebSockets message is received
-    property OnMessage: TOnHttpApiWebSocketServerMessageEvent read fOnMessage;
+    property OnMessage: TOnHttpApiWebSocketServerMessageEvent
+      read fOnMessage;
     /// event triggerred when a WebSockets client is connected
-    property OnConnect: TOnHttpApiWebSocketServerConnectEvent read fOnConnect;
+    property OnConnect: TOnHttpApiWebSocketServerConnectEvent
+      read fOnConnect;
     /// event triggerred when a WebSockets client is gracefully disconnected
-    property OnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent read fOnDisconnect;
+    property OnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent
+      read fOnDisconnect;
     /// event triggerred when a non complete frame is received
     // - required if ManualFragmentManagement is true
-    property OnFragment: TOnHttpApiWebSocketServerMessageEvent read fOnFragment;
+    property OnFragment: TOnHttpApiWebSocketServerMessageEvent
+      read fOnFragment;
 
     /// Send message to the WebSocket connection identified by its index
-    function Send(index: integer; aBufferType: ULONG; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+    function Send(index: integer; aBufferType: ULONG;
+      aBuffer: Pointer; aBufferSize: ULONG): boolean;
     /// Send message to all connections of this protocol
-    function Broadcast(aBufferType: ULONG; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+    function Broadcast(aBufferType: ULONG;
+      aBuffer: Pointer; aBufferSize: ULONG): boolean;
     /// Close WebSocket connection identified by its index
-    function Close(index: integer; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer;
-      aBufferSize: ULONG): boolean;
+    function Close(index: integer; aStatus: WEB_SOCKET_CLOSE_STATUS;
+      aBuffer: Pointer; aBufferSize: ULONG): boolean;
   end;
 
-  THttpApiWebSocketServerProtocolDynArray = array of THttpApiWebSocketServerProtocol;
-  PHttpApiWebSocketServerProtocolDynArray = ^THttpApiWebSocketServerProtocolDynArray;
+  THttpApiWebSocketServerProtocolDynArray =
+    array of THttpApiWebSocketServerProtocol;
+  PHttpApiWebSocketServerProtocolDynArray =
+    ^THttpApiWebSocketServerProtocolDynArray;
 
   /// HTTP & WebSocket server using fast http.sys kernel-mode server
   // - can be used like simple THttpApiServer
@@ -1052,24 +1104,28 @@ type
     // TSynWebSocketGuard will send ping frame
     // - if connection not receive any messages longer than double of
     // this timeout it will be closed
-    property PingTimeout: integer read fPingTimeout;
+    property PingTimeout: integer
+      read fPingTimeout;
     /// access to the associated endpoints
-    property Protocols[index: integer]: THttpApiWebSocketServerProtocol read GetProtocol;
+    property Protocols[index: integer]: THttpApiWebSocketServerProtocol
+      read GetProtocol;
     /// access to the associated endpoints count
-    property ProtocolsCount: integer read getProtocolsCount;
+    property ProtocolsCount: integer
+      read getProtocolsCount;
     /// event called when the processing thread starts
-    property OnWSThreadStart: TOnNotifyThread read FOnWSThreadStart
-      write SetOnWSThreadStart;
+    property OnWSThreadStart: TOnNotifyThread
+      read FOnWSThreadStart write SetOnWSThreadStart;
     /// event called when the processing thread termintes
-    property OnWSThreadTerminate: TOnNotifyThread read FOnWSThreadTerminate
-      write SetOnWSThreadTerminate;
+    property OnWSThreadTerminate: TOnNotifyThread
+      read FOnWSThreadTerminate write SetOnWSThreadTerminate;
     /// send a "service" message to a WebSocketServer to wake up a WebSocket thread
     // - can be called from any thread
     // - when a webSocket thread receives such a message it will call onServiceMessage
     // in the thread context
     procedure SendServiceMessage;
     /// event called when a service message is raised
-    property OnServiceMessage: TThreadMethod read fOnServiceMessage write fOnServiceMessage;
+    property OnServiceMessage: TThreadMethod
+      read fOnServiceMessage write fOnServiceMessage;
   end;
 
   /// a Thread Pool, used for fast handling of WebSocket requests
@@ -1084,7 +1140,8 @@ type
     procedure Task(aCaller: TSynThread; aContext: Pointer); override;
   public
     /// initialize the thread pool
-    constructor Create(Server: THttpApiWebSocketServer; NumberOfThreads: integer = 1); reintroduce;
+    constructor Create(Server: THttpApiWebSocketServer;
+      NumberOfThreads: integer = 1); reintroduce;
   end;
 
   /// Thread for closing deprecated WebSocket connections
@@ -1231,27 +1288,32 @@ begin
   fServerName := aName;
 end;
 
-procedure THttpServerGeneric.SetOnRequest(const aRequest: TOnHttpServerRequest);
+procedure THttpServerGeneric.SetOnRequest(
+  const aRequest: TOnHttpServerRequest);
 begin
   fOnRequest := aRequest;
 end;
 
-procedure THttpServerGeneric.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
+procedure THttpServerGeneric.SetOnBeforeBody(
+  const aEvent: TOnHttpServerBeforeBody);
 begin
   fOnBeforeBody := aEvent;
 end;
 
-procedure THttpServerGeneric.SetOnBeforeRequest(const aEvent: TOnHttpServerRequest);
+procedure THttpServerGeneric.SetOnBeforeRequest(
+  const aEvent: TOnHttpServerRequest);
 begin
   fOnBeforeRequest := aEvent;
 end;
 
-procedure THttpServerGeneric.SetOnAfterRequest(const aEvent: TOnHttpServerRequest);
+procedure THttpServerGeneric.SetOnAfterRequest(
+  const aEvent: TOnHttpServerRequest);
 begin
   fOnAfterRequest := aEvent;
 end;
 
-procedure THttpServerGeneric.SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse);
+procedure THttpServerGeneric.SetOnAfterResponse(
+  const aEvent: TOnHttpServerAfterResponse);
 begin
   fOnAfterResponse := aEvent;
 end;

@@ -641,7 +641,7 @@ type
       out aResponse: RawUTF8; aTable: TOrmClass = nil; aID: TID = 0;
       aResponseHead: PRawUTF8 = nil): integer;
     /// to be called before CallBack() if the client could ignore the answer
-    // - do nothing by default, but overriden e.g. in TSQLHttpClientWebsockets
+    // - do nothing by default, but overriden e.g. in TRestHttpClientWebsockets
     procedure CallbackNonBlockingSetHeader(out Header: RawUTF8); virtual;
 
     /// register one or several Services on the client side via their interfaces
@@ -767,7 +767,7 @@ type
     // TRestClientURI instance, to avoid any potential concern (e.g. for
     // multi-threaded process, or in case of communication error): you should
     // therefore use this TRestClientURI connection only for the remote log
-    // server, e.g. via TSQLHttpClientGeneric.CreateForRemoteLogging() - do
+    // server, e.g. via TRestHttpClientGeneric.CreateForRemoteLogging() - do
     // not call ServerRemoteLogStart() from a high-level business client!
     procedure ServerRemoteLogStart(aLogClass: TSynLogClass;
       aClientOwnedByFamily: boolean);

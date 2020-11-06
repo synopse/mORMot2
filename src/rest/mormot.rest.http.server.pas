@@ -632,7 +632,7 @@ begin
       if (aServers[i] = nil) or
          (aServers[i].Model = nil) then
         ErrMsg := 'Invalid TRestServer';
-    if ErrMsg = '' then
+    if {%H-}ErrMsg = '' then
       for i := 0 to high(aServers) do
         with aServers[i].Model do
         begin
@@ -691,18 +691,18 @@ begin
   if aHttpServerSecurity = secSynShaAes then
     fHttpServer.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
 {$endif PUREMORMOT2}
-{$ifdef COMPRESSSYNLZ} // SynLZ registered first, since will be prefered
+  {$ifdef COMPRESSSYNLZ} // SynLZ registered first, since will be prefered
   fHttpServer.RegisterCompress(CompressSynLZ);
-{$endif COMPRESSSYNLZ}
-{$ifdef COMPRESSDEFLATE}
+  {$endif COMPRESSSYNLZ}
+  {$ifdef COMPRESSDEFLATE}
   fHttpServer.RegisterCompress(CompressGZip);
-{$endif COMPRESSDEFLATE}
-{$ifndef ONLYUSEHTTPSOCKET}
+  {$endif COMPRESSDEFLATE}
+  {$ifndef ONLYUSEHTTPSOCKET}
   if fHttpServer.InheritsFrom(THttpApiServer) then
     // allow fast multi-threaded requests
     if ServerThreadPoolCount > 1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount - 1);
-{$endif ONLYUSEHTTPSOCKET}
+  {$endif ONLYUSEHTTPSOCKET}
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do

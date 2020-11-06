@@ -563,7 +563,7 @@ type
     /// this event will be raised on any Delete on a versioned record
     procedure Deleted(const ID: TID; const Revision: TRecordVersion); virtual;
     /// match TInterfaceFactory.MethodIndexCurrentFrameCallback signature,
-    // so that TSQLHttpClientWebsockets.CallbackRequest will call it
+    // so that TRestHttpClientWebsockets.CallbackRequest will call it
     // - it will create a temporary TRestBatch for the whole "jumbo frame"
     procedure CurrentFrame(isLast: boolean); virtual;
     /// low-level event handler triggerred by Added/Updated/Deleted methods

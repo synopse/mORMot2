@@ -501,7 +501,7 @@
 {$else}
 
   {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
-  // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
+  // cross-platform libcurl for https -> TCurlHttp and TRestHttpClientCurl
   {$define USELIBCURL}
   {$ifdef ANDROID}
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios

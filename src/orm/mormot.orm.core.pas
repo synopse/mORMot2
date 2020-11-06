@@ -636,7 +636,7 @@ type
     // - after a successfull call to Decode()
     function SameFieldNames(const Fields: TRawUTF8DynArray): boolean;
     /// search for a field name in the current identified FieldNames[]
-    function FindFieldName(const FieldName: RawUTF8): integer;
+    function FindFieldName(const FieldName: RawUTF8): PtrInt;
   end;
 
 
@@ -8716,7 +8716,7 @@ begin
   end;
 end;
 
-function TJSONObjectDecoder.FindFieldName(const FieldName: RawUTF8): integer;
+function TJSONObjectDecoder.FindFieldName(const FieldName: RawUTF8): PtrInt;
 begin
   for result := 0 to FieldCount - 1 do
     if IdemPropNameU(FieldNames[result], FieldName) then
@@ -8828,7 +8828,7 @@ end;
 
 function NotExpandedBufferRowCountPos(P, PEnd: PUTF8Char): PUTF8Char;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := nil;
   if (PEnd <> nil) and (PEnd - P > 24) then
@@ -8893,8 +8893,8 @@ end;
 
 function StartWithQuotedID(P: PUTF8Char; out ID: TID): boolean;
 begin
-  if PCardinal(P)^ and $ffffdfdf = ord('I') + ord('D') shl 8 + ord('"') shl 16 +
-    ord(':') shl 24 then
+  if PCardinal(P)^ and $ffffdfdf =
+       ord('I') + ord('D') shl 8 + ord('"') shl 16 + ord(':') shl 24 then
   begin
     SetID(P + 4, ID{%H-});
     result := ID > 0;
@@ -8915,7 +8915,8 @@ end;
 
 function StartWithID(P: PUTF8Char; out ID: TID): boolean;
 begin
-  if PCardinal(P)^ and $ffdfdf = ord('I') + ord('D') shl 8 + ord(':') shl 16 then
+  if PCardinal(P)^ and $ffdfdf =
+       ord('I') + ord('D') shl 8 + ord(':') shl 16 then
   begin
     SetID(P + 3, ID{%H-});
     result := ID > 0;
@@ -9170,8 +9171,8 @@ begin
     W.AddRawJSON(tmp);
 end;
 
-function TOrmPropInfo.GetValue(Instance: TObject; ToSQL: boolean; wasSQLString:
-  PBoolean): RawUTF8;
+function TOrmPropInfo.GetValue(Instance: TObject; ToSQL: boolean;
+  wasSQLString: PBoolean): RawUTF8;
 begin
   GetValueVar(Instance, ToSQL, result, wasSQLString);
 end;
@@ -9230,7 +9231,8 @@ begin
     result := GetInt64(pointer(temp)) = 0;
 end;
 
-function TOrmPropInfo.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
+function TOrmPropInfo.SetFieldSQLVar(Instance: TObject;
+  const aValue: TSQLVar): boolean;
 begin
   case aValue.VType of
     ftInt64:
@@ -9318,8 +9320,9 @@ begin
                          (PInteger(Value)^ = FALSE_LOW));
     oftEnumerate:
       result.VInteger := GetInteger(Value);
-    oftInteger, oftID, oftTID, oftRecord, oftSet, oftRecordVersion, oftSessionUserID,
-    oftTimeLog, oftModTime, oftCreateTime, oftUnixTime, oftUnixMSTime:
+    oftInteger, oftID, oftTID, oftRecord, oftSet, oftRecordVersion,
+    oftSessionUserID, oftTimeLog, oftModTime, oftCreateTime,
+    oftUnixTime, oftUnixMSTime:
       SetInt64(Value, result.VInt64);
     oftAnsiText, oftUTF8Text:
       FastSetString(RawUTF8(result.VAny), Value, ValueLen);
@@ -9367,7 +9370,8 @@ begin
   end;
 end;
 
-procedure TOrmPropInfo.CopyProp(Source: TObject; DestInfo: TOrmPropInfo; Dest: TObject);
+procedure TOrmPropInfo.CopyProp(Source: TObject; DestInfo: TOrmPropInfo;
+  Dest: TObject);
 
   procedure GenericCopy;
   var
@@ -9445,7 +9449,7 @@ var
 
   procedure FlattenedPropNameSet;
   var
-    i, max: integer;
+    i, max: PtrInt;
   begin // Address.Street1 -> Address_Street1
     (result as TOrmPropInfoRTTI).fFlattenedProps := aFlattenedProps;
     result.fNameUnflattened := result.fName;
@@ -9540,7 +9544,8 @@ begin
             if aType^.RttiFloat = rfDouble then
               C := TOrmPropInfoRTTIDouble;
           rkLString:
-            case aType^.AnsiStringCodePage of // recognize optimized UTF-8/UTF-16
+            case aType^.AnsiStringCodePage of
+              // recognize optimized UTF-8/UTF-16
               CP_UTF8:
                 C := TOrmPropInfoRTTIRawUTF8;
               CP_UTF16:

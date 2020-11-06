@@ -181,7 +181,8 @@ type
     function GetInputExists(const ParamName: RawUTF8): boolean;
     function GetInputInt(const ParamName: RawUTF8): Int64;
     function GetInputDouble(const ParamName: RawUTF8): Double;
-    procedure GetInputByName(const ParamName,InputName: RawUTF8; var result: RawUTF8);
+    procedure GetInputByName(const ParamName,InputName: RawUTF8;
+      var result: RawUTF8);
     function GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
     function GetInputString(const ParamName: RawUTF8): string;
@@ -395,7 +396,8 @@ type
     // - this method could have been declared as protected, since it should
     // never be called outside the TRestServer.URI() method workflow
     // - should set Call, and Method members
-    constructor Create(aServer: TRestServer; const aCall: TRestURIParams); virtual;
+    constructor Create(aServer: TRestServer;
+      const aCall: TRestURIParams); virtual;
     /// finalize the execution context
     destructor Destroy; override;
     /// validate mPost/mPut/mDelete action against those access rights
@@ -413,35 +415,44 @@ type
     procedure FillInput(const LogInputIdent: RawUTF8 = '');
     /// retrieve one input parameter from its URI name as Int64
     // - raise an EParsingException if the parameter is not found
-    property InputInt[const ParamName: RawUTF8]: Int64 read GetInputInt;
+    property InputInt[const ParamName: RawUTF8]: Int64
+      read GetInputInt;
     /// retrieve one input parameter from its URI name as double
     // - raise an EParsingException if the parameter is not found
-    property InputDouble[const ParamName: RawUTF8]: double read GetInputDouble;
+    property InputDouble[const ParamName: RawUTF8]: double
+      read GetInputDouble;
     /// retrieve one input parameter from its URI name as RawUTF8
     // - raise an EParsingException if the parameter is not found
-    property InputUTF8[const ParamName: RawUTF8]: RawUTF8 read GetInputUTF8;
+    property InputUTF8[const ParamName: RawUTF8]: RawUTF8
+      read GetInputUTF8;
     /// retrieve one input parameter from its URI name as a VCL string
     // - raise an EParsingException if the parameter is not found
     // - prior to Delphi 2009, some Unicode characters may be missing in the
     // returned AnsiString value
-    property InputString[const ParamName: RawUTF8]: string read GetInputString;
+    property InputString[const ParamName: RawUTF8]: string
+      read GetInputString;
     /// retrieve one input parameter from its URI name as Int64
     // - returns 0 if the parameter is not found
-    property InputIntOrVoid[const ParamName: RawUTF8]: Int64 read GetInputIntOrVoid;
+    property InputIntOrVoid[const ParamName: RawUTF8]: Int64
+      read GetInputIntOrVoid;
     /// retrieve one hexadecimal input parameter from its URI name as cardinal
     // - returns 0 if the parameter is not found
-    property InputHexaOrVoid[const ParamName: RawUTF8]: cardinal read GetInputHexaOrVoid;
+    property InputHexaOrVoid[const ParamName: RawUTF8]: cardinal
+      read GetInputHexaOrVoid;
     /// retrieve one input parameter from its URI name as double
     // - returns 0 if the parameter is not found
-    property InputDoubleOrVoid[const ParamName: RawUTF8]: double read GetInputDoubleOrVoid;
+    property InputDoubleOrVoid[const ParamName: RawUTF8]: double
+      read GetInputDoubleOrVoid;
     /// retrieve one input parameter from its URI name as RawUTF8
     // - returns '' if the parameter is not found
-    property InputUTF8OrVoid[const ParamName: RawUTF8]: RawUTF8 read GetInputUTF8OrVoid;
+    property InputUTF8OrVoid[const ParamName: RawUTF8]: RawUTF8
+      read GetInputUTF8OrVoid;
     /// retrieve one input parameter from its URI name as a VCL string
     // - returns '' if the parameter is not found
     // - prior to Delphi 2009, some Unicode characters may be missing in the
     // returned AnsiString value
-    property InputStringOrVoid[const ParamName: RawUTF8]: string read GetInputStringOrVoid;
+    property InputStringOrVoid[const ParamName: RawUTF8]: string
+      read GetInputStringOrVoid;
     /// retrieve one input parameter from its URI name as RawUTF8
     // - returns FALSE and call Error(ErrorMessageForMissingParameter) - which
     // may be a resourcestring - if the parameter is not found
@@ -462,19 +473,22 @@ type
       out ValueEnum; DefaultEnumOrd: integer = 0): boolean;
     /// return TRUE if the input parameter is available at URI
     // - even if InputUTF8['param']='', there may be '..?param=&another=2'
-    property InputExists[const ParamName: RawUTF8]: boolean read GetInputExists;
+    property InputExists[const ParamName: RawUTF8]: boolean
+      read GetInputExists;
     /// retrieve one input parameter from its URI name as variant
     // - if the parameter value is text, it is stored in the variant as
     // a generic VCL string content: so before Delphi 2009, you may loose
     // some characters at decoding from UTF-8 input buffer
     // - raise an EParsingException if the parameter is not found
-    property Input[const ParamName: RawUTF8]: variant read GetInput; default;
+    property Input[const ParamName: RawUTF8]: variant
+      read GetInput; default;
     /// retrieve one input parameter from its URI name as variant
     // - if the parameter value is text, it is stored in the variant as
     // a RawUTF8: so before Delphi 2009, you won't loose any Unicode character,
     // but you should convert its value to AnsiString using UTF8ToString()
     // - returns Unassigned if the parameter is not found
-    property InputOrVoid[const ParamName: RawUTF8]: variant read GetInputOrVoid;
+    property InputOrVoid[const ParamName: RawUTF8]: variant
+      read GetInputOrVoid;
     /// retrieve one input parameter from its URI name as variant
     // - returns FALSE and call Error(ErrorMessageForMissingParameter) - which
     // may be a resourcestring - if the parameter is not found
@@ -505,30 +519,38 @@ type
     // - Input*[] properties should have been called previously to fill the
     // internal array, or by calling FillInput if you do not know the input
     // parameters which may appear
-    property InputPairs: TRawUTF8DynArray read FInput;
+    property InputPairs: TRawUTF8DynArray
+      read FInput;
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     // - but rather call RemoteIP or UserAgent properties instead of
     // InHeader['remoteip'] or InHeader['User-Agent']
-    property InHeader[const HeaderName: RawUTF8]: RawUTF8 read GetInHeader;
+    property InHeader[const HeaderName: RawUTF8]: RawUTF8
+      read GetInHeader;
     /// retrieve an incoming HTTP cookie value
     // - cookie name are case-sensitive
-    property InCookie[CookieName: RawUTF8]: RawUTF8 read GetInCookie write SetInCookie;
+    property InCookie[CookieName: RawUTF8]: RawUTF8
+      read GetInCookie write SetInCookie;
     /// define a new 'name=value' cookie to be returned to the client
     // - if not void, TRestServer.URI() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
     // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
     // - if no Path=/.. is included, it will append
     // $ '; Path=/'+Server.Model.Root+'; HttpOnly'
-    property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
+    property OutSetCookie: RawUTF8
+      read fOutSetCookie write SetOutSetCookie;
     /// retrieve the "User-Agent" value from the incoming HTTP headers
-    property UserAgent: RawUTF8 read GetUserAgent;
+    property UserAgent: RawUTF8
+      read GetUserAgent;
     /// retrieve the "RemoteIP" value from the incoming HTTP headers
-    property RemoteIP: RawUTF8 read GetRemoteIP;
+    property RemoteIP: RawUTF8
+      read GetRemoteIP;
     /// true if the "RemoteIP" value from the incoming HTTP headers is '127.0.0.1'
-    property RemoteIPIsLocalHost: boolean read GetRemoteIPIsLocalHost;
+    property RemoteIPIsLocalHost: boolean
+      read GetRemoteIPIsLocalHost;
     /// "RemoteIP" value from the incoming HTTP headers but '' for '127.0.0.1'
-    property RemoteIPNotLocal: RawUTF8 read GetRemoteIPNotLocal;
+    property RemoteIPNotLocal: RawUTF8
+      read GetRemoteIPNotLocal;
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJWTAbstract.Verify method
@@ -551,7 +573,8 @@ type
     // - may be nil depending on the context: you should NOT use it, but the
     // safe Session, SessionGroup, SessionUser, SessionUserName fields instead
     // - is used internally
-    property AuthSession: TAuthSession read fAuthSession;
+    property AuthSession: TAuthSession
+      read fAuthSession;
     /// identify which kind of client is actually connected
     // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
     // set ckFramework on match
@@ -570,7 +593,8 @@ type
     function IsRemoteAdministrationExecute: boolean;
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
-    property ResourceFileName: TFileName read GetResourceFileName;
+    property ResourceFileName: TFileName
+      read GetResourceFileName;
     /// use this method to send back directly a result value to the caller
     // - expects Status to be either HTTP_SUCCESS, HTTP_NOTMODIFIED,
     // HTTP_CREATED, or HTTP_TEMPORARYREDIRECT, and will return as answer the
@@ -596,8 +620,9 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
     // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS
-    procedure Returns(const NameValuePairs: array of const; Status: integer = HTTP_SUCCESS;
-      Handle304NotModified: boolean = false; HandleErrorAsRegularResult: boolean = false;
+    procedure Returns(const NameValuePairs: array of const;
+      Status: integer = HTTP_SUCCESS; Handle304NotModified: boolean = false;
+      HandleErrorAsRegularResult: boolean = false;
       const CustomHeader: RawUTF8 = ''); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
@@ -647,12 +672,14 @@ type
     // that the file content will be sent back to the server only if it changed
     // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
     procedure ReturnFileFromFolder(const FolderName: TFileName;
-      Handle304NotModified: boolean = true; const DefaultFileName: TFileName = 'index.html';
+      Handle304NotModified: boolean = true;
+      const DefaultFileName: TFileName = 'index.html';
       const Error404Redirect: RawUTF8 = ''; CacheControlMaxAge: integer = 0);
     /// use this method notify the caller that the resource URI has changed
     // - returns a HTTP_TEMPORARYREDIRECT status with the specified location,
     // or HTTP_MOVEDPERMANENTLY if PermanentChange is TRUE
-    procedure Redirect(const NewLocation: RawUTF8; PermanentChange: boolean = false);
+    procedure Redirect(const NewLocation: RawUTF8;
+      PermanentChange: boolean = false);
     /// use this method to send back a JSON object with a "result" field
     // - this method will encode the supplied values as a {"result":"...}
     // JSON object, as such for one value:
@@ -664,8 +691,9 @@ type
     // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
     // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS and/or
     // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
-    procedure Results(const Values: array of const; Status: integer = HTTP_SUCCESS;
-      Handle304NotModified: boolean = false; CacheControlMaxAge: integer = 0);
+    procedure Results(const Values: array of const;
+      Status: integer = HTTP_SUCCESS; Handle304NotModified: boolean = false;
+      CacheControlMaxAge: integer = 0);
     /// use this method if the caller expect no data, just a status
     // - just wrap the overloaded Returns() method with no result value
     // - if Status is an error code, it will call Error() method
@@ -679,15 +707,17 @@ type
     // - if no ErrorMessage is specified, will return a default text
     // corresponding to the Status code
     procedure Error(const ErrorMessage: RawUTF8 = '';
-      Status: integer = HTTP_BADREQUEST; CacheControlMaxAge: integer = 0); overload; virtual;
+      Status: integer = HTTP_BADREQUEST;
+      CacheControlMaxAge: integer = 0); overload; virtual;
     /// use this method to send back an error to the caller
     // - implementation is just a wrapper over Error(FormatUTF8(Format,Args))
     procedure Error(const Format: RawUTF8; const Args: array of const;
-      Status: integer = HTTP_BADREQUEST; CacheControlMaxAge: integer = 0); overload;
+      Status: integer = HTTP_BADREQUEST;
+      CacheControlMaxAge: integer = 0); overload;
     /// use this method to send back an error to the caller
     // - will serialize the supplied exception, with an optional error message
-    procedure Error(E: Exception; const Format: RawUTF8; const Args: array of const;
-      Status: integer = HTTP_BADREQUEST); overload;
+    procedure Error(E: Exception; const Format: RawUTF8;
+      const Args: array of const; Status: integer = HTTP_BADREQUEST); overload;
     /// implements a method-based service for live update of some settings
     // - should be called from a method-based service, e.g. Configuration()
     // - the settings are expected to be stored e.g. in a TSynAutoCreateFields
@@ -1054,7 +1084,8 @@ type
     // and will always call User.Free
     // - on failure, will call TRestServerURIContext.AuthenticationFailed()
     // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
-    procedure SessionCreate(Ctxt: TRestServerURIContext; var User: TAuthUser); virtual;
+    procedure SessionCreate(Ctxt: TRestServerURIContext;
+      var User: TAuthUser); virtual;
     /// Ctxt.Returns(['result',result,....[,'data',data]],200,header);
     procedure SessionCreateReturns(Ctxt: TRestServerURIContext;
       Session: TAuthSession; const result, data, header: RawUTF8);
@@ -1074,10 +1105,12 @@ type
     // fill Ctxt.Session* members according to in-memory session information
     // - returns nil if this remote request does not match this authentication
     // - method execution should be protected by TRestServer.fSessions.Lock
-    function RetrieveSession(Ctxt: TRestServerURIContext): TAuthSession; virtual; abstract;
+    function RetrieveSession(
+      Ctxt: TRestServerURIContext): TAuthSession; virtual; abstract;
     /// allow to tune the authentication process
     // - default value is [saoUserByLogonOrID]
-    property Options: TRestServerAuthenticationOptions read fOptions write fOptions;
+    property Options: TRestServerAuthenticationOptions
+      read fOptions write fOptions;
   end;
 
   /// weak authentication scheme using URL-level parameter
@@ -1086,7 +1119,8 @@ type
     /// will check URI-level signature
     // - retrieve the session ID from 'session_signature=...' parameter
     // - method execution should be protected by TRestServer.fSessions.Lock
-    function RetrieveSession(Ctxt: TRestServerURIContext): TAuthSession; override;
+    function RetrieveSession(
+      Ctxt: TRestServerURIContext): TAuthSession; override;
   end;
 
   /// secure authentication scheme using URL-level digital signature
@@ -1111,7 +1145,8 @@ type
     /// will check URI-level signature
     // - check session_signature=... parameter to be a valid digital signature
     // - method execution should be protected by TRestServer.fSessions.Lock
-    function RetrieveSession(Ctxt: TRestServerURIContext): TAuthSession; override;
+    function RetrieveSession(
+      Ctxt: TRestServerURIContext): TAuthSession; override;
     /// allow any order when creating sessions
     // - by default, signed sessions are expected to be sequential, and new
     // signed session signature can't be older in time than the last one,
@@ -1121,16 +1156,16 @@ type
     // this property to TRUE to enabled a weaker but more tolerant behavior
     // ! (aServer.AuthenticationRegister(TRestServerAuthenticationDefault) as
     // !   TRestServerAuthenticationSignedURI).NoTimestampCoherencyCheck := true;
-    property NoTimestampCoherencyCheck: boolean read fNoTimestampCoherencyCheck
-      write SetNoTimestampCoherencyCheck;
+    property NoTimestampCoherencyCheck: boolean
+      read fNoTimestampCoherencyCheck write SetNoTimestampCoherencyCheck;
     /// time tolerance in seconds for the signature timestamps coherency check
     // - by default, signed sessions are expected to be sequential, and new
     // signed session signature can't be older in time than the last one,
     // with a tolerance time defined by this property
     // - default value is 5 seconds, which cover most kind of clients (AJAX or
     // WebSockets), even over a slow Internet connection
-    property TimestampCoherencySeconds: cardinal read fTimestampCoherencySeconds
-      write SetTimestampCoherencySeconds;
+    property TimestampCoherencySeconds: cardinal
+      read fTimestampCoherencySeconds write SetTimestampCoherencySeconds;
     /// customize the session_signature signing algorithm with a specific function
     // - the very same function should be set on TRestClientURI
     // - to select a known hash algorithm, you may change the Algorithm property
@@ -1140,7 +1175,8 @@ type
     // - you need to set this value on the server side only; those known algorithms
     // will be recognized by TRestClientURI on the client side during the
     // session handshake, to select the matching ComputeSignature function
-    property Algorithm: TRestAuthenticationSignedURIAlgo write SetAlgorithm;
+    property Algorithm: TRestAuthenticationSignedURIAlgo
+      write SetAlgorithm;
   end;
 
   /// mORMot secure RESTful authentication scheme on Server
@@ -1486,14 +1522,12 @@ type
     // - if there is a WaitFor currently in progress, returns FALSE
     function Reset: boolean; virtual;
     /// the associated blocking process instance
-    property Process: TBlockingProcess
-      read fProcess;
+    property Process: TBlockingProcess read fProcess;
   published
     /// the current state of process
     // - just a wrapper around Process.Event
     // - use Reset method to re-use this instance after a WaitFor process
-    property Event: TBlockingEvent
-      read GetEvent;
+    property Event: TBlockingEvent read GetEvent;
   end;
 
 
@@ -2617,8 +2651,8 @@ procedure TRestServerURIContext.ExecuteCommand;
 
   procedure TimeOut;
   begin
-    Log.Log(sllServer, 'TimeOut %.Execute(%) after % ms',
-      [self, ToText(Command)^, Server.fAcquireExecution[Command].LockedTimeOut], self);
+    Log.Log(sllServer, 'TimeOut %.Execute(%) after % ms', [self,
+      ToText(Command)^, Server.fAcquireExecution[Command].LockedTimeOut], self);
     if Call <> nil then
       Call^.OutStatus := HTTP_TIMEOUT; // 408 Request Time-out
   end;
@@ -2878,8 +2912,10 @@ end;
 
 procedure TRestServerURIContext.ServiceResultEnd(WR: TTextWriter; ID: TID);
 const
-  JSONSEND_WITHID: array[boolean] of RawUTF8 = ('],"id":', '},"id":');
-  JSONSEND_NOID: array[boolean] of AnsiChar = (']', '}');
+  JSONSEND_WITHID: array[boolean] of RawUTF8 = (
+    '],"id":', '},"id":');
+  JSONSEND_NOID: array[boolean] of AnsiChar = (
+    ']', '}');
 begin
   // InternalExecuteSOAByInterface has set ForceServiceResultAsJSONObject
   if ID = 0 then
@@ -2887,9 +2923,8 @@ begin
   else
   begin
     if ForceServiceResultAsJSONObjectWithoutResult then
-      raise EServiceException.CreateUTF8(
-        '%.ServiceResultEnd(ID=%) with ForceServiceResultAsJSONObjectWithoutResult',
-        [self, ID]);
+      raise EServiceException.CreateUTF8('%.ServiceResultEnd(ID=%) with ' +
+        'ForceServiceResultAsJSONObjectWithoutResult', [self, ID]);
     WR.AddString(JSONSEND_WITHID[ForceServiceResultAsJSONObject]);
     WR.Add(ID); // only used in sicClientDriven mode
   end;
@@ -3094,8 +3129,8 @@ end;
 
 procedure TRestServerURIContext.ExecuteORMGet;
 
-  procedure ConvertOutBodyAsPlainJSON(const FieldsCSV: RawUTF8; Options:
-    TJSONSerializerOrmOptions);
+  procedure ConvertOutBodyAsPlainJSON(const FieldsCSV: RawUTF8;
+    Options: TJSONSerializerOrmOptions);
   var
     rec: TOrm;
     W: TJSONSerializer;
@@ -3112,10 +3147,10 @@ procedure TRestServerURIContext.ExecuteORMGet;
       exit;
     rec := Table.CreateAndFillPrepare(Call.OutBody);
     try
-      W := TableModelProps.Props.CreateJSONWriter(TRawByteStringStream.Create,
-        true, FieldsCSV, {knownrows=}0);
+      W := TableModelProps.Props.CreateJSONWriter(
+        TRawByteStringStream.Create, true, FieldsCSV, {knownrows=}0);
       try
-        W.CustomOptions := W.CustomOptions + [twoForceJSONStandard]; // force regular JSON
+        W.CustomOptions := W.CustomOptions + [twoForceJSONStandard]; // regular JSON
         W.OrmOptions := Options; // will do the magic
         rec.AppendFillAsJsonValues(W);
         W.SetText(Call.OutBody);
@@ -3517,7 +3552,7 @@ begin
         TableID := TableEngine.EngineAdd(TableIndex, Call.InBody);
         if TableID <> 0 then
         begin
-        // 201 Created
+          // 201 Created
           Call.OutStatus := HTTP_CREATED;
           FormatUTF8('Location: %/%', [URI, TableID], Call.OutHead);
           cache := orm.CacheOrNil;
@@ -3869,11 +3904,13 @@ var
 begin
   i := GetInputNameIndex(ParamName);
   if i < 0 then
-    raise EParsingException.CreateUTF8('%: missing InputString[%]', [self, ParamName]);
+    raise EParsingException.CreateUTF8('%: missing InputString[%]',
+      [self, ParamName]);
   result := UTF8ToString(fInput[i * 2 + 1]);
 end;
 
-function TRestServerURIContext.GetInputStringOrVoid(const ParamName: RawUTF8): string;
+function TRestServerURIContext.GetInputStringOrVoid(
+  const ParamName: RawUTF8): string;
 var
   i: PtrInt;
 begin
@@ -4017,7 +4054,8 @@ begin
     fInputCookies[n].value := cv;
     inc(n);
     if n > COOKIE_MAXCOUNT_DOSATTACK then
-      raise EParsingException.CreateUTF8('%.RetrieveCookies overflow: DOS?', [self]);
+      raise EParsingException.CreateUTF8(
+        '%.RetrieveCookies overflow: DOS?', [self]);
   end;
 end;
 
@@ -4065,7 +4103,8 @@ end;
 
 procedure TRestServerURIContext.SetOutSetCookie(aOutSetCookie: RawUTF8);
 const
-  HTTPONLY: array[boolean] of RawUTF8 = ('; HttpOnly', '');
+  HTTPONLY: array[boolean] of RawUTF8 = (
+    '; HttpOnly', '');
 begin
   if self = nil then
     exit;
@@ -4323,9 +4362,10 @@ begin
   end;
 end;
 
-procedure TRestServerURIContext.ReturnFileFromFolder(const FolderName: TFileName;
-  Handle304NotModified: boolean; const DefaultFileName: TFileName;
-  const Error404Redirect: RawUTF8; CacheControlMaxAge: integer);
+procedure TRestServerURIContext.ReturnFileFromFolder(
+  const FolderName: TFileName; Handle304NotModified: boolean;
+  const DefaultFileName: TFileName; const Error404Redirect: RawUTF8;
+  CacheControlMaxAge: integer);
 var
   fileName: TFileName;
 begin
@@ -4334,7 +4374,8 @@ begin
   else if PosEx('..', URIBlobFieldName) > 0 then
     fileName := ''
   else
-    fileName := UTF8ToString(StringReplaceChars(URIBlobFieldName, '/', PathDelim));
+    fileName := UTF8ToString(
+      StringReplaceChars(URIBlobFieldName, '/', PathDelim));
   if fileName <> '' then
     fileName := IncludeTrailingPathDelimiter(FolderName) + fileName;
   ReturnFile(fileName, Handle304NotModified, '', '', Error404Redirect,
@@ -4446,7 +4487,8 @@ begin
     Call.OutBody := ErrorMessage;
     if CacheControlMaxAge <> 0 then
       // Cache-Control is ignored for errors
-      Call.OutHead := 'Cache-Control: max-age=' + UInt32ToUtf8(CacheControlMaxAge);
+      Call.OutHead := 'Cache-Control: max-age=' +
+        UInt32ToUtf8(CacheControlMaxAge);
     exit;
   end;
   if ErrorMessage = '' then
@@ -4536,7 +4578,7 @@ var
 
   procedure DecodeUriParametersIntoJSON(const input: TRawUTF8DynArray);
   var
-    a, i, iLow: integer;
+    a, i, iLow: PtrInt;
     WR: TTextWriter;
     argDone: boolean;
     temp: TTextWriterStackBuffer;
@@ -4864,7 +4906,7 @@ function TRestServerAuthentication.AuthSessionRelease(
 var
   aUserName: RawUTF8;
   aSessionID: cardinal;
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if fServer.fSessions = nil then
@@ -4917,7 +4959,8 @@ begin
     else
       result := nil;
     if result = nil then
-      result := fServer.fSQLAuthUserClass.Create(fServer.ORM, 'LogonName=?', [aUserName]);
+      result := fServer.fSQLAuthUserClass.Create(
+        fServer.ORM, 'LogonName=?', [aUserName]);
     if (result.IDValue = 0) and
        (saoHandleUnknownLogonAsStar in fOptions) then
       if fServer.OrmInstance.Retrieve('LogonName=?', [], ['*'], result) then
@@ -5462,7 +5505,8 @@ end;
 { TSynMonitorUsageRest }
 
 constructor TSynMonitorUsageRest.Create(const aStorage: IRestOrm;
-  aProcessID: Int64; aStoredClass: TOrmMonitorUsageClass; aProcessIDShift: integer);
+  aProcessID: Int64; aStoredClass: TOrmMonitorUsageClass;
+  aProcessIDShift: integer);
 var
   g: TSynMonitorUsageGranularity;
 begin

@@ -642,7 +642,7 @@ type
     /// identifies a CurrentFrame() method in this interface
     // - i.e. the index in Methods[] of the following signature:
     // ! procedure CurrentFrame(isLast: boolean);
-    // - this method will be called e.g. by TSQLHttpClientWebsockets.CallbackRequest
+    // - this method will be called e.g. by TRestHttpClientWebsockets.CallbackRequest
     // for interface callbacks in case of WebSockets jumbo frames, to allow e.g.
     // faster database access via a batch
     // - contains -1 if no such method do exist in the interface definition

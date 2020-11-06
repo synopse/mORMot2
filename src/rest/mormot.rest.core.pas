@@ -492,8 +492,8 @@ type
     // - aDefinition.Kind will define the actual class which will be
     // instantiated: currently TRestServerFullMemory, TRestServerDB,
     // TRestClientURINamedPipe, TRestClientURIMessage,
-    // TSQLHttpClientWinSock, TSQLHttpClientWinINet, TSQLHttpClientWinHTTP,
-    // and TSQLHttpClientCurl classes are recognized by this method
+    // TRestHttpClientWinSock, TRestHttpClientWinINet, TRestHttpClientWinHTTP,
+    // and TRestHttpClientCurl classes are recognized by this method
     // - then other aDefinition fields will be used to refine the instance:
     // please refer to each overriden DefinitionTo() method documentation
     // - use TRestMongoDBCreate() and/or TRestExternalDBCreate() instead

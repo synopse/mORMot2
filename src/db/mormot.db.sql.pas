@@ -2409,7 +2409,7 @@ type
     // if you call it from the main thread, it may fail to release resources
     // - within the mORMot server, mORMotDB unit will call this method
     // for every terminating thread created for TRestServerNamedPipeResponse
-    // or TSQLHttpServer multi-thread process
+    // or TRestHttpServer multi-thread process
     procedure EndCurrentThread; virtual;
     /// set this property if you want to disable the per-thread connection pool
     // - to be used e.g. in database embedded mode (SQLite3/FireBird), when

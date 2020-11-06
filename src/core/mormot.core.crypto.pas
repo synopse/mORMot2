@@ -5232,7 +5232,7 @@ begin
   if Buffer = nil then
     exit; // avoid GPF
   inc(Data.MLen, QWord(cardinal(Len)) shl 3);
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   if (K256AlignedStore <> '') and
      (Data.Index = 0) and
      (Len >= 64) then
@@ -5243,7 +5243,7 @@ begin
     Len := Len and 63;
     dec(PByte(Buffer), Len);
   end;
-  {$endif CPUX64}
+  {$endif ASMX64}
   while Len > 0 do
   begin
     aLen := 64 - Data.Index;

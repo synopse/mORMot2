@@ -230,7 +230,7 @@ type
     // parameters) should not block the client waiting for answer
     // - may be handy e.g. when consuming an event-driven asynchronous service
     // - will call CallbackNonBlockingSetHeader, currently implemented only in
-    // TSQLHttpClientWebsockets, with frame gathering
+    // TRestHttpClientWebsockets, with frame gathering
     property NonBlockWithoutAnswer: boolean read fNonBlockWithoutAnswer write fNonBlockWithoutAnswer;
   end;
 

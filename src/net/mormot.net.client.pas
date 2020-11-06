@@ -123,7 +123,7 @@ type
     wraNegotiate);
 
   /// a record to set some extended options for HTTP clients
-  // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
+  // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
   // the actual mormot.net.http's THttpRequest implementation class
   THttpRequestExtendedOptions = record
     /// let HTTPS be less paranoid about SSL certificates
