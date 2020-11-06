@@ -16,7 +16,7 @@ unit mormot.orm.core;
     - RecordRef Wrapper Definition
     - TOrmTable TOrmTableJSON Definitions
     - TOrmMany Definition
-    - Virtual TOrm Definitions
+    - TOrmVirtual Definitions
     - TOrmProperties Definitions
     - TOrmModel TOrmModelProperties Definitions
     - TRestCache Definition
@@ -5375,7 +5375,7 @@ type
   end;
 
 
-  { -------------------- Virtual TOrm Definitions }
+  { -------------------- TOrmVirtual Definitions }
 
   /// parent of all ORM virtual classes
   // - you can define a plain TOrm class as virtual if needed  - e.g.
@@ -18598,7 +18598,7 @@ begin
 end;
 
 
-{ ------------ Virtual TOrm Definitions }
+{ ------------ TOrmVirtual Definitions }
 
 { TOrmFts3 }
 

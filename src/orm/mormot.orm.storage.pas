@@ -553,9 +553,10 @@ type
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
-    // - faster than OneFieldValues method, which creates a temporary JSON content
+    // - this virtual implementation redirect to OneFieldValues method, which
+    // creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
-      out ResultID: TIDDynArray): boolean; overload; virtual; abstract;
+      out ResultID: TIDDynArray): boolean; overload; virtual;
     /// returns the current authentication session ID from TRestOrmServer owner
     function GetCurrentSessionUserID: TID; override;
 
@@ -1706,6 +1707,13 @@ function TRestStorage.SearchField(const FieldName: RawUTF8; FieldValue: Int64;
   out ResultID: TIDDynArray): boolean;
 begin
   result := SearchField(FieldName, Int64ToUTF8(FieldValue), ResultID);
+end;
+
+function TRestStorage.SearchField(const FieldName, FieldValue: RawUTF8;
+  out ResultID: TIDDynArray): boolean;
+begin
+  result := OneFieldValues(fStoredClass, 'ID',
+    FormatUTF8('%=?', [FieldName, FieldValue]), TInt64DynArray(ResultID));
 end;
 
 function TRestStorage.RecordCanBeUpdated(Table: TOrmClass; ID: TID;
