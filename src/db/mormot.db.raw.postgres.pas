@@ -30,9 +30,11 @@ uses
   mormot.db.core,
   mormot.db.sql;
 
+
 { ************ Native PostgreSQL Client Library Constants }
 
-const // see pg_type.h
+const
+  // see pg_type.h
   BOOLOID = 16;
   BYTEAOID = 17;
   INT8OID = 20;
@@ -220,10 +222,18 @@ const
 { TSQLDBPostgresLib }
 
 const
-  LIBNAME = {$ifdef MSWINDOWS}'libpq.dll'{$else}
-    {$ifdef darwin}'libpq.dylib'{$else}'libpq.so.5'{$endif}{$endif};
-  LIBNAME2 = {$ifdef MSWINDOWS}''{$else}
-    {$ifdef darwin}''{$else}'libpq.so.4'{$endif}{$endif};
+  {$ifdef MSWINDOWS}
+  LIBNAME = 'libpq.dll';
+  LIBNAME2 = '';
+  {$else}
+    {$ifdef DARWIN}
+    LIBNAME = 'libpq.dylib';
+    LIBNAME2 = '';
+    {$else}
+    LIBNAME = 'libpq.so.5';
+    LIBNAME2 = 'libpq.so.4';
+    {$endif DARWIN}
+  {$endif MSWINDOWS}
 
 constructor TSQLDBPostgresLib.Create;
 var
@@ -248,14 +258,14 @@ begin
     GetLength(res, tup_num, field_num));
 end;
 
-procedure TSQLDBPostgresLib.Check(conn: PPGconn; res: PPGresult; pRes: PPPGresult;
-  andClear: boolean);
+procedure TSQLDBPostgresLib.Check(conn: PPGconn; res: PPGresult;
+  pRes: PPPGresult; andClear: boolean);
 var
   errMsg, errCode: PUTF8Char;
 begin
   if (res = nil) or // nil in case of very fatal error, out of emory for example
-     (ResultStatus(res) in [PGRES_BAD_RESPONSE, PGRES_NONFATAL_ERROR,
-       PGRES_FATAL_ERROR]) then
+     (ResultStatus(res) in
+       [PGRES_BAD_RESPONSE, PGRES_NONFATAL_ERROR, PGRES_FATAL_ERROR]) then
   begin
     errMsg := ErrorMessage(conn);
     if res <> nil then
@@ -265,7 +275,8 @@ begin
     Clear(res);
     if pRes <> nil then
       pRes^ := nil;
-    raise ESQLDBPostgres.CreateUTF8('% PGERRCODE: %, %', [self, errCode, errMsg]);
+    raise ESQLDBPostgres.CreateUTF8(
+            '% PGERRCODE: %, %', [self, errCode, errMsg]);
   end
   else if andClear then
     Clear(res);
@@ -283,6 +294,7 @@ begin
     GlobalUnLock;
   end;
 end;
+
 
 initialization
 

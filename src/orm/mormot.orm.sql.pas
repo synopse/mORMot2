@@ -59,7 +59,7 @@ type
   TOnEngineAddComputeID = function(Sender: TRestStorageExternal;
     var Handled: boolean): TID of object;
 
-  /// REST server with direct access to a SynDB-based external database
+  /// REST server with direct access to a mormot.db.sql-based external database
   // - handle all REST commands, using the external SQL database connection,
   // and prepared statements
   // - is used by TRestServer.URI for faster RESTful direct access
@@ -104,7 +104,7 @@ type
     // then bound inlined parameters as :(1234): and call its Execute method
     // - should return nil on error, and not raise an exception
     function PrepareInlinedForRows(const aSQL: RawUTF8): ISQLDBStatement;
-    /// overloaded method using FormatUTF8() and binding SynDB parameters
+    /// overloaded method using FormatUTF8() and binding mormot.db.sql parameters
     function PrepareDirectForRows(SQLFormat: PUTF8Char;
       const Args, Params: array of const): ISQLDBStatement;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
@@ -116,10 +116,10 @@ type
     /// overloaded method using FormatUTF8() and inlined parameters
     function ExecuteInlined(SQLFormat: PUTF8Char; const Args: array of const;
       ExpectResults: boolean): ISQLDBRows; overload;
-    /// overloaded method using FormatUTF8() and binding SynDB parameters
+    /// overloaded method using FormatUTF8() and binding mormot.db.sql parameters
     function ExecuteDirect(SQLFormat: PUTF8Char; const Args, Params: array of const;
       ExpectResults: boolean): ISQLDBRows;
-    /// overloaded method using FormatUTF8() and binding SynDB parameters
+    /// overloaded method using FormatUTF8() and binding mormot.db.sql parameters
     function ExecuteDirectSQLVar(SQLFormat: PUTF8Char; const Args: array of const;
        var Params: TSQLVarDynArray; const LastIntegerParam: Int64;
        ParamsMatchCopiableFields: boolean): boolean;
@@ -281,7 +281,7 @@ type
     property OnEngineAddComputeID: TOnEngineAddComputeID read
       fOnEngineAddComputeID write fOnEngineAddComputeID;
   published
-    /// the associated external SynDB database connection properties
+    /// the associated external mormot.db.sql database connection properties
     property Properties: TSQLDBConnectionProperties
       read GetConnectionProperties;
     /// by default, any INSERT will compute the new ID from an internal variable
@@ -343,7 +343,7 @@ type
     property SQL: RawUTF8 read fSQL;
   end;
 
-  /// A SynDB-based virtual table for accessing any external database
+  /// mormot.db.sql-based virtual table for accessing any external database
   // - for ORM access, you should use VirtualTableExternalRegister method to
   //   associate this virtual table module to any TOrm class
   // - transactions are handled by this module, according to the external database
@@ -1085,7 +1085,7 @@ begin
         mDelete:
           begin
             if cPostgreBulkArray in fProperties.BatchSendingAbilities then
-              // for SynDBPostgres array binding
+              // for mormot.db.sql.postgres array binding
               SQL := 'delete from % where %=ANY(?)'
             else
               // regular SQL
@@ -2054,7 +2054,8 @@ begin
     k := fStoredClassRecordProps.Fields.IndexByNameOrExcept(
       Decoder.FieldNames[f]);
     ExternalFields[f] := fStoredClassMapping^.FieldNameByIndex(k);
-    k := fFieldsInternalToExternal[k + 1]; // retrieve exact Types[f] from SynDB
+    // retrieve mormot.db.sql Types[f]
+    k := fFieldsInternalToExternal[k + 1];
     if k < 0 then
       raise ERestStorage.CreateUTF8(
         '%.JSONDecodedPrepareToSQL(%): No column for [%] field in table %',
@@ -2065,7 +2066,8 @@ begin
   Decoder.DecodedFieldNames := pointer(ExternalFields);
   if BoundArray and
      (cPostgreBulkArray in fProperties.BatchSendingAbilities) then
-    // SynDBPostgres array binding e.g. via 'insert into ... values (unnest...)'
+    // efficient mormot.db.sql.postgres array binding
+    // e.g. via 'insert into ... values (unnest...)'
     Decoder.DecodedFieldTypesToUnnest := @Types;
   result := Decoder.EncodeAsSQLPrepared(fTableName, Occasion,
     fStoredClassMapping^.RowIDFieldName, BatchOptions);

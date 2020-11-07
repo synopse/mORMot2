@@ -176,7 +176,7 @@ type
 
 
 const
-  /// FireDAC DriverID values corresponding to SynDB recognized SQL engines
+  /// FireDAC DriverID values corresponding to mormot.db.sql recognized SQL engines
   {$ifdef ISDELPHIXE5}
   FIREDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
     'Ora', 'MSSQL', 'MSAcc', 'MySQL', 'SQLite', 'FB', '', 'PG', 'DB2', 'Infx');
@@ -262,24 +262,29 @@ begin
   case fDBMS of
     dSQLite:
       begin
-        if fFireDACOptions.Values['CharacterSet'] = '' then // force UTF-8 for SynDB
+        if fFireDACOptions.Values['CharacterSet'] = '' then
+          // force UTF-8 for mormot.db.sql
           fFireDACOptions.Values['CharacterSet'] := 'UTF8';
-      {$ifdef UNICODE}
+        {$ifdef UNICODE}
         // CreateUTF16 is the default value for Delphi 2009+
-        if fFireDACOptions.Values['OpenMode'] = '' then // force UTF-8 for SynDB
+        if fFireDACOptions.Values['OpenMode'] = '' then
+          // force UTF-8 for mormot.db.sql
           fFireDACOptions.Values['OpenMode'] := 'CreateUTF8';
-      {$else}
-        ForceUseWideString := true; // as expected by FireDAC when UTF-8 is enabled
-      {$endif UNICODE}
-        fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for FireDAC
+        {$else}
+        // as expected by FireDAC when UTF-8 is enabled
+        ForceUseWideString := true;
+        {$endif UNICODE}
+        // SQLite3 INTEGER = 32bit for FireDAC
+        fSQLCreateField[ftInt64] := ' BIGINT';
       end;
     dFirebird, dMySQL, dPostgreSQL, dDB2:
       begin
-        if fFireDACOptions.Values['CharacterSet'] = '' then // force UTF-8 for SynDB
+        if fFireDACOptions.Values['CharacterSet'] = '' then
+          // force UTF-8 for mormot.db.sql
           fFireDACOptions.Values['CharacterSet'] := 'UTF8';
-      {$ifndef UNICODE}
+        {$ifndef UNICODE}
         ForceUseWideString := true; // as expected by FireDAC when UTF-8 is enabled
-      {$endif}
+        {$endif}
       end;
   end;
 end;

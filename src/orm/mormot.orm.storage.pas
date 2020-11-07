@@ -478,7 +478,8 @@ type
   // - you can set an alternate per-table database engine by using this class
   // - this abstract class is to be overridden with a proper implementation
   // (e.g. TRestStorageInMemory in this unit, or TRestStorageExternal
-  // from mORMotDB unit, or TRestStorageMongoDB from mORMotMongoDB unit)
+  // from mormot.orm.sql unit, or TRestStorageMongoDB from
+  // mormot.orm.mongodb.pas unit)
   TRestStorage = class(TRestOrm)
   protected
     fStoredClass: TOrmClass;

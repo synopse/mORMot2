@@ -587,7 +587,7 @@ type
   // - an ODBC Driver should be specified at creation
   // - you should better use direct connection classes, like
   // TSQLDBOleDBMSSQLConnectionProperties or TSQLDBOleDBOracleConnectionProperties
-  // as defined in SynDBODBC.pas
+  // as defined in mormot.db.sql.odbc.pas
   TSQLDBOleDBODBCSQLConnectionProperties = class(TSQLDBOleDBConnectionProperties)
   protected
     fDriver: RawUTF8;

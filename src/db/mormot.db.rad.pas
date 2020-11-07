@@ -346,7 +346,7 @@ type
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this implementation will also loop through all internal bound array
     // of values (if any), to implement BATCH mode even if the database library
-    // does not support array binding (only SynDBFireDAC does support it yet)
+    // does not support array binding (only mormot.db.rad.firedac does support it yet)
     // - this overridden method will log the SQL statement if sllSQL has been
     // enabled in SynDBLog.Family.Level
     // - raise an ESQLDBDataset on any error

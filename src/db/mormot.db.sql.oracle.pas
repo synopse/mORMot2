@@ -305,7 +305,7 @@ type
     // and handling ftCurrency/NUMBER(22,0) as fast as possible, directly from
     // the memory buffers returned by OCI: it will ensure best performance
     // possible when called from TOrmVirtualTableCursorExternal.Column method
-    // as defined in mORMotDB unit (i.e. mORMot external DB access)
+    // as defined in mormot.orm.sql unit (i.e. mORMot external DB access)
     procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar;
       var Temp: RawByteString); override;
     /// append all columns values of the current Row to a JSON stream

@@ -65,8 +65,9 @@ type
     /// initialize the properties to connect via UniDAC database access
     // - aServerName shall contain the UniDAC provider name, e.g. 'Oracle' - you
     // can use the TSQLDBUniDACConnectionProperties.URI() to retrieve the
-    // provider name from its SynDB.TSQLDBDefinition enumeration, and optionally
-    // set some options, which will be added to the internal SpecificOptions[]:
+    // provider name from its mormot.db.sql.TSQLDBDefinition enumeration,
+    // and optionally set some options, which will be added to the internal
+    // SpecificOptions[]:
     // ! 'Oracle?ClientLibrary=oci64\oci.dll'
     // ! 'MySQL?Server=192.168.2.60;Port=3306', 'world', 'root', 'dev'
     // - aDatabaseName shall contain the database server name
@@ -160,7 +161,7 @@ type
 
 
 const
-  /// UniDAC provider names corresponding to SynDB recognized SQL engines
+  /// UniDAC provider names corresponding to mormot.db.sql recognized SQL engines
   UNIDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
     'Oracle', 'SQL Server', 'Access', 'MySQL', 'SQLite', 'InterBase', 
     'NexusDB', 'PostgreSQL', 'DB2', '');

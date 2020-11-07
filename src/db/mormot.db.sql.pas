@@ -2091,7 +2091,7 @@ type
     // if SeekFirst is TRUE, will put the cursor on the first row of results,
     // otherwise, it will fetch one row of data, to be called within a loop
     // - should raise an Exception on any error
-    // - typical use may be (see also e.g. the mORMotDB unit):
+    // - typical use may be (see also e.g. the mormot.orm.sql unit):
     // ! var Query: ISQLDBStatement;
     // ! begin
     // !   Query := Props.NewThreadSafeStatementPrepared(
@@ -2263,7 +2263,7 @@ type
     // - similar to corresponding TSQLRequest.Execute method in the
     // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
-    // - warning: TRestStorageExternal.EngineRetrieve in mORMotDB unit
+    // - warning: TRestStorageExternal.EngineRetrieve in mormot.orm.sql unit
     // expects the Expanded=true format to return '[{...}]'#10
     function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
     // Append all rows content as a CSV stream
@@ -2407,7 +2407,7 @@ type
     // ! end;
     // - this method shall be called from the thread about to be terminated: e.g.
     // if you call it from the main thread, it may fail to release resources
-    // - within the mORMot server, mORMotDB unit will call this method
+    // - within the mORMot server, mormot.orm.sql unit will call this method
     // for every terminating thread created for TRestServerNamedPipeResponse
     // or TRestHttpServer multi-thread process
     procedure EndCurrentThread; virtual;

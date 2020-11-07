@@ -110,7 +110,7 @@ type
   TSQLVarOptions = set of TSQLVarOption;
 
   /// memory structure used for database values by reference storage
-  // - used mainly by mormot.db.sql, mORMot, mORMotDB and mORMotSQLite3 units
+  // - used mainly by mormot.db.sql, mORMot, mormot.orm.sql and mORMotSQLite3 units
   // - defines only TSQLDBFieldType data types (similar to those handled by
   // SQLite3, with the addition of ftCurrency and ftDate)
   // - cleaner/lighter dedicated type than TValue or variant/TVarData, strong

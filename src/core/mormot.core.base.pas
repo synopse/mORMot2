@@ -1730,9 +1730,12 @@ type
   /// binary access to an unsigned 32-bit value (4 bytes in memory)
   TDWordRec = record
     case integer of
-    0: (V: DWord);
-    1: (L, H: word);
-    2: (B: array[0..3] of byte);
+      0: (
+           V: DWord);
+      1: (
+           L, H: word);
+      2: (
+           B: array[0..3] of byte);
   end;
   /// points to the binary of an unsigned 32-bit value
   PDWordRec = ^TDWordRec;
@@ -1740,11 +1743,16 @@ type
   /// binary access to an unsigned 64-bit value (8 bytes in memory)
   TQWordRec = record
     case integer of
-    0: (V: Qword);
-    1: (L, H: cardinal);
-    2: (Li, Hi: integer);
-    3: (W: array[0..3] of word);
-    4: (B: array[0..7] of byte);
+      0: (
+           V: Qword);
+      1: (
+           L, H: cardinal);
+      2: (
+           Li, Hi: integer);
+      3: (
+           W: array[0..3] of word);
+      4: (
+           B: array[0..7] of byte);
   end;
   /// points to the binary of an unsigned 64-bit value
   PQWordRec = ^TQWordRec;
@@ -1755,29 +1763,34 @@ type
   THash128 = array[0..15] of byte;
   /// pointer to a 128-bit hash value
   PHash128 = ^THash128;
+
   /// store a 160-bit hash value
   // - e.g. a SHA-1 digest
   // - consumes 20 bytes of memory
   THash160 = array[0..19] of byte;
   /// pointer to a 160-bit hash value
   PHash160 = ^THash160;
+
   /// store a 192-bit hash value
   // - consumes 24 bytes of memory
   THash192 = array[0..23] of byte;
   /// pointer to a 192-bit hash value
   PHash192 = ^THash192;
+
   /// store a 256-bit hash value
   // - e.g. a SHA-256 digest, a TECCSignature result, or array[0..7] of cardinal
   // - consumes 32 bytes of memory
   THash256 = array[0..31] of byte;
   /// pointer to a 256-bit hash value
   PHash256 = ^THash256;
+
   /// store a 384-bit hash value
   // - e.g. a SHA-384 digest
   // - consumes 48 bytes of memory
   THash384 = array[0..47] of byte;
   /// pointer to a 384-bit hash value
   PHash384 = ^THash384;
+
   /// store a 512-bit hash value
   // - e.g. a SHA-512 digest, a TECCSignature result, or array[0..15] of cardinal
   // - consumes 64 bytes of memory
@@ -1801,18 +1814,27 @@ type
   // - e.g. MD5 digests
   // - consumes 16 bytes of memory per item
   THash128DynArray = array of THash128;
+
   /// map a 128-bit hash as an array of lower bit size values
   // - consumes 16 bytes of memory
   THash128Rec = packed record
   case integer of
-  0: (Lo,Hi: Int64);
-  1: (L,H: QWord);
-  2: (i0,i1,i2,i3: integer);
-  3: (c0,c1,c2,c3: cardinal);
-  4: (c: TBlock128);
-  5: (b: THash128);
-  6: (w: array[0..7] of word);
-  7: (l64,h64: Int64Rec);
+  0: (
+      Lo, Hi: Int64);
+  1: (
+      L, H: QWord);
+  2: (
+      i0, i1, i2, i3: integer);
+  3: (
+      c0, c1, c2 ,c3: cardinal);
+  4: (
+      c: TBlock128);
+  5: (
+      b: THash128);
+  6: (
+      w: array[0..7] of word);
+  7: (
+      l64, h64: Int64Rec);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -1826,19 +1848,29 @@ type
   // - e.g. SHA-256 digests, TECCSignature results, or array[0..7] of cardinal
   // - consumes 32 bytes of memory per item
   THash256DynArray = array of THash256;
+
   /// map a 256-bit hash as an array of lower bit size values
   // - consumes 32 bytes of memory
   THash256Rec = packed record
   case integer of
-  0: (Lo,Hi: THash128);
-  1: (d0,d1,d2,d3: Int64);
-  2: (i0,i1,i2,i3,i4,i5,i6,i7: integer);
-  3: (c0,c1: TBlock128);
-  4: (b: THash256);
-  5: (q: array[0..3] of QWord);
-  6: (c: array[0..7] of cardinal);
-  7: (w: array[0..15] of word);
-  8: (l,h: THash128Rec);
+  0: (
+      Lo, Hi: THash128);
+  1: (
+      d0, d1, d2, d3: Int64);
+  2: (
+      i0, i1, i2, i3, i4, i5, i6, i7: integer);
+  3: (
+      c0, c1: TBlock128);
+  4: (
+      b: THash256);
+  5: (
+      q: array[0..3] of QWord);
+  6: (
+      c: array[0..7] of cardinal);
+  7: (
+      w: array[0..15] of word);
+  8: (
+     l, h: THash128Rec);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
@@ -1852,23 +1884,38 @@ type
   // - e.g. SHA-512 digests, or array[0..15] of cardinal
   // - consumes 64 bytes of memory per item
   THash512DynArray = array of THash512;
+
   /// map a 512-bit hash as an array of lower bit size values
   // - consumes 64 bytes of memory
   THash512Rec = packed record
   case integer of
-  0: (Lo,Hi: THash256);
-  1: (h0,h1,h2,h3: THash128);
-  2: (d0,d1,d2,d3,d4,d5,d6,d7: Int64);
-  3: (i0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14,i15: integer);
-  4: (c0,c1,c2,c3: TBlock128);
-  5: (b: THash512);
-  6: (b160: THash160);
-  7: (b384: THash384);
-  8: (w: array[0..31] of word);
-  9: (c: array[0..15] of cardinal);
-  10: (i: array[0..7] of Int64);
-  11: (r: array[0..3] of THash128Rec);
-  12: (l,h: THash256Rec);
+  0: (
+      Lo, Hi: THash256);
+  1: (
+      h0, h1, h2, h3: THash128);
+  2: (
+      d0, d1, d2, d3, d4, d5, d6, d7: Int64);
+  3: (
+      i0, i1, i2, i3, i4, i5, i6, i7,
+      i8, i9, i10, i11, i12, i13, i14, i15: integer);
+  4: (
+      c0, c1, c2, c3: TBlock128);
+  5: (
+      b: THash512);
+  6: (
+      b160: THash160);
+  7: (
+      b384: THash384);
+  8: (
+      w: array[0..31] of word);
+  9: (
+      c: array[0..15] of cardinal);
+  10: (
+       i: array[0..7] of Int64);
+  11: (
+       r: array[0..3] of THash128Rec);
+  12: (
+       l, h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -2093,19 +2140,19 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 type
   /// the potential features, retrieved from an Intel CPU
   // - cf https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
-  // - is defined on all platforms, so that an ARM desktop may browse Intel logs
-  // using TSynLogFile from mormot.core.log.pas
+  // - is defined on all platforms, so that e.g. an ARM desktop may browse
+  // Intel-generated logs using TSynLogFile from mormot.core.log.pas
   TIntelCpuFeature = (
    { CPUID 1 in EDX }
-   cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
-   cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
-   cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
-   cfFXSR, cfSSE, cfSSE2, cfSS, cfHTT, cfTM, cfIA64, cfPBE,
+   cfFPU,  cfVME,   cfDE,   cfPSE,   cfTSC,  cfMSR, cfPAE,  cfMCE,
+   cfCX8,  cfAPIC,  cf_d10, cfSEP,   cfMTRR, cfPGE, cfMCA,  cfCMOV,
+   cfPAT,  cfPSE36, cfPSN,  cfCLFSH, cf_d20, cfDS,  cfACPI, cfMMX,
+   cfFXSR, cfSSE,   cfSSE2, cfSS,    cfHTT,  cfTM,  cfIA64, cfPBE,
    { CPUID 1 in ECX }
-   cfSSE3, cfCLMUL, cfDS64, cfMON, cfDSCPL, cfVMX, cfSMX, cfEST,
-   cfTM2, cfSSSE3, cfCID, cfSDBG, cfFMA, cfCX16, cfXTPR, cfPDCM,
-   cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
-   cfTSC2, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP,
+   cfSSE3, cfCLMUL, cfDS64, cfMON,   cfDSCPL, cfVMX,  cfSMX,   cfEST,
+   cfTM2,  cfSSSE3, cfCID,  cfSDBG,  cfFMA,   cfCX16, cfXTPR,  cfPDCM,
+   cf_c16, cfPCID,  cfDCA,  cfSSE41, cfSSE42, cfX2A,  cfMOVBE, cfPOPCNT,
+   cfTSC2, cfAESNI, cfXS,   cfOSXS,  cfAVX,   cfF16C, cfRAND,  cfHYP,
    { extended features CPUID 7 in EBX, ECX, EDX }
    cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
    cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
@@ -2181,6 +2228,7 @@ type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
   // - cpuERMS is slightly slower than cpuAVX so is not available by default
   TX64CpuFeatures = set of(cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif});
+
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   CPUIDX64: TX64CpuFeatures;
@@ -2207,7 +2255,6 @@ procedure FillZero(var dest; count: PtrInt); overload;
 // or optimized X87 assembly implementation for older CPUs
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 procedure MoveFast(const src; var dst; cnt: PtrInt);
-
 
 {$else} // fallback to RTL versions on non-INTEL or PIC platforms
 
@@ -3247,7 +3294,7 @@ const
   JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
 
   /// HTTP header for MIME content type used for plain JSON
-  JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+JSON_CONTENT_TYPE;
+  JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + JSON_CONTENT_TYPE;
 
   /// MIME content type used for plain JSON, in upper case
   // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
@@ -3255,25 +3302,26 @@ const
 
   /// HTTP header for MIME content type used for plain JSON, in upper case
   // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_HEADER_UPPER = HEADER_CONTENT_TYPE_UPPER+JSON_CONTENT_TYPE_UPPER;
+  JSON_CONTENT_TYPE_HEADER_UPPER =
+    HEADER_CONTENT_TYPE_UPPER + JSON_CONTENT_TYPE_UPPER;
 
   /// MIME content type used for plain UTF-8 text
   TEXT_CONTENT_TYPE = 'text/plain; charset=UTF-8';
 
   /// HTTP header for MIME content type used for plain UTF-8 text
-  TEXT_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+TEXT_CONTENT_TYPE;
+  TEXT_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + TEXT_CONTENT_TYPE;
 
   /// MIME content type used for UTF-8 encoded HTML
   HTML_CONTENT_TYPE = 'text/html; charset=UTF-8';
 
   /// HTTP header for MIME content type used for UTF-8 encoded HTML
-  HTML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+HTML_CONTENT_TYPE;
+  HTML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + HTML_CONTENT_TYPE;
 
   /// MIME content type used for UTF-8 encoded XML
   XML_CONTENT_TYPE = 'text/xml; charset=UTF-8';
 
   /// HTTP header for MIME content type used for UTF-8 encoded XML
-  XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+XML_CONTENT_TYPE;
+  XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + XML_CONTENT_TYPE;
 
   /// MIME content type used for raw binary data
   BINARY_CONTENT_TYPE = 'application/octet-stream';
@@ -3282,7 +3330,7 @@ const
   BINARY_CONTENT_TYPE_UPPER = 'APPLICATION/OCTET-STREAM';
 
   /// HTTP header for MIME content type used for raw binary data
-  BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+BINARY_CONTENT_TYPE;
+  BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + BINARY_CONTENT_TYPE;
 
   /// MIME content type used for a JPEG picture
   JPEG_CONTENT_TYPE = 'image/jpeg';
@@ -3296,10 +3344,12 @@ const
   STATICFILE_CONTENT_TYPE = '!STATICFILE';
 
   /// internal HTTP content-type Header for efficient static file sending
-  STATICFILE_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + STATICFILE_CONTENT_TYPE;
+  STATICFILE_CONTENT_TYPE_HEADER =
+    HEADER_CONTENT_TYPE + STATICFILE_CONTENT_TYPE;
 
   /// uppercase version of HTTP header for static file content serving
-  STATICFILE_CONTENT_TYPE_HEADER_UPPPER = HEADER_CONTENT_TYPE_UPPER + STATICFILE_CONTENT_TYPE;
+  STATICFILE_CONTENT_TYPE_HEADER_UPPPER =
+    HEADER_CONTENT_TYPE_UPPER + STATICFILE_CONTENT_TYPE;
 
   /// used to notify e.g. the THttpServerRequest not to wait for any response
   // from the client
@@ -3311,7 +3361,7 @@ const
   /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a shortstring
   BOOL_STR: array[boolean] of string[7] = (
-    'false','true');
+    'false', 'true');
 
   /// the JavaScript-like values of non-number IEEE constants
   // - as recognized by FloatToShortNan, and used by TBaseWriter.Add()
@@ -10565,7 +10615,8 @@ end;
 { ************ Raw Shared Constants / Types Definitions }
 
 var
-  ReasonCache: array[1..5, 0..13] of RawUTF8; // avoid memory allocation
+  // live cache array to avoid memory allocation
+  ReasonCache: array[1..5, 0..13] of RawUTF8;
 
 function StatusCodeToReasonInternal(Code: cardinal): RawUTF8;
 begin

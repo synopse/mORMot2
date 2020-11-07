@@ -895,7 +895,7 @@ type
     /// define an optional logging instance to be used
     // - you can also specify the event types to be used for requests or
     // replay: by default, a verbose log with sllSQL and sllDB will be set
-    // - e.g. mORMotMongoDB.pas will call Client.SetLog(SQLite3Log) for you
+    // - e.g. mormot.orm.mongodb.pas will call Client.SetLog(SQLite3Log) for you
     procedure SetLog(LogClass: TSynLogClass; RequestEvent: TSynLogInfo = sllSQL;
       ReplyEvent: TSynLogInfo = sllDB; ReplyEventMaxSize: cardinal = 1024);
 

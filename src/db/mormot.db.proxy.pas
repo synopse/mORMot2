@@ -376,7 +376,7 @@ type
     // format and contains true BLOB data
     // - this overridden implementation will use JSON for transmission, and
     // binary encoding only for parameters (to avoid unneeded conversions, e.g.
-    // when called from mORMotDB.pas)
+    // when called from mormot.orm.sql.pas)
     procedure ExecutePreparedAndFetchAllAsJSON(Expanded: boolean; out JSON: RawUTF8); override;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized

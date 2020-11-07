@@ -131,8 +131,9 @@ type
     /// initialize raw properties to connect to the ZEOS engine
     // - using Zeos' TZURL detailed class - see: src\core\ZURL.pas
     // - this gives all possibilities to add Properties before a connection is opened
-    // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define TSQLDBDefinition
-    // to describe the server syntax SynDB and the ORM use behind the abstract driver
+    // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define
+    // TSQLDBDefinition to describe the server syntax mormot.db.sql and the ORM
+    // use behind the abstract driver
     constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSQLDBDefinition;
       aOwnsURL: boolean); virtual;
     /// finalize properties internal structures
@@ -551,8 +552,9 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
         fStatementParams.Add('enhanced_column_info=false');
         //fStatementParams.Add('use_ole_update_params=True'); //see 'ADO'
         //fStatementParams.Add('internal_buffer_size=131072'); //see 'ADO'
-        // EH: hooking a syndb bug. Void strings are not accepted by SQLServer if:
-        // fixed-width columns are used and option ANSI_PADDING is set to !off!.
+        // EH: hooking a mormot.db.sql limitation. Void strings are not
+        // accepted by SQLServer if: fixed-width columns are used and
+        // option ANSI_PADDING is set to !off!.
         StoreVoidStringAsNull := False;
       end;
   end;
@@ -736,7 +738,7 @@ class function TSQLDBZEOSConnectionProperties.URI(aServer: TSQLDBDefinition;
   const aServerName: RawUTF8; const aLibraryLocation: TFileName;
   aLibraryLocationAppendExePath: boolean): RawUTF8;
 const
-  /// ZDBC provider names corresponding to SynDB recognized SQL engines
+  /// ZDBC provider names corresponding to mormot.db.sql recognized SQL engines
   ZEOS_PROVIDER: array[TSQLDBDefinition] of RawUTF8 = ('', '', 'oracle:',
     'mssql:', '', 'mysql:', 'sqlite:', 'firebird:', '', 'postgresql:', '', '');
 begin

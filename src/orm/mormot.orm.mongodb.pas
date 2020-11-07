@@ -216,7 +216,7 @@ type
 // initialize the void tables (e.g. default TSQLAuthGroup and TSQLAuthUser records)
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
-// (just a regular external DB as defined in mORMotDB.pas unit) - it may be
+// (just a regular external DB as defined in mormot.orm.sql.pas unit) - it may be
 // a good idea to use short field names on MongoDB side, to reduce the space
 // used for storage (since they will be embedded within the document data)
 // - it will return the corresponding TRestStorageMongoDB instance -

@@ -200,12 +200,12 @@ const
   rkAllTypes = [succ(low(TRttiKind))..high(TRttiKind)];
 
   /// quick retrieve how many bytes an ordinal consist in
-  ORDTYPE_SIZE: array[TRttiOrd] of byte =
-    (1, 1, 2, 2, 4, 4 {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
+  ORDTYPE_SIZE: array[TRttiOrd] of byte = (
+    1, 1, 2, 2, 4, 4 {$ifdef FPC_NEWRTTI} , 8, 8 {$endif} );
 
   /// quick retrieve how many bytes a floating-point consist in
-  FLOATTYPE_SIZE: array[TRttiFloat] of byte =
-    (4, 8, {$ifdef TSYNEXTENDED80} 10 {$else} 8 {$endif}, 8, 8 );
+  FLOATTYPE_SIZE: array[TRttiFloat] of byte = (
+    4, 8, {$ifdef TSYNEXTENDED80} 10 {$else} 8 {$endif}, 8, 8 );
 
 
 type

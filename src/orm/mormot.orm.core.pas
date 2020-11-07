@@ -244,7 +244,8 @@ type
   // published property can be typecasted to the TTimeLogBits memory structure;
   // the value of this field is automatically updated with the current
   // date and time each time a record is updated (with external DB, it will
-  // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
+  // use the Server time, as retrieved by TSQLDBConnection.ServerTimestamp
+  // from mormot.db.sql.pas) - see ComputeFieldsBeforeWrite
   // virtual method of TOrm; note also that only RESTful PUT/POST access
   // will change this field value: manual SQL statements (like
   // 'UPDATE Table SET Column=0') won't change its content; note also that
@@ -255,7 +256,8 @@ type
   // published property can be typecasted to the TTimeLogBits memory structure;
   // the value of this field is automatically updated with the current
   // date and time when the record is created (with external DB, it will
-  // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
+  // use the Server time, as retrieved by TSQLDBConnection.ServerTimestamp
+  // from mormot.db.sql.pas) - see ComputeFieldsBeforeWrite
   // virtual method of TOrm; note also that only RESTful PUT/POST access
   // will set this field value: manual SQL statements (like
   // 'INSERT INTO Table ...') won't set its content; note also that this is
@@ -580,7 +582,7 @@ type
     // SELECT UNNEST(...)' statements for very efficient bulk writes in a
     // PostgreSQL database
     // - as set by TRestStorageExternal.JSONDecodedPrepareToSQL when
-    // cPostgreBulkArray flag is detected (for SynDBPostgres)
+    // cPostgreBulkArray flag is detected - for mormot.db.sql.postgres.pas
     DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined
@@ -6104,7 +6106,7 @@ type
   // rCustomForcedID/rCustomAutoID
   // - a plain TOrm class can be defined as rCustomForcedID (e.g. for
   // TOrmMany) after registration for an external DB via a call to
-  // VirtualTableExternalRegister() from mORMotDB unit
+  // VirtualTableExternalRegister() from mormot.orm.sql unit
   TOrmVirtualKind = (
     rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger,
     rCustomForcedID, rCustomAutoID);
@@ -6173,7 +6175,7 @@ type
 
   /// allow custom field mapping of a TOrm
   // - used e.g. for external database process, including SQL generation,
-  // as implemented in the mORMotDB.pas unit
+  // as implemented in the mormot.orm.sql.pas unit
   // - in end user code, mostly MapField/MapFields/Options methods
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
@@ -6296,7 +6298,7 @@ type
     // - will define such a generic TObject, to avoid any unecessary type
     // dependency to other units, e.g. mormot.db.* or mormot.rest.*
     // - in practice, will be assigned by VirtualTableExternalRegister() to
-    // a TSQLDBConnectionProperties instance in mORMotDB.pas, or by
+    // a TSQLDBConnectionProperties instance in mormot.orm.sql.pas, or by
     // StaticMongoDBRegister() to a TMongoCollection instance, or by
     // TDDDRepositoryRestObjectMapping.Create to its associated TRest
     // - in ORM context, equals nil if the table is internal to SQLite3:
@@ -6308,7 +6310,7 @@ type
     /// used on the Server side to specify the external DB table name
     // - e.g. for including a schema name or an existing table name, with an
     // OleDB/MSSQL/Oracle/MySQL/PostgreSQL/Jet/SQLite3 backend
-    // - equals SQLTableName by default (may be overridden e.g. by mORMotDB's
+    // - equals SQLTableName by default (may be overridden e.g. by mormot.orm.sql's
     // VirtualTableExternalRegister procedure)
     property TableName: RawUTF8 read fTableName;
     /// pre-computed SQL statements for this external TOrm in this model
@@ -6674,7 +6676,7 @@ type
     // rCustomAutoID (e.g. TOrmMany calling VirtualTableExternalRegister)
     // - aModule is expected to be a TOrmVirtualTableClass type definition
     // - optional aExternalTableName, aExternalDataBase and aMappingOptions can
-    // be used to specify e.g. connection parameters as expected by mORMotDB
+    // be used to specify e.g. connection parameters as expected by mormot.orm.sql
     // - call it before TRestServer.Create()
     function VirtualTableRegister(aClass: TOrmClass; aModule: TClass;
       const aExternalTableName: RawUTF8 = ''; aExternalDataBase: TObject = nil;

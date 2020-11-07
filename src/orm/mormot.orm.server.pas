@@ -237,7 +237,7 @@ type
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
     // cache used at SQLite3 database level; but some virtual tables (e.g.
-    // TRestStorageExternal classes defined in mORMotDB) could flush
+    // TRestStorageExternal classes defined in mormot.orm.sql) could flush
     // the database content without proper notification
     // - this default implementation will just do nothing, but mORMotSQlite3
     // unit will call TSQLDataBase.CacheFlush method
@@ -369,7 +369,7 @@ type
       read GetStaticDataServer;
     /// retrieve a running TRestStorage virtual table
     // - associated e.g. to a 'JSON' or 'Binary' virtual table module, or may
-    // return a TRestStorageExternal instance (as defined in mORMotDB)
+    // return a TRestStorageExternal instance (as defined in mormot.orm.sql)
     // - this property will return nil if there is no Virtual Table associated
     // or if the corresponding module is not a TOrmVirtualTable
     // (e.g. "pure" static tables registered by StaticDataCreate will be
