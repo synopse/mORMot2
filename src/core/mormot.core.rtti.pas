@@ -6577,17 +6577,17 @@ var
   pt: TRttiParserType;
   pct: TRttiParserComplexType;
 begin
+  if ParserType <> nil then
+    ParserType^ := ptNone;
   result := Find(Name, NameLen);
   if result = nil then
   begin
     pt := TypeNameToStandardParserType(Name, NameLen, @pct);
+    if ParserType <> nil then
+      ParserType^ := pt;
     if (pt <> ptNone) and
        (pt <> ptArray) then
-    begin
-      if ParserType <> nil then
-        ParserType^ := pt;
       result := RegisterType(ParserTypeToTypeInfo(pt, pct));
-    end;
   end
   else if ParserType <> nil then
     ParserType^ := result.Parser;

@@ -776,15 +776,14 @@ begin
   result := true;
 end;
 
-function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
+function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char; inline;
 begin
   result := nil;
-  if Str = nil then
-    exit;
-  repeat
-    if Str^ = #0 then
-      exit;
-  until Str^ = Chr;
+  if Str <> nil then
+    repeat
+      if Str^ = #0 then
+        exit;
+    until Str^ = Chr;
   result := Str;
 end;
 
