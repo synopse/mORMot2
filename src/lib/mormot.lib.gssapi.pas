@@ -38,14 +38,14 @@ uses
 { ****************** Low-Level libgssapi_krb5/libgssapi.so Library Access }
 
 type
-  gss_name_t = Pointer;
+  gss_name_t = pointer;
   gss_name_t_ptr = ^gss_name_t;
-  gss_cred_id_t = Pointer;
-  gss_ctx_id_t = Pointer;
+  gss_cred_id_t = pointer;
+  gss_ctx_id_t = pointer;
 
   gss_OID_desc = record
     length: PtrUInt;
-    elements: Pointer;
+    elements: pointer;
   end;
   gss_OID = ^gss_OID_desc;
   gss_OID_ptr = ^gss_OID;
@@ -61,7 +61,7 @@ type
 
   gss_buffer_desc = record
     length: PtrUInt;
-    value: Pointer;
+    value: pointer;
   end;
   gss_buffer_t = ^gss_buffer_desc;
 
@@ -78,12 +78,13 @@ const
   GSS_C_ACCEPT    = 2;
 
   GSS_C_MUTUAL_FLAG = 2;
-  GSS_C_CONF_FLAG = 16;
-  GSS_C_INTEG_FLAG = 32;
+  GSS_C_CONF_FLAG   = 16;
+  GSS_C_INTEG_FLAG  = 32;
 
   GSS_C_CALLING_ERROR_OFFSET = 24;
   GSS_C_ROUTINE_ERROR_OFFSET = 16;
   GSS_C_SUPPLEMENTARY_OFFSET =  0;
+
   GSS_C_CALLING_ERROR_MASK = $ff;
   GSS_C_ROUTINE_ERROR_MASK = $ff;
   GSS_C_SUPPLEMENTARY_MASK = $ffff;
@@ -120,68 +121,68 @@ type
   TGSSAPI = class(TSynLibrary)
   public
     gss_import_name: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       input_name_buffer: gss_buffer_t;
       input_name_type: gss_OID;
-      out output_name: gss_name_t): Cardinal; cdecl;
+      out output_name: gss_name_t): cardinal; cdecl;
     gss_display_name: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       input_name: gss_name_t;
       output_name_buffer: gss_buffer_t;
-      output_name_type: gss_OID_ptr): Cardinal; cdecl;
+      output_name_type: gss_OID_ptr): cardinal; cdecl;
     gss_release_name: function (
-      out minor_status: Cardinal;
-      var name: gss_name_t): Cardinal; cdecl;
+      out minor_status: cardinal;
+      var name: gss_name_t): cardinal; cdecl;
     gss_acquire_cred: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       desired_name: gss_name_t;
-      time_req: Cardinal;
+      time_req: cardinal;
       desired_mechs: gss_OID_set;
-      cred_usage: Integer;
+      cred_usage: integer;
       out output_cred_handle: gss_cred_id_t;
       actual_mechs: gss_OID_set_ptr;
-      time_rec: PCardinal): Cardinal; cdecl;
+      time_rec: PCardinal): cardinal; cdecl;
     gss_acquire_cred_with_password: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       desired_name: gss_name_t;
       password: gss_buffer_t;
-      time_req: Cardinal;
+      time_req: cardinal;
       desired_mechs: gss_OID_set;
-      cred_usage: Integer;
+      cred_usage: integer;
       out output_cred_handle: gss_cred_id_t;
       actual_mechs: gss_OID_set_ptr;
-      time_rec: PCardinal): Cardinal; cdecl;
+      time_rec: PCardinal): cardinal; cdecl;
     gss_release_cred: function (
-      out minor_status: Cardinal;
-      var cred_handle: gss_cred_id_t): Cardinal; cdecl;
+      out minor_status: cardinal;
+      var cred_handle: gss_cred_id_t): cardinal; cdecl;
     gss_init_sec_context: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       initiator_cred_handle: gss_cred_id_t;
       var context_handle: gss_ctx_id_t;
       target_name: gss_name_t;
       mech_type: gss_OID;
-      req_flags: Cardinal;
-      time_req: Cardinal;
-      input_chan_bindings: Pointer;
+      req_flags: cardinal;
+      time_req: cardinal;
+      input_chan_bindings: pointer;
       input_token: gss_buffer_t;
       actual_mech_type: gss_OID_ptr;
       output_token: gss_buffer_t;
       ret_flags: PCardinal;
-      time_rec: PCardinal): Cardinal; cdecl;
+      time_rec: PCardinal): cardinal; cdecl;
     gss_accept_sec_context: function (
-      out minor_status: Cardinal;
-      var context_handle: Pointer;
-      acceptor_cred_handle: Pointer;
+      out minor_status: cardinal;
+      var context_handle: pointer;
+      acceptor_cred_handle: pointer;
       input_token_buffer: gss_buffer_t;
-      input_chan_bindings: Pointer;
+      input_chan_bindings: pointer;
       src_name: gss_name_t;
       mech_type: gss_OID_ptr;
       output_token: gss_buffer_t;
       ret_flags: PCardinal;
       time_rec: PCardinal;
-      delegated_cred_handle: PPointer): Cardinal; cdecl;
+      delegated_cred_handle: PPointer): cardinal; cdecl;
     gss_inquire_context: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       context_handle: gss_ctx_id_t;
       src_name: gss_name_t_ptr;
       targ_name: gss_name_t_ptr;
@@ -189,65 +190,66 @@ type
       mech_type: gss_OID_ptr;
       ctx_flags: PCardinal;
       locally_initiated: PInteger;
-      open: PInteger): Cardinal; cdecl;
+      open: PInteger): cardinal; cdecl;
     gss_delete_sec_context: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       var gss_context: gss_ctx_id_t;
-      buffer: gss_buffer_t): Cardinal; cdecl;
+      buffer: gss_buffer_t): cardinal; cdecl;
     gss_inquire_saslname_for_mech: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       desired_mech: gss_OID;
       sasl_mech_name: gss_buffer_t;
       mech_name: gss_buffer_t;
-      mech_description: gss_buffer_t): Cardinal; cdecl;
+      mech_description: gss_buffer_t): cardinal; cdecl;
     gss_release_buffer: function (
-      out minor_status: Cardinal;
-      var buffer: gss_buffer_desc): Cardinal; cdecl;
+      out minor_status: cardinal;
+      var buffer: gss_buffer_desc): cardinal; cdecl;
     gss_wrap: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       context_handle: gss_ctx_id_t;
-      conf_req_flag: Integer;
-      qop_req: Cardinal;
+      conf_req_flag: integer;
+      qop_req: cardinal;
       input_message_buffer: gss_buffer_t;
       conf_state: PInteger;
-      output_message_buffer: gss_buffer_t): Cardinal; cdecl;
+      output_message_buffer: gss_buffer_t): cardinal; cdecl;
     gss_unwrap: function (
-      out minor_status: Cardinal;
+      out minor_status: cardinal;
       context_handle: gss_ctx_id_t;
       input_message_buffer: gss_buffer_t;
       output_message_buffer: gss_buffer_t;
       conf_state: PInteger;
-      qop_state: PCardinal): Cardinal; cdecl;
+      qop_state: PCardinal): cardinal; cdecl;
     gss_indicate_mechs: function (
-      out minor_status: Cardinal;
-      out mech_set: gss_OID_set): Cardinal; cdecl;
+      out minor_status: cardinal;
+      out mech_set: gss_OID_set): cardinal; cdecl;
     gss_release_oid_set: function (
-      out minor_status: Cardinal;
-      out mech_set: gss_OID_set): Cardinal; cdecl;
+      out minor_status: cardinal;
+      out mech_set: gss_OID_set): cardinal; cdecl;
     gss_display_status: function (
-      out minor_status: Cardinal;
-      status: Cardinal;
-      status_type: Integer;
+      out minor_status: cardinal;
+      status: cardinal;
+      status_type: integer;
       mech_type: gss_OID;
-      out message_context: Cardinal;
-      out status_string: gss_buffer_desc): Cardinal; cdecl;
+      out message_context: cardinal;
+      out status_string: gss_buffer_desc): cardinal; cdecl;
     krb5_gss_register_acceptor_identity: function (
-      path: PAnsiChar): Cardinal; cdecl;
+      path: PAnsiChar): cardinal; cdecl;
   end;
 
   /// Exception raised during gssapi library process
   EGSSAPI = class(Exception)
   private
-    fMajorStatus: Cardinal;
-    fMinorStatus: Cardinal;
+    fMajorStatus: cardinal;
+    fMinorStatus: cardinal;
   public
     /// initialize an gssapi library exception
-    constructor Create(aMajorStatus, aMinorStatus: Cardinal; const aPrefix: String);
+    constructor Create(aMajorStatus, aMinorStatus: cardinal;
+      const aPrefix: string);
     /// associated GSS_C_GSS_CODE state value
-    property MajorStatus: Cardinal
+    property MajorStatus: cardinal
       read fMajorStatus;
     /// associated GSS_C_MECH_CODE state value
-    property MinorStatus: Cardinal
+    property MinorStatus: cardinal
       read fMinorStatus;
   end;
 
@@ -270,7 +272,7 @@ var
 procedure LoadGSSAPI(const LibraryName: TFileName = '');
 
 /// Call this function to check whether GSSAPI library loaded or not
-function GSSAPILoaded: Boolean;
+function GSSAPILoaded: boolean;
 
 /// Call this function to check whether GSSAPI library loaded
 // and raise exception if not
@@ -278,12 +280,12 @@ procedure RequireGSSAPI;
 
 
 // some macros for GSSAPI functions process
-function GSS_CALLING_ERROR(x: Cardinal): Cardinal; inline;
-function GSS_ROUTINE_ERROR(x: Cardinal): Cardinal; inline;
-function GSS_SUPPLEMENTARY_INFO(x: Cardinal): Cardinal; inline;
-function GSS_ERROR(x: Cardinal): Cardinal; inline;
+function GSS_CALLING_ERROR(x: cardinal): cardinal; inline;
+function GSS_ROUTINE_ERROR(x: cardinal): cardinal; inline;
+function GSS_SUPPLEMENTARY_INFO(x: cardinal): cardinal; inline;
+function GSS_ERROR(x: cardinal): cardinal; inline;
 
-function gss_compare_oid(oid1, oid2: gss_OID): Boolean;
+function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 
 
 { ****************** Middle-Level GSSAPI Wrappers }
@@ -292,8 +294,8 @@ type
   /// GSSAPI Auth context
   TSecContext = record
     ID: Int64;
-    CredHandle: Pointer;
-    CtxHandle: Pointer;
+    CredHandle: pointer;
+    CtxHandle: pointer;
     CreatedTick64: Int64;
   end;
   PSecContext = ^TSecContext;
@@ -328,13 +330,14 @@ function SecDecrypt(var aSecContext: TSecContext;
 
 /// Checks the return value of GSSAPI call and raises ESynGSSAPI exception
 // when it indicates failure
-procedure GSSCheck(aMajorStatus, aMinorStatus: Cardinal;
-  const aPrefix: String = '');
+procedure GSSCheck(aMajorStatus, aMinorStatus: cardinal;
+  const aPrefix: string = '');
 
 /// Lists supported security mechanisms in form
 // sasl:name:description
 // - not all mechanisms provide human readable name and description
 procedure GSSEnlistMechsSupported(MechList: TStringList);
+
 
 
 { ****************** High-Level Client and Server Authentication using GSSAPI }
@@ -349,8 +352,8 @@ procedure GSSEnlistMechsSupported(MechList: TStringList);
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
 function ClientSSPIAuth(var aSecContext: TSecContext;
-    const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
-    out aOutData: RawByteString): Boolean;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+  out aOutData: RawByteString): boolean;
 
 /// Client-side authentication procedure with clear text password.
 //  This function must be used when application need to use different
@@ -365,8 +368,8 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // and call function again with data, returned from server
 // - you must use ClientForceSPN to specify server SPN before call
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
-    const aInData: RawByteString; const aUserName: RawUTF8;
-    const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
+  const aInData: RawByteString; const aUserName: RawUTF8;
+  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -375,7 +378,7 @@ function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
 // - if function returns True, server must send aOutData to client
 // and call function again with data, returned from client
 function ServerSSPIAuth(var aSecContext: TSecContext;
-    const aInData: RawByteString; out aOutData: RawByteString): Boolean;
+  const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
 /// Server-side function that returns authenticated user name
 // - aSecContext must be received from previous successful call to ServerSSPIAuth
@@ -428,44 +431,44 @@ implementation
 
 { ****************** Low-Level libgssapi_krb5/libgssapi.so Library Access }
 
-function gss_compare_oid(oid1, oid2: gss_OID): Boolean;
+function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 begin
   if (oid1 <> nil) and
      (oid2 <> nil) then
   begin
-    Result := (oid1^.length = oid2^.length) and
-              CompareMem(oid1^.elements, oid2^.elements, oid1^.length);
+    result := (oid1^.length = oid2^.length) and
+              CompareMemFixed(oid1^.elements, oid2^.elements, oid1^.length);
   end
   else
-    Result := False;
+    result := False;
 end;
 
-function GSS_CALLING_ERROR(x: Cardinal): Cardinal;
+function GSS_CALLING_ERROR(x: cardinal): cardinal;
 begin
-  Result := x and
+  result := x and
             (GSS_C_CALLING_ERROR_MASK shl GSS_C_CALLING_ERROR_OFFSET);
 end;
 
-function GSS_ROUTINE_ERROR(x: Cardinal): Cardinal;
+function GSS_ROUTINE_ERROR(x: cardinal): cardinal;
 begin
-  Result := x and
+  result := x and
             (GSS_C_ROUTINE_ERROR_MASK shl GSS_C_ROUTINE_ERROR_OFFSET);
 end;
 
-function GSS_SUPPLEMENTARY_INFO(x: Cardinal): Cardinal;
+function GSS_SUPPLEMENTARY_INFO(x: cardinal): cardinal;
 begin
-  Result := x and
+  result := x and
             (GSS_C_SUPPLEMENTARY_MASK shl GSS_C_SUPPLEMENTARY_OFFSET);
 end;
 
-function GSS_ERROR(x: Cardinal): Cardinal;
+function GSS_ERROR(x: cardinal): cardinal;
 begin
-  Result := x and
+  result := x and
             ((GSS_C_CALLING_ERROR_MASK shl GSS_C_CALLING_ERROR_OFFSET) or
              (GSS_C_ROUTINE_ERROR_MASK shl GSS_C_ROUTINE_ERROR_OFFSET));
 end;
 
-procedure GSSCheck(AMajorStatus, AMinorStatus: Cardinal; const APrefix: String);
+procedure GSSCheck(AMajorStatus, AMinorStatus: cardinal; const APrefix: string);
 begin
   if GSS_ERROR(AMajorStatus) <> 0 then
     raise EGSSAPI.Create(AMajorStatus, AMinorStatus, APrefix);
@@ -473,12 +476,13 @@ end;
 
 const
   GSS_NAMES: array[0 .. 17] of PChar = (
-    'gss_import_name', 'gss_display_name', 'gss_release_name', 'gss_acquire_cred',
-    'gss_acquire_cred_with_password', 'gss_release_cred', 'gss_init_sec_context',
-    'gss_accept_sec_context', 'gss_inquire_context', 'gss_delete_sec_context',
-    'gss_inquire_saslname_for_mech', 'gss_release_buffer', 'gss_wrap',
-    'gss_unwrap', 'gss_indicate_mechs', 'gss_release_oid_set',
-    'gss_display_status', 'krb5_gss_register_acceptor_identity');
+    'gss_import_name', 'gss_display_name', 'gss_release_name',
+    'gss_acquire_cred', 'gss_acquire_cred_with_password', 'gss_release_cred',
+    'gss_init_sec_context', 'gss_accept_sec_context', 'gss_inquire_context',
+    'gss_delete_sec_context', 'gss_inquire_saslname_for_mech',
+    'gss_release_buffer', 'gss_wrap', 'gss_unwrap', 'gss_indicate_mechs',
+    'gss_release_oid_set', 'gss_display_status',
+    'krb5_gss_register_acceptor_identity');
 
 procedure LoadGSSAPI(const LibraryName: TFileName);
 var
@@ -498,7 +502,8 @@ begin
         GetProc(GSS_NAMES[i], P^[i]);
       if not Assigned(krb5_gss_register_acceptor_identity) then
         // try alternate function name
-        GetProc('gsskrb5_register_acceptor_identity', @krb5_gss_register_acceptor_identity);
+        GetProc('gsskrb5_register_acceptor_identity',
+          @krb5_gss_register_acceptor_identity);
       if Assigned(gss_acquire_cred) and
          Assigned(gss_accept_sec_context) and
          Assigned(gss_release_buffer) and
@@ -512,9 +517,9 @@ begin
   FreeAndNil(GSSAPI);
 end;
 
-function GSSAPILoaded: Boolean;
+function GSSAPILoaded: boolean;
 begin
-  Result := GSSAPI <> nil
+  result := GSSAPI <> nil
 end;
 
 procedure RequireGSSAPI;
@@ -528,13 +533,13 @@ end;
 
 { EGSSAPI }
 
-procedure GetDisplayStatus(var Msg: String; aErrorStatus: Cardinal;
-  StatusType: Integer);
+procedure GetDisplayStatus(var Msg: string; aErrorStatus: cardinal;
+  StatusType: integer);
 var
-  Str: String;
-  MsgCtx: Cardinal;
+  Str: string;
+  MsgCtx: cardinal;
   MsgBuf: gss_buffer_desc;
-  MajSt, MinSt: Cardinal;
+  MajSt, MinSt: cardinal;
 begin
   if GSSAPI = nil then
     exit;
@@ -552,10 +557,10 @@ begin
         (MsgCtx = 0);
 end;
 
-constructor EGSSAPI.Create(aMajorStatus, aMinorStatus: Cardinal;
-  const aPrefix: String);
+constructor EGSSAPI.Create(aMajorStatus, aMinorStatus: cardinal;
+  const aPrefix: string);
 var
-  Msg: String;
+  Msg: string;
 begin
   Msg := aPrefix;
   GetDisplayStatus(Msg, aMajorStatus, GSS_C_GSS_CODE);
@@ -579,7 +584,7 @@ begin
 end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
-var MinStatus: Cardinal;
+var MinStatus: cardinal;
 begin
   if aSecContext.CtxHandle <> nil then
     GSSAPI.gss_delete_sec_context(MinStatus, aSecContext.CtxHandle, nil);
@@ -590,42 +595,42 @@ end;
 function SecEncrypt(var aSecContext: TSecContext;
   const aPlain: RawByteString): RawByteString;
 var
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   OutBuf: gss_buffer_desc;
 begin
   InBuf.length := Length(aPlain);
-  InBuf.value := Pointer(aPlain);
+  InBuf.value := pointer(aPlain);
   MajStatus := GSSAPI.gss_wrap(
     MinStatus, aSecContext.CtxHandle, 1, 0, @InBuf, nil, @OutBuf);
   GSSCheck(MajStatus, MinStatus, 'Failed to encrypt message');
-  SetString(Result, PAnsiChar(OutBuf.value), OutBuf.length);
+  SetString(result, PAnsiChar(OutBuf.value), OutBuf.length);
   GSSAPI.gss_release_buffer(MinStatus, OutBuf);
 end;
 
 function SecDecrypt(var aSecContext: TSecContext;
   const aEncrypted: RawByteString): RawByteString;
 var
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   OutBuf: gss_buffer_desc;
 begin
   InBuf.length := Length(aEncrypted);
-  InBuf.value := Pointer(aEncrypted);
+  InBuf.value := pointer(aEncrypted);
   MajStatus := GSSAPI.gss_unwrap(
     MinStatus, aSecContext.CtxHandle, @InBuf, @OutBuf, nil, nil);
   GSSCheck(MajStatus, MinStatus, 'Failed to decrypt message');
-  SetString(Result, PAnsiChar(OutBuf.value), OutBuf.length);
+  SetString(result, PAnsiChar(OutBuf.value), OutBuf.length);
   GSSAPI.gss_release_buffer(MinStatus, OutBuf);
 end;
 
 procedure GSSEnlistMechsSupported(MechList: TStringList);
 var
   i: PtrInt;
-  MajSt, MinSt: Cardinal;
+  MajSt, MinSt: cardinal;
   Mechs: gss_OID_set;
   Buf_sasl, Buf_name, Buf_desc: gss_buffer_desc;
-  Sasl, Name, Desc: String;
+  Sasl, Name, Desc: string;
 begin
   if MechList <> nil then
   begin
@@ -655,20 +660,20 @@ var
 
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
-  out aOutData: RawByteString): Boolean;
+  out aOutData: RawByteString): boolean;
 var
   TargetName: gss_name_t;
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   OutBuf: gss_buffer_desc;
-  CtxReqAttr: Cardinal;
-  CtxAttr: Cardinal;
+  CtxReqAttr: cardinal;
+  CtxAttr: cardinal;
 begin
   TargetName := nil;
   if aSecKerberosSPN <> '' then
   begin
     InBuf.length := Length(aSecKerberosSPN);
-    InBuf.value := Pointer(aSecKerberosSPN);
+    InBuf.value := pointer(aSecKerberosSPN);
     MajStatus := GSSAPI.gss_import_name(
       MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, TargetName);
     GSSCheck(MajStatus, MinStatus, 'Failed to import server SPN');
@@ -678,14 +683,14 @@ begin
     if TargetName <> nil then
       CtxReqAttr := CtxReqAttr or GSS_C_MUTUAL_FLAG;
     InBuf.length := Length(aInData);
-    InBuf.value := Pointer(aInData);
+    InBuf.value := pointer(aInData);
     OutBuf.length := 0;
     OutBuf.value := nil;
     MajStatus := GSSAPI.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
       aSecContext.CtxHandle, TargetName, GSS_C_MECH_SPNEGO,
       CtxReqAttr, GSS_C_INDEFINITE, nil, @InBuf, nil, @OutBuf, @CtxAttr, nil);
     GSSCheck(MajStatus, MinStatus, 'Failed to initialize security context');
-    Result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
+    result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
     SetString(aOutData, PAnsiChar(OutBuf.value), OutBuf.length);
     GSSAPI.gss_release_buffer(MinStatus, OutBuf);
   finally
@@ -696,9 +701,9 @@ end;
 
 function ClientSSPIAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
-  out aOutData: RawByteString): Boolean;
+  out aOutData: RawByteString): boolean;
 var
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   SecKerberosSPN: RawUTF8;
 begin
   RequireGSSAPI;
@@ -707,21 +712,22 @@ begin
     aSecContext.CreatedTick64 := GetTickCount64();
     MajStatus := GSSAPI.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE, nil,
       GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
-    GSSCheck(MajStatus, MinStatus, 'Failed to acquire credentials for current user');
+    GSSCheck(MajStatus, MinStatus,
+      'Failed to acquire credentials for current user');
   end;
   if aSecKerberosSPN <> '' then
     SecKerberosSPN := aSecKerberosSPN
   else
     SecKerberosSPN := ForceSecKerberosSPN;
-  Result := ClientSSPIAuthWorker(
+  result := ClientSSPIAuthWorker(
     aSecContext, aInData, SecKerberosSPN, aOutData);
 end;
 
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName, aPassword: RawUTF8;
-  out aOutData: RawByteString): Boolean;
+  out aOutData: RawByteString): boolean;
 var
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   UserName: gss_name_t;
 begin
@@ -730,18 +736,19 @@ begin
   begin
     aSecContext.CreatedTick64 := GetTickCount64;
     InBuf.length := Length(aUserName);
-    InBuf.value := Pointer(aUserName);
+    InBuf.value := pointer(aUserName);
     MajStatus := GSSAPI.gss_import_name(
       MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, UserName);
     GSSCheck(MajStatus, MinStatus, 'Failed to import UserName');
     InBuf.length := Length(aPassword);
-    InBuf.value := Pointer(aPassword);
+    InBuf.value := pointer(aPassword);
     MajStatus := GSSAPI.gss_acquire_cred_with_password(
       MinStatus, UserName, @InBuf, GSS_C_INDEFINITE, nil,
       GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
-    GSSCheck(MajStatus, MinStatus, 'Failed to acquire credentials for specified user');
+    GSSCheck(MajStatus, MinStatus,
+      'Failed to acquire credentials for specified user');
   end;
-  Result := ClientSSPIAuthWorker(
+  result := ClientSSPIAuthWorker(
     aSecContext, aInData, ForceSecKerberosSPN, aOutData);
 end;
 
@@ -772,31 +779,28 @@ end;
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 begin
   result := nil;
-  if Str <> nil then
-  begin
-    repeat
-      if Str^ = #0 then
-        exit else
-      if Str^ = Chr then
-        break;
-    until false;
-    result := Str;
-  end;
+  if Str = nil then
+    exit;
+  repeat
+    if Str^ = #0 then
+      exit;
+  until Str^ = Chr;
+  result := Str;
 end;
 
 function ServerSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; out aOutData: RawByteString): Boolean;
+  const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   OutBuf: gss_buffer_desc;
-  CtxAttr: Cardinal;
+  CtxAttr: cardinal;
 begin
   RequireGSSAPI;
   if aSecContext.CredHandle = nil then
   begin
     aSecContext.CreatedTick64 := GetTickCount64;
-    if IdemPChar(Pointer(aInData), 'NTLMSSP') then
+    if IdemPChar(pointer(aInData), 'NTLMSSP') then
       raise EGSSAPI.CreateFmt(
         'NTLM authentication not supported by GSSAPI library',[]);
     MajStatus := GSSAPI.gss_acquire_cred(
@@ -811,7 +815,7 @@ begin
   MajStatus := GSSAPI.gss_accept_sec_context(MinStatus, aSecContext.CtxHandle,
     aSecContext.CredHandle, @InBuf, nil, nil, nil, @OutBuf, @CtxAttr, nil, nil);
   GSSCheck(MajStatus, MinStatus, 'Failed to accept client credentials');
-  Result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
+  result := (MajStatus and GSS_S_CONTINUE_NEEDED) <> 0;
   SetString(aOutData, PAnsiChar(OutBuf.value), OutBuf.length);
   GSSAPI.gss_release_buffer(MinStatus, OutBuf);
 end;
@@ -866,7 +870,7 @@ var
   DomainLen, i: PtrInt;
   Domain, User: RawUTF8;
 begin
-  // Assume GSSAPI buffer is null-terminated
+  // Ensure GSSAPI buffer is null-terminated
   Assert(P[Len] = #0);
   // Change user name from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
   DomainStart := PosChar(P, '@');
@@ -901,7 +905,7 @@ end;
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUTF8);
 var
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   SrcName: gss_name_t;
   OutBuf: gss_buffer_desc;
   NameType: gss_OID;
@@ -914,8 +918,10 @@ begin
   try
     OutBuf.length := 0;
     OutBuf.value := nil;
-    MajStatus := GSSAPI.gss_display_name(MinStatus, SrcName, @OutBuf, @NameType);
-    GSSCheck(MajStatus, MinStatus, 'Failed to obtain name for authenticated user');
+    MajStatus := GSSAPI.gss_display_name(
+      MinStatus, SrcName, @OutBuf, @NameType);
+    GSSCheck(MajStatus, MinStatus,
+      'Failed to obtain name for authenticated user');
     if gss_compare_oid(NameType, GSS_KRB5_NT_PRINCIPAL_NAME) then
       ConvertUserName(PUTF8Char(OutBuf.value), OutBuf.length, aUserName);
     GSSAPI.gss_release_buffer(MinStatus, OutBuf);
@@ -926,7 +932,7 @@ end;
 
 function SecPackageName(var aSecContext: TSecContext): RawUTF8;
 var
-  MajStatus, MinStatus: Cardinal;
+  MajStatus, MinStatus: cardinal;
   MechType: gss_OID;
   OutBuf: gss_buffer_desc;
 begin
@@ -940,7 +946,7 @@ begin
   MajStatus := GSSAPI.gss_inquire_saslname_for_mech(
     MinStatus, MechType, nil, @OutBuf, nil);
   GSSCheck(MajStatus, MinStatus, 'Failed to obtain name for mech');
-  SetString(Result, PAnsiChar(OutBuf.value), OutBuf.length);
+  SetString(result, PAnsiChar(OutBuf.value), OutBuf.length);
   GSSAPI.gss_release_buffer(MinStatus, OutBuf);
 end;
 
@@ -952,7 +958,7 @@ end;
 procedure ServerForceKeytab(const aKeytab: RawUTF8);
 begin
   if Assigned(GSSAPI.krb5_gss_register_acceptor_identity) then
-    GSSAPI.krb5_gss_register_acceptor_identity(Pointer(aKeytab));
+    GSSAPI.krb5_gss_register_acceptor_identity(pointer(aKeytab));
 end;
 
 {$endif MSWINDOWS}

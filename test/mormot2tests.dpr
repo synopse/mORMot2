@@ -40,6 +40,7 @@ uses
   mormot.net.http          in '..\src\net\mormot.net.http.pas',
   mormot.lib.winhttp       in '..\src\lib\mormot.lib.winhttp.pas',
   mormot.lib.curl          in '..\src\lib\mormot.lib.curl.pas',
+  mormot.lib.gssapi        in '..\src\lib\mormot.lib.gssapi.pas',
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
   mormot.net.asynch        in '..\src\net\mormot.net.asynch.pas',
