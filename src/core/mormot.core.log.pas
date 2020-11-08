@@ -2533,7 +2533,7 @@ begin
   {$ifndef FPC}
   if DebugHook <> 0 then // never let stManualAndAPI trigger AV within the IDE
     fStackTraceUse := stOnlyAPI;
-  {$endif}
+  {$endif FPC}
   fExceptionIgnore := TList.Create;
   fLevelStackTrace := [sllStackTrace, sllException, sllExceptionOS    {$ifndef FPC}, sllError, sllFail, sllLastError, sllDDDError{$endif}];
 end;

@@ -4938,7 +4938,7 @@ begin
     result := ''
   else
   begin
-    result := RawUTF8(ClassName);
+    result := ToText(PClass(self)^);
     if IdemPChar(pointer(result), 'TSQLDB') then
       Delete(result, 1, 6)
     else if result[1] = 'T' then

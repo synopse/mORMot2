@@ -1562,7 +1562,7 @@ begin
       begin
         fSecure := nil;
         raise ENetSock.CreateFmt('OpenBind(%s:%s,%s): TLS failed [%s %s]', [aServer,
-          port, BINDTXT[doBind], E.ClassName, E.Message]);
+          port, BINDTXT[doBind], ClassNameShort(E)^, E.Message]);
       end;
     end;
   end;

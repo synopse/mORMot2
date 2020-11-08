@@ -1060,7 +1060,7 @@ begin
     end;
   except
     on E: Exception do
-      FormatString('% [%]', [E.ClassName, E.Message], fLastError);
+      FormatString('% [%]', [ClassNameShort(E)^, E.Message], fLastError);
   end
   else if (Sender.fIncoming.AnswerToIgnore > 0) and
           (FrameData(request, 'answer') <> nil) then

@@ -670,7 +670,8 @@ begin
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
   else
     raise EDatabaseError.CreateFmt('%s.GetFieldData unhandled DataType=%s (%d)',
-      [ClassName, GetEnumName(TypeInfo(TFieldType), ord(Field.DataType))^, ord(Field.DataType)]);
+      [ClassName, GetEnumName(TypeInfo(TFieldType), ord(Field.DataType))^,
+       ord(Field.DataType)]);
   end;
 end;
 
@@ -695,8 +696,8 @@ begin
     ftWideString:
         result := TRawByteStringStream.Create(Utf8DecodeToRawUnicode(Data, DataLen));
     else
-      raise EDatabaseError.CreateFmt('%s.CreateBlobStream DataType=%d', [ClassName,
-        ord(Field.DataType)]);
+      raise EDatabaseError.CreateFmt('%s.CreateBlobStream DataType=%d',
+        [ClassName, ord(Field.DataType)]);
     end;
 end;
 

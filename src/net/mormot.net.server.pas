@@ -1637,7 +1637,8 @@ begin
       {$endif MONOTHREAD}
     end;
   except
-    on E: Exception do // any exception would break and release the thread
+    on E: Exception do
+      // any exception would break and release the thread
       fExecuteMessage := E.ClassName + ' [' + E.Message + ']';
   end;
   EnterCriticalSection(fProcessCS);
@@ -1755,7 +1756,8 @@ var
       end;
     except
       on E: Exception do
-      begin // error reading or sending file
+      begin
+        // error reading or sending file
         ErrorMsg := E.ClassName + ': ' + E.Message;
         Code := HTTP_NOTFOUND;
         result := false; // fatal error
@@ -1855,6 +1857,7 @@ begin
       on E: Exception do
         if not respsent then
         begin
+          // notify the exception as server response
           ErrorMsg := E.ClassName + ': ' + E.Message;
           Code := HTTP_SERVERERROR;
           SendResponse;

@@ -884,9 +884,9 @@ end;
 procedure TOrmVirtualTableModuleSQLite3.Attach(aDB: TSQLDataBase);
 begin
   if aDB = nil then
-    raise ERestStorage.CreateFmt('aDB=nil at %s.SetDB()', [ClassName]);
+    raise ERestStorage.CreateUTF8('aDB=nil at %.SetDB()', [self]);
   if fDB <> nil then
-    raise ERestStorage.CreateFmt('fDB<>nil at %s.SetDB()', [ClassName]);
+    raise ERestStorage.CreateUTF8('fDB<>nil at %.SetDB()', [self]);
   FillCharFast(fModule, sizeof(fModule), 0);
   fModule.iVersion := 1;
   fModule.xCreate := vt_Create;

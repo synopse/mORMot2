@@ -44,7 +44,7 @@ begin
     on E: Exception do
       {$ifdef LINUX} // there is always an error console ouput on POSIX
       writeln(SQLITE_LIBRARY_DEFAULT_NAME + ' initialization failed with ',
-        E.ClassName, ': ', E.Message);
+        ClassNameShort(E)^, ': ', E.Message);
       {$endif LINUX}
   end;
 end;

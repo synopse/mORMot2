@@ -2816,7 +2816,8 @@ begin
     SourceName := Source.ClassName
   else
     SourceName := 'nil';
-  raise EConvertError.CreateFmt('Cannot assign a %s to a %s', [SourceName, ClassName]);
+  raise EConvertError.CreateFmt('Cannot assign a %s to a %s',
+    [SourceName, ClassNameShort(self)^]);
 end;
 
 class procedure TSynPersistent.RttiCustomSet(Rtti: TRttiCustom);
@@ -2830,8 +2831,8 @@ begin
   result := false; // default JSON serialization
 end;
 
-function TSynPersistent.RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
-  Options: TTextWriterWriteObjectOptions): boolean;
+function TSynPersistent.RttiWritePropertyValue(W: TBaseWriter;
+  Prop: PRttiCustomProp; Options: TTextWriterWriteObjectOptions): boolean;
 begin
   result := false; // default JSON serializaiton
 end;

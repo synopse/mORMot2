@@ -903,7 +903,8 @@ var
   URI: TURI;
 begin
   if not URI.From(aURI) then
-    raise EHttpSocket.CreateFmt('%.Create: invalid url=%', [ClassName, aURI]);
+    raise EHttpSocket.CreateFmt('%.Create: invalid url=%',
+      [ClassNameShort(self)^, aURI]);
   IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
   Create(URI.Server, URI.Port, URI.Https, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, URI.Layer);

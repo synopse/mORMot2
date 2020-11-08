@@ -460,7 +460,8 @@ begin
       0:
         compressible := true;
       1:
-        compressible := IdemPCharArray(OutContentTypeP + 6, ['SVG', 'X-ICO']) >= 0;
+        compressible := IdemPCharArray(OutContentTypeP + 6,
+          ['SVG', 'X-ICO']) >= 0;
       2:
         compressible := IdemPCharArray(OutContentTypeP + 12,
           ['JSON', 'XML', 'JAVASCRIPT']) >= 0;
@@ -470,7 +471,7 @@ begin
     for i := 0 to high(Handled) do
       if i in Accepted then
         with Handled[i] do
-          if (CompressMinSize = 0) or // 0 here means "always" (e.g. for encryption)
+          if (CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
              (compressible and
               (OutContentLen >= CompressMinSize)) then
           begin
@@ -598,7 +599,8 @@ begin
       readln(SockIn^, line);
       err := ioresult;
       if err <> 0 then
-        raise EHttpSocket.CreateFmt('%s.GetHeader error=%d', [ClassName, err]);
+        raise EHttpSocket.CreateFmt('%s.GetHeader error=%d',
+          [ClassNameShort(self)^, err]);
       {$I+}
       if line[0] = #0 then
         break; // HTTP headers end with a void line
@@ -615,11 +617,14 @@ begin
       'CONNECTION: ', 'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:',
       'X-POWERED-BY:']) of
       0:
+        // 'CONTENT-'
         case IdemPCharArray(P + 8, ['LENGTH:', 'TYPE:', 'ENCODING:']) of
           0:
+            // 'CONTENT-LENGTH:'
             ContentLength := GetCardinal(P + 16);
           1:
             begin
+              // 'CONTENT-TYPE:'
               inc(P, 13);
               while P^ = ' ' do
                 inc(P);
@@ -629,10 +634,12 @@ begin
               begin
                 GetTrimmed(P, ContentType);
                 if ContentType <> '' then
-                  P := nil; // is searched by HEADER_CONTENT_TYPE_UPPER later on
+                  // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
+                  P := nil;
               end;
             end;
           2:
+            // 'CONTENT-ENCODING:'
             if fCompress <> nil then
             begin
               GetTrimmed(P + 17, c);
@@ -647,22 +654,28 @@ begin
           P := nil;
         end;
       1:
+        // 'TRANSFER-ENCODING: CHUNKED'
         include(HeaderFlags, hfTransferChuked);
       2:
+        // 'CONNECTION: '
         case IdemPCharArray(P + 12, ['CLOSE', 'UPGRADE', 'KEEP-ALIVE']) of
           0:
+            // 'CONNECTION: CLOSE'
             include(HeaderFlags, hfConnectionClose);
           1:
+            // 'CONNECTION: UPGRADE'
             include(HeaderFlags, hfConnectionUpgrade);
           2:
             begin
+              // 'CONNECTION: KEEP-ALIVE'
               include(HeaderFlags, hfConnectionKeepAlive);
               if P[22] = ',' then
               begin
                 inc(P, 23);
-                if P^ = ' ' then
+                while P^ = ' ' do
                   inc(P);
                 if IdemPChar(P, 'UPGRADE') then
+                  // 'CONNECTION: KEEP-ALIVE, UPGRADE'
                   include(HeaderFlags, hfConnectionUpgrade);
               end;
             end;
@@ -670,17 +683,22 @@ begin
           P := nil;
         end;
       3:
+        // 'ACCEPT-ENCODING:'
         if fCompress <> nil then
           fCompressAcceptHeader := ComputeContentEncoding(fCompress, P + 16)
         else
           P := nil;
       4:
+        // 'UPGRADE:'
         GetTrimmed(P + 8, Upgrade);
       5:
+        // 'SERVER-INTERNALSTATE:'
         ServerInternalState := GetCardinal(P + 21);
       6:
+        // 'X-POWERED-BY:'
         GetTrimmed(P + 13, XPoweredBy);
     else
+      // unrecognized name should be stored in Headers
       P := nil;
     end;
     if (P = nil) or
@@ -697,6 +715,7 @@ begin
       else
         SockSend(s);
   until false;
+  // retrieve meaningful headers from SockSend() fSndBuf/fSndLen temp buffer
   Headers := copy(fSndBuf, 1, fSndBufLen);
   fSndBufLen := 0;
 end;

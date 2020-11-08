@@ -2709,27 +2709,32 @@ var
 begin
   inherited;
   if not IsFixedWidthCodePage(aCodePage) then
-    raise ESynUnicode.CreateFmt('%s.Create - Invalid code page %d', [ClassName, fCodePage]);
+    // warning: CreateUTF8() uses UTF8ToString() -> call CreateFmt() now
+    raise ESynUnicode.CreateFmt('%s.Create - Invalid code page %d',
+      [ClassName, fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide, 256);
   if (aCodePage = CODEPAGE_US) or
      (aCodePage = CODEPAGE_LATIN1) or
      (aCodePage = CP_RAWBYTESTRING) then
   begin
+    // do not trust the Windows API for the 1252 code page :(
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
-    if aCodePage = CODEPAGE_US then // do not trust the Windows API :(
+    if aCodePage = CODEPAGE_US then
       for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
         fAnsiToWide[i] := WinAnsiUnicodeChars[i];
   end
   else
-  begin // from Operating System returned values
+  begin
+    // initialize table from Operating System returned values
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
     FillcharFast(U256, SizeOf(U256), 0);
     if Unicode_AnsiToWide(A256, U256, 256, 256, fCodePage) <> 256 then
-      // warning: CreateUTF8() uses UTF8ToString() -> use CreateFmt() now
-      raise ESynUnicode.CreateFmt('OS error for %s.Create(%d)', [ClassName, aCodePage]);
+      // warning: CreateUTF8() uses UTF8ToString() -> call CreateFmt() now
+      raise ESynUnicode.CreateFmt('OS error for %s.Create(%d)',
+        [ClassName, aCodePage]);
     MoveFast(U256[0], fAnsiToWide[0], 512);
   end;
   SetLength(fWideToAnsi, 65536);

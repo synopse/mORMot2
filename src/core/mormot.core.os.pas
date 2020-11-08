@@ -1915,7 +1915,7 @@ begin
       PatchCodePtrUInt(pointer(vmt), PtrUInt(slots), {leaveunprotected=}true);
       if vmt^ <> slots then
         raise EOSException.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
-          [ObjectClass.ClassName]);
+          [ClassNameShort(ObjectClass)^]);
     end;
     for i := 0 to high(slots^) - 1 do
       if slots^[i] = nil then
@@ -1929,7 +1929,7 @@ begin
     LeaveCriticalSection(AutoSlotsLock);
   end;
   raise EOSException.CreateFmt('ClassPropertiesAdd: no slot available on %s',
-    [ObjectClass.ClassName]);
+    [ClassNameShort(ObjectClass)^]);
 end;
 
 
@@ -2697,7 +2697,7 @@ begin
   result := false;
   if aRaiseExceptionOnFailure <> nil then
     raise aRaiseExceptionOnFailure.CreateFmt(
-      '%s.LoadLibray failed - searched in %s', [ClassName, libs]);
+      '%s.LoadLibray failed - searched in %s', [ClassNameShort(self)^, libs]);
 end;
 
 destructor TSynLibrary.Destroy;
