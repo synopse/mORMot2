@@ -73,6 +73,7 @@ begin
 end;
 
 var
+  // redirect to a separated slower but more accurate API since Windows 8
   GetSystemTimePreciseAsFileTime: procedure(var ft: TFILETIME); stdcall;
 
 function UnixMSTimeUTC: Int64;
@@ -719,8 +720,9 @@ begin
   until n > 8192;
 end;
 
+// local RTL wrapper function to avoid linking mormot.core.text.pas
 procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUTF8);
-var // defined here to avoid linking mormot.core.text.pas
+var
   tmp: TSynTempBuffer;
 begin
   if Len <= 0 then
@@ -747,9 +749,10 @@ begin
 end;
 
 function EnumProcessName(PID: Cardinal): RawUTF8;
-var h: THandle;
-    len: DWORD;
-    name: array[0..4095] of WideChar;
+var
+  h: THandle;
+  len: DWORD;
+  name: array[0..4095] of WideChar;
 begin
   result := '';
   if PID = 0 then
@@ -762,7 +765,8 @@ begin
         len := high(name);
         if QueryFullProcessImageNameW(h, 0, name, @len) then
           RawUnicodeToUtf8(name, len, result);
-      end else
+      end
+      else
         if GetModuleFileNameExW(h,0,name,high(name)) <> 0 then
           RawUnicodeToUtf8(name, StrLenW(name), result);
     finally
@@ -1543,7 +1547,7 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall
   external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
-procedure TrimSpaces(var s: RawUTF8);
+procedure TrimDualSpaces(var s: RawUTF8);
 var
   i: integer;
 begin
@@ -1551,7 +1555,7 @@ begin
     i := PosEx('  ', s);
     if i = 0 then
       break;
-    delete(s, i, 1);
+    delete(s, i, 1); // dual space -> single space
   until false;
   s := Trim(s);
 end;
@@ -1729,10 +1733,10 @@ begin
   cpu := Trim(cpu);
   CpuInfoText := RawUTF8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu]));
-  TrimSpaces(OSVersionText);
-  TrimSpaces(OSVersionInfoEx);
-  TrimSpaces(BiosInfoText);
-  TrimSpaces(CpuInfoText);
+  TrimDualSpaces(OSVersionText);
+  TrimDualSpaces(OSVersionInfoEx);
+  TrimDualSpaces(BiosInfoText);
+  TrimDualSpaces(CpuInfoText);
 end;
 
 {$I-}

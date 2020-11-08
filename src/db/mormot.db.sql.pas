@@ -2799,7 +2799,8 @@ begin
           else
             break;
       until false;
-    end else if (c = ';') and
+    end
+    else if (c = ';') and
                 not AllowSemicolon then
       exit; // complex expression can not be prepared
     inc(s);

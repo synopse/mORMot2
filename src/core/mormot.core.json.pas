@@ -2666,7 +2666,8 @@ num:    result := P;
   if P^ = #0 then
     // reached end of input buffer: keep position in trailing #0
     PDest := P
-  else begin
+  else
+  begin
     // ensure JSON value is zero-terminated, and continue after it
     P^ := #0;
     PDest := P + 1;

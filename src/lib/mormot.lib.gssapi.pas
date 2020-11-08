@@ -65,6 +65,7 @@ type
   end;
   gss_buffer_t = ^gss_buffer_desc;
 
+
 const
   GSS_C_NO_NAME = nil;
 
@@ -437,7 +438,7 @@ begin
      (oid2 <> nil) then
   begin
     result := (oid1^.length = oid2^.length) and
-              CompareMemFixed(oid1^.elements, oid2^.elements, oid1^.length);
+              CompareMemSmall(oid1^.elements, oid2^.elements, oid1^.length);
   end
   else
     result := False;
@@ -584,7 +585,8 @@ begin
 end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
-var MinStatus: cardinal;
+var
+  MinStatus: cardinal;
 begin
   if aSecContext.CtxHandle <> nil then
     GSSAPI.gss_delete_sec_context(MinStatus, aSecContext.CtxHandle, nil);

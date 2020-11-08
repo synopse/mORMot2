@@ -259,7 +259,8 @@ type
     // ! PropList: array[1..PropCount] of TPropInfo
     // - use TPropInfo.Next to get the next one:
     // ! P := PropList;
-    // ! for i := 1 to PropCount do begin
+    // ! for i := 1 to PropCount do
+    // ! begin
     // !   // ... do something with P
     // !   P := P^.Next;
     // ! end;
@@ -1073,7 +1074,8 @@ function GetRttiProps(RttiClass: TClass): PRttiProps;
 //  !  begin
 //  !    CT := ..;
 //  !    repeat
-//  !      for i := 1 to GetRttiProp(CT,P) do begin
+//  !      for i := 1 to GetRttiProp(CT,P) do
+// !       begin
 //  !        // use P^
 //  !        P := P^.Next;
 //  !      end;
@@ -2203,7 +2205,7 @@ begin
 end;
 
 type
-  // wrapper to retrieve IInvokable Interface RTTI via GetRttiInterface()
+  // local wrapper to retrieve IInvokable Interface RTTI via GetRttiInterface()
   TGetRttiInterface = class
   public
     Level: integer;
@@ -4423,7 +4425,8 @@ begin
       if aFlags * [pfConst, pfVar, pfOut] = [] then
         RaiseError('%: % parameter should be declared as const, var or out',
           [aParamName^, aTypeName^]);
-    end else if aInfo^.Kind = rkInterface then
+    end
+    else if aInfo^.Kind = rkInterface then
       if not (pfConst in aFlags) then
         RaiseError('%: % parameter should be declared as const',
           [aParamName^, aTypeName^]);

@@ -638,10 +638,12 @@ procedure FastAssignNew(var d; s: pointer = nil);
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// initialize a RawByteString, ensuring returned "aligned" pointer is 16-bytes aligned
-// - to be used e.g. for proper SSE process
-procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
-  out aligned: pointer);
+/// initialize a RawByteString, ensuring returned "aligned" pointer
+// is 16-bytes aligned
+// - to be used e.g. for proper SIMD process
+// - you can specify an alternate alignment, but it should be a power of two
+procedure GetMemAligned(var holder: RawByteString; p: pointer; len: PtrUInt;
+  out aligned: pointer; alignment: PtrUInt = 16);
 
 /// equivalence to @UTF8[1] expression to ensure a RawUTF8 variable is unique
 // - will ensure that the string refcount is 1, and return a pointer to the text
@@ -3834,7 +3836,8 @@ begin
     PStrRec(result)^.length := len;
     inc(PStrRec(result));
     PCardinal(result + len)^ := 0; // ensure ends with four #0
-  end else
+  end
+  else
     result := nil;
 end;
 
@@ -3858,12 +3861,14 @@ begin
   FastAssignNew(s, r);
 end;
 
-procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
-  out aligned: pointer);
+procedure GetMemAligned(var holder: RawByteString; p: pointer; len: PtrUInt;
+  out aligned: pointer; alignment: PtrUInt);
 begin
-  FastSetStringCP(s, nil, len + 12, CP_RAWBYTESTRING);
-  aligned := pointer(s);
-  inc(PByte(aligned), PtrUInt(aligned) and 15);
+  dec(alignment); // expected to be a power of two
+  FastSetStringCP(holder, nil, len + alignment, CP_RAWBYTESTRING);
+  aligned := pointer(holder);
+  while PtrUInt(aligned) and alignment <> 0 do
+    inc(PByte(aligned));
   if p <> nil then
     MoveFast(p^, aligned^, len);
 end;

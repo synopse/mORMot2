@@ -93,16 +93,26 @@ type
     wXP_64,
     wServer2003,
     wServer2003_R2,
-    wVista, wVista_64,
-    wServer2008, wServer2008_64,
-    wSeven, wSeven_64,
-    wServer2008_R2, wServer2008_R2_64,
-    wEight, wEight_64,
-    wServer2012, wServer2012_64,
-    wEightOne, wEightOne_64,
-    wServer2012R2, wServer2012R2_64,
-    wTen, wTen_64,
-    wServer2016, wServer2016_64,
+    wVista,
+    wVista_64,
+    wServer2008,
+    wServer2008_64,
+    wSeven,
+    wSeven_64,
+    wServer2008_R2,
+    wServer2008_R2_64,
+    wEight,
+    wEight_64,
+    wServer2012,
+    wServer2012_64,
+    wEightOne,
+    wEightOne_64,
+    wServer2012R2,
+    wServer2012R2_64,
+    wTen,
+    wTen_64,
+    wServer2016,
+    wServer2016_64,
     wServer2019_64);
 
   /// the running Operating System, encoded as a 32-bit integer
@@ -487,6 +497,8 @@ type
   TThreadID = DWORD;
   TMessage = Messages.TMessage;
   HWND = Windows.HWND;
+  LARGE_INTEGER = Windows.LARGE_INTEGER;
+  BOOL = Windows.BOOL;
 
   /// the known Windows Registry Root key used by TWinRegistry.Open
   TWinRegistryRoot = (
@@ -577,8 +589,9 @@ type
   end;
 
 const
-  NO_ERROR = 0;
-  ERROR_ACCESS_DENIED = 5;
+  NO_ERROR = Windows.NO_ERROR;
+  ERROR_ACCESS_DENIED = Windows.ERROR_ACCESS_DENIED;
+  ERROR_INVALID_PARAMETER = Windows.ERROR_INVALID_PARAMETER;
 
   INVALID_HANDLE_VALUE = DWORD(-1);
   

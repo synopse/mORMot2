@@ -759,8 +759,8 @@ begin
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
       curl.infoText := format('%s using %s',[curl.infoText, curl.info.ssl_version]);
-    // api := 0; with curl.info do while protocols[api]<>nil do begin
-    // write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
+    // api := 0; with curl.info do while protocols[api]<>nil do
+    // begin write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally
     curl_initialized := true; // should be set last
     GlobalUnLock;

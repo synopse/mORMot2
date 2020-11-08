@@ -320,7 +320,8 @@ begin
       else
         result := rpcNone;
       exit;
-    end else
+    end
+    else
     case PropWrap(SetProc).Kind of
       ptField:
         begin

@@ -3724,13 +3724,14 @@ begin
         or ((ValueType in [imvRecord]) and
           // trunk i386/x86_64\cpupara.pas: DynArray const is passed as register
           not (vPassedByReference in ValueKindAsm))
-        {$endif FPC}
-        then
+        {$endif FPC} then
       begin
         // this parameter will go on the stack
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack, SizeInStack);
-      end else begin
+      end
+      else
+      begin
         // this parameter will go in a register
         InStackOffset := STACKOFFSET_NONE;
         {$ifndef CPUX86}

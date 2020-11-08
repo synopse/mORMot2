@@ -1041,7 +1041,8 @@ type
   // try..finally block statement to reset the FPU exception register
   // - to be used e.g. as such:
   // !begin
-  // !  with TSynFPUException.ForLibrayCode do begin
+  // !  with TSynFPUException.ForLibrayCode do
+  // !  begin
   // !    ... now FPU exceptions will be ignored
   // !    ... so here it is safe to call external libray code
   // !  end; // now FPU exception will be reset as with standard Delphi

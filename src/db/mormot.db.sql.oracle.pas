@@ -1982,7 +1982,9 @@ begin
                  // starting with 11.2, OCI supports NUMBER conversion into Int64
                  ColumnType := ftInt64;
                  ColumnValueDBType := SQLT_INT;
-               end else begin
+               end
+               else
+               begin
                  // we'll work out with null-terminated string
                  ColumnType := ftCurrency;
                  ColumnValueDBType := SQLT_STR;

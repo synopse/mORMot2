@@ -4533,7 +4533,8 @@ begin
       if (Len = ValueLen) and
          CompareMemFixed(Value, Source, Len) then
         exit;
-    end else if UTF8ILComp(Value, pointer(Source), ValueLen, Len) = 0 then
+    end
+    else if UTF8ILComp(Value, pointer(Source), ValueLen, Len) = 0 then
       exit;
    inc(Source, Len);
   end;

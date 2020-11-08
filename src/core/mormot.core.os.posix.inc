@@ -1435,7 +1435,8 @@ begin
       begin
         StubCallAllocMemLastStart := start;
         exit;
-      end else
+      end
+      else
         fpmunmap(result, STUB_SIZE);
     end;
   end;

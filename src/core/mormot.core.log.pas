@@ -435,7 +435,8 @@ type
   // module: e.g. a server application may want to log in separate files the
   // low-level Communication, the DB access, and the high-level process
   // - initialize the family settings before using them, like in this code:
-  // ! with TSynLogDB.Family do begin
+  // ! with TSynLogDB.Family do
+  // ! begin
   // !   Level := LOG_VERBOSE;
   // !   PerThreadLog := ptOneFilePerThread;
   // !   DestinationPath := 'C:\Logs';
