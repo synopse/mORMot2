@@ -6,5 +6,4 @@ This folder gives access to the *Network Communication Layer* used by the *mORMo
 
 ## Network Communication
 
-All `mormot.net.*.pas` units define client/server communication as used by our framework, especially for its REST features. 
-
+All `mormot.net.*.pas` units define client/server communication as used by our framework, especially for its REST features, over sockets, HTTP and WebSockets. 

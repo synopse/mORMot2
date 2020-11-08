@@ -8,9 +8,18 @@ The framework has a *REST* orientation, but is not trully *RESTful*. You could l
 
 JSON has been found out to be a simple but very powerful mean of data representation, and our framework tries to leverage its usage from the ground up. For instance, the ORM layer (from `mormot.orm.core.pas`) is able to create efficient JSON from the lowest level of the supported Database engines, and the client side can consume this JSON with very few resource consumption, on all possible platforms - including JavaScript.
 
+## Composition Over Inheritance
+
+One goal of the *mORMot* 2 rewrite was to follow the SOLID principle.
+
+Our *REST* approach publishes a `TRest` class, and its Client and Server inherited classes, which offers:
+- *Object-Relational-Mapping* via its `ORM: IRestORM` interface field;
+- *Service-Oriented-Architecture* via its `Services` field;
+- *Threading* abilities in its `Run` field;
+- REST-specific features are isolated also in this `TRest` class, like URI routing and execution, authorization and authentication, and sessions support.
+
 ## Folder Content
 
 This folder hosts the *RESTful* oriented features of the *mORMot* Open Source framework, version 2.
-
 
 
