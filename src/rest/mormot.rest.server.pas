@@ -201,13 +201,9 @@ type
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
     function GetUserAgent: RawUTF8;
-      {$ifdef HASINLINE}inline;{$endif}
     function GetRemoteIP: RawUTF8;
-      {$ifdef HASINLINE}inline;{$endif}
     function GetRemoteIPNotLocal: RawUTF8;
-      {$ifdef HASINLINE}inline;{$endif}
     function GetRemoteIPIsLocalHost: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure InternalSetTableFromTableIndex(Index: integer); virtual;
@@ -584,7 +580,7 @@ type
     // set ckFramework on match
     // - either ckAjax for a classic (AJAX) browser, or any other kind of
     // HTTP client
-    // - will be used e.g. by ClienTOrmOptions to check if the
+    // - will be used e.g. by ClientOrmOptions to check if the
     // current remote client expects standard JSON in all cases
     function ClientKind: TRestServerURIContextClientKind;
     /// identify if the request is about a Table containing nested objects or
@@ -592,7 +588,7 @@ type
     // of plain JSON string (as stored in the database)
     // - will idenfity ClientKind=ckAjax, or check for rsoGetAsJsonNotAsString
     // in TRestServer.Options
-    function ClienTOrmOptions: TJSONSerializerOrmOptions;
+    function ClientOrmOptions: TJSONSerializerOrmOptions;
     /// true if called from TRestServer.AdministrationExecute
     function IsRemoteAdministrationExecute: boolean;
     /// compute the file name corresponding to the URI
@@ -743,6 +739,8 @@ type
     /// low-level statistics merge during service execution
     procedure StatsFromContext(Stats: TSynMonitorInputOutput;
       var Diff: Int64; DiffIsMicroSecs: boolean);
+    /// low-level HTTP header merge of the OutSetCookie value
+    procedure OutHeadFromCookie;
     /// event raised by ExecuteMethod() for interface parameters
     // - match TInterfaceMethodInternalExecuteCallback signature
     procedure ExecuteCallback(var Par: PUTF8Char; ParamInterfaceInfo: TRttiJson;
@@ -2836,6 +2834,14 @@ begin
     Diff := Stats.FromExternalQueryPerformanceCounters(Diff);
 end;
 
+procedure TRestServerURIContext.OutHeadFromCookie;
+begin
+  Call.OutHead := Trim(Call.OutHead + #13#10'Set-Cookie: ' + OutSetCookie);
+  if rsoCookieIncludeRootPath in Server.fOptions then
+    // case-sensitive Path=/ModelRoot
+    Call.OutHead := Call.OutHead + '; Path=/';
+end;
+
 procedure TRestServerURIContext.ExecuteCallback(var Par: PUTF8Char;
   ParamInterfaceInfo: TRttiJson; out Obj);
 var
@@ -3279,7 +3285,7 @@ begin
                      (length(TableIndexes) = 1) then
                   begin
                     InternalSetTableFromTableIndex(TableIndexes[0]);
-                    opt := ClienTOrmOptions;
+                    opt := ClientOrmOptions;
                     if opt <> [] then
                       ConvertOutBodyAsPlainJSON(SQLSelect, opt);
                   end;
@@ -3350,7 +3356,7 @@ begin
                 if Call.OutBody <> '' then
                 begin
                   // if something was found
-                  opt := ClienTOrmOptions;
+                  opt := ClientOrmOptions;
                   if opt <> [] then
                   begin
                     // cached? -> make private
@@ -3447,7 +3453,7 @@ begin
             if Call.OutBody <> '' then
             begin
               // got JSON list '[{...}]' ?
-              opt := ClienTOrmOptions;
+              opt := ClientOrmOptions;
               if opt <> [] then
                 ConvertOutBodyAsPlainJSON(SQLSelect, opt);
               Call.OutStatus := HTTP_SUCCESS;  // 200 OK
@@ -4236,7 +4242,7 @@ begin
             (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
 end;
 
-function TRestServerURIContext.ClienTOrmOptions: TJSONSerializerOrmOptions;
+function TRestServerURIContext.ClientOrmOptions: TJSONSerializerOrmOptions;
 begin
   result := [];
   if (TableModelProps = nil) or
@@ -4345,8 +4351,9 @@ begin
 end;
 
 procedure TRestServerURIContext.ReturnFile(const FileName: TFileName;
-  Handle304NotModified: boolean; const ContentType, AttachmentFileName,
-  Error404Redirect: RawUTF8; CacheControlMaxAge: integer);
+  Handle304NotModified: boolean; const ContentType: RawUTF8;
+  const AttachmentFileName: RawUTF8; const Error404Redirect: RawUTF8;
+  CacheControlMaxAge: integer);
 var
   FileTime: TDateTime;
   clientHash, serverHash: RawUTF8;
@@ -4536,12 +4543,14 @@ begin
        (ErrorMsg[1] = '{') and
        (ErrorMsg[length(ErrorMsg)] = '}') then
     begin
+      // detect and append the error message as JSON object
       AddShort(','#13#10'"error":'#13#10);
       AddNoJSONEscape(pointer(ErrorMsg), length(ErrorMsg));
       AddShorter(#13#10'}');
     end
     else
     begin
+      // regular error message as JSON text
       AddShort(','#13#10'"errorText":"');
       AddJSONEscape(pointer(ErrorMsg));
       AddShorter('"'#13#10'}');
@@ -7076,8 +7085,8 @@ begin
             Ctxt.Command := execSOAByMethod
         else if Ctxt.Service <> nil then
           Ctxt.Command := execSOAByInterface
-        else if Ctxt.Method in [mLOCK, mGET, mUNLOCK, mSTATE] then
-          // handle read methods
+        else if Ctxt.Method in [mLOCK, mGET, mUNLOCK, mSTATE, mHEAD] then
+          // read methods
           Ctxt.Command := execOrmGet
         else
           // write methods (mPOST, mPUT, mDELETE...)
@@ -7135,12 +7144,7 @@ begin
       // database state may have changed above
       Call.OutInternalState := TRestOrmServer(fOrmInstance).InternalState;
     if Ctxt.OutSetCookie <> '' then
-    begin
-      Call.OutHead := Trim(Call.OutHead + #13#10'Set-Cookie: ' + Ctxt.OutSetCookie);
-      if rsoCookieIncludeRootPath in fOptions then
-        // case-sensitive Path=/ModelRoot
-        Call.OutHead := Call.OutHead + '; Path=/';
-    end;
+      Ctxt.OutHeadFromCookie;
     if not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
       Ctxt.Error('Unsafe HTTP header rejected [%]',
