@@ -3525,7 +3525,8 @@ type
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
-// - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+// - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+// - see also StatusCodeToErrorMsg() from mormot.core.text
 function StatusCodeToReason(Code: cardinal): RawUTF8;
 
 /// returns true for successful HTTP status codes, i.e. in 200..399 range

@@ -1999,6 +1999,11 @@ type
   /// meta-class of the ESynException hierarchy
   ESynExceptionClass = class of ESynException;
 
+/// convert any HTTP_* constant to an integer error code and its English text
+// - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+// - calls StatusCodeToReason() to retrieve the text message
+function StatusCodeToErrorMsg(Code: integer): shortstring;
+
 
 { **************** Hexadecimal Text And Binary Conversion }
 
@@ -9502,6 +9507,15 @@ begin
 end;
 
 {$endif NOEXCEPTIONINTERCEPT}
+
+
+function StatusCodeToErrorMsg(Code: integer): shortstring;
+var
+  msg: RawUTF8;
+begin
+  msg := StatusCodeToReason(Code);
+  FormatShort('HTTP Error % - %', [Code, msg], result);
+end;
 
 
 { **************** Hexadecimal Text And Binary Conversion }

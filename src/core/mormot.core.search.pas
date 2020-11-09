@@ -2080,7 +2080,8 @@ begin
             CompareMemU(aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper);
 end;
 
-procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+procedure TMatch.Prepare(const aPattern: RawUTF8;
+  aCaseInsensitive, aReuse: boolean);
 begin
   Prepare(pointer(aPattern), length(aPattern), aCaseInsensitive, aReuse);
 end;
@@ -2185,7 +2186,8 @@ type
   TSBNDMQ2Mask = array[AnsiChar] of cardinal;
   PSBNDMQ2Mask = ^TSBNDMQ2Mask;
 
-function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8; u: PNormTable): RawByteString;
+function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8;
+  u: PNormTable): RawByteString;
 var
   i: PtrInt;
   p: PAnsiChar absolute Pattern;
@@ -2201,7 +2203,8 @@ begin
   end;
 end;
 
-function SearchSBNDMQ2(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+function SearchSBNDMQ2(aMatch: PMatch;
+  aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
   mask: PSBNDMQ2Mask;
   max, i, j: PtrInt;
@@ -2243,7 +2246,8 @@ begin
   result := false;
 end;
 
-function SearchSBNDMQ2U(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+function SearchSBNDMQ2U(aMatch: PMatch;
+  aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
   u: PNormTable;
   mask: PSBNDMQ2Mask;
@@ -2287,7 +2291,8 @@ begin
   result := false;
 end;
 
-procedure TMatch.PrepareContains(var aPattern: RawUTF8; aCaseInsensitive: boolean);
+procedure TMatch.PrepareContains(var aPattern: RawUTF8;
+  aCaseInsensitive: boolean);
 begin
   pmax := length(aPattern) - 1;
   if aCaseInsensitive and
@@ -3324,7 +3329,8 @@ begin
     repeat
       dec(n);
       with TExprParserMatchNode(fWords[n]) do
-        if not fFound and fMatch.Match(aText, aTextLen) then
+        if not fFound and
+           fMatch.Match(aText, aTextLen) then
         begin
           fFound := true;
           inc(fMatchedLastSet);
