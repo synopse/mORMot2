@@ -1569,7 +1569,7 @@ begin
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'OpenBind(%:%) % sock=% (accept=%) ', [fServer,
     fPort, BINDTXT[doBind], fSock, aSock], self);
-  {$endif}
+  {$endif SYNCRTDEBUGLOW}
 end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -1989,7 +1989,7 @@ begin
   if body > 0 then
     TSynLog.Add.Log(sllCustom2, 'SockSend sock=% body len=% %', [fSock, body,
       LogEscapeFull(pointer(aBody), body)], self);
-  {$endif}
+  {$endif SYNCRTDEBUGLOW}
   if not TrySockSendFlush then
     raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s',
       [fServer, fSndBufLen, _NR[NetLastError]]);
@@ -2099,9 +2099,9 @@ begin
       if res <> nrOK then
       begin // no more to read, or socket issue?
         {$ifdef SYNCRTDEBUGLOW}
-        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% AsynchRecv=% %', [sock,
-          read, SocketErrorMessage], self);
-        {$endif}
+        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% AsynchRecv=% %',
+          [sock, read, SocketErrorMessage], self);
+        {$endif SYNCRTDEBUGLOW}
         if StopBeforeLength and
            (res = nrRetry) then
           break;
@@ -2127,9 +2127,9 @@ begin
         if diff >= TimeOut then
         begin
           {$ifdef SYNCRTDEBUGLOW}
-          TSynLog.Add.Log(sllCustom2, 'TrySockRecv: timeout (diff=%>%)', [diff,
-            TimeOut], self);
-          {$endif}
+          TSynLog.Add.Log(sllCustom2, 'TrySockRecv: timeout (diff=%>%)',
+            [diff, TimeOut], self);
+          {$endif SYNCRTDEBUGLOW}
           exit; // identify read timeout as error
         end;
         if diff < 100 then

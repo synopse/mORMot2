@@ -788,7 +788,7 @@ begin
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',
     [fSock, SockInPending(0), PTextRec(SockIn)^.BufEnd - PTextRec(SockIn)^.bufpos,
     ContentLength, LogEscapeFull(Content)], self);
-  {$endif}
+  {$endif SYNCRTDEBUGLOW}
   if SockIn <> nil then
   begin
     Error := ioresult;

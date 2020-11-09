@@ -699,10 +699,11 @@ function THttpClientSocket.Request(const url, method: RawUTF8; KeepAlive:
 
   procedure DoRetry(Error: integer; const msg: RawUTF8);
   begin
-    {$ifdef SYNCRTDEBUGLOW}     TSynLog.Add.Log(sllCustom2,
-      'Request: % socket=% DoRetry(%) retry=%', [msg, Sock, Error, BOOL_STR[retry]],
-      self);
-    {$endif}
+    {$ifdef SYNCRTDEBUGLOW}
+    TSynLog.Add.Log(sllCustom2,
+      'Request: % socket=% DoRetry(%) retry=%',
+      [msg, Sock, Error, BOOL_STR[retry]], self);
+    {$endif SYNCRTDEBUGLOW}
     if retry then // retry once -> return error only if failed after retrial
       result := Error
     else

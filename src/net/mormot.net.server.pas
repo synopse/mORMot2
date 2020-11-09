@@ -416,6 +416,8 @@ type
   TSynThreadPoolTHttpServer = class(TSynThreadPool)
   protected
     fServer: THttpServer;
+    fBigBodySize: integer;
+    fMaxBodyThreadCount: integer;
     {$ifndef USE_WINIOCP}
     function QueueLength: integer; override;
     {$endif USE_WINIOCP}
@@ -426,7 +428,21 @@ type
     /// initialize a thread pool with the supplied number of threads
     // - Task() overridden method processs the HTTP request set by Push()
     // - up to 256 threads can be associated to a Thread Pool
-    constructor Create(Server: THttpServer; NumberOfThreads: integer = 32); reintroduce;
+    constructor Create(Server: THttpServer;
+      NumberOfThreads: integer = 32); reintroduce;
+    /// when Content-Length is bigger than this value, by-pass the threadpool
+    // and creates a dedicated THttpServerResp thread
+    // - default is THREADPOOL_BIGBODYSIZE = 16 MB, but can set a bigger value
+    // e.g. behind a buffering proxy if you trust the client not to make DOD
+    property BigBodySize: integer
+      read fBigBodySize write fBigBodySize;
+    /// how many stand-alone THttpServerResp threads can be initialized when a
+    // HTTP request comes in
+    // - default is THREADPOOL_MAXWORKTHREADS = 512, but since each thread
+    // consume system memory, you should not go so high
+    // - above this value, the thread pool will be used
+    property MaxBodyThreadCount: integer
+      read fMaxBodyThreadCount write fMaxBodyThreadCount;
   end;
 
   /// meta-class of the THttpServerSocket process
@@ -458,7 +474,7 @@ type
   // - don't forget to use Free method when you are finished
   THttpServer = class(THttpServerGeneric)
   protected
-    /// used to protect Process() call
+    /// used to protect Process() call, e.g. fInternalHttpServerRespList
     fProcessCS: TRTLCriticalSection;
     fHeaderRetrieveAbortDelay: integer;
     fThreadPool: TSynThreadPoolTHttpServer;
@@ -624,6 +640,18 @@ type
     property StatOwnedConnections: integer
       index grOwned read GetStat;
   end;
+
+
+const
+  // kept-alive or big HTTP requests will create a dedicated THttpServerResp
+  // - each thread reserves 2 MB of memory so it may break the server
+  // - keep the value to a decent number, to let resources be constrained up to 1GB
+  // - is the default value to TSynThreadPoolTHttpServer.MaxBodyThreadCount
+  THREADPOOL_MAXWORKTHREADS = 512;
+
+  /// if HTTP body length is bigger than 16 MB, creates a dedicated THttpServerResp
+  // - is the default value to TSynThreadPoolTHttpServer.BigBodySize
+  THREADPOOL_BIGBODYSIZE = 16 * 1024 * 1024;
 
 
 {$ifdef USEWININET}
@@ -1736,7 +1764,7 @@ var
     {$ifdef SYNCRTDEBUGLOW}
     TSynLog.Add.Log(sllCustom2, 'SendResponse respsent=% code=%', [respsent,
       Code], self);
-    {$endif}
+    {$endif SYNCRTDEBUGLOW}
     respsent := true;
     // handle case of direct sending of static file (as with http.sys)
     if (ctxt.OutContent <> '') and
@@ -2048,7 +2076,9 @@ procedure THttpServerResp.Execute;
     pending: TCrtSocketPending;
     res: THttpServerSocketGetRequestResult;
   begin
-    {$ifdef SYNCRTDEBUGLOW} try {$endif}
+    {$ifdef SYNCRTDEBUGLOW}
+    try
+    {$endif SYNCRTDEBUGLOW}
     try
       repeat
         beforetix := mormot.core.os.GetTickCount64;
@@ -2066,10 +2096,9 @@ procedure THttpServerResp.Execute;
             // server is down -> disconnect the client
             exit;
           {$ifdef SYNCRTDEBUGLOW}
-          TSynLog.Add.Log(sllCustom2,
-            'HandleRequestsProcess: sock=% pending=%', [fServerSock.fSock,
-            _CSP[pending]], self);
-          {$endif}
+          TSynLog.Add.Log(sllCustom2, 'HandleRequestsProcess: sock=% pending=%',
+            [fServerSock.fSock, _CSP[pending]], self);
+          {$endif SYNCRTDEBUGLOW}
           case pending of
             cspSocketError:
               exit; // socket error -> disconnect the client
@@ -2082,9 +2111,10 @@ procedure THttpServerResp.Execute;
                 begin
                   {$ifdef SYNCRTDEBUGLOW}
                   // getsockopt(fServerSock.fSock,SOL_SOCKET,SO_ERROR,@error,errorlen) returns 0 :(
-                  TSynLog.Add.Log(sllCustom2, 'HandleRequestsProcess: sock=% LOWDELAY=%',
+                  TSynLog.Add.Log(sllCustom2,
+                    'HandleRequestsProcess: sock=% LOWDELAY=%',
                     [fServerSock.fSock, tix - beforetix], self);
-                  {$endif}
+                  {$endif SYNCRTDEBUGLOW}
                   SleepHiRes(1); // seen only on Windows in practice
                   if (fServer = nil) or
                      fServer.Terminated then
@@ -2137,10 +2167,10 @@ procedure THttpServerResp.Execute;
     end;
     {$ifdef SYNCRTDEBUGLOW}
     finally
-      TSynLog.Add.Log(sllCustom2, 'HandleRequestsProcess: close sock=%', [fServerSock.fSock],
-        self);
+      TSynLog.Add.Log(sllCustom2, 'HandleRequestsProcess: close sock=%',
+        [fServerSock.fSock], self);
     end;
-    {$endif}
+    {$endif SYNCRTDEBUGLOW}
   end;
 
 var
@@ -2198,6 +2228,8 @@ constructor TSynThreadPoolTHttpServer.Create(Server: THttpServer;
 begin
   fServer := Server;
   fOnThreadTerminate := fServer.fOnThreadTerminate;
+  fBigBodySize := THREADPOOL_BIGBODYSIZE;
+  fMaxBodyThreadCount := THREADPOOL_MAXWORKTHREADS;
   inherited Create(NumberOfThreads {$ifndef USE_WINIOCP}, {queuepending=}true{$endif});
 end;
 
@@ -2229,15 +2261,16 @@ begin
     if (fServer = nil) or
        fServer.Terminated then
       exit;
+    // properly get the incoming body and process the request
     InterlockedIncrement(fServer.fStats[res]);
     case res of
       grHeaderReceived:
         begin
           // connection and header seem valid -> process request further
           if (fServer.ServerKeepAliveTimeOut > 0) and
-             (fServer.fInternalHttpServerRespList.Count < THREADPOOL_MAXWORKTHREADS) and
+             (fServer.fInternalHttpServerRespList.Count < fMaxBodyThreadCount) and
              (ServerSock.KeepAliveClient or
-              (ServerSock.ContentLength > THREADPOOL_BIGBODYSIZE)) then
+              (ServerSock.ContentLength > fBigBodySize)) then
           begin
             // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
             // -> process in dedicated background thread
