@@ -123,15 +123,15 @@ const
   SQLITE_NULL = 5;
 
   /// text is UTF-8 encoded
-  SQLITE_UTF8     = 1;
+  SQLITE_UTF8 = 1;
   /// text is UTF-16 LE encoded
-  SQLITE_UTF16LE  = 2;
+  SQLITE_UTF16LE = 2;
   /// text is UTF-16 BE encoded
-  SQLITE_UTF16BE  = 3;
+  SQLITE_UTF16BE = 3;
   /// text is UTF-16 encoded, using the system native byte order
-  SQLITE_UTF16    = 4;
+  SQLITE_UTF16 = 4;
   /// sqlite3.create_function don't care about text encoding
-  SQLITE_ANY      = 5;
+  SQLITE_ANY = 5;
   /// used by sqlite3.create_collation() only
   SQLITE_UTF16_ALIGNED = 8;
 
@@ -362,8 +362,7 @@ type
   // access the database and SQLITE_BUSY or SQLITE_IOERR_BLOCKED is returned.
   // - If the callback returns non-zero, then another attempt is made to open
   // the database for reading and the cycle repeats.
-  TSQLBusyHandler = function(user: pointer; count: integer): integer;
-     cdecl;
+  TSQLBusyHandler = function(user: pointer; count: integer): integer; cdecl;
 
   PFTSMatchInfo = ^TFTSMatchInfo;
   /// map the matchinfo function returned BLOB value
@@ -418,8 +417,10 @@ type
     /// Used internally - xBestIndex() should ignore this field
     iTermOffset: integer;
   end;
+
   PSQLite3IndexConstraintArray = ^TSQLite3IndexConstraintArray;
-  TSQLite3IndexConstraintArray = array[0..MaxInt div SizeOf(TSQLite3IndexConstraint)-1] of TSQLite3IndexConstraint;
+  TSQLite3IndexConstraintArray = array[0 ..
+    MaxInt div SizeOf(TSQLite3IndexConstraint) - 1] of TSQLite3IndexConstraint;
 
   /// ORDER BY clause, one item per column
   TSQLite3IndexOrderBy = record
@@ -432,7 +433,8 @@ type
     desc: bytebool;
   end;
   PSQLite3IndexOrderByArray = ^TSQLite3IndexOrderByArray;
-  TSQLite3IndexOrderByArray = array[0..MaxInt div SizeOf(TSQLite3IndexOrderBy)-1] of TSQLite3IndexOrderBy;
+  TSQLite3IndexOrderByArray = array[0 ..
+    MaxInt div SizeOf(TSQLite3IndexOrderBy) - 1] of TSQLite3IndexOrderBy;
 
   /// define what information is to be passed to xFilter() for a given WHERE
   // clause constraint of the form "column OP expr"
@@ -455,7 +457,8 @@ type
     omit: bytebool;
   end;
   PSQLite3IndexConstraintUsageArray = ^TSQLite3IndexConstraintUsageArray;
-  TSQLite3IndexConstraintUsageArray = array[0..MaxInt div SizeOf(TSQLite3IndexConstraintUsage) - 1] of TSQLite3IndexConstraintUsage;
+  TSQLite3IndexConstraintUsageArray = array[0 ..
+    MaxInt div SizeOf(TSQLite3IndexConstraintUsage) - 1] of TSQLite3IndexConstraintUsage;
 
   /// Structure used as part of the virtual table interface to pass information
   // into and receive the reply from the xBestIndex() method of a virtual table module
@@ -651,8 +654,8 @@ type
     // it should make a copy. Care must be taken to store the copy in a place
     // where it will be deallocated, such as in the idxStr field with
     // needToFreeIdxStr set to 1.
-    xBestIndex: function(var pVTab: TSQLite3VTab; var pInfo: TSQLite3IndexInfo): integer;
-      cdecl;
+    xBestIndex: function(var pVTab: TSQLite3VTab;
+      var pInfo: TSQLite3IndexInfo): integer; cdecl;
     /// Releases a connection to a virtual table
     // - Only the pVTab object is destroyed. The virtual table is not destroyed and
     // any backing store associated with the virtual table persists. This method
@@ -678,8 +681,8 @@ type
     // - When initially opened, the cursor is in an undefined state. The SQLite core
     // will invoke the xFilter method on the cursor prior to any attempt to
     // position or read from the cursor.
-    xOpen: function(var pVTab: TSQLite3VTab; var ppCursor: PSQLite3VTabCursor): integer;
-      cdecl;
+    xOpen: function(var pVTab: TSQLite3VTab;
+      var ppCursor: PSQLite3VTabCursor): integer; cdecl;
     /// Closes a cursor previously opened by xOpen
     // - The SQLite core will always call xClose once for each cursor opened using xOpen.
     // - This method must release all resources allocated by the corresponding xOpen call.
@@ -703,8 +706,9 @@ type
     // The xNext method will be used to advance to the next row.
     // - This method must return SQLITE_OK if successful, or an sqlite error code
     // if an error occurs.
-    xFilter: function(var pVtabCursor: TSQLite3VTabCursor; idxNum: integer; const idxStr: PAnsiChar;
-      argc: integer; var argv: TSQLite3ValueArray): integer; cdecl;
+    xFilter: function(var pVtabCursor: TSQLite3VTabCursor; idxNum: integer;
+      const idxStr: PAnsiChar; argc: integer;
+      var argv: TSQLite3ValueArray): integer; cdecl;
     /// Advances a virtual table cursor to the next row of a result set initiated by xFilter
     // - If the cursor is already pointing at the last row when this routine is called,
     // then the cursor no longer points to valid data and a subsequent call to the
@@ -728,12 +732,12 @@ type
     // - The xColumn method must return SQLITE_OK on success.
     // - To raise an error, the xColumn method should use one of the result_text()
     // methods to set the error message text, then return an appropriate error code.
-    xColumn: function(var pVtabCursor: TSQLite3VTabCursor; sContext: TSQLite3FunctionContext;
-      N: integer): integer; cdecl;
+    xColumn: function(var pVtabCursor: TSQLite3VTabCursor;
+      sContext: TSQLite3FunctionContext; N: integer): integer; cdecl;
     /// Should fill pRowid with the rowid of row that the virtual table cursor
     // pVtabCursor is currently pointing at
-    xRowid: function(var pVtabCursor: TSQLite3VTabCursor; var pRowid: Int64): integer;
-      cdecl;
+    xRowid: function(var pVtabCursor: TSQLite3VTabCursor;
+      var pRowid: Int64): integer; cdecl;
     /// Makes a change to a virtual table content (insert/delete/update)
     // - The nArg parameter specifies the number of entries in the ppArg[] array
     // - The value of nArg will be 1 for a pure delete operation or N+2 for an
@@ -829,21 +833,22 @@ type
     // function. But for "like(A,B)" the A term is considered the first argument.
     // - The function pointer returned by this routine must be valid for the
     // lifetime of the pVTab object given in the first parameter.
-    xFindFunction: function(var pVTab: TSQLite3VTab; nArg: integer; const zName: PAnsiChar;
-      var pxFunc: TSQLFunctionFunc; var ppArg: Pointer): integer; cdecl;
+    xFindFunction: function(var pVTab: TSQLite3VTab; nArg: integer;
+      const zName: PAnsiChar; var pxFunc: TSQLFunctionFunc;
+      var ppArg: Pointer): integer; cdecl;
     /// Provides notification that the virtual table implementation that the
     // virtual table will be given a new name
     // - If this method returns SQLITE_OK then SQLite renames the table.
     // - If this method returns an error code then the renaming is prevented.
-    xRename: function(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): integer;
-       cdecl;
+    xRename: function(var pVTab: TSQLite3VTab;
+      const zNew: PAnsiChar): integer; cdecl;
     /// Starts a new transaction with the virtual table
     // - SAVEPOINTs are a method of creating transactions, similar to BEGIN and
     // COMMIT, except that the SAVEPOINT and RELEASE commands are named and
     // may be nested. See @http://www.sqlite.org/lang_savepoint.html
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
-    xSavepoint: function(var pVTab: TSQLite3VTab; iSavepoint: integer): integer;
-       cdecl;
+    xSavepoint: function(var pVTab: TSQLite3VTab;
+      iSavepoint: integer): integer; cdecl;
     /// Merges a transaction into its parent transaction, so that the specified
     // transaction and its parent become the same transaction
     // - Causes all savepoints back to and including the most recent savepoint
@@ -853,13 +858,13 @@ type
     // changes committed by an inner transaction might later be undone by a
     // rollback in an outer transaction.
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
-    xRelease: function(var pVTab: TSQLite3VTab; iSavepoint: integer): integer;
-       cdecl;
+    xRelease: function(var pVTab: TSQLite3VTab;
+      iSavepoint: integer): integer; cdecl;
     /// Reverts the state of the virtual table content back to what it was just
     // after the corresponding SAVEPOINT
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
-    xRollbackTo: function(var pVTab: TSQLite3VTab; iSavepoint: integer): integer;
-       cdecl;
+    xRollbackTo: function(var pVTab: TSQLite3VTab;
+      iSavepoint: integer): integer; cdecl;
   end;
 
   /// Compile-Time Authorization Callback prototype
@@ -993,8 +998,8 @@ type
   // sqlite3.trace_v2() call
   // - P and X arguments are pointers whose meanings depend on Trace content:
   // see TSQLTraceMask for the various use cases
-  TSQLTraceCallback = procedure(Trace: TSQLTraceMask; UserData,P,X: pointer);
-    cdecl;
+  TSQLTraceCallback = procedure(Trace: TSQLTraceMask;
+    UserData, P, X: pointer); cdecl;
 
   /// Callback function registered by sqlite3.profile()
   // - this procedure will be invoked as each SQL statement finishes
@@ -1198,7 +1203,8 @@ type
     // - StringEncoding is either SQLITE_UTF8 either SQLITE_UTF16
     // - TSQLDataBase.Create add WIN32CASE, WIN32NOCASE and ISO8601 collations
     create_collation: function(DB: TSQLite3DB; CollationName: PUTF8Char;
-      StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl;
+      StringEncoding: integer; CollateParam: pointer;
+      cmp: TSQLCollateFunc): integer; cdecl;
 
     /// Returns the rowid of the most recent successful INSERT into the database
     last_insert_rowid: function(DB: TSQLite3DB): Int64; cdecl;
@@ -1647,7 +1653,8 @@ type
     // the result set of a SELECT, and 3. Hidden columns are not included in the
     // implicit column-list used by an INSERT statement that lacks an explicit
     // column-list.
-    declare_vtab: function(DB: TSQLite3DB; const zSQL: PAnsiChar): integer; cdecl;
+    declare_vtab: function(DB: TSQLite3DB;
+      const zSQL: PAnsiChar): integer; cdecl;
 
     /// Registers an authorizer callback to a specified DB connection
     // - Only a single authorizer can be in place on a database connection at a time
@@ -1837,7 +1844,8 @@ type
     // as is used by the backup operation (which is the case in the
     // mormot.db.raw.sqlite3 and  mORMotSQLite3 units), then the backup database
     // is automatically updated at the same time, so you won't loose any data.
-    backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer; cdecl;
+    backup_step: function(Backup: TSQLite3Backup;
+      nPages: integer): integer; cdecl;
     /// finalize a Backup process on a given database
     // - When backup_step() has returned SQLITE_DONE, or when the application
     // wishes to abandon the backup operation, the application should destroy the
@@ -1915,7 +1923,8 @@ type
     config: function(operation: integer): integer; cdecl varargs;
 
     /// used to make global configuration changes to current database connection
-    db_config: function(DestDB: TSQLite3DB; operation: integer): integer; cdecl varargs;
+    db_config: function(DestDB: TSQLite3DB;
+      operation: integer): integer; cdecl varargs;
 
     /// initialize the internal version numbers
     constructor Create; virtual;
@@ -2556,7 +2565,8 @@ type
     // sqlite3.create_function() format) and the number of expected parameters
     // - if the function name is not specified, it will be retrieved from the type
     // information (e.g. TReferenceDynArray will declare 'ReferenceDynArray')
-    constructor Create(aFunction: TSQLFunctionFunc; aFunctionParametersCount: integer;
+    constructor Create(aFunction: TSQLFunctionFunc;
+      aFunctionParametersCount: integer;
       const aFunctionName: RawUTF8=''); reintroduce;
     /// the internal function prototype
     // - ready to be assigned to sqlite3.create_function() xFunc parameter
@@ -3692,37 +3702,97 @@ end;
 
 const
   SQLITE3_ENTRIES: array[0..91] of PChar = (
-    'sqlite3_initialize', 'sqlite3_shutdown',
-    'sqlite3_open', 'sqlite3_open_v2', 'sqlite3_key', 'sqlite3_rekey',
-    'sqlite3_close', 'sqlite3_libversion', 'sqlite3_errmsg',
-    'sqlite3_extended_errcode', 'sqlite3_create_function',
-    'sqlite3_create_function_v2', 'create_window_function',
-    'sqlite3_create_collation', 'sqlite3_last_insert_rowid',
-    'sqlite3_busy_timeout', 'sqlite3_busy_handler', 'sqlite3_prepare_v2',
-    'sqlite3_finalize', 'sqlite3_next_stmt', 'sqlite3_reset',
-    'sqlite3_stmt_readonly', 'sqlite3_step', 'sqlite3_column_count',
-    'sqlite3_column_type', 'sqlite3_column_decltype', 'sqlite3_column_name',
-    'sqlite3_column_bytes', 'sqlite3_column_value', 'sqlite3_column_double',
-    'sqlite3_column_int', 'sqlite3_column_int64', 'sqlite3_column_text',
-    'sqlite3_column_text16', 'sqlite3_column_blob', 'sqlite3_value_type',
-    'sqlite3_value_numeric_type', 'sqlite3_value_bytes', 'sqlite3_value_double',
-    'sqlite3_value_int64', 'sqlite3_value_text', 'sqlite3_value_blob',
-    'sqlite3_result_null', 'sqlite3_result_int64', 'sqlite3_result_double',
-    'sqlite3_result_blob', 'sqlite3_result_text', 'sqlite3_result_value',
-    'sqlite3_result_error', 'sqlite3_user_data', 'sqlite3_context_db_handle',
-    'sqlite3_aggregate_context', 'sqlite3_bind_text', 'sqlite3_bind_blob',
-    'sqlite3_bind_zeroblob', 'sqlite3_bind_double', 'sqlite3_bind_int',
-    'sqlite3_bind_int64', 'sqlite3_bind_null', 'sqlite3_clear_bindings',
-    'sqlite3_bind_parameter_count', 'sqlite3_blob_open', 'sqlite3_blob_reopen',
-    'sqlite3_blob_close', 'sqlite3_blob_read', 'sqlite3_blob_write',
-    'sqlite3_blob_bytes', 'sqlite3_create_module_v2', 'sqlite3_declare_vtab',
-    'sqlite3_set_authorizer', 'sqlite3_update_hook', 'sqlite3_commit_hook',
-    'sqlite3_rollback_hook', 'sqlite3_changes', 'sqlite3_total_changes',
-    'sqlite3_malloc', 'sqlite3_realloc', 'sqlite3_free', 'sqlite3_memory_used',
-    'sqlite3_memory_highwater', 'sqlite3_trace_v2', 'sqlite3_limit',
-    'sqlite3_backup_init', 'sqlite3_backup_step', 'sqlite3_backup_finish',
-    'sqlite3_backup_remaining', 'sqlite3_backup_pagecount', 'sqlite3_serialize',
-    'sqlite3_deserialize', 'sqlite3_soft_heap_limit64', 'sqlite3_config',
+    'sqlite3_initialize',
+    'sqlite3_shutdown',
+    'sqlite3_open',
+    'sqlite3_open_v2',
+    'sqlite3_key',
+    'sqlite3_rekey',
+    'sqlite3_close',
+    'sqlite3_libversion',
+    'sqlite3_errmsg',
+    'sqlite3_extended_errcode',
+    'sqlite3_create_function',
+    'sqlite3_create_function_v2',
+    'create_window_function',
+    'sqlite3_create_collation',
+    'sqlite3_last_insert_rowid',
+    'sqlite3_busy_timeout',
+    'sqlite3_busy_handler',
+    'sqlite3_prepare_v2',
+    'sqlite3_finalize',
+    'sqlite3_next_stmt',
+    'sqlite3_reset',
+    'sqlite3_stmt_readonly',
+    'sqlite3_step',
+    'sqlite3_column_count',
+    'sqlite3_column_type',
+    'sqlite3_column_decltype',
+    'sqlite3_column_name',
+    'sqlite3_column_bytes',
+    'sqlite3_column_value',
+    'sqlite3_column_double',
+    'sqlite3_column_int',
+    'sqlite3_column_int64',
+    'sqlite3_column_text',
+    'sqlite3_column_text16',
+    'sqlite3_column_blob',
+    'sqlite3_value_type',
+    'sqlite3_value_numeric_type',
+    'sqlite3_value_bytes',
+    'sqlite3_value_double',
+    'sqlite3_value_int64',
+    'sqlite3_value_text',
+    'sqlite3_value_blob',
+    'sqlite3_result_null',
+    'sqlite3_result_int64',
+    'sqlite3_result_double',
+    'sqlite3_result_blob',
+    'sqlite3_result_text',
+    'sqlite3_result_value',
+    'sqlite3_result_error',
+    'sqlite3_user_data',
+    'sqlite3_context_db_handle',
+    'sqlite3_aggregate_context',
+    'sqlite3_bind_text',
+    'sqlite3_bind_blob',
+    'sqlite3_bind_zeroblob',
+    'sqlite3_bind_double',
+    'sqlite3_bind_int',
+    'sqlite3_bind_int64',
+    'sqlite3_bind_null',
+    'sqlite3_clear_bindings',
+    'sqlite3_bind_parameter_count',
+    'sqlite3_blob_open',
+    'sqlite3_blob_reopen',
+    'sqlite3_blob_close',
+    'sqlite3_blob_read',
+    'sqlite3_blob_write',
+    'sqlite3_blob_bytes',
+    'sqlite3_create_module_v2',
+    'sqlite3_declare_vtab',
+    'sqlite3_set_authorizer',
+    'sqlite3_update_hook',
+    'sqlite3_commit_hook',
+    'sqlite3_rollback_hook',
+    'sqlite3_changes',
+    'sqlite3_total_changes',
+    'sqlite3_malloc',
+    'sqlite3_realloc',
+    'sqlite3_free',
+    'sqlite3_memory_used',
+    'sqlite3_memory_highwater',
+    'sqlite3_trace_v2',
+    'sqlite3_limit',
+    'sqlite3_backup_init',
+    'sqlite3_backup_step',
+    'sqlite3_backup_finish',
+    'sqlite3_backup_remaining',
+    'sqlite3_backup_pagecount',
+    'sqlite3_serialize',
+    'sqlite3_deserialize',
+    'sqlite3_soft_heap_limit64',
+    'sqlite3_config',
     'sqlite3_db_config');
 
 function TSQLite3LibraryDynamic.GetLibraryName: TFileName;

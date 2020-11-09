@@ -4776,7 +4776,8 @@ var
   {$endif CPUX86NOTPIC}
 label
   neg, pos;
-begin // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
+begin
+  // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
   {$ifndef CPUX86NOTPIC} table := @NormToUpperByte; {$endif}
   if u1 <> u2 then
     if (u1 <> nil) and
@@ -4953,7 +4954,8 @@ begin
           ((w < 126) and
            not (tcWord in TEXT_BYTES[w]));
     if PW - Start >= UpperLen then
-      if Unicode_CompareString(Start, Upper, UpperLen, UpperLen, {ignorecase=}true) = 2 then
+      if Unicode_CompareString(Start, Upper, UpperLen, UpperLen,
+           {ignorecase=}true) = 2 then
       begin
         result := true; // case-insensitive match found
         exit;
@@ -5002,7 +5004,8 @@ begin
             break;
       end
       else if c and $20 = 0 then
-      begin // fast direct process $0..$7ff
+      begin
+        // fast direct process of $0..$7ff codepoints including accents
         c := ((c shl 6) or byte(U^)) - $3080;
         inc(U);
         if c <= 255 then
@@ -5016,9 +5019,11 @@ begin
         end;
       end
       else if UTF8_EXTRABYTES[c] = 0 then
+        // invalid leading byte
         exit
-      else // invalid leading byte
-        inc(U, UTF8_EXTRABYTES[c]); // just ignore surrogates for soundex
+      else
+        // just ignore surrogates for soundex
+        inc(U, UTF8_EXTRABYTES[c]);
     until false;
     // here we had the first char match -> check if this word match UpperValue
     UpperValue := ValueStart;
@@ -5048,8 +5053,9 @@ begin
       else
       begin
         if UTF8_EXTRABYTES[c] = 0 then
+          // invalid leading byte
           exit
-        else // invalid leading byte
+        else
           inc(U, UTF8_EXTRABYTES[c]);
         break;
       end;
