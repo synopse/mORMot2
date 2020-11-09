@@ -200,9 +200,6 @@
             </Checks>
             <TargetCPU Value="x86_64"/>
             <TargetOS Value="linux"/>
-            <Optimizations>
-              <OptimizationLevel Value="3"/>
-            </Optimizations>
           </CodeGeneration>
           <Linking>
             <Debugging>
@@ -541,7 +538,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="73">
+    <Units Count="74">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -834,6 +831,10 @@
         <Filename Value="..\src\lib\mormot.lib.sspi.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit72>
+      <Unit73>
+        <Filename Value="..\src\core\mormot.core.mustache.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit73>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

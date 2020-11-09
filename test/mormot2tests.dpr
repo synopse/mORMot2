@@ -33,6 +33,7 @@ uses
   mormot.core.search       in '..\src\core\mormot.core.search.pas',
   mormot.core.threads      in '..\src\core\mormot.core.threads.pas',
   mormot.core.interfaces   in '..\src\core\mormot.core.interfaces.pas',
+  mormot.core.mustache     in '..\src\core\mormot.core.mustache.pas',
   mormot.core.zip          in '..\src\core\mormot.core.zip.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
   mormot.lib.lizard        in '..\src\lib\mormot.lib.lizard.pas',
