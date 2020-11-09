@@ -1166,7 +1166,7 @@ begin
     header := fServerRemoteIPHeader + ip;
   result := TServerClient(TServerClient.WebSocketsConnect(
     fServerHost, fServerPort, TSynopseClientProtocol.Create(self, protocol),
-    fLog, 'NewServerClient', url, header));
+    fLog, 'NewServerClient', url, header{%H-}));
   if result <> nil then
   begin
     result.Connection := connection;

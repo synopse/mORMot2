@@ -1389,7 +1389,7 @@ function TSynMustache.RenderJSON(const JSON: RawUTF8;
 var
   context: variant;
 begin
-  _Json(JSON, context, JSON_OPTIONS[true]);
+  _Json(JSON, context{%H-}, JSON_OPTIONS[true]);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
@@ -1400,7 +1400,7 @@ function TSynMustache.RenderJSON(const JSON: RawUTF8;
 var
   context: variant;
 begin
-  _Json(FormatUTF8(JSON, Args, Params, true), context, JSON_OPTIONS[true]);
+  _Json(FormatUTF8(JSON, Args, Params, true), context{%H-}, JSON_OPTIONS[true]);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
@@ -1509,7 +1509,7 @@ begin
     result := Time.i18nText;
   end
   else
-    SetVariantNull(result);
+    SetVariantNull(result{%H-});
 end;
 
 class procedure TSynMustache.DateToText(const Value: variant;
@@ -1524,7 +1524,7 @@ begin
     result := Time.i18nText;
   end
   else
-    SetVariantNull(result);
+    SetVariantNull(result{%H-});
 end;
 
 class procedure TSynMustache.DateFmt(const Value: variant;
@@ -1539,7 +1539,7 @@ begin
        VariantToDateTime(Values[0], dt) then
       result := FormatDateTime(Values[1], dt)
     else
-      SetVariantNull(result);
+      SetVariantNull(result{%H-});
 end;
 
 class procedure TSynMustache.TimeLogToText(const Value: variant;
@@ -1550,7 +1550,7 @@ begin
   if VariantToInt64(Value, Time.Value) then
     result := Time.i18nText
   else
-    SetVariantNull(result);
+    SetVariantNull(result{%H-});
 end;
 
 class procedure TSynMustache.ToJSON(const Value: variant;
@@ -1708,7 +1708,7 @@ begin
          TVarData(Values[0]), TVarData(Values[1]), false) = 0) then
       result := true
     else
-      SetVariantNull(result);
+      SetVariantNull(result{%H-});
 end;
 
 class procedure TSynMustache.If_(const Value: variant; out result: variant);
@@ -1718,7 +1718,7 @@ var
   wasString: boolean;
 begin
   // {{#if .<>""}} or {{#if .,"=",123}}
-  SetVariantNull(result);
+  SetVariantNull(result{%H-});
   with _Safe(Value)^ do
     if (Kind = dvArray) and
        (Count = 3) then

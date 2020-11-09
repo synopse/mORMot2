@@ -1243,7 +1243,7 @@ begin
       varCurrency:
         Value := TVarData(V).VCurrency;
     else
-      if SetVariantUnRefSimpleValue(V, vd) then
+      if SetVariantUnRefSimpleValue(V, vd{%H-}) then
         result := VariantToDateTime(variant(vd), Value)
       else
       begin

@@ -28,11 +28,11 @@ interface
 
 uses
   sysutils,
+  mormot.core.base,
+  mormot.core.os,
   mormot.db.raw.sqlite3;
 
 implementation
-
-uses mormot.core.os;
 
 procedure DoInitialization;
 begin
