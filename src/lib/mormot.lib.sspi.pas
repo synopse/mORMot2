@@ -420,8 +420,16 @@ procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
 // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
 procedure ServerForceNTLM(ForceNTLM: boolean);
 
+/// high-level cross-platform initialization function
+// - as called e.g. by mormot.rest.client/server.pas
+// - in this unit, will just call ServerForceNTLM(false)
+procedure InitializeDomainAuth;
+
 
 const
+  /// character used as marker in user name to indicates the associated domain
+  SSPI_USER_CHAR = '\';
+
   // SSPI package names. Client always use Negotiate
   // Server detect Negotiate or NTLM requests and use appropriate package
   SECPKGNAMENTLM = 'NTLM';
@@ -894,9 +902,10 @@ begin
   end;
 end;
 
-
-initialization
-  ServerForceNTLM(False);
+procedure InitializeDomainAuth;
+begin
+  ServerForceNTLM(false);
+end;
 
 {$endif MSWINDOWS}
 

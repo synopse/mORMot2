@@ -24,6 +24,10 @@ uses
   variants,
   contnrs,
   mormot.lib.z, // we use zlib crc32 as default URI signature
+  {$ifdef DOMAINRESTAUTH}
+  mormot.lib.sspi, // do-nothing units on non compliant system
+  mormot.lib.gssapi,
+  {$endif DOMAINRESTAUTH}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -123,8 +127,8 @@ type
     /// is called by ClientComputeSessionKey() overriden method to execute the
     // root/Auth service with the supplied parameters, then retrieve and
     // decode the "result": session key and any other values (e.g. "version")
-    class function ClientGetSessionKey(Sender: TRestClientURI;
-      User: TAuthUser; const aNameValueParameters: array of const): RawUTF8; virtual;
+    class function ClientGetSessionKey(Sender: TRestClientURI; User: TAuthUser;
+      const aNameValueParameters: array of const): RawUTF8; virtual;
   public
     /// class method to be used on client side to create a remote session
     // - call this method instead of TRestClientURI.SetUser() if you need
@@ -283,7 +287,8 @@ type
       const aUserName,aPasswordClear: RawUTF8): RawUTF8; override;
   end;
 
-  {$ifdef DOMAINAUTH}
+  {$ifdef DOMAINRESTAUTH}
+  { will use mormot.lib.sspi/gssapi units depending on the OS }
 
   /// authentication of the current logged user using Windows Security Support
   // Provider Interface (SSPI) or GSSAPI library on Linux
@@ -305,7 +310,7 @@ type
       User: TAuthUser): RawUTF8; override;
   end;
 
-  {$endif DOMAINAUTH}
+  {$endif DOMAINRESTAUTH}
 
   /// store the information about the current session
   // - as set after a sucessfull TRestClientURI.SetUser() method
@@ -599,6 +604,10 @@ type
     destructor Destroy; override;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
     procedure SetOrmInstance(aORM: TInterfacedObject); override;
+    /// save the TSQLRestClientURI properties into a persistent storage object
+    // - CreateFrom() will expect Definition.UserName/Password to store the
+    // credentials which will be used by SetUser()
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// main method calling the remote Server via a RESTful command
     // - redirect to the InternalURI() abstract method, which should be
     // overridden for local, pipe, HTTP/1.1 or WebSockets actual communication
@@ -1234,7 +1243,8 @@ end;
 class function TRestClientAuthenticationNone.ClientComputeSessionKey(
   Sender: TRestClientURI; User: TAuthUser): RawUTF8;
 begin
-  result := ClientGetSessionKey(Sender, User, ['UserName', User.LogonName]);
+  result := ClientGetSessionKey(Sender, User, [
+    'UserName', User.LogonName]);
 end;
 
 
@@ -1307,7 +1317,8 @@ begin
 end;
 
 
-{$ifdef DOMAINAUTH}
+{$ifdef DOMAINRESTAUTH}
+{ will use mormot.lib.sspi/gssapi units depending on the OS }
 
 class function TRestClientAuthenticationSSPI.ClientComputeSessionKey(
   Sender: TRestClientURI; User: TAuthUser): RawUTF8;
@@ -1319,22 +1330,24 @@ begin
   result := '';
   InvalidateSecContext(SecCtx, 0);
   WithPassword := User.LogonName <> '';
-  Sender.fSessionData := '';
+  Sender.fSession.Data := '';
   try
     repeat
       if WithPassword then
-        ClientSSPIAuthWithPassword(SecCtx, Sender.fSessionData, User.LogonName,
-          User.PasswordHashHexa, OutData)
+        ClientSSPIAuthWithPassword(SecCtx,
+          Sender.fSession.Data, User.LogonName, User.PasswordHashHexa, OutData)
       else
-        ClientSSPIAuth(SecCtx, Sender.fSessionData, User.PasswordHashHexa, OutData);
+        ClientSSPIAuth(SecCtx,
+          Sender.fSession.Data, User.PasswordHashHexa, OutData);
       if OutData = '' then
         break;
       if result <> '' then
         break; // 2nd pass
       // 1st call will return data, 2nd call SessionKey
       result := ClientGetSessionKey(Sender, User,
-        ['UserName', '', 'data', BinToBase64(OutData)]);
-    until Sender.fSessionData = '';
+        ['UserName', '',
+         'data', BinToBase64(OutData)]);
+    until Sender.fSession.Data = '';
     if result <> '' then
       result := SecDecrypt(SecCtx, Base64ToBin(result));
   finally
@@ -1345,7 +1358,7 @@ begin
   User.PasswordHashHexa := ''; // should not appear on URI signature
 end;
 
-{$endif DOMAINAUTH}
+{$endif DOMAINRESTAUTH}
 
 
 { ************ TRestClientRoutingREST/TRestClientRoutingJSON_RPC Routing Schemes }
@@ -1705,6 +1718,9 @@ begin
     [self, Factory.InterfaceName]);
 end;
 
+const
+  SSPI_DEFINITION_USERNAME = '***SSPI***';
+
 constructor TRestClientURI.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 begin
@@ -1714,12 +1730,30 @@ begin
     fOnIdle := fModel.OnClientIdle; // allow UI interactivity during SetUser()
   if aDefinition.User <> '' then
   begin
-    {$ifdef DOMAINAUTH}
+    {$ifdef DOMAINRESTAUTH}
     if aDefinition.User = SSPI_DEFINITION_USERNAME then
       SetUser('', aDefinition.PasswordPlain)
     else
-    {$endif DOMAINAUTH}
+    {$endif DOMAINRESTAUTH}
       SetUser(aDefinition.User, aDefinition.PasswordPlain, true);
+  end;
+end;
+
+procedure TRestClientURI.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition = nil then
+    exit;
+  inherited DefinitionTo(Definition); // save Kind
+  if (fSession.Authentication <> nil) and
+     (fSession.User <> nil) then
+  begin
+    {$ifdef DOMAINRESTAUTH}
+    if fSession.Authentication.InheritsFrom(TRestClientAuthenticationSSPI) then
+      Definition.User := SSPI_DEFINITION_USERNAME
+    else
+    {$endif DOMAINRESTAUTH}
+       Definition.User := fSession.User.LogonName;
+     Definition.PasswordPlain := fSession.User.PasswordHashHexa;
   end;
 end;
 
@@ -2399,13 +2433,6 @@ begin
   fRemoteLogClass := nil;
 end;
 
-const
-  {$ifdef GSSAPIAUTH}
-  SSPI_USER_CHAR = '@';
-  {$else}
-  SSPI_USER_CHAR = '\';
-  {$endif GSSAPIAUTH}
-
 function TRestClientURI.SetUser(const aUserName, aPassword: RawUTF8;
   aHashedPassword: boolean): boolean;
 const
@@ -2417,15 +2444,15 @@ begin
     result := false;
     exit;
   end;
-  {$ifdef DOMAINAUTH}
+  {$ifdef DOMAINRESTAUTH}
   // try Windows/GSSAPI authentication with the current logged user
   result := true;
-  if (IsVoid(aUserName) or
+  if ((Trim(aUserName) = '') or
       (PosExChar(SSPI_USER_CHAR, aUserName) > 0)) and
      TRestClientAuthenticationSSPI.ClientSetUser(
        self, aUserName, aPassword, passKerberosSPN) then
     exit;
-  {$endif DOMAINAUTH}
+  {$endif DOMAINRESTAUTH}
   result := TRestClientAuthentication.ClientSetUser(self, aUserName,
     aPassword, HASH[aHashedPassword]);
 end;
@@ -2513,6 +2540,12 @@ end;
 
 {$endif PUREMORMOT2}
 
+
+initialization
+  {$ifdef DOMAINRESTAUTH}
+  // setup mormot.lib.sspi/gssapi unit depending on the OS
+  InitializeDomainAuth;
+  {$endif DOMAINRESTAUTH}
 
 end.
 

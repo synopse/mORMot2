@@ -405,8 +405,13 @@ procedure ServerForceKeytab(const aKeytab: RawUTF8);
 const
   /// HTTP header to be set for authentication
   SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate';
+
   /// HTTP header pattern received for authentication
   SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
+
+  /// character used as marker in user name to indicates the associated domain
+  SSPI_USER_CHAR = '@';
+
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
 // - to use same value for TAuthUser.LogonName on all platforms user name
@@ -425,6 +430,12 @@ procedure ServerDomainMapUnRegister(const aOld, aNew: RawUTF8);
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
 procedure ServerDomainMapUnRegisterAll;
+
+
+/// high-level cross-platform initialization function
+// - as called e.g. by mormot.rest.client/server.pas
+// - in this unit, will just call LoadGSSAPI('')
+procedure InitializeDomainAuth;
 
 
 implementation
@@ -960,6 +971,11 @@ procedure ServerForceKeytab(const aKeytab: RawUTF8);
 begin
   if Assigned(GSSAPI.krb5_gss_register_acceptor_identity) then
     GSSAPI.krb5_gss_register_acceptor_identity(pointer(aKeytab));
+end;
+
+procedure InitializeDomainAuth;
+begin
+  LoadGSSAPI('');
 end;
 
 {$endif MSWINDOWS}

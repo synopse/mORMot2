@@ -1214,7 +1214,11 @@ const
     TRestServerAuthenticationDefault,
     TRestServerAuthenticationHttpBasic,
     TRestServerAuthenticationNone,
-    TRestServerAuthenticationSSPI{may be nil});
+    {$ifdef DOMAINRESTAUTH}
+    TRestServerAuthenticationSSPI
+    {$else}
+    nil
+    {$endif DOMAINRESTAUTH});
 var
   a: TRestHttpServerRestAuthentication;
   thrdCnt: integer;

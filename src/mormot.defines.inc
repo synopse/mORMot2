@@ -72,6 +72,12 @@
 {.$define DISABLEAPPNOSQL}
 // Mongo DB client won't be linked to the executable by mormot.app
 
+{.$define NOSSPIAUTH}
+// disable Windows mormot.lib.sspi support in mormot.rest.client/server units
+
+{.$define NOGSSAPIAUTH}
+// disable Posix mormot.lib.gsssapi support in mormot.rest.client/server units
+
 
 {$ifdef FPC}
 
@@ -488,7 +494,6 @@
   {$define NOSQLITE3ENCRYPT}
 {$endif NOSQLITE3STATIC}
 
-
 {$ifdef MSWINDOWS}
 
   {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
@@ -497,6 +502,10 @@
 
   {$define USE_WINIOCP} // I/O completion ports API is the best option under Windows
   // (under Linux/POSIX, we fallback to a classical event-driven pool)
+  {$ifndef NOSSPIAUTH}
+    {$define DOMAINRESTAUTH}
+    // enable Windows SSPI authentication in mormot.rest.client/server
+  {$endif NOSSPIAUTH}
 
 {$else}
 
@@ -507,6 +516,11 @@
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
     {$define LIBCURLSTATIC}
+  {$else}
+    {$ifndef NOGSSAPIAUTH} // mormot.lib.gssapi is not Android compatible
+      {$define DOMAINRESTAUTH}
+      // enable Kerberos authentication via libgss in mormot.rest.client/server
+    {$endif NOGSSAPIAUTH}
   {$endif ANDROID}
 
 {$endif MSWINDOWS}

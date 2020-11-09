@@ -31,6 +31,10 @@ uses
   variants,
   contnrs,
   mormot.lib.z, // zlib's crc32 for private hash
+  {$ifdef DOMAINRESTAUTH}
+  mormot.lib.sspi, // do-nothing units on non compliant system
+  mormot.lib.gssapi,
+  {$endif DOMAINRESTAUTH}
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -1299,6 +1303,38 @@ type
     function Auth(Ctxt: TRestServerURIContext): boolean; override;
   end;
 
+  {$ifdef DOMAINRESTAUTH}
+  { will use mormot.lib.sspi/gssapi units depending on the OS }
+
+  /// authentication of the current logged user using Windows Security Support
+  // Provider Interface (SSPI) or GSSAPI library on Linux
+  // - is able to authenticate the currently logged user on the client side,
+  // using either NTLM (Windows only) or Kerberos - it will allow to safely
+  // authenticate on a mORMot server without prompting the user to enter its
+  // password
+  // - if ClientSetUser() receives aUserName as '', aPassword should be either
+  // '' if you expect NTLM authentication to take place, or contain the SPN
+  // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
+  // authentication
+  // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
+  // authentication will take place on the specified domain, with aPassword
+  // as plain password value
+  TRestServerAuthenticationSSPI = class(TRestServerAuthenticationSignedURI)
+  protected
+    /// Windows built-in authentication
+    // - holds information between calls to ServerSSPIAuth
+    fSSPIAuthContexts: TSecContextDynArray;
+  public
+    /// finalize internal sspi/gssapi allocated structures
+    destructor Destroy; override;
+    /// will try to handle the Auth RESTful method with Windows SSPI API
+    // - to be called in a two pass algorithm, used to cypher the password
+    // - the client-side logged user will be identified as valid, according
+    // to a Windows SSPI API secure challenge
+    function Auth(Ctxt: TRestServerURIContext): boolean; override;
+  end;
+
+  {$endif DOMAINRESTAUTH}
 
 { ************ TRestServerMonitor for High-Level Statistics of a REST Server }
 
@@ -1942,9 +1978,11 @@ type
     function AuthenticationRegister(
       aMethod: TRestServerAuthenticationClass): TRestServerAuthentication; overload;
     /// call this method to add several authentication methods to the server
-    // - if TRestServer.Create() constructor is called with aHandleUserAuthentication
-    // set to TRUE, it will register the two following classes:
-    // ! AuthenticationRegister([TRestServerAuthenticationDefault,TRestServerAuthenticationSSPI]);
+    // - if TRestServer.Create() constructor is called with
+    // aHandleUserAuthentication set to TRUE, it will register the two
+    // following classes:
+    // ! AuthenticationRegister([
+    // !   TRestServerAuthenticationDefault, TRestServerAuthenticationSSPI]);
     procedure AuthenticationRegister(
       const aMethods: array of TRestServerAuthenticationClass); overload;
     /// call this method to remove an authentication method to the server
@@ -2391,11 +2429,6 @@ type
     property WebSocketPassword: SPIUTF8
       read fPassWord write fPassWord;
   end;
-
-
-const
-  TRestServerAuthenticationSSPI = nil;
-  { TODO : implement TRestServerAuthenticationSSPI }
 
 
 
@@ -5392,6 +5425,141 @@ begin
 end;
 
 
+
+{$ifdef DOMAINRESTAUTH}
+{ will use mormot.lib.sspi/gssapi units depending on the OS }
+
+const
+  /// maximum number of Windows Authentication context to be handled at once
+  // - 64 should be big enough
+  MAXSSPIAUTHCONTEXTS = 64;
+
+
+{ TRestServerAuthenticationSSPI }
+
+destructor TRestServerAuthenticationSSPI.Destroy;
+var
+  i: PtrInt;
+begin
+  for i := 0 to High(fSSPIAuthContexts) do
+    FreeSecContext(fSSPIAuthContexts[i]);
+  inherited Destroy;
+end;
+
+function TRestServerAuthenticationSSPI.Auth(
+  Ctxt: TRestServerURIContext): boolean;
+var
+  i, ndx: PtrInt;
+  username, indataenc: RawUTF8;
+  ticks,connectionID: Int64;
+  browserauth: Boolean;
+  ctxarray: TDynArray;
+  outdata: RawByteString;
+  user: TAuthUser;
+  session: TAuthSession;
+begin
+  result := AuthSessionRelease(Ctxt);
+  if result or
+     not Ctxt.InputExists['username'] or
+     not Ctxt.InputExists['Data'] then
+    exit;
+  // use connectionID to find authentication session
+  connectionID := Ctxt.Call^.LowLevelConnectionID;
+  // GET ModelRoot/auth?username=&data=... -> windows SSPI auth
+  indataenc := Ctxt.InputUTF8['Data'];
+  if indataenc = '' then
+  begin
+    // client is browser and used HTTP headers to send auth data
+    FindNameValue(Ctxt.Call.InHead, SECPKGNAMEHTTPAUTHORIZATION, indataenc);
+    if indataenc = '' then
+    begin
+      // no auth data sent, reply with supported auth methods
+      Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
+      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
+      Ctxt.Call.OutBody := StatusCodeToReason(HTTP_UNAUTHORIZED);
+      exit;
+    end;
+    browserauth := True;
+  end
+  else
+    browserauth := False;
+  ctxarray.InitSpecific(TypeInfo(TSecContextDynArray), fSSPIAuthContexts, ptInt64);
+  // check for outdated auth context
+  ticks := GetTickCount64 - 30000;
+  for i := High(fSSPIAuthContexts) downto 0 do
+    if ticks > fSSPIAuthContexts[i].CreatedTick64 then
+    begin
+      FreeSecContext(fSSPIAuthContexts[i]);
+      ctxarray.Delete(i);
+    end;
+  // if no auth context specified, create a new one
+  result := true;
+  ndx := ctxarray.Find(connectionID);
+  if ndx < 0 then
+  begin
+    // 1st call: create SecCtxId
+    if High(fSSPIAuthContexts) > MAXSSPIAUTHCONTEXTS then
+    begin
+      fServer.InternalLog('Too many Windows Authenticated session in  pending' +
+        ' state: MAXSSPIAUTHCONTEXTS=%', [MAXSSPIAUTHCONTEXTS], sllUserAuth);
+      exit;
+    end;
+    ndx := ctxarray.New; // add a new entry to fSSPIAuthContexts[]
+    InvalidateSecContext(fSSPIAuthContexts[ndx], connectionID);
+  end;
+  // call SSPI provider
+  if ServerSSPIAuth(fSSPIAuthContexts[ndx], Base64ToBin(indataenc), outdata) then
+  begin
+    if browserauth then
+    begin
+      Ctxt.Call.OutHead :=
+        (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata);
+      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
+      Ctxt.Call.OutBody := StatusCodeToReason(HTTP_UNAUTHORIZED);
+    end
+    else
+      Ctxt.Returns(['result', '',
+                    'data', BinToBase64(outdata)]);
+    exit; // 1st call: send back outdata to the client
+  end;
+  // 2nd call: user was authenticated -> release used context
+  ServerSSPIAuthUser(fSSPIAuthContexts[ndx], username);
+  if sllUserAuth in fServer.fLogFamily.Level then
+    fServer.fLogFamily.SynLog.Log(sllUserAuth, '% Authentication success for %',
+      [SecPackageName(fSSPIAuthContexts[ndx]), username], self);
+  // now client is authenticated -> create a session for aUserName
+  // and send back outdata
+  try
+    if username = '' then
+      exit;
+    user := GetUser(Ctxt,username);
+    if user <> nil then
+    try
+      user.PasswordHashHexa := ''; // override with context
+      fServer.SessionCreate(
+        user, Ctxt, session); // call Ctxt.AuthenticationFailed on error
+      if session <> nil then
+        with session.user do
+          if browserauth then
+            SessionCreateReturns(Ctxt, session, session.fPrivateSalt, '',
+              (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata))
+          else
+            SessionCreateReturns(Ctxt, session,
+              BinToBase64(SecEncrypt(fSSPIAuthContexts[ndx], session.fPrivateSalt)),
+              BinToBase64(outdata),'');
+    finally
+      user.Free;
+    end else
+      Ctxt.AuthenticationFailed(afUnknownUser);
+  finally
+    FreeSecContext(fSSPIAuthContexts[ndx]);
+    ctxarray.Delete(ndx);
+  end;
+end;
+
+{$endif DOMAINRESTAUTH}
+
+
 { ************ TRestServerMonitor for High-Level Statistics of a REST Server }
 
 { TRestServerMonitor }
@@ -5709,8 +5877,11 @@ begin
   fSessionClass := TAuthSession;
   if aHandleUserAuthentication then
     // default mORMot authentication schemes
-    AuthenticationRegister([TRestServerAuthenticationDefault
-      {$ifdef DOMAINAUTH}, TRestServerAuthenticationSSPI{$endif}]);
+    AuthenticationRegister([
+      TRestServerAuthenticationDefault
+      {$ifdef DOMAINRESTAUTH},
+      TRestServerAuthenticationSSPI
+      {$endif DOMAINRESTAUTH}]);
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
   inherited Create(aModel);
   fAfterCreation := true;
@@ -7023,6 +7194,10 @@ initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
     SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
+  {$ifdef DOMAINRESTAUTH}
+  // setup mormot.lib.sspi/gssapi unit depending on the OS
+  InitializeDomainAuth;
+  {$endif DOMAINRESTAUTH}
 
 end.
 
