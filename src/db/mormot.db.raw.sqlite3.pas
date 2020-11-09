@@ -3749,16 +3749,19 @@ begin
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
     fLoader.GetProc(SQLITE3_ENTRIES[i], @P^[i]);
-  if not Assigned(initialize) or not Assigned(libversion) or
-     not Assigned(open) or not Assigned(close) or
-     not Assigned(create_function) or not Assigned(prepare_v2) or
+  if not Assigned(initialize) or
+     not Assigned(libversion) or
+     not Assigned(open) or
+     not Assigned(close) or
+     not Assigned(create_function) or
+     not Assigned(prepare_v2) or
      not Assigned(create_module_v2) then
      // note: some APIs like config() key() or trace() may not be available
   begin
     if Assigned(libversion) then
       vers := libversion
     else
-      vers := nil;
+      vers := 'unknown';
     FreeAndNil(fLoader);
     raise ESQLite3Exception.CreateUTF8(
       '%.Create: TOO OLD % % - need 3.7 at least', [self, LibraryName, vers]);

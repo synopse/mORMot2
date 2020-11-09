@@ -712,7 +712,7 @@ var
   // - see also TWebSocketProcessSettings.LogDetails and
   // TWebSocketProcessSettings.SetFullLog to setup even more verbose information,
   // e.g. by setting HttpServerFullWebSocketsLog and HttpClientFullWebSocketsLog
-  // global variables to true (as defined in mORMotHttpServer/mORMotHttpClient)
+  // global variables to true (as defined in mormot.rest.http.server/client)
   WebSocketLog: TSynLogClass;
 
   /// number of bytes above which SynLZ compression may be done

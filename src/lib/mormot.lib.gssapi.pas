@@ -293,6 +293,7 @@ function gss_compare_oid(oid1, oid2: gss_OID): boolean;
 
 type
   /// GSSAPI Auth context
+  // - first field should be an Int64 ID
   TSecContext = record
     ID: Int64;
     CredHandle: pointer;
@@ -509,7 +510,7 @@ begin
   begin
     if TryLoadLibrary([LibraryName, GSSLib_MIT, GSSLib_Heimdal], nil) then
     begin
-      P := @gss_import_name;
+      P := @@gss_import_name;
       for i := 0 to high(GSS_NAMES) do
         GetProc(GSS_NAMES[i], P^[i]);
       if not Assigned(krb5_gss_register_acceptor_identity) then
