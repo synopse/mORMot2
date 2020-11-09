@@ -38,8 +38,16 @@ uses
 type
   /// used to store a set of 8-bit encoded characters
   TSynAnsicharSet = set of AnsiChar;
+
   /// used to store a set of 8-bit unsigned integers
   TSynByteSet = set of Byte;
+
+  /// a generic callback, which can be used to translate some text on the fly
+  // - maps procedure TLanguageFile.Translate(var English: string) signature
+  // as defined in mORMoti18n.pas
+  // - can be used e.g. for TSynMustache's {{"English text}} callback
+  TOnStringTranslate = procedure(var English: string) of object;
+
 
 /// extract a line from source array of chars
 // - next will contain the beginning of next line, or nil if source if ended
@@ -322,6 +330,7 @@ var
 // - P is expected to be #0 ended
 // - return "string" type, i.e. UnicodeString for Delphi 2009+
 procedure GetCaptionFromPCharLen(P: PUTF8Char; out result: string);
+
 
 
 { ************ CSV-like Iterations over Text Buffers }

@@ -226,6 +226,28 @@ function TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H, M, S, MS: PtrUIn
 function TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
   FirstChar: AnsiChar = 'T'; WithMS: boolean = false): PUTF8Char; overload;
 
+/// convert any date/time Variant into a TDateTime value
+// - would handle varDate kind of variant, or use a string conversion and
+// ISO-8601 parsing if possible
+function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
+
+var
+  /// custom TTimeLog date to ready to be displayed text function
+  // - you can override this pointer in order to display the text according
+  // to your expected i18n settings
+  // - this callback will therefore be set by the mORMoti18n.pas unit
+  // - used e.g. by TTimeLogBits.i18nText and by TOrmTable.ExpandAsString()
+  // methods, i.e. TOrmTableToGrid.DrawCell()
+  i18nDateText: function(const Iso: TTimeLog): string = nil;
+
+  /// custom date to ready to be displayed text function
+  // - you can override this pointer in order to display the text according
+  // to your expected i18n settings
+  // - this callback will therefore be set by the mORMoti18n.pas unit
+  // - used e.g. by TOrmTable.ExpandAsString() method,
+  // i.e. TOrmTableToGrid.DrawCell()
+  i18nDateTimeText: function(const DateTime: TDateTime): string = nil;
+
 
 
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
@@ -562,6 +584,9 @@ type
     // - never truncate to date/time or return '' as Text() does
     function FullText(Dest: PUTF8Char; Expanded: boolean;
       FirstTimeChar: AnsiChar = 'T'; QuotedChar: AnsiChar = #0): PUTF8Char; overload;
+    /// convert to ready-to-be displayed text
+    // - using i18nDateText global event, if set (e.g. by mORMoti18n.pas)
+    function i18nText: string;
     /// extract the Time value of this date/time as floating-point TTime
     function ToTime: TTime;
     /// extract the Date value of this date/time as floating-point TDate
@@ -578,7 +603,7 @@ type
     /// fill Value from specified Date and Time
     procedure From(Y, M, D, HH, MM, SS: cardinal); overload;
      /// fill Value from specified TDateTime
-    procedure From(DateTime: TDateTime; DateOnly: boolean=false); overload;
+    procedure From(DateTime: TDateTime; DateOnly: boolean = false); overload;
     /// fill Value from specified File Date
     procedure From(FileDate: integer); overload;
     /// fill Value from Iso-8601 encoded text
@@ -1196,6 +1221,38 @@ begin
   end;
   Dest^ := #0;
   result := Dest;
+end;
+
+function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
+var
+  tmp: RawUTF8;
+  vd: TVarData;
+  vt: cardinal;
+begin
+  vt := TVarData(V).VType;
+  if vt = varVariant or varByRef then
+    result := VariantToDateTime(PVariant(TVarData(V).VPointer)^, Value)
+  else
+  begin
+    result := true;
+    case vt of
+      varDouble, varDate:
+        Value := TVarData(V).VDouble;
+      varSingle:
+        Value := TVarData(V).VSingle;
+      varCurrency:
+        Value := TVarData(V).VCurrency;
+    else
+      if SetVariantUnRefSimpleValue(V, vd) then
+        result := VariantToDateTime(variant(vd), Value)
+      else
+      begin
+        VariantToUTF8(V, tmp);
+        Iso8601ToDateTimePUTF8CharVar(pointer(tmp), length(tmp), Value);
+        result := Value <> 0;
+      end;
+    end;
+  end;
 end;
 
 
@@ -2199,6 +2256,13 @@ begin
     FullText(tmp{%H-}, Expanded, FirstTimeChar, QuotedChar) - PUTF8Char(@tmp));
 end;
 
+function TTimeLogBits.i18nText: string;
+begin
+  if Assigned(i18nDateText) then
+    result := i18nDateText(Value)
+  else
+    result := {$ifdef UNICODE}Ansi7ToString{$endif}(Text(true, ' '));
+end;
 
 function TimeLogNow: TTimeLog;
 begin

@@ -7809,7 +7809,7 @@ end;
 
 function TrimU(const S: RawUTF8): RawUTF8;
 begin
-  result := Trim(S);
+  result := mormot.core.base.Trim(S);
 end;
 
 procedure TrimCopy(const S: RawUTF8; start, count: PtrInt;

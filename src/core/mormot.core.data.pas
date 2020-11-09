@@ -2553,58 +2553,73 @@ type
     procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUTF8 = #13#10);
     /// return the count of stored RawUTF8
     // - reading this property is not thread-safe, since size may change
-    property Count: PtrInt read GetCount;
+    property Count: PtrInt
+      read GetCount;
     /// set or retrieve the current memory capacity of the RawUTF8 list
     // - reading this property is not thread-safe, since size may change
-    property Capacity: PtrInt read GetCapacity write SetCapacity;
+    property Capacity: PtrInt
+      read GetCapacity write SetCapacity;
     /// set if IndexOf() shall be case sensitive or not
     // - default is TRUE
     // - matches fCaseSensitive in Flags
-    property CaseSensitive: boolean read GetCaseSensitive write SetCaseSensitive;
+    property CaseSensitive: boolean
+      read GetCaseSensitive write SetCaseSensitive;
     /// set if the list doesn't allow duplicated UTF-8 text
     // - if true, an internal hash table is maintained for faster IndexOf()
     // - matches fNoDuplicate in Flags
-    property NoDuplicate: boolean read GetNoDuplicate;
+    property NoDuplicate: boolean
+      read GetNoDuplicate;
     /// access to the low-level flags of this list
-    property Flags: TRawUTF8ListFlags read fFlags write fFlags;
+    property Flags: TRawUTF8ListFlags
+      read fFlags write fFlags;
     /// get or set a RawUTF8 item
     // - returns '' and raise no exception in case of out of range supplied index
     // - if you want to use it with the VCL, use UTF8ToString() function
     // - reading this property is not thread-safe, since content may change
-    property Strings[Index: PtrInt]: RawUTF8 read Get write Put; default;
+    property Strings[Index: PtrInt]: RawUTF8
+      read Get write Put; default;
     /// get or set a Object item
     // - returns nil and raise no exception in case of out of range supplied index
     // - reading this property is not thread-safe, since content may change
-    property Objects[Index: PtrInt]: pointer read GetObject write PutObject;
+    property Objects[Index: PtrInt]: pointer
+      read GetObject write PutObject;
     /// retrieve the corresponding Name when stored as 'Name=Value' pairs
     // - reading this property is not thread-safe, since content may change
     // - consider TSynNameValue if you expect more efficient name/value process
-    property Names[Index: PtrInt]: RawUTF8 read GetName;
+    property Names[Index: PtrInt]: RawUTF8
+      read GetName;
     /// access to the corresponding 'Name=Value' pairs
     // - search on Name is case-insensitive with 'Name=Value' pairs
     // - reading this property is thread-safe, but won't use the hash table
     // - consider TSynNameValue if you expect more efficient name/value process
-    property Values[const Name: RawUTF8]: RawUTF8 read GetValue write SetValue;
+    property Values[const Name: RawUTF8]: RawUTF8
+      read GetValue write SetValue;
     /// the char separator between 'Name=Value' pairs
     // - equals '=' by default
     // - consider TSynNameValue if you expect more efficient name/value process
-    property NameValueSep: AnsiChar read fNameValueSep write fNameValueSep;
+    property NameValueSep: AnsiChar
+      read fNameValueSep write fNameValueSep;
     /// set or retrieve all items as text lines
     // - lines are separated by #13#10 (CRLF) by default; use GetText and
     // SetText methods if you want to use another line delimiter (even a comma)
     // - this property is thread-safe
-    property Text: RawUTF8 read GetTextCRLF write SetTextCRLF;
+    property Text: RawUTF8
+      read GetTextCRLF write SetTextCRLF;
     /// Event triggered when an entry is modified
-    property OnChange: TNotifyEvent read fOnChange write fOnChange;
+    property OnChange: TNotifyEvent
+      read fOnChange write fOnChange;
     /// direct access to the memory of the TRawUTF8DynArray items
     // - reading this property is not thread-safe, since content may change
-    property TextPtr: PPUtf8CharArray read GetTextPtr;
+    property TextPtr: PPUtf8CharArray
+      read GetTextPtr;
     /// direct access to the memory of the TObjectDynArray items
     // - reading this property is not thread-safe, since content may change
-    property ObjectPtr: PPointerArray read GetObjectPtr;
+    property ObjectPtr: PPointerArray
+      read GetObjectPtr;
     /// direct access to the TRawUTF8DynArray items dynamic array wrapper
     // - using this property is not thread-safe, since content may change
-    property ValuesArray: TDynArrayHashed read fValues;
+    property ValuesArray: TDynArrayHashed
+      read fValues;
   end;
 
   PRawUTF8List = ^TRawUTF8List;

@@ -387,7 +387,7 @@ type
   public
     /// initialize the ORM storage, with the associated ORM Server
     constructor Create(aRest: TRest; aServer: TRestOrmServerDB); reintroduce;
-    /// retrieve a list of members as a TSQLTable (implements REST GET Collection)
+    /// retrieve a list of members as a TOrmTable (implements REST GET Collection)
     // - this overridden method call directly the database to get its result,
     // without any URI() call, but with use of DB JSON cache if available
     // - other TRestClientDB methods use URI() function and JSON conversion
@@ -2359,7 +2359,7 @@ begin
       // InternalListJSON will handle both static and DB tables
       result := fServer.ExecuteList(Tables, aSQL)
     else
-      // we access localy the DB -> TSQLTableDB handle Tables parameter
+      // we access localy the DB -> TOrmTableDB handle Tables parameter
       result := TOrmTableDB.Create(fServer.DB, Tables, aSQL,
         not fServer.Owner.NoAJAXJSON);
     if fServer.DB.InternalState <> nil then

@@ -15573,14 +15573,14 @@ begin // Text was already forced to '' because was defined as "out" parameter
 IsDateTime:
         if Value <> 0 then
         begin
-          ValueDateTime := ValueTimeLog.ToDateTime;
           if CustomFormat <> '' then
           begin
+            ValueDateTime := ValueTimeLog.ToDateTime;
             Text := FormatDateTime(CustomFormat, ValueDateTime);
             if Text <> CustomFormat then
               exit; // valid conversion
           end;
-          Text := DateTimeToStr(ValueDateTime); // was i18nText()
+          Text := ValueTimeLog.i18nText;
           exit;
         end;
       end;
