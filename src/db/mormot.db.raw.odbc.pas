@@ -968,7 +968,7 @@ end;
 constructor TODBCLib.Create;
 var
   P: PPointerArray;
-  i: integer;
+  i: PtrInt;
 begin
   TryLoadLibrary([ODBC_LIB], EODBCException);
   P := @@AllocEnv;

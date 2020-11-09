@@ -501,33 +501,43 @@ procedure LoadGSSAPI(const LibraryName: TFileName);
 var
   i: PtrInt;
   P: PPointerArray;
+  api: TGSSAPI;
 begin
   if GSSAPI <> nil then
     // already loaded
     exit;
-  GSSAPI := TGSSAPI.Create;
-  with GSSAPI do
+  api := TGSSAPI.Create;
+  if api.TryLoadLibrary([LibraryName, GSSLib_MIT, GSSLib_Heimdal], nil) then
   begin
-    if TryLoadLibrary([LibraryName, GSSLib_MIT, GSSLib_Heimdal], nil) then
+    P := @@api.gss_import_name;
+    for i := 0 to high(GSS_NAMES) do
+      api.GetProc(GSS_NAMES[i], @P^[i]);
+    if not Assigned(api.krb5_gss_register_acceptor_identity) then
+      // try alternate function name
+      api.GetProc('gsskrb5_register_acceptor_identity',
+        @api.krb5_gss_register_acceptor_identity);
+    if Assigned(api.gss_acquire_cred) and
+       Assigned(api.gss_accept_sec_context) and
+       Assigned(api.gss_release_buffer) and
+       Assigned(api.gss_inquire_context) and
+       Assigned(api.gss_display_name) and
+       Assigned(api.gss_release_name) then
     begin
-      P := @@gss_import_name;
-      for i := 0 to high(GSS_NAMES) do
-        GetProc(GSS_NAMES[i], P^[i]);
-      if not Assigned(krb5_gss_register_acceptor_identity) then
-        // try alternate function name
-        GetProc('gsskrb5_register_acceptor_identity',
-          @krb5_gss_register_acceptor_identity);
-      if Assigned(gss_acquire_cred) and
-         Assigned(gss_accept_sec_context) and
-         Assigned(gss_release_buffer) and
-         Assigned(gss_inquire_context) and
-         Assigned(gss_display_name) and
-         Assigned(gss_release_name) then
-       // minimal API to work on server side
-       exit;
+      // minimal API to work on server side -> thread safe setup into GSSAPI
+      GlobalLock;
+      try
+        if GSSAPI = nil then
+        begin
+          GSSAPI := api;
+          exit;
+        end;
+      finally
+        GlobalUnlock;
+      end;
     end;
   end;
-  FreeAndNil(GSSAPI);
+  // always release on setup failure
+  api.Free;
 end;
 
 function GSSAPILoaded: boolean;
@@ -538,9 +548,8 @@ end;
 procedure RequireGSSAPI;
 begin
   if GSSAPI = nil then
-    raise ENotSupportedException.Create(
-      'No GSSAPI library found - please install ' +
-      'either MIT or Heimdal GSSAPI implementation');
+    raise ENotSupportedException.Create('No GSSAPI library found - please ' +
+      'install either MIT or Heimdal GSSAPI implementation');
 end;
 
 

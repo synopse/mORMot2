@@ -2635,11 +2635,11 @@ function TSynLibrary.GetProc(ProcName: PChar; Entry: PPointer;
   RaiseExceptionOnFailure: ExceptionClass): boolean;
 begin
   if (Entry = nil) or
-     (Handle = 0) then
+     (fHandle = 0) then
     result := false // avoid GPF
   else
   begin
-    Entry^ := GetProcAddress(Handle, ProcName);
+    Entry^ := GetProcAddress(fHandle, ProcName);
     result := Entry^ <> nil;
   end;
   if (RaiseExceptionOnFailure <> nil) and
