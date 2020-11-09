@@ -541,7 +541,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="72">
+    <Units Count="73">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -830,6 +830,10 @@
         <Filename Value="..\src\lib\mormot.lib.gssapi.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit71>
+      <Unit72>
+        <Filename Value="..\src\lib\mormot.lib.sspi.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit72>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

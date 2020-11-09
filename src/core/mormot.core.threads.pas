@@ -864,7 +864,7 @@ type
 
 
 const
-  // up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
+  // allow up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
   THREADPOOL_MAXSUBTHREADS = 256;
 
 
