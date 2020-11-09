@@ -751,7 +751,8 @@ var
   i: PtrInt;
   log: ISynLog;
 begin
-  if (self <> nil) and not fShutdownInProgress then
+  if (self <> nil) and
+     not fShutdownInProgress then
   begin
     log := fLog.Enter('Shutdown(%)', [BOOL_STR[noRestServerShutdown]], self);
     fShutdownInProgress := true;

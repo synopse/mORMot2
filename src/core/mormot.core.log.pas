@@ -5044,8 +5044,10 @@ begin
     FastSetString(fExeName, PBeg, P - PBeg + 1);
     PBeg := PUTF8Char(fLines[1]) + 5;
     PEnd := PUTF8Char(fLines[1]) + LineSize(1);
-    if not GetOne(' USER=', fHost) or not GetOne(' CPU=', fUser) or
-       not GetOne(' OS=', fCPU) or not GetOne(' WOW64=', fOsDetailed) or
+    if not GetOne(' USER=', fHost) or
+       not GetOne(' CPU=', fUser) or
+       not GetOne(' OS=', fCPU) or
+       not GetOne(' WOW64=', fOsDetailed) or
        not GetOne(' FREQ=', aWow64) then
       exit;
     Split(fCPU, ':', fCpu, feat);

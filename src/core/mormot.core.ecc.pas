@@ -1838,8 +1838,8 @@ begin
         priv := @Authority.fPrivateKey;
         pub := @Authority.fContent.Signed.PublicKey;
         if ParanoidVerify then // check below will be on Authority keys
-          if not ecdsa_sign(fPrivateKey, hash{%H-}, temp) or not ecdsa_verify(PublicKey,
-            hash, temp) then
+          if not ecdsa_sign(fPrivateKey, hash{%H-}, temp) or
+             not ecdsa_verify(PublicKey, hash, temp) then
             if retry then
               raise EECCException.CreateUTF8('%.CreateNew: ParanoidVerify1?', [self])
             else
@@ -1848,7 +1848,8 @@ begin
       sha.Full(@fContent.Signed, sizeof(TECCCertificateSigned), hash);
       if not ecdsa_sign(priv^, hash, fContent.Signature) then
         raise EECCException.CreateUTF8('%.CreateNew: ecdsa_sign?', [self]);
-      if not ParanoidVerify or ecdsa_verify(pub^, hash, fContent.Signature) then
+      if not ParanoidVerify or
+         ecdsa_verify(pub^, hash, fContent.Signature) then
         break
       else if retry then
         raise EECCException.CreateUTF8('%.CreateNew: ParanoidVerify2?', [self]);
@@ -1858,7 +1859,8 @@ begin
 end;
 
 constructor TECCCertificateSecret.CreateFromSecureBinary(const Binary:
-  RawByteString; const PassWord: RawUTF8; PBKDF2Rounds: integer; AES: TAESAbstractClass);
+  RawByteString; const PassWord: RawUTF8; PBKDF2Rounds: integer;
+  AES: TAESAbstractClass);
 begin
   CreateFromSecureBinary(pointer(Binary), length(Binary), PassWord, PBKDF2Rounds, AES);
 end;
@@ -1881,10 +1883,11 @@ begin
 end;
 
 constructor TECCCertificateSecret.CreateFromSecureFile(const FolderName:
-  TFileName; const Serial, PassWord: RawUTF8; PBKDF2Rounds: integer; AES:
-  TAESAbstractClass);
+  TFileName; const Serial, PassWord: RawUTF8; PBKDF2Rounds: integer;
+  AES: TAESAbstractClass);
 begin
-  CreateFromSecureFile(IncludeTrailingPathDelimiter(FolderName) + UTF8ToString(Serial),
+  CreateFromSecureFile(
+    IncludeTrailingPathDelimiter(FolderName) + UTF8ToString(Serial),
     PassWord, PBKDF2Rounds, AES);
 end;
 
@@ -1896,7 +1899,8 @@ end;
 
 function TECCCertificateSecret.InternalLoad(const data: RawByteString): boolean;
 begin
-  result := fStoreOnlyPublicKey or TAESPRNG.AFUnsplit(data, fPrivateKey, sizeof(fPrivateKey));
+  result := fStoreOnlyPublicKey or
+            TAESPRNG.AFUnsplit(data, fPrivateKey, sizeof(fPrivateKey));
 end;
 
 function TECCCertificateSecret.InternalSave: RawByteString;
@@ -1904,7 +1908,8 @@ begin
   if fStoreOnlyPublicKey then
     result := ''
   else
-    result := TAESPRNG.Main.AFSplit(fPrivateKey, sizeof(fPrivateKey), fAFSplitStripes);
+    result := TAESPRNG.Main.AFSplit(
+                fPrivateKey, sizeof(fPrivateKey), fAFSplitStripes);
 end;
 
 function TECCCertificateSecret.HasSecret: boolean;
@@ -1914,8 +1919,11 @@ begin
 end;
 
 const
-  PRIVKEY_MAGIC: array[0..15] of AnsiChar = 'SynEccPrivatKey'#26;
-  PRIVKEY_SALTSIZE = 16; // 128-bit is enough, since it is transmitted as clear
+  // header of a private key binary file
+  PRIVKEY_MAGIC: array[0..15] of AnsiChar =
+    'SynEccPrivatKey'#26;
+  // 128-bit is enough, since it is transmitted as clear
+  PRIVKEY_SALTSIZE = 16;
 
 function TECCCertificateSecret.SaveToSecureBinary(const PassWord: RawUTF8;
   AFStripes, PBKDF2Rounds: integer; AES: TAESAbstractClass; NoHeader: boolean):
@@ -1970,7 +1978,8 @@ begin
   end;
 end;
 
-function TECCCertificateSecret.SaveToSecureFileName(FileNumber: integer): TFileName;
+function TECCCertificateSecret.SaveToSecureFileName(
+  FileNumber: integer): TFileName;
 var
   tmp: RawUTF8;
 begin
@@ -1986,9 +1995,9 @@ begin
   end;
 end;
 
-function TECCCertificateSecret.SaveToSecureFile(const PassWord: RawUTF8; const
-  DestFolder: TFileName; AFStripes, PBKDF2Rounds: integer; AES:
-  TAESAbstractClass; NoHeader: boolean): boolean;
+function TECCCertificateSecret.SaveToSecureFile(const PassWord: RawUTF8;
+  const DestFolder: TFileName; AFStripes, PBKDF2Rounds: integer;
+  AES: TAESAbstractClass; NoHeader: boolean): boolean;
 begin
   if (self = nil) or
      not DirectoryExists(DestFolder) then
@@ -1999,9 +2008,9 @@ begin
       SaveToSecureFileName);
 end;
 
-function TECCCertificateSecret.SaveToSecureFiles(const PassWord: RawUTF8; const
-  DestFolder: TFileName; DestFileCount, AFStripes, PBKDF2Rounds: integer; AES:
-  TAESAbstractClass; NoHeader: boolean): boolean;
+function TECCCertificateSecret.SaveToSecureFiles(const PassWord: RawUTF8;
+  const DestFolder: TFileName; DestFileCount, AFStripes, PBKDF2Rounds: integer;
+  AES: TAESAbstractClass; NoHeader: boolean): boolean;
 var
   diff, one: RawByteString;
   head, index, pos, difflen, onechunk, onelen: integer;
@@ -2010,8 +2019,8 @@ var
 begin
   if DestFileCount = 1 then
   begin
-    result := SaveToSecureFile(PassWord, DestFolder, AFStripes, PBKDF2Rounds,
-      AES, NoHeader);
+    result := SaveToSecureFile(
+      PassWord, DestFolder, AFStripes, PBKDF2Rounds, AES, NoHeader);
     exit;
   end;
   result := false;
@@ -2022,8 +2031,8 @@ begin
     exit;
   if DestFileCount > 255 then
     DestFileCount := 255;
-  diff := SaveToSecureBinary(PassWord, AFStripes * DestFileCount, PBKDF2Rounds,
-    AES, true);
+  diff := SaveToSecureBinary(
+    PassWord, AFStripes * DestFileCount, PBKDF2Rounds, AES, true);
   difflen := length(diff);
   onechunk := difflen div DestFileCount;
   if NoHeader then
@@ -2049,11 +2058,12 @@ begin
   result := true;
 end;
 
-function TECCCertificateSecret.LoadFromSecureBinary(const Binary: RawByteString;
-  const PassWord: RawUTF8; PBKDF2Rounds: integer; AES: TAESAbstractClass): boolean;
+function TECCCertificateSecret.LoadFromSecureBinary(
+  const Binary: RawByteString; const PassWord: RawUTF8;
+  PBKDF2Rounds: integer; AES: TAESAbstractClass): boolean;
 begin
-  result := LoadFromSecureBinary(pointer(Binary), length(Binary), PassWord,
-    PBKDF2Rounds, AES);
+  result := LoadFromSecureBinary(
+    pointer(Binary), length(Binary), PassWord, PBKDF2Rounds, AES);
 end;
 
 function TECCCertificateSecret.LoadFromSecureBinary(Data: pointer; Len: integer;
@@ -2076,7 +2086,8 @@ begin
     head := 16;
   end
   else
-    head := 0; // was with NoHeader=true (e.g. SaveToSource)
+    // was with NoHeader=true (e.g. SaveToSource)
+    head := 0;
   if Len and AESBlockMod <> 0 then
     exit;
   SetString(salt, PAnsiChar(Data) + head, PRIVKEY_SALTSIZE);
@@ -2117,7 +2128,8 @@ begin
     FN := FileName + ECCCERTIFICATESECRET_FILEEXT
   else
     FN := FileName;
-  result := LoadFromSecureBinary(StringFromFile(FN), PassWord, PBKDF2Rounds, AES);
+  result := LoadFromSecureBinary(
+    StringFromFile(FN), PassWord, PBKDF2Rounds, AES);
 end;
 
 function TECCCertificateSecret.SaveToSource(
@@ -2132,7 +2144,8 @@ begin
   if (self = nil) or
      (PassWord = '') then
     exit;
-  data := SaveToSecureBinary(PassWord, AFStripes, PBKDF2Rounds, AES, true); // NoHeader=true
+  data := SaveToSecureBinary(
+    PassWord, AFStripes, PBKDF2Rounds, AES, {NoHeader=}true);
   if data = '' then
     exit;
   if ConstName = '' then
@@ -2149,8 +2162,8 @@ begin
   suffix := FormatUTF8('  %_ROUNDS = %;'#13#10'%',
     [name, PBKDF2Rounds, suffix]);
   if IncludeRaw then
-    suffix := FormatUTF8('  %_RAW = ''%'';'#13#10'%',
-      [name, mormot.core.text.BinToHex(@fPrivateKey, sizeof(fPrivateKey)), suffix]);
+    suffix := FormatUTF8('  %_RAW = ''%'';'#13#10'%', [name,
+      mormot.core.text.BinToHex(@fPrivateKey, sizeof(fPrivateKey)), suffix]);
   result := BinToSource(name, Comment, pointer(data), length(data), 16, suffix)
 end;
 
@@ -2195,14 +2208,16 @@ begin
   sign := SignToBase64(sha);
   meta.InitObject([
     'name', ExtractFileName(FileToSign),
-    'date', DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))], JSON_OPTIONS_FAST);
+    'date', DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))],
+    JSON_OPTIONS_FAST);
   meta.AddNameValuesToObject(MetaNameValuePairs);
   doc.InitObject([
     'meta', variant(meta),
     'size', length(content),
     'md5', MD5(content),
     'sha256', SHA256DigestToString(sha),
-    'sign', sign], JSON_OPTIONS_FAST);
+    'sign', sign],
+    JSON_OPTIONS_FAST);
   result := FileToSign + ECCCERTIFICATESIGN_FILEEXT;
   FileFromString(doc.ToJSON('', '', jsonHumanReadable), result);
 end;
@@ -2234,7 +2249,8 @@ begin
       exit;
     end;
     SetLength(secret, sizeof(TECCSecretKey));
-    if not ecdh_shared_secret(head.rndpub, fPrivateKey, PECCSecretKey(secret)^) then
+    if not ecdh_shared_secret(
+        head.rndpub, fPrivateKey, PECCSecretKey(secret)^) then
       exit;
     PBKDF2_HMAC_SHA256(secret, MACSalt, MACRounds, mackey, 'hmac');
     HMAC_SHA256(@mackey, data, sizeof(mackey), datalen, hmac);

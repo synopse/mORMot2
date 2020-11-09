@@ -2661,8 +2661,10 @@ var
   var
     av, fr, tot: QWord;
   begin
-    if not withfreespace or not GetDiskInfo(p.mounted, av, fr, tot) then
-      FormatShort('% % (%)', [p.mounted, p.name, KB(p.size, nospace)], result)
+    if not withfreespace or
+       not GetDiskInfo(p.mounted, av, fr, tot) then
+      FormatShort('% % (%)',
+        [p.mounted, p.name, KB(p.size, nospace)], result)
     else
       FormatShort(F[nospace],
         [p.mounted, p.name, KB(fr, nospace), KB(tot, nospace)], result);
@@ -2674,7 +2676,8 @@ begin
   begin
     _DiskPartitions := GetDiskPartitions;
     {$ifndef MSWINDOWS}
-    DynArray(TypeInfo(TDiskPartitions), _DiskPartitions).Sort(SortDynArrayDiskPartitions);
+    DynArray(TypeInfo(TDiskPartitions), _DiskPartitions).
+      Sort(SortDynArrayDiskPartitions);
     {$endif MSWINDOWS}
   end;
   parts := _DiskPartitions;

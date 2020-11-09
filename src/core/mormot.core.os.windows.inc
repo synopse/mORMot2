@@ -377,7 +377,8 @@ function SwitchToThread: BOOL; stdcall; external kernel32 name 'SwitchToThread';
 
 procedure SleepHiRes(ms: cardinal);
 begin
-  if (ms <> 0) or not SwitchToThread then
+  if (ms <> 0) or
+     not SwitchToThread then
     Windows.Sleep(ms);
 end;
 

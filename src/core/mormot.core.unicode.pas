@@ -2690,8 +2690,8 @@ end;
 
 const
   /// reference set for WinAnsi to Unicode conversion
-  // - this table contain sall the unicode codepoints corresponding to
-  // the Ansi Code page 1252 (i.e. WinAnsi), which unicode value are > 255
+  // - this table contains all the Unicode codepoints corresponding to
+  // the Ansi Code Page 1252 (i.e. WinAnsi), which Unicode value are > 255
   // - values taken from MultiByteToWideChar(1252,0,@Tmp,256,@WinAnsiTable,256)
   // so these values are available outside the Windows platforms (e.g. Linux/BSD)
   // and even if registry has been tweaked as such:

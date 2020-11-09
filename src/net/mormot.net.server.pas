@@ -1772,7 +1772,8 @@ var
     try
       ExtractNameValue(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
       fn := UTF8ToString(ctxt.OutContent);
-      if not Assigned(fOnSendFile) or not fOnSendFile(ctxt, fn) then
+      if not Assigned(fOnSendFile) or
+         not fOnSendFile(ctxt, fn) then
       begin
         fs := TFileStream.Create(fn, fmOpenRead or fmShareDenyNone);
         try

@@ -32,7 +32,8 @@ uses
   sysutils,
   classes,
   mormot.core.base,
-  mormot.core.os;
+  mormot.core.os,
+  mormot.core.unicode;
 
 
 { ****************** Low-Level libgssapi_krb5/libgssapi.so Library Access }
@@ -773,41 +774,6 @@ begin
   end;
   result := ClientSSPIAuthWorker(
     aSecContext, aInData, ForceSecKerberosSPN, aOutData);
-end;
-
-function IdemPChar(p, up: PUTF8Char): boolean;
-var
-  c, u: AnsiChar;
-begin
-  result := false;
-  if (p = nil) or
-     (up = nil) then
-    exit;
-  repeat
-    u := up^;
-    if u = #0 then
-      break;
-    inc(up);
-    c := p^;
-    inc(p);
-    if (c >= 'a') and
-       (c <= 'z') then
-      dec(c, 32);
-    if c <> u then
-      exit;
-  until false;
-  result := true;
-end;
-
-function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char; inline;
-begin
-  result := nil;
-  if Str <> nil then
-    repeat
-      if Str^ = #0 then
-        exit;
-    until Str^ = Chr;
-  result := Str;
 end;
 
 function ServerSSPIAuth(var aSecContext: TSecContext;

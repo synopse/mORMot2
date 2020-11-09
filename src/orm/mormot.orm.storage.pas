@@ -2736,7 +2736,8 @@ begin
           // save rows as JSON, with appropriate search according to Where.* arguments
           MS := TRawByteStringStream.Create;
           try
-            ForceAJAX := ForceAJAX or not Owner.Owner.NoAJAXJSON;
+            ForceAJAX := ForceAJAX or
+                         not Owner.Owner.NoAJAXJSON;
             ResCount := GetJSONValues(MS, ForceAJAX, Stmt);
             result := MS.DataString;
           finally

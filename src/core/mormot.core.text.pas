@@ -10207,13 +10207,16 @@ begin // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   inc(PByte(guid), 4);
   for i := 1 to 2 do
   begin
-    if (P^ <> '-') or not HexaToByte(P + 1, guid[1]) or
+    if (P^ <> '-') or
+       not HexaToByte(P + 1, guid[1]) or
        not HexaToByte(P + 3, guid[0]) then
       exit;
     inc(P, 5);
     inc(PByte(guid), 2);
   end;
-  if (P[0] <> '-') or (P[5] <> '-') or not HexaToByte(P + 1, guid[0]) or
+  if (P[0] <> '-') or
+     (P[5] <> '-') or
+     not HexaToByte(P + 1, guid[0]) or
      not HexaToByte(P + 3, guid[1]) then
     exit;
   inc(PByte(guid), 2);
@@ -10235,13 +10238,15 @@ begin
   if aStream = nil then
     exit;
   current := aStream.Position;
-  if (current = 0) and aStream.InheritsFrom(TRawByteStringStream) then
+  if (current = 0) and
+     aStream.InheritsFrom(TRawByteStringStream) then
   begin
     result := TRawByteStringStream(aStream).DataString; // fast COW
     exit;
   end;
   size := aStream.Size - current;
-  if (size = 0) or (size > maxInt) then
+  if (size = 0) or
+     (size > maxInt) then
     exit;
   SetLength(result, size);
   aStream.Read(pointer(result)^, size);

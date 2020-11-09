@@ -8304,7 +8304,8 @@ begin
   // paranoid basic execution on Darwin x64 (as reported by alf)
   CpuFeatures := CpuFeatures - [cfSSE42, cfAESNI, cfAVX, cfAVX2, cfFMA];
   {$else}
-  if not (cfOSXS in CpuFeatures) or not IsXmmYmmOSEnabled then
+  if not (cfOSXS in CpuFeatures) or
+     not IsXmmYmmOSEnabled then
     // available on the CPU, but not supported at OS level during context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
   {$endif DISABLE_SSE42}

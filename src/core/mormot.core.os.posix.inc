@@ -44,7 +44,8 @@ const
   NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD;
-  lpString1: PWideChar; cchCount1: longint; lpString2: PWideChar; cchCount2: longint): longint;
+  lpString1: PWideChar; cchCount1: longint;
+  lpString2: PWideChar; cchCount2: longint): longint;
 var
   U1, U2: UnicodeString; // faster than WideString on Windows
 begin
@@ -55,23 +56,28 @@ begin
   if cchCount2 < 0 then
     cchCount2 := StrLenW(lpString2);
   SetString(U2, lpString2, cchCount2);
-  result := widestringmanager.CompareUnicodeStringProc(U1, U2, TCompareOptions(dwCmpFlags)) + 2;
+  result := widestringmanager.CompareUnicodeStringProc(
+    U1, U2, TCompareOptions(dwCmpFlags)) + 2;
 end;
 
-function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
+function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar;
+  LA, LW, CodePage: PtrInt): integer;
 var
   tmp: UnicodeString; // not called often on UNIX which is likely to be UTF-8
 begin
-  widestringmanager.Ansi2UnicodeMoveProc(A, {$ifdef ISFPC27}CodePage, {$endif} tmp, LA);
+  widestringmanager.Ansi2UnicodeMoveProc(
+    A, {$ifdef ISFPC27}CodePage, {$endif} tmp, LA);
   result := length(tmp);
   MoveFast(Pointer(tmp)^, W^, result * 2);
 end;
 
-function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar;
+  LW, LA, CodePage: PtrInt): integer;
 var
   tmp: RawByteString;
 begin
-  widestringmanager.Unicode2AnsiMoveProc(W, tmp, {$ifdef ISFPC27}CodePage, {$endif} LA);
+  widestringmanager.Unicode2AnsiMoveProc(
+    W, tmp, {$ifdef ISFPC27}CodePage, {$endif} LA);
   result := length(tmp);
   MoveFast(Pointer(tmp)^, A^, result);
 end;
@@ -314,15 +320,18 @@ var
   {$endif LINUXNOTBSD}
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
-var trunc: array[0..15] of AnsiChar; // truncated to 16 non space chars (including #0)
-    i, L: integer;
+var
+  // truncated to 16 non space chars (including #0)
+  trunc: array[0..15] of AnsiChar;
+  i, L: integer;
 begin
   if Name = '' then
     exit;
   L := 0; // trim unrelevant spaces and prefixes when filling the 16 chars
   i := 1;
   if Name[1] = 'T' then
-    if PCardinal(Name)^ = ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24 then
+    if PCardinal(Name)^ =
+         ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24 then
       i := 5
     else
       i := 2;
@@ -389,14 +398,16 @@ begin
   result := FileSetDate(Dest, FileGetDate(SourceHandle)) = 0;
 end;
 
-function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
+function FileSetDateFromWindowsTime(const Dest: TFileName;
+  WinTime: integer): boolean;
 var
   date, time: TDateTime;
 begin
   with PLongRec(@WinTime)^ do
-  result := TryEncodeDate(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, date) and
-            TryEncodeTime(Lo shr 11, Lo shr 5 and 63, Lo and 31 shl 1, 0, time) and
-            (FileSetDate(Dest, DateTimeToFileDate(date + time)) = 0);
+  result :=
+    TryEncodeDate(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, date) and
+    TryEncodeTime(Lo shr 11, Lo shr 5 and 63, Lo and 31 shl 1, 0, time) and
+    (FileSetDate(Dest, DateTimeToFileDate(date + time)) = 0);
 end;
 
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
@@ -472,7 +483,8 @@ begin
       FileCreateDateTime := lastreadaccess;
 end;
 
-function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+function CopyFile(const Source, Target: TFileName;
+  FailIfExists: boolean): boolean;
 var
   SourceF, DestF: TFileStream;
 begin
@@ -1067,9 +1079,12 @@ begin
         begin
           //  ~/.cache/appname
           _UserPath := GetEnvironmentVariable('XDG_CACHE_HOME');
-          if (_UserPath = '') or not IsDirectoryWritable(_UserPath) then
-            _UserPath := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
-          _UserPath := EnsureDirectoryExists(_UserPath + TFileName(ExeVersion.ProgramName));
+          if (_UserPath = '') or
+             not IsDirectoryWritable(_UserPath) then
+            _UserPath := EnsureDirectoryExists(
+              GetSystemPath(spUserDocuments) + '.cache');
+          _UserPath := EnsureDirectoryExists(
+            _UserPath + TFileName(ExeVersion.ProgramName));
         end;
         result := _UserPath;
       end;
@@ -1093,7 +1108,8 @@ begin
     begin
       if _HomePath = '' then
         // POSIX requires a value for $HOME
-        _HomePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
+        _HomePath := IncludeTrailingPathDelimiter(
+          GetEnvironmentVariable('HOME'));
       result := _HomePath;
     end;
   end;
@@ -1375,18 +1391,22 @@ begin
     for i := 0 to Size - 1 do // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
   PageSize := SystemInfo.dwPageSize;
-  AlignedAddr := Pointer((PtrUInt(Old) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+  AlignedAddr :=
+    Pointer((PtrUInt(Old) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
   while PtrUInt(Old) + PtrUInt(Size) >= PtrUInt(AlignedAddr) + PageSize do
     Inc(PageSize, SystemInfo.dwPageSize);
-  ProtectedResult := SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
+  ProtectedResult := SynMProtect(
+    AlignedAddr, PageSize, PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
   ProtectedMemory := not ProtectedResult;
   if ProtectedMemory then
-    ProtectedResult := SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_WRITE) = 0;
+    ProtectedResult := SynMProtect(
+      AlignedAddr, PageSize, PROT_READ or PROT_WRITE) = 0;
   if ProtectedResult then
   try
     for i := 0 to Size - 1 do // do not use Move() here
       PByteArray(Old)^[i] := PByteArray(New)^[i];
-    if not LeaveUnprotected and ProtectedMemory then
+    if not LeaveUnprotected and
+       ProtectedMemory then
       SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_EXEC);
   except
   end;
@@ -1426,7 +1446,8 @@ begin
   begin
     // try whole -STUB_INTERV..+STUB_INTERV range
     inc(start, STUB_SIZE);
-    result := fpmmap(pointer(start), STUB_SIZE, flProtect, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+    result := fpmmap(pointer(start), STUB_SIZE,
+      flProtect, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
     if result <> MAP_FAILED then
     begin
       // close enough for a 24/32-bit relative jump?
@@ -1448,7 +1469,8 @@ end;
 // other platforms (Intel+Arm64) use plain Kernel call
 function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
 begin
-  result := fpmmap(nil, STUB_SIZE, flProtect, MAP_PRIVATE OR MAP_ANONYMOUS, -1, 0);
+  result := fpmmap(nil, STUB_SIZE,
+    flProtect, MAP_PRIVATE OR MAP_ANONYMOUS, -1, 0);
 end;
 
 {$endif CPUARM}
@@ -1574,7 +1596,8 @@ begin
     if (dist <> '') and
        (PosExChar('=', dist) = 0) and
        (PosExChar(' ', dist) > 0) then
-      SetLinuxDistrib(dist) // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
+      // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
+      SetLinuxDistrib(dist)
     else
       dist := '';
     FindClose(SR);
@@ -1600,9 +1623,11 @@ begin
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
   P := @uts.release[0];
-  KernelRevision := GetNextCardinal(P) shl 16 + GetNextCardinal(P) shl 8 +
-    GetNextCardinal(P);
-  OSVersionInt32 := integer(KernelRevision shl 8) + ord(OS_KIND);
+  KernelRevision := GetNextCardinal(P) shl 16 +
+                    GetNextCardinal(P) shl 8 +
+                    GetNextCardinal(P);
+  OSVersionInt32 := integer(KernelRevision shl 8) +
+                    ord(OS_KIND);
   with SystemInfo.uts do
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then
@@ -1644,7 +1669,8 @@ begin
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
   if (clock_gettime(CLOCK_REALTIME_FAST, @tp) <> 0) or // paranoid check
      (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) then
-    raise Exception.CreateFmt('clock_gettime() not supported by %s kernel - errno=%d',
+    raise EOSException.CreateFmt(
+      'clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);
   {$endif LINUX}
   {$endif DARWIN}

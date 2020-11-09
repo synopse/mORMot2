@@ -26,7 +26,7 @@ unit mormot.orm.core;
     - TOrm High-Level Parents
 
    This unit is not depending from mormot.rest.core so can be used as a pure
-   ORM layer for your projects. IRestOrm is the main abstract entry point.
+   ORM layer for your projects. IRestOrm is the main SOLID entry point.
 
   *****************************************************************************
 }
@@ -13979,7 +13979,8 @@ begin
       begin
         if Assigned(OnExportValue) then
           W.AddString(OnExportValue(self, R, F, false))
-        else if Tab or not IsStringJSON(U^) then
+        else if Tab or
+                not IsStringJSON(U^) then
           W.AddNoJSONEscape(U^, StrLen(U^))
         else
         begin
@@ -17121,7 +17122,8 @@ begin
       rCustomForcedID, rCustomAutoID:
         begin
           M := aModel.VirtualTableModule(self);
-          if (M = nil) or not Assigned(GetVirtualTableModuleName) then
+          if (M = nil) or
+             not Assigned(GetVirtualTableModuleName) then
             raise EModelException.CreateUTF8('No registered module for %', [self]);
           mname := GetVirtualTableModuleName(M);
           if Props.Props.Fields.Count = 0 then
@@ -20422,7 +20424,8 @@ begin
   result := false;
   if aClass = nil then
     exit;
-  if (aModule = nil) or not Assigned(GetVirtualTableModuleName) or
+  if (aModule = nil) or
+     not Assigned(GetVirtualTableModuleName) or
      (GetVirtualTableModuleName(aModule) = '') then
     raise EModelException.CreateUTF8('Unexpected %.VirtualTableRegister(%,%)',
       [self, aClass, aModule]);
