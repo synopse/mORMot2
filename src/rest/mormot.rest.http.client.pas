@@ -280,7 +280,7 @@ type
   // to upgrade its HTTP connection to the WebSockets protocol, so that the
   // server may be able to notify the client via a callback
   // - the internal Socket class will be in fact a THttpClientWebSockets
-  // instance, as defined in the SynBidirSock unit
+  // instance, as defined in the mormot.net.ws.client unit
   TRestHttpClientWebsockets = class(TRestHttpClientWinSock)
   protected
     fWebSocketParams: record

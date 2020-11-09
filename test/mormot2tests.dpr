@@ -39,6 +39,7 @@ uses
   mormot.lib.lizard        in '..\src\lib\mormot.lib.lizard.pas',
   mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
   mormot.net.http          in '..\src\net\mormot.net.http.pas',
+  mormot.net.relay         in '..\src\net\mormot.net.relay.pas',
   mormot.lib.winhttp       in '..\src\lib\mormot.lib.winhttp.pas',
   mormot.lib.curl          in '..\src\lib\mormot.lib.curl.pas',
   mormot.lib.sspi          in '..\src\lib\mormot.lib.sspi.pas',

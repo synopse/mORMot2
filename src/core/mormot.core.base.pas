@@ -3537,6 +3537,11 @@ function StatusCodeToReason(Code: cardinal): RawUTF8;
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check the supplied HTTP header to not contain more than one EOL
+// - to avoid unexpected HTTP body injection, e.g. from unsafe business code
+function IsInvalidHttpHeader(head: PUTF8Char; headlen: PtrInt): boolean;
+
+
 
 implementation
 
@@ -10750,6 +10755,20 @@ begin
   result := (Code >= HTTP_SUCCESS) and
             (Code < HTTP_BADREQUEST); // 200..399
 end;
+
+function IsInvalidHttpHeader(head: PUTF8Char; headlen: PtrInt): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to headlen - 3 do
+    if (PInteger(head + i)^ = $0a0d0a0d) or
+       (PWord(head + i)^ = $0d0d) or (PWord(head + i)^ = $0a0a) then
+      exit;
+  result := false;
+end;
+
+
 
 procedure InitializeUnit;
 var

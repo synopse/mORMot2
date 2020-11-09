@@ -2206,7 +2206,7 @@ type
     // which will perform all update operations as expected
     // - the callback process will be blocking for the ORM write point of view:
     // so it should be as fast as possible, or asynchronous - note that regular
-    // callbacks using WebSockets, as implemented by SynBidirSock.pas and
+    // callbacks using WebSockets, as implemented by mormot.net.ws.core.server and
     // mormot.rest.http.server's TRestHttpServer on useBidirSocket, are asynchronous
     // - if the supplied RecordVersion is not the latest on the server side,
     // this method will return FALSE and the caller should synchronize again via

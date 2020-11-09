@@ -1031,6 +1031,12 @@ function CpuFeaturesText: RawUTF8;
 // - including Host, User, CPU, OS, freemem, freedisk...
 function SystemInfoJson: RawUTF8;
 
+/// returns a TDocVariant array of the latest intercepted exception texts
+// - runs ToText() over all information returned by overloaded GetLastExceptions
+// - defined in this unit to have TDocVariant at hand
+function GetLastExceptions(Depth: integer = 0): variant; overload;
+
+
 
 { ************ TSynFPUException Wrapper for FPU Flags Preservation }
 
@@ -2340,12 +2346,32 @@ begin
   else
     free := TSynMonitorMemory.FreeAsText;
   with SystemInfo do
-    result := JSONEncode(['host', ExeVersion.Host, 'user', ExeVersion.User,
-      'os', OSVersionText, 'cpu', CpuInfoText, 'bios', BiosInfoText,
+    result := JSONEncode([
+      'host', ExeVersion.Host,
+      'user', ExeVersion.User,
+      'os', OSVersionText,
+      'cpu', CpuInfoText,
+      'bios', BiosInfoText,
       {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64', IsWow64, {$endif}{$endif MSWINDOWS}
       {$ifdef CPUINTEL}'cpufeatures', CpuFeaturesText, {$endif}
-      'processcpu', cpu, 'processmem', mem, 'freemem', free,
+      'processcpu', cpu,
+      'processmem', mem,
+      'freemem', free,
       'disk', GetDiskPartitionsText(false, true)]);
+end;
+
+function GetLastExceptions(Depth: integer): variant;
+var
+  info: TSynLogExceptionInfoDynArray;
+  i: PtrInt;
+begin
+  VarClear(result{%H-});
+  GetLastExceptions(info, Depth);
+  if info = nil then
+    exit;
+  TDocVariantData(result).InitFast(length(info), dvArray);
+  for i := 0 to high(info) do
+    TDocVariantData(result).AddItemText(ToText(info[i]));
 end;
 
 

@@ -435,6 +435,7 @@ function ToText(opt: TRestHttpServerOptions): PShortString; overload;
 function ToText(sec: TRestHttpServerSecurity): PShortString; overload;
 
 
+
 { ************ TRestHttpRemoteLogServer to Receive Remote Log Stream }
 
 type

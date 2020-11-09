@@ -97,15 +97,6 @@ type
     array[TRestServerURIContextCommand] of TRestAcquireExecution;
 
 
-/// returns a TDocVariant array of the latest intercepted exception texts
-// - runs ToText() over all information returned by overloaded GetLastExceptions
-// - defined in this unit to have TDocVariant at hand
-function GetLastExceptions(Depth: integer = 0): variant; overload;
-
-/// check the supplied HTTP header to not contain more than one EOL
-// - to avoid unexpected HTTP body injection, e.g. from unsafe business code
-function IsInvalidHttpHeader(head: PUTF8Char; headlen: PtrInt): boolean;
-
 const
   // log up to 2 KB of JSON response, to save space
   MAX_SIZE_RESPONSE_LOG = 2 shl 10;
@@ -1480,32 +1471,6 @@ destructor TRestAcquireExecution.Destroy;
 begin
   inherited Destroy;
   Thread.Free;
-end;
-
-function GetLastExceptions(Depth: integer): variant;
-var
-  info: TSynLogExceptionInfoDynArray;
-  i: PtrInt;
-begin
-  VarClear(result);
-  GetLastExceptions(info, Depth);
-  if info = nil then
-    exit;
-  TDocVariantData(result).InitFast(length(info), dvArray);
-  for i := 0 to high(info) do
-    TDocVariantData(result).AddItemText(ToText(info[i]));
-end;
-
-function IsInvalidHttpHeader(head: PUTF8Char; headlen: PtrInt): boolean;
-var
-  i: PtrInt;
-begin
-  result := true;
-  for i := 0 to headlen - 3 do
-    if (PInteger(head + i)^ = $0a0d0a0d) or
-       (PWord(head + i)^ = $0d0d) or (PWord(head + i)^ = $0a0a) then
-      exit;
-  result := false;
 end;
 
 

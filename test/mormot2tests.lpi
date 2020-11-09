@@ -538,7 +538,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="74">
+    <Units Count="75">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -835,6 +835,10 @@
         <Filename Value="..\src\core\mormot.core.mustache.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit73>
+      <Unit74>
+        <Filename Value="..\src\net\mormot.net.relay.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit74>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

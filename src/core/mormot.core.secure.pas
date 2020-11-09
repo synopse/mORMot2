@@ -1267,8 +1267,12 @@ end;
 
 function TSynConnectionDefinition.SaveToJSON: RawUTF8;
 begin
-  result := JSONEncode(['Kind', fKind, 'ServerName', fServerName,
-    'DatabaseName', fDatabaseName, 'User', fUser, 'Password', fPassword]);
+  result := JSONEncode([
+    'Kind', fKind,
+    'ServerName', fServerName,
+    'DatabaseName', fDatabaseName,
+    'User', fUser,
+    'Password', fPassword]);
 end;
 
 
