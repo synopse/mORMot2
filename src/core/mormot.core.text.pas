@@ -99,6 +99,16 @@ function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8 = n
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
 function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
 
+/// check all character within text are spaces or control chars
+// - i.e. a faster alternative to  if Trim(text)='' then
+function IsVoid(const text: RawUTF8): boolean;
+
+/// returns the supplied text content, without any control char
+// - a control char has an ASCII code #0 .. #32, i.e. text[]<=' '
+// - you can specify a custom char set to be excluded, if needed
+function TrimControlChars(const text: RawUTF8;
+  const controls: TSynAnsicharSet = [#0 .. ' ']): RawUTF8;
+
 /// fill all bytes of this memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
 // - will write the memory buffer directly, so if this string instance is shared
 // (i.e. has refcount>1), all other variables will contains zeros
@@ -2585,6 +2595,44 @@ begin
   for i := result to high(DestPtr) do
     if DestPtr[i] <> nil then
       DestPtr[i]^ := '';
+end;
+
+function IsVoid(const text: RawUTF8): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  for i := 1 to length(text) do
+    if text[i] > ' ' then
+      exit;
+  result := true;
+end;
+
+function TrimControlChars(const text: RawUTF8;
+  const controls: TSynAnsicharSet): RawUTF8;
+var
+  len, i, j, n: PtrInt;
+  P: PAnsiChar;
+begin
+  len := length(text);
+  for i := 1 to len do
+    if text[i] in controls then
+    begin
+      n := i - 1;
+      FastSetString(result, nil, len);
+      P := pointer(result);
+      if n > 0 then
+        MoveFast(pointer(text)^, P^, n);
+      for j := i + 1 to len do
+        if not (text[j] in controls) then
+        begin
+          P[n] := text[j];
+          inc(n);
+        end;
+      SetLength(result, n); // truncate
+      exit;
+    end;
+  result := text; // no control char found
 end;
 
 procedure FillZero(var secret: RawByteString);
