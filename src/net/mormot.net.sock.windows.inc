@@ -749,10 +749,6 @@ type
   TCtxtHandle = type TCredHandle;
   PCtxtHandle = ^TCtxtHandle;
 
-  {$ifdef DELPHI5OROLDER}
-  PCardinal = ^Cardinal;
-  {$endif}
-
   TSChannelCred = record
     dwVersion: cardinal;
     cCreds: cardinal;

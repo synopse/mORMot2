@@ -50,6 +50,7 @@ uses
   mormot.net.ws.core       in '..\src\net\mormot.net.ws.core.pas',
   mormot.net.ws.client     in '..\src\net\mormot.net.ws.client.pas',
   mormot.net.ws.server     in '..\src\net\mormot.net.ws.server.pas',
+  mormot.net.rtsphttp      in '..\src\net\mormot.net.rtsphttp.pas',
   mormot.orm.core          in '..\src\orm\mormot.orm.core.pas',
   mormot.orm.rest          in '..\src\orm\mormot.orm.rest.pas',
   mormot.orm.client        in '..\src\orm\mormot.orm.client.pas',
@@ -110,6 +111,7 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([TTestCoreBase, TTestCoreCrypto]);
 end;
+
 
 
 
