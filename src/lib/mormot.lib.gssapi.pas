@@ -954,6 +954,9 @@ begin
   LoadGSSAPI('');
 end;
 
+finalization
+  GSSAPI.Free;
+
 {$endif MSWINDOWS}
 
 end.
