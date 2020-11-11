@@ -1348,7 +1348,7 @@ begin
         RawUnicodeToUtf8(tmp.buf, StrLenW(tmp.buf), result);
     end;
     if andtrim then
-      result := Trim(result);
+      result := TrimU(result);
   end;
   tmp.Done;
 end;
@@ -1558,7 +1558,7 @@ begin
       break;
     delete(s, i, 1); // dual space -> single space
   until false;
-  s := Trim(s);
+  s := TrimU(s);
 end;
 
 procedure InitializeUnit;
@@ -1691,7 +1691,7 @@ begin
     if Assigned(wine_get_version) then
     begin
       OSVersionInfoEx := wine_get_version;
-      OSVersionInfoEx := trim('Wine ' + trim(OSVersionInfoEx));
+      OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
     end;
     FreeLibrary(h);
   end;
@@ -1731,7 +1731,7 @@ begin
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
     cpu := RawUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
-  cpu := Trim(cpu);
+  cpu := TrimU(cpu);
   CpuInfoText := RawUTF8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu]));
   TrimDualSpaces(OSVersionText);

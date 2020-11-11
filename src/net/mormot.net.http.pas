@@ -847,7 +847,7 @@ end;
 
 procedure THttpServerRequestAbstract.AddInHeader(additionalHeader: RawUTF8);
 begin
-  additionalHeader := Trim(additionalHeader);
+  additionalHeader := TrimU(additionalHeader);
   if additionalHeader <> '' then
     if fInHeaders = '' then
       fInHeaders := additionalHeader

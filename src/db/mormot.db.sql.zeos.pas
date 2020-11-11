@@ -750,7 +750,7 @@ class function TSQLDBZEOSConnectionProperties.URI(const aProtocol, aServerName:
   RawUTF8; const aLibraryLocation: TFileName; aLibraryLocationAppendExePath:
   boolean): RawUTF8;
 begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
-  result := trim(aProtocol);
+  result := TrimU(aProtocol);
   if result = '' then
     exit;
   if aServerName <> '' then

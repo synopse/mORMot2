@@ -1802,7 +1802,7 @@ var
 begin
   if (Ctxt.Method <> 'POST') or
      (Ctxt.InContent = '') or
-     not IdemPropNameU(trim(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
+     not IdemPropNameU(TrimU(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
   begin
     result := HTTP_NOTFOUND;
     exit;

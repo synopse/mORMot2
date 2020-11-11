@@ -3564,7 +3564,7 @@ begin
   if DB_KEYWORDS[dDefault] = nil then
     for db := Low(DB_KEYWORDS) to high(DB_KEYWORDS) do
       CSVToRawUTF8DynArray(DB_KEYWORDS_CSV[db], DB_KEYWORDS[db]);
-  aWord := Trim(LowerCase(aWord));
+  aWord := TrimU(LowerCase(aWord));
   if (aDB = dSQLite) or
      (FastFindPUTF8CharSorted(pointer(DB_KEYWORDS[dDefault]),
        high(DB_KEYWORDS[dDefault]), pointer(aWord)) < 0) then
@@ -3655,8 +3655,8 @@ begin
     with Execute(SQL, []) do
       while Step do
       begin
-        F.ColumnName := trim(ColumnUTF8(0));
-        F.ColumnTypeNative := trim(ColumnUTF8(1));
+        F.ColumnName := TrimU(ColumnUTF8(0));
+        F.ColumnTypeNative := TrimU(ColumnUTF8(1));
         F.ColumnLength := ColumnInt(2);
         F.ColumnPrecision := ColumnInt(3);
         if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
@@ -3687,14 +3687,14 @@ begin
   with Execute(SQL, []) do
     while Step do
     begin
-      F.IndexName := trim(ColumnUTF8(0));
+      F.IndexName := TrimU(ColumnUTF8(0));
       F.IsUnique := ColumnInt(1) > 0;
-      F.TypeDesc := trim(ColumnUTF8(2));
+      F.TypeDesc := TrimU(ColumnUTF8(2));
       F.IsPrimaryKey := ColumnInt(3) > 0;
       F.IsUniqueConstraint := ColumnInt(4) > 0;
-      F.Filter := trim(ColumnUTF8(5));
-      F.KeyColumns := trim(ColumnUTF8(6));
-      F.IncludedColumns := trim(ColumnUTF8(7));
+      F.Filter := TrimU(ColumnUTF8(5));
+      F.KeyColumns := TrimU(ColumnUTF8(6));
+      F.IncludedColumns := TrimU(ColumnUTF8(7));
       FA.Add(F);
     end;
   SetLength(Indexes, n);
@@ -3712,7 +3712,7 @@ begin
     begin
       count := 0;
       while Step do
-        AddSortedRawUTF8(Procedures, count, trim(ColumnUTF8(0)));
+        AddSortedRawUTF8(Procedures, count, TrimU(ColumnUTF8(0)));
       SetLength(Procedures, count);
     end;
   except
@@ -3738,8 +3738,8 @@ begin
   with Execute(SQL, []) do
     while Step do
     begin
-      F.ColumnName := trim(ColumnUTF8(0));
-      F.ColumnTypeNative := trim(ColumnUTF8(1));
+      F.ColumnName := TrimU(ColumnUTF8(0));
+      F.ColumnTypeNative := TrimU(ColumnUTF8(1));
       F.ColumnLength := ColumnInt(2);
       F.ColumnPrecision := ColumnInt(3);
       if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
@@ -3776,7 +3776,7 @@ begin
       count := 0;
       while Step do
       begin
-        table := trim(ColumnUTF8(0));
+        table := TrimU(ColumnUTF8(0));
         if (checkschema = '') or
            IdemPChar(pointer(table), pointer(checkschema)) then
           AddSortedRawUTF8(Tables, count, table);
@@ -3805,7 +3805,7 @@ begin
       count := 0;
       while Step do
       begin
-        table := trim(ColumnUTF8(0));
+        table := TrimU(ColumnUTF8(0));
         if (checkschema = '') or
            IdemPChar(pointer(table), pointer(checkschema)) then
           AddSortedRawUTF8(Views, count, table);
@@ -4505,7 +4505,7 @@ begin
   GetIndexes(aTableName, Indexes);
   for i := 0 to high(Indexes) do
   begin
-    ColName := Trim(GetCSVItem(pointer(Indexes[i].KeyColumns), 0));
+    ColName := TrimU(GetCSVItem(pointer(Indexes[i].KeyColumns), 0));
     if ColName <> '' then
       for j := 0 to high(Fields) do
         if IdemPropNameU(Fields[j].ColumnName, ColName) then
@@ -5493,7 +5493,7 @@ begin
     ftDate:
       PTimeLogBits(@result)^.From(ColumnDateTime(Col));
   else
-    PTimeLogBits(@result)^.From(Trim(ColumnUTF8(Col)));
+    PTimeLogBits(@result)^.From(TrimU(ColumnUTF8(Col)));
   end;
 end;
 

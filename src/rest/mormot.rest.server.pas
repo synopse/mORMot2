@@ -2847,7 +2847,7 @@ end;
 
 procedure TRestServerURIContext.OutHeadFromCookie;
 begin
-  Call.OutHead := Trim(Call.OutHead + #13#10'Set-Cookie: ' + OutSetCookie);
+  Call.OutHead := TrimU(Call.OutHead + #13#10'Set-Cookie: ' + OutSetCookie);
   if rsoCookieIncludeRootPath in Server.fOptions then
     // case-sensitive Path=/ModelRoot
     Call.OutHead := Call.OutHead + '; Path=/';
@@ -3430,7 +3430,7 @@ begin
                   SQLSort := SQLSort + ' DESC';
                 SQLWhere := SQLWhere + ' ORDER BY ' + SQLSort;
               end;
-              SQLWhere := trim(SQLWhere);
+              SQLWhere := TrimU(SQLWhere);
               if (SQLResults <> 0) and
                  (StrPosI('LIMIT ', pointer(SQLWhere)) = nil) then
               begin
@@ -3458,7 +3458,7 @@ begin
               end;
             end;
             SQL := Server.fModel.TableProps[TableIndex].SQLFromSelectWhere(
-              SQLSelect, trim(SQLWhere));
+              SQLSelect, TrimU(SQLWhere));
             Call.OutBody := TRestOrmServer(Server.fOrmInstance).
               InternalListRawUTF8(TableIndex, SQL);
             if Call.OutBody <> '' then
@@ -3499,7 +3499,7 @@ begin
                   if SQLTotalRowsCount = 0 then // avoid sending fields array
                     Call.OutBody := '[]'
                   else
-                    Call.OutBody := trim(Call.OutBody);
+                    Call.OutBody := TrimU(Call.OutBody);
                   Call.OutBody := '{"values":' + Call.OutBody +
                     FormatUTF8(Server.URIPagingParameters.SendTotalRowsCountFmt,
                      [SQLTotalRowsCount]) + '}';
@@ -3695,7 +3695,7 @@ begin
         repeat
           if UrlDecodeValue(Parameters, 'WHERE=', SQLWhere, @Parameters) then
           begin
-            SQLWhere := trim(SQLWhere);
+            SQLWhere := TrimU(SQLWhere);
             if SQLWhere <> '' then
             begin
               if orm.Delete(Table, SQLWhere) then
@@ -4113,7 +4113,7 @@ procedure TRestServerURIContext.SetInCookie(CookieName, CookieValue: RawUTF8);
 var
   i, n: PtrInt;
 begin
-  CookieName := trim(CookieName);
+  CookieName := TrimU(CookieName);
   if (self = nil) or
      (CookieName = '') then
     exit;
@@ -4136,7 +4136,7 @@ var
   i: PtrInt;
 begin
   result := '';
-  CookieName := trim(CookieName);
+  CookieName := TrimU(CookieName);
   if (self = nil) or
      (CookieName = '') then
     exit;
@@ -4158,7 +4158,7 @@ const
 begin
   if self = nil then
     exit;
-  aOutSetCookie := Trim(aOutSetCookie);
+  aOutSetCookie := TrimU(aOutSetCookie);
   if not IsValidUTF8WithoutControlChars(aOutSetCookie) then
     raise EParsingException.CreateUTF8('Unsafe %.SetOutSetCookie', [self]);
   if PosExChar('=', aOutSetCookie) < 2 then
@@ -6771,7 +6771,7 @@ end;
 procedure TRestServer.ServiceMethodRegister(aMethodName: RawUTF8;
   const aEvent: TOnRestServerCallBack; aByPassAuthentication: boolean);
 begin
-  aMethodName := trim(aMethodName);
+  aMethodName := TrimU(aMethodName);
   if aMethodName = '' then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegister('''')', [self]);
   if Model.GetTableIndex(aMethodName) >= 0 then

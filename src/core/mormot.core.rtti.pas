@@ -1257,6 +1257,12 @@ function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
 // $ aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex)
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 
+/// get the corresponding enumeration name, without the first lowercase chars
+// (otDone -> 'Done')
+// - this will return the code-based English text; use GetEnumCaption() to
+// retrieve the enumeration display text
+function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUTF8;
+
 /// helper to retrieve all texts of an enumerate
 // - may be used as cache for overloaded ToText() content
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
@@ -1659,9 +1665,9 @@ function TypeInfoToStandardParserType(Info: PRttiInfo;
 
 /// recognize a simple value type from a dynamic array RTTI
 // - if ExactType=false, will approximate the first field
-function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
-  ElemSize: integer; ExactType: boolean; out FieldSize: integer;
-  Complex: PRTTIParserComplexType = nil): TRttiParserType;
+function DynArrayTypeInfoToStandardParserType(
+  DynArrayInfo, ElemInfo: PRttiInfo; ElemSize: integer; ExactType: boolean;
+  out FieldSize: integer; Complex: PRTTIParserComplexType = nil): TRttiParserType;
 
 /// trim ending 'DynArray' or 's' chars from a dynamic array type name
 // - used internally to guess the associated item type name
@@ -4161,6 +4167,11 @@ begin
     List := NameList;
     result := MaxValue;
   end;
+end;
+
+function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUTF8;
+begin
+  result := TrimLeftLowerCaseShort(GetEnumName(aTypeInfo, aIndex));
 end;
 
 procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);

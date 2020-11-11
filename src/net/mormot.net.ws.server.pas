@@ -352,7 +352,7 @@ begin
     version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
     if GetInteger(pointer(version)) < 13 then
       exit; // we expect WebSockets protocol version 13 at least
-    uri := Trim(RawUTF8(ClientSock.URL));
+    uri := TrimU(ClientSock.URL);
     if (uri <> '') and
        (uri[1] = '/') then
       Delete(uri, 1, 1);

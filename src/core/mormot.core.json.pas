@@ -1714,8 +1714,6 @@ type
   TOnRttiJsonRead = procedure(var Context: TJsonParserContext;
     Data: pointer) of object;
 
-  TRttiJson = class;
-
   /// used internally by TRttiJson for fast allocation of a rkClass instance
   TRttiJsonNewInstance = function(Rtti: TRttiCustom): pointer;
 
@@ -7448,7 +7446,7 @@ var
 begin
   result := false;
   byte(aEnum) := aEnumDefault;
-  v := trim(Value(aName, ''));
+  v := TrimU(Value(aName, ''));
   if v = '' then
     exit;
   i := GetInteger(pointer(v), err);

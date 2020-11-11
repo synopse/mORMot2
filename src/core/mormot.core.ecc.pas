@@ -1636,7 +1636,7 @@ begin
 end;
 
 {$ifdef ISDELPHI20062007}
-  {$WARNINGS OFF} // circument Delphi 2007 false positive warning
+  {$WARNINGS OFF} // circumvent Delphi 2007 false positive warning
 {$endif}
 
 function TECCCertificate.Encrypt(const Plain: RawByteString;
@@ -1724,7 +1724,7 @@ begin
 end;
 
 {$ifdef ISDELPHI20062007}
-  {$WARNINGS ON} // circument Delphi 2007 false positive warning
+  {$WARNINGS ON} // circumvent Delphi 2007 false positive warning
 {$endif}
 
 function TECCCertificate.EncryptFile(const FileToCrypt, DestFile: TFileName;

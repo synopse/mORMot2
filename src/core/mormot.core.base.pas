@@ -2318,15 +2318,19 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+{$ifndef PUREMORMOT2}
 /// fast dedicated RawUTF8 version of Trim()
 // - in the middle of VCL code, consider using TrimU() which won't have name
 // collision ambiguity as with SysUtils' homonymous function
 function Trim(const S: RawUTF8): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
+{$endif PUREMORMOT2}
 
 /// fast dedicated RawUTF8 version of Trim()
-// - could be used if overloaded Trim() from SysUtils.pas is ambiguous
+// - should be used for RawUTF8 instead of SysUtils' Trim() which is ambiguous
+// with the main String/UnicodeString type of Delphi 2009+
+// - in mORMot 1.18, there was a Trim() function but it was confusing
 function TrimU(const S: RawUTF8): RawUTF8;
-  {$ifdef HASINLINE}inline;{$endif}
 
 // single-allocation (therefore faster) alternative to Trim(copy())
 procedure TrimCopy(const S: RawUTF8; start, count: PtrInt;
@@ -7787,7 +7791,7 @@ end;
 
 {$endif UNICODE}
 
-function Trim(const S: RawUTF8): RawUTF8;
+function TrimU(const S: RawUTF8): RawUTF8;
 var
   I, L: PtrInt;
 begin
@@ -7812,10 +7816,12 @@ begin
   end;
 end;
 
-function TrimU(const S: RawUTF8): RawUTF8;
+{$ifndef PUREMORMOT2}
+function Trim(const S: RawUTF8): RawUTF8;
 begin
-  result := mormot.core.base.Trim(S);
+  result := TrimU(S);
 end;
+{$endif PUREMORMOT2}
 
 procedure TrimCopy(const S: RawUTF8; start, count: PtrInt;
   out result: RawUTF8); // faster alternative to Trim(copy())

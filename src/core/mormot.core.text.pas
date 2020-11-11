@@ -62,7 +62,7 @@ function TrimLeft(const S: RawUTF8): RawUTF8;
 // newline, space, and tab characters
 function TrimRight(const S: RawUTF8): RawUTF8;
 
-// single-allocation (therefore faster) alternative to Trim(copy())
+// single-allocation (therefore faster) alternative to TrimU(copy())
 procedure TrimCopy(const S: RawUTF8; start, count: PtrInt; out result: RawUTF8);
 
 /// split a RawUTF8 string into two strings, according to SepStr separator
@@ -100,7 +100,7 @@ function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8 = n
 function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
 
 /// check all character within text are spaces or control chars
-// - i.e. a faster alternative to  if Trim(text)='' then
+// - i.e. a faster alternative to  if TrimU(text)='' then
 function IsVoid(const text: RawUTF8): boolean;
 
 /// returns the supplied text content, without any control char
@@ -606,7 +606,7 @@ type
   // by the instance, but specified at constructor, maybe from the stack
   // - twoIgnoreDefaultInRecord will force custom record serialization to avoid
   // writing the fields with default values, i.e. enable soWriteIgnoreDefault
-  // when TJSONCustomParserRTTI.WriteOneLevel is called
+  // when published properties are serialized
   TTextWriterOption = (
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
@@ -4180,7 +4180,7 @@ begin
   begin
     GetNextItem(CSV, Sep, s);
     if TrimValue then
-      s := trim(s);
+      s := TrimU(s);
     if CaseSensitive then
     begin
       if s = Value then

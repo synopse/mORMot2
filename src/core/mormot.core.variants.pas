@@ -1094,7 +1094,7 @@ type
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item will be copied into Dest, on match
     // - returns FALSE if no match is found, TRUE if found and copied by reference
-    function GetDocVariantByProp(const aPropName,aPropValue: RawUTF8;
+    function GetDocVariantByProp(const aPropName, aPropValue: RawUTF8;
       aPropValueCaseSensitive: boolean; out Dest: PDocVariantData): boolean;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if not found and dvoReturnNullForUnknownProperty
@@ -1149,8 +1149,8 @@ type
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
     // and/or as varDouble is AllowVarDouble is set)
     // - if Update=TRUE, will set the property, even if it is existing
-    function AddValueFromText(const aName,aValue: RawUTF8; Update: boolean = false;
-      AllowVarDouble: boolean = false): integer;
+    function AddValueFromText(const aName, aValue: RawUTF8;
+      Update: boolean = false; AllowVarDouble: boolean = false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
@@ -1218,7 +1218,7 @@ type
     // object, and the corresponding item will be deleted, on match
     // - returns FALSE if no match is found, TRUE if found and deleted
     // - will call VariantEquals() for value comparison
-    function DeleteByProp(const aPropName,aPropValue: RawUTF8;
+    function DeleteByProp(const aPropName, aPropValue: RawUTF8;
       aPropValueCaseSensitive: boolean): boolean;
     /// delete one or several value/item in this document, from its value
     // - returns the number of deleted items
@@ -1238,7 +1238,7 @@ type
     // object, and the corresponding item index will be returned, on match
     // - returns -1 if no match is found
     // - will call VariantEquals() for value comparison
-    function SearchItemByProp(const aPropName,aPropValue: RawUTF8;
+    function SearchItemByProp(const aPropName, aPropValue: RawUTF8;
       aPropValueCaseSensitive: boolean): integer; overload;
     /// search a property match in this document, handled as array or object
     // - {aPropName:aPropValue} will be searched within the stored array or
@@ -4028,7 +4028,7 @@ begin
     else
       GetNextItem(CSV, ItemSep, v);
     if DoTrim then
-      v := trim(v);
+      v := TrimU(v);
     if n = '' then
       break;
     RawUTF8ToVariant(v, val);

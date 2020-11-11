@@ -2650,9 +2650,9 @@ begin
         if aDestMemoryMB <> nil then
           mem := FormatUTF8('%% ', [mem, TwoDigits(WorkKB / 1024)]);
       end;
-  result := trim(result);
+  result := TrimU(result);
   if aDestMemoryMB <> nil then
-    aDestMemoryMB^ := trim(mem);
+    aDestMemoryMB^ := TrimU(mem);
 end;
 
 function TSystemUse.HistoryVariant(aProcessID, aDepth: integer): variant;

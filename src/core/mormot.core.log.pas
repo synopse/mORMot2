@@ -146,14 +146,18 @@ type
     // - if unitname = '', returns the main file name of the current executable
     class function FindFileName(const unitname: RawUTF8): TFileName;
     /// all symbols associated to the executable
-    property Symbols: TSynMapSymbolDynArray read fSymbol;
+    property Symbols: TSynMapSymbolDynArray
+      read fSymbol;
     /// all units, including line numbers, associated to the executable
-    property Units: TSynMapUnitDynArray read fUnit;
+    property Units: TSynMapUnitDynArray
+      read fUnit;
   published
     /// the associated file name
-    property FileName: TFileName read fMapFile;
+    property FileName: TFileName
+      read fMapFile;
     /// equals true if a .map or .mab debugging information has been loaded
-    property HasDebugInfo: boolean read fHasDebugInfo;
+    property HasDebugInfo: boolean
+      read fHasDebugInfo;
   end;
 
 
@@ -548,7 +552,8 @@ type
     // - you may also trigger ESynLogSilent exceptions for silent process
     // - see also ExceptionIgnoreCurrentThread property, if you want a per-thread
     // filtering of all exceptions
-    property ExceptionIgnore: TList read fExceptionIgnore;
+    property ExceptionIgnore: TList
+      read fExceptionIgnore;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// allow to (temporarly) ignore exceptions in the current thread
     // - this property will affect all TSynLogFamily instances, for the
@@ -580,11 +585,13 @@ type
     // - this event handler will be called one time per .log file to archive,
     // then one last time with aOldLogFileName='' in order to close any pending
     // archive (used e.g. by EventArchiveZip to open the .zip only once)
-    property OnArchive: TSynLogArchiveEvent read fOnArchive write fOnArchive;
+    property OnArchive: TSynLogArchiveEvent
+      read fOnArchive write fOnArchive;
     /// event called to perform a custom file rotation
     // - will be checked by TSynLog.PerformRotation to customize the rotation
     // process and do not perform the default step, if the callback returns TRUE
-    property OnRotate: TSynLogRotateEvent read fOnRotate write fOnRotate;
+    property OnRotate: TSynLogRotateEvent
+      read fOnRotate write fOnRotate;
     /// if the some kind of events shall be echoed to the console
     // - note that it will slow down the logging process a lot (console output
     // is slow by nature under Windows, but may be convenient for interactive
@@ -593,21 +600,24 @@ type
     // will have no effect
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
     // - EchoCustom or EchoToConsole can be activated separately
-    property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
+    property EchoToConsole: TSynLogInfos
+      read fEchoToConsole write SetEchoToConsole;
     /// can be set to a callback which will be called for each log line
     // - could be used with a third-party logging system
     // - EchoToConsole or EchoCustom can be activated separately
     // - you may even disable the integrated file output, via NoFile := true
-    property EchoCustom: TOnTextWriterEcho read fEchoCustom write SetEchoCustom;
+    property EchoCustom: TOnTextWriterEcho
+      read fEchoCustom write SetEchoCustom;
     /// the associated TSynLog class
-    property SynLogClass: TSynLogClass read fSynLogClass;
-
+    property SynLogClass: TSynLogClass
+      read fSynLogClass;
   published
     /// the associated TSynLog class
     property SynLogClassName: string
       read GetSynLogClassName;
     /// index in global SynLogFileFamily[] and SynLogLookupThreadVar[] lists
-    property Ident: integer read fIdent;
+    property Ident: integer
+      read fIdent;
     /// the current level of logging information for this family
     // - can be set e.g. to LOG_VERBOSE in order to log every kind of events
     property Level: TSynLogInfos
@@ -1087,22 +1097,27 @@ type
     procedure ForceRotation;
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
-    property Writer: TBaseWriter read fWriter;
+    property Writer: TBaseWriter
+      read fWriter;
   published
     /// the associated file name containing the log
     // - this is accurate only with the default implementation of the class:
     // any child may override it with a custom logging mechanism
-    property FileName: TFileName read fFileName;
+    property FileName: TFileName
+      read fFileName;
     /// the current size, in bytes, of the associated file containing the log
-    property FileSize: Int64 read GetFileSize;
+    property FileSize: Int64
+      read GetFileSize;
     /// the current number of thread contexts associated with this instance
     // - doesn't match necessary the number of threads of the process, but the
     // threads which are still marked as active for this TSynLog
     // - a huge number may therefore not indicate a potential "out of memory"
     // error, but a broken logic with missing NotifyThreadEnded calls
-    property ThreadContextCount: integer read fThreadContextCount;
+    property ThreadContextCount: integer
+      read fThreadContextCount;
     /// the associated logging family
-    property GenericFamily: TSynLogFamily read fFamily;
+    property GenericFamily: TSynLogFamily
+      read fFamily;
   end;
 
   TSynLogDynArray = array of TSynLog;
@@ -1202,7 +1217,8 @@ type
       const Text: RawUTF8): boolean;
   published
     /// how many registrations are currently defined
-    property Count: integer read fCount;
+    property Count: integer
+      read fCount;
   end;
 
   /// store simple log-related settings
@@ -1221,18 +1237,22 @@ type
     // - if you don't call this method, the logging won't be initiated
     procedure SetLog(aLogClass: TSynLogClass = nil);
     /// read-only access to the TSynLog class, if SetLog() has been called
-    property LogClass: TSynLogClass read fLogClass;
+    property LogClass: TSynLogClass
+      read fLogClass;
   published
     /// the log levels to be used for the log file
     // - i.e. a combination of none or several logging event
     // - if "*" is serialized, unneeded sllNone won't be part of the set
     // - default is LOG_STACKTRACE
-    property Levels: TSynLogInfos read fLevels write fLevels;
+    property Levels: TSynLogInfos
+      read fLevels write fLevels;
     /// allow to customize where the logs should be written
     // - default is the system log folder (e.g. /var/log on Linux)
-    property DestinationPath: TFileName read fDestinationPath write fDestinationPath;
+    property DestinationPath: TFileName
+      read fDestinationPath write fDestinationPath;
     /// how many files will be rotated (default is 2)
-    property RotateFileCount: integer read fRotateFileCount write fRotateFileCount;
+    property RotateFileCount: integer
+      read fRotateFileCount write fRotateFileCount;
   end;
 
 
@@ -1371,89 +1391,117 @@ type
     /// retrieve the level of an event
     // - is calculated by Create() constructor
     // - EventLevel[] array index is from 0 to Count-1
-    property EventLevel: TSynLogInfoDynArray read fLevels;
+    property EventLevel: TSynLogInfoDynArray
+      read fLevels;
     /// retrieve all used event levels
     // - is calculated by Create() constructor
-    property EventLevelUsed: TSynLogInfos read fLevelUsed;
+    property EventLevelUsed: TSynLogInfos
+      read fLevelUsed;
     /// retrieve the description text of an event
     // - returns '' if supplied index is out of range
     // - see also EventString() function, for direct VCL use
-    property EventText[index: integer]: RawUTF8 read GetEventText;
+    property EventText[index: integer]: RawUTF8
+      read GetEventText;
     /// retrieve all event thread IDs
     // - contains something if TSynLogFamily.PerThreadLog was ptIdentifiedInOnFile
     // - for ptMergedInOneFile (default) or ptOneFilePerThread logging process,
     // the array will be void (EventThread=nil)
-    property EventThread: TWordDynArray read fThreads;
+    property EventThread: TWordDynArray
+      read fThreads;
     /// the number of threads
-    property ThreadsCount: cardinal read fThreadMax;
+    property ThreadsCount: cardinal
+      read fThreadMax;
     /// profiled methods information
     // - is calculated by Create() constructor
     // - will contain the sllEnter index, with the associated elapsed time
     // - number of items in the array is retrieved by the LogProcCount property
-    property LogProc: PSynLogFileProcArray read fLogProcCurrent;
+    property LogProc: PSynLogFileProcArray
+      read fLogProcCurrent;
     /// the current sort order
-    property LogProcOrder: TLogProcSortOrder read fLogProcSortInternalOrder;
+    property LogProcOrder: TLogProcSortOrder
+      read fLogProcSortInternalOrder;
     /// if the method information must be merged for the same method name
-    property LogProcMerged: boolean read fLogProcIsMerged write SetLogProcMerged;
+    property LogProcMerged: boolean
+      read fLogProcIsMerged write SetLogProcMerged;
     /// all used event levels, as retrieved at log file content parsing
-    property LevelUsed: TSynLogInfos read fLevelUsed;
+    property LevelUsed: TSynLogInfos
+      read fLevelUsed;
     /// high-resolution time stamp frequence, as retrieved from log file header
     // - equals 0 if date time resolution, >0 if high-resolution time stamp
-    property Freq: Int64 read fFreq;
+    property Freq: Int64
+      read fFreq;
     /// the row indexes where the day changed
     // - only available for low-resolution timestamp, i.e. Freq=0
     // - if set, contains at least [0] if the whole log is over a single day
-    property DayChangeIndex: TIntegerDynArray read fDayChangeIndex;
+    property DayChangeIndex: TIntegerDynArray
+      read fDayChangeIndex;
     /// the number of rows for each DayChangeIndex[] value
-    property DayCount: TIntegerDynArray read fDayCount;
+    property DayCount: TIntegerDynArray
+      read fDayCount;
     /// custom headers, to be searched as .ini content
-    property Headers: RawUTF8 read fHeaders;
+    property Headers: RawUTF8
+      read fHeaders;
     /// the available CPU features, as recognized at program startup
     // - is extracted from the last part of the CPU property text
     // - you could use the overloaded ToText() function to show it in an
     // human-friendly way
-    property IntelCPU: TIntelCpuFeatures read fIntelCPU;
+    property IntelCPU: TIntelCpuFeatures
+      read fIntelCPU;
   published
     /// the associated executable name (with path)
     // - returns e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe'
-    property ExecutableName: RawUTF8 read fExeName;
+    property ExecutableName: RawUTF8
+      read fExeName;
     /// the associated executable version
     // - returns e.g. '0.0.0.0'
-    property ExecutableVersion: RawUTF8 read fExeVersion;
+    property ExecutableVersion: RawUTF8
+      read fExeVersion;
     /// the associated executable build date and time
-    property ExecutableDate: TDateTime read fExeDate;
+    property ExecutableDate: TDateTime
+      read fExeDate;
     /// for a library, the associated instance name (with path)
     // - returns e.g. 'C:\Dev\lib\SQLite3\exe\TestLibrary.dll'
     // - for an executable, will be left void
-    property InstanceName: RawUTF8 read fInstanceName;
+    property InstanceName: RawUTF8
+      read fInstanceName;
     /// the computer host name in which the process was running on
-    property ComputerHost: RawUTF8 read fHost;
+    property ComputerHost: RawUTF8
+      read fHost;
     /// the computer user name who launched the process
-    property RunningUser: RawUTF8 read fUser;
+    property RunningUser: RawUTF8
+      read fUser;
     /// the computer CPU in which the process was running on
     // - returns e.g. '1*0-15-1027'
-    property CPU: RawUTF8 read fCPU;
+    property CPU: RawUTF8
+      read fCPU;
     /// the computer Operating System in which the process was running on
     // - equals wUnknown on Linux or BSD - use DetailedOS instead
-    property OS: TWindowsVersion read fOS;
+    property OS: TWindowsVersion
+      read fOS;
     /// the Operating System Service Pack number
     // - not defined on Linux or BSD - use DetailedOS instead
-    property ServicePack: integer read fOSServicePack;
+    property ServicePack: integer
+      read fOSServicePack;
     /// if the 32 bit process was running under WOW 64 virtual emulation
-    property Wow64: boolean read fWow64;
+    property Wow64: boolean
+      read fWow64;
     /// the computer Operating System in which the process was running on
     // - returns e.g. '2.3=5.1.2600' for Windows XP
     // - under Linux, it will return the full system version, e.g.
     // 'Ubuntu=Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
-    property DetailedOS: RawUTF8 read fOSDetailed;
+    property DetailedOS: RawUTF8
+      read fOSDetailed;
     /// the associated framework information
     // - returns e.g. 'TSQLLog 1.18.2765 ERTL FTS3'
-    property Framework: RawUTF8 read fFramework;
+    property Framework: RawUTF8
+      read fFramework;
     /// the date and time at which the log file was started
-    property StartDateTime: TDateTime read fStartDateTime;
+    property StartDateTime: TDateTime
+      read fStartDateTime;
     /// number of profiled methods in this .log file
     // - i.e. number of items in the LogProc[] array
-    property LogProcCount: integer read fLogProcCurrentCount;
+    property LogProcCount: integer
+      read fLogProcCurrentCount;
   end;
 
   /// used to parse a .log file and process into VCL/LCL/FMX
@@ -1513,15 +1561,19 @@ type
     procedure SetAllThreads(enabled: boolean);
     /// define the current selection range, according to event kinds
     // - once you have set Events and Threads[], call Select() to fill Selected[]
-    property Events: TSynLogInfos read fEvents write fEvents;
+    property Events: TSynLogInfos
+      read fEvents write fEvents;
     /// define the current selection range, according to a thread ID
     // - here the supplied thread ID starts at 1
     // - once you have set Events and Threads[], call Select() to fill Selected[]
-    property Threads[thread: integer]: boolean read GetThreads write SetThreads;
+    property Threads[thread: integer]: boolean read
+      GetThreads write SetThreads;
     /// the row indexes of the selected entries
-    property Selected: TIntegerDynArray read fSelected;
+    property Selected: TIntegerDynArray
+      read fSelected;
     /// how many entries are currently stored in Selected[]
-    property SelectedCount: integer read fSelectedCount;
+    property SelectedCount: integer
+      read fSelectedCount;
   end;
 
 
@@ -5123,7 +5175,8 @@ begin
                   // adjust huge seconds timing from date/time column
                   fLogProcNatural[i].Time := Round(
                     (EventDateTime(j) - EventDateTime(fLogProcNatural[i].index))
-                     * 86400000000.0) + fLogProcNatural[i].Time mod 1000000
+                     * 86400000000.0) +
+                    fLogProcNatural[i].Time mod 1000000
                 else
                 begin
                   HexDisplayToBin(fLines[fLogProcNatural[i].index],
@@ -5214,7 +5267,8 @@ function TSynLogFile.LogProcSortComp(A, B: PtrInt): PtrInt;
 begin
   case fLogProcSortInternalOrder of
     soByName:
-      result := StrICompLeftTrim(PUTF8Char(fLines[LogProc[A].index]) + fLineTextOffset,
+      result := StrICompLeftTrim(
+        PUTF8Char(fLines[LogProc[A].index]) + fLineTextOffset,
         PUTF8Char(fLines[LogProc[B].index]) + fLineTextOffset);
     soByOccurrence:
       result := LogProc[A].index - LogProc[B].index;

@@ -7442,6 +7442,7 @@ type
   TSQLInitializeTableOptions = TOrmInitializeTableOptions;
   TSQLAccessRights = TOrmAccessRights;
   PSQLAccessRights = POrmAccessRights;
+  TSQLFieldType = TOrmFieldType;
   TSQLFieldTables = TOrmFieldTables;
   TSQLModel = TOrmModel;
   TSQLModelProperties = TOrmModelProperties;
@@ -8511,7 +8512,7 @@ begin
 end;
 
 {$ifdef ISDELPHI20062007}
-  {$WARNINGS OFF} // circument Delphi 2007 false positive warning
+  {$WARNINGS OFF} // circumvent Delphi 2007 false positive warning
 {$endif}
 
 const

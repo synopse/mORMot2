@@ -1549,7 +1549,7 @@ begin
   if not result then
     exit; // no match -> manual send
   delete(Context.fOutContent, 1, match); // remove e.g. '/var/www'
-  Context.OutCustomHeaders := Trim(Context.OutCustomHeaders + #13#10 +
+  Context.OutCustomHeaders := TrimU(Context.OutCustomHeaders + #13#10 +
     'X-Accel-Redirect: ' + Context.OutContent);
   Context.OutContent := '';
 end;

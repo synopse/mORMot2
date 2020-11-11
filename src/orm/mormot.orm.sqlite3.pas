@@ -1259,7 +1259,7 @@ begin
     exit;
   end;
   SQL := 'INSERT INTO ' + SQL;
-  if trim(SentData) = '' then
+  if TrimU(SentData) = '' then
     SQL := SQL + ' DEFAULT VALUES;'
   else
   begin

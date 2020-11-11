@@ -2114,7 +2114,7 @@ begin
   if aClient = nil then
     raise EMongoException.CreateUTF8('%.Create(nil)', [self]);
   fClient := aClient;
-  fServerAddress := trim(aServerAddress);
+  fServerAddress := TrimU(aServerAddress);
   if fServerAddress = '' then
     fServerAddress := '127.0.0.1';
   fServerPort := aServerPort;

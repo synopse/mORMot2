@@ -1026,7 +1026,7 @@ begin
     Sender.SessionClose;  // ensure Sender.SessionUser=nil
     U := TAuthUser(Sender.fModel.GetTableInherited(TAuthUser).Create);
     try
-      U.LogonName := trim(aUserName);
+      U.LogonName := TrimU(aUserName);
       U.DisplayName := U.LogonName;
       if aPasswordKind <> passClear then
         U.PasswordHashHexa := aPassword
@@ -1256,7 +1256,7 @@ begin
   if (Sender <> nil) and
      (Sender.Session.ID <> 0) and
      (Sender.Session.User <> nil) then
-    Call.InHead := Trim(Call.InHead + // session ID transmitted as HTTP cookie
+    Call.InHead := TrimU(Call.InHead + // session ID transmitted as HTTP cookie
       (#13#10'Cookie: ' + REST_COOKIE_SESSION + '=') + Sender.Session.IDHexa8);
 end;
 
@@ -1282,7 +1282,7 @@ begin
     Sender.fSession.Authentication := self; // to enable ClientSessionSign()
     U := TAuthUser(Sender.fModel.GetTableInherited(TAuthUser).Create);
     try
-      U.LogonName := trim(aUserName);
+      U.LogonName := TrimU(aUserName);
       res := ClientGetSessionKey(Sender, U, []);
       if res <> '' then
         result := Sender.SessionCreate(self, U, res);
@@ -2139,7 +2139,7 @@ begin
      (Head^ <> '') then
     Call.InHead := Head^;
   if fSession.HttpHeader <> '' then
-    Call.InHead := Trim(Call.InHead + #13#10 + fSession.HttpHeader);
+    Call.InHead := TrimU(Call.InHead + #13#10 + fSession.HttpHeader);
   try
     CallInternalURI;
     if (Call.OutStatus = HTTP_TIMEOUT) and
@@ -2379,7 +2379,7 @@ begin
   else
   begin
     InternalLog('/Timestamp call failed -> Server not available', sllWarning);
-    fLastErrorMessage := 'Server not available  - ' + Trim(fLastErrorMessage);
+    fLastErrorMessage := 'Server not available  - ' + TrimU(fLastErrorMessage);
   end;
 end;
 
@@ -2447,7 +2447,7 @@ begin
   {$ifdef DOMAINRESTAUTH}
   // try Windows/GSSAPI authentication with the current logged user
   result := true;
-  if ((Trim(aUserName) = '') or
+  if ((TrimU(aUserName) = '') or
       (PosExChar(SSPI_USER_CHAR, aUserName) > 0)) and
      TRestClientAuthenticationSSPI.ClientSetUser(
        self, aUserName, aPassword, passKerberosSPN) then

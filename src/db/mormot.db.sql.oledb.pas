@@ -2044,8 +2044,8 @@ begin
            (nameCol >= 0) then
           while Step do
           begin
-            schema := Trim(ColumnUTF8(schemaCol));
-            tablename := Trim(ColumnUTF8(nameCol));
+            schema := TrimU(ColumnUTF8(schemaCol));
+            tablename := TrimU(ColumnUTF8(nameCol));
             if schema <> '' then
               tablename := schema + '.' + tablename;
             AddSortedRawUTF8(Tables, count, tablename);
@@ -2091,7 +2091,7 @@ begin
         FA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Fields, @n);
         while Step do
         begin
-          F.ColumnName := Trim(ColumnUTF8('COLUMN_NAME'));
+          F.ColumnName := TrimU(ColumnUTF8('COLUMN_NAME'));
           F.ColumnLength := ColumnInt('CHARACTER_MAXIMUM_LENGTH');
           F.ColumnPrecision := ColumnInt('NUMERIC_PRECISION');
           F.ColumnScale := ColumnInt('NUMERIC_SCALE');
@@ -2111,7 +2111,7 @@ begin
         FromRowSet(Rows);
         while Step do
         begin
-          Column := Trim(ColumnUTF8('COLUMN_NAME'));
+          Column := TrimU(ColumnUTF8('COLUMN_NAME'));
           for i := 0 to high(Fields) do
             with Fields[i] do
               if IdemPropNameU(ColumnName, Column) then
@@ -2141,12 +2141,12 @@ begin
       try
         FromRowSet(Rows);
         while Step do
-          fForeignKeys.Add(Trim(ColumnUTF8('FK_TABLE_SCHEMA')) + '.' +
-            Trim(ColumnUTF8('FK_TABLE_NAME')) + '.' +
-              Trim(ColumnUTF8('FK_COLUMN_NAME')),
-            Trim(ColumnUTF8('PK_TABLE_SCHEMA')) + '.' +
-              Trim(ColumnUTF8('PK_TABLE_NAME')) + '.' +
-              Trim(ColumnUTF8('PK_COLUMN_NAME')));
+          fForeignKeys.Add(TrimU(ColumnUTF8('FK_TABLE_SCHEMA')) + '.' +
+            TrimU(ColumnUTF8('FK_TABLE_NAME')) + '.' +
+              TrimU(ColumnUTF8('FK_COLUMN_NAME')),
+            TrimU(ColumnUTF8('PK_TABLE_SCHEMA')) + '.' +
+              TrimU(ColumnUTF8('PK_TABLE_NAME')) + '.' +
+              TrimU(ColumnUTF8('PK_COLUMN_NAME')));
       finally
         Free;
       end;

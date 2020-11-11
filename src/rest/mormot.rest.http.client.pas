@@ -518,7 +518,7 @@ begin
           SetLength(Head, PBeg - pointer(Head))
         else
           system.delete(Head, PBeg - pointer(Head) + 1, P - PBeg);
-        Head := trim(Head);
+        Head := TrimU(Head);
         break;
       end;
       P := GotoNextLine(P);

@@ -582,8 +582,9 @@ begin
         aID, False, state, Resp) then
     begin
       Value.InternalState := state;
-      Original := Value.GetJSONValues(IsNotAjaxJSON(pointer(Resp)), true, ooSelect);
-      Resp := trim(Resp);
+      Original := Value.GetJSONValues(
+        IsNotAjaxJSON(pointer(Resp)), true, ooSelect);
+      Resp := TrimU(Resp);
       if (Resp <> '') and
          (Resp[1] = '[') then // '[{....}]' -> '{...}'
         Resp := copy(Resp, 2, length(Resp) - 2);
@@ -599,13 +600,15 @@ begin
 end;
 
 function TRestOrmClient.ListFmt(const Tables: array of TOrmClass;
-  const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TOrmTable;
+  const SQLSelect, SQLWhereFormat: RawUTF8;
+  const Args: array of const): TOrmTable;
 begin
   result := List(Tables, SQLSelect, FormatUTF8(SQLWhereFormat, Args));
 end;
 
 function TRestOrmClient.ListFmt(const Tables: array of TOrmClass;
-  const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable;
+  const SQLSelect, SQLWhereFormat: RawUTF8;
+  const Args, Bounds: array of const): TOrmTable;
 begin
   result := List(Tables, SQLSelect, FormatUTF8(SQLWhereFormat, Args, Bounds));
 end;

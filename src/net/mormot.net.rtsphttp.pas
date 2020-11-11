@@ -29,6 +29,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.rtti,
   mormot.core.data,
   mormot.core.text,
   mormot.core.unicode,

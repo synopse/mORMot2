@@ -2356,7 +2356,7 @@ var
 begin
   Clear;
   result := false;
-  aURI := Trim(aURI);
+  aURI := TrimU(aURI);
   if aURI = '' then
     exit;
   P := pointer(aURI);

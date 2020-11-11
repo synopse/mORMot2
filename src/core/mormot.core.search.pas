@@ -4770,7 +4770,7 @@ end;
 
 procedure TSynFilterTrim.Process(aFieldIndex: integer; var value: RawUTF8);
 begin
-  value := Trim(value);
+  value := TrimU(value);
 end;
 
 

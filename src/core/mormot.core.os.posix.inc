@@ -1541,10 +1541,10 @@ begin
     {$endif LINUXNOTBSD}
   end;
   {$endif ANDROID}
-  prod := Trim(StringFromFile('/sys/class/dmi/id/product_name', true));
+  prod := TrimU(StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
   begin
-    prodver := Trim(StringFromFile('/sys/class/dmi/id/product_version', true));
+    prodver := TrimU(StringFromFile('/sys/class/dmi/id/product_version', true));
     if prodver <> '' then
       prod := prod + ' ' + prodver;
   end;
@@ -1576,7 +1576,7 @@ begin
   if (release <> '') and
      (release[1] = '"') then
     release := copy(release, 2, length(release) - 2);
-  release := trim(release);
+  release := TrimU(release);
   if release = '' then
   begin
     FindNameValue(StringFromFile('/etc/lsb-release'), 'DISTRIB_DESCRIPTION=', release);
@@ -1592,7 +1592,7 @@ begin
        (FindNext(SR) = 0) then
       release := SR.Name;
     release := split(release, '-');
-    dist := split(trim(StringFromFile('/etc/' + SR.Name)), #10);
+    dist := split(TrimU(StringFromFile('/etc/' + SR.Name)), #10);
     if (dist <> '') and
        (PosExChar('=', dist) = 0) and
        (PosExChar(' ', dist) > 0) then

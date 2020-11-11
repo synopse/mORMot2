@@ -1748,7 +1748,7 @@ begin
   rc := 0;
   curl.easy_getinfo(fHandle, ciResponseCode, rc);
   result := rc;
-  Header := Trim(fOut.Header);
+  Header := TrimU(fOut.Header);
   if IdemPChar(pointer(Header), 'HTTP/') then
   begin
     i := 6;
