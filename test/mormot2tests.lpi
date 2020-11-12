@@ -538,7 +538,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="75">
+    <Units Count="77">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -839,6 +839,14 @@
         <Filename Value="..\src\net\mormot.net.relay.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit74>
+      <Unit75>
+        <Filename Value="..\src\net\mormot.net.rtsphttp.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit75>
+      <Unit76>
+        <Filename Value="..\src\soa\mormot.soa.codegen.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit76>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
