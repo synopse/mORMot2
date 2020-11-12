@@ -919,13 +919,17 @@ type
     // move back its writing position to its initial place
     procedure CancelAll; virtual;
     /// the associated writing stream
-    property Stream: TStream read fStream;
+    property Stream: TStream
+      read fStream;
     /// the current position in the internal buffer
-    property BufferPosition: PtrInt read fPos;
+    property BufferPosition: PtrInt
+      read fPos;
     /// get the byte count written since last Flush
-    property TotalWritten: Int64 read GetTotalWritten;
+    property TotalWritten: Int64
+      read GetTotalWritten;
     /// simple property used to store some integer content
-    property Tag: PtrInt read fTag write fTag;
+    property Tag: PtrInt
+      read fTag write fTag;
   end;
 
 {$ifndef PUREMORMOT2}
@@ -1480,23 +1484,29 @@ type
     /// retrieve a line content as UTF-8
     // - a temporary UTF-8 string is created
     // - will return '' if aIndex is out of range
-    property Lines[aIndex: integer]: RawUTF8 read GetLine;
+    property Lines[aIndex: integer]: RawUTF8
+      read GetLine;
     /// retrieve a line content as generic VCL string type
     // - a temporary VCL string is created (after conversion for UNICODE Delphi)
     // - will return '' if aIndex is out of range
-    property Strings[aIndex: integer]: string read GetString;
+    property Strings[aIndex: integer]: string
+      read GetString;
     /// direct access to each text line
     // - use LineSize() method to retrieve line length, since end of line will
     // NOT end with #0, but with #13 or #10
     // - warning: no range check is performed about supplied index
-    property LinePointers: PPointerArray read fLines;
+    property LinePointers: PPointerArray
+      read fLines;
     /// the memory map used to access the raw file content
-    property Map: TMemoryMap read fMap;
+    property Map: TMemoryMap
+      read fMap;
   published
     /// the file name which was opened by this instance
-    property FileName: TFileName read fFileName write fFileName;
+    property FileName: TFileName
+      read fFileName write fFileName;
     /// the number of text lines
-    property Count: integer read fCount;
+    property Count: integer
+      read fCount;
   end;
   {$M-}
 

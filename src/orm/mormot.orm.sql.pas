@@ -340,7 +340,8 @@ type
     // valid call, even if HasData will return false, i.e. no data match)
     function Next: boolean; override;
     /// read-only access to the SELECT statement
-    property SQL: RawUTF8 read fSQL;
+    property SQL: RawUTF8
+      read fSQL;
   end;
 
   /// mormot.db.sql-based virtual table for accessing any external database

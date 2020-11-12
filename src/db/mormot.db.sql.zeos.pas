@@ -186,16 +186,20 @@ type
       aLibraryLocationAppendExePath: boolean = true): RawUTF8; overload;
   published
     /// the remote DBMS name, as retrieved from ServerName, i.e. ZEOS URL
-    property DBMSName: RawUTF8 read fDBMSName;
+    property DBMSName: RawUTF8
+      read fDBMSName;
     /// direct access to the internal TZURL connection parameters
-    property ZeosURL: TZURL read fURL;
+    property ZeosURL: TZURL
+      read fURL;
     /// direct access to the internal statement parameters
     // - i.e. will be used by IZConnection.PrepareStatementWithParams()
     // - default values (set in Create method) try to achieve best permormance
-    property ZeosStatementParams: TStrings read fStatementParams;
+    property ZeosStatementParams: TStrings
+      read fStatementParams;
     /// if the associated ZDBC provider supports parameters array binding
     // - you should use the BindArray() methods only if this property is TRUE
-    property SupportsArrayBindings: boolean read fSupportsArrayBindings;
+    property SupportsArrayBindings: boolean
+      read fSupportsArrayBindings;
   end;
 
 
@@ -225,7 +229,8 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated ZEOS connection instance
-    property Database: IZConnection read fDatabase;
+    property Database: IZConnection
+      read fDatabase;
   end;
 
   /// implements a statement via a ZEOS database connection

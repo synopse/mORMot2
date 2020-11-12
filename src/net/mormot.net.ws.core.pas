@@ -699,7 +699,8 @@ type
     /// the associated communication socket
     // - on the server side, is a THttpServerSocket
     // - access to this instance is protected by Safe.Lock/Unlock
-    property Socket: TCrtSocket read fSocket;
+    property Socket: TCrtSocket
+      read fSocket;
   end;
 
 /// returns the text corresponding to a specified WebSockets sending mode

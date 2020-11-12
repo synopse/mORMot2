@@ -76,12 +76,14 @@ type
     /// access to the associated interface factory
     // - this property will be injected by TServiceFactoryServer.CreateInstance,
     // so may be nil if the instance was created outside the SOA context
-    property Factory: TServiceFactoryServer read fFactory;
+    property Factory: TServiceFactoryServer
+      read fFactory;
     /// access ot the associated REST Server, e.g. to its ORM methods
     // - slightly faster than Factory.RestServer
     // - this value will be injected by TServiceFactoryServer.CreateInstance,
     // so may be nil if the instance was created outside the SOA context
-    property Server: TRestServer read fServer;
+    property Server: TRestServer
+      read fServer;
   end;
 
   /// class-reference type (metaclass) of a TInjectableObjectRest type
@@ -201,7 +203,8 @@ type
 
     /// you can define here an event to allow/deny execution of any method
     // of this service, at runtime
-    property OnMethodExecute: TOnServiceCanExecute read fOnMethodExecute write fOnMethodExecute;
+    property OnMethodExecute: TOnServiceCanExecute
+      read fOnMethodExecute write fOnMethodExecute;
     /// allow to hook the methods execution
     // - several events could be registered, and will be called directly
     // before and after method execution
@@ -267,15 +270,18 @@ type
       aLogClass: TOrmServiceLogClass = nil): TServiceFactoryServerAbstract; override;
 
     /// the associated TRestServer instance
-    property RestServer: TRestServer read fRestServer;
+    property RestServer: TRestServer
+      read fRestServer;
     /// direct access to per-method detailed process statistics
     // - this Stats[] array follows Interface.Methods[] order
     // - see Stat[] property to retrieve information about a method by name
-    property Stats: TSynMonitorInputOutputObjArray read fStats;
+    property Stats: TSynMonitorInputOutputObjArray
+      read fStats;
     /// retrieve detailed statistics about a method use
     // - will return a reference to the actual item in Stats[]: caller should
     // not free the returned instance
-    property Stat[const aMethod: RawUTF8]: TSynMonitorInputOutput read GetStat;
+    property Stat[const aMethod: RawUTF8]: TSynMonitorInputOutput
+      read GetStat;
   published
     /// the class type used to implement this interface
     property ImplementationClass: TInterfacedClass

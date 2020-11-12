@@ -97,15 +97,18 @@ type
     // corresponding to the class
     // - you may want to customize it via the ConnectionStringDialogExecute
     // method, or to provide some additional parameters
-    property ConnectionString: SynUnicode read fConnectionString write fConnectionString;
+    property ConnectionString: SynUnicode
+      read fConnectionString write fConnectionString;
     /// custom Error handler for OleDB COM objects
     // - returns TRUE if specific error was retrieved and has updated
     // ErrorMessage and InfoMessage
     // - default implementation just returns false
-    property OnCustomError: TSQLDBOleDBOnCustomError read fOnCustomError write fOnCustomError;
+    property OnCustomError: TSQLDBOleDBOnCustomError
+      read fOnCustomError write fOnCustomError;
   published { to be loggged as JSON }
     /// the associated OleDB provider name, as set for each class
-    property ProviderName: RawUTF8 read fProviderName;
+    property ProviderName: RawUTF8
+      read fProviderName;
   end;
 
   /// implements an OleDB connection
@@ -152,11 +155,14 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// the associated OleDB database properties
-    property OleDBProperties: TSQLDBOleDBConnectionProperties read fOleDBProperties;
+    property OleDBProperties: TSQLDBOleDBConnectionProperties
+      read fOleDBProperties;
     /// internal error message, as retrieved from the OleDB provider
-    property OleDBErrorMessage: string read fOleDBErrorMessage;
+    property OleDBErrorMessage: string
+      read fOleDBErrorMessage;
     /// internal information message, as retrieved from the OleDB provider
-    property OleDBInfoMessage: string read fOleDBInfoMessage;
+    property OleDBInfoMessage: string
+      read fOleDBInfoMessage;
   end;
 
   /// used to store properties and value about one TSQLDBOleDBStatement Param
@@ -439,15 +445,18 @@ type
     // - a ftBlob content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; override;
     /// just map the original Collection into a TSQLDBOleDBConnection class
-    property OleDBConnection: TSQLDBOleDBConnection read fOleDBConnection;
+    property OleDBConnection: TSQLDBOleDBConnection
+      read fOleDBConnection;
     /// if TRUE, the data will be 8 bytes aligned in OleDB internal buffers
     // - it's recommended by official OleDB documentation for faster process
     // - is enabled by default, and should not be modified in most cases
-    property AlignDataInternalBuffer: boolean read fAlignBuffer write fAlignBuffer;
+    property AlignDataInternalBuffer: boolean
+      read fAlignBuffer write fAlignBuffer;
     /// size in bytes of the internal OleDB buffer used to fetch rows
     // - several rows are retrieved at once into the internal buffer
     // - default value is 16384 bytes, minimal allowed size is 8192
-    property RowBufferSize: integer read fRowBufferSize write SetRowBufferSize;
+    property RowBufferSize: integer
+      read fRowBufferSize write SetRowBufferSize;
   end;
 
 
@@ -602,7 +611,8 @@ type
       aUserID, aPassWord: RawUTF8); reintroduce;
   published { to be logged as JSON }
     /// the associated ODBC Driver name, as specified at creation
-    property Driver: RawUTF8 read fDriver;
+    property Driver: RawUTF8
+      read fDriver;
   end;
 
 

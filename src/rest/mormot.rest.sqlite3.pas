@@ -113,7 +113,8 @@ type
     property DB: TSQLDataBase read GetDB;
     /// contains some textual information about the latest Exception raised
     // during SQL statement execution
-    property StatementLastException: RawUTF8 read GetStatementLastException;
+    property StatementLastException: RawUTF8
+      read GetStatementLastException;
   end;
 
   /// class-reference type (metaclass) of a REST server using SQLite3 as main engine
@@ -165,9 +166,11 @@ type
     destructor Destroy; override;
 
     /// associated Server
-    property Server: TRestServerDB read fServer;
+    property Server: TRestServerDB
+      read fServer;
     /// associated database
-    property DB: TSQLDataBase read GetDB;
+    property DB: TSQLDataBase
+      read GetDB;
   end;
 
 

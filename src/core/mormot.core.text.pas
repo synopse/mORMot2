@@ -1125,7 +1125,8 @@ type
     /// how many bytes were currently written on disk/stream
     // - excluding the bytes in the internal buffer (see PendingBytes)
     // - see TextLength for the total number of bytes, on both stream and memory
-    property WrittenBytes: PtrUInt read fTotalFileSize;
+    property WrittenBytes: PtrUInt
+      read fTotalFileSize;
     /// low-level access to the current indentation level
     property HumanReadableLevel: integer
       read fHumanReadableLevel write fHumanReadableLevel;
@@ -1152,20 +1153,24 @@ type
     /// count of added bytes to the stream
     // - see PendingBytes for the number of bytes currently in the memory buffer
     // or WrittenBytes for the number of bytes already written to disk/stream
-    property TextLength: PtrUInt read GetTextLength;
+    property TextLength: PtrUInt
+      read GetTextLength;
     /// the internal TStream used for storage
     // - you should call the FlushFinal (or FlushToStream) methods before using
     // this TStream content, to flush all pending characters
     // - if the TStream instance has not been specified when calling the
     // TBaseWriter constructor, it can be forced via this property, before
     // any writting
-    property Stream: TStream read fStream write SetStream;
+    property Stream: TStream
+      read fStream write SetStream;
     /// global options to customize this TBaseWriter instance process
     // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior
-    property CustomOptions: TTextWriterOptions read fCustomOptions write fCustomOptions;
+    property CustomOptions: TTextWriterOptions
+      read fCustomOptions write fCustomOptions;
     /// optional event called before FlushToStream method process
     // - used e.g. by TEchoWriter to perform proper content echoing
-    property OnFlushToStream: TOnTextWriterFlush read fOnFlushToStream write fOnFlushToStream;
+    property OnFlushToStream: TOnTextWriterFlush
+      read fOnFlushToStream write fOnFlushToStream;
   end;
 
   /// class of our simple TEXT format writer to a Stream
@@ -1256,13 +1261,15 @@ type
     /// reset the internal buffer used for echoing content
     procedure EchoReset;
     /// the associated TBaseWriter instance
-    property Writer: TBaseWriter read fWriter;
+    property Writer: TBaseWriter
+      read fWriter;
     /// define how AddEndOfLine method stores its line feed characters
     // - by default (FALSE), it will append a LF (#10) char to the buffer
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
     // be appended instead
     // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
-    property EndOfLineCRLF: boolean read GetEndOfLineCRLF write SetEndOfLineCRLF;
+    property EndOfLineCRLF: boolean
+      read GetEndOfLineCRLF write SetEndOfLineCRLF;
   end;
 
 
@@ -2005,7 +2012,8 @@ type
     // - will be serialized as "Address": hexadecimal and source code location
     // (using TSynMapFile .map/.mab information) in TJSONSerializer.WriteObject
     // when woStorePointer option is defined - e.g. with ObjectToJSONDebug()
-    property RaisedAt: pointer read fRaisedAt write fRaisedAt;
+    property RaisedAt: pointer
+      read fRaisedAt write fRaisedAt;
   published
     /// the Exception Message string, as defined in parent Exception class
     property Message;

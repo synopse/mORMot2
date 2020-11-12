@@ -189,7 +189,8 @@ type
     procedure SetEngineAddComputeIdentifier(aIdentifier: word);
   published
     /// the associated MongoDB collection instance
-    property Collection: TMongoCollection read fCollection;
+    property Collection: TMongoCollection
+      read fCollection;
     /// how the next ID would be compute at each insertion
     // - default eacLastIDOnce may be the fastest, but other options are
     // available, and may be used in some special cases

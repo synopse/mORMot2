@@ -165,22 +165,30 @@ type
     /// notify internal socket polls to stop their polling loop ASAP
     procedure Terminate(waitforMS: integer);
     /// low-level access to the polling class used for incoming data
-    property PollRead: TPollSockets read fRead;
+    property PollRead: TPollSockets
+      read fRead;
     /// low-level access to the polling class used for outgoind data
-    property PollWrite: TPollSockets write fWrite;
+    property PollWrite: TPollSockets
+      write fWrite;
     /// some processing options
-    property Options: TPollAsynchSocketsOptions read fOptions write fOptions;
+    property Options: TPollAsynchSocketsOptions
+      read fOptions write fOptions;
   published
     /// how many connections are currently managed by this instance
-    property Count: integer read GetCount;
+    property Count: integer
+      read GetCount;
     /// how many times data has been received by this instance
-    property ReadCount: integer read fReadCount;
+    property ReadCount: integer
+      read fReadCount;
     /// how many times data has been sent by this instance
-    property WriteCount: integer read fWriteCount;
+    property WriteCount: integer
+      read fWriteCount;
     /// how many data bytes have been received by this instance
-    property ReadBytes: Int64 read fReadBytes;
+    property ReadBytes: Int64
+      read fReadBytes;
     /// how many data bytes have been sent by this instance
-    property WriteBytes: Int64 read fWriteBytes;
+    property WriteBytes: Int64
+      read fWriteBytes;
   end;
 
   {$M-}
@@ -239,12 +247,15 @@ type
     /// initialize this instance
     constructor Create(const aRemoteIP: RawUTF8); reintroduce; virtual;
     /// read-only access to the socket number associated with this connection
-    property Socket: TNetSocket read fSlot.socket;
+    property Socket: TNetSocket
+      read fSlot.socket;
   published
     /// the associated remote IP4/IP6, as text
-    property RemoteIP: RawUTF8 read fRemoteIP;
+    property RemoteIP: RawUTF8
+      read fRemoteIP;
     /// read-only access to the handle number associated with this connection
-    property Handle: TAsynchConnectionHandle read fHandle;
+    property Handle: TAsynchConnectionHandle
+      read fHandle;
   end;
 
   /// meta-class of one TAsynchConnections connection
@@ -275,7 +286,8 @@ type
       timeout: integer = 5000): boolean; override;
   published
     /// how many clients have been handled by the poll, from the beginning
-    property Total: integer read GetTotal;
+    property Total: integer
+      read GetTotal;
   end;
 
   /// used to implement a thread poll to process TAsynchConnection instances
@@ -389,20 +401,24 @@ type
     property Options: TAsynchConnectionsOptions
       read fOptions write fOptions;
     /// access to the associated log class
-    property Log: TSynLogClass read fLog;
+    property Log: TSynLogClass
+      read fLog;
     /// low-level unsafe direct access to the connection instances
     // - ensure this property is used in a thread-safe manner, i.e. via
     // ! Lock; try ... finally UnLock; end;
-    property Connection: TAsynchConnectionObjArray read fConnection;
+    property Connection: TAsynchConnectionObjArray
+      read fConnection;
     /// low-level unsafe direct access to the connection count
     // - ensure this property is used in a thread-safe manner, i.e. via
     // ! Lock; try ... finally UnLock; end;
-    property ConnectionCount: integer read fConnectionCount;
+    property ConnectionCount: integer
+      read fConnectionCount;
   published
     /// access to the TCP client sockets poll
     // - TAsynchConnection.OnRead should rather use Write() and LogVerbose()
     // methods of this TAsynchConnections class instead of using Clients
-    property Clients: TAsynchConnectionsSockets read fClients;
+    property Clients: TAsynchConnectionsSockets
+      read fClients;
   end;
 
   /// implements a thread-pooled high-performance TCP server
@@ -423,7 +439,8 @@ type
     destructor Destroy; override;
   published
     /// access to the TCP server socket
-    property Server: TCrtSocket read fServer;
+    property Server: TCrtSocket
+      read fServer;
   end;
 
   /// implements thread-pooled high-performance TCP multiple clients
@@ -442,9 +459,11 @@ type
       aThreadPoolCount: integer = 1); reintroduce; virtual;
   published
     /// server IP address
-    property Server: RawUTF8 read fThreadClients.Address;
+    property Server: RawUTF8
+      read fThreadClients.Address;
     /// server IP port
-    property Port: RawUTF8 read fThreadClients.Port;
+    property Port: RawUTF8
+      read fThreadClients.Port;
   end;
 
 

@@ -490,10 +490,10 @@ type
 
     TDynArrayRec = packed record
       refCnt: TRefCnt; // =SizeInt
-      high: tdynarrayindex;  // equals length-1
+      high: tdynarrayindex;  // differs from Delphi: equals length-1
       function GetLength: sizeint; inline;
       procedure SetLength(len: sizeint); inline;
-      property length: sizeint // wrapper
+      property length: sizeint // Delphi compatibility wrapper
         read GetLength write SetLength;
     end;
 

@@ -946,37 +946,51 @@ type
 
     /// the SELECT SQL statement parsed
     // - equals '' if the parsing failed
-    property SQLStatement: RawUTF8 read fSQLStatement;
+    property SQLStatement: RawUTF8
+      read fSQLStatement;
     /// the column SELECTed for the SQL statement, in the expected order
-    property Select: TSelectStatementSelectDynArray read fSelect;
+    property Select: TSelectStatementSelectDynArray
+      read fSelect;
     /// if the SELECTed expression of this SQL statement have any function defined
-    property SelectFunctionCount: integer read fSelectFunctionCount;
+    property SelectFunctionCount: integer
+      read fSelectFunctionCount;
     /// the retrieved table name
-    property TableName: RawUTF8 read fTableName;
+    property TableName: RawUTF8
+      read fTableName;
     /// if any Select[].SubField was actually set
-    property HasSelectSubFields: boolean read fHasSelectSubFields;
+    property HasSelectSubFields: boolean
+      read fHasSelectSubFields;
     /// the WHERE clause of this SQL statement
-    property Where: TSelectStatementWhereDynArray read fWhere;
+    property Where: TSelectStatementWhereDynArray
+      read fWhere;
     /// if the WHERE clause contains any ( ) parenthesis expression
-    property WhereHasParenthesis: boolean read fWhereHasParenthesis;
+    property WhereHasParenthesis: boolean
+      read fWhereHasParenthesis;
     /// if the WHERE clause contains any Where[].SubField
-    property WhereHasSubFields: boolean read fWhereHasSubFields;
+    property WhereHasSubFields: boolean
+      read fWhereHasSubFields;
     /// recognize an GROUP BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
-    property GroupByField: TFieldIndexDynArray read fGroupByField;
+    property GroupByField: TFieldIndexDynArray
+      read fGroupByField;
     /// recognize an ORDER BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
-    property OrderByField: TFieldIndexDynArray read fOrderByField;
+    property OrderByField: TFieldIndexDynArray
+      read fOrderByField;
     /// false for default ASC order, true for DESC attribute
-    property OrderByDesc: boolean read fOrderByDesc;
+    property OrderByDesc: boolean
+      read fOrderByDesc;
     /// the number specified by the optional LIMIT ... clause
     // - set to 0 by default (meaning no LIMIT clause)
-    property Limit: integer read fLimit;
+    property Limit: integer
+      read fLimit;
     /// the number specified by the optional OFFSET ... clause
     // - set to 0 by default (meaning no OFFSET clause)
-    property Offset: integer read fOffset;
+    property Offset: integer
+      read fOffset;
     /// optional associated writer
-    property Writer: TJSONWriter read fWriter write fWriter;
+    property Writer: TJSONWriter
+      read fWriter write fWriter;
   end;
 
 function ToText(Op: TSelectStatementOperator): PShortString; overload;

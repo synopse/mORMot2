@@ -70,18 +70,22 @@ type
       aUseSSL: boolean = false); override;
     {$ifdef MSWINDOWS}
     /// input parameter containing the caller Full URL
-    property FullURL: SynUnicode read fFullURL;
+    property FullURL: SynUnicode
+      read fFullURL;
     {$endif MSWINDOWS}
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
-    property Server: THttpServerGeneric read fServer;
+    property Server: THttpServerGeneric
+      read fServer;
     /// the thread which owns the connection of this execution context
     // - depending on the HTTP server used, may not follow ConnectionID
-    property ConnectionThread: TSynThread read fConnectionThread;
+    property ConnectionThread: TSynThread
+      read fConnectionThread;
     {$ifdef MSWINDOWS}
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
     // - not used by now for other kind of servers
-    property HttpApiRequest: Pointer read fHttpApiRequest;
+    property HttpApiRequest: Pointer
+      read fHttpApiRequest;
     {$endif MSWINDOWS}
   end;
 
@@ -596,7 +600,8 @@ type
       read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
     /// the bound TCP port, as specified to Create() constructor
     // - TCrtSocket.Bind() occurs in the Execute method
-    property SockPort: RawUTF8 read fSockPort;
+    property SockPort: RawUTF8
+      read fSockPort;
     /// TCP/IP prefix to mask HTTP protocol
     // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
     // - in order to make the TCP/IP stream not HTTP compliant, you can specify
@@ -790,7 +795,8 @@ type
       aCompressMinSize: integer = 1024); override;
     /// access to the internal THttpApiServer list cloned by this main instance
     // - as created by Clone() method
-    property Clones: THttpApiServers read fClones;
+    property Clones: THttpApiServers
+      read fClones;
   public { HTTP API 2.0 methods and properties }
     /// can be used to check if the HTTP API 2.0 is available
     function HasAPI2: boolean;
@@ -862,7 +868,8 @@ type
       read fAuthenticationSchemes;
     /// read-only access to check if the HTTP API 2.0 logging is enabled
     // - use LogStart/LogStop methods to change this property value
-    property Logging: boolean read GetLogging;
+    property Logging: boolean
+      read GetLogging;
     /// the current HTTP API 2.0 logging Service name
     // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUTF8Conversion])
     // - this value is dedicated to one instance, so the main instance won't

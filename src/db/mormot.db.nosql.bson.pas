@@ -450,7 +450,8 @@ type
     // ! BSONVariantType[BSON(['BSON',_Arr(['awesome',5.05, 1986])])]
     // - see also all BSONVariant() overloaded functions, which also create
     // a TBSONVariant betDoc instance
-    property NewDoc[const BSONDoc: TBSONDocument]: variant read GetNewDoc; default;
+    property NewDoc[const BSONDoc: TBSONDocument]: variant
+      read GetNewDoc; default;
   end;
 
 

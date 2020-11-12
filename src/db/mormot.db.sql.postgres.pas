@@ -114,9 +114,11 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// direct access to the associated PPGconn connection
-    property Direct: pointer read fPGConn;
+    property Direct: pointer
+      read fPGConn;
     /// how many prepared statements are currently cached for this connection
-    property PreparedCount: integer read fPreparedCount;
+    property PreparedCount: integer
+      read fPreparedCount;
   end;
 
 
@@ -188,7 +190,8 @@ type
     // - overriden method to avoid temporary memory allocation or conversion
     procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// how many parameters founded during prepare stage
-    property PreparedParamsCount: integer read fPreparedParamsCount;
+    property PreparedParamsCount: integer
+      read fPreparedParamsCount;
   end;
 
 

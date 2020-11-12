@@ -461,7 +461,8 @@ type
     /// release the HTTP server and its internal mORMot server
     destructor Destroy; override;
     /// the associated mORMot server instance running with this HTTP server
-    property Server: TRestServerFullMemory read fServer;
+    property Server: TRestServerFullMemory
+      read fServer;
   published
     /// this HTTP server will publish a 'RemoteLog' method-based service
     // - expecting PUT with text as body, at http://server/root/RemoteLog

@@ -110,7 +110,8 @@ type
     // used, even if the DB is created as SQLITE_MEMORY_DATABASE_NAME
     function FileName(const aTableName: RawUTF8): TFileName; override;
     /// the associated SQLite3 database connection
-    property DB: TSQLDataBase read fDB;
+    property DB: TSQLDataBase
+      read fDB;
   end;
 
   /// define a Virtual Table module for a TRestOrmServerDB SQLite3 engine
@@ -165,7 +166,8 @@ type
     // - contains the folder, and root file name for the storage
     // - each shard would end with its 4 digits index: actual file name would
     // append '0000.dbs' to this ShardRootFileName
-    property ShardRootFileName: TFileName read fShardRootFileName;
+    property ShardRootFileName: TFileName
+      read fShardRootFileName;
   end;
 
 
@@ -354,7 +356,8 @@ type
     function TableMaxID(Table: TOrmClass): TID; override;
     /// prepared statements with parameters for faster SQLite3 execution
     // - used for SQL code with :(%): internal parameters
-    property StatementCache: TSQLStatementCached read fStatementCache;
+    property StatementCache: TSQLStatementCached
+      read fStatementCache;
     /// after how many bytes a sllSQL statement log entry should be truncated
     // - default is 0, meaning no truncation
     // - typical value is 2048 (2KB), which will avoid any heap allocation
@@ -366,7 +369,8 @@ type
       write fStatementPreparedSelectQueryPlan;
   published
     /// associated database
-    property DB: TSQLDataBase read fDB;
+    property DB: TSQLDataBase
+      read fDB;
     /// contains some textual information about the latest Exception raised
     // during SQL statement execution
     property StatementLastException: RawUTF8
@@ -396,9 +400,11 @@ type
       const SQLSelect: RawUTF8 = 'ID';
       const SQLWhere: RawUTF8 = ''): TOrmTable; override;
     /// associated ORM Server
-    property Server: TRestOrmServerDB read fServer;
+    property Server: TRestOrmServerDB
+      read fServer;
     /// associated database
-    property DB: TSQLDataBase read GetDB;
+    property DB: TSQLDataBase
+      read GetDB;
   end;
 
 

@@ -1153,9 +1153,11 @@ type
     constructor Create(api: THttpAPIs; Error: integer); reintroduce;
   published
     /// the error code of this exception
-    property LastError: integer read fLastError;
+    property LastError: integer
+      read fLastError;
     /// the execution context of this exception
-    property LastApi: THttpAPIs read fLastApi;
+    property LastApi: THttpAPIs
+      read fLastApi;
   end;
 
 
@@ -1591,9 +1593,11 @@ type
     constructor Create(api: TWebSocketAPIs; Error: integer); reintroduce; overload;
   published
     /// the error code of this exception
-    property LastError: integer read fLastError;
+    property LastError: integer
+      read fLastError;
     /// the execution context of this exception
-    property LastApi: TWebSocketAPIs read fLastApi;
+    property LastApi: TWebSocketAPIs
+      read fLastApi;
   end;
 
 const

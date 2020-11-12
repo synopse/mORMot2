@@ -383,9 +383,11 @@ type
     /// browse all nodes until Next = nil
     function Last: TExprNode;
     /// points to the next node in the parsed tree
-    property Next: TExprNode read fNext;
+    property Next: TExprNode
+      read fNext;
     /// what is actually stored in this node
-    property NodeType: TExprNodeType read fNodeType;
+    property NodeType: TExprNodeType
+      read fNodeType;
   end;
 
   /// abstract class to handle word search, as used by TExprParser
@@ -440,9 +442,11 @@ type
     // 'Missing parenthesis')
     class function ParseError(const aExpression: RawUTF8): RawUTF8;
     /// the associated text expression used to define the search
-    property Expression: RawUTF8 read fExpression;
+    property Expression: RawUTF8
+      read fExpression;
     /// how many words did appear in the search expression
-    property WordCount: integer read fWordCount;
+    property WordCount: integer
+      read fWordCount;
   end;
 
   /// abstract class to parse a text expression into nodes
@@ -569,15 +573,20 @@ type
       aMagic: cardinal = $B1003F11): boolean; overload; virtual;
   published
     /// maximum number of items which are expected to be inserted
-    property Size: cardinal read fSize;
+    property Size: cardinal
+      read fSize;
     /// expected percentage (1..100) of false positive results for MayExists()
-    property FalsePositivePercent: double read fFalsePositivePercent;
+    property FalsePositivePercent: double
+      read fFalsePositivePercent;
     /// number of bits stored in the internal bits array
-    property Bits: cardinal read fBits;
+    property Bits: cardinal
+      read fBits;
     /// how many hash functions would be applied for each Insert()
-    property HashFunctions: cardinal read fHashFunctions;
+    property HashFunctions: cardinal
+      read fHashFunctions;
     /// how many times the Insert() method has been called
-    property Inserted: cardinal read GetInserted;
+    property Inserted: cardinal
+      read GetInserted;
   end;
 
   /// implements a thread-safe differential Bloom Filter storage
@@ -626,7 +635,8 @@ type
     /// the opaque revision number of this internal storage
     // - is in fact the Unix timestamp shifted by 31 bits, and an incremental
     // counter: this pattern will allow consistent IDs over several ServPanels
-    property Revision: Int64 read fRevision;
+    property Revision: Int64
+      read fRevision;
     /// after how many Insert() the internal bits array storage should be
     // promoted as known revision
     // - equals Size div 32 by default
@@ -801,7 +811,8 @@ type
     /// - this overloaded constructor will allow to easily set the parameters
     constructor CreateUTF8(const Format: RawUTF8; const Args, Params: array of const); overload;
     /// the optional associated parameters, supplied as JSON-encoded
-    property Parameters: RawUTF8 read fParameters write SetParameters;
+    property Parameters: RawUTF8
+      read fParameters write SetParameters;
   end;
 
   /// will define a validation to be applied to a Record (typicaly a TOrm)
@@ -868,19 +879,23 @@ type
     // growing list of new gTLDs available at
     // @http://newgtlds.icann.org/en/program-status/delegated-strings
     // - the only restriction is that it should be ascii characters
-    property AnyTLD: boolean read fAnyTLD write fAnyTLD;
+    property AnyTLD: boolean
+      read fAnyTLD write fAnyTLD;
     /// a CSV list of allowed TLD
     // - if accessed directly, should be set as lower case values
     // - e.g. 'com,org,net'
-    property AllowedTLD: RawUTF8 read fAllowedTLD write fAllowedTLD;
+    property AllowedTLD: RawUTF8
+      read fAllowedTLD write fAllowedTLD;
     /// a CSV list of forbidden TLD
     // - if accessed directly, should be set as lower case values
     // - e.g. 'fr'
-    property ForbiddenTLD: RawUTF8 read fForbiddenTLD write fForbiddenTLD;
+    property ForbiddenTLD: RawUTF8
+      read fForbiddenTLD write fForbiddenTLD;
     /// a CSV list of forbidden domain names
     // - if accessed directly, should be set as lower case values
     // - not only the TLD, but whole domains like 'cracks.ru,hotmail.com' or such
-    property ForbiddenDomains: RawUTF8 read fForbiddenDomains write fForbiddenDomains;
+    property ForbiddenDomains: RawUTF8
+      read fForbiddenDomains write fForbiddenDomains;
   end;
 
   /// glob case-sensitive pattern validation of a Record field content
@@ -958,61 +973,78 @@ type
     // - the length is calculated with UTF-16 Unicode codepoints, unless
     // UTF8Length has been set to TRUE so that the UTF-8 byte count is checked
     // - default is 1, i.e. a void text will not pass the validation
-    property MinLength: cardinal read fProps[0] write fProps[0];
+    property MinLength: cardinal
+      read fProps[0] write fProps[0];
     /// Maximal length value allowed for the text content
     // - the length is calculated with UTF-16 Unicode codepoints, unless
     // UTF8Length has been set to TRUE so that the UTF-8 byte count is checked
     // - default is maxInt, i.e. no maximum length is set
-    property MaxLength: cardinal read fProps[1] write fProps[1];
+    property MaxLength: cardinal
+      read fProps[1] write fProps[1];
     /// Minimal alphabetical character [a-zA-Z] count
     // - default is 0, i.e. no minimum set
-    property MinAlphaCount: cardinal read fProps[2] write fProps[2];
+    property MinAlphaCount: cardinal
+      read fProps[2] write fProps[2];
     /// Maximal alphabetical character [a-zA-Z] count
     // - default is maxInt, i.e. no Maximum set
-    property MaxAlphaCount: cardinal read fProps[10] write fProps[10];
+    property MaxAlphaCount: cardinal
+      read fProps[10] write fProps[10];
     /// Minimal digit character [0-9] count
     // - default is 0, i.e. no minimum set
-    property MinDigitCount: cardinal read fProps[3] write fProps[3];
+    property MinDigitCount: cardinal
+      read fProps[3] write fProps[3];
     /// Maximal digit character [0-9] count
     // - default is maxInt, i.e. no Maximum set
-    property MaxDigitCount: cardinal read fProps[11] write fProps[11];
+    property MaxDigitCount: cardinal
+      read fProps[11] write fProps[11];
     /// Minimal punctuation sign [_!;.,/:?%$="#@(){}+-*] count
     // - default is 0, i.e. no minimum set
-    property MinPunctCount: cardinal read fProps[4] write fProps[4];
+    property MinPunctCount: cardinal
+      read fProps[4] write fProps[4];
     /// Maximal punctuation sign [_!;.,/:?%$="#@(){}+-*] count
     // - default is maxInt, i.e. no Maximum set
-    property MaxPunctCount: cardinal read fProps[12] write fProps[12];
+    property MaxPunctCount: cardinal
+      read fProps[12] write fProps[12];
     /// Minimal alphabetical lower case character [a-z] count
     // - default is 0, i.e. no minimum set
-    property MinLowerCount: cardinal read fProps[5] write fProps[5];
+    property MinLowerCount: cardinal
+      read fProps[5] write fProps[5];
     /// Maximal alphabetical lower case character [a-z] count
     // - default is maxInt, i.e. no Maximum set
-    property MaxLowerCount: cardinal read fProps[13] write fProps[13];
+    property MaxLowerCount: cardinal
+      read fProps[13] write fProps[13];
     /// Minimal alphabetical upper case character [A-Z] count
     // - default is 0, i.e. no minimum set
-    property MinUpperCount: cardinal read fProps[6] write fProps[6];
+    property MinUpperCount: cardinal
+      read fProps[6] write fProps[6];
     /// Maximal alphabetical upper case character [A-Z] count
     // - default is maxInt, i.e. no Maximum set
-    property MaxUpperCount: cardinal read fProps[14] write fProps[14];
+    property MaxUpperCount: cardinal
+      read fProps[14] write fProps[14];
     /// Minimal space count inside the value text
     // - default is 0, i.e. any space number allowed
-    property MinSpaceCount: cardinal read fProps[7] write fProps[7];
+    property MinSpaceCount: cardinal
+      read fProps[7] write fProps[7];
     /// Maximal space count inside the value text
     // - default is maxInt, i.e. any space number allowed
-    property MaxSpaceCount: cardinal read fProps[15] write fProps[15];
+    property MaxSpaceCount: cardinal
+      read fProps[15] write fProps[15];
     /// Maximal space count allowed on the Left side
     // - default is maxInt, i.e. any Left space allowed
-    property MaxLeftTrimCount: cardinal read fProps[8] write fProps[8];
+    property MaxLeftTrimCount: cardinal
+      read fProps[8] write fProps[8];
     /// Maximal space count allowed on the Right side
     // - default is maxInt, i.e. any Right space allowed
-    property MaxRightTrimCount: cardinal read fProps[9] write fProps[9];
+    property MaxRightTrimCount: cardinal
+      read fProps[9] write fProps[9];
     /// defines if lengths parameters expects UTF-8 or UTF-16 codepoints number
     // - with default FALSE, the length is calculated with UTF-16 Unicode
     // codepoints - MaxLength may not match the UCS4 glyphs number, in case of
     // UTF-16 surrogates
     // - you can set this property to TRUE so that the UTF-8 byte count would
     // be used for truncation againts the MaxLength parameter
-    property UTF8Length: boolean read fUTF8Length write fUTF8Length;
+    property UTF8Length: boolean
+      read fUTF8Length write fUTF8Length;
   end;
 {$M-}
 
@@ -1120,14 +1152,16 @@ type
     // - the length is calculated with UTF-16 Unicode codepoints, unless
     // UTF8Length has been set to TRUE so that the UTF-8 byte count is checked
     // - default is 0, i.e. no maximum length is forced
-    property MaxLength: cardinal read fMaxLength write fMaxLength;
+    property MaxLength: cardinal
+      read fMaxLength write fMaxLength;
     /// defines if MaxLength is stored as UTF-8 or UTF-16 codepoints number
     // - with default FALSE, the length is calculated with UTF-16 Unicode
     // codepoints - MaxLength may not match the UCS4 glyphs number, in case of
     // UTF-16 surrogates
     // - you can set this property to TRUE so that the UTF-8 byte count would
     // be used for truncation againts the MaxLength parameter
-    property UTF8Length: boolean read fUTF8Length write fUTF8Length;
+    property UTF8Length: boolean
+      read fUTF8Length write fUTF8Length;
   end;
 
 resourcestring
@@ -1266,9 +1300,11 @@ type
     // stored value should be following UTC
     function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
     /// direct access to the low-level time zone information
-    property Zone: TTimeZoneDataDynArray read fZone;
+    property Zone: TTimeZoneDataDynArray
+      read fZone;
     /// direct access to the wrapper over the time zone information array
-    property Zones: TDynArrayHashed read fZones;
+    property Zones: TDynArrayHashed
+      read fZones;
     /// returns a TStringList of all TzID values
     // - could be used to fill any VCL component to select the time zone
     // - order in Ids[] array follows the Zone[].id information

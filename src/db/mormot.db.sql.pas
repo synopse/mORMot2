@@ -706,7 +706,8 @@ type
     // - of course, using a variant and a column name will be a bit slower than
     // direct access via the Column*() dedicated methods, but resulting code
     // is fast in practice
-    property Column[const ColName: RawUTF8]: Variant read GetColumnVariant; default;
+    property Column[const ColName: RawUTF8]: Variant
+      read GetColumnVariant; default;
     /// create a TSQLDBRowVariantType able to access any field content via late binding
     // - i.e. you can use Data.Name to access the 'Name' column of the current row
     // - this Variant will point to the corresponding TSQLDBStatement instance,
@@ -938,14 +939,16 @@ type
     /// if set, any BLOB field won't be retrieved, and forced to be null
     // - this may be used to speed up fetching the results for SQL requests
     // with * statements
-    property ForceBlobAsNull: boolean read GetForceBlobAsNull write SetForceBlobAsNull;
+    property ForceBlobAsNull: boolean
+      read GetForceBlobAsNull write SetForceBlobAsNull;
     function GetForceDateWithMS: boolean;
     procedure SetForceDateWithMS(value: boolean);
     /// if set, any ftDate field will contain the milliseconds information
     // when serialized into ISO-8601 text
     // - this setting is private to each statement, since may vary depending
     // on data definition (e.g. ORM TDateTime/TDateTimeMS)
-    property ForceDateWithMS: boolean read GetForceDateWithMS write SetForceDateWithMS;
+    property ForceDateWithMS: boolean
+      read GetForceDateWithMS write SetForceDateWithMS;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer;
   end;
@@ -1253,8 +1256,8 @@ type
     // ! aServer.AcquireExecutionMode[execOrmWrite] := am***;
     // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
     // amLocked, amBackgroundThread or amMainThread
-    property ConnectionTimeOutMinutes: cardinal read GetConnectionTimeOutMinutes
-      write SetConnectionTimeOutMinutes;
+    property ConnectionTimeOutMinutes: cardinal
+      read GetConnectionTimeOutMinutes write SetConnectionTimeOutMinutes;
     /// intercept connection errors at statement preparation and try to reconnect
     // - i.e. detect TSQLDBConnection.LastErrorWasAboutConnection in
     // TSQLDBConnection.NewStatementPrepared
@@ -1514,63 +1517,77 @@ type
     /// return a shared connection, corresponding to the given database
     // - call the ThreadSafeConnection method instead e.g. for multi-thread
     // access, or NewThreadSafeStatement for direct retrieval of a new statement
-    property MainConnection: TSQLDBConnection read GetMainConnection;
+    property MainConnection: TSQLDBConnection
+      read GetMainConnection;
     /// the associated User Password, as specified at creation
     // - not published, for security reasons (may be serialized otherwise)
-    property PassWord: RawUTF8 read fPassWord;
+    property PassWord: RawUTF8
+      read fPassWord;
     /// the associated database name, as specified at creation
     // - not published, for security reasons (may be serialized otherwise)
     // - DatabaseNameSafe will be published, and delete any matching
     // PasswordValue in DatabaseName
-    property DatabaseName: RawUTF8 read fDatabaseName;
+    property DatabaseName: RawUTF8
+      read fDatabaseName;
     /// can be used to store the fForeignKeys[] data in an external BLOB
     // - since GetForeignKeys can be (somewhat) slow, could save a lot of time
-    property ForeignKeysData: RawByteString read GetForeignKeysData write
-      SetForeignKeysData;
+    property ForeignKeysData: RawByteString
+      read GetForeignKeysData write SetForeignKeysData;
     /// this event handler will be called during all process
     // - can be used e.g. to change the desktop cursor, or be notified
     // on connection/disconnection/reconnection
     // - you can override this property directly in the TSQLDBConnection
-    property OnProcess: TOnSQLDBProcess read fOnProcess write fOnProcess;
+    property OnProcess: TOnSQLDBProcess
+      read fOnProcess write fOnProcess;
     /// this event handler will be called when statements trigger some low-level
     // information
-    property OnStatementInfo: TOnSQLDBInfo read fOnStatementInfo write fOnStatementInfo;
+    property OnStatementInfo: TOnSQLDBInfo
+      read fOnStatementInfo write fOnStatementInfo;
     /// you can define a callback method able to handle multiple INSERT
     // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
     // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
-    property OnBatchInsert: TOnBatchInsert read fOnBatchInsert write fOnBatchInsert;
+    property OnBatchInsert: TOnBatchInsert
+      read fOnBatchInsert write fOnBatchInsert;
   published { to be logged as JSON - no UserID nor Password for security :) }
     /// return the database engine name, as computed from the class name
     // - 'TSQLDBConnectionProperties' will be trimmed left side of the class name
-    property Engine: RawUTF8 read fEngineName;
+    property Engine: RawUTF8
+      read fEngineName;
     /// the associated server name, as specified at creation
-    property ServerName: RawUTF8 read fServerName;
+    property ServerName: RawUTF8
+      read fServerName;
     /// the associated database name, safely trimmed from the password
     // - would replace any matching Password value content from DatabaseName
     // by '***' for security reasons, e.g. before serialization
-    property DatabaseNameSafe: RawUTF8 read GetDatabaseNameSafe;
+    property DatabaseNameSafe: RawUTF8
+      read GetDatabaseNameSafe;
     /// the associated User Identifier, as specified at creation
-    property UserID: RawUTF8 read fUserID;
+    property UserID: RawUTF8
+      read fUserID;
     /// the remote DBMS type, as stated by the inheriting class itself, or
     //  retrieved at connecton time (e.g. for ODBC)
-    property DBMS: TSQLDBDefinition read GetDBMS;
+    property DBMS: TSQLDBDefinition
+      read GetDBMS;
     /// the remote DBMS type name, retrieved as text from the DBMS property
-    property DBMSEngineName: RawUTF8 read GetDBMSName;
+    property DBMSEngineName: RawUTF8
+      read GetDBMSName;
     /// the abilities of the database for batch sending
     // - e.g. Oracle will handle array DML binds, or MS SQL bulk insert
-    property BatchSendingAbilities: TSQLDBStatementCRUDs read fBatchSendingAbilities;
+    property BatchSendingAbilities: TSQLDBStatementCRUDs
+      read fBatchSendingAbilities;
     /// the maximum number of rows to be transmitted at once for batch sending
     // - e.g. Oracle handles array DML operation with iters <= 32767 at best
     // - if OnBatchInsert points to MultipleValuesInsert(), this value is
     // ignored, and the maximum number of parameters is guessed per DBMS type
-    property BatchMaxSentAtOnce: integer read fBatchMaxSentAtOnce write
-      fBatchMaxSentAtOnce;
+    property BatchMaxSentAtOnce: integer
+      read fBatchMaxSentAtOnce write fBatchMaxSentAtOnce;
     /// the maximum size, in bytes, of logged SQL statements
     // - setting 0 will log statement and parameters with no size limit
     // - setting -1 will log statement without any parameter value (just ?)
     // - setting any value >0 will log statement and parameters up to the
     // number of bytes (default set to 2048 to log up to 2KB per statement)
-    property LoggedSQLMaxSize: integer read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
+    property LoggedSQLMaxSize: integer
+      read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
     /// allow to log the SQL statement when any low-level ESQLDBException is raised
     property LogSQLStatementOnException: boolean read
       fLogSQLStatementOnException write fLogSQLStatementOnException;
@@ -1580,11 +1597,12 @@ type
     // - depending on the DBMS identified, the class may also set automatically
     // the default 'dbo' for MS SQL or 'public' for PostgreSQL
     // - you can set a custom schema to be used instead
-    property ForcedSchemaName: RawUTF8 read fForcedSchemaName write fForcedSchemaName;
+    property ForcedSchemaName: RawUTF8
+      read fForcedSchemaName write fForcedSchemaName;
     /// if GetTableNames/GetViewNames should only return the table names
     // starting with 'ForcedSchemaName.' prefix
-    property FilterTableViewSchemaName: boolean read fFilterTableViewSchemaName
-      write fFilterTableViewSchemaName;
+    property FilterTableViewSchemaName: boolean
+      read fFilterTableViewSchemaName write fFilterTableViewSchemaName;
     /// TRUE if an internal cache of SQL statement should be used
     // - cache will be accessed for NewStatementPrepared() method only, by
     // returning ISQLDBStatement interface instances
@@ -1592,7 +1610,8 @@ type
     // regression tests will be two times faster with statement caching)
     // - will cache only statements containing ? parameters or a SELECT with no
     // WHERE clause within
-    property UseCache: boolean read fUseCache write fUseCache;
+    property UseCache: boolean
+      read fUseCache write fUseCache;
     /// if UseCache is true, how many statement replicates can be generated
     // if the cached ISQLDBStatement is already used
     // - such replication is normally not needed in a per-thread connection,
@@ -1602,28 +1621,28 @@ type
     // - default is 0 to cache statements once - but you may try to increase
     // this value if you run identical SQL with long-standing ISQLDBStatement;
     // or you can set -1 if you don't want the warning log to appear
-    property StatementCacheReplicates: integer read fStatementCacheReplicates
-      write fStatementCacheReplicates;
+    property StatementCacheReplicates: integer
+      read fStatementCacheReplicates write fStatementCacheReplicates;
     /// defines if TSQLDBConnection.Disconnect shall Rollback any pending
     // transaction
     // - some engines executes a COMMIT when the client is disconnected, others
     // do raise an exception: this parameter ensures that any pending transaction
     // is roll-backed before disconnection
     // - is set to TRUE by default
-    property RollbackOnDisconnect: boolean read fRollbackOnDisconnect write
-      fRollbackOnDisconnect;
+    property RollbackOnDisconnect: boolean
+      read fRollbackOnDisconnect write fRollbackOnDisconnect;
     /// defines if '' string values are to be stored as SQL null
     // - by default, '' will be stored as ''
     // - but some DB engines (e.g. Jet or MS SQL) does not allow by default to
     // store '' values, but expect NULL to be stored instead
-    property StoreVoidStringAsNull: boolean read fStoreVoidStringAsNull write
-      fStoreVoidStringAsNull;
+    property StoreVoidStringAsNull: boolean
+       read fStoreVoidStringAsNull write fStoreVoidStringAsNull;
     /// customize the ISO-8601 text format expected by the database provider
     // - is 'T' by default, as expected by the ISO-8601 standard
     // - will be changed e.g. for PostgreSQL, which expects ' ' instead
     // - as used by SQLDateToIso8601Quoted() and BindArray()
-    property DateTimeFirstChar: AnsiChar read fDateTimeFirstChar write
-      fDateTimeFirstChar;
+    property DateTimeFirstChar: AnsiChar
+      read fDateTimeFirstChar write fDateTimeFirstChar;
     {$ifndef UNICODE}
     /// set to true to force all variant conversion to WideString instead of
     // the default faster AnsiString, for pre-Unicode version of Delphi
@@ -1640,8 +1659,8 @@ type
     // - the Variant conversion is mostly used for the TQuery wrapper, or for
     // the ISQLDBRows.Column[] property or ISQLDBRows.ColumnVariant() method;
     // this won't affect other Column*() methods, or JSON production
-    property VariantStringAsWideString: boolean read fVariantWideString write
-      fVariantWideString;
+    property VariantStringAsWideString: boolean
+      read fVariantWideString write fVariantWideString;
     {$endif}
     /// SQL statements what will be executed for each new connection
     // usage scenarios examples:
@@ -1651,8 +1670,8 @@ type
     // $  ['SET client_min_messages to ERROR']
     // - SQLite3: turn foreign keys ON
     // $  ['PRAGMA foreign_keys = ON']
-    property ExecuteWhenConnected: TRawUTF8DynArray read fExecuteWhenConnected
-      write fExecuteWhenConnected;
+    property ExecuteWhenConnected: TRawUTF8DynArray
+      read fExecuteWhenConnected write fExecuteWhenConnected;
   end;
 
   /// abstract connection created from TSQLDBConnectionProperties
@@ -1750,48 +1769,60 @@ type
     // will most likely return a local time, not an UTC time
     // - this property will return the timestamp in TTimeLog / TTimeLogBits /
     // Int64 value
-    property ServerTimestamp: TTimeLog read GetServerTimestamp;
+    property ServerTimestamp: TTimeLog
+      read GetServerTimestamp;
     /// the current Date and Time, as retrieved from the server
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
     // will most likely return a local time, not an UTC time
     // - this property will return the value as regular TDateTime
-    property ServerDateTime: TDateTime read GetServerDateTime;
+    property ServerDateTime: TDateTime
+      read GetServerDateTime;
     /// this event handler will be called during all process
     // - can be used e.g. to change the desktop cursor
     // - by default, will follow TSQLDBConnectionProperties.OnProcess property
-    property OnProcess: TOnSQLDBProcess read fOnProcess write fOnProcess;
+    property OnProcess: TOnSQLDBProcess
+      read fOnProcess write fOnProcess;
   published { to be logged as JSON }
     /// returns TRUE if the connection was set
-    property Connected: boolean read IsConnected;
+    property Connected: boolean
+      read IsConnected;
     /// the time returned by the server when the connection occurred
-    property ServerTimestampAtConnection: TDateTime read fServerTimestampAtConnection;
+    property ServerTimestampAtConnection: TDateTime
+      read fServerTimestampAtConnection;
     /// number of sucessfull connections for this instance
     // - can be greater than 1 in case of re-connection via Disconnect/Connect
-    property TotalConnectionCount: integer read fTotalConnectionCount;
+    property TotalConnectionCount: integer
+      read fTotalConnectionCount;
     /// number of nested StartTransaction calls
     // - equals 0 if no transaction is active
-    property TransactionCount: integer read fTransactionCount;
+    property TransactionCount: integer
+      read fTransactionCount;
     /// TRUE if StartTransaction has been called
     // - check if TransactionCount>0
-    property InTransaction: boolean read GetInTransaction;
+    property InTransaction: boolean
+      read GetInTransaction;
     /// defines if Disconnect shall Rollback any pending transaction
     // - some engines executes a COMMIT when the client is disconnected, others
     // do raise an exception: this parameter ensures that any pending transaction
     // is roll-backed before disconnection
     // - is set to TRUE by default
-    property RollbackOnDisconnect: boolean read fRollbackOnDisconnect write
-      fRollbackOnDisconnect;
+    property RollbackOnDisconnect: boolean
+      read fRollbackOnDisconnect write fRollbackOnDisconnect;
     /// some error message, e.g. during execution of NewStatementPrepared
-    property LastErrorMessage: RawUTF8 read fErrorMessage write fErrorMessage;
+    property LastErrorMessage: RawUTF8
+      read fErrorMessage write fErrorMessage;
     /// some error exception, e.g. during execution of NewStatementPrepared
-    property LastErrorException: ExceptClass read fErrorException;
+    property LastErrorException: ExceptClass
+      read fErrorException;
     /// TRUE if last error is a broken connection, e.g. during execution of
     // NewStatementPrepared
     // - i.e. LastErrorException/LastErrorMessage concerns the database connection
     // - will use TSQLDBConnectionProperties.ExceptionIsAboutConnection virtual method
-    property LastErrorWasAboutConnection: boolean read GetLastErrorWasAboutConnection;
+    property LastErrorWasAboutConnection: boolean
+      read GetLastErrorWasAboutConnection;
     /// the associated database properties
-    property Properties: TSQLDBConnectionProperties read fProperties;
+    property Properties: TSQLDBConnectionProperties
+      read fProperties;
   end;
 
   /// generic abstract class to implement a prepared SQL query
@@ -2305,42 +2336,52 @@ type
     procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
       const ColTypes: TSQLDBFieldTypeDynArray); virtual;
     /// low-level access to the Timer used for last DB operation
-    property SQLLogTimer: TPrecisionTimer read fSQLLogTimer;
+    property SQLLogTimer: TPrecisionTimer
+      read fSQLLogTimer;
     /// after a call to Prepare(), contains the query text to be passed to the DB
     // - depending on the DB, parameters placeholders are replaced by ?, :1, $1 etc
     // - this SQL is ready to be used in any DB tool, e.g. to check the real
     // execution plan/timing
-    property SQLPrepared: RawUTF8 read fSQLPrepared;
+    property SQLPrepared: RawUTF8
+      read fSQLPrepared;
     /// the prepared SQL statement, in its current state
     // - if statement is prepared, then equals SQLPrepared, otherwise, contains
     // the raw SQL property content
     // - used internally by the implementation units, e.g. for errors logging
-    property SQLCurrent: RawUTF8 read GetSQLCurrent;
+    property SQLCurrent: RawUTF8
+      read GetSQLCurrent;
     /// low-level access to the statement cache index, after a call to Prepare()
     // - contains >= 0 if the database supports prepared statement cache
     //(Oracle, Postgres) and query plan is cached; contains -1 in other cases
-    property CacheIndex: integer read fCacheIndex;
+    property CacheIndex: integer
+      read fCacheIndex;
   published
     /// the prepared SQL statement, as supplied to Prepare() method
-    property SQL: RawUTF8 read fSQL;
+    property SQL: RawUTF8
+      read fSQL;
     /// the prepared SQL statement, with all '?' changed into the supplied
     // parameter values
     // - such statement query plan usually differ from a real execution plan
     // for prepared statements with parameters - see SQLPrepared property instead
-    property SQLWithInlinedParams: RawUTF8 read GetSQLWithInlinedParams;
+    property SQLWithInlinedParams: RawUTF8
+      read GetSQLWithInlinedParams;
     /// the current row after Execute/Step call, corresponding to Column*() methods
     // - contains 0 before initial Step call, or a number >=1 during data retrieval
-    property CurrentRow: integer read fCurrentRow;
+    property CurrentRow: integer
+      read fCurrentRow;
     /// the total number of data rows retrieved by this instance
     // - is not reset when there is no more row of available data (Step returns
     // false), or when Step() is called with SeekFirst=true
-    property TotalRowsRetrieved: integer read fTotalRowsRetrieved;
+    property TotalRowsRetrieved: integer
+      read fTotalRowsRetrieved;
     /// the associated database connection
-    property Connection: TSQLDBConnection read fConnection;
+    property Connection: TSQLDBConnection
+      read fConnection;
     /// strip last semicolon in query
     // - expectation may vary, depending on the SQL statement and the engine
     // - default is true
-    property StripSemicolon: boolean read fStripSemicolon write fStripSemicolon;
+    property StripSemicolon: boolean
+      read fStripSemicolon write fStripSemicolon;
   end;
 
 
@@ -2648,7 +2689,8 @@ type
       FieldSize: PInteger = nil): TSQLDBFieldType; override;
     /// direct access to the columns description
     // - gives more details than the default ColumnType() function
-    property Columns: TSQLDBColumnPropertyDynArray read fColumns;
+    property Columns: TSQLDBColumnPropertyDynArray
+      read fColumns;
   end;
 
 

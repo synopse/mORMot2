@@ -71,7 +71,8 @@ type
     function NewConnection: TSQLDBConnection; override;
     /// direct access to the main SQlite3 DB instance
     // - can be used to tune directly the database properties
-    property MainSQLite3DB: TSQLDataBase read GetMainDB;
+    property MainSQLite3DB: TSQLDataBase
+      read GetMainDB;
   published
     /// TRUE if you want the SQL creation fields to use mORMot collation
     // - default value is TRUE for use within the mORMot framework, to use
@@ -115,14 +116,16 @@ type
     procedure Rollback; override;
     /// the associated SQLite3 DB instance
     // - assigned to not nil after successfull connection
-    property DB: TSQLDataBase read fDB;
+    property DB: TSQLDataBase
+      read fDB;
     /// query or change the SQlite3 file-based syncrhonization mode, i.e. the
     // way it waits for the data to be flushed on hard drive
     // - default smFull is very slow, but achieve 100% ACID behavior
     // - smNormal is faster, and safe until a catastrophic hardware failure occurs
     // - smOff is the fastest, data should be safe if the application crashes,
     // but database file may be corrupted in case of failure at the wrong time
-    property Synchronous: TSQLSynchronousMode read GetSynchronous write SetSynchronous;
+    property Synchronous: TSQLSynchronousMode
+      read GetSynchronous write SetSynchronous;
     /// query or change the SQlite3 file-based locking mode, i.e. the
     // way it locks the file
     // - default lmNormal is ACID and safe
@@ -130,7 +133,8 @@ type
     // transactions, so can be used to release a mORMot server power: but you
     // won't be able to access the database file from outside the process (like
     // a "normal" database engine)
-    property LockingMode: TSQLLockingMode read GetLockingMode write SetLockingMode;
+    property LockingMode: TSQLLockingMode
+      read GetLockingMode write SetLockingMode;
   end;
 
   /// implements a statement using the SQLite3 engine

@@ -78,7 +78,8 @@ type
     function SQLLimitClause(AStmt: TSelectStatement): TSQLDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
-    property ClientVersion: RawUTF8 read GetClientVersion;
+    property ClientVersion: RawUTF8
+      read GetClientVersion;
     /// the OCI initialization mode used for the connection
     // - equals OCI_EVENTS or OCI_THREADED by default, since will likely be
     // used in a multi-threaded context (even if this class is inheriting from
@@ -89,25 +90,32 @@ type
       read fEnvironmentInitializationMode write fEnvironmentInitializationMode;
     /// the size (in bytes) of the internal buffer used to retrieve rows in statements
     // - default is 128 KB, which gives very good results
-    property InternalBufferSize: integer read fInternalBufferSize write fInternalBufferSize;
+    property InternalBufferSize: integer
+      read fInternalBufferSize write fInternalBufferSize;
     /// the size (in bytes) of rows data prefecth at OCI driver level
     // - is set to 128 KB by default, but may be changed for tuned performance
-    property RowsPrefetchSize: integer read fRowsPrefetchSize write fRowsPrefetchSize;
+    property RowsPrefetchSize: integer
+      read fRowsPrefetchSize write fRowsPrefetchSize;
     /// the size (in bytes) of LOB prefecth
     // - is set to 4096 (4 KB) by default, but may be changed for tuned performance
-    property BlobPrefetchSize: integer read fBlobPrefetchSize write fBlobPrefetchSize;
+    property BlobPrefetchSize: integer
+      read fBlobPrefetchSize write fBlobPrefetchSize;
     /// Password Expired event
-    property OnPasswordExpired: TOnPasswordExpired read FOnPasswordExpired write FOnPasswordExpired;
+    property OnPasswordExpired: TOnPasswordExpired
+      read FOnPasswordExpired write FOnPasswordExpired;
     /// Password changed event
-    property OnPasswordChanged: TNotifyEvent read FOnPasswordChanged write FOnPasswordChanged;
+    property OnPasswordChanged: TNotifyEvent
+      read FOnPasswordChanged write FOnPasswordChanged;
     /// the number of prepared statements cached by OCI on the Client side
     // - is set to 30 by default
     // - only used if UseCache=true
-    property StatementCacheSize: integer read fStatementCacheSize write fStatementCacheSize;
+    property StatementCacheSize: integer
+      read fStatementCacheSize write fStatementCacheSize;
     /// use the Secure External Password Store for Password Credentials
     // - see Oracle documentation
     // http://docs.oracle.com/cd/B28359_01/network.111/b28531/authentication.htm#DBSEG97906
-    property UseWallet: boolean read fUseWallet write fUseWallet;
+    property UseWallet: boolean
+      read fUseWallet write fUseWallet;
     /// When we execute a SELECT statement across a database link, a transaction lock is placed
     // on the undo segments (transaction is implicity started).
     // Setting this options to true allow to ignore ORA-01453 during

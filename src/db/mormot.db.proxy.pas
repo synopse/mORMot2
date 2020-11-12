@@ -183,7 +183,8 @@ type
       out Output: RawByteString; Connection: TSQLDBConnection); virtual;
     /// the associated authentication information
     // - you can manage users via AuthenticateUser/DisauthenticateUser methods
-    property Authenticate: TSynAuthenticationAbstract read GetAuthenticate write fAuthenticate;
+    property Authenticate: TSynAuthenticationAbstract
+      read GetAuthenticate write fAuthenticate;
   end;
 
   /// server-side implementation of a remote connection to any mormot.db.sql engine
@@ -250,7 +251,8 @@ type
     // - you can set this property to TRUE if you expect the remote connection
     // by in synch with the remote proxy connection (should not be used in
     // most cases, unless you are sure you have only one single client at a time
-    property HandleConnection: boolean read fHandleConnection write fHandleConnection;
+    property HandleConnection: boolean
+      read fHandleConnection write fHandleConnection;
     /// milliseconds to way until StartTransaction is allowed by the server
     // - in the current implementation, there should be a single transaction
     // at once on the server side: this is the time to try before reporting
@@ -343,7 +345,8 @@ type
       const ColTypes: TSQLDBFieldTypeDynArray); override;
 
     /// read-only access to the number of data rows stored
-    property DataRowCount: integer read fDataRowCount;
+    property DataRowCount: integer
+      read fDataRowCount;
   end;
 
   /// implements a proxy-like virtual connection statement to a DB engine
@@ -396,7 +399,8 @@ type
     function UpdateCount: integer; override;
     /// force no UpdateCount method call on server side
     // - may be needed to reduce server load, if this information is not needed
-    property ForceNoUpdateCount: boolean read fForceNoUpdateCount write fForceNoUpdateCount;
+    property ForceNoUpdateCount: boolean
+      read fForceNoUpdateCount write fForceNoUpdateCount;
 
     /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     //   Execute(), this method must be called one or more times to evaluate it
@@ -518,19 +522,24 @@ type
     /// released used memory
     destructor Destroy; override;
     /// the associated database connection properties
-    property Properties: TSQLDBConnectionProperties read fProperties write fProperties;
+    property Properties: TSQLDBConnectionProperties
+      read fProperties write fProperties;
     /// the associated port number
-    property Port: RawUTF8 read fPort;
+    property Port: RawUTF8
+      read fPort;
     /// the associated database name
-    property DatabaseName: RawUTF8 read fDatabaseName;
+    property DatabaseName: RawUTF8
+      read fDatabaseName;
     /// the associated communication protocol
     // - to manage user authentication, use AuthenticateUser/DisauthenticateUser
     // methods of Protocol.Authenticate
-    property Protocol: TSQLDBProxyConnectionProtocol read fProtocol write fProtocol;
+    property Protocol: TSQLDBProxyConnectionProtocol
+      read fProtocol write fProtocol;
     /// if the internal Process() method would be protected by a critical section
     // - set to TRUE if constructor's aThreadMode is left to its default
     // tmMainConnection value
-    property ProcessLocked: boolean read fProcessLocked write fProcessLocked;
+    property ProcessLocked: boolean
+      read fProcessLocked write fProcessLocked;
   end;
 
   /// implements a mormot.db.proxy HTTP server via the user-land Sockets API
@@ -606,12 +615,15 @@ type
     function InternalRequest(var Data, DataType: RawByteString): integer; virtual; abstract;
   published
     /// the associated server IP address or name
-    property Server: RawByteString read GetServer;
+    property Server: RawByteString
+      read GetServer;
     /// the associated port number
-    property Port: RawByteString read GetPort;
+    property Port: RawByteString
+      read GetPort;
     /// time (in milliseconds) to keep the connection alive with the server
     // - default is 60000, i.e. one minute
-    property KeepAliveMS: cardinal read fKeepAliveMS write fKeepAliveMS;
+    property KeepAliveMS: cardinal
+      read fKeepAliveMS write fKeepAliveMS;
   end;
 
   /// implements a HTTP client via sockets, able to access remotely any mormot.db.sql
@@ -628,7 +640,8 @@ type
     /// released used memory
     destructor Destroy; override;
     /// low-level direct access to the Socket implementation instance
-    property Socket: THttpClientSocket read fSocket;
+    property Socket: THttpClientSocket
+      read fSocket;
   end;
 
 
@@ -644,7 +657,8 @@ type
     /// released used memory
     destructor Destroy; override;
     /// low-level direct access to the WinHTTP implementation instance
-    property Client: THttpRequest read fClient;
+    property Client: THttpRequest
+      read fClient;
   end;
 
   {$ifdef USELIBCURL}

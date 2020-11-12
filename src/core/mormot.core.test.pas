@@ -93,18 +93,22 @@ type
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
-    property Ident: string read GetIdent;
+    property Ident: string
+      read GetIdent;
     /// return the number of tests associated with this class
     // - i.e. the number of registered tests by the Register() method PLUS
     // the number of published methods defined within this class
-    property Count: integer read GetCount;
+    property Count: integer
+      read GetCount;
     /// return the number of published methods defined within this class as tests
     // - i.e. the number of tests added by the Create() constructor from RTTI
     // - any TestName/TestMethod[] index higher or equal to this value has been
     // added by a specific call to the Add() method
-    property InternalTestsCount: integer read fInternalTestsCount;
+    property InternalTestsCount: integer
+      read fInternalTestsCount;
     /// allows to tune the test case process
-    property Options: TSynTestOptions read fOptions write fOptions;
+    property Options: TSynTestOptions
+      read fOptions write fOptions;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter }
@@ -261,15 +265,19 @@ type
     // - OnlyLog will compute and append the info to the log, but not on the console
     procedure AddConsole(const msg: string; OnlyLog: boolean = false);
     /// the test suit which owns this test case
-    property Owner: TSynTests read fOwner;
+    property Owner: TSynTests
+      read fOwner;
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // an uncameled text from the class name
-    property Ident: string read GetIdent;
+    property Ident: string
+      read GetIdent;
     /// the number of assertions (i.e. Check() method call) for this test case
-    property Assertions: integer read fAssertions;
+    property Assertions: integer
+      read fAssertions;
     /// the number of assertions (i.e. Check() method call) for this test case
-    property AssertionsFailed: integer read fAssertionsFailed;
+    property AssertionsFailed: integer
+      read fAssertionsFailed;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter
@@ -395,19 +403,24 @@ type
     // ! end;
     function Run: boolean; virtual;
     /// number of failed tests after the last call to the Run method
-    property FailedCount: integer read GetFailedCount;
+    property FailedCount: integer
+      read GetFailedCount;
     /// method information currently running
     // - is set by Run and available within TTestCase methods
-    property CurrentMethodInfo: PSynTestMethodInfo read fCurrentMethodInfo;
+    property CurrentMethodInfo: PSynTestMethodInfo
+      read fCurrentMethodInfo;
     /// retrieve the information associated with a failure
-    property Failed[Index: integer]: TSynTestFailed read GetFailed;
+    property Failed[Index: integer]: TSynTestFailed
+      read GetFailed;
   published
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
-    property Assertions: integer read fAssertions;
+    property Assertions: integer
+      read fAssertions;
     /// the number of assertions (i.e. Check() method call) which failed in all tests
     // - this property is set by the Run method above
-    property AssertionsFailed: integer read fAssertionsFailed;
+    property AssertionsFailed: integer
+      read fAssertionsFailed;
   published
     { all published methods of the children will be run as test cases registering
       - these methods must be declared as procedure with no parameter
@@ -436,9 +449,11 @@ type
     /// release associated memory
     destructor Destroy; override;
     /// the .log file generator created if any test case failed
-    property LogFile: TSynLog read fLogFile;
+    property LogFile: TSynLog
+      read fLogFile;
     /// a replicate of the text written to the console
-    property ConsoleDup: RawUTF8 read fConsoleDup;
+    property ConsoleDup: RawUTF8
+      read fConsoleDup;
   end;
 
 

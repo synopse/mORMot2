@@ -120,7 +120,8 @@ type
     // - could be nil if the connection is in standard HTTP/1.1 mode
     function WebSocketProtocol: TWebSocketProtocol;
     /// low-level WebSocket protocol processing instance
-    property WebSocketProcess: TWebSocketProcessServer read fProcess;
+    property WebSocketProcess: TWebSocketProcessServer
+      read fProcess;
   end;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)

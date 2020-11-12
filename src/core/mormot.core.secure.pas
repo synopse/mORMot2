@@ -79,12 +79,14 @@ type
       CustomKey: cardinal = 0; const AppSecret: RawUTF8 = ''): SPIUTF8;
     /// the private key used to cypher the password storage on serialization
     // - application can override the default 0 value at runtime
-    property Key: cardinal read GetKey write fKey;
+    property Key: cardinal
+      read GetKey write fKey;
     /// access to the associated unencrypted Password value
     // - may trigger a ESynException if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
-    property PasswordPlain: SPIUTF8 read GetPassWordPlain write SetPassWordPlain;
+    property PasswordPlain: SPIUTF8
+      read GetPassWordPlain write SetPassWordPlain;
   end;
 
 type
@@ -95,10 +97,12 @@ type
     fUserName: RawUTF8;
   published
     /// the associated user name
-    property UserName: RawUTF8 read fUserName write fUserName;
+    property UserName: RawUTF8
+      read fUserName write fUserName;
     /// the associated encrypted password
     // - use the PasswordPlain public property to access to the uncrypted password
-    property Password: SPIUTF8 read fPassword write fPassword;
+    property Password: SPIUTF8
+      read fPassword write fPassword;
   end;
 
   /// handle safe storage of any connection properties
@@ -134,17 +138,22 @@ type
   published
     /// the class name implementing the connection or TRest instance
     // - will be used to instantiate the expected class type
-    property Kind: string read fKind write fKind;
+    property Kind: string
+      read fKind write fKind;
     /// the associated server name (or file, for SQLite3) to be connected to
-    property ServerName: RawUTF8 read fServerName write fServerName;
+    property ServerName: RawUTF8
+      read fServerName write fServerName;
     /// the associated database name (if any), or additional options
-    property DatabaseName: RawUTF8 read fDatabaseName write fDatabaseName;
+    property DatabaseName: RawUTF8
+      read fDatabaseName write fDatabaseName;
     /// the associated User Identifier (if any)
-    property User: RawUTF8 read fUser write fUser;
+    property User: RawUTF8
+      read fUser write fUser;
     /// the associated Password, e.g. for storage or transmission encryption
     // - will be persisted encrypted with a private key
     // - use the PassWordPlain property to access to its uncyphered value
-    property Password: SPIUTF8 read fPassword write fPassword;
+    property Password: SPIUTF8
+      read fPassword write fPassword;
   end;
 
 
@@ -205,9 +214,11 @@ type
     // - to be sent to the client for its authentication challenge
     function CurrentToken: Int64;
     /// the number of current opened sessions
-    property SessionsCount: integer read fSessionsCount;
+    property SessionsCount: integer
+      read fSessionsCount;
     /// the number of registered users
-    property UsersCount: integer read GetUsersCount;
+    property UsersCount: integer
+      read GetUsersCount;
     /// to be used to compute a Hash on the client sude, for a given Token
     // - the token should have been retrieved from the server, and the client
     // should compute and return this hash value, to perform the authentication
@@ -264,10 +275,12 @@ type
     function DynArrayLocked: TDynArray;
     /// low-level access to the internal IPv4 list
     // - 32-bit unsigned values are sorted, for fast O(log(n)) binary search
-    property IP4: TIntegerDynArray read fIP4;
+    property IP4: TIntegerDynArray
+      read fIP4;
   published
     /// how many IPs are currently banned
-    property Count: integer read fCount;
+    property Count: integer
+      read fCount;
   end;
 
 
@@ -425,14 +438,18 @@ type
     // - FromObfuscated and ToObfuscated methods will validate their hexadecimal
     // content with this value to secure the associated CRC
     // - may be used e.g. as system-depending salt
-    property CryptoCRC: cardinal read fCryptoCRC;
+    property CryptoCRC: cardinal
+      read fCryptoCRC;
     /// direct access to the associated mutex
-    property Safe: TSynLocker read fSafe;
+    property Safe: TSynLocker
+      read fSafe;
   published
     /// the process identifier, associated with this generator
-    property Identifier: TSynUniqueIdentifierProcess read fIdentifier;
+    property Identifier: TSynUniqueIdentifierProcess
+      read fIdentifier;
     /// how many times ComputeNew method has been called
-    property ComputedCount: Int64 read GetComputedCount;
+    property ComputedCount: Int64
+      read GetComputedCount;
   end;
 
   /// hold a dynamic array of TSynUniqueIdentifierGenerator instances
@@ -571,7 +588,8 @@ type
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
     /// the hash algorithm used by this instance
-    property Algo: THashAlgo read fAlgo;
+    property Algo: THashAlgo
+      read fAlgo;
   end;
 
 function ToText(algo: TSignAlgo): PShortString; overload;

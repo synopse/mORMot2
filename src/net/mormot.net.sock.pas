@@ -260,7 +260,8 @@ type
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; virtual; abstract;
     /// how many TSocket instances are currently tracked
-    property Count: integer read fCount;
+    property Count: integer
+      read fCount;
   end;
   {$M-}
 
@@ -298,7 +299,8 @@ type
   published
     /// how many TSocket instances could be tracked, at most
     // - depends on the API used
-    property MaxSockets: integer read fMaxSockets;
+    property MaxSockets: integer
+      read fMaxSockets;
   end;
 
   /// meta-class of TPollSocketAbstract socket polling classes
@@ -360,9 +362,11 @@ type
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate; virtual;
     /// the actual polling class used to track socket state changes
-    property PollClass: TPollSocketClass read fPollClass write fPollClass;
+    property PollClass: TPollSocketClass
+      read fPollClass write fPollClass;
     /// set to true by the Terminate method
-    property Terminated: boolean read fTerminated;
+    property Terminated: boolean
+      read fTerminated;
   end;
 
 
@@ -583,7 +587,8 @@ type
     // a custom header value set by a local proxy as retrieved by inherited
     // THttpServerSocket.GetRequest, searching the header named in
     // THttpServerGeneric.RemoteIPHeader (e.g. 'X-Real-IP' for nginx)
-    property RemoteIP: RawUTF8 read fRemoteIP write fRemoteIP;
+    property RemoteIP: RawUTF8
+      read fRemoteIP write fRemoteIP;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress(LocalAsVoid: boolean = false): RawByteString;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
@@ -618,25 +623,34 @@ type
     // is immediately discarded at Close
     property Linger: integer write SetLinger;
     /// low-level socket handle, initialized after Open() with socket
-    property Sock: TNetSocket read fSock write fSock;
+    property Sock: TNetSocket
+      read fSock write fSock;
     /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
-    property SockIn: PTextFile read fSockIn;
+    property SockIn: PTextFile
+      read fSockIn;
     /// after CreateSockOut, use Writeln(SockOut^,s) to send a line to the opened socket
-    property SockOut: PTextFile read fSockOut;
+    property SockOut: PTextFile
+      read fSockOut;
   published
     /// low-level socket type, initialized after Open() with socket
-    property SocketLayer: TNetLayer read fSocketLayer;
+    property SocketLayer: TNetLayer
+      read fSocketLayer;
     /// IP address, initialized after Open() with Server name
-    property Server: RawUTF8 read fServer;
+    property Server: RawUTF8
+      read fServer;
     /// IP port, initialized after Open() with port number
-    property Port: RawUTF8 read fPort;
+    property Port: RawUTF8
+      read fPort;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
-    property TimeOut: PtrInt read fTimeOut;
+    property TimeOut: PtrInt
+      read fTimeOut;
     /// total bytes received
-    property BytesIn: Int64 read fBytesIn write fBytesIn;
+    property BytesIn: Int64
+      read fBytesIn write fBytesIn;
     /// total bytes sent
-    property BytesOut: Int64 read fBytesOut write fBytesOut;
+    property BytesOut: Int64
+      read fBytesOut write fBytesOut;
   end;
   {$M-}
 

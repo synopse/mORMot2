@@ -520,7 +520,7 @@ type
     // internal array, or by calling FillInput if you do not know the input
     // parameters which may appear
     property InputPairs: TRawUTF8DynArray
-      read FInput;
+      read fInput;
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     // - but rather call RemoteIP or UserAgent properties instead of
@@ -976,28 +976,35 @@ type
     // - never equals to 1 (CONST_AUTHENTICATION_NOT_USED, i.e. authentication
     // mode is not enabled), nor 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED,
     // i.e. session still in handshaking phase)
-    property IDCardinal: cardinal read fIDCardinal;
+    property IDCardinal: cardinal
+      read fIDCardinal;
     /// the associated User
     // - this is a true TAuthUser instance, and User.GroupRights will contain
     // also a true TAuthGroup instance
-    property User: TAuthUser read fUser;
+    property User: TAuthUser
+      read fUser;
     /// set by the Access() method to the current GetTickCount64 shr 10
     // timestamp + TimeoutSecs
-    property TimeOutTix: cardinal read fTimeOutTix;
+    property TimeOutTix: cardinal
+      read fTimeOutTix;
     /// copy of the associated user access rights
     // - extracted from User.TAuthGroup.SQLAccessRights
-    property AccessRights: TOrmAccessRights read fAccessRights;
+    property AccessRights: TOrmAccessRights
+      read fAccessRights;
     /// the hexadecimal private key as returned to the connected client
     // as 'SessionID+PrivateKey'
-    property PrivateKey: RawUTF8 read fPrivateKey;
+    property PrivateKey: RawUTF8
+      read fPrivateKey;
     /// the transmitted HTTP headers, if any
     // - can contain e.g. 'RemoteIp: 127.0.0.1' or 'User-Agent: Mozilla/4.0'
-    property SentHeaders: RawUTF8 read fSentHeaders;
+    property SentHeaders: RawUTF8
+      read fSentHeaders;
     /// per-session statistics about method-based services
     // - Methods[] follows TRestServer.fPublishedMethod[] array
     // - is initialized and maintained only if mlSessions is defined in
     // TRestServer.StatLevels property
-    property Methods: TSynMonitorInputOutputObjArray read fMethods;
+    property Methods: TSynMonitorInputOutputObjArray
+      read fMethods;
     /// per-session statistics about interface-based services
     // - Interfaces[] follows TRestServer.Services.fListInterfaceMethod[] array
     // - is initialized and maintained only if mlSessions is defined in
@@ -1006,20 +1013,26 @@ type
       read fInterfaces write fInterfaces;
   published
     /// the session ID number, as text
-    property ID: RawUTF8 read fID;
+    property ID: RawUTF8
+      read fID;
     /// the associated User Name, as in User.LogonName
-    property UserName: RawUTF8 read GetUserName;
+    property UserName: RawUTF8
+      read GetUserName;
     /// the associated User ID, as in User.ID
-    property UserID: TID read GetUserID;
+    property UserID: TID
+      read GetUserID;
     /// the associated Group ID, as in User.GroupRights.ID
-    property GroupID: TID read GetGroupID;
+    property GroupID: TID
+      read GetGroupID;
     /// the timestamp (in numbers of 1024 ms) until a session is kept alive
     // - extracted from User.TAuthGroup.SessionTimeout
     // - is used for fast comparison with GetTickCount64 shr 10
-    property TimeoutShr10: cardinal read fTimeOutShr10;
+    property TimeoutShr10: cardinal
+      read fTimeOutShr10;
     /// the remote IP, if any
     // - is extracted from SentHeaders properties
-    property RemoteIP: RawUTF8 read fRemoteIP;
+    property RemoteIP: RawUTF8
+      read fRemoteIP;
   end;
 
   /// class-reference type (metaclass) used to define overridden session instances
@@ -1390,30 +1403,40 @@ type
       const MicroSecondsElapsed: QWord);
   published
     /// when this monitoring instance (therefore the server) was created
-    property StartDate: RawUTF8 read fStartDate;
+    property StartDate: RawUTF8
+      read fStartDate;
     /// number of valid responses
     // - i.e. which returned status code 200/HTTP_SUCCESS or 201/HTTP_CREATED
     // - any invalid request will increase the TSynMonitor.Errors property
-    property Success: TSynMonitorCount64 read fSuccess;
+    property Success: TSynMonitorCount64
+      read fSuccess;
     /// count of the remote method-based service calls
-    property ServiceMethod: TSynMonitorCount64 read fServiceMethod;
+    property ServiceMethod: TSynMonitorCount64
+      read fServiceMethod;
     /// count of the remote interface-based service calls
-    property ServiceInterface: TSynMonitorCount64 read fServiceInterface;
+    property ServiceInterface: TSynMonitorCount64
+      read fServiceInterface;
     /// count of files transmitted directly (not part of Output size property)
     // - i.e. when the service uses STATICFILE_CONTENT_TYPE/HTTP_RESP_STATICFILE
     // as content type to let the HTTP server directly serve the file content
-    property OutcomingFiles: TSynMonitorCount64 read fOutcomingFiles;
+    property OutcomingFiles: TSynMonitorCount64
+      read fOutcomingFiles;
     /// number of current declared thread counts
     // - as registered by BeginCurrentThread/EndCurrentThread
-    property CurrentThreadCount: TSynMonitorOneCount read fCurrentThreadCount;
+    property CurrentThreadCount: TSynMonitorOneCount
+      read fCurrentThreadCount;
     /// how many Create / Add ORM operations did take place
-    property Created: TSynMonitorCount64 read fCreated;
+    property Created: TSynMonitorCount64
+      read fCreated;
     /// how many Read / Get ORM operations did take place
-    property Read: TSynMonitorCount64 read fRead;
+    property Read: TSynMonitorCount64
+      read fRead;
     /// how many Update ORM operations did take place
-    property Updated: TSynMonitorCount64 read fUpdated;
+    property Updated: TSynMonitorCount64
+      read fUpdated;
     /// how many Delete ORM operations did take place
-    property Deleted: TSynMonitorCount64 read fDeleted;
+    property Deleted: TSynMonitorCount64
+      read fDeleted;
   end;
 
   /// ORM table used to store TSynMonitorUsage information in TSynMonitorUsageRest
@@ -1433,15 +1456,19 @@ type
     function UsageID(aProcessIDShift: integer = 16): integer;
   published
     /// the granularity of the statistics of this entry
-    property Gran: TSynMonitorUsageGranularity read fGran write fGran;
+    property Gran: TSynMonitorUsageGranularity
+      read fGran write fGran;
     /// identify which application is monitored
     // - match the lower bits of each record ID
     // - by default, is expected to be a TSynUniqueIdentifierProcess 16-bit value
-    property Process: Int64 read fProcess write fProcess;
+    property Process: Int64
+      read fProcess write fProcess;
     /// the actual statistics information, stored as a TDocVariant JSON object
-    property Info: variant read fInfo write fInfo;
+    property Info: variant
+      read fInfo write fInfo;
     /// a custom text, which may be used e.g. by support or developpers
-    property Comment: RawUTF8 read fComment write fComment;
+    property Comment: RawUTF8
+      read fComment write fComment;
   end;
   /// class-reference type (metaclass) of a TOrmMonitorUsage table
   TOrmMonitorUsageClass = class of TOrmMonitorUsage;
@@ -1473,19 +1500,23 @@ type
     destructor Destroy; override;
     /// you can set an optional Batch instance to speed up DB writing
     // - when calling the Modified() method
-    property SaveBatch: TRestBatch read fSaveBatch write fSaveBatch;
+    property SaveBatch: TRestBatch
+      read fSaveBatch write fSaveBatch;
   published
     /// the actual ORM class used for persistence
-    property StoredClass: TOrmMonitorUsageClass read fStoredClass;
+    property StoredClass: TOrmMonitorUsageClass
+      read fStoredClass;
     /// how the information could be stored for several processes
     // - e.g. when several SOA nodes gather monitoring information in a
     // shared (MongoDB) database
     // - is by default a TSynUniqueIdentifierProcess value, but may be
     // any integer up to ProcessIDShift bits as set in Create()
-    property ProcessID: Int64 read fProcessID;
+    property ProcessID: Int64
+      read fProcessID;
     /// how process ID are stored within the mORMot TOrm.ID
     // - equals 16 bits by default, to match TSynUniqueIdentifierProcess resolution
-    property ProcessIDShift: integer read fProcessIDShift;
+    property ProcessIDShift: integer
+      read fProcessIDShift;
   end;
 
   /// the flags used for TRestServer.AddStats
@@ -1522,7 +1553,8 @@ type
     destructor Destroy; override;
     /// the associated TRestServer instance, which will be notified
     // when the callback is released
-    property Rest: TRest read fRest;
+    property Rest: TRest
+      read fRest;
     /// the interface type, implemented by this callback class
     property RestInterface: TGUID
       read fInterface write fInterface;
@@ -1564,12 +1596,14 @@ type
     // - if there is a WaitFor currently in progress, returns FALSE
     function Reset: boolean; virtual;
     /// the associated blocking process instance
-    property Process: TBlockingProcess read fProcess;
+    property Process: TBlockingProcess
+      read fProcess;
   published
     /// the current state of process
     // - just a wrapper around Process.Event
     // - use Reset method to re-use this instance after a WaitFor process
-    property Event: TBlockingEvent read GetEvent;
+    property Event: TBlockingEvent
+      read GetEvent;
   end;
 
 

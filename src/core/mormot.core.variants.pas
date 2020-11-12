@@ -1329,7 +1329,8 @@ type
     // - those options are set when creating the instance
     // - dvoArray and dvoObject are not options, but define the document Kind,
     // so those items are ignored when assigned to this property
-    property Options: TDocVariantOptions read VOptions write SetOptions;
+    property Options: TDocVariantOptions
+      read VOptions write SetOptions;
     /// returns the document internal layout
     // - just after initialization, it will return dvUndefined
     // - most of the time, you will add named values with AddValue() or by

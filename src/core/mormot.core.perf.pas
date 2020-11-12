@@ -203,13 +203,16 @@ type
     function Started: boolean;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInMicroSec: TSynMonitorTotalMicroSec read fTime write fTime;
+    property TimeInMicroSec: TSynMonitorTotalMicroSec
+      read fTime write fTime;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property LastTimeInMicroSec: TSynMonitorOneMicroSec read fLastTime write fLastTime;
+    property LastTimeInMicroSec: TSynMonitorOneMicroSec
+      read fLastTime write fLastTime;
     /// how many times the Pause method was called, i.e. the number of tasks
     // processeed
-    property PauseCount: TSynMonitorCount read fPauseCount;
+    property PauseCount: TSynMonitorCount
+      read fPauseCount;
   end;
 
   /// interface to a reference counted high resolution timer instance
@@ -275,9 +278,11 @@ type
       {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
   published
     /// micro seconds time elapsed, as raw number
-    property MicroSec: TSynMonitorTotalMicroSec read fMicroSeconds write fMicroSeconds;
+    property MicroSec: TSynMonitorTotalMicroSec
+      read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
-    property Text: TShort16 read GetAsText;
+    property Text: TShort16
+      read GetAsText;
   end;
 
   /// able to serialize any immediate timing as raw micro-seconds number or text
@@ -292,9 +297,11 @@ type
       {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
   published
     /// micro seconds time elapsed, as raw number
-    property MicroSec: TSynMonitorOneMicroSec read fMicroSeconds write fMicroSeconds;
+    property MicroSec: TSynMonitorOneMicroSec
+      read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
-    property Text: TShort16 read GetAsText;
+    property Text: TShort16
+      read GetAsText;
   end;
 
   TSynMonitorSizeParent = class(TSynPersistent)
@@ -313,9 +320,11 @@ type
     function GetAsText: TShort16;
   published
     /// number of bytes, as raw number
-    property Bytes: TSynMonitorTotalBytes read fBytes write fBytes;
+    property Bytes: TSynMonitorTotalBytes
+      read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
-    property Text: TShort16 read GetAsText;
+    property Text: TShort16
+      read GetAsText;
   end;
 
   /// able to serialize any immediate size as bytes number
@@ -327,9 +336,11 @@ type
     function GetAsText: TShort16;
   published
     /// number of bytes, as raw number
-    property Bytes: TSynMonitorOneBytes read fBytes write fBytes;
+    property Bytes: TSynMonitorOneBytes
+      read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
-    property Text: TShort16 read GetAsText;
+    property Text: TShort16
+      read GetAsText;
   end;
 
   /// able to serialize any bandwith as bytes count per second
@@ -341,9 +352,11 @@ type
     function GetAsText: TShort16;
   published
     /// number of bytes per second, as raw number
-    property BytesPerSec: QWord read fBytesPerSec write fBytesPerSec;
+    property BytesPerSec: QWord
+      read fBytesPerSec write fBytesPerSec;
     /// number of bytes per second, as '... B-KB-MB-GB/s' text
-    property Text: TShort16 read GetAsText;
+    property Text: TShort16
+      read GetAsText;
   end;
 
   /// a generic value object able to handle any task / process statistic
@@ -454,28 +467,39 @@ type
     class procedure RttiCustomSet(Rtti: TRttiCustom); override;
     /// an identifier associated to this monitored resource
     // - is used e.g. for TSynMonitorUsage persistence/tracking
-    property Name: RawUTF8 read fName write fName;
+    property Name: RawUTF8
+      read fName write fName;
   published
     /// indicates if this thread is currently working on some process
-    property Processing: boolean read fProcessing write fProcessing;
+    property Processing: boolean
+      read fProcessing write fProcessing;
     /// how many times the task was performed
-    property TaskCount: TSynMonitorCount64 read fTaskCount write fTaskCount;
+    property TaskCount: TSynMonitorCount64
+      read fTaskCount write fTaskCount;
     /// the whole time spend during all working process
-    property TotalTime: TSynMonitorTime read fTotalTime;
+    property TotalTime: TSynMonitorTime
+      read fTotalTime;
     /// the time spend during the last task processing
-    property LastTime: TSynMonitorOneTime read fLastTime;
+    property LastTime: TSynMonitorOneTime
+      read fLastTime;
     /// the lowest time spent during any working process
-    property MinimalTime: TSynMonitorOneTime read fMinimalTime;
+    property MinimalTime: TSynMonitorOneTime
+      read fMinimalTime;
     /// the time spent in average during any working process
-    property AverageTime: TSynMonitorOneTime read fAverageTime;
+    property AverageTime: TSynMonitorOneTime
+      read fAverageTime;
     /// the highest time spent during any working process
-    property MaximalTime: TSynMonitorOneTime read fMaximalTime;
+    property MaximalTime: TSynMonitorOneTime
+      read fMaximalTime;
     /// average of how many tasks did occur per second
-    property PerSec: QWord read fPerSec;
+    property PerSec: QWord
+      read fPerSec;
     /// how many errors did occur during the processing
-    property Errors: TSynMonitorCount read fInternalErrors;
+    property Errors: TSynMonitorCount
+      read fInternalErrors;
     /// information about the last error which occured during the processing
-    property LastError: variant read fLastInternalError;
+    property LastError: variant
+      read fLastInternalError;
   end;
   /// references a TSynMonitor instance
   PSynMonitor = ^TSynMonitor;
@@ -498,9 +522,11 @@ type
     procedure AddSize(const Bytes: QWord);
   published
     /// how many total data has been hanlded during all working process
-    property Size: TSynMonitorSize read fSize;
+    property Size: TSynMonitorSize
+      read fSize;
     /// data processing bandwith, returned as B/KB/MB per second
-    property Throughput: TSynMonitorThroughput read fThroughput;
+    property Throughput: TSynMonitorThroughput
+      read fThroughput;
   end;
 
 
@@ -524,13 +550,17 @@ type
     procedure AddSize(const Incoming, Outgoing: QWord);
   published
     /// how many data has been received
-    property Input: TSynMonitorSize read fInput;
+    property Input: TSynMonitorSize
+      read fInput;
     /// how many data has been sent back
-    property Output: TSynMonitorSize read fOutput;
+    property Output: TSynMonitorSize
+      read fOutput;
     /// incoming data processing bandwith, returned as B/KB/MB per second
-    property InputThroughput: TSynMonitorThroughput read fInputThroughput;
+    property InputThroughput: TSynMonitorThroughput
+      read fInputThroughput;
     /// outgoing data processing bandwith, returned as B/KB/MB per second
-    property OutputThroughput: TSynMonitorThroughput read fOutputThroughput;
+    property OutputThroughput: TSynMonitorThroughput
+      read fOutputThroughput;
   end;
 
 
@@ -560,12 +590,15 @@ type
     function AddCurrentRequestCount(diff: integer): integer;
   published
     /// current count of connected clients
-    property ClientsCurrent: TSynMonitorOneCount read fClientsCurrent;
+    property ClientsCurrent: TSynMonitorOneCount
+      read fClientsCurrent;
     /// max count of connected clients
-    property ClientsMax: TSynMonitorOneCount read fClientsMax;
+    property ClientsMax: TSynMonitorOneCount
+      read fClientsMax;
     /// how many concurrent requests are currently processed
     // - modified via AddCurrentRequestCount() in TRestServer.URI()
-    property CurrentRequestCount: integer read fCurrentRequestCount;
+    property CurrentRequestCount: integer
+      read fCurrentRequestCount;
   end;
 
   /// a list of simple process statistics
@@ -732,7 +765,8 @@ type
       ModificationTime: TTimeLog = 0): integer; overload; virtual;
     /// some custom text, associated with the current stored state
     // - will be persistented by Save() methods
-    property Comment: RawUTF8 read fComment write fComment;
+    property Comment: RawUTF8
+      read fComment write fComment;
   end;
 
 const
@@ -892,13 +926,16 @@ type
     property UnsubscribeProcessOnAccessError: boolean
       read fUnsubscribeProcessOnAccessError write fUnsubscribeProcessOnAccessError;
     /// how many items are stored internally, and returned by the History() method
-    property HistoryDepth: integer read fHistoryDepth;
+    property HistoryDepth: integer
+      read fHistoryDepth;
     /// executed when TSystemUse.BackgroundExecute finished its measurement
-    property OnMeasured: TOnSystemUseMeasured read fOnMeasured write fOnMeasured;
+    property OnMeasured: TOnSystemUseMeasured
+      read fOnMeasured write fOnMeasured;
     /// low-level access to the associated timer running BackgroundExecute
     // - equals nil if has been associated to no timer
     // - holds e.g. a TRestBackgroundTimer from TRest.SystemUseTrack
-    property Timer: TObject read fTimer write fTimer;
+    property Timer: TObject
+      read fTimer write fTimer;
   end;
 
   /// value object able to gather information about the current system memory
@@ -943,26 +980,35 @@ type
     class function ToVariant: variant;
   published
     /// Total of allocated memory used by the program
-    property AllocatedUsed: TSynMonitorOneSize read GetAllocatedUsed;
+    property AllocatedUsed: TSynMonitorOneSize
+      read GetAllocatedUsed;
     /// Total of allocated memory reserved by the program
-    property AllocatedReserved: TSynMonitorOneSize read GetAllocatedReserved;
+    property AllocatedReserved: TSynMonitorOneSize
+      read GetAllocatedReserved;
     /// Percent of memory in use for the system
-    property MemoryLoadPercent: integer read GetMemoryLoadPercent;
+    property MemoryLoadPercent: integer
+      read GetMemoryLoadPercent;
     /// Total of physical memory for the system
-    property PhysicalMemoryTotal: TSynMonitorOneSize read GetPhysicalMemoryTotal;
+    property PhysicalMemoryTotal: TSynMonitorOneSize
+      read GetPhysicalMemoryTotal;
     /// Free of physical memory for the system
-    property PhysicalMemoryFree: TSynMonitorOneSize read GetPhysicalMemoryFree;
+    property PhysicalMemoryFree: TSynMonitorOneSize
+      read GetPhysicalMemoryFree;
     /// Total of paging file for the system
-    property PagingFileTotal: TSynMonitorOneSize read GetPagingFileTotal;
+    property PagingFileTotal: TSynMonitorOneSize
+      read GetPagingFileTotal;
     /// Free of paging file for the system
-    property PagingFileFree: TSynMonitorOneSize read GetPagingFileFree;
+    property PagingFileFree: TSynMonitorOneSize
+      read GetPagingFileFree;
     {$ifdef MSWINDOWS}
     /// Total of virtual memory for the system
     // - property not defined under Linux, since not applying to this OS
-    property VirtualMemoryTotal: TSynMonitorOneSize read GetVirtualMemoryTotal;
+    property VirtualMemoryTotal: TSynMonitorOneSize
+      read GetVirtualMemoryTotal;
     /// Free of virtual memory for the system
     // - property not defined under Linux, since not applying to this OS
-    property VirtualMemoryFree: TSynMonitorOneSize read GetVirtualMemoryFree;
+    property VirtualMemoryFree: TSynMonitorOneSize
+      read GetVirtualMemoryFree;
     {$endif MSWINDOWS}
   end;
 
@@ -992,19 +1038,24 @@ type
     class function FreeAsText: RawUTF8;
   published
     /// the disk name
-    property Name: TFileName read GetName;
+    property Name: TFileName
+      read GetName;
     {$ifdef MSWINDOWS}
     /// the volume name (only available on Windows)
-    property VolumeName: SynUnicode read fVolumeName write fVolumeName;
+    property VolumeName: SynUnicode
+      read fVolumeName write fVolumeName;
     /// space currently available on this disk for the current user
     // - may be less then FreeSize, if user quotas are specified (only taken
     // into account under Windows: on POSIX, AvailableSize=FreeSize)
-    property AvailableSize: TSynMonitorOneSize read GetAvailable;
+    property AvailableSize: TSynMonitorOneSize
+      read GetAvailable;
     {$endif MSWINDOWS}
     /// free space currently available on this disk
-    property FreeSize: TSynMonitorOneSize read GetFree;
+    property FreeSize: TSynMonitorOneSize
+      read GetFree;
     /// total space
-    property TotalSize: TSynMonitorOneSize read GetTotal;
+    property TotalSize: TSynMonitorOneSize
+      read GetTotal;
   end;
 
 

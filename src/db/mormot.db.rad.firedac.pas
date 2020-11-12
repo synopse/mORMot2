@@ -111,7 +111,8 @@ type
     // - by default, ServerName, DatabaseName, UserID and Password are set by
     // the Create() constructor according to the underlying FireDAC driver
     // - you can add some additional options here
-    property Parameters: TStringList read fFireDACOptions;
+    property Parameters: TStringList
+      read fFireDACOptions;
   end;
 
 
@@ -143,7 +144,8 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated FireDAC connection instance
-    property Database: {$ifdef ISDELPHIXE5}TFDConnection{$else}TADConnection{$endif} read fDatabase;
+    property Database: {$ifdef ISDELPHIXE5}TFDConnection{$else}TADConnection{$endif}
+      read fDatabase;
   end;
 
   ///	implements a statement via a FireDAC connection

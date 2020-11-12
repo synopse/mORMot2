@@ -536,9 +536,11 @@ type
     function GetServerTimestamp: TTimeLog; virtual;
 
     /// main access to the IRestOrm methods of this instance
-    property ORM: IRestOrm read fOrm;
+    property ORM: IRestOrm
+      read fOrm;
     /// low-level access to the associated Data Model
-    property Model: TOrmModel read fModel;
+    property Model: TOrmModel
+      read fModel;
     /// access to the interface-based services list
     // - may be nil if no service interface has been registered yet: so be
     // aware that the following line may trigger an access violation if
@@ -549,7 +551,8 @@ type
     // trigger any access violation if Services=nil, could be:
     // ! if fServer.Services.Resolve(ICalculator, Calc) then
     // !   ...
-    property Services: TServiceContainer read fServices;
+    property Services: TServiceContainer
+      read fServices;
     /// access or initialize the internal IoC resolver, used for interface-based
     // remote services, and more generaly any Services.Resolve() call
     // - create and initialize the internal TServiceContainer if no service
@@ -564,7 +567,8 @@ type
     /// internal procedure called to implement TServiceContainer.Release
     procedure ServicesRelease(Caller: TServiceContainer);
     /// access to the Multi-Threading process of this instance
-    property Run: TRestRunThreads read fRun;
+    property Run: TRestRunThreads
+      read fRun;
 
     /// how this class execute its internal commands
     // - by default, TRestServer.URI() will lock for Write ORM according to
@@ -1244,20 +1248,26 @@ type
     // - returns FALSE if successfully waited up to MS milliseconds
     function SleepOrTerminated(MS: integer): boolean;
     /// read-only access to the associated REST instance
-    property Rest: TRest read FRest;
+    property Rest: TRest
+      read FRest;
     /// TRUE if the associated REST instance will be owned by this thread
-    property OwnRest: boolean read fOwnRest;
+    property OwnRest: boolean
+      read fOwnRest;
     /// a critical section is associated to this thread
     // - could be used to protect shared resources within the internal process
-    property Safe: TSynLocker read fSafe;
+    property Safe: TSynLocker
+      read fSafe;
     /// read-only access to the TSynLog instance of the associated REST instance
-    property Log: TSynLog read fLog;
+    property Log: TSynLog
+      read fLog;
     /// a event associated to this thread
-    property Event: TEvent read fEvent;
+    property Event: TEvent
+      read fEvent;
     /// publishes the thread running state
     property Terminated;
     /// publishes the thread executing state (set when Execute leaves)
-    property Executing: boolean read fExecuting;
+    property Executing: boolean
+      read fExecuting;
   end;
   {$M-}
 

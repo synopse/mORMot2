@@ -66,29 +66,37 @@ type
     /// the 'interface.method' identifier of this call
     // - this column will be indexed, for fast SQL queries, with the MicroSec
     // column (for performance tuning)
-    property Method: RawUTF8 read fMethod write fMethod;
+    property Method: RawUTF8
+      read fMethod write fMethod;
     /// the input parameters, as a JSON document
     // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
     // shortened field names, for smaller TEXT storage
     // - content may be searched using JsonGet/JsonHas SQL functions on a
     // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
-    property Input: variant read fInput write fInput;
+    property Input: variant
+      read fInput write fInput;
     /// the output parameters, as a JSON document, including result: for a function
     // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
     // shortened field names, for smaller TEXT storage
     // - content may be searched using JsonGet/JsonHas SQL functions on a
     // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
-    property Output: variant read fOutput write fOutput;
+    property Output: variant
+      read fOutput write fOutput;
     /// the Session ID, if there is any
-    property Session: integer read fSession write fSession;
+    property Session: integer
+      read fSession write fSession;
     /// the User ID, if there is an identified Session
-    property User: integer read fUser write fUser;
+    property User: integer
+      read fUser write fUser;
     /// will be filled by the ORM when this record is written in the database
-    property Time: TModTime read fTime write fTime;
+    property Time: TModTime
+      read fTime write fTime;
     /// execution time of this method, in micro seconds
-    property MicroSec: integer read fMicroSec write fMicroSec;
+    property MicroSec: integer
+      read fMicroSec write fMicroSec;
     /// if not localhost/127.0.0.1, the remote IP address
-    property IP: RawUTF8 read fIP write fIP;
+    property IP: RawUTF8
+      read fIP write fIP;
   end;
 
   /// execution statistics used for DB-based asynchronous notifications
@@ -121,7 +129,8 @@ type
   published
     /// when this notification has been sent
     // - equals 0 until it was actually notified
-    property Sent: TTimeLog read fSent write fSent;
+    property Sent: TTimeLog
+      read fSent write fSent;
   end;
 
   /// class-reference type (metaclass) for storing interface-based service
@@ -275,13 +284,16 @@ type
     // is set to TRUE (which is not the default setting, for security reasons)
     function RetrieveSignature: RawUTF8; virtual; abstract;
     /// access to the registered Interface RTTI information
-    property InterfaceFactory: TInterfaceFactory read fInterface;
+    property InterfaceFactory: TInterfaceFactory
+      read fInterface;
     /// the registered Interface low-level Delphi RTTI type
     // - just maps InterfaceFactory.InterfaceTypeInfo
-    property InterfaceTypeInfo: PRttiInfo read GetInterfaceTypeInfo;
+    property InterfaceTypeInfo: PRttiInfo
+      read GetInterfaceTypeInfo;
     /// the registered Interface GUID
     // - just maps InterfaceFactory.InterfaceIID
-    property InterfaceIID: TGUID read GetInterfaceIID;
+    property InterfaceIID: TGUID
+      read GetInterfaceIID;
     /// the service contract, serialized as a JSON object
     // - a "contract" is in fact the used interface signature, i.e. its
     //   implementation mode (InstanceCreation) and all its methods definitions
@@ -295,7 +307,8 @@ type
     // $               {"argument":"n2","direction":"in","type":"integer"},
     // $               {"argument":"Result","direction":"out","type":"integer"}
     // $ ]}]}
-    property Contract: RawUTF8 read fContract;
+    property Contract: RawUTF8
+      read fContract;
     /// the published service contract, as expected by both client and server
     // - by default, will contain ContractHash property value (for security)
     // - but you can override this value using plain Contract or any custom
@@ -312,32 +325,39 @@ type
     // check and ask the server contract for consistency: it may be used e.g.
     // for accessing a plain REST HTTP server which is not based on mORMot,
     // so may not implement POST /root/Interface._contract_
-    property ContractExpected: RawUTF8 read fContractExpected write fContractExpected;
+    property ContractExpected: RawUTF8
+      read fContractExpected write fContractExpected;
     /// direct access to the low-level per-method execution rights
-    property Execution: TServiceFactoryExecutionDynArray read fExecution;
+    property Execution: TServiceFactoryExecutionDynArray
+      read fExecution;
   published
     /// access to the associated TRest ORM instance
-    property ORM: IRestOrm read fOrm;
+    property ORM: IRestOrm
+      read fOrm;
   published
     /// the registered Interface URI
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
-    property InterfaceURI: RawUTF8 read fInterfaceURI;
+    property InterfaceURI: RawUTF8
+      read fInterfaceURI;
     /// the registered Interface mangled URI
     // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
     // ! ['{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}'] into '00amyWGct0y_ze4lIsj2Mw'
     // - can be substituted to the clear InterfaceURI name
-    property InterfaceMangledURI: RawUTF8 read fInterfaceMangledURI;
+    property InterfaceMangledURI: RawUTF8
+      read fInterfaceMangledURI;
     /// how each class instance is to be created
     // - only relevant on the server side; on the client side, this class will
     // be accessed only to retrieve a remote access instance, i.e. sicSingle
-    property InstanceCreation: TServiceInstanceImplementation read fInstanceCreation;
+    property InstanceCreation: TServiceInstanceImplementation
+      read fInstanceCreation;
     /// a hash of the service contract, serialized as a JSON string
     // - this may be used instead of the JSON signature, to enhance security
     // (i.e. if you do not want to publish the available methods, but want
     // to check for the proper synchronization of both client and server)
     // - a possible value may be: "C351335A7406374C"
-    property ContractHash: RawUTF8 read fContractHash;
+    property ContractHash: RawUTF8
+      read fContractHash;
   end;
 
 const
@@ -546,8 +566,8 @@ type
       read fResultAsXMLObjectNameSpace write fResultAsXMLObjectNameSpace;
     /// disable base64-encoded TOrmServiceLog.Output for methods
     // returning TServiceCustomAnswer record (to reduce storage size)
-    property ExcludeServiceLogCustomAnswer: boolean read fExcludeServiceLogCustomAnswer
-      write fExcludeServiceLogCustomAnswer;
+    property ExcludeServiceLogCustomAnswer: boolean
+      read fExcludeServiceLogCustomAnswer write fExcludeServiceLogCustomAnswer;
   end;
 
 
@@ -795,7 +815,8 @@ type
     /// property which allows to read or set the Address/Port/Root fields as
     // one UTF-8 text field (i.e. a TRestServerURIString instance)
     // - URI format is 'address:port/root', but port or root are optional
-    property URI: TRestServerURIString read GetURI write SetURI;
+    property URI: TRestServerURIString
+      read GetURI write SetURI;
   end;
 
   /// store a list of TRestServer URIs
@@ -884,7 +905,8 @@ type
     // - is 0 by default, meaning no expiration
     // - you can set it to a value so that any service URI registered with
     // RegisterFromJSON() AFTER this property modification may expire
-    property TimeOut: integer read fTimeOut write fTimeOut;
+    property TimeOut: integer
+      read fTimeOut write fTimeOut;
   end;
 
 

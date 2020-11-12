@@ -1966,7 +1966,8 @@ type
     /// unload the external library
     destructor Destroy; override;
   published
-    property LibraryName: TFileName read GetLibraryName;
+    property LibraryName: TFileName
+      read GetLibraryName;
   end;
 
 
@@ -3184,7 +3185,8 @@ type
     // - it is actually faster than creating a new TSQLBlobStream instance
     procedure ChangeRow(RowID: Int64);
     /// read-only access to the BLOB object handle
-    property Handle: TSQLite3Blob read fBlob;
+    property Handle: TSQLite3Blob
+      read fBlob;
   end;
 
   /// kind of event triggerred during TSQLDatabase.BackupBackground() process

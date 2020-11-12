@@ -255,18 +255,23 @@ type
       IgnoreTime: boolean = false; NotBeforeDelta: TUnixTime = 15): TJWTResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
-    property Algorithm: RawUTF8 read fAlgorithm;
+    property Algorithm: RawUTF8
+      read fAlgorithm;
     /// allow to tune the Verify and Compute method process
-    property Options: TJWTOptions read fOptions write fOptions;
+    property Options: TJWTOptions
+      read fOptions write fOptions;
     /// the JWT Registered Claims, as implemented by this instance
     // - Verify() method will ensure all claims are defined in the payload,
     // then fill TJWTContent.reg[] with all corresponding values
-    property Claims: TJWTClaims read fClaims;
+    property Claims: TJWTClaims
+      read fClaims;
     /// the period, in seconds, for the "exp" claim
-    property ExpirationSeconds: integer read fExpirationSeconds;
+    property ExpirationSeconds: integer
+      read fExpirationSeconds;
     /// the audience string values associated with this instance
     // - will be checked by Verify() method, and set in TJWTContent.audience
-    property Audience: TRawUTF8DynArray read fAudience;
+    property Audience: TRawUTF8DynArray
+      read fAudience;
     /// delay of optional in-memory cache of Verify() TJWTContent
     // - equals 0 by default, i.e. cache is disabled
     // - may be useful if the signature process is very resource consumming
@@ -278,7 +283,8 @@ type
     // - default is [jwtValid] but you may also include jwtInvalidSignature
     // if signature checking uses a lot of resources
     // - only used if CacheTimeoutSeconds>0
-    property CacheResults: TJWTResults read fCacheResults write fCacheResults;
+    property CacheResults: TJWTResults
+      read fCacheResults write fCacheResults;
   end;
 
   /// class-reference type (metaclass) of a JWT algorithm process
@@ -353,11 +359,14 @@ type
     /// finalize the instance
     destructor Destroy; override;
     /// the digital signature size, in byte
-    property SignatureSize: integer read fSignPrepared.SignatureSize;
+    property SignatureSize: integer
+      read fSignPrepared.SignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
-    property SignatureAlgo: TSignAlgo read fSignPrepared.Algo;
+    property SignatureAlgo: TSignAlgo
+      read fSignPrepared.Algo;
     /// low-level read access to the internal signature structure
-    property SignPrepared: TSynSigner read fSignPrepared;
+    property SignPrepared: TSynSigner
+      read fSignPrepared;
   end;
 
   /// meta-class for TJWTSynSignerAbstract creations
@@ -502,9 +511,11 @@ type
     destructor Destroy; override;
     /// access to the associated TECCCertificate instance
     // - which may be a TECCCertificateSecret for Compute() private key
-    property Certificate: TECCCertificate read fCertificate;
+    property Certificate: TECCCertificate
+      read fCertificate;
     /// if the associated TECCCertificate is to be owned by this instance
-    property OwnCertificate: boolean read fOwnCertificate write fOwnCertificate;
+    property OwnCertificate: boolean
+      read fOwnCertificate write fOwnCertificate;
   end;
 
 

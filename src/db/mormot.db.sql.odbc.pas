@@ -154,16 +154,21 @@ type
     procedure Rollback; override;
 
     /// the remote DBMS type, as retrieved at ODBC connection opening
-    property DBMS: TSQLDBDefinition read fDBMS;
+    property DBMS: TSQLDBDefinition
+      read fDBMS;
     /// the full connection string (expanded from ServerName)
-    property SQLDriverFullString: RawUTF8 read fSQLDriverFullString;
+    property SQLDriverFullString: RawUTF8
+      read fSQLDriverFullString;
   published
     /// the remote DBMS name, as retrieved at ODBC connection opening
-    property DBMSName: RawUTF8 read fDBMSName;
+    property DBMSName: RawUTF8
+      read fDBMSName;
     /// the remote DBMS version, as retrieved at ODBC connection opening
-    property DBMSVersion: RawUTF8 read fDBMSVersion;
+    property DBMSVersion: RawUTF8
+      read fDBMSVersion;
     /// the local driver name, as retrieved at ODBC connection opening
-    property DriverName: RawUTF8 read fDriverName;
+    property DriverName: RawUTF8
+      read fDriverName;
   end;
 
   /// implements a statement using a ODBC connection

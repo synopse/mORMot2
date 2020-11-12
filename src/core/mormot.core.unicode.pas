@@ -306,9 +306,11 @@ type
     function AnsiToAnsi(From: TSynAnsiConvert;
       Source: PAnsiChar; SourceChars: cardinal): RawByteString; overload;
     /// corresponding code page
-    property CodePage: Cardinal read fCodePage;
+    property CodePage: Cardinal
+      read fCodePage;
     /// corresponding length binary shift used for worst conversion case
-    property AnsiCharShift: byte read fAnsiCharShift;
+    property AnsiCharShift: byte
+      read fAnsiCharShift;
   end;
 
   /// a class to handle Ansi to/from Unicode translation of fixed width encoding
@@ -377,11 +379,13 @@ type
     function IsValidAnsiU8Bit(UTF8Text: PUTF8Char): boolean;
     /// direct access to the Ansi-To-Unicode lookup table
     // - use this array like AnsiToWide: array[byte] of word
-    property AnsiToWide: TWordDynArray read fAnsiToWide;
+    property AnsiToWide: TWordDynArray
+      read fAnsiToWide;
     /// direct access to the Unicode-To-Ansi lookup table
     // - use this array like WideToAnsi: array[word] of byte
     // - any unhandled WideChar will return ord('?')
-    property WideToAnsi: TByteDynArray read fWideToAnsi;
+    property WideToAnsi: TByteDynArray
+      read fWideToAnsi;
   end;
 
   /// a class to handle UTF-8 to/from Unicode translation

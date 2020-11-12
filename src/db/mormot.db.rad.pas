@@ -275,7 +275,8 @@ type
     // value is within expected range), either as Int64 variant
     // - on some versions of Delphi, and some version of TDataSet (e.g. BDE),
     // you may have to use a conversion to double to avoid a runtime error
-    property ForceInt64AsFloat: boolean read fForceInt64AsFloat write fForceInt64AsFloat;
+    property ForceInt64AsFloat: boolean
+      read fForceInt64AsFloat write fForceInt64AsFloat;
     {$endif UNICODE}
     /// set to true to force all text content to be processed as WideString
     // instead of the default faster AnsiString, for pre-Unicode version of Delphi
@@ -292,7 +293,8 @@ type
     // - starting with Delphi 2009, the TEXT content will be processed as an
     // UnicodeString, so this property is not necessary for most cases,
     // but it appeared that some providers expects it to be defined
-    property ForceUseWideString: boolean read fForceUseWideString write fForceUseWideString;
+    property ForceUseWideString: boolean
+      read fForceUseWideString write fForceUseWideString;
   end;
 
   ///	implements an abstract statement via the DB.pas TDataSet/TQuery-like

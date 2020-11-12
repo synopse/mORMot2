@@ -301,11 +301,14 @@ type
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(additionalHeader: RawUTF8);
     /// input parameter containing the caller URI
-    property URL: RawUTF8 read fURL;
+    property URL: RawUTF8
+      read fURL;
     /// input parameter containing the caller method (GET/POST...)
-    property Method: RawUTF8 read fMethod;
+    property Method: RawUTF8
+      read fMethod;
     /// input parameter containing the caller message headers
-    property InHeaders: RawUTF8 read fInHeaders;
+    property InHeaders: RawUTF8
+      read fInHeaders;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
     property InContent: RawByteString

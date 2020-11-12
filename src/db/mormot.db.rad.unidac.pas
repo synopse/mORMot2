@@ -109,7 +109,8 @@ type
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
     // ! Props.SpecificOptions.Values['ClientLibrary'] := ClientDllName;
-    property SpecificOptions: TStringList read fSpecificOptions;
+    property SpecificOptions: TStringList
+      read fSpecificOptions;
   end;
 
 
@@ -141,7 +142,8 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated UniDAC connection instance
-    property Database: TUniConnection read fDatabase;
+    property Database: TUniConnection
+      read fDatabase;
   end;
 
   ///	implements a statement via a UniDAC connection

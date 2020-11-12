@@ -410,9 +410,11 @@ type
     // - under Linux, always return '0.0.0.0' if no custom version number
     // has been defined
     // - consider using DetailedOrVoid method if '0.0.0.0' is not expected
-    property Detailed: string read fDetailed write fDetailed;
+    property Detailed: string
+      read fDetailed write fDetailed;
     /// build date and time of this exe file
-    property BuildDateTime: TDateTime read fBuildDateTime write fBuildDateTime;
+    property BuildDateTime: TDateTime
+      read fBuildDateTime write fBuildDateTime;
   end;
 
 {$M-}
@@ -1199,13 +1201,17 @@ type
     /// unmap the file
     procedure UnMap;
     /// retrieve the memory buffer mapped to the file content
-    property Buffer: PAnsiChar read fBuf;
+    property Buffer: PAnsiChar
+      read fBuf;
     /// retrieve the buffer size
-    property Size: PtrUInt read fBufSize;
+    property Size: PtrUInt
+      read fBufSize;
     /// retrieve the mapped file size
-    property FileSize: Int64 read fFileSize;
+    property FileSize: Int64
+      read fFileSize;
     /// access to the low-level associated File handle (if any)
-    property FileHandle: THandle read fFile;
+    property FileHandle: THandle
+      read fFile;
   end;
 
   /// a TStream created from a file content, using fast memory mapping
@@ -1228,7 +1234,8 @@ type
     /// release any internal mapped file instance
     destructor Destroy; override;
     /// the file name, if created from such Create(aFileName) constructor
-    property FileName: TFileName read fFileName;
+    property FileName: TFileName
+      read fFileName;
   end;
 
   /// low-level access to a resource bound to the executable
@@ -1475,9 +1482,11 @@ type
     /// release associated memory and linked library
     destructor Destroy; override;
     /// the associated library handle
-    property Handle: TSynLibraryHandle read fHandle write fHandle;
+    property Handle: TSynLibraryHandle
+      read fHandle write fHandle;
     /// the loaded library path
-    property LibraryPath: TFileName read fLibraryPath;
+    property LibraryPath: TFileName
+      read fLibraryPath;
   end;
 
 
@@ -1629,41 +1638,48 @@ type
     // !end;
     function ProtectMethod: IUnknown;
     /// returns true if the mutex is currently locked by another thread
-    property IsLocked: boolean read fLocked;
+    property IsLocked: boolean
+      read fLocked;
     /// returns true if the Init method has been called for this mutex
     // - is only relevant if the whole object has been previously filled with 0,
     // i.e. as part of a class or as global variable, but won't be accurate
     // when allocated on stack
-    property IsInitialized: boolean read fInitialized;
+    property IsInitialized: boolean
+      read fInitialized;
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // LockedBool, LockedInt64, LockedPointer and LockedUTF8 array properties
     // - returns null if the Index is out of range
-    property Locked[Index: integer]: Variant read GetVariant write SetVariant;
+    property Locked[Index: integer]: Variant
+      read GetVariant write SetVariant;
     /// safe locked access to a Int64 value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked and LockedUTF8 array properties
     // - Int64s will be stored internally as a varInt64 variant
     // - returns nil if the Index is out of range, or does not store a Int64
-    property LockedInt64[Index: integer]: Int64 read GetInt64 write SetInt64;
+    property LockedInt64[Index: integer]: Int64
+      read GetInt64 write SetInt64;
     /// safe locked access to a boolean value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked, LockedInt64, LockedPointer and LockedUTF8 array properties
     // - value will be stored internally as a varboolean variant
     // - returns nil if the Index is out of range, or does not store a boolean
-    property LockedBool[Index: integer]: boolean read GetBool write SetBool;
+    property LockedBool[Index: integer]: boolean
+      read GetBool write SetBool;
     /// safe locked access to a pointer/TObject value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked, LockedBool, LockedInt64 and LockedUTF8 array properties
     // - pointers will be stored internally as a varUnknown variant
     // - returns nil if the Index is out of range, or does not store a pointer
-    property LockedPointer[Index: integer]: Pointer read GetPointer write SetPointer;
+    property LockedPointer[Index: integer]: Pointer
+      read GetPointer write SetPointer;
     /// safe locked access to an UTF-8 string value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked and LockedPointer array properties
     // - UTF-8 string will be stored internally as a varString variant
     // - returns '' if the Index is out of range, or does not store a string
-    property LockedUTF8[Index: integer]: RawUTF8 read GetUTF8 write SetUTF8;
+    property LockedUTF8[Index: integer]: RawUTF8
+      read GetUTF8 write SetUTF8;
     /// safe locked in-place increment to an Int64 value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // Locked and LockedUTF8 array properties
@@ -1690,7 +1706,8 @@ type
     // - returns nil if the Index is out of range, or does not store a Int64
     // - you should rather call LockedInt64[] property, or use this property
     // with a Lock; try ... finally UnLock block
-    property UnlockedInt64[Index: integer]: Int64 read GetUnlockedInt64 write SetUnlockedInt64;
+    property UnlockedInt64[Index: integer]: Int64
+      read GetUnlockedInt64 write SetUnlockedInt64;
   end;
 
   /// a pointer to a TSynLocker mutex instance
@@ -1729,7 +1746,8 @@ type
     destructor Destroy; override;
     /// access to the associated instance critical section
     // - call Safe.Lock/UnLock to protect multi-thread access on this storage
-    property Safe: PSynLocker read fSafe;
+    property Safe: PSynLocker
+      read fSafe;
   end;
 
   {$M-}

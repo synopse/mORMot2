@@ -248,32 +248,41 @@ type
     // table name as file name, and module name as extension
     function FileName(const aTableName: RawUTF8): TFileName; virtual;
     /// the Virtual Table module features
-    property Features: TOrmVirtualTableFeatures read fFeatures.Features;
+    property Features: TOrmVirtualTableFeatures
+      read fFeatures.Features;
     /// the associated virtual table class
-    property TableClass: TOrmVirtualTableClass read fTableClass;
+    property TableClass: TOrmVirtualTableClass
+      read fTableClass;
     /// the associated virtual table cursor class
-    property CursorClass: TOrmVirtualTableCursorClass read fFeatures.CursorClass;
+    property CursorClass: TOrmVirtualTableCursorClass
+      read fFeatures.CursorClass;
     /// the associated TRestStorage class used for storage
     // - e.g. returns TRestStorageInMemory for TOrmVirtualTableJSON,
     // or TRestStorageExternal for TOrmVirtualTableExternal, or
     // either nil for TOrmVirtualTableLog
-    property StaticClass: TRestStorageClass read fFeatures.StaticClass;
+    property StaticClass: TRestStorageClass
+      read fFeatures.StaticClass;
     /// the associated TOrm class
     // - is mostly nil, e.g. for TOrmVirtualTableJSON
     // - used to retrieve the field structure for TOrmVirtualTableLog e.g.
-    property RecordClass: TOrmClass read fFeatures.RecordClass;
+    property RecordClass: TOrmClass
+      read fFeatures.RecordClass;
     /// the extension of the filename (without any left '.')
-    property FileExtension: TFileName read fFeatures.FileExtension;
+    property FileExtension: TFileName
+      read fFeatures.FileExtension;
     /// the full path to be used for the filename
     // - is '' by default, i.e. will use the executable path
     // - you can specify here a custom path, which will be used by the FileName
     // method to retrieve the .json/.data full file
-    property FilePath: TFileName read fFilePath write fFilePath;
+    property FilePath: TFileName
+      read fFilePath write fFilePath;
     /// the associated Server instance
     // - may be nil, in case of direct access to the virtual table
-    property Server: TRestOrmServer read fServer;
+    property Server: TRestOrmServer
+      read fServer;
     /// the corresponding module name
-    property ModuleName: RawUTF8 read fModuleName;
+    property ModuleName: RawUTF8
+      read fModuleName;
   end;
 
   /// the available transaction levels
@@ -325,10 +334,12 @@ type
     class function StructureFromClass(aClass: TOrmClass;
       const aTableName: RawUTF8): RawUTF8;
     /// the associated Virtual Table module
-    property Module: TOrmVirtualTableModule read fModule;
+    property Module: TOrmVirtualTableModule
+      read fModule;
     /// the name of the Virtual Table, as specified following the TABLE keyword
     // in the CREATE VIRTUAL TABLE statement
-    property TableName: RawUTF8 read fTableName;
+    property TableName: RawUTF8
+      read fTableName;
   public { virtual methods to be overridden }
     /// should return the main specifications of the associated TOrmVirtualTableModule
     class procedure GetTableModuleProperties(
@@ -384,13 +395,17 @@ type
     // - can be e.g. a TRestStorageInMemory for TOrmVirtualTableJSON,
     // or a TRestStorageExternal for TOrmVirtualTableExternal, or nil
     // for TOrmVirtualTableLog
-    property Static: TRestOrm read fStatic;
+    property Static: TRestOrm
+      read fStatic;
     /// the associated virtual table storage instance, if is a TRestStorage
-    property StaticStorage: TRestStorage read fStaticStorage;
+    property StaticStorage: TRestStorage
+      read fStaticStorage;
     /// the associated virtual table storage table
-    property StaticTable: TOrmClass read fStaticTable;
+    property StaticTable: TOrmClass
+      read fStaticTable;
     /// the associated virtual table storage index in its Model.Tables[] array
-    property StaticTableIndex: integer read fStaticTableIndex;
+    property StaticTableIndex: integer
+      read fStaticTableIndex;
   end;
 
   /// abstract class able to define a Virtual Table cursor
@@ -421,7 +436,8 @@ type
     // - it will be destroyed when by the DB engine (e.g. via xClose in SQLite3)
     constructor Create(aTable: TOrmVirtualTable); virtual;
     /// the associated Virtual Table class instance
-    property Table: TOrmVirtualTable read fTable;
+    property Table: TOrmVirtualTable
+      read fTable;
   public { abstract methods to be overridden }
     /// called to begin a search in the virtual table
     // - the TOrmVirtualTablePrepared parameters were set by
@@ -670,11 +686,14 @@ type
     /// called by TRestStorageInMemory.AddOne after a precious Find()
     function AddedAfterFind(Rec: TOrm): boolean;
     /// the corresponding field RTTI
-    property PropInfo: TOrmPropInfo read fPropInfo;
+    property PropInfo: TOrmPropInfo
+      read fPropInfo;
     /// if the string comparison shall be case-insensitive
-    property CaseInsensitive: boolean read fCaseInsensitive;
+    property CaseInsensitive: boolean
+      read fCaseInsensitive;
     /// access to the internal hash table
-    property Hasher: TDynArrayHasher read fHasher;
+    property Hasher: TDynArrayHasher
+      read fHasher;
   end;
 
   /// REST storage with direct access to a TObjectList memory-stored table
@@ -994,7 +1013,8 @@ type
     property CommitShouldNotUpdateFile: boolean
       read fCommitShouldNotUpdateFile write fCommitShouldNotUpdateFile;
     /// read-only access to the number of TOrm values
-    property Count: integer read fCount;
+    property Count: integer
+      read fCount;
   end;
 
   /// a dynamic array of TRestStorageInMemory instances
@@ -1202,7 +1222,8 @@ type
   published
     /// the remote ORM instance used for data persistence
     // - may be a TRestOrmClient or a TRestOrmServer instance
-    property RemoteRest: TRestOrm read fRemoteRest;
+    property RemoteRest: TRestOrm
+      read fRemoteRest;
   end;
 
 

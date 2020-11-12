@@ -243,7 +243,8 @@ type
     /// delete the partials
     destructor Destroy; override;
     /// low-level access to the internal partials list
-    property List: TRawUTF8List read fList;
+    property List: TRawUTF8List
+      read fList;
   end;
 
 

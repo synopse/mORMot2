@@ -103,7 +103,8 @@ type
     {$endif FPC}
   public
     /// the associated reference count
-    property RefCount: integer read fRefCount write fRefCount;
+    property RefCount: integer
+      read fRefCount write fRefCount;
   end;
 
   /// any TCollection used between client and server shall inherit from this class
@@ -321,7 +322,8 @@ type
     function Safe: PSynLocker;
     /// direct access to the locking methods of this instance
     // - faster than IAutoLocker.Safe function
-    property Locker: TSynLocker read fSafe;
+    property Locker: TSynLocker
+      read fSafe;
   end;
 
 
@@ -435,13 +437,16 @@ type
     /// fast delete one item in the list
     function Remove(item: pointer): integer; virtual;
     /// how many items are stored in this TList instance
-    property Count: integer read fCount;
+    property Count: integer
+      read fCount;
     /// low-level access to the items stored in this TList instance
-    property List: TPointerDynArray read fList;
+    property List: TPointerDynArray
+      read fList;
     /// low-level array-like access to the items stored in this TList instance
     // - warning: if index is out of range, will return nil and won't raise
     // any exception
-    property Items[index: integer]: pointer read Get; default;
+    property Items[index: integer]: pointer
+      read Get; default;
   end;
   PSynList = ^TSynList;
 
@@ -469,7 +474,8 @@ type
     destructor Destroy; override;
     /// optional class of the stored items
     // - could be used when unserializing from JSON
-    property ItemClass: TClass read fItemClass write fItemClass;
+    property ItemClass: TClass
+      read fItemClass write fItemClass;
   end;
   PSynObjectList = ^TSynObjectList;
 
@@ -498,7 +504,8 @@ type
     destructor Destroy; override;
     /// access to the associated instance critical section
     // - call Safe.Lock/UnLock to protect multi-thread access on this storage
-    property Safe: PSynLocker read fSafe;
+    property Safe: PSynLocker
+      read fSafe;
     /// could be used as a short-cut to Safe.Lock
     procedure Lock;
       {$ifdef HASINLINE}inline;{$endif}
@@ -525,7 +532,8 @@ type
     destructor Destroy; override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: PSynLocker read fSafe;
+    property Safe: PSynLocker
+      read fSafe;
   end;
 
   /// add locking methods to a TSynObjectList
@@ -561,7 +569,8 @@ type
     // - could be used to protect shared resources within the internal process,
     // for index-oriented methods like Delete/Items/Count...
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker read fSafe;
+    property Safe: TSynLocker
+      read fSafe;
   end;
 
   /// abstract persistent class with a 64-bit TID field
@@ -578,7 +587,8 @@ type
   public
     /// this property gives direct access to the class instance ID
     // - not defined as "published" since RttiCustomSet did register it
-    property IDValue: TID read fID write fID;
+    property IDValue: TID
+      read fID write fID;
   end;
 
 
@@ -651,11 +661,14 @@ type
       BufLen: integer = 65536; ForcedAlgo: TAlgoCompress = nil): PtrUInt;
     /// one optional text associated with this storage
     // - you can define this field as published to serialize its value in log/JSON
-    property Name: RawUTF8 read fName;
+    property Name: RawUTF8
+      read fName;
     /// after a LoadFrom(), contains the uncompressed data size read
-    property LoadFromLastUncompressed: integer read fLoadFromLastUncompressed;
+    property LoadFromLastUncompressed: integer
+      read fLoadFromLastUncompressed;
     /// after a SaveTo(), contains the uncompressed data size written
-    property SaveToLastUncompressed: integer read fSaveToLastUncompressed;
+    property SaveToLastUncompressed: integer
+      read fSaveToLastUncompressed;
   end;
 
 
@@ -1631,7 +1644,8 @@ type
     // - same as length(DynArray) or SetLength(DynArray)
     // - this property will recognize T*ObjArray types, so will free any stored
     // instance if the array is sized down
-    property Count: PtrInt read GetCount write SetCount;
+    property Count: PtrInt
+      read GetCount write SetCount;
     /// the internal buffer capacity
     // - if no external Count pointer was set with Init, is the same as Count
     // - if an external Count pointer is set, you can set a value to this
@@ -1640,7 +1654,8 @@ type
     // will affect the Count value, i.e. Add() will append after this count
     // - this property will recognize T*ObjArray types, so will free any stored
     // instance if the array is sized down
-    property Capacity: PtrInt read GetCapacity write SetCapacity;
+    property Capacity: PtrInt
+      read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
     // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayboolean,
@@ -1648,7 +1663,8 @@ type
     // SortDynArrayInt64, SortDynArrayDouble, SortDynArrayAnsiString,
     // SortDynArrayAnsiStringI, SortDynArrayString, SortDynArrayStringI,
     // SortDynArrayUnicodeString, SortDynArrayUnicodeStringI
-    property Compare: TDynArraySortCompare read fCompare write SetCompare;
+    property Compare: TDynArraySortCompare
+      read fCompare write SetCompare;
     /// must be TRUE if the array is currently in sorted order according to
     // the compare function
     // - Add/Delete/Insert/Load* methods will reset this property to false
@@ -1656,18 +1672,23 @@ type
     // - you MUST set this property to false if you modify the dynamic array
     // content in your code, so that Find() won't try to wrongly use binary
     // search in an unsorted array, and miss its purpose
-    property Sorted: boolean read fSorted write fSorted;
+    property Sorted: boolean
+      read fSorted write fSorted;
 
     /// low-level direct access to the storage variable
-    property Value: PPointer read fValue;
+    property Value: PPointer
+      read fValue;
     /// low-level extended RTTI access
     // - use e.g. Info.ArrayRtti to access the item RTTI, or Info.Cache.ItemInfo
     // to get the managed item TypeInfo()
-    property Info: TRttiCustom read fInfo;
+    property Info: TRttiCustom
+      read fInfo;
     /// just a convenient copy of Info.Cache.ItemSize
-    property ElemSize: cardinal read fElemSize;
+    property ElemSize: cardinal
+      read fElemSize;
     /// low-level direct access to the external count (if defined at Init)
-    property CountExternal: PInteger read fCountP;
+    property CountExternal: PInteger
+      read fCountP;
   end;
 
   /// function prototype to be used for hashing of a dynamic array element
@@ -1956,13 +1977,15 @@ type
     // even if the number of items is lower than HashCountTrigger
     function Scan(const Item): integer;
     /// retrieve the hash value of a given item, from its index
-    property Hash[aIndex: PtrInt]: Cardinal read GetHashFromIndex;
+    property Hash[aIndex: PtrInt]: Cardinal
+      read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
     // - will be used instead of Compare, to allow object-oriented callbacks
     property EventCompare: TOnDynArraySortCompare
       read fHash.EventCompare write fHash.EventCompare;
     /// custom hash function to be used for hashing of a dynamic array element
-    property HashItem: TDynArrayHashOne read fHash.HashItem;
+    property HashItem: TDynArrayHashOne
+      read fHash.HashItem;
     /// alternative event-oriented Hash function for ReHash
     // - this object-oriented callback will be used instead of HashItem()
     // on each dynamic array entries - HashItem will still be used on
@@ -1980,7 +2003,8 @@ type
       read fHash.CountTrigger write fHash.CountTrigger;
     /// access to the internal hash table
     // - you can call e.g. Hasher.Clear to invalidate the whole hash table
-    property Hasher: TDynArrayHasher read fHash;
+    property Hasher: TDynArrayHasher
+      read fHash;
   end;
 
 

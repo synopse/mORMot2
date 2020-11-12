@@ -100,9 +100,11 @@ type
     /// by default, the client is identified as IE 5.5, which is very
     // friendly welcome by most servers :(
     // - you can specify a custom value here
-    property UserAgent: RawUTF8 read fUserAgent write fUserAgent;
+    property UserAgent: RawUTF8
+      read fUserAgent write fUserAgent;
     /// the associated process name
-    property ProcessName: RawUTF8 read fProcessName write fProcessName;
+    property ProcessName: RawUTF8
+      read fProcessName write fProcessName;
   end;
 
   /// class-reference type (metaclass) of a HTTP client socket access
@@ -292,19 +294,25 @@ type
       read fExtendedOptions
       write fExtendedOptions;
     /// some internal field, which may be used by end-user code
-    property Tag: PtrInt read fTag write fTag;
+    property Tag: PtrInt
+      read fTag write fTag;
   published
     /// the remote server host name, as stated specified to the class constructor
-    property Server: RawUTF8 read fServer;
+    property Server: RawUTF8
+      read fServer;
     /// the remote server port number, as specified to the class constructor
-    property Port: cardinal read fPort;
+    property Port: cardinal
+      read fPort;
     /// if the remote server uses HTTPS, as specified to the class constructor
-    property Https: boolean read fHttps;
+    property Https: boolean
+      read fHttps;
     /// the remote server optional proxy, as specified to the class constructor
-    property ProxyName: RawUTF8 read fProxyName;
+    property ProxyName: RawUTF8
+      read fProxyName;
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
-    property ProxyByPass: RawUTF8 read fProxyByPass;
+    property ProxyByPass: RawUTF8
+      read fProxyByPass;
   end;
   {$M-}
 
@@ -374,18 +382,22 @@ type
     /// returns TRUE if the class is actually supported on this system
     class function IsAvailable: boolean; override;
     /// do not add "Accept: */*" HTTP header by default
-    property NoAllAccept: boolean read fNoAllAccept write fNoAllAccept;
+    property NoAllAccept: boolean
+      read fNoAllAccept write fNoAllAccept;
     /// download would call this method to notify progress of incoming data
-    property OnProgress: TOnWinHttpProgress read fOnProgress write fOnProgress;
+    property OnProgress: TOnWinHttpProgress
+      read fOnProgress write fOnProgress;
     /// download would call this method instead of filling Data: RawByteString value
     // - may be used e.g. when downloading huge content, and saving directly
     // the incoming data on disk or database
     // - if this property is set, raw TCP/IP incoming data would be supplied:
     // compression and encoding won't be handled by the class
-    property OnDownload: TWinHttpDownload read fOnDownload write fOnDownload;
+    property OnDownload: TWinHttpDownload
+      read fOnDownload write fOnDownload;
     /// upload would call this method to notify progress of outgoing data
     // - and optionally abort sending the data by returning FALSE
-    property OnUpload: TWinHttpUpload read fOnUpload write fOnUpload;
+    property OnUpload: TWinHttpUpload
+      read fOnUpload write fOnUpload;
     /// how many bytes should be retrieved for each OnDownload event chunk
     // - if default 0 value is left, would use 65536, i.e. 64KB
     property OnDownloadChunkSize: cardinal
@@ -431,7 +443,8 @@ type
     constructor Create;
   published
     /// the associated WSAGetLastError value
-    property LastError: integer read fLastError;
+    property LastError: integer
+      read fLastError;
   end;
 
   /// a class to handle HTTP/1.1 request using the WinHTTP API
@@ -572,7 +585,8 @@ type
     /// release the connection
     destructor Destroy; override;
     /// allow to set a CA certification file without touching the client certification
-    property CACertFile: RawUTF8 read GetCACertFile write SetCACertFile;
+    property CACertFile: RawUTF8
+      read GetCACertFile write SetCACertFile;
     /// set the client SSL certification details
     // - see CACertFile if you don't want to change the whole client cert info
     // - used e.g. as
@@ -640,7 +654,8 @@ type
     /// erase one resource from internal cache
     function Flush(const aAddress: RawUTF8): boolean;
     /// read-only access to the connected server
-    property URI: TURI read fURI;
+    property URI: TURI
+      read fURI;
   end;
 
 

@@ -127,7 +127,8 @@ type
     function NewConnection: TSQLDBConnection; override;
   published
     /// the transport protocol used to connect to the NexusDB engine
-    property Protocol: TNXProtocol read fProtocol;
+    property Protocol: TNXProtocol
+      read fProtocol;
   end;
 
 
@@ -162,9 +163,11 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated NexusDB connection instance
-    property Database: TnxDatabase read fDatabase;
+    property Database: TnxDatabase
+      read fDatabase;
     /// associated NexusDB server engine
-    property ServerEngine: TnxBaseServerEngine read fServerEngine write SetServerEngine;
+    property ServerEngine: TnxBaseServerEngine
+      read fServerEngine write SetServerEngine;
   end;
 
   // implements a statement via the native NexusDB connection

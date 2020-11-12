@@ -177,9 +177,11 @@ type
     constructor CreateFromAuth(const AuthPubKey: TFileName; const AuthBase64,
       AuthSerial: RawUTF8); virtual;
     /// the certification information, digitaly signed in the Signature field
-    property Signed: TECCCertificateSigned read fContent.Signed;
+    property Signed: TECCCertificateSigned
+      read fContent.Signed;
     /// SHA-256 + ECDSA secp256r1 signature of the Certificate record
-    property Signature: TECCSignature read fContent.Signature;
+    property Signature: TECCSignature
+      read fContent.Signature;
     /// persist the certificate as some base-64 encoded binary
     // - will use SaveToStream serialization
     function ToBase64: RawUTF8;
@@ -254,33 +256,44 @@ type
     function ToFile(const filename: TFileName): boolean;
     /// low-level access to the binary buffer used ECC secp256r1 cryptography
     // - you should not use this property, but other methods
-    property Content: TECCCertificateContent read fContent write fContent;
+    property Content: TECCCertificateContent
+      read fContent write fContent;
   published
     /// the TECCCertificate format version
     // - currently equals 1
-    property Version: word read fContent.Version;
+    property Version: word
+      read fContent.Version;
     /// the genuine identifier of this certificate, as hexadecimal text
-    property Serial: RawUTF8 read GetSerial;
+    property Serial: RawUTF8
+      read GetSerial;
     /// identify the certificate issuer, as text
-    property Issuer: RawUTF8 read GetIssuer;
+    property Issuer: RawUTF8
+      read GetIssuer;
     /// when this certificate was generated, as ISO-8601 text
-    property IssueDate: RawUTF8 read GetIssueDate;
+    property IssueDate: RawUTF8
+      read GetIssueDate;
     /// valid not before this date, as ISO-8601 text
-    property ValidityStart: RawUTF8 read GetValidityStart;
+    property ValidityStart: RawUTF8
+      read GetValidityStart;
     /// valid not after this date, as ISO-8601 text
-    property ValidityEnd: RawUTF8 read GetValidityEnd;
+    property ValidityEnd: RawUTF8
+      read GetValidityEnd;
     /// hexadecimal text of the authority certificate identifier used for signing
-    property AuthoritySerial: RawUTF8 read GetAuthoritySerial;
+    property AuthoritySerial: RawUTF8
+      read GetAuthoritySerial;
     /// identify the authoritify issuer used for signing, as text
-    property AuthorityIssuer: RawUTF8 read GetAuthorityIssuer;
+    property AuthorityIssuer: RawUTF8
+      read GetAuthorityIssuer;
     /// if this certificate has been signed by itself
     // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
     // fields matching Serial/Issuer, and should be used as "root" certificates
-    property IsSelfSigned: boolean read GetIsSelfSigned;
+    property IsSelfSigned: boolean
+      read GetIsSelfSigned;
     /// base-64 encoded text of the whole certificate binary information
     // - only the public part of the certificate will be shown: any private key
     // of a TECCCertificateSecret instance would be trimmed
-    property Base64: RawUTF8 read PublicToBase64 write SetBase64;
+    property Base64: RawUTF8
+      read PublicToBase64 write SetBase64;
   end;
 
   /// used to store a list of TECCCertificate instances
@@ -465,16 +478,18 @@ type
     // - you may set e.g. to 32 to activate safe diffusion to 1KB of storage
     // for ToBase64/SaveToStream methods
     // - is modified temporarly by SaveToSecure() method
-    property AFSplitStripes: integer read fAFSplitStripes;
+    property AFSplitStripes: integer
+      read fAFSplitStripes;
     /// disable private secret key storage in SaveToStream()
     // - default is false, i.e. the private secret key will be serialized
     // - you may set TRUE here so that SaveToStream() would store only the
     // public certificate, as expected by a TECCCertificate class
     // - is used e.g. by PublicToBase64 method to trim the private information
-    property StoreOnlyPublicKey: boolean read fStoreOnlyPublicKey write
-      fStoreOnlyPublicKey;
+    property StoreOnlyPublicKey: boolean
+      read fStoreOnlyPublicKey write fStoreOnlyPublicKey;
     /// read access to the low-level stored private key 
-    property PrivateKey: TECCPrivateKey read fPrivateKey;
+    property PrivateKey: TECCPrivateKey
+      read fPrivateKey;
   end;
 
   /// store settings pointing to a local .private file containing a secret key
@@ -501,22 +516,26 @@ type
     /// the first characters of the .private file holding the secret key
     // - equals '' by default, meaning no private secret is defined
     // - you may use the FileName property instead to specify a full path name
-    property Serial: RawUTF8 read fSerial write fSerial;
+    property Serial: RawUTF8
+      read fSerial write fSerial;
     /// the first characters of the .private file holding the secret key
     // - equals '' by default, meaning no private secret is defined
     // - you may use the Serial property instead to search in an application
     // specific folder
-    property FileName: TFileName read fFileName write fFileName;
+    property FileName: TFileName
+      read fFileName write fFileName;
     /// the password used to protect the .private file
     // - matches the -authpass parameter used with "ECC decrypt" command, but
     // with TSynPersistentWithPassword encryption
     // - i.e. matches ConstName_CYPH as generated by TECCCertificateSecret.SaveToSource
-    property Password: SPIUTF8 read fPassword write fPassword;
+    property Password: SPIUTF8
+      read fPassword write fPassword;
     /// number of PBKDF2 rounds to be applied to the associated password
     // - matches ConstName_ROUNDS as generated by TECCCertificateSecret.SaveToSource
     // - matches the -authrounds parameter used with "ECC decrypt" command
     // - default is DEFAULT_ECCROUNDS, i.e. 60000
-    property PasswordRounds: integer read fPasswordRounds write fPasswordRounds;
+    property PasswordRounds: integer
+      read fPasswordRounds write fPasswordRounds;
   end;
 
   /// store settings pointing to a local .private file containing a secret key
@@ -535,11 +554,13 @@ type
     /// the Salt passphrase used to protect the .synecc encrypted file
     // - matches the -saltpass parameter used with "ECC crypt" command
     // - default is 'salt'
-    property Salt: RawUTF8 read fSalt write fSalt;
+    property Salt: RawUTF8
+      read fSalt write fSalt;
     /// number of PBKDF2 rounds to be applied to the associated Salt
     // - matches the -saltrounds parameter used with "ECC crypt" command
     // - default is DEFAULT_ECCROUNDS, i.e. 60000
-    property SaltRounds: integer read fSaltRounds write fSaltRounds;
+    property SaltRounds: integer
+      read fSaltRounds write fSaltRounds;
   end;
 
   /// a ECDSA secp256r1 digital signature of some content, signed by an authority
@@ -617,17 +638,22 @@ type
     function SaveToDERFile(const FileName: TFileName): boolean;
     /// low-level access to the binary buffer used ECDSA secp256r1 cryptography
     // - you should not use this property, but other methods
-    property Content: TECCSignatureCertifiedContent read fContent write fContent;
+    property Content: TECCSignatureCertifiedContent
+      read fContent write fContent;
   published
     /// the TECCSignatureCertified format version
     // - currently equals 1
-    property Version: word read fContent.Version;
+    property Version: word
+      read fContent.Version;
     /// when this signature was generated, as ISO-8601 text
-    property Date: RawUTF8 read GetDate;
+    property Date: RawUTF8
+      read GetDate;
     /// hexadecimal text of the authority certificate identifier used for signing
-    property AuthoritySerial: RawUTF8 read GetAuthoritySerial;
+    property AuthoritySerial: RawUTF8
+      read GetAuthoritySerial;
     /// identify the authoritify issuer used for signing, as text
-    property AuthorityIssuer: RawUTF8 read GetAuthorityIssuer;
+    property AuthorityIssuer: RawUTF8
+      read GetAuthorityIssuer;
   end;
 
   /// handle a .sign file content as generated by TECCCertificateSecret.SignFile
@@ -661,20 +687,27 @@ type
     function FromDecryptedFile(const aDecryptedContent: RawByteString;
       const Signature: TECCSignatureCertifiedContent; const MetaData: RawJSON): boolean;
     /// low-level access to the whole JSON document members
-    property LowLevelInfo: TDocVariantData read fLowLevelInfo;
+    property LowLevelInfo: TDocVariantData
+      read fLowLevelInfo;
     /// the MD5 binary hash as stored in the .sign file
-    property MD5Digest: TMD5Digest read fMD5Digest;
+    property MD5Digest: TMD5Digest
+      read fMD5Digest;
     /// the SHA-256 binary hash as stored in the .sign file
-    property SHA256Digest: TSHA256Digest read fSHA256Digest;
+    property SHA256Digest: TSHA256Digest
+      read fSHA256Digest;
   published
     /// the meta data document as stored in the .sign file
-    property MetaData: variant read fMetaData;
+    property MetaData: variant
+      read fMetaData;
     /// the signed file size in bytes, as stored in the .sign file
-    property Size: integer read fSize;
+    property Size: integer
+      read fSize;
     /// the MD5 hexadecimal signature as stored in the .sign file
-    property MD5: RawUTF8 read fMD5;
+    property MD5: RawUTF8
+      read fMD5;
     /// the SHA-256 hexadecimal signature as stored in the .sign file
-    property SHA256: RawUTF8 read fSHA256;
+    property SHA256: RawUTF8
+      read fSHA256;
   end;
 
   /// manage PKI certificates using ECC secp256r1 cryptography
@@ -903,15 +936,18 @@ type
     /// low-level access to the internal certificates chain
     // - thread-safe process may be done using
     // ! Safe.Lock; try ... finally Safe.Unlock; end;
-    property Items: TECCCertificateObjArray read fItems;
+    property Items: TECCCertificateObjArray
+      read fItems;
     /// how many certificates are currently stored in the certificates chain
-    property Count: integer read GetCount;
+    property Count: integer
+      read GetCount;
     /// if the IsValid() calls should maintain a cache of all valid certificates
     // - will use a naive but very efficient crc64c hashing of previous contents
     // - since ecdsa_verify() is very demanding, such a cache may have a huge
     // speed benefit if the certificates are about to be supplied several times
     // - is disabled by default, for paranoid safety
-    property IsValidCached: boolean read fIsValidCached write SetIsValidCached;
+    property IsValidCached: boolean
+      read fIsValidCached write SetIsValidCached;
   end;
 
 const
@@ -1196,33 +1232,41 @@ type
     function Clone: IProtocol;
     /// shared public-key infrastructure, used to validate exchanged certificates
     // - will be used for authenticity validation of ECDSA signatures
-    property PKI: TECCCertificateChain read fPKI;
+    property PKI: TECCCertificateChain
+      read fPKI;
     /// the current Authentication scheme
     // - this value on client side should match server's Authorized
     // - this value on server side may change if the client forced another mode
-    property Auth: TECDHEAuth read fAlgo.auth;
+    property Auth: TECDHEAuth
+      read fAlgo.auth;
     /// the current Key Derivation Function
     // - this value should match on both client and server sides
-    property KDF: TECDHEKDF read fAlgo.kdf write fAlgo.kdf;
+    property KDF: TECDHEKDF
+      read fAlgo.kdf write fAlgo.kdf;
     /// the current salt, used by the Key Derivation Function KDF to compute the
     // key supplied to the Encryption Function EF
     // - equals 'ecdhesalt' by default
     // - this value should match on both client and server sides
-    property EFSalt: RawByteString read fEFSalt write fEFSalt;
+    property EFSalt: RawByteString
+      read fEFSalt write fEFSalt;
     /// the current Encryption Function
     // - this value should match on both client and server sides
-    property EF: TECDHEEF read fAlgo.ef write fAlgo.ef;
+    property EF: TECDHEEF
+      read fAlgo.ef write fAlgo.ef;
     /// the current salt, used by the Key Derivation Function KDF to compute the
     // key supplied to the Message Authentication Code MAC
     // - equals 'ecdhemac' by default
     // - this value should match on both client and server sides
-    property MACSalt: RawByteString read fMACSalt write fMACSalt;
+    property MACSalt: RawByteString
+      read fMACSalt write fMACSalt;
     /// the current Message Authentication Code
     // - this value should match on both client and server sides
-    property MAC: TECDHEMAC read fAlgo.mac write fAlgo.mac;
+    property MAC: TECDHEMAC
+      read fAlgo.mac write fAlgo.mac;
     /// after handshake, contains the information about the other side
     // public key certificate validity, against the shared PKI
-    property CertificateValidity: TECCValidity read fCertificateValidity;
+    property CertificateValidity: TECCValidity
+      read fCertificateValidity;
   end;
 
   /// meta-class of the TECDHEProtocol type
@@ -1271,7 +1315,8 @@ type
     /// the Authentication Schemes allowed by this server
     // - by default, only the aAuth value specified to Create is allowed
     // - you can set e.g. [authMutual,authServer] for a weaker pattern
-    property Authorized: TECDHEAuths read fAuthorized write fAuthorized;
+    property Authorized: TECDHEAuths
+      read fAuthorized write fAuthorized;
   end;
 
 

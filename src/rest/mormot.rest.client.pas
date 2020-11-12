@@ -742,7 +742,8 @@ type
       ParamValue: Pointer): integer; virtual;
     function FakeCallbackUnregister(Factory: TInterfaceFactory;
       FakeCallbackID: integer; Instance: pointer): boolean; virtual;
-    property FakeCallbacks: TRestClientCallbacks read fFakeCallbacks;
+    property FakeCallbacks: TRestClientCallbacks
+      read fFakeCallbacks;
 
     /// you can call this method to call the remote URI root/Timestamp
     // - this can be an handy way of testing the connection, since this method
@@ -823,10 +824,12 @@ type
     property ComputeSignature: TOnRestAuthenticationSignedURIComputeSignature
       read fComputeSignature write fComputeSignature;
     /// the current session information as set by a successfull SetUser() call
-    property Session: TRestClientSession read fSession;
+    property Session: TRestClientSession
+      read fSession;
     /// the current user as set by SetUser() method
     // - contains nil if no User is currently authenticated
-    property SessionUser: TAuthUser read fSession.User;
+    property SessionUser: TAuthUser
+      read fSession.User;
     /// access to the low-level HTTP header used for authentication
     // - you can force here your own header, e.g. a JWT as authentication bearer
     // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
@@ -870,11 +873,13 @@ type
     // background thread, but let the UI still be reactive: the
     // TLoginForm.OnIdleProcess and OnIdleProcessForm methods of
     // mORMotUILogin.pas will match this property expectations
-    property OnIdle: TOnIdleSynBackgroundThread read fOnIdle write fOnIdle;
+    property OnIdle: TOnIdleSynBackgroundThread
+      read fOnIdle write fOnIdle;
     /// TRUE if the background thread is active, and OnIdle event is called
     // during process
     // - to be used e.g. to ensure no re-entrance from User Interface messages
-    property OnIdleBackgroundThreadActive: boolean read GetOnIdleBackgroundThreadActive;
+    property OnIdleBackgroundThreadActive: boolean
+      read GetOnIdleBackgroundThreadActive;
     /// this Event is called in case of remote authentication failure
     // - client software can ask the user to enter a password and user name
     // - if no event is specified, the URI() method will return directly
@@ -884,7 +889,8 @@ type
     /// this Event is called if URI() was not successfull
     // - the callback will have all needed information
     // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
-    property OnFailed: TOnClientFailed read fOnFailed write fOnFailed;
+    property OnFailed: TOnClientFailed
+      read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
     // - is called always, on each TRestClientURI.SetUser call
     // - you can check the Sender.SessionUser property pointing to the current
@@ -892,24 +898,28 @@ type
     // - could be used to refresh the User Interface layout according to
     // current authenticated user rights, or to subscribe to some services
     // via callbacks
-    property OnSetUser: TOnRestClientNotify read fOnSetUser write fOnSetUser;
+    property OnSetUser: TOnRestClientNotify
+      read fOnSetUser write fOnSetUser;
   published
     /// low-level error code, as returned by server
     // - check this value about HTTP_* constants
     // - HTTP_SUCCESS or HTTP_CREATED mean no error
     // - otherwise, check LastErrorMessage property for additional information
     // - this property value will record status codes returned by URI() method
-    property LastErrorCode: integer read fLastErrorCode;
+    property LastErrorCode: integer
+      read fLastErrorCode;
     /// low-level error message, as returned by server
     // - this property value will record content returned by URI() method in
     // case of an error, or '' if LastErrorCode is HTTP_SUCCESS or HTTP_CREATED
-    property LastErrorMessage: RawUTF8 read fLastErrorMessage;
+    property LastErrorMessage: RawUTF8
+      read fLastErrorMessage;
     /// low-level exception class, if any
     // - will record any Exception class raised within URI() method
     // - contains nil if URI() execution did not raise any exception (which
     // is the most expected behavior, since server-side errors are trapped
     // into LastErrorCode/LastErrorMessage properties
-    property LastErrorException: ExceptClass read fLastErrorException;
+    property LastErrorException: ExceptClass
+      read fLastErrorException;
     /// maximum additional retry occurence
     // - defaut is 1, i.e. will retry once
     // - set OnAuthentificationFailed to nil in order to avoid any retry
@@ -923,15 +933,19 @@ type
     // is not started yet - i.e. if SetUser() call failed
     // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
     // is not enabled - i.e. after a fresh Create() without SetUser() call
-    property SessionID: cardinal read fSession.ID;
+    property SessionID: cardinal
+      read fSession.ID;
     /// the remote server executable name, as retrieved after a SetUser() success
-    property SessionServer: RawUTF8 read fSession.Server;
+    property SessionServer: RawUTF8
+      read fSession.Server;
     /// the remote server version, as retrieved after a SetUser() success
-    property SessionVersion: RawUTF8 read fSession.Version;
+    property SessionVersion: RawUTF8
+      read fSession.Version;
     /// the remote server session tiemout in minutes, as retrieved after
     // a SetUser() success
     // - will be used to set SessionHeartbeatSeconds default
-    property SessionServerTimeout: integer read fSession.ServerTimeout;
+    property SessionServerTimeout: integer
+      read fSession.ServerTimeout;
     /// frequency of Callback/_ping_ calls to maintain session and services
     // - will be used to call SessionRenewEvent at the specified period, so that
     // the session and all sicClientDriven instances will be maintained on the

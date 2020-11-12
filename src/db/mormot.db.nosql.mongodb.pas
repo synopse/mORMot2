@@ -183,17 +183,22 @@ type
     /// write the main parameters of the request as JSON
     function ToJSON(Mode: TMongoJSONMode): RawUTF8; overload;
     /// identify the message, after call to any reintroduced Create() constructor
-    property MongoRequestID: integer read fRequestID;
+    property MongoRequestID: integer
+      read fRequestID;
     /// the associated full collection name, e.g. 'db.test'
-    property FullCollectionName: RawUTF8 read fFullCollectionName;
+    property FullCollectionName: RawUTF8
+      read fFullCollectionName;
     /// the associated full collection name, e.g. 'db'
-    property DatabaseName: RawUTF8 read fDatabaseName;
+    property DatabaseName: RawUTF8
+      read fDatabaseName;
     /// the associated full collection name, e.g. 'test'
-    property CollectionName: RawUTF8 read fCollectionName;
+    property CollectionName: RawUTF8
+      read fCollectionName;
     /// the message operation code
     // - should be either opUpdate, opInsert, opQuery, opGetMore, opDelete
     // or opKillCursors, depending on the TMongoRequest* class instantiated
-    property MongoRequestOpCode: TMongoOperation read fRequestOpCode;
+    property MongoRequestOpCode: TMongoOperation
+      read fRequestOpCode;
   end;
 
   /// a MongoDB client abstract ancestor which is able to create a BULK
@@ -316,9 +321,11 @@ type
     /// write the main parameters of the request as JSON
     procedure ToJSON(W: TTextWriter; Mode: TMongoJSONMode); override;
     /// retrieve the NumberToReturn parameter as set to the constructor
-    property NumberToReturn: integer read fNumberToReturn;
+    property NumberToReturn: integer
+      read fNumberToReturn;
     /// retrieve the NumberToSkip parameter as set to the constructor
-    property NumberToSkip: integer read fNumberToSkip;
+    property NumberToSkip: integer
+      read fNumberToSkip;
   end;
 
   /// a MongoDB client message to continue the query of one or more documents
@@ -544,27 +551,36 @@ type
     procedure AppendAllToBSON(Dest: TBSONWriter);
 
     /// retrieve the context execution of this message
-    property ResponseFlags: TMongoReplyCursorFlags read fResponseFlags;
+    property ResponseFlags: TMongoReplyCursorFlags
+      read fResponseFlags;
     /// identifier of this message
-    property RequestID: integer read fRequestID;
+    property RequestID: integer
+      read fRequestID;
     /// retrieve the RequestID from the original request
-    property ResponseTo: integer read fResponseTo;
+    property ResponseTo: integer
+      read fResponseTo;
     /// access to the low-level binary reply message
-    property Reply: TMongoReply read fReply;
+    property Reply: TMongoReply
+      read fReply;
     /// cursor identifier if the client may need to perform further
     // TMongoRequestGetMore messages
     // - in the event that the result set of the query fits into one OP_REPLY
     // message, CursorID will be 0
-    property CursorID: Int64 read fCursorID;
+    property CursorID: Int64
+      read fCursorID;
     /// where in the cursor this reply is starting
-    property StartingFrom: integer read fStartingFrom;
+    property StartingFrom: integer
+      read fStartingFrom;
     /// number of documents in the reply
-    property DocumentCount: integer read fNumberReturned;
+    property DocumentCount: integer
+      read fNumberReturned;
     /// points to the first document binary
     // - i.e. just after the Reply header
-    property FirstDocument: PAnsiChar read fFirstDocument;
+    property FirstDocument: PAnsiChar
+      read fFirstDocument;
     /// direct access to the low-level BSON binary content of each document
-    property DocumentBSON: TPointerDynArray read fDocuments;
+    property DocumentBSON: TPointerDynArray
+      read fDocuments;
     /// retrieve a given document as a TDocVariant instance
     // - could be used e.g. as:
     // ! var Reply: TMongoReply;
@@ -576,9 +592,11 @@ type
     // - note that there is an internal cache for the latest retrieved document
     // by this property, so that you can call Reply.Document[i] several times
     // without any noticeable speed penalty
-    property Document[index: integer]: variant read GetOneDocument;
+    property Document[index: integer]: variant
+      read GetOneDocument;
     /// the current position of the Next() call, starting at 0
-    property Position: integer read fCurrentPosition;
+    property Position: integer
+      read fCurrentPosition;
   end;
 
 
@@ -749,20 +767,26 @@ type
       flags: TMongoQueryFlags = []): boolean; overload;
 
     /// return TRUE if the Open method has successfully been called
-    property Opened: boolean read GetOpened;
+    property Opened: boolean
+      read GetOpened;
     /// access to the corresponding MongoDB server
-    property Client: TMongoClient read fClient;
+    property Client: TMongoClient
+      read fClient;
     /// direct access to the low-level TCP/IP communication socket
-    property Socket: TCrtSocket read fSocket;
+    property Socket: TCrtSocket
+      read fSocket;
     /// is TRUE when the connection is busy
-    property Locked: boolean read GetLocked;
+    property Locked: boolean
+      read GetLocked;
   published
     /// read-only access to the supplied server address
     // - the server address is either a host name, or an IP address
-    property ServerAddress: RawUTF8 read fServerAddress;
+    property ServerAddress: RawUTF8
+      read fServerAddress;
     /// read-only access to the supplied server port
     // - the server Port is MONGODB_DEFAULTPORT (27017) by default
-    property ServerPort: integer read fServerPort;
+    property ServerPort: integer
+      read fServerPort;
   end;
 
   /// array of TCP connection to a MongoDB Replica Set
@@ -910,29 +934,35 @@ type
     // - this property is cached, so request is sent only once
     // - you may rather use ServerBuildInfoNumber to check for available
     // features at runtime, for easy comparison of the server version
-    property ServerBuildInfo: variant read fServerBuildInfo;
+    property ServerBuildInfo: variant
+      read fServerBuildInfo;
     /// access to a given MongoDB database
     // - try to open it via a non-authenticated connection it if not already:
     // will raise an exception on error, or will return an instance
     // - will return an existing instance if has already been opened
-    property Database[const DatabaseName: RawUTF8]: TMongoDatabase read Open; default;
+    property Database[const DatabaseName: RawUTF8]: TMongoDatabase
+      read Open; default;
     /// low-level access to the TCP/IP connections of this MongoDB replica set
     // - first item [0] is the Primary member
     // - other items [1..] are the Secondary members
-    property Connections: TMongoConnectionDynArray read fConnections;
+    property Connections: TMongoConnectionDynArray
+      read fConnections;
     /// define the logging instance to be used for LogRequestEvent/LogReplyEvent
     // - you may also call the SetLog() method to set all options at once
-    property Log: TSynLog read fLog write fLog;
+    property Log: TSynLog
+      read fLog write fLog;
   published
     /// the connection definition used to connect to this MongoDB server
-    property ConnectionString: RawUTF8 read fConnectionString;
+    property ConnectionString: RawUTF8
+      read fConnectionString;
     /// retrieve the server version and build information
     // - return the content as a TDocVariant document, e.g.
     // ! 2040900 for MongoDB 2.4.9, or 2060000 for MongoDB 2.6, or
     // ! 3000300 for MongoDB 3.0.3
     // - this property is cached, so can be used to check for available
     // features at runtime, without any performance penalty
-    property ServerBuildInfoNumber: cardinal read fServerBuildInfoNumber;
+    property ServerBuildInfoNumber: cardinal
+      read fServerBuildInfoNumber;
     /// define Read Preference mode to a MongoDB replica set
     // - see http://docs.mongodb.org/manual/core/read-preference
     // - default is rpPrimary, i.e. reading from the main primary instance
@@ -952,17 +982,21 @@ type
     property ConnectionTimeOut: Cardinal
       read fConnectionTimeOut write fConnectionTimeOut;
     /// if the socket connection is secured over TLS
-    property ConnectionTLS: boolean read fConnectionTLS;
+    property ConnectionTLS: boolean
+      read fConnectionTLS;
     /// allow automatic reconnection (with authentication, if applying), if the
     // socket is closed (e.g. was dropped from the server)
     property GracefulReconnect: boolean
       read fGracefulReconnect.Enabled write fGracefulReconnect.Enabled;
     /// how may bytes this client did received, among all its connections
-    property BytesReceived: Int64 read GetBytesReceived;
+    property BytesReceived: Int64
+      read GetBytesReceived;
     /// how may bytes this client did received, among all its connections
-    property BytesSent: Int64 read GetBytesSent;
+    property BytesSent: Int64
+      read GetBytesSent;
     /// how may bytes this client did transmit, adding both input and output
-    property BytesTransmitted: Int64 read GetBytesTransmitted;
+    property BytesTransmitted: Int64
+      read GetBytesTransmitted;
     /// if set to something else than default sllNone, will log each request
     // with the corresponding logging event kind
     // - will use the Log property for the destination log
@@ -1058,9 +1092,11 @@ type
       read GetCollectionOrCreate;
   published
     /// the database name
-    property Name: RawUTF8 read fName;
+    property Name: RawUTF8
+      read fName;
     /// the associated MongoDB client instance
-    property Client: TMongoClient read fClient;
+    property Client: TMongoClient
+      read fClient;
   end;
 
   /// remote access to a MongoDB collection
@@ -1468,11 +1504,14 @@ type
       Mode: TMongoJSONMode = modMongoStrict): RawUTF8; overload;
   published
     /// the collection name
-    property Name: RawUTF8 read fName;
+    property Name: RawUTF8
+      read fName;
     /// the full collection name, e.g. 'dbname.collectionname'
-    property FullCollectionName: RawUTF8 read fFullCollectionName;
+    property FullCollectionName: RawUTF8
+      read fFullCollectionName;
     /// the associated MongoDB database instance
-    property Database: TMongoDatabase read fDatabase;
+    property Database: TMongoDatabase
+      read fDatabase;
   end;
 
   /// exception type used for MongoDB process, once connected
@@ -1488,7 +1527,8 @@ type
       aConnection: TMongoConnection); reintroduce;
   published
     /// the associated connection
-    property Connection: TMongoConnection read fConnection;
+    property Connection: TMongoConnection
+      read fConnection;
   end;
 
   EMongoDatabaseException = class(EMongoConnectionException)
@@ -1509,7 +1549,8 @@ type
     {$endif NOEXCEPTIONINTERCEPT}
   published
     /// the associated Database
-    property Database: TMongoDatabase read fDatabase;
+    property Database: TMongoDatabase
+      read fDatabase;
   end;
 
   /// exception type used for MongoDB query process
@@ -1539,12 +1580,14 @@ type
       const Context: TSynLogExceptionContext): boolean; override;
     {$endif NOEXCEPTIONINTERCEPT}
     /// the associated error reply document
-    property ErrorReply: TMongoReplyCursor read fError;
+    property ErrorReply: TMongoReplyCursor
+      read fError;
   published
     /// the associated error reply document, as a TDocVariant instance
     // - will return the first document available in ErrorReply, or the supplied
     // aErrorDoc: TDocVariantData instance
-    property ErrorDoc: Variant read GetErrorDoc;
+    property ErrorDoc: Variant
+      read GetErrorDoc;
   end;
 
   /// exception type used for MongoDB query process after an Operating System
@@ -1561,7 +1604,8 @@ type
       aRequest: TMongoRequest = nil); reintroduce;
     /// contain the associated Operating System last error code
     // - will specify e.g. the kind of communication/socket error
-    property SystemLastError: cardinal read fSystemLastError;
+    property SystemLastError: cardinal
+      read fSystemLastError;
   end;
 
 {$M-}

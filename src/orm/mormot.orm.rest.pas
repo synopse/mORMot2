@@ -257,7 +257,8 @@ type
     procedure EndCurrentThread(Sender: TThread); virtual;
     /// low-level access to the current TOrm class holding a transaction
     // - equals nil outside of a TransactionBegin/Commit scope
-    property TransactionTable: TOrmClass read fTransactionTable;
+    property TransactionTable: TOrmClass
+      read fTransactionTable;
   public
     // ------- IRestOrm interface implementation methods
     // calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
