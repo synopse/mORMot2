@@ -3173,34 +3173,42 @@ const
 
 procedure mul_x(var a: TAESBlock; const b: TAESBlock);
 // {$ifdef HASINLINE}inline;{$endif} // inlining has no benefit here
-var t: cardinal;
-    y: TWA4 absolute b;
+var
+  t: cardinal;
+  y: TWA4 absolute b;
 const
   MASK_80 = cardinal($80808080);
   MASK_7F = cardinal($7f7f7f7f);
 begin
   t := gft_le[(y[3] shr 17) and MASK_80];
-  TWA4(a)[3] :=  ((y[3] shr 1) and MASK_7F) or (((y[3] shl 15) or (y[2] shr 17)) and MASK_80);
-  TWA4(a)[2] :=  ((y[2] shr 1) and MASK_7F) or (((y[2] shl 15) or (y[1] shr 17)) and MASK_80);
-  TWA4(a)[1] :=  ((y[1] shr 1) and MASK_7F) or (((y[1] shl 15) or (y[0] shr 17)) and MASK_80);
-  TWA4(a)[0] := (((y[0] shr 1) and MASK_7F) or ( (y[0] shl 15) and MASK_80)) xor t;
+  TWA4(a)[3] := ((y[3] shr 1) and MASK_7F) or
+                (((y[3] shl 15) or (y[2] shr 17)) and MASK_80);
+  TWA4(a)[2] := ((y[2] shr 1) and MASK_7F) or
+                (((y[2] shl 15) or (y[1] shr 17)) and MASK_80);
+  TWA4(a)[1] := ((y[1] shr 1) and MASK_7F) or
+                (((y[1] shl 15) or (y[0] shr 17)) and MASK_80);
+  TWA4(a)[0] := (((y[0] shr 1) and MASK_7F) or
+                ((y[0] shl 15) and MASK_80)) xor t;
 end;
 
 procedure gf_mul(var a: TAESBlock; const b: TAESBlock);
-var p: array[0..7] of TAESBlock;
-    x: TWA4;
-    t: cardinal;
-    i: PtrInt;
-    j: integer;
-    c: byte;
+var
+  p: array[0 .. 7] of TAESBlock;
+  x: TWA4;
+  t: cardinal;
+  i: PtrInt;
+  j: integer;
+  c: byte;
 begin
   p[0] := b;
   for i := 1 to 7 do
-    mul_x(p[i], p[i-1]);
+    mul_x(p[i], p[i - 1]);
   FillZero(TAESBlock(x));
-  for i:=0 to 15 do begin
-    c := a[15-i];
-    if i>0 then begin
+  for i := 0 to 15 do
+  begin
+    c := a[15 - i];
+    if i > 0 then
+    begin
       // inlined mul_x8()
       t := gft_le[x[3] shr 24];
       x[3] := ((x[3] shl 8) or  (x[2] shr 24));
@@ -3208,8 +3216,10 @@ begin
       x[1] := ((x[1] shl 8) or  (x[0] shr 24));
       x[0] := ((x[0] shl 8) xor t);
     end;
-    for j:=0 to 7 do begin
-      if c and ($80 shr j) <> 0 then begin
+    for j := 0 to 7 do
+    begin
+      if c and ($80 shr j) <> 0 then
+      begin
         x[3] := x[3] xor TWA4(p[j])[3];
         x[2] := x[2] xor TWA4(p[j])[2];
         x[1] := x[1] xor TWA4(p[j])[1];
@@ -3456,7 +3466,8 @@ begin
       repeat
         // single-pass loop optimized e.g. for PKCS7 padding
         GCM_IncCtr(TAESContext(actx).IV);
-        actx.Encrypt(TAESContext(actx).IV, TAESContext(actx).buf); // maybe AES-NI
+        TAESContext(actx.Context).DoBlock(actx.Context,
+          TAESContext(actx).IV, TAESContext(actx).buf); // maybe AES-NI
         XorBlock16(ptp, ctp, @TAESContext(actx).buf);
         gf_mul_h(txt_ghv);
         XorBlock16(@txt_ghv, ctp);
@@ -5237,7 +5248,8 @@ begin
   if fromos then
     exit;
   i := Len;
-  repeat // call Random32() (=RdRand32 or Lecuyer) as fallback/padding
+  repeat
+    // call FillRandom() (i.e. RdRand32 and Lecuyer) as fallback/padding
     mormot.core.base.FillRandom(@tmp, SizeOf(tmp) shr 2);
     if i <= SizeOf(tmp) then
     begin

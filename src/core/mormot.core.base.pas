@@ -8212,12 +8212,12 @@ begin
   if CardinalCount <= 0 then
     exit;
   {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then // won't hurt
-    c := RdRand32
+  if cfRAND in CpuFeatures then
+    c := RdRand32 // won't hurt
   else
-    c := Rdtsc;
+    c := Rdtsc; // lowest 32-bit part of RDTSC is highly unpredictable
   {$else}
-  c := Random(MaxInt); // good enough as seed
+  c := Random(MaxInt); // good enough as seed, especially on FPC
   {$endif CPUINTEL}
   gen := @_Lecuyer;
   repeat
