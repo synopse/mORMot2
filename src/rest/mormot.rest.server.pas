@@ -1999,6 +1999,31 @@ type
       const aMethods: array of TRestServerAuthenticationClass); overload;
     /// call this method to remove all authentication methods to the server
     procedure AuthenticationUnregisterAll;
+    /// read-only access to the internal list of sessions
+    // - ensure you protect its access calling Sessions.Lock/Sessions.Unlock
+    property Sessions: TSynObjectListLocked
+      read fSessions;
+    /// read-only access to the list of registered server-side authentication
+    // methods, used for session creation
+    // - note that the exact number or registered services in this list is
+    // stored in the AuthenticationSchemesCount property
+    property AuthenticationSchemes: TRestServerAuthenticationDynArray
+      read fSessionAuthentication;
+    /// how many authentication methods are registered in AuthenticationSchemes
+    property AuthenticationSchemesCount: integer
+      read GetAuthenticationSchemesCount;
+    /// define if unsecure connections (i.e. not in-process or encrypted
+    // WebSockets) with no session can be authenticated via JWT
+    // - once set, this instance will be owned by the TSQLRestServer
+    // - by definition, such JWT authentication won't identify any mORMot user
+    // nor session (it just has to be valid), so only sicSingle, sicShared or
+    // sicPerThread interface-based services execution are possible
+    // - typical usage is for a public API, in conjunction with
+    // ServiceDefine(...).ResultAsJSONObjectWithoutResult := true on the server
+    // side and TSQLRestClientURI.ServiceDefineSharedAPI() method for the client
+    // - see also JWTForUnauthenticatedRequestWhiteIP() for additional security
+    property JWTForUnauthenticatedRequest: TJWTAbstract
+      read fJWTForUnauthenticatedRequest write fJWTForUnauthenticatedRequest;
     /// (un)register a banned IPv4 value
     // - any connection attempt from this IP Address will be rejected by
     function BanIP(const aIP: RawUTF8; aRemoveBan: boolean = false): boolean;
