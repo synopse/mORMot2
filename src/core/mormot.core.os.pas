@@ -2600,26 +2600,13 @@ end;
 
 {$endif PUREMORMOT2}
 
-{$I-}
-
 function ConsoleReadBody: RawByteString;
 var
   len, n: integer;
   P: PByte;
-  {$ifndef FPC}
-  StdInputHandle: THandle;
-  {$endif FPC}
 begin
   result := '';
-  {$ifdef MSWINDOWS}
-  {$ifndef FPC}
-  StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
-  {$endif FPC}
-  if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @len, nil) then
-  {$else}
-  if fpioctl(StdInputHandle, FIONREAD, @len) < 0 then
-  {$endif MSWINDOWS}
-    len := 0;
+  len := ConsoleStdInputLen;
   SetLength(result, len);
   P := pointer(result);
   while len > 0 do
@@ -2634,6 +2621,8 @@ begin
     inc(P, n);
   end;
 end;
+
+{$I-}
 
 procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);

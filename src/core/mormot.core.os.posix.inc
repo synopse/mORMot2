@@ -965,6 +965,12 @@ begin
   ioresult;
 end;
 
+function ConsoleStdInputLen: integer;
+begin
+  if fpioctl(StdInputHandle, FIONREAD, @result) < 0 then
+    result := 0;
+end;
+
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
 begin
   result := S; // expect a UTF-8 console under Linux/BSD

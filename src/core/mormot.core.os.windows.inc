@@ -721,7 +721,7 @@ begin
   until n > 8192;
 end;
 
-// local RTL wrapper function to avoid linking mormot.core.text.pas
+// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUTF8);
 var
   tmp: TSynTempBuffer;
@@ -1125,6 +1125,22 @@ begin
         DispatchMessage(msg);
       end;
   end;
+end;
+
+{$ifndef FPC}
+var
+  // Delphi doesn't define this global variable need by ConsoleReadBody
+  StdInputHandle: THandle;
+{$endif FPC}
+
+function ConsoleStdInputLen: integer;
+begin
+  {$ifndef FPC}
+  if StdInputHandle = 0 then
+    StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
+  {$endif FPC}
+  if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @result, nil) then
+    result := 0;
 end;
 
 function Utf8ToConsole(const S: RawUTF8): RawByteString;

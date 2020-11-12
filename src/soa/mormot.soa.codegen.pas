@@ -297,7 +297,7 @@ const
 // - you may specify an optional description file, as previously generated
 // by mORMotWrappers' FillDescriptionFromSource function - a local
 // 'WrappersDescription' resource will also be checked
-// - to actually call the remote server, aOnGetClient should be supplied
+// - to actually call the remote server, aOnCall should be supplied
 procedure ExecuteFromCommandLine(
   const aServices: array of TGUID;
   const aOnCall: TOnCommandLineCall;
@@ -1959,6 +1959,7 @@ var
   cc: TConsoleColor;
   call: TRestURIParams;
 begin
+  // prepare the input parameters
   call.Init;
   if cloPipe in fOptions then
     call.InBody := ConsoleReadBody
@@ -1975,10 +1976,12 @@ begin
     ToConsole('POST %', [method.InterfaceDotMethodName], ccLightGray);
   if cloVerbose in fOptions then
     ToConsole('%', [call.InBody], ccLightBlue);
+  // execute the OnCall event handler to actually run the process
   if not Assigned(fOnCall) then
     raise EServiceException.CreateUTF8(
       'No Client available to call %', [method.InterfaceDotMethodName]);
   fOnCall(fOptions, service, method, call); // will set URI + Bearer
+  // send output to Console
   if [cloVerbose, cloHeaders] * fOptions <> [] then
     ToConsole('HTTP %'#13#10'%', [call.OutStatus, call.OutHead], ccLightGray);
   if (call.OutBody <> '') and
