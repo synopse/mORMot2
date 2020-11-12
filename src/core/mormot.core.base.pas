@@ -493,7 +493,8 @@ type
       high: tdynarrayindex;  // equals length-1
       function GetLength: sizeint; inline;
       procedure SetLength(len: sizeint); inline;
-      property length: sizeint read GetLength write SetLength; // wrapper
+      property length: sizeint // wrapper
+        read GetLength write SetLength;
     end;
 
     {$else not FPC}
@@ -1931,7 +1932,7 @@ function IsZero(const dig: THash128): boolean; overload;
 // - e.g. a MD5 digest, or an AES block
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose - and it is also branchless therefore fast
-function IsEqual(const A,B: THash128): boolean; overload;
+function IsEqual(const A, B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all 16 bytes of this 128-bit buffer with zero
@@ -1952,7 +1953,7 @@ function IsZero(const dig: THash160): boolean; overload;
 // - e.g. a SHA-1 digest
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
-function IsEqual(const A,B: THash160): boolean; overload;
+function IsEqual(const A, B: THash160): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all 20 bytes of this 160-bit buffer with zero
@@ -1969,7 +1970,7 @@ function IsZero(const dig: THash256): boolean; overload;
 // - e.g. a SHA-256 digest, or a TECCSignature result
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
-function IsEqual(const A,B: THash256): boolean; overload;
+function IsEqual(const A, B: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast O(n) search of a 256-bit item in an array of such values
@@ -1989,7 +1990,7 @@ function IsZero(const dig: THash384): boolean; overload;
 // - e.g. a SHA-384 digest
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
-function IsEqual(const A,B: THash384): boolean; overload;
+function IsEqual(const A, B: THash384): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all 32 bytes of this 384-bit buffer with zero
@@ -2006,7 +2007,7 @@ function IsZero(const dig: THash512): boolean; overload;
 // - e.g. two SHA-512 digests
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
-function IsEqual(const A,B: THash512): boolean; overload;
+function IsEqual(const A, B: THash512): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all 64 bytes of this 512-bit buffer with zero
@@ -2014,20 +2015,26 @@ function IsEqual(const A,B: THash512): boolean; overload;
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash512); overload;
 
+/// returns TRUE if all bytes of both buffers do match
+// - this function is not sensitive to any timing attack, so is designed
+// for cryptographic purposes - use CompareMem/CompareMemSmall/CompareMemFixed
+// as faster alternatives for general-purpose code
+function IsEqual(const A, B; count: PtrInt): boolean; overload;
+
 /// thread-safe move of a 32-bit value using a simple Read-Copy-Update pattern
-procedure RCU32(var src,dst);
+procedure RCU32(var src, dst);
 
 /// thread-safe move of a 64-bit value using a simple Read-Copy-Update pattern
-procedure RCU64(var src,dst);
+procedure RCU64(var src, dst);
 
 /// thread-safe move of a 128-bit value using a simple Read-Copy-Update pattern
-procedure RCU128(var src,dst);
+procedure RCU128(var src, dst);
 
 /// thread-safe move of a pointer value using a simple Read-Copy-Update pattern
-procedure RCUPtr(var src,dst);
+procedure RCUPtr(var src, dst);
 
 /// thread-safe move of a memory buffer using a simple Read-Copy-Update pattern
-procedure RCU(var src,dst; len: integer);
+procedure RCU(var src, dst; len: integer);
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
@@ -3177,7 +3184,8 @@ type
     /// retrieve the stored content from a given position, as UTF-8 text
     procedure GetAsText(StartPos, Len: PtrInt; var Text: RawUTF8);
     /// direct low-level access to the internal RawByteString storage
-    property DataString: RawByteString read fDataString write fDataString;
+    property DataString: RawByteString
+      read fDataString write fDataString;
   end;
 
   /// TStream pointing to some existing in-memory data, for instance UTF-8 text
@@ -7356,12 +7364,26 @@ begin
   d[7] := 0;
 end;
 
+function IsEqual(const A, B; count: PtrInt): boolean;
+var
+  perbyte: boolean; // ensure no optimization takes place
+begin
+  result := true;
+  while count > 0 do
+  begin
+    dec(count);
+    perbyte := PByteArray(@A)[count] = PByteArray(@B)[count];
+    result := result and perbyte;
+  end;
+end;
+
 {$ifdef ISDELPHI} // intrinsic in FPC
 procedure ReadBarrier;
 asm
         {$ifdef CPUX86}
         lock add dword ptr [esp], 0
         {$else}
+        .noframe
         lfence // lfence requires an SSE CPU, which is OK on x86-64
         {$endif CPUX86}
 end;
