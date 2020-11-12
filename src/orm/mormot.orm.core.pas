@@ -9487,7 +9487,7 @@ begin
   end;
   if result = nil then
   begin
-    aOrmFieldType := GetOrmFieldType(aType);
+    aOrmFieldType := GetOrmFieldType(aType); // guess from RTTI
     C := nil;
     if (OrmPropInfoRegistration = nil) or
        not OrmPropInfoRegistration.FindAndCopy(aType, C) then
@@ -10532,9 +10532,9 @@ begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
   D := TOrmPropInfoRTTIObject(DestInfo).GetInstance(Dest);
-  if fPropRtti.ValueKnownClass = TCollection then
+  if fPropRtti.ValueRTLClass = TCollection then
     CopyCollection(TCollection(S), TCollection(D))
-  else if fPropRtti.ValueKnownClass = TStrings then
+  else if fPropRtti.ValueRTLClass = TStrings then
     CopyStrings(TStrings(S), TStrings(D))
   else
   begin

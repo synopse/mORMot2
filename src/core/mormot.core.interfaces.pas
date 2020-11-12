@@ -3518,7 +3518,7 @@ begin
       imvObject:
         if ArgRtti.ValueClass = TList then
           ErrorMsg := ' - use TObjectList instead'
-        else if (ArgRtti.ValueKnownClass = TCollection) and
+        else if (ArgRtti.ValueRTLClass = TCollection) and
                 (ArgRtti.CollectionItem = nil) then
           ErrorMsg :=
             ' - inherit from TInterfacedCollection or call Rtti.RegisterCollection() first'

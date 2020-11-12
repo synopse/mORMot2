@@ -1738,6 +1738,7 @@ type
     // - equals -1 if Prop has a setter
     OffsetSet: PtrInt;
     /// map to Prop^.Name or a customized field/property name
+    // - e.g. 'SubProp'
     Name: PShortString;
     /// store standard RTTI of this published property
     // - equals nil for rkRecord/rkObject nested field
@@ -1805,7 +1806,8 @@ type
     // - do nothing on FPC or Delphi 2009 and older
     procedure SetFromRecordExtendedRtti(RecordInfo: PRttiInfo);
     /// called once List[] and Size have been defined
-    procedure SetManagedFromList;
+    // - compute the fManaged[] internal list
+    procedure AdjustAfterAdded;
     /// retrieve all List[] items as text
     procedure AsText(out Result: RawUTF8; IncludePropType: boolean;
       const Prefix, Suffix: RawUTF8);
@@ -1870,7 +1872,7 @@ type
     // used by NoRttiSetAndRegister()
     fNoRttiInfo: TByteDynArray;
     // customize class process
-    fValueClass, fValueKnownClass: TClass;
+    fValueClass, fValueRTLClass: TClass;
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
@@ -1919,57 +1921,77 @@ type
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
     function ClassNewInstance: pointer; virtual;
     /// low-level RTTI kind, taken from Rtti property
-    property Kind: TRttiKind read fCache.Kind;
+    property Kind: TRttiKind
+      read fCache.Kind;
     /// direct access to the low-level RTTI TypeInfo() pointer, from Rtti property
-    property Info: PRttiInfo read fCache.Info;
+    property Info: PRttiInfo
+      read fCache.Info;
     /// the known type name
     // - may be an hexadecimal value of self, if rcfWithoutRtti is in Flags
-    property Name: RawUTF8 read fName;
+    property Name: RawUTF8
+      read fName;
     /// direct access to the low-level size in bytes used to store a value
     // of this type, as taken from Rtti property
     // - warning: for rkArray/rkDynArray, equals SizeOf(pointer), not the item size
-    property Size: integer read fCache.Size;
+    property Size: integer
+      read fCache.Size;
     /// direct access to the ready-to-use RTTI
-    property Cache: TRttiCache read fCache;
+    property Cache: TRttiCache
+      read fCache;
     /// define specific behavior for this type
-    property Flags: TRttiCustomFlags read fFlags write fFlags;
+    property Flags: TRttiCustomFlags
+      read fFlags write fFlags;
     /// high-level Parser kind
-    property Parser: TRttiParserType read fParser;
+    property Parser: TRttiParserType
+      read fParser;
     /// high-level Parser Complex kind
-    property ParserComplex: TRttiParserComplexType read fParserComplex;
+    property ParserComplex: TRttiParserComplexType
+      read fParserComplex;
     /// store information about the properties/fields of this type
     // - only set for rkClass and rkRecord/rkObject
-    property Props: TRttiCustomProps read fProps;
+    property Props: TRttiCustomProps
+      read fProps;
     /// shortcut to the TRttiCustom of the item of a (dynamic) array
     // - only set for rkArray and rkDynArray
     // - may be set also for unmanaged types - use Cache.ItemInfo if you want the
     // PRttiInfo TypeInfo() pointer for rkManagedTypes only
-    property ArrayRtti: TRttiCustom read fArrayRtti;
+    property ArrayRtti: TRttiCustom
+      read fArrayRtti;
     /// best guess of first field type for a rkDynArray
     // - equals ArrayRtti.Parser if ArrayRtti.Kind is not rkRecordTypes
-    property ArrayFirstField: TRttiParserType read fArrayFirstField;
+    property ArrayFirstField: TRttiParserType
+      read fArrayFirstField;
     /// store the number of bytes for hexadecimal serialization for rcfBinary
     // - used when rcfBinary is defined in Flags; equals 0 if disabled (default)
-    property BinarySize: integer read fBinarySize;
+    property BinarySize: integer
+      read fBinarySize;
     /// store the class of this type, i.e. contains Cache.Info.RttiClass.RttiClass
-    property ValueClass: TClass read fValueClass;
-    /// identify e.g. TCollection or TStrings inherited classes for special handling
-    property ValueKnownClass: TClass read fValueKnownClass;
+    property ValueClass: TClass
+      read fValueClass;
+    /// identify most common RTL inherited classes for special handling
+    // - recognize TCollection TStrings TObjectList TList parents
+    property ValueRTLClass: TClass
+      read fValueRTLClass;
     /// store the class of a T*ObjArray dynamic array
     // - shortcut to ArrayRtti.Info.RttiClass.RttiClass
     // - used when rcfObjArray is defined in Flags
-    property ObjArrayClass: TClass read fObjArrayClass;
+    property ObjArrayClass: TClass
+      read fObjArrayClass;
     /// store the Item class for a given TCollection
     // - as previously registered by Rtti.RegisterCollection()
-    property CollectionItem: TCollectionItemClass read fCollectionItem;
+    property CollectionItem: TCollectionItemClass
+      read fCollectionItem;
     /// opaque private instance used by mormot.orm.base.pas or mormot.core.log.pas
     // - stores e.g. the TOrmProperties ORM information of a TOrm,
     // or the TSynLogFamily of a TSynLog instance
-    property Private: TObject read fPrivate write fPrivate;
+    property Private: TObject
+      read fPrivate write fPrivate;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
-    property JsonLoad: pointer read fJsonLoad write fJsonLoad;
+    property JsonLoad: pointer
+      read fJsonLoad write fJsonLoad;
     /// opaque TRttiJsonSave callback used by mormot.core.json.pas
-    property JsonSave: pointer read fJsonSave write fJsonSave;
+    property JsonSave: pointer
+      read fJsonSave write fJsonSave;
   end;
 
   PRttiCustom = ^TRttiCustom;
@@ -2147,7 +2169,8 @@ type
     /// default property to access a given RTTI TypeInfo() customization
     // - you can access or register one type by using this default property:
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
-    property ByTypeInfo[P: PRttiInfo]: TRttiCustom read RegisterType; default;
+    property ByTypeInfo[P: PRttiInfo]: TRttiCustom
+      read RegisterType; default;
   end;
 
 
@@ -5637,7 +5660,7 @@ begin
   List[result].Name := pointer(s); // PShortString
 end;
 
-procedure TRttiCustomProps.SetManagedFromList;
+procedure TRttiCustomProps.AdjustAfterAdded;
 var
   i, n: PtrInt;
   p: PRttiCustomProp;
@@ -5965,13 +5988,13 @@ begin
       begin
         fValueClass := aInfo.RttiClass.RttiClass;
         if fValueClass.InheritsFrom(TCollection) then
-          fValueKnownClass := TCollection
+          fValueRTLClass := TCollection
         else if fValueClass.InheritsFrom(TStrings) then
-          fValueKnownClass := TStrings
+          fValueRTLClass := TStrings
         else if fValueClass.InheritsFrom(TObjectList) then
-          fValueKnownClass := TObjectList
+          fValueRTLClass := TObjectList
         else if fValueClass.InheritsFrom(TList) then
-          fValueKnownClass := TList;
+          fValueRTLClass := TList;
         fProps.AddFromClass(aInfo, {includeparents=}true);
         if fProps.Count = 0 then
           if fValueClass.InheritsFrom(Exception) then
@@ -6075,7 +6098,7 @@ begin
   if fProps.Count > 0 then
   begin
     include(fFlags, rcfHasNestedProperties);
-    fProps.SetManagedFromList;
+    fProps.AdjustAfterAdded;
     if fProps.fManaged <> nil then
       include(fFlags, rcfHasNestedManagedProperties);
   end;
@@ -6394,7 +6417,7 @@ begin
   end;
   // set whole size and managed fields/properties
   fProps.Size := fCache.Size;
-  Props.SetManagedFromList;
+  Props.AdjustAfterAdded;
   if Props.fManaged <> nil then
     include(fFlags, rcfHasNestedManagedProperties);
 end;
@@ -6806,11 +6829,11 @@ begin
      (aTo <> nil) then
   begin
     cFrom := Rtti.RegisterClass(PClass(aFrom)^);
-    if (cFrom.ValueKnownClass = TCollection) and
+    if (cFrom.ValueRTLClass = TCollection) and
        (PClass(aFrom)^ = PClass(aTo)^)  then
       // specific process of TCollection items
       CopyCollection(TCollection(aFrom), TCollection(aTo))
-    else if (cFrom.ValueKnownClass = TStrings) and
+    else if (cFrom.ValueRTLClass = TStrings) and
             PClass(aTo)^.InheritsFrom(TStrings) then
       // specific process of TStrings items using VCL-style copy
       TStrings(aTo).Assign(TStrings(aFrom))

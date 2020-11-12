@@ -150,8 +150,9 @@ function JsonPropNameValid(P: PUTF8Char): boolean;
 // - true/false boolean values are returned as 'true'/'false', with WasString=false
 // - any number value is returned as its ascii representation, with WasString=false
 // - works for both field names or values (e.g. '"FieldName":' or 'Value,')
-function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char; WasString: PBoolean = nil;
-  EndOfObject: PUTF8Char = nil; Len: PInteger = nil): PUTF8Char;
+function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
+  WasString: PBoolean = nil; EndOfObject: PUTF8Char = nil;
+  Len: PInteger = nil): PUTF8Char;
 
 /// decode a JSON field name in an UTF-8 encoded buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
@@ -183,8 +184,9 @@ procedure GetJSONPropName(var P: PUTF8Char; out PropName: shortstring); overload
 // - WasString is set to true if the JSON value was a "string"
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
 // - if Len is set, it will contain the length of the returned pointer value
-function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; WasString: PBoolean = nil;
-  EndOfObject: PUTF8Char = nil; HandleValuesAsObjectOrArray: boolean = false;
+function GetJSONFieldOrObjectOrArray(var P: PUTF8Char;
+  WasString: PBoolean = nil; EndOfObject: PUTF8Char = nil;
+  HandleValuesAsObjectOrArray: boolean = false;
   NormalizeBoolean: boolean = true; Len: PInteger = nil): PUTF8Char;
 
 /// retrieve the next JSON item as a RawJSON variable
@@ -262,7 +264,8 @@ function GotoNextJSONObjectOrArray(P: PUTF8Char): PUTF8Char; overload;
 // - specify ']' or '}' as the expected EndChar
 // - will return nil in case of parsing error or unexpected end (#0)
 // - will return the next character after ending ] or } - i.e. may be , } ]
-function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar): PUTF8Char; overload;
+function GotoNextJSONObjectOrArray(P: PUTF8Char;
+  EndChar: AnsiChar): PUTF8Char; overload;
   {$ifdef FPC}inline;{$endif}
 
 /// reach the position of the next JSON object of JSON array
@@ -316,7 +319,8 @@ function JSONArrayItem(P: PUTF8Char; Index: integer): PUTF8Char;
 // - returns false if the supplied input is invalid
 // - returns true on success, with Values[] pointing to each unescaped value,
 // may be a JSON string, object, array of constant
-function JSONArrayDecode(P: PUTF8Char; out Values: TPUTF8CharDynArray): boolean;
+function JSONArrayDecode(P: PUTF8Char;
+  out Values: TPUTF8CharDynArray): boolean;
 
 /// compute the number of fields in a JSON object
 // - this will handle any kind of objects, including those with nested
@@ -344,7 +348,7 @@ function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8;
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
 // - incoming P^ should point to the first initial '{' char
-function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
+function JsonObjectByPath(JsonObject, PropPath: PUTF8Char): PUTF8Char;
 
 /// return all matching properties of a JSON object
 // - here the PropPath could be a comma-separated list of full paths,
@@ -354,7 +358,7 @@ function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
 // - incoming P^ should point to the first initial '{' char
-function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
+function JsonObjectsByPath(JsonObject, PropPath: PUTF8Char): RawUTF8;
 
 /// convert one JSON object into two JSON arrays of keys and values
 // - i.e. makes the following transformation:
@@ -363,7 +367,8 @@ function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
 // modify the JSON input buffer
 // - is the reverse of the TTextWriter.AddJSONArraysAsJSONObject() method
 // - used e.g. by TSynDictionary.LoadFromJSON
-function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
+function JSONObjectAsJSONArrays(JSON: PUTF8Char;
+  out keys, values: RawUTF8): boolean;
 
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
@@ -422,7 +427,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
   /// used e.g. by JSONDecode() overloaded function to returns values
-  TValuePUTF8CharArray = array[0..maxInt div SizeOf(TValuePUTF8Char)-1] of TValuePUTF8Char;
+  TValuePUTF8CharArray =
+    array[0 .. maxInt div SizeOf(TValuePUTF8Char) - 1] of TValuePUTF8Char;
   PValuePUTF8CharArray = ^TValuePUTF8CharArray;
 
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
@@ -454,12 +460,14 @@ type
 // - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
 // just like '{"name":'"John","year":1972}'
 procedure JSONDecode(var JSON: RawUTF8; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean = false); overload;
+  Values: PValuePUTF8CharArray;
+  HandleValuesAsObjectOrArray: boolean = false); overload;
 
 /// decode the supplied UTF-8 JSON content for the supplied names
 // - an overloaded function when the JSON is supplied as a RawJSON variable
 procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean = false); overload;
+  Values: PValuePUTF8CharArray;
+  HandleValuesAsObjectOrArray: boolean = false); overload;
 
 /// decode the supplied UTF-8 JSON content for the supplied names
 // - data will be set in Values, according to the Names supplied e.g.
@@ -473,7 +481,8 @@ procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
 // - if ValuesLen is set, ValuesLen[] will contain the length of each Values[]
 // - returns a pointer to the next content item in the JSON buffer
 function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
-  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean = false): PUTF8Char; overload;
+  Values: PValuePUTF8CharArray;
+  HandleValuesAsObjectOrArray: boolean = false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content into an array of name/value pairs
 // - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
@@ -492,7 +501,8 @@ function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
 // - this function will decode the JSON content in-memory, so will unescape it
 // in-place: it must be called only once with the same JSON data
 function JSONDecode(var JSON: RawUTF8; const aName: RawUTF8 = 'result';
-  WasString: PBoolean = nil; HandleValuesAsObjectOrArray: boolean = false): RawUTF8; overload;
+  WasString: PBoolean = nil;
+  HandleValuesAsObjectOrArray: boolean = false): RawUTF8; overload;
 
 /// retrieve a pointer to JSON string field content, without unescaping it
 // - returns either ':' for name field, or } , for value field
@@ -569,13 +579,16 @@ function JSONEncode(const Format: RawUTF8;
   const Args, Params: array of const): RawUTF8; overload;
 
 /// encode the supplied RawUTF8 array data as an UTF-8 valid JSON array content
-function JSONEncodeArrayUTF8(const Values: array of RawUTF8): RawUTF8; overload;
+function JSONEncodeArrayUTF8(
+  const Values: array of RawUTF8): RawUTF8; overload;
 
 /// encode the supplied integer array data as a valid JSON array
-function JSONEncodeArrayInteger(const Values: array of integer): RawUTF8; overload;
+function JSONEncodeArrayInteger(
+  const Values: array of integer): RawUTF8; overload;
 
 /// encode the supplied floating-point array data as a valid JSON array
-function JSONEncodeArrayDouble(const Values: array of double): RawUTF8; overload;
+function JSONEncodeArrayDouble(
+  const Values: array of double): RawUTF8; overload;
 
 /// encode the supplied array data as a valid JSON array content
 // - if WithoutBraces is TRUE, no [ ] will be generated
@@ -643,12 +656,13 @@ function QuotedStrJSON(const aText: RawUTF8): RawUTF8; overload;
 // parameters, as exected by our ORM or DB units, i.e. :(1234): for numerical
 // values, and :('quoted '' string'): for textual values
 // - if optional JSONFormat parameter is TRUE, ? parameters will be written
-// as JSON quoted strings, without :(...): tokens, e.g. "quoted "" string"
+// as JSON escaped strings, without :(...): tokens, e.g. "quoted \" string"
 // - resulting string has no length limit and uses fast concatenation
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
-function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
+function FormatUTF8(const Format: RawUTF8;
+  const Args, Params: array of const;
   JSONFormat: boolean = false): RawUTF8; overload;
 
 
@@ -889,7 +903,8 @@ type
     // - note that, due to a Delphi compiler limitation, cardinal values should be
     // type-casted to Int64() (otherwise the integer mapped value will be converted)
     // - you can pass nil as parameter for a null JSON value
-    procedure AddJSONEscape(const NameValuePairs: array of const); overload;
+    procedure AddJSONEscape(
+      const NameValuePairs: array of const); overload;
     /// encode the supplied (extended) JSON content, with parameters,
     // as an UTF-8 valid JSON object content
     // - in addition to the JSON RFC specification strict mode, this method will
@@ -909,7 +924,8 @@ type
     // ! '{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}'
     // - will call internally _JSONFastFmt() to create a temporary TDocVariant
     // with all its features - so is slightly slower than other AddJSON* methods
-    procedure AddJSON(const Format: RawUTF8; const Args, Params: array of const);
+    procedure AddJSON(const Format: RawUTF8;
+      const Args, Params: array of const);
     /// append two JSON arrays of keys and values as one JSON object
     // - i.e. makes the following transformation:
     // $ [key1,key2...] + [value1,value2...] -> {key1:value1,key2,value2...}
@@ -1068,18 +1084,23 @@ type
     /// can be used to set all data from one BLOB memory buffer
     procedure SetBlobDataPtr(aValue: pointer);
     /// can be used to set or retrieve all stored data as one BLOB content
-    property BlobData: RawByteString read GetBlobData write SetBlobData;
+    property BlobData: RawByteString
+      read GetBlobData write SetBlobData;
     /// event triggerred after an item has just been added to the list
-    property OnAfterAdd: TOnSynNameValueNotify read fOnAdd write fOnAdd;
+    property OnAfterAdd: TOnSynNameValueNotify
+      read fOnAdd write fOnAdd;
     /// search for a Name, return the associated Value as a UTF-8 string
     // - returns '' if aName is not found in the stored keys
-    property Str[const aName: RawUTF8]: RawUTF8 read GetStr; default;
+    property Str[const aName: RawUTF8]: RawUTF8
+      read GetStr; default;
     /// search for a Name, return the associated Value as integer
     // - returns 0 if aName is not found, or not a valid Int64 in the stored keys
-    property Int[const aName: RawUTF8]: Int64 read GetInt;
+    property Int[const aName: RawUTF8]: Int64
+      read GetInt;
     /// search for a Name, return the associated Value as boolean
     // - returns true if aName stores '1' as associated value
-    property Bool[const aName: RawUTF8]: boolean read GetBool;
+    property Bool[const aName: RawUTF8]: boolean
+      read GetBool;
   end;
 
   /// a reference pointer to a Name/Value RawUTF8 pairs storage
@@ -1256,16 +1277,20 @@ type
     // ! finally
     // !   cache.Safe.Unlock;
     // ! end;
-    property Safe: PSynLocker read fSafe;
+    property Safe: PSynLocker
+      read fSafe;
     /// the current global size of Values in RAM cache, in bytes
-    property RamUsed: cardinal read fRamUsed;
+    property RamUsed: cardinal
+      read fRamUsed;
     /// the maximum RAM to be used for values, in bytes
     // - the cache is flushed when ValueSize reaches this limit
     // - default is 16 MB (16 shl 20)
-    property MaxRamUsed: cardinal read fMaxRamUsed;
+    property MaxRamUsed: cardinal
+      read fMaxRamUsed;
     /// after how many seconds betwen Add() calls the cache should be flushed
     // - equals 0 by default, meaning no time out
-    property TimeoutSeconds: cardinal read fTimeoutSeconds;
+    property TimeoutSeconds: cardinal
+      read fTimeoutSeconds;
   end;
 
 
@@ -1392,7 +1417,8 @@ type
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - will update the associated timeout value of the entry, unless
     // aUpdateTimeOut is set to false
-    function FindAndCopy(const aKey; out aValue; aUpdateTimeOut: boolean = true): boolean;
+    function FindAndCopy(const aKey;
+      out aValue; aUpdateTimeOut: boolean = true): boolean;
     /// search of a stored value by its primary key, then delete and return it
     // - returns TRUE if aKey was found, fill aValue with its content,
     // and delete the entry in the internal storage
@@ -1482,9 +1508,11 @@ type
     // JSON serialization), unless ObjArrayByRef is true and pointers are copied
     procedure CopyValues(out Dest; ObjArrayByRef: boolean = false);
     /// serialize the content as a "key":value JSON object
-    procedure SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean = false); overload;
+    procedure SaveToJSON(
+      W: TTextWriter; EnumSetsAsText: boolean = false); overload;
     /// serialize the content as a "key":value JSON object
-    function SaveToJSON(EnumSetsAsText: boolean = false): RawUTF8; overload;
+    function SaveToJSON(
+      EnumSetsAsText: boolean = false): RawUTF8; overload;
     /// serialize the Values[] as a JSON array
     function SaveValuesToJSON(EnumSetsAsText: boolean = false): RawUTF8;
     /// unserialize the content from "key":value JSON object
@@ -1506,9 +1534,11 @@ type
     // - as previously saved by SaveToBinary method
     function LoadFromBinary(const binary: RawByteString): boolean;
     /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
-    class function OnCanDeleteSynPersistentLock(const aKey, aValue; aIndex: integer): boolean;
+    class function OnCanDeleteSynPersistentLock(
+      const aKey, aValue; aIndex: integer): boolean;
     /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
-    class function OnCanDeleteSynPersistentLocked(const aKey, aValue; aIndex: integer): boolean;
+    class function OnCanDeleteSynPersistentLocked(
+      const aKey, aValue; aIndex: integer): boolean;
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe
     function Count: integer;
@@ -1518,19 +1548,25 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
-    property Keys: TDynArrayHashed read fKeys;
+    property Keys: TDynArrayHashed
+      read fKeys;
     /// direct access to the associated stored values
     // - if you want to access the values, you should use fSafe.Lock/Unlock
-    property Values: TDynArray read fValues;
+    property Values: TDynArray
+      read fValues;
     /// defines how many items are currently stored in Keys/Values internal arrays
-    property Capacity: integer read GetCapacity write SetCapacity;
+    property Capacity: integer
+      read GetCapacity write SetCapacity;
     /// direct low-level access to the internal access tick (GetTickCount64 shr 10)
     // - may be nil if TimeOutSeconds=0
-    property TimeOut: TCardinalDynArray read fTimeOut;
+    property TimeOut: TCardinalDynArray
+      read fTimeOut;
     /// returns the aTimeOutSeconds parameter value, as specified to Create()
-    property TimeOutSeconds: cardinal read GetTimeOutSeconds;
+    property TimeOutSeconds: cardinal
+      read GetTimeOutSeconds;
     /// the compression algorithm used for binary serialization
-    property CompressAlgo: TAlgoCompress read fCompressAlgo write fCompressAlgo;
+    property CompressAlgo: TAlgoCompress
+      read fCompressAlgo write fCompressAlgo;
     /// callback to by-pass DeleteDeprecated deletion by returning false
     // - can be assigned e.g. to OnCanDeleteSynPersistentLock if Value is a
     // TSynPersistentLock instance, to avoid any potential access violation
@@ -1853,8 +1889,9 @@ function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
 // - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
 // also able to serialize plain Exception as a simple '{"Exception":"Message"}',
 // and append .map/.mab source code line number for ESynException
-function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions =
-  [woDontStoreDefault, woHumanReadable, woStoreClassName, woStorePointer]): RawUTF8;
+function ObjectToJSONDebug(Value: TObject;
+  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
+    woHumanReadable, woStoreClassName, woStorePointer]): RawUTF8;
 
 /// fill a record content from a JSON serialization as saved by
 // TTextWriter.AddRecordJSON / RecordSaveJSON
@@ -1877,7 +1914,8 @@ function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: PRttiInfo;
 // JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
 // enhanced RTTI), if available
 function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: PRttiInfo;
-  CustomVariantOptions: PDocVariantOptions = nil; Tolerant: boolean = true): boolean; overload;
+  CustomVariantOptions: PDocVariantOptions = nil;
+  Tolerant: boolean = true): boolean; overload;
 
 /// fill a dynamic array content from a JSON serialization as saved by
 // TTextWriter.AddDynArrayJSON
@@ -1928,14 +1966,16 @@ function DynArrayLoadJSON(var Value; const JSON: RawUTF8;
 // will point in From at the syntax error place (e.g. on any unknown property name)
 // - caller should explicitely perform a SetDefaultValuesObject(Value) if
 // the default values are expected to be set before JSON parsing
-function JSONToObject(var ObjectInstance; From: PUTF8Char; out Valid: boolean;
-  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): PUTF8Char;
+function JSONToObject(var ObjectInstance; From: PUTF8Char;
+  out Valid: boolean; TObjectListItemClass: TClass = nil;
+  Options: TJsonParserOptions = []): PUTF8Char;
 
 /// parse the supplied JSON with some tolerance about Settings format
 // - will make a TSynTempBuffer copy for parsing, and un-comment it
 // - returns true if the supplied JSON was successfully retrieved
 // - returns false and set InitialJsonContent := '' on error
-function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject): boolean;
+function JSONSettingsToObject(var InitialJsonContent: RawUTF8;
+  Instance: TObject): boolean;
 
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
@@ -1944,7 +1984,8 @@ function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject
 // during process, before calling safely JSONToObject()
 // - will return TRUE on success, or FALSE if the supplied JSON was invalid
 function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
-  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): boolean;
+  TObjectListItemClass: TClass = nil;
+  Options: TJsonParserOptions = []): boolean;
 
 /// create a new object instance, as saved by ObjectToJSON(...,[...,woStoreClassName,...]);
 // - JSON input should be either 'null', either '{"ClassName":"TMyClass",...}'
@@ -1967,7 +2008,8 @@ function JSONToNewObject(var From: PUTF8Char; var Valid: boolean;
 // owner class: you can set the j2oSetterExpectsToFreeTempInstance option
 // to let this method release it when the setter returns
 function PropertyFromJSON(Prop: PRttiCustomProp; Instance: TObject;
-  From: PUTF8Char; var Valid: boolean; Options: TJsonParserOptions = []): PUTF8Char;
+  From: PUTF8Char; var Valid: boolean;
+  Options: TJsonParserOptions = []): PUTF8Char;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // object contents
@@ -1978,13 +2020,16 @@ function PropertyFromJSON(Prop: PRttiCustomProp; Instance: TObject;
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
 function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar;
-  var ObjectInstance; Next: PPUTF8Char = nil; Options: TJsonParserOptions = []): boolean;
+  var ObjectInstance; Next: PPUTF8Char = nil;
+  Options: TJsonParserOptions = []): boolean;
 
 /// fill the object properties from a JSON file content
 // - ObjectInstance must be an existing TObject instance
 // - this function will call RemoveCommentsFromJSON() before process
 function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
-  TObjectListItemClass: TClass = nil; Options: TJsonParserOptions = []): boolean;
+  TObjectListItemClass: TClass = nil;
+  Options: TJsonParserOptions = []): boolean;
+
 
 const
   /// standard header for an UTF-8 encoded XML file
@@ -2155,7 +2200,8 @@ type
     /// persist the settings as a JSON file, named from LoadFromFile() parameter
     procedure SaveIfNeeded; virtual;
     /// optional persistence file name, as set by LoadFromFile()
-    property FileName: TFileName read fFileName;
+    property FileName: TFileName
+      read fFileName;
   end;
 
 
@@ -4461,25 +4507,29 @@ const
     [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
      vtCurrency, vtExtended],
     [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
-     vtCurrency,vtExtended,vtVariant]);
+     vtCurrency, vtExtended, vtVariant]);
 label
   Txt;
 begin
   if (Format = '') or
      ((high(Args) < 0) and
       (high(Params) < 0)) then
-  begin // no formatting to process, but may be a const -> make unique
+  begin
+    // no formatting to process, but may be a const
+    // -> make unique since e.g. _JsonFmt() will parse it in-place
     FastSetString(result, pointer(Format), length(Format));
-    exit; // e.g. _JsonFmt() will parse it in-place
+    exit;
   end;
   if high(Params) < 0 then
   begin
-    FormatUTF8(Format, Args, result); // faster function with no ?
+    // faster function with no ?
+    FormatUTF8(Format, Args, result);
     exit;
   end;
   if Format = '%' then
   begin
-    VarRecToUTF8(Args[0], result); // optimize raw conversion
+    // optimize raw conversion
+    VarRecToUTF8(Args[0], result);
     exit;
   end;
   tmpN := 0;
@@ -4490,8 +4540,10 @@ begin
   F := pointer(Format);
   while F^ <> #0 do
   begin
-    if F^ <> '%' then
+    if (F^ <> '%') and
+       (F^ <> '?') then
     begin
+      // handle plain text betweeb % ? markers
       FDeb := F;
       while not (F^ in [#0, '%', '?']) do
         inc(F);
@@ -4511,7 +4563,8 @@ Txt:  len := F - FDeb;
     inc(F); // jump '%' or '?'
     if (isParam = '%') and
        (A <= high(Args)) then
-    begin // handle % substitution
+    begin
+      // handle % substitution
       if tmpN = length(tmp) then
         SetLength(tmp, tmpN + 8);
       VarRecToUTF8(Args[A], tmp[tmpN]);
@@ -4524,7 +4577,8 @@ Txt:  len := F - FDeb;
     end
     else if (isParam = '?') and
             (P <= high(Params)) then
-    begin // handle ? substitution
+    begin
+      // handle ? substitution
       if tmpN = length(tmp) then
         SetLength(tmp, tmpN + 8);
       if JSONFormat and
@@ -4550,7 +4604,8 @@ Txt:  len := F - FDeb;
       inc(tmpN);
     end
     else if F^ <> #0 then
-    begin // no more available Args -> add all remaining text
+    begin
+      // no more available Args -> add all remaining text
       FDeb := F;
       repeat
         inc(F)
@@ -4562,8 +4617,8 @@ Txt:  len := F - FDeb;
     exit;
   if not JSONFormat and
      (tmpN > SizeOf(inlin) shl 3) then
-    raise EJSONException.CreateUTF8('Too many parameters for FormatUTF8(): %>%',
-      [tmpN, SizeOf(inlin) shl 3]);
+    raise EJSONException.CreateUTF8(
+      'Too many parameters for FormatUTF8(): %>%', [tmpN, SizeOf(inlin) shl 3]);
   FastSetString(result, nil, L);
   F := pointer(result);
   for i := 0 to tmpN - 1 do
@@ -6145,14 +6200,18 @@ noesc:
       JSON_ESCAPE_NONE:
         goto noesc;
       JSON_ESCAPE_ENDINGZERO:
-        exit; // #0
+        // #0
+        exit;
       JSON_ESCAPE_UNICODEHEX:
-        begin // characters below ' ', #7 e.g. -> // 'u0007'
-          PCardinal(B + 1)^ := ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
+        begin
+          // characters below ' ', #7 e.g. -> // 'u0007'
+          PCardinal(B + 1)^ :=
+            ord('\') + ord('u') shl 8 + ord('0') shl 16 + ord('0') shl 24;
           inc(B, 4);
           PWord(B + 1)^ := TwoDigitsHexWB[PByteArray(P)[i]];
         end;
-    else // escaped as \ + b,t,n,f,r,\,"
+    else
+      // escaped as \ + b,t,n,f,r,\,"
       PWord(B + 1)^ := (integer(tab[PByteArray(P)[i]]) shl 8) or ord('\');
     end;
     inc(i);
@@ -8920,19 +8979,19 @@ begin
       // allow any kind of customization for TSynPersistent children
       TSPHookClass(fValueClass).RttiCustomSet(self)
     // recognize most known RTL classes
-    else if fValueKnownClass = TStrings then
+    else if fValueRTLClass = TStrings then
     begin
       fJsonSave := @_JS_TStrings;
       fJsonLoad := @_JL_TStrings;
     end
-    else if fValueKnownClass = TObjectList then
+    else if fValueRTLClass = TObjectList then
     begin
       fJsonSave := @_JS_TObjectList;
       fJsonLoad := @_JL_TObjectList;
     end
-    else if fValueKnownClass = TList then
+    else if fValueRTLClass = TList then
       fJsonSave := @_JS_TList
-    else if fValueKnownClass = TCollection then
+    else if fValueRTLClass = TCollection then
     begin
       fJsonSave := @_JS_TCollection;
       fJsonLoad := @_JL_TCollection;

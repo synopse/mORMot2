@@ -346,9 +346,8 @@ begin
         else
           inc(P);
       if P^ = ']' then
-        break
-      else
-        inc(P);
+        break;
+      inc(P);
       TableName := GetJSONField(P, P, @wasString);
       if not wasString or
          (P = nil) then
@@ -641,8 +640,8 @@ begin
     end;
     // we have the SQLite3 engine at hand
     fake.ServerName := ':memory:';
-    result := TRestServerClass(c).RegisteredClassCreateFrom(aModel, fake,
-      aHandleUserAuthentication);
+    result := TRestServerClass(c).RegisteredClassCreateFrom(
+      aModel, fake, aHandleUserAuthentication);
   finally
     fake.Free;
   end;
