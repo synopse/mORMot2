@@ -356,7 +356,7 @@ type
   public
     /// initialize the multiple connections
     // - warning: currently reliable only with aThreadPoolCount=1
-    constructor Create(OnStart, OnStop: TOnNotifyThread;
+    constructor Create(const OnStart, OnStop: TOnNotifyThread;
       aStreamClass: TAsynchConnectionClass; const ProcessName: RawUTF8;
       aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions;
       aThreadPoolCount: integer); reintroduce; virtual;
@@ -431,7 +431,8 @@ type
     procedure Execute; override;
   public
     /// run the TCP server, listening on a supplied IP port
-    constructor Create(const aPort: RawUTF8; OnStart, OnStop: TOnNotifyThread;
+    constructor Create(const aPort: RawUTF8;
+      const OnStart, OnStop: TOnNotifyThread;
       aStreamClass: TAsynchConnectionClass; const ProcessName: RawUTF8;
       aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions;
       aThreadPoolCount: integer = 1); reintroduce; virtual;
@@ -453,7 +454,8 @@ type
   public
     /// start the TCP client connections, connecting to the supplied IP server
     constructor Create(const aServer, aPort: RawUTF8;
-      aClientsCount, aClientsTimeoutSecs: integer; OnStart, OnStop: TOnNotifyThread;
+      aClientsCount, aClientsTimeoutSecs: integer;
+      const OnStart, OnStop: TOnNotifyThread;
       aStreamClass: TAsynchConnectionClass; const ProcessName: RawUTF8;
       aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions;
       aThreadPoolCount: integer = 1); reintroduce; virtual;
@@ -1058,7 +1060,7 @@ begin // for fast binary search from the connection handle
   result := TAsynchConnection(A).Handle - TAsynchConnection(B).Handle;
 end;
 
-constructor TAsynchConnections.Create(OnStart, OnStop: TOnNotifyThread;
+constructor TAsynchConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aStreamClass: TAsynchConnectionClass; const ProcessName: RawUTF8;
   aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 var
@@ -1332,7 +1334,7 @@ end;
 { TAsynchServer }
 
 constructor TAsynchServer.Create(const aPort: RawUTF8;
-  OnStart, OnStop: TOnNotifyThread; aStreamClass: TAsynchConnectionClass;
+  const OnStart, OnStop: TOnNotifyThread; aStreamClass: TAsynchConnectionClass;
   const ProcessName: RawUTF8; aLog: TSynLogClass;
   aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 begin
@@ -1412,9 +1414,10 @@ end;
 { TAsynchClient }
 
 constructor TAsynchClient.Create(const aServer, aPort: RawUTF8;
-  aClientsCount, aClientsTimeoutSecs: integer; OnStart, OnStop: TOnNotifyThread;
-  aStreamClass: TAsynchConnectionClass; const ProcessName: RawUTF8;
-  aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
+  aClientsCount, aClientsTimeoutSecs: integer;
+  const OnStart, OnStop: TOnNotifyThread; aStreamClass: TAsynchConnectionClass;
+  const ProcessName: RawUTF8; aLog: TSynLogClass;
+  aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 begin
   fThreadClients.Count := aClientsCount;
   fThreadClients.Timeout := aClientsTimeoutSecs * 1000;

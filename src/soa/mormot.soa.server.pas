@@ -501,7 +501,7 @@ type
     // - the optional low-level aOnNotify callback will be triggerred for each
     // incoming notification, to track the object changes in real-time
     constructor Create(aSlave: TRestServer; aMaster: TRestClientURI;
-      aTable: TOrmClass; aOnNotify: TOnBatchWrite); reintroduce;
+      aTable: TOrmClass; const aOnNotify: TOnBatchWrite); reintroduce;
     /// finalize this callback instance
     destructor Destroy; override;
     /// this event will be raised on any Add on a versioned record
@@ -576,7 +576,7 @@ begin
   end
   else
   begin
-    if aRestServer.Services.implements(fInterface.InterfaceTypeInfo) then
+    if aRestServer.Services.Implements(fInterface.InterfaceTypeInfo) then
       fImplementationClassKind := ickFromInjectedResolver
     else if fImplementationClass.InheritsFrom(TInjectableObjectRest) then
       fImplementationClassKind := ickInjectableRest
@@ -588,10 +588,7 @@ begin
       GetInterfaceEntry(fInterface.InterfaceIID);
     if fImplementationClassInterfaceEntry = nil then
       raise EServiceException.CreateUTF8('%.Create: % does not implement I%',
-        [self, fImplementationClass, fInterfaceURI])
-    else
-
-
+        [self, fImplementationClass, fInterfaceURI]);
   end;
   if (fInterface.MethodIndexCallbackReleased >= 0) and
      (InstanceCreation <> sicShared) then
@@ -1385,8 +1382,9 @@ begin
     aLogRest.AsynchBatchStart(aLogClass, 1, 500, 1000); // do nothing if already set
 end;
 
-function TServiceFactoryServer.SetServiceLog(const aMethod: array of RawUTF8;
-  const aLogRest: IRestOrm; aLogClass: TOrmServiceLogClass): TServiceFactoryServerAbstract;
+function TServiceFactoryServer.SetServiceLog(
+  const aMethod: array of RawUTF8; const aLogRest: IRestOrm;
+  aLogClass: TOrmServiceLogClass): TServiceFactoryServerAbstract;
 var
   bits: TInterfaceFactoryMethodBits;
 begin
@@ -1421,7 +1419,8 @@ type
     fRaiseExceptionOnInvokeError: boolean;
     function CallbackInvoke(const aMethod: TInterfaceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
-      aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
+      aClientDrivenID: PCardinal;
+      aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   public
     constructor Create(aRequest: TRestServerURIContext;
       aFactory: TInterfaceFactory; aFakeID: integer);
@@ -1966,7 +1965,7 @@ end;
 { TServiceRecordVersionCallback }
 
 constructor TServiceRecordVersionCallback.Create(aSlave: TRestServer;
-  aMaster: TRestClientURI; aTable: TOrmClass; aOnNotify: TOnBatchWrite);
+  aMaster: TRestClientURI; aTable: TOrmClass; const aOnNotify: TOnBatchWrite);
 begin
   if aSlave = nil then
     raise EServiceException.CreateUTF8('%.Create(%): Slave=nil',

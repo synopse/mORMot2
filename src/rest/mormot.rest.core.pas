@@ -296,8 +296,9 @@ type
     // - will properly call BeginCurrentThread/EndCurrentThread methods
     // - you should supply some runtime information to name the thread, for
     // proper debugging
-    function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
-      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
+    function NewBackgroundThreadProcess(
+      const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+      const Format: RawUTF8; const Args: array of const;
       aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
     /// allows to safely execute a process in parallel
     // - returns a TSynParallelProcess instance, ready to execute any task
@@ -315,12 +316,12 @@ type
     // - you can run BackgroundTimer.EnQueue or ExecuteNow methods to implement
     // a FIFO queue, or force immediate execution of the process
     // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
-    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+    function TimerEnable(const aOnProcess: TOnSynBackgroundTimerProcess;
       aOnProcessSecs: cardinal): TRestBackgroundTimer;
     /// undefine a task running on a periodic number of seconds
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
-    function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    function TimerDisable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// will gather CPU and RAM information in a background thread
     // - you can specify the update frequency, in seconds
     // - access to the information via the returned instance, which maps
@@ -825,14 +826,14 @@ type
     // TRestRunThreads compatibility methods
     function NewBackgroundThreadMethod(const Format: RawUTF8;
       const Args: array of const): TSynBackgroundThreadMethod;
-    function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
+    function NewBackgroundThreadProcess(const aOnProcess: TOnSynBackgroundThreadProcess;
       aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
       aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
     function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
       const Args: array of const): TSynParallelProcess;
-    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+    function TimerEnable(const aOnProcess: TOnSynBackgroundTimerProcess;
       aOnProcessSecs: cardinal): TRestBackgroundTimer;
-    function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    function TimerDisable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     function SystemUseTrack(periodSec: integer = 10): TSystemUse;
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
     procedure BeginCurrentThread(Sender: TThread); virtual;
@@ -2583,7 +2584,7 @@ begin
 end;
 
 function TRest.NewBackgroundThreadProcess(
-  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
   const Format: RawUTF8; const Args: array of const;
   aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
 begin
@@ -2594,7 +2595,7 @@ begin
       aOnProcess, aOnProcessMS, Format, Args);
 end;
 
-function TRest.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+function TRest.TimerEnable(const aOnProcess: TOnSynBackgroundTimerProcess;
   aOnProcessSecs: cardinal): TRestBackgroundTimer;
 begin
   if self = nil then
@@ -2603,7 +2604,7 @@ begin
     result := fRun.TimerEnable(aOnProcess, aOnProcessSecs);
 end;
 
-function TRest.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+function TRest.TimerDisable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
   if self = nil then
     result := false
@@ -3554,7 +3555,7 @@ begin
 end;
 
 function TRestRunThreads.NewBackgroundThreadProcess(
-  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
   const Format: RawUTF8; const Args: array of const;
   aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
 var
@@ -3569,7 +3570,8 @@ begin
       BeginCurrentThread, EndCurrentThread, aStats);
 end;
 
-function TRestRunThreads.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+function TRestRunThreads.TimerEnable(
+  const aOnProcess: TOnSynBackgroundTimerProcess;
   aOnProcessSecs: cardinal): TRestBackgroundTimer;
 begin
   result := nil;
@@ -3584,7 +3586,8 @@ begin
   result.Enable(aOnProcess, aOnProcessSecs);
 end;
 
-function TRestRunThreads.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+function TRestRunThreads.TimerDisable(
+  const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
   if (self = nil) or
      (fBackgroundTimer = nil) then

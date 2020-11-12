@@ -584,7 +584,7 @@ begin
     @fORM, @fRecords, @fEnumerates, @fSets, @fArrays, @fUnits, @fDescriptions]);
   if aDescriptions <> '' then
     desc := StringFromFile(aDescriptions);
-  if desc = '' then
+  if {%H-}desc = '' then
     ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
   if desc <> '' then
     fDescriptions.InitJSONInPlace(Pointer(desc), JSON_OPTIONS_FAST);
@@ -1623,7 +1623,7 @@ begin
               interfaceName := '';
           end;
         end
-        else if interfaceName <> '' then
+        else if {%H-}interfaceName <> '' then
           if IdemPropNameU(typeName, 'function') or
              IdemPropNameU(typeName, 'procedure') then
             if GetNextFieldProp(P, typeName) then
@@ -1965,7 +1965,7 @@ begin
   else
   begin
     for i := firstparam to ParamCount do
-      params := FormatUTF8('% %', [params, ParamStr(i)]);
+      params := FormatUTF8('% %', [{%H-}params, ParamStr(i)]);
     //writeln(params); // for debugging
     call.InBody := method^.ArgsCommandLineToObject(
       pointer(params), {input=}true, {raiseexcep=}true);
@@ -2023,7 +2023,7 @@ begin
   TDocVariant.NewFast([@fDescriptions]);
   if aDescriptions <> '' then
     desc := StringFromFile(aDescriptions);
-  if desc = '' then
+  if {%H-}desc = '' then
     ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
   if desc <> '' then
     fDescriptions.InitJSONInPlace(pointer(desc), JSON_OPTIONS_FAST);
@@ -2041,15 +2041,15 @@ begin
   n := 0;
   for i := 1 to ParamCount do
   begin
-    StringToUTF8(ParamStr(i), p[n]);
+    StringToUTF8(ParamStr(i), {%H-}p[n]);
     a := pointer(p[n]);
     if a^ in ['-', '/'] then
     begin
       inc(a);
       if a^ = '-' then
         inc(a);
-      j := PRttiInfo(TypeInfo(TServiceClientCommandLineOptions))^.SetEnumType^.
-             GetEnumNameTrimedValue(a);
+      j := PRttiInfo(TypeInfo(TServiceClientCommandLineOptions))^.
+             SetEnumType^.GetEnumNameTrimedValue(a);
       if j >= 0 then
       begin
         SetBitPtr(@fOptions, j);

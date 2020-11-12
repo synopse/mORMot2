@@ -3472,7 +3472,7 @@ begin
       ILen := ILen shr AESBlockShift;
       repeat
         // single-pass loop optimized e.g. for PKCS7 padding
-        GCM_IncCtr(TAESContext(actx).IV);
+        {%H-}GCM_IncCtr(TAESContext(actx).IV);
         TAESContext(actx.Context).DoBlock(actx.Context,
           TAESContext(actx).IV, TAESContext(actx).buf); // maybe AES-NI
         XorBlock16(ptp, ctp, @TAESContext(actx).buf);

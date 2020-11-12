@@ -738,7 +738,7 @@ type
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
     constructor Create(CreateSuspended: boolean; QueueName: SynUnicode = '';
-      OnStart: TOnNotifyThread = nil; OnStop: TOnNotifyThread = nil;
+      const OnStart: TOnNotifyThread = nil; const OnStop: TOnNotifyThread = nil;
       const ProcessName: RawUTF8 = ''); reintroduce;
     /// create a HTTP/1.1 processing clone from the main thread
     // - do not use directly - is called during thread pool creation
@@ -2454,8 +2454,9 @@ begin
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
 end;
 
-constructor THttpApiServer.Create(CreateSuspended: boolean; QueueName:
-  SynUnicode; OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8);
+constructor THttpApiServer.Create(CreateSuspended: boolean;
+  QueueName: SynUnicode; const OnStart, OnStop: TOnNotifyThread;
+  const ProcessName: RawUTF8);
 var
   bindInfo: HTTP_BINDING_INFO;
 begin

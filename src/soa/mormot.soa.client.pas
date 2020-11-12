@@ -453,12 +453,14 @@ type
       const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); override;
   public
     constructor Create(aClient: TServiceFactoryClient;
-      aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+      const aInvoke: TOnFakeInstanceInvoke;
+      const aNotifyDestroy: TOnFakeInstanceDestroy);
     destructor Destroy; override;
   end;
 
 constructor TInterfacedObjectFakeClient.Create(aClient: TServiceFactoryClient;
-  aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+  const aInvoke: TOnFakeInstanceInvoke;
+  const aNotifyDestroy: TOnFakeInstanceDestroy);
 var
   opt: TInterfacedObjectFromFactoryOptions;
 begin

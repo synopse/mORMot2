@@ -955,10 +955,12 @@ type
   TSynNameValueItemDynArray = array of TSynNameValueItem;
 
   /// event handler used to convert on the fly some UTF-8 text content
-  TOnSynNameValueConvertRawUTF8 = function(const text: RawUTF8): RawUTF8 of object;
+  TOnSynNameValueConvertRawUTF8 = function(
+    const text: RawUTF8): RawUTF8 of object;
 
   /// callback event used by TSynNameValue
-  TOnSynNameValueNotify = procedure(const Item: TSynNameValueItem; Index: PtrInt) of object;
+  TOnSynNameValueNotify = procedure(
+    const Item: TSynNameValueItem; Index: PtrInt) of object;
 
   /// pseudo-class used to store Name/Value RawUTF8 pairs
   // - use internaly a TDynArrayHashed instance for fast retrieval
@@ -1000,8 +1002,8 @@ type
     // - will first call Init(false) to initialize the internal array
     // - Section can be retrieved e.g. via FindSectionFirstLine()
     procedure InitFromIniSection(Section: PUTF8Char;
-      OnTheFlyConvert: TOnSynNameValueConvertRawUTF8 = nil;
-      OnAdd: TOnSynNameValueNotify = nil);
+      const OnTheFlyConvert: TOnSynNameValueConvertRawUTF8 = nil;
+      const OnAdd: TOnSynNameValueNotify = nil);
     /// reset content, then add all name=value; CSV pairs
     // - will first call Init(false) to initialize the internal array
     // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
@@ -7318,7 +7320,8 @@ begin
 end;
 
 procedure TSynNameValue.InitFromIniSection(Section: PUTF8Char;
-  OnTheFlyConvert: TOnSynNameValueConvertRawUTF8; OnAdd: TOnSynNameValueNotify);
+  const OnTheFlyConvert: TOnSynNameValueConvertRawUTF8;
+  const OnAdd: TOnSynNameValueNotify);
 var
   s: RawUTF8;
   i: integer;

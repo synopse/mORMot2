@@ -1490,7 +1490,7 @@ type
     // - optional aEventParams parameter will be transmitted to aEvent handler
     // - callback's Ctxt: TOnInterfaceStubExecuteParamsVariant's Method field
     // will identify the executed method
-    function Executes(aEvent: TOnInterfaceStubExecuteVariant;
+    function Executes(const aEvent: TOnInterfaceStubExecuteVariant;
       const aEventParams: RawUTF8 = ''): TInterfaceStub; overload;
     /// will add execution rules for all methods to log the input parameters
     // - aKind will define how the input parameters are serialized in JSON
@@ -5576,7 +5576,8 @@ begin
 end;
 
 function TInterfaceStub.Executes(const aMethodName: RawUTF8;
-  const aEvent: TOnInterfaceStubExecuteVariant; const aEventParams: RawUTF8): TInterfaceStub;
+  const aEvent: TOnInterfaceStubExecuteVariant;
+  const aEventParams: RawUTF8): TInterfaceStub;
 begin
   result := Executes(aMethodName, '', aEvent, aEventParams);
 end;
@@ -5589,13 +5590,14 @@ begin
     aEvent, aEventParams);
 end;
 
-function TInterfaceStub.Executes(aEvent: TOnInterfaceStubExecuteVariant;
+function TInterfaceStub.Executes(const aEvent: TOnInterfaceStubExecuteVariant;
   const aEventParams: RawUTF8): TInterfaceStub;
 var
   i: PtrInt;
 begin
   for i := 0 to fInterface.MethodsCount - 1 do
-    fRules[i].AddRule(self, isExecutesVariant, '', aEventParams, TNotifyEvent(aEvent));
+    fRules[i].AddRule(
+      self, isExecutesVariant, '', aEventParams, TNotifyEvent(aEvent));
   result := self;
 end;
 

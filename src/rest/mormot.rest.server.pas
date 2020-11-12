@@ -2248,7 +2248,8 @@ type
     // - an optional OnNotify event may be defined, which will be triggered
     // for all incoming change, supllying the updated TOrm instance
     function RecordVersionSynchronizeSlaveStart(Table: TOrmClass;
-      MasterRemoteAccess: TRestClientURI; OnNotify: TOnBatchWrite = nil): boolean;
+      MasterRemoteAccess: TRestClientURI;
+      const OnNotify: TOnBatchWrite = nil): boolean;
     /// finalize asynchronous master/slave replication on a slave TRest
     // - stop synchronization of a TOrm table, using its TRecordVersion
     // field, for real-time master/slave replication on the slave side
@@ -6303,7 +6304,7 @@ begin
 end;
 
 function TRestServer.RecordVersionSynchronizeSlaveStart(Table: TOrmClass;
-  MasterRemoteAccess: TRestClientURI; OnNotify: TOnBatchWrite): boolean;
+  MasterRemoteAccess: TRestClientURI; const OnNotify: TOnBatchWrite): boolean;
 var
   current, previous: TRecordVersion;
   tableIndex: integer;

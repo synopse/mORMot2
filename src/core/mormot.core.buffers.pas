@@ -621,6 +621,7 @@ type
     procedure Init(Buffer: pointer; Len: PtrInt); overload;
     /// initialize the reader from a RawByteString content
     procedure Init(const Buffer: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// raise a EFastReader with "Reached End of Input" error message
     procedure ErrorOverflow;
     /// raise a EFastReader with "Incorrect Data: ...." error message

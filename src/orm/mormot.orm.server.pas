@@ -336,7 +336,7 @@ type
     // to access the updates before applying to the current slave storage
     function RecordVersionSynchronizeSlave(Table: TOrmClass;
       Master: TRest; ChunkRowLimit: integer = 0;
-      OnWrite: TOnBatchWrite = nil): TRecordVersion;
+      const OnWrite: TOnBatchWrite = nil): TRecordVersion;
     /// synchronous master/slave replication from a slave TRest into a Batch
     // - will retrieve all the updates from a (distant) master TRest for a
     // given TOrm table, using its TRecordVersion field, and a supplied
@@ -354,7 +354,7 @@ type
     // straightforward RecordVersionSynchronizeSlave()
     function RecordVersionSynchronizeSlaveToBatch(Table: TOrmClass;
       Master: TRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer = 0;
-      OnWrite: TOnBatchWrite = nil): TRestBatch; virtual;
+      const OnWrite: TOnBatchWrite = nil): TRestBatch; virtual;
     /// access to the associated TRestServer main instance
     property Owner: TRestServer
       read fOwner;
@@ -758,8 +758,9 @@ begin
   end;
 end;
 
-function TRestOrmServer.RecordVersionSynchronizeSlave(Table: TOrmClass;
-  Master: TRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
+function TRestOrmServer.RecordVersionSynchronizeSlave(
+  Table: TOrmClass; Master: TRest; ChunkRowLimit: integer;
+  const OnWrite: TOnBatchWrite): TRecordVersion;
 var
   Writer: TRestBatch;
   IDs: TIDDynArray;
@@ -816,7 +817,7 @@ end;
 
 function TRestOrmServer.RecordVersionSynchronizeSlaveToBatch(
   Table: TOrmClass; Master: TRest; var RecordVersion: TRecordVersion;
-  MaxRowLimit: integer; OnWrite: TOnBatchWrite): TRestBatch;
+  MaxRowLimit: integer; const OnWrite: TOnBatchWrite): TRestBatch;
 var
   TableIndex, SourceTableIndex, UpdatedRow, DeletedRow: integer;
   Props: TOrmProperties;

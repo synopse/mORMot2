@@ -1209,12 +1209,14 @@ function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TOb
 /// escape some UTF-8 text into HTML
 // - just a wrapper around TBaseWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
-function HtmlEscape(const text: RawUTF8; fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
+function HtmlEscape(const text: RawUTF8;
+  fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
 
 /// escape some VCL/LCL text into UTF-8 HTML
 // - just a wrapper around TBaseWriter.AddHtmlEscapeString() process,
 // replacing < > & " chars depending on the HTML layer
-function HtmlEscapeString(const text: string; fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
+function HtmlEscapeString(const text: string;
+  fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
 
 
 type
@@ -1311,7 +1313,8 @@ function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integ
 /// return the index of Value in Values[] using IdemPropNameU(), -1 if not found
 // - typical use with a dynamic array is like:
 // ! index := FindPropName(pointer(aDynArray),length(aDynArray),aValue);
-function FindPropName(Values: PRawUTF8; const Value: RawUTF8; ValuesCount: integer): integer; overload;
+function FindPropName(Values: PRawUTF8;
+  const Value: RawUTF8; ValuesCount: integer): integer; overload;
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
@@ -1328,21 +1331,24 @@ function RawUTF8DynArrayEquals(const A, B: TRawUTF8DynArray): boolean; overload;
 /// true if both TRawUTF8DynArray are the same for a given number of items
 // - A and B are expected to have at least Count items
 // - comparison is case-sensitive
-function RawUTF8DynArrayEquals(const A, B: TRawUTF8DynArray; Count: integer): boolean; overload;
+function RawUTF8DynArrayEquals(const A, B: TRawUTF8DynArray;
+  Count: integer): boolean; overload;
 
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
 procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
   var Result: TRawUTF8DynArray);
 
 /// convert the string list into a dynamic array of UTF-8 strings
-procedure StringListToRawUTF8DynArray(Source: TStringList; var Result: TRawUTF8DynArray);
+procedure StringListToRawUTF8DynArray(Source: TStringList;
+  var Result: TRawUTF8DynArray);
 
 /// retrieve the index where to insert a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
 // - string comparison is case-sensitive StrComp (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
 // - will use fast O(log(n)) binary search algorithm
-function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt; overload;
+function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
+  Value: PUTF8Char): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the index where to insert a PUTF8Char in a sorted PUTF8Char array
@@ -1351,8 +1357,8 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Ch
 // - string comparison is case-sensitive (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
 // - will use fast O(log(n)) binary search algorithm
-function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
-  Compare: TUTF8Compare): PtrInt; overload;
+function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
+  Value: PUTF8Char; Compare: TUTF8Compare): PtrInt; overload;
 
 /// retrieve the index where is located a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
@@ -1360,7 +1366,8 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Ch
 // - returns -1 if the specified Value was not found
 // - will use inlined binary search algorithm with optimized x86_64 branchless asm
 // - slightly faster than plain FastFindPUTF8CharSorted(P,R,Value,@StrComp)
-function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt; overload;
+function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
+  Value: PUTF8Char): PtrInt; overload;
 
 /// retrieve the index where is located a PUTF8Char in a sorted uppercase PUTF8Char array
 // - P[] array is expected to be already uppercased
@@ -1378,8 +1385,8 @@ function FastFindUpperPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
 // - string comparison will use the specified Compare function
 // - returns -1 if the specified Value was not found
 // - will use fast O(log(n)) binary search algorithm
-function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
-  Compare: TUTF8Compare): PtrInt; overload;
+function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
+  Value: PUTF8Char; Compare: TUTF8Compare): PtrInt; overload;
 
 /// retrieve the index of a PUTF8Char in a PUTF8Char array via a sort indexed
 // - will use fast O(log(n)) binary search algorithm
@@ -1398,8 +1405,9 @@ function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
 // be set to optional ForceIndex parameter
 // - by default, exact (case-sensitive) match is used; you can specify a custom
 // compare function if needed in Compare optional parameter
-function AddSortedRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
-  const Value: RawUTF8; CoValues: PIntegerDynArray = nil; ForcedIndex: PtrInt = -1;
+function AddSortedRawUTF8(var Values: TRawUTF8DynArray;
+  var ValuesCount: integer; const Value: RawUTF8;
+  CoValues: PIntegerDynArray = nil; ForcedIndex: PtrInt = -1;
   Compare: TUTF8Compare = nil): PtrInt;
 
 /// delete a RawUTF8 item in a dynamic array of RawUTF8
@@ -1408,7 +1416,8 @@ function DeleteRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
   Index: integer; CoValues: PIntegerDynArray = nil): boolean; overload;
 
 /// delete a RawUTF8 item in a dynamic array of RawUTF8;
-function DeleteRawUTF8(var Values: TRawUTF8DynArray; Index: integer): boolean; overload;
+function DeleteRawUTF8(var Values: TRawUTF8DynArray;
+  Index: integer): boolean; overload;
 
 /// sort a dynamic array of RawUTF8 items
 // - if CoValues is set, the integer items are also synchronized
@@ -1535,7 +1544,8 @@ function Curr64ToString(Value: Int64): string;
 // - DOUBLE_PRECISION will redirect to DoubleToShort() and its faster Fabian
 // Loitsch's Grisu algorithm if available
 // - returns the count of chars stored into S, i.e. length(S)
-function ExtendedToShort(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
+function ExtendedToShort(var S: ShortString;
+  Value: TSynExtended; Precision: integer): integer;
 
 /// convert a floating-point value to its numerical text equivalency without
 // scientification notation
@@ -1561,7 +1571,8 @@ function FloatToStrNan(const s: RawUTF8): TFloatNan;
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8; overload;
 
 /// convert a floating-point value to its numerical text equivalency
-procedure ExtendedToStr(Value: TSynExtended; Precision: integer; var result: RawUTF8); overload;
+procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
+  var result: RawUTF8); overload;
 
 /// recognize if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
 // - returns the number as text (stored into tmp variable), or "Infinity",
@@ -1614,7 +1625,8 @@ const
 // any scientific notation ) or min_width=C_NO_MIN_WIDTH (for DoubleToShort to
 // force the scientific notation when the double cannot be represented as
 // a simple fractinal number)
-procedure DoubleToAscii(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
+procedure DoubleToAscii(min_width, frac_digits: integer;
+  const v: double; str: PAnsiChar);
 {$endif DOUBLETOSHORT_USEGRISU}
 
 /// convert a 64-bit floating-point value to its JSON text equivalency
@@ -1624,7 +1636,8 @@ procedure DoubleToAscii(min_width, frac_digits: integer; const v: double; str: P
 // - returns the number as text (stored into tmp variable), or "Infinity",
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
-function DoubleToJSON(var tmp: ShortString; Value: double; NoExp: boolean): PShortString;
+function DoubleToJSON(var tmp: ShortString; Value: double;
+  NoExp: boolean): PShortString;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
 function DoubleToStr(Value: Double): RawUTF8; overload;
@@ -1679,7 +1692,8 @@ function ToUTF8(const V: Variant): RawUTF8; overload;
 // - wasString is set if the V value was a text
 // - empty and null variants will be stored as 'null' text - as expected by JSON
 // - custom variant types (e.g. TDocVariant) will be stored as JSON
-procedure VariantToUTF8(const V: Variant; var result: RawUTF8; var wasString: boolean); overload;
+procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
+   var wasString: boolean); overload;
 
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
@@ -1945,7 +1959,8 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
 // more than three digits to the left of the decimal separator
-function IntToThousandString(Value: integer; const ThousandSep: TShort4=','): shortstring;
+function IntToThousandString(Value: integer;
+  const ThousandSep: TShort4 = ','): shortstring;
 
 
 { ************ ESynException class }
@@ -2270,7 +2285,8 @@ function IP4Text(ip4: cardinal): shortstring; overload;
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-function IP6Text(ip6: PHash128): shortstring; overload; {$ifdef HASINLINE}inline;{$endif}
+function IP6Text(ip6: PHash128): shortstring; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
@@ -2324,8 +2340,8 @@ type
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
-function GUIDToShort(const
-  guid: TGUID): TGUIDShortString; overload; {$ifdef HASINLINE}inline;{$endif}
+function GUIDToShort(const guid: TGUID): TGUIDShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
@@ -2395,7 +2411,7 @@ begin
     Finalize(result);
     {$else}
     result := '';
-    {$endif}
+    {$endif FPC}
     next := source;
     exit;
   end;
@@ -2836,7 +2852,7 @@ begin
     Finalize(RawUTF8(tmp));
     {$else}
     RawUTF8(tmp) := '';
-    {$endif}
+    {$endif FPC}
 end;
 
 function GotoEndOfQuotedString(P: PUTF8Char): PUTF8Char;
@@ -6418,7 +6434,7 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char
         {$ifdef win64}  // P=rcx/rdi R=rdx/rsi Value=r8/rdx
         push    rdi
         mov     rdi, P  // P=rdi
-        {$endif}
+        {$endif win64}
         push    r12
         push    r13
         xor     r9, r9  // L=r9
@@ -6445,7 +6461,7 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char
         pop     r12
         {$ifdef win64}
         pop     rdi
-        {$endif}
+        {$endif win64}
         ret
 @lt:    mov     r9, r13 // very unlikely P[rax]=nil
         jmp     @nxt
@@ -6772,7 +6788,7 @@ begin
     P := StrInt32(@tmp[23], Value);
     {$else}
     P := StrInt64(@tmp[23], Value);
-    {$endif}
+    {$endif CPU64}
     FastSetString(result, P, @tmp[23] - P);
   end;
 end;
@@ -6795,7 +6811,7 @@ begin
     P := StrUInt32(@tmp[23], Value);
     {$else}
     P := StrUInt64(@tmp[23], Value);
-    {$endif}
+    {$endif CPU64}
     FastSetString(result, P, @tmp[23] - P);
   end;
 end;
@@ -6974,7 +6990,7 @@ begin
       result := result shl 3 + result + result;
       {$else}
       result := result * 10;
-      {$endif}
+      {$endif CPU32DELPHI}
       inc(result, c);
       inc(P);
       if Dec <> 0 then
@@ -7141,7 +7157,7 @@ end;
 {$ifndef EXTENDEDTOSHORT_USESTR}
 var // standard FormatSettings (US)
   SettingsUS: TFormatSettings;
-{$endif}
+{$endif EXTENDEDTOSHORT_USESTR}
 
 // used ExtendedToShortNoExp / DoubleToShortNoExp from str/DoubleToAscii output
 function FloatStringNoExp(S: PAnsiChar; Precision: PtrInt): PtrInt;
@@ -7309,14 +7325,14 @@ function ExtendedToShort(var S: ShortString; Value: TSynExtended; Precision: int
 {$ifdef UNICODE}
 var
   i: PtrInt;
-{$endif}
+{$endif UNICODE}
 begin
   // use ffGeneral: see https://synopse.info/forum/viewtopic.php?pid=442#p442
   result := FloatToText(PChar(@S[1]), Value, fvExtended, ffGeneral, Precision, 0, SettingsUS);
   {$ifdef UNICODE} // FloatToText(PWideChar) is faster than FloatToText(PAnsiChar)
   for i := 1 to result do
     PByteArray(@S)[i] := PWordArray(PtrInt(@S) - 1)[i];
-  {$endif}
+  {$endif UNICODE}
   S[0] := AnsiChar(result);
 end;
 
@@ -7864,7 +7880,7 @@ var
   dig_round, dig_sticky: byte;
   {$ifdef GRISU1_F2A_AGRESSIVE_ROUNDUP}
   i: PtrInt;
-  {$endif}
+  {$endif GRISU1_F2A_AGRESSIVE_ROUNDUP}
 begin
   result := 0;
   n := n_current;
@@ -8192,7 +8208,7 @@ begin
       // NaN [also pseudo-NaN, pseudo-Inf, non-normal for floatx80]
       {$ifdef GRISU1_F2A_NAN_SIGNLESS}
       n := 0;
-      {$endif}
+      {$endif GRISU1_F2A_NAN_SIGNLESS}
       {$ifndef GRISU1_F2A_NO_SNAN}
       if (w.f and (C_MANT2_INTEGER shr 1)) = 0 then
         return_special(str, n, C_STR_SNAN)
@@ -8565,7 +8581,7 @@ begin
           AnyAnsiToUTF8(RawByteString(VString), result);
           {$else}
           result := RawUTF8(VString);
-          {$endif}
+          {$endif HASCODEPAGE}
         end;
       {$ifdef HASVARUSTRING}
       varUString:
@@ -8573,7 +8589,7 @@ begin
           wasString := true;
           RawUnicodeToUtf8(VAny, length(UnicodeString(VAny)), result);
         end;
-      {$endif}
+      {$endif HASVARUSTRING}
       varOleStr:
         begin
           wasString := true;
@@ -8591,7 +8607,7 @@ begin
         AnyAnsiToUTF8(PRawByteString(VString)^, result);
         {$else}
         result := PRawUTF8(VString)^;
-        {$endif}
+        {$endif HASCODEPAGE}
       end
       else if vt = varByRef or varOleStr then
       begin
@@ -8606,7 +8622,7 @@ begin
         RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^), length(PUnicodeString(VAny)^), result);
       end
       else
-      {$endif}
+      {$endif HASVARUSTRING}
         VariantSaveJSON(V, twJSONEscape, result); // will handle also custom types
     end;
 end;
@@ -8728,7 +8744,7 @@ begin
     {$ifdef FPC}
     vtQWord:
       value := V.VQWord^;
-    {$endif}
+    {$endif FPC}
     vtBoolean:
       if V.VBoolean then
         value := 1
@@ -8774,10 +8790,12 @@ begin
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      RawUnicodeToUtf8(V.VPWideChar, length(UnicodeString(V.VUnicodeString)), RawUTF8(Res.TempRawUTF8));
-    {$endif}
+      RawUnicodeToUtf8(V.VPWideChar, length(UnicodeString(V.VUnicodeString)),
+        RawUTF8(Res.TempRawUTF8));
+    {$endif HASVARUSTRING}
     vtWideString:
-      RawUnicodeToUtf8(V.VPWideChar, length(WideString(V.VWideString)), RawUTF8(Res.TempRawUTF8));
+      RawUnicodeToUtf8(V.VPWideChar, length(WideString(V.VWideString)),
+        RawUTF8(Res.TempRawUTF8));
     vtPChar:
       begin // expect UTF-8 content
         Res.Text := V.VPointer;
@@ -8937,7 +8955,7 @@ begin
       {$ifdef HASVARUSTRING}
       vtUnicodeString:
         RawUnicodeToUtf8(VUnicodeString, length(UnicodeString(VUnicodeString)), result);
-      {$endif}
+      {$endif HASVARUSTRING}
       vtWideString:
         RawUnicodeToUtf8(VWideString, length(WideString(VWideString)), result);
       vtPChar:
@@ -8960,7 +8978,7 @@ begin
       {$ifdef FPC}
       vtQWord:
         UInt64ToUtf8(VQWord^, result);
-      {$endif}
+      {$endif FPC}
       vtCurrency:
         Curr64ToStr(VInt64^, result);
       vtExtended:
@@ -8985,7 +9003,7 @@ begin
           result := '';
       {$else}
         PointerToHex(VInterface,result);
-      {$endif}
+      {$endif HASINTERFACEASTOBJECT}
       vtVariant:
         VariantToUTF8(VVariant^, result, isString);
     else
@@ -9384,7 +9402,7 @@ procedure K(value: Int64; out result: TShort16);
 begin
   KB(Value, result, {nospace=}true);
   if result[0] <> #0 then
-    dec(result[0]); // just trim last 'B'
+    dec(result[0]); // just trim last 'B' ;)
 end;
 
 function K(value: Int64): TShort16;
@@ -9392,7 +9410,8 @@ begin
   K(Value, result);
 end;
 
-function IntToThousandString(Value: integer; const ThousandSep: TShort4): shortstring;
+function IntToThousandString(Value: integer;
+  const ThousandSep: TShort4): shortstring;
 var
   i, L, Len: cardinal;
 begin
@@ -9431,12 +9450,14 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16);
     end;
   end;
 
-  procedure TimeToString(value: cardinal; const u: shortstring; var result: TShort16);
+  procedure TimeToString(value: cardinal; const u: shortstring;
+    var result: TShort16);
   var
     d: cardinal;
   begin
     d := value div 60;
-    FormatShort16('%%%', [d, u, UInt2DigitsToShortFast(value - (d * 60))], result);
+    FormatShort16('%%%',
+      [d, u, UInt2DigitsToShortFast(value - (d * 60))], result);
   end;
 
 begin

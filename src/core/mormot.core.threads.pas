@@ -158,8 +158,8 @@ type
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, or
     // at least set OnAfterExecute to TSynLogFamily.OnThreadEnded
     constructor Create(const aThreadName: RawUTF8;
-      OnBeforeExecute: TOnNotifyThread = nil;
-      OnAfterExecute: TOnNotifyThread = nil;
+      const OnBeforeExecute: TOnNotifyThread = nil;
+      const OnAfterExecute: TOnNotifyThread = nil;
       CreateSuspended: boolean = false); reintroduce;
     /// release used resources
     // - calls WaitForNotExecuting(100) for proper finalization
@@ -248,9 +248,9 @@ type
     // the background process to finish until RunAndWait() will return
     // - you could define some callbacks to nest the thread execution, e.g.
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
-    constructor Create(aOnIdle: TOnIdleSynBackgroundThread;
-      const aThreadName: RawUTF8; OnBeforeExecute: TOnNotifyThread = nil;
-      OnAfterExecute: TOnNotifyThread = nil); reintroduce;
+    constructor Create(const aOnIdle: TOnIdleSynBackgroundThread;
+      const aThreadName: RawUTF8; const OnBeforeExecute: TOnNotifyThread = nil;
+      const OnAfterExecute: TOnNotifyThread = nil); reintroduce;
     /// finalize the thread
     destructor Destroy; override;
     /// launch Process abstract method asynchronously in the background thread
@@ -308,8 +308,9 @@ type
     /// initialize the thread
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
-    constructor Create(aOnProcess: TOnProcessSynBackgroundThread;
-      aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8); reintroduce;
+    constructor Create(const aOnProcess: TOnProcessSynBackgroundThread;
+      const aOnIdle: TOnIdleSynBackgroundThread;
+      const aThreadName: RawUTF8); reintroduce;
     /// provide a method handler to be execute in the background thread
     // - triggered by RunAndWait() method - which will wait until finished
     // - the OpaqueParam as specified to RunAndWait() will be supplied here
@@ -344,7 +345,7 @@ type
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
     constructor Create(aOnProcess: TOnProcessSynBackgroundThreadProc;
-      aOnIdle: TOnIdleSynBackgroundThread;
+      const aOnIdle: TOnIdleSynBackgroundThread;
       const aThreadName: RawUTF8); reintroduce;
     /// provide a procedure handler to be execute in the background thread
     // - triggered by RunAndWait() method - which will wait until finished
@@ -379,9 +380,10 @@ type
     // - you could define some callbacks to nest the thread execution, e.g.
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(const aThreadName: RawUTF8;
-      aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-      aOnBeforeExecute: TOnNotifyThread = nil;
-      aOnAfterExecute: TOnNotifyThread = nil; aStats: TSynMonitorClass = nil;
+      const aOnProcess: TOnSynBackgroundThreadProcess;
+      aOnProcessMS: cardinal; const aOnBeforeExecute: TOnNotifyThread = nil;
+      const aOnAfterExecute: TOnNotifyThread = nil;
+      aStats: TSynMonitorClass = nil;
       CreateSuspended: boolean = false); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
@@ -436,39 +438,40 @@ type
     fTask: TSynBackgroundTimerTaskDynArray;
     fTasks: TDynArray;
     fTaskLock: TSynLocker;
-    procedure EverySecond(Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
+    procedure EverySecond(Sender: TSynBackgroundThreadProcess;
+      Event: TWaitResult);
     function Find(const aProcess: TMethod): integer;
-    function Add(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8;
-      aExecuteNow: boolean): boolean;
+    function Add(const aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
   public
     /// initialize the thread for a periodic task processing
     // - you could define some callbacks to nest the thread execution, e.g.
     // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, as
     // made by TRestBackgroundTimer.Create
     constructor Create(const aThreadName: RawUTF8;
-      aOnBeforeExecute: TOnNotifyThread = nil;
-      aOnAfterExecute: TOnNotifyThread = nil;
+      const aOnBeforeExecute: TOnNotifyThread = nil;
+      const aOnAfterExecute: TOnNotifyThread = nil;
       aStats: TSynMonitorClass = nil); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
     /// define a process method for a task running on a periodic number of seconds
     // - for background process on a mORMot service, consider using TRest
     // TimerEnable/TimerDisable methods, and its associated BackgroundTimer thread
-    procedure Enable(aOnProcess: TOnSynBackgroundTimerProcess;
+    procedure Enable(const aOnProcess: TOnSynBackgroundTimerProcess;
       aOnProcessSecs: cardinal);
     /// undefine a task running on a periodic number of seconds
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
     // - for background process on a mORMot service, consider using TRestServer
     // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
-    function Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    function Disable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// add a message to be processed during the next execution of a task
     // - supplied message will be added to the internal FIFO list associated
     // with aOnProcess, then supplied to as aMsg parameter for each call
     // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+    function EnQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsg: RawUTF8; aExecuteNow: boolean = false): boolean; overload;
     /// add a message to be processed during the next execution of a task
     // - supplied message will be added to the internal FIFO list associated
@@ -476,7 +479,7 @@ type
     // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+    function EnQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsgFmt: RawUTF8; const Args: array of const;
       aExecuteNow: boolean = false): boolean; overload;
     /// remove a message from the processing list
@@ -484,12 +487,12 @@ type
     // with aOnProcess, then removed from the list if found
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied message was not registered
-    function DeQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+    function DeQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsg: RawUTF8): boolean;
     /// execute a task without waiting for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    function ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    function ExecuteNow(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// returns true if there is currenly one task processed
     function Processing: boolean;
     /// wait until no background task is processed
@@ -637,7 +640,8 @@ type
   protected
     fMethod: TOnSynParallelProcess;
     fIndexStart, fIndexStop: integer;
-    procedure Start(Method: TOnSynParallelProcess; IndexStart, IndexStop: integer);
+    procedure Start(const Method: TOnSynParallelProcess;
+      IndexStart, IndexStop: integer);
     /// executes fMethod(fIndexStart,fIndexStop)
     procedure Process; override;
   public
@@ -662,8 +666,8 @@ type
     // - if ThreadPoolCount is 0, no thread would be created, and process
     // would take place in the current thread
     constructor Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
-      OnBeforeExecute: TOnNotifyThread = nil;
-      OnAfterExecute: TOnNotifyThread = nil;
+      const OnBeforeExecute: TOnNotifyThread = nil;
+      const OnAfterExecute: TOnNotifyThread = nil;
       MaxThreadPoolCount: integer = 32); reintroduce; virtual;
     /// finalize the thread pool
     destructor Destroy; override;
@@ -981,7 +985,7 @@ end;
 { TSynBackgroundThreadAbstract }
 
 constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
-  OnBeforeExecute: TOnNotifyThread; OnAfterExecute: TOnNotifyThread;
+  const OnBeforeExecute: TOnNotifyThread; const OnAfterExecute: TOnNotifyThread;
   CreateSuspended: boolean);
 begin
   fProcessEvent := TEvent.Create(nil, false, false, '');
@@ -1097,8 +1101,8 @@ end;
 { TSynBackgroundThreadMethodAbstract }
 
 constructor TSynBackgroundThreadMethodAbstract.Create(
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8;
-  OnBeforeExecute, OnAfterExecute: TOnNotifyThread);
+  const aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8;
+  const OnBeforeExecute, OnAfterExecute: TOnNotifyThread);
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fCallerEvent := TEvent.Create(nil, false, false, '');
@@ -1289,8 +1293,9 @@ end;
 
 { TSynBackgroundThreadEvent }
 
-constructor TSynBackgroundThreadEvent.Create(aOnProcess: TOnProcessSynBackgroundThread;
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+constructor TSynBackgroundThreadEvent.Create(
+  const aOnProcess: TOnProcessSynBackgroundThread;
+  const aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
 begin
   inherited Create(aOnIdle, aThreadName);
   fOnProcess := aOnProcess;
@@ -1326,8 +1331,9 @@ end;
 
 { TSynBackgroundThreadProcedure }
 
-constructor TSynBackgroundThreadProcedure.Create(aOnProcess: TOnProcessSynBackgroundThreadProc;
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+constructor TSynBackgroundThreadProcedure.Create(
+  aOnProcess: TOnProcessSynBackgroundThreadProc;
+  const aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
 begin
   inherited Create(aOnIdle, aThreadName);
   fOnProcess := aOnProcess;
@@ -1344,9 +1350,9 @@ end;
 { TSynBackgroundThreadProcess }
 
 constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
-  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass;
-  CreateSuspended: boolean);
+  const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread;
+  aStats: TSynMonitorClass; CreateSuspended: boolean);
 begin
   if not Assigned(aOnProcess) then
     raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)', [self]);
@@ -1407,7 +1413,7 @@ var
   ProcessSystemUse: TSystemUse;
 
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
-  aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
+  const aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
 begin
   fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask);
   fTaskLock.Init;
@@ -1487,8 +1493,8 @@ begin // caller should have made fTaskLock.Lock;
   result := -1;
 end;
 
-procedure TSynBackgroundTimer.Enable(aOnProcess: TOnSynBackgroundTimerProcess;
-  aOnProcessSecs: cardinal);
+procedure TSynBackgroundTimer.Enable(
+  const aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
 var
   task: TSynBackgroundTimerTask;
   found: integer;
@@ -1535,19 +1541,22 @@ begin
         (mormot.core.os.GetTickcount64 > timeout);
 end;
 
-function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+function TSynBackgroundTimer.ExecuteNow(
+  const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
   result := Add(aOnProcess, #0, true);
 end;
 
-function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+function TSynBackgroundTimer.EnQueue(
+  const aOnProcess: TOnSynBackgroundTimerProcess;
   const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
 begin
   result := Add(aOnProcess, aMsg, aExecuteNow);
 end;
 
-function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
-  const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean): boolean;
+function TSynBackgroundTimer.EnQueue(
+  const aOnProcess: TOnSynBackgroundTimerProcess; const aMsgFmt: RawUTF8;
+  const Args: array of const; aExecuteNow: boolean): boolean;
 var
   msg: RawUTF8;
 begin
@@ -1555,8 +1564,9 @@ begin
   result := Add(aOnProcess, msg, aExecuteNow);
 end;
 
-function TSynBackgroundTimer.Add(aOnProcess: TOnSynBackgroundTimerProcess;
-  const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
+function TSynBackgroundTimer.Add(
+  const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8;
+  aExecuteNow: boolean): boolean;
 var
   found: integer;
 begin
@@ -1586,8 +1596,8 @@ begin
   end;
 end;
 
-function TSynBackgroundTimer.DeQueue(aOnProcess: TOnSynBackgroundTimerProcess;
-  const aMsg: RawUTF8): boolean;
+function TSynBackgroundTimer.DeQueue(
+  const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8): boolean;
 var
   found: integer;
 begin
@@ -1607,7 +1617,8 @@ begin
   end;
 end;
 
-function TSynBackgroundTimer.Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+function TSynBackgroundTimer.Disable(
+  const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 var
   found: integer;
 begin
@@ -1851,8 +1862,8 @@ begin
   fMethod := nil;
 end;
 
-procedure TSynParallelProcessThread.Start(Method: TOnSynParallelProcess;
-  IndexStart, IndexStop: integer);
+procedure TSynParallelProcessThread.Start(
+  const Method: TOnSynParallelProcess; IndexStart, IndexStop: integer);
 begin
   fMethod := Method;
   fIndexStart := IndexStart;
@@ -1864,7 +1875,7 @@ end;
 { TSynParallelProcess }
 
 constructor TSynParallelProcess.Create(ThreadPoolCount: integer;
-  const ThreadName: RawUTF8; OnBeforeExecute, OnAfterExecute: TOnNotifyThread;
+  const ThreadName: RawUTF8; const OnBeforeExecute, OnAfterExecute: TOnNotifyThread;
   MaxThreadPoolCount: integer);
 var
   i: PtrInt;

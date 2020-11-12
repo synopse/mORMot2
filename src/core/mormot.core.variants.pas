@@ -1292,27 +1292,27 @@ type
     // - you can optionally apply an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUTF8;
       out result: TDocVariantData;
-      OnReduce: TOnReducePerItem = nil); overload;
+      const OnReduce: TOnReducePerItem = nil); overload;
     /// create a TDocVariant array, from the values of a single properties of
     // this document, specified by name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - you can optionally apply an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUTF8;
-      OnReduce: TOnReducePerItem = nil): variant; overload;
+      const OnReduce: TOnReducePerItem = nil): variant; overload;
     /// create a TDocVariant array, from the values of a single properties of
     // this document, specified by name
     // - this overloaded method accepts an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUTF8;
       out result: TDocVariantData;
-      OnReduce: TOnReducePerValue); overload;
+      const OnReduce: TOnReducePerValue); overload;
     /// create a TDocVariant array, from the values of a single properties of
     // this document, specified by name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - this overloaded method accepts an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUTF8;
-      OnReduce: TOnReducePerValue): variant; overload;
+      const OnReduce: TOnReducePerValue): variant; overload;
     /// rename some properties of a TDocVariant object
     // - returns the number of property names modified
     function Rename(const aFromPropName, aToPropName: TRawUTF8DynArray): integer;
@@ -4716,14 +4716,14 @@ begin
 end;
 
 function TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
-  OnReduce: TOnReducePerItem): variant;
+  const OnReduce: TOnReducePerItem): variant;
 begin
   VarClear(result{%H-});
   ReduceAsArray(aPropName, PDocVariantData(@result)^, OnReduce);
 end;
 
 procedure TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
-  out result: TDocVariantData; OnReduce: TOnReducePerItem);
+  out result: TDocVariantData; const OnReduce: TOnReducePerItem);
 var
   ndx, j: PtrInt;
   item: PDocVariantData;
@@ -4744,14 +4744,14 @@ begin
 end;
 
 function TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
-  OnReduce: TOnReducePerValue): variant;
+  const OnReduce: TOnReducePerValue): variant;
 begin
   VarClear(result{%H-});
   ReduceAsArray(aPropName, PDocVariantData(@result)^, OnReduce);
 end;
 
 procedure TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
-  out result: TDocVariantData; OnReduce: TOnReducePerValue);
+  out result: TDocVariantData; const OnReduce: TOnReducePerValue);
 var
   ndx, j: PtrInt;
   item: PDocVariantData;
