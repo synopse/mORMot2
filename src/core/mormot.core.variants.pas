@@ -1577,6 +1577,15 @@ function _Safe(const DocVariant: variant;
 function _Obj(const NameValuePairs: array of const;
   Options: TDocVariantOptions = []): variant;
 
+/// add a property value to a document-based object content
+// - if Obj is a TDocVariant object, will add the Name/Value pair
+// - if Obj is not a TDocVariant, will create a new fast document,
+// initialized with supplied the Name/Value pairs
+// - this function will also ensure that ensure Obj is not stored by reference,
+// but as a true TDocVariantData
+procedure _ObjAddProp(const Name: RawUTF8; const Value: variant;
+  var Obj: variant);
+
 /// add some property values to a document-based object content
 // - if Obj is a TDocVariant object, will add the Name/Value pairs
 // - if Obj is not a TDocVariant, will create a new fast document,
@@ -5899,6 +5908,28 @@ begin
   TDocVariantData(result).InitArray(Items, Options);
 end;
 
+procedure _ObjAddProp(const Name: RawUTF8; const Value: variant;
+  var Obj: variant);
+var
+  o: PDocVariantData;
+begin
+  o := _Safe(Obj);
+  if not (dvoIsObject in o^.VOptions) then
+  begin
+    // create new object
+    VarClear(Obj);
+    TDocVariantData(Obj).InitObject([Name, Value], JSON_OPTIONS_FAST);
+  end
+  else
+  begin
+    // append new names/values to existing object
+    if o <> @Obj then
+      // ensure not stored by reference
+      TVarData(Obj) := PVarData(o)^;
+    o^.AddOrUpdateValue(Name, Value);
+  end;
+end;
+
 procedure _ObjAddProps(const NameValuePairs: array of const;
   var Obj: variant);
 var
@@ -5906,20 +5937,23 @@ var
 begin
   o := _Safe(Obj);
   if not (dvoIsObject in o^.VOptions) then
-  begin // create new object
+  begin
+    // create new object
     VarClear(Obj);
     TDocVariantData(Obj).InitObject(NameValuePairs, JSON_OPTIONS_FAST);
   end
   else
   begin // append new names/values to existing object
-    TVarData(Obj) := PVarData(o)^; // ensure not stored by reference
+    if o <> @Obj then
+      // ensure not stored by reference
+      TVarData(Obj) := PVarData(o)^;
     o^.AddNameValuesToObject(NameValuePairs);
   end;
 end;
 
 procedure _ObjAddProps(const Document: variant; var Obj: variant);
 var
-  ndx: integer;
+  ndx: PtrInt;
   d, o: PDocVariantData;
 begin
   d := _Safe(Document);
