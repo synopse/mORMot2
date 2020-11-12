@@ -62,9 +62,6 @@ function TrimLeft(const S: RawUTF8): RawUTF8;
 // newline, space, and tab characters
 function TrimRight(const S: RawUTF8): RawUTF8;
 
-// single-allocation (therefore faster) alternative to TrimU(copy())
-procedure TrimCopy(const S: RawUTF8; start, count: PtrInt; out result: RawUTF8);
-
 /// split a RawUTF8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
@@ -2459,34 +2456,6 @@ begin
         (S[i] <= ' ') do
     Dec(i);
   FastSetString(result, pointer(S), i);
-end;
-
-procedure TrimCopy(const S: RawUTF8; start, count: PtrInt; out result: RawUTF8);
-var
-  L: PtrInt;
-begin
-  if count <= 0 then
-    exit;
-  if start <= 0 then
-    start := 1;
-  L := Length(S);
-  while (start <= L) and
-        (S[start] <= ' ') do
-  begin
-    inc(start);
-    dec(count);
-  end;
-  dec(start);
-  dec(L, start);
-  if count < L then
-    L := count;
-  while L > 0 do
-    if S[start + L] <= ' ' then
-      dec(L)
-    else
-      break;
-  if L > 0 then
-    FastSetString(result, @PByteArray(S)[start], L);
 end;
 
 function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8): RawUTF8;
