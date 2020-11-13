@@ -3847,7 +3847,7 @@ var
 begin
   if (self = nil) or
      (fCurrent > fMax) or
-     (TOrmVirtualTableJSON(Table).static = nil) then
+     (TOrmVirtualTableJSON(Table).Static = nil) then
   begin
     result := false;
     exit;

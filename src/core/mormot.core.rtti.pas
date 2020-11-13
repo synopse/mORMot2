@@ -1342,6 +1342,8 @@ function GetDisplayNameFromClass(C: TClass): RawUTF8;
 // - return generic VCL string type, i.e. UnicodeString for Delphi 2009+
 function GetCaptionFromClass(C: TClass): string;
 
+/// defined here to avoid circular dependency in mormot.core.os.pas
+function ToText(cmd: TParseCommands): shortstring; overload;
 
 
 { ***************** IInvokable Interface RTTI }
@@ -4480,6 +4482,14 @@ begin
        inc(P);
     GetCaptionFromPCharLen(P, result);
   end;
+end;
+
+function ToText(cmd: TParseCommands): shortstring;
+begin
+  if cmd = [] then
+    result[0] := #0
+  else
+    GetSetNameShort(TypeInfo(TParseCommands), cmd, result, {trim=}true);
 end;
 
 

@@ -4694,7 +4694,8 @@ procedure TSQLDataBase.SetUseCache(const Value: boolean);
 begin
   if self <> nil then
     if Value <> UseCache then
-      if Value and (fUseCacheSize > 0) then
+      if Value and
+         (fUseCacheSize > 0) then
         fCache := TSynCache.Create(fUseCacheSize, true)
       else
         FreeAndNil(fCache);

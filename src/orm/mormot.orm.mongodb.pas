@@ -988,7 +988,9 @@ var
   blobRaw: RawByteString;
 begin
   result := false;
-  if (fCollection = nil) or (POrmClass(Value)^ <> fStoredClass) or (Value = nil) then
+  if (fCollection = nil) or
+     (POrmClass(Value)^ <> fStoredClass) or
+     (Value = nil) then
     exit;
   aID := Value.ID;
   if aID <= 0 then
@@ -1615,7 +1617,9 @@ var
   Props: TOrmModelProperties;
 begin
   result := nil;
-  if (aServer = nil) or (aClass = nil) or (aMongoDatabase = nil) then
+  if (aServer = nil) or
+     (aClass = nil) or
+     (aMongoDatabase = nil) then
     exit; // avoid GPF
   if aMongoDatabase.Client.Log = nil then
     aMongoDatabase.Client.SetLog(aServer.LogClass);

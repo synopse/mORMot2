@@ -727,7 +727,8 @@ var
   Value: TVarData;
 begin
   result := msNothing;
-  if (fContextCount > 0) and (ValueName[1] = '-') then
+  if (fContextCount > 0) and
+     (ValueName[1] = '-') then
     with fContext[fContextCount - 1] do
       if ListCount >= 0 then
       begin
@@ -837,7 +838,8 @@ begin
   result := nil;
   if DocVariantType.IsOfType(Partials) then
     with TDocVariantData(Partials) do
-      if (Kind = dvObject) and (Count > 0) then
+      if (Kind = dvObject) and
+         (Count > 0) then
       begin
         result := TSynMustachePartials.Create;
         result.fOwned := true;
@@ -1414,7 +1416,9 @@ end;
 function TSynMustache.FoundInTemplate(const text: RawUTF8): boolean;
 begin
   // internal partials are part of fTemplate
-  result := (self <> nil) and (text <> '') and (PosEx(text, fTemplate) > 0);
+  result := (self <> nil) and
+            (text <> '') and
+            (PosEx(text, fTemplate) > 0);
 end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;

@@ -1099,7 +1099,8 @@ var
 begin
   fAccessControlAllowOrigin := Value;
   FreeAndNil(fAccessControlAllowOriginsMatch);
-  if (Value = '') or (Value = '*') then
+  if (Value = '') or
+     (Value = '*') then
     exit;
   CSVToRawUTF8DynArray(pointer(Value), patterns);
   if patterns = nil then

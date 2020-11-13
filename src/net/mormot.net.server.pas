@@ -1584,7 +1584,7 @@ begin
     LeaveCriticalSection(fProcessCS);
     if ok then
       exit;
-    Sleep(1);
+    Sleep(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
       raise EHttpServer.CreateUTF8('%.WaitStarted failed after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
@@ -2561,7 +2561,7 @@ begin
     begin
       endtix := mormot.core.os.GetTickCount64 + 5000; // never wait forever
       repeat
-        sleep(1);
+        Sleep(1); // warning: waits typically 1-15 ms on Windows
       until not fExecuting or
         (mormot.core.os.GetTickCount64 > endtix); // ensure Execute has ended
     end;

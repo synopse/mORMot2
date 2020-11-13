@@ -2672,7 +2672,8 @@ end;
 
 function TRest.BackgroundTimer: TRestBackgroundTimer;
 begin
-  if (self = nil) or (fRun = nil) then
+  if (self = nil) or
+     (fRun = nil) then
     result := nil
   else
     result := fRun.fBackgroundTimer;
@@ -3452,7 +3453,7 @@ begin
     exit;
   endtix := mormot.core.os.GetTickCount64 + MS;
   repeat
-    fEvent.WaitFor(MS);
+    fEvent.WaitFor(MS); // warning: can wait up to 15 ms more on Windows
     if Terminated then
       exit;
   until (MS < 32) or

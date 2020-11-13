@@ -1487,7 +1487,8 @@ begin
       result := ExecuteInlined('update % set %=:(%): where %=:(%):',
         [fTableName, InternalToExternal(SetFieldName), SetValue,
          ExtWhereFieldName, WhereValue], false) <> nil;
-      if result and (Owner <> nil) then
+      if result and
+         (Owner <> nil) then
       begin
         if Owner.InternalUpdateEventNeeded(TableModelIndex) then
         begin
@@ -1532,7 +1533,8 @@ begin
         [fTableName, extField, extField, Increment, RowIDFieldName, ID],
         false) <> nil;
     end;
-    if result and (Owner <> nil) then
+    if result and
+       (Owner <> nil) then
       Owner.FlushInternalDBCache;
   except
     HandleClearPoolOnConnectionIssue;
@@ -1607,7 +1609,8 @@ begin
         result := ExecuteDirectSQLVar('update % set % where %=?',
           [fTableName, fUpdateBlobFieldsSQL, fStoredClassMapping^.RowIDFieldName],
           Params, aID, false);
-        if result and (Owner <> nil) then
+        if result and
+           (Owner <> nil) then
         begin
           Owner.InternalUpdateEvent(oeUpdateBlob, fStoredClassProps.TableIndex,
             aID, '', @fStoredClassRecordProps.FieldBits[oftBlob]);
@@ -2270,7 +2273,8 @@ var
   Fields: TOrmPropInfoList;
 begin
   result := inherited Prepare(Prepared); // set costFullScan or costPrimaryIndex
-  if result and (Static <> nil) then
+  if result and
+     (Static <> nil) then
     with Static as TRestStorageExternal do
     begin
       // mark Where[] clauses will be handled by SQL
@@ -2325,7 +2329,8 @@ end;
 function TOrmVirtualTableExternal.Delete(aRowID: Int64): boolean;
 begin
   if (self <> nil) and
-     (Static <> nil) and (aRowID > 0) then
+     (Static <> nil) and
+     (aRowID > 0) then
     with Static as TRestStorageExternal do
       result := ExecuteDirect('delete from % where %=?',
         [fTableName, fStoredClassMapping^.RowIDFieldName],
@@ -2435,7 +2440,8 @@ var
   rec: TOrmClass;
   opt: TOrmPropertiesMappingOptions;
 begin
-  result := (aModel <> nil) and (aExternalDB <> nil);
+  result := (aModel <> nil) and
+            (aExternalDB <> nil);
   if not result then
     exit; // avoid GPF
   opt := [];

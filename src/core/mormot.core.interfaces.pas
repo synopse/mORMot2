@@ -4014,15 +4014,17 @@ asm
     str  r2,sr2
     str  r3,sr3
     // TFakeCallStack address as 2nd parameter
-    // there is no lea equivalent instruction for ARM (AFAIK), so this is calculated by hand (by looking at assembler)
+    // there is no lea equivalent instruction for ARM (AFAIK), so this is
+    // calculated by hand (looking at assembler)
     sub  r1, fp, #128
     // branch to the FakeCall function
     bl   FakeCall
-    // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["sd0"]
+    // FakeCall should set Int64 result in method result,
+    // and float in aCall.FPRegs["sd0"]
     vstr d0,sd0
 end;
 {$else}
-procedure TInterfacedObjectFake.ArmFakeStub;nostackframe;assembler;
+procedure TInterfacedObjectFake.ArmFakeStub; nostackframe;assembler;
 asm
       // get method index
       str   r12,[r13, #-52]
@@ -4087,7 +4089,8 @@ asm
     add x1, sp, #0
     // branch to the FakeCall function
     bl  FakeCall
-    // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["sd0"]
+    // FakeCall should set Int64 result in method result,
+    // and float in aCall.FPRegs["sd0"]
     str d0,sd0
 end;
 {$endif CPUAARCH64}
@@ -4153,7 +4156,7 @@ asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
         {$endif LINUX}
         call    TInterfacedObjectFake.FakeCall
         // FakeCall should set Int64 result in method result,
-        //and float in aCall.FPRegs["XMM0"]
+        // and float in aCall.FPRegs["XMM0"]
         movsd   xmm0, qword ptr sxmm0 // movsd for zero extension
 end;
 

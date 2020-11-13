@@ -312,7 +312,7 @@ begin
   inherited;
 end;
 
-function THttpClientWebSockets.request(const url, method: RawUTF8;
+function THttpClientWebSockets.Request(const url, method: RawUTF8;
   KeepAlive: cardinal; const header: RawUTF8; const Data: RawByteString;
   const DataType: RawUTF8; retry: boolean): integer;
 var

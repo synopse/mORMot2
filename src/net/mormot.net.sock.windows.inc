@@ -1228,7 +1228,8 @@ begin
         dec(len, s);
         inc(sent, s);
       end;
-      Sleep(1); // try again
+      SleepHiRes(0); // warning: Sleep(1) waits typically 1-15 ms on Windows
+      // loop to try again
     until false;
   end;
   result := nrOK;

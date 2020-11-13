@@ -7644,7 +7644,8 @@ TestT:
   len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len + 1]) or (pSub[len + 1] <> p[len + 2]) then
+      if (pSub[len] <> p[len + 1]) or
+         (pSub[len + 1] <> p[len + 2]) then
         goto AfterTestT;
       inc(len, 2);
     until len >= 0;
@@ -7656,7 +7657,8 @@ Test0:
   len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len]) or (pSub[len + 1] <> p[len + 1]) then
+      if (pSub[len] <> p[len]) or
+         (pSub[len + 1] <> p[len + 1]) then
         goto AfterTest0;
       inc(len, 2);
     until len >= 0;
@@ -7681,7 +7683,8 @@ begin
       begin
         if Str1^ = Str2^ then
           repeat
-            if (Str1^ = #0) or (Str2^ = #0) then
+            if (Str1^ = #0) or
+               (Str2^ = #0) then
               break;
             inc(Str1);
             inc(Str2);
@@ -7727,11 +7730,14 @@ label
   Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4, AfterTestT, AfterTest0, Ret, Exit;
 begin
   result := 0;
-  if (p = nil) or (pSub = nil) or (PtrInt(Offset) <= 0) then
+  if (p = nil) or
+     (pSub = nil) or
+     (PtrInt(Offset) <= 0) then
     goto Exit;
   len := PStrLen(PtrUInt(p) - _STRLEN)^;
   lenSub := PStrLen(PtrUInt(pSub) - _STRLEN)^ - 1;
-  if (len < lenSub + PtrInt(Offset)) or (lenSub < 0) then
+  if (len < lenSub + PtrInt(Offset)) or
+     (lenSub < 0) then
     goto Exit;
   pStop := p + len;
   inc(p, lenSub);
@@ -7780,7 +7786,8 @@ TestT:
   len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len + 1]) or (pSub[len + 1] <> p[len + 2]) then
+      if (pSub[len] <> p[len + 1]) or
+         (pSub[len + 1] <> p[len + 2]) then
         goto AfterTestT;
       inc(len, 2);
     until len >= 0;
@@ -7792,7 +7799,8 @@ Test0:
   len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len]) or (pSub[len + 1] <> p[len + 1]) then
+      if (pSub[len] <> p[len]) or
+         (pSub[len + 1] <> p[len + 1]) then
         goto AfterTest0;
       inc(len, 2);
     until len >= 0;
@@ -8047,7 +8055,8 @@ begin
         not (cardinal(FileName[i]) in [ord('\'), ord('/'), ord('.')]) and
         (i >= max) do
     dec(i);
-  if (i = 0) or (FileName[i] <> '.') then
+  if (i = 0) or
+     (FileName[i] <> '.') then
   begin
     result := FileName;
     if Extension <> nil then
@@ -9011,7 +9020,8 @@ nextCW:
         dst^ := src^;
         inc(src);
         inc(dst);
-        if (src >= src_end) or (dst >= dst_end) then
+        if (src >= src_end) or
+           (dst >= dst_end) then
           break;
         if last_hashed < dst - 3 then
         begin
@@ -9043,12 +9053,14 @@ nextCW:
         end;
         {$ifdef CPU64}
         o := offset[h];
-        if (t <= 8) or (PtrUInt(dst - o) < t) then
+        if (t <= 8) or
+           (PtrUInt(dst - o) < t) then
           MoveSmall(o, dst, t)
         else
           MoveFast(o^, dst^, t);
         {$else}
-        if (t <= 8) or (PtrUInt(dst - offset[h]) < t) then
+        if (t <= 8) or
+           (PtrUInt(dst - offset[h]) < t) then
           MoveSmall(offset[h], dst, t)
         else
           MoveFast(offset[h]^, dst^, t);
@@ -9305,10 +9317,13 @@ begin
   result := false;
   for i := 1 to Length shr 4 do // 16 bytes (4 DWORD) by loop - aligned read
     {$ifdef CPU64}
-    if (PInt64Array(P)^[0] <> 0) or (PInt64Array(P)^[1] <> 0) then
+    if (PInt64Array(P)^[0] <> 0) or
+       (PInt64Array(P)^[1] <> 0) then
     {$else}
-    if (PCardinalArray(P)^[0] <> 0) or (PCardinalArray(P)^[1] <> 0) or
-       (PCardinalArray(P)^[2] <> 0) or (PCardinalArray(P)^[3] <> 0) then
+    if (PCardinalArray(P)^[0] <> 0) or
+       (PCardinalArray(P)^[1] <> 0) or
+       (PCardinalArray(P)^[2] <> 0) or
+       (PCardinalArray(P)^[3] <> 0) then
     {$endif CPU64}
         exit
       else
@@ -9664,7 +9679,10 @@ begin
     repeat
       if PtrUInt(P) > PtrUInt(Count) then
         break;
-      if (P^[0] = Value) or (P^[1] = Value) or (P^[2] = Value) or (P^[3] = Value) then
+      if (P^[0] = Value) or
+         (P^[1] = Value) or
+         (P^[2] = Value) or
+         (P^[3] = Value) then
         exit;
       P := @P[4];
     until false;
@@ -9890,7 +9908,8 @@ end;
 procedure RawByteStringToVariant(Data: PByte; DataLen: integer; var Value: variant);
 begin
   ClearVariantForString(Value);
-  if (Data = nil) or (DataLen <= 0) then
+  if (Data = nil) or
+     (DataLen <= 0) then
     TVarData(Value).VType := varNull
   else
     SetString(RawByteString(TVarData(Value).VAny), PAnsiChar(Data), DataLen);
@@ -9936,13 +9955,15 @@ end;
 function VarDataIsEmptyOrNull(VarData: pointer): boolean;
 begin
   with VarDataFromVariant(PVariant(VarData)^)^ do
-    result := (VType <= varNull) or (VType = varNull or varByRef);
+    result := (VType <= varNull) or
+              (VType = varNull or varByRef);
 end;
 
 function VarIsEmptyOrNull(const V: Variant): boolean;
 begin
   with VarDataFromVariant(V)^ do
-    result := (VType <= varNull) or (VType = varNull or varByRef);
+    result := (VType <= varNull) or
+              (VType = varNull or varByRef);
 end;
 
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
@@ -10793,7 +10814,8 @@ begin
   result := true;
   for i := 0 to headlen - 3 do
     if (PInteger(head + i)^ = $0a0d0a0d) or
-       (PWord(head + i)^ = $0d0d) or (PWord(head + i)^ = $0a0a) then
+       (PWord(head + i)^ = $0d0d) or
+       (PWord(head + i)^ = $0a0a) then
       exit;
   result := false;
 end;

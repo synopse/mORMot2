@@ -644,8 +644,8 @@ begin
     pInfo.needToFreeIdxStr := 1; // will do sqlite3.free(idxStr) when needed
     result := SQLITE_OK;
     {$ifdef OrmVirtualLOGS}
-    if Table.static is TRestStorageExternal then
-      TRestStorageExternal(Table.static).ComputeSQL(Prepared^);
+    if Table.Static is TRestStorageExternal then
+      TRestStorageExternal(Table.Static).ComputeSQL(Prepared^);
     SQLite3Log.Add.Log(sllDebug, 'vt_BestIndex(%) plan=% -> cost=% rows=%',
       [sqlite3.VersionNumber, ord(Prepared^.EstimatedCost),
        pInfo.estimatedCost, pInfo.estimatedRows]);
@@ -786,7 +786,8 @@ begin
   // call Delete/Insert/Update methods according to supplied parameters
   Table := TOrmVirtualTable(pVTab.pInstance);
   result := SQLITE_ERROR;
-  if (nArg <= 0) or (nArg > 1024) then
+  if (nArg <= 0) or
+     (nArg > 1024) then
     exit;
   case sqlite3.value_type(ppArg[0]) of
     SQLITE_INTEGER:

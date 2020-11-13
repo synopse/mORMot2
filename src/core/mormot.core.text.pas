@@ -4280,7 +4280,8 @@ begin
      (PosEx(Sep, NewValue) > 0) then
     exit;
   if CompareMem(pointer(OldValue), pointer(CSV), i) and // first (or unique) item
-    ((CSV[i + 1] = Sep[1]) or (CSV[i + 1] = #0)) then
+    ((CSV[i + 1] = Sep[1]) or
+     (CSV[i + 1] = #0)) then
     i := 1
   else
   begin
@@ -5532,7 +5533,8 @@ begin
     PEnd := 0
   else
     PEnd := PtrUInt(P) + PtrUInt(Len) * SizeOf(WideChar);
-  while (Len = 0) or (PtrUInt(P) < PEnd) do
+  while (Len = 0) or
+        (PtrUInt(P) < PEnd) do
   begin
     if B >= BEnd then
       FlushToStream;
@@ -5620,8 +5622,9 @@ procedure TBaseWriter.AddInt18ToChars3(Value: cardinal);
 begin
   if B >= BEnd then
     FlushToStream;
-  PCardinal(B + 1)^ := ((Value shr 12) and $3f) or ((Value shr 6) and $3f) shl 8 or
-                        (Value and $3f) shl 16 + $202020;
+  PCardinal(B + 1)^ := ((Value shr 12) and $3f) or
+                       ((Value shr 6) and $3f) shl 8 or
+                       (Value and $3f) shl 16 + $202020;
   inc(B, 3);
 end;
 
@@ -5667,16 +5670,18 @@ begin
   if Value^ <> 0 then
   begin
     inc(B);
-    if AlwaysDateAndTime or (trunc(Value^) <> 0) then
+    if AlwaysDateAndTime or
+       (trunc(Value^) <> 0) then
     begin
       T.FromDate(Date);
       B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
     end;
-    if AlwaysDateAndTime or (frac(Value^) <> 0) then
+    if AlwaysDateAndTime or
+       (frac(Value^) <> 0) then
     begin
       T.FromTime(Value^);
-      B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second, T.MilliSecond,
-        FirstChar, WithMS);
+      B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second,
+        T.MilliSecond, FirstChar, WithMS);
     end;
     dec(B);
   end;
@@ -5816,7 +5821,8 @@ begin
   begin
     repeat // append hexa chars up to the last non zero byte
       dec(BinBytes);
-    until (BinBytes = 0) or (PByteArray(Bin)[BinBytes] <> 0);
+    until (BinBytes = 0) or
+          (PByteArray(Bin)[BinBytes] <> 0);
     inc(BinBytes);
   end;
   AddBinToHexDisplayLower(Bin, BinBytes, QuotedChar);
@@ -6406,7 +6412,8 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
 var
   L, i, cmp: PtrInt;
 begin // fast O(log(n)) binary search
-  if not Assigned(Compare) or (R < 0) then
+  if not Assigned(Compare) or
+     (R < 0) then
     result := 0
   else if Compare(P^[R], Value) < 0 then // quick return if already sorted
     result := R + 1
@@ -7938,7 +7945,8 @@ begin
         i := n - 2;
         repeat
           dec(i);
-        until (i = n_max) or (buf[i] <> 9);
+        until (i = n_max) or
+              (buf[i] <> 9);
         if i = n_max then
           // force round-up
           dig_round := 9; // any value ">=5"
@@ -7949,7 +7957,8 @@ begin
   // Handle "round half to even" case
   if (dig_round = 5) and
      half_round_to_even and
-     ((n_max = 0) or (buf[n_max - 1] and 1 = 0)) then
+     ((n_max = 0) or
+      (buf[n_max - 1] and 1 = 0)) then
   begin
     // even and a half: check if exactly the half
     dig_sticky := 0;
@@ -8456,7 +8465,8 @@ begin
   while s^=' ' do
     inc(s);
   c := s^;
-  if (c='+') or (c='-') then
+  if (c='+') or
+     (c='-') then
   begin
     inc(s);
     d^ := c;
@@ -9125,7 +9135,8 @@ begin
       FDeb := F;
       repeat
         inc(F);
-      until (F^ = '%') or (F^ = #0);
+      until (F^ = '%') or
+            (F^ = #0);
       b^.Text := FDeb;
       b^.Len := F - FDeb;
       b^.TempRawUTF8 := nil;
@@ -10130,21 +10141,24 @@ end;
 function Int18ToChars3(Value: cardinal): RawUTF8;
 begin
   FastSetString(result, nil, 3);
-  PCardinal(result)^ := ((Value shr 12) and $3f) or ((Value shr 6) and $3f) shl 8 or
-                         (Value and $3f) shl 16 + $202020;
+  PCardinal(result)^ := ((Value shr 12) and $3f) or
+                        ((Value shr 6) and $3f) shl 8 or
+                        (Value and $3f) shl 16 + $202020;
 end;
 
 procedure Int18ToChars3(Value: cardinal; var result: RawUTF8);
 begin
   FastSetString(result, nil, 3);
-  PCardinal(result)^ := ((Value shr 12) and $3f) or ((Value shr 6) and $3f) shl 8 or
-                         (Value and $3f) shl 16 + $202020;
+  PCardinal(result)^ := ((Value shr 12) and $3f) or
+                        ((Value shr 6) and $3f) shl 8 or
+                        (Value and $3f) shl 16 + $202020;
 end;
 
 function Chars3ToInt18(P: pointer): cardinal;
 begin
   result := PCardinal(P)^ - $202020;
-  result := ((result shr 16) and $3f) or ((result shr 8) and $3f) shl 6 or
+  result := ((result shr 16) and $3f) or
+            ((result shr 8) and $3f) shl 6 or
             (result and $3f) shl 12;
 end;
 

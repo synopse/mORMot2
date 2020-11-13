@@ -1572,7 +1572,8 @@ begin
         P := GotoNextNotSpace(P);
         if IdemPChar(P, '{$IFDEF ') then
           IgnoreIfDef
-        else if (P[0] = '/') and (P[1] = '/') then
+        else if (P[0] = '/') and
+                (P[1] = '/') then
         begin
           if P[2] = '/' then
             inc(P, 3)
