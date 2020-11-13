@@ -1482,6 +1482,321 @@ end;
 {$endif CPUARM}
 
 
+{ ****************** Unix Daemon and Windows Service Support }
+
+// Linux/POSIX signal interception
+
+var
+  SynDaemonIntercepted: boolean;
+  SynDaemonInterceptLog: TOnDaemonLog;
+
+procedure DoShutDown(Sig: Longint; Info: PSigInfo; Context: PSigContext); cdecl;
+var
+  level: TSynLogInfo;
+  si_code: integer;
+  text: shortstring; // code below has no memory allocation
+begin
+  if Assigned(SynDaemonInterceptLog) then
+  begin
+    case Sig of
+      SIGQUIT:
+        text := 'QUIT';
+      SIGTERM:
+        text := 'TERM';
+      SIGINT:
+        text := 'INT';
+      SIGABRT:
+        text := 'ABRT';
+    else
+      str(Sig, text);
+    end;
+    if Sig = SIGTERM then
+      // polite quit
+      level := sllInfo
+    else
+       // abort after panic
+      level := sllExceptionOS;
+    if Info = nil then
+      si_code := 0
+    else
+      si_code := Info^.si_code;
+    SynDaemonInterceptLog(level,
+      'SynDaemonIntercepted received SIG%=% si_code=%', [text, Sig, si_code]);
+  end;
+  SynDaemonTerminated := Sig;
+end;
+
+procedure SynDaemonIntercept(const onlog: TOnDaemonLog);
+var
+  saOld, saNew: SigactionRec;
+begin
+  // note: SIGFPE/SIGSEGV/SIGBUS/SIGILL are handled by the RTL
+  if SynDaemonIntercepted then
+    exit;
+  SynDaemonIntercepted := true;
+  SynDaemonInterceptLog := onlog;
+  FillCharFast(saNew, SizeOf(saNew), 0);
+  saNew.sa_handler := @DoShutDown;
+  fpSigaction(SIGQUIT, @saNew, @saOld);
+  fpSigaction(SIGTERM, @saNew, @saOld);
+  fpSigaction(SIGINT, @saNew, @saOld);
+  fpSigaction(SIGABRT, @saNew, @saOld);
+end;
+
+function RunUntilSigTerminatedPidFile: TFileName;
+begin
+  result := Format('%s.%s.pid',
+     [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
+end;
+
+function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
+var
+  pid: PtrInt;
+  pidfilename: TFileName;
+  tix: Int64;
+begin
+  result := false;
+  pidfilename := RunUntilSigTerminatedPidFile;
+  pid := GetInteger(pointer(StringFromFile(pidfilename)));
+  if pid <= 0 then
+    exit;
+  if fpkill(pid, SIGTERM) <> 0 then // polite quit
+    if fpgeterrno <> ESysESRCH then
+      exit
+    else
+    // no such process -> try to delete the .pid file
+    if DeleteFile(pidfilename) then
+    begin
+      result := true; // process crashed or hard reboot -> nothing to kill
+      exit;
+    end;
+  if waitseconds <= 0 then
+  begin
+    result := true;
+    exit;
+  end;
+  tix := GetTickCount64 + waitseconds * 1000;
+  repeat
+    // RunUntilSigTerminated() below should delete the .pid file
+    sleep(10);
+    if not FileExists(pidfilename) then
+      result := true;
+  until result or
+        (GetTickCount64 > tix);
+  if not result then
+    fpkill(pid, SIGKILL); // finesse
+end;
+
+procedure CleanAfterFork;
+begin
+  fpUMask(0); // reset file mask
+  chdir('/'); // avoid locking current directory
+  Close(input);
+  AssignFile(input, '/dev/null');
+  ReWrite(input);
+  Close(output);
+  AssignFile(output, '/dev/null');
+  ReWrite(output);
+  Close(stderr);
+end;
+
+procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
+  const start, stop: TThreadMethod; const onlog: TOnDaemonLog;
+  const servicename: string);
+var
+  pid, sid: TPID;
+  pidfilename: TFileName;
+  s: AnsiString;
+const
+  TXT: array[boolean] of string[4] = ('run', 'fork');
+begin
+  SynDaemonIntercept(onlog);
+  if dofork then
+  begin
+    pidfilename := RunUntilSigTerminatedPidFile;
+    pid := GetInteger(pointer(StringFromFile(pidfilename)));
+    if pid > 0 then
+      if (fpkill(pid, 0) = 0) or
+         not DeleteFile(pidfilename) then
+        raise EOSException.CreateFmt(
+          '%s.CommandLine Fork failed: %s is already forked as pid=%d',
+          [daemon.ClassName, ExeVersion.ProgramName, PtrInt(pid)]);
+    pid := fpFork;
+    if pid < 0 then
+      raise EOSException.CreateFmt(
+        '%s.CommandLine Fork failed', [daemon.ClassName]);
+    if pid > 0 then  // main program - just terminate
+      exit;
+    // clean forked instance
+    sid := fpSetSID;
+    if sid < 0 then // new session (process group) created?
+      raise EOSException.CreateFmt(
+        '%s.CommandLine SetSID failed', [daemon.ClassName]);
+    CleanAfterFork;
+    // create local .[ExeVersion.ProgramName].pid file
+    pid := fpgetpid;
+    str(pid, s);
+    FileFromString(s, pidfilename);
+  end;
+  try
+    if Assigned(onlog) then
+      onlog(sllNewRun, 'Start % /% %',
+        [servicename, TXT[dofork], ExeVersion.Version.DetailedOrVoid]);
+    start;
+    while SynDaemonTerminated = 0 do
+      fpPause;
+  finally
+    if Assigned(onlog) then
+      onlog(sllNewRun, 'Stop /% from Sig=%',
+        [TXT[dofork], SynDaemonTerminated]);
+    try
+      stop;
+    finally
+      if dofork and
+         (pidfilename <> '') then
+      begin
+        DeleteFile(pidfilename);
+        if Assigned(onlog) then
+          onlog(sllTrace, 'RunUntilSigTerminated: deleted file %',
+            [pidfilename]);
+      end;
+    end;
+  end;
+end;
+
+function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
+begin
+  result := nil;
+  if Str <> nil then
+    repeat
+      if Str^ = #0 then
+        exit;
+      if Str^ = Chr then
+        break;
+      inc(Str);
+    until false;
+  result := Str;
+end;
+
+function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TFileName;
+  envaddexisting: boolean): integer;
+var
+  pid: TPID;
+  e: array[0..511] of PAnsiChar; // max 512 environment variables
+  envpp: PPAnsiChar;
+  P: PAnsiChar;
+  n: PtrInt;
+begin
+  {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
+  pid := FpvFork;
+  {$else}
+  pid := FpFork;
+  {$ifend}
+  if pid < 0 then
+  begin
+    // fork failed
+    result := -1;
+    exit;
+  end;
+  if pid = 0 then
+  begin
+    // we are in child process -> switch to new executable
+    if not waitfor then
+      // don't share the same console
+      CleanAfterFork;
+    envpp := envp;
+    if env <> '' then
+    begin
+      n := 0;
+      result := -ESysE2BIG;
+      if envaddexisting and
+         (envpp <> nil) then
+      begin
+        while envpp^ <> nil do
+        begin
+          if PosChar(envpp^, #10) = nil then
+          begin
+            // filter to add only single-line variables
+            if n = high(e) - 1 then
+              exit;
+            e[n] := envpp^;
+            inc(n);
+          end;
+          inc(envpp);
+        end;
+      end;
+      P := pointer(env); // env follows Windows layout 'n1=v1'#0'n2=v2'#0#0
+      while P^ <> #0 do
+      begin
+        if n = high(e) - 1 then
+          exit;
+        e[n] := P; // makes POSIX compatible
+        inc(n);
+        inc(P, StrLen(P) + 1);
+      end;
+      e[n] := nil; // end with null
+      envpp := @e;
+    end;
+    FpExecve(args^, args, envpp);
+    FpExit(127);
+  end;
+  if waitfor then
+  begin
+    result := WaitProcess(pid);
+    if result = 127 then
+      // execv() failed in child process
+      result := -result;
+  end
+  else
+    // fork success (don't wait for the child process to fail)
+    result := 0;
+end;
+
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2, arg3, arg4, arg5, env: TFileName;
+  envaddexisting: boolean): integer;
+var
+  a: array[0..6] of PAnsiChar; // assume no UNICODE on POSIX, i.e. as TFileName
+begin
+  a[0] := pointer(path);
+  a[1] := pointer(arg1);
+  a[2] := pointer(arg2);
+  a[3] := pointer(arg3);
+  a[4] := pointer(arg4);
+  a[5] := pointer(arg5);
+  a[6] := nil; // end pointer list with null
+  result := RunInternal(@a, waitfor, env, envaddexisting);
+end;
+
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName; envaddexisting: boolean;
+  parsed: PParseCommands): integer;
+var
+  temp: RawUTF8;
+  err: TParseCommands;
+  a: TParseCommandsArgs;
+begin
+  err := ParseCommandArgs(cmd, @a, nil, @temp);
+  if parsed <> nil then
+    parsed^ := err;
+  if err = [] then
+    // no need to spawn the shell for simple commands
+    result := RunInternal(a, waitfor, env, envaddexisting)
+  else if err * PARSECOMMAND_ERROR <> [] then
+    // no system call for clearly invalid command line
+    result := {$ifdef FPCLINUXNOTBSD} -ESysELIBBAD {$else} -80 {$endif}
+  else
+  begin
+    // execute complex commands via the shell
+    a[0] := '/bin/sh';
+    a[1] := '-c';
+    a[2] := pointer(cmd);
+    a[3] := nil;
+    result := RunInternal(@a, waitfor, env, envaddexisting);
+  end;
+end;
+
+
 { ****************** Gather Operating System Information }
 
 function getpagesize: integer; cdecl; external 'c';

@@ -12,6 +12,7 @@ unit mormot.core.os;
   - Unicode, Time, File, Console, Library process
   - Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
   - TSynLocker/TSynLocked and Low-Level Threading Features
+  - Unix Daemon and Windows Service Support
 
    Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid $ifdef/$endif in "uses" clauses.
@@ -1143,7 +1144,7 @@ function FileOpenSequentialRead(const FileName: string): integer;
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 
-/// read a File content into a String
+/// read a File content into a string
 // - content can be binary or text
 // - returns '' if file was not found or any read error occured
 // - wil use GetFileSize() API by default, unless HasNoSize is defined,
@@ -1446,7 +1447,7 @@ function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
 {$endif MSWINDOWS}
 
-/// direct conversion of a UTF-8 encoded string into a console OEM-encoded String
+/// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
@@ -1520,7 +1521,7 @@ function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
 
 
 
-{ **************** TSynLocker and Low-Level Threading Features }
+{ **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
 type
   /// allow to add cross-platform locking methods to any class instance
@@ -1771,7 +1772,11 @@ var
 // - using millisecond resolution
 // - SleepHiRes(0) calls ThreadSwitch on Windows, but POSIX version will
 // wait 10 microsecond unless SleepHiRes0Yield is forced to true (bad idea)
-// - in respect to RTL's Sleep() function, it will return on ESysEINTR
+// - in respect to RTL's Sleep() function, it will return on ESysEINTR if was
+// interrupted by any OS signal
+// - warning: wait typically the next system timer interrupt on Windows, which
+// is every 16ms by default; as a consequence, never rely on the ms supplied
+// value to guess the elapsed time, but call GetTickCount64
 procedure SleepHiRes(ms: cardinal);
 
 /// low-level naming of a thread
@@ -1831,6 +1836,576 @@ procedure GlobalLock;
 // critical section or TSynLocker - these functions are just here to be
 // convenient, for non time-critical process (e.g. singleton initialization)
 procedure GlobalUnLock;
+
+
+{ ****************** Unix Daemon and Windows Service Support }
+
+type
+  /// callback definition used to log some event
+  // - defined as TMethod to avoid dependency with the mormot.core.log unit
+  TOnDaemonLog = procedure(level: TSynLogInfo; const Fmt: RawUTF8;
+    const Args: array of const) of object;
+
+{$ifdef MSWINDOWS}
+
+{ *** some minimal Windows API definitions, replacing WinSvc.pas missing for FPC }
+
+const
+  SERVICE_QUERY_CONFIG         = $0001;
+  SERVICE_CHANGE_CONFIG        = $0002;
+  SERVICE_QUERY_STATUS         = $0004;
+  SERVICE_ENUMERATE_DEPENDENTS = $0008;
+  SERVICE_START                = $0010;
+  SERVICE_STOP                 = $0020;
+  SERVICE_PAUSE_CONTINUE       = $0040;
+  SERVICE_INTERROGATE          = $0080;
+  SERVICE_USER_DEFINED_CONTROL = $0100;
+  SERVICE_ALL_ACCESS           = STANDARD_RIGHTS_REQUIRED or
+                                 SERVICE_QUERY_CONFIG or
+                                 SERVICE_CHANGE_CONFIG or
+                                 SERVICE_QUERY_STATUS or
+                                 SERVICE_ENUMERATE_DEPENDENTS or
+                                 SERVICE_START or
+                                 SERVICE_STOP or
+                                 SERVICE_PAUSE_CONTINUE or
+                                 SERVICE_INTERROGATE or
+                                 SERVICE_USER_DEFINED_CONTROL;
+
+  SC_MANAGER_CONNECT            = $0001;
+  SC_MANAGER_CREATE_SERVICE     = $0002;
+  SC_MANAGER_ENUMERATE_SERVICE  = $0004;
+  SC_MANAGER_LOCK               = $0008;
+  SC_MANAGER_QUERY_LOCK_STATUS  = $0010;
+  SC_MANAGER_MODIFY_BOOT_CONFIG = $0020;
+  SC_MANAGER_ALL_ACCESS         = STANDARD_RIGHTS_REQUIRED or
+                                  SC_MANAGER_CONNECT or
+                                  SC_MANAGER_CREATE_SERVICE or
+                                  SC_MANAGER_ENUMERATE_SERVICE or
+                                  SC_MANAGER_LOCK or
+                                  SC_MANAGER_QUERY_LOCK_STATUS or
+                                  SC_MANAGER_MODIFY_BOOT_CONFIG;
+
+  SERVICE_CONFIG_DESCRIPTION    = $0001;
+
+  SERVICE_WIN32_OWN_PROCESS     = $00000010;
+  SERVICE_WIN32_SHARE_PROCESS   = $00000020;
+  SERVICE_INTERACTIVE_PROCESS   = $00000100;
+
+  SERVICE_BOOT_START            = $00000000;
+  SERVICE_SYSTEM_START          = $00000001;
+  SERVICE_AUTO_START            = $00000002;
+  SERVICE_DEMAND_START          = $00000003;
+  SERVICE_DISABLED              = $00000004;
+  SERVICE_ERROR_IGNORE          = $00000000;
+  SERVICE_ERROR_NORMAL          = $00000001;
+  SERVICE_ERROR_SEVERE          = $00000002;
+  SERVICE_ERROR_CRITICAL        = $00000003;
+
+  SERVICE_CONTROL_STOP          = $00000001;
+  SERVICE_CONTROL_PAUSE         = $00000002;
+  SERVICE_CONTROL_CONTINUE      = $00000003;
+  SERVICE_CONTROL_INTERROGATE   = $00000004;
+  SERVICE_CONTROL_SHUTDOWN      = $00000005;
+  SERVICE_STOPPED               = $00000001;
+  SERVICE_START_PENDING         = $00000002;
+  SERVICE_STOP_PENDING          = $00000003;
+  SERVICE_RUNNING               = $00000004;
+  SERVICE_CONTINUE_PENDING      = $00000005;
+  SERVICE_PAUSE_PENDING         = $00000006;
+  SERVICE_PAUSED                = $00000007;
+
+type
+  PServiceStatus = ^TServiceStatus;
+  TServiceStatus = object
+  public
+    dwServiceType: DWORD;
+    dwCurrentState: DWORD;
+    dwControlsAccepted: DWORD;
+    dwWin32ExitCode: DWORD;
+    dwServiceSpecificExitCode: DWORD;
+    dwCheckPoint: DWORD;
+    dwWaitHint: DWORD;
+  end;
+
+  PServiceStatusProcess = ^TServiceStatusProcess;
+  TServiceStatusProcess = object(TServiceStatus)
+  public
+    dwProcessId: DWORD;
+    dwServiceFlags: DWORD;
+  end;
+
+  SC_HANDLE = THandle;
+  SERVICE_STATUS_HANDLE = DWORD;
+  TServiceTableEntry = record
+    lpServiceName: PChar;
+    lpServiceProc: procedure(ArgCount: DWORD; Args: PPChar); stdcall;
+  end;
+  PServiceTableEntry = ^TServiceTableEntry;
+
+  {$Z4}
+  SC_STATUS_TYPE = (SC_STATUS_PROCESS_INFO);
+  {$Z1}
+
+function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
+  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  name 'OpenSCManager' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: DWORD;
+  lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
+function StartService(hService: SC_HANDLE; dwNumServiceArgs: DWORD;
+  lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
+  name 'StartService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+function CreateService(hSCManager: SC_HANDLE; lpServiceName, lpDisplayName: PChar;
+  dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: DWORD;
+  lpBinaryPathName, lpLoadOrderGroup: PChar; lpdwTagId: LPDWORD; lpDependencies,
+  lpServiceStartName, lpPassword: PChar): SC_HANDLE; stdcall; external advapi32
+  name 'CreateService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+function OpenService(hSCManager: SC_HANDLE; lpServiceName: PChar;
+  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  name 'OpenService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
+function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
+function QueryServiceStatus(hService: SC_HANDLE;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function QueryServiceStatusEx(hService: SC_HANDLE;
+  InfoLevel: SC_STATUS_TYPE; lpBuffer: Pointer; cbBufSize: DWORD;
+  var pcbBytesNeeded: DWORD): BOOL; stdcall; external advapi32;
+function ControlService(hService: SC_HANDLE; dwControl: DWORD;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function RegisterServiceCtrlHandler(lpServiceName: PChar;
+  lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32
+  name 'RegisterServiceCtrlHandler' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+function StartServiceCtrlDispatcher(
+  lpServiceStartTable: PServiceTableEntry): BOOL; stdcall; external advapi32
+  name 'StartServiceCtrlDispatcher' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+
+
+{ *** high level classes to define and manage Windows Services }
+
+var
+  /// you can set this global variable to TSynLog or TSQLLog to enable logging
+  // - default is nil, i.e. disabling logging, since it may interfere with the
+  // logging process of the service itself
+  ServiceLog: TOnDaemonLog;
+
+type
+  /// all possible states of the service
+  TServiceState = (
+    ssNotInstalled,
+    ssStopped,
+    ssStarting,
+    ssStopping,
+    ssRunning,
+    ssResuming,
+    ssPausing,
+    ssPaused,
+    ssErrorRetrievingState);
+
+  /// TServiceControler class is intended to create a new Windows Service instance
+  // or to maintain (that is start, stop, pause, resume...) an existing Service
+  // - to provide the service itself, use the TService class
+  TServiceController = class
+  protected
+    fSCHandle: THandle;
+    fHandle: THandle;
+    fStatus: TServiceStatus;
+    fName: RawUTF8;
+  protected
+    function GetStatus: TServiceStatus;
+    function GetState: TServiceState;
+  public
+    /// create a new Windows Service and control it and/or its configuration
+    // - TargetComputer - set it to empty string if local computer is the target.
+    // - DatabaseName - set it to empty string if the default database is supposed
+    // ('ServicesActive').
+    // - Name - name of a service.
+    // - DisplayName - display name of a service.
+    // - Path - a path to binary (executable) of the service created.
+    // - OrderGroup - an order group name (unnecessary)
+    // - Dependencies - string containing a list with names of services, which must
+    // start before (every name should be separated with #0, entire
+    // list should be separated with #0#0. Or, an empty string can be
+    // passed if there is no dependancy).
+    // - Username - login name. For service type SERVICE_WIN32_OWN_PROCESS, the
+    // account name in the form of "DomainName\Username"; If the account
+    // belongs to the built-in domain, ".\Username" can be specified;
+    // Services of type SERVICE_WIN32_SHARE_PROCESS are not allowed to
+    // specify an account other than LocalSystem. If '' is specified, the
+    // service will be logged on as the 'LocalSystem' account, in which
+    // case, the Password parameter must be empty too.
+    // - Password - a password for login name. If the service type is
+    // SERVICE_KERNEL_DRIVER or SERVICE_FILE_SYSTEM_DRIVER,
+    // this parameter is ignored.
+    // - DesiredAccess - a combination of following flags:
+    // SERVICE_ALL_ACCESS (default value), SERVICE_CHANGE_CONFIG,
+    // SERVICE_ENUMERATE_DEPENDENTS, SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE,
+    // SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP,
+    // SERVICE_USER_DEFINED_CONTROL
+    // - ServiceType - a set of following flags:
+    // SERVICE_WIN32_OWN_PROCESS (default value, which specifies a Win32 service
+    // that runs in its own process), SERVICE_WIN32_SHARE_PROCESS,
+    // SERVICE_KERNEL_DRIVER, SERVICE_FILE_SYSTEM_DRIVER,
+    // SERVICE_INTERACTIVE_PROCESS (default value, which enables a Win32 service
+    // process to interact with the desktop)
+    // - StartType - one of following values:
+    // SERVICE_BOOT_START, SERVICE_SYSTEM_START,
+    // SERVICE_AUTO_START (which specifies a device driver or service started by
+    // the service control manager automatically during system startup),
+    // SERVICE_DEMAND_START (default value, which specifies a service started by
+    // a service control manager when a process calls the StartService function,
+    // that is the TServiceController.Start method), SERVICE_DISABLED
+    // - ErrorControl - one of following:
+    // SERVICE_ERROR_IGNORE, SERVICE_ERROR_NORMAL (default value, by which
+    // the startup program logs the error and displays a message but continues
+    // the startup operation), SERVICE_ERROR_SEVERE,
+    // SERVICE_ERROR_CRITICAL
+    constructor CreateNewService(const TargetComputer, DatabaseName,
+      Name, DisplayName, Path: string;
+      const OrderGroup: string = ''; const Dependencies: string = '';
+      const Username: string = ''; const Password: string = '';
+      DesiredAccess: DWORD = SERVICE_ALL_ACCESS;
+      ServiceType: DWORD = SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
+      StartType: DWORD = SERVICE_DEMAND_START; ErrorControl: DWORD = SERVICE_ERROR_NORMAL);
+    /// wrapper around CreateNewService() to install the current executable as service
+    class function Install(const Name,DisplayName,Description: string;
+      AutoStart: boolean; ExeName: TFileName=''; Dependencies: string=''): TServiceState;
+    /// open an existing service, in order to control it or its configuration
+    // from your application
+    // - TargetComputer - set it to empty string if local computer is the target.
+    // - DatabaseName - set it to empty string if the default database is supposed
+    // ('ServicesActive').
+    // - Name - name of a service.
+    // - DesiredAccess - a combination of following flags:
+    // SERVICE_ALL_ACCESS, SERVICE_CHANGE_CONFIG, SERVICE_ENUMERATE_DEPENDENTS,
+    // SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE, SERVICE_QUERY_CONFIG,
+    // SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP, SERVICE_USER_DEFINED_CONTROL
+    constructor CreateOpenService(const TargetComputer, DataBaseName, Name: string;
+      DesiredAccess: DWORD = SERVICE_ALL_ACCESS);
+    /// release memory and handles
+    destructor Destroy; override;
+    /// Handle of SC manager
+    property SCHandle: THandle
+      read fSCHandle;
+    /// Handle of service opened or created
+    // - its value is 0 if something failed in any Create*() method
+    property Handle: THandle
+      read fHandle;
+    /// Retrieve the Current status of the service
+    property Status: TServiceStatus
+      read GetStatus;
+    /// Retrieve the Current state of the service
+    property State: TServiceState
+      read GetState;
+    /// Requests the service to stop
+    function Stop: boolean;
+    /// Requests the service to pause
+    function Pause: boolean;
+    /// Requests the paused service to resume
+    function Resume: boolean;
+    /// Requests the service to update immediately its current status information
+    // to the service control manager
+    function Refresh: boolean;
+    /// Request the service to shutdown
+    // - this function always return false
+    function Shutdown: boolean;
+    /// Removes service from the system, i.e. close the Service
+    function Delete: boolean;
+    /// starts the execution of a service with some specified arguments
+    // - this version expect PChar pointers, either AnsiString (for FPC and old
+    //  Delphi compiler), either UnicodeString (till Delphi 2009)
+    function Start(const Args: array of PChar): boolean;
+    /// try to define the description text of this service
+    procedure SetDescription(const Description: string);
+    /// this class method will check the command line parameters, and will let
+    //  control the service according to it
+    // - MyServiceSetup.exe /install will install the service
+    // - MyServiceSetup.exe /start   will start the service
+    // - MyServiceSetup.exe /stop    will stop the service
+    // - MyServiceSetup.exe /uninstall will uninstall the service
+    // - so that you can write in the main block of your .dpr:
+    // !CheckParameters('MyService.exe',HTTPSERVICENAME,HTTPSERVICEDISPLAYNAME);
+    // - if ExeFileName='', it will install the current executable
+    // - optional Description and Dependencies text may be specified
+    class procedure CheckParameters(const ExeFileName: TFileName;
+      const ServiceName, DisplayName,Description: string;
+      const Dependencies: string='');
+  end;
+
+  {$M+}
+  TService = class;
+  {$M-}
+
+  /// callback procedure for Windows Service Controller
+  TServiceControlHandler = procedure(CtrlCode: DWORD); stdcall;
+
+  /// event triggered for Control handler
+  TServiceControlEvent = procedure(Sender: TService; Code: DWORD) of object;
+
+  /// event triggered to implement the Service functionality
+  TServiceEvent = procedure(Sender: TService) of object;
+
+  /// let an executable implement a Windows Service
+  TService = class
+  protected
+    fSName: string;
+    fDName: string;
+    fStartType: DWORD;
+    fServiceType: DWORD;
+    fData: DWORD;
+    fControlHandler: TServiceControlHandler;
+    fOnControl: TServiceControlEvent;
+    fOnInterrogate: TServiceEvent;
+    fOnPause: TServiceEvent;
+    fOnShutdown: TServiceEvent;
+    fOnStart: TServiceEvent;
+    fOnExecute: TServiceEvent;
+    fOnResume: TServiceEvent;
+    fOnStop: TServiceEvent;
+    fStatusRec: TServiceStatus;
+    fArgsList: array of string;
+    fStatusHandle: THandle;
+    function GetArgCount: Integer;
+    function GetArgs(Idx: Integer): string;
+    function GetInstalled: boolean;
+    procedure SetStatus(const Value: TServiceStatus);
+    procedure CtrlHandle(Code: DWORD);
+    function GetControlHandler: TServiceControlHandler;
+    procedure SetControlHandler(const Value: TServiceControlHandler);
+  public
+    /// this method is the main service entrance, from the OS point of view
+    // - it will call OnControl/OnStop/OnPause/OnResume/OnShutdown events
+    // - and report the service status to the system (via ReportStatus method)
+    procedure DoCtrlHandle(Code: DWORD); virtual;
+    /// Creates the service
+    // - the service is added to the internal registered services
+    // - main application must call the global ServicesRun procedure to actually
+    // start the services
+    // - caller must free the TService instance when it's no longer used
+    constructor Create(const aServiceName, aDisplayName: string); reintroduce; virtual;
+    /// Reports new status to the system
+    function ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
+    /// Installs the service in the database
+    // - return true on success
+    // - create a local TServiceController with the current executable file,
+    // with the supplied command line parameters
+    function Install(const Params: string=''): boolean;
+    /// Removes the service from database
+    //  - uses a local TServiceController with the current Service Name
+    procedure Remove;
+    /// Starts the service
+    //  - uses a local TServiceController with the current Service Name
+    procedure Start;
+    /// Stops the service
+    // - uses a local TServiceController with the current Service Name
+    procedure Stop;
+    /// this is the main method, in which the Service should implement its run
+    procedure Execute; virtual;
+
+    /// Number of arguments passed to the service by the service controler
+    property ArgCount: Integer
+      read GetArgCount;
+    /// List of arguments passed to the service by the service controler
+    property Args[Idx: Integer]: string
+      read GetArgs;
+    /// Any data You wish to associate with the service object
+    property Data: DWORD
+      read FData write FData;
+    /// Whether service is installed in DataBase
+    // - uses a local TServiceController to check if the current Service Name exists
+    property Installed: boolean
+      read GetInstalled;
+    /// Current service status
+    // - To report new status to the system, assign another
+    // value to this record, or use ReportStatus method (preferred)
+    property Status: TServiceStatus
+      read fStatusRec write SetStatus;
+    /// Callback handler for Windows Service Controller
+    // - if handler is not set, then auto generated handler calls DoCtrlHandle
+    // (note that this auto-generated stubb is... not working yet - so you should
+    // either set your own procedure to this property, or use TServiceSingle)
+    // - a typical control handler may be defined as such:
+    // ! var MyGlobalService: TService;
+    // !
+    // ! procedure MyServiceControlHandler(Opcode: LongWord); stdcall;
+    // ! begin
+    // !   if MyGlobalService<>nil then
+    // !     MyGlobalService.DoCtrlHandle(Opcode);
+    // ! end;
+    // !
+    // ! ...
+    // ! MyGlobalService := TService.Create(...
+    // ! MyGlobalService.ControlHandler := MyServiceControlHandler;
+    property ControlHandler: TServiceControlHandler
+      read GetControlHandler write SetControlHandler;
+    /// Start event is executed before the main service thread (i.e. in the Execute method)
+    property OnStart: TServiceEvent
+      read fOnStart write fOnStart;
+    /// custom Execute event
+    // - launched in the main service thread (i.e. in the Execute method)
+    property OnExecute: TServiceEvent
+      read fOnExecute write fOnExecute;
+    /// custom event triggered when a Control Code is received from Windows
+    property OnControl: TServiceControlEvent
+      read fOnControl write fOnControl;
+    /// custom event triggered when the service is stopped
+    property OnStop: TServiceEvent
+      read fOnStop write fOnStop;
+    /// custom event triggered when the service is paused
+    property OnPause: TServiceEvent
+      read fOnPause write fOnPause;
+    /// custom event triggered when the service is resumed
+    property OnResume: TServiceEvent
+      read fOnResume write fOnResume;
+    /// custom event triggered when the service receive an Interrogate
+    property OnInterrogate: TServiceEvent
+      read fOnInterrogate write fOnInterrogate;
+    /// custom event triggered when the service is shut down
+    property OnShutdown: TServiceEvent
+      read fOnShutdown write fOnShutdown;
+  published
+    /// Name of the service. Must be unique
+    property ServiceName: string
+      read fSName;
+    /// Display name of the service
+    property DisplayName: string
+      read fDName write fDName;
+    /// Type of service
+    property ServiceType: DWORD
+      read fServiceType write fServiceType;
+    /// Type of start of service
+    property StartType: DWORD
+      read fStartType write fStartType;
+  end;
+
+  /// inherit from this class if your application has a single Windows Service
+  // - note that the TService jumper does not work well - so use this instead
+  TServiceSingle = class(TService)
+  public
+    /// will set a global function as service controller
+    constructor Create(const aServiceName, aDisplayName: string); override;
+    /// will release the global service controller
+    destructor Destroy; override;
+  end;
+
+
+var
+  /// the main TService instance running in the current executable
+  ServiceSingle: TServiceSingle = nil;
+
+/// launch the registered Service execution
+// - ServiceSingle provided by this aplication is sent to the operating system
+// - returns TRUE on success
+// - returns FALSE on error (to get extended information, call GetLastError)
+function ServiceSingleRun: boolean;
+
+/// convert the Control Code retrieved from Windows into a service state
+// enumeration item
+function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
+
+/// return the ready to be displayed text of a TServiceState value
+function ServiceStateText(State: TServiceState): string;
+
+function ToText(st: TServiceState): PShortString; overload;
+
+/// return service PID
+function GetServicePid(const aServiceName: string): DWORD;
+
+/// kill Windows process
+function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
+
+{$else}
+
+/// low-level function able to properly run or fork the current process
+// then execute the start/stop methods of a TSynDaemon / TDDDDaemon instance
+// - fork will create a local /run/[ProgramName]-[ProgramPathHash].pid file name
+procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
+  const start, stop: TThreadMethod; const onlog: TOnDaemonLog = nil;
+  const servicename: string = '');
+
+/// kill a process previously created by RunUntilSigTerminated(dofork=true)
+// - will lookup a local /run/[ProgramName]-[ProgramPathHash].pid file name to
+// retrieve the actual PID to be killed, then send a SIGTERM, and wait
+// waitseconds for the .pid file to disapear
+// - returns true on success, false on error (e.g. no valid .pid file or
+// the file didn't disappear, which may mean that the daemon is broken)
+function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
+
+/// local .pid file name as created by RunUntilSigTerminated(dofork=true)
+function RunUntilSigTerminatedPidFile: TFileName;
+
+var
+  /// once SynDaemonIntercept has been called, this global variable
+  // contains the SIGQUIT / SIGTERM / SIGINT received signal
+  SynDaemonTerminated: integer;
+
+/// enable low-level interception of executable stop signals
+// - any SIGQUIT / SIGTERM / SIGINT signal will set appropriately the global
+// SynDaemonTerminated variable, with an optional logged entry to log
+// - as called e.g. by RunUntilSigTerminated()
+// - you can call this method several times with no issue
+procedure SynDaemonIntercept(const onlog: TOnDaemonLog=nil);
+
+{$endif MSWINDOWS}
+
+type
+  /// command line patterns recognized by ParseCommandArgs()
+  TParseCommand = (
+    pcHasRedirection,
+    pcHasSubCommand,
+    pcHasParenthesis,
+    pcHasJobControl,
+    pcHasWildcard,
+    pcHasShellVariable,
+    pcUnbalancedSingleQuote,
+    pcUnbalancedDoubleQuote,
+    pcTooManyArguments,
+    pcInvalidCommand,
+    pcHasEndingBackSlash);
+  TParseCommands = set of TParseCommand;
+  PParseCommands = ^TParseCommands;
+
+  /// used to store references of arguments recognized by ParseCommandArgs()
+  TParseCommandsArgs = array[0..31] of PAnsiChar;
+  PParseCommandsArgs = ^TParseCommandsArgs;
+
+const
+  /// identifies some bash-specific processing
+  PARSECOMMAND_BASH =
+    [pcHasRedirection .. pcHasShellVariable];
+
+  /// identifies obvious invalid content
+  PARSECOMMAND_ERROR =
+    [pcUnbalancedSingleQuote .. pcHasEndingBackSlash];
+
+/// low-level parsing of a RunCommand() execution command
+// - parse and fills argv^[0..argc^-1] with corresponding arguments, after
+// un-escaping and un-quoting if applicable, using temp^ to store the content
+// - if argv=nil, do only the parsing, not the argument extraction - could be
+// used for fast validation of the command line syntax
+// - you can force arguments OS flavor using the posix parameter - note that
+// Windows parsing is not consistent by itself (e.g. double quoting or
+// escaping depends on the actual executable called) so returned flags
+// should be considered as indicative only with posix=false
+function ParseCommandArgs(const cmd: RawUTF8; argv: PParseCommandsArgs = nil;
+  argc: PInteger = nil; temp: PRawUTF8 = nil;
+  posix: boolean = {$ifdef MSWINDOWS}false{$else}true{$endif}): TParseCommands;
+
+/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
+// - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2: TFileName = ''; const arg3: TFileName = '';
+  const arg4: TFileName = ''; const arg5: TFileName = '';
+  const env: TFileName = ''; envaddexisting: boolean = false): integer;
+
+/// like fpSystem, but cross-platform
+// - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
+// - under Windows (especially Windows 10), creating a process can be dead slow
+// https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName = ''; envaddexisting: boolean = false;
+  parsed: PParseCommands = nil): integer;
+
 
 
 implementation
@@ -2359,7 +2934,8 @@ begin
     exit;
   end;
   result := false;
-  if (fFileSize <= 0) {$ifdef CPU32} or (fFileSize > maxInt){$endif} then
+  if (fFileSize <= 0)
+     {$ifdef CPU32} or (fFileSize > maxInt){$endif} then
     // maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors on CPU32)
     exit;
   if aCustomSize = 0 then
@@ -3215,6 +3791,207 @@ destructor TSynLocked.Destroy;
 begin
   inherited Destroy;
   fSafe^.DoneAndFreeMem;
+end;
+
+
+
+{ ****************** Unix Daemon and Windows Service Support }
+
+function ParseCommandArgs(const cmd: RawUTF8; argv: PParseCommandsArgs;
+  argc: PInteger; temp: PRawUTF8; posix: boolean): TParseCommands;
+var
+  n: PtrInt;
+  state: set of (sWhite, sInArg, sInSQ, sInDQ, sSpecial, sBslash);
+  c: AnsiChar;
+  D, P: PAnsiChar;
+begin
+  result := [pcInvalidCommand];
+  if argv <> nil then
+    argv[0] := nil;
+  if argc <> nil then
+    argc^ := 0;
+  if cmd = '' then
+    exit;
+  if argv = nil then
+    D := nil
+  else
+  begin
+    if temp = nil then
+      exit;
+    SetLength(temp^, length(cmd));
+    D := pointer(temp^);
+  end;
+  state := [];
+  n := 0;
+  P := pointer(cmd);
+  repeat
+    c := P^;
+    if D <> nil then
+      D^ := c;
+    inc(P);
+    case c of
+      #0:
+        begin
+          if sInSQ in state then
+            include(result, pcUnbalancedSingleQuote);
+          if sInDQ in state then
+            include(result, pcUnbalancedDoubleQuote);
+          exclude(result, pcInvalidCommand);
+          if argv <> nil then
+            argv[n] := nil;
+          if argc <> nil then
+            argc^ := n;
+          exit;
+        end;
+      #1 .. ' ':
+        begin
+         if state = [sInArg] then
+         begin
+           state := [];
+           if D <> nil then
+           begin
+             D^ := #0;
+             inc(D);
+           end;
+           continue;
+         end;
+         if state * [sInSQ, sInDQ] = [] then
+           continue;
+        end;
+      '\':
+        if posix and
+           (state * [sInSQ, sBslash] = []) then
+          if sInDQ in state then
+          begin
+            case P^ of
+              '"', '\', '$', '`':
+                begin
+                  include(state, sBslash);
+                  continue;
+                end;
+            end;
+          end
+          else if P^ = #0 then
+          begin
+            include(result, pcHasEndingBackSlash);
+            exit;
+          end
+          else
+          begin
+            if D <> nil then
+              D^ := P^;
+            inc(P);
+          end;
+      '^':
+        if not posix and
+           (state * [sInSQ, sInDQ, sBslash] = []) then
+          if PWord(P)^ = $0a0d then
+          begin
+            inc(P, 2);
+            continue;
+          end
+          else if P^ = #0 then
+          begin
+            include(result, pcHasEndingBackSlash);
+            exit;
+          end
+          else
+          begin
+            if D <> nil then
+              D^ := P^;
+            inc(P);
+          end;
+      '''':
+        if posix and
+           not(sInDQ in state) then
+          if sInSQ in state then
+          begin
+            exclude(state, sInSQ);
+            continue;
+          end else if state = [] then
+          begin
+            if argv <> nil then
+            begin
+              argv[n] := D;
+              inc(n);
+              if n = high(argv^) then
+                exit;
+            end;
+            state := [sInSQ, sInArg];
+            continue;
+          end else if state = [sInArg] then
+          begin
+            state := [sInSQ, sInArg];
+            continue;
+          end;
+      '"':
+        if not(sInSQ in state) then
+          if sInDQ in state then
+          begin
+            exclude(state, sInDQ);
+            continue;
+          end else if state = [] then
+          begin
+            if argv <> nil then
+            begin
+              argv[n] := D;
+              inc(n);
+              if n = high(argv^) then
+                exit;
+            end;
+            state := [sInDQ, sInArg];
+            continue;
+          end
+          else if state = [sInArg] then
+          begin
+            state := [sInDQ, sInArg];
+            continue;
+          end;
+      '|', '<', '>':
+        if state * [sInSQ, sInDQ] = [] then
+          include(result, pcHasRedirection);
+      '&', ';':
+        if posix and
+           (state * [sInSQ, sInDQ] = []) then
+        begin
+          include(state, sSpecial);
+          include(result, pcHasJobControl);
+        end;
+      '`':
+        if posix and
+           (state * [sInSQ, sBslash] = []) then
+           include(result, pcHasSubCommand);
+      '(', ')':
+        if posix and
+           (state * [sInSQ, sInDQ] = []) then
+          include(result, pcHasParenthesis);
+      '$':
+        if posix and
+           (state * [sInSQ, sBslash] = []) then
+          if p^ = '(' then
+            include(result, pcHasSubCommand)
+          else
+            include(result, pcHasShellVariable);
+      '*', '?':
+        if posix and
+           (state * [sInSQ, sInDQ] = []) then
+          include(result, pcHasWildcard);
+    end;
+    exclude(state, sBslash);
+    if state = [] then
+    begin
+      if argv <> nil then
+      begin
+        argv[n] := D;
+        inc(n);
+        if n = high(argv^) then
+          exit;
+      end;
+      state := [sInArg];
+    end;
+    if D <> nil then
+      inc(D);
+  until false;
 end;
 
 

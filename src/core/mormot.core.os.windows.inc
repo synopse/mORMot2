@@ -1543,6 +1543,760 @@ begin
 end;
 
 
+{ ****************** Unix Daemon and Windows Service Support }
+
+const
+  _SERVICESTATE: array[TServiceState] of string[12] = (
+    'NotInstalled', 'Stopped', 'Starting', 'Stopping', 'Running',
+    'Resuming', 'Pausing', 'Paused', 'Error');
+
+function ToText(st: TServiceState): PShortString;
+begin
+  result := @_SERVICESTATE[st];
+end;
+
+
+{ TServiceController }
+
+constructor TServiceController.CreateNewService(
+  const TargetComputer, DatabaseName, Name, DisplayName, Path,
+  OrderGroup, Dependencies, Username, Password: string;
+  DesiredAccess, ServiceType, StartType, ErrorControl: DWORD);
+var
+  Exe: TFileName;
+  backupError: cardinal;
+begin
+  inherited Create;
+  if Path = '' then
+  begin
+    if Assigned(ServiceLog) then
+      ServiceLog(sllError,
+        'CreateNewService("%","%") with Path=""', [Name, DisplayName]);
+    exit;
+  end;
+  if TargetComputer = '' then
+    if GetDriveType(pointer(ExtractFileDrive(Path))) = DRIVE_REMOTE then
+    begin
+      Exe := ExpandUNCFileName(Path);
+      if (copy(Exe, 1, 12) <> '\\localhost\') or
+         (Exe[14] <> '$') then
+      begin
+        if Assigned(ServiceLog) then
+          ServiceLog(sllError,
+            'CreateNewService("%","%") on remote drive: Path="%" is %',
+            [Name, DisplayName, Path, Exe]);
+        exit;
+      end;
+      system.delete(Exe, 1, 12); // \\localhost\c$\... -> c:\...
+      Exe[2] := ':';
+    end
+    else
+      Exe := Path;
+  fName := RawUTF8(Name);
+  fSCHandle := OpenSCManager(
+    pointer(TargetComputer), pointer(DatabaseName), SC_MANAGER_ALL_ACCESS);
+  if fSCHandle = 0 then
+  begin
+    backupError := GetLastError;
+    if Assigned(ServiceLog) then
+      ServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
+        [TargetComputer, DatabaseName, fName]);
+    SetLastError(backupError);
+    exit;
+  end;
+  fHandle := CreateService(fSCHandle,
+    pointer(Name), pointer(DisplayName), DesiredAccess, ServiceType, StartType,
+    ErrorControl, pointer(Exe), pointer(OrderGroup), nil, pointer(Dependencies),
+    pointer(Username), pointer(Password));
+  if fHandle = 0 then
+  begin
+    backupError := GetLastError;
+    if Assigned(ServiceLog) then
+      ServiceLog(sllLastError,
+        'CreateService("%","%","%")', [Name, DisplayName, Path]);
+    SetLastError(backupError);
+  end;
+end;
+
+constructor TServiceController.CreateOpenService(
+  const TargetComputer, DataBaseName, Name: string; DesiredAccess: DWORD);
+var
+  backupError: cardinal;
+begin
+  inherited Create;
+  fName := RawUTF8(Name);
+  fSCHandle := OpenSCManager(
+    pointer(TargetComputer), pointer(DataBaseName), GENERIC_READ);
+  if fSCHandle = 0 then
+  begin
+    backupError := GetLastError;
+    if Assigned(ServiceLog) then
+      ServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
+        [TargetComputer, DataBaseName, fName]);
+    SetLastError(backupError);
+    exit;
+  end;
+  fHandle := OpenService(fSCHandle, pointer(Name), DesiredAccess);
+  if fHandle = 0 then
+  begin
+    backupError := GetLastError;
+    if Assigned(ServiceLog) then
+      ServiceLog(sllLastError, 'OpenService("%")', [Name]);
+    SetLastError(backupError);
+  end;
+end;
+
+function TServiceController.Delete: boolean;
+begin
+  Result := FALSE;
+  if fHandle <> 0 then
+    if DeleteService(fHandle) then
+    begin
+      Result := CloseServiceHandle(fHandle);
+      fHandle := 0;
+    end
+    else if Assigned(ServiceLog) then
+      ServiceLog(sllLastError, 'DeleteService("%")', [fName]);
+end;
+
+destructor TServiceController.Destroy;
+begin
+  if fHandle <> 0 then
+    CloseServiceHandle(fHandle);
+  if fSCHandle <> 0 then
+    CloseServiceHandle(fSCHandle);
+  inherited;
+end;
+
+function TServiceController.GetState: TServiceState;
+begin
+  if (self = nil) or
+     (fSCHandle = 0) or
+     (fHandle = 0) then
+    result := ssNotInstalled
+  else
+    result := CurrentStateToServiceState(Status.dwCurrentState);
+  if Assigned(ServiceLog) then
+    ServiceLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]]);
+end;
+
+function TServiceController.GetStatus: TServiceStatus;
+begin
+  FillChar(fStatus, Sizeof(fStatus), 0);
+  QueryServiceStatus(fHandle, fStatus);
+  Result := fStatus;
+end;
+
+function TServiceController.Pause: boolean;
+begin
+  Result := ControlService(fHandle, SERVICE_CONTROL_PAUSE, fStatus);
+end;
+
+function TServiceController.Refresh: boolean;
+begin
+  Result := ControlService(fHandle, SERVICE_CONTROL_INTERROGATE, fStatus);
+end;
+
+function TServiceController.Resume: boolean;
+begin
+  Result := ControlService(fHandle, SERVICE_CONTROL_CONTINUE, fStatus);
+end;
+
+function TServiceController.Shutdown: boolean;
+begin
+  Result := ControlService(fHandle, SERVICE_CONTROL_SHUTDOWN, fStatus);
+end;
+
+function TServiceController.Start(const Args: array of PChar): boolean;
+begin
+  if length(Args) = 0 then
+    Result := StartService(fHandle, 0, nil)
+  else
+    Result := StartService(fHandle, length(Args), @Args[0]);
+end;
+
+function TServiceController.Stop: boolean;
+begin
+  Result := ControlService(fHandle, SERVICE_CONTROL_STOP, fStatus);
+end;
+
+procedure TServiceController.SetDescription(const Description: string);
+var
+  desc: SynUnicode;
+begin
+  if Description = '' then
+    exit;
+  desc := SynUnicode(Description);
+  ChangeServiceConfig2(fHandle, SERVICE_CONFIG_DESCRIPTION, @desc);
+end;
+
+class procedure TServiceController.CheckParameters(const ExeFileName: TFileName;
+  const ServiceName, DisplayName, Description, Dependencies: string);
+var
+  param: string;
+  i: integer;
+
+  procedure ShowError(const Msg: RawUTF8);
+  begin
+    if Assigned(ServiceLog) then
+      ServiceLog(sllLastError, 'During % for %', [Msg, param]);
+    if not IsConsole then
+      exit;
+    {$I-} // ignore if no console has been allocated
+    writeln(ServiceName, ': Error "', Msg, '" for ', param);
+    ioresult;
+    {$I+}
+  end;
+
+begin
+  for i := 1 to ParamCount do
+  begin
+    param := SysUtils.LowerCase(paramstr(i));
+    if Assigned(ServiceLog) then
+      ServiceLog(sllInfo, 'Controling % with command [%]', [ServiceName, param]);
+    if param = '/install' then
+      TServiceController.Install(
+        ServiceName, DisplayName, Description, true, ExeFileName, Dependencies)
+    else
+      with TServiceController.CreateOpenService('', '', ServiceName) do
+      try
+        if State = ssErrorRetrievingState then
+          ShowError('State')
+        else if param = '/uninstall' then
+        begin
+          if not Stop then
+            ShowError('Stop');
+          if not Delete then
+            ShowError('Delete');
+        end
+        else if param = '/stop' then
+        begin
+          if not Stop then
+            ShowError('Stop');
+        end
+        else if param = '/start' then
+        begin
+          if not Start([]) then
+            ShowError('Start');
+        end;
+      finally
+        Free;
+      end;
+  end;
+end;
+
+class function TServiceController.Install(
+  const Name, DisplayName, Description: string;
+  AutoStart: boolean; ExeName: TFileName; Dependencies: string): TServiceState;
+var
+  ctrl: TServiceController;
+  start: DWORD;
+begin
+  if AutoStart then
+    start := SERVICE_AUTO_START
+  else
+    start := SERVICE_DEMAND_START;
+  if ExeName = '' then
+    ExeName := ExeVersion.ProgramFileName;
+  ctrl := TServiceController.CreateNewService(
+    '', '', Name, DisplayName, ExeName, '', Dependencies, '', '',
+    SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS, start);
+  try
+    result := ctrl.State;
+    if result <> ssNotInstalled then
+      ctrl.SetDescription(Description);
+  finally
+    ctrl.Free;
+  end;
+end;
+
+
+{ TService }
+
+constructor TService.Create(const aServiceName, aDisplayName: string);
+begin
+  fSName := aServiceName;
+  fDName := aDisplayName;
+  if aDisplayName = '' then
+    fDName := aServiceName;
+  fServiceType := SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
+  fStartType := SERVICE_AUTO_START;
+  fStatusRec.dwServiceType := fServiceType;
+  fStatusRec.dwCurrentState := SERVICE_STOPPED;
+  fStatusRec.dwControlsAccepted := 31;
+  fStatusRec.dwWin32ExitCode := NO_ERROR;
+  if Assigned(ServiceLog) then
+    ServiceLog(sllInfo, 'Create: % (%) running as [%]',
+      [ServiceName, aDisplayName, ExeVersion.ProgramFullSpec]);
+end;
+
+procedure TService.CtrlHandle(Code: DWORD);
+begin
+  DoCtrlHandle(Code);
+end;
+
+procedure TService.DoCtrlHandle(Code: DWORD);
+begin
+  if Assigned(ServiceLog) then
+    ServiceLog(sllInfo, '%: command % received from OS', [ServiceName, Code]);
+  try
+    case Code of
+      SERVICE_CONTROL_STOP:
+        begin
+          ReportStatus(SERVICE_STOP_PENDING, NO_ERROR, 0);
+          try
+            if Assigned(fOnStop) then
+              fOnStop(Self);
+            ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
+          except
+            ReportStatus(SERVICE_STOPPED, ERROR_CAN_NOT_COMPLETE, 0);
+          end;
+        end;
+      SERVICE_CONTROL_PAUSE:
+        begin
+          ReportStatus(SERVICE_PAUSE_PENDING, NO_ERROR, 0);
+          try
+            if Assigned(fOnPause) then
+              fOnPause(Self);
+            ReportStatus(SERVICE_PAUSED, NO_ERROR, 0)
+          except
+            ReportStatus(SERVICE_PAUSED, ERROR_CAN_NOT_COMPLETE, 0)
+          end;
+        end;
+      SERVICE_CONTROL_CONTINUE:
+        begin
+          ReportStatus(SERVICE_CONTINUE_PENDING, NO_ERROR, 0);
+          try
+            if Assigned(fOnResume) then
+              fOnResume(Self);
+            ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
+          except
+            ReportStatus(SERVICE_RUNNING, ERROR_CAN_NOT_COMPLETE, 0);
+          end;
+        end;
+      SERVICE_CONTROL_SHUTDOWN:
+        begin
+          if Assigned(fOnShutdown) then
+            fOnShutdown(Self);
+          Code := 0;
+        end;
+      SERVICE_CONTROL_INTERROGATE:
+        begin
+          SetServiceStatus(fStatusHandle, fStatusRec);
+          if Assigned(fOnInterrogate) then
+            fOnInterrogate(Self);
+        end;
+    end;
+    if Assigned(fOnControl) then
+      fOnControl(Self, Code);
+  except
+  end;
+  if Assigned(ServiceLog) then
+    ServiceLog(sllInfo, '%: command % finished', [ServiceName, Code]);
+end;
+
+procedure TService.Execute;
+begin
+  try
+    if Assigned(fOnStart) then
+      fOnStart(@Self);
+    ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
+    if Assigned(fOnExecute) then
+      fOnExecute(@Self);
+  except
+    ReportStatus(SERVICE_RUNNING, ERROR_CAN_NOT_COMPLETE, 0);
+  end;
+end;
+
+function TService.GetArgCount: Integer;
+begin
+  result := length(fArgsList);
+end;
+
+function TService.GetArgs(Idx: Integer): string;
+begin
+  if cardinal(Idx) > cardinal(high(fArgsList)) then
+    result := ''
+  else
+    // avoid GPF
+    result := fArgsList[Idx];
+end;
+
+function TService.GetControlHandler: TServiceControlHandler;
+begin
+  Result := fControlHandler;
+  if not Assigned(Result) then
+    if Assigned(ServiceLog) then
+      ServiceLog(sllError, '%.GetControlHandler with ControlHandler=nil: ' +
+        'use TServiceSingle or assign a custom ControlHandler', [self]);
+end;
+
+function TService.GetInstalled: boolean;
+begin
+  with TServiceController.CreateOpenService(
+    '', '', fSName, SERVICE_QUERY_STATUS) do
+  try
+    result := Handle <> 0;
+  finally
+    Free;
+  end;
+end;
+
+function TService.Install(const Params: string): boolean;
+var
+  schService: SC_HANDLE;
+  schSCManager: SC_HANDLE;
+  ServicePath: TFileName;
+begin
+  result := false;
+  if installed then
+    exit;
+  ServicePath := ExeVersion.ProgramFileName;
+  if Params <> '' then
+    ServicePath := ServicePath + ' ' + Params;
+  schSCManager := OpenSCManager(nil, nil, SC_MANAGER_ALL_ACCESS);
+  if schSCManager > 0 then
+  begin
+    schService := CreateService(schSCManager, pointer(fSName), pointer(fDName),
+      SERVICE_ALL_ACCESS, fServiceType, fStartType, SERVICE_ERROR_NORMAL,
+      pointer(ServicePath), nil, nil, nil, nil, nil);
+    if schService > 0 then
+    begin
+      result := true;
+      CloseServiceHandle(schService);
+    end;
+  end;
+end;
+
+procedure TService.Remove;
+begin
+  with TServiceController.CreateOpenService(
+    '', '', fSName, SERVICE_ALL_ACCESS) do
+  try
+    if Handle = 0 then
+      exit;
+    Stop;
+    Delete;
+  finally
+    Free;
+  end;
+end;
+
+function TService.ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
+var
+  status: string;
+begin
+  status := ServiceStateText(CurrentStateToServiceState(dwState));
+  if Assigned(ServiceLog) then
+    ServiceLog(sllInfo, '% ReportStatus(%,%,%)', 
+      [ServiceName, status, dwExitCode, dwWait]);
+  if dwState = SERVICE_START_PENDING then
+    fStatusRec.dwControlsAccepted := 0
+  else
+    fStatusRec.dwControlsAccepted := 31;
+  fStatusRec.dwCurrentState := dwState;
+  fStatusRec.dwWin32ExitCode := dwExitCode;
+  fStatusRec.dwWaitHint := dwWait;
+  if (dwState = SERVICE_RUNNING) or
+     (dwState = SERVICE_STOPPED) then
+    fStatusRec.dwCheckPoint := 0
+  else
+    inc(fStatusRec.dwCheckPoint);
+  result := SetServiceStatus(fStatusHandle, fStatusRec);
+  if not result then
+    if Assigned(ServiceLog) then
+      ServiceLog(sllLastError, '% ReportStatus(%,%,%)',
+        [ServiceName, status, dwExitCode, dwWait]);
+end;
+
+procedure TService.SetControlHandler(const Value: TServiceControlHandler);
+begin
+  fControlHandler := Value;
+end;
+
+procedure TService.SetStatus(const Value: TServiceStatus);
+begin
+  fStatusRec := Value;
+  if fStatusHandle <> 0 then
+    SetServiceStatus(fStatusHandle, fStatusRec);
+end;
+
+procedure TService.start;
+begin
+  with TServiceController.CreateOpenService(
+    '', '', fSName, SERVICE_ALL_ACCESS) do
+  try
+    start([]);
+  finally
+    Free;
+  end;
+end;
+
+procedure TService.Stop;
+begin
+  with TServiceController.CreateOpenService(
+    '', '', fSName, SERVICE_ALL_ACCESS) do
+  try
+    Stop;
+  finally
+    Free;
+  end;
+end;
+
+function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
+begin
+  case CurrentState of
+    SERVICE_STOPPED:
+      result := ssStopped;
+    SERVICE_START_PENDING:
+      result := ssStarting;
+    SERVICE_STOP_PENDING:
+      result := ssStopping;
+    SERVICE_RUNNING:
+      result := ssRunning;
+    SERVICE_CONTINUE_PENDING:
+      result := ssResuming;
+    SERVICE_PAUSE_PENDING:
+      result := ssPausing;
+    SERVICE_PAUSED:
+      result := ssPaused;
+  else
+    // e.g. SERVICE_CONTROL_SHUTDOWN
+    result := ssNotInstalled;
+  end;
+end;
+
+function ServiceStateText(State: TServiceState): string;
+var
+  P: PShortString;
+begin
+  P := @_SERVICESTATE[State];
+  result := string(copy(P^, 3, length(P^) - 2));
+end;
+
+function GetServicePid(const aServiceName: string): DWORD;
+var
+  ssp: TServiceStatusProcess;
+  scm: THandle;
+  svc: THandle;
+  size: DWORD;
+begin
+  result := 0;
+  scm := OpenSCManager(nil, nil, SC_MANAGER_CONNECT);
+  if scm <> 0 then
+  try
+    svc := OpenService(scm, pointer(aServiceName), SERVICE_QUERY_STATUS);
+    if svc <> 0 then
+    try
+      if QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
+          @ssp, SizeOf(TServiceStatusProcess), size) then
+        result := ssp.dwProcessId
+      else if Assigned(ServiceLog) then
+        ServiceLog(sllLastError, '', []);
+    finally
+      CloseServiceHandle(svc);
+    end;
+  finally
+    CloseServiceHandle(scm);
+  end;
+end;
+
+function KillProcess(pid: DWORD; waitseconds: integer): boolean;
+var
+  ph: THandle;
+begin
+  ph := OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE, false, pid);
+  result := ph <> 0;
+  if result then
+  begin
+    try
+      result := TerminateProcess(ph, 0) and
+                (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
+    finally
+      CloseHandle(ph);
+    end;
+  end;
+end;
+
+{  function that a service process specifies as the entry point function
+   of a particular service. The function can have any application-defined name
+  - Args points to an array of pointers that point to null-terminated
+    argument strings. The first argument in the array is the name of the service,
+    and subsequent arguments are any strings passed to the service by the process
+    that called the StartService function to start the service.  }
+    
+procedure ServiceProc(ArgCount: DWORD; Args: PPChar); stdcall;
+var
+  i: integer;
+begin
+  if not Assigned(ServiceSingle) then
+    exit;
+  for i := 1 to ArgCount - 1 do
+  begin
+    Inc(Args);
+    SetLength(ServiceSingle.fArgsList, length(ServiceSingle.fArgsList) + 1);
+    ServiceSingle.fArgsList[high(ServiceSingle.fArgsList)] := Args^;
+  end;
+  ServiceSingle.fStatusHandle := RegisterServiceCtrlHandler(
+    pointer(ServiceSingle.fSName), @ServiceSingle.ControlHandler);
+  if ServiceSingle.fStatusHandle = 0 then
+  begin
+    ServiceSingle.ReportStatus(SERVICE_STOPPED, GetLastError, 0);
+    exit;
+  end;
+  ServiceSingle.ReportStatus(SERVICE_START_PENDING, 0, 0);
+  ServiceSingle.Execute;
+end;
+
+function ServiceSingleRun: boolean;
+var
+  S: array[0..1] of TServiceTableEntry;
+begin
+  if ServiceSingle = nil then
+  begin
+    result := false;
+    exit;
+  end;
+  S[0].lpServiceName := pointer(ServiceSingle.ServiceName);
+  S[0].lpServiceProc := ServiceProc;
+  S[1].lpServiceName := nil;
+  S[1].lpServiceProc := nil;
+  { TODO : disable EExternal exception logging in ServicesSingleRun? }
+  result := StartServiceCtrlDispatcher(@S);
+end;
+
+
+{ TServiceSingle }
+
+procedure SingleServiceControlHandler(Opcode: LongWord); stdcall;
+begin
+  if ServiceSingle <> nil then
+    ServiceSingle.DoCtrlHandle(Opcode);
+end;
+
+constructor TServiceSingle.Create(const aServiceName, aDisplayName: string);
+begin
+  if ServiceSingle <> nil then
+    raise EOSException.Create('Only one TServiceSingle is allowed at a time');
+  inherited Create(aServiceName, aDisplayName);
+  ServiceSingle := self;
+  ControlHandler := SingleServiceControlHandler;
+end;
+
+destructor TServiceSingle.Destroy;
+begin
+  try
+    inherited;
+  finally
+    ServiceSingle := nil;
+  end;
+end;
+
+// redefined here so that we can share code with FPC and Delphi
+function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
+   lpProcessAttributes, lpThreadAttributes: PSecurityAttributes;
+   bInheritHandles: BOOL; dwCreationFlags: DWORD; lpEnvironment: Pointer;
+   lpCurrentDirectory: PWideChar; const lpStartupInfo: TStartupInfo;
+   out lpProcessInformation: TProcessInformation): BOOL;
+  stdcall; external kernel32;
+
+function GetExitCodeProcess(hProcess: THandle; out lpExitCode: DWORD): BOOL;
+  stdcall; external kernel32;
+
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2, arg3, arg4, arg5, env: TFileName; envaddexisting: boolean): integer;
+begin
+  result := RunCommand(Format('"%s" %s %s %s %s %s',
+    [path, arg1, arg2, arg3, arg4, arg5]), waitfor, env, envaddexisting);
+end;
+
+var
+  EnvironmentCache: SynUnicode;
+
+function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
+  envaddexisting: boolean; parsed: PParseCommands): integer;
+var
+  startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
+  processinfo: TProcessInformation;
+  path: TFileName;
+  wcmd, wenv, wpath: SynUnicode;
+  e, p: PWideChar;
+  exitcode: DWORD;
+  i: integer;
+begin
+  // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
+  result := -1;
+  if cmd = '' then
+    exit;
+  // CreateProcess can alter the strings -> use local SynUnicode temp variable
+  wcmd := SynUnicode(cmd);
+  UniqueString(wcmd);
+  if cmd[1] = '"' then
+  begin
+    path := copy(cmd, 2, maxInt);
+    i := Pos('"', path);
+    if i = 0 then
+      exit;
+    SetLength(path, i - 1); // unquote "path" string
+  end
+  else
+  begin
+    i := Pos(' ', cmd);
+    if i <= 1 then
+      exit;
+    path := copy(cmd, 1, i - 1);
+  end;
+  path := ExtractFilePath(path);
+  if path = '' then
+    path := ExeVersion.ProgramFilePath;
+  wpath := SynUnicode(path);
+  if env <> '' then
+  begin
+    wenv := SynUnicode(env);
+    if envaddexisting then
+    begin
+      GlobalLock;
+      if EnvironmentCache = '' then
+      begin
+        e := GetEnvironmentStringsW;
+        p := e;
+        while p^ <> #0 do
+          inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
+        SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+        FreeEnvironmentStringsW(e);
+      end;
+      wenv := EnvironmentCache + wenv;
+      GlobalUnLock;
+    end
+    else
+      UniqueString(wenv);
+  end;
+  FillCharFast(startupinfo, SizeOf(startupinfo), 0);
+  startupinfo.cb := SizeOf(startupinfo);
+  FillCharFast(processinfo, SizeOf(processinfo), 0);
+  // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
+  if CreateProcessW(nil, pointer(wcmd), nil, nil, false,
+    CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
+    DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
+    pointer(wenv), pointer(wpath), startupinfo, processinfo) then
+  begin
+    if waitfor then
+      if WaitForSingleObject(processinfo.hProcess, INFINITE) = WAIT_FAILED then
+        result := -GetLastError
+      else if not GetExitCodeProcess(processinfo.hProcess, exitcode) then
+        result := -GetLastError
+      else
+        result := exitcode
+    else
+      result := 0;
+    CloseHandle(processinfo.hProcess);
+    CloseHandle(processinfo.hThread);
+  end
+  else
+    result := -GetLastError;
+end;
+
+
 { ****************** Gather Operating System Information }
 
 const
