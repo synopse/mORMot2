@@ -1974,7 +1974,7 @@ type
   /// compute the HMAC message authentication code using crc32c as hash function
   // - HMAC over a non cryptographic hash function like crc32c is known to be a
   // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
-  // - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+  // - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
   // - you may use HMAC_CRC32C() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute()
@@ -2013,19 +2013,19 @@ type
 /// compute the HMAC message authentication code using crc32c as hash function
 // - HMAC over a non cryptographic hash function like crc32c is known to be a
 // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
-// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
 function HMAC_CRC32C(key, msg: pointer; keylen, msglen: integer): cardinal; overload;
 
 /// compute the HMAC message authentication code using crc32c as hash function
 // - HMAC over a non cryptographic hash function like crc32c is known to be a
 // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
-// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
 function HMAC_CRC32C(const key: THash256; const msg: RawByteString): cardinal; overload;
 
 /// compute the HMAC message authentication code using crc32c as hash function
 // - HMAC over a non cryptographic hash function like crc32c is known to be a
 // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
-// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+// - SSE 4.2 will let MAC be computed at 13 GB/s on a Core i7 / x86_64
 function HMAC_CRC32C(const key, msg: RawByteString): cardinal; overload;
 
 

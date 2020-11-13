@@ -4293,8 +4293,8 @@ type
     /// the field size in bytes; -1 means not computed yet
     ContentSize: integer;
     /// the field low-level RTTI information
-    // - is the PRttiInfo for oftBlobDynArray/oftNullable, PRttiEnumType for
-    // oftEnumerate/oftSet, or nil
+    // - is a PRttiInfo for oftBlobDynArray/oftNullable,
+    // or is a PRttiEnumType for oftEnumerate/oftSet, or nil
     ContentTypeInfo: pointer;
     /// the corresponding index in fQueryTables[]
     TableIndex: integer;

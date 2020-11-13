@@ -2552,7 +2552,7 @@ function EventEquals(const eventA, eventB): boolean;
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
 
 type
-  /// implements a stack-based storage of some (UTF-8 or binary) content
+  /// implements a 4KB stack-based storage of some (UTF-8 or binary) content
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of data
@@ -2582,9 +2582,10 @@ type
     /// initialize a temporary buffer with the length of the internal stack
     function InitOnStack: pointer;
     /// initialize the buffer returning the internal buffer size (4080 bytes)
+    // - also set len to the internal buffer size
     // - could be used e.g. for an API call, first trying with plain temp.Init
     // and using temp.buf and temp.len safely in the call, only calling
-    // temp.Init(expectedsize) if the API returned an error about an insufficient
+    // temp.Init(expectedsize) if the API returned an error about insufficient
     // buffer space
     function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes

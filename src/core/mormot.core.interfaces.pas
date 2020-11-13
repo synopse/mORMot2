@@ -143,6 +143,7 @@ type
     /// the type name, as declared in object pascal
     ArgTypeName: PShortString;
     /// the low-level RTTI information of this argument
+    // - use ArgRtti.Info to retrieve the TypeInfo() of this argument
     ArgRtti: TRttiJson;
     /// we do not handle all kind of object pascal variables
     ValueType: TInterfaceMethodValueType;
@@ -3926,8 +3927,8 @@ begin
     raise EInterfaceFactory.Create('TInterfaceFactory(nil).CheckMethodIndex');
   result := FindMethodIndex(aMethodName);
   if result < 0 then
-    raise EInterfaceFactory.CreateUTF8('%.CheckMethodIndex: %.% not found', [self,
-      fInterfaceName, aMethodName]);
+    raise EInterfaceFactory.CreateUTF8('%.CheckMethodIndex: %.% not found',
+      [self, fInterfaceName, aMethodName]);
 end;
 
 function TInterfaceFactory.CheckMethodIndex(aMethodName: PUTF8Char): integer;

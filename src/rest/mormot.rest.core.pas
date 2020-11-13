@@ -98,9 +98,11 @@ type
 
 
 const
-  // log up to 2 KB of JSON response, to save space
+  /// size in bytes, to log up to 2 KB of JSON response, to save space
   MAX_SIZE_RESPONSE_LOG = 2 shl 10;
 
+  /// you can use this cookie value to delete a cookie on the browser side
+  COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
 
 
 { ************ TRestBackgroundTimer for Multi-Thread Process }

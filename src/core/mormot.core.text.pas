@@ -1104,7 +1104,8 @@ type
       WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
-    procedure AddTypedJSON(Value, TypeInfo: pointer;
+    // - TypeInfo is a PRttiInfo instance - but not available in this early unit
+    procedure AddTypedJSON(Value: pointer; TypeInfo: pointer;
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
 
     /// serialize as JSON the given object

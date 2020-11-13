@@ -416,7 +416,7 @@ type
     // - thread-safe method
     procedure ProcessStartTask; virtual;
     /// should be called when an error occurred
-    // - typical use is with ObjectToVariantDebug(E,...) kind of information
+    // - typical use is with ObjectToVariant(E,...) kind of information
     // - thread-safe method
     procedure ProcessError(const info: variant); virtual;
     /// should be called when an error occurred
