@@ -349,6 +349,17 @@ type
     // - return the first one if Value is invalid (>MaxValue)
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetCaption(const Value): string;
+    /// get all caption names, ready to be display, as lines separated by #13#10
+    // - return "string" type, i.e. UnicodeString for Delphi 2009+
+    // - if UsedValuesBits is not nil, only the corresponding bits set are added
+    function GetCaptionStrings(UsedValuesBits: pointer = nil): string;
+    /// add caption names, ready to be display, to a TStrings class
+    // - add pointer(ord(element)) as Objects[] value
+    // - if UsedValuesBits is not nil, only the corresponding bits set are added
+    // - can be used e.g. to populate a combo box as such:
+    // ! PTypeInfo(TypeInfo(TMyEnum))^.EnumBaseType^.AddCaptionStrings(ComboBox.Items);
+    procedure AddCaptionStrings(Strings: TStrings;
+      UsedValuesBits: pointer = nil);
     /// retrieve all element names as a dynamic array of RawUTF8
     // - names could be optionally trimmed left from their initial lower chars
     procedure GetEnumNameAll(var result: TRawUTF8DynArray;
@@ -2384,6 +2395,63 @@ end;
 function TRttiEnumType.GetCaption(const Value): string;
 begin
   GetCaptionFromTrimmed(GetEnumNameOrd(FromRttiOrd(RttiOrd, @Value)), result);
+end;
+
+procedure TRttiEnumType.AddCaptionStrings(Strings: TStrings;
+  UsedValuesBits: Pointer);
+var
+  i, L: PtrInt;
+  Line: array[byte] of AnsiChar;
+  P: PAnsiChar;
+  V: PShortString;
+  s: string;
+begin
+  if @self = nil then
+    exit;
+  Strings.BeginUpdate;
+  try
+    V := NameList;
+    for i := MinValue to MaxValue do
+    begin
+      if (UsedValuesBits = nil) or
+         GetBitPtr(UsedValuesBits, i) then
+      begin
+        L := ord(V^[0]);
+        P := @V^[1];
+        while (L > 0) and
+              (P^ in ['a'..'z']) do
+        begin // ignore left lowercase chars
+          inc(P);
+          dec(L);
+        end;
+        if L = 0 then
+        begin
+          L := ord(V^[0]);
+          P := @V^[1];
+        end;
+        Line[L] := #0; // GetCaptionFromPCharLen() expect it as ASCIIZ
+        MoveFast(P^, Line, L);
+        GetCaptionFromPCharLen(Line, s);
+        Strings.AddObject(s, pointer(i));
+      end;
+      inc(PByte(V), length(V^)+1);
+    end;
+  finally
+    Strings.EndUpdate;
+  end;
+end;
+
+function TRttiEnumType.GetCaptionStrings(UsedValuesBits: pointer): string;
+var
+  List: TStringList;
+begin
+  List := TStringList.Create;
+  try
+    AddCaptionStrings(List, UsedValuesBits);
+    result := List.Text;
+  finally
+    List.Free;
+  end;
 end;
 
 procedure TRttiEnumType.GetEnumNameAll(var result: TRawUTF8DynArray;
@@ -4688,7 +4756,8 @@ var
   p: PRttiInfo;
   n: PtrInt;
   fin: PRttiFinalizers;
-begin // caller ensured Info is indeed a record/object
+begin
+  // caller ensured Info is indeed a record/object
   Info.RecordManagedFields(fields);
   n := fields.Count;
   if n > 0 then
@@ -4762,9 +4831,11 @@ begin
       MoveFast(Source^, Dest^, ItemSize * SourceCount)
     else
     if ItemInfo^.Kind in rkRecordTypes then
+      // retrieve record/object RTTI once for all items
       _RecordCopySeveral(pointer(Dest), pointer(Source), SourceCount, ItemInfo)
     else
     begin
+      // loop the TRttiCopier function over all items
       cop := RTTI_COPY[ItemInfo^.Kind];
       if Assigned(cop) then
         repeat
@@ -4966,33 +5037,42 @@ begin
   vt := Source^.VType;
   PCardinal(Dest)^ := vt;
   if vt > varNull then
+    // varEmpty,varNull need no copy
     if vt <= varWord64 then
+      // most used types
       if (vt < varOleStr) or
          (vt > varError) then
-raw:    Dest^.VInt64 := Source^.VInt64 // will copy any simple value
+raw:    // copy any simple value (e.g. ordinal, varByRef)
+        Dest^.VInt64 := Source^.VInt64
       else if vt = varOleStr then
       begin
+        // copy WideString with reference counting
         Dest^.VAny := nil;
         WideString(Dest^.VAny) := WideString(Source^.VAny)
       end
       else
-        goto rtl // varError, varDispatch
+        // varError, varDispatch
+        goto rtl
     else if vt = varString then
     begin
+      // copy AnsiString with reference counting
       Dest^.VAny := nil;
       RawByteString(Dest^.VAny) := RawByteString(Source^.VAny)
     end
     else if vt >= varByRef then
-      goto raw // varByRef has no refcount
+      // varByRef has no refcount
+      goto raw
     {$ifdef HASVARUSTRING}
     else if vt = varUString then
     begin
+      // copy UnicodeString with reference counting
       Dest^.VAny := nil;
       UnicodeString(Dest^.VAny) := UnicodeString(Source^.VAny)
     end
     {$endif HASVARUSTRING}
     else
-rtl:  VarCopyProc(Dest^, Source^); // will handle any complex type
+rtl:  // copy any complex type via the RTL function of the variants unit
+      VarCopyProc(Dest^, Source^);
   result := SizeOf(Source^);
 end;
 
@@ -5172,7 +5252,8 @@ begin
       else
         exit;
   end;
-  case Info^.Kind of // FPC and Delphi will use a fast jmp table
+  case Info^.Kind of
+    // FPC and Delphi will use a fast jmp table
     {$ifdef FPC} rkLStringOld, {$endif} rkLString:
     begin
       cp := Info^.AnsiStringCodePage;
@@ -5385,7 +5466,8 @@ begin
           if (ElemInfo = nil) or
              (ElemInfo^.Kind in rkRecordTypes) then
             continue; // nested records
-          result := TypeInfoToStandardParserType(ElemInfo, {fromname=}true, Complex);
+          result := TypeInfoToStandardParserType(
+            ElemInfo, {fromname=}true, Complex);
           if result = ptNone then
           begin
             ElemInfo := nil;

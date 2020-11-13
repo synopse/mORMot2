@@ -1831,6 +1831,15 @@ procedure ObjectToVariant(Value: TObject; var result: variant;
 // - convenient overloaded function to include woEnumSetsAsText option
 function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant; overload;
 
+/// will serialize any TObject into a TDocVariant debugging document
+// - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
+// "Context":"..." text message
+// - if the supplied context format matches '{....}' then it will be added
+// as a corresponding TDocVariant JSON object
+function ObjectToVariantDebug(Value: TObject;
+  const ContextFormat: RawUTF8; const ContextArgs: array of const;
+  const ContextName: RawUTF8 = 'context'): variant; overload;
+
 /// get the enumeration names corresponding to a set value, as a JSON array
 function SetNameToVariant(Value: cardinal; Info: TRttiCustom;
   FullSetsAsStar: boolean = false): variant;
@@ -3461,6 +3470,20 @@ const
      [woDontStoreDefault], [woDontStoreDefault, woEnumSetsAsText]);
 begin
   ObjectToVariant(Value, result, OPTIONS[EnumSetsAsText]);
+end;
+
+function ObjectToVariantDebug(Value: TObject;
+  const ContextFormat: RawUTF8; const ContextArgs: array of const;
+  const ContextName: RawUTF8): variant;
+begin
+  _Json(ObjectToJSON(Value), result, JSON_OPTIONS_FAST);
+  if ContextFormat <> '' then
+    if ContextFormat[1] = '{' then
+      _ObjAddProps([ContextName,
+        _JsonFastFmt(ContextFormat, [], ContextArgs)], result)
+    else
+      _ObjAddProps([ContextName,
+        FormatUTF8(ContextFormat, ContextArgs)], result);
 end;
 
 procedure ObjectToVariant(Value: TObject; var result: variant;
