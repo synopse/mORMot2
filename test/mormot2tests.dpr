@@ -70,6 +70,7 @@ uses
   mormot.rest.sqlite3      in '..\src\rest\mormot.rest.sqlite3.pas',
   mormot.rest.http.client  in '..\src\rest\mormot.rest.http.client.pas',
   mormot.rest.http.server  in '..\src\rest\mormot.rest.http.server.pas',
+  mormot.rest.mvc          in '..\src\rest\mormot.rest.mvc.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
   mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
   mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',

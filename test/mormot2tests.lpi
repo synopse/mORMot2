@@ -538,7 +538,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="77">
+    <Units Count="78">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -847,6 +847,10 @@
         <Filename Value="..\src\soa\mormot.soa.codegen.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit76>
+      <Unit77>
+        <Filename Value="..\src\rest\mormot.rest.mvc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit77>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
