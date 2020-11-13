@@ -1095,6 +1095,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// class method which can be assigned to mormot.core.os' TOnDaemonLog
     // event handler, or used instead of Add.Log
+    // - will flush the content to disk and avoid any memory reallocation
+    // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
     class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUTF8;
       const Args: array of const; Instance: TObject = nil);
     /// Force log rotation; Can be used for example inside SUGHUP signal handler
@@ -3562,7 +3564,16 @@ begin
   log := Add;
   if (log <> nil) and
      (Level in log.fFamily.fLevel) then
+  begin
+    if Level = sllExceptionOS then
+      // don't make Out-Of-Memory any worse
+      log.Writer.CustomOptions := log.Writer.CustomOptions +
+        [twoFlushToStreamNoAutoResize];
     log.LogInternalFmt(Level, Fmt, Args, Instance);
+    if Level = sllExceptionOS then
+      // ensure all log is safely written
+      log.Flush({diskwrite=}true);
+  end;
 end;
 
 procedure TSynLog.ForceRotation;

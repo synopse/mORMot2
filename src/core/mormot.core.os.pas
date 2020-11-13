@@ -1843,7 +1843,7 @@ procedure GlobalUnLock;
 type
   /// callback definition used to log some event
   // - defined as TMethod to avoid dependency with the mormot.core.log unit
-  // - could be assigned to TSynLog.DoLog() class procedure
+  // - could be assigned from TSynLog.DoLog class procedure
   TOnDaemonLog = procedure(Level: TSynLogInfo; const Fmt: RawUTF8;
     const Args: array of const; Instance: TObject = nil) of object;
 
@@ -1988,6 +1988,7 @@ var
   /// you can set this global variable to TSynLog or TSQLLog to enable logging
   // - default is nil, i.e. disabling logging, since it may interfere with the
   // logging process of the service itself
+  // - can be assigned from TSynLog.DoLog class method for proper logging
   ServiceLog: TOnDaemonLog;
 
 type
@@ -2323,6 +2324,7 @@ function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 /// low-level function able to properly run or fork the current process
 // then execute the start/stop methods of a TSynDaemon / TDDDDaemon instance
 // - fork will create a local /run/[ProgramName]-[ProgramPathHash].pid file name
+// - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; const onlog: TOnDaemonLog = nil;
   const servicename: string = '');
@@ -2348,6 +2350,7 @@ var
 // SynDaemonTerminated variable, with an optional logged entry to log
 // - as called e.g. by RunUntilSigTerminated()
 // - you can call this method several times with no issue
+// - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure SynDaemonIntercept(const onlog: TOnDaemonLog = nil);
 
 {$endif MSWINDOWS}
