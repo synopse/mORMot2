@@ -2600,7 +2600,7 @@ type
     // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains() if possible
     // (this implementation will allocate each dynamic array into memory before
     // comparison, and will be therefore slower than those optimized versions)
-    constructor Create(aTypeInfo: pointer; aCompare: TDynArraySortCompare;
+    constructor Create(aTypeInfo: PRttiInfo; aCompare: TDynArraySortCompare;
       const aFunctionName: RawUTF8 = ''); reintroduce;
   end;
 
@@ -2900,7 +2900,7 @@ type
     // (this implementation will allocate each dynamic array into memory before
     // comparison, and will be therefore slower than those optimized versions -
     // but it will be always faster than Client-Server query, in all cases)
-    procedure RegisterSQLFunction(aDynArrayTypeInfo: pointer;
+    procedure RegisterSQLFunction(aDynArrayTypeInfo: PRttiInfo;
       aCompare: TDynArraySortCompare;
       const aFunctionName: RawUTF8 = ''); overload;
 
@@ -5281,7 +5281,7 @@ begin
     aFunction.CreateFunction(DB);
 end;
 
-procedure TSQLDataBase.RegisterSQLFunction(aDynArrayTypeInfo: pointer;
+procedure TSQLDataBase.RegisterSQLFunction(aDynArrayTypeInfo: PRttiInfo;
   aCompare: TDynArraySortCompare; const aFunctionName: RawUTF8);
 begin
   RegisterSQLFunction(TSQLDataBaseSQLFunctionDynArray.Create(aDynArrayTypeInfo,
@@ -6090,7 +6090,7 @@ begin
   sqlite3.result_int64(Context, Int64(P <> nil));
 end;
 
-constructor TSQLDataBaseSQLFunctionDynArray.Create(aTypeInfo: pointer;
+constructor TSQLDataBaseSQLFunctionDynArray.Create(aTypeInfo: PRttiInfo;
   aCompare: TDynArraySortCompare; const aFunctionName: RawUTF8);
 begin
   fDummyDynArray.Init(aTypeInfo, fDummyDynArrayValue);

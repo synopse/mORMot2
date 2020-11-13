@@ -704,7 +704,7 @@ type
       Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// same as AddDynArrayJSON(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
-    procedure AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue;
+    procedure AddDynArrayJSONAsString(aTypeInfo: PRttiInfo; var aValue;
       WriteOptions: TTextWriterWriteObjectOptions = []);
     /// append a JSON field name, followed by an escaped UTF-8 JSON String and
     // a comma (',')
@@ -1045,8 +1045,8 @@ type
     // - returns true and set aEnum if aName was found, and associated value
     // matched an aEnumTypeInfo item
     // - returns false if no match was found
-    function ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer; out aEnum;
-      aEnumDefault: byte = 0): boolean; overload;
+    function ValueEnum(const aName: RawUTF8; aEnumTypeInfo: PRttiInfo;
+      out aEnum; aEnumDefault: byte = 0): boolean; overload;
     /// returns all values, as CSV or INI content
     function AsCSV(const KeySeparator: RawUTF8 = '=';
       const ValueSeparator: RawUTF8 = #13#10; const IgnoreKey: RawUTF8 = ''): RawUTF8;
@@ -1356,7 +1356,7 @@ type
     // aKeyCaseInsensitive is TRUE
     // - you can set an optional timeout period, in seconds - you should call
     // DeleteDeprecated periodically to search for deprecated items
-    constructor Create(aKeyTypeInfo, aValueTypeInfo: pointer;
+    constructor Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
       aKeyCaseInsensitive: boolean = false; aTimeoutSeconds: cardinal = 0;
       aCompressAlgo: TAlgoCompress = nil); reintroduce; virtual;
     /// finalize the storage
@@ -1887,10 +1887,8 @@ function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
 /// will serialize any TObject into its expanded UTF-8 JSON representation
 // - includes debugger-friendly information, similar to TSynLog, i.e.
 // class name and sets/enumerates as text
-// - could be used to create a TDocVariant object with full information
-// - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
-// also able to serialize plain Exception as a simple '{"Exception":"Message"}',
-// and append .map/.mab source code line number for ESynException
+// - redirect to ObjectToJSON() with the proper TTextWriterWriteObjectOptions,
+// since our JSON serialization detects and serialize Exception.Message
 function ObjectToJSONDebug(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
     woHumanReadable, woStoreClassName, woStorePointer]): RawUTF8;
@@ -5294,7 +5292,7 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue;
+procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: PRttiInfo; var aValue;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   temp: TDynArray;
@@ -7500,7 +7498,7 @@ begin
   result := Value(aName) = '1';
 end;
 
-function TSynNameValue.ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer;
+function TSynNameValue.ValueEnum(const aName: RawUTF8; aEnumTypeInfo: PRttiInfo;
   out aEnum; aEnumDefault: byte): boolean;
 var
   v: RawUTF8;
@@ -8202,7 +8200,7 @@ begin
   result := 0;
 end;
 
-constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: pointer;
+constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress);
 begin
   inherited Create;

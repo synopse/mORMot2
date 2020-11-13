@@ -353,7 +353,7 @@ type
     // at a specified level
     // - TSynLog will handle enumerations and dynamic array; TSQLLog will be
     // able to write TObject/TOrm and sets content as JSON
-    procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: pointer;
+    procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
@@ -869,7 +869,7 @@ type
     procedure LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
       Instance: TObject; TextTruncateAtLength: integer); overload;
     procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
-      aTypeInfo: pointer; const aValue; Instance: TObject); overload;
+      aTypeInfo: PRttiInfo; const aValue; Instance: TObject); overload;
     // any call to this method MUST call LeaveCriticalSection(GlobalThreadLock)
     procedure LogHeader(Level: TSynLogInfo);
     procedure LogTrailer(Level: TSynLogInfo);
@@ -1061,7 +1061,7 @@ type
     // written as human readable JSON: handle dynamic arrays and enumerations
     // - TSQLLog from mORMot.pas unit will be able to write
     // TObject/TOrm and sets content as JSON
-    procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: pointer;
+    procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
@@ -3591,7 +3591,7 @@ begin
 end;
 
 procedure TSynLog.log(Level: TSynLogInfo; const aName: RawUTF8;
-  aTypeInfo: pointer; const aValue; Instance: TObject);
+  aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
@@ -4070,7 +4070,7 @@ begin
 end;
 
 procedure TSynLog.LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
-  aTypeInfo: pointer; const aValue; Instance: TObject);
+  aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   EnterCriticalSection(GlobalThreadLock);
   try

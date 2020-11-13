@@ -960,7 +960,7 @@ type
     // or if the value is not a string corresponding to the supplied enumerate
     // - return true if the name has been found, and aValue stores the value
     // - will call Delete() on the found entry, if aDeleteFoundEntry is true
-    function GetValueEnumerate(const aName: RawUTF8; aTypeInfo: pointer;
+    function GetValueEnumerate(const aName: RawUTF8; aTypeInfo: PRttiInfo;
       out aValue; aDeleteFoundEntry: boolean = false): boolean;
     /// returns a TDocVariant object containing all properties matching the
     // first characters of the supplied property name
@@ -5086,7 +5086,7 @@ begin
 end;
 
 function TDocVariantData.GetValueEnumerate(const aName: RawUTF8;
-  aTypeInfo: pointer; out aValue; aDeleteFoundEntry: boolean): boolean;
+  aTypeInfo: PRttiInfo; out aValue; aDeleteFoundEntry: boolean): boolean;
 var
   text: RawUTF8;
   ndx, ord: integer;
