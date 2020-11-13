@@ -864,12 +864,12 @@ type
     {$endif FPC}
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
-    procedure LogInternal(Level: TSynLogInfo; const TextFmt: RawUTF8;
-      const TextArgs: array of const; Instance: TObject); overload;
-    procedure LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
-      Instance: TObject; TextTruncateAtLength: integer); overload;
-    procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
-      aTypeInfo: PRttiInfo; const aValue; Instance: TObject); overload;
+    procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUTF8;
+      const TextArgs: array of const; Instance: TObject);
+    procedure LogInternalText(Level: TSynLogInfo; const Text: RawUTF8;
+      Instance: TObject; TextTruncateAtLength: integer);
+    procedure LogInternalRtti(Level: TSynLogInfo; const aName: RawUTF8;
+      aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     // any call to this method MUST call LeaveCriticalSection(GlobalThreadLock)
     procedure LogHeader(Level: TSynLogInfo);
     procedure LogTrailer(Level: TSynLogInfo);
@@ -1093,6 +1093,10 @@ type
     /// the associated TSynLog class
     function LogClass: TSynLogClass;
       {$ifdef HASINLINE}inline;{$endif}
+    /// class method which can be assigned to mormot.core.os' TOnDaemonLog
+    // event handler, or used instead of Add.Log
+    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUTF8;
+      const Args: array of const; Instance: TObject = nil);
     /// Force log rotation; Can be used for example inside SUGHUP signal handler
     procedure ForceRotation;
     /// direct access to the low-level writing content
@@ -3024,17 +3028,20 @@ begin
   if fFamily.fPerThreadLog <> ptNoThreadProcess then
   begin
     secondpass := false;
-    hash := 0; // efficient TThreadID hash on all architectures
+    // efficient TThreadID hash on all architectures
+    hash := 0;
     repeat
       hash := hash xor (id and (MAXLOGTHREAD - 1));
       id := id shr (MAXLOGTHREADBITS - 1); // -1 for less collisions under Linux
     until id = 0;
     fThreadLastHash := hash;
     fThreadIndex := fThreadHash[hash];
+    // fast O(1) loookup of the associated thread context
     if fThreadIndex <> 0 then
       repeat
         fThreadContext := @fThreadContexts[fThreadIndex - 1];
-        if fThreadContext^.ID = fThreadID then // match found
+        if fThreadContext^.ID = fThreadID then
+          // ThreadID found (very likely)
           exit;
         // hash collision -> try next item in fThreadHash[] if possible
         if fThreadLastHash = MAXLOGTHREAD - 1 then
@@ -3052,13 +3059,13 @@ begin
     // here we know that fThreadIndex=fThreadHash[hash]=0 -> register the thread
     if fThreadIndexReleasedCount > 0 then
     begin
-      // reuse NotifyThreadEnded() index
+      // reuse an available NotifyThreadEnded() index
       dec(fThreadIndexReleasedCount);
       fThreadIndex := fThreadIndexReleased[fThreadIndexReleasedCount];
     end
     else
     begin
-      // store a new entry
+      // we need a new entry in the internal list
       if fThreadContextCount >= length(fThreadContexts) then
         SetLength(fThreadContexts, fThreadContextCount + 128);
       inc(fThreadContextCount);
@@ -3068,6 +3075,8 @@ begin
   end
   else
     fThreadIndex := 1;
+  // if we reach here, this is either the first time for this thread,
+  // or we have a single context (ptNoThreadProcess) which needs to be updated
   fThreadContext := @fThreadContexts[fThreadIndex - 1];
   fThreadContext^.ID := fThreadID;
   if (fFamily.fPerThreadLog = ptIdentifiedInOnFile) and
@@ -3083,7 +3092,8 @@ var
   id, hash: PtrUInt;
   secondpass: boolean;
   ctxt: PSynLogThreadContext;
-begin // should match TSynLog.GetThreadContextInternal
+begin
+  // should match TSynLog.GetThreadContextInternal
   if fFamily.fPerThreadLog = ptNoThreadProcess then
     exit;
   FillcharFast(fThreadHash[0], MAXLOGTHREAD * sizeof(fThreadHash[0]), 0);
@@ -3443,44 +3453,44 @@ begin
   TextColor(ccLightGray);
 end;
 
-procedure TSynLog.log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
   const TextArgs: array of const; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternal(Level, TextFmt, TextArgs, aInstance);
+    LogInternalFmt(Level, TextFmt, TextArgs, aInstance);
 end;
 
-procedure TSynLog.log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
   const TextArg: RawUTF8; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternal(Level, TextFmt, [TextArg], aInstance);
+    LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
 end;
 
-procedure TSynLog.log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
   const TextArg: Int64; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternal(Level, TextFmt, [TextArg], aInstance);
+    LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
 end;
 
-procedure TSynLog.log(Level: TSynLogInfo; const Text: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const Text: RawUTF8;
   aInstance: TObject; TextTruncateAtLength: integer);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternal(Level, Text, aInstance, TextTruncateAtLength);
+    LogInternalText(Level, Text, aInstance, TextTruncateAtLength);
 end;
 
 {$ifdef UNICODE}
-procedure TSynLog.log(Level: TSynLogInfo; const Text: string; aInstance: TObject);
+procedure TSynLog.Log(Level: TSynLogInfo; const Text: string; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternal(Level, '%', [Text], aInstance);
+    LogInternalFmt(Level, '%', [Text], aInstance);
 end;
 {$endif UNICODE}
 
@@ -3496,7 +3506,7 @@ procedure TSynLog.LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char;
       if s <> '' then
         if (IgnoreWhenStartWith = nil) or
            not IdemPChar(pointer(s), IgnoreWhenStartWith) then
-          LogInternal(Level, s, aInstance, maxInt);
+          LogInternalText(Level, s, aInstance, maxInt);
     until LinesToLog = nil;
   end;
 
@@ -3544,6 +3554,17 @@ begin
     result := PPointer(self)^;
 end;
 
+class procedure TSynLog.DoLog(Level: TSynLogInfo; const Fmt: RawUTF8;
+   const Args: array of const; Instance: TObject);
+var
+  log: TSynLog;
+begin
+  log := Add;
+  if (log <> nil) and
+     (Level in log.fFamily.fLevel) then
+    log.LogInternalFmt(Level, Fmt, Args, Instance);
+end;
+
 procedure TSynLog.ForceRotation;
 begin
   EnterCriticalSection(GlobalThreadLock);
@@ -3580,22 +3601,22 @@ begin
   end;
 end;
 
-procedure TSynLog.log(Level: TSynLogInfo; aInstance: TObject);
+procedure TSynLog.Log(Level: TSynLogInfo; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
     if aInstance <> nil then
-      LogInternal(Level, '', aInstance, maxInt)
+      LogInternalText(Level, '', aInstance, maxInt)
     else
-      LogInternal(Level, 'Instance=nil', nil, maxInt);
+      LogInternalText(Level, 'Instance=nil', nil, maxInt);
 end;
 
-procedure TSynLog.log(Level: TSynLogInfo; const aName: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUTF8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternal(Level, aName, aTypeInfo, aValue, Instance);
+    LogInternalRtti(Level, aName, aTypeInfo, aValue, Instance);
 end;
 
 {$STACKFRAMES ON}
@@ -3658,7 +3679,7 @@ begin
   if Format <> '' then
   begin
     FormatUTF8(Format, Args, Msg);
-    Add.LogInternal(Level, Msg, nil, maxInt);
+    Add.LogInternalText(Level, Msg, nil, maxInt);
     {$ifdef MSWINDOWS}
     if IsDebuggerPresent then
       {$ifdef CPU64DELPHI}
@@ -3994,7 +4015,7 @@ begin
         end;
 end;
 
-procedure TSynLog.LogInternal(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynLog.LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUTF8;
   const TextArgs: array of const; Instance: TObject);
 var
   lasterror: cardinal;
@@ -4022,7 +4043,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
+procedure TSynLog.LogInternalText(Level: TSynLogInfo; const Text: RawUTF8;
   Instance: TObject; TextTruncateAtLength: integer);
 var
   lasterror: cardinal;
@@ -4069,7 +4090,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
+procedure TSynLog.LogInternalRtti(Level: TSynLogInfo; const aName: RawUTF8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   EnterCriticalSection(GlobalThreadLock);

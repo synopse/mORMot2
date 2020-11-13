@@ -1561,7 +1561,7 @@ end;
 constructor TServiceController.CreateNewService(
   const TargetComputer, DatabaseName, Name, DisplayName, Path,
   OrderGroup, Dependencies, Username, Password: string;
-  DesiredAccess, ServiceType, StartType, ErrorControl: DWORD);
+  DesiredAccess, ServiceType, StartType, ErrorControl: cardinal);
 var
   Exe: TFileName;
   backupError: cardinal;
@@ -1571,7 +1571,7 @@ begin
   begin
     if Assigned(ServiceLog) then
       ServiceLog(sllError,
-        'CreateNewService("%","%") with Path=""', [Name, DisplayName]);
+        'CreateNewService("%","%") with Path=""', [Name, DisplayName], self);
     exit;
   end;
   if TargetComputer = '' then
@@ -1584,7 +1584,7 @@ begin
         if Assigned(ServiceLog) then
           ServiceLog(sllError,
             'CreateNewService("%","%") on remote drive: Path="%" is %',
-            [Name, DisplayName, Path, Exe]);
+            [Name, DisplayName, Path, Exe], self);
         exit;
       end;
       system.delete(Exe, 1, 12); // \\localhost\c$\... -> c:\...
@@ -1600,7 +1600,7 @@ begin
     backupError := GetLastError;
     if Assigned(ServiceLog) then
       ServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
-        [TargetComputer, DatabaseName, fName]);
+        [TargetComputer, DatabaseName, fName], self);
     SetLastError(backupError);
     exit;
   end;
@@ -1613,13 +1613,13 @@ begin
     backupError := GetLastError;
     if Assigned(ServiceLog) then
       ServiceLog(sllLastError,
-        'CreateService("%","%","%")', [Name, DisplayName, Path]);
+        'CreateService("%","%","%")', [Name, DisplayName, Path], self);
     SetLastError(backupError);
   end;
 end;
 
 constructor TServiceController.CreateOpenService(
-  const TargetComputer, DataBaseName, Name: string; DesiredAccess: DWORD);
+  const TargetComputer, DataBaseName, Name: string; DesiredAccess: cardinal);
 var
   backupError: cardinal;
 begin
@@ -1632,7 +1632,7 @@ begin
     backupError := GetLastError;
     if Assigned(ServiceLog) then
       ServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
-        [TargetComputer, DataBaseName, fName]);
+        [TargetComputer, DataBaseName, fName], self);
     SetLastError(backupError);
     exit;
   end;
@@ -1641,7 +1641,7 @@ begin
   begin
     backupError := GetLastError;
     if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, 'OpenService("%")', [Name]);
+      ServiceLog(sllLastError, 'OpenService("%")', [Name], self);
     SetLastError(backupError);
   end;
 end;
@@ -1656,7 +1656,7 @@ begin
       fHandle := 0;
     end
     else if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, 'DeleteService("%")', [fName]);
+      ServiceLog(sllLastError, 'DeleteService("%")', [fName], self);
 end;
 
 destructor TServiceController.Destroy;
@@ -1677,7 +1677,7 @@ begin
   else
     result := CurrentStateToServiceState(Status.dwCurrentState);
   if Assigned(ServiceLog) then
-    ServiceLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]]);
+    ServiceLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]], self);
 end;
 
 function TServiceController.GetStatus: TServiceStatus;
@@ -1753,7 +1753,8 @@ begin
   begin
     param := SysUtils.LowerCase(paramstr(i));
     if Assigned(ServiceLog) then
-      ServiceLog(sllInfo, 'Controling % with command [%]', [ServiceName, param]);
+      ServiceLog(sllInfo,
+        'Controling % with command [%]', [ServiceName, param]);
     if param = '/install' then
       TServiceController.Install(
         ServiceName, DisplayName, Description, true, ExeFileName, Dependencies)
@@ -1790,7 +1791,7 @@ class function TServiceController.Install(
   AutoStart: boolean; ExeName: TFileName; Dependencies: string): TServiceState;
 var
   ctrl: TServiceController;
-  start: DWORD;
+  start: cardinal;
 begin
   if AutoStart then
     start := SERVICE_AUTO_START
@@ -1827,18 +1828,18 @@ begin
   fStatusRec.dwWin32ExitCode := NO_ERROR;
   if Assigned(ServiceLog) then
     ServiceLog(sllInfo, 'Create: % (%) running as [%]',
-      [ServiceName, aDisplayName, ExeVersion.ProgramFullSpec]);
+      [ServiceName, aDisplayName, ExeVersion.ProgramFullSpec], self);
 end;
 
-procedure TService.CtrlHandle(Code: DWORD);
+procedure TService.CtrlHandle(Code: cardinal);
 begin
   DoCtrlHandle(Code);
 end;
 
-procedure TService.DoCtrlHandle(Code: DWORD);
+procedure TService.DoCtrlHandle(Code: cardinal);
 begin
   if Assigned(ServiceLog) then
-    ServiceLog(sllInfo, '%: command % received from OS', [ServiceName, Code]);
+    ServiceLog(sllInfo, '%: command % received from OS', [ServiceName, Code], self);
   try
     case Code of
       SERVICE_CONTROL_STOP:
@@ -1892,7 +1893,7 @@ begin
   except
   end;
   if Assigned(ServiceLog) then
-    ServiceLog(sllInfo, '%: command % finished', [ServiceName, Code]);
+    ServiceLog(sllInfo, '%: command % finished', [ServiceName, Code], self);
 end;
 
 procedure TService.Execute;
@@ -1928,7 +1929,7 @@ begin
   if not Assigned(Result) then
     if Assigned(ServiceLog) then
       ServiceLog(sllError, '%.GetControlHandler with ControlHandler=nil: ' +
-        'use TServiceSingle or assign a custom ControlHandler', [self]);
+        'use TServiceSingle or assign a custom ControlHandler', [self], self);
 end;
 
 function TService.GetInstalled: boolean;
@@ -1982,14 +1983,14 @@ begin
   end;
 end;
 
-function TService.ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
+function TService.ReportStatus(dwState, dwExitCode, dwWait: cardinal): BOOL;
 var
   status: string;
 begin
   status := ServiceStateText(CurrentStateToServiceState(dwState));
   if Assigned(ServiceLog) then
     ServiceLog(sllInfo, '% ReportStatus(%,%,%)', 
-      [ServiceName, status, dwExitCode, dwWait]);
+      [ServiceName, status, dwExitCode, dwWait], self);
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0
   else
@@ -2006,7 +2007,7 @@ begin
   if not result then
     if Assigned(ServiceLog) then
       ServiceLog(sllLastError, '% ReportStatus(%,%,%)',
-        [ServiceName, status, dwExitCode, dwWait]);
+        [ServiceName, status, dwExitCode, dwWait], self);
 end;
 
 procedure TService.SetControlHandler(const Value: TServiceControlHandler);
@@ -2043,7 +2044,7 @@ begin
   end;
 end;
 
-function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
+function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 begin
   case CurrentState of
     SERVICE_STOPPED:
@@ -2074,12 +2075,12 @@ begin
   result := string(copy(P^, 3, length(P^) - 2));
 end;
 
-function GetServicePid(const aServiceName: string): DWORD;
+function GetServicePid(const aServiceName: string): cardinal;
 var
   ssp: TServiceStatusProcess;
   scm: THandle;
   svc: THandle;
-  size: DWORD;
+  size: cardinal;
 begin
   result := 0;
   scm := OpenSCManager(nil, nil, SC_MANAGER_CONNECT);
@@ -2092,7 +2093,7 @@ begin
           @ssp, SizeOf(TServiceStatusProcess), size) then
         result := ssp.dwProcessId
       else if Assigned(ServiceLog) then
-        ServiceLog(sllLastError, '', []);
+        ServiceLog(sllLastError, 'GetServicePid(%)', [aServiceName]);
     finally
       CloseServiceHandle(svc);
     end;
@@ -2101,7 +2102,7 @@ begin
   end;
 end;
 
-function KillProcess(pid: DWORD; waitseconds: integer): boolean;
+function KillProcess(pid: cardinal; waitseconds: integer): boolean;
 var
   ph: THandle;
 begin
@@ -2125,7 +2126,7 @@ end;
     and subsequent arguments are any strings passed to the service by the process
     that called the StartService function to start the service.  }
     
-procedure ServiceProc(ArgCount: DWORD; Args: PPChar); stdcall;
+procedure ServiceProc(ArgCount: cardinal; Args: PPChar); stdcall;
 var
   i: integer;
 begin
@@ -2195,12 +2196,12 @@ end;
 // redefined here so that we can share code with FPC and Delphi
 function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
    lpProcessAttributes, lpThreadAttributes: PSecurityAttributes;
-   bInheritHandles: BOOL; dwCreationFlags: DWORD; lpEnvironment: Pointer;
+   bInheritHandles: BOOL; dwCreationFlags: cardinal; lpEnvironment: Pointer;
    lpCurrentDirectory: PWideChar; const lpStartupInfo: TStartupInfo;
    out lpProcessInformation: TProcessInformation): BOOL;
   stdcall; external kernel32;
 
-function GetExitCodeProcess(hProcess: THandle; out lpExitCode: DWORD): BOOL;
+function GetExitCodeProcess(hProcess: THandle; out lpExitCode: cardinal): BOOL;
   stdcall; external kernel32;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
@@ -2221,7 +2222,7 @@ var
   path: TFileName;
   wcmd, wenv, wpath: SynUnicode;
   e, p: PWideChar;
-  exitcode: DWORD;
+  exitcode: cardinal;
   i: integer;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments

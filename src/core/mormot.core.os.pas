@@ -1843,8 +1843,9 @@ procedure GlobalUnLock;
 type
   /// callback definition used to log some event
   // - defined as TMethod to avoid dependency with the mormot.core.log unit
-  TOnDaemonLog = procedure(level: TSynLogInfo; const Fmt: RawUTF8;
-    const Args: array of const) of object;
+  // - could be assigned to TSynLog.DoLog() class procedure
+  TOnDaemonLog = procedure(Level: TSynLogInfo; const Fmt: RawUTF8;
+    const Args: array of const; Instance: TObject = nil) of object;
 
 {$ifdef MSWINDOWS}
 
@@ -1918,27 +1919,27 @@ type
   PServiceStatus = ^TServiceStatus;
   TServiceStatus = object
   public
-    dwServiceType: DWORD;
-    dwCurrentState: DWORD;
-    dwControlsAccepted: DWORD;
-    dwWin32ExitCode: DWORD;
-    dwServiceSpecificExitCode: DWORD;
-    dwCheckPoint: DWORD;
-    dwWaitHint: DWORD;
+    dwServiceType: cardinal;
+    dwCurrentState: cardinal;
+    dwControlsAccepted: cardinal;
+    dwWin32ExitCode: cardinal;
+    dwServiceSpecificExitCode: cardinal;
+    dwCheckPoint: cardinal;
+    dwWaitHint: cardinal;
   end;
 
   PServiceStatusProcess = ^TServiceStatusProcess;
   TServiceStatusProcess = object(TServiceStatus)
   public
-    dwProcessId: DWORD;
-    dwServiceFlags: DWORD;
+    dwProcessId: cardinal;
+    dwServiceFlags: cardinal;
   end;
 
   SC_HANDLE = THandle;
-  SERVICE_STATUS_HANDLE = DWORD;
+  SERVICE_STATUS_HANDLE = cardinal;
   TServiceTableEntry = record
     lpServiceName: PChar;
-    lpServiceProc: procedure(ArgCount: DWORD; Args: PPChar); stdcall;
+    lpServiceProc: procedure(ArgCount: cardinal; Args: PPChar); stdcall;
   end;
   PServiceTableEntry = ^TServiceTableEntry;
 
@@ -1947,29 +1948,29 @@ type
   {$Z1}
 
 function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
-  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32
   name 'OpenSCManager' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
-function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: DWORD;
+function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: cardinal;
   lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
-function StartService(hService: SC_HANDLE; dwNumServiceArgs: DWORD;
+function StartService(hService: SC_HANDLE; dwNumServiceArgs: cardinal;
   lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
   name 'StartService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
 function CreateService(hSCManager: SC_HANDLE; lpServiceName, lpDisplayName: PChar;
-  dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: DWORD;
+  dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: cardinal;
   lpBinaryPathName, lpLoadOrderGroup: PChar; lpdwTagId: LPDWORD; lpDependencies,
   lpServiceStartName, lpPassword: PChar): SC_HANDLE; stdcall; external advapi32
   name 'CreateService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
 function OpenService(hSCManager: SC_HANDLE; lpServiceName: PChar;
-  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32
   name 'OpenService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
 function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
 function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
 function QueryServiceStatus(hService: SC_HANDLE;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
 function QueryServiceStatusEx(hService: SC_HANDLE;
-  InfoLevel: SC_STATUS_TYPE; lpBuffer: Pointer; cbBufSize: DWORD;
-  var pcbBytesNeeded: DWORD): BOOL; stdcall; external advapi32;
-function ControlService(hService: SC_HANDLE; dwControl: DWORD;
+  InfoLevel: SC_STATUS_TYPE; lpBuffer: Pointer; cbBufSize: cardinal;
+  var pcbBytesNeeded: cardinal): BOOL; stdcall; external advapi32;
+function ControlService(hService: SC_HANDLE; dwControl: cardinal;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
 function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
@@ -2060,16 +2061,18 @@ type
     // the startup program logs the error and displays a message but continues
     // the startup operation), SERVICE_ERROR_SEVERE,
     // SERVICE_ERROR_CRITICAL
-    constructor CreateNewService(const TargetComputer, DatabaseName,
-      Name, DisplayName, Path: string;
+    constructor CreateNewService(
+      const TargetComputer, DatabaseName, Name, DisplayName, Path: string;
       const OrderGroup: string = ''; const Dependencies: string = '';
       const Username: string = ''; const Password: string = '';
-      DesiredAccess: DWORD = SERVICE_ALL_ACCESS;
-      ServiceType: DWORD = SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
-      StartType: DWORD = SERVICE_DEMAND_START; ErrorControl: DWORD = SERVICE_ERROR_NORMAL);
+      DesiredAccess: cardinal = SERVICE_ALL_ACCESS;
+      ServiceType: cardinal = SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
+      StartType: cardinal = SERVICE_DEMAND_START;
+      ErrorControl: cardinal = SERVICE_ERROR_NORMAL);
     /// wrapper around CreateNewService() to install the current executable as service
-    class function Install(const Name,DisplayName,Description: string;
-      AutoStart: boolean; ExeName: TFileName=''; Dependencies: string=''): TServiceState;
+    class function Install(const Name, DisplayName, Description: string;
+      AutoStart: boolean; ExeName: TFileName = '';
+      Dependencies: string = ''): TServiceState;
     /// open an existing service, in order to control it or its configuration
     // from your application
     // - TargetComputer - set it to empty string if local computer is the target.
@@ -2080,8 +2083,9 @@ type
     // SERVICE_ALL_ACCESS, SERVICE_CHANGE_CONFIG, SERVICE_ENUMERATE_DEPENDENTS,
     // SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE, SERVICE_QUERY_CONFIG,
     // SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP, SERVICE_USER_DEFINED_CONTROL
-    constructor CreateOpenService(const TargetComputer, DataBaseName, Name: string;
-      DesiredAccess: DWORD = SERVICE_ALL_ACCESS);
+    constructor CreateOpenService(
+      const TargetComputer, DataBaseName, Name: string;
+      DesiredAccess: cardinal = SERVICE_ALL_ACCESS);
     /// release memory and handles
     destructor Destroy; override;
     /// Handle of SC manager
@@ -2128,8 +2132,8 @@ type
     // - if ExeFileName='', it will install the current executable
     // - optional Description and Dependencies text may be specified
     class procedure CheckParameters(const ExeFileName: TFileName;
-      const ServiceName, DisplayName,Description: string;
-      const Dependencies: string='');
+      const ServiceName, DisplayName, Description: string;
+      const Dependencies: string = '');
   end;
 
   {$M+}
@@ -2137,10 +2141,10 @@ type
   {$M-}
 
   /// callback procedure for Windows Service Controller
-  TServiceControlHandler = procedure(CtrlCode: DWORD); stdcall;
+  TServiceControlHandler = procedure(CtrlCode: cardinal); stdcall;
 
   /// event triggered for Control handler
-  TServiceControlEvent = procedure(Sender: TService; Code: DWORD) of object;
+  TServiceControlEvent = procedure(Sender: TService; Code: cardinal) of object;
 
   /// event triggered to implement the Service functionality
   TServiceEvent = procedure(Sender: TService) of object;
@@ -2150,9 +2154,9 @@ type
   protected
     fSName: string;
     fDName: string;
-    fStartType: DWORD;
-    fServiceType: DWORD;
-    fData: DWORD;
+    fStartType: cardinal;
+    fServiceType: cardinal;
+    fData: cardinal;
     fControlHandler: TServiceControlHandler;
     fOnControl: TServiceControlEvent;
     fOnInterrogate: TServiceEvent;
@@ -2169,14 +2173,14 @@ type
     function GetArgs(Idx: Integer): string;
     function GetInstalled: boolean;
     procedure SetStatus(const Value: TServiceStatus);
-    procedure CtrlHandle(Code: DWORD);
+    procedure CtrlHandle(Code: cardinal);
     function GetControlHandler: TServiceControlHandler;
     procedure SetControlHandler(const Value: TServiceControlHandler);
   public
     /// this method is the main service entrance, from the OS point of view
     // - it will call OnControl/OnStop/OnPause/OnResume/OnShutdown events
     // - and report the service status to the system (via ReportStatus method)
-    procedure DoCtrlHandle(Code: DWORD); virtual;
+    procedure DoCtrlHandle(Code: cardinal); virtual;
     /// Creates the service
     // - the service is added to the internal registered services
     // - main application must call the global ServicesRun procedure to actually
@@ -2184,12 +2188,12 @@ type
     // - caller must free the TService instance when it's no longer used
     constructor Create(const aServiceName, aDisplayName: string); reintroduce; virtual;
     /// Reports new status to the system
-    function ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
+    function ReportStatus(dwState, dwExitCode, dwWait: cardinal): BOOL;
     /// Installs the service in the database
     // - return true on success
     // - create a local TServiceController with the current executable file,
     // with the supplied command line parameters
-    function Install(const Params: string=''): boolean;
+    function Install(const Params: string = ''): boolean;
     /// Removes the service from database
     //  - uses a local TServiceController with the current Service Name
     procedure Remove;
@@ -2209,7 +2213,7 @@ type
     property Args[Idx: Integer]: string
       read GetArgs;
     /// Any data You wish to associate with the service object
-    property Data: DWORD
+    property Data: cardinal
       read FData write FData;
     /// Whether service is installed in DataBase
     // - uses a local TServiceController to check if the current Service Name exists
@@ -2271,10 +2275,10 @@ type
     property DisplayName: string
       read fDName write fDName;
     /// Type of service
-    property ServiceType: DWORD
+    property ServiceType: cardinal
       read fServiceType write fServiceType;
     /// Type of start of service
-    property StartType: DWORD
+    property StartType: cardinal
       read fStartType write fStartType;
   end;
 
@@ -2301,7 +2305,7 @@ function ServiceSingleRun: boolean;
 
 /// convert the Control Code retrieved from Windows into a service state
 // enumeration item
-function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
+function CurrentStateToServiceState(CurrentState: cardinal): TServiceState;
 
 /// return the ready to be displayed text of a TServiceState value
 function ServiceStateText(State: TServiceState): string;
@@ -2309,10 +2313,10 @@ function ServiceStateText(State: TServiceState): string;
 function ToText(st: TServiceState): PShortString; overload;
 
 /// return service PID
-function GetServicePid(const aServiceName: string): DWORD;
+function GetServicePid(const aServiceName: string): cardinal;
 
 /// kill Windows process
-function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
+function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 
 {$else}
 
@@ -2344,7 +2348,7 @@ var
 // SynDaemonTerminated variable, with an optional logged entry to log
 // - as called e.g. by RunUntilSigTerminated()
 // - you can call this method several times with no issue
-procedure SynDaemonIntercept(const onlog: TOnDaemonLog=nil);
+procedure SynDaemonIntercept(const onlog: TOnDaemonLog = nil);
 
 {$endif MSWINDOWS}
 

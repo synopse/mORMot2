@@ -590,8 +590,9 @@ end;
 function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
 begin
   if aCustomOffset <> 0 then
-    if aCustomOffset and (SystemInfo.dwPageSize - 1) <> 0 then
-      raise EOSException.CreateFmt('fpmmap(aCustomOffset=%d) with dwPageSize=%d',
+    if (aCustomOffset and (SystemInfo.dwPageSize - 1)) <> 0 then
+      raise EOSException.CreateFmt(
+        'DoMap(aCustomOffset=%d) with dwPageSize=%d',
         [aCustomOffset, SystemInfo.dwPageSize])
     else
       aCustomOffset := aCustomOffset div SystemInfo.dwPageSize;
@@ -1521,7 +1522,8 @@ begin
     else
       si_code := Info^.si_code;
     SynDaemonInterceptLog(level,
-      'SynDaemonIntercepted received SIG%=% si_code=%', [text, Sig, si_code]);
+      'SynDaemonIntercepted received SIG%=% si_code=%',
+      [text, Sig, si_code], nil);
   end;
   SynDaemonTerminated := Sig;
 end;
@@ -1641,14 +1643,14 @@ begin
   try
     if Assigned(onlog) then
       onlog(sllNewRun, 'Start % /% %',
-        [servicename, TXT[dofork], ExeVersion.Version.DetailedOrVoid]);
+        [servicename, TXT[dofork], ExeVersion.Version.DetailedOrVoid], nil);
     start;
     while SynDaemonTerminated = 0 do
       fpPause;
   finally
     if Assigned(onlog) then
       onlog(sllNewRun, 'Stop /% from Sig=%',
-        [TXT[dofork], SynDaemonTerminated]);
+        [TXT[dofork], SynDaemonTerminated], nil);
     try
       stop;
     finally
@@ -1658,7 +1660,7 @@ begin
         DeleteFile(pidfilename);
         if Assigned(onlog) then
           onlog(sllTrace, 'RunUntilSigTerminated: deleted file %',
-            [pidfilename]);
+            [pidfilename], nil);
       end;
     end;
   end;
