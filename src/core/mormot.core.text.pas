@@ -1436,7 +1436,8 @@ var
   // - use around 16KB of heap (since each item consumes 16 bytes), but increase
   // overall performance and reduce memory allocation (and fragmentation),
   // especially during multi-threaded execution
-  // - noticeable when strings are used as array indexes (e.g. in mormot.db.nosql.bson)
+  // - noticeable when strings are used as array indexes (e.g.
+  // in mormot.db.nosql.bson)
   // - is defined globally, since may be used from an inlined function
   SmallUInt32UTF8: array[0..999] of RawUTF8;
 
@@ -3022,7 +3023,8 @@ end;
 function UnQuotedSQLSymbolName(const ExternalDBSymbol: RawUTF8): RawUTF8;
 begin
   if (ExternalDBSymbol <> '') and
-     (ExternalDBSymbol[1] in ['[', '"', '''', '(']) then // e.g. for ZDBC's GetFields()
+     (ExternalDBSymbol[1] in ['[', '"', '''', '(']) then
+    // e.g. for ZDBC's GetFields()
     result := copy(ExternalDBSymbol, 2, length(ExternalDBSymbol) - 2)
   else
     result := ExternalDBSymbol;
@@ -3363,7 +3365,8 @@ begin
         inc(PUTF8Char(List));
         dec(PLen);
       until PLen = 0;
-      if (PLen = aValueLen) and CompareMemFixed(aValue, List, PLen) then
+      if (PLen = aValueLen) and
+         CompareMemFixed(aValue, List, PLen) then
         exit;
       inc(PUTF8Char(List), PLen);
     end;
@@ -3393,7 +3396,8 @@ label
   Next;
 begin
   DBeg := D;
-  if (D <> nil) and (P <> nil) then
+  if (D <> nil) and
+     (P <> nil) then
   begin // avoid GPF
     Space := D;
     SpaceBeg := D;
@@ -3628,7 +3632,8 @@ begin
     while (S^ <> #0) and (S^ <> #10) do
       inc(S);
     E := S;
-    if (E > P) and (E[-1] = #13) then
+    if (E > P) and
+       (E[-1] = #13) then
       dec(E);
     FastSetString(result, P, E - P);
     if S^ <> #0 then
@@ -3723,7 +3728,8 @@ begin
     while (S^ <= ' ') and (S^ <> #0) do
       inc(S);
     P := S;
-    if (S^ <> #0) and (S^ <> Sep) then
+    if (S^ <> #0) and
+       (S^ <> Sep) then
       repeat
         inc(S);
       until (S^ = #0) or
@@ -3909,10 +3915,12 @@ begin
         inc(bit);
       end;
     end;
-    if (P <> nil) and (P^ = ',') then
+    if (P <> nil) and
+       (P^ = ',') then
       inc(P);
   end;
-  if (P <> nil) and (P^ = ',') then
+  if (P <> nil) and
+     (P^ = ',') then
     inc(P);
 end;
 
@@ -3988,7 +3996,7 @@ begin
     repeat
       inc(P)
     until P^ <> ' ';
-  if (P^ in ['+', '-']) then
+  if P^ in ['+', '-'] then
   begin
     minus := P^ = '-';
     inc(P);
@@ -4083,7 +4091,8 @@ var
 begin
   result := 0;
   L := GetNextTChar64(P, Sep, tmp);
-  if (L > 0) and (L and 1 = 0) then
+  if (L > 0) and
+     (L and 1 = 0) then
     if not HexDisplayToBin(@tmp, @result, L shr 1) then
       result := 0;
 end;
@@ -4200,7 +4209,8 @@ begin
       GetNextItemTrimed(CSV, Sep, s)
     else
       GetNextItem(CSV, Sep, s);
-    if (s <> '') or AddVoidItems then
+    if (s <> '') or
+       AddVoidItems then
       AddRawUTF8(Result, n, s);
   end;
   if n <> length(Result) then
@@ -4589,26 +4599,30 @@ begin
     twOnSameLine:
       AddOnSameLine(pointer(tmp)); // minimalistic version for TSynLog
     twJSONEscape:
-      raise ESynException.CreateUTF8('%.Add(twJSONEscape) unimplemented: use TTextWriter', [self]);
+      raise ESynException.CreateUTF8(
+        '%.Add(twJSONEscape) unimplemented: use TTextWriter', [self]);
   end;
 end;
 
 procedure TBaseWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  raise ESynException.CreateUTF8('%.AddVariant unimplemented: use TTextWriter', [self]);
+  raise ESynException.CreateUTF8(
+    '%.AddVariant unimplemented: use TTextWriter', [self]);
 end;
 
 procedure TBaseWriter.AddTypedJSON(Value, TypeInfo: pointer;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  raise ESynException.CreateUTF8('%.AddTypedJSON unimplemented: use TTextWriter', [self]);
+  raise ESynException.CreateUTF8(
+    '%.AddTypedJSON unimplemented: use TTextWriter', [self]);
 end;
 
 function TBaseWriter.{%H-}AddJSONReformat(JSON: PUTF8Char;
   Format: TTextWriterJSONFormat; EndOfObject: PUTF8Char): PUTF8Char;
 begin
-  raise ESynException.CreateUTF8('%.AddJSONReformat unimplemented: use TTextWriter', [self]);
+  raise ESynException.CreateUTF8(
+    '%.AddJSONReformat unimplemented: use TTextWriter', [self]);
 end;
 
 procedure TBaseWriter.AddShorter(const Text: TShort8);
@@ -4735,10 +4749,14 @@ begin
     if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
     begin
       s := fTotalFileSize - fInitialStreamPosition;
-      if (fTempBufSize < 49152) and (s > PtrUInt(fTempBufSize) * 4) then
-        s := fTempBufSize * 2 // tune small (stack-alloc?) buffer
-      else if (fTempBufSize < 1 shl 20) and (s > 40 shl 20) then
-        s := 1 shl 20 // 40MB -> 1MB buffer
+      if (fTempBufSize < 49152) and
+         (s > PtrUInt(fTempBufSize) * 4) then
+        // tune small (stack-alloc?) buffer to grow by twice its size
+        s := fTempBufSize * 2
+      else if (fTempBufSize < 1 shl 20) and
+              (s > 40 shl 20) then
+        // total > 40MB -> grow internal buffer to 1MB
+        s := 1 shl 20
       else
         s := 0;
       if s > 0 then
@@ -4760,7 +4778,8 @@ end;
 procedure TBaseWriter.ForceContent(const text: RawUTF8);
 begin
   CancelAll;
-  if (fInitialStreamPosition = 0) and fStream.InheritsFrom(TRawByteStringStream) then
+  if (fInitialStreamPosition = 0) and
+     fStream.InheritsFrom(TRawByteStringStream) then
     TRawByteStringStream(fStream).DataString := text
   else
     fStream.WriteBuffer(pointer(text)^, length(text));
@@ -4811,7 +4830,8 @@ end;
 
 procedure TBaseWriter.CancelLastChar(aCharToCancel: AnsiChar);
 begin
-  if (B >= fTempBuf) and (B^ = aCharToCancel) then
+  if (B >= fTempBuf) and
+     (B^ = aCharToCancel) then
     dec(B);
 end;
 
@@ -4826,7 +4846,8 @@ var
   P: PUTF8Char;
 begin
   P := B;
-  if (P >= fTempBuf) and (P^ = ',') then
+  if (P >= fTempBuf) and
+     (P^ = ',') then
     dec(B);
 end;
 
@@ -4859,7 +4880,8 @@ var
   P: PUTF8Char;
 begin
   P := B;
-  if (P >= fTempBuf) and (P^ = c) then
+  if (P >= fTempBuf) and
+     (P^ = c) then
     exit; // no duplicate
   if P >= BEnd then
     P := FlushToStream;
@@ -5204,7 +5226,8 @@ procedure TBaseWriter.AddNoJSONEscape(P: Pointer; Len: PtrInt);
 var
   i: PtrInt;
 begin
-  if (P <> nil) and (Len > 0) then
+  if (P <> nil) and
+     (Len > 0) then
   begin
     inc(B); // allow CancelLastChar
     repeat
@@ -5260,7 +5283,8 @@ begin
             inc(P, 4);
             dec(Len, 4);
           until Len < 4;
-        if (Len > 0) and (P^ < #128) then
+        if (Len > 0) and
+           (P^ < #128) then
           repeat
             inc(P);
             dec(Len);
@@ -5478,7 +5502,8 @@ var
   D: PUTF8Char;
   c: AnsiChar;
 begin
-  if (P <> nil) and (Len > 0) then
+  if (P <> nil) and
+     (Len > 0) then
   begin
     D := B + 1;
     repeat
@@ -5629,7 +5654,8 @@ procedure TBaseWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
 var
   T: TSynSystemTime;
 begin
-  if (Value^ = 0) and (QuoteChar = #0) then
+  if (Value^ = 0) and
+     (QuoteChar = #0) then
     exit;
   if BEnd - B <= 25 then
     FlushToStream;
@@ -5699,7 +5725,8 @@ var
   L: PtrInt;
 begin
   L := PtrInt(Text);
-  if (len <= 0) or (L = 0) then
+  if (len <= 0) or
+     (L = 0) then
     exit;
   if start < 0 then
     start := 0
@@ -5950,7 +5977,8 @@ var
   B: PUTF8Char;
   esc: ^TSynAnsicharSet;
 begin
-  if (Text = nil) or (TextLen <= 0) then
+  if (Text = nil) or
+     (TextLen <= 0) then
     exit;
   if Fmt = hfNone then
   begin
@@ -6059,7 +6087,8 @@ end;
 
 destructor TEchoWriter.Destroy;
 begin
-  if (fWriter <> nil) and (TMethod(fWriter.OnFlushToStream).Data = self) then
+  if (fWriter <> nil) and
+     (TMethod(fWriter.OnFlushToStream).Data = self) then
     fWriter.OnFlushToStream := nil;
   inherited Destroy;
 end;
@@ -7129,7 +7158,8 @@ var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
 begin
-  if (Value >= 0) and (Value <= high(SmallUInt32UTF8)) then
+  if (Value >= 0) and
+     (Value <= high(SmallUInt32UTF8)) then
     result := SmallUInt32UTF8[Value]
   else
   begin
@@ -7184,7 +7214,8 @@ begin
       else
         dec(prec);
   end;
-  if (prec >= Precision) and (prec <> result) then
+  if (prec >= Precision) and
+     (prec <> result) then
   begin
     dec(result, prec - Precision);
     if S[result + 1] > '5' then
@@ -7196,7 +7227,8 @@ begin
           if c = '9' then
           begin
             S[prec] := '0';
-            if ((prec = 2) and (S[1] = '-')) or (prec = 1) then
+            if ((prec = 2) and (S[1] = '-')) or
+               (prec = 1) then
             begin
               i := result;
               inc(S, prec);
@@ -7232,7 +7264,9 @@ begin
       else
       begin
         dec(result);
-        if (result = 2) and (S[1] = '-') and (S[2] = '0') then
+        if (result = 2) and
+           (S[1] = '-') and
+           (S[2] = '0') then
         begin
           result := 1;
           S[1] := '0'; // '-0.000' -> '0'
@@ -7288,19 +7322,22 @@ begin
   valueabs := abs(Value);
   if Precision <= SINGLE_PRECISION then
   begin
-    if (valueabs > SINGLE_HI) or (valueabs < SINGLE_LO) then
+    if (valueabs > SINGLE_HI) or
+       (valueabs < SINGLE_LO) then
       scientificneeded := true;
   end
   else
   {$ifdef TSYNEXTENDED80}
   if Precision > DOUBLE_PRECISION then
   begin
-    if (valueabs > EXT_HI) or (valueabs < EXT_LO) then
+    if (valueabs > EXT_HI) or
+       (valueabs < EXT_LO) then
       scientificneeded := true;
   end
   else
   {$endif TSYNEXTENDED80}
-  if (valueabs > DOUBLE_HI) or (valueabs < DOUBLE_LO) then
+  if (valueabs > DOUBLE_HI) or
+     (valueabs < DOUBLE_LO) then
     scientificneeded := true;
   if scientificneeded then
   begin
@@ -7444,7 +7481,7 @@ end;
     and made a huge refactoring to reach the best performance, especially
     tuning the Intel target with some dedicated asm and code rewrite.
 
-  With Delphi 10.3 on Win32: (no benefit)
+  With Delphi 10.3 on Win32:
    100000 FloatToText    in 38.11ms i.e. 2,623,570/s, aver. 0us, 47.5 MB/s
    100000 str            in 43.19ms i.e. 2,315,082/s, aver. 0us, 50.7 MB/s
    100000 DoubleToShort  in 45.50ms i.e. 2,197,367/s, aver. 0us, 43.8 MB/s
@@ -7692,8 +7729,8 @@ begin
     factor.c := B^.c;
 end;
 
-procedure d2a_unpack_float(const f: double; out minus: boolean; out result: TDIY_FP);
-  {$ifdef HASINLINE}inline;{$endif}
+procedure d2a_unpack_float(const f: double; out minus: boolean;
+  out result: TDIY_FP);   {$ifdef HASINLINE}inline;{$endif}
 type
   TSplitFloat = packed record
     case byte of
@@ -7747,7 +7784,7 @@ var
   P: PAnsiChar;
   c100: qword;
 begin
-  tab := @TwoDigitByteLookupW; // 0..99 value -> two byte digits (0..9)
+  tab := @TwoDigitByteLookupW; // 0..99 value -> two byte digits (00..99)
   P := PAnsiChar(@buf[24]); // append backwards
   repeat
     if x >= 100 then
@@ -7893,7 +7930,8 @@ begin
   // into "5"; also make sure we have at least 1 digit between "dig_round"
   // and the second last.
   if not half_round_to_even then
-    if (dig_round = 4) and (n_max < n - 3) then
+    if (dig_round = 4) and
+       (n_max < n - 3) then
       if buf[n - 2] >= 8 then // somewhat arbitrary...
       begin
         // check for only "9" are in between
@@ -7909,7 +7947,8 @@ begin
   if dig_round < 5 then
     exit;
   // Handle "round half to even" case
-  if (dig_round = 5) and half_round_to_even and
+  if (dig_round = 5) and
+     half_round_to_even and
      ((n_max = 0) or (buf[n_max - 1] and 1 = 0)) then
   begin
     // even and a half: check if exactly the half
@@ -7942,8 +7981,8 @@ begin
 end;
 
 // format the number in the fixed-point representation
-procedure d2a_return_fixed(str: PAnsiChar; minus: boolean; var digits: TAsciiDigits;
-  n_digits_have, fixed_dot_pos, frac_digits: integer);
+procedure d2a_return_fixed(str: PAnsiChar; minus: boolean;
+  var digits: TAsciiDigits; n_digits_have, fixed_dot_pos, frac_digits: integer);
 var
   p: PAnsiChar;
   d: PByte;
@@ -7960,7 +7999,8 @@ begin
     inc(fixed_dot_pos, d2a_round_digits(digits, n_digits_have, cut_digits_at
       {$ifdef GRISU1_F2A_HALF_ROUNDUP}, false {$endif} ));
   // Before dot: digits, pad0
-  if (fixed_dot_pos <= 0) or (n_digits_have = 0) then
+  if (fixed_dot_pos <= 0) or
+     (n_digits_have = 0) then
   begin
     n_before_dot := 0;
     n_before_dot_pad0 := 1;
@@ -8103,7 +8143,8 @@ begin
 end;
 
 /// set one of special results with proper sign
-procedure d2a_return_special(str: PAnsiChar; sign: integer; const spec: shortstring);
+procedure d2a_return_special(str: PAnsiChar; sign: integer;
+  const spec: shortstring);
 begin
   // Compute length
   str[0] := spec[0];
@@ -8145,7 +8186,8 @@ begin
   result := n;
 end;
 
-procedure DoubleToAscii(min_width, frac_digits: integer; const v: double; str: PAnsiChar);
+procedure DoubleToAscii(min_width, frac_digits: integer; const v: double;
+  str: PAnsiChar);
 var
   w, D: TDIY_FP;
   c_mk: TDIY_FP_Power_of_10;
@@ -8186,7 +8228,8 @@ begin
   // Float -> DIY_FP
   d2a_unpack_float(v, minus, w);
   // Handle Zero
-  if (w.e = 0) and (w.f = 0) then
+  if (w.e = 0) and
+     (w.f = 0) then
   begin
     {$ifdef GRISU1_F2A_ZERONOFRACT}
     PWord(str)^ := 1 + ord('0') shl 8; // just return '0'
@@ -8240,7 +8283,8 @@ begin
   // 2. Define "V = D * 10^k": multiply the input number by "c_mk", do not
   //    normalize to land into [ alpha .. gamma ]
   // 3. Generate digits ( n_digits_need + "round" )
-  if (C_GRISU_ALPHA <= w.e) and (w.e <= C_GRISU_GAMMA) then
+  if (C_GRISU_ALPHA <= w.e) and
+     (w.e <= C_GRISU_GAMMA) then
   begin
     // no scaling required
     D := w;
@@ -8313,7 +8357,8 @@ begin
     until true;
   {$ifdef CPU32}
   // Append "sticky" digit if any
-  if (f <> 0) and (n_digits_have >= n_digits_need + 1) then
+  if (f <> 0) and
+     (n_digits_have >= n_digits_need + 1) then
   begin
     // single "<>0" digit is enough
     n_digits_have := n_digits_need + 2;
@@ -8342,9 +8387,11 @@ var
   valueabs: double;
 begin
   valueabs := abs(Value);
-  if (valueabs > DOUBLE_HI) or (valueabs < DOUBLE_LO) then
+  if (valueabs > DOUBLE_HI) or
+     (valueabs < DOUBLE_LO) then
   begin
-    DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, @S); // = str(Value,S) for scientific notation
+    // = str(Value,S) for scientific notation
+    DoubleToAscii(C_NO_MIN_WIDTH, -1, Value, @S);
     result := ord(S[0]);
   end
   else
@@ -8372,7 +8419,8 @@ end;
 
 {$endif DOUBLETOSHORT_USEGRISU}
 
-function DoubleToJSON(var tmp: ShortString; Value: double; NoExp: boolean): PShortString;
+function DoubleToJSON(var tmp: ShortString; Value: double;
+  NoExp: boolean): PShortString;
 begin
   if Value = 0 then
     result := @JSON_NAN[fnNumber]
@@ -8428,7 +8476,8 @@ begin
       d^ := c;
       inc(d);
       c := s^;
-      if ((c >= '0') and (c <= '9')) or (c = '.') then
+      if ((c >= '0') and (c <= '9')) or
+         (c = '.') then
         continue;
       if (c <> 'e') and (c <> 'E') then
         break;
@@ -8532,7 +8581,8 @@ begin
 end;
 
 
-procedure VariantToUTF8(const V: Variant; var result: RawUTF8; var wasString: boolean);
+procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
+  var wasString: boolean);
 var
   tmp: TVarData;
   vt: cardinal;
@@ -8597,9 +8647,11 @@ begin
           RawUnicodeToUtf8(VAny, length(WideString(VAny)), result);
         end;
     else
-      if SetVariantUnRefSimpleValue(V, tmp{%H-}) then // simple varByRef
+      if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
+        // simple varByRef
         VariantToUTF8(Variant(tmp), result, wasString)
-      else if vt = varVariant or varByRef then // complex varByRef
+      else if vt = varVariant or varByRef then
+        // complex varByRef
         VariantToUTF8(PVariant(VPointer)^, result, wasString)
       else if vt = varByRef or varString then
       begin
@@ -8613,18 +8665,21 @@ begin
       else if vt = varByRef or varOleStr then
       begin
         wasString := true;
-        RawUnicodeToUtf8(pointer(PWideString(VAny)^), length(PWideString(VAny)^), result);
+        RawUnicodeToUtf8(pointer(PWideString(VAny)^),
+          length(PWideString(VAny)^), result);
       end
       else
       {$ifdef HASVARUSTRING}
       if vt = varByRef or varUString then
       begin
         wasString := true;
-        RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^), length(PUnicodeString(VAny)^), result);
+        RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^),
+          length(PUnicodeString(VAny)^), result);
       end
       else
       {$endif HASVARUSTRING}
-        VariantSaveJSON(V, twJSONEscape, result); // will handle also custom types
+        // not recognizable vt -> seralize as JSON to handle also custom types
+        VariantSaveJSON(V, twJSONEscape, result);
     end;
 end;
 
@@ -8813,7 +8868,8 @@ begin
         exit;
       end;
     vtPWideChar:
-      RawUnicodeToUtf8(V.VPWideChar, StrLenW(V.VPWideChar), RawUTF8(Res.TempRawUTF8));
+      RawUnicodeToUtf8(V.VPWideChar, StrLenW(V.VPWideChar),
+        RawUTF8(Res.TempRawUTF8));
     vtWideChar:
       RawUnicodeToUtf8(@V.VWideChar, 1, RawUTF8(Res.TempRawUTF8));
     vtBoolean:
@@ -8955,7 +9011,8 @@ begin
         result := RawUTF8(VAnsiString); // expect UTF-8 content
       {$ifdef HASVARUSTRING}
       vtUnicodeString:
-        RawUnicodeToUtf8(VUnicodeString, length(UnicodeString(VUnicodeString)), result);
+        RawUnicodeToUtf8(VUnicodeString, length(UnicodeString(VUnicodeString)),
+          result);
       {$endif HASVARUSTRING}
       vtWideString:
         RawUnicodeToUtf8(VWideString, length(WideString(VWideString)), result);
@@ -9176,7 +9233,8 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 var
   process: TFormatUTF8;
 begin
-  if (Format = '') or (high(Args) < 0) then // no formatting needed
+  if (Format = '') or
+     (high(Args) < 0) then // no formatting needed
     result := Format
   else if PWord(Format)^ = ord('%') then    // optimize raw conversion
     VarRecToUTF8(Args[0], result)
@@ -9196,7 +9254,8 @@ procedure FormatShort(const Format: RawUTF8; const Args: array of const;
 var
   process: TFormatUTF8;
 begin
-  if (Format = '') or (high(Args) < 0) then // no formatting needed
+  if (Format = '') or
+     (high(Args) < 0) then // no formatting needed
     SetString(result, PAnsiChar(pointer(Format)), length(Format))
   else
   begin
@@ -9210,7 +9269,8 @@ function FormatBuffer(const Format: RawUTF8; const Args: array of const;
 var
   process: TFormatUTF8;
 begin
-  if (Dest = nil) or (DestLen <= 0) then
+  if (Dest = nil) or
+     (DestLen <= 0) then
   begin
     result := 0;
     exit; // avoid buffer overflow
@@ -9219,7 +9279,8 @@ begin
   result := PtrUInt(process.WriteMax(Dest, DestLen)) - PtrUInt(Dest);
 end;
 
-function FormatToShort(const Format: RawUTF8; const Args: array of const): shortstring;
+function FormatToShort(const Format: RawUTF8;
+  const Args: array of const): shortstring;
 var
   process: TFormatUTF8;
 begin
@@ -9232,7 +9293,8 @@ procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
 var
   process: TFormatUTF8;
 begin
-  if (Format = '') or (high(Args) < 0) then // no formatting needed
+  if (Format = '') or
+     (high(Args) < 0) then // no formatting needed
     SetString(result, PAnsiChar(pointer(Format)), length(Format))
   else
   begin
@@ -9247,7 +9309,8 @@ var
   process: TFormatUTF8;
   temp: TSynTempBuffer; // will avoid most memory allocations
 begin
-  if (Format = '') or (high(Args) < 0) then
+  if (Format = '') or
+     (high(Args) < 0) then
   begin
     // no formatting needed
     UTF8DecodeToString(pointer(Format), length(Format), result);
@@ -9309,7 +9372,7 @@ procedure KB(bytes: Int64; out result: TShort16; nospace: boolean);
 type
   TUnits = (kb, mb, gb, tb, pb, eb, b);
 const
-  TXT: array[boolean, TUnits] of RawUTF8 = (
+  TXT: array[{nospace:}boolean, TUnits] of RawUTF8 = (
     (' KB', ' MB', ' GB', ' TB', ' PB', ' EB', '% B'),
     ('KB', 'MB', 'GB', 'TB', 'PB', 'EB', '%B'));
 var
@@ -9420,8 +9483,9 @@ begin
   L := length(result);
   Len := L + 1;
   if Value < 0 then
+    // ignore '-' sign
     dec(L, 2)
-  else // ignore '-' sign
+  else
     dec(L);
   for i := 1 to L div 3 do
     insert(ThousandSep, result, Len - i * 3);
@@ -9486,7 +9550,8 @@ end;
 
 { ESynException }
 
-constructor ESynException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
+constructor ESynException.CreateUTF8(const Format: RawUTF8;
+  const Args: array of const);
 var
   msg: string;
 begin
@@ -9515,7 +9580,8 @@ var
   i: PtrInt;
 begin
   WR.AddClassName(Context.EClass);
-  if (Context.ELevel = sllException) and (Context.EInstance <> nil) and
+  if (Context.ELevel = sllException) and
+     (Context.EInstance <> nil) and
      (Context.EClass <> EExternalException) then
   begin
     extcode := Context.AdditionalInfo(extnames);
@@ -9693,7 +9759,9 @@ var {$ifdef CPUX86NOTPIC}
      tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
     {$endif CPUX86NOTPIC}
 begin
-  if (Bin = nil) or (Hex = nil) or (BinBytes <= 0) then
+  if (Bin = nil) or
+     (Hex = nil) or
+     (BinBytes <= 0) then
     exit;
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexWLower; {$endif}
   inc(Hex, BinBytes * 2);
@@ -9828,7 +9896,8 @@ var
   {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
-  if (Hex = nil) or (Bin = nil) then
+  if (Hex = nil) or
+     (Bin = nil) then
     exit;
   {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
   if BinBytes > 0 then
@@ -9837,7 +9906,8 @@ begin
     repeat
       b := tab[Ord(Hex[0])];
       c := tab[Ord(Hex[1])];
-      if (b > 15) or (c > 15) then
+      if (b > 15) or
+         (c > 15) then
         exit;
       b := b shl 4; // better FPC generation code in small explicit steps
       b := b or c;
@@ -9888,7 +9958,8 @@ begin
       repeat
         b := tab[Ord(Hex[0])];
         c := tab[Ord(Hex[1])];
-        if (b > 15) or (c > 15) then
+        if (b > 15) or
+           (c > 15) then
           exit;
         inc(Hex, 2);
         b := b shl 4;
@@ -9899,7 +9970,8 @@ begin
       until BinBytes = 0
     else
       repeat // Bin=nil -> validate Hex^ input
-        if (tab[Ord(Hex[0])] > 15) or (tab[Ord(Hex[1])] > 15) then
+        if (tab[Ord(Hex[0])] > 15) or
+           (tab[Ord(Hex[1])] > 15) then
           exit;
         inc(Hex, 2);
         dec(BinBytes);
@@ -9955,7 +10027,8 @@ begin
     {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
     B := tab[Ord(Hex[0])];
     C := tab[Ord(Hex[1])];
-    if (B <= 15) and (C <= 15) then
+    if (B <= 15) and
+       (C <= 15) then
     begin
       if Bin <> nil then
         Bin^ := AnsiChar(B shl 4 + C);
@@ -10123,12 +10196,14 @@ var
 begin
   aValue := 0;
   result := false;
-  if (P = nil) or (IdemPChar(P, '127.0.0.1') and (P[9] = #0)) then
+  if (P = nil) or
+     (IdemPChar(P, '127.0.0.1') and (P[9] = #0)) then
     exit;
   for i := 0 to 3 do
   begin
     c := GetNextItemCardinal(P, '.');
-    if (c > 255) or ((P = nil) and (i < 3)) then
+    if (c > 255) or
+       ((P = nil) and (i < 3)) then
       exit;
     b[i] := c;
   end;
@@ -10320,7 +10395,9 @@ var
 begin
   result := '';
   L := 0;
-  if (S.Read(L, 4) <> 4) or (L <= 0) or (L > MaxAllowedSize) then
+  if (S.Read(L, 4) <> 4) or
+     (L <= 0) or
+     (L > MaxAllowedSize) then
     exit;
   FastSetString(result, nil, L);
   if S.Read(pointer(result)^, L) <> L then
@@ -10387,9 +10464,9 @@ begin
   end;
 end;
 
+
 initialization
   InitializeUnit;
 
-finalization
 end.
 

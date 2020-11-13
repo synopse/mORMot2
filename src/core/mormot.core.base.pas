@@ -801,7 +801,8 @@ type
   {$endif TSYNEXTENDED80}
 
   /// the non-number values potentially stored in an IEEE floating point
-  TFloatNan = (fnNumber, fnNan, fnInf, fnNegInf);
+  TFloatNan = (
+    fnNumber, fnNan, fnInf, fnNegInf);
 
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   /// unaligned() will be defined and useful only on FPC ARM/Aarch64 plaforms

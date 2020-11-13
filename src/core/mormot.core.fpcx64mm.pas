@@ -264,7 +264,8 @@ function GetSmallBlockStatus(maxcount: integer = 10;
 
 /// retrieve all small blocks which suffered from blocking during multi-thread
 // - returns maxcount biggest results, sorted by SleepCount occurence
-function GetSmallBlockContention(maxcount: integer = 10): TSmallBlockContentionDynArray;
+function GetSmallBlockContention(
+  maxcount: integer = 10): TSmallBlockContentionDynArray;
 
 
 /// convenient debugging function into the console
@@ -487,7 +488,7 @@ asm
         neg     cnt
         jns     @z
         align 16
-@s:     movaps  xmm0, oword ptr [src + cnt]  // AVX move is not really faster
+@s:     movaps  xmm0, oword ptr [src + cnt] // AVX move is not really faster
         movntdq oword ptr [dst + cnt], xmm0 // non-temporal loop
         add     cnt, 16
         js      @s

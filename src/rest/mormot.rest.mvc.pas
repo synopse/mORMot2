@@ -55,11 +55,14 @@ uses
 
 type
   /// TMVCView.Flags rendering context
+  // - viewHasGenerationTimeTag is set if TMVCViewsAbtract.ViewGenerationTimeTag
+  // text appears in the template, for this time value not to affect the cache
   TMVCViewFlags = set of (
     viewHasGenerationTimeTag);
 
   /// define a particular rendered View
-  // - as rendered by TMVCViewsAbtract.Render() method
+  // - is initialized by TMVCRendererFromViews.Renders(), then rendered by the
+  // TMVCViewsAbtract.Render() method
   TMVCView = record
     /// the low-level content of this View
     Content: RawByteString;
@@ -1708,7 +1711,7 @@ begin
   if forcesError or
      (fMethodIndex = fRun.fViews.fFactoryErrorIndex) then
   try
-    // specific rendering of the error page
+    // current rendering of the error page
     fRun.fViews.Render(fRun.fViews.fFactoryErrorIndex, outContext, view);
   except
     // fallback to our default HTML error template, if custom one is buggy
