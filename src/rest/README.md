@@ -22,4 +22,70 @@ Our *REST* approach publishes a `TRest` class, and its Client and Server inherit
 
 This folder hosts the *RESTful* oriented features of the *mORMot* Open Source framework, version 2.
 
+## Units Presentation
 
+### mormot.rest.core
+
+Shared Types and Definitions for Abstract REST Process
+- Customize REST Execution
+- `TRestBackgroundTimer` for Multi-Thread Process
+- `TRestRunThreads` Multi-Threading Process of a REST instance
+- `TRest` Abstract Parent Class
+- RESTful Authentication Support
+- `TRestURIParams` REST URI Definitions
+- `TRestThread` Background Process of a REST instance
+- `TOrmHistory`/`TOrmTableDeleted` Modifications Tracked Persistence
+
+### mormot.rest.client
+
+Client-Side REST Process
+- Client Authentication and Authorization Logic
+- `TRestClientRoutingREST`/`TRestClientRoutingJSON_RPC` Routing Schemes
+- `TRestClientURI` Base Class for Actual Clients
+
+### mormot.rest.server
+
+Server-Side REST Process
+- `TRestServerURIContext` Access to the Server-Side Execution
+- `TRestServerRoutingREST`/`TRestServerRoutingJSON_RPC` Requests Parsing Scheme
+- `TAuthSession` for In-Memory User Sessions
+- `TRestServerAuthentication` Implementing Authentication Schemes
+- `TRestServerMonitor` for High-Level Statistics of a REST Server
+- `TInterfacedCallback`/`TBlockingCallback` Classes
+- `TRestServer` Abstract REST Server
+- `TRestHttpServerDefinition` Settings for a HTTP Server
+
+### mormot.rest.memserver
+
+Standalone REST In-Memory Server Using JSON or Binary Persistence
+- `TRestOrmServerFullMemory` Standalone REST ORM Engine
+- `TRestServerFullMemory` Standalone REST Server
+
+### mormot.rest.sqlite3
+
+REST Server and Client Using an Embedded SQlite3 Database Engine
+- `TRestServerDB` REST Server with Direct Access to a SQLite3 Database
+- `TRestClientDB` REST Client with Direct Access to a SQLite3 Database
+
+### mormot.rest.http.client
+
+Client-Side REST Process over HTTP/WebSockets
+- `TRestHttpClientGeneric` and `TRestHttpClientRequest` Parent Classes
+- `TRestHttpClientWinSock` REST Client Class over Sockets
+- `TRestHttpClientWebsockets` REST Client Class over WebSockets
+- `TRestHttpClientWinINet` TRestHttpClientWinHTTP Windows REST Client Classes
+- `TRestHttpClientCurl` REST Client Class over LibCurl
+
+### mormot.rest.http.server
+
+Server-Side REST Process over HTTP/WebSockets
+- TRestHttpServer RESTful Server
+- TRestHttpRemoteLogServer to Receive Remote Log Stream
+
+### mormot.rest.mvc
+
+Web Server using Model-View-Controller (MVC) pattern and Mustache
+- Web Views Implementation using Mustache
+- ViewModel/Controller Sessions using Cookies
+- Web Renderer Returning Mustache Views or Json
+- Application ViewModel/Controller using Interfaces
