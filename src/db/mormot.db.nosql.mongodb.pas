@@ -6,7 +6,7 @@ unit mormot.db.nosql.mongodb;
 {
   *****************************************************************************
 
-   Efficient BSON Support for MongoDB Clients
+   MongoDB Client for NoSQL Data Access
     - MongoDB Protocol Items
     - MongoDB Client Classes
 
@@ -258,8 +258,9 @@ type
     // - there is no response to an opInsert message
     // - warning: JSONDocuments[] buffer will be modified in-place during
     // parsing, so a private copy may have to be made by the caller
-    constructor Create(const FullCollectionName: RawUTF8; const JSONDocuments:
-      array of PUTF8Char; Flags: TMongoInsertFlags = []); reintroduce; overload;
+    constructor Create(const FullCollectionName: RawUTF8;
+      const JSONDocuments: array of PUTF8Char;
+      Flags: TMongoInsertFlags = []); reintroduce; overload;
   end;
 
   /// a MongoDB client message to delete one or more documents in a collection
@@ -1149,7 +1150,7 @@ type
     // case, the returned instance won't be a dvArray kind of TDocVariant, but
     // either null or the single returned document)
     // - if the query does not have any matching record, it will return null
-    function FindDoc(Criteria: PUTF8Char; const Params: array of const;
+    function FindDoc(const Criteria: RawUTF8; const Params: array of const;
       NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []): variant; overload;
     /// find an existing document in a collection, by its _id field
@@ -1183,7 +1184,7 @@ type
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
     // projection operators
-    procedure FindDocs(Criteria: PUTF8Char; const Params: array of const;
+    procedure FindDocs(const Criteria: RawUTF8; const Params: array of const;
       var result: TVariantDynArray; const Projection: variant;
       NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = []); overload;
@@ -1195,9 +1196,10 @@ type
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
     // projection operators
-    function FindDocs(Criteria: PUTF8Char; const Params: array of const;
-      const Projection: variant; NumberToReturn: integer = maxInt;
-      NumberToSkip: integer = 0; Flags: TMongoQueryFlags = []): TVariantDynArray; overload;
+    function FindDocs(const Criteria: RawUTF8;
+      const Params: array of const; const Projection: variant;
+      NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
+      Flags: TMongoQueryFlags = []): TVariantDynArray; overload;
 
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
@@ -1235,7 +1237,7 @@ type
     // matching documents as a '[..]' JSON array, or specify a limit (e.g. 1
     // for one document - in this case, the returned instance won't be a '[..]'
     // JSON array, but either 'null' or a single '{..}' JSON object)
-    function FindJSON(Criteria: PUTF8Char; const Params: array of const;
+    function FindJSON(const Criteria: RawUTF8; const Params: array of const;
       NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = [];
       Mode: TMongoJSONMode = modMongoStrict): RawUTF8; overload;
@@ -1243,7 +1245,7 @@ type
     // containing the selected documents
     // - Criteria and Projection can specify the query selector as (extended)
     // JSON and parameters
-    function FindJSON(Criteria: PUTF8Char; const CriteriaParams: array of const;
+    function FindJSON(const Criteria: RawUTF8; const Params: array of const;
       const Projection: variant; NumberToReturn: integer = maxInt;
       NumberToSkip: integer = 0; Flags: TMongoQueryFlags = [];
       Mode: TMongoJSONMode = modMongoStrict): RawUTF8; overload;
@@ -1363,7 +1365,8 @@ type
     // ! book.update('{item:?},['Divine Comedy'],'{$set:{price:?},$inc:{stock:?}},[18,5]);
     // ! // the updated document is now:
     // ! { "_id" : 11, "item" : "Divine Comedy", "price" : 18, "stock" : 7 }
-    procedure Update(Query: PUTF8Char; const QueryParams: array of const;
+    procedure Update(
+      const Query: RawUTF8; const QueryParams: array of const;
       const Update: RawUTF8; const UpdateParams: array of const;
       Flags: TMongoUpdateFlags = []); overload;
     /// modifies some fields of an existing document in a collection
@@ -1394,7 +1397,7 @@ type
     // selectors as used in the Find() method
     // - to limit the deletion to just one document, set Flags to [mdfSingleRemove]
     // - to delete all documents matching the deletion criteria, leave it to []
-    procedure RemoveFmt(Query: PUTF8Char; const QueryParams: array of const;
+    procedure RemoveFmt(const Query: RawUTF8; const Params: array of const;
       Flags: TMongoDeleteFlags = []);
 
     /// creates an index on the specified field(s) if the index does
@@ -1446,7 +1449,7 @@ type
     // you do not want an exact count, but only check for a specific limit)
     // - optional NumberToSkip can specify the number of matching documents
     // to skip before counting
-    function FindCount(Criteria: PUTF8Char; const Args, Params: array of const;
+    function FindCount(const Criteria: RawUTF8; const Args, Params: array of const;
       MaxNumberToReturn: integer = 0; NumberToSkip: integer = 0): Int64; overload;
     /// returns TRUE if the collection has no document, FALSE otherwise
     // - is much faster than Count, especially for huge collections
@@ -1464,7 +1467,7 @@ type
     // this single item as a TDocVariant
     // - if the server sent back several items as {result:[{..},{..}]}, will
     // return a dvArray kind of TDocVariant
-    function AggregateDoc(Operators: PUTF8Char;
+    function AggregateDoc(const Operators: RawUTF8;
       const Params: array of const): variant; overload;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - the Aggregation Framework was designed to be more efficient than the
@@ -1477,7 +1480,8 @@ type
     // descending order according by the age field and then in ascending order
     // according to the value in the posts field
     // ! AggregateJSON('{ $sort : { age : -1, posts: 1 } }',[])
-    function AggregateJSON(Operators: PUTF8Char; const Params: array of const;
+    function AggregateJSON(const Operators: RawUTF8;
+      const Params: array of const;
       Mode: TMongoJSONMode = modMongoStrict): RawUTF8; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
@@ -3264,13 +3268,13 @@ begin
   result := not VarIsNull(res);
 end;
 
-function TMongoCollection.AggregateDoc(Operators: PUTF8Char;
+function TMongoCollection.AggregateDoc(const Operators: RawUTF8;
   const Params: array of const): variant;
 begin
   result := AggregateDocFromJson(FormatUTF8(Operators, Params));
 end;
 
-function TMongoCollection.AggregateJSON(Operators: PUTF8Char;
+function TMongoCollection.AggregateJSON(const Operators: RawUTF8;
   const Params: array of const; Mode: TMongoJSONMode): RawUTF8;
 begin
   result := AggregateJSONFromJson(FormatUTF8(Operators, Params), Mode);
@@ -3456,7 +3460,7 @@ begin
   result := _Safe(res)^.GetValueOrDefault('n', 0);
 end;
 
-function TMongoCollection.FindCount(Criteria: PUTF8Char;
+function TMongoCollection.FindCount(const Criteria: RawUTF8;
   const Args, Params: array of const;
   MaxNumberToReturn, NumberToSkip: integer): Int64;
 var
@@ -3499,7 +3503,7 @@ begin
       Criteria, Projection, NumberToReturn, NumberToSkip, Flags), result);
 end;
 
-function TMongoCollection.FindDoc(Criteria: PUTF8Char;
+function TMongoCollection.FindDoc(const Criteria: RawUTF8;
   const Params: array of const; NumberToReturn, NumberToSkip: integer;
   Flags: TMongoQueryFlags): variant;
 begin
@@ -3507,7 +3511,7 @@ begin
     BSONVariant(Criteria, [], Params), null, NumberToReturn, NumberToSkip, Flags);
 end;
 
-procedure TMongoCollection.FindDocs(Criteria: PUTF8Char;
+procedure TMongoCollection.FindDocs(const Criteria: RawUTF8;
   const Params: array of const; var result: TVariantDynArray;
   const Projection: variant; NumberToReturn, NumberToSkip: integer;
   Flags: TMongoQueryFlags);
@@ -3518,7 +3522,7 @@ begin
       NumberToReturn, NumberToSkip, Flags), result);
 end;
 
-function TMongoCollection.FindDocs(Criteria: PUTF8Char;
+function TMongoCollection.FindDocs(const Criteria: RawUTF8;
   const Params: array of const; const Projection: variant;
   NumberToReturn, NumberToSkip: integer;
   Flags: TMongoQueryFlags): TVariantDynArray;
@@ -3564,7 +3568,7 @@ begin
       Criteria, Projection, NumberToReturn, NumberToSkip, Flags), Mode);
 end;
 
-function TMongoCollection.FindJSON(Criteria: PUTF8Char;
+function TMongoCollection.FindJSON(const Criteria: RawUTF8;
   const Params: array of const; NumberToReturn, NumberToSkip: integer;
   Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
 begin
@@ -3573,13 +3577,13 @@ begin
     NumberToSkip, Flags, Mode);
 end;
 
-function TMongoCollection.FindJSON(Criteria: PUTF8Char;
-  const CriteriaParams: array of const; const Projection: variant;
-  NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags;
-  Mode: TMongoJSONMode): RawUTF8;
+function TMongoCollection.FindJSON(
+  const Criteria: RawUTF8; const Params: array of const;
+  const Projection: variant; NumberToReturn, NumberToSkip: integer;
+  Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUTF8;
 begin
   result := FindJSON(
-    BSONVariant(Criteria, [], CriteriaParams), Projection, NumberToReturn,
+    BSONVariant(Criteria, [], Params), Projection, NumberToReturn,
     NumberToSkip, Flags, Mode);
 end;
 
@@ -3675,9 +3679,10 @@ begin
   Save(doc, DocumentObjectID);
 end;
 
-procedure TMongoCollection.Update(Query: PUTF8Char;
-  const QueryParams: array of const; const Update: RawUTF8;
-  const UpdateParams: array of const; Flags: TMongoUpdateFlags);
+procedure TMongoCollection.Update(
+  const Query: RawUTF8; const QueryParams: array of const;
+  const Update: RawUTF8; const UpdateParams: array of const;
+  Flags: TMongoUpdateFlags);
 var
   quer, upd: variant;
 begin
@@ -3716,10 +3721,10 @@ begin
   Remove(BSONVariant(['_id', _id]), [mdfSingleRemove]);
 end;
 
-procedure TMongoCollection.RemoveFmt(Query: PUTF8Char;
-  const QueryParams: array of const; Flags: TMongoDeleteFlags);
+procedure TMongoCollection.RemoveFmt(const Query: RawUTF8;
+  const Params: array of const; Flags: TMongoDeleteFlags);
 begin
-  Remove(BSONVariant(Query, [], QueryParams), Flags);
+  Remove(BSONVariant(Query, [], Params), Flags);
 end;
 
 function ToText(wc: TMongoClientWriteConcern): PShortString;

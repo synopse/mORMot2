@@ -4,7 +4,7 @@
 
 This folder hosts the SQL and NoSQL *Data Access Layer* of the *mORMot* Open Source framework, version 2.
 
-We redefined a genuine hierarchy of DB classes, to directly access the database engines. It is not grounded on the Delphi/FPC regular DB classes, to avoid the complexity of the `DB.pas` unit, mainly the `TDataSet` component and all the low-level supported types.
+We redefined a genuine hierarchy of DB classes, to directly access the database engines. It is not grounded on the Delphi/FPC regular DB classes, to avoid the complexity of the `DB.pas` unit, mainly the `TDataSet` component and all the low-level supported types, rooted on last century databases limitations.
 
 These classes focus on:
 - Easy to use, via a small set of types, classes and interfaces;
@@ -81,7 +81,7 @@ Efficient BSON Support for MongoDB Clients
 
 ### mormot.db.nosql.mongodb
 
-Efficient BSON Support for MongoDB Clients
+MongoDB Client for NoSQL Data Access
 - MongoDB Protocol Items
 - MongoDB Client Classes
 

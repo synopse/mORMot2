@@ -36,17 +36,17 @@ Basic types and reusable stand-alone functions shared by all framework units
 - Common Types Used for Compatibility Between Compilers and CPU
 - Numbers (floats and integers) Low-level Definitions
 - integer Arrays Manipulation
-- `ObjArray PtrArray InterfaceArray` Wrapper Functions
+- `ObjArray` `PtrArray` `InterfaceArray` Wrapper Functions
 - Low-level Types Mapping Binary or Bits Structures
 - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
 - Date / Time Processing
-- Efficient Variant Values Conversion
+- Efficient `Variant` Values Conversion
 - Sorting/Comparison Functions
 - Some Convenient `TStream` descendants and File access functions
 - Faster Alternative to RTL Standard Functions
 - Raw Shared Constants / Types Definitions
 
-Aim of those types and functions is to be cross-platform and cross-compiler,without any dependency but the main FPC/Delphi RTL. It also detects the kind of Intel/AMD it runs on, to adapt to the fastest asm version available. It is the main unit where x86_64 or i386 asm stubs are included.
+Aim of those types and functions is to be cross-platform and cross-compiler, without any dependency but the main FPC/Delphi RTL. It also detects the kind of Intel/AMD it runs on, to adapt to the fastest asm version available. It is the main unit where x86_64 or i386 asm stubs are included.
 
 ### mormot.core.os
 
@@ -54,11 +54,11 @@ Cross-platform functions shared by all framework units
 - Gather Operating System Information
 - Operating System Specific Types (e.g. `TWinRegistry`)
 - Unicode, Time, File, Console, Library process
-- Per Class Properties O(1) Lookup via vmtAutoTable Slot (e.g. for RTTI cache)
+- Per Class Properties O(1) Lookup via `vmtAutoTable` Slot (e.g. for RTTI cache)
 - `TSynLocker`/`TSynLocked` and Low-Level Threading Features
 - Unix Daemon and Windows Service Support
 
-Aim of this unit is to centralize most used OS-specific API calls, like a SysUtils unit on steroids, to avoid `$ifdef/$endif` in "uses" clauses.
+Aim of this unit is to centralize most used OS-specific API calls, like a `SysUtils` unit on steroids, to avoid `$ifdef/$endif` in "uses" clauses.
 
 In practice, no "Windows", nor "Linux/Unix" reference should be needed inregular units, once mormot.core.os is included. :)
 
@@ -85,7 +85,7 @@ Text Processing functions shared by all framework units
 ### mormot.core.datetime
 
 Date and Time definitions and process shared by all framework units
-- ISO-8601 Compatible Date/Time Text Encoding
+- *ISO-8601* Compatible Date/Time Text Encoding
 - `TSynDate` / `TSynDateTime` / `TSynSystemTime` High-Level objects
 - `TUnixTime` / `TUnixMSTime` POSIX Epoch Compatible 64-bit date/time
 - `TTimeLog` efficient 64-bit custom date/time encoding
@@ -95,7 +95,7 @@ Date and Time definitions and process shared by all framework units
 Cross-Compiler RTTI Definitions shared by all framework units
 - Low-Level Cross-Compiler RTTI Definitions
 - Enumerations RTTI
-- Published Class Properties and Methods RTTI
+- Published `class` Properties and Methods RTTI
 - `IInvokable` Interface RTTI
 - Efficient Dynamic Arrays and Records Process
 - Managed Types Finalization or Copy
@@ -103,9 +103,9 @@ Cross-Compiler RTTI Definitions shared by all framework units
 - RTTI-based Registration for Custom JSON Parsing
 - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
 
-Purpose of this unit is to avoid any direct use of `TypInfo.pas` RTL unit, which is not exactly compatible between compilers, and lack of direct RTTI access with no memory allocation. We define pointers to RTTI record/object to access `TypeInfo()` via a set of explicit methods. Here fake record/objects are just wrappers around pointers defined in Delphi/FPC RTL's TypInfo.pas with the magic of inlining.
+Purpose of this unit is to avoid any direct use of `TypInfo.pas` RTL unit, which is not exactly compatible between compilers, and lacks of direct RTTI access with no memory allocation. We define pointers to RTTI record/object to access `TypeInfo()` via a set of explicit methods. Here fake record/objects are just wrappers around pointers defined in Delphi/FPC RTL's `TypInfo.pas` with the magic of inlining. We redefined all RTTI definitions as `TRtti*` types to avoid confusion with type names as published by the `TypInfo` unit.
 
-We redefined all RTTI definitions as `TRtti*` types to avoid confusion with type names as published by the `TypInfo` unit. `TRttiCustom` class is the main cached entry of our customizable RTTI,accessible from the global `Rtti.*` methods.
+At higher level, the new `TRttiCustom` class is the main cached entry of our customizable RTTI,accessible from the global `Rtti.*` methods. It is enhanced in the `mormot.core.json` unit to support JSON.
 
 ### mormot.core.buffers
 
@@ -135,7 +135,7 @@ Low-Level Data Processing Functions shared by all framework units
 JSON functions shared by all framework units
 - Low-Level JSON Processing Functions
 - `TTextWriter` class with proper JSON escaping and `WriteObject()` support
-- JSON-aware `TSynNameValue TSynPersistentStoreJson TRawByteStringGroup`
+- JSON-aware `TSynNameValue` `TSynPersistentStoreJson` `&TRawByteStringGroup`
 - JSON-aware `TSynDictionary` Storage
 - JSON Unserialization for any kind of Values
 - JSON Serialization Wrapper Functions
@@ -143,11 +143,11 @@ JSON functions shared by all framework units
 
 ### mormot.core.variants
 
-Variant / `TDocVariant` feature shared by all framework units
-- Low-Level Variant Wrappers
-- Custom Variant Types with JSON support
+`Variant` / `TDocVariant` feature shared by all framework units
+- Low-Level `Variant` Wrappers
+- Custom `Variant` Types with JSON support
 - `TDocVariant` Object/Array Document Holder with JSON support
-- JSON Parsing into Variant
+- JSON Parsing into `Variant`
 
 ### mormot.core.search
 
@@ -155,7 +155,7 @@ Several Indexing and Search Engines, as used by other parts of the framework
 - Files Search in Folders
 - GLOB and SOUNDEX Text Search
 - Versatile Expression Search Engine
-- Bloom Filter Probabilistic Index
+- *Bloom Filter* Probabilistic Index
 - `TDynArray` Low-Level Binary Search
 - `TSynFilter` and `TSynValidate` Processing Classes
 - Cross-Platform `TSynTimeZone` Time Zones
@@ -164,7 +164,7 @@ Several Indexing and Search Engines, as used by other parts of the framework
 
 Logging functions shared by all framework units
 - Executable Symbols Processing
-- Logging via `TSynLogFamily TSynLog ISynLog`
+- Logging via `TSynLogFamily` `TSynLog` `ISynLog`
 - High-Level Logs and Exception Related Features
 - Efficient `.log` File Access via `TSynLogFile`
 
@@ -202,8 +202,8 @@ Optimized x86_64 or i386 asm stubs, featuring e.g. AES-NI, are included.
 
 ### mormot.core.ecc256r1
 
-High-Performance secp256r1/NISTP-256/prime256v1 Elliptic-Curve Cryptography
-- Low-Level ECC secp256r1 ECDSA and ECDH Functions
+High-Performance *secp256r1/NISTP-256/prime256v1* Elliptic-Curve Cryptography
+- Low-Level ECC *secp256r1* ECDSA and ECDH Functions
 - Middle-Level Certificate-based Public Key Cryptography
 
 Pascal and optimized gcc static binaries are included.
@@ -224,16 +224,23 @@ JSON Web Tokens (JWT) Implementation - see RFC 7797
 ### mormot.core.secure
 
 Authentication and Security types shared by all framework units.
-- `TSyn***Password` and `TSynConnectionDefinition` Classes
+- `TSyn*Password` and `TSynConnectionDefinition` Classes
 - Reusable Authentication Classes
 - High-Level `TSynSigner`/`TSynHasher` Multi-Algorithm Wrappers
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
 
+### mormot.core.zip
+
+High-Level Zip/Deflate Compression features shared by all framework units
+- `TSynZipCompressor` Stream Class
+- GZ Read/Write Support
+- `.zip` Archive File Support
+
 ### mormot.core.mustache
 
-Logic-Less Mustache Templates Rendering
-- Mustache Execution Data Context Types
+Logic-Less `{{Mustache}}` Templates Rendering
+- *Mustache* Execution Data Context Types
 - `TSynMustache` Template Processing
 
 ### mormot.core.interfaces
@@ -241,8 +248,8 @@ Logic-Less Mustache Templates Rendering
 Implements SOLID Process via Interface types
 - `IInvokable` Interface Methods and Parameters RTTI Extraction
 - `TInterfaceFactory` Generating Runtime Implementation Class
-- `TInterfaceResolver TInjectableObject` for IoC / Dependency Injection
-- `TInterfaceStub TInterfaceMock` for Dependency Mocking
+- `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
+- `TInterfaceStub` `TInterfaceMock` for Dependency Mocking
 - `TInterfaceMethodExecute` for Method Execution from JSON
 
 ### mormot.core.test
@@ -250,9 +257,3 @@ Implements SOLID Process via Interface types
 Testing functions shared by all framework units
 - Unit-Testing classes and functions
 
-### mormot.core.zip
-
-High-Level Zip/Deflate Compression features shared by all framework units
-- `TSynZipCompressor` Stream Class
-- GZ Read/Write Support
-- `.ZIP` Archive File Support

@@ -16,7 +16,7 @@ unit mormot.core.os;
 
    Aim of this unit is to centralize most used OS-specific API calls, like a
   SysUtils unit on steroids, to avoid $ifdef/$endif in "uses" clauses.
-   In practice, no "Windows", nor "Linux/Unix" reference should be needed in
+   In practice, no "Windows", nor "Linux/Posix" reference should be needed in
   regular units, once mormot.core.os is included. :)
    This unit only refers to mormot.core.base so can be used almost stand-alone.
 
