@@ -6,7 +6,7 @@ An Open Source Client-Server ORM/SOA framework, version 2
 
 https://synopse.info  - http://mORMot.net
 
-See CONTRIBUTORS.md for a list of contributors.
+See [the Contributors list](CONTRIBUTORS.md).
 
 **WARNING: This set of units is still a work-in-progress, and not yet ready for production. Please still [use *mORMot 1.18*](https://github.com/synopse/mORMot) for your projects.**
 
