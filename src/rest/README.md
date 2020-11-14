@@ -73,14 +73,14 @@ Client-Side REST Process over HTTP/WebSockets
 - `TRestHttpClientGeneric` and `TRestHttpClientRequest` Parent Classes
 - `TRestHttpClientWinSock` REST Client Class over Sockets
 - `TRestHttpClientWebsockets` REST Client Class over WebSockets
-- `TRestHttpClientWinINet` TRestHttpClientWinHTTP Windows REST Client Classes
+- `TRestHttpClientWinINet` `TRestHttpClientWinHTTP` Windows REST Client Classes
 - `TRestHttpClientCurl` REST Client Class over LibCurl
 
 ### mormot.rest.http.server
 
 Server-Side REST Process over HTTP/WebSockets
-- TRestHttpServer RESTful Server
-- TRestHttpRemoteLogServer to Receive Remote Log Stream
+- `TRestHttpServer` RESTful Server
+- `TRestHttpRemoteLogServer` to Receive Remote Log Stream
 
 ### mormot.rest.mvc
 

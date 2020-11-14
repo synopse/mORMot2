@@ -12,19 +12,20 @@ The framework source code is licensed under a disjunctive three-license giving t
 - *GNU Lesser General Public License*, version 2.1 or later (LGPL), with *linking exception* of the *FPC modified LGPL*.
 This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
 
-See LICENSE.md file in the root folder of this repository for more information.
+See [the full licensing terms](../LICENSE.md) in the root folder of this repository for more information.
 
 ## Sub-Folders
 
 The source code tree is split into the following sub-folders:
 
-- `core` for low-level shared components like text, JSON, compression, crypto, network;
-- `lib` for external third-party libraries like zlib or openssl;
+- `core` for low-level shared components like text, RTTI, JSON, compression, crypto;
+- `lib` for external third-party libraries like *zlib* or *openssl*;
 - `net` for the client/server communication layer;
-- `db` for our SQLite3 kernel, and SQL/NoSQL direct access;
+- `db` for our *SQLite3* kernel, and SQL/NoSQL direct access;
+- `rest` for the RESTful client/server processing;
 - `orm` for high-level ORM features;
 - `soa` for high-level SOA features;
-- `app` for hosting REST (micro)services/daemons and applications;
+- `app` for hosting (micro)services/daemons and applications;
 - `ddd` for *Domain-Driven-Design* related code.
 
 

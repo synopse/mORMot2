@@ -172,10 +172,10 @@ Logging functions shared by all framework units
 
 Performance Monitoring functions shared by all framework units
 - Performance Counters
-- TSynMonitor Process Information Classes
-- TSynMonitorUsage Process Information Database Storage
+- `TSynMonitor` Process Information Classes
+- `TSynMonitorUsage` Process Information Database Storage
 - Operating System Monitoring
-- TSynFPUException Wrapper for FPU Flags Preservation
+- `TSynFPUException` Wrapper for FPU Flags Preservation
 
 ### mormot.core.threads
 
@@ -218,8 +218,8 @@ Certificate-based Public Key Cryptography Classes
 
 JSON Web Tokens (JWT) Implementation - see RFC 7797
 - Abstract JWT Parsing and Computation
-- JWT Implementation of HS* and S3* Symmetric Algorithms
-- JWT Implementation of ES256 Asymmetric Algorithm
+- JWT Implementation of `HS*` and `S3*` Symmetric Algorithms
+- JWT Implementation of `ES256` Asymmetric Algorithm
 
 ### mormot.core.secure
 

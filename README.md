@@ -16,21 +16,23 @@ The *mORMot* framework stayed in revision 1.18 for years, and is was time for a 
 
 The main refactoring points tried to better follow SOLID principles:
  - Switch to Semantic Versioning - see https://semver.org
- - Separate main big units (`SynCommons.pas`, `mORMot.pas`) into smaller scope-refined units;
- - All unit names changed, to avoid collision between versions;
- - Favor composition over inheritance (e.g. TSQLRest class split into proper REST/ORM/SOA classes);
+ - Split main big units (`SynCommons.pas`, `mORMot.pas`) into smaller scope-refined units;
+ - OS- or compiler- specific code separated to ease evolution;
+ - Rename confusing types (e.g. `TSQLRecord` into `TOrm`, `TSQLRest` into `TRest`...);
+ - Favor composition over inheritance (e.g. `TRest` class split into proper REST/ORM/SOA classes - and folders);
  - Rewrite some code to avoid internal errors on Delphi (e.g. untyped const/var changed into pointers);
+ - Tools to leverage MicroServices coding and administration;
  - Add MVC support for SOA rich clients on Delphi VCL and Lazarus LCL;
- - Introduce high-level non-visual TComponent version of our classes for a more RAD approach.
+ - Introduce high-level non-visual `TComponent` version of our classes for a more RAD approach.
 
-We therefore created a whole new project and repository, since switching to version 2 induced some backward uncompatible changes. New unit names were used, to avoid unexpected issues during migration, or if 1.18 is to remain installed for a compatibility project.
+We therefore created a whole new project and repository, since switching to version 2 induced some backward uncompatible changes. New unit names were used, to avoid unexpected collision issues during migration, or if 1.18 is to remain installed for a compatibility project.
 
 (See below if you are upgrading from 1.18 branch)
 
 
 ## Presentation
 
-Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 10.3 Rio and FPC, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
+Synopse *mORMot* is an Open Source Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 10.4 Sydney and FPC 3.2/trunk, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX).
 
 The main features of *mORMot* are therefore:
 
@@ -50,16 +52,16 @@ Emphasizing speed and versatility, *mORMot* is a incredibly well documented Open
 
 It provides an Open Source self-sufficient set of units (even Delphi starter edition is enough) for creating any application, from a stand-alone solution up to the most complex Domain-Driven Design (DDD):
 
- - Presentation layer featuring MVC UI generation with i18n and reporting (with pdf export) for rich Delphi clients, MVC web clients (with logic-less Mustache templates) or rich AJAX clients (via native JSON/REST access);
+- Presentation layer featuring MVC UI generation with i18n and reporting (with pdf export) for rich Delphi clients, MVC web clients (with logic-less Mustache templates) or rich AJAX clients (via native JSON/REST access);
 
- - Application layer implementing Service Oriented Architecture via interface-based services (like WCF) and Client-Server ORM (including method-based services) - following a RESTful model using JSON over several communication protocols (e.g. HTTP/1.1);
+- Application layer implementing Service Oriented Architecture via interface-based services (like WCF) and Client-Server ORM (including method-based services) - following a RESTful model using JSON over several communication protocols (e.g. HTTP/1.1);
 
- - Domain Model layer handling all the needed business logic in plain Delphi objects, including high-level managed types like dynamic arrays or records for Value Objects, dedicated classes for Entities or Aggregates, and variant storage with late-binding for dynamic documents;
+- Domain Model layer handling all the needed business logic in plain Delphi objects, including high-level managed types like dynamic arrays or records for Value Objects, dedicated classes for Entities or Aggregates, and variant storage with late-binding for dynamic documents;
 
- - Data persistence infrastructure layer with ORM operations on direct Oracle, MS SQL, OleDB, ODBC, ZEOS/ZDBC access or any TDataSet provider (e.g. FireDAC/AnyDAC, UniDAC, NexusDB, BDE...), with a powerful SQLite3 kernel, and optional SQL access if needed, with amazing performance and advanced features like Array DML, auto-generating SQL for SQLite3, Oracle, 
+- Data persistence infrastructure layer with ORM operations on direct Oracle, MS SQL, OleDB, ODBC, ZEOS/ZDBC access or any TDataSet provider (e.g. FireDAC/AnyDAC, UniDAC, NexusDB, BDE...), with a powerful SQLite3 kernel, and optional SQL access if needed, with amazing performance and advanced features like Array DML, auto-generating SQL for SQLite3, Oracle, 
  Jet/MSAccess, MS SQL, Firebird, DB2, PostgreSQL, MySQL and NexusDB - and alternative high-speed MongoDB NoSQL database access for ODM persistence;
 
- - Cross-Cutting infrastructure layers for handling data filtering and validation, security (e.g. Windows authentication or any custom model), caching, logging and testing (framework uses test-driven approach and features interface stubbing and mocking).
+- Cross-Cutting infrastructure layers for handling data filtering and validation, security (e.g. Windows authentication or any custom model), caching, logging and testing (framework uses test-driven approach and features interface stubbing and mocking).
 
 ## Client-Server Fully Integrated Framework
 
@@ -72,8 +74,8 @@ The SpiderMonkey JavaScript engine has been integrated on the server side and ca
 The framework Core is non-visual: you will get everything you need in a consistent set of classes to be used from code. In order to let you focus on your business, using *mORMot*'s KISS/DRY/SOC/YAGNI/TDD and Convention-Over-Configuration patterns. But you have also some UI units available (including screen auto-generation, reporting and ribbon GUI), and you can use it from
 any RAD, web, or AJAX clients (via JavaScript or Smart Mobile Studio).
 
-No dependency is needed on the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP, even through a corporate proxy or a VPN. Rich Delphi clients can be deployed just by copying and running
-a stand-alone small executable, with no installation process. Stream can be encrypted via HTTS or with proven SHA/AES-256. Endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call.
+No dependency is needed on the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP, even through a corporate proxy or a VPN. Rich Delphi clients can be deployed just by copying and running a stand-alone small executable, with no installation process. Stream can be encrypted via HTTS or with proven SHA/AES-256. Endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call.
+
 Speed and scalability has been implemented from the ground up: a genuine optimized multi-threaded core let a single server handle more than 50,000 concurrent clients, faster than DataSnap, WCF or node.js, and our rich SOA design is able to implement both vertical and horizontal scalable hosting, using recognized enterprise-level SQL or NoSQL databases for storage.
 
 Even if *mORMot* will be more easily used in a project designed from scratch, it fits very well the purpose of evolving any existing Delphi project, or creating the server side part of an AJAX application.
@@ -87,19 +89,20 @@ That is, you can use e.g. only  PDF generation, SynDB fast database access, a st
 ## Compiler targets
 
 The framework source code:
- - Tries to stay compatible with FPC trunk and Delphi 7 up to 10.3; 
- - Is validated against FPC trunk SVN 40491, Delphi 7, XE4, XE7 and 10.3;
- - Please submit pull requests for non-validated versions.
+- Tries to stay compatible with FPC trunk and Delphi 7 and up; 
+- Is validated against FPC 3.2.0-r45643, Delphi 7, XE4, XE7 and 10.3;
+- Please submit pull requests for non-validated versions.
 
 ## MPL/GPL/LGPL Three-License
 
 Licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
- - Mozilla Public License, version 1.1 or later;
- - GNU General Public License, version 2.0 or later;
- - GNU Lesser General Public License, version 2.1 or later.
+- Mozilla Public License, version 1.1 or later;
+- GNU General Public License, version 2.0 or later;
+- GNU Lesser General Public License, version 2.1 or later.
+
 This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
 
-See LICENSE.md for the licensing terms.
+See [the full licensing terms](LICENSE.md).
 
 ## Links
 
@@ -161,6 +164,6 @@ Quick Steps when upgrading from a previous 1.18 revision:
  
 5) Consult the documentation about breaking changes from 1.18, mainly:
  - Units refactoring (see point 4 above);
- - Delphi 5-6 compatibility removed;
- - ...
+ - Delphi 5-6 and Kylix compatibility removed;
+ - BigTable, LVCL, RTTI-UI deprecated;
 
