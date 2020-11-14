@@ -102,7 +102,7 @@ Licensed under a disjunctive three-license giving you the choice of one of the t
 
 This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
 
-See [the full licensing terms](LICENSE.md).
+See [the full licensing terms](LICENCE.md).
 
 ## Links
 
