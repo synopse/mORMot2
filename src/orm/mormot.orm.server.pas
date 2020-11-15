@@ -155,7 +155,7 @@ type
     // - it may be used by client to avoid retrieve data only if necessary
     // - if its value is 0, this feature is not activated on the server, and the
     // client must ignore it and always retrieve the content
-    InternalState: Cardinal;
+    InternalState: cardinal;
     /// a method can be specified here to trigger events after any table update
     // - is called BEFORE deletion, and AFTER insertion or update
     // - note that the aSentData parameter does not contain all record fields,

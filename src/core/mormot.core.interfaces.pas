@@ -2052,7 +2052,7 @@ type
     fOptions: TInterfacedObjectFromFactoryOptions;
     fInvoke: TOnFakeInstanceInvoke;
     fNotifyDestroy: TOnFakeInstanceDestroy;
-    fClientDrivenID: Cardinal;
+    fClientDrivenID: cardinal;
   public
     /// create an instance, using the specified interface
     constructor Create(aFactory: TInterfaceFactory;
@@ -2066,7 +2066,7 @@ type
     property Factory: TInterfaceFactory
       read fFactory;
     /// the ID used in sicClientDriven mode
-    property ClientDrivenID: Cardinal
+    property ClientDrivenID: cardinal
       read fClientDrivenID;
   end;
   {$M-}
@@ -2921,7 +2921,7 @@ const
 
   {$ifdef CPU32}
   // parameters are always aligned to 8 bytes boundaries on 64-bit ABI
-  ARGS_IN_STACK_SIZE: array[TInterfaceMethodValueType] of Cardinal = (
+  ARGS_IN_STACK_SIZE: array[TInterfaceMethodValueType] of cardinal = (
     0, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES,
     POINTERBYTES, 8, 8, 8, 8, POINTERBYTES, POINTERBYTES, POINTERBYTES,
     POINTERBYTES, 0, POINTERBYTES, POINTERBYTES, POINTERBYTES, POINTERBYTES,

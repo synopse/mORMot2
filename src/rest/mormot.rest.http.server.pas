@@ -428,7 +428,7 @@ type
 var
   /// a global hook variable, able to enhance WebSockets logging
   // - when a TRestHttpServer is created from a TRestHttpServerDefinition
-  HttpServerFullWebSocketsLog: Boolean;
+  HttpServerFullWebSocketsLog: boolean;
 
 
 function ToText(opt: TRestHttpServerOptions): PShortString; overload;

@@ -141,10 +141,10 @@ type
     // match DB charset for CHAR/NVARCHAR2, nil for OCI_UTF8/OCI_AL32UTF8
     fAnsiConvert: TSynAnsiConvert;
     procedure STRToUTF8(P: PAnsiChar; var result: RawUTF8;
-      ColumnDBCharSet,ColumnDBForm: Cardinal);
+      ColumnDBCharSet,ColumnDBForm: cardinal);
     {$ifndef UNICODE}
     procedure STRToAnsiString(P: PAnsiChar; var result: AnsiString;
-      ColumnDBCharSet,ColumnDBForm: Cardinal);
+      ColumnDBCharSet,ColumnDBForm: cardinal);
     {$endif}
   public
     /// prepare a connection to a specified Oracle database server
@@ -1985,7 +1985,8 @@ begin
               ColumnValueDBSize := sizeof(Double);
               case oScale of
                {0: if (major_version>11) or
-                      ((major_version=11) and (minor_version>1)) then
+                      ((major_version=11) and
+                       (minor_version>1)) then
                begin
                  // starting with 11.2, OCI supports NUMBER conversion into Int64
                  ColumnType := ftInt64;

@@ -531,13 +531,13 @@ type
     // directly into JSON
     procedure FetchAllToJSON(W: TTextWriter;
       Mode: TMongoJSONMode = modMongoStrict; WithHeader: boolean = false;
-      MaxSize: Cardinal = 0);
+      MaxSize: cardinal = 0);
     /// return all documents content as a JSON array, or one JSON object
     // if there is only one document in this reply
     // - this method is very optimized and will convert the BSON binary content
     // directly into JSON
     function ToJSON(Mode: TMongoJSONMode = modMongoStrict;
-      WithHeader: boolean = false; MaxSize: Cardinal = 0): RawUTF8;
+      WithHeader: boolean = false; MaxSize: cardinal = 0): RawUTF8;
     /// append all documents content to a dynamic array of TDocVariant
     // - return the new size of the Dest[] array
     function AppendAllToDocVariantDynArray(var Dest: TVariantDynArray): integer;
@@ -870,7 +870,7 @@ type
     fConnections: TMongoConnectionDynArray;
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
-    fConnectionTimeOut: Cardinal;
+    fConnectionTimeOut: cardinal;
     fConnectionTLS: boolean;
     fGracefulReconnect: record
       Enabled, ForcedDBCR: boolean;
@@ -980,7 +980,7 @@ type
       read fWriteConcern write fWriteConcern;
     /// the connection time out, in milliseconds
     // - default value is 30000, i.e. 30 seconds
-    property ConnectionTimeOut: Cardinal
+    property ConnectionTimeOut: cardinal
       read fConnectionTimeOut write fConnectionTimeOut;
     /// if the socket connection is secured over TLS
     property ConnectionTLS: boolean
@@ -2086,7 +2086,7 @@ begin
 end;
 
 procedure TMongoReplyCursor.FetchAllToJSON(W: TTextWriter; Mode: TMongoJSONMode;
-  WithHeader: boolean; MaxSize: Cardinal);
+  WithHeader: boolean; MaxSize: cardinal);
 var
   b: PByte;
 begin
@@ -2120,7 +2120,7 @@ begin
 end;
 
 function TMongoReplyCursor.ToJSON(Mode: TMongoJSONMode; WithHeader: boolean;
-  MaxSize: Cardinal): RawUTF8;
+  MaxSize: cardinal): RawUTF8;
 var
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;

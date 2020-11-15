@@ -374,7 +374,7 @@ type
     RecSize: cardinal;
     ManagedCount: integer;
     // ManagedFields: array[0..0] of TManagedField;
-    NumOps: Byte;
+    NumOps: byte;
     // RecOps: array[0..0] of pointer;
     AllCount: integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
     AllFields: array[0..0] of TRecordTypeField; // as defined in TypInfo.pas

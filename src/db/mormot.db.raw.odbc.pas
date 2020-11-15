@@ -395,19 +395,19 @@ const
 
 type
   SqlSmallint = Smallint;
-  SqlDate = Byte;
-  SqlTime = Byte;
-  SqlDecimal = Byte;
+  SqlDate = byte;
+  SqlTime = byte;
+  SqlDecimal = byte;
   SqlDouble = Double;
   SqlFloat = Double;
   SqlInteger = integer;
   SqlUInteger = cardinal;
-  SqlNumeric = Byte;
+  SqlNumeric = byte;
   SqlPointer = Pointer;
   SqlReal = Single;
   SqlUSmallint = Word;
-  SqlTimestamp = Byte;
-  SqlVarchar = Byte;
+  SqlTimestamp = byte;
+  SqlVarchar = byte;
   PSqlSmallint = ^SqlSmallint;
   PSqlInteger = ^SqlInteger;
 

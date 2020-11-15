@@ -302,7 +302,7 @@ type
     fDataCurrentRowNull: TByteDynArray;
     fDataCurrentRowValues: array of pointer;
     fDataCurrentRowValuesStart: pointer;
-    fDataCurrentRowValuesSize: Cardinal;
+    fDataCurrentRowValuesSize: cardinal;
     // per-row column type (SQLite3 only) e.g. select coalesce(column,0) from ..
     fDataCurrentRowColTypes: array of TSQLDBFieldType;
     function IntColumnType(Col: integer; out Data: PByte): TSQLDBFieldType;

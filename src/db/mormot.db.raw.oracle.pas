@@ -45,7 +45,7 @@ type
   sb2     = SmallInt;
   ub2     = Word;
   sb1     = ShortInt;
-  ub1     = Byte;
+  ub1     = byte;
   dvoid   = Pointer;
   text    = PAnsiChar;
   OraText = PAnsiChar;
@@ -1638,7 +1638,8 @@ begin
     GetProc(OCI_ENTRIES[i], @P[i], ESQLDBOracle); // raise an ESQLDBOracle on error
   ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
   SupportsInt64Params := (major_version > 11) or
-                         ((major_version = 11) and (minor_version > 1));
+                         ((major_version = 11) and
+                          (minor_version > 1));
   UseLobChunks := true; // by default
 end;
 

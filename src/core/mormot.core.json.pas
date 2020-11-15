@@ -677,7 +677,7 @@ type
     fBlockComment: RawUTF8;
     /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
     fInternalJSONWriter: TTextWriter;
-    procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
+    procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
       AnsiToWide: PWordArray; Escape: TTextWriterKind);
   public
     /// release all internal structures
@@ -2603,7 +2603,7 @@ lit:        inc(P);
                     c4 := c4 shr 6;
                     dec(extra);
                   until extra = 0;
-                  D^ := AnsiChar(Byte(c4) or UTF8_FIRSTBYTE[ord(c)]);
+                  D^ := AnsiChar(byte(c4) or UTF8_FIRSTBYTE[ord(c)]);
                   inc(D, ord(c));
                   inc(P, 5);
                 end
@@ -5353,7 +5353,7 @@ begin
   Add(',');
 end;
 
-procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
+procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
   AnsiToWide: PWordArray; Escape: TTextWriterKind);
 var
   c: cardinal;

@@ -7084,8 +7084,8 @@ begin
   end;
   RTTI_FINALIZE[rkClass] := @_ObjClear;
   PT_INFO[ptBoolean] := TypeInfo(boolean);
-  PT_INFO[ptByte] := TypeInfo(Byte);
-  PT_INFO[ptCardinal] := TypeInfo(Cardinal);
+  PT_INFO[ptByte] := TypeInfo(byte);
+  PT_INFO[ptCardinal] := TypeInfo(cardinal);
   PT_INFO[ptCurrency] := TypeInfo(Currency);
   PT_INFO[ptDouble] := TypeInfo(Double);
   PT_INFO[ptExtended] := TypeInfo(Extended);

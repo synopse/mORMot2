@@ -463,7 +463,7 @@ type
 var
   /// a global hook variable, able to set WebSockets logging to full verbose
   // - checked by TRestHttpClientWebsockets.WebSocketsConnect()
-  HttpClientFullWebSocketsLog: Boolean;
+  HttpClientFullWebSocketsLog: boolean;
 
 
 
@@ -644,7 +644,7 @@ begin
     else if UrlDecodeValue(P, 'PROXYBYPASS', tmp) then
       fProxyByPass := CurrentAnsiConvert.UTF8ToAnsi(tmp);
     if UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS', V, @P) then
-      fExtendedOptions.IgnoreSSLCertificateErrors := Boolean(V);
+      fExtendedOptions.IgnoreSSLCertificateErrors := boolean(V);
   end;
   inherited RegisteredClassCreateFrom(aModel, aDefinition, false); // call SetUser()
 end;

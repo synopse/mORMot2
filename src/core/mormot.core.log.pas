@@ -3929,7 +3929,7 @@ begin
   fWriter.AddShorter('   ');
 end;
 
-procedure TSynLog.AddErrorMessage(Error: Cardinal);
+procedure TSynLog.AddErrorMessage(Error: cardinal);
 begin
   fWriter.Add(' ', '"');
   fWriter.AddOnSameLine(pointer(GetErrorText(Error)));
@@ -5011,7 +5011,7 @@ begin
   end;
   repeat
     inc(result);
-    if result >= Cardinal(Count) then
+    if result >= cardinal(Count) then
       break;
     case fLevels[result] of
       sllEnter:
@@ -5513,12 +5513,12 @@ begin
   case L of
     sllEnter:
       begin
-        if Cardinal(fLogProcStackCount[thread]) >=
-            Cardinal(length(fLogProcStack[thread])) then
+        if cardinal(fLogProcStackCount[thread]) >=
+            cardinal(length(fLogProcStack[thread])) then
           SetLength(fLogProcStack[thread], length(fLogProcStack[thread]) + 256);
         fLogProcStack[thread][fLogProcStackCount[thread]] := fLogProcNaturalCount;
         inc(fLogProcStackCount[thread]);
-        if Cardinal(fLogProcNaturalCount) >= Cardinal(length(fLogProcNatural)) then
+        if cardinal(fLogProcNaturalCount) >= cardinal(length(fLogProcNatural)) then
           SetLength(fLogProcNatural, length(fLogProcNatural) + 32768);
         // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
         inc(fLogProcNaturalCount);

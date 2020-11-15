@@ -40,7 +40,7 @@ type
   TSynAnsicharSet = set of AnsiChar;
 
   /// used to store a set of 8-bit unsigned integers
-  TSynByteSet = set of Byte;
+  TSynByteSet = set of byte;
 
   /// a generic callback, which can be used to translate some text on the fly
   // - maps procedure TLanguageFile.Translate(var English: string) signature
@@ -1657,19 +1657,19 @@ function FloatStrCopy(s, d: PUTF8Char): PUTF8Char;
 
 /// fast conversion of 2 digit characters into a 0..99 value
 // - returns FALSE on success, TRUE if P^ is not correct
-function Char2ToByte(P: PUTF8Char; out Value: Cardinal;
+function Char2ToByte(P: PUTF8Char; out Value: cardinal;
    ConvertHexToBinTab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion of 3 digit characters into a 0..9999 value
 // - returns FALSE on success, TRUE if P^ is not correct
-function Char3ToWord(P: PUTF8Char; out Value: Cardinal;
+function Char3ToWord(P: PUTF8Char; out Value: cardinal;
    ConvertHexToBinTab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion of 4 digit characters into a 0..9999 value
 // - returns FALSE on success, TRUE if P^ is not correct
-function Char4ToWord(P: PUTF8Char; out Value: Cardinal;
+function Char4ToWord(P: PUTF8Char; out Value: cardinal;
    ConvertHexToBinTab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1743,13 +1743,13 @@ type
 /// creates a 4 digits short string from a 0..9999 value
 // - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
-function UInt4DigitsToShort(Value: Cardinal): TShort4;
+function UInt4DigitsToShort(Value: cardinal): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 3 digits short string from a 0..999 value
 // - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
-function UInt3DigitsToShort(Value: Cardinal): TShort4;
+function UInt3DigitsToShort(Value: cardinal): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 2 digits short string from a 0..99 value
@@ -2187,20 +2187,20 @@ procedure PointerToHex(aPointer: Pointer; var result: RawUTF8); overload;
 // - such result type would avoid a string allocation on heap
 function PointerToHexShort(aPointer: Pointer): TShort16; overload;
 
-/// fast conversion from a Cardinal value into hexa chars, ready to be displayed
+/// fast conversion from a cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 // - reverse function of HexDisplayToCardinal()
-function CardinalToHex(aCardinal: Cardinal): RawUTF8;
+function CardinalToHex(aCardinal: cardinal): RawUTF8;
 
-/// fast conversion from a Cardinal value into hexa chars, ready to be displayed
+/// fast conversion from a cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplayLower()
 // - reverse function of HexDisplayToCardinal()
-function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
+function CardinalToHexLower(aCardinal: cardinal): RawUTF8;
 
-/// fast conversion from a Cardinal value into hexa chars, ready to be displayed
+/// fast conversion from a cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 // - such result type would avoid a string allocation on heap
-function CardinalToHexShort(aCardinal: Cardinal): TShort16;
+function CardinalToHexShort(aCardinal: cardinal): TShort16;
 
 /// compute the hexadecimal representation of the crc32 checkum of a given text
 // - wrapper around CardinalToHex(crc32c(...))
@@ -3907,7 +3907,7 @@ begin
     begin
       inc(P);
       last := GetNextItemCardinalStrict(P) - 1; // '0' marks end of list
-      if last >= Cardinal(BitsCount) then
+      if last >= cardinal(BitsCount) then
         exit;
       while bit <= last do
       begin
@@ -6928,7 +6928,7 @@ procedure Curr64ToStr(const Value: Int64; var result: RawUTF8);
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
-  Decim, L: Cardinal;
+  Decim, L: cardinal;
 begin
   if Value = 0 then
     result := SmallUInt32UTF8[0]
@@ -6963,7 +6963,7 @@ function Curr64ToPChar(const Value: Int64; Dest: PUTF8Char): PtrInt;
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
-  Decim: Cardinal;
+  Decim: cardinal;
 begin
   P := StrCurr64(@tmp[31], Value);
   result := @tmp[31] - P;
@@ -8515,7 +8515,7 @@ begin
 end;
 
 
-function Char2ToByte(P: PUTF8Char; out Value: Cardinal;
+function Char2ToByte(P: PUTF8Char; out Value: cardinal;
    ConvertHexToBinTab: PByteArray): boolean;
 var
   B: PtrUInt;
@@ -8535,7 +8535,7 @@ begin
   result := true; // error
 end;
 
-function Char3ToWord(P: PUTF8Char; out Value: Cardinal;
+function Char3ToWord(P: PUTF8Char; out Value: cardinal;
    ConvertHexToBinTab: PByteArray): boolean;
 var
   B: PtrUInt;
@@ -8560,7 +8560,7 @@ begin
   result := true; // error
 end;
 
-function Char4ToWord(P: PUTF8Char; out Value: Cardinal;
+function Char4ToWord(P: PUTF8Char; out Value: cardinal;
    ConvertHexToBinTab: PByteArray): boolean;
 var
   B: PtrUInt;
@@ -8732,7 +8732,7 @@ begin
 end;
 
 
-function UInt4DigitsToShort(Value: Cardinal): TShort4;
+function UInt4DigitsToShort(Value: cardinal): TShort4;
 begin
   result[0] := #4;
   if Value > 9999 then
@@ -8740,7 +8740,7 @@ begin
   YearToPChar(Value, @result[1]);
 end;
 
-function UInt3DigitsToShort(Value: Cardinal): TShort4;
+function UInt3DigitsToShort(Value: cardinal): TShort4;
 begin
   if Value > 999 then
     Value := 999;
@@ -9836,13 +9836,13 @@ begin
   BinToHexDisplay(@aPointer, pointer(result), SizeOf(aPointer));
 end;
 
-function CardinalToHex(aCardinal: Cardinal): RawUTF8;
+function CardinalToHex(aCardinal: cardinal): RawUTF8;
 begin
   FastSetString(result, nil, SizeOf(aCardinal) * 2);
   BinToHexDisplay(@aCardinal, pointer(result), SizeOf(aCardinal));
 end;
 
-function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
+function CardinalToHexLower(aCardinal: cardinal): RawUTF8;
 begin
   FastSetString(result, nil, SizeOf(aCardinal) * 2);
   BinToHexDisplayLower(@aCardinal, pointer(result), SizeOf(aCardinal));
@@ -9866,7 +9866,7 @@ begin
   BinToHexDisplay(@aPointer, @result[1], SizeOf(aPointer));
 end;
 
-function CardinalToHexShort(aCardinal: Cardinal): TShort16;
+function CardinalToHexShort(aCardinal: cardinal): TShort16;
 begin
   result[0] := AnsiChar(SizeOf(aCardinal) * 2);
   BinToHexDisplay(@aCardinal, @result[1], SizeOf(aCardinal));

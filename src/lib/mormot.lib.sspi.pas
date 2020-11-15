@@ -371,7 +371,7 @@ type
 // and call function again width data, returned from servsr
 function ClientSSPIAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
-  out aOutData: RawByteString): Boolean;
+  out aOutData: RawByteString): boolean;
 
 /// client-side authentication procedure with clear text password
 //  - this function must be used when application need to use different
@@ -386,7 +386,7 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // and call function again width data, returned from server
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUTF8;
-  const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
+  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
 
 /// server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -395,7 +395,7 @@ function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
 // - if this function returns True, server must send aOutData to client
 // and call function again width data, returned from client
 function ServerSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; out aOutData: RawByteString): Boolean;
+  const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
 /// Server-side function that returns authenticated user name
 // - aSecContext must be received from a previous successful call to
@@ -678,7 +678,7 @@ var
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
   pAuthData: PSecWinntAuthIdentityW;
-  out aOutData: RawByteString): Boolean;
+  out aOutData: RawByteString): boolean;
 var
   InBuf: TSecBuffer;
   InDesc: TSecBufferDesc;
@@ -688,8 +688,8 @@ var
   LInCtxPtr: PSecHandle;
   OutBuf: TSecBuffer;
   OutDesc: TSecBufferDesc;
-  CtxReqAttr: Cardinal;
-  CtxAttr: Cardinal;
+  CtxReqAttr: cardinal;
+  CtxAttr: cardinal;
   Status: Integer;
 begin
   InBuf.BufferType := SECBUFFER_TOKEN;
@@ -744,7 +744,7 @@ end;
 
 function ClientSSPIAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
-  out aOutData: RawByteString): Boolean;
+  out aOutData: RawByteString): boolean;
 var
   TargetName: PWideChar;
 begin
@@ -763,7 +763,7 @@ end;
 
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUTF8;
-  const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
+  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
 var
   UserPos: Integer;
   Domain, User, Password: SynUnicode;
@@ -798,7 +798,7 @@ begin
 end;
 
 function ServerSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; out aOutData: RawByteString): Boolean;
+  const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
   InBuf: TSecBuffer;
   InDesc: TSecBufferDesc;
@@ -807,7 +807,7 @@ var
   LInCtxPtr: PSecHandle;
   OutBuf: TSecBuffer;
   OutDesc: TSecBufferDesc;
-  CtxAttr: Cardinal;
+  CtxAttr: cardinal;
   Status: Integer;
 begin
   InBuf.BufferType := SECBUFFER_TOKEN;

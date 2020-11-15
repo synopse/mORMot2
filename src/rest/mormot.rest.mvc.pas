@@ -277,7 +277,7 @@ type
     /// secret information, used for HMAC digital signature of cookie content
     Secret: THMAC_CRC32C;
     /// random IV used as CTR on Crypt[] secret key
-    CryptNonce: Cardinal;
+    CryptNonce: cardinal;
     /// secret information, used for encryption of the cookie content
     Crypt: array[byte] of byte;
   end;
@@ -1382,9 +1382,9 @@ end;
 procedure XorMemoryCTR(data: PCardinal; key256bytes: PCardinalArray;
   size: PtrUInt; ctr: cardinal);
 begin
-  while size >= sizeof(Cardinal) do
+  while size >= sizeof(cardinal) do
   begin
-    dec(size, sizeof(Cardinal));
+    dec(size, sizeof(cardinal));
     data^ := data^ xor key256bytes[ctr and $3f] xor ctr;
     inc(data);
     ctr := ((ctr xor (ctr shr 15)) * 2246822519); // prime-number ctr diffusion

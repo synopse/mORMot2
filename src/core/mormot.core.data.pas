@@ -1523,7 +1523,7 @@ type
       CustomVariantOptions: PDocVariantOptions = nil;
       Tolerant: boolean = false): PUTF8Char;
     ///  select a sub-section (slice) of a dynamic array content
-    procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal = 0);
+    procedure Slice(var Dest; aCount: cardinal; aFirstIndex: cardinal = 0);
     /// add items from a given dynamic array variable
     // - the supplied source DynArray MUST be of the same exact type as the
     // current used for this TDynArray - warning: pass here a reference to
@@ -1839,7 +1839,7 @@ type
     fHash: TDynArrayHasher;
     procedure SetEventHash(const event: TOnDynArrayHashOne);
       {$ifdef HASINLINE}inline;{$endif}
-    function GetHashFromIndex(aIndex: PtrInt): Cardinal;
+    function GetHashFromIndex(aIndex: PtrInt): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the wrapper with a one-dimension dynamic array
@@ -1977,7 +1977,7 @@ type
     // even if the number of items is lower than HashCountTrigger
     function Scan(const Item): integer;
     /// retrieve the hash value of a given item, from its index
-    property Hash[aIndex: PtrInt]: Cardinal
+    property Hash[aIndex: PtrInt]: cardinal
       read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
     // - will be used instead of Compare, to allow object-oriented callbacks
@@ -7407,7 +7407,7 @@ end;
 
 procedure TDynArray.Slice(var Dest; aCount, aFirstIndex: cardinal);
 var
-  n: Cardinal;
+  n: cardinal;
   dst: TDynArray;
 begin
   if fValue = nil then
@@ -8493,7 +8493,7 @@ begin
   end;
 end;
 
-function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): Cardinal;
+function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): cardinal;
 begin
   result := fHash.GetHashFromIndex(aIndex);
 end;

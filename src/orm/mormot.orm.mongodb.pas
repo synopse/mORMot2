@@ -112,7 +112,7 @@ type
   public
     // overridden methods calling the MongoDB external server
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
-    function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean = false;
+    function EngineList(const SQL: RawUTF8; ForceAJAX: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawUTF8; override;
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUTF8): TID; override;
@@ -1158,7 +1158,7 @@ begin
   W.EndJSONObject(0, result);
 end;
 
-function TRestStorageMongoDB.EngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
+function TRestStorageMongoDB.EngineList(const SQL: RawUTF8; ForceAJAX: boolean;
   ReturnedRowCount: PPtrInt): RawUTF8;
 var
   ResCount: PtrInt;

@@ -41,7 +41,7 @@ type
     fInitialized: boolean;
     fDestStream: TStream;
     Z: TZLib;
-    fCRC: Cardinal;
+    fCRC: cardinal;
     fFormat: TSynZipCompressorFormat;
     {$ifdef FPC}
     function GetPosition: Int64; override;

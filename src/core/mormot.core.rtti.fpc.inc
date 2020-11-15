@@ -320,12 +320,14 @@ end;
 
 
 const
-  INTEGER_NAME:  string[7] = 'Integer';   // FPC names integer  as "longint"
-  CARDINAL_NAME: string[8] = 'Cardinal';  // FPC names cardinal as "longword"
+  // FPC RTTI names integer type as "longint"
+  INTEGER_NAME:  string[7] = 'Integer';
+  // FPC RTTI names cardinal type as "longword"
+  CARDINAL_NAME: string[8] = 'Cardinal';
 
 function TRttiInfo.Name: PShortString;
 begin
-  // recognize TypeInfo(integer/Cardinal)=TypeInfo(LongInt/LongWord) on FPC
+  // recognize TypeInfo(integer/cardinal)=TypeInfo(LongInt/LongWord) on FPC
   result := pointer(@self);
   if result <> nil then
     if result <> TypeInfo(integer) then

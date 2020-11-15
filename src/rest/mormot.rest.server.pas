@@ -945,8 +945,8 @@ type
     fPrivateSalt: RawUTF8;
     fSentHeaders: RawUTF8;
     fRemoteIP: RawUTF8;
-    fPrivateSaltHash: Cardinal;
-    fLastTimestamp: Cardinal;
+    fPrivateSaltHash: cardinal;
+    fLastTimestamp: cardinal;
     fExpectedHttpAuthentication: RawUTF8;
     fAccessRights: TOrmAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
@@ -2078,7 +2078,7 @@ type
     // in order to be really thread-safe)
     // - the returned TAuthUser instance will have GroupRights=nil but will
     // have ID, LogonName, DisplayName, PasswordHashHexa and Data fields available
-    function SessionGetUser(aSessionID: Cardinal): TAuthUser;
+    function SessionGetUser(aSessionID: cardinal): TAuthUser;
     /// persist all in-memory sessions into a compressed binary file
     // - you should not call this method it directly, but rather use Shutdown()
     // with a StateFileName parameter - to be used e.g. for a short maintainance
@@ -5540,7 +5540,7 @@ var
   i, ndx: PtrInt;
   username, indataenc: RawUTF8;
   ticks, connectionID: Int64;
-  browserauth: Boolean;
+  browserauth: boolean;
   outdata: RawByteString;
   user: TAuthUser;
   session: TAuthSession;
@@ -6719,7 +6719,7 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
   result := nil;
 end;
 
-function TRestServer.SessionGetUser(aSessionID: Cardinal): TAuthUser;
+function TRestServer.SessionGetUser(aSessionID: cardinal): TAuthUser;
 var
   i: PtrInt;
 begin

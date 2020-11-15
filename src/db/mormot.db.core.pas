@@ -1596,7 +1596,7 @@ begin
   DateToIso8601PChar(Date, PUTF8Char(pointer(result)) + 3, True);
 end;
 
-function DateToSQL(Year, Month, Day: Cardinal): RawUTF8;
+function DateToSQL(Year, Month, Day: cardinal): RawUTF8;
 begin
   result := '';
   if (Year = 0) or
@@ -2605,7 +2605,7 @@ begin
             JoinedOR := whereWithOR;
             NotClause := whereNotClause;
             FunctionName := UpperCase(Prop);
-            // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
+            // Byte/Word/Integer/cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
             len := length(Prop);
             if (len > 16) and
                IdemPropName('DynArrayContains',

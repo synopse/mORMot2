@@ -7813,7 +7813,7 @@ end;
 procedure TMD5.Finalize;
 var
   count: integer;
-  p: ^Byte;
+  p: PByte;
 begin
   count := bytes[0] and $3f;  // number of pending bytes in
   p := @in_;

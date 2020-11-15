@@ -97,21 +97,21 @@ const
   GSS_S_UNSEQ_TOKEN     = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 3);
   GSS_S_GAP_TOKEN       = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 4);
 
-  gss_mech_spnego: array [0..5] of Byte = (
+  gss_mech_spnego: array [0..5] of byte = (
     43, 6, 1, 5, 5, 2);
   gss_mech_spnego_desc: gss_OID_desc = (
     length: Length(gss_mech_spnego);
     elements: @gss_mech_spnego);
   GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
 
-  gss_nt_krb5_name: array [0..9] of Byte = (
+  gss_nt_krb5_name: array [0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
   gss_nt_krb5_name_desc: gss_OID_desc = (
     length: Length(gss_nt_krb5_name);
     elements: @gss_nt_krb5_name);
   GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID = @gss_nt_krb5_name_desc;
 
-  gss_nt_user_name: array [0..9] of Byte = (
+  gss_nt_user_name: array [0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 1, 1);
   gss_nt_user_name_desc: gss_OID_desc = (
     length: Length(gss_nt_user_name);

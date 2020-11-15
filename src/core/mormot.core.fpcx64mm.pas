@@ -330,10 +330,10 @@ const
   PAGE_READWRITE = 4;
 
 function VirtualAlloc(lpAddress: pointer;
-   dwSize: PtrUInt; flAllocationType, flProtect: Cardinal): pointer; stdcall;
+   dwSize: PtrUInt; flAllocationType, flProtect: cardinal): pointer; stdcall;
      external kernel32 name 'VirtualAlloc';
 function VirtualFree(lpAddress: pointer; dwSize: PtrUInt;
-   dwFreeType: Cardinal): LongBool; stdcall;
+   dwFreeType: cardinal): LongBool; stdcall;
      external kernel32 name 'VirtualFree';
 procedure SwitchToThread; stdcall;
      external kernel32 name 'SwitchToThread';
@@ -589,7 +589,7 @@ type
   // information for each small block size - 64/256 bytes long >= CPU cache line
   TSmallBlockType = record
     BlockTypeLocked: boolean;
-    AllowedGroupsForBlockPoolBitmap: Byte;
+    AllowedGroupsForBlockPoolBitmap: byte;
     BlockSize: Word;
     MinimumBlockPoolSize: Word;
     OptimalBlockPoolSize: Word;
@@ -633,8 +633,8 @@ type
     NextPartiallyFreePool: PSmallBlockPoolHeader;
     PreviousPartiallyFreePool: PSmallBlockPoolHeader;
     FirstFreeBlock: pointer;
-    BlocksInUse: Cardinal;
-    SmallBlockPoolSignature: Cardinal;
+    BlocksInUse: cardinal;
+    SmallBlockPoolSignature: cardinal;
     FirstBlockPoolPointerAndFlags: PtrUInt;
   end;
 
@@ -656,12 +656,12 @@ type
     Locked: boolean;
     PoolsCircularList: TMediumBlockPoolHeader;
     LastSequentiallyFed: pointer;
-    SequentialFeedBytesLeft: Cardinal;
-    BinGroupBitmap: Cardinal;
+    SequentialFeedBytesLeft: cardinal;
+    BinGroupBitmap: cardinal;
     {$ifndef FPCMM_ASSUMEMULTITHREAD}
     IsMultiThreadPtr: PBoolean; // safe access to IsMultiThread global variable
     {$endif FPCMM_ASSUMEMULTITHREAD}
-    BinBitmaps: array[0..MediumBlockBinGroupCount - 1] of Cardinal;
+    BinBitmaps: array[0..MediumBlockBinGroupCount - 1] of cardinal;
     Bins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
   end;
 
@@ -852,7 +852,7 @@ begin
   NotifyFree(HeapStatus.Medium, MediumBlockPoolSizeMem);
 end;
 
-function AllocNewSequentialFeedMediumPool(blocksize: Cardinal): pointer;
+function AllocNewSequentialFeedMediumPool(blocksize: cardinal): pointer;
 var
   old: PMediumBlockPoolHeader;
   new: pointer;
@@ -2552,7 +2552,7 @@ begin
         (MediumBlockBinsPerGroup * MediumBlockGranularity);
       if num > 7 then
         num := 7;
-      small^.AllowedGroupsForBlockPoolBitmap := Byte(Byte(-1) shl num);
+      small^.AllowedGroupsForBlockPoolBitmap := byte(byte(-1) shl num);
       small^.MinimumBlockPoolSize := MinimumMediumBlockSize +
         num * (MediumBlockBinsPerGroup * MediumBlockGranularity);
       poolsize := ((size * TargetSmallBlocksPerPool +

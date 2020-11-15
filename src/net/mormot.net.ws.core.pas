@@ -286,7 +286,7 @@ type
     function FrameToOutput(var answer: TWebSocketFrame;
       Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     /// convert the output information of REST request to a WebSocket frame
-    procedure OutputToFrame(Ctxt: THttpServerRequestAbstract; Status: Cardinal;
+    procedure OutputToFrame(Ctxt: THttpServerRequestAbstract; Status: cardinal;
       var outhead: RawUTF8; out answer: TWebSocketFrame); virtual;
   end;
 
@@ -1124,7 +1124,7 @@ begin
 end;
 
 procedure TWebSocketProtocolRest.OutputToFrame(Ctxt: THttpServerRequestAbstract;
-  Status: Cardinal; var outhead: RawUTF8; out answer: TWebSocketFrame);
+  Status: cardinal; var outhead: RawUTF8; out answer: TWebSocketFrame);
 var
   OutContentType: RawByteString;
 begin

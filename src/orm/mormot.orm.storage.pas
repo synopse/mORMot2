@@ -3853,7 +3853,7 @@ begin
     exit;
   end;
   store := TOrmVirtualTableJSON(Table).fStaticInMemory;
-  if Cardinal(fCurrent) >= Cardinal(store.fCount) then
+  if cardinal(fCurrent) >= cardinal(store.fCount) then
     result := false
   else
   begin

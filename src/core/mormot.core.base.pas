@@ -380,7 +380,7 @@ type
   PPByte = ^PByte;
   PPPointer = ^PPointer;
   PByteArray = ^TByteArray;
-  TByteArray = array[0 .. MaxInt - 1] of Byte; // redefine here with {$R-}
+  TByteArray = array[0 .. MaxInt - 1] of byte; // redefine here with {$R-}
   PBooleanArray = ^TBooleanArray;
   TBooleanArray = array[0 .. MaxInt - 1] of boolean;
   PPWord = ^PWord;
@@ -1195,11 +1195,11 @@ function PtrUIntScan(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): pointer;
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast search of an unsigned Byte value position in a Byte array
-// - Count is the number of Byte entries in P^
+/// fast search of an unsigned byte value position in a byte array
+// - Count is the number of byte entries in P^
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of an unsigned Word value position in a Word array
@@ -2100,7 +2100,7 @@ const
   POINTERSHRBITS = {$ifdef CPU64}  6 {$else}  5 {$endif};
 
   /// constant array used by GetAllBits() function (when inlined)
-  ALLBITS_CARDINAL: array[1..32] of Cardinal = (
+  ALLBITS_CARDINAL: array[1..32] of cardinal = (
     1 shl  1 - 1, 1 shl  2 - 1, 1 shl  3 - 1, 1 shl  4 - 1, 1 shl  5 - 1,
     1 shl  6 - 1, 1 shl  7 - 1, 1 shl  8 - 1, 1 shl  9 - 1, 1 shl 10 - 1,
     1 shl 11 - 1, 1 shl 12 - 1, 1 shl 13 - 1, 1 shl 14 - 1, 1 shl 15 - 1,
@@ -5192,7 +5192,7 @@ begin
   high := len - 1;
 end;
 
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 begin
   result := IndexByte(P^, Count, Value); // will use fast FPC SSE version
 end;
@@ -5213,7 +5213,7 @@ end;
 
 {$else not FPC}
 
-function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): PtrInt;
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 begin
   result := 0;
   if P <> nil then
@@ -7508,7 +7508,7 @@ begin
     inc(result, popcnt(P^ and ((PtrInt(1) shl Count) - 1)));
 end;
 
-function GetAllBits(Bits, BitCount: Cardinal): boolean;
+function GetAllBits(Bits, BitCount: cardinal): boolean;
 begin
   if (BitCount >= low(ALLBITS_CARDINAL)) and
      (BitCount <= high(ALLBITS_CARDINAL)) then
@@ -9221,6 +9221,8 @@ end;
 
 function TSynTempBuffer.InitZero(ZeroLen: PtrInt): pointer;
 begin
+  if ZeroLen = 0 then
+    ZeroLen := SizeOf(tmp);
   Init(ZeroLen - 16);
   FillCharFast(buf^, ZeroLen, 0);
   result := buf;

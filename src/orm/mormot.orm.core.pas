@@ -4603,7 +4603,7 @@ type
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
     // country use ',' as decimal separator, for instance our "douce France")
-    // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
+    // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
     procedure GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar = ',';
       AddBOM: boolean = false; RowFirst: integer = 0; RowLast: integer = 0); overload;
     /// save the table as CSV format, into a string variable
@@ -4611,7 +4611,7 @@ type
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
     // country use ',' as decimal separator, for instance our "douce France")
-    // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
+    // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
     function GetCSVValues(Tab: boolean; CommaSep: AnsiChar = ',';
       AddBOM: boolean = false; RowFirst: integer = 0; RowLast: integer = 0): RawUTF8; overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
@@ -13970,7 +13970,7 @@ begin
   W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
   try
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
+      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 byte Order Mark
     if Tab then
       CommaSep := #9;
     FMax := FieldCount - 1;
@@ -22086,7 +22086,7 @@ end;
 
 function TOrmAccessRights.ToString: RawUTF8;
 begin
-  FormatUTF8('%,%,%,%,%', [Byte(AllowRemoteExecute),
+  FormatUTF8('%,%,%,%,%', [byte(AllowRemoteExecute),
     GetBitCSV(GET, MAX_TABLES), GetBitCSV(POST, MAX_TABLES),
     GetBitCSV(PUT, MAX_TABLES), GetBitCSV(DELETE, MAX_TABLES)], result);
 end;

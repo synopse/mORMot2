@@ -1017,7 +1017,7 @@ type
     /// sends entity-body data associated with an HTTP response.
     SendResponseEntityBody: function(ReqQueueHandle: THandle; RequestId:
       HTTP_REQUEST_ID; Flags: integer; EntityChunkCount: word;
-      pEntityChunks: pointer; var pBytesSent: Cardinal; pReserved1: Pointer = nil;
+      pEntityChunks: pointer; var pBytesSent: cardinal; pReserved1: Pointer = nil;
       pReserved2: Pointer = nil; pOverlapped: POverlapped = nil;
       pLogData: PHTTP_LOG_DATA = nil): HRESULT; stdcall;
     /// set specified data, such as IP addresses or SSL Certificates, from the
@@ -1472,7 +1472,7 @@ type
     WEB_SOCKET_KEEPALIVE_INTERVAL_PROPERTY_TYPE,
     WEB_SOCKET_SUPPORTED_VERSIONS_PROPERTY_TYPE);
 
-  WEB_SOCKET_ACTION_QUEUE = Cardinal;
+  WEB_SOCKET_ACTION_QUEUE = cardinal;
 
   WEB_SOCKET_ACTION = (
     WEB_SOCKET_NO_ACTION, //0
@@ -2026,7 +2026,7 @@ var
   Buffer: array[0..511] of byte;
   BufferSize, UserSize, DomainSize: DWORD;
   UserInfo: PSIDAndAttributes;
-  NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
+  NameUse: {$ifdef FPC}SID_NAME_USE{$else}cardinal{$endif};
   tmp: SynUnicode;
   P: PWideChar;
 begin

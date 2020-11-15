@@ -411,7 +411,8 @@ const
   SWD64 = '{"type":"number","format":"double"}';
 
   { TODO: refactor TID and Int64 for JavaScript (integers truncated to 53-bit) }
-  TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUTF8 =(   // lngDelphi
+  TYPES_LANG: array[TWrapperLanguage, TWrapperType] of RawUTF8 =(
+    // lngDelphi
     ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
     'UInt64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'RawUTF8', 'String', 'RawJSON',

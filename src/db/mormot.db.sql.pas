@@ -2303,7 +2303,7 @@ type
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
     // country use ',' as decimal separator, for instance our "douce France")
-    // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
+    // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
     // - BLOB fields will be appended as "blob" with no data
     // - returns the number of row data returned
     function FetchAllToCSVValues(Dest: TStream; Tab: boolean;
@@ -5757,7 +5757,7 @@ begin
   W := TTextWriter.Create(Dest, 65536);
   try
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
+      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 byte Order Mark
     // add CSV header
     for F := 0 to FMax do
     begin

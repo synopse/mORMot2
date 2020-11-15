@@ -137,8 +137,8 @@ type
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     procedure SetRemoteIPHeader(const aHeader: RawUTF8); virtual;
     procedure SetRemoteConnIDHeader(const aHeader: RawUTF8); virtual;
-    function GetHTTPQueueLength: Cardinal; virtual; abstract;
-    procedure SetHTTPQueueLength(aValue: Cardinal); virtual; abstract;
+    function GetHTTPQueueLength: cardinal; virtual; abstract;
+    procedure SetHTTPQueueLength(aValue: cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Code: cardinal); virtual;
@@ -498,8 +498,8 @@ type
     fHeadersNotFiltered: boolean;
     fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
-    function GetHTTPQueueLength: Cardinal; override;
-    procedure SetHTTPQueueLength(aValue: Cardinal); override;
+    function GetHTTPQueueLength: cardinal; override;
+    procedure SetHTTPQueueLength(aValue: cardinal); override;
     procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
     procedure InternalHttpServerRespListRemove(resp: THttpServerResp);
     function OnNginxAllowSend(Context: THttpServerRequest;
@@ -700,12 +700,12 @@ type
     procedure SetReceiveBufferSize(Value: cardinal);
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
-    function GetHTTPQueueLength: Cardinal; override;
-    procedure SetHTTPQueueLength(aValue: Cardinal); override;
-    function GetMaxBandwidth: Cardinal;
-    procedure SetMaxBandwidth(aValue: Cardinal);
-    function GetMaxConnections: Cardinal;
-    procedure SetMaxConnections(aValue: Cardinal);
+    function GetHTTPQueueLength: cardinal; override;
+    procedure SetHTTPQueueLength(aValue: cardinal); override;
+    function GetMaxBandwidth: cardinal;
+    procedure SetMaxBandwidth(aValue: cardinal);
+    function GetMaxConnections: cardinal;
+    procedure SetMaxConnections(aValue: cardinal);
     procedure SetOnTerminate(const Event: TOnNotifyThread); override;
     function GetAPIVersion: RawUTF8; override;
     function GetLogging: boolean;
@@ -901,14 +901,14 @@ type
     // - by default Windows not limit bandwidth (actually limited to 4 Gbit/sec).
     // - will return 0 if the system does not support HTTP API 2.0 (i.e.
     // under Windows XP or Server 2003)
-    property MaxBandwidth: Cardinal
+    property MaxBandwidth: cardinal
       read GetMaxBandwidth write SetMaxBandwidth;
     /// the maximum number of HTTP connections allowed (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited number of connections
     // - by default Windows does not limit number of allowed connections
     // - will return 0 if the system does not support HTTP API 2.0 (i.e.
     // under Windows XP or Server 2003)
-    property MaxConnections: Cardinal
+    property MaxConnections: cardinal
       read GetMaxConnections write SetMaxConnections;
   end;
 
@@ -949,7 +949,7 @@ type
     fBuffer: RawByteString;
     fCloseStatus: WEB_SOCKET_CLOSE_STATUS;
     fIndex: integer;
-    function ProcessActions(ActionQueue: Cardinal): boolean;
+    function ProcessActions(ActionQueue: cardinal): boolean;
     function ReadData(const WebsocketBufferData): integer;
     procedure WriteData(const WebsocketBufferData);
     procedure BeforeRead;
@@ -1489,12 +1489,12 @@ begin
   result := fStats[one];
 end;
 
-function THttpServer.GetHTTPQueueLength: Cardinal;
+function THttpServer.GetHTTPQueueLength: cardinal;
 begin
   result := fHTTPQueueLength;
 end;
 
-procedure THttpServer.SetHTTPQueueLength(aValue: Cardinal);
+procedure THttpServer.SetHTTPQueueLength(aValue: cardinal);
 begin
   fHTTPQueueLength := aValue;
 end;
@@ -2612,7 +2612,7 @@ var
   InContentLength, InContentLengthChunk, InContentLengthRead: cardinal;
   InContentEncoding, InAcceptEncoding, Range: RawUTF8;
   OutContentEncoding, OutStatus: RawUTF8;
-  OutStatusCode, AfterStatusCode: Cardinal;
+  OutStatusCode, AfterStatusCode: cardinal;
   RespSent: boolean;
   Context: THttpServerRequest;
   FileHandle: THandle;
@@ -3000,7 +3000,7 @@ begin
   end;
 end;
 
-function THttpApiServer.GetHTTPQueueLength: Cardinal;
+function THttpApiServer.GetHTTPQueueLength: cardinal;
 var
   returnLength: ULONG;
 begin
@@ -3020,7 +3020,7 @@ begin
   end;
 end;
 
-procedure THttpApiServer.SetHTTPQueueLength(aValue: Cardinal);
+procedure THttpApiServer.SetHTTPQueueLength(aValue: cardinal);
 begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetRequestQueueProperty, ERROR_OLD_WIN_VERSION);
@@ -3048,7 +3048,7 @@ begin
   result := (fOwner <> nil);
 end;
 
-procedure THttpApiServer.SetMaxBandwidth(aValue: Cardinal);
+procedure THttpApiServer.SetMaxBandwidth(aValue: cardinal);
 var
   qosInfo: HTTP_QOS_SETTING_INFO;
   limitInfo: HTTP_BANDWIDTH_LIMIT_INFO;
@@ -3076,7 +3076,7 @@ begin
   end;
 end;
 
-function THttpApiServer.GetMaxBandwidth: Cardinal;
+function THttpApiServer.GetMaxBandwidth: cardinal;
 var
   qosInfoGet: record
     qosInfo: HTTP_QOS_SETTING_INFO;
@@ -3104,7 +3104,7 @@ begin
   result := qosInfoGet.limitInfo.MaxBandwidth;
 end;
 
-function THttpApiServer.GetMaxConnections: Cardinal;
+function THttpApiServer.GetMaxConnections: cardinal;
 var
   qosInfoGet: record
     qosInfo: HTTP_QOS_SETTING_INFO;
@@ -3133,7 +3133,7 @@ begin
   result := qosInfoGet.limitInfo.MaxConnections;
 end;
 
-procedure THttpApiServer.SetMaxConnections(aValue: Cardinal);
+procedure THttpApiServer.SetMaxConnections(aValue: cardinal);
 var
   qosInfo: HTTP_QOS_SETTING_INFO;
   limitInfo: HTTP_CONNECTION_LIMIT_INFO;
@@ -3721,7 +3721,7 @@ procedure THttpApiWebSocketConnection.WriteData(const WebsocketBufferData);
 var
   Err: HRESULT;
   httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
-  bytesWrite: Cardinal;
+  bytesWrite: cardinal;
   aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
   if fWSHandle = nil then
@@ -3773,7 +3773,7 @@ end;
 procedure THttpApiWebSocketConnection.Disconnect;
 var //Err: HRESULT; //todo: handle error
   httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
-  bytesWrite: Cardinal;
+  bytesWrite: cardinal;
 begin
   WebSocketAPI.AbortHandle(fWSHandle);
   WebSocketAPI.DeleteHandle(fWSHandle);

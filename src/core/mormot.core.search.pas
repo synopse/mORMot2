@@ -4218,14 +4218,14 @@ begin
   aUpd := upd;
 end;
 
-procedure WriteByte(var P: PAnsiChar; V: Byte);
+procedure WriteByte(var P: PAnsiChar; V: byte);
   {$ifdef HASINLINE}inline;{$endif}
 begin
   PByte(P)^ := V;
   inc(P);
 end;
 
-procedure WriteInt(var P: PAnsiChar; V: Cardinal);
+procedure WriteInt(var P: PAnsiChar; V: cardinal);
   {$ifdef HASINLINE}inline;{$endif}
 begin
   PCardinal(P)^ := V;
@@ -4249,7 +4249,7 @@ var
 
   procedure CreateCopied;
   begin
-    Getmem(Delta, NewSizeSave + 17);  // 17 = 4*integer + 1*Byte
+    Getmem(Delta, NewSizeSave + 17);  // 17 = 4*integer + 1*byte
     d := Delta;
     db := ToVarUInt32(0, ToVarUInt32(NewSizeSave, db));
     WriteByte(d, FLAG_COPIED); // block copied flag
@@ -4391,8 +4391,8 @@ end;
 
 function DeltaExtract(Delta, Old, New: PAnsiChar): TDeltaError;
 var
-  BufCRC: Cardinal;
-  Code: Byte;
+  BufCRC: cardinal;
+  Code: byte;
   Len, BufRead, OldRead: PtrInt;
   db: PByte absolute Delta;
   Upd: PAnsiChar;

@@ -929,7 +929,7 @@ type // as in FMTBcd.pas
     VType: TVarType;
     Reserved1, Reserved2, Reserved3: Word;
     VBcd: TFMTBcdData;
-    Reserved4: Cardinal;
+    Reserved4: cardinal;
   end;
 
 class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TTextWriter; const aValue);
@@ -1623,7 +1623,7 @@ begin
             P.AsLargeInt := I64;
           {$else}
             if (PInt64Rec(@I64)^.Hi = 0) or
-               (PInt64Rec(@I64)^.Hi = Cardinal(-1)) then
+               (PInt64Rec(@I64)^.Hi = cardinal(-1)) then
               P.AsInteger := I64
             else if TSQLDBDatasetConnectionProperties(
                Connection.Properties).ForceInt64AsFloat then

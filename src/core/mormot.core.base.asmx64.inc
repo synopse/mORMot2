@@ -1653,7 +1653,7 @@ function IsXmmYmmOSEnabled: boolean;
         sete    al
 end;
 
-procedure GetCPUID(Param: Cardinal; var Registers: TIntelRegisters);
+procedure GetCPUID(Param: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, Param
         mov     r9, Registers

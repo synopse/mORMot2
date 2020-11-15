@@ -244,7 +244,7 @@ type
   {$A-} // packed records
 {$endif}
   TBoid = record
-    rgb_: array[0..15] of Byte;
+    rgb_: array[0..15] of byte;
   end;
   PBoid = ^TBoid;
 
@@ -306,8 +306,8 @@ type
     cbMaxLen: PtrUInt;
     dwFlags: UINT;
     wType: DBTYPE;
-    bPrecision: Byte;
-    bScale: Byte;
+    bPrecision: byte;
+    bScale: byte;
   end;
   PDBBindingArray = ^TDBBindingArray;
   TDBBindingArray = array[0..MAXBOUND] of TDBBinding;
@@ -342,8 +342,8 @@ type
     dwFlags: DBCOLUMNFLAGS;
     ulColumnSize: PtrUInt;
     wType: DBTYPE;
-    bPrecision: Byte;
-    bScale: Byte;
+    bPrecision: byte;
+    bScale: byte;
     columnid: DBID;
   end;
 
@@ -392,8 +392,8 @@ type
     pTypeInfo: ITypeInfo;
     ulParamSize: DBLENGTH;
     wType: DBTYPE;
-    bPrecision: Byte;
-    bScale: Byte;
+    bPrecision: byte;
+    bScale: byte;
   end;
   TDBParamInfo = DBPARAMINFO;
 
@@ -407,8 +407,8 @@ type
     pwszName: PWideChar;
     ulParamSize: DBLENGTH;
     dwFlags: DBPARAMFLAGS;
-    bPrecision: Byte;
-    bScale: Byte;
+    bPrecision: byte;
+    bScale: byte;
   end;
   TDBParamBindInfo = DBPARAMBINDINFO;
   PDBParamBindInfoArray = ^TDBParamBindInfoArray;
