@@ -97,6 +97,7 @@ uses
   //mormot.db.rad.unidac     in '..\src\db\mormot.db.rad.unidac.pas',
   //mormot.db.rad.nexusdb    in '..\src\db\mormot.db.rad.nexusdb.pas',
   {$endif FPC}
+  mormot.app.daemon        in '..\src\app\mormot.app.daemon.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 
