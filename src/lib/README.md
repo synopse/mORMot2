@@ -12,8 +12,8 @@ We define "external" libraries as some code which is statically linked or dynami
 
 Notes:
 
-- The mandatory libraries which are meant to be part of the Operating System - e.g. the Windows API or the `libc`/`pthread` API - are defined in `mormot.core.os.pas`.
-- Access to the SQL database client libraries won't be in this folder, but defined as `mormot.db.raw.*.pas` units in the `src/db` folder.
+- The mandatory libraries which are meant to be part of the Operating System - e.g. the Windows API or the `libc`/`pthread` API - are defined in `mormot.core.os`.
+- Access to the SQL database client libraries won't be in this folder, but defined as `mormot.db.raw.*` units in the `src/db` folder.
 
 ## Thin Wrappers
 
@@ -50,21 +50,21 @@ Cross-Platform and Cross-Compiler `libcurl` API
 ### mormot.lib.winhttp
 
 Windows HTTP and WebSockets API Libraries
-- WinINet API Additional Wrappers
-- http.sys / HTTP Server API low-level direct access
-- winhttp.dll Windows API Definitions
-- websocket.dll Windows API Definitions
+- `WinINet` API Additional Wrappers
+- `http.sys` / HTTP Server API low-level direct access
+- `winhttp.dll` Windows API Definitions
+- `websocket.dll` Windows API Definitions
 
 ### mormot.lib.sspi
 
 Security Support Provider Interface (SSPI) Support on Windows
 - Low-Level SSPI/SChannel Functions
 - Middle-Level SSPI Wrappers
-- High-Level Client and Server Authentication using SSPI
+- High-Level Client and Server Authentication using SSPI e.g. in `mormot.core.rest`
 
 ### mormot.lib.gssapi
 
 Generic Security Service API on POSIX/Linux
-- Low-Level libgssapi_krb5/libgssapi.so Library Access
+- Low-Level `libgssapi_krb5`/`libgssapi.so` Library Access
 - Middle-Level GSSAPI Wrappers
-- High-Level Client and Server Authentication using GSSAPI
+- High-Level Client and Server Authentication using GSSAPI e.g. in `mormot.core.rest`

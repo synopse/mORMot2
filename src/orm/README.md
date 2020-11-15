@@ -11,7 +11,7 @@ This folder hosts the *RESTful ORM* high-level features of the *mORMot* Open Sou
 - The parent `TOrm` class give access to ORM methods at object level;
 - `IRestOrm IRestOrmServer IRestOrmClient` interfaces can be used in business code for abstract and persistent-agnostic data access;
 - UTF-8 and JSON are used from the ground up, to make our ORM easy to consume in a REST approach, as defined in the `/src/rest` folder;
-- It can leverage *SQlite3* as its kernel, to access several data sources;
+- It can leverage *SQlite3* as its kernel, to access several data sources over virtual tables;
 - A high-performance in-memory engine, using JSON or binary on disk, is available;
 - Switch to a *NoSQL* database like *MongoDB* is possible, transforming our ORM to an ODM - aka *Object-Document-Mapping*.
 
@@ -71,14 +71,14 @@ Server-Side Storage Process using JSON or Binary Persistence
 
 ### mormot.orm.sql
 
-ORM SQL Database Access using mormot.db.sql units
+ORM SQL Database Access using `mormot.db.sql` units
 - `TRestStorageExternal` for ORM/REST Storage over SQL
 - `TOrmVirtualTableExternal` for External SQL Virtual Tables
 - External SQL Database Engines Registration Functions
 
 ### mormot.orm.sqlite3
 
-ORM SQLite3 Database Access using mormot.db.raw.sqlite3 unit
+ORM SQLite3 Database Access using `mormot.db.raw.sqlite3` unit
 - `TOrmTableDB` as Efficient ORM-Aware TOrmTable
 - `TOrmVirtualTableModuleServerDB` for SQLite3 Virtual Tables
 - `TRestStorageShardDB` for REST Storage Sharded Over SQlite3 Files

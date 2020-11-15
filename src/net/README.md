@@ -32,7 +32,7 @@ HTTP/HTTPS Abstract Process Classes and Definitions
 HTTP Client Classes
 - `THttpClientSocket` Implementing HTTP client over plain sockets
 - `THttpRequest` Abstract HTTP client class
-- `TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP`
+- `TWinHttp` `TWinINet` `TWinHttpWebSocketClient` `TCurlHTTP`
 - Cached HTTP Connection to a Remote Server
 
 ### mormot.net.server
@@ -48,6 +48,8 @@ HTTP Server Classes
 Event-Driven Network Classes and Functions
 - Low-Level Non-blocking Connections
 - Client or Server Asynchronous Process
+
+Used e.g. by both `mormot.net.relay` and `mormot.net.rtsphttp` to handle thousands on concurrent streams, with minimal resources, in a cross-platform way.
 
 ### mormot.net.ws.core
 
@@ -83,5 +85,3 @@ RTSP Stream Tunnelling over HTTP as defined by Apple at https://goo.gl/CX6VA3
 - RTSP over HTTP Tunnelling 
 
 Encapsulate a RTSP TCP/IP duplex video stream into two HTTP links, one POST for upgoing commands, and one GET for downloaded video.
-
-Thanks to TAsynchServer, it can handle thousands on concurrent streams, with minimal resources, in a cross-platform way.

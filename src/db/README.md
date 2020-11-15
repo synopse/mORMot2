@@ -53,12 +53,12 @@ This unit is used by both `mormot.db.*` units and `mormot.orm.*` units.
 
 Shared Types and Definitions for SQL Database Access
 - SQL Fields and Columns Definitions
-- Define Database Engine Specific Behavior
+- Define Database Engine Specific Behavior (as used by our ORM)
 - General SQL Processing Functions
 - Abstract SQL DB Classes and Interfaces
 - Parent Classes for Thread-Safe and Parametrized Connections
 
-And the associated `mormot.db.sql.*.pas` / `mormot.db.raw.*.pas` units for ODBC, OleDB, Zeos/ZDBC, Oracle, PostgreSQL, SQLite3 database clients.
+And the associated `mormot.db.sql.*.pas` / `mormot.db.raw.*.pas` units for ODBC, OleDB, Zeos/ZDBC providers, and direct Oracle, PostgreSQL, SQLite3 database clients.
 
 ### mormot.db.rad
 

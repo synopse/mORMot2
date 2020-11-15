@@ -1,5 +1,9 @@
 # mORMot REST Client-Server Units
 
+## Folder Content
+
+This folder hosts the *RESTful* oriented features of the *mORMot* Open Source framework, version 2.
+
 ## REST In mORMot
 
 *REST* stands for *RE*presentation *S*tate *T*ranfer, and is a way of communicating between clients and servers. Our framework uses JSON for the REpresentation of data between two ends. In practice, you will use HTTP/HTTPS or WebSockets as communication layer of the REST process. But our parent `TSQLRest` class is abstract for any actual mean of communication, and could actually involve a direct in-process call.
@@ -17,10 +21,6 @@ Our *REST* approach publishes a `TRest` class, and its Client and Server inherit
 - *Service-Oriented-Architecture* via its `Services` field;
 - *Threading* abilities in its `Run` field;
 - REST-specific features are isolated also in this `TRest` class, like URI routing and execution, authorization and authentication, and sessions support.
-
-## Folder Content
-
-This folder hosts the *RESTful* oriented features of the *mORMot* Open Source framework, version 2.
 
 ## Units Presentation
 
@@ -85,7 +85,7 @@ Server-Side REST Process over HTTP/WebSockets
 ### mormot.rest.mvc
 
 Web Server using Model-View-Controller (MVC) pattern and Mustache
-- Web Views Implementation using Mustache
+- Web Views Implementation using `mormot.core.mustache`
 - ViewModel/Controller Sessions using Cookies
-- Web Renderer Returning Mustache Views or Json
-- Application ViewModel/Controller using Interfaces
+- Web Renderer Returning Mustache HTML5 Views or JSON
+- Application ViewModel/Controller using `Interface`s

@@ -14,21 +14,6 @@ With "Core Units", we mean units implementing shared basic functionality of our 
 
 ## Units Presentation
 
-### mormot.core.fpcx64mm
-
-A Multi-thread Friendly Memory Manager for FPC written in x86_64 assembly
-- targetting Linux (and Windows) multi-threaded Services
-- only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
-- based on FastMM4 proven algorithms by Pierre le Riche
-- code has been reduced to the only necessary featureset for production
-- deep asm refactoring for cross-platform, compactness and efficiency
-- can report detailed statistics (with threads contention and memory leaks)
-- mremap() makes large block ReallocMem a breeze on Linux :)
-- inlined SSE2 movaps loop is more efficient that subfunction(s)
-- lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
-- optional lockless bin list to avoid freemem() thread contention
-- three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
-
 ### mormot.core.base
 
 Basic types and reusable stand-alone functions shared by all framework units
@@ -85,7 +70,7 @@ Text Processing functions shared by all framework units
 ### mormot.core.datetime
 
 Date and Time definitions and process shared by all framework units
-- *ISO-8601* Compatible Date/Time Text Encoding
+- ISO-8601 Compatible Date/Time Text Encoding
 - `TSynDate` / `TSynDateTime` / `TSynSystemTime` High-Level objects
 - `TUnixTime` / `TUnixMSTime` POSIX Epoch Compatible 64-bit date/time
 - `TTimeLog` efficient 64-bit custom date/time encoding
@@ -256,4 +241,19 @@ Implements SOLID Process via Interface types
 
 Testing functions shared by all framework units
 - Unit-Testing classes and functions
+
+### mormot.core.fpcx64mm
+
+A Multi-thread Friendly Memory Manager for FPC written in x86_64 assembly
+- targetting Linux (and Windows) multi-threaded Services
+- only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
+- based on FastMM4 proven algorithms by Pierre le Riche
+- code has been reduced to the only necessary featureset for production
+- deep asm refactoring for cross-platform, compactness and efficiency
+- can report detailed statistics (with threads contention and memory leaks)
+- mremap() makes large block ReallocMem a breeze on Linux :)
+- inlined SSE2 movaps loop is more efficient that subfunction(s)
+- lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
+- optional lockless bin list to avoid freemem() thread contention
+- three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
 
