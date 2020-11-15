@@ -1125,12 +1125,12 @@ end;
 {$ifdef BSD}
 // https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c/
 
-function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 begin
   result := nil;
 end;
 
-function EnumProcessName(PID: Cardinal): RawUTF8;
+function EnumProcessName(PID: cardinal): RawUTF8;
 begin
   result := '';
 end;
@@ -1150,7 +1150,7 @@ const
   DT_SOCK     = 12;
   DT_WHT      = 14;
 
-function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 var
   d: pDir;
   e: pDirent;
@@ -1190,7 +1190,7 @@ end;
 var
   tryprocexe: boolean = true;
 
-function EnumProcessName(PID: Cardinal): RawUTF8;
+function EnumProcessName(PID: cardinal): RawUTF8;
 var
   proc: TFileName;
   cmdline: RawUTF8;

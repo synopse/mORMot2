@@ -271,7 +271,16 @@ function GetDelphiCompilerVersion: RawUTF8; deprecated;
 
 {$ifdef MSWINDOWS}
 
-{$ifndef UNICODE}
+{$ifdef UNICODE}
+
+const
+  _AW = 'W';
+
+{$else}
+
+const
+  _AW = 'A';
+
 type
   /// low-level API structure, not defined in old Delphi versions
   TOSVersionInfoEx = record
@@ -287,6 +296,7 @@ type
     wProductType: BYTE;
     wReserved: BYTE;
   end;
+
 {$endif UNICODE}
 
 var
@@ -543,6 +553,128 @@ type
     /// low-level enumeration of all sub-entries names of a Windows Registry key
     function ReadEnumEntries: TRawUTF8DynArray;
   end;
+
+  /// TSynWindowsPrivileges enumeration synchronized with WinAPI
+  // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
+  TWinSystemPrivilege = (
+    wspCreateToken,
+    wspAssignPrimaryToken,
+    wspLockMemory,
+    wspIncreaseQuota,
+    wspUnsolicitedInput,
+    wspMachineAccount,
+    wspTCP,
+    wspSecurity,
+    wspTakeOwnership,
+    wspLoadDriver,
+    wspSystemProfile,
+    wspSystemTime,
+    wspProfSingleProcess,
+    wspIncBasePriority,
+    wspCreatePageFile,
+    wspCreatePermanent,
+    wspBackup,
+    wspRestore,
+    wspShutdown,
+    wspDebug,
+    wspAudit,
+    wspSystemEnvironment,
+    wspChangeNotify,
+    wspRemoteShutdown,
+    wspUndock,
+    wspSyncAgent,
+    wspEnableDelegation,
+    wspManageVolume,
+    wspImpersonate,
+    wspCreateGlobal,
+    wspTrustedCredmanAccess,
+    wspRelabel,
+    wspIncWorkingSet,
+    wspTimeZone,
+    wspCreateSymbolicLink);
+
+  /// TSynWindowsPrivileges set synchronized with WinAPI
+  TWinSystemPrivileges = set of TWinSystemPrivilege;
+
+  /// TSynWindowsPrivileges enumeration synchronized with WinAPI
+  // - define the execution context, i.e. if the token is used for current
+  // process or the current thread
+  TPrivilegeTokenType = (
+    pttProcess,
+    pttThread);
+
+  /// object dedicated to management of available privileges on Windows platform
+  // - not all available privileges are active for process
+  // - for usage of more advanced WinAPI, explicit enabling of privilege is
+  // sometimes needed
+  TSynWindowsPrivileges = object
+  private
+    fAvailable: TWinSystemPrivileges;
+    fEnabled: TWinSystemPrivileges;
+    fDefEnabled: TWinSystemPrivileges;
+    function SetPrivilege(
+      aPrivilege: TWinSystemPrivilege; aEnablePrivilege: boolean): boolean;
+    procedure LoadPrivileges;
+  public
+    /// handle to privileges token
+    Token: THandle;
+    /// initialize the object dedicated to management of available privileges
+    // - aTokenPrivilege can be used for current process or current thread
+    procedure Init(aTokenPrivilege: TPrivilegeTokenType = pttProcess);
+    /// finalize the object and relese Token handle
+    // - aRestoreInitiallyEnabled parameter can be used to restore initially
+    // state of enabled privileges
+    procedure Done(aRestoreInitiallyEnabled: boolean = true);
+    /// enable privilege
+    // - if aPrivilege is already enabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Enable(aPrivilege: TWinSystemPrivilege): boolean;
+    /// disable privilege
+    // - if aPrivilege is already disabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Disable(aPrivilege: TWinSystemPrivilege): boolean;
+    /// set of available privileges for current process/thread
+    property Available: TWinSystemPrivileges
+      read fAvailable;
+    /// set of enabled privileges for current process/thread
+    property Enabled: TWinSystemPrivileges
+      read fEnabled;
+  end;
+
+  /// which information was returned by GetProcessInfo() overloaded functions
+  TWinProcessAvailableInfos = set of (
+    wpaiPID,
+    wpaiBasic,
+    wpaiPEB,
+    wpaiCommandLine,
+    wpaiImagePath);
+
+  /// information returned by GetProcessInfo() overloaded functions
+  TWinProcessInfo = record
+    AvailableInfo: TWinProcessAvailableInfos;
+    PID: cardinal;
+    ParentPID: cardinal;
+    SessionID: cardinal;
+    PEBBaseAddress: Pointer;
+    AffinityMask: cardinal;
+    BasePriority: LongInt;
+    ExitStatus: LongInt;
+    BeingDebugged: byte;
+    ImagePath: SynUnicode;
+    CommandLine: SynUnicode;
+  end;
+
+  PWinProcessInfo = ^TWinProcessInfo;
+  TWinProcessInfoDynArray = array of TWinProcessInfo;
+
+
+/// retrieve low-level process information, from the Windows API
+procedure GetProcessInfo(aPid: cardinal;
+  out aInfo: TWinProcessInfo); overload;
+
+/// retrieve low-level process(es) information, from the Windows API
+procedure GetProcessInfo(const aPidList: TCardinalDynArray;
+  out aInfo: TWinProcessInfoDynArray); overload;
 
 
 type
@@ -1350,13 +1482,13 @@ procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
 // - on Linux, will enumerate /proc/* pseudo-files
-function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
 
 /// return the process name of a given PID
 // - under Windows, is a wrapper around QueryFullProcessImageNameW/GetModuleFileNameEx
 // PsAPI call
 // - on Linux, will query /proc/[pid]/exe or /proc/[pid]/cmdline pseudo-file
-function EnumProcessName(PID: Cardinal): RawUTF8;
+function EnumProcessName(PID: cardinal): RawUTF8;
 
 /// return the system-wide time usage information
 // - under Windows, is a wrapper around GetSystemTimes() kernel API call
@@ -1949,20 +2081,20 @@ type
 
 function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
   dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32
-  name 'OpenSCManager' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+  name 'OpenSCManager' + _AW;
 function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: cardinal;
   lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
 function StartService(hService: SC_HANDLE; dwNumServiceArgs: cardinal;
   lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
-  name 'StartService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+  name 'StartService' + _AW;
 function CreateService(hSCManager: SC_HANDLE; lpServiceName, lpDisplayName: PChar;
   dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: cardinal;
   lpBinaryPathName, lpLoadOrderGroup: PChar; lpdwTagId: LPDWORD; lpDependencies,
   lpServiceStartName, lpPassword: PChar): SC_HANDLE; stdcall; external advapi32
-  name 'CreateService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+  name 'CreateService' + _AW;
 function OpenService(hSCManager: SC_HANDLE; lpServiceName: PChar;
   dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32
-  name 'OpenService' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+  name 'OpenService' + _AW;
 function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
 function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
 function QueryServiceStatus(hService: SC_HANDLE;
@@ -1976,10 +2108,10 @@ function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
 function RegisterServiceCtrlHandler(lpServiceName: PChar;
   lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32
-  name 'RegisterServiceCtrlHandler' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+  name 'RegisterServiceCtrlHandler' + _AW;
 function StartServiceCtrlDispatcher(
   lpServiceStartTable: PServiceTableEntry): BOOL; stdcall; external advapi32
-  name 'StartServiceCtrlDispatcher' + {$ifdef UNICODE}'W'{$else}'A'{$endif};
+  name 'StartServiceCtrlDispatcher' + _AW;
 
 
 { *** high level classes to define and manage Windows Services }
