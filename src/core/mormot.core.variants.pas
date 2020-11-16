@@ -2462,34 +2462,25 @@ begin
           VDouble := V.VExtended^;
         end;
       vtVariant:
-        begin
-          VType := varVariant or varByRef;
-          VAny := V.VVariant;
-        end;
+        result := V.VVariant^;
+      // warning: use varByRef or varString makes GPF -> safe and fast refcount
       vtAnsiString:
         begin
-          VType := varString or varByRef;
-          VString := V.VAnsiString;
-        end;
-      vtWideString:
-        begin
-          VType := varOleStr or varByRef;
-          VString := V.VWideString;
+          VType := varString;
+          VAny := nil;
+          RawByteString(VAny) := RawByteString(V.VAnsiString);
         end;
       {$ifdef HASVARUSTRING}
-      vtUnicodeString:
-        begin
-          VType := varUString or varByRef;
-          VString := V.VUnicodeString;
-        end;
+      vtUnicodeString,
       {$endif HASVARUSTRING}
-      vtString, vtPChar, vtChar, vtWideChar, vtClass:
+      vtWideString, vtString, vtPChar, vtChar, vtWideChar, vtClass:
         begin
           VType := varString;
           VString := nil; // avoid GPF on next line
           VarRecToUTF8(V, RawUTF8(VString)); // return as new RawUTF8 instance
         end;
-      vtObject: // class instance will be serialized as a TDocVariant
+      vtObject:
+        // class instance will be serialized as a TDocVariant
         ObjectToVariant(V.VObject, result, [woDontStoreDefault]);
     else
       raise ESynVariant.CreateUTF8('Unhandled TVarRec.VType=%', [V.VType]);
