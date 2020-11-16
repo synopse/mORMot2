@@ -2680,8 +2680,9 @@ var
 begin
   for i := 0 to length(SynVariantTypes) - 1 do
   begin
-    result := SynVariantTypes[i]; // returns already registered instance
+    result := SynVariantTypes[i];
     if PPointer(result)^ = pointer(aClass) then
+      // returns already registered instance
       exit;
   end;
   result := aClass.Create; // register variant type
@@ -6767,6 +6768,10 @@ end;
 
 
 initialization
+  // register the TDocVariant custom type
+  DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
+  DocVariantVType := DocVariantType.VarType;
+  // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJSON := _BinaryVariantLoadAsJSON;
   VariantClearSeveral := _VariantClearSeveral;
   SortDynArrayVariantComp := _SortDynArrayVariantComp;
