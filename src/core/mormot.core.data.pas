@@ -1020,8 +1020,9 @@ var
   // and be called by TDynArray.LoadFromJSON method
   // - this unit will just set a wrapper raising an ERttiException
   // - link mormot.core.json.pas to have a working implementation
-  GetDataFromJSON: procedure(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
-    TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+  GetDataFromJSON: procedure(Data: pointer; var JSON: PUTF8Char;
+    EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
+    CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 
 type
   /// function prototype to be used for TDynArray Sort and Find method
@@ -6396,11 +6397,12 @@ begin
   end;
 end;
 
-procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
-  TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char;
+  EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 begin
-  raise ERttiException.Create('GetDataFromJSON() not available - include ' +
-    'mormot.core.json.pas in your uses clause');
+  raise ERttiException.Create('_GetDataFromJSON not implemented - ' +
+    'please include mormot.core.json in your uses clause');
 end;
 
 function TDynArray.LoadFromJSON(P: PUTF8Char; EndOfObject: PUTF8Char;
@@ -6461,7 +6463,8 @@ begin
           n := result - 1;
       until L > n;
     end
-    else // array is not sorted, or aIndex=nil -> use O(n) iterating search
+    else
+      // array is not sorted, or aIndex=nil -> use O(n) iterating search
       for result := 0 to n do
         if aCompare(P^, Item) = 0 then
           exit
@@ -7869,7 +7872,7 @@ begin
       exit;
     end
     else if not aForAdd and
-                (HashOne(P + ndx * siz) = aHashCode) then
+            (HashOne(P + ndx * siz) = aHashCode) then
     begin
       result := ndx;
       exit;

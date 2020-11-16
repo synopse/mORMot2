@@ -2504,32 +2504,35 @@ begin
           WasString^ := true;
         inc(P);
         result := P;
+        while not (jcJSONStringMarker in jsonset[P^]) do
+          // not [#0, '"', '\']
+          inc(P); // very fast parsing of most UTF-8 chars within "string"
         D := P;
+        if P^ <> '"' then
         repeat
-          if not (jcJSONStringMarker in jsonset[P^]) then
-          begin
-            // not [#0, '"', '\']
-            inc(P);
-            continue; // very fast parsing of most UTF-8 chars within "string"
-          end;
-          if P^ = '"' then
-            // end of string
-            break
-          else if P^ = #0 then
-            // premature ending
-            exit;
-          // get char after \
-          inc(P);
+          // escape needed -> inplace unescape from P^ into D^ 
           c := P^;
-          if (c = '"') or
-             (c = '\') then
+          if not (jcJSONStringMarker in jsonset[c]) then
           begin
-            // most common cases are \\ or \"
 lit:        inc(P);
             D^ := c;
             inc(D);
-            continue;
-          end
+            continue; // very fast parsing of most UTF-8 chars within "string"
+          end;
+          // P^ is either #0, '"' or '\'
+          if c = '"' then
+            // end of string
+            break;
+          if c = #0 then
+            // premature ending
+            exit;
+          // unescape JSON text: get char after \
+          inc(P); // P^ was '\' here
+          c := P^;
+          if (c = '"') or
+             (c = '\') then
+            // most common cases are \\ or \"
+            goto lit
           else if c = #0 then
             // to avoid potential buffer overflow issue on \#0
             exit
@@ -9074,8 +9077,9 @@ begin
   TRttiJsonLoad(fJsonLoad)(Data, Ctxt);
 end;
 
-procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
-  TypeInfo: PRttiInfo; CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char;
+  EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 var
   opt: TJsonParserOptions;
 begin
