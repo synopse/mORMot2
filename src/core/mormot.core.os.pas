@@ -3600,7 +3600,7 @@ end;
 
 function NewSynLocker: PSynLocker;
 begin
-  result := AllocMem(SizeOf(result^));
+  result := AllocMem(SizeOf(TSynLocker));
   InitializeCriticalSection(result^.fSection);
   result^.fInitialized := true;
 end;

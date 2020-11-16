@@ -458,7 +458,8 @@ type
     ifHasGuid,
     ifDispInterface,
     ifDispatch
-    {$ifdef FPC} , ifHasStrGUID {$endif});
+    {$ifdef FPC} ,
+    ifHasStrGUID {$endif});
 
   /// define the set of interface abilities
   TRttiIntfFlags = set of TRttiIntfFlag;
@@ -4979,7 +4980,7 @@ var
   n: PtrInt;
   fin: TRttiFinalizer;
 begin
-  Info^.ArrayItemType(n, result);
+  Info := Info^.ArrayItemType(n, result);
   if Info = nil then
     FillCharFast(V^, result, 0)
   else
@@ -5097,10 +5098,11 @@ var
   fields: TRttiRecordManagedFields; // Size/Count/Fields
   offset: PtrUInt;
   f: PRttiRecordField;
+  cop: PRttiCopiers;
 begin
   Info^.RecordManagedFields(fields);
   f := fields.Fields;
-  fields.Fields := @RTTI_COPY; // reuse pointer slot on stack
+  cop := @RTTI_COPY; 
   offset := 0;
   while fields.Count <> 0 do
   begin
@@ -5117,7 +5119,7 @@ begin
         inc(Source, offset);
         inc(Dest, offset);
       end;
-      offset := PRttiCopiers(fields.Fields)[Info^.Kind](Dest, Source, Info);
+      offset := cop[Info^.Kind](Dest, Source, Info);
       inc(Source, offset);
       inc(Dest, offset);
       inc(offset, f^.Offset);
@@ -5141,7 +5143,7 @@ var
   n, itemsize: PtrInt;
   cop: TRttiCopier;
 begin
-  Info^.ArrayItemType(n, result);
+  Info := Info^.ArrayItemType(n, result);
   if Info = nil then
     MoveFast(Source^, Dest^, result)
   else
@@ -6162,7 +6164,7 @@ begin
       [self, ToText(ParserType)^]);
   end;
   // create fake RTTI which should be enough for our purpose
-  SetLength(fNoRttiInfo, length(TypeName) + 32); // all filled with zeros
+  SetLength(fNoRttiInfo, length(TypeName) + 64); // all filled with zeros
   fCache.Info := pointer(fNoRttiInfo);
   fCache.Info.Kind := fCache.Kind;
   if TypeName = '' then

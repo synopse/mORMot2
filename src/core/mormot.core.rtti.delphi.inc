@@ -357,13 +357,13 @@ begin
 end;
 
 procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
+var
+  nfo: PRecordInfo;
 begin
-  with PRecordInfo(GetTypeData(@self))^ do
-  begin
-    Fields.Size := RecSize;
-    Fields.Count := ManagedFldCount;
-    Fields.Fields := @PIntegerArray(@ManagedFldCount)[1];
-  end;
+  nfo := pointer(GetTypeData(@self));
+  Fields.Size := nfo^.RecSize;
+  Fields.Count := nfo^.ManagedFldCount;
+  Fields.Fields := @PIntegerArray(@nfo^.ManagedFldCount)[1];
 end;
 
 {$ifdef ISDELPHI2010} // read enhanced RTTI available since Delphi 2010
@@ -461,17 +461,16 @@ begin
 end;
 
 function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+var
+  nfo: PArrayInfo;
 begin
-  with PArrayInfo(GetTypeData(@self))^ do
-  begin
-    aDataCount := ElCount;
-    aDataSize := ArraySize;
-    if (DimCount = 1) and
-       (ArrayType <> nil) then
-      result := ArrayType^
-    else
-      result := nil;
-  end;
+  // nfo^.DimCount=1 is not tested explicitly -> assume single dimension array
+  nfo := pointer(GetTypeData(@self));
+  aDataCount := nfo^.ElCount;
+  aDataSize := nfo^.ArraySize;
+  result := pointer(nfo^.ArrayType);
+  if result <> nil then
+    result := PPointer(result)^;
 end;
 
 function TRttiInfo.ArrayItemSize: PtrInt;
