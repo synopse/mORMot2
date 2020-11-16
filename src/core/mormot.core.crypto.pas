@@ -175,6 +175,8 @@ function Adler32Pas(Adler: cardinal; p: pointer; Count: integer): cardinal;
 function Adler32Asm(Adler: cardinal; p: pointer; Count: integer): cardinal;
  {$ifndef CPUX86} inline; {$endif}
 
+function Adler32SelfTest: boolean;
+
 /// entry point of the raw MD5 transform function - may be used for low-level use
 procedure RawMd5Compress(var Hash; Data: pointer);
 
@@ -193,8 +195,8 @@ procedure RawSha512Compress(var Hash; Data: pointer);
 
 const
   /// hide all AES Context complex code
-  AESContextSize = 276 + sizeof(pointer)
-    {$ifdef USEAESNI32} + sizeof(pointer) {$endif};
+  AESContextSize = 276 + SizeOf(pointer)
+    {$ifdef USEAESNI32} + SizeOf(pointer) {$endif};
 
   /// power of two for a standard AES block size during cypher/uncypher
   // - to be used as 1 shl AESBlockShift or 1 shr AESBlockShift for fast div/mod
@@ -1027,6 +1029,7 @@ procedure AESIVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
 
 function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 
+function AESTablesTest: boolean;
 
 {$ifndef PUREMORMOT2}
 
@@ -2081,9 +2084,9 @@ procedure PBKDF2_SHA3_Crypt(algo: TSHA3Algo; const password, salt: RawByteString
 { ****************** Digest/Hash to Hexadecimal Text Conversion }
 
 const
-  SHA1DIGESTSTRLEN = sizeof(TSHA1Digest) * 2;
-  SHA256DIGESTSTRLEN = sizeof(TSHA256Digest) * 2;
-  MD5DIGESTSTRLEN = sizeof(TMD5Digest) * 2;
+  SHA1DIGESTSTRLEN = SizeOf(TSHA1Digest) * 2;
+  SHA256DIGESTSTRLEN = SizeOf(TSHA256Digest) * 2;
+  MD5DIGESTSTRLEN = SizeOf(TMD5Digest) * 2;
 
 type
   /// 32-characters ASCII string, e.g. as returned by AESBlockToShortString()
@@ -2349,6 +2352,7 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 
 {$endif PUREMORMOT2}
 
+
 /// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 // - note that this algorithm is proprietary, and less secure (and standard)
@@ -2601,6 +2605,17 @@ begin
 end;
 
 {$endif CPUX86}
+
+function Adler32SelfTest: boolean;
+begin
+  result :=
+  {$ifndef PUREPASCAL}
+    (Adler32Asm(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
+    (Adler32Asm(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE) and
+  {$endif}
+    (Adler32Pas(1, @Te0, SizeOf(Te0)) = $BCBEFE10) and
+    (Adler32Pas(7, @Te1, SizeOf(Te1) - 3) = $DA91FDBE);
+end;
 
 {$ifndef CPUINTEL}
 
@@ -3136,7 +3151,32 @@ procedure TAES.Done;
 var
   ctx: TAESContext absolute Context;
 begin
-  FillcharFast(ctx, sizeof(ctx), 0); // always erase key in memory after use
+  FillcharFast(ctx, SizeOf(ctx), 0); // always erase key in memory after use
+end;
+
+function AESTablesTest: boolean;
+begin
+  // ensure that we have $2000 bytes of contiguous XOR tables ;)
+  result := (PtrUInt(@TD0) + $400 = PtrUInt(@TD1)) and
+            (PtrUInt(@TD0) + $800 = PtrUInt(@TD2)) and
+            (PtrUInt(@TD0) + $C00 = PtrUInt(@TD3)) and
+            (PtrUInt(@TD0) + $1000 = PtrUInt(@TE0)) and
+            (PtrUInt(@TD0) + $1400 = PtrUInt(@TE1)) and
+            (PtrUInt(@TD0) + $1800 = PtrUInt(@TE2)) and
+            (PtrUInt(@TD0) + $1C00 = PtrUInt(@TE3)) and
+            (SBox[255] = $16) and
+            (InvSBox[0] = $52) and
+            (Te0[0] = $a56363c6) and
+            (Te0[255] = $3a16162c) and
+            (Te1[0] = $6363c6a5) and
+            (Te1[255] = $16162c3a) and
+            (Te3[0] = $c6a56363) and
+            (Te3[255] = $2c3a1616) and
+            (Td0[0] = $50a7f451) and
+            (Td0[99] = 0) and
+            (Td0[255] = $4257b8d0) and
+            (Td3[0] = $5150a7f4) and
+            (Td3[255] = $d04257b8);
 end;
 
 
@@ -3803,9 +3843,9 @@ end;
 function TAESAbstract.EncryptPKCS7Length(InputLen: cardinal;
   IVAtBeginning: boolean): cardinal;
 begin
-  result := InputLen + sizeof(TAESBlock) - (InputLen and AESBlockMod);
+  result := InputLen + SizeOf(TAESBlock) - (InputLen and AESBlockMod);
   if IVAtBeginning then
-    inc(result, sizeof(TAESBlock));
+    inc(result, SizeOf(TAESBlock));
 end;
 
 function TAESAbstract.EncryptPKCS7Buffer(Input, Output: pointer;
@@ -3813,9 +3853,9 @@ function TAESAbstract.EncryptPKCS7Buffer(Input, Output: pointer;
 var
   padding, ivsize: cardinal;
 begin
-  padding := sizeof(TAESBlock) - (InputLen and AESBlockMod);
+  padding := SizeOf(TAESBlock) - (InputLen and AESBlockMod);
   if IVAtBeginning then
-    ivsize := sizeof(TAESBlock)
+    ivsize := SizeOf(TAESBlock)
   else
     ivsize := 0;
   if OutputLen <> ivsize + InputLen + padding then
@@ -3849,7 +3889,7 @@ var
   ctr: TAESIVCTR;
 begin
   result := true;
-  if (InputLen < sizeof(TAESBlock)) or
+  if (InputLen < SizeOf(TAESBlock)) or
      (InputLen and AESBlockMod <> 0) then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',
@@ -3900,8 +3940,8 @@ begin
           'potential replay attack', [self, AESBlockToShortString(fIV)])
       else
         result := false;
-    dec(InputLen, sizeof(TAESBlock));
-    ivsize := sizeof(TAESBlock);
+    dec(InputLen, SizeOf(TAESBlock));
+    ivsize := SizeOf(TAESBlock);
   end
   else
     ivsize := 0;
@@ -3918,7 +3958,7 @@ begin
   if not DecryptPKCS7Len(InputLen, ivsize, Input,
       IVAtBeginning, RaiseESynCryptoOnError) then
     exit;
-  if InputLen < sizeof(tmp) then
+  if InputLen < SizeOf(tmp) then
     P := @tmp
   else
   begin
@@ -3927,7 +3967,7 @@ begin
   end;
   Decrypt(@PByteArray(Input)^[ivsize], P, InputLen);
   padding := ord(P[InputLen - 1]); // result[1..len]
-  if padding > sizeof(TAESBlock) then
+  if padding > SizeOf(TAESBlock) then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid Input', [self])
     else
@@ -3958,7 +3998,7 @@ begin
   SetLength(result, len);
   Decrypt(@PByteArray(Input)^[ivsize], pointer(result), len);
   padding := result[len - 1]; // result[0..len-1]
-  if padding > sizeof(TAESBlock) then
+  if padding > SizeOf(TAESBlock) then
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid Input', [self])
     else
@@ -3990,6 +4030,49 @@ begin
   result := false;
 end;
 
+// minimum RecordSave/RecordLoad implementation to avoid mormot.core.data link
+
+function ToVarUInt32Length(Value: PtrUInt): PtrUInt;
+begin
+  result := 1;
+  while Value > $7F do
+  begin
+    Value := Value shr 7;
+    inc(result);
+  end;
+end;
+
+function ToVarUInt32(Value: cardinal; Dest: PByte): PByte;
+begin
+  while Value > $7F do
+  begin
+    Dest^ := (Value and $7F) or $80;
+    Value := Value shr 7;
+    inc(Dest);
+  end;
+  Dest^ := Value;
+  inc(Dest);
+  result := Dest;
+end;
+
+function FromVarUInt32(var Source: PByte): cardinal;
+var
+  c, n: cardinal;
+begin
+  result := 0;
+  n := 0;
+  repeat
+    c := Source^;
+    inc(Source);
+    if c <= $7f then
+      break;
+    c := c and $7F;
+    result := result or (c shl n);
+    inc(n, 7);
+  until false;
+  result := result or (c shl n);
+end;
+
 function TAESAbstract.MACAndCrypt(const Data: RawByteString;
   Encrypt: boolean): RawByteString;
 type
@@ -4001,14 +4084,14 @@ type
   PCryptData = ^TCryptData;
 const
   VERSION = 1;
-  CRCSIZ = sizeof(THash256) * 2;
-  SIZ = CRCSIZ + sizeof(cardinal);
+  CRCSIZ = SizeOf(THash256) * 2;
+  SIZ = CRCSIZ + SizeOf(cardinal);
 var
-  len: integer;
+  len: cardinal;
   pcd: PCryptData absolute Data;
-  rec: TCryptData;
   rcd: PCryptData absolute result;
-  P: PAnsiChar;
+  rec: TCryptData;
+  P: PByte;
 begin
   result := ''; // e.g. MACSetNonce not supported
   try
@@ -4019,29 +4102,27 @@ begin
         exit;
       rec.Data := EncryptPKCS7(Data, true);
       len := length(rec.Data);
-      if (len > $7f) or
-         not MACGetLast(rec.mac)  then
-        // only accept small data (no need of full RecordSave/ToVarUInt32 here)
+      if not MACGetLast(rec.mac)  then
         exit;
-      SetLength(result, len + (SIZ + 1));
+      // inlined RecordSave()
+      SetLength(result, SIZ + ToVarUInt32Length(len) + len);
       rcd.nonce := rec.nonce;
       rcd.mac := rec.mac;
       rcd.crc := crc32c(VERSION, @rcd.nonce, CRCSIZ);
       P := @rcd^.Data;
-      P^ := AnsiChar(len);
-      MoveFast(pointer(rec.Data)^, P[1], len); // inlined RecordSave()
+      MoveFast(pointer(rec.Data)^, ToVarUInt32(len, P)^, len);
     end
     else
     begin
       if (length(Data) <= SIZ) or
          (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
         exit;
-      P := @pcd^.Data; // inlined RecordLoad() for safety
-      len := ord(P^);
-      inc(P);
-      if (len > $7f) or
-         (length(Data) - len <> P - pointer(Data)) then
-        exit; // only accept smallest FromVarUInt32() data
+      // inlined RecordLoad() for safety
+      P := @pcd^.Data;
+      len := FromVarUInt32(P);
+      if length(Data) - integer(len) <> PAnsiChar(P) - pointer(Data) then
+        // to avoid buffer overflow
+        exit;
       if MACSetNonce(pcd^.nonce) then
         result := DecryptPKCS7Buffer(P, len, true, false);
       if result <> '' then
@@ -4269,7 +4350,7 @@ var
   tmp: TAESBlock;
 begin
   inherited; // CV := IV + set fIn,fOut
-  if Count >= sizeof(TAESBlock) then
+  if Count >= SizeOf(TAESBlock) then
   begin
     if fAESInit <> initDecrypt then
       DecryptInit;
@@ -4443,8 +4524,8 @@ end;
 destructor TAESAbstractAEAD.Destroy;
 begin
   inherited Destroy;
-  FillCharFast(fMacKey, sizeof(fMacKey), 0);
-  FillCharFast(fMac, sizeof(fMac), 0);
+  FillCharFast(fMacKey, SizeOf(fMacKey), 0);
+  FillCharFast(fMac, SizeOf(fMac), 0);
 end;
 
 function TAESAbstractAEAD.MACSetNonce(const aKey: THash256; aAssociated: pointer;
@@ -4461,7 +4542,7 @@ begin
      (aAssociatedLen > 0) then
     crc128c(aAssociated, aAssociatedLen, fMACKey.encrypted)
   else
-    FillcharFast(fMACKey.encrypted, sizeof(THash128), 255);
+    FillcharFast(fMACKey.encrypted, SizeOf(THash128), 255);
   result := true;
 end;
 
@@ -4486,7 +4567,7 @@ begin
     exit;
   crc := fMACKey.encrypted;
   crcblocks(@crc, aEncrypted, Count shr 4 - 2);
-  result := IsEqual(crc, PHash128(@PByteArray(aEncrypted)[Count - sizeof(crc)])^);
+  result := IsEqual(crc, PHash128(@PByteArray(aEncrypted)[Count - SizeOf(crc)])^);
 end;
 
 
@@ -5036,7 +5117,7 @@ destructor TAESAbstract_API.Destroy;
 begin
   if fKeyCryptoAPI <> nil then
     CryptoAPI.DestroyKey(fKeyCryptoAPI);
-  FillCharFast(fKeyHeaderKey, sizeof(fKeyHeaderKey), 0);
+  FillCharFast(fKeyHeaderKey, SizeOf(fKeyHeaderKey), 0);
   inherited;
 end;
 
@@ -5053,7 +5134,7 @@ begin
     fKeyCryptoAPI := nil;
   end;
   if not CryptoAPI.ImportKey(CryptoAPIAESProvider, @fKeyHeader,
-     sizeof(fKeyHeader) + fKeySizeBytes, nil, 0, fKeyCryptoAPI) then
+     SizeOf(fKeyHeader) + fKeySizeBytes, nil, 0, fKeyCryptoAPI) then
     raise ESynCrypto.CreateLastOSError('in CryptImportKey for %', [self]);
   if not CryptoAPI.SetKeyParam(fKeyCryptoAPI, KP_IV, @fIV, 0) then
     raise ESynCrypto.CreateLastOSError('in CryptSetKeyParam(KP_IV) for %', [self]);
@@ -5284,7 +5365,7 @@ var
     data.c[7] := data.c[7] xor mormot.core.base.Random32;
     XorEntropy(@data.h2); // RdRand32+Rdtsc+Now+Random+CreateGUID
     XorEntropy(@data.h3);
-    sha3.Update(@data, sizeof(data));
+    sha3.Update(@data, SizeOf(data));
   end;
 
 begin
@@ -5303,14 +5384,14 @@ begin
     XorEntropy(@data.h0);
     sha3update;
     ext := NowUTC;
-    sha3.Update(@ext, sizeof(ext));
+    sha3.Update(@ext, SizeOf(ext));
     sha3.Update(ExeVersion.Host);
     sha3.Update(ExeVersion.User);
     sha3.Update(ExeVersion.ProgramFullSpec);
     data.h0 := ExeVersion.Hash.b;
     sha3update;
     ext := Random; // why not?
-    sha3.Update(@ext, sizeof(ext));
+    sha3.Update(@ext, SizeOf(ext));
     data.i0 := integer(HInstance); // override data.d0d1/h0
     data.i1 := PtrInt(GetCurrentThreadId);
     data.i2 := PtrInt(MainThreadID);
@@ -5318,7 +5399,7 @@ begin
     SleepHiRes(0); // force non deterministic time shift
     sha3update;
     sha3.Update(OSVersionText);
-    sha3.Update(@SystemInfo, sizeof(SystemInfo));
+    sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     result := sha3.Cypher(fromos); // = XOR OS entropy using SHA-3 in XOF mode
   finally
     sha3.Done;
@@ -5383,7 +5464,7 @@ end;
 
 procedure TAESPRNG.FillRandom(out Buffer: THash256);
 begin
-  FillRandom(@Buffer, sizeof(Buffer));
+  FillRandom(@Buffer, SizeOf(Buffer));
 end;
 
 procedure TAESPRNG.FillRandom(Buffer: pointer; Len: integer);
@@ -5454,7 +5535,7 @@ var
   block: THash128Rec;
 begin
   FillRandom(block.b);
-  result := (block.L * max) shr 32; // no needt o XOR with block.H
+  result := (QWord(block.c0) * max) shr 32; // no need to XOR with block.H
 end;
 
 function TAESPRNG.Random64: QWord;
@@ -5497,7 +5578,7 @@ begin
     P := pointer(result);
     for i := 1 to Len do
     begin
-      P^ := CHARS[ord(P^) mod sizeof(CHARS)];
+      P^ := CHARS[ord(P^) mod SizeOf(CHARS)];
       if not haspunct and
          not (ord(P^) in [ord('A')..ord('Z'), ord('a')..ord('z'), ord('0')..ord('9')]) then
         haspunct := true;
@@ -5654,7 +5735,7 @@ end;
 
 procedure TAESPRNGSystem.FillRandom(out Block: TAESBlock);
 begin
-  FillRandom(@Block, sizeof(Block));
+  FillRandom(@Block, SizeOf(Block));
 end;
 
 procedure TAESPRNGSystem.FillRandom(Buffer: pointer; Len: integer);
@@ -5730,12 +5811,12 @@ var
 begin
   L := length(s);
   p := pointer(s);
-  if L < sizeof(tmp) then
+  if L < SizeOf(tmp) then
   begin
-    FillcharFast(tmp, sizeof(tmp), L); // add some salt to unweak password
+    FillcharFast(tmp, SizeOf(tmp), L); // add some salt to unweak password
     if L > 0 then
       MoveFast(p^, tmp, L);
-    SHA.Full(@tmp, sizeof(tmp), Digest);
+    SHA.Full(@tmp, SizeOf(tmp), Digest);
   end
   else
     SHA.Full(p, L, Digest);
@@ -5771,13 +5852,13 @@ begin
       {$else}
       key := key2;
       {$endif MSWINDOWS}
-      if TAESPRNG.AFUnsplit(key, __h, sizeof(__h)) then
+      if TAESPRNG.AFUnsplit(key, __h, SizeOf(__h)) then
         exit; // successfully extracted secret key in __h
     end;
     if FileExists(fn) then // allow rewrite of invalid local file
       FileSetAttributes(fn, {secret=}false);
     TAESPRNG.Main.FillRandom(__h);
-    key := TAESPRNG.Main.AFSplit(__h, sizeof(__h), 126);
+    key := TAESPRNG.Main.AFSplit(__h, SizeOf(__h), 126);
     {$ifdef MSWINDOWS}
     // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
     key2 := CryptDataForCurrentUserDPAPI(key, appsec, true);
@@ -5948,7 +6029,7 @@ begin
   Data.Hash.F := $9b05688c;
   Data.Hash.G := $1f83d9ab;
   Data.Hash.H := $5be0cd19;
-  FillcharFast(Data.MLen, sizeof(Data) - sizeof(Data.Hash), 0);
+  FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
 end;
 
 procedure TSHA256.Update(Buffer: pointer; Len: integer);
@@ -6178,7 +6259,7 @@ begin
   Hash.h := QWord($47b5481dbefa4fa4);
   MLen := 0;
   Index := 0;
-  FillcharFast(Data, sizeof(Data), 0);
+  FillcharFast(Data, SizeOf(Data), 0);
 end;
 
 procedure TSHA384.Update(Buffer: pointer; Len: integer);
@@ -6190,7 +6271,7 @@ begin
     exit; // avoid GPF
   inc(MLen, Len);
   repeat
-    aLen := sizeof(Data) - Index;
+    aLen := SizeOf(Data) - Index;
     if aLen <= Len then
     begin
       if Index <> 0 then
@@ -6262,7 +6343,7 @@ begin
   Hash.h := $5be0cd19137e2179;
   MLen := 0;
   Index := 0;
-  FillcharFast(Data, sizeof(Data), 0);
+  FillcharFast(Data, SizeOf(Data), 0);
 end;
 
 procedure TSHA512.Update(Buffer: pointer; Len: integer);
@@ -6274,7 +6355,7 @@ begin
     exit; // avoid GPF
   inc(MLen, Len);
   repeat
-    aLen := sizeof(Data) - Index;
+    aLen := SizeOf(Data) - Index;
     if aLen <= Len then
     begin
       if Index <> 0 then
@@ -6541,7 +6622,7 @@ begin
      ((aRate and 63) <> 0) then
     raise ESynCrypto.CreateUTF8('Unexpected TSHA3Context.Init(%,%)',
       [aRate, aCapacity]);
-  FillCharFast(self, sizeof(self), 0);
+  FillCharFast(self, SizeOf(self), 0);
   Rate := aRate;
   Capacity := aCapacity;
 end;
@@ -6766,7 +6847,7 @@ begin
   else
     PSHA3Context(@Context)^.FinalBit_LSB(0, 0, Digest, DigestBits);
   if not NoInit then
-    FillCharFast(Context, sizeof(Context), 0);
+    FillCharFast(Context, SizeOf(Context), 0);
 end;
 
 function TSHA3.Final256(NoInit: boolean): THash256;
@@ -6860,7 +6941,7 @@ end;
 
 procedure TSHA3.Done;
 begin
-  FillCharFast(self, sizeof(self), 0);
+  FillCharFast(self, SizeOf(self), 0);
 end;
 
 
@@ -6880,7 +6961,7 @@ var
   k0, k0xorIpad: THash512Rec;
 begin
   FillZero(k0.b);
-  if keylen > sizeof(k0) then
+  if keylen > SizeOf(k0) then
     SHA.Full(key, keylen, k0.b160)
   else
     MoveFast(key^, k0, keylen);
@@ -6889,7 +6970,7 @@ begin
   for i := 0 to 15 do
     step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   SHA.Init;
-  SHA.Update(@k0xorIpad, sizeof(k0xorIpad));
+  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
   FillZero(k0.b);
   FillZero(k0xorIpad.b);
 end;
@@ -6902,8 +6983,8 @@ end;
 procedure THMAC_SHA1.Done(out result: TSHA1Digest; NoInit: boolean);
 begin
   SHA.Final(result);
-  SHA.Update(@step7data, sizeof(step7data));
-  SHA.Update(@result, sizeof(result));
+  SHA.Update(@step7data, SizeOf(step7data));
+  SHA.Update(@result, SizeOf(result));
   SHA.Final(result, NoInit);
   if not NoInit then
     FillZero(step7data.b);
@@ -6948,7 +7029,7 @@ end;
 procedure HMAC_SHA1(const key: TSHA1Digest; const msg: RawByteString;
   out result: TSHA1Digest);
 begin
-  HMAC_SHA1(@key, pointer(msg), sizeof(key), length(msg), result);
+  HMAC_SHA1(@key, pointer(msg), SizeOf(key), length(msg), result);
 end;
 
 
@@ -6960,7 +7041,7 @@ var
   k0, k0xorIpad: THash512Rec;
 begin
   FillZero(k0.b);
-  if keylen > sizeof(k0) then
+  if keylen > SizeOf(k0) then
     SHA.Full(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
@@ -6969,7 +7050,7 @@ begin
   for i := 0 to 15 do
     step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   SHA.Init;
-  SHA.Update(@k0xorIpad, sizeof(k0xorIpad));
+  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
   FillZero(k0.b);
   FillZero(k0xorIpad.b);
 end;
@@ -6981,12 +7062,12 @@ end;
 
 procedure THMAC_SHA256.Update(const msg: THash128);
 begin
-  SHA.Update(@msg, sizeof(msg));
+  SHA.Update(@msg, SizeOf(msg));
 end;
 
 procedure THMAC_SHA256.Update(const msg: THash256);
 begin
-  SHA.Update(@msg, sizeof(msg));
+  SHA.Update(@msg, SizeOf(msg));
 end;
 
 procedure THMAC_SHA256.Update(const msg: RawByteString);
@@ -6997,8 +7078,8 @@ end;
 procedure THMAC_SHA256.Done(out result: TSHA256Digest; NoInit: boolean);
 begin
   SHA.Final(result);
-  SHA.Update(@step7data, sizeof(step7data));
-  SHA.Update(@result, sizeof(result));
+  SHA.Update(@step7data, SizeOf(step7data));
+  SHA.Update(@result, SizeOf(result));
   SHA.Final(result, NoInit);
   if not NoInit then
     FillZero(step7data.b);
@@ -7043,7 +7124,7 @@ end;
 procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString;
   out result: TSHA256Digest);
 begin
-  HMAC_SHA256(@key, pointer(msg), sizeof(key), length(msg), result);
+  HMAC_SHA256(@key, pointer(msg), SizeOf(key), length(msg), result);
 end;
 
 
@@ -7054,8 +7135,8 @@ var
   i: integer;
   k0, k0xorIpad: array[0..31] of cardinal;
 begin
-  FillCharFast(k0, sizeof(k0), 0);
-  if keylen > sizeof(k0) then
+  FillCharFast(k0, SizeOf(k0), 0);
+  if keylen > SizeOf(k0) then
     SHA.Full(key, keylen, PSHA384Digest(@k0)^)
   else
     MoveFast(key^, k0, keylen);
@@ -7064,9 +7145,9 @@ begin
   for i := 0 to 31 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   SHA.Init;
-  SHA.Update(@k0xorIpad, sizeof(k0xorIpad));
-  FillCharFast(k0, sizeof(k0), 0);
-  FillCharFast(k0xorIpad, sizeof(k0xorIpad), 0);
+  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
+  FillCharFast(k0, SizeOf(k0), 0);
+  FillCharFast(k0xorIpad, SizeOf(k0xorIpad), 0);
 end;
 
 procedure THMAC_SHA384.Update(msg: pointer; msglen: integer);
@@ -7077,11 +7158,11 @@ end;
 procedure THMAC_SHA384.Done(out result: TSHA384Digest; NoInit: boolean);
 begin
   SHA.Final(result);
-  SHA.Update(@step7data, sizeof(step7data));
-  SHA.Update(@result, sizeof(result));
+  SHA.Update(@step7data, SizeOf(step7data));
+  SHA.Update(@result, SizeOf(result));
   SHA.Final(result, NoInit);
   if not NoInit then
-    FillCharFast(step7data, sizeof(step7data), 0);
+    FillCharFast(step7data, SizeOf(step7data), 0);
 end;
 
 procedure THMAC_SHA384.Done(out result: RawUTF8; NoInit: boolean);
@@ -7123,7 +7204,7 @@ end;
 procedure HMAC_SHA384(const key: TSHA384Digest; const msg: RawByteString;
   out result: TSHA384Digest);
 begin
-  HMAC_SHA384(@key, pointer(msg), sizeof(key), length(msg), result);
+  HMAC_SHA384(@key, pointer(msg), SizeOf(key), length(msg), result);
 end;
 
 
@@ -7134,8 +7215,8 @@ var
   i: integer;
   k0, k0xorIpad: array[0..31] of cardinal;
 begin
-  FillCharFast(k0, sizeof(k0), 0);
-  if keylen > sizeof(k0) then
+  FillCharFast(k0, SizeOf(k0), 0);
+  if keylen > SizeOf(k0) then
     SHA.Full(key, keylen, PSHA512Digest(@k0)^)
   else
     MoveFast(key^, k0, keylen);
@@ -7144,9 +7225,9 @@ begin
   for i := 0 to 31 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   SHA.Init;
-  SHA.Update(@k0xorIpad, sizeof(k0xorIpad));
-  FillCharFast(k0, sizeof(k0), 0);
-  FillCharFast(k0xorIpad, sizeof(k0xorIpad), 0);
+  SHA.Update(@k0xorIpad, SizeOf(k0xorIpad));
+  FillCharFast(k0, SizeOf(k0), 0);
+  FillCharFast(k0xorIpad, SizeOf(k0xorIpad), 0);
 end;
 
 procedure THMAC_SHA512.Update(msg: pointer; msglen: integer);
@@ -7157,11 +7238,11 @@ end;
 procedure THMAC_SHA512.Done(out result: TSHA512Digest; NoInit: boolean);
 begin
   SHA.Final(result);
-  SHA.Update(@step7data, sizeof(step7data));
-  SHA.Update(@result, sizeof(result));
+  SHA.Update(@step7data, SizeOf(step7data));
+  SHA.Update(@result, SizeOf(result));
   SHA.Final(result, NoInit);
   if not NoInit then
-    FillCharFast(step7data, sizeof(step7data), 0);
+    FillCharFast(step7data, SizeOf(step7data), 0);
 end;
 
 procedure THMAC_SHA512.Done(out result: RawUTF8; NoInit: boolean);
@@ -7203,7 +7284,7 @@ end;
 procedure HMAC_SHA512(const key: TSHA512Digest; const msg: RawByteString;
   out result: TSHA512Digest);
 begin
-  HMAC_SHA512(@key, pointer(msg), sizeof(key), length(msg), result);
+  HMAC_SHA512(@key, pointer(msg), SizeOf(key), length(msg), result);
 end;
 
 
@@ -7235,8 +7316,8 @@ var
   h1, h2: cardinal;
   k0, k0xorIpad, step7data: THash512Rec;
 begin
-  FillCharFast(k0, sizeof(k0), 0);
-  if keylen > sizeof(k0) then
+  FillCharFast(k0, SizeOf(k0), 0);
+  if keylen > SizeOf(k0) then
     crc256c(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
@@ -7244,15 +7325,15 @@ begin
     k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
     step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  h1 := crc32c(crc32c(0, @k0xorIpad, sizeof(k0xorIpad)), msg, msglen);
-  h2 := crc32c(crc32c(h1, @k0xorIpad, sizeof(k0xorIpad)), msg, msglen);
+  h1 := crc32c(crc32c(0, @k0xorIpad, SizeOf(k0xorIpad)), msg, msglen);
+  h2 := crc32c(crc32c(h1, @k0xorIpad, SizeOf(k0xorIpad)), msg, msglen);
   crc256cmix(h1, h2, @result);
-  h1 := crc32c(crc32c(0, @step7data, sizeof(step7data)), @result, sizeof(result));
-  h2 := crc32c(crc32c(h1, @step7data, sizeof(step7data)), @result, sizeof(result));
+  h1 := crc32c(crc32c(0, @step7data, SizeOf(step7data)), @result, SizeOf(result));
+  h2 := crc32c(crc32c(h1, @step7data, SizeOf(step7data)), @result, SizeOf(result));
   crc256cmix(h1, h2, @result);
-  FillCharFast(k0, sizeof(k0), 0);
-  FillCharFast(k0xorIpad, sizeof(k0), 0);
-  FillCharFast(step7data, sizeof(k0), 0);
+  FillCharFast(k0, SizeOf(k0), 0);
+  FillCharFast(k0xorIpad, SizeOf(k0), 0);
+  FillCharFast(step7data, SizeOf(k0), 0);
 end;
 
 procedure HMAC_CRC256C(const key: THash256; const msg: RawByteString;
@@ -7279,8 +7360,8 @@ var
   i: integer;
   k0, k0xorIpad: THash512Rec;
 begin
-  FillCharFast(k0, sizeof(k0), 0);
-  if keylen > sizeof(k0) then
+  FillCharFast(k0, SizeOf(k0), 0);
+  if keylen > SizeOf(k0) then
     crc256c(key, keylen, k0.Lo)
   else
     MoveFast(key^, k0, keylen);
@@ -7288,9 +7369,9 @@ begin
     k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
     step7data.c[i] := k0.c[i] xor $5c5c5c5c;
-  seed := crc32c(0, @k0xorIpad, sizeof(k0xorIpad));
-  FillCharFast(k0, sizeof(k0), 0);
-  FillCharFast(k0xorIpad, sizeof(k0xorIpad), 0);
+  seed := crc32c(0, @k0xorIpad, SizeOf(k0xorIpad));
+  FillCharFast(k0, SizeOf(k0), 0);
+  FillCharFast(k0xorIpad, SizeOf(k0xorIpad), 0);
 end;
 
 procedure THMAC_CRC32C.Update(msg: pointer; msglen: integer);
@@ -7305,14 +7386,14 @@ end;
 
 function THMAC_CRC32C.Done(NoInit: boolean): cardinal;
 begin
-  result := crc32c(seed, @step7data, sizeof(step7data));
+  result := crc32c(seed, @step7data, SizeOf(step7data));
   if not NoInit then
-    FillcharFast(self, sizeof(self), 0);
+    FillcharFast(self, SizeOf(self), 0);
 end;
 
 function THMAC_CRC32C.Compute(msg: pointer; msglen: integer): cardinal;
 begin
-  result := crc32c(crc32c(seed, msg, msglen), @step7data, sizeof(step7data));
+  result := crc32c(crc32c(seed, msg, msglen), @step7data, SizeOf(step7data));
 end;
 
 function HMAC_CRC32C(key, msg: pointer; keylen, msglen: integer): cardinal;
@@ -7353,12 +7434,12 @@ begin
   for i := 2 to count do
   begin
     mac := first; // re-use the very same SHA context for best performance
-    mac.sha.Update(@tmp, sizeof(tmp));
+    mac.sha.Update(@tmp, SizeOf(tmp));
     mac.Done(tmp, true);
-    XorMemory(@result, @tmp, sizeof(result));
+    XorMemory(@result, @tmp, SizeOf(result));
   end;
-  FillcharFast(mac, sizeof(mac), 0);
-  FillcharFast(first, sizeof(first), 0);
+  FillcharFast(mac, SizeOf(mac), 0);
+  FillcharFast(first, SizeOf(first), 0);
   FillZero(tmp);
 end;
 
@@ -7381,12 +7462,12 @@ begin
   for i := 2 to count do
   begin
     mac := first; // re-use the very same SHA context for best performance
-    mac.sha.Update(@tmp, sizeof(tmp));
+    mac.sha.Update(@tmp, SizeOf(tmp));
     mac.Done(tmp, true);
-    XorMemoryPtrInt(@result, @tmp, sizeof(result) shr POINTERSHR);
+    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
   end;
-  FillcharFast(first, sizeof(first), 0);
-  FillcharFast(mac, sizeof(mac), 0);
+  FillcharFast(first, SizeOf(first), 0);
+  FillcharFast(mac, SizeOf(mac), 0);
   FillZero(tmp);
 end;
 
@@ -7400,7 +7481,7 @@ var
   first: THMAC_SHA256;
 begin
   first.Init(pointer(password), length(password));
-  SetLength(iter, sizeof(integer));
+  SetLength(iter, SizeOf(integer));
   for n := 0 to high(result) do
   begin
     PInteger(iter)^ := bswap32(n + 1); // U1 = PRF(Password, Salt || INT_32_BE(i))
@@ -7412,14 +7493,14 @@ begin
     for i := 2 to count do
     begin
       mac := first; // re-use the very same SHA context for best performance
-      mac.sha.Update(@tmp, sizeof(tmp));
+      mac.sha.Update(@tmp, SizeOf(tmp));
       mac.Done(tmp, true);
-      XorMemoryPtrInt(@result[n], @tmp, sizeof(result[n]) shr POINTERSHR);
+      XorMemoryPtrInt(@result[n], @tmp, SizeOf(result[n]) shr POINTERSHR);
     end;
   end;
   FillZero(tmp);
-  FillcharFast(mac, sizeof(mac), 0);
-  FillcharFast(first, sizeof(first), 0);
+  FillcharFast(mac, SizeOf(mac), 0);
+  FillcharFast(first, SizeOf(first), 0);
 end;
 
 procedure PBKDF2_HMAC_SHA384(const password, salt: RawByteString; count: integer;
@@ -7438,12 +7519,12 @@ begin
   for i := 2 to count do
   begin
     mac := first; // re-use the very same SHA context for best performance
-    mac.sha.Update(@tmp, sizeof(tmp));
+    mac.sha.Update(@tmp, SizeOf(tmp));
     mac.Done(tmp, true);
-    XorMemoryPtrInt(@result, @tmp, sizeof(result) shr POINTERSHR);
+    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
   end;
-  FillcharFast(mac, sizeof(mac), 0);
-  FillcharFast(first, sizeof(first), 0);
+  FillcharFast(mac, SizeOf(mac), 0);
+  FillcharFast(first, SizeOf(first), 0);
   FillZero(tmp);
 end;
 
@@ -7463,12 +7544,12 @@ begin
   for i := 2 to count do
   begin
     mac := first; // re-use the very same SHA context for best performance
-    mac.sha.Update(@tmp, sizeof(tmp));
+    mac.sha.Update(@tmp, SizeOf(tmp));
     mac.Done(tmp, true);
-    XorMemoryPtrInt(@result, @tmp, sizeof(result) shr POINTERSHR);
+    XorMemoryPtrInt(@result, @tmp, SizeOf(result) shr POINTERSHR);
   end;
-  FillcharFast(mac, sizeof(mac), 0);
-  FillcharFast(first, sizeof(first), 0);
+  FillcharFast(mac, SizeOf(mac), 0);
+  FillcharFast(first, SizeOf(first), 0);
   FillZero(tmp);
 end;
 
@@ -7496,8 +7577,8 @@ begin
     mac.Final(pointer(tmp), resultbytes shl 3, true);
     XorMemory(pointer(result), pointer(tmp), resultbytes);
   end;
-  FillcharFast(mac, sizeof(mac), 0);
-  FillcharFast(first, sizeof(first), 0);
+  FillcharFast(mac, SizeOf(mac), 0);
+  FillcharFast(first, SizeOf(first), 0);
   FillZero(tmp);
 end;
 
@@ -8177,7 +8258,7 @@ begin
   Data.Hash.C := $98BADCFE;
   Data.Hash.D := $10325476;
   Data.Hash.E := $C3D2E1F0;
-  FillcharFast(Data.MLen, sizeof(Data) - sizeof(Data.Hash), 0);
+  FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
 end;
 
 procedure TSHA1.Update(Buffer: pointer; Len: integer);
@@ -8190,7 +8271,7 @@ begin
   inc(Data.MLen, QWord(cardinal(Len)) shl 3);
   while Len > 0 do
   begin
-    aLen := sizeof(Data.Buffer) - Data.Index;
+    aLen := SizeOf(Data.Buffer) - Data.Index;
     if aLen <= Len then
     begin
       if Data.Index <> 0 then
@@ -8387,12 +8468,12 @@ end;
 
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 begin
-  BinToHexLower(@D, sizeof(D), result);
+  BinToHexLower(@D, SizeOf(D), result);
 end;
 
 function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
 begin
-  result := mormot.core.text.HexToBin(pointer(Source), @Dest, sizeof(Dest));
+  result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
 
@@ -8408,12 +8489,12 @@ end;
 
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 begin
-  BinToHexLower(@D, sizeof(D), result);
+  BinToHexLower(@D, SizeOf(D), result);
 end;
 
 function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
 begin
-  result := mormot.core.text.HexToBin(pointer(Source), @Dest, sizeof(Dest));
+  result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
 
@@ -8439,18 +8520,18 @@ end;
 
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 begin
-  BinToHexLower(@D, sizeof(D), result);
+  BinToHexLower(@D, SizeOf(D), result);
 end;
 
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
 begin
-  result := mormot.core.text.HexToBin(pointer(Source), @Dest, sizeof(Dest));
+  result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
 
 function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
 begin
-  BinToHexLower(@D, sizeof(D), result);
+  BinToHexLower(@D, SizeOf(D), result);
 end;
 
 function SHA384(const s: RawByteString): RawUTF8;
@@ -8466,7 +8547,7 @@ end;
 
 function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
 begin
-  BinToHexLower(@D, sizeof(D), result);
+  BinToHexLower(@D, SizeOf(D), result);
 end;
 
 function SHA512(const s: RawByteString): RawUTF8;
@@ -8793,19 +8874,19 @@ begin
         end;
         LastLen := inLen and AESBlockMod;
         if LastLen = 0 then
-          SetOutLen(inLen + sizeof(TAESBlock))
+          SetOutLen(inLen + SizeOf(TAESBlock))
         else
           SetOutLen((nBlock + 2) shl AESBlockShift);
         Head.SomeSalt := random(MaxInt);
         Head.HeaderCheck := Head.Calc(Key, KeySize);
         Crypt.Encrypt(TAESBlock(Head));
-        Write(@Head, sizeof(Head));
+        Write(@Head, SizeOf(Head));
       end
       else
       begin
         // uncrypt data
         dec(nBlock); // Header is already done
-        read(@Head, sizeof(Head));
+        read(@Head, SizeOf(Head));
         Crypt.Decrypt(TAESBlock(Head));
         with Head do
         begin
@@ -8833,14 +8914,14 @@ begin
       if LastLen <> 0 then
         if Encrypt then
         begin
-          FillcharFast(Last, sizeof(TAESBlock), 0);
+          FillcharFast(Last, SizeOf(TAESBlock), 0);
           read(@Last, LastLen);
           Crypt.Encrypt(Last);
-          Write(@Last, sizeof(TAESBlock));
+          Write(@Last, SizeOf(TAESBlock));
         end
         else
         begin
-          read(@Last, sizeof(TAESBlock));
+          read(@Last, SizeOf(TAESBlock));
           Crypt.Decrypt(Last);
           Write(@Last, LastLen);
         end;
@@ -8877,7 +8958,7 @@ procedure TAESWriteStream.Finish;
 begin
   if BufCount = 0 then
     exit;
-  if (BufCount >= sizeof(TAESBlock)) or
+  if (BufCount >= SizeOf(TAESBlock)) or
      not AES.Initialized or NoCrypt then
     raise ESynCrypto.CreateUTF8('Unexpected %.Finish', [self]);
   XorOffset(@buf, DestSize, BufCount);
@@ -8913,16 +8994,16 @@ begin
     begin
       if BufCount > 0 then
       begin
-        Len := sizeof(TAESBlock) - BufCount;
+        Len := SizeOf(TAESBlock) - BufCount;
         if Len > Count then
           Len := Count;
         MoveFast(Buffer, buf[BufCount], Len);
         inc(BufCount, Len);
-        if BufCount < sizeof(TAESBlock) then
+        if BufCount < SizeOf(TAESBlock) then
           exit;
         AES.Encrypt(buf);
-        Dest.WriteBuffer(buf, sizeof(TAESBlock));
-        inc(DestSize, sizeof(TAESBlock));
+        Dest.WriteBuffer(buf, SizeOf(TAESBlock));
+        inc(DestSize, SizeOf(TAESBlock));
         Dec(Count, Len);
         AES.DoBlocks(@B[Len], @B[Len], cardinal(Count) shr AESBlockShift, true);
       end
@@ -8981,7 +9062,7 @@ var
   Digest: TSHA256Digest;
 begin
   SHA256Weak(Password, Digest);
-  AES(Digest, sizeof(Digest) * 8, bIn, bOut, Len, Encrypt);
+  AES(Digest, SizeOf(Digest) * 8, bIn, bOut, Len, Encrypt);
   FillZero(Digest);
 end;
 
@@ -9004,7 +9085,7 @@ var
   Digest: TSHA256Digest;
 begin
   SHA256Weak(Password, Digest);
-  AESFull(Digest, sizeof(Digest) * 8, bIn, Len, outStream, Encrypt);
+  AESFull(Digest, SizeOf(Digest) * 8, bIn, Len, outStream, Encrypt);
 end;
 
 {$endif PUREMORMOT2}
@@ -9033,20 +9114,20 @@ begin
     end;
   end;
   {$endif ASMX64}
-  assert(sizeof(TMD5Buf) = sizeof(TMD5Digest));
-  assert(sizeof(TAESContext) = AESContextSize);
+  assert(SizeOf(TMD5Buf) = SizeOf(TMD5Digest));
+  assert(SizeOf(TAESContext) = AESContextSize);
   assert(AESContextSize <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
-  assert(sizeof(TSHAContext) = SHAContextSize);
-  assert(sizeof(TSHA3Context) = SHA3ContextSize);
-  assert(1 shl AESBlockShift = sizeof(TAESBlock));
+  assert(SizeOf(TSHAContext) = SHAContextSize);
+  assert(SizeOf(TSHA3Context) = SHA3ContextSize);
+  assert(1 shl AESBlockShift = SizeOf(TAESBlock));
   {$ifndef PUREMORMOT2}
-  assert(sizeof(TAESFullHeader) = sizeof(TAESBlock));
+  assert(SizeOf(TAESFullHeader) = SizeOf(TAESBlock));
   {$endif PUREMORMOT2}
-  assert(sizeof(TAESIVCTR) = sizeof(TAESBlock));
-  assert(sizeof(TSHA256) = sizeof(TSHA1));
-  assert(sizeof(TSHA512) > sizeof(TSHA256));
-  assert(sizeof(TSHA3) > sizeof(TSHA512));
-  assert(sizeof(TSHA3) > sizeof(THMAC_SHA512));
+  assert(SizeOf(TAESIVCTR) = SizeOf(TAESBlock));
+  assert(SizeOf(TSHA256) = SizeOf(TSHA1));
+  assert(SizeOf(TSHA512) > SizeOf(TSHA256));
+  assert(SizeOf(TSHA3) > SizeOf(TSHA512));
+  assert(SizeOf(TSHA3) > SizeOf(THMAC_SHA512));
   assert((PtrUInt(@TD0) + $400 = PtrUInt(@TD1)) and
          (PtrUInt(@TD0) + $800 = PtrUInt(@TD2)) and
          (PtrUInt(@TD0) + $C00 = PtrUInt(@TD3)) and
