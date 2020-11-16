@@ -4628,15 +4628,15 @@ end;
 
 procedure TBaseWriter.AddShorter(const Text: TShort8);
 var
-  P, S: PUTF8Char;
+  L: PtrInt;
 begin
-  P := B;
-  if P >= BEnd then
-    // BEnd is 16 bytes before end of buffer -> 8 chars OK
-    P := FlushToStream;
-  S := @Text; // better code generation when inlined on FPC
-  inc(B, ord(S[0]));
-  PInt64(P + 1)^ := PInt64(S + 1)^;
+  L := ord(Text[0]);
+  if L = 0 then
+    exit;
+  if BEnd - B <= L then
+    FlushToStream;
+  PInt64(B + 1)^ := PInt64(@Text[1])^;
+  inc(B, L);
 end;
 
 procedure TBaseWriter.AddNull;
@@ -4711,7 +4711,7 @@ begin
   end;
   fTempBufSize := aBufSize;
   B := fTempBuf - 1; // Add() methods will append at B+1
-  BEnd := fTempBuf + fTempBufSize - 16; // -16 to avoid buffer overwrite/overread
+  BEnd := fTempBuf + (fTempBufSize - 16); // -16 to avoid buffer overwrite/overread
   if DefaultTextWriterTrimEnum then
     Include(fCustomOptions, twoTrimLeftEnumSets);
 end;
@@ -4741,7 +4741,7 @@ end;
 function TBaseWriter.FlushToStream: PUTF8Char;
 var
   i: PtrInt;
-  s: PtrUInt;
+  newsize: PtrUInt;
 begin
   i := B - fTempBuf + 1;
   if i > 0 then
@@ -4749,28 +4749,31 @@ begin
     WriteToStream(fTempBuf, i);
     if not (twoFlushToStreamNoAutoResize in fCustomOptions) then
     begin
-      s := fTotalFileSize - fInitialStreamPosition;
+      newsize := fTotalFileSize - fInitialStreamPosition;
       if (fTempBufSize < 49152) and
-         (s > PtrUInt(fTempBufSize) * 4) then
+         (newsize > PtrUInt(fTempBufSize) * 4) then
         // tune small (stack-alloc?) buffer to grow by twice its size
-        s := fTempBufSize * 2
+        newsize := fTempBufSize * 2
       else if (fTempBufSize < 1 shl 20) and
-              (s > 40 shl 20) then
+              (newsize > 40 shl 20) then
         // total > 40MB -> grow internal buffer to 1MB
-        s := 1 shl 20
+        newsize := 1 shl 20
       else
-        s := 0;
-      if s > 0 then
+        // nothing to change about internal buffer size
+        newsize := 0;
+      if newsize > 0 then
       begin
-        fTempBufSize := s;
-        if twoBufferIsExternal in fCustomOptions then // use heap, not stack
+        fTempBufSize := newsize;
+        if twoBufferIsExternal in fCustomOptions then
+          // use heap, not stack
           exclude(fCustomOptions, twoBufferIsExternal)
         else
-          FreeMem(fTempBuf); // with big content comes bigger buffer
+          // with big content comes bigger buffer
+          FreeMem(fTempBuf);
         GetMem(fTempBuf, fTempBufSize);
         BEnd := fTempBuf + (fTempBufSize - 16);
       end;
-    end;
+    end; 
     B := fTempBuf - 1;
   end;
   result := B;
@@ -5232,7 +5235,7 @@ begin
   begin
     inc(B); // allow CancelLastChar
     repeat
-      i := BEnd - B; // guess biggest size to be added into buf^ at once
+      i := BEnd - B  + 1; // guess biggest size to be added into buf^ at once
       if Len < i then
         i := Len;
       // add UTF-8 bytes
@@ -9576,7 +9579,7 @@ var
   tmp: RawUTF8;
   error: integer;
 begin
-  error := {$ifdef FPC} GetLastOSError {$else} GetLastError {$endif};
+  error := GetLastError;
   FormatUTF8(Format, Args, tmp);
   CreateUTF8('OSError % [%] %', [error, SysErrorMessage(error), tmp]);
 end;
@@ -9598,7 +9601,7 @@ begin
     extcode := Context.AdditionalInfo(extnames);
     if extcode <> 0 then
     begin
-      WR.AddShorter(' 0x');
+      {%H-}WR.AddShorter(' 0x');
       WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
       for i := 0 to high(extnames) do
       begin
