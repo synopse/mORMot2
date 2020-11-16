@@ -60,7 +60,8 @@ type
     // information and company copyright (if available)
     function ServiceDescription: string;
     /// read-only access to the TSynLog class, if SetLog() has been called
-    property LogClass: TSynLogClass read fLogClass;
+    property LogClass: TSynLogClass
+      read fLogClass;
     /// optional service dependencies
     // - not published by default: could be defined if needed, or e.g. set in
     // overriden constructor
@@ -328,10 +329,12 @@ var
     writeln('Try with one of the switches:');
     spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
     {$ifdef MSWINDOWS}
-    writeln('   ', ExeVersion.ProgramName, ' /console -c /verbose /help -h /version');
+    writeln('   ', ExeVersion.ProgramName,
+      ' /console -c /verbose /help -h /version');
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(' ./', ExeVersion.ProgramName, ' --console -c --verbose --help -h --version');
+    writeln(' ./', ExeVersion.ProgramName,
+      ' --console -c --verbose --help -h --version');
     writeln(spaces, '--run -r --fork -f --kill -k');
     {$endif MSWINDOWS}
     custom := CustomCommandLineSyntax;
@@ -506,7 +509,7 @@ begin
     {$else}
     // POSIX Run/Fork background execution of the executable
     cRun, cFork:
-      RunUntilSigTerminated(self, (cmd = cFork), Start, Stop,
+      RunUntilSigTerminated(self, {dofork=}(cmd = cFork), Start, Stop,
         fSettings.fLogClass.DoLog, fSettings.ServiceName);
     cKill, cSilentKill:
       if RunUntilSigTerminatedForKill then
