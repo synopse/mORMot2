@@ -2510,7 +2510,7 @@ begin
         D := P;
         if P^ <> '"' then
         repeat
-          // escape needed -> inplace unescape from P^ into D^ 
+          // escape needed -> inplace unescape from P^ into D^
           c := P^;
           if not (jcJSONStringMarker in jsonset[c]) then
           begin

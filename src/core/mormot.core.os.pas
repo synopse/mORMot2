@@ -3600,8 +3600,9 @@ end;
 
 function NewSynLocker: PSynLocker;
 begin
-  GetMem(result, SizeOf(TSynLocker));
-  result^.Init;
+  result := AllocMem(SizeOf(result^));
+  InitializeCriticalSection(result^.fSection);
+  result^.fInitialized := true;
 end;
 
 
