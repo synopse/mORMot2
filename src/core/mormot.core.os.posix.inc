@@ -737,9 +737,9 @@ var
   p: PPointer;
   i, j: integer;
 const
-  NAMES: array[0..4] of PAnsiChar = (
+  NAMES: array[0..5] of PAnsiChar = (
     'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print',
-    'sd_notify', 'sd_watchdog_enabled');
+    'sd_journal_sendv', 'sd_notify', 'sd_watchdog_enabled');
 begin
   GlobalLock;
   if not tested then

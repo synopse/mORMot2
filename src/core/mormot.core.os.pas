@@ -896,6 +896,11 @@ const
   ENV_INVOCATION_ID: PAnsiChar = 'INVOCATION_ID';
 
 type
+  TIoVec = record
+    iov_base: pointer;
+    iov_len: PtrUInt;
+  end;
+
   /// implements late-binding of the systemd library
   // - about systemd: see https://www.freedesktop.org/wiki/Software/systemd
   // and http://0pointer.de/blog/projects/socket-activation.html - to get headers
@@ -915,6 +920,10 @@ type
     /// systemd: submit simple, plain text log entries to the system journal
     // - priority value can be obtained using longint(LOG_TO_SYSLOG[logLevel])
     journal_print: function(priority: longint; args: array of const): longint; cdecl;
+    /// systemd: submit array of iov structures instead of the format string to the system journal.
+    //  - each structure should reference one field of the entry to submit.
+    //  - the second argument specifies the number of structures in the array.
+    journal_sendv: function(var iov: TIoVec; n: longint): longint; cdecl;
     /// sends notification to systemd
     // - see https://www.freedesktop.org/software/systemd/man/notify.html
     // status notification sample: sd.notify(0, 'READY=1');

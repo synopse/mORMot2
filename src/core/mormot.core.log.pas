@@ -11,10 +11,10 @@ unit mormot.core.log;
     - Logging via TSynLogFamily, TSynLog, ISynLog
     - High-Level Logs and Exception Related Features
     - Efficient .log File Access via TSynLogFile
+    - SysLog Messages Support as defined by RFC 5424
 
   *****************************************************************************
 
-  TODO: support TSynLogFamily.EchoToConsoleUseJournal as in SynLog
 }
 
 
@@ -487,6 +487,7 @@ type
     fFileExistsAction: TSynLogExistsAction;
     fExceptionIgnore: TList;
     fEchoToConsole: TSynLogInfos;
+    fEchoToConsoleUseJournal: boolean;
     fEchoCustom: TOnTextWriterEcho;
     fEchoRemoteClient: TObject;
     fEchoRemoteClientOwned: boolean;
@@ -503,6 +504,7 @@ type
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
+    procedure SetEchoToConsoleUseJournal(aValue: boolean);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
     {$ifndef NOEXCEPTIONINTERCEPT}
@@ -602,6 +604,14 @@ type
     // - EchoCustom or EchoToConsole can be activated separately
     property EchoToConsole: TSynLogInfos
       read fEchoToConsole write SetEchoToConsole;
+    /// redirect all EchoToConsole logging into the Linux journald service
+    // - do nothing on Windows or BSD systems
+    // - such logs can be exported into a format which can be viewed by our
+    // LogView tool using the following command (replacing UNIT with
+    // your unit name and PROCESS with the executable name):
+    // $ "journalctl -u UNIT --no-hostname -o short-iso-precise --since today | grep "PROCESS\[.*\]:  . " > todaysLog.log"
+    property EchoToConsoleUseJournal: boolean
+      read fEchoToConsoleUseJournal write SetEchoToConsoleUseJournal;
     /// can be set to a callback which will be called for each log line
     // - could be used with a third-party logging system
     // - EchoToConsole or EchoCustom can be activated separately
@@ -1582,6 +1592,74 @@ type
       read fSelectedCount;
   end;
 
+
+{ **************  SysLog Messages Support as defined by RFC 5424 }
+
+type
+  /// syslog message facilities as defined by RFC 3164
+  TSyslogFacility = (
+    sfKern,
+    sfUser,
+    sfMail,
+    sfDaemon,
+    sfAuth,
+    sfSyslog,
+    sfLpr,
+    sfNews,
+    sfUucp,
+    sfClock,
+    sfAuthpriv,
+    sfFtp,
+    sfNtp,
+    sfAudit,
+    sfAlert,
+    sfCron,
+    sfLocal0,
+    sfLocal1,
+    sfLocal2,
+    sfLocal3,
+    sfLocal4,
+    sfLocal5,
+    sfLocal6,
+    sfLocal7);
+
+  /// syslog message severities as defined by RFC 5424
+  TSyslogSeverity = (
+    ssEmerg,
+    ssAlert,
+    ssCrit,
+    ssErr,
+    ssWarn,
+    ssNotice,
+    ssInfo,
+    ssDebug);
+
+const
+  /// used to convert a TSynLog event level into a syslog message severity
+  LOG_TO_SYSLOG: array[TSynLogInfo] of TSyslogSeverity = (
+     ssDebug, ssInfo, ssDebug, ssDebug, ssNotice, ssWarn,
+    // sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
+     ssDebug, ssDebug,
+    // sllEnter, sllLeave,
+    ssWarn, ssErr, ssErr, ssDebug, ssDebug,
+    // sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
+    ssNotice, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug,
+    // sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
+    ssDebug, ssDebug, ssDebug,
+    // sllServiceCall, sllServiceReturn, sllUserAuth,
+    ssDebug, ssDebug, ssDebug, ssDebug, ssNotice,
+    // sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
+    ssWarn, ssInfo, ssDebug);
+    // sllDDDError, sllDDDInfo, sllMonitoring);
+
+/// append some information to a syslog message memory buffer
+// - following https://tools.ietf.org/html/rfc5424 specifications
+// - ready to be sent via UDP to a syslog remote server
+// - returns the number of bytes written to destbuffer (which should have
+// destsize > 127)
+function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  trimmsgfromlog: boolean): PtrInt;
 
 
 implementation
@@ -2567,6 +2645,18 @@ begin
   fEchoToConsole := aEnabled;
 end;
 
+procedure TSynLogFamily.SetEchoToConsoleUseJournal(aValue: boolean);
+begin
+  if self <> nil then
+    {$ifdef LINUXNOTBSD}
+    if aValue and
+       sd.IsAvailable then
+      fEchoToConsoleUseJournal := true
+    else
+    {$endif LINUXNOTBSD}
+      fEchoToConsoleUseJournal := false;
+end;
+
 function TSynLogFamily.GetSynLogClassName: string;
 begin
   if self = nil then
@@ -3447,10 +3537,32 @@ end;
 
 function TSynLog.ConsoleEcho(Sender: TBaseWriter; Level: TSynLogInfo;
   const Text: RawUTF8): boolean;
+{$ifdef LINUXNOTBSD}
+var
+  tmp, mtmp: RawUTF8;
+  jvec: Array[0..1] of TioVec;
+{$endif LINUXNOTBSD}
 begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
+  {$ifdef LINUXNOTBSD}
+  if Family.EchoToConsoleUseJournal then begin
+    if length(Text) < 18 then
+      // should be at last "20200615 08003008  "
+      exit;
+    FormatUTF8('PRIORITY=%', [LOG_TO_SYSLOG[Level]], tmp);
+    jvec[0].iov_base := pointer(tmp);
+    jvec[0].iov_len := length(tmp);
+    // skip time "20200615 08003008  ."
+    // (journal do it for us, and first space after it)
+    FormatUTF8('MESSAGE=%', [PUTF8Char(pointer(Text))+18], mtmp);
+    jvec[1].iov_base := pointer(mtmp);
+    jvec[1].iov_len := length(mtmp);
+    sd.journal_sendv(jvec[0], 2);
+    exit;
+  end;
+  {$endif LINUXNOTBSD}
   ConsoleWrite(Text, LOG_CONSOLE_COLORS[Level]);
   TextColor(ccLightGray);
 end;
@@ -6106,6 +6218,101 @@ begin
   dec(thread);
   result := (cardinal(thread) < fThreadMax) and
     GetBitPtr(pointer(fThreadSelected), thread);
+end;
+
+
+{ **************  SysLog Messages Support as defined by RFC 5424 }
+
+function PrintUSAscii(P: PUTF8Char; const text: RawUTF8): PUTF8Char;
+var
+  i: PtrInt;
+begin
+  P^ := ' ';
+  inc(P);
+  for i := 1 to length(text) do
+    if ord(text[i]) in [33..126] then
+    begin // only printable ASCII chars
+      P^ := text[i];
+      inc(P);
+    end;
+  if P[-1] = ' ' then
+  begin
+    P^ := '-'; // nothing appended -> NILVALUE
+    inc(P);
+  end;
+  result := P;
+end;
+
+function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  trimmsgfromlog: boolean): PtrInt;
+var
+  P: PAnsiChar;
+  start: PUTF8Char;
+  len: PtrInt;
+  st: TSynSystemTime;
+begin
+  result := 0;
+  if destsize < 127 then
+    exit;
+  start := destbuffer;
+  destbuffer^ := '<';
+  destbuffer := AppendUInt32ToBuffer(
+    destbuffer + 1, ord(severity) + ord(facility) shl 3);
+  PInteger(destbuffer)^ :=
+    ord('>') + ord('1') shl 8 + ord(' ') shl 16; // VERSION=1
+  inc(destbuffer, 3);
+  st.FromNowUTC;
+  DateToIso8601PChar(destbuffer,
+    true, st.Year, st.Month, st.Day);
+  TimeToIso8601PChar(destbuffer + 10,
+    true, st.Hour, st.Minute, st.Second, st.MilliSecond, 'T', true);
+  destbuffer[23] := 'Z';
+  inc(destbuffer, 24);
+  with ExeVersion do
+  begin
+    if length(Host) + length(ProgramName) + length(procid) +
+       length(msgid) + (destbuffer - start) + 15 > destsize then
+      exit; // avoid buffer overflow
+    destbuffer := PrintUSAscii(destbuffer, Host);        // HOST
+    destbuffer := PrintUSAscii(destbuffer, ProgramName); // APP-NAME
+  end;
+  destbuffer := PrintUSAscii(destbuffer, procid); // PROCID
+  destbuffer := PrintUSAscii(destbuffer, msgid);  // MSGID
+  destbuffer := PrintUSAscii(destbuffer, '');     // no STRUCTURED-DATA
+  destbuffer^ := ' ';
+  inc(destbuffer);
+  len := length(msg);
+  P := pointer(msg);
+  if trimmsgfromlog and
+     (len > 27) then
+    if (P[0] = '2') and
+       (P[8] = ' ') then
+    begin
+      inc(P, 27); // trim e.g. '20160607 06442255  ! trace '
+      dec(len, 27);
+    end
+    else if mormot.core.text.HexToBin(P, nil, 8) then
+    begin
+      // trim e.g. '00000000089E5A13  " info '
+      inc(P, 25);
+      dec(len, 25);
+    end;
+  while (len > 0) and
+        (P^ <= ' ') do
+  begin
+    // trim left spaces
+    inc(P);
+    dec(len);
+  end;
+  len := Utf8TruncatedLength(P, len, destsize - (destbuffer - start) - 3);
+  if not IsAnsiCompatible(P, len) then
+  begin
+    PInteger(destbuffer)^ := $bfbbef; // UTF-8 BOM
+    inc(destbuffer, 3);
+  end;
+  MoveFast(P^, destbuffer^, len);
+  result := (destbuffer - start) + len;
 end;
 
 
