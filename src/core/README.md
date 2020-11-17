@@ -152,6 +152,7 @@ Logging functions shared by all framework units
 - Logging via `TSynLogFamily` `TSynLog` `ISynLog`
 - High-Level Logs and Exception Related Features
 - Efficient `.log` File Access via `TSynLogFile`
+- SysLog Messages Support as defined by RFC 5424
 
 ### mormot.core.perf
 

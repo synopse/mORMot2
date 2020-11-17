@@ -474,20 +474,21 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
       FURL.Protocol := 'OleDB';
       {$else}
       FURL.Protocol := 'odbc_w'
-      {$endif}
+      {$endif MSWINDOWS}
   end;
-  {$endif}
+  {$endif ZEOS73UP}
   inherited Create(StringToUTF8(FURL.HostName), StringToUTF8(FURL.Database),
     StringToUTF8(FURL.UserName), StringToUTF8(FURL.Password));
   if StrToBoolDef(fURL.Properties.Values['syndb_singleconnection'], false) then
     ThreadingMode := tmMainConnection;
-  fUseCache := {$ifdef ZEOS72UP}true{$else}false{$endif}; // caching disabled by default - enabled if stable enough
+  // caching disabled by default - enabled if stable enough
+  fUseCache := {$ifdef ZEOS72UP}true{$else}false{$endif ZEOS72UP};
   case fDBMS of
     dSQLite:
       begin
         {$ifndef ZEOS72UP}
         fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for ZDBC!
-        {$endif}
+        {$endif ZEOS72UP}
       end;
     dFirebird:
       begin
@@ -522,14 +523,14 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
         //fStatementParams.Add('row_prefetch_size=131072');
         //max mem in bytes which Zeos can for batch or resultset buffers
         //fStatementParams.Add('internal_buffer_size=131072');
-        {$endif}
+        {$endif ZEOS72UP}
       end;
     dSQLite:
       begin
         {$ifdef ZEOS72UP} // new since 7.2up
         // Bind double values instead of ISO formated DateTime-strings
         //fStatementParams.Add('BindDoubleDateTimeValues=True');
-        {$endif}
+        {$endif ZEOS72UP}
       end;
     dMySQL:
       begin
@@ -550,7 +551,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
         fURL.Properties.Add('NoTableInfoCache=true');
         {$ifdef ZEOS73UP}
         //fURL.Properties.Add(DSProps_BinaryWireResultMode+'=False');
-        {$endif}
+        {$endif ZEOS73UP}
       end;
     dMSSQL:
       begin
@@ -578,7 +579,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     // Always load the lobs? Or just on accessing them?
     // if you allways copy the data by fetching the row than it doesn't make sense.
     fStatementParams.Add('cachedlob=false'); //default = False
-    {$endif}
+    {$endif ZEOS72UP}
   end;
 end;
 
@@ -633,7 +634,7 @@ begin
     OnBatchInsert := nil;
     fSupportsArrayBindings := True;
   end;
-  {$endif}
+  {$endif ZEOS72UP}
 end;
 
 procedure TSQLDBZEOSConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
@@ -649,11 +650,14 @@ begin
     TableTypes[0] := 'TABLE';
     res := meta.GetTables('', '', '', TableTypes);
     n := 0;
-    while res.Next do      {$ifdef ZEOS72UP}
-      AddSortedRawUTF8(Tables, n, res.GetUTF8String(TableNameIndex));
+    while res.Next do
+      {$ifdef ZEOS72UP}
+      AddSortedRawUTF8(Tables, n,
+        res.GetUTF8String(TableNameIndex));
       {$else}
-    AddSortedRawUTF8(Tables, n, SynUnicodeToUtf8(res.GetUnicodeString(TableNameIndex)));
-      {$endif}
+      AddSortedRawUTF8(Tables, n,
+        SynUnicodeToUtf8(res.GetUnicodeString(TableNameIndex)));
+      {$endif ZEOS72UP}
     SetLength(Tables, n);
   end
   else
@@ -688,10 +692,13 @@ begin
       F.ColumnName := res.GetUTF8String(ColumnNameIndex);
       F.ColumnTypeNative := res.GetUTF8String(TableColColumnTypeNameIndex);
       {$else}
-      F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(ColumnNameIndex));
-      F.ColumnTypeNative := SynUnicodeToUtf8(res.GetUnicodeString(TableColColumnTypeNameIndex));
-      {$endif}
-      F.ColumnType := TZSQLTypeToTSQLDBFieldType(TZSQLType(res.GetInt(TableColColumnTypeIndex)));
+      F.ColumnName := SynUnicodeToUtf8(
+        res.GetUnicodeString(ColumnNameIndex));
+      F.ColumnTypeNative := SynUnicodeToUtf8(
+        res.GetUnicodeString(TableColColumnTypeNameIndex));
+      {$endif ZEOS72UP}
+      F.ColumnType := TZSQLTypeToTSQLDBFieldType(
+        TZSQLType(res.GetInt(TableColColumnTypeIndex)));
       F.ColumnLength := res.GetInt(TableColColumnSizeIndex);  // for char or date types this is the maximum number of characters
       F.ColumnPrecision := res.GetInt(TableColColumnSizeIndex);  // for numeric or decimal types this is precision
       F.ColumnScale := res.GetInt(TableColColumnDecimalDigitsIndex);  // the number of fractional digits
@@ -705,8 +712,9 @@ begin
         {$ifdef ZEOS72UP}
         F.ColumnName := res.GetUTF8String(IndexInfoColColumnNameIndex);
         {$else}
-        F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(IndexInfoColColumnNameIndex));
-        {$endif}
+        F.ColumnName := SynUnicodeToUtf8(
+          res.GetUnicodeString(IndexInfoColColumnNameIndex));
+        {$endif ZEOS72UP}
         i := FA.Find(F);
         if i >= 0 then
           Fields[i].ColumnIndexed := true;
@@ -720,17 +728,18 @@ function TSQLDBZEOSConnectionProperties.TZSQLTypeToTSQLDBFieldType(aNativeType:
   TZSQLType): TSQLDBFieldType;
 begin
   case aNativeType of
-    stBoolean, stByte, stShort, stInteger, stLong    {$ifdef ZEOS72UP}, stSmall,
-      stWord, stLongWord, stULong{$endif}:
+    stBoolean, stByte, stShort, stInteger, stLong
+    {$ifdef ZEOS72UP}, stSmall, stWord, stLongWord, stULong {$endif ZEOS72UP}:
       result := ftInt64;
     stFloat, stDouble:
       result := ftDouble;
-    stBigDecimal{$ifdef ZEOS72UP}, stCurrency{$endif}:
+    stBigDecimal
+    {$ifdef ZEOS72UP}, stCurrency {$endif ZEOS72UP}:
       result := ftCurrency;
     stDate, stTime, stTimestamp:
       result := ftDate;
-    stString, stUnicodeString, {$ifdef ZEOS72UP}stGUID, {$endif} stAsciiStream,
-      stUnicodeStream:
+    {$ifdef ZEOS72UP}stGUID, {$endif ZEOS72UP}
+    stString, stUnicodeString, stAsciiStream, stUnicodeStream:
       result := ftUTF8;
     stBytes, stBinaryStream:
       result := ftBlob;
@@ -849,9 +858,9 @@ begin
   inherited StartTransaction;
   {$ifdef ZEOS73UP}
   fDatabase.StartTransaction; //returns the txn level
-  {$ELSE}
+  {$else}
   fDatabase.SetAutoCommit(false);
-  {$endif}
+  {$endif ZEOS73UP}
 end;
 procedure TSQLDBZEOSConnection.Commit;
 begin
@@ -862,9 +871,9 @@ begin
     inc(fTransactionCount); // the transaction is still active
     raise;
   end;
-  {$IFNDEF ZEOS73UP} //no longer required zdbc falls back to AC automatically
+  {$ifndef ZEOS73UP} //no longer required zdbc falls back to AC automatically
   fDatabase.SetAutoCommit(true);
-  {$endif}
+  {$endif ZEOS73UP}
 end;
 
 procedure TSQLDBZEOSConnection.Rollback;
@@ -873,7 +882,7 @@ begin
   fDatabase.Rollback;
   {$ifndef ZEOS73UP} //no longer required zdbc falls back to AC automatically
   fDatabase.SetAutoCommit(true);
-  {$endif}
+  {$endif ZEOS73UP}
 end;
 
 
@@ -1103,7 +1112,7 @@ begin
         ftBlob:
           fStatement.SetBlob(i + FirstDbcIndex,stBinaryStream,
             TZAbstractBlob.CreateWithData(Pointer(VData), length(VData)
-            {$ifndef ZEOS72UP} ,fStatement.GetConnection{$endif}));
+            {$ifndef ZEOS72UP} ,fStatement.GetConnection{$endif ZEOS72UP}));
       else
         raise ESQLDBZEOS.CreateUTF8(
           '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
@@ -1277,7 +1286,7 @@ begin
     StringToUTF8(fResultSet.GetString(Col + FirstDbcIndex), result);
     {$else}
     result := fResultSet.GetString(Col + FirstDbcIndex); // thanks to controls_cp=CP_UTF8
-    {$endif}
+    {$endif UNICODE}
   {$endif ZEOS72UP}
 end;
 
