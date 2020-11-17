@@ -4280,7 +4280,8 @@ var
   p: PCardinal;
   c: AnsiChar;
   d: cardinal;
-begin // returns size of initial segment of s which are not in reject
+begin
+  // returns size of initial segment of s which are not in reject
   result := 0;
   repeat
     c := PAnsiChar(s)[result];

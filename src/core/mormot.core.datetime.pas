@@ -1583,7 +1583,10 @@ var
 begin
   P := WR.B + 1;
   if WR.BEnd - P <= 4 then
-    P := WR.FlushToStream + 1;
+  begin
+    WR.FlushToStream;
+    P := WR.B + 1;
+  end;
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
   y := Year;
   d100 := y div 100;

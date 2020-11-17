@@ -21650,7 +21650,7 @@ begin // '{"Table":[...,"POST",{object},...]}'
   if (fBatch = nil) or
      (fTable = nil) then
     raise EOrmException.CreateUTF8('%.RawAdd %', [self, SentData]);
-  {%H-}fBatch.AddShorter('"POST",');
+  fBatch.AddShorter('"POST",');
   fBatch.AddString(SentData);
   fBatch.Add(',');
   result := fBatchCount;

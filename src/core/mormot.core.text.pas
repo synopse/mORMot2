@@ -824,7 +824,7 @@ type
     // memory buffer to the destination Stream
     // - you can set FlushToStreamNoAutoResize=true or call FlushFinal if you
     // do not want the automatic memory buffer resizal to take place
-    function FlushToStream: PUTF8Char; virtual;
+    procedure FlushToStream; virtual;
     /// write pending data to the Stream, without automatic buffer resizal
     // - will append the internal memory buffer to the Stream
     // - in short, FlushToStream may be called during the adding process, and
@@ -894,7 +894,8 @@ type
     // TEchoWriter.AddEndOfLine() method instead
     // - TEchoWriter.AddEndOfLine() will append either CR+LF (#13#10) or
     // only LF (#10) depending on its internal options
-    procedure AddCR; {$ifdef HASINLINE}inline;{$endif}
+    procedure AddCR;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append CR+LF (#13#10) chars and #9 indentation
     // - indentation depth is defined by the HumanReadableLevel value
     procedure AddCRAndIndent; virtual;
@@ -968,9 +969,11 @@ type
     /// append a TShort8 - Text should be not '', and up to 8 chars long
     // - this method is aggressively inlined, so may be preferred to AddShort()
     // for appending simple constant UTF-8 text
-    procedure AddShorter(const Text: TShort8); {$ifdef HASINLINE}inline;{$endif}
+    procedure AddShorter(const Text: TShort8);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append 'null' as text
-    procedure AddNull; {$ifdef HASINLINE}inline;{$endif}
+    procedure AddNull;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a sub-part of an UTF-8  String
     // - emulates AddString(copy(Text,start,len))
     procedure AddStringCopy(const Text: RawUTF8; start,len: PtrInt);
@@ -1238,7 +1241,8 @@ type
     fEchoBuf: RawUTF8;
     fEchos: array of TOnTextWriterEcho;
     function EchoFlush: PtrInt;
-    function GetEndOfLineCRLF: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function GetEndOfLineCRLF: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
   public
     /// prepare for the echoing process
@@ -1739,29 +1743,6 @@ type
   /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
   // - such result type would avoid a string allocation on heap
   TShort4 = string[4];
-
-/// creates a 4 digits short string from a 0..9999 value
-// - using TShort4 as returned string would avoid a string allocation on heap
-// - could be used e.g. as parameter to FormatUTF8()
-function UInt4DigitsToShort(Value: cardinal): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a 3 digits short string from a 0..999 value
-// - using TShort4 as returned string would avoid a string allocation on heap
-// - could be used e.g. as parameter to FormatUTF8()
-function UInt3DigitsToShort(Value: cardinal): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a 2 digits short string from a 0..99 value
-// - using TShort4 as returned string would avoid a string allocation on heap
-// - could be used e.g. as parameter to FormatUTF8()
-function UInt2DigitsToShort(Value: byte): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// creates a 2 digits short string from a 0..99 value
-// - won't test Value>99 as UInt2DigitsToShort()
-function UInt2DigitsToShortFast(Value: byte): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************ Text Formatting functions }
@@ -2281,6 +2262,41 @@ function Int18ToChars3(Value: cardinal): RawUTF8; overload;
 /// compute the value as encoded by TBaseWriter.AddInt18ToChars3() method
 procedure Int18ToChars3(Value: cardinal; var result: RawUTF8); overload;
 
+/// creates a 3 digits string from a 0..999 value as '000'..'999'
+// - consider using UInt3DigitsToShort() to avoid temporary memory allocation,
+// e.g. when used as FormatUTF8() parameter
+function UInt3DigitsToUTF8(Value: cardinal): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a 4 digits string from a 0..9999 value as '0000'..'9999'
+// - consider using UInt4DigitsToShort() to avoid temporary memory allocation,
+// e.g. when used as FormatUTF8() parameter
+function UInt4DigitsToUTF8(Value: cardinal): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
+
+  /// creates a 4 digits short string from a 0..9999 value
+// - using TShort4 as returned string would avoid a string allocation on heap
+// - could be used e.g. as parameter to FormatUTF8()
+function UInt4DigitsToShort(Value: cardinal): TShort4;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a 3 digits short string from a 0..999 value
+// - using TShort4 as returned string would avoid a string allocation on heap
+// - could be used e.g. as parameter to FormatUTF8()
+function UInt3DigitsToShort(Value: cardinal): TShort4;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a 2 digits short string from a 0..99 value
+// - using TShort4 as returned string would avoid a string allocation on heap
+// - could be used e.g. as parameter to FormatUTF8()
+function UInt2DigitsToShort(Value: byte): TShort4;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a 2 digits short string from a 0..99 value
+// - won't test Value>99 as UInt2DigitsToShort()
+function UInt2DigitsToShortFast(Value: byte): TShort4;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert a 32-bit integer (storing a IP4 address) into its full notation
 // - returns e.g. '1.2.3.4' for any valid address, or '' if ip4=0
 function IP4Text(ip4: cardinal): shortstring; overload;
@@ -2358,6 +2374,12 @@ procedure GUIDToShort(const
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
 function TextToGUID(P: PUTF8Char; guid: PByteArray): PUTF8Char;
+
+/// convert some UTF-8 encoded text into a TGUID
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
+// is not a valid TGUID
+function RawUTF8ToGUID(const text: RawByteString): TGUID;
 
 /// read a TStream content into a String
 // - it will read binary or text content from the current position until the
@@ -4631,22 +4653,20 @@ var
   L: PtrInt;
 begin
   L := ord(Text[0]);
-  if L = 0 then
-    exit;
-  if BEnd - B <= L then
-    FlushToStream;
-  PInt64(B + 1)^ := PInt64(@Text[1])^;
-  inc(B, L);
+  if L > 0 then
+  begin
+    if BEnd - B <= L then
+      FlushToStream;
+    PInt64(B + 1)^ := PInt64(@Text[1])^;
+    inc(B, L);
+  end;
 end;
 
 procedure TBaseWriter.AddNull;
-var
-  P: PUTF8Char;
 begin
-  P := B;
-  if P >= BEnd then
-    P := FlushToStream;
-  PCardinal(P + 1)^ := NULL_LOW;
+  if B >= BEnd then
+    FlushToStream;
+  PCardinal(B + 1)^ := NULL_LOW;
   inc(B, 4);
 end;
 
@@ -4738,7 +4758,7 @@ begin
   FlushToStream;
 end;
 
-function TBaseWriter.FlushToStream: PUTF8Char;
+procedure TBaseWriter.FlushToStream;
 var
   i: PtrInt;
   newsize: PtrUInt;
@@ -4776,7 +4796,6 @@ begin
     end; 
     B := fTempBuf - 1;
   end;
-  result := B;
 end;
 
 procedure TBaseWriter.ForceContent(const text: RawUTF8);
@@ -4869,39 +4888,30 @@ begin
 end;
 
 procedure TBaseWriter.Add(c: AnsiChar);
-var
-  P: PUTF8Char;
 begin
-  P := B;
-  if P >= BEnd then
-    P := FlushToStream;
-  P[1] := c;
+  if B >= BEnd then
+    FlushToStream;
+  B[1] := c;
   inc(B);
 end;
 
 procedure TBaseWriter.AddOnce(c: AnsiChar);
-var
-  P: PUTF8Char;
 begin
-  P := B;
-  if (P >= fTempBuf) and
-     (P^ = c) then
+  if (B >= fTempBuf) and
+     (B^ = c) then
     exit; // no duplicate
-  if P >= BEnd then
-    P := FlushToStream;
-  P[1] := c;
+  if B >= BEnd then
+    FlushToStream;
+  B[1] := c;
   inc(B);
 end;
 
 procedure TBaseWriter.Add(c1, c2: AnsiChar);
-var
-  P: PUTF8Char;
 begin
-  P := B;
-  if P >= BEnd then
-    P := FlushToStream;
-  P[1] := c1;
-  P[2] := c2;
+  if B >= BEnd then
+    FlushToStream;
+  B[1] := c1;
+  B[2] := c2;
   inc(B, 2);
 end;
 
@@ -5095,13 +5105,10 @@ begin
 end;
 
 procedure TBaseWriter.AddCR;
-var
-  P: PUTF8Char;
 begin
-  P := B;
-  if P >= BEnd then
-    P := FlushToStream;
-  PWord(P + 1)^ := 13 + 10 shl 8; // CR + LF
+  if B >= BEnd then
+    FlushToStream;
+  PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
   inc(B, 2);
 end;
 
@@ -5486,7 +5493,10 @@ begin
     if P^ <> #0 then
       repeat
         if D >= BEnd then
-          D := FlushToStream + 1;
+        begin
+          FlushToStream;
+          D := B + 1;
+        end;
         c := P^;
         if c < ' ' then
           if c = #0 then
@@ -5512,7 +5522,10 @@ begin
     D := B + 1;
     repeat
       if D >= BEnd then
-        D := FlushToStream + 1;
+      begin
+        FlushToStream;
+        D := B + 1;
+      end;
       c := P^;
       if c < ' ' then
         c := ' ';
@@ -5904,7 +5917,10 @@ begin
         end;
       end
       else
-        P := FlushToStream + 1;
+      begin
+        FlushToStream;
+        P := B + 1;
+      end;
     until false;
   P^ := Quote;
   B := P;
@@ -8735,36 +8751,6 @@ begin
 end;
 
 
-function UInt4DigitsToShort(Value: cardinal): TShort4;
-begin
-  result[0] := #4;
-  if Value > 9999 then
-    Value := 9999;
-  YearToPChar(Value, @result[1]);
-end;
-
-function UInt3DigitsToShort(Value: cardinal): TShort4;
-begin
-  if Value > 999 then
-    Value := 999;
-  YearToPChar(Value, @result[0]);
-  result[0] := #3; // override first digit
-end;
-
-function UInt2DigitsToShort(Value: byte): TShort4;
-begin
-  result[0] := #2;
-  if Value > 99 then
-    Value := 99;
-  PWord(@result[1])^ := TwoDigitLookupW[Value];
-end;
-
-function UInt2DigitsToShortFast(Value: byte): TShort4;
-begin
-  result[0] := #2;
-  PWord(@result[1])^ := TwoDigitLookupW[Value];
-end;
-
 
 { ************ Text Formatting functions }
 
@@ -9601,7 +9587,7 @@ begin
     extcode := Context.AdditionalInfo(extnames);
     if extcode <> 0 then
     begin
-      {%H-}WR.AddShorter(' 0x');
+      WR.AddShorter(' 0x');
       WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
       for i := 0 to high(extnames) do
       begin
@@ -10165,6 +10151,51 @@ begin
             (result and $3f) shl 12;
 end;
 
+function UInt3DigitsToUTF8(Value: cardinal): RawUTF8;
+begin
+  FastSetString(result, nil, 3);
+  PWordArray(result)[0] := TwoDigitLookupW[Value div 10];
+  PByteArray(result)[2] := (Value mod 10) + 48;
+end;
+
+function UInt4DigitsToUTF8(Value: cardinal): RawUTF8;
+begin
+  FastSetString(result, nil, 4);
+  if Value > 9999 then
+    Value := 9999;
+  YearToPChar(Value, pointer(result));
+end;
+
+function UInt4DigitsToShort(Value: cardinal): TShort4;
+begin
+  result[0] := #4;
+  if Value > 9999 then
+    Value := 9999;
+  YearToPChar(Value, @result[1]);
+end;
+
+function UInt3DigitsToShort(Value: cardinal): TShort4;
+begin
+  if Value > 999 then
+    Value := 999;
+  YearToPChar(Value, @result[0]);
+  result[0] := #3; // override first digit
+end;
+
+function UInt2DigitsToShort(Value: byte): TShort4;
+begin
+  result[0] := #2;
+  if Value > 99 then
+    Value := 99;
+  PWord(@result[1])^ := TwoDigitLookupW[Value];
+end;
+
+function UInt2DigitsToShortFast(Value: byte): TShort4;
+begin
+  result[0] := #2;
+  PWord(@result[1])^ := TwoDigitLookupW[Value];
+end;
+
 function IP4Text(ip4: cardinal): shortstring;
 var
   b: array[0..3] of byte absolute ip4;
@@ -10344,7 +10375,8 @@ end;
 function TextToGUID(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 var
   i: PtrInt;
-begin // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
+begin
+  // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   result := nil;
   for i := 3 downto 0 do
   begin
@@ -10377,6 +10409,15 @@ begin // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   result := P;
 end;
 
+function RawUTF8ToGUID(const text: RawByteString): TGUID;
+begin
+  // decode from '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
+  if (length(text) <> 38) or
+     (text[1] <> '{') or
+     (text[38] <> '}') or
+     (TextToGUID(@text[2], @result) = nil) then
+   FillZero(PHash128(@result)^);
+end;
 
 function StreamToRawByteString(aStream: TStream): RawByteString;
 var
