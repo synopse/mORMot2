@@ -830,6 +830,7 @@ type
     // items were read, and Position contains the end of the binary buffer
     function Step(Elem: pointer): boolean;
     /// extract the first field value of the current stored item
+    // - this function won't increase the internal Current pointer
     // - returns true if Field was filled with one value, or false if all
     // items were read, and Position contains the end of the binary buffer
     // - could be called before Step(), to pre-allocate a new item instance,
@@ -4772,7 +4773,7 @@ begin
   Count := 0;
   Current := 0;
   Reader.Init(Source, SourceMaxLen);
-  ArrayRtti := Rtti.Find(ArrayTypeInfo);
+  ArrayRtti := Rtti.RegisterType(ArrayTypeInfo);
   if (ArrayRtti.Parser <> ptDynArray) or
      Reader.EOF then
     exit;
@@ -4810,6 +4811,7 @@ function TDynArrayLoadFrom.FirstField(Field: pointer): boolean;
 var
   load: TRttiBinaryLoad;
   info: PRttiInfo;
+  noiteration: TFastReader;
 begin
   if (Current < Count) and
      not Reader.EOF then
@@ -4820,7 +4822,8 @@ begin
       load := RTTI_BINARYLOAD[info^.Kind];
       if Assigned(load) then
       begin
-        load(Field, Reader, info);
+        noiteration := Reader;
+        load(Field, noiteration, info);
         result := true;
         exit;
       end;

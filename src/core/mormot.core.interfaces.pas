@@ -3498,7 +3498,7 @@ begin
   if IsNullGUID(fInterfaceIID) then
     raise EInterfaceFactory.CreateUTF8(
       '%.Create: % has no GUID', [self, aInterface^.RawName]);
-  fInterfaceRTTI := rtti.RegisterType(aInterface) as TRttiJson;
+  fInterfaceRTTI := Rtti.RegisterType(aInterface) as TRttiJson;
   fInterfaceName := fInterfaceRTTI.Name;
   fInterfaceURI := fInterfaceName;
   if fInterfaceURI[1] in ['i','I'] then
@@ -4327,7 +4327,7 @@ begin
     begin
       sa^.ParamName := a^.ParamName;
       sa^.ArgTypeName := a^.TypeName;
-      sa^.ArgRtti := rtti.RegisterType(a^.TypeInfo) as TRttiJson;
+      sa^.ArgRtti := Rtti.RegisterType(a^.TypeInfo) as TRttiJson;
       sa^.ValueDirection := TInterfaceMethodValueDirection(a^.Direction);
       inc(sa);
       inc(a);

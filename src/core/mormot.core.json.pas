@@ -3695,7 +3695,8 @@ begin
     repeat
       P := GotoEndJSONItem(P);
       if P = nil then
-        exit; // invalid content, or #0 reached
+        // invalid content, or #0 reached
+        exit;
       inc(n);
       if P^ <> ',' then
         break;
@@ -3714,6 +3715,7 @@ begin
     begin
       P := GotoEndJSONItem(P, PMax);
       if P = nil then
+        // invalid content, or #0/PMax reached
         break;
       inc(result);
       if P^ <> ',' then
@@ -3722,7 +3724,8 @@ begin
     end;
   if (P = nil) or
      (P^ <> ']') then
-    result := - result;
+    // invalid or aborted when PMax was reached 
+    result := -result;
 end;
 
 
@@ -6961,8 +6964,9 @@ var
 begin
   arr := pointer(Data);
   if arr^ <> nil then
-    Ctxt.Info.ValueFinalize(arr); // void whole array
+    Ctxt.Info.ValueFinalize(arr); // reset whole array variable
   if not Ctxt.ParseArray then
+    // void (i.e. []) or invalid array
     exit;
   if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE then
     // legacy binary layout with a single Base-64 encoded item
@@ -6978,40 +6982,43 @@ begin
     arrinfo := Ctxt.Info;
     Ctxt.Info := Ctxt.Info.ArrayRtti;
     load := TRttiJson(Ctxt.Info).fJsonLoad;
-    if not Assigned(load) then
+    // initial guess of the JSON array count - will browse up to 256KB of input
+    cap := abs(JSONArrayCount(Ctxt.JSON, Ctxt.JSON + 256 shl 10));
+    if (cap = 0) or
+       not Assigned(load) then
     begin
       Ctxt.Valid := false;
       exit;
     end;
+    Data := DynArrayNew(arr, cap, Ctxt.Info.Size); // allocate new zeroed memory
+    // main JSON unserialization loop
     n := 0;
-    cap := abs(JSONArrayCount(Ctxt.JSON, Ctxt.JSON + 256 shl 10)); // guess
     repeat
-      if (n = 0) or
-         (n = cap) then
+      if n = cap then
       begin
-        if (n <> 0) or
-           (cap = 0) then
-          cap := NextGrow(cap);
-        DynArraySetLength(pointer(arr), arrinfo.Info, 1, @cap);
-        Data := arr^;
-        inc(Data, n * Ctxt.Info.Size);
+        // grow if our initial guess was aborted due to huge input
+        cap := NextGrow(cap);
+        Data := DynArrayGrow(arr, cap, Ctxt.Info.Size) + (n * Ctxt.Info.Size);
       end;
+      // unserialize the next item
       load(Data, Ctxt); // will call _JL_RttiCustom() for T*ObjArray
+      inc(n);
       if Ctxt.Valid then
         if Ctxt.EndOfObject = ',' then
         begin
           inc(Data, Ctxt.Info.Size);
-          inc(n);
           continue;
         end
         else if Ctxt.EndOfObject = ']' then
-          break; // reached end of arrray
+          // reached end of arrray
+          break;
       Ctxt.Valid := false; // unexpected end
       arrinfo.ValueFinalize(arr); // whole array clear on error
       exit;
     until false;
     if n <> cap then
-      DynArraySetLength(pointer(arr), arrinfo.Info, 1, @n);
+      // don't size down the grown memory buffer, just fake its length
+      PDALen(PAnsiChar(arr^) - _DALEN)^ := n - _DAOFF;
     Ctxt.Info := arrinfo;
   end;
   Ctxt.ParseEnd; // mimics GetJsonField() / Ctxt.ParseNext
@@ -8801,8 +8808,8 @@ begin
   fSafe.Lock;
   try
     try
-      RTTI_BINARYLOAD[rkDynArray](fKeys.Value, rdr, fKeys.Info.Cache.ItemInfo);
-      RTTI_BINARYLOAD[rkDynArray](fValues.Value, rdr, fValues.Info.Cache.ItemInfo);
+      RTTI_BINARYLOAD[rkDynArray](fKeys.Value, rdr, fKeys.Info.Info);
+      RTTI_BINARYLOAD[rkDynArray](fValues.Value, rdr, fValues.Info.Info);
       if fKeys.Count = fValues.Count then
       begin
         SetTimeouts;  // set ComputeNextTimeOut for all items
@@ -8842,8 +8849,8 @@ begin
       exit;
     W := TBufferWriter.Create(tmp{%H-});
     try
-      RTTI_BINARYSAVE[rkDynArray](fKeys.Value, W, fKeys.Info.Cache.ItemInfo);
-      RTTI_BINARYSAVE[rkDynArray](fValues.Value, W, fValues.Info.Cache.ItemInfo);
+      RTTI_BINARYSAVE[rkDynArray](fKeys.Value, W, fKeys.Info.Info);
+      RTTI_BINARYSAVE[rkDynArray](fValues.Value, W, fValues.Info.Info);
       result := W.FlushAndCompress(NoCompression, Algo);
     finally
       W.Free;
