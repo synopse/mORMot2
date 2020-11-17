@@ -138,7 +138,7 @@ JSON functions shared by all framework units
 
 Several Indexing and Search Engines, as used by other parts of the framework
 - Files Search in Folders
-- GLOB and SOUNDEX Text Search
+- ScanUTF8, GLOB and SOUNDEX Text Search
 - Versatile Expression Search Engine
 - *Bloom Filter* Probabilistic Index
 - `TDynArray` Low-Level Binary Search
