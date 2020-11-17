@@ -265,7 +265,7 @@ var
   r: TQWordRec;
 begin
   r.V := Offset;
-  r.L := SetFilePointer(Handle, R.L, @R.H, Origin);
+  r.L := SetFilePointer(Handle, r.L, @r.H, Origin);
   if (r.Li = -1) and
      (GetLastError <> 0) then
     result := -1

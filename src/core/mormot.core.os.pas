@@ -846,11 +846,11 @@ function GetQueuedCompletionStatus(CompletionPort: THandle;
 // - redefined in mormot.core.os to avoid dependency to Windows
 function PostQueuedCompletionStatus(CompletionPort: THandle;
   NumberOfBytesTransferred: DWORD; dwCompletionKey: pointer;
-  lpOverlapped: POverlapped): BOOL;
+  lpOverlapped: POverlapped): BOOL; stdcall;
 
 /// finalize a Windows resource (e.g. IOCP instance)
 // - redefined in mormot.core.os to avoid dependency to Windows
-function CloseHandle(hObject: THandle): BOOL;
+function CloseHandle(hObject: THandle): BOOL; stdcall;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
@@ -896,6 +896,7 @@ const
   ENV_INVOCATION_ID: PAnsiChar = 'INVOCATION_ID';
 
 type
+  /// low-level systemd parameter to sd.journal_sendv() function
   TIoVec = record
     iov_base: pointer;
     iov_len: PtrUInt;
