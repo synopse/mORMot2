@@ -437,8 +437,8 @@ begin
   result := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
 end;
 
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
-  aClass: TClass): integer;
+function GetPublishedMethods(Instance: TObject;
+  out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
 
   procedure AddParentsFirst(C: TClass);
   type
@@ -760,7 +760,7 @@ begin
   begin
     Info := PPointer(Info)^;
     if Info <> nil then
-     FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), Info, p^.high + 1);
+      FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), Info, p^.high + 1);
   end;
   _Freemem(p);
 end;

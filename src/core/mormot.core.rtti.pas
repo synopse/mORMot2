@@ -1455,6 +1455,11 @@ function FastRecordClear(Value: pointer; Info: PRttiInfo): PtrInt;
 procedure RawUTF8DynArrayClear(var Value: TRawUTF8DynArray);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if the TypeInfo() points to an "array of RawUTF8"
+// - e.g. returns true for TypeInfo(TRawUTF8DynArray) or other sub-types
+// defined as "type aNewType = type TRawUTF8DynArray"
+function IsRawUTF8DynArray(Info: PRttiInfo): boolean;
+
 /// initialize a record content
 // - calls FastRecordClear() and FillCharFast() with 0
 // - do nothing if the TypeInfo is not from a record/object
@@ -2862,7 +2867,8 @@ begin
     result := CP_RAWBLOB
   else
   {$ifdef HASCODEPAGE}
-  if Kind = rkLString then // has rkLStringOld any codepage? -> UTF-8
+  if Kind = rkLString then
+    // has rkLStringOld any codepage? don't think so -> UTF-8
     result := GetTypeData(@self)^.CodePage
   else
     result := CP_UTF8; // default is UTF-8
@@ -4654,6 +4660,15 @@ begin
   FastDynArrayClear(@Value, TypeInfo(RawUTF8));
 end;
 
+function IsRawUTF8DynArray(Info: PRttiInfo): boolean;
+var
+  r: TRttiCustom;
+begin
+  r := Rtti.Find(Info).ArrayRtti;
+  result := (r.Parser = ptRawUTF8) and
+            (r.Cache.Info.AnsiStringCodePage = CP_UTF8);
+end;
+
 procedure _RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
 var
   fields: TRttiRecordManagedFields;
@@ -4714,10 +4729,18 @@ var
 begin
   //  caller ensured ElemTypeInfo<>nil and Count>0
   case ElemTypeInfo^.Kind of
-    rkRecord {$ifdef FPC} , rkObject {$endif}:
+    {$ifdef FPC}
+    rkObject,
+    {$endif FPC}
+    rkRecord:
       // retrieve ElemTypeInfo.RecordManagedFields once
       _RecordClearSeveral(pointer(Value), ElemTypeInfo, Count);
-    {$ifdef HASVARUSTRING} rkUString, {$endif} {$ifdef FPC} rkLStringOld, {$endif}
+    {$ifdef FPC}
+    rkLStringOld,
+    {$endif FPC}
+    {$ifdef HASVARUSTRING}
+    rkUString,
+    {$endif HASVARUSTRING}
     rkLString:
       // optimized loop for AnsiString / UnicodeString (PStrRec header)
       _StringClearSeveral(pointer(Value), Count);
@@ -7151,12 +7174,12 @@ begin
   PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
   PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
   PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
-  PatchCode(@fpc_ansistr_compare, @_ansistr_compare,$77);   // fpclen=$12f
-  PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal,$57); // =$cf
-  PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
-  PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);  // fpclen=$3f
-  PatchJmp(@fpc_unicodestr_assign, @_ansistr_assign, $3f);      // fpclen=$3f
-  PatchCode(@fpc_dynarray_incr_ref, @_dynarray_incr_ref, $17);  // fpclen=$2f
+  PatchCode(@fpc_ansistr_compare, @_ansistr_compare,$77); // fpclen=$12f
+  PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal,$57); // fpc=$cf
+  PatchCode(@fpc_unicodestr_incr_ref, @_ansistr_incr_ref, $17);      // fpc=$2f
+  PatchJmp(@fpc_unicodestr_decr_ref, @_ansistr_decr_ref, $27);      // fpc=$3f
+  PatchJmp(@fpc_unicodestr_assign, @_ansistr_assign, $3f);         // fpc=$3f
+  PatchCode(@fpc_dynarray_incr_ref, @_dynarray_incr_ref, $17);    // fpc=$2f
   PatchJmp(@fpc_dynarray_clear, @_dynarray_decr_ref, $2f,
     PtrUInt(@_dynarray_decr_ref_free));
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
