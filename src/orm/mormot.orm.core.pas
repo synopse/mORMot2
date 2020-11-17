@@ -12116,7 +12116,7 @@ begin
   inherited Create(aName, oftUTF8Custom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, nil, nil);
   fTypeInfo := aTypeInfo;
-  SetCustomParser(rtti.RegisterType(aTypeInfo) as TRttiJson);
+  SetCustomParser(Rtti.RegisterType(aTypeInfo) as TRttiJson);
 end;
 
 constructor TOrmPropInfoCustomJSON.Create(const aTypeName, aName: RawUTF8;
@@ -12125,7 +12125,7 @@ constructor TOrmPropInfoCustomJSON.Create(const aTypeName, aName: RawUTF8;
 begin
   inherited Create(aName, oftUTF8Custom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, nil, nil);
-  SetCustomParser(rtti.Find(pointer(aTypeName), length(aTypeName)) as TRttiJson);
+  SetCustomParser(Rtti.Find(pointer(aTypeName), length(aTypeName)) as TRttiJson);
 end;
 
 function TOrmPropInfoCustomJSON.GetSQLFieldRTTITypeName: RawUTF8;
@@ -18776,7 +18776,7 @@ begin
     raise EModelException.Create('TOrmProperties.Create(nil)');
   // register for JSONToObject() and for TOrmPropInfoRTTITID.Create()
   // (should have been done before in TOrmModel.Create/AddTable)
-  fTableRtti := rtti.RegisterClass(aTable) as TRttiJson;
+  fTableRtti := Rtti.RegisterClass(aTable) as TRttiJson;
   // initialize internal structures
   fModelMax := -1;
   fTable := aTable;
@@ -19759,7 +19759,7 @@ var
   n: PtrInt;
 begin
   // first register for JSONToObject() and for TOrmPropInfoRTTITID.Create()
-  rtti.RegisterClass(aTable);
+  Rtti.RegisterClass(aTable);
   // insert only once
   if GetTableIndex(aTable) >= 0 then
   begin
@@ -19870,7 +19870,7 @@ begin
   MoveFast(Tables[0], fTables[0], N * SizeOf(Tables[0]));
   for i := 0 to N - 1 do
     // first register for JSONToObject() and for TOrmPropInfoRTTITID.Create()
-    rtti.RegisterClass(Tables[i]);
+    Rtti.RegisterClass(Tables[i]);
   SetLength(fSortedTablesNameUpper, N);
   SetLength(fSortedTablesNameIndex, N);
   SetLength(fTableProps, N);

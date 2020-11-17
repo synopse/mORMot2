@@ -875,7 +875,7 @@ begin
         hasRecord := true;
         fHasAnyRecord := true;
         field := ContextFromRtti(wRecord,
-          rtti.Find(TOrmPropInfoRecordTyped(nfo).TypeInfo),
+          Rtti.RegisterType(TOrmPropInfoRecordTyped(nfo).TypeInfo),
           nfoOrmFieldRTTITypeName);
       end
       else
