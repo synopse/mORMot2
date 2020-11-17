@@ -768,5 +768,10 @@ begin
 end;
 
 
+initialization
+
+finalization
+  curl.Free;
+
 end.
 
