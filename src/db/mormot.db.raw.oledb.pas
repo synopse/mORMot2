@@ -895,7 +895,7 @@ end;
 
 procedure TIDListRowset.FillBindingsAndSetupRowBuffer(pBindingsList: PDBBindingArray);
 var
-  i: integer;
+  i: PtrInt;
   rec: TIDListRec; // pseudo record to compute offset within TIDListRec
 begin
   FillcharFast(rec, sizeof(rec), 0); // makes Win64 compiler happy
@@ -1052,7 +1052,6 @@ begin
     result := ftUtf8;
   end;
 end;
-
 
 {$endif MSWINDOWS}
 

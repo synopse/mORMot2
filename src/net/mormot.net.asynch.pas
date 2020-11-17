@@ -1442,9 +1442,5 @@ begin
 end;
 
 
-initialization
-
-finalization
-
 end.
 

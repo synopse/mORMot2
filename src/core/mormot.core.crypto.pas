@@ -5828,7 +5828,9 @@ var
   k256: THash256;
   key, key2, appsec: RawByteString;
 begin
+  // CryptProtectDataEntropy used as salt
   __hmac.Init(@CryptProtectDataEntropy, 32);
+  // CryptProtectDataEntropy derivated for current user -> fn + k256 
   SetString(appsec, PAnsiChar(@CryptProtectDataEntropy), 32);
   PBKDF2_HMAC_SHA256(appsec, ExeVersion.User, 100, k256);
   FillZero(appsec);
@@ -5836,8 +5838,9 @@ begin
   fn := FormatString({$ifdef MSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
     [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
   SetString(appsec, PAnsiChar(@k256[15]), 17); // use remaining bytes as key
-  SHA256Weak(appsec, k256);
+  SHA256Weak(appsec, k256); // just a way to reduce to 256-bit
   try
+    // extract private user key from local hidden file 
     key := StringFromFile(fn);
     if key <> '' then
     begin
@@ -5848,14 +5851,19 @@ begin
       end;
       FillZero(key);
       {$ifdef MSWINDOWS}
+      // somewhat enhance privacy by using Windows API
       key := CryptDataForCurrentUserDPAPI(key2, appsec, false);
       {$else}
+      // chmod 400 + AES-CFB + AFUnSplit is enough for privacy on POSIX 
       key := key2;
       {$endif MSWINDOWS}
       if TAESPRNG.AFUnsplit(key, __h, SizeOf(__h)) then
-        exit; // successfully extracted secret key in __h
+        // successfully extracted secret key in __h
+        exit;
     end;
-    if FileExists(fn) then // allow rewrite of invalid local file
+    // persist the new private user key into local hidden file
+    if FileExists(fn) then
+      // allow rewrite of an invalid local file
       FileSetAttributes(fn, {secret=}false);
     TAESPRNG.Main.FillRandom(__h);
     key := TAESPRNG.Main.AFSplit(__h, SizeOf(__h), 126);
@@ -9162,4 +9170,5 @@ initialization
 
 finalization
   FinalizeUnit;
+  
 end.

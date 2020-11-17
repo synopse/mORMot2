@@ -4290,9 +4290,5 @@ end;
 
 {$endif USEWININET}
 
-initialization
-
-finalization
-
 end.
 

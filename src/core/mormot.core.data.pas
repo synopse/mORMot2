@@ -8977,7 +8977,5 @@ end;
 initialization
   InitializeUnit;
 
-finalization
-
 end.
 

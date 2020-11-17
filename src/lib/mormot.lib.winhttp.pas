@@ -2265,8 +2265,6 @@ initialization
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
 
-finalization
-
 {$endif USEWININET}
 
 end.

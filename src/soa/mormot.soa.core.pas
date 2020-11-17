@@ -1825,14 +1825,9 @@ begin
      TypeInfo(TServicesPublishedInterfaces), _TServicesPublishedInterfaces]);
 end;
 
-procedure FinalizeUnit;
-begin
-end;
-
 
 initialization
   InitializeUnit;
-finalization
-  FinalizeUnit;
+
 end.
 

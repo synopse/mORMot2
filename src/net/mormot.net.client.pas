@@ -1925,9 +1925,5 @@ begin
     result := true;
 end;
 
-initialization
-
-finalization
-
 end.
 

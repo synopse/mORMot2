@@ -954,6 +954,8 @@ begin
   LoadGSSAPI('');
 end;
 
+initialization
+
 finalization
   GSSAPI.Free;
 

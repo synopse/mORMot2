@@ -3088,6 +3088,7 @@ finalization
   ObjArrayClear(GlobalSynFPUExceptionInstances);
   {$endif CPUINTEL}
   ProcessSystemUse.Free;
+  
 end.
 
 

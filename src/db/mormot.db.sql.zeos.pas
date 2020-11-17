@@ -14,7 +14,8 @@ unit mormot.db.sql.zeos;
 
 interface
 
-{$ifdef NOSYNDBZEOS} // defined in mormot_base.lpk Lazarus package > Custom Options > Defines
+{$ifdef NOSYNDBZEOS}
+// NOSYNDBZEOS from mormot_base.lpk Lazarus package > Custom Options > Defines
 
 implementation // compile a void unit if NOSYNDBZEOS conditional is set
 
@@ -1398,7 +1399,8 @@ end;
 initialization
   TSQLDBZEOSConnectionProperties.RegisterClassNameForDefinition;
 
-{$endif NOSYNDBZEOS} // defined in mormot_base.lpk Lazarus package > Custom Options > Defines
+{$endif NOSYNDBZEOS}
+// defined in mormot_base.lpk Lazarus package > Custom Options > Defines
 
 end.
 

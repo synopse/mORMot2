@@ -95,7 +95,8 @@ function InternalBCDToBuffer(const AValue: TBcd; out ADest: TBCDBuffer; var PBeg
 
 /// convert a TBcd value into a currency
 // - purepascal version included in latest Delphi versions is slower than this
-function BCDToCurr(const AValue: TBcd; var Curr: TSystemCurrency): boolean;
+function BCDToCurr(const AValue: TBcd;
+  var Curr: Currency): boolean;
 
 /// convert a TBcd value into a RawUTF8 text
 // - will call fast InternalBCDToBuffer function
@@ -128,7 +129,8 @@ type
     function GetCanModify: boolean; override;
     procedure GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
     function GetBookmarkFlag(Buffer: TRecordBuffer): TBookmarkFlag; override;
-    function GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode; DoCheck: boolean): TGetResult; override;
+    function GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode;
+      DoCheck: boolean): TGetResult; override;
     function GetRecordSize: Word; override;
     procedure InternalClose; override;
     procedure InternalFirst; override;
@@ -153,8 +155,8 @@ type
     function GetRowFieldData(Field: TField; RowIndex: integer; out ResultLen: integer;
       OnlyCheckNull: boolean): Pointer; virtual; abstract;
     // - to search for a field, returning RecNo (0 = not found by default)
-    function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
-      aOptions: TLocateOptions): integer; virtual;
+    function SearchForField(const aLookupFieldName: RawUTF8;
+      const aLookupValue: variant; aOptions: TLocateOptions): integer; virtual;
     // used to serialize TBCDVariant as JSON - BcdRead will always fail
     class procedure BcdWrite(const aWriter: TTextWriter; const aValue);
     //class function BcdRead(P: PUTF8Char; var aValue; out aValid: boolean): PUTF8Char;
@@ -180,7 +182,8 @@ type
     function GetFieldData(Field: TField; Buffer: pointer): boolean; override;
     {$endif ISDELPHIXE3}
     {$ifndef UNICODE}
-    function GetFieldData(Field: TField; Buffer: pointer; NativeFormat: boolean): boolean; override;
+    function GetFieldData(Field: TField; Buffer: pointer;
+      NativeFormat: boolean): boolean; override;
     {$endif UNICODE}
     /// searching a dataset for a specified record and making it the active record
     // - will call SearchForField protected virtual method for actual lookup
@@ -229,15 +232,17 @@ type
     function GetRecordCount: integer; override;
     function GetRowFieldData(Field: TField; RowIndex: integer;
       out ResultLen: integer; OnlyCheckNull: boolean): Pointer; override;
-    function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
-      aOptions: TLocateOptions): integer; override;
+    function SearchForField(const aLookupFieldName: RawUTF8;
+      const aLookupValue: variant; aOptions: TLocateOptions): integer; override;
   public
     /// initialize the virtual TDataSet from a dynamic array of TDocVariant
     // - you can set the expected column names and types matching the results
     // document layout - if no column information is specified, the first
     // TDocVariant will be used as reference
-    constructor Create(Owner: TComponent; const Data: TVariantDynArray;
-      const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType); reintroduce;
+    constructor Create(Owner: TComponent;
+      const Data: TVariantDynArray;
+      const ColumnNames: array of RawUTF8;
+      const ColumnTypes: array of TSQLDBFieldType); reintroduce;
   end;
 
 /// export all rows of a TDataSet into JSON
@@ -268,7 +273,8 @@ type
     /// initialize the properties to connect via TDataSet database access
     // - this overridden method will enable the BATCH process (emulated in
     // TSQLDBDatasetStatement.ExecutePrepared, native e.g. for FireDAC)
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName,
+      aUserID, aPassWord: RawUTF8); override;
     {$ifndef UNICODE}
     /// set to true to force all Int64 content to be processed as a truncated float
     // - by default, Int64 values will be bound either as an integer (if the
@@ -343,7 +349,8 @@ type
     // - if ExpectResults is true, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESQLDBDataset on any error
-    procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
+    procedure Prepare(const aSQL: RawUTF8;
+      ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this implementation will also loop through all internal bound array
@@ -376,7 +383,7 @@ type
     /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: integer): TSystemCurrency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -407,7 +414,8 @@ type
     // - if ExpectResults is true, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESQLDBDataset on any error
-    procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
+    procedure Prepare(const aSQL: RawUTF8;
+      ExpectResults: boolean = false); overload; override;
   end;
 
   
@@ -489,7 +497,7 @@ begin
   end;
 end;
 
-function BCDToCurr(const AValue: TBcd; var Curr: TSystemCurrency): boolean;
+function BCDToCurr(const AValue: TBcd; var Curr: currency): boolean;
 var
   len: integer;
   PBeg: PAnsiChar;
@@ -628,10 +636,12 @@ begin
     ftLargeint, ftFloat, ftCurrency:
       PInt64(Dest)^ := PInt64(Data)^;
     ftDate, ftTime, ftDateTime:
-      if PDateTime(Data)^ = 0 then // handle 30/12/1899 date as NULL
+      if PDateTime(Data)^ = 0 then
+         // handle 30/12/1899 date as NULL
         result := false
       else
-      begin  // inlined DataConvert(Field,Data,Dest,true)
+      begin
+        // inlined DataConvert(Field,Data,Dest,true)
         TS := DateTimeToTimeStamp(PDateTime(Data)^);
         case Field.DataType of
           ftDate:
@@ -641,8 +651,9 @@ begin
           ftDateTime:
             if (TS.Time < 0) or
                (TS.Date <= 0) then
+              // should match ValidateTimeStamp() expectations 
               result := false
-            else // matches ValidateTimeStamp() expectations
+            else
               PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
         end; // see NativeToDateTime/DateTimeToNative in TDataSet.DataConvert
       end;
@@ -661,14 +672,16 @@ begin
       end;
     ftWideString:
       begin
-    {$ifdef ISDELPHI2007ANDUP} // here Dest = PWideChar[] of DataSize bytes
+        {$ifdef ISDELPHI2007ANDUP}
+        // here Dest = PWideChar[] of DataSize bytes
         if DataLen = 0 then
           PWideChar(Dest)^ := #0
         else
           UTF8ToWideChar(Dest, Data, (Field.DataSize - 2) shr 1, DataLen);
-    {$else}          // here Dest is PWideString
+        {$else}
+        // here Dest is PWideString
         UTF8ToWideString(Data, DataLen, WideString(Dest^));
-    {$endif ISDELPHI2007ANDUP}
+        {$endif ISDELPHI2007ANDUP}
       end;
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
   else
@@ -691,13 +704,14 @@ begin
       ftBlob:
         result := TSynMemoryStream.Create(Data, DataLen);
       ftMemo, ftString:
-        result := TRawByteStringStream.Create(CurrentAnsiConvert.UTF8BufferToAnsi
-          (Data, DataLen));
+        result := TRawByteStringStream.Create(
+          CurrentAnsiConvert.UTF8BufferToAnsi(Data, DataLen));
     {$ifdef ISDELPHI2007ANDUP}
     ftWideMemo,
     {$endif ISDELPHI2007ANDUP}
     ftWideString:
-        result := TRawByteStringStream.Create(Utf8DecodeToRawUnicode(Data, DataLen));
+        result := TRawByteStringStream.Create(
+          Utf8DecodeToRawUnicode(Data, DataLen));
     else
       raise EDatabaseError.CreateFmt('%s.CreateBlobStream DataType=%d',
         [ClassName, ord(Field.DataType)]);
@@ -760,9 +774,9 @@ begin
   {$ifdef ISDELPHIXE6}
   if not (lcPersistent in Fields.LifeCycles) then
   {$else}
-    if DefaultFields then
+  if DefaultFields then
   {$endif ISDELPHIXE6}
-      DestroyFields;
+    DestroyFields;
   fIsCursorOpen := false;
 end;
 
@@ -801,9 +815,9 @@ begin
   {$ifdef ISDELPHIXE6}
   if not (lcPersistent in Fields.LifeCycles) then
   {$else}
-    if DefaultFields then
+  if DefaultFields then
   {$endif ISDELPHIXE6}
-      CreateFields;
+    CreateFields;
   BindFields(true);
   fCurrentRow := -1;
   fIsCursorOpen := true;
@@ -824,7 +838,8 @@ begin
   PRecInfo(Buffer)^.Bookmark := PRecInfoIdentifier(Data)^;
 end;
 
-procedure TSynVirtualDataSet.SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag);
+procedure TSynVirtualDataSet.SetBookmarkFlag(Buffer: TRecordBuffer;
+  Value: TBookmarkFlag);
 begin
   PRecInfo(Buffer)^.BookmarkFlag := Value;
 end;
@@ -862,11 +877,11 @@ function TSynVirtualDataSet.Locate(const KeyFields: string;
   const KeyValues: Variant; Options: TLocateOptions): boolean;
 var
   i, l, h, found: integer;
-    {$ifdef ISDELPHIXE4}
+  {$ifdef ISDELPHIXE4}
   FieldList: TList<TField>;
-    {$else}
+  {$else}
   FieldList: TList;
-    {$endif ISDELPHIXE4}
+  {$endif ISDELPHIXE4}
 begin
   CheckActive;
   result := true;
@@ -885,7 +900,8 @@ begin
         if (FieldList.Count = 1) and
            (l < h) then
         begin
-          found := SearchForField(StringToUTF8(KeyFields), KeyValues, Options);
+          found := SearchForField(
+            StringToUTF8(KeyFields), KeyValues, Options);
           if found > 0 then
           begin
             RecNo := found;
@@ -895,8 +911,9 @@ begin
         else
           for i := 0 to FieldList.Count - 1 do
           begin
-            found := SearchForField(StringToUTF8(TField(FieldList[i]).FieldName),
-              KeyValues[l + i], Options);
+            found := SearchForField(
+              StringToUTF8(TField(FieldList[i]).FieldName), KeyValues[l + i],
+              Options);
             if found > 0 then
             begin
               RecNo := found;
@@ -932,7 +949,8 @@ type // as in FMTBcd.pas
     Reserved4: cardinal;
   end;
 
-class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TTextWriter; const aValue);
+class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TTextWriter;
+  const aValue);
 begin
   AddBCD(aWriter, TFMTBcdVarData(aValue).VBcd.FBcd);
 end;
@@ -988,11 +1006,11 @@ begin
               ftString, ftFixedChar, ftMemo:
                 begin
                   W.Add('"');
-                {$ifdef UNICODE}
+                  {$ifdef UNICODE}
                   W.AddAnsiString(AsAnsiString, twJSONEscape);
-                {$else}
+                  {$else}
                   W.AddAnsiString(AsString, twJSONEscape);
-                {$endif UNICODE}
+                  {$endif UNICODE}
                   W.Add('"');
                 end;
               ftWideString:
@@ -1063,7 +1081,8 @@ begin
   if n > 0 then
   begin
     if n <> length(ColumnTypes) then
-      raise ESynException.CreateUTF8('%.Create(ColumnNames<>ColumnTypes)', [self]);
+      raise ESynException.CreateUTF8(
+        '%.Create(ColumnNames<>ColumnTypes)', [self]);
     SetLength(fColumns, n);
     for ndx := 0 to n - 1 do
     begin
@@ -1078,7 +1097,8 @@ begin
     for ndx := 0 to first^.Count - 1 do
     begin
       fColumns[ndx].Name := first^.Names[ndx];
-      fColumns[ndx].FieldType := VariantTypeToSQLDBFieldType(first^.Values[ndx]);
+      fColumns[ndx].FieldType :=
+        VariantTypeToSQLDBFieldType(first^.Values[ndx]);
       case fColumns[ndx].FieldType of
         mormot.db.core.ftNull:
           fColumns[ndx].FieldType := mormot.db.core.ftBlob;
@@ -1092,8 +1112,9 @@ begin
               with _Safe(fValues[j], dvObject)^ do
                 if (ndx < Length(Names)) and
                    IdemPropNameU(Names[ndx], fColumns[ndx].Name) then
-                  if VariantTypeToSQLDBFieldType(Values[ndx]) in [mormot.db.core.ftNull,
-                    mormot.db.core.ftDouble, mormot.db.core.ftCurrency] then
+                  if VariantTypeToSQLDBFieldType(Values[ndx]) in
+                     [mormot.db.core.ftNull, mormot.db.core.ftDouble,
+                      mormot.db.core.ftCurrency] then
                   begin
                     fColumns[ndx].FieldType := mormot.db.core.ftDouble;
                     break;
@@ -1179,7 +1200,8 @@ begin
       siz := 16
     else
       siz := 0;
-    FieldDefs.Add(UTF8ToString(fColumns[F].Name), TYPES[fColumns[F].FieldType], siz);
+    FieldDefs.Add(
+      UTF8ToString(fColumns[F].Name), TYPES[fColumns[F].FieldType], siz);
   end;
 end;
 
@@ -1209,7 +1231,8 @@ function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
   const ColumnNames: array of RawUTF8;
   const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; 
 begin
-  result := TDocVariantArrayDataSet.Create(aOwner, Data, ColumnNames, ColumnTypes);
+  result := TDocVariantArrayDataSet.Create(
+    aOwner, Data, ColumnNames, ColumnTypes);
   result.Open;
 end;
 
@@ -1224,8 +1247,8 @@ const
 
 { TSQLDBDatasetConnectionProperties }
 
-constructor TSQLDBDatasetConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUTF8);
+constructor TSQLDBDatasetConnectionProperties.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   fBatchSendingAbilities := [cCreate, cUpdate, cDelete]; // always emulated
@@ -1244,7 +1267,8 @@ begin
       exit
     else if TField(ColumnAttr).IsBlob then
     begin
-      Str := TField(ColumnAttr).DataSet.CreateBlobStream(TField(ColumnAttr), bmRead);
+      Str := TField(ColumnAttr).DataSet.CreateBlobStream(
+        TField(ColumnAttr), bmRead);
       try
         if Str.Size > 0 then
         begin
@@ -1262,7 +1286,7 @@ begin
     end;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnCurrency(Col: integer): TSystemCurrency;
+function TSQLDBDatasetStatementAbstract.ColumnCurrency(Col: integer): currency;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1306,10 +1330,10 @@ begin
   {$ifdef UNICODE}
       result := TField(ColumnAttr).AsLargeInt;
   {$else}
-  if ColumnValueDBType = IsTLargeIntField then
-    result := TLargeintField(ColumnAttr).AsLargeInt
-  else
-    result := TField(ColumnAttr).AsInteger;
+      if ColumnValueDBType = IsTLargeIntField then
+        result := TLargeintField(ColumnAttr).AsLargeInt
+      else
+        result := TField(ColumnAttr).AsInteger;
   {$endif UNICODE}
 end;
 
@@ -1326,12 +1350,12 @@ begin
     if TField(ColumnAttr).IsNull then
       result := ''
     else
-    {$ifndef UNICODE}
-    if ColumnValueDBType = IsTWideStringField then
-      result := WideStringToUTF8(TWideStringField(ColumnAttr).Value)
-    else
-    {$endif UNICODE}
-      result := StringToUTF8(TField(ColumnAttr).AsString);
+      {$ifndef UNICODE}
+      if ColumnValueDBType = IsTWideStringField then
+        result := WideStringToUTF8(TWideStringField(ColumnAttr).Value)
+      else
+      {$endif UNICODE}
+        result := StringToUTF8(TField(ColumnAttr).AsString);
 end;
 
 constructor TSQLDBDatasetStatementAbstract.Create(aConnection: TSQLDBConnection);
@@ -1379,7 +1403,8 @@ begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount <> fParamCount then
-    raise ESQLDBDataset.CreateUTF8('%.ExecutePrepared expected % bound parameters, got %',
+    raise ESQLDBDataset.CreateUTF8(
+      '%.ExecutePrepared expected % bound parameters, got %',
       [self, fPreparedParamsCount, fParamCount]);
   lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support
   repeat
@@ -1578,8 +1603,8 @@ begin
               WR.WrBase64(pointer(blob), length(blob), true); // withMagic=true
             end;
         else
-          raise ESQLDBException.CreateUTF8('%: Invalid ColumnType()=%', [self,
-            ord(ColumnType)]);
+          raise ESQLDBException.CreateUTF8('%: Invalid ColumnType()=%',
+            [self, ord(ColumnType)]);
         end;
       WR.Add(',');
     end;
@@ -1591,8 +1616,8 @@ end;
 
 { TSQLDBDatasetStatement }
 
-procedure TSQLDBDatasetStatement.DataSetBindSQLParam(const aArrayIndex,
-  aParamIndex: integer; const aParam: TSQLDBParam);
+procedure TSQLDBDatasetStatement.DataSetBindSQLParam(
+  const aArrayIndex, aParamIndex: integer; const aParam: TSQLDBParam);
 var
   P: TParam;
   I64: Int64;
@@ -1625,8 +1650,8 @@ begin
             if (PInt64Rec(@I64)^.Hi = 0) or
                (PInt64Rec(@I64)^.Hi = cardinal(-1)) then
               P.AsInteger := I64
-            else if TSQLDBDatasetConnectionProperties(
-               Connection.Properties).ForceInt64AsFloat then
+            else if TSQLDBDatasetConnectionProperties(Connection.Properties).
+                      ForceInt64AsFloat then
               P.AsFloat := I64
             else
               P.Value := I64;
@@ -1663,7 +1688,8 @@ begin
               else
                 P.AsString := UTF8ToString(tmp);
             end
-          else if (VData = '') and fConnection.Properties.StoreVoidStringAsNull then
+          else if (VData = '') and
+                  fConnection.Properties.StoreVoidStringAsNull then
             P.Clear
           else if fForceUseWideString then
             P.Value := UTF8ToWideString(VData)
@@ -1693,9 +1719,9 @@ procedure TSQLDBDatasetStatement.DataSetOutSQLParam(const aParamIndex: integer;
   var aParam: TSQLDBParam);
 var
   Par: TParam;
-{$ifdef UNICODE}
+  {$ifdef UNICODE}
   tmpBytes: TBytes;
-{$endif UNICODE}
+  {$endif UNICODE}
 begin
   Par := fQueryParams[aParamIndex];
   case aParam.VType of

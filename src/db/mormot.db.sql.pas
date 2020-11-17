@@ -7416,5 +7416,6 @@ initialization
   assert(SizeOf(TSQLDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
   Rtti.RegisterType(TypeInfo(TSQLDBFieldType));
   Rtti.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
+  
 end.
 

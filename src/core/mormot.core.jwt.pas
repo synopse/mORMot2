@@ -1231,14 +1231,8 @@ begin
   GetEnumNames(TypeInfo(TJWTClaim), @_TJWTClaim);
 end;
 
-procedure FinalizeUnit;
-begin
-end;
-
 
 initialization
   InitializeUnit;
-
-finalization
-  FinalizeUnit;
+  
 end.

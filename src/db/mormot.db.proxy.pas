@@ -2039,5 +2039,5 @@ initialization
   {$ifdef USELIBCURL}
   TSQLDBCurlConnectionProperties.RegisterClassNameForDefinition;
   {$endif USELIBCURL}
+  
 end.
-

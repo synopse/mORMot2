@@ -2539,8 +2539,10 @@ end;
 
 
 initialization
-  GetEnumNames(TypeInfo(TWebSocketFrameOpCode), @_TWebSocketFrameOpCode);
-  GetEnumNames(TypeInfo(TWebSocketProcessNotifyCallback), @_TWebSocketProcessNotifyCallback);
+  GetEnumNames(TypeInfo(TWebSocketFrameOpCode),
+    @_TWebSocketFrameOpCode);
+  GetEnumNames(TypeInfo(TWebSocketProcessNotifyCallback),
+    @_TWebSocketProcessNotifyCallback);
 
 end.
 

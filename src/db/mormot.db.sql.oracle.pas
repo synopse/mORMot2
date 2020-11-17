@@ -2304,7 +2304,5 @@ end;
 initialization
   TSQLDBOracleConnectionProperties.RegisterClassNameForDefinition;
 
-finalization
-  FreeAndNil(OCI);
 end.
 

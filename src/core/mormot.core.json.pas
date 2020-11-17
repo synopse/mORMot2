@@ -9684,5 +9684,6 @@ end;
 initialization
   InitializeUnit;
   DefaultTextWriterSerializer := TTextWriter;
+  
 end.
 

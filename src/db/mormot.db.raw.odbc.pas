@@ -1059,5 +1059,6 @@ initialization
 
 finalization
   FreeAndNil(ODBC);
+  
 end.
 
