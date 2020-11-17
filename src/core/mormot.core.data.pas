@@ -1488,7 +1488,7 @@ type
     // checksum, or optional SourceMax overflow
     // - return a non nil pointer just after the Source content on success
     // - this method will raise an ESynException for T*ObjArray types
-    function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar;
+    function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; 
     /// unserialize the dynamic array content from a TDynArray.SaveTo binary string
     // - same as LoadFrom, and will check for any buffer overflow since we
     // know the actual end of input buffer
@@ -4629,8 +4629,8 @@ begin
     if Map.Size <> 0 then
       case Map.TextFileKind of
       isUTF8:
-          // ignore UTF-8 BOM
-          SetTextPtr(P + 3, P + Map.Size, #13#10);
+        // ignore UTF-8 BOM
+        SetTextPtr(P + 3, P + Map.Size, #13#10);
       isUnicode:
         begin
           // conversion from UTF-16 content (mainly on Windows) into UTF-8
@@ -5062,7 +5062,7 @@ function DynArrayLoadHeader(var Source: TFastReader;
 begin
   Source.VarNextInt; // ignore stored itemsize for 32-bit/64-bit compatibility
   if Source.NextByte <> DelphiType(ItemInfo) then
-    Source.ErrorData('RTTI_BINARYLOAD[rkDynArray] failed for %', [ArrayInfo.Name^]);
+    Source.ErrorData('RTTI_BINARYLOAD[rkDynArray] failed for %', [ArrayInfo.RawName]);
   result := Source.VarUInt32;
   Source.Next4; // ignore legacy Hash32 checksum (was to avoid buffer overflow)
 end;
@@ -5074,12 +5074,12 @@ var
   load: TRttiBinaryLoad;
 begin
   iteminfo := Info^.DynArrayItemType(itemsize);
-  n := DynArrayLoadHeader(Source, iteminfo, Info);
+  n := DynArrayLoadHeader(Source, Info, iteminfo);
   if PPointer(Data)^ <> nil then
     FastDynArrayClear(pointer(Data), iteminfo);
   if n > 0 then
   begin
-    DynArraySetLength(pointer(Data), Info, 1, @n); // allocate memory
+    DynArrayNew(pointer(Data), n, itemsize); // allocate zeroed  memory
     Data := PPointer(Data)^; // point to first item
     if iteminfo = nil then
       Source.Copy(Data, itemsize * n)
@@ -6312,7 +6312,7 @@ end;
 
 procedure TDynArray.SaveTo(W: TBufferWriter);
 begin
-  DynArraySave(pointer(fValue), fCountP, W, Info.Cache.ItemInfo);
+  DynArraySave(pointer(fValue), fCountP, W, Info.Info);
 end;
 
 procedure TDynArray.SaveToStream(Stream: TStream);
@@ -6345,9 +6345,12 @@ begin
   end;
 end;
 
-function TDynArray.LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar): PAnsiChar;
+function TDynArray.LoadFrom(Source, SourceMax: PAnsiChar): PAnsiChar;
 begin
-  result := BinaryLoad(fValue, Source, Info.Cache.ItemInfo, nil, SourceMax, [rkDynArray]);
+  if SourceMax = nil then
+    // backward compatible: assume fake 100MB Source input buffer
+    SourceMax := Source + 100 shl 20;
+  result := BinaryLoad(fValue, Source, Info.Info, nil, SourceMax, [rkDynArray]);
 end;
 
 procedure TDynArray.LoadFromStream(Stream: TCustomMemoryStream);
@@ -6356,13 +6359,13 @@ var
 begin
   S := PAnsiChar(Stream.Memory);
   P := S + Stream.Position;
-  P := BinaryLoad(fValue, P, Info.Cache.ItemInfo, nil, S + Stream.Size, [rkDynArray]);
+  P := BinaryLoad(fValue, P, Info.Info, nil, S + Stream.Size, [rkDynArray]);
   Stream.Seek(P - S, soFromBeginning);
 end;
 
 function TDynArray.LoadFromBinary(const Buffer: RawByteString): boolean;
 begin
-  result := BinaryLoad(fValue, Buffer, Info.Cache.ItemInfo, [rkDynArray]);
+  result := BinaryLoad(fValue, Buffer, Info.Info, [rkDynArray]);
 end;
 
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
@@ -6425,8 +6428,8 @@ function TDynArray.LoadFromJSON(P: PUTF8Char; EndOfObject: PUTF8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUTF8Char;
 begin
   SetCount(0); // faster to use our own routine now
-  GetDataFromJSON(fValue, P, EndOfObject, Info.Cache.ItemInfo,
-    CustomVariantOptions, Tolerant);
+  GetDataFromJSON(fValue,
+    P, EndOfObject, Info.Info, CustomVariantOptions, Tolerant);
   result := P;
 end;
 
@@ -7126,7 +7129,7 @@ begin
     result := CompareMem(fValue^, B.fValue^, ElemSize * cardinal(n))
   else
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
-      fCountP, B.fCountP, fInfo.Cache.ItemInfo, casesensitive) = 0;
+      fCountP, B.fCountP, fInfo.Info, casesensitive) = 0;
 end;
 
 function TDynArray.Compares(B: PDynArray; IgnoreCompare, CaseSensitive: boolean): integer;
@@ -7161,7 +7164,7 @@ begin
     result := StrCompL(fValue^, B.fValue^, ElemSize * cardinal(n))
   else
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
-      fCountP, B.fCountP, fInfo.Cache.ItemInfo, casesensitive);
+      fCountP, B.fCountP, fInfo.Info, casesensitive);
 end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);
@@ -7174,7 +7177,7 @@ begin
     LoadFromJSON(pointer(Source.SaveToJSON))
   else
   begin
-    DynArrayCopy(fValue^, Source.fValue^, fInfo.Cache.ItemInfo, Source.fCountP);
+    DynArrayCopy(fValue^, Source.fValue^, fInfo.Info, Source.fCountP);
     if fCountP <> nil then
       fCountP^ := GetCapacity;
   end;
@@ -7253,7 +7256,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   if NewLength = 0 then
   begin
     if p <> nil then
-    begin // FastDynArrayClear() with ObjArray support
+    begin
+      // FastDynArrayClear() with ObjArray support
       dec(p);
       if (p^.refCnt >= 0) and
          RefCntDecFree(p^.refCnt) then

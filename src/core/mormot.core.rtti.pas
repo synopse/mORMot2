@@ -584,7 +584,7 @@ type
     /// the declared name of the type ('String','Word','RawUnicode'...)
     // - on FPC, will adjust 'integer'/'cardinal' from 'longint'/'longword' RTTI
     function Name: PShortString;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef ISDELPHI2006ANDUP}inline;{$endif}
     /// efficiently finalize any (managed) type value
     // - do nothing for unmanaged types (e.g. integer)
     // - if you are sure that your type is managed, you may call directly
@@ -1473,6 +1473,19 @@ procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
 // - faster than the RTL CopyArray() function
 procedure CopySeveral(Dest, Source: PByte; SourceCount: PtrInt;
   ItemInfo: PRttiInfo; ItemSize: PtrInt);
+
+/// low-level initialization of a dynamic array
+// - faster than System.DynArraySetLength() function on a void dynamic array,
+// when the RTTI is known
+// - caller should ensure that Dest is not nil, but Dest^ = nil (i.e. a
+// clear/void dynamic array)
+function DynArrayNew(Dest: PPointer; Count, ItemSize: PtrInt): pointer;
+
+/// low-level size up of a dynamic array
+// - faster than System.DynArraySetLength() function dynamic array with RefCnt=1
+// - caller should ensure that Dest is not nil
+// - DataBytes is expected to be Count * ItemSize
+function DynArrayGrow(Dest: PPointer; Count, ItemSize: PtrInt): PAnsiChar;
 
 /// create a dynamic array from another one
 // - same as RTTI_COPY[rkDynArray] but with an optional external source count
@@ -4664,8 +4677,11 @@ function IsRawUTF8DynArray(Info: PRttiInfo): boolean;
 var
   r: TRttiCustom;
 begin
-  r := Rtti.Find(Info).ArrayRtti;
-  result := (r.Parser = ptRawUTF8) and
+  r := Rtti.RegisterType(Info);
+  if r <> nil then
+    r := r.ArrayRtti;
+  result := (r <> nil) and
+            (r.Parser = ptRawUTF8) and
             (r.Cache.Info.AnsiStringCodePage = CP_UTF8);
 end;
 
@@ -4881,6 +4897,29 @@ begin
     end;
 end;
 
+function DynArrayNew(Dest: PPointer; Count, ItemSize: PtrInt): pointer;
+begin
+  result := AllocMem(Count * ItemSize +  SizeOf(TDynArrayRec));
+  PDynArrayRec(result)^.refCnt := 1;
+  PDynArrayRec(result)^.length := Count;
+  inc(PDynArrayRec(result));
+  Dest^ := result;
+end;
+
+function DynArrayGrow(Dest: PPointer; Count, ItemSize: PtrInt): PAnsiChar;
+var
+  old: PtrInt;
+begin
+  result := Dest^;
+  dec(PDynArrayRec(result));
+  ReallocMem(result, (Count * ItemSize) + SizeOf(TDynArrayRec));
+  old := PDynArrayRec(result)^.length * ItemSize;
+  PDynArrayRec(result)^.length := Count;
+  inc(PDynArrayRec(result));
+  FillCharFast(result[old], (Count - old) * ItemSize, 0);
+  Dest^ := result;
+end;
+
 procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
   SourceExtCount: PInteger);
 var
@@ -4896,8 +4935,8 @@ begin
     if SourceExtCount <> nil then
       n := SourceExtCount^
     else
-      n := PDynArrayRec(PAnsiChar(Source) - SizeOf(TDynArrayRec))^.length;
-    DynArraySetLength(Dest^, Info, 1, @n); // allocate memory
+      n := PDALen(PAnsiChar(Source) - _DALEN)^ + _DAOFF;
+    DynArrayNew(Dest^, n, itemsize); // allocate zeroed memory
     CopySeveral(Dest^, pointer(Source), n, iteminfo, itemsize);
   end;
 end;
@@ -4912,11 +4951,11 @@ begin
   dec(p);
   if (p^.refCnt < 0) or
      ((p^.refCnt > 1) and
-     not RefCntDecFree(p^.refCnt)) then
+      not RefCntDecFree(p^.refCnt)) then
   begin
     n := p^.length;
-    DynArraySetLength(pointer(Value), Info, 1, @n);
     Info := Info^.DynArrayItemType(elemsize);
+    DynArrayNew(Value, n, elemsize); // allocate zeroed memory
     inc(p);
     CopySeveral(pointer(p), Value^, n, Info, elemsize);
   end;
@@ -6132,14 +6171,18 @@ begin
           pt := DynArrayTypeInfoToStandardParserType(aInfo, fCache.ItemInfo,
             fCache.ItemSize, {exacttype=}true, dummy, @pct);
           fArrayFirstField := pt;
-          fCache.ItemInfo := ParserTypeToTypeInfo(pt, pct);
-        end;
-        fArrayRtti := Rtti.RegisterType(fCache.ItemInfo);
-        if (fArrayFirstField = ptNone) and
-           (fArrayRtti.Kind in rkRecordOrDynArrayTypes) then
-          // guess first field (using fProps[0] would break compatibility)
-          fArrayFirstField := DynArrayTypeInfoToStandardParserType(
-            aInfo, fCache.ItemInfo, fCache.ItemSize, {exacttype=}false, dummy);
+          fArrayRtti := Rtti.RegisterType(ParserTypeToTypeInfo(pt, pct));
+        end
+        else
+          fArrayRtti := Rtti.RegisterType(fCache.ItemInfo);
+        if (fArrayRtti <> nil) and
+           (fArrayFirstField = ptNone) then
+          if fArrayRtti.Kind in rkRecordOrDynArrayTypes then
+            // guess first field (using fProps[0] would break compatibility)
+            fArrayFirstField := DynArrayTypeInfoToStandardParserType(
+              aInfo, fCache.ItemInfo, fCache.ItemSize, {exacttype=}false, dummy)
+          else
+            fArrayFirstField := fArrayRtti.Parser;
       end;
     rkArray:
       fArrayRtti := Rtti.RegisterType(fCache.ItemInfo);
