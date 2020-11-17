@@ -1646,11 +1646,11 @@ end;
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
 // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
-        xor     ecx, ecx  // specify control register XCR0 = XFEATURE_ENABLED_MASK
-        db  $0f, $01, $d0 // XGETBV reads XCR0 into EDX:EAX
-        and     eax, 6    // check OS has enabled both XMM (bit 1) and YMM (bit 2)
+        xor     ecx, ecx  // specify control register XCR0=XFEATURE_ENABLED_MASK
+        db $0f, $01, $d0  // XGETBV opcode reads XCR0 into EDX:EAX
+        and     eax, 6
         cmp     al, 6
-        sete    al
+        sete    al   // check if OS enabled both XMM (bit 1=2) and YMM (bit 2=4)
 end;
 
 procedure GetCPUID(Param: cardinal; var Registers: TIntelRegisters);

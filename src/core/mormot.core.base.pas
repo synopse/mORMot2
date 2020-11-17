@@ -896,6 +896,23 @@ function SimpleRoundTo2Digits(const d: double): double;
 // - this function will only allow 2 digits in the returned text
 function TwoDigits(const d: double): TShort31;
 
+/// truncate a currency value to only 2 digits
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+function TruncTo2Digits(Value: currency): currency;
+
+/// truncate a currency value, stored as Int64, to only 2 digits
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+procedure TruncTo2DigitsCurr64(var Value: Int64);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// truncate a Currency value, stored as Int64, to only 2 digits
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+function TruncTo2Digits64(Value: Int64): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// simple wrapper to efficiently compute both division and modulo per 100
 // - compute result.D = Y div 100 and result.M = Y mod 100
 // - under FPC, will use fast multiplication by reciprocal so can be inlined
@@ -2207,12 +2224,19 @@ function InterlockedIncrement(var I: integer): integer;
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedDecrement(var I: integer): integer;
 
+// defined here for mormot.test.base only
+function GetBitsCountSSE42(value: PtrInt): PtrInt;
+
+// defined here for mormot.core.search and mormot.test.base low-level access
+// - use rather global crc32c() variable
+function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
 {$endif CPUINTEL}
 
 /// low-level string/dynarray reference counter unprocess
 // - caller should have tested that refcnt>=0
 // - returns true if the managed variable should be released (i.e. refcnt was 1)
-// - on Delphi, RefCnt field is a 32-bit longint, whereas on FPC it is a SizeInt/PtrInt
+// - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
   {$ifndef CPUINTEL}inline;{$endif}
 
@@ -2596,11 +2620,23 @@ type
     function InitIncreasing(Count: PtrInt; Start: PtrInt = 0): PIntegerArray;
     /// initialize a new temporary buffer of a given number of zero bytes
     function InitZero(ZeroLen: PtrInt): pointer;
+    /// inlined wrapper around buf + len
+    function BufEnd: pointer; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload;
   end;
+
+/// compute the median of a serie of values, using "Quickselect"
+// - based on the algorithm described in "Numerical recipes in C", Second Edition
+// - expect the values information to be available from a comparison callback
+// - this version will use a temporary index list to exchange items order
+// (supplied as a TSynTempBuffer), so won't change the supplied values themself
+// - see also function MedianQuickSelectInteger() for PIntegerArray values
+// - returns the index of the median Value
+function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
+  var TempBuffer: TSynTempBuffer): integer;
 
 /// logical OR of two memory buffers
 // - will perform on all buffer bytes:
@@ -2729,6 +2765,7 @@ var
   // achieve up to 16GB/s with the optimized implementation from mormot.core.crypto
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher = crc32cfast;
+
   /// compute CRC32C checksum on one 32-bit unsigned integer
   // - can be used instead of crc32c() for inlined process during data acquisition
   // - doesn't make "crc := not crc" before and after the computation: caller has
@@ -3713,6 +3750,24 @@ begin
     tmp[L - 2] := '.';
   end;
   SetString(result, P, L);
+end;
+
+function TruncTo2Digits(Value: Currency): Currency;
+var
+  V64: Int64 absolute Value; // to avoid any floating-point precision issues
+begin
+  dec(V64, V64 mod 100);
+  result := Value;
+end;
+
+procedure TruncTo2DigitsCurr64(var Value: Int64);
+begin
+  dec(Value, Value mod 100);
+end;
+
+function TruncTo2Digits64(Value: Int64): Int64;
+begin
+  result := Value - Value mod 100;
 end;
 
 procedure Int64ToCurrency(const i: Int64; out c: currency);
@@ -6721,6 +6776,75 @@ begin
   until false;
 end;
 
+function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
+  var TempBuffer: TSynTempBuffer): integer;
+var
+  low, high, middle, median, ll, hh: PtrInt;
+  tmp: integer;
+  ndx: PIntegerArray;
+begin
+  if n <= 1 then
+  begin
+    TempBuffer.buf := nil; // avoid GPF in TempBuffer.Done
+    result := 0;
+    exit;
+  end;
+  low := 0;
+  high := n - 1;
+  ndx := TempBuffer.InitIncreasing(n * 4); // no heap alloacation until n>1024
+  median := high shr 1;
+  repeat
+    if high <= low then
+    begin // one item left
+      result := ndx[median];
+      TempBuffer.Done;
+      exit;
+    end;
+    if high = low + 1 then
+    begin // two items -> return the smallest (not average)
+      if OnCompare(ndx[low], ndx[high]) then
+        Exchg32(ndx[low], ndx[high]);
+      result := ndx[median];
+      TempBuffer.Done;
+      exit;
+    end;
+    // find median of low, middle and high items; swap into position low
+    middle := (low + high) shr 1;
+    if OnCompare(ndx[middle], ndx[high]) then
+      Exchg32(ndx[middle], ndx[high]);
+    if OnCompare(ndx[low], ndx[high]) then
+      Exchg32(ndx[low], ndx[high]);
+    if OnCompare(ndx[middle], ndx[low]) then
+      Exchg32(ndx[middle], ndx[low]);
+    // swap low item (now in position middle) into position (low+1)
+    Exchg32(ndx[middle], ndx[low + 1]);
+    // nibble from each end towards middle, swapping items when stuck
+    ll := low + 1;
+    hh := high;
+    repeat
+      tmp := ndx[low];
+      repeat
+        inc(ll);
+      until not OnCompare(tmp, ndx[ll]);
+      repeat
+        dec(hh);
+      until not OnCompare(ndx[hh], tmp);
+      if hh < ll then
+        break;
+      tmp := ndx[ll];
+      ndx[ll] := ndx[hh];
+      ndx[hh] := tmp; // Exchg32(ndx[ll],ndx[hh]);
+    until false;
+    // swap middle item (in position low) back into correct position
+    Exchg32(ndx[low], ndx[hh]);
+    // next active partition
+    if hh <= median then
+      low := ll;
+    if hh >= median then
+      high := hh - 1;
+  until false;
+end;
+
 function gcd(a, b: cardinal): cardinal;
 begin
   while a <> b do
@@ -9226,6 +9350,11 @@ begin
   Init(ZeroLen - 16);
   FillCharFast(buf^, ZeroLen, 0);
   result := buf;
+end;
+
+function TSynTempBuffer.BufEnd: pointer;
+begin
+  result := PAnsiChar(buf) + len;
 end;
 
 procedure TSynTempBuffer.Done;
