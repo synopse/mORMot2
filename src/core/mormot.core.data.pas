@@ -4968,27 +4968,27 @@ begin
   result := SizeOf(pointer);
 end;
 
-function _BC_PUTF8Char(A, B: PUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_LString(A, B: PPUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  compared := StrComp(A, B);
+  compared := StrComp(A^, B^);
   result := SizeOf(pointer);
 end;
 
-function _BC_PWideChar(A, B: PWideChar; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_WString(A, B: PPWideChar; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  compared := StrCompW(A, B);
+  compared := StrCompW(A^, B^);
   result := SizeOf(pointer);
 end;
 
-function _BCI_PUTF8Char(A, B: PUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BCI_LString(A, B: PPUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  compared := StrIComp(A, B);
+  compared := StrIComp(A^, B^);
   result := SizeOf(pointer);
 end;
 
-function _BCI_PWideChar(A, B: PWideChar; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BCI_WString(A, B: PPWideChar; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  compared := AnsiICompW(A, B);
+  compared := AnsiICompW(A^, B^);
   result := SizeOf(pointer);
 end;
 
@@ -5012,7 +5012,7 @@ var
   sav: TRttiBinarySave;
 begin
   Info := Info^.DynArrayItemType(itemsize);
-  Dest.Write1(0); // no stored itemsize for 32-bit/64-bit compatibility
+  Dest.WriteVarUInt32(itemsize); // may vary on 32-bit/64-bit compatibility
   Dest.Write1(DelphiType(Info));
   Data := PPointer(Data)^; // de-reference pointer to array data
   if Data = nil then
@@ -5064,7 +5064,8 @@ begin
   if Source.NextByte <> DelphiType(ItemInfo) then
     Source.ErrorData('RTTI_BINARYLOAD[rkDynArray] failed for %', [ArrayInfo.RawName]);
   result := Source.VarUInt32;
-  Source.Next4; // ignore legacy Hash32 checksum (was to avoid buffer overflow)
+  if result <> 0 then
+    Source.Next4; // ignore deprecated Hash32 checksum (0 stored now)
 end;
 
 function _BL_DynArray(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): PtrInt;
@@ -7445,7 +7446,7 @@ begin
     aCount := n - aFirstIndex;
   dst.InitRtti(fInfo, Dest);
   dst.SetCapacity(aCount);
-  CopySeveral(PPointer(Dest)^, @(PByteArray(fValue^)[aFirstIndex * ElemSize]),
+  CopySeveral(pointer(Dest), @(PByteArray(fValue^)[aFirstIndex * ElemSize]),
     aCount, fInfo.Cache.ItemInfo, ElemSize);
 end;
 
@@ -8704,8 +8705,11 @@ function TSynQueue.PopEquals(aAnother: pointer; aCompare: TDynArraySortCompare;
 begin
   fSafe.Lock;
   try
-    result := (fFirst >= 0) and Assigned(aCompare) and Assigned(aAnother) and
-      (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) and Pop(aValue);
+    result := (fFirst >= 0) and
+              Assigned(aCompare) and
+              Assigned(aAnother) and
+              (aCompare(fValues.ItemPtr(fFirst)^, aAnother^) = 0) and
+              Pop(aValue);
   finally
     fSafe.UnLock;
   end;
@@ -8741,11 +8745,13 @@ begin
   try
     endtix := GetTickCount64 + aTimeoutMS;
     repeat
-      if Assigned(aCompared) and Assigned(aCompare) then
+      if Assigned(aCompared) and
+         Assigned(aCompare) then
         result := PopEquals(aCompared, aCompare, aValue)
       else
         result := Pop(aValue);
-    until result or InternalWaitDone(endtix, aWhenIdle);
+    until result or
+          InternalWaitDone(endtix, aWhenIdle);
   finally
     InternalDestroying(-1);
   end;
@@ -8938,15 +8944,15 @@ begin
           if k = rkLString then
           begin
             RTTI_BINARYLOAD[k] := @_BL_LString;
-            RTTI_COMPARE[false, k] := @_BC_PUTF8Char;
-            RTTI_COMPARE[true, k] := @_BCI_PUTF8Char;
+            RTTI_COMPARE[false, k] := @_BC_LString;
+            RTTI_COMPARE[true, k] := @_BCI_LString;
           end
           {$ifdef HASVARUSTRING}
           else if k = rkUString then
           begin
             RTTI_BINARYLOAD[k] := @_BL_UString;
-            RTTI_COMPARE[false, k] := @_BC_PWideChar;
-            RTTI_COMPARE[true, k] := @_BCI_PWideChar;
+            RTTI_COMPARE[false, k] := @_BC_WString;
+            RTTI_COMPARE[true, k] := @_BCI_WString;
           end;
           {$endif HASVARUSTRING}
         end; // rkLStringOld not generated any more
@@ -8954,8 +8960,8 @@ begin
         begin
           RTTI_BINARYSAVE[k] := @_BS_WString;
           RTTI_BINARYLOAD[k] := @_BL_WString;
-          RTTI_COMPARE[false, k] := @_BC_PWideChar;
-          RTTI_COMPARE[true, k] := @_BCI_PWideChar;
+          RTTI_COMPARE[false, k] := @_BC_WString;
+          RTTI_COMPARE[true, k] := @_BCI_WString;
         end;
       {$ifdef FPC} rkObject, {$endif} rkRecord:
         begin
