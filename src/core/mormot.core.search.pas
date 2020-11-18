@@ -815,9 +815,9 @@ type
     /// initialize iteration over a TDynArray.SaveTo binary buffer
     // - returns true on success, with Count and Position being set
     // - returns false if the supplied binary buffer is not correct
-    // - you can specify an optional SourceMaxLen to avoid any buffer overflow
+    // - you should specify SourceMaxLen to avoid any buffer overflow
     function Init(ArrayTypeInfo: PRttiInfo; Source: PAnsiChar;
-      SourceMaxLen: PtrInt = 0): boolean; overload;
+      SourceMaxLen: PtrInt): boolean; overload;
     /// initialize iteration over a TDynArray.SaveTo binary buffer
     // - returns true on success, with Count and Position being set
     // - returns false if the supplied binary buffer is not correct
@@ -4689,7 +4689,7 @@ end;
 { ****************** TDynArray Low-Level Binary Search }
 
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: PRttiInfo;
-  out Count, ElemSize: PtrInt; NoHash32Check: boolean): pointer;
+  out Count, ElemSize: PtrInt): pointer;
 var
   Hash: PCardinalArray absolute Source;
   iteminfo: PRttiInfo;
@@ -4706,14 +4706,12 @@ begin
     exit; // invalid type information or Source content
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count <> 0) and
-     (NoHash32Check or
-      (Hash32(@Hash[1], Count * ElemSize) = Hash[0])) then
+  if Count <> 0 then
     result := @Hash[1]; // returns valid Source content
 end;
 
-function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
-  NoHash32Check: boolean): PIntegerArray;
+function IntegerDynArrayLoadFrom(Source: PAnsiChar;
+  var Count: integer): PIntegerArray;
 var
   Hash: PCardinalArray absolute Source;
 begin
@@ -4724,9 +4722,7 @@ begin
     exit; // invalid Source content
   inc(Source, 2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count <> 0) and
-     (NoHash32Check or
-      (Hash32(@Hash[1], Count * 4) = Hash[0])) then
+  if Count <> 0 then
     result := @Hash[1]; // returns valid Source content
 end;
 
