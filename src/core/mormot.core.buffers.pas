@@ -3350,6 +3350,7 @@ constructor TBufferWriter.Create(aStream: TStream;
   aTempBuf: pointer; aTempLen: integer);
 begin
   fBufLen := aTempLen;
+  fBufLen16 := fBufLen - 16;
   fBuffer := aTempBuf;
   fStream := aStream;
 end;
