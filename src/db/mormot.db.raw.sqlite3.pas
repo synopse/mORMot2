@@ -4111,8 +4111,8 @@ begin
   Blob := sqlite3.value_blob(argv[0]);
   if Blob <> nil then
   begin // search into direct in-memory mapping (no allocation)
-    Blob := SimpleDynArrayLoadFrom(Blob, sqlite3.user_data(Context),
-      Count, ElemSize, {nohash32=}true);
+    Blob := SimpleDynArrayLoadFrom(
+      Blob, sqlite3.user_data(Context), Count, ElemSize);
     if Blob <> nil then
     begin
       V := sqlite3.value_int64(argv[1]);

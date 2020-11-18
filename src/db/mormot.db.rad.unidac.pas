@@ -541,7 +541,8 @@ end;
 
 function TSQLDBUniDACConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and fDatabase.Connected;
+  result := Assigned(fDatabase) and
+            fDatabase.Connected;
 end;
 
 function TSQLDBUniDACConnection.NewStatement: TSQLDBStatement;

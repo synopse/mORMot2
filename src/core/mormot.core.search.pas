@@ -774,8 +774,9 @@ function ToText(err: TDeltaError): PShortString; overload;
 // - will return nil if no or invalid data, or a pointer to the data
 // array otherwise, with the items number stored in Count and the individual
 // element size in ElemSize (e.g. 2 for a TWordDynArray)
+// - note: mORMot 1.18 Hash32 is not stored any more
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: PRttiInfo;
-  out Count, ElemSize: PtrInt; NoHash32Check: boolean = false): pointer;
+  out Count, ElemSize: PtrInt): pointer;
 
 /// wrap an integer dynamic array BLOB content as stored by TDynArray.SaveTo
 // - same as TDynArray.LoadFrom() with no memory allocation nor memory copy: so
@@ -783,8 +784,7 @@ function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: PRttiInfo;
 // - will return nil if no or invalid data, or a pointer to the integer
 // array otherwise, with the items number stored in Count
 // - sligtly faster than SimpleDynArrayLoadFrom(Source,TypeInfo(TIntegerDynArray),Count)
-function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
-  NoHash32Check: boolean = false): PIntegerArray;
+function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer): PIntegerArray;
 
 /// search in a RawUTF8 dynamic array BLOB content as stored by TDynArray.SaveTo
 // - same as search within TDynArray.LoadFrom() with no memory allocation nor

@@ -2020,7 +2020,8 @@ end;
 
 procedure TSynThread.DoTerminate;
 begin
-  if Assigned(fStartNotified) and Assigned(fOnThreadTerminate) then
+  if Assigned(fStartNotified) and
+     Assigned(fOnThreadTerminate) then
   begin
     fOnThreadTerminate(self);
     fStartNotified := nil;

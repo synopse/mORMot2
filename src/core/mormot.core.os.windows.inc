@@ -780,7 +780,8 @@ function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean
 var
   ftidl, ftkrn, ftusr: TFileTime;
 begin
-  result := Assigned(GetSystemTimes) and GetSystemTimes(ftidl, ftkrn, ftusr);
+  result := Assigned(GetSystemTimes) and
+            GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
   FileTimeToInt64(ftidl, IdleTime);
@@ -796,7 +797,8 @@ var
   mem: TProcessMemoryCounters;
 begin
   result := false;
-  if not Assigned(GetProcessTimes) or not Assigned(GetProcessMemoryInfo) then
+  if not Assigned(GetProcessTimes) or
+     not Assigned(GetProcessMemoryInfo) then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
   if h = 0 then
@@ -823,8 +825,10 @@ end;
 function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self, SizeOf(self), 0);
-  result := Assigned(GetSystemTimes) and Assigned(GetProcessTimes) and
-    Assigned(GetProcessMemoryInfo); // no monitoring API under oldest Windows
+  // no monitoring API available under oldest Windows
+  result := Assigned(GetSystemTimes) and
+            Assigned(GetProcessTimes) and
+            Assigned(GetProcessMemoryInfo);
 end;
 
 function TProcessInfo.Start: boolean;
@@ -832,7 +836,8 @@ var
   ftidl, ftkrn, ftusr: TFileTime;
   sidl, skrn, susr: Int64;
 begin
-  result := Assigned(GetSystemTimes) and GetSystemTimes(ftidl, ftkrn, ftusr);
+  result := Assigned(GetSystemTimes) and
+            GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
   FileTimeToInt64(ftidl, sidl);

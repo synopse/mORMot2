@@ -428,7 +428,8 @@ end;
 
 function TSQLDBNexusDBConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and fDatabase.Connected;
+  result := Assigned(fDatabase) and
+            fDatabase.Connected;
 end;
 
 function TSQLDBNexusDBConnection.NewStatement: TSQLDBStatement;

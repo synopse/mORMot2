@@ -3547,7 +3547,8 @@ begin
   if not (Level in fFamily.fEchoToConsole) then
     exit;
   {$ifdef LINUXNOTBSD}
-  if Family.EchoToConsoleUseJournal then begin
+  if Family.EchoToConsoleUseJournal then
+  begin
     if length(Text) < 18 then
       // should be at last "20200615 08003008  "
       exit;
@@ -6231,13 +6232,15 @@ begin
   inc(P);
   for i := 1 to length(text) do
     if ord(text[i]) in [33..126] then
-    begin // only printable ASCII chars
+    begin
+      // only printable ASCII chars
       P^ := text[i];
       inc(P);
     end;
   if P[-1] = ' ' then
   begin
-    P^ := '-'; // nothing appended -> NILVALUE
+    // nothing appended -> NILVALUE
+    P^ := '-';
     inc(P);
   end;
   result := P;
@@ -6266,20 +6269,21 @@ begin
   DateToIso8601PChar(destbuffer,
     true, st.Year, st.Month, st.Day);
   TimeToIso8601PChar(destbuffer + 10,
-    true, st.Hour, st.Minute, st.Second, st.MilliSecond, 'T', true);
+    true, st.Hour, st.Minute, st.Second, st.MilliSecond, 'T', {withms=}true);
   destbuffer[23] := 'Z';
   inc(destbuffer, 24);
   with ExeVersion do
   begin
     if length(Host) + length(ProgramName) + length(procid) +
        length(msgid) + (destbuffer - start) + 15 > destsize then
-      exit; // avoid buffer overflow
-    destbuffer := PrintUSAscii(destbuffer, Host);        // HOST
+      // avoid buffer overflow
+      exit;
+    destbuffer := PrintUSAscii(destbuffer, Host);         // HOST
     destbuffer := PrintUSAscii(destbuffer, ProgramName); // APP-NAME
   end;
-  destbuffer := PrintUSAscii(destbuffer, procid); // PROCID
-  destbuffer := PrintUSAscii(destbuffer, msgid);  // MSGID
-  destbuffer := PrintUSAscii(destbuffer, '');     // no STRUCTURED-DATA
+  destbuffer := PrintUSAscii(destbuffer, procid);      // PROCID
+  destbuffer := PrintUSAscii(destbuffer, msgid);      // MSGID
+  destbuffer := PrintUSAscii(destbuffer, '');        // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
   len := length(msg);
@@ -6289,7 +6293,8 @@ begin
     if (P[0] = '2') and
        (P[8] = ' ') then
     begin
-      inc(P, 27); // trim e.g. '20160607 06442255  ! trace '
+      // trim e.g. '20160607 06442255  ! trace '
+      inc(P, 27);
       dec(len, 27);
     end
     else if mormot.core.text.HexToBin(P, nil, 8) then

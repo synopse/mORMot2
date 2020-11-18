@@ -1658,7 +1658,8 @@ end;
 
 function TRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
 begin
-  result := (self <> nil) and Assigned(fOnIdle) and
+  result := (self <> nil) and
+            Assigned(fOnIdle) and
             fBackgroundThread.OnIdleBackgroundThreadActive;
 end;
 

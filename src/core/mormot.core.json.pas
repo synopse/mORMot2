@@ -4979,12 +4979,13 @@ begin
   c.W.BlockBegin('[', c.Options);
   if Data^ <> nil then
   begin
-    if c.Info <> nil then
+    if (c.Info <> nil) and
+       Assigned(c.Info.JsonSave) then
     begin
       // efficient JSON serialization from recognized PT_JSONSAVE/PTC_JSONSAVE
       P := Data^;
       n := PDALen(P - _DALEN)^ + _DAOFF; // length(Data)
-      jsonsave := TRttiJson(c.Info).fJsonSave;
+      jsonsave := c.Info.JsonSave;
       if Assigned(jsonsave) then
         repeat
           jsonsave(P, c);
@@ -5116,7 +5117,7 @@ begin
             begin
               // direct value write (record field or plain class property)
               c.Info := c.Prop^.Value;
-              TRttiJsonSave(TRttiJson(c.Info).fJsonSave)(Data + c.Prop^.OffsetGet, c);
+              TRttiJsonSave(c.Info.JsonSave)(Data + c.Prop^.OffsetGet, c);
             end
             else
             begin
@@ -5165,7 +5166,7 @@ begin
         begin
           c := v;
           ctxt.Info := Rtti.RegisterClass(c);
-          save := TRttiJson(ctxt.Info).fJsonSave;
+          save := ctxt.Info.JsonSave;
         end;
         save(pointer(Value), ctxt);
       end;
@@ -5207,7 +5208,7 @@ begin
   if last >= 0 then
     repeat
       item := Data^.Items[i];
-      TRttiJsonSave(TRttiJson(c.Info).fJsonSave)(@item, c);
+      TRttiJsonSave(c.Info.JsonSave)(@item, c);
       if i = last then
         break;
       c.W.BlockAfterItem(c.Options);
@@ -5862,7 +5863,7 @@ var
   save: TRttiJsonSave;
 begin
   {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterType(TypeInfo));
-  save := TRttiJson(ctxt.Info).fJsonSave;
+  save := ctxt.Info.JsonSave;
   if Assigned(save) then
     save(Value, ctxt)
   else
@@ -5876,7 +5877,7 @@ var
   save: TRttiJsonSave;
 begin
   {%H-}ctxt.Init(self, WriteOptions, TRttiCustom(RttiCustom));
-  save := TRttiJson(RttiCustom).fJsonSave;
+  save := TRttiCustom(RttiCustom).JsonSave;
   if Assigned(save) then
     save(Value, ctxt)
   else
@@ -9061,9 +9062,11 @@ procedure TRttiJson.ValueLoadJson(Data: pointer; var JSON: PUTF8Char;
 var
   ctxt: TJsonParserContext;
 begin
-  if Assigned(self) and Assigned(fJsonLoad) then
+  if Assigned(self) and
+     Assigned(fJsonLoad) then
   begin
-    ctxt.Init(JSON, self, ParserOptions, CustomVariantOptions, ObjectListItemClass);
+    ctxt.Init(
+      JSON, self, ParserOptions, CustomVariantOptions, ObjectListItemClass);
     TRttiJsonLoad(fJsonLoad)(Data, ctxt);
     if ctxt.Valid then
       JSON := ctxt.JSON

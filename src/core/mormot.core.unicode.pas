@@ -200,7 +200,8 @@ function Utf8TruncatedLength(const text: RawUTF8; maxBytes: PtrUInt): PtrInt; ov
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns maxUTF8 if text was not truncated, or the number of fitting bytes
-function Utf8TruncatedLength(text: PAnsiChar; textlen,maxBytes: PtrUInt): PtrInt; overload;
+function Utf8TruncatedLength(text: PAnsiChar;
+  textlen, maxBytes: PtrUInt): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
 // - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
@@ -253,10 +254,12 @@ type
     function AnsiToRawUnicode(const AnsiText: RawByteString): RawUnicode; overload;
     /// convert any Ansi buffer into an Unicode String
     // - returns a value using our RawUnicode kind of string
-    function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: cardinal): RawUnicode; overload; virtual;
+    function AnsiToRawUnicode(
+      Source: PAnsiChar; SourceChars: cardinal): RawUnicode; overload; virtual;
     /// convert any Ansi buffer into an Unicode String
     // - returns a SynUnicode, i.e. Delphi 2009+ UnicodeString or a WideString
-    function AnsiToUnicodeString(Source: PAnsiChar; SourceChars: cardinal): SynUnicode; overload;
+    function AnsiToUnicodeString(
+      Source: PAnsiChar; SourceChars: cardinal): SynUnicode; overload;
     /// convert any Ansi buffer into an Unicode String
     // - returns a SynUnicode, i.e. Delphi 2009+ UnicodeString or a WideString
     function AnsiToUnicodeString(const Source: RawByteString): SynUnicode; overload;
@@ -271,8 +274,8 @@ type
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this default implementation will rely on the Operating System for
     // all non ASCII-7 chars
-    function UnicodeBufferToAnsi(Dest: PAnsiChar;
-      Source: PWideChar; SourceChars: cardinal): PAnsiChar; overload; virtual;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
+      SourceChars: cardinal): PAnsiChar; overload; virtual;
     /// direct conversion of an Unicode buffer into an Ansi Text
     function UnicodeBufferToAnsi(Source: PWideChar;
       SourceChars: cardinal): RawByteString; overload; virtual;
@@ -286,12 +289,13 @@ type
       SourceChars: cardinal): PAnsiChar; overload; virtual;
     /// convert any UTF-8 encoded buffer into Ansi Text
     // - internaly calls UTF8BufferToAnsi virtual method
-    function UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: cardinal): RawByteString; overload;
+    function UTF8BufferToAnsi(Source: PUTF8Char;
+      SourceChars: cardinal): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// convert any UTF-8 encoded buffer into Ansi Text
     // - internaly calls UTF8BufferToAnsi virtual method
-    procedure UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: cardinal;
-      var result: RawByteString); overload; virtual;
+    procedure UTF8BufferToAnsi(Source: PUTF8Char;
+      SourceChars: cardinal; var result: RawByteString); overload; virtual;
     /// convert any UTF-8 encoded String into Ansi Text
     // - internaly calls UTF8BufferToAnsi virtual method
     function UTF8ToAnsi(const UTF8: RawUTF8): RawByteString; virtual;
@@ -299,12 +303,14 @@ type
     // - will truncate the destination string to DestSize bytes (including the
     // trailing #0), with a maximum handled size of 2048 bytes
     // - returns the number of bytes stored in Dest^ (i.e. the position of #0)
-    function Utf8ToAnsiBuffer(const S: RawUTF8; Dest: PAnsiChar; DestSize: integer): integer;
+    function Utf8ToAnsiBuffer(const S: RawUTF8;
+      Dest: PAnsiChar; DestSize: integer): integer;
     /// convert any Ansi Text (providing a From converted) into Ansi Text
-    function AnsiToAnsi(From: TSynAnsiConvert; const Source: RawByteString): RawByteString; overload;
-    /// convert any Ansi buffer (providing a From converted) into Ansi Text
     function AnsiToAnsi(From: TSynAnsiConvert;
-      Source: PAnsiChar; SourceChars: cardinal): RawByteString; overload;
+      const Source: RawByteString): RawByteString; overload;
+    /// convert any Ansi buffer (providing a From converted) into Ansi Text
+    function AnsiToAnsi(From: TSynAnsiConvert; Source: PAnsiChar;
+      SourceChars: cardinal): RawByteString; overload;
     /// corresponding code page
     property CodePage: cardinal
       read fCodePage;
@@ -415,7 +421,8 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
+      SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an Unicode buffer into an Ansi Text
     function UnicodeBufferToAnsi(Source: PWideChar; SourceChars: cardinal): RawByteString; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-8 buffer

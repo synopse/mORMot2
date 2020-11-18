@@ -487,7 +487,8 @@ end;
 
 function TSQLDBFireDACConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and fDatabase.Connected;
+  result := Assigned(fDatabase) and
+            fDatabase.Connected;
 end;
 
 function TSQLDBFireDACConnection.NewStatement: TSQLDBStatement;

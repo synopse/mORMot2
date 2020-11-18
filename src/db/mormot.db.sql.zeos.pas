@@ -840,7 +840,8 @@ end;
 
 function TSQLDBZEOSConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and not fDatabase.IsClosed;
+  result := Assigned(fDatabase) and
+            not fDatabase.IsClosed;
 end;
 
 function TSQLDBZEOSConnection.NewStatement: TSQLDBStatement;
