@@ -4844,30 +4844,44 @@ var
   fields: TRttiRecordManagedFields;
   f: PRttiRecordField;
   p: PRttiInfo;
-  i: PtrInt;
+  i, offset: PtrUInt;
   cop: PRttiCopiers;
 begin
   Info^.RecordManagedFields(fields); // retrieve RTTI once for all items
-  if fields.Count > 0 then
-  begin
-    cop := @RTTI_COPY;
-    repeat
+  cop := @RTTI_COPY;
+  repeat
+    i := fields.Count;
+    offset := 0;
+    if i > 0 then
+    begin
       f := fields.Fields;
-      i := fields.Count;
       repeat
         p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
         {$ifdef FPC_OLDRTTI}
-        if Assigned(cop[p^.Kind]) then
+        if Info^.Kind in rkManagedTypes then
         {$endif FPC_OLDRTTI}
-          cop[p^.Kind](Dest + f^.Offset, Source + f^.Offset, p);
+        begin
+          offset := f^.Offset - offset;
+          if offset <> 0 then
+          begin
+            MoveFast(Source^, Dest^, offset);
+            inc(Source, offset);
+            inc(Dest, offset);
+          end;
+          offset := cop[p^.Kind](Dest, Source, p);
+          inc(Source, offset);
+          inc(Dest, offset);
+          inc(offset, f^.Offset);
+        end;
         inc(f);
         dec(i);
       until i = 0;
-      inc(Source, fields.Size);
-      inc(Dest, fields.Size);
-      dec(n);
-    until n = 0;
-  end;
+    end;
+    offset := PtrUInt(fields.Size) - offset;
+    if offset <> 0 then
+      MoveFast(Source^, Dest^, offset);
+    dec(n);
+  until n = 0;
 end;
 
 procedure CopySeveral(Dest, Source: PByte; SourceCount: PtrInt;
