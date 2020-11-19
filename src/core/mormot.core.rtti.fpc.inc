@@ -53,7 +53,10 @@ type
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
-  result := pointer(GetTypeData(@self));
+  if @self <> nil then
+    result := pointer(GetTypeData(@self))
+  else
+    result := nil;
 end;
 
 function TRttiClass.ParentInfo: PRttiInfo;

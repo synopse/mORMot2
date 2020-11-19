@@ -9513,7 +9513,9 @@ var
   p: ^PRttiCustomProp;
 begin
   // faster than ClassPropertiesGet: we know it is the first slot
-  rtti := PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^;
+  rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+  if rtti <> nil then
+    rtti := PPointer(rtti)^;
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then
     rtti := DoRegisterAutoCreateFields(ObjectInstance);
@@ -9576,8 +9578,7 @@ end;
 constructor TPersistentAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
-  inherited Create; // may have been overriden in TPersistentWithCustomCreate
-end; 
+end; // no need to call the void inherited TPersistentWithCustomCreate
 
 destructor TPersistentAutoCreateFields.Destroy;
 begin
@@ -9591,8 +9592,7 @@ end;
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
-  inherited Create; // may have been overriden in children TSynPersistent class
-end; 
+end; // no need to call the void inherited TSynPersistent
 
 destructor TSynAutoCreateFields.Destroy;
 begin

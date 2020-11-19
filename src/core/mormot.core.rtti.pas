@@ -1710,11 +1710,13 @@ function DynArrayItemTypeLen(const DynArrayTypeName: RawUTF8): PtrInt;
 { ************** RTTI-based Registration for Custom JSON Parsing }
 
 const
-  /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + NameLen and 7
+  /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + NameLen and xxx
   // - optimized "hash table of the poor" (tm) for Find(TypeInfo) and Find(Name)
   // - should be a bit mask (i.e. power of two minus 1)
-  RTTICUSTOMTYPEINFOHASH = 7;
+  RTTICUSTOMTYPEINFOHASH = 15;
 
+{ TODO : replace Kind+NameLen with a better distribution using primes (xxHash32) }
+  
 type
   TRttiCustom = class;
 
@@ -1947,7 +1949,8 @@ type
     /// compare two stored values of this type
     // - not implemented in this class (raise an ERttiException)
     // but in TRttiJson, so that it will use mormot.core.data comparison
-    function ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer; virtual;
+    function ValueCompare(Data, Other: pointer;
+      CaseInsensitive: boolean): integer; virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -4237,6 +4240,7 @@ end;
 function ClassFieldCountWithParents(ClassType: TClass; onlyWithoutGetter: boolean): integer;
 var
   cp: PRttiProps;
+  rc: PRttiClass;
   p: PRttiProp;
   i: integer;
 begin
@@ -4264,7 +4268,9 @@ begin
     // we can use directly the root RTTI information
     while ClassType <> nil do
     begin
-      inc(result, GetRttiClass(ClassType)^.PropCount);
+      rc := GetRttiClass(ClassType);
+      if rc <> nil then
+        inc(result, rc^.PropCount);
       ClassType := GetClassParent(ClassType);
     end;
   end;
@@ -6011,7 +6017,7 @@ end;
 
 procedure TRttiCustomProps.FinalizeAndClearPublishedProperties(Instance: TObject);
 var
-  pp: ^PRttiCustomProp;
+  pp: PRttiCustomProp;
   p: PtrInt;
   n: integer;
   rtti: TRttiCustom;
@@ -6025,7 +6031,7 @@ begin
       p := pp^.OffsetSet;
       if p >= 0 then
       begin
-        inc(P, PtrInt(Instance));
+        inc(p, PtrInt(Instance));
         rtti := pp^.Value;
         rtti.ValueFinalize(pointer(p));
         if pp^.PropDefault <> NO_DEFAULT then
