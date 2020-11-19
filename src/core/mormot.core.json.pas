@@ -789,14 +789,14 @@ type
     // - this overriden version will properly handle JSON escape
     // - properly handle Value as a TRttiVarData from TRttiProp.GetValue
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape;
-      WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
+      WriteOptions: TTextWriterWriteObjectOptions = []); override;
     /// append complex types as JSON content using raw TypeInfo()
     // - handle rkClass as WriteObject, rkEnumeration/rkSet with proper options,
     // rkRecord, rkDynArray or rkVariant using proper JSON serialization
     // - other types will append 'null'
     // - returns the size of the Value, in bytes
     procedure AddTypedJSON(Value, TypeInfo: pointer;
-      WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
+      WriteOptions: TTextWriterWriteObjectOptions = []); override;
     /// append complex types as JSON content using TRttiCustom
     // - called e.g. by TTextWriter.AddVariant() for varAny / TRttiVarData
     procedure AddRttiCustomJSON(Value: pointer; RttiCustom: TObject;
@@ -8800,6 +8800,7 @@ function TSynDictionary.LoadFromBinary(const binary: RawByteString): boolean;
 var
   plain: RawByteString;
   rdr: TFastReader;
+  n: integer;
 begin
   result := false;
   plain := fCompressAlgo.Decompress(binary);
@@ -8811,8 +8812,12 @@ begin
     try
       RTTI_BINARYLOAD[rkDynArray](fKeys.Value, rdr, fKeys.Info.Info);
       RTTI_BINARYLOAD[rkDynArray](fValues.Value, rdr, fValues.Info.Info);
-      if fKeys.Count = fValues.Count then
+      n := fKeys.Capacity;
+      if n = fValues.Capacity then
       begin
+        // RTTI_BINARYLOAD[rkDynArray]() did not set the external count
+        fSafe.Padding[DIC_KEYCOUNT].VInteger := n;
+        fSafe.Padding[DIC_VALUECOUNT].VInteger := n;      
         SetTimeouts;  // set ComputeNextTimeOut for all items
         fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
         result := true;
@@ -9159,9 +9164,10 @@ end;
 function DynArraySaveJSON(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean): RawUTF8;
 begin
-  if (PPointer(Value)^ = nil) or
-     (TypeInfo^.Kind <> rkDynArray) then
+  if TypeInfo^.Kind <> rkDynArray then
     result := NULL_STR_VAR
+  else if pointer(Value) = nil then
+    result := '[]'
   else
     result := SaveJSON(Value, TypeInfo, EnumSetsAsText);
 end;
@@ -9477,7 +9483,7 @@ end;
 function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
 begin
   result := Rtti.RegisterType(ObjectInstance.ClassInfo);
-  if PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^ <> result then
+  if PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^ <> result then
     raise ERttiException.CreateUTF8('AutoCreateFields(%): unexpected vmtAutoTable',
       [ObjectInstance]); // paranoid check
   result.Props.SetAutoCreateFields;
@@ -9491,7 +9497,7 @@ var
   p: ^PRttiCustomProp;
 begin
   // faster than ClassPropertiesGet: we know it is the first slot
-  rtti := PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^;
+  rtti := PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^;
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then
     rtti := DoRegisterAutoCreateFields(ObjectInstance);
@@ -9517,7 +9523,8 @@ var
   arr: PPAnsiChar;
   o: TObject;
 begin
-  props := @TRttiCustom(PPPointer(PAnsiChar(ObjectInstance) + vmtAutoTable)^^).Props;
+  props := @TRttiCustom(
+    PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^).Props;
   // free all published class fields
   p := pointer(props.AutoCreateClasses);
   if p <> nil then
@@ -9553,8 +9560,8 @@ end;
 constructor TPersistentAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
-  inherited Create;
-end;
+  inherited Create; // may have been overriden in TPersistentWithCustomCreate
+end; 
 
 destructor TPersistentAutoCreateFields.Destroy;
 begin
@@ -9568,7 +9575,8 @@ end;
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
-end; // no need to call inherited TSynPersistent.Create
+  inherited Create; // may have been overriden in children TSynPersistent class
+end; 
 
 destructor TSynAutoCreateFields.Destroy;
 begin
