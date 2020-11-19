@@ -887,9 +887,16 @@ procedure Int64ToCurrency(const i: Int64; c: PCurrency); overload;
 
 /// no banker rounding into two digits after the decimal point
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
-// - due to floating point number limitations, some numbers may have inifinite
-// digits encoded (e.g. 1.333333): display should ignore the additional digits
-function SimpleRoundTo2Digits(const d: double): double;
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+function SimpleRoundTo2Digits(Value: Currency): Currency;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// simple, no banker rounding of a Currency value, stored as Int64, to only 2 digits
+// - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
 
 /// no banker rounding into text, with two digits after the decimal point
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
@@ -3704,21 +3711,24 @@ begin
   PVarData(@v).VCurrency := c;
 end;
 
-function SimpleRoundTo2Digits(const d: double): double;
-var
-  v: Int64;
-  m: PtrInt;
+function SimpleRoundTo2Digits(Value: Currency): Currency;
 begin
-  v := trunc(d * CURR_RES);
-  m := v mod 100;
-  if m <> 0 then
-    if m > 50 then
-      inc(v, 100 - m)
-    else if m < -50 then
-      dec(v, 100 + m)
+  SimpleRoundTo2DigitsCurr64(PInt64(@Value)^);
+  result := Value;
+end;
+
+procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
+var
+  Spare: PtrInt;
+begin
+  Spare := Value mod 100;
+  if Spare <> 0 then
+    if Spare > 50 then
+      inc(Value, 100 - Spare)
+    else if Spare < -50 then
+      dec(Value, 100 + Spare)
     else
-      dec(v, m);
-  result := v / CURR_RES;
+      dec(Value, Spare);
 end;
 
 function TwoDigits(const d: double): TShort31;
