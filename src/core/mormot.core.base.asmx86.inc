@@ -1319,45 +1319,6 @@ asm
 @p:     mov     eax, 1
 end;
 
-{$ifndef FPC_OR_UNICODE}
-
-function CompareInt64(const A, B: Int64): integer;
-asm
-        // Delphi x86 compiler is not efficient at compiling Int64 comparisons
-        mov     ecx, [eax]
-        mov     eax, [eax + 4]
-        cmp     eax, [edx + 4]
-        jnz     @nz
-        cmp     ecx, [edx]
-        jz      @0
-        jnb     @p
-@n:     mov     eax, -1
-        ret
-@0:     xor     eax, eax
-        ret
-@nz:    jl      @n
-@p:     mov     eax, 1
-end;
-
-function CompareQword(const A, B: QWord): integer;
-asm
-        // Delphi x86 compiler is not efficient, and oldest even incorrect
-        mov     ecx, [eax]
-        mov     eax, [eax + 4]
-        cmp     eax, [edx + 4]
-        jnz     @nz
-        cmp     ecx, [edx]
-        jz      @0
-@nz:    jnb     @p
-        mov     eax, -1
-        ret
-@0:     xor     eax, eax
-        ret
-@p:     mov     eax, 1
-end;
-
-{$endif FPC_OR_UNICODE}
-
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

@@ -1131,7 +1131,7 @@ function CompareCardinal(const A, B: cardinal): integer;
 
 /// a comparison function for sorting 64-bit signed integer values
 function CompareInt64(const A, B: Int64): integer;
-  {$ifdef FPC_OR_UNICODE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// a comparison function for sorting 32/64-bit signed integer values
 function ComparePtrInt(const A, B: PtrInt): integer;
@@ -1146,7 +1146,7 @@ function ComparePointer(const A, B: pointer): integer;
 // should better use this function or SortDynArrayQWord() to properly compare
 // two QWord values over CPUX86 on Delphi 7-2007
 function CompareQWord(const A, B: QWord): integer;
-  {$ifdef FPC_OR_UNICODE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of an unsigned integer position in an integer array
 // - Count is the number of cardinal entries in P^
@@ -5080,6 +5080,20 @@ end;
 function CompareQword(const A, B: QWord): integer;
 begin
   result := ord(A > B) - ord(A < B);
+end;
+
+{$else}
+
+function CompareInt64(const A, B: Int64): integer;
+begin
+  // Delphi x86 compiler is not efficient at compiling Int64 comparisons
+  result := SortDynArrayInt64(A, B);
+end;
+
+function CompareQword(const A, B: QWord): integer;
+begin
+  // Delphi x86 compiler is not efficient, and oldest even incorrect
+  result := SortDynArrayQWord(A, B);
 end;
 
 {$endif FPC_OR_UNICODE}
