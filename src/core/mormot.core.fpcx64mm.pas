@@ -1721,7 +1721,7 @@ asm
         mov     eax, $100
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.BlockTypeLocked, ah
         je      @FreeAndUnlock
-        @CheckTinySmallLock:
+@CheckTinySmallLock:
         {$ifdef FPCMM_LOCKLESSFREE}
         // Try to put rcx=P in TSmallBlockType.BinInstance[]
         cmp     byte ptr [rbx].TSmallBlockType.BinCount, SmallBlockBinCount

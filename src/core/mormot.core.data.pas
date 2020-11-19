@@ -8359,7 +8359,7 @@ begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
     Init(aTypeInfo, aValue, aCountPointer);
   fHash.Init(@self, aHashItem, nil, aHasher, aCompare, nil, aCaseInsensitive);
-  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SetCompare(fHash.Compare);
+  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := fHash.Compare;
 end;
 
 procedure TDynArrayHashed.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
@@ -8369,8 +8369,7 @@ begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
     Init(aTypeInfo, aValue, aCountPointer);
   fHash.InitSpecific(@self, aKind, aCaseInsensitive, aHasher);
-  {$ifdef UNDIRECTDYNARRAY} with InternalDynArray do {$endif}
-    fCompare := fHash.Compare;
+  {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := fHash.Compare;
 end;
 
 function TDynArrayHashed.Scan(const Item): integer;
