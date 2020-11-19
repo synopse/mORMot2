@@ -2561,8 +2561,13 @@ begin
           result := AnsiICompW(A.VAny, B.VAny)
         else
           result := StrCompW(A.VAny, B.VAny);
-    else
-      if at < varString then
+    else if at = varString or varByRef then
+      // e.g. from TRttiVarData / TRttiCustomProp.CompareValue
+      if caseInsensitive then
+        result := StrIComp(PPointer(A.VAny)^, PPointer(B.VAny)^)
+      else
+        result := StrComp(PPointer(A.VAny)^, PPointer(B.VAny)^)
+    else if at < varString then
         result := ICMP[VarCompareValue(variant(A), variant(B))]
       else
         result := CMP[caseInsensitive](variant(A), variant(B));
