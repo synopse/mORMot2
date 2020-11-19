@@ -4185,6 +4185,32 @@ begin
   result := sp;
 end;
 
+{$ifdef CPUINTEL}
+// crc32c SSE4.2 hardware accellerated dword hash
+{$ifdef CPUX86}
+function crc32c32sse42(buf: pointer): cardinal;
+{$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        mov     edx, eax
+        xor     eax, eax
+        {$ifdef ISDELPHI2010}
+        crc32   eax, dword ptr[edx]
+        {$else}
+        db $F2, $0F, $38, $F1, $02
+        {$endif ISDELPHI2010}
+end;
+{$else}
+function crc32c32sse42(buf: pointer): cardinal;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm // ecx=buf (Linux: edi=buf)
+        .noframe
+{$endif FPC}
+        xor     eax, eax
+        crc32   eax, dword ptr[buf]
+end;
+{$endif CPUX86}
+{$endif CPUINTEL}
+
 function hash32prime(buf: pointer): cardinal;
 begin // xxhash32-inspired - and won't pollute L1 cache with lookup tables
   result := PCardinal(buf)^;
@@ -4216,7 +4242,7 @@ begin
   // 1. fill HTab[] with hashes for all old data
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then
-    hash := @crc32csse42
+    hash := @crc32c32sse42
   else
   {$endif CPUINTEL}
     hash := @hash32prime;
