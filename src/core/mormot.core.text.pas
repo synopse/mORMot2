@@ -1104,7 +1104,7 @@ type
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJSONEscape;
-      WriteOptions: TTextWriterWriteObjectOptions = [woFullExpand]); virtual;
+      WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
     // - TypeInfo is a PRttiInfo instance - but not available in this early unit
@@ -10497,6 +10497,14 @@ begin
     TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
     TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;
+  {$ifndef EXTENDEDTOSHORT_USESTR}
+    {$ifdef ISDELPHIXE}
+    SettingsUS := TFormatSettings.Create($0409);
+    {$else}
+    GetLocaleFormatSettings($0409, SettingsUS);
+    {$endif ISDELPHIXE}
+    SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
+  {$endif EXTENDEDTOSHORT_USESTR}
   {$ifdef DOUBLETOSHORT_USEGRISU}
   MoveFast(TwoDigitLookup[0], TwoDigitByteLookupW[0], SizeOf(TwoDigitLookup));
   for i := 0 to 199 do
