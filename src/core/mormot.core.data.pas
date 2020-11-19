@@ -5969,6 +5969,17 @@ begin
   end;
 end;
 
+function TDynArray.GetCapacity: PtrInt;
+begin
+  result := PtrInt(fValue);
+  if result <> 0 then
+  begin
+    result := PPtrInt(result)^;
+    if result <> 0 then
+      result := PDALen(result - _DALEN)^ + _DAOFF; // capacity = length()
+  end;
+end;
+
 procedure TDynArray.ItemCopy(Source, Dest: pointer);
 begin
   if fInfo.ArrayRtti <> nil then
@@ -6352,6 +6363,10 @@ begin
     // backward compatible: assume fake 100MB Source input buffer
     SourceMax := Source + 100 shl 20;
   result := BinaryLoad(fValue, Source, Info.Info, nil, SourceMax, [rkDynArray]);
+  if (fCountP <> nil) and
+     (fValue^ <> nil) then
+    // BinaryLoad() set the array length, not the external count
+    fCountP^ := GetCapacity;
 end;
 
 procedure TDynArray.LoadFromStream(Stream: TCustomMemoryStream);
@@ -6359,14 +6374,17 @@ var
   S, P: PAnsiChar;
 begin
   S := PAnsiChar(Stream.Memory);
-  P := S + Stream.Position;
-  P := BinaryLoad(fValue, P, Info.Info, nil, S + Stream.Size, [rkDynArray]);
+  P := LoadFrom(S + Stream.Position, S + Stream.Size);
   Stream.Seek(P - S, soFromBeginning);
 end;
 
 function TDynArray.LoadFromBinary(const Buffer: RawByteString): boolean;
 begin
   result := BinaryLoad(fValue, Buffer, Info.Info, [rkDynArray]);
+  if (fCountP <> nil) and
+     (fValue^ <> nil) then
+    // BinaryLoad() set the array length, not the external count
+    fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
 end;
 
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
@@ -6421,7 +6439,7 @@ procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 begin
-  raise ERttiException.Create('_GetDataFromJSON not implemented - ' +
+  raise ERttiException.Create('GetDataFromJSON() not implemented - ' +
     'please include mormot.core.json in your uses clause');
 end;
 
@@ -6431,6 +6449,10 @@ begin
   SetCount(0); // faster to use our own routine now
   GetDataFromJSON(fValue,
     P, EndOfObject, Info.Info, CustomVariantOptions, Tolerant);
+  if (fCountP <> nil) and
+     (fValue^ <> nil) then
+    // GetDataFromJSON() set the array length, not the external count
+    fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
   result := P;
 end;
 
@@ -7391,17 +7413,6 @@ begin
     end;
   // no external Count, array size-down or array up-grow -> realloc
   InternalSetLength(oldlen, aCount);
-end;
-
-function TDynArray.GetCapacity: PtrInt;
-begin
-  result := PtrInt(fValue);
-  if result <> 0 then
-  begin
-    result := PPtrInt(result)^;
-    if result <> 0 then
-      result := PDALen(result - _DALEN)^ + _DAOFF; // capacity = length()
-  end;
 end;
 
 procedure TDynArray.SetCapacity(aCapacity: PtrInt);
