@@ -5496,24 +5496,25 @@ begin
       {$ifdef CPU64}
       else {$else} ;
     8: {$endif CPU64}
-      case ElemInfo^.Kind of
-        rkFloat:
-          if DynArrayInfo = TypeInfo(TDoubleDynArray) then
-            result := ptDouble
-          else if DynArrayInfo = TypeInfo(TCurrencyDynArray) then
-            result := ptCurrency
-          else if DynArrayInfo = TypeInfo(TDateTimeDynArray) then
-            result := ptDateTime
-          else if DynArrayInfo = TypeInfo(TDateTimeMSDynArray) then
-            result := ptDateTimeMS;
-        rkInt64:
-          if DynArrayInfo = TypeInfo(TTimeLogDynArray) then
-            result := ptTimeLog
-          else if DynArrayInfo = TypeInfo(TUnixTimeDynArray) then
-            result := ptUnixTime
-          else if DynArrayInfo = TypeInfo(TUnixMSTimeDynArray) then
-            result := ptUnixMSTime;
-      end;
+      if ElemInfo <> nil then
+        case ElemInfo^.Kind of
+          rkFloat:
+            if DynArrayInfo = TypeInfo(TDoubleDynArray) then
+              result := ptDouble
+            else if DynArrayInfo = TypeInfo(TCurrencyDynArray) then
+              result := ptCurrency
+            else if DynArrayInfo = TypeInfo(TDateTimeDynArray) then
+              result := ptDateTime
+            else if DynArrayInfo = TypeInfo(TDateTimeMSDynArray) then
+              result := ptDateTimeMS;
+          rkInt64:
+            if DynArrayInfo = TypeInfo(TTimeLogDynArray) then
+              result := ptTimeLog
+            else if DynArrayInfo = TypeInfo(TUnixTimeDynArray) then
+              result := ptUnixTime
+            else if DynArrayInfo = TypeInfo(TUnixMSTimeDynArray) then
+              result := ptUnixMSTime;
+        end;
     {$ifdef TSYNEXTENDED80}
     10:
       if DynArrayInfo = TypeInfo(TSynExtendedDynArray) then
@@ -6182,7 +6183,7 @@ begin
       begin
         if fCache.ItemInfo = nil then
         begin
-          pt := DynArrayTypeInfoToStandardParserType(aInfo, fCache.ItemInfo,
+          pt := DynArrayTypeInfoToStandardParserType(aInfo, nil,
             fCache.ItemSize, {exacttype=}true, dummy, @pct);
           fArrayFirstField := pt;
           fArrayRtti := Rtti.RegisterType(ParserTypeToTypeInfo(pt, pct));
