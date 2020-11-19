@@ -830,15 +830,20 @@ function DynArrayLoadHeader(var Source: TFastReader;
 /// raw comparison of two dynamic arrays
 // - as called e.g. by TDynArray.Equals, using ExternalCountA/B optional parameter
 // - RTTI_COMPARE[true/false,rkDynArray] are wrappers to this, with ExternalCount=nil
+// - if Info=TypeInfo(TObjectDynArray) then will compare any T*ObjArray
 function DynArrayCompare(A, B: PAnsiChar;
   ExternalCountA, ExternalCountB: PInteger; Info: PRttiInfo;
   CaseInSensitive: boolean): integer;
 
 /// compare two dynamic arrays by calling TDynArray.Equals
+// - if Info=TypeInfo(TObjectDynArray) then will compare any T*ObjArray
 function DynArrayEquals(TypeInfo: PRttiInfo; var Array1, Array2;
   Array1Count: PInteger = nil; Array2Count: PInteger = nil): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+// two low-level comparison methods used for T*ObjArray by mormot.core.json
+function _BC_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BCI_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 
 /// check equality of two values by content, using RTTI
 // - optionally returns the known in-memory PSize of the value
@@ -1556,6 +1561,7 @@ type
     // - T*ObjArray kind of arrays will properly compare their properties
     function Equals(B: PDynArray; IgnoreCompare: boolean = false;
       CaseSensitive: boolean = true): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of the two arrays
     // - use any supplied Compare property (unless ignorecompare=true), or
     // following the RTTI element description on all array items
@@ -5100,7 +5106,7 @@ end;
 function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
   Info: PRttiInfo; CaseInSensitive: boolean): integer;
 var
-  n1, n2, itemsize: PtrInt;
+  n1, n2, n, itemsize: PtrInt;
   comp: TRttiCompare;
 begin
   A := PPointer(A)^;
@@ -5120,7 +5126,6 @@ begin
     result := 1;
     exit;
   end;
-  Info := Info^.DynArrayItemType;
   if ExternalCountA <> nil then
     n1 := ExternalCountA^ // e.g. from TDynArray with external count
   else
@@ -5129,18 +5134,43 @@ begin
     n2 := ExternalCountB^
   else
     n2 := PDALen(B - _DALEN)^ + _DAOFF;
-  comp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
-  if Assigned(comp) then
+  n := n1;
+  if n > n2 then
+    n := n2;
+  if Info = TypeInfo(TObjectDynArray) then
+  begin
     repeat
-      itemsize := comp(A, B, Info, result);
-      inc(A, itemsize);
-      inc(B, itemsize);
+      result := ObjectCompare(PPointer(A)^, PPointer(B)^, CaseInSensitive);
       if result <> 0 then
         exit;
-      dec(n1); // both items are equal -> continue to next items
-      dec(n2);
-    until (n2 = 0) or
-          (n1 = 0);
+      inc(PPointer(A));
+      inc(PPointer(B));
+      dec(n);
+    until n = 0;
+  end
+  else
+  begin
+    Info := Info^.DynArrayItemType(itemsize);
+    if Info = nil then
+      comp := nil
+    else
+      comp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
+    if Assigned(comp) then
+      repeat
+        itemsize := comp(A, B, Info, result);
+        inc(A, itemsize);
+        inc(B, itemsize);
+        if result <> 0 then
+          exit;
+        dec(n); // both items are equal -> continue to next items
+      until n = 0
+    else
+    begin
+      result := StrCompL(A, B, n * itemsize); // binary comparison with length
+      if result <> 0 then
+        exit;
+    end;
+  end;
   result := n1 - n2;
 end;
 
@@ -5160,6 +5190,20 @@ end;
 function _BCI_DynArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
   Compared := DynArrayCompare(A, B, nil, nil, Info, {casesens=}false);
+  result := SizeOf(pointer);
+end;
+
+function _BC_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := DynArrayCompare(
+    A, B, nil, nil, TypeInfo(TObjectDynArray), {casesens=}true);
+  result := SizeOf(pointer);
+end;
+
+function _BCI_ObjArray(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
+begin
+  Compared := DynArrayCompare(
+    A, B, nil, nil, TypeInfo(TObjectDynArray), {casesens=}false);
   result := SizeOf(pointer);
 end;
 
@@ -5335,7 +5379,7 @@ var
 begin
   Info := Info^.ArrayItemType(n, ArraySize);
   if Info = nil then
-    result := StrCompL(A, B, ArraySize)
+    result := StrCompL(A, B, ArraySize) // binary comparison with length
   else
   begin
     cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
@@ -6034,8 +6078,7 @@ begin
   if Assigned(fCompare) then
     result := fCompare(A^, B^)
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:// binary comparison
-    result := StrCompL(A, B, fElemSize)
+bin:result := StrCompL(A, B, fElemSize) // binary comparison with length
   else
   begin
     rtti := fInfo.Cache.ItemInfo;
@@ -7124,35 +7167,8 @@ begin
 end;
 
 function TDynArray.Equals(B: PDynArray; IgnoreCompare, CaseSensitive: boolean): boolean;
-var
-  i, n: integer;
-  P1, P2: PAnsiChar;
 begin
-  result := false;
-  n := GetCount;
-  if (n <> B.Count) or
-     (fInfo.Cache.ItemInfo <> B.fInfo.Cache.ItemInfo) then
-    exit;
-  if Assigned(fCompare) and
-     not ignorecompare then
-  begin // use customized comparison
-    P1 := fValue^;
-    P2 := B.fValue^;
-    for i := 1 to n do
-      if fCompare(P1^, P2^) <> 0 then
-        exit
-      else
-      begin
-        inc(P1, ElemSize);
-        inc(P2, ElemSize);
-      end;
-    result := true;
-  end
-  else if not(rcfArrayItemManaged in fInfo.Flags) then
-    result := CompareMem(fValue^, B.fValue^, ElemSize * cardinal(n))
-  else
-    result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
-      fCountP, B.fCountP, fInfo.Info, casesensitive) = 0;
+  result := Compares(B, IgnoreCompare, CaseSensitive) = 0;
 end;
 
 function TDynArray.Compares(B: PDynArray; IgnoreCompare, CaseSensitive: boolean): integer;
@@ -7171,7 +7187,8 @@ begin
   end;
   if Assigned(fCompare) and
      not ignorecompare then
-  begin // use customized comparison
+  begin
+    // use customized comparison
     P1 := fValue^;
     P2 := B.fValue^;
     for i := 1 to n do
@@ -7184,7 +7201,11 @@ begin
     end;
   end
   else if not(rcfArrayItemManaged in fInfo.Flags) then
+    // binary comparison with length
     result := StrCompL(fValue^, B.fValue^, ElemSize * cardinal(n))
+  else if rcfObjArray in fInfo.Flags then
+    result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
+      fCountP, B.fCountP, TypeInfo(TObjectDynArray), casesensitive)
   else
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
       fCountP, B.fCountP, fInfo.Info, casesensitive);
@@ -8934,7 +8955,7 @@ begin
           RTTI_COMPARE[false, k] := @_BC_Ord;
           RTTI_COMPARE[true, k] := @_BC_Ord;
         end;
-        {$ifdef FPC} rkQWord, {$endif} rkInt64:
+      {$ifdef FPC} rkQWord, {$endif} rkInt64:
         begin
           RTTI_BINARYSAVE[k] := @_BS_64;
           RTTI_BINARYLOAD[k] := @_BL_64;

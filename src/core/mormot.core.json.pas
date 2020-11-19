@@ -8935,8 +8935,16 @@ begin
   // set Name and Flags from Props[]
   inherited SetParserType(aParser, aParserComplex);
   // handle default comparison
-  fCompare[true] := RTTI_COMPARE[true][Kind];
-  fCompare[false] := RTTI_COMPARE[false][Kind];
+  if rcfObjArray in fFlags then
+  begin
+    fCompare[true] := _BC_ObjArray;
+    fCompare[false] := _BCI_ObjArray;
+  end
+  else
+  begin
+    fCompare[true] := RTTI_COMPARE[true][Kind];
+    fCompare[false] := RTTI_COMPARE[false][Kind];
+  end;
   // handle default JSON serialization/unserialization
   if aParser = ptClass then
   begin
@@ -9694,7 +9702,8 @@ begin
   end;
   // initialize JSON serialization
   if Rtti.Count > 0 then
-    raise EJSONException.CreateUTF8('Rtti.Count=% at mormot.core.json start', [Rtti.Count]);
+    raise EJSONException.CreateUTF8(
+      'Rtti.Count=% at mormot.core.json start', [Rtti.Count]);
   Rtti.GlobalClass := TRttiJson;
   GetDataFromJSON := _GetDataFromJSON;
 end;
