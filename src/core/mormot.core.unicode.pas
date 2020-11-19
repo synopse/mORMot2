@@ -1376,7 +1376,7 @@ begin
     v := byte(U^);
     if v and $c0 <> $80 then
       exit; // invalid input content
-    c := (c shl 6) or v;
+    c := (c shl 6) + v;
     inc(U);
   end;
   with UTF8_EXTRA[extra] do
@@ -1415,7 +1415,7 @@ begin
     begin
       if result and $20 = 0 then
       begin
-        result := (result shl 6) or byte(P[1]) - $3080; // fast process $0..$7ff
+        result := (result shl 6) + byte(P[1]) - $3080; // fast process $0..$7ff
         inc(P, 2);
       end
       else
@@ -1709,7 +1709,7 @@ begin
             dest[0] := AnsiChar(len);
             exit; // invalid UTF-8 content
           end;
-          c := (c shl 6) or byte(source^);
+          c := (c shl 6) + byte(source^);
           inc(source);
         end;
         dec(c, UTF8_EXTRA[extra].offset);
@@ -1775,7 +1775,7 @@ begin
     begin
       if byte(source^) and $c0 <> $80 then
         goto Quit; // invalid input content
-      c := (c shl 6) or byte(source^);
+      c := (c shl 6) + byte(source^);
       inc(source);
     end;
     with UTF8_EXTRA[extra] do
@@ -1870,7 +1870,7 @@ By1:  c := byte(source^);
       begin
         if byte(source^) and $c0 <> $80 then
           goto Quit; // invalid input content
-        c := (c shl 6) or byte(source^);
+        c := (c shl 6) + byte(source^);
         inc(source);
       end;
       with UTF8_EXTRA[extra] do
@@ -2832,7 +2832,7 @@ begin
         begin
           if byte(UTF8Text^) and $c0 <> $80 then
             exit; // invalid UTF-8 content
-          c := (c shl 6) or byte(UTF8Text^);
+          c := (c shl 6) + byte(UTF8Text^);
           inc(UTF8Text);
         end;
         dec(c, UTF8_EXTRA[extra].offset);
@@ -2867,7 +2867,7 @@ begin
         begin
           if byte(UTF8Text^) and $c0 <> $80 then
             exit; // invalid UTF-8 content
-          c := (c shl 6) or byte(UTF8Text^);
+          c := (c shl 6) + byte(UTF8Text^);
           inc(UTF8Text);
         end;
         dec(c, UTF8_EXTRA[extra].offset);
@@ -2966,7 +2966,7 @@ By1:  c := byte(Source^);
         begin
           if byte(Source^) and $c0 <> $80 then
             goto Quit; // invalid UTF-8 content
-          c := (c shl 6) or byte(Source^);
+          c := (c shl 6) + byte(Source^);
           inc(Source);
         end;
         dec(c, UTF8_EXTRA[extra].offset);
@@ -4658,7 +4658,7 @@ begin
           if byte(P[i]) and $c0 <> $80 then
             exit
           else // invalid input content
-            c := (c shl 6) or byte(P[i]);
+            c := (c shl 6) + byte(P[i]);
       with UTF8_EXTRA[extra] do
       begin
         dec(c, offset);
@@ -4832,7 +4832,7 @@ begin
             if integer(L1) < 0 then
               goto neg;
             for i := 0 to extra - 1 do
-              result := (result shl 6) or PByteArray(u1)[i];
+              result := (result shl 6) + PByteArray(u1)[i];
             dec(result, UTF8_EXTRA[extra].offset);
             inc(u1, extra);
             if result and $ffffff00 = 0 then
@@ -4856,7 +4856,7 @@ begin
             if integer(L2) < 0 then
               goto pos;
             for i := 0 to extra - 1 do
-              c2 := (c2 shl 6) or PByteArray(u2)[i];
+              c2 := (c2 shl 6) + PByteArray(u2)[i];
             dec(c2, UTF8_EXTRA[extra].offset);
             inc(u2, extra);
             if c2 and $ffffff00 = 0 then
@@ -5018,7 +5018,7 @@ begin
       else if c and $20 = 0 then
       begin
         // fast direct process of $0..$7ff codepoints including accents
-        c := ((c shl 6) or byte(U^)) - $3080;
+        c := ((c shl 6) + byte(U^)) - $3080;
         inc(U);
         if c <= 255 then
         begin
@@ -5056,7 +5056,7 @@ begin
       end
       else if c and $20 = 0 then
       begin
-        c := ((c shl 6) or byte(U^)) - $3080;
+        c := ((c shl 6) + byte(U^)) - $3080;
         inc(U);
         if (c > 255) or
            (PAnsiChar(@NormToUpper)[c] <> UpperValue^) then
@@ -5208,7 +5208,7 @@ Set1:     inc(Dest);
              (Source + extra > endSource) then
             break;
           for i := 0 to extra - 1 do
-            c := (c shl 6) or byte(Source[i]);
+            c := (c shl 6) + byte(Source[i]);
           with UTF8_EXTRA[extra] do
           begin
             dec(c, offset);
