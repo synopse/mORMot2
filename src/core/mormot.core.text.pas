@@ -2375,6 +2375,12 @@ procedure GUIDToShort(const
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
 function TextToGUID(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 
+/// convert some VCL text into a TGUID
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
+// is not a valid TGUID
+function StringToGUID(const text: string): TGUID;
+
 /// convert some UTF-8 encoded text into a TGUID
 // - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
@@ -10407,6 +10413,29 @@ begin
     else
       exit;
   result := P;
+end;
+
+function StringToGUID(const text: string): TGUID;
+{$ifdef UNICODE}
+var
+  tmp: array[0..35] of byte;
+  i: integer;
+{$endif UNICODE}
+begin
+  if (length(text) = 38) and
+     (text[1] = '{') and
+     (text[38] = '}') then
+  begin
+    {$ifdef UNICODE}
+    for i := 0 to 35 do
+      tmp[i] := PWordArray(text)[i + 1];
+    if TextToGUID(@tmp, @result) <> nil then
+    {$else}
+    if TextToGUID(@text[2], @result) <> nil then
+    {$endif UNICODE}
+      exit; // conversion OK
+  end;
+  FillZero(PHash128(@result)^);
 end;
 
 function RawUTF8ToGUID(const text: RawByteString): TGUID;
