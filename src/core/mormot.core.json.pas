@@ -1637,6 +1637,8 @@ type
   // TObjectList serialized field with the global Classes.FindClass() function
   // - null will release any class instance, unless jpoNullDontReleaseObjectInstance
   // is set which will leave the instance untouched
+  // - class instances will be left untouched before parsing, unless
+  // jpoClearClassPublishedProperties is defined
   TJsonParserOption = (
     jpoIgnoreUnknownProperty,
     jpoIgnoreStringType,
@@ -1648,7 +1650,8 @@ type
     jpoAllowInt64Hex,
     jpoAllowDouble,
     jpoObjectListClassNameGlobalFindClass,
-    jpoNullDontReleaseObjectInstance);
+    jpoNullDontReleaseObjectInstance,
+    jpoClearClassPublishedProperties);
 
   /// set of options for JsonParser() parsing process
   TJsonParserOptions = set of TJsonParserOption;
@@ -7103,10 +7106,12 @@ begin
           FreeAndNil(PObject(Data)^);
         exit;
       end;
-      if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
+      if PPointer(Data)^ = nil then
+        // e.g. from _JL_DynArray for T*ObjArray
         PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
       else
-        Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
+        if jpoClearClassPublishedProperties in Ctxt.Options then
+          Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;
       if (rcfSynPersistentHook in Ctxt.Info.Flags) and
