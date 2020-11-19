@@ -4106,9 +4106,11 @@ begin
     while not (jcEndOfJSONFieldOr0 in tab[P^]) do
       inc(P); // not #0 , ] } :
     EndOfObject := P^;
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
+    if P^ <> #0 then
+      repeat
+        inc(P); // ignore trailing , ] } and any successive spaces
+      until (P^ > ' ') or
+            (P^ = #0);
   end;
   result := P;
 end;
@@ -7178,6 +7180,7 @@ begin
           break;
         end;
       end;
+      Ctxt.ParseEnd; // mimics GetJsonField() - set Ctxt.EndOfObject
       Ctxt.Info := root; // restore
     end;
     if rcfSynPersistentHook in Ctxt.Info.Flags then
