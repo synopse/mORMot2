@@ -8037,7 +8037,8 @@ var
   i: integer;
 begin
   {$ifdef FPC} // to use fast FPC SSE version
-  if length(SepStr) = 1 then
+  if (length(SepStr) = 1) and
+     (StartPos <= 1) then
     i := PosExChar(SepStr[1], Str)
   else
   {$endif FPC}
