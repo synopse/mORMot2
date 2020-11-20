@@ -5473,6 +5473,8 @@ var
   offset: integer;
 begin
   result := ptNone;
+  if Complex <> nil then
+    Complex^ := pctNone;
   FieldSize := 0;
   case ElemSize of // very fast guess of most known ArrayType
     1:
