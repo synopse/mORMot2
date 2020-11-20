@@ -2341,12 +2341,17 @@ function TSynAnsiConvert.AnsiBufferToRawUTF8(Source: PAnsiChar;
   SourceChars: cardinal): RawUTF8;
 var
   tmp: TSynTempBuffer;
+  P: pointer;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
     result := ''
   else
-    tmp.Done(AnsiBufferToUTF8(tmp.Init(SourceChars * 3), Source, SourceChars), result);
+  begin
+    P := tmp.Init(SourceChars * 3);
+    P := AnsiBufferToUTF8(P, Source, SourceChars);
+    tmp.Done(P, result);
+  end;
 end;
 
 constructor TSynAnsiConvert.Create(aCodePage: cardinal);
@@ -4052,7 +4057,7 @@ var
   t, o: PtrInt;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute NormToUpperAnsi7;
-  {$else}
+  {$else}            
   tab: PNormTableByte; // faster on PIC/ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
@@ -4064,8 +4069,9 @@ begin
     begin
       o := t - length(upArray[result]);
       if (o >= 0) and
-         IdemPCharByte(tab, PUTF8Char(pointer(text)) + o,
-            pointer(upArray[result])) then
+         ((upArray[result] = '') or
+          IdemPCharByte(tab, PUTF8Char(pointer(text)) + o,
+            pointer(upArray[result]))) then
         exit;
     end;
   end;
