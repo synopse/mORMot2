@@ -9281,11 +9281,11 @@ begin
         exit;
       len := SynLZdecompressdestlen(P + 8);
       tmp.Init(len);
-      if (len <> 0) and
-         ((SynLZDecompress1(P + 8, DataLen - 8, tmp.buf) <> len) or
-          (Hash32(tmp.buf, len) <> PCardinal(P)^)) then
-        exit;
-      SetString(Data, PAnsiChar(tmp.buf), len);
+      if (len = 0) or
+         ((SynLZDecompress1(P + 8, DataLen - 8, tmp.buf) = len) and
+          (Hash32(tmp.buf, len) = PCardinal(P)^)) then
+        SetString(Data, PAnsiChar(tmp.buf), len);
+      tmp.Done;
     end;
   result := 'synlz';
 end;
@@ -9354,7 +9354,7 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  Init(RandomLen);
+  Init(RandomLen); // ensure has 16 bytes more than RandomLen so +1 below is ok
   if RandomLen > 0 then
     FillRandom(buf, (RandomLen shr 2) + 1);
   result := buf;
