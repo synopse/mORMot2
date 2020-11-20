@@ -588,7 +588,7 @@ begin
     ctxt.EStack := stack;
     ctxt.EStackCount := 0;
     ctxt.ETimestamp := UnixTimeUTC; // fast API call
-    _RawLogException(ctxt);
+    backuphandler(ctxt);
   except
     { ignore any nested exception }
   end;
