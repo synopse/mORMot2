@@ -1748,13 +1748,11 @@ function DynArrayItemTypeLen(const DynArrayTypeName: RawUTF8): PtrInt;
 { ************** RTTI-based Registration for Custom JSON Parsing }
 
 const
-  /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + NameLen and xxx
+  /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + Name[0..1]
   // - optimized "hash table of the poor" (tm) for Find(TypeInfo) and Find(Name)
   // - should be a bit mask (i.e. power of two minus 1)
   RTTICUSTOMTYPEINFOHASH = 15;
 
-{ TODO : replace Kind+NameLen with a better distribution using primes (xxHash32) }
-  
 type
   TRttiCustom = class;
 
@@ -2080,7 +2078,7 @@ type
     Lock: TRTLCriticalSection;
     // speedup search by name e.g. from a loop
     LastPair: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustom;
-    // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0] for efficiency
+    // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0..1] 
     Pairs: array[succ(low(TRttiKind)) .. high(TRttiKind)] of
            array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
     // used to release memory used by registered customizations
@@ -6650,14 +6648,13 @@ end;
 function TRttiCustomList.Find(Info: PRttiInfo): TRttiCustom;
 var
   PEnd: PAnsiChar;
-  k: TRttiKind;
   // paranoid use of a local TPointerDynArray for refcnt? slower...
 begin
-  k := Info^.Kind;
-  if k <> rkClass then
+  if Info^.Kind <> rkClass then
   begin
     // use optimized "hash table of the poor" (tm) lists
-    result := pointer(Pairs[k, ord(Info.RawName[0]) and RTTICUSTOMTYPEINFOHASH]);
+    result := pointer(Pairs[Info^.Kind, (PtrUInt(Info.RawName[0]) xor
+      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]);
     if result = nil then
       exit;
     PEnd := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF];
@@ -6725,7 +6722,8 @@ begin
        IdemPropNameU(result.Name, Name, NameLen) then
       exit;
     // use optimized "hash table of the poor" (tm) lists
-    result := pointer(Pairs[Kind, NameLen and RTTICUSTOMTYPEINFOHASH]);
+    result := pointer(Pairs[Kind,
+      (PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH]);
     if result <> nil then
     begin
       result := FindNameInPairs(pointer(result), Name, NameLen);
@@ -6742,6 +6740,7 @@ function TRttiCustomList.Find(Name: PUTF8Char; NameLen: PtrInt;
 var
   k: TRttiKind;
 begin
+  // not very optimized, but called only at startup from Rtti.RegisterFromText()
   if Kinds = [] then
     Kinds := rkAllTypes;
   for k := low(Pairs) to high(Pairs) do
@@ -6807,7 +6806,8 @@ var
 begin
   EnterCriticalSection(Lock);
   try
-    hash := ord(Instance.Info.RawName[0]) and RTTICUSTOMTYPEINFOHASH;
+    hash := (PtrUInt(Instance.Info.RawName[0]) xor
+             PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH;
     newlist := copy(Pairs[Instance.Kind, hash]);
     n := length(newlist);
     SetLength(newlist, n + 2); // PRttiInfo/TRttiCustom pairs
@@ -7305,6 +7305,12 @@ begin
   {$endif FPC_X64MM}
   {$endif NOPATCHRTL}
   {$endif FPC_CPUX64}
+  // validate some redefined RTTI structures with TypInfo definitions
+  assert(SizeOf(TRttiVarData) = SizeOf(TVarData));
+  assert(@PRttiVarData(nil)^.VInt64 = @PVarData(nil)^.VInt64);
+  {$ifdef FPC_OR_UNICODE}
+  assert(SizeOf(TRttiRecordField) = SizeOf(TManagedField));
+  {$endif FPC_OR_UNICODE}
 end;
 
 procedure FinalizeUnit;
@@ -7317,11 +7323,6 @@ end;
 
 initialization
   InitializeUnit;
-  assert(SizeOf(TRttiVarData) = SizeOf(TVarData));
-  assert(@PRttiVarData(nil)^.VInt64 = @PVarData(nil)^.VInt64);
-  {$ifdef FPC_OR_UNICODE}
-  assert(SizeOf(TRttiRecordField) = SizeOf(TManagedField));
-  {$endif FPC_OR_UNICODE}
 
 finalization
   FinalizeUnit;
