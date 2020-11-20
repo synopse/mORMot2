@@ -7603,41 +7603,41 @@ begin
       UpperCopy255Buf(tmp{%H-}, Item, PStrLen(Item - _STRLEN)^) - {%H-}tmp);
 end;
 
-function HashSynUnicode(const Item: SynUnicode; Hasher: THasher): cardinal;
+function HashSynUnicode(Item: PSynUnicode; Hasher: THasher): cardinal;
 begin
-  if PtrUInt(Item) = 0 then
+  if PtrUInt(Item^) = 0 then
     result := 0
   else
-    result := Hasher(0, Pointer(Item), length(Item) * 2);
+    result := Hasher(0, Pointer(Item^), length(Item^) * 2);
 end;
 
-function HashSynUnicodeI(const Item: SynUnicode; Hasher: THasher): cardinal;
+function HashSynUnicodeI(Item: PSynUnicode; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
-  if PtrUInt(Item) = 0 then
+  if PtrUInt(Item^) = 0 then
     result := 0
   else
-    result := Hasher(0, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item) - {%H-}tmp);
+    result := Hasher(0, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp);
 end;
 
-function HashWideString(const Item: WideString; Hasher: THasher): cardinal;
+function HashWideString(Item: PWideString; Hasher: THasher): cardinal;
 begin // WideString internal size is in bytes, not WideChar
-  if PtrUInt(Item) = 0 then
+  if PtrUInt(Item^) = 0 then
     result := 0
   else
-    result := Hasher(0, Pointer(Item), Length(Item) * 2);
+    result := Hasher(0, Pointer(Item^), Length(Item^) * 2);
 end;
 
-function HashWideStringI(const Item: WideString; Hasher: THasher): cardinal;
+function HashWideStringI(Item: PWideString; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
-  if PtrUInt(Item) = 0 then
+  if PtrUInt(Item^) = 0 then
     result := 0
   else
     result := Hasher(0, tmp{%H-},
-      UpperCopy255W(tmp{%H-}, pointer(Item), Length(Item)) - {%H-}tmp);
+      UpperCopy255W(tmp{%H-}, pointer(Item^), Length(Item^)) - {%H-}tmp);
 end;
 
 function HashPtrUInt(Item: pointer; Hasher: THasher): cardinal;
