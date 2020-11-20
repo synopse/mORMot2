@@ -1427,7 +1427,6 @@ asm
         test    edx, edx
         jz      @0
         jmp     @align
-        db      $8D, $0B4, $26, $00, $00, $00, $00 // manual @by8 align 16
 @a:     {$ifdef FPC}
         crc32   eax, byte ptr[edx]
         {$else} // oldest Delphi don't support these opcodes
@@ -1467,11 +1466,11 @@ asm
         {$endif}
 @0:     not     eax
         ret
-@by8:   {$ifdef FPC}
-        crc32   eax, dword ptr[edx]
+        {$ifdef FPC}
+@by8:   crc32   eax, dword ptr[edx]
         crc32   eax, dword ptr[edx + 4]
         {$else}
-        db      $F2, $0F, $38, $F1, $02
+@by8:   db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
         {$endif FPC}
         add     edx, 8

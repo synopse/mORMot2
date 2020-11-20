@@ -9106,8 +9106,12 @@ begin
   {$ifdef CRC32C_X64}
   if (cfSSE42 in CpuFeatures) and
      (cfAesNi in CpuFeatures) then
+  begin
     // use SSE4.2+pclmulqdq instructions
     crc32c := @crc32c_sse42_aesni;
+    DefaultHasher := @crc32c_sse42_aesni;
+    InterningHasher := @crc32c_sse42_aesni;
+  end;
   {$endif CRC32C_X64}
   if cfSSE41 in CpuFeatures then
   begin

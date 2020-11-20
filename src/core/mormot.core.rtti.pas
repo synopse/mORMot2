@@ -131,10 +131,28 @@ type
   ///  TTypeKind enumerate as defined in Delphi 6 and up
   // - dkUString and following appear only since Delphi 2009
   TDelphiType = (
-    dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
-    dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
-    dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
-    dkUString, dkClassRef, dkPointer, dkProcedure);
+    dkUnknown,
+    dkInteger,
+    dkChar,
+    dkEnumeration,
+    dkFloat,
+    dkString,
+    dkSet,
+    dkClass,
+    dkMethod,
+    dkWChar,
+    dkLString,
+    dkWString,
+    dkVariant,
+    dkArray,
+    dkRecord,
+    dkInterface,
+    dkInt64,
+    dkDynArray,
+    dkUString,
+    dkClassRef,
+    dkPointer,
+    dkProcedure);
 
 const
   /// convert our TRttiKind to Delphi's TTypeKind enumerate
@@ -159,10 +177,30 @@ const
   /// available type families for Delphi 6 and up, similar to typinfo.pas
   // - redefined here to leverage FPC and Delphi compatibility as much as possible
   TRttiKind = (
-    rkUnknown, rkInteger, rkChar, rkEnumeration, rkFloat,
-    rkSString, rkSet, rkClass, rkMethod, rkWChar, rkLString, rkWString,
-    rkVariant, rkArray, rkRecord, rkInterface, rkInt64, rkDynArray
-    {$ifdef UNICODE}, rkUString, rkClassRef, rkPointer, rkProcedure {$endif});
+    rkUnknown,
+    rkInteger,
+    rkChar,
+    rkEnumeration,
+    rkFloat,
+    rkSString,
+    rkSet,
+    rkClass,
+    rkMethod,
+    rkWChar,
+    rkLString,
+    rkWString,
+    rkVariant,
+    rkArray,
+    rkRecord,
+    rkInterface,
+    rkInt64,
+    rkDynArray
+    {$ifdef UNICODE},
+    rkUString,
+    rkClassRef,
+    rkPointer,
+    rkProcedure
+    {$endif UNICODE});
 
 const
   /// potentially managed types in TRttiKind enumerates
@@ -6681,7 +6719,7 @@ begin
      (Name <> nil) and
      (NameLen > 0) then
   begin
-    // try latest found value for huge speed up e.g. calling from TObjectList
+    // try latest found value e.g. calling from JSONRetrieveObjectRttiCustom()
     result := LastPair[Kind];
     if (result <> nil) and
        IdemPropNameU(result.Name, Name, NameLen) then

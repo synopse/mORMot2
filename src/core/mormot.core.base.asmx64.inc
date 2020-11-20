@@ -1495,7 +1495,7 @@ asm // rcx=src, edx=size, r8=dest
         jnz     @26
         movzx   r11, byte ptr [rcx]
         add     rcx, 1
-        lea     r11, [r11 + 12]
+        lea     r11, [r11 + 12H]
 @26:    mov     r14, qword ptr [off + rbx * 8] // r14=o
         mov     rbx, r8
         xor     rsi, rsi
