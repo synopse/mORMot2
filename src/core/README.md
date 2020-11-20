@@ -141,6 +141,7 @@ Several Indexing and Search Engines, as used by other parts of the framework
 - ScanUTF8, GLOB and SOUNDEX Text Search
 - Versatile Expression Search Engine
 - *Bloom Filter* Probabilistic Index
+- Binary Buffers Delta Compression
 - `TDynArray` Low-Level Binary Search
 - `TSynFilter` and `TSynValidate` Processing Classes
 - Cross-Platform `TSynTimeZone` Time Zones

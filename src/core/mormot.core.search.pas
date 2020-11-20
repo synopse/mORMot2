@@ -11,6 +11,7 @@ unit mormot.core.search;
     - ScanUTF8, GLOB and SOUNDEX Text Search
     - Versatile Expression Search Engine
     - Bloom Filter Probabilistic Index
+    - Binary Buffers Delta Compression
     - TDynArray Low-Level Binary Search and Iteration
     - TSynFilter and TSynValidate Processing Classes
     - Cross-Platform TSynTimeZone Time Zones
@@ -698,6 +699,8 @@ procedure ZeroCompressXor(New, Old: PAnsiChar; Len: cardinal;
 function ZeroDecompressOr(P, Dest: PAnsiChar; Len, DestLen: integer): boolean;
 
 
+{ ****************** Binary Buffers Delta Compression }
+
 const
   /// normal pattern search depth for DeltaCompress()
   // - gives good results on most content
@@ -794,12 +797,11 @@ function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
   Value: PUTF8Char; ValueLen: PtrInt; CaseSensitive: boolean): PtrInt;
 
 type
-    /// allows to iterate over a TDynArray.SaveTo binary buffer
+  /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
   // to allocate all items at once, but retrieve items one by one
   TDynArrayLoadFrom = object
   protected
-    ArrayRtti: TRttiCustom;
     ArrayLoad: TRttiBinaryLoad;
   public
     /// how many items were saved in the TDynArray.SaveTo binary buffer
@@ -812,6 +814,8 @@ type
     // - after Step() returned false, points just after the binary buffer,
     // like a regular TDynArray.LoadFrom
     Reader: TFastReader;
+    /// RTTI information of the unserialized dynamic array
+    ArrayRtti: TRttiCustom;
     /// initialize iteration over a TDynArray.SaveTo binary buffer
     // - returns true on success, with Count and Position being set
     // - returns false if the supplied binary buffer is not correct
@@ -833,6 +837,7 @@ type
     // - this function won't increase the internal Current pointer
     // - returns true if Field was filled with one value, or false if all
     // items were read, and Position contains the end of the binary buffer
+    // - Field is expected to be of ArrayRtti.ArrayFirstField type
     // - could be called before Step(), to pre-allocate a new item instance,
     // or update an existing instance
     function FirstField(Field: pointer): boolean;
@@ -4095,6 +4100,9 @@ begin
   end;
   result := crc = PCardinal(P)^;
 end;
+
+
+{ ****************** Binary Buffers Delta Compression }
 
 function Max(a, b: PtrInt): PtrInt; {$ifdef HASINLINE}inline;{$endif}
 begin
