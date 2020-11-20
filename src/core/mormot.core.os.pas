@@ -3017,7 +3017,7 @@ begin
         ctxt.ETimestamp := UnixTimeUTC;
         ctxt.EStack := pointer(Frame);
         ctxt.EStackCount := FrameCount;
-        _RawLogException(ctxt);
+        backuphandler(ctxt);
       except
         { ignore any nested exception }
       end;
