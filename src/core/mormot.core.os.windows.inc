@@ -2114,7 +2114,7 @@ begin
   end;
   fHandle := CreateService(fSCHandle,
     pointer(Name), pointer(DisplayName), DesiredAccess, ServiceType, StartType,
-    ErrorControl, pointer(Exe), pointer(OrderGroup), nil, pointer(Dependencies),
+    ErrorControl, pointer({%H-}Exe), pointer(OrderGroup), nil, pointer(Dependencies),
     pointer(Username), pointer(Password));
   if fHandle = 0 then
   begin
@@ -2787,7 +2787,7 @@ begin
   if CreateProcessW(nil, pointer(wcmd), nil, nil, false,
     CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
     DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
-    pointer(wenv), pointer(wpath), startupinfo, processinfo) then
+    pointer({%H-}wenv), pointer(wpath), startupinfo, processinfo) then
   begin
     if waitfor then
       if WaitForSingleObject(processinfo.hProcess, INFINITE) = WAIT_FAILED then

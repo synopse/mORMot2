@@ -315,7 +315,7 @@ var
     writeln(' ', name);
     writeln(StringOfChar('-', length(name) + 2));
     TextColor(ccGreen);
-    if copyright <> '' then
+    if {%H-}copyright <> '' then
       writeln(' ', copyright);
     writeln;
     TextColor(ccLightGray);
