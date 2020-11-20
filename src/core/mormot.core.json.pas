@@ -5646,6 +5646,7 @@ var
 begin
   BinarySave(Data, temp, Info, Kinds);
   WrBase64(temp.buf, temp.len, withMagic);
+  temp.Done;
 end;
 
 procedure TTextWriter.Add(const Format: RawUTF8; const Values: array of const;
@@ -8791,14 +8792,14 @@ begin
     exit;
   fSafe.Lock;
   try
-    if fKeys.LoadFromJSON(pointer(k), nil, CustomVariantOptions) <> nil then
-      if fValues.LoadFromJSON(pointer(v), nil, CustomVariantOptions) <> nil then
-        if fKeys.Count = fValues.Count then
-        begin
-          SetTimeouts;
-          fKeys.Rehash; // warning: duplicated keys won't be identified
-          result := true;
-        end;
+    if (fKeys.LoadFromJSON(pointer(k), nil, CustomVariantOptions) <> nil) and
+       (fValues.LoadFromJSON(pointer(v), nil, CustomVariantOptions) <> nil) and
+       (fKeys.Count = fValues.Count) then
+      begin
+        SetTimeouts;
+        fKeys.Rehash; // warning: duplicated keys won't be identified
+        result := true;
+      end;
   finally
     fSafe.UnLock;
   end;
