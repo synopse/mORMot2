@@ -3159,7 +3159,7 @@ begin
   end
   else
   begin
-    if KeepNotFoundValue then
+    if not KeepNotFoundValue then
       {$ifdef FPC} Finalize(Value); {$else} Value := ''; {$endif}
     result := false;
   end;
