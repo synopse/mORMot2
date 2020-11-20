@@ -2747,7 +2747,7 @@ begin
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
     FillcharFast(U256, SizeOf(U256), 0);
-    if Unicode_AnsiToWide(A256, U256, 256, 256, fCodePage) <> 256 then
+    if PtrUInt(inherited AnsiBufferToUnicode(U256, A256, 256)) - PtrUInt(@U256) > 512 then
       // warning: CreateUTF8() uses UTF8ToString() -> call CreateFmt() now
       raise ESynUnicode.CreateFmt('OS error for %s.Create(%d)',
         [ClassName, aCodePage]);
