@@ -4956,7 +4956,7 @@ begin
       n := SourceExtCount^
     else
       n := PDALen(PAnsiChar(Source) - _DALEN)^ + _DAOFF;
-    DynArrayNew(Dest^, n, itemsize); // allocate zeroed memory
+    DynArrayNew(Dest, n, itemsize); // allocate zeroed memory
     CopySeveral(Dest^, pointer(Source), n, iteminfo, itemsize);
   end;
 end;
