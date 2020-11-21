@@ -1093,7 +1093,6 @@ type
   // - it would use fast hardware AES-NI opcode, if available
   TAESPRNG = class(TAESLocked)
   protected
-    fCTR: THash128Rec; // we use a litle-endian CTR
     fBytesSinceSeed: PtrUInt;
     fSeedAfterBytes: PtrUInt;
     fAESKeySize: integer;
@@ -5430,7 +5429,7 @@ begin
     EnterCriticalSection(fSafe);
     try
       fAES.EncryptInit(key.Lo, fAESKeySize);
-      crcblocks(@fCTR, @key.Hi, 2);
+      crcblocks(@TAESContext(fAES.Context).iv, @key.Hi, 2);
       fBytesSinceSeed := 0;
     finally
       LeaveCriticalSection(fSafe);
@@ -5446,10 +5445,13 @@ begin
   if fBytesSinceSeed > fSeedAfterBytes then
     Seed;
   EnterCriticalSection(fSafe);
-  TAESContext(fAES.Context).DoBlock(fAES.Context, fCtr, Block{%H-});
-  inc(fCtr.L);
-  if fCtr.L = 0 then
-    inc(fCtr.H);
+  with TAESContext(fAES.Context) do
+  begin
+    DoBlock(rk, iv, Block{%H-});
+    inc(iv.L);
+    if iv.L = 0 then
+      inc(iv.H);
+  end;
   inc(fBytesSinceSeed, 16);
   inc(fTotalBytes, 16);
   LeaveCriticalSection(fSafe);
@@ -5463,7 +5465,7 @@ end;
 procedure TAESPRNG.FillRandom(Buffer: pointer; Len: PtrInt);
 var
   main, remain: PtrUInt;
-  reserved: TAESContext; // local copy if Seed is called in another thread
+  aes: TAESContext; // local copy if Seed is called in another thread
 begin
   // prepare the AES rounds
   if Len <= 0 then
@@ -5475,11 +5477,13 @@ begin
   if fBytesSinceSeed > fSeedAfterBytes then
     Seed;
   EnterCriticalSection(fSafe);
-  reserved := TAESContext(fAES);
-  reserved.iv := fCtr;
-  inc(fCtr.L, main);
-  if fCtr.L < reserved.iv.L then
-    inc(fCtr.H);
+  MoveFast(fAES, aes, SizeOf(aes));
+  with TAESContext(fAES.Context).iv do
+  begin
+    inc(L, main);
+    if L < aes.iv.L then
+      inc(H);
+  end;
   Len := main shl AESBlockShift;
   inc(fBytesSinceSeed, Len);
   inc(fTotalBytes, Len);
@@ -5489,21 +5493,21 @@ begin
   // thread-safe unlocked AES computation
   if main <> 0 then
     repeat
-      TAESContext(fAES.Context).DoBlock(fAES.Context, reserved.iv, Buffer^);
+      aes.DoBlock(aes, aes.iv, Buffer^);
       {$ifdef CPU64}
-      inc(reserved.iv.L);
-      if reserved.iv.L = 0 then
-        inc(reserved.iv.H);
+      inc(aes.iv.L);
+      if aes.iv.L = 0 then
+        inc(aes.iv.H);
       {$else}
-      inc(reserved.iv.c0);
-      if reserved.iv.c0 = 0 then
+      inc(aes.iv.c0);
+      if aes.iv.c0 = 0 then
       begin
-        inc(reserved.iv.c1);
-        if reserved.iv.c1 = 0 then
+        inc(aes.iv.c1);
+        if aes.iv.c1 = 0 then
         begin
-          inc(reserved.iv.c2);
-          if reserved.iv.c2 = 0 then
-            inc(reserved.iv.c3);
+          inc(aes.iv.c2);
+          if aes.iv.c2 = 0 then
+            inc(aes.iv.c3);
         end;
       end;
       {$endif CPU64}
@@ -5512,8 +5516,8 @@ begin
     until main = 0;
   if remain <> 0 then
   begin
-    TAESContext(fAES.Context).DoBlock(fAES.Context, fCTR.b, reserved.iv);
-    MoveFast(reserved.iv, Buffer^, remain);
+    aes.DoBlock(aes, aes.iv, aes.iv);
+    MoveFast(aes.iv, Buffer^, remain);
   end;
 end;
 
