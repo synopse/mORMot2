@@ -2727,19 +2727,22 @@ end;
 
 procedure TTestCoreBase._Random32;
 var
-  i: integer;
+  i: PtrInt;
   c: array[0..1000] of cardinal;
+  timer: TPrecisionTimer;
 begin
   for i := 0 to high(c) do
     c[i] := Random32;
   QuickSortInteger(@c, 0, high(c));
   for i := 1 to high(c) do
     Check(c[i + 1] <> c[i], 'unique Random32');
+  timer.Start;
   Check(Random32(0) = 0);
   for i := 1 to 100000 do
     Check(Random32(i) < cardinal(i));
   for i := 0 to 100000 do
     Check(Random32(maxInt - i) < cardinal(maxInt - i));
+  NotifyTestSpeed('Random32', 100000 * 2, 100000 * 8, @timer);
 end;
 
 procedure TTestCoreBase._TRawUTF8Interning;

@@ -479,17 +479,20 @@ end;
 
 procedure TTestCoreCrypto._TAESPNRG;
 var
+  p: TAESPRNG;
   b1, b2: TAESBlock;
   a1, a2: TAESPRNG;
-  s1, s2, split: RawByteString;
+  s1, s2, split, big: RawByteString;
   c: cardinal;
   d: double;
   e: TSynExtended;
-  i, stripes: integer;
+  i, stripes: PtrInt;
   clo, chi, dlo, dhi, elo, ehi: integer;
+  timer: TPrecisionTimer;
 begin
-  TAESPRNG.Main.FillRandom(b1);
-  TAESPRNG.Main.FillRandom(b2);
+  p := TAESPRNG.Main;
+  p.FillRandom(b1);
+  p.FillRandom(b2);
   Check(not IsEqual(b1, b2));
   Check(not CompareMem(@b1, @b2, sizeof(b1)));
   clo := 0;
@@ -567,16 +570,27 @@ begin
             (dlo <= 2100), 'RandomDouble distribution dlo=%', [dlo]);
   CheckUTF8((elo >= 1800) and
             (elo <= 2100), 'RandomExt distribution elo=%', [elo]);
-  s1 := TAESPRNG.Main.FillRandom(100);
+  s1 := p.FillRandom(100);
   for i := 1 to length(s1) do
     for stripes := 0 to 10 do
     begin
-      split := TAESPRNG.Main.AFSplit(pointer(s1)^, i, stripes);
+      split := p.AFSplit(pointer(s1)^, i, stripes);
       check(length(split) = i * (stripes + 1));
       check(TAESPRNG.AFUnsplit(split, pointer(s2)^, i));
       check(CompareMem(pointer(s1), pointer(s2), i));
     end;
   check(PosEx(s1, split) = 0);
+  timer.Start;
+  Check(p.Random32(0) = 0);
+  for i := 1 to 100000 do
+    Check(p.Random32(i) < cardinal(i));
+  for i := 0 to 100000 do
+    Check(p.Random32(maxInt - i) < cardinal(maxInt - i));
+  NotifyTestSpeed('Random32', 100000 * 2, 100000 * 8, @timer);
+  SetLength(big, 200000);
+  timer.Start;
+  p.FillRandom(pointer(big), length(big));
+  NotifyTestSpeed('FillRandom', 1, length(big), @timer);
 end;
 
 procedure TTestCoreCrypto.CryptData(dpapi: boolean);
