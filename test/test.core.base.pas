@@ -16,6 +16,7 @@ uses
   mormot.core.buffers,
   mormot.core.unicode,
   mormot.core.rtti,
+  mormot.core.variants,
   mormot.core.json,
   mormot.core.data,
   mormot.core.datetime,
@@ -1592,11 +1593,11 @@ begin
     {$ifdef FPC}
     h := 2648774601;
     {$else}
-    h := $A29C10E;
+    h := 1157949341;
     {$endif FPC}
   {$else}
     {$ifdef UNICODE}
-    h := $62F9C106;
+    h := 3723814805;
     {$else}
     h := $CAA117C1;
     {$endif UNICODE}
@@ -2240,6 +2241,8 @@ var
   s: RawByteString;
   st: string;
   g, g2: TGUID;
+  h, h2: THash512Rec;
+  pt: TRttiParserType;
 const
   GUID: TGUID = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 begin
@@ -2271,12 +2274,22 @@ begin
     Check(not IsEqualGUID(g2, g));
     Check(not IsEqualGUID(RawUTF8ToGUID(s), g));
   end;
-  {$ifdef ISDELPHI2010}
-  s := RecordSaveJSON(g, TypeInfo(TGUID));
+  // oldest Delphi can't compile TypeInfo(TGUID) -> use PT_INFO[ptGUID]
+  s := RecordSaveJSON(g, PT_INFO[ptGUID]);
   FillCharFast(g2, sizeof(g2), 0);
-  Check(RecordLoadJSON(g2, pointer(s), TypeInfo(TGUID)) <> nil);
+  Check(RecordLoadJSON(g2, pointer(s), PT_INFO[ptGUID]) <> nil);
   Check(IsEqualGUID(g2, g));
-  {$endif ISDELPHI2010}
+  FillCharFast(h, SizeOf(h), 1);
+  for pt := ptGUID to ptHash512 do
+  begin
+    FillRandom(@h, PT_SIZE[pt] shr 2);
+    s := SaveJSON(h, PT_INFO[pt]); // ptHash* are not record types
+    CheckUTF8(TextToVariantNumberType(pointer(s)) = varString,
+      '%:%', [PT_INFO[pt].RawName, s]);
+    FillCharFast(h2, SizeOf(h2), 0);
+    Check(LoadJSON(h2, pointer(s), PT_INFO[pt]) <> nil);
+    CheckUTF8(CompareMem(@h, @h2, PT_SIZE[pt]), '%', [PT_INFO[pt].RawName]);
+  end;
 end;
 
 procedure TTestCoreBase._ParseCommandArguments;

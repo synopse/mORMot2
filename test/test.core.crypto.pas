@@ -565,7 +565,7 @@ begin
             (clo <= 1100), 'Random32 distribution clo=%', [clo]);
   CheckUTF8((dlo >= 1800) and
             (dlo <= 2100), 'RandomDouble distribution dlo=%', [dlo]);
-  CheckUTF8((elo >= 1900) and
+  CheckUTF8((elo >= 1800) and
             (elo <= 2100), 'RandomExt distribution elo=%', [elo]);
   s1 := TAESPRNG.Main.FillRandom(100);
   for i := 1 to length(s1) do
