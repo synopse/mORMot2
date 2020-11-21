@@ -1120,7 +1120,7 @@ type
     procedure FillRandom(out Buffer: THash256); overload;
     /// fill a binary buffer with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
-    procedure FillRandom(Buffer: pointer; Len: integer); overload; virtual;
+    procedure FillRandom(Buffer: pointer; Len: PtrInt); overload; virtual;
     /// returns a binary buffer filled with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandom(Len: integer): RawByteString; overload;
@@ -1131,8 +1131,12 @@ type
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandomHex(Len: integer): RawUTF8;
     /// returns a 32-bit unsigned random number
+    // - is twice slower than Lecuyer's Random32 of mormot.core.bas unit, but
+    // is cryptographic secure
     function Random32: cardinal; overload;
     /// returns a 32-bit unsigned random number, with a maximum value
+    // - is twice slower than Lecuyer's Random32 of mormot.core.bas unit, but
+    // is cryptographic secure
     function Random32(max: cardinal): cardinal; overload;
     /// returns a 64-bit unsigned random number
     function Random64: QWord;
@@ -1256,7 +1260,7 @@ type
     /// fill a binary buffer with some pseudorandom data
     // - this method is thread-safe
     // - is just a wrapper around FillSystemRandom()
-    procedure FillRandom(Buffer: pointer; Len: integer); override;
+    procedure FillRandom(Buffer: pointer; Len: PtrInt); override;
     /// called to force the internal generator to re-seed its private key
     // - won't do anything for the Operating System pseudorandom source
     procedure Seed; override;
@@ -5456,7 +5460,7 @@ begin
   FillRandom(@Buffer, SizeOf(Buffer));
 end;
 
-procedure TAESPRNG.FillRandom(Buffer: pointer; Len: integer);
+procedure TAESPRNG.FillRandom(Buffer: pointer; Len: PtrInt);
 var
   main, remain: PtrUInt;
   reserved: TAESContext; // local copy if Seed is called in another thread
@@ -5749,7 +5753,7 @@ begin
   FillRandom(@Block, SizeOf(Block));
 end;
 
-procedure TAESPRNGSystem.FillRandom(Buffer: pointer; Len: integer);
+procedure TAESPRNGSystem.FillRandom(Buffer: pointer; Len: PtrInt);
 begin
   FillSystemRandom(Buffer, Len, false);
 end;
