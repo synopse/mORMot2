@@ -903,7 +903,8 @@ begin
     with fServer.Model.TableProps[t] do
       rec := _JsonFastFmt(
         '{tableName:?,className:?,classParent:?,fields:?,isInMormotPas:%,unitName:?,comma:%}',
-        [NULL_OR_TRUE[(Props.Table = TAuthGroup) or (Props.Table = TAuthUser)],
+        [NULL_OR_TRUE[(Props.Table = TAuthGroup) or
+         (Props.Table = TAuthUser)],
          NULL_OR_COMMA[t < fServer.Model.TablesMax]],
          [Props.SQLTableName, Props.Table.ClassName,
           Props.Table.ClassParent.ClassName,

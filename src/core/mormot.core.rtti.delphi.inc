@@ -250,11 +250,13 @@ begin
       case PropWrap(StoredProc).Kind of
         ptField:
           begin
-            result := PBoolean(PtrUInt(Instance) + PtrUInt(StoredProc) and $00ffffff)^;
+            result := PBoolean(
+              PtrUInt(Instance) + PtrUInt(StoredProc) and $00ffffff)^;
             exit;
           end;
         ptVirtual:
-          call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(StoredProc) and $00ffffff)^;
+          call.Code := PPointer(
+            PPtrUInt(Instance)^ + PtrUInt(StoredProc) and $00ffffff)^;
         else
           call.Code := pointer(StoredProc);
       end;
@@ -276,7 +278,8 @@ begin
       if (SetProc <> nil) and
          (PropWrap(SetProc).Kind = ptField) then
       begin
-        Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
+        Call.Data := pointer(
+          PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
         result := rpcField;
       end
       else
@@ -288,14 +291,16 @@ begin
       ptField:
         begin
           // GetProc is an offset to the instance fields
-          Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
+          Call.Data := pointer(
+            PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
           result := rpcField;
           exit;
         end;
       ptVirtual:
         // GetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from GetterCall()
-          Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(GetProc) and $00ffffff)^;
+          Call.Code := PPointer(
+            PPtrUInt(Instance)^ + PtrUInt(GetProc) and $00ffffff)^;
     else
       // ptStatic: GetProc is the method code itself
       Call.Code := pointer(GetProc);
@@ -317,7 +322,8 @@ begin
       if (GetProc <> nil) and
          (PropWrap(GetProc).Kind = ptField) then
       begin
-        Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
+        Call.Data := pointer(
+          PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
         result := rpcField;
       end
       else
@@ -329,14 +335,16 @@ begin
       ptField:
         begin
           // SetProc is an offset to the instance fields
-          Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
+          Call.Data := pointer(
+            PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
           result := rpcField;
           exit;
         end;
       ptVirtual:
         // SetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from SetterCall()
-          Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(SetProc) and $00ffffff)^;
+          Call.Code := PPointer(
+            PPtrUInt(Instance)^ + PtrUInt(SetProc) and $00ffffff)^;
     else
       // ptStatic: SetProc is the method code itself
       Call.Code := pointer(SetProc);
@@ -400,7 +408,14 @@ begin
     begin
       with result[f] do
       begin
-        TypeInfo := PPointer(p^.Field.TypeRef)^;
+        TypeInfo := pointer(p^.Field.TypeRef);
+        if TypeInfo = nil then
+        begin
+          // this field has no RTTI -> we can't trust it for serialization
+          result := nil;
+          exit;
+        end;
+        TypeInfo := PPointer(TypeInfo)^;
         Offset := p^.Field.FldOffset;
         Name := @p^.Name;
       end;
@@ -555,7 +570,7 @@ const
     ManagedCount5: 0);
 
   _THASH128: TFakeTypeInfo = ( // stored in PT_INFO[ptHash128]
-    Kind: tkRecord;
+    Kind: tkRecord; // note: is a tkArray when HASNOSTATICRTTI
     Name8: 'THash128';
     RecSize8: SizeOf(THash128);
     ManagedCount8: 0);

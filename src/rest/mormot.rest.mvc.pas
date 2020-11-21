@@ -1333,8 +1333,8 @@ var
   var
     recJSON: RawUTF8;
   begin
-    SaveJSON(rec, PRecordDataTypeInfo, [twoForceJSONExtended,
-      twoEnumSetsAsBooleanInRecord, twoTrimLeftEnumSets], recJSON);
+    // create a TDocVariant from the binary record content
+    SaveJSON(rec, PRecordDataTypeInfo, TEXTWRITEROPTIONS_MUSTACHE, recJSON);
     TDocVariantData(result).InitJSONInPlace(
       pointer(recJSON), JSON_OPTIONS_FAST);
   end;

@@ -234,6 +234,9 @@ const
   /// maps records or dynamic arrays
   rkRecordOrDynArrayTypes = rkRecordTypes + [rkDynArray];
 
+  /// maps records or static arrays
+  rkRecordOrArrayTypes = rkRecordTypes + [rkArray];
+
   /// all recognized TRttiKind enumerates, i.e. all but rkUnknown
   rkAllTypes = [succ(low(TRttiKind))..high(TRttiKind)];
 
@@ -689,8 +692,13 @@ type
     procedure RecordManagedFields(out Fields: TRttiRecordManagedFields);
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkRecordTypes: retrieve enhanced RTTI information about all fields
-    // of this record
+    // of this record, for JSON serialization without text definition
     // - this information is currently only available since Delphi 2010
+    // - if any field has no RTTI (e.g. a static array of unmanaged type), then
+    // it will ignore this uncomplete, therefore non-useful RTTI
+    // - in practice, it may be a good habit to always define the records used
+    // within the SOA (e.g. as DTOs) calling RegisterFromText, and don't rely on
+    // this RTTI, since it will be more cross-platform, and more customizable
     function RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
     /// for rkDynArray: get the dynamic array type information of the stored item
     // - caller should ensure the type is indeed a dynamic array
@@ -1663,6 +1671,10 @@ var
   /// simple lookup to the plain RTTI type of most simple managed types
   // - nil for unmanaged types (e.g. rkOrdinals) or for more complex types
   // requering additional PRttiInfo (rkRecord, rkDynArray, rkArray...)
+  // - you can use PT_INFO[] for types with no RTTI before Delphi 2010, for
+  // instance PT_INFO[ptGUID], PT_INFO[ptHash128], PT_INFO[ptHash256] and
+  // PT_INFO[ptHash512] since oldest compilers refuse to compile TypeInfo(TGUID),
+  // TypeInfo(THash128), TypeInfo(THash256) and TypeInfo(THash512)
   PT_INFO: array[TRttiParserType] of PRttiInfo;
 
   /// simple lookup to the plain RTTI type of most simple managed types
@@ -5313,11 +5325,11 @@ const
     ptRawUTF8, ptVariant, ptWideString, ptWord);
   SORTEDCOMPLEX: array[0..SORTEDMAX] of TRttiParserComplexType = (
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
-    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
-    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
+    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
+    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctCreateTime, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctNone, pctID, pctModTime, pctRecordReference, pctRecordReferenceToBeDeleted,
-    pctRecordVersion, pctNone, pctTimeLog, pctNone, pctNone,
+    pctRecordVersion, pctNone, pctTimeLog, pctNone, 
     pctNone, pctNone, pctNone, pctNone, pctNone);
 var
   ndx: PtrInt;
@@ -5369,6 +5381,8 @@ var
   cp: integer;
 begin
   result := ptNone;
+  if Complex <> nil then
+    Complex^ := pctNone;
   if Info = nil then
     exit;
   if FirstSearchByName then
