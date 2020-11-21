@@ -1033,6 +1033,7 @@ var
   // and be called by TDynArray.LoadFromJSON method
   // - this unit will just set a wrapper raising an ERttiException
   // - link mormot.core.json.pas to have a working implementation
+  // - rather call LoadJson() from mormot.core.json than this low-level function
   GetDataFromJSON: procedure(Data: pointer; var JSON: PUTF8Char;
     EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);

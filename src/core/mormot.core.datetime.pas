@@ -993,14 +993,16 @@ begin
   result := Iso8601ToDateTimePUTF8Char(pointer(S), length(S));
 end;
 
-procedure YearToPChar2(tab: PWordArray; Y: PtrUInt; P: PUTF8Char);
-  {$ifdef HASINLINE}inline;{$endif}
-var d100: PtrUInt;
+{$ifndef CPUX86NOTPIC}
+procedure YearToPChar2(tab: PWordArray; Y: PtrUInt; P: PUTF8Char); inline;
+var
+  d100: TDiv100Rec;
 begin
-  d100 := Y div 100;
-  PWordArray(P)[0] := tab[d100];
-  PWordArray(P)[1] := tab[Y-(d100*100)];
+  Div100(Y, d100{%H-});
+  PWordArray(P)[0] := tab[d100.D];
+  PWordArray(P)[1] := tab[d100.M];
 end;
+{$endif CPUX86NOTPIC}
 
 function DateToIso8601PChar(P: PUTF8Char; Expanded: boolean;
   Y, M, D: PtrUInt): PUTF8Char;
@@ -1010,14 +1012,14 @@ var
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 begin
   {$ifdef CPUX86NOTPIC}
   YearToPChar(Y, P);
   {$else}
   tab := @TwoDigitLookupW;
   YearToPChar2(tab, Y, P);
-  {$endif}
+  {$endif CPUX86NOTPIC}
   inc(P, 4);
   if Expanded then
   begin
@@ -1037,11 +1039,12 @@ end;
 
 function TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean;
   H, M, S, MS: PtrUInt; FirstChar: AnsiChar; WithMS: boolean): PUTF8Char;
-var {$ifdef CPUX86NOTPIC}
-    tab: TWordArray absolute TwoDigitLookupW;
-    {$else}
-    tab: PWordArray;
-    {$endif CPUX86NOTPIC}
+var
+  {$ifdef CPUX86NOTPIC}
+  tab: TWordArray absolute TwoDigitLookupW;
+  {$else}
+  tab: PWordArray;
+  {$endif CPUX86NOTPIC}
 begin // use Thhmmss[.sss] format
   if FirstChar <> #0 then
   begin
@@ -1573,7 +1576,7 @@ end;
 
 procedure TSynSystemTime.AddLogTime(WR: TBaseWriter);
 var
-  y, d100: PtrUInt;
+  d100: TDiv100Rec;
   P: PUTF8Char;
   {$ifdef CPUX86NOTPIC}
   tab: TWordArray absolute TwoDigitLookupW;
@@ -1588,18 +1591,16 @@ begin
     P := WR.B + 1;
   end;
   {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
-  y := Year;
-  d100 := y div 100;
-  PWord(P)^ := tab[d100];
-  PWord(P + 2)^ := tab[y - (d100 * 100)];
-  PWord(P + 4)^ := tab[Month];
-  PWord(P + 6)^ := tab[Day];
+  Div100(Year, d100{%H-});
+  PWord(P)^ := tab[d100.D];
+  PWord(P + 2)^ := tab[d100.M];
+  PWord(P + 4)^ := tab[PtrUInt(Month)];
+  PWord(P + 6)^ := tab[PtrUInt(Day)];
   P[8] := ' ';
-  PWord(P + 9)^  := tab[Hour];
-  PWord(P + 11)^ := tab[Minute];
-  PWord(P + 13)^ := tab[Second];
-  y := Millisecond;
-  PWord(P + 15)^ := tab[y shr 4];
+  PWord(P + 9)^  := tab[PtrUInt(Hour)];
+  PWord(P + 11)^ := tab[PtrUInt(Minute)];
+  PWord(P + 13)^ := tab[PtrUInt(Second)];
+  PWord(P + 15)^ := tab[PtrUInt(Millisecond) shr 4];
   inc(WR.B, 17);
 end;
 

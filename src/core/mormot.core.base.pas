@@ -8861,7 +8861,7 @@ begin // this code is faster than Borland's original str() or IntToStr()
       break;
     end;
     dec(P, 2);
-    c100 := val div 100;
+    c100 := val div 100; // FPC will use fast reciprocal
     dec(val, c100 * 100);
     PWord(P)^ := tab[val];
     val := c100;
@@ -9927,7 +9927,7 @@ var d100: PtrUInt;
     tab: PWordArray;
 begin
   tab := @TwoDigitLookupW;
-  d100 := Y div 100;
+  d100 := Y div 100; // FPC will use fast reciprocal
   PWordArray(P)[0] := tab[d100];
   PWordArray(P)[1] := tab[Y-(d100*100)];
 end;
