@@ -443,6 +443,13 @@ type
 
 
 const
+  /// Mustache-friendly JSON Serialization Options
+  // - as used e.g. from mormot.rest.mvc Data Context from Cookies
+  TEXTWRITEROPTIONS_MUSTACHE =
+     [twoForceJSONExtended,
+      twoEnumSetsAsBooleanInRecord,
+      twoTrimLeftEnumSets];
+
   /// this constant can be used to define as JSON a tag value
   NULL_OR_TRUE: array[boolean] of RawUTF8 = (
     'null', 'true');
@@ -914,7 +921,8 @@ procedure TSynMustacheParser.AddTag(aKind: TSynMustacheTagKind;
 var
   P: PUTF8Char;
 begin
-  if (aStart = nil) or (aEnd = nil) then
+  if (aStart = nil) or
+     (aEnd = nil) then
   begin
     aStart := fScanStart;
     aEnd := fScanEnd;

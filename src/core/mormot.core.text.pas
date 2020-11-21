@@ -1223,6 +1223,15 @@ function HtmlEscapeString(const text: string;
   fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUTF8;
 
 
+const
+  /// JSON serialization options focusing of sets support
+  // - as used e.g. by TTextWriter.AddRecordJSON/AddDynArrayJSON and
+  // TDynArray.SaveJSON methods, and SaveJSON/RecordSaveJson functions
+  // - to be used as TEXTWRITEROPTIONS_TEXTSET[EnumSetsAsText]
+  TEXTWRITEROPTIONS_SETASTEXT: array[boolean] of TTextWriterOptions = (
+    [twoFullSetsAsStar],
+    [twoFullSetsAsStar, twoEnumSetsAsTextInRecord]);
+
 type
   /// callback used to echo each line of TEchoWriter class
   // - should return TRUE on success, FALSE if the log was not echoed: but
@@ -4778,7 +4787,7 @@ begin
       newsize := fTotalFileSize - fInitialStreamPosition;
       if (fTempBufSize < 49152) and
          (newsize > PtrUInt(fTempBufSize) * 4) then
-        // tune small (stack-alloc?) buffer to grow by twice its size
+        // tune small (stack-allocated?) buffer to grow by twice its size
         newsize := fTempBufSize * 2
       else if (fTempBufSize < 1 shl 20) and
               (newsize > 40 shl 20) then
@@ -4791,13 +4800,13 @@ begin
       begin
         fTempBufSize := newsize;
         if twoBufferIsExternal in fCustomOptions then
-          // use heap, not stack
+          // use heap, not stack from now on
           exclude(fCustomOptions, twoBufferIsExternal)
         else
-          // with big content comes bigger buffer
+          // from big content comes bigger buffer
           FreeMem(fTempBuf);
         GetMem(fTempBuf, fTempBufSize);
-        BEnd := fTempBuf + (fTempBufSize - 16);
+        BEnd := fTempBuf + (fTempBufSize - 16); // as in SetBuffer()
       end;
     end; 
     B := fTempBuf - 1;

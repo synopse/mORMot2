@@ -2475,7 +2475,7 @@ begin
         try
           VariantSaveJSON(Value, twJSONEscape, json);
           RecordLoadJSON(rec[0], pointer(json), ArgRtti.Info);
-          json := SaveJSON(rec[0], ArgRtti.Info, true);
+          json := SaveJSON(rec[0], ArgRtti.Info, {EnumSetsAsText=}true);
           _Json(json, Value, JSON_OPTIONS_FAST);
         finally
           ArgRtti.ValueFinalize(pointer(rec));

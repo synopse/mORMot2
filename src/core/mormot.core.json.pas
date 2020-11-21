@@ -1717,6 +1717,13 @@ var
     [jpoHandleCustomVariants, jpoIgnoreUnknownEnum,
      jpoIgnoreUnknownProperty, jpoIgnoreStringType, jpoAllowInt64Hex];
 
+  /// access default (false) or tolerant (true) JSON parser options
+  // - used as JSONPARSER_DEFAULTORTOLERANTOPTIONS[tolerant]
+  JSONPARSER_DEFAULTORTOLERANTOPTIONS: array[boolean] of TJsonParserOptions = (
+    [],
+    [jpoHandleCustomVariants, jpoIgnoreUnknownEnum,
+     jpoIgnoreUnknownProperty, jpoIgnoreStringType, jpoAllowInt64Hex]);
+
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
@@ -1851,7 +1858,6 @@ function RecordSaveJSON(const Rec; TypeInfo: PRttiInfo;
 // (following EnumSetsAsText optional parameter for nested enumerates and sets)
 function DynArraySaveJSON(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean = false): RawUTF8;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// serialize a dynamic array content, supplied as raw binary buffer, as JSON
 // - Value shall be set to the source dynamic array field
@@ -1895,6 +1901,17 @@ function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
 function ObjectToJSONDebug(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
     woHumanReadable, woStoreClassName, woStorePointer]): RawUTF8;
+
+/// unserialize most kind of content as JSON, using its RTTI, as saved by
+// TTextWriter.AddRecordJSON / RecordSaveJSON
+// - is just a wrapper around GetDataFromJSON() global low-level function
+// - returns nil on error, or the end of buffer on success
+// - warning: the JSON buffer will be modified in-place during process - use
+// a temporary copy if you need to access it later or if the string comes from
+// a constant (refcount=-1) - see e.g. the overloaded RecordLoadJSON()
+function LoadJSON(var Value; JSON: PUTF8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUTF8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
+  Tolerant: boolean = true): PUTF8Char;
 
 /// fill a record content from a JSON serialization as saved by
 // TTextWriter.AddRecordJSON / RecordSaveJSON
@@ -9113,15 +9130,9 @@ end;
 procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
-var
-  opt: TJsonParserOptions;
 begin
-  if Tolerant then
-    opt := JSONPARSER_TOLERANTOPTIONS
-  else
-    opt := JSONPARSER_DEFAULTOPTIONS;
-  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
-    Data, JSON, EndOfObject, opt, CustomVariantOptions);
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(Data, JSON, EndOfObject,
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
 end;
 
 class function TRttiJson.RegisterCustomSerializer(Info: PRttiInfo;
@@ -9160,21 +9171,16 @@ begin
 end;
 
 function SaveJSON(const Value; TypeInfo: PRttiInfo; EnumSetsAsText: boolean): RawUTF8;
-var
-  options: TTextWriterOptions;
 begin
-  if EnumSetsAsText then
-    options := [twoEnumSetsAsTextInRecord, twoFullSetsAsStar]
-  else
-    options := [twoFullSetsAsStar];
-  SaveJSON(Value, TypeInfo, options, result);
+  SaveJSON(Value, TypeInfo, TEXTWRITEROPTIONS_SETASTEXT[EnumSetsAsText], result);
 end;
 
 function RecordSaveJSON(const Rec; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean): RawUTF8;
 begin
-  if TypeInfo^.Kind in rkRecordTypes then
-    result := SaveJSON(Rec, TypeInfo, EnumSetsAsText)
+  if (TypeInfo <> nil) and
+     (TypeInfo^.Kind in rkRecordTypes) then
+    SaveJSON(Rec, TypeInfo, TEXTWRITEROPTIONS_SETASTEXT[EnumSetsAsText], result)
   else
     result := NULL_STR_VAR;
 end;
@@ -9182,12 +9188,13 @@ end;
 function DynArraySaveJSON(const Value; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean): RawUTF8;
 begin
-  if TypeInfo^.Kind <> rkDynArray then
+  if (TypeInfo = nil) or
+     (TypeInfo^.Kind <> rkDynArray) then
     result := NULL_STR_VAR
   else if pointer(Value) = nil then
     result := '[]'
   else
-    result := SaveJSON(Value, TypeInfo, EnumSetsAsText);
+    SaveJSON(Value, TypeInfo, TEXTWRITEROPTIONS_SETASTEXT[EnumSetsAsText], result);
 end;
 
 function DynArrayBlobSaveJSON(TypeInfo: PRttiInfo; BlobValue: pointer): RawUTF8;
@@ -9293,6 +9300,15 @@ begin
   result := ObjectToJSON(Value, Options);
 end;
 
+function LoadJSON(var Value; JSON: PUTF8Char; TypeInfo: PRttiInfo;
+  EndOfObject: PUTF8Char; CustomVariantOptions: PDocVariantOptions;
+  Tolerant: boolean): PUTF8Char;
+begin
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Value, JSON, EndOfObject,
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
+  result := JSON;
+end;
+
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUTF8Char; CustomVariantOptions: PDocVariantOptions;
   Tolerant: boolean): PUTF8Char;
@@ -9301,7 +9317,8 @@ begin
      not (TypeInfo.Kind in rkRecordTypes) then
     raise EJSONException.CreateUTF8('RecordLoadJSON: % is not a record',
       [TypeInfo.Name]);
-  GetDataFromJSON(@Rec, JSON, EndOfObject, TypeInfo, CustomVariantOptions, Tolerant);
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Rec, JSON, EndOfObject,
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
   result := JSON;
 end;
 
@@ -9327,7 +9344,8 @@ begin
      (TypeInfo.Kind <> rkDynArray) then
     raise EJSONException.CreateUTF8('DynArrayLoadJSON: % is not a dynamic array',
       [TypeInfo.Name]);
-  GetDataFromJSON(@Value, JSON, EndOfObject, TypeInfo, CustomVariantOptions, Tolerant);
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Value, JSON, EndOfObject,
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
   result := JSON;
 end;
 
