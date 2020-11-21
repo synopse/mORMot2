@@ -40,140 +40,140 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         {$endif win64}
         movzx   r13, byte ptr [r12].TAESContext.Rounds
         mov     eax, dword ptr [rdx]
-        mov     ebx, dword ptr [rdx+4H]
-        mov     ecx, dword ptr [rdx+8H]
-        mov     edx, dword ptr [rdx+0CH]
+        mov     ebx, dword ptr [rdx + 4H]
+        mov     ecx, dword ptr [rdx + 8H]
+        mov     edx, dword ptr [rdx + 0CH]
         xor     eax, dword ptr [r12]
-        xor     ebx, dword ptr [r12+4H]
-        xor     ecx, dword ptr [r12+8H]
-        xor     edx, dword ptr [r12+0CH]
+        xor     ebx, dword ptr [r12 + 4H]
+        xor     ecx, dword ptr [r12 + 8H]
+        xor     edx, dword ptr [r12 + 0CH]
         sub     r13, 1
         add     r12, 16
-        lea     r14, [rip+Te0]
+        lea     r14, [rip + Te0]
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @round: mov     esi, eax
         mov     edi, edx
         movzx   r8d, al
         movzx   r9d, cl
         movzx   r10d, bl
-        mov     r8d, dword ptr [r14+r8*4]
-        mov     r9d, dword ptr [r14+r9*4]
-        mov     r10d, dword ptr [r14+r10*4]
+        mov     r8d, dword ptr [r14 + r8*4]
+        mov     r9d, dword ptr [r14 + r9*4]
+        mov     r10d, dword ptr [r14 + r10*4]
         shr     esi, 16
         shr     edi, 16
         movzx   ebp, bh
-        xor     r8d, dword ptr [r14+rbp*4+400H]
+        xor     r8d, dword ptr [r14 + rbp*4 + 400H]
         movzx   ebp, dh
-        xor     r9d, dword ptr [r14+rbp*4+400H]
+        xor     r9d, dword ptr [r14 + rbp*4 + 400H]
         movzx   ebp, ch
-        xor     r10d, dword ptr [r14+rbp*4+400H]
+        xor     r10d, dword ptr [r14 + rbp*4 + 400H]
         shr     ebx, 16
         shr     ecx, 16
         movzx   ebp, dl
-        mov     edx, dword ptr [r14+rbp*4]
+        mov     edx, dword ptr [r14 + rbp*4]
         movzx   ebp, cl
-        xor     r8d, dword ptr [r14+rbp*4+800H]
+        xor     r8d, dword ptr [r14 + rbp*4 + 800H]
         movzx   ebp, sil
-        xor     r9d, dword ptr [r14+rbp*4+800H]
+        xor     r9d, dword ptr [r14 + rbp*4 + 800H]
         movzx   r11, dil
         movzx   eax, ah
         shr     edi, 8
         movzx   ebp, bh
         shr     esi, 8
-        xor     r10d, dword ptr [r14+r11*4+800H]
-        xor     edx, dword ptr [r14+rax*4+400H]
-        xor     r8d, dword ptr [r14+rdi*4+0C00H]
-        xor     r9d, dword ptr [r14+rbp*4+0C00H]
-        xor     r10d, dword ptr [r14+rsi*4+0C00H]
+        xor     r10d, dword ptr [r14 + r11*4 + 800H]
+        xor     edx, dword ptr [r14 + rax*4 + 400H]
+        xor     r8d, dword ptr [r14 + rdi*4 + 0C00H]
+        xor     r9d, dword ptr [r14 + rbp*4 + 0C00H]
+        xor     r10d, dword ptr [r14 + rsi*4 + 0C00H]
         movzx   ebp, bl
-        xor     edx, dword ptr [r14+rbp*4+800H]
+        xor     edx, dword ptr [r14 + rbp*4 + 800H]
         mov     rbx, r10
         mov     rax, r8
         movzx   ebp, ch
-        xor     edx, dword ptr [r14+rbp*4+0C00H]
+        xor     edx, dword ptr [r14 + rbp*4 + 0C00H]
         mov     rcx, r9
         xor     eax, dword ptr [r12]
-        xor     ebx, dword ptr [r12+4H]
-        xor     ecx, dword ptr [r12+8H]
-        xor     edx, dword ptr [r12+0CH]
+        xor     ebx, dword ptr [r12 + 4H]
+        xor     ecx, dword ptr [r12 + 8H]
+        xor     edx, dword ptr [r12 + 0CH]
         add     r12, 16
         sub     r13, 1
         jnz     @round
-        lea     r9, [rip+SBox]
+        lea     r9, [rip + SBox]
         movzx   r8, al
-        movzx   r14, byte ptr [r9+r8]
+        movzx   r14, byte ptr [r9 + r8]
         movzx   edi, bh
-        movzx   r8, byte ptr [r9+rdi]
+        movzx   r8, byte ptr [r9 + rdi]
         shl     r8d, 8
         xor     r14d, r8d
         mov     r11, rcx
         shr     r11, 16
         and     r11, 0FFH
-        movzx   r8, byte ptr [r9+r11]
+        movzx   r8, byte ptr [r9 + r11]
         shl     r8d, 16
         xor     r14d, r8d
         mov     r11, rdx
         shr     r11, 24
-        movzx   r8, byte ptr [r9+r11]
+        movzx   r8, byte ptr [r9 + r11]
         shl     r8d, 24
         xor     r14d, r8d
         xor     r14d, dword ptr [r12]
         mov     dword ptr [r15], r14d
         movzx   r8, bl
-        movzx   r14, byte ptr [r9+r8]
+        movzx   r14, byte ptr [r9 + r8]
         movzx   edi, ch
-        movzx   r8, byte ptr [r9+rdi]
+        movzx   r8, byte ptr [r9 + rdi]
         shl     r8d, 8
         xor     r14d, r8d
         mov     r11, rdx
         shr     r11, 16
         and     r11, 0FFH
-        movzx   r8, byte ptr [r9+r11]
+        movzx   r8, byte ptr [r9 + r11]
         shl     r8d, 16
         xor     r14d, r8d
         mov     r11, rax
         shr     r11, 24
-        movzx   r8, byte ptr [r9+r11]
+        movzx   r8, byte ptr [r9 + r11]
         shl     r8d, 24
         xor     r14d, r8d
-        xor     r14d, dword ptr [r12+4H]
-        mov     dword ptr [r15+4H], r14d
+        xor     r14d, dword ptr [r12 + 4H]
+        mov     dword ptr [r15 + 4H], r14d
         movzx   r8, cl
-        movzx   r14, byte ptr [r9+r8]
+        movzx   r14, byte ptr [r9 + r8]
         movzx   edi, dh
-        movzx   r8, byte ptr [r9+rdi]
+        movzx   r8, byte ptr [r9 + rdi]
         shl     r8d, 8
         xor     r14d, r8d
         mov     r11, rax
         shr     r11, 16
         and     r11, 0FFH
-        movzx   r8, byte ptr [r9+r11]
+        movzx   r8, byte ptr [r9 + r11]
         shl     r8d, 16
         xor     r14d, r8d
         mov     r11, rbx
         shr     r11, 24
-        movzx   r8, byte ptr [r9+r11]
+        movzx   r8, byte ptr [r9 + r11]
         shl     r8d, 24
         xor     r14d, r8d
-        xor     r14d, dword ptr [r12+8H]
-        mov     dword ptr [r15+8H], r14d
+        xor     r14d, dword ptr [r12 + 8H]
+        mov     dword ptr [r15 + 8H], r14d
         and     rdx, 0FFH
-        movzx   r14, byte ptr [r9+rdx]
+        movzx   r14, byte ptr [r9 + rdx]
         movzx   eax, ah
-        movzx   r8, byte ptr [r9+rax]
+        movzx   r8, byte ptr [r9 + rax]
         shl     r8d, 8
         xor     r14d, r8d
         shr     rbx, 16
         and     rbx, 0FFH
-        movzx   r8, byte ptr [r9+rbx]
+        movzx   r8, byte ptr [r9 + rbx]
         shl     r8d, 16
         xor     r14d, r8d
         shr     rcx, 24
-        movzx   r8, byte ptr [r9+rcx]
+        movzx   r8, byte ptr [r9 + rcx]
         shl     r8d, 24
         xor     r14d, r8d
-        xor     r14d, dword ptr [r12+0CH]
-        mov     dword ptr [r15+0CH], r14d
+        xor     r14d, dword ptr [r12 + 0CH]
+        mov     dword ptr [r15 + 0CH], r14d
         {$ifdef win64}
         pop     rsi
         pop     rdi
@@ -1648,9 +1648,9 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         mov     rsi, rcx
         push    rsi
         mov     eax, dword ptr [rsi]
-        mov     ebx, dword ptr [rsi+4H]
-        mov     ecx, dword ptr [rsi+8H]
-        mov     edx, dword ptr [rsi+0CH]
+        mov     ebx, dword ptr [rsi + 4H]
+        mov     ecx, dword ptr [rsi + 8H]
+        mov     edx, dword ptr [rsi + 0CH]
         mov     rbp, qword ptr [r14]
         add     eax, -680876936
         add     eax, ebp
@@ -1675,7 +1675,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     edx, esi
         rol     edx, 12
         add     edx, eax
-        mov     r8, qword ptr [r14+8H]
+        mov     r8, qword ptr [r14 + 8H]
         add     ecx, 606105819
         add     ecx, r8d
         mov     esi, edx
@@ -1699,7 +1699,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     ebx, esi
         rol     ebx, 22
         add     ebx, ecx
-        mov     r9, qword ptr [r14+10H]
+        mov     r9, qword ptr [r14 + 10H]
         add     eax, -176418897
         add     eax, r9d
         mov     esi, ebx
@@ -1723,7 +1723,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     edx, esi
         rol     edx, 12
         add     edx, eax
-        mov     r10, qword ptr [r14+18H]
+        mov     r10, qword ptr [r14 + 18H]
         add     ecx, -1473231341
         add     ecx, r10d
         mov     esi, edx
@@ -1747,7 +1747,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     ebx, esi
         rol     ebx, 22
         add     ebx, ecx
-        mov     r11, qword ptr [r14+20H]
+        mov     r11, qword ptr [r14 + 20H]
         add     eax, 1770035416
         add     eax, r11d
         mov     esi, ebx
@@ -1771,7 +1771,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     edx, esi
         rol     edx, 12
         add     edx, eax
-        mov     r12, qword ptr [r14+28H]
+        mov     r12, qword ptr [r14 + 28H]
         add     ecx, -42063
         add     ecx, r12d
         mov     esi, edx
@@ -1795,7 +1795,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     ebx, esi
         rol     ebx, 22
         add     ebx, ecx
-        mov     r13, qword ptr [r14+30H]
+        mov     r13, qword ptr [r14 + 30H]
         add     eax, 1804603682
         add     eax, r13d
         mov     esi, ebx
@@ -1819,7 +1819,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     edx, esi
         rol     edx, 12
         add     edx, eax
-        mov     r14, qword ptr [r14+38H]
+        mov     r14, qword ptr [r14 + 38H]
         add     ecx, -1502002290
         add     ecx, r14d
         mov     esi, edx
@@ -2328,9 +2328,9 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
         add     ebx, ecx
         pop     rsi
         add     dword ptr [rsi], eax
-        add     dword ptr [rsi+4H], ebx
-        add     dword ptr [rsi+8H], ecx
-        add     dword ptr [rsi+0CH], edx
+        add     dword ptr [rsi + 4H], ebx
+        add     dword ptr [rsi + 8H], ecx
+        add     dword ptr [rsi + 0CH], edx
         pop     r14
         pop     r13
         pop     r12
