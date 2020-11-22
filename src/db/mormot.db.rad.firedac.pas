@@ -209,6 +209,7 @@ type
 {$else}
 
 uses
+  mormot.core.data,
   uADPhysIntf,
   uADStanDef,
   uADDAptManager,
