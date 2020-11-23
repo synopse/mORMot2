@@ -29,7 +29,7 @@ uses
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}  // as set in mormot.defines.inc
-  WinINet;
+  WinINet,
   mormot.lib.winhttp,
   {$endif USEWININET}
   {$ifdef USELIBCURL}  // as set in mormot.defines.inc
@@ -2174,7 +2174,7 @@ var
   end;
 
 var
-  P: PAnsiChar;
+  P: PUTF8Char;
   rec, ToList, head: RawUTF8;
 begin
   result := false;
