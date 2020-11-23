@@ -71,7 +71,7 @@ type
     nrTooManyConnections);
 
   {$M+}
-  /// exception class raise by this unit
+  /// exception class raised by this unit
   ENetSock = class(Exception)
   public
     /// raise ENetSock if res is not nrOK or nrRetry

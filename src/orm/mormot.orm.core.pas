@@ -17151,7 +17151,7 @@ begin
           c := self;
           repeat
             ClassToText(c, cname); // TOrmFtsTest = class(TOrmFts3Porter)
-            if IdemPChar(pointer(cname), 'TOrmFts') and
+            if IdemPChar(pointer(cname), 'TORMFTS') and
                (cname[14] in ['3', '4', '5']) then
             begin
               if length(cname) > 14 then
