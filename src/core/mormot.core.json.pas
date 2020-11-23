@@ -1024,10 +1024,10 @@ type
     /// search for the first chars of a Name, return the index in List
     // - using O(n) calls of IdemPChar() function
     // - here aUpperName should be already uppercase, as expected by IdemPChar()
-    function FindStart(const aUpperName: RawUTF8): integer;
+    function FindStart(const aUpperName: RawUTF8): PtrInt;
     /// search for a Value, return the index in List
     // - using O(n) brute force algoritm with case-sensitive aValue search
-    function FindByValue(const aValue: RawUTF8): integer;
+    function FindByValue(const aValue: RawUTF8): PtrInt;
     /// search for a Name, and delete its entry in the List if it exists
     function Delete(const aName: RawUTF8): boolean;
     /// search for a Value, and delete its entry in the List if it exists
@@ -1676,23 +1676,40 @@ type
     Prop: PRttiCustomProp;
     /// force the item class when reading a TObjectList without "ClassName":...
     ObjectListItem: TRttiCustom;
-    /// initialize this context
+    /// if ParseNext unserialized a JSON string
+    WasString: boolean;
+    /// ParseNext unserialized value
+    Value: PUTF8Char;
+    /// ParseNext unserialized value length
+    ValueLen: integer;
+    /// TDocVariant initialization options
+    DVO: TDocVariantOptions;
+    /// initialize this unserialization context
     procedure Init(P: PUTF8Char; Rtti: TRttiCustom; O: TJsonParserOptions;
       CV: PDocVariantOptions; ObjectListItemClass: TClass);
-  protected
-    WasString: boolean;
-    Value: PUTF8Char;
-    ValueLen: integer;
-    DVO: TDocVariantOptions;
+    /// call GetJSONField() to retrieve the next JSON value
+    // - on success, return true and set Value/ValueLen and WasString fields
     function ParseNext: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure ParseEnd;
+    /// retrieve the next JSON value as text
+    function ParseUTF8: RawUTF8;
+    /// set the EndOfObject field of a JSON buffer, just like GetJsonField() does
+    procedure ParseEndOfObject;
       {$ifdef HASINLINE}inline;{$endif}
+    /// parse a 'null' value from JSON buffer
     function ParseNull: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// parse initial '[' token from JSON buffer
     function ParseArray: boolean;
+    /// parse a JSON object from the buffer into a
+    // - if ObjectListItem was not defined, expect the JSON input to start as
+    // '{"ClassName":"TMyClass",...}'
     function ParseNewObject: TObject;
       {$ifdef HASINLINE}inline;{$endif}
+    /// wrapper around JSONDecode()
+    function ParseObject(const Names: array of RawUTF8;
+      Values: PValuePUTF8CharArray;
+      HandleValuesAsObjectOrArray: boolean = false): boolean;
   end;
 
   PJsonParserContext = ^TJsonParserContext;
@@ -2235,7 +2252,6 @@ uses
 
 
 { ********** Low-Level JSON Processing Functions }
-
 
 function NeedsJsonEscape(P: PUTF8Char; PLen: integer): boolean;
 var
@@ -3145,7 +3161,7 @@ var
 begin
   {$ifdef FPC}
   Values := nil;
-  {$endif}
+  {$endif FPC}
   result := nil;
   n := 0;
   if P <> nil then
@@ -6657,11 +6673,19 @@ begin
   Valid := result;
 end;
 
-procedure TJsonParserContext.ParseEnd;
+function TJsonParserContext.ParseUTF8: RawUTF8;
+begin
+  if ParseNext then
+    FastSetString(result, Value, ValueLen)
+  else
+    result := '';
+end;
+
+procedure TJsonParserContext.ParseEndOfObject;
 begin
   if Valid then
   begin
-    JSON := ParseEndOfObject(JSON, EndOfObject);
+    JSON := mormot.core.json.ParseEndOfObject(JSON, EndOfObject);
     Valid := JSON <> nil;
   end;
 end;
@@ -6676,7 +6700,7 @@ begin
     P := GotoNextNotSpace(JSON);
     if PCardinal(P)^ = NULL_LOW then
     begin
-      P := ParseEndOfObject(P + 4, EndOfObject);
+      P := mormot.core.json.ParseEndOfObject(P + 4, EndOfObject);
       if P <> nil then
       begin
         JSON := P;
@@ -6700,7 +6724,7 @@ begin
     if P^ = ']' then
     begin
       // void but valid array
-      P := ParseEndOfObject(P + 1, EndOfObject);
+      P := mormot.core.json.ParseEndOfObject(P + 1, EndOfObject);
       Valid := P <> nil;
       JSON := P;
     end
@@ -6732,6 +6756,15 @@ begin
     end;
   end;
   result := TRttiJson(Info).ParseNewInstance(self);
+end;
+
+function TJsonParserContext.ParseObject(const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: boolean): boolean;
+begin
+  JSON := JSONDecode(JSON, Names, Values, HandleValuesAsObjectOrArray);
+  if JSON = nil then
+    Valid := false;
+  result := Valid;
 end;
 
 
@@ -7057,7 +7090,7 @@ begin
       PDALen(PAnsiChar(arr^) - _DALEN)^ := n - _DAOFF;
     Ctxt.Info := arrinfo;
   end;
-  Ctxt.ParseEnd; // mimics GetJsonField() / Ctxt.ParseNext
+  Ctxt.ParseEndOfObject; // mimics GetJsonField() / Ctxt.ParseNext
 end;
 
 procedure _JL_Interface(Data: PInterface; var Ctxt: TJsonParserContext);
@@ -7165,7 +7198,7 @@ begin
     end;
     Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON + 1);
     if Ctxt.JSON^ = '}' then
-      Ctxt.ParseEnd
+      Ctxt.ParseEndOfObject
     else
     begin
       root := pointer(Ctxt.Info); // Ctxt.Info overriden in JsonLoadProp()
@@ -7211,7 +7244,7 @@ begin
           break;
         end;
       end;
-      Ctxt.ParseEnd; // mimics GetJsonField() - set Ctxt.EndOfObject
+      Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
       Ctxt.Info := root; // restore
     end;
     if rcfSynPersistentHook in Ctxt.Info.Flags then
@@ -7236,7 +7269,7 @@ begin
     Data^.Add(item);
   until Ctxt.EndOfObject = ']';
   Ctxt.Info := root;
-  Ctxt.ParseEnd;
+  Ctxt.ParseEndOfObject;
 end;
 
 procedure _JL_TCollection(Data: PCollection; var Ctxt: TJsonParserContext);
@@ -7259,7 +7292,7 @@ begin
     until (not Ctxt.Valid) or
           (Ctxt.EndOfObject = ']');
     Ctxt.Info := root;
-    Ctxt.ParseEnd;
+    Ctxt.ParseEndOfObject;
   finally
     Data^.EndUpdate;
   end;
@@ -7282,7 +7315,7 @@ begin
     Data^.Add(item);
   until Ctxt.EndOfObject = ']';
   Ctxt.Info := root;
-  Ctxt.ParseEnd;
+  Ctxt.ParseEndOfObject;
 end;
 
 procedure _JL_TStrings(Data: PStrings; var Ctxt: TJsonParserContext);
@@ -7305,7 +7338,7 @@ begin
   finally
     Data^.EndUpdate;
   end;
-  Ctxt.ParseEnd;
+  Ctxt.ParseEndOfObject;
 end;
 
 procedure _JL_TRawUTF8List(Data: PRawUTF8List; var Ctxt: TJsonParserContext);
@@ -7328,7 +7361,7 @@ begin
   finally
     Data^.EndUpdate;
   end;
-  Ctxt.ParseEnd;
+  Ctxt.ParseEndOfObject;
 end;
 
 var
@@ -7474,7 +7507,7 @@ begin
   result := DynArray.FindHashed(aName);
 end;
 
-function TSynNameValue.FindStart(const aUpperName: RawUTF8): integer;
+function TSynNameValue.FindStart(const aUpperName: RawUTF8): PtrInt;
 begin
   for result := 0 to Count - 1 do
     if IdemPChar(pointer(List[result].Name), pointer(aUpperName)) then
@@ -7482,7 +7515,7 @@ begin
   result := -1;
 end;
 
-function TSynNameValue.FindByValue(const aValue: RawUTF8): integer;
+function TSynNameValue.FindByValue(const aValue: RawUTF8): PtrInt;
 begin
   for result := 0 to Count - 1 do
     if List[result].Value = aValue then
@@ -7497,7 +7530,7 @@ end;
 
 function TSynNameValue.DeleteByValue(const aValue: RawUTF8; Limit: integer): integer;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   result := 0;
   if Limit < 1 then
@@ -7631,7 +7664,7 @@ end;
 
 function TSynNameValue.AsJSON: RawUTF8;
 var
-  i: integer;
+  i: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
   with TTextWriter.CreateOwnedStream(temp) do
@@ -7655,7 +7688,7 @@ end;
 
 procedure TSynNameValue.AsNameValues(out Names, Values: TRawUTF8DynArray);
 var
-  i: integer;
+  i: PtrInt;
 begin
   SetLength(Names, Count);
   SetLength(Values, Count);
@@ -7668,7 +7701,7 @@ end;
 
 function TSynNameValue.ValueVariantOrNull(const aName: RawUTF8): variant;
 var
-  i: integer;
+  i: PtrInt;
 begin
   i := Find(aName);
   if i < 0 then
@@ -9155,7 +9188,7 @@ begin
   result := Rtti.RegisterType(Info);
   res.fJsonWriter := TMethod(Writer);
   res.fJsonReader := TMethod(Reader);
-  res.SetParserType(res.Parser, res.ParserComplex); // set fJsonSave/fJsonLoad
+  res.SetParserType(res.Parser, res.ParserComplex); // (re)set fJsonSave/fJsonLoad
 end;
 
 class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
@@ -9251,7 +9284,8 @@ begin
     end;
 end;
 
-function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
+function ObjectsToJSON(const Names: array of RawUTF8;
+  const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions): RawUTF8;
 var
   i, n: PtrInt;
@@ -9306,7 +9340,8 @@ begin
     result := FileFromString(json, JSONFile);
 end;
 
-function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
+function ObjectToJSONDebug(Value: TObject;
+  Options: TTextWriterWriteObjectOptions): RawUTF8;
 begin
   // our JSON serialization detects and serialize Exception.Message
   result := ObjectToJSON(Value, Options);
@@ -9532,8 +9567,8 @@ function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
 begin
   result := Rtti.RegisterType(ObjectInstance.ClassInfo);
   if PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^ <> result then
-    raise ERttiException.CreateUTF8('AutoCreateFields(%): unexpected vmtAutoTable',
-      [ObjectInstance]); // paranoid check
+    raise ERttiException.CreateUTF8( // paranoid check
+      'AutoCreateFields(%): unexpected vmtAutoTable', [ObjectInstance]);
   result.Props.SetAutoCreateFields;
   result.Flags := result.Flags + [rcfAutoCreateFields];
 end;
@@ -9747,6 +9782,7 @@ begin
   Rtti.GlobalClass := TRttiJson;
   GetDataFromJSON := _GetDataFromJSON;
 end;
+
 
 initialization
   InitializeUnit;
