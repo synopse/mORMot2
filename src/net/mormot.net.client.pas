@@ -11,6 +11,7 @@ unit mormot.net.client;
    - THttpRequest Abstract HTTP client class
    - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP
    - Cached HTTP Connection to a Remote Server
+   - Send Email using the SMTP Protocol
 
   *****************************************************************************
 
@@ -35,6 +36,7 @@ uses
   mormot.lib.curl,
   {$endif USELIBCURL}
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
+  mormot.core.buffers,
   mormot.core.text,
   mormot.core.data,
   mormot.core.json; // TSynDictionary for THttpRequestCached
@@ -678,7 +680,83 @@ type
   end;
 
 
+/// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
+// - this method will use a low-level THttpClientSock socket for plain http URI,
+// or TWinHTTP/TCurlHTTP for any https URI, or if forceNotSocket is set to true
+function HttpGet(const aURI: RawUTF8; outHeaders: PRawUTF8 = nil;
+  forceNotSocket: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
+
+/// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
+// - this method will use a low-level THttpClientSock socket for plain http URI,
+// or TWinHTTP/TCurlHTTP for any https URI
+function HttpGet(const aURI: RawUTF8; const inHeaders: RawUTF8;
+  outHeaders: PRawUTF8 = nil; forceNotSocket: boolean = false;
+  outStatus: PInteger = nil): RawByteString; overload;
+
+
+
+{ ************** Send Email using the SMTP Protocol }
+
+const
+  /// the layout of TSMTPConnection.FromText method
+  SMTP_DEFAULT = 'user:password@smtpserver:port';
+
+type
+  /// may be used to store a connection to a SMTP server
+  // - see SendEmail() overloaded function
+  {$ifdef USERECORDWITHMETHODS}
+  TSMTPConnection = record
+  {$else}
+  TSMTPConnection = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// the SMTP server IP or host name
+    Host: RawUTF8;
+    /// the SMTP server port (25 by default)
+    Port: RawUTF8;
+    /// the SMTP user login (if any)
+    User: RawUTF8;
+    /// the SMTP user password (if any)
+    Pass: RawUTF8;
+    /// fill the STMP server information from a single text field
+    // - expects 'user:password@smtpserver:port' format
+    // - if aText equals SMTP_DEFAULT ('user:password@smtpserver:port'),
+    // does nothing
+    function FromText(const aText: RawUTF8): boolean;
+  end;
+
+  /// exception class raised by SendEmail() on raw SMTP process
+  ESendEmail = class(ESynException);
+
+/// send an email using the SMTP protocol
+// - retry true on success
+// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// SendEmailSubject() to encode it as Unicode, if needed
+// - you can optionally set the encoding charset to be used for the Text body
+function SendEmail(const Server, From, CSVDest, Subject, Text: RawUTF8;
+  const Headers: RawUTF8 = ''; const User: RawUTF8 = ''; const Pass: RawUTF8 = '';
+  const Port: RawUTF8 = '25'; const TextCharSet: RawUTF8  =  'ISO-8859-1';
+  aTLS: boolean = false): boolean; overload;
+
+/// send an email using the SMTP protocol
+// - retry true on success
+// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// SendEmailSubject() to encode it as Unicode, if needed
+// - you can optionally set the encoding charset to be used for the Text body
+function SendEmail(const Server: TSMTPConnection;
+  const From, CSVDest, Subject, Text: RawUTF8; const Headers: RawUTF8 = '';
+  const TextCharSet: RawUTF8  =  'ISO-8859-1'; aTLS: boolean = false): boolean; overload;
+
+/// convert a supplied subject text into an Unicode encoding
+// - will convert the text into UTF-8 and append '=?UTF-8?B?'
+// - for pre-Unicode versions of Delphi, Text is expected to be already UTF-8
+// encoded - since Delphi 2010, it will be converted from UnicodeString
+function SendEmailSubject(const Text: string): RawUTF8;
+
+
+
 implementation
+
 
 
 
@@ -1987,6 +2065,180 @@ begin
   else
     result := true;
 end;
+
+
+
+function HttpGet(const aURI: RawUTF8; outHeaders: PRawUTF8;
+  forceNotSocket: boolean; outStatus: PInteger): RawByteString;
+begin
+  result := HttpGet(aURI, '', outHeaders, forceNotSocket, outStatus);
+end;
+
+function HttpGet(const aURI: RawUTF8; const inHeaders: RawUTF8;
+  outHeaders: PRawUTF8; forceNotSocket: boolean;
+  outStatus: PInteger): RawByteString;
+var
+  URI: TURI;
+begin
+  if URI.From(aURI) then
+    if URI.Https or
+       forceNotSocket then
+      {$ifdef USEWININET}
+      result := TWinHTTP.Get(
+        aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
+      {$else}
+      {$ifdef USELIBCURL}
+      result := TCurlHTTP.Get(
+        aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
+      {$else}
+      raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aURI])
+      {$endif}
+      {$endif USEWININET}
+    else
+      result := OpenHttpGet(
+        URI.Server, URI.Port, URI.Address, inHeaders, outHeaders, URI.Layer)
+    else
+      result := '';
+  {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}
+  if result = '' then
+    writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
+  {$endif LINUX_RAWDEBUGVOIDHTTPGET}
+end;
+
+
+{ ************** Send Email using the SMTP Protocol }
+
+function TSMTPConnection.FromText(const aText: RawUTF8): boolean;
+var
+  u, h: RawUTF8;
+begin
+  if aText = SMTP_DEFAULT then
+  begin
+    result := false;
+    exit;
+  end;
+  if Split(aText, '@', u, h) then
+  begin
+    if not Split(u, ':', User, Pass) then
+      User := u;
+  end
+  else
+    h := aText;
+  if not Split(h, ':', Host, Port) then
+  begin
+    Host := h;
+    Port := '25';
+  end;
+  if (Host <> '') and
+     (Host[1] = '?') then
+    Host := '';
+  result := Host <> '';
+end;
+
+function SendEmail(const Server: TSMTPConnection; const From, CSVDest, Subject,
+  Text, Headers, TextCharSet: RawUTF8; aTLS: boolean): boolean;
+begin
+  result := SendEmail(
+    Server.Host, From, CSVDest, Subject, Text, Headers,
+    Server.User, Server.Pass, Server.Port, TextCharSet,
+    (Server.Port = '465') or (Server.Port = '587'));
+end;
+
+{$I-}
+
+function SendEmail(const Server, From, CSVDest, Subject, Text, Headers, User,
+  Pass, Port, TextCharSet: RawUTF8; aTLS: boolean): boolean;
+var
+  TCP: TCrtSocket;
+
+  procedure Expect(const Answer: RawUTF8);
+  var
+    Res: RawUTF8;
+  begin
+    repeat
+      readln(TCP.SockIn^, Res);
+      if ioresult <> 0 then
+        raise ESendEmail.CreateUTF8('read error for %', [Res]);
+    until (Length(Res) < 4) or
+          (Res[4] <> '-');
+    if not IdemPChar(pointer(Res), pointer(Answer)) then
+      raise ESendEmail.CreateUTF8('%', [Res]);
+  end;
+
+  procedure Exec(const Command, Answer: RawUTF8);
+  begin
+    writeln(TCP.SockOut^, Command);
+    if ioresult <> 0 then
+      raise ESendEmail.CreateUTF8('write error for %s', [Command]);
+    Expect(Answer)
+  end;
+
+var
+  P: PAnsiChar;
+  rec, ToList, head: RawUTF8;
+begin
+  result := false;
+  P := pointer(CSVDest);
+  if P = nil then
+    exit;
+  TCP := Open(Server, Port, aTLS);
+  if TCP <> nil then
+  try
+    TCP.CreateSockIn; // we use SockIn and SockOut here
+    TCP.CreateSockOut;
+    Expect('220');
+    if (User <> '') and
+       (Pass <> '') then
+    begin
+      Exec('EHLO ' + Server, '25');
+      Exec('AUTH LOGIN', '334');
+      Exec(BinToBase64(User), '334');
+      Exec(BinToBase64(Pass), '235');
+    end
+    else
+      Exec('HELO ' + Server, '25');
+    writeln(TCP.SockOut^, 'MAIL FROM:<', From, '>');
+    Expect('250');
+    repeat
+      GetNextItem(P, ',', rec);
+      rec := Trim(rec);
+      if rec = '' then
+        continue;
+      if PosExChar('<', rec) = 0 then
+        rec := '<' + rec + '>';
+      Exec('RCPT TO:' + rec, '25');
+      if ToList = '' then
+        ToList := #13#10'To: ' + rec
+      else
+        ToList := ToList + ', ' + rec;
+    until P = nil;
+    Exec('DATA', '354');
+    head := trim(Headers);
+    if head <> '' then
+      head := head + #13#10;
+    writeln(TCP.SockOut^,
+      'Subject: ', Subject,
+      #13#10'From: ', From, ToList,
+      #13#10'Content-Type: text/plain; charset=', TextCharSet,
+      #13#10'Content-Transfer-Encoding: 8bit'#13#10, head,
+      #13#10, Text);
+    Exec('.', '25');
+    writeln(TCP.SockOut^, 'QUIT');
+    result := ioresult = 0;
+  finally
+    TCP.Free;
+  end;
+end;
+
+{$I+}
+
+function SendEmailSubject(const Text: string): RawUTF8;
+begin
+  StringToUTF8(Text, result);
+  if not IsAnsiCompatible(result) then
+    result := '=?UTF-8?B?' + BinToBase64(result);
+end;
+
 
 end.
 
