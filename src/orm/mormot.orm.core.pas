@@ -3656,9 +3656,9 @@ type
     procedure GetJSONValues(JSON: TStream; Expand, withID: boolean;
       Occasion: TOrmOccasion; OrmOptions: TJSONSerializerOrmOptions = []); overload;
     /// same as overloaded GetJSONValues(), but returning result into a RawUTF8
-    // - if UsingStream is not set, it will use a temporary THeapMemoryStream instance
+    // - if UsingStream is not set, it will use a temporary TRawByteStringStream
     function GetJSONValues(Expand, withID: boolean;
-      Occasion: TOrmOccasion; UsingStream: TCustomMemoryStream = nil;
+      Occasion: TOrmOccasion; UsingStream: TRawByteStringStream = nil;
       OrmOptions: TJSONSerializerOrmOptions = []): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
@@ -17066,7 +17066,7 @@ begin
 end;
 
 function TOrm.GetJSONValues(Expand, withID: boolean;
-  Occasion: TOrmOccasion; UsingStream: TCustomMemoryStream;
+  Occasion: TOrmOccasion; UsingStream: TRawByteStringStream;
   OrmOptions: TJSONSerializerOrmOptions): RawUTF8;
 var
   J: TRawByteStringStream;
@@ -17074,20 +17074,18 @@ begin
   if not withID and IsZero(RecordProps.SimpleFieldsBits[Occasion]) then
     // no simple field to write -> quick return
     result := ''
-  else if UsingStream <> nil then
-  begin
-    UsingStream.Seek(0, soFromBeginning);
-    GetJSONValues(UsingStream, Expand, withID, Occasion, OrmOptions);
-    FastSetString(result, UsingStream.Memory, UsingStream.Seek(0, soFromCurrent));
-  end
   else
   begin
-    J := TRawByteStringStream.Create;
+    if UsingStream <> nil then
+      J := UsingStream
+    else
+      J := TRawByteStringStream.Create;
     try
       GetJSONValues(J, Expand, withID, Occasion, OrmOptions);
       result := J.DataString;
     finally
-      J.Free;
+      if UsingStream = nil then
+        J.Free;
     end;
   end;
 end;
