@@ -11,6 +11,7 @@ unit mormot.core.variants;
   - Custom Variant Types with JSON support
   - TDocVariant Object/Array Document Holder with JSON support
   - JSON Parsing into Variant
+  - Variant Binary Serialization
 
   *****************************************************************************
 }
@@ -2152,6 +2153,73 @@ function VariantLoadJSON(const JSON: RawUTF8;
   TryCustomVariants: PDocVariantOptions = nil;
   AllowDouble: boolean = false): variant; overload;
 
+
+{ ************** Variant Binary Serialization }
+
+{$ifndef PUREMORMOT2}
+
+/// compute the number of bytes needed to save a Variant content
+// using the VariantSave() function
+// - will return 0 in case of an invalid (not handled) Variant type
+// - deprecated function - use overloaded BinarySave() functions instead
+function VariantSaveLength(const Value: variant): integer; deprecated;
+  {$ifdef HASINLINE}inline;{$endif}
+
+
+/// save a Variant content into a destination memory buffer
+// - Dest must be at least VariantSaveLength() bytes long
+// - will handle standard Variant types and custom types (serialized as JSON)
+// - will return nil in case of an invalid (not handled) Variant type
+// - will use a proprietary binary format, with some variable-length encoding
+// of the string length
+// - warning: will encode generic string fields as within the variant type
+// itself: using this function between UNICODE and NOT UNICODE
+// versions of Delphi, will propably fail - you have been warned!
+// - deprecated function - use overloaded BinarySave() functions instead
+function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;
+  overload; deprecated;   {$ifdef HASINLINE}inline;{$endif}
+
+{$endif PUREMORMOT2}
+
+/// save a Variant content into a binary buffer
+// - will handle standard Variant types and custom types (serialized as JSON)
+// - will return '' in case of an invalid (not handled) Variant type
+// - just a wrapper around VariantSaveLength()+VariantSave()
+// - warning: will encode generic string fields as within the variant type
+// itself: using this function between UNICODE and NOT UNICODE
+// versions of Delphi, will propably fail - you have been warned!
+// - is a wrapper around BinarySave(rkVariant)
+function VariantSave(const Value: variant): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// retrieve a variant value from our optimized binary serialization format
+// - follow the data layout as used by RecordLoad() or VariantSave() function
+// - return nil if the Source buffer is incorrect
+// - in case of success, return the memory buffer pointer just after the
+// read content
+// - how custom type variants are created can be defined via CustomVariantOptions
+// - is a wrapper around BinaryLoad(rkVariant)
+function VariantLoad(var Value: variant; Source: PAnsiChar;
+  CustomVariantOptions: PDocVariantOptions;
+  SourceMax: PAnsiChar = nil): PAnsiChar; overload;
+
+/// retrieve a variant value from our optimized binary serialization format
+// - follow the data layout as used by RecordLoad() or VariantSave() function
+// - return varEmpty if the Source buffer is incorrect
+// - just a wrapper around VariantLoad()
+// - how custom type variants are created can be defined via CustomVariantOptions
+// - is a wrapper around BinaryLoad(rkVariant)
+function VariantLoad(const Bin: RawByteString;
+  CustomVariantOptions: PDocVariantOptions): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// retrieve a variant value from variable-length buffer
+// - matches TFileBufferWriter.Write()
+// - how custom type variants are created can be defined via CustomVariantOptions
+// - is just a wrapper around VariantLoad/BinaryLoad
+procedure FromVarVariant(var Source: PByte; var Value: variant;
+  CustomVariantOptions: PDocVariantOptions = nil);
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 implementation
@@ -6760,6 +6828,53 @@ begin
   finally
     tmp.Done;
   end;
+end;
+
+
+{ ************** Variant Binary Serialization }
+
+{$ifndef PUREMORMOT2}
+
+function VariantSaveLength(const Value: variant): integer;
+begin
+  result := {%H-}BinarySaveLength(@Value, TypeInfo(Variant), nil, [rkVariant]);
+end;
+
+function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;
+var
+  dummy: integer;
+begin
+  result := {%H-}BinarySave(@Value, Dest, TypeInfo(Variant), dummy, [rkVariant]);
+end;
+
+{$endif PUREMORMOT2}
+
+function VariantSave(const Value: variant): RawByteString;
+begin
+  result := BinarySave(@Value, TypeInfo(Variant), [rkVariant]);
+end;
+
+function VariantLoad(var Value: variant; Source: PAnsiChar;
+  CustomVariantOptions: PDocVariantOptions; SourceMax: PAnsiChar): PAnsiChar;
+begin
+  if SourceMax = nil then
+    // backward compatible: assume fake 100MB Source input buffer
+    SourceMax := Source + 100 shl 20;
+  result := BinaryLoad(@Value, Source, TypeInfo(Variant), nil, SourceMax,
+    [rkVariant], CustomVariantOptions);
+end;
+
+function VariantLoad(const Bin: RawByteString;
+  CustomVariantOptions: PDocVariantOptions): variant;
+begin
+  result := BinaryLoad(@result, Bin, TypeInfo(Variant),
+    [rkVariant], CustomVariantOptions);
+end;
+
+procedure FromVarVariant(var Source: PByte; var Value: variant;
+  CustomVariantOptions: PDocVariantOptions);
+begin
+  Source := PByte(VariantLoad(Value, PAnsiChar(Source), CustomVariantOptions));
 end;
 
 

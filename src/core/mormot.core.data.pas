@@ -717,8 +717,8 @@ type
     // - dvoInternNames and dvoInternValues will use shared TRawUTF8Interning
     // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
     // so that redundant text content will be allocated only once on heap
-    TDocVariantOption =
-      (dvoIsArray,
+    TDocVariantOption = (
+       dvoIsArray,
        dvoIsObject,
        dvoNameCaseSensitive,
        dvoCheckForDuplicatedNames,
@@ -5944,6 +5944,8 @@ end;
 
 
 
+
+
 { ************ TDynArray, TDynArrayHashed and TSynQueue Wrappers }
 
 { TDynArray }
@@ -7734,7 +7736,7 @@ begin
           len := length(UnicodeString(VAny));
           P := VAny;
         end;
-      {$endif}
+      {$endif HASVARUSTRING}
       else
       begin
         S := TFakeWriterStream.Create;
