@@ -2267,7 +2267,7 @@ type
   end;
 
 function TWebProcessInFrame.GetBytes(P: PAnsiChar; count: integer): boolean;
-begin // SockInRead() below raise a ECrtSocket error on failure
+begin // SockInRead() below raise a ENetSock error on failure
   inc(len, process.ReceiveBytes(P + len, count - len));
   result := len = count;
 end;

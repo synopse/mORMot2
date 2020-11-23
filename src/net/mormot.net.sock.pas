@@ -448,11 +448,12 @@ type
     constructor Bind(const aAddress: RawUTF8; aLayer: TNetLayer = nlTCP;
       aTimeOut: integer = 10000);
     /// low-level internal method called by Open() and Bind() constructors
-    // - raise an ECrtSocket exception on error
+    // - raise an ENetSock exception on error
     // - you may ask for a TLS secured client connection (only available under
     // Windows by now, using the SChannel API)
     procedure OpenBind(const aServer, aPort: RawUTF8; doBind: boolean;
-      aSock: TNetSocket = TNetSocket(-1); aLayer: TNetLayer = nlTCP; aTLS: boolean = false);
+      aSock: TNetSocket = TNetSocket(-1); aLayer: TNetLayer = nlTCP;
+      aTLS: boolean = false);
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
     procedure AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -499,8 +500,9 @@ type
     // - will wait up to the specified aTimeOutMS value (in milliseconds) for
     // incoming data - may wait a little less time on Windows due to a select bug
     // - returns -1 in case of a socket error (e.g. broken/closed connection);
-    // you can raise a ECrtSocket exception to propagate the error
-    function SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket: boolean = false): integer;
+    // you can raise a ENetSock exception to propagate the error
+    function SockInPending(aTimeOutMS: integer;
+      aPendingAlsoInSocket: boolean = false): integer;
     /// checks if the low-level socket handle has been assigned
     // - just a wrapper around PtrInt(fSock)>0
     function SockIsDefined: boolean;
@@ -511,7 +513,7 @@ type
     // - useful on multi-treaded environnement (as in THttpServer.Process)
     // - no temp buffer is used
     // - handle RawByteString, ShortString, Char, integer parameters
-    // - raise ECrtSocket exception on socket error
+    // - raise ENetSock exception on socket error
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with a single line - includes trailing #13#10
     procedure SockSend(const Line: RawByteString = ''); overload;
@@ -519,7 +521,7 @@ type
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
     /// flush all pending data to be sent, optionally with some body content
-    // - raise ECrtSocket on error
+    // - raise ENetSock on error
     procedure SockSendFlush(const aBody: RawByteString = '');
     /// flush all pending data to be sent
     // - returning true on success
@@ -529,7 +531,7 @@ type
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
-    // - raise ECrtSocket exception on socket error
+    // - raise ENetSock exception on socket error
     procedure SockRecv(Buffer: pointer; Length: integer);
     /// check if there are some pending bytes in the input sockets API buffer
     // - returns cspSocketError if the connection is broken or closed
@@ -550,18 +552,18 @@ type
     /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one if needed
     // - use TimeOut milliseconds wait for incoming data
-    // - raise ECrtSocket exception on socket error
+    // - raise ENetSock exception on socket error
     // - by default, will handle #10 or #13#10 as line delimiter (as normal text
     // files), but you can delimit lines using #13 if CROnly is TRUE
     procedure SockRecvLn(out Line: RawUTF8; CROnly: boolean = false); overload;
     /// call readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one
     // - use TimeOut milliseconds wait for incoming data
-    // - raise ECrtSocket exception on socket error
+    // - raise ENetSock exception on socket error
     // - line content is ignored
     procedure SockRecvLn; overload;
     /// direct send data through network
-    // - raise a ECrtSocket exception on any error
+    // - raise a ENetSock exception on any error
     // - bypass the SockSend() or SockOut^ buffers
     procedure SndLow(P: pointer; Len: integer);
     /// direct send data through network
@@ -572,7 +574,7 @@ type
     // - i.e. returns WSAGetLastError
     function LastLowSocketError: integer;
     /// direct send data through network
-    // - raise a ECrtSocket exception on any error
+    // - raise a ENetSock exception on any error
     // - bypass the SndBuf or SockOut^ buffers
     // - raw Data is sent directly to OS: no LF/CRLF is appened to the block
     procedure Write(const Data: RawByteString);
@@ -708,8 +710,9 @@ const
 
 
 /// create a TCrtSocket, returning nil on error
-// (useful to easily catch socket error exception ECrtSocket)
-function Open(const aServer, aPort: RawUTF8; aTLS: boolean = false): TCrtSocket;
+// (useful to easily catch socket error exception ENetSock)
+function Open(const aServer, aPort: RawUTF8;
+  aTLS: boolean = false): TCrtSocket;
 
 
 implementation
@@ -1938,7 +1941,7 @@ const
 
 procedure TCrtSocket.SockSend(const Values: array of const);
 var
-  i: integer;
+  i: PtrInt;
   tmp: shortstring;
 begin
   for i := 0 to high(Values) do

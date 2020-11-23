@@ -5202,7 +5202,7 @@ raw:    // copy any simple value (e.g. ordinal, varByRef)
       RawByteString(Dest^.VAny) := RawByteString(Source^.VAny)
     end
     else if vt >= varByRef then
-      // varByRef has no refcount
+      // varByRef has no refcount -> copy VPointer
       goto raw
     {$ifdef HASVARUSTRING}
     else if vt = varUString then
