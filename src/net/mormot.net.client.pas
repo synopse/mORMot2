@@ -28,6 +28,7 @@ uses
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}  // as set in mormot.defines.inc
+  WinINet;
   mormot.lib.winhttp,
   {$endif USEWININET}
   {$ifdef USELIBCURL}  // as set in mormot.defines.inc
@@ -111,6 +112,24 @@ type
   // - may be either THttpClientSocket or THttpClientWebSockets (from
   // mormot.net.websock unit)
   THttpClientSocketClass = class of THttpClientSocket;
+
+/// create a THttpClientSocket, returning nil on error
+// - useful to easily catch socket error exception ENetSock
+function OpenHttp(const aServer, aPort: RawUTF8; aTLS: boolean = false;
+  aLayer: TNetLayer = nlTCP): THttpClientSocket; overload;
+
+/// create a THttpClientSocket, returning nil on error
+// - useful to easily catch socket error exception ENetSock
+function OpenHttp(const aURI: RawUTF8;
+  aAddress: PRawUTF8 = nil): THttpClientSocket; overload;
+
+/// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
+// - this method will use a low-level THttpClientSock socket: if you want
+// something able to use your computer proxy, take a look at TWinINet.Get()
+// and the overloaded HttpGet() functions
+function OpenHttpGet(const server, port, url, inHeaders: RawUTF8;
+  outHeaders: PRawUTF8 = nil; aLayer: TNetLayer = nlTCP): RawByteString; overload;
+
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -661,11 +680,6 @@ type
 
 implementation
 
-{$ifdef USEWININET}
-uses
-  WinINet;
-{$endif USEWININET}
-
 
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
@@ -769,7 +783,7 @@ begin
         DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
         exit;
       end;
-      SockRecvLn(Command); // will raise ECrtSocket on any error
+      SockRecvLn(Command); // will raise ENetSock on any error
       if TCPPrefix <> '' then
         if Command <> TCPPrefix then
         begin
@@ -853,6 +867,55 @@ begin
   result := Request(url, 'DELETE', KeepAlive, header, '', '', false);
 end;
 
+
+function OpenHttp(const aServer, aPort: RawUTF8; aTLS: boolean;
+  aLayer: TNetLayer): THttpClientSocket;
+begin
+  try
+    result := THttpClientSocket.Open(
+      aServer,aPort, aLayer, 0, aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
+  except
+    on ENetSock do
+      result := nil;
+  end;
+end;
+
+function OpenHttp(const aURI: RawUTF8;
+  aAddress: PRawUTF8): THttpClientSocket;
+var
+  URI: TURI;
+begin
+  result := nil;
+  if URI.From(aURI) then
+  begin
+    result := OpenHttp(URI.Server,URI.Port,URI.Https,URI.Layer);
+    if aAddress <> nil then
+      aAddress^ := URI.Address;
+  end;
+end;
+
+function OpenHttpGet(const server, port, url, inHeaders: RawUTF8;
+  outHeaders: PRawUTF8; aLayer: TNetLayer): RawByteString;
+var Http: THttpClientSocket;
+begin
+  result := '';
+  Http := OpenHttp(server, port, false, aLayer);
+  if Http <> nil then
+  try
+    if Http.Get(url, 0, inHeaders) in
+         [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
+    begin
+      result := Http.Content;
+      if outHeaders <> nil then
+        outHeaders^ := Http.HeaderGetText;
+    end;
+  finally
+    Http.Free;
+  end;
+end;
+
+
+{ ******************** THttpRequest Abstract HTTP client class }
 
 { THttpRequest }
 

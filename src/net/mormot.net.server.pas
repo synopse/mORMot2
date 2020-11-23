@@ -171,7 +171,7 @@ type
     // value, so that the method could know which connnection is to be used -
     // it will return HTTP_NOTFOUND (404) if the connection is unknown
     // - result of the function is the HTTP error code (200 if OK, e.g.)
-    // - warning: this void implementation will raise an ECrtSocket exception -
+    // - warning: this void implementation will raise an EHttpServer exception -
     // inherited classes should override it, e.g. as in TWebSocketServerRest
     function Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal; virtual;
     /// will register a compression algorithm
@@ -545,7 +545,7 @@ type
     // should call and check this method result just after THttpServer.Create
     // - initial THttpServer design was to call Bind() within Create, which
     // works fine on Delphi + Windows, but fails with a EThreadError on FPC/Linux
-    // - raise a ECrtSocket if binding failed within the specified period (if
+    // - raise a EHttpServer if binding failed within the specified period (if
     // port is free, it would be almost immediate)
     // - calling this method is optional, but if the background thread didn't
     // actually bind the port, the server will be stopped and unresponsive with
