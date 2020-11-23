@@ -65,8 +65,8 @@ function TrimRight(const S: RawUTF8): RawUTF8;
 /// split a RawUTF8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
-procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8;
-  ToUpperCase: boolean = false); overload;
+function Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8;
+  ToUpperCase: boolean = false): boolean; overload;
 
 /// split a RawUTF8 string into two strings, according to SepStr separator
 // - this overloaded function returns the right string as function result
@@ -2563,8 +2563,8 @@ begin
   result := Str;
 end;
 
-procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8;
-  ToUpperCase: boolean);
+function Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8;
+  ToUpperCase: boolean): boolean;
 var
   i: integer;
   tmp: RawUTF8; // may be called as Split(Str,SepStr,Str,RightStr)
@@ -2579,12 +2579,14 @@ begin
   begin
     LeftStr := Str;
     RightStr := '';
+    result := false;
   end
   else
   begin
     tmp := copy(Str, 1, i - 1);
     RightStr := copy(Str, i + length(SepStr), maxInt);
     LeftStr := tmp;
+    result := true;
   end;
   if ToUpperCase then
   begin
@@ -2593,7 +2595,8 @@ begin
   end;
 end;
 
-function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean): RawUTF8;
+function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8;
+  ToUpperCase: boolean): RawUTF8;
 begin
   Split(Str, SepStr, LeftStr, result, ToUpperCase);
 end;

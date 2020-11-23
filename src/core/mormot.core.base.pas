@@ -8137,8 +8137,9 @@ begin
       if PC^ = #0 then
         break
       else if PC^ <= #127 then
+        // 7 bits chars are always OK, whatever codepage/charset is used
         inc(PC)
-      else // 7 bits chars are always OK, whatever codepage/charset is used
+      else
         exit;
   result := true;
 end;
