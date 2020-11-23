@@ -674,8 +674,9 @@ type
   // kind of value, including objects
   TTextWriter = class(TBaseWriter)
   protected
+    // used by AddCRAndIndent for enums, sets and T*ObjArray comment of values
     fBlockComment: RawUTF8;
-    /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
+    // used by WriteObjectAsString/AddDynArrayJSONAsString methods
     fInternalJSONWriter: TTextWriter;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
       AnsiToWide: PWordArray; Escape: TTextWriterKind);
@@ -1720,12 +1721,12 @@ type
 
 var
   /// default options for the JSON parser
-  // - as supplied to GetDataFromJSON() global function with Tolerant=false
+  // - as supplied to LoadJson() with Tolerant=false
   // - defined as var, not as const, to allow process-wide override
   JSONPARSER_DEFAULTOPTIONS: TJsonParserOptions = [];
 
   /// some open-minded options for the JSON parser
-  // - as supplied to GetDataFromJSON() global function with Tolerant=true
+  // - as supplied to LoadJson() with Tolerant=true
   // - won't block JSON unserialization due to some minor unexpected values
   // - used e.g. by TObjArraySerializer.CustomReader and
   // TInterfacedObjectFake.FakeCall/TServiceMethodExecute.ExecuteJson methods
@@ -5076,6 +5077,7 @@ type
 procedure _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 var
   c: TJsonSaveContext;
+  p: PRttiCustomProp;
   n: integer;
   rvd: TRttiVarData;
   done: boolean;
@@ -5087,7 +5089,7 @@ begin
     // class instances are accessed by reference, records are stored by value
     Data := PPointer(Data)^
   else
-    exclude(c.Options, woFullExpand); // not for records
+    exclude(c.Options, woFullExpand); // not for null or for records
   if Data = nil then
     // append 'null' for nil class instance
     c.W.AddNull
@@ -5125,49 +5127,51 @@ begin
           c.W.BlockAfterItem(c.Options);
       end;
     end;
+    if woDontStoreInherited in c.Options then
     with Ctxt.Info.Props do
-      if woDontStoreInherited in c.Options then
-      begin
-        // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
-        n := Count - NotInheritedIndex;
-        inc(c.Prop, NotInheritedIndex);
-      end
-      else
-        n := Count;
+    begin
+      // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
+      n := Count - NotInheritedIndex;
+      inc(c.Prop, NotInheritedIndex);
+    end
+    else
+      n := Ctxt.Info.Props.Count;
     if n > 0 then
       // this is the main loop serializing Info.Props[]
       repeat
+        p := c.Prop;
         if // handle Props.NameChange() set to New='' to ignore this field
-           (c.Prop^.Name <> nil) and
+           (p^.Name <> nil) and
            // handle woStoreStoredFalse flag and "stored" attribute in code
-           ((c.Prop^.Prop = nil) or
+           ((p^.Prop = nil) or
             (woStoreStoredFalse in c.Options) or
-            (c.Prop^.Prop.IsStored(pointer(Data)))) and
+            (p^.Prop.IsStored(pointer(Data)))) and
            // handle woDontStoreDefault flag over "default" attribute in code
-           (not (woDontStoreDefault in c.Options) or
-            (c.Prop.PropDefault = NO_DEFAULT) or
-            not c.Prop.ValueIsDefault(Data)) and
+           ((p^.Prop = nil) or
+            not (woDontStoreDefault in c.Options) or
+            (p.PropDefault = NO_DEFAULT) or
+            not p.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
            (not (woDontStoreVoid in c.Options) or
-            not c.Prop.ValueIsVoid(Data)) then
+            not p.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
-          c.W.WriteObjectPropName(c.Prop^.Name^, c.Options);
+          c.W.WriteObjectPropName(p^.Name^, c.Options);
           if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
-             not TSPHook(Data).RttiWritePropertyValue(c.W, c.Prop, c.Options) then
+             not TSPHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             if (woHideSensitivePersonalInformation in c.Options) and
-               (rcfSPI in c.Prop^.Value.Flags) then
+               (rcfSPI in p^.Value.Flags) then
               c.W.AddShorter('"***"')
-            else if c.Prop^.OffsetGet >= 0 then
+            else if p^.OffsetGet >= 0 then
             begin
               // direct value write (record field or plain class property)
-              c.Info := c.Prop^.Value;
-              TRttiJsonSave(c.Info.JsonSave)(Data + c.Prop^.OffsetGet, c);
+              c.Info := p^.Value;
+              TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
             end
             else
             begin
               // need to call a getter method
-              c.Prop^.Prop.GetValue(pointer(Data), c.Prop^.Value, rvd);
+              p^.Prop.GetValue(pointer(Data), p^.Value, rvd);
               c.W.AddVariant(variant(rvd), twJSONEscape, c.Options);
               if rvd.NeedsClear then
                 VarClearProc(rvd.Data);
@@ -5207,15 +5211,16 @@ begin
   W.BlockBegin('[', Options);
   if Count > 0 then
     repeat
-      if Value^ = nil then
+      v := Value^;
+      if v = nil then
         W.AddNull
       else
       begin
-        v := PPointer(Value^)^; // check Value class
+        v := PPointer(v)^; // check Value class
         if v <> c then
         begin
           c := v;
-          ctxt.Info := Rtti.RegisterClass(c);
+          ctxt.Info := Rtti.RegisterClass(v);
           save := ctxt.Info.JsonSave;
         end;
         save(pointer(Value), ctxt);
