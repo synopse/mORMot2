@@ -28,6 +28,10 @@ uses
   termio,
   dl;
 
+{$ifdef UNICODE}
+  'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUTF8Char'
+{$endif UNICODE}
+
 
 { ****************** Unicode, Time, File process }
 var
@@ -623,7 +627,7 @@ begin
     // handle SleepHiRes(0) special case
     if SleepHiRes0Yield then
     begin
-      // warning: reported as buggy by Alan on POSIX, and despited by Linus
+      // warning: reported as buggy by Alan on POSIX, and despitable by Linus
       ThreadSwitch; // call e.g. pthread's sched_yield API
       exit;
     end
@@ -795,14 +799,12 @@ begin
   end;
 end;
 
-
-
 {$endif LINUXNOTBSD}
 
 
-// define some raw functions, to avoid linking mormot.core.text
+// define some raw text functions, to avoid linking mormot.core.text
 
-function IdemPChar(p, up: PUTF8Char): boolean;
+function IdemPChar(p, up: PUTF8Char): boolean; inline;
 var
   c, u: AnsiChar;
 begin
@@ -901,6 +903,18 @@ begin
   FastSetString(result, S, P - S);
 end;
 
+function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char; inline;
+begin
+  result := nil;
+  repeat
+    if Str^ = #0 then
+      exit;
+    if Str^ = Chr then
+      break;
+    inc(Str);
+  until false;
+  result := Str;
+end;
 
 // we bypass crt.pp since this unit cancels the SIGINT signal
 
@@ -1664,20 +1678,6 @@ begin
       end;
     end;
   end;
-end;
-
-function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
-begin
-  result := nil;
-  if Str <> nil then
-    repeat
-      if Str^ = #0 then
-        exit;
-      if Str^ = Chr then
-        break;
-      inc(Str);
-    until false;
-  result := Str;
 end;
 
 function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TFileName;
