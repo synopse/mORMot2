@@ -2833,26 +2833,19 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         mov     rcx, len
         not     eax
         test    buf, buf
-        jz      @z
+        jz      @0
         cmp     len, 64
-        jb      @sml
-        // our  call: rcx/rdi=crc rdx/rsi=buf r8/rdx=len
-        // iscsi_01:  rcx/rdi=buf rdx/rsi=len r8/rdx=crc
-        mov     crc, buf
-        mov     buf, len
-        mov     len, rax
-        call    crc32_iscsi_01
-@z:     not     eax
-        ret
-@sml:   shr     len, 3
+        jae     @big
+        // it is faster to use a direct 8-bytes loop for blocks < 64 bytes
+        shr     len, 3
         jz      @2
 {$ifdef FPC}
         align   16
         // hash 8 bytes per loop
-@s:     crc32   rax, qword [buf]
+        @s:     crc32   rax, qword [buf]
 {$else} .align  16
         // circumvent Delphi inline asm compiler bug
-@s:     db $F2,$48,$0F,$38,$F1,$02
+        @s:     db $F2,$48,$0F,$38,$F1,$02
 {$endif FPC}
         add     buf, 8
         dec     len
@@ -2869,6 +2862,14 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         jz      @0
         crc32   eax, byte ptr[buf]
 @0:     not     eax
+        ret
+@big:   // our  call: rcx/rdi=crc rdx/rsi=buf r8/rdx=len
+        // iscsi_01:  rcx/rdi=buf rdx/rsi=len r8/rdx=crc
+        mov     crc, buf
+        mov     buf, len
+        mov     len, rax
+        call    crc32_iscsi_01
+        not     eax
 end;
 
 {$endif CRC32C_X64}
