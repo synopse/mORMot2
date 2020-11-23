@@ -31,6 +31,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.data,
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
@@ -209,7 +210,6 @@ type
 {$else}
 
 uses
-  mormot.core.data,
   uADPhysIntf,
   uADStanDef,
   uADDAptManager,
