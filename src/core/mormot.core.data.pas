@@ -5548,12 +5548,15 @@ begin
     rB := Rtti.RegisterClass(PPointer(B)^);
     for i := 1 to rA.Props.Count do
     begin
-      pB := rB.Props.Find(pA^.Name^);
-      if pB <> nil then
+      if pA^.Name <> nil then
       begin
-        result := pA^.CompareValue(A, B, pB^, CaseInSensitive);
-        if result <> 0 then
-          exit;
+        pB := rB.Props.Find(pA^.Name^);
+        if pB <> nil then
+        begin
+          result := pA^.CompareValue(A, B, pB^, CaseInSensitive);
+          if result <> 0 then
+            exit;
+        end;
       end;
       inc(pA);
     end;

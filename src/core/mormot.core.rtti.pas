@@ -1821,6 +1821,8 @@ type
     OffsetSet: PtrInt;
     /// map to Prop^.Name or a customized field/property name
     // - e.g. 'SubProp'
+    // - equals nil if Props.NameChange() was set to New='', meaning this field
+    // should not be part of the serialized JSON object
     Name: PShortString;
     /// store standard RTTI of this published property
     // - equals nil for rkRecord/rkObject nested field
@@ -1876,7 +1878,23 @@ type
     /// locate a property/field by name
     function Find(PropName: PUTF8Char; PropNameLen: PtrInt): PRttiCustomProp; overload;
     /// customize a property/field name
+    // - New is expected to be only plain pascal identifier, i.e.
+    // A-Z a-z 0-9 and _ characters, up to 63 in length
+    // - if New equals '', this published property will be excluded from
+    // the JSON serialized object
+    // - the New shortstring should be a local constant, to avoid random GPF
     function NameChange(const Old, New: shortstring): PRttiCustomProp;
+    /// customize property/field name, specified as old/new pairs
+    // - each Old[] field name will be replaced by the corresponding New[] name
+    // - New[] is expected to be only plain pascal identifier, i.e.
+    // A-Z a-z 0-9 and _ characters, up to 63 in length
+    // - if any New[] equals '', this published property will be excluded from
+    // the JSON serialized object
+    // - setting both Old=New=[] will return back to the default names from RTTI
+    // - the New shortstring should be a local constant, to avoid random GPF
+    // - Rtti.ByClass[TMyClass].Props.NameChanges() replaces deprecated
+    // TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, ...)
+    procedure NameChanges(const Old, New: array of shortstring);
     /// manuall adding of a property/field definition
     procedure Add(Info: PRttiInfo; Offset: PtrInt; const PropName: shortstring);
     /// register the published properties of a given class
@@ -2198,6 +2216,7 @@ type
     // the memory
     // - set Item=nil to unregister the type as a T*ObjArray
     // - may return nil if DynArray is not a rkDynArray
+    // - replace deprecated TJSONSerializer.RegisterObjArrayForJSON() method
     function RegisterObjArray(DynArray: PRttiInfo; Item: TClass): TRttiCustom;
     /// register one or several dynamic array RTTI TypeInfo() to be serialized
     // as T*ObjArray
@@ -2255,6 +2274,11 @@ type
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
     property ByTypeInfo[P: PRttiInfo]: TRttiCustom
       read RegisterType; default;
+      /// default property to access a given RTTI customization of a class
+      // - you can access or register one type by using this default property:
+      // ! Rtti.ByClass[TMyClass].Props.NameChanges(['old', 'new'])
+      property ByClass[C: TClass]: TRttiCustom
+        read RegisterClass;
   end;
 
 
@@ -4066,7 +4090,7 @@ begin
   result := nil;
   props := ClassFieldAllProps(ClassType, Types);
   n := length(props);
-  SetLength(result,n);
+  SetLength(result, n);
   for i := 0 to n - 1 do
     if IncludePropType then
       FormatUTF8('%: %', [props[i]^.Name^, props[i]^.TypeInfo^.Name], result[i])
@@ -5834,7 +5858,8 @@ begin
     n := Count;
     repeat
       s := pointer(result.Name);
-      if (ord(s[0]) = PropNameLen) and
+      if (s <> nil) and
+         (PtrInt(s[0]) = PropNameLen) and
          IdemPropNameUSameLen(s + 1, PropName, PropNameLen) then
         exit;
       inc(result);
@@ -5848,7 +5873,39 @@ function TRttiCustomProps.NameChange(const Old, New: shortstring): PRttiCustomPr
 begin
   result := Find(Old);
   if result <> nil then
-    result^.Name := @New;
+    if New = '' then
+      // mark ignore this field in JSON serialized object
+      result^.Name := nil
+    else
+      // customize this field
+      result^.Name := @New;
+end;
+
+procedure TRttiCustomProps.NameChanges(const Old, New: array of shortstring);
+var
+  i: PtrInt;
+  p: PRttiCustomProp;
+begin
+  if high(Old) <> high(New) then
+    raise ERttiException.CreateUTF8(
+      'NameChanges(%,%) fields count', [high(Old), high(New)]);
+  // first reset the names from RTTI (if available)
+  for i := 0 to Count - 1 do
+    if List[i].Prop <> nil then
+      List[i].Name := List[i].Prop^.Name;
+  // customize field names
+  for i := 0 to high(Old) do
+  begin
+    p := Find(Old[i]);
+    if p = nil then
+      raise ERttiException.CreateUTF8('NameChanges(%) unknown', [Old[i]]);
+    if New[i] = '' then
+      // mark ignore this field in JSON serialized object
+      p^.Name := nil
+    else
+      // customize this field
+      p^.Name := @New[i];
+  end;
 end;
 
 procedure TRttiCustomProps.Add(Info: PRttiInfo; Offset: PtrInt;
@@ -7057,6 +7114,7 @@ procedure CopyObject(aFrom, aTo: TObject);
 var
   cFrom: TRttiCustom;
   rFrom, rTo: PRttiCustomProps;
+  n: PShortString;
   p: PRttiCustomProp;
   i: PtrInt;
   rvd: TRttiVarData;
@@ -7083,11 +7141,15 @@ begin
       rTo := @Rtti.RegisterClass(PClass(aTo)^).Props;
       for i := 0 to rFrom.Count - 1 do
       begin
-        p := rTo.Find(rFrom.List[i].Name^);
-        if p <> nil then
+        n := rFrom.List[i].Name;
+        if n <> nil then
         begin
-          rFrom.List[i].GetValue(pointer(aFrom), rvd);
-          p^.SetValue(pointer(aTo), rvd, {andclear=}true);
+          p := rTo.Find(n^);
+          if p <> nil then
+          begin
+            rFrom.List[i].GetValue(pointer(aFrom), rvd);
+            p^.SetValue(pointer(aTo), rvd, {andclear=}true);
+          end;
         end;
       end;
     end;

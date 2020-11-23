@@ -1793,9 +1793,11 @@ type
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
       ObjectListItemClass: TClass = nil);
     /// register a custom callback for JSON serialization of a given TypeInfo()
+    // - replace deprecated TJSONSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
       const Writer: TOnRttiJsonWrite; const Reader: TOnRttiJsonRead): TRttiCustom; overload;
     /// register a custom callback for JSON serialization of a given class
+    // - replace deprecated TJSONSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(ObjectClass: TClass;
       const Writer: TOnRttiJsonWrite; const Reader: TOnRttiJsonRead): TRttiCustom; overload;
   end;
@@ -4896,7 +4898,8 @@ begin
   if woIDAsIDstr in Ctxt.Options then
   begin
     Ctxt.W.BlockAfterItem(Ctxt.Options);
-    if Ctxt.Prop <> nil then
+    if (Ctxt.Prop <> nil) and
+       (Ctxt.Prop^.Name <> nil) then
     begin
       FormatShort('%_str', [Ctxt.Prop^.Name^], _str);
       Ctxt.W.WriteObjectPropName(_str, Ctxt.Options);
@@ -5059,6 +5062,7 @@ var
   c: TJsonSaveContext;
   n: integer;
   rvd: TRttiVarData;
+  done: boolean;
 begin
   c.W := Ctxt.W;
   c.Options := Ctxt.Options;
@@ -5117,8 +5121,10 @@ begin
     if n > 0 then
       // this is the main loop serializing Info.Props[]
       repeat
-        // handle woStoreStoredFalse flag and "stored" attribute in code
-        if ((c.Prop^.Prop = nil) or
+        if // handle Props.NameChange() set to New='' to ignore this field
+           (c.Prop^.Name <> nil) and
+           // handle woStoreStoredFalse flag and "stored" attribute in code
+           ((c.Prop^.Prop = nil) or
             (woStoreStoredFalse in c.Options) or
             (c.Prop^.Prop.IsStored(pointer(Data)))) and
            // handle woDontStoreDefault flag over "default" attribute in code
@@ -5150,11 +5156,16 @@ begin
               if rvd.NeedsClear then
                 VarClearProc(rvd.Data);
             end;
-        end;
+          done := true;
+        end
+        else
+          done := false;
         dec(n);
         if n = 0 then
           break;
-        c.W.BlockAfterItem(c.Options);
+        if done then
+          // append ',' and proper indentation
+          c.W.BlockAfterItem(c.Options);
         inc(c.Prop);
       until false;
     if rcfSynPersistentHook in Ctxt.Info.Flags then
@@ -7167,7 +7178,8 @@ begin
         if not Ctxt.Valid then
           break;
         // O(1) optimistic process of the propertyname
-        if IdemPropName(prop^.Name^, propname, propnamelen) then
+        if (prop^.Name <> nil) and
+           IdemPropName(prop^.Name^, propname, propnamelen) then
           if JsonLoadProp(Data, prop^, Ctxt) then
             inc(prop)
           else
