@@ -104,8 +104,8 @@ type
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
   published
-    /// the faster CopyRecord function, enhancing the system.pas unit
-    procedure SystemCopyRecord;
+    /// test the new RecordCopy() using our fast RTTI
+    procedure _RecordCopy;
     /// test the TRawUTF8List class
     procedure _TRawUTF8List;
     /// test the TDynArray object and methods
@@ -2081,7 +2081,7 @@ begin
 end;
 {$endif CPUINTEL}
 
-procedure TTestCoreBase.SystemCopyRecord;
+procedure TTestCoreBase._RecordCopy;
 type
   TR = record
     One: integer;
@@ -2112,7 +2112,7 @@ begin
   A.Arr[5] := 'five';
   SetLength(A.Dyn, 10);
   A.Dyn[9] := 9;
-  B := A;
+  RecordCopy(B, A, TypeInfo(TR)); // mORMot 2 doesn't overload RecordCopy()
   Check(A.One = B.One);
   Check(A.S1 = B.S1);
   Check(A.Three = B.Three);
@@ -2141,7 +2141,7 @@ begin
     Check(CompareMemFixed(@A.Bulk, @B.Bulk, i) = (i = 0));
   B.Three := 3;
   B.Dyn[0] := 10;
-  C := B;
+  RecordCopy(C, B, TypeInfo(TR)); // mORMot 2 doesn't overload RecordCopy()
   Check(A.One = C.One);
   Check(A.S1 = C.S1);
   Check(C.Three = 3);
