@@ -122,8 +122,11 @@ type
 
 const
   /// the default access rights used by the HTTP server if none is specified
-  HTTP_DEFAULT_ACCESS_RIGHTS: PORMAccessRights = @SUPERVISOR_ACCESS_RIGHTS;
+  // will return @SUPERVISOR_ACCESS_RIGHTS; implementad as function 
+  // due to Delphi compiler requirementes for compiling as package
+  function HTTP_DEFAULT_ACCESS_RIGHTS: PORMAccessRights;
 
+const
   /// the kind of HTTP server to be used by default
   // - will define the best available server class, depending on the platform
   HTTP_DEFAULT_MODE =
@@ -1304,6 +1307,10 @@ begin
   end;
 end;
 
+function HTTP_DEFAULT_ACCESS_RIGHTS: PORMAccessRights;
+begin
+  Result:=@SUPERVISOR_ACCESS_RIGHTS;
+end;
 
 end.
 
