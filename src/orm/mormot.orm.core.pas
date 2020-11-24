@@ -5596,7 +5596,7 @@ type
 
   /// this base class will create a FTS3 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
-  // - will generate tokenize=unicode64 by convention from the class name
+  // - will generate tokenize=unicode61 by convention from the class name
   TOrmFts3Unicode61 = class(TOrmFts3);
 
   /// a base record, corresponding to a FTS4 table, which is an enhancement to FTS3
@@ -5627,7 +5627,7 @@ type
 
   /// this base class will create a FTS4 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
-  // - will generate tokenize=unicode64 by convention from the class name
+  // - will generate tokenize=unicode61 by convention from the class name
   TOrmFts4Unicode61 = class(TOrmFts4);
 
   /// a base record, corresponding to a FTS5 table, which is an enhancement to FTS4
@@ -5649,7 +5649,7 @@ type
 
   /// this base class will create a FTS5 table using the Unicode61 Stemming algorithm
   // - see https://sqlite.org/fts5.html#tokenizers
-  // - will generate tokenize=unicode64 by convention from the class name
+  // - will generate tokenize=unicode61 by convention from the class name
   TOrmFts5Unicode61 = class(TOrmFts5);
 
 
@@ -17140,27 +17140,39 @@ begin
           if (Props.fFTSWithoutContentFields <> '') and
              (Props.fFTSWithoutContentTableIndex >= 0) then
           begin
-            result := FormatUTF8('%content="%",',
-              [result, aModel.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName]);
+            result := FormatUTF8('%content="%",', [result,
+              aModel.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName]);
             if Props.Kind = rFTS5 then
               result := FormatUTF8('%content_rowid="ID",', [result]);
           end;
           for i := 0 to fields.Count - 1 do
             result := result + fields.List[i].Name + ',';
-          tokenizer := 'simple';
+          if Props.Kind = rFTS5 then
+            tokenizer := 'ascii'   // FTS5 knows ascii/porter/unicode61
+          else
+            tokenizer := 'simple'; // FTS3-4 know simple/porter/unicode61
           c := self;
           repeat
             ClassToText(c, cname); // TOrmFtsTest = class(TOrmFts3Porter)
             if IdemPChar(pointer(cname), 'TORMFTS') and
-               (cname[14] in ['3', '4', '5']) then
-            begin
-              if length(cname) > 14 then
-                tokenizer := copy(cname, 15, 100); // e.g. TOrmFts3Porter -> 'Porter'
+               (cname[8] in ['3', '4', '5']) then
+            begin // e.g. TOrmFts3Porter -> 'tokenize=porter'
+              if length(cname) > 8 then
+                tokenizer := LowerCase(copy(cname, 9, 100));
               break;
             end;
+            {$ifndef PUREMORMOT2}
+            if IdemPChar(pointer(cname), 'TSQLRECORDFTS') and
+               (cname[14] in ['3', '4', '5']) then
+            begin // e.g. TSQLRecordFTS3Porter -> 'tokenize=porter'
+              if length(cname) > 14 then
+                tokenizer := LowerCase(copy(cname, 15, 100));
+              break;
+            end;
+            {$endif PUREMORMOT2}
             c := GetClassParent(c);
           until c = TOrm;
-          result := FormatUTF8('% tokenize=%)', [result, LowerCaseU(tokenizer)]);
+          result := FormatUTF8('% tokenize=%)', [result, tokenizer]);
         end;
       rRTree, rRTreeInteger:
         begin
