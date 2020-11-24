@@ -7095,7 +7095,8 @@ end;
 
 function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt;
 begin
-  result := PtrUIntScanIndex(pointer(aObjArray), length(TObjectDynArray(aObjArray)), PtrUInt(aItem));
+  result := PtrUIntScanIndex(
+    pointer(aObjArray), length(TObjectDynArray(aObjArray)), PtrUInt(aItem));
 end;
 
 function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt;
@@ -7263,7 +7264,8 @@ var
   a: TInterfaceDynArray absolute aInterfaceArray;
   n: PtrInt;
 begin
-  if PtrUIntScanExists(pointer(aInterfaceArray), length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem)) then
+  if PtrUIntScanExists(pointer(aInterfaceArray),
+      length(TInterfaceDynArray(aInterfaceArray)), PtrUInt(aItem)) then
     exit;
   n := length(a);
   SetLength(a, n + 1);

@@ -316,9 +316,8 @@ type
     function DecompressPartial(Comp, Partial: PAnsiChar; CompLen,
       PartialLen, PartialLenMax: integer): integer;
     /// compress a Stream content using this compression algorithm
-    // - source Stream is split into 128 MB blocks for fast in-memory compression of
-    // any Stream size, then SynLZ compressed and including a Hash32 checksum
-    // - it is not compatible with StreamSynLZ format, which has no 128 MB chunking
+    // - source Stream is not split into 128 MB chunks, as with FileCompress,
+    // but directly compressed and including Source and Dest checksums
     // - you should specify a Magic number to be used to identify the compressed
     // Stream format
     // - follow the StreamSynLZ() deprecated function format, if ForceHash32=true
@@ -326,9 +325,8 @@ type
     function StreamCompress(Source: TCustomMemoryStream; Dest: TStream;
       Magic: cardinal; ForceHash32: boolean = false): integer; overload;
     /// compress a Stream content using this compression algorithm into a file
-    // - source Stream is split into 128 MB blocks for fast in-memory compression of
-    // any Stream size, then SynLZ compressed and including a Hash32 checksum
-    // - it is not compatible with StreamSynLZ format, which has no 128 MB chunking
+    // - source Stream is not split into 128 MB chunks, as with FileCompress,
+    // but directly compressed and including Source and Dest checksums
     // - you should specify a Magic number to be used to identify the compressed
     // Stream format
     // - follow the StreamSynLZ() deprecated function format, if ForceHash32=true
@@ -357,15 +355,16 @@ type
     // - follow the FileIsSynLZ() deprecated function format
     function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean;
     /// compress a file content using this compression algorithm
-    // - source file is split into 128 MB blocks for fast in-memory compression of
-    // any file size, then SynLZ compressed and including a Hash32 checksum
-    // - it is not compatible with StreamSynLZ format, which has no 128 MB chunking
+    // - source file is split into ChunkBytes blocks (128 MB by default) for
+    // fast in-memory compression of any file size, then compressed and
+    // including checksums of Source/Dest data
+    // - it is not compatible with StreamCompress format, which has no chunking
     // - you should specify a Magic number to be used to identify the compressed
     // file format
     // - follow the FileSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function FileCompress(const Source, Dest: TFileName; Magic: cardinal;
-      ForceHash32: boolean = false): boolean;
+      ForceHash32: boolean = false; ChunkBytes: Int64 = 128 shl 20): boolean;
     /// uncompress a file previoulsy compressed via FileCompress()
     // - you should specify a Magic number to be used to identify the compressed
     // file format
@@ -4213,7 +4212,8 @@ begin
   end;
   crc := AlgoHash(0, Plain, PlainLen);
   if (PlainLen < CompressionSizeTrigger) or
-     (CheckMagicForCompressed and IsContentCompressed(Plain, PlainLen)) then
+     (CheckMagicForCompressed and
+      IsContentCompressed(Plain, PlainLen)) then
   begin
     SetString(result, nil, PlainLen + BufferOffset + 9);
     R := pointer(result);
@@ -4249,10 +4249,13 @@ begin
       R[4] := AnsiChar(AlgoID);
       PCardinal(R + 5)^ := AlgoHash(0, R + 9, len);
     end;
+    inc(len, BufferOffset + 9);
     if R = @tmp[BufferOffset] then
-      SetString(result, PAnsiChar(@tmp), len + BufferOffset + 9)
+      SetString(result, PAnsiChar(@tmp), len)
     else
-      SetLength(result, len + BufferOffset + 9); // MM may not move the data
+      if result <> '' then
+        // don't call the MM which may move the data: just adjust length()
+        PStrLen(R - _STRLEN)^ := len;
   end;
 end;
 
@@ -4448,6 +4451,7 @@ begin
 end;
 
 type
+  // disk header of TAlgoCompress chunk
   TAlgoCompressHead = packed record
     Magic: cardinal;
     CompressedSize: integer;
@@ -4686,28 +4690,29 @@ begin
 end;
 
 function TAlgoCompress.FileCompress(const Source, Dest: TFileName;
-  Magic: cardinal; ForceHash32: boolean): boolean;
+  Magic: cardinal; ForceHash32: boolean; ChunkBytes: Int64): boolean;
 var
   src, dst: RawByteString; // tmp buffers
   S, D: THandleStream;
   Head: TAlgoCompressHead;
-  Count, Max: Int64;
+  Count: Int64;
 begin
   result := false;
-  if FileExists(Source) then
+  if (ChunkBytes > 0) and
+     FileExists(Source) then
   try
     S := FileStreamSequentialRead(Source);
     try
       DeleteFile(Dest);
-      Max := 128 shl 20; // 128 MB default compression chunk
       D := TFileStream.Create(Dest, fmCreate);
       try
         Head.Magic := Magic;
         Count := S.Size;
         while Count > 0 do
         begin
-          if Count > Max then
-            Head.UnCompressedSize := Max
+          // compress Source into Dest with proper chunking
+          if Count > ChunkBytes then
+            Head.UnCompressedSize := ChunkBytes
           else
             Head.UnCompressedSize := Count;
           if {%H-}src = '' then
@@ -4760,6 +4765,7 @@ begin
         Count := S.Size;
         while Count > 0 do
         begin
+          // uncompress Source into Dest with proper chunking
           if S.Read(Head, SizeOf(Head)) <> SizeOf(Head) then
             exit;
           dec(Count, SizeOf(Head));
@@ -7195,7 +7201,7 @@ var
   L: PtrInt;
 begin
   L := length(Text);
-  SetLength(Text, L + 1); // reallocate
+  SetLength(Text, L + 1); // reallocate - most MM keep in-place with no move
   PByteArray(Text)[L] := ord(Ch);
 end;
 
@@ -7378,7 +7384,8 @@ begin
   if sourcelen = 0 then
     exit;
   sourcelen := EscapeBuffer(source, pointer(result), sourcelen, sourcelen * 3) - pointer(result);
-  SetLength(result, sourcelen);
+  // don't call the MM which may move the data: just adjust length()
+  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := sourcelen;
 end;
 
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring;
@@ -7450,22 +7457,27 @@ begin
   result := '';
   if Map.Map(FileName) then
   try
+    {$ifdef UNICODE}
     if ForceUTF8 then
-      {$ifdef UNICODE}
       UTF8DecodeToString(PUTF8Char(Map.Buffer), Map.Size, result)
-      {$else}
-      result := CurrentAnsiConvert.UTF8BufferToAnsi(PUTF8Char(Map.Buffer), Map.Size)
-      {$endif UNICODE}
     else
       case Map.TextFileKind of
-      {$ifdef UNICODE}
         isUnicode:
-          SetString(result, PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
+          SetString(result,
+            PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
         isUTF8:
-          UTF8DecodeToString(pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3, result);
+          UTF8DecodeToString(
+            pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3, result);
         isAnsi:
-          result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer, Map.Size);
-      {$else}
+          result := CurrentAnsiConvert.AnsiToUnicodeString(
+            Map.Buffer, Map.Size);
+      end;
+    {$else}
+    if ForceUTF8 then
+      result := CurrentAnsiConvert.UTF8BufferToAnsi(
+        PUTF8Char(Map.Buffer), Map.Size)
+    else
+      case Map.TextFileKind of
         isUnicode:
           result := CurrentAnsiConvert.UnicodeBufferToAnsi(
             PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
@@ -7474,8 +7486,8 @@ begin
             pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
         isAnsi:
           SetString(result, PAnsiChar(Map.Buffer), Map.Size);
-      {$endif UNICODE}
       end;
+    {$endif UNICODE}
   finally
     Map.UnMap;
   end;
