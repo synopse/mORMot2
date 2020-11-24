@@ -4016,8 +4016,7 @@ begin
               intvalues.UniqueVariant(VValue[VCount]);
             inc(VCount);
           until EndOfObject = ']';
-          if VCount <> cap then
-            SetLength(VValue, VCount);
+          // no SetLength(VValue,VCount) if cap is not exactly accurate
         end;
       end;
     '{':
