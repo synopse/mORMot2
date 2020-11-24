@@ -1277,13 +1277,14 @@ function SearchRecValidFolder(const F: TSearchRec): boolean;
 // FileRead() for chunks bigger than 32MB on files opened with this flag,
 // so it would use regular FileOpen() on this deprecated OS
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
-// - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
+// - is used e.g. by StringFromFile() or HashFile() functions
 function FileOpenSequentialRead(const FileName: string): integer;
   {$ifdef FPC}inline;{$endif}
 
 /// returns a TFileStream optimized for one pass file reading
 // - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
+// - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 
 /// read a File content into a string

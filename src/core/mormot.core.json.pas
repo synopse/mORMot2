@@ -5219,10 +5219,12 @@ begin
         v := PPointer(v)^; // check Value class
         if v <> c then
         begin
+          // need to retrieve the RTTI
           c := v;
           ctxt.Info := Rtti.RegisterClass(v);
           save := ctxt.Info.JsonSave;
         end;
+        // this is where each object is serialized
         save(pointer(Value), ctxt);
       end;
       dec(Count);

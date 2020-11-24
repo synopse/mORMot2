@@ -4123,7 +4123,8 @@ begin
     fSafe.Lock;
     try
       if capa <= 0 then
-      begin // clear
+      begin
+        // clear
         if fObjects <> nil then
         begin
           if fObjectsOwned in fFlags then
@@ -4136,9 +4137,11 @@ begin
         Changed;
       end
       else
-      begin // resize
+      begin
+        // resize
         if capa < fCount then
-        begin // resize down
+        begin
+          // resize down
           if fObjects <> nil then
           begin
             if fObjectsOwned in fFlags then
@@ -4151,7 +4154,8 @@ begin
           Changed;
         end;
         if capa > length(fValue) then
-        begin // resize up
+        begin
+          // resize up
           SetLength(fValue, capa);
           if fObjects <> nil then
             SetLength(fObjects, capa);
@@ -7300,7 +7304,8 @@ procedure TDynArray.InternalSetLength(OldLength, NewLength: PtrUInt);
 var
   p: PDynArrayRec;
   NeededSize, minLength: PtrUInt;
-begin // this method is faster than default System.DynArraySetLength() function
+begin
+  // this method is faster than default System.DynArraySetLength() function
   p := fValue^;
   // check that new array length is not just a finalize in disguise
   if NewLength = 0 then
@@ -7326,7 +7331,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   // calculate the needed size of the resulting memory structure on heap
   NeededSize := NewLength * ElemSize + SizeOf(TDynArrayRec);
   {$ifndef CPU64}
-  if NeededSize > 1 shl 30 then // max workable memory block is 1 GB
+  if NeededSize > 1 shl 30 then
+    // in practice, consider that max workable memory block is 1 GB on 32-bit
     raise EDynArray.CreateFmt('TDynArray SetLength(%s,%d) size concern',
       [fInfo.ArrayRtti.Name, NewLength]);
   {$endif CPU64}
@@ -7338,16 +7344,17 @@ begin // this method is faster than default System.DynArraySetLength() function
   end
   else
   begin
-    dec(PtrUInt(p), SizeOf(TDynArrayRec)); // p^ = start of heap object
+    dec(p); // p^ = start of heap object
     if (p^.refCnt >= 0) and
        RefCntDecFree(p^.refCnt) then
     begin
       // we own the dynamic array instance -> direct reallocation
-      if NewLength < OldLength then // reduce array in-place
+      if NewLength < OldLength then
+        // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
             fInfo.Cache.ItemInfo, OldLength - NewLength)
-        else if rcfObjArray in fInfo.Flags then // FreeAndNil() of resized objects list
+        else if rcfObjArray in fInfo.Flags then // FreeAndNil() of resized objects
           RawObjectsClear(pointer(PAnsiChar(p) + NeededSize), OldLength - NewLength);
       ReallocMem(p, NeededSize);
     end
