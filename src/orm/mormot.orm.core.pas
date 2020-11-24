@@ -16040,6 +16040,28 @@ end;
 
 { ------------ TOrm Definition }
 
+// some methods defined ahead of time for proper inlining
+
+class function TOrm.RecordProps: TOrmProperties;
+begin
+  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
+  if result <> nil then
+    // we know TRttiCustom is the first slot, and Private is TOrmProperties
+    result := TOrmProperties(PRttiCustom(result)^.Private)
+  else
+    // first time we use this TOrm: generate information from RTTI
+    result := PropsCreate;
+end;
+
+class function TOrm.SQLTableName: RawUTF8;
+begin
+  if self = nil then
+    result := ''
+  else
+    result := RecordProps.SQLTableName;
+end;
+
+
 { TOrmFill }
 
 function TOrmFill.GetJoinedFields: boolean;
@@ -16284,17 +16306,6 @@ begin
   finally
     LeaveCriticalSection(vmtAutoTableLock);
   end;
-end;
-
-class function TOrm.RecordProps: TOrmProperties;
-begin
-  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
-  if result <> nil then
-    // we know TRttiCustom is the first slot, and Private is TOrmProperties
-    result := TOrmProperties(PRttiCustom(result)^.Private)
-  else
-    // first time we use this TOrm: generate information from RTTI
-    result := PropsCreate;
 end;
 
 function TOrm.RecordClass: TOrmClass;
@@ -18041,14 +18052,6 @@ begin
     result := Filter(F)
   else
     result := false;
-end;
-
-class function TOrm.SQLTableName: RawUTF8;
-begin
-  if self = nil then
-    result := ''
-  else
-    result := RecordProps.SQLTableName;
 end;
 
 class function TOrm.AutoFree(varClassPairs: array of pointer): IAutoFree;
