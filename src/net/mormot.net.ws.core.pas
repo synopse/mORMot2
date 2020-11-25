@@ -201,7 +201,8 @@ type
     /// set the fEncryption: IProtocol according to the supplied key
     // - any asymmetric algorithm needs to know which side (client/server) to work on
     // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESCFB)
-    // using SHA256Weak(aKey)
+    // using the deprecated SHA256Weak(aKey) - consider using a safer hasher
+    // and SetEncryptKeyAES() with a safer derivated key
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
     /// set the fEncryption: IProtocol as TProtocolAES.Create(TAESCFB)
     procedure SetEncryptKeyAES(const aKey; aKeySize: cardinal);
@@ -792,7 +793,7 @@ begin
     fEncryption := TECDHEProtocol.FromKey(aKey, aServer);
     if fEncryption = nil then
     begin
-      SHA256Weak(aKey, key); // fallback to TProtocolAES/TAESCFB
+      SHA256Weak(aKey, key); // fallback to deprecated TProtocolAES/TAESCFB
       SetEncryptKeyAES(key, 256);
     end;
   end;

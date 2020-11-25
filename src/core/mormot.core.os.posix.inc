@@ -517,7 +517,7 @@ begin
   end;
 end;
 
-function OemToUnicode(const OEM: RawByteString): SynUnicode;
+function OemToUnicode(const oem: RawByteString): SynUnicode;
 const
   OEMTOWIDE: array[128..255] of word = (
     // from Windows API oemtocharw()
@@ -534,21 +534,21 @@ var
   len, i, c: PtrInt;
   d: PUTF8Char;
 begin
-  len := length(OEM);
+  len := length(oem);
   SetLength(result, len);
   for i := 0 to len - 1 do
   begin
-    c := PByteArray(OEM)[i];
+    c := PByteArray(oem)[i];
     if c > 127 then
       c := OEMTOWIDE[c];
     PWordArray(result)[i] := c;
   end;
 end;
 
-function OemToFileName(const OEM: RawByteString): TFileName;
+function OemToFileName(const oem: RawByteString): TFileName;
 begin
   // let's assume UTF-8 under Linux/POSIX
-  result := UTF8Encode(OemToUnicode(OEM));
+  result := UTF8Encode(OemToUnicode(oem));
 end;
 
 {$I-}

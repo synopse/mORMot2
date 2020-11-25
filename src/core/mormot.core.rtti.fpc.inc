@@ -481,7 +481,6 @@ begin
     AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
 
-
 const
   {$if defined(CPUI386) or defined(CPUI8086) or defined(CPUX86_64) or defined(CPUM68K)}
   DEFCC = ccReg;

@@ -6,14 +6,14 @@ unit mormot.core.secure;
 {
   *****************************************************************************
 
-   Authentication and Security types shared by all framework units.
+   Authentication and Security types shared by all framework units
     - TSyn***Password and TSynConnectionDefinition Classes
     - Reusable Authentication Classes
     - High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
 
-   Uses optimized mormot.core.crypto.pas for its process.
+   Uses optimized mormot.core.crypto.pas for its actual process.
 
   *****************************************************************************
 }
@@ -44,8 +44,8 @@ type
   // - the associated Password, e.g. for storage or transmission encryption
   // will be persisted encrypted with a private key (which can be customized)
   // - if default simple symmetric encryption is not enough, it will also
-  // read passwords strongly obfuscated for a given user using mormot.core.crypto
-  // CryptDataForCurrentUser()
+  // read passwords strongly obfuscated for a given user using
+  // mormot.core.crypto.pas' CryptDataForCurrentUser()
   // - a published property should be defined as such in inherited class:
   // ! property PasswordPropertyName: RawUTF8 read fPassword write fPassword;
   // - use the PassWordPlain property to access to its uncyphered value

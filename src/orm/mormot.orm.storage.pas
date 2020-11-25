@@ -1399,7 +1399,8 @@ begin
   fServer := aServer;
   fTableClass.GetTableModuleProperties(fFeatures);
   fModuleName := fTableClass.ModuleName;
-  if fFeatures.FileExtension = '' then // default extension is the module name
+  if fFeatures.FileExtension = '' then
+    // default extension is the module name
     fFeatures.FileExtension := UTF8ToString(LowerCase(fModuleName));
 end;
 
@@ -4712,10 +4713,12 @@ begin
   end;
 end;
 
+
 function ToText(t: TORMVirtualTableTransaction): PShortString;
 begin
   result := GetEnumName(TypeInfo(TORMVirtualTableTransaction), ord(t));
 end;
+
 
 initialization
   // set late-binding return of TOrmVirtualTableClass.ModuleName

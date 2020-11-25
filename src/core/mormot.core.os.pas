@@ -1229,11 +1229,11 @@ function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 
 /// conversion of Windows OEM charset into a UTF-16 encoded string
-function OemToUnicode(const OEM: RawByteString): SynUnicode;
+function OemToUnicode(const oem: RawByteString): SynUnicode;
 
 /// conversion of Windows OEM charset into a file name
 // - as used e.g. by mormot.core.zip for non UTF-8 file names
-function OemToFileName(const OEM: RawByteString): TFileName;
+function OemToFileName(const oem: RawByteString): TFileName;
 
 /// prompt the user for an error message
 // - in practice, text encoding is expected to be plain ASCII 

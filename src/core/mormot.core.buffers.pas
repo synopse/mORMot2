@@ -1137,13 +1137,15 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
 /// fast conversion from Base64-URI encoded text into binary data
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
+procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt;
+  var result: RawByteString); overload;
 
 /// fast conversion from Base64-URI encoded text into binary data
 // - caller should always execute temp.Done when finished with the data
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): boolean; overload;
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt;
+  var temp: TSynTempBuffer): boolean; overload;
 
 /// fast conversion from Base64-URI encoded text into binary data
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -1285,8 +1287,8 @@ function UrlDecode(U: PUTF8Char): RawUTF8; overload;
 // will return Next^='where=...' and V='*'
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8; var Value: RawUTF8;
-  Next: PPUTF8Char = nil): boolean;
+function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: RawUTF8; Next: PPUTF8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // integer numerical value
@@ -1294,8 +1296,8 @@ function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8; var Value: RawUTF8;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8; var Value: integer;
-  Next: PPUTF8Char = nil): boolean;
+function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: integer; Next: PPUTF8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // cardinal numerical value
@@ -1303,8 +1305,8 @@ function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8; var Value: integer
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8; var Value: cardinal;
-  Next: PPUTF8Char = nil): boolean;
+function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: cardinal; Next: PPUTF8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // Int64 numerical value
@@ -1312,8 +1314,8 @@ function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8; var Value: cardin
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8; var Value: Int64;
-  Next: PPUTF8Char = nil): boolean;
+function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: Int64; Next: PPUTF8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // floating-point value
@@ -1321,8 +1323,8 @@ function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8; var Value: Int64;
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8; var Value: TSynExtended;
-  Next: PPUTF8Char = nil): boolean;
+function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: TSynExtended; Next: PPUTF8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // floating-point value
@@ -1330,8 +1332,8 @@ function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8; var Value: TSynEx
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8; var Value: double;
-  Next: PPUTF8Char = nil): boolean;
+function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: double; Next: PPUTF8Char = nil): boolean;
 
 /// returns TRUE if all supplied parameters do exist in the URI encoded text
 // - CSVNames parameter shall provide as a CSV list of names
@@ -1345,7 +1347,8 @@ function UrlDecodeNeedParameters(U, CSVNames: PUTF8Char): boolean;
 // - if a pair is decoded, return a PUTF8Char pointer to the next pair in
 // the input buffer, or points to #0 if all content has been processed
 // - if a pair is not decoded, return nil
-function UrlDecodeNextNameValue(U: PUTF8Char; var Name,Value: RawUTF8): PUTF8Char;
+function UrlDecodeNextNameValue(U: PUTF8Char;
+  var Name,Value: RawUTF8): PUTF8Char;
 
 /// decode a URI-encoded Value from an input buffer
 // - decoded value is set in Value out variable
