@@ -1257,10 +1257,6 @@ type
 function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
-/// retrieve the code address of a published method of a class
-// - returns nil if this method name doesn't exist in the class RTTI
-function GetPublishedMethodAddr(aClass: TClass; const aName: RawUTF8): pointer;
-
 
 /// copy object properties
 // - copy integer, Int64, enumerates (including boolean), variant, records,
@@ -4357,22 +4353,6 @@ begin
   end;
 end;
 
-
-function GetPublishedMethodAddr(aClass: TClass; const aName: RawUTF8): pointer;
-var
-  methods: TPublishedMethodInfoDynArray;
-  m: PtrInt;
-begin
-  if (aClass <> nil) and
-     (aName <> '') then
-    for m := 0 to GetPublishedMethods(nil, methods, aClass) - 1 do
-      if IdemPropNameU(methods[m].Name, aName) then
-      begin
-        result := methods[m].Method.Code;
-        exit;
-      end;
-  result := nil;
-end;
 
 { *************** Enumerations RTTI }
 
