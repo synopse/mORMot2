@@ -1768,7 +1768,7 @@ const
   /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + Name[0..1]
   // - optimized "hash table of the poor" (tm) for Find(TypeInfo) and Find(Name)
   // - should be a bit mask (i.e. power of two minus 1)
-  RTTICUSTOMTYPEINFOHASH = 15;
+  RTTICUSTOMTYPEINFOHASH = 31;
 
 type
   TRttiCustom = class;
