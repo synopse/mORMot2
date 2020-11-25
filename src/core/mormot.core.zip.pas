@@ -10,6 +10,7 @@ unit mormot.core.zip;
     - TSynZipCompressor Stream Class
     - GZ Read/Write Support
     - .ZIP Archive File Support
+    - TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms
 
   *****************************************************************************
 }
@@ -23,6 +24,8 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.buffers, // for TAlgoCompress
+  mormot.core.unicode,
   mormot.lib.z;
 
 
@@ -403,6 +406,17 @@ function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUTF8;
 function CompressZLib(var Data: RawByteString; Compress: boolean): RawUTF8;
 
 
+{ ************ TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms }
+
+var
+  /// acccess to Zip Deflate compression in level 6 as a TAlgoCompress class
+  AlgoDeflate: TAlgoCompress;
+
+  /// acccess to Zip Deflate compression in level 1 as a TAlgoCompress class
+  AlgoDeflateFast: TAlgoCompress;
+
+
+
 
 implementation
 
@@ -600,7 +614,8 @@ begin
     // 0 length stream
     exit;
   SetLength(result, uncomplen32);
-  if (cardinal(UnCompressMem(comp, pointer(result), complen, uncomplen32)) <> uncomplen32) or
+  if (cardinal(UnCompressMem(
+       comp, pointer(result), complen, uncomplen32)) <> uncomplen32) or
      (mormot.lib.z.crc32(0, pointer(result), uncomplen32) <> crc32) then
     result := ''; // invalid CRC or truncated uncomplen32
 end;
@@ -674,7 +689,8 @@ begin
     exit;
   if zscode <> Z_STREAM_END then
   begin
-    zscode := z.Check(z.Uncompress(Z_FINISH), [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'ZStreamNext');
+    zscode := z.Check(z.Uncompress(Z_FINISH),
+      [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'ZStreamNext');
     result := zssize - integer(z.Stream.avail_out);
     if result = 0 then
       exit;
@@ -707,7 +723,7 @@ begin
     result := '';
 end;
 
-function GZFile(const orig, destgz: TFileName; CompressionLevel: integer = 6): boolean;
+function GZFile(const orig, destgz: TFileName; CompressionLevel: integer): boolean;
 var
   gz: TSynZipCompressor;
   s, d: TFileStream;
@@ -740,7 +756,7 @@ end;
 
 const
   // those constants have +1 to avoid finding it in the exe
-  ENTRY_SIGNATURE_INC = $02014b50 + 1; // PK#1#2
+  ENTRY_SIGNATURE_INC = $02014b50 + 1;         // PK#1#2
   FIRSTHEADER_SIGNATURE_INC = $04034b50 + 1;  // PK#3#4
   LASTHEADER_SIGNATURE_INC = $06054b50 + 1;  // PK#5#6
 
@@ -770,6 +786,7 @@ begin
   extFileAttr := $A0; // archive, normal
   fileInfo.neededVersion := $14;
 end;
+
 
 { TFileInfo }
 
@@ -1141,20 +1158,13 @@ end;
 
 { TZipRead }
 
-{$ifdef UNICODE}
-function UTF8Decode(const tmp: UTF8String): TFileName;
-begin
-  result := TFileName(tmp);
-end;
-{$endif UNICODE}
-
 constructor TZipRead.Create(BufZip: PByteArray; Size: cardinal);
 var
   lhr: PLastHeader;
   H: PFileHeader;
   lfhr: PLocalFileHeader;
   i, j: integer;
-  tmp: UTF8String;
+  tmp: RawByteString;
 begin
   for i := 0 to 127 do
   begin
@@ -1207,9 +1217,9 @@ begin
           PAnsiChar(Pointer(tmp))[j] := '\';
       if infoLocal^.GetUTF8FileName then
         // decode UTF-8 file name into native string/TFileName type
-        zipName := TFileName(UTF8Decode(tmp))
+        zipName := UTF8ToString(tmp)
       else
-        // legacy Windows-OEM encoding
+        // legacy Windows-OEM encoding - from mormot.core.os
         zipName := OemToFileName(tmp);
       inc(PByte(H), sizeof(H^) + infoLocal^.NameLen + H^.fileInfo.extraLen + H^.commentLen);
       if not (infoLocal^.zZipMethod in [Z_STORED, Z_DEFLATED]) then
@@ -1570,5 +1580,81 @@ begin
 end;
 
 
+
+{ ************ TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms }
+
+{ TAlgoDeflate }
+
+type
+  // implements the AlgoDeflate global variable
+  TAlgoDeflate = class(TAlgoCompressWithNoDestLen)
+  protected
+    fDeflateLevel: integer;
+    function RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
+      process: TAlgoCompressWithNoDestLenProcess): integer; override;
+  public
+    constructor Create; override;
+    function AlgoID: byte; override;
+    function AlgoCompressDestLen(PlainLen: integer): integer; override;
+  end;
+
+constructor TAlgoDeflate.Create;
+begin
+  inherited Create;
+  fDeflateLevel := 6;
+end;
+
+function TAlgoDeflate.AlgoID: byte;
+begin
+  result := 2;
+end;
+
+function TAlgoDeflate.RawProcess(src, dst: pointer; srcLen, dstLen,
+  dstMax: integer; process: TAlgoCompressWithNoDestLenProcess): integer;
+begin
+  case process of
+    doCompress:
+      result := mormot.lib.z.CompressMem(
+        src, dst, srcLen, dstLen, fDeflateLevel);
+    doUnCompress, doUncompressPartial:
+      result := mormot.lib.z.UnCompressMem(
+        src, dst, srcLen, dstLen);
+  else
+    result := 0;
+  end;
+end;
+
+function TAlgoDeflate.AlgoCompressDestLen(PlainLen: integer): integer;
+begin
+  result := PlainLen + 256 + PlainLen shr 3;
+end;
+
+
+{ TAlgoDeflateFast }
+
+type
+  // implements the AlgoDeflateFast global variable
+  TAlgoDeflateFast = class(TAlgoDeflate)
+  public
+    constructor Create; override;
+    function AlgoID: byte; override;
+  end;
+
+function TAlgoDeflateFast.AlgoID: byte;
+begin
+  result := 3;
+end;
+
+constructor TAlgoDeflateFast.Create;
+begin
+  inherited Create;
+  fDeflateLevel := 1;
+end;
+
+
+initialization
+  AlgoDeflate := TAlgoDeflate.Create;
+  AlgoDeflateFast := TAlgoDeflateFast.Create;
+  
 end.
 
