@@ -397,7 +397,12 @@ function RemoveCommentsFromJSON(const s: RawUTF8): RawUTF8; overload;
 // - returns P=nil if reached prematurely the end of content, or returns
 // the value separator (e.g. , or }) in EndOfObject (like GetJsonField)
 function GetSetNameValue(Names: PShortString; MaxValue: integer;
-  var P: PUTF8Char; out EndOfObject: AnsiChar): QWord;
+  var P: PUTF8Char; out EndOfObject: AnsiChar): QWord; overload;
+
+/// helper to retrieve the bit mapped integer value of a set from its JSON text
+// - overloaded function using the RTTI
+function GetSetNameValue(Info: PRttiInfo;
+  var P: PUTF8Char; out EndOfObject: AnsiChar): QWord; overload;
 
 type
   /// points to one value of raw UTF-8 content, decoded from a JSON buffer
@@ -4209,6 +4214,20 @@ begin
   end
   else
     SetQWord(GetJSONField(P, P, nil, @EndOfObject), result);
+end;
+
+function GetSetNameValue(Info: PRttiInfo;
+  var P: PUTF8Char; out EndOfObject: AnsiChar): QWord;
+var
+  Names: PShortString;
+  MaxValue: integer;
+begin
+  if (Info <> nil) and
+     (Info^.Kind = rkEnumeration) and
+     (Info^.SetEnumType(Names, MaxValue) <> nil) then
+    result := GetSetNameValue(Names, MaxValue, P, EndOfObject)
+  else
+    result := 0;
 end;
 
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
