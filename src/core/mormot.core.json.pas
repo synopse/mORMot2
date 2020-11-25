@@ -1832,6 +1832,11 @@ type
     // - replace deprecated TJSONSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(ObjectClass: TClass;
       const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON; overload;
+    /// unregister any custom callback for JSON serialization of a given TypeInfo()
+    // - will also work after RegisterFromText()
+    class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON; overload;
+    /// unregister any custom callback for JSON serialization of a given class
+    class function UnRegisterCustomSerializer(ObjectClass: TClass): TRttiJSON; overload;
     /// register TypeInfo() custom JSON serialization for a given dynamic
     // array or record
     // - to be used instead of homonomous Rtti.RegisterFromText() to supply
@@ -9236,19 +9241,31 @@ end;
 
 class function TRttiJson.RegisterCustomSerializer(Info: PRttiInfo;
   const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
-var
-  res: TRttiJson absolute result;
 begin
   result := Rtti.RegisterType(Info) as TRttiJson;
-  res.fJsonWriter := TMethod(Writer);
-  res.fJsonReader := TMethod(Reader);
-  res.SetParserType(res.Parser, res.ParserComplex); // (re)set fJsonSave/fJsonLoad
+  // (re)set fJsonSave/fJsonLoad
+  result.fJsonWriter := TMethod(Writer);
+  result.fJsonReader := TMethod(Reader);
+  result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
 class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
   const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
 begin
   result := RegisterCustomSerializer(ObjectClass.ClassInfo, Reader, Writer);
+end;
+
+class function TRttiJson.UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON;
+begin
+  result := Rtti.RegisterType(Info) as TRttiJson;
+  result.fJsonWriter.Code := nil; // this force reset of the JSON serialization
+  result.fJsonReader.Code := nil;
+  result.SetParserType(result.Parser, result.ParserComplex);
+end;
+
+class function TRttiJson.UnRegisterCustomSerializer(ObjectClass: TClass): TRttiJSON;
+begin
+  result := UnRegisterCustomSerializer(ObjectClass.ClassInfo);
 end;
 
 class function TRttiJson.RegisterFromText(DynArrayOrRecord: PRttiInfo;
