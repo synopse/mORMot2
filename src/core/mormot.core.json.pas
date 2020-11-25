@@ -7042,7 +7042,7 @@ begin
   if arr^ <> nil then
     Ctxt.Info.ValueFinalize(arr); // reset whole array variable
   if not Ctxt.ParseArray then
-    // void (i.e. []) or invalid array
+    // detect void (i.e. []) or invalid array
     exit;
   if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE then
     // legacy binary layout with a single Base-64 encoded item

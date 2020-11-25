@@ -615,21 +615,17 @@ type
   TDocVariantData = object
   {$endif USERECORDWITHMETHODS}
   private
-    VType: TVarType;
-    VOptions: TDocVariantOptions;
-    (* this structure uses all TVarData available space: no filler needed!
-    {$HINTS OFF} // does not complain if Filler is declared but never used
-    Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(TDocVariantOptions)-
-      SizeOf(TDocVariantKind)-SizeOf(TRawUTF8DynArray)-SizeOf(TVariantDynArray)-
-      SizeOf(integer)] of byte;
-    {$HINTS ON} *)
-    VName: TRawUTF8DynArray;
-    VValue: TVariantDynArray;
-    VCount: integer;
+    // note: this structure uses all TVarData available space: no filler needed!
+    VType: TVarType;              // 16-bit
+    VOptions: TDocVariantOptions; // 16-bit
+    VName: TRawUTF8DynArray;      // pointer
+    VValue: TVariantDynArray;     // pointer
+    VCount: integer;              // 32-bit
     // retrieve the value as varByRef
     function GetValueOrItem(const aNameOrIndex: variant): variant;
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
-    function GetKind: TDocVariantKind; {$ifdef HASINLINE}inline;{$endif}
+    function GetKind: TDocVariantKind;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetOptions(const opt: TDocVariantOptions); // keep dvoIsObject/Array
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(aValue: integer);
@@ -1847,7 +1843,8 @@ function SetNameToVariant(Value: cardinal; Info: TRttiCustom;
 
 /// fill a class instance from a TDocVariant object document properties
 // - returns FALSE if the variant is not a dvObject, TRUE otherwise
-function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
+function DocVariantToObject(var doc: TDocVariantData; obj: TObject;
+  objRtti: TRttiCustom = nil): boolean;
 
 /// fill a T*ObjArray variable from a TDocVariant array document values
 // - will always erase the T*ObjArray instance, and fill it from arr values
@@ -3289,7 +3286,7 @@ procedure TDocVariant.CopyByValue(var Dest: TVarData; const Source: TVarData);
 var
   S: TDocVariantData absolute Source;
   D: TDocVariantData absolute Dest;
-  i: integer;
+  i: PtrInt;
 begin
   //Assert(Source.VType=DocVariantVType);
   VarClear(variant(Dest)); // Dest may be a complex type
@@ -3566,7 +3563,7 @@ end;
 function SetNameToVariant(Value: cardinal; Info: TRttiCustom;
   FullSetsAsStar: boolean): variant;
 var
-  j: integer;
+  bit: PtrInt;
   PS: PShortString;
   arr: TDocVariantData;
 begin
@@ -3578,9 +3575,9 @@ begin
     with Info.Cache do
     begin
       PS := @EnumList;
-      for j := EnumInfo.MinValue to EnumMax do
+      for bit := EnumInfo.MinValue to EnumMax do
       begin
-        if GetBitPtr(@Value, j) then
+        if GetBitPtr(@Value, bit) then
           arr.AddItem(PS^);
         inc(PByte(PS), ord(PS^[0]) + 1); // next item
       end;
@@ -3588,20 +3585,21 @@ begin
   result := variant(arr);
 end;
 
-function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
+function DocVariantToObject(var doc: TDocVariantData; obj: TObject;
+  objRtti: TRttiCustom): boolean;
 var
-  p: integer;
-  props: PRttiCustomProps;
+  p: PtrInt;
   prop: PRttiCustomProp;
 begin
   if (doc.Kind = dvObject) and
      (doc.Count > 0) and
      (obj <> nil) then
   begin
-    props := @Rtti.RegisterClass(PClass(obj)^).Props;
+    if objRtti = nil then
+      objRtti := Rtti.RegisterClass(PClass(obj)^);
     for p := 0 to doc.Count - 1 do
     begin
-      prop := props.Find(pointer(doc.Names[p]), length(doc.Names[p]));
+      prop := objRtti.Props.Find(pointer(doc.Names[p]), length(doc.Names[p]));
       if prop <> nil then
         prop^.Prop.SetValue(obj, doc.Values[p]);
     end;
@@ -3615,7 +3613,7 @@ procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
   objClass: TClass);
 var
   info: TRttiCustom;
-  i: integer;
+  i: PtrInt;
   obj: TObjectDynArray absolute objArray;
 begin
   if objClass = nil then
@@ -3629,7 +3627,7 @@ begin
   for i := 0 to arr.Count - 1 do
   begin
     obj[i] := info.ClassNewInstance;
-    DocVariantToObject(_Safe(arr.Values[i])^, obj[i]);
+    DocVariantToObject(_Safe(arr.Values[i])^, obj[i], info);
   end;
 end;
 
@@ -3987,26 +3985,30 @@ begin
           if JSON^ = #0 then
             exit;
         until JSON^ > ' ';
-        if JSON^ = ']' then // void but valid input array
+        if JSON^ = ']' then
+          // void but valid input array
           repeat
             inc(JSON)
           until (JSON^ = #0) or
                 (JSON^ > ' ')
         else
         begin
-          cap := abs(JSONArrayCount(JSON, JSON + 256 shl 10)); // initial guess
+          // initial guess of the JSON array count - will browse up to 256KB of input
           include(VOptions, dvoIsArray);
+          cap := abs(JSONArrayCount(JSON, JSON + 256 shl 10));
+          if cap = 0 then
+            exit; // invalid content
+          SetLength(VValue, cap);
           repeat
-            if (VCount = 0) or
-               (VCount = cap) then
+            if VCount = cap then
             begin
-              if (VCount <> 0) or
-                 (cap = 0) then
-                cap := NextGrow(cap);
+              // grow if our initial guess was aborted due to huge input
+              cap := NextGrow(cap);
               SetLength(VValue, cap);
             end;
-            GetJSONToAnyVariant(
-              VValue[VCount], JSON, @EndOfObject, @VOptions, false);
+            // unserialize the next item
+            GetJSONToAnyVariant(VValue[VCount], JSON, @EndOfObject, @VOptions,
+              {double=}false{is set from VOptions});
             if JSON = nil then
             begin
               VCount := 0;
@@ -4016,7 +4018,7 @@ begin
               intvalues.UniqueVariant(VValue[VCount]);
             inc(VCount);
           until EndOfObject = ']';
-          // no SetLength(VValue,VCount) if cap is not exactly accurate
+          // no SetLength(VValue,VCount) if NextGrow() was used on huge input
         end;
       end;
     '{':
@@ -4048,7 +4050,8 @@ begin
             FastSetString(VName[VCount], Name, NameLen);
             if intnames <> nil then
               intnames.UniqueText(VName[VCount]);
-            GetJSONToAnyVariant(VValue[VCount], JSON, @EndOfObject, @VOptions, false);
+            GetJSONToAnyVariant(VValue[VCount], JSON, @EndOfObject, @VOptions,
+              {double=}false{is set from VOptions});
             if JSON = nil then
               if EndOfObject = '}' then // valid object end
                 JSON := @NULCHAR
@@ -4981,7 +4984,7 @@ end;
 function TDocVariantData.DeleteByStartName(
   aStartName: PUTF8Char; aStartNameLen: integer): integer;
 var
-  ndx: integer;
+  ndx: PtrInt;
   upname: array[byte] of AnsiChar;
 begin
   result := 0;
@@ -5229,7 +5232,7 @@ end;
 function TDocVariantData.GetAsPVariant(
   aName: PUTF8Char; aNameLen: PtrInt): PVariant;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   ndx := GetValueIndex(aName, aNameLen, dvoNameCaseSensitive in VOptions);
   if ndx >= 0 then
@@ -5241,7 +5244,7 @@ end;
 function TDocVariantData.GetVarData(const aName: RawUTF8;
   aSortedCompare: TUTF8Compare): PVarData;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   if (cardinal(VType) <> DocVariantVType) or
      not (dvoIsObject in VOptions) or
@@ -5251,7 +5254,8 @@ begin
   else
   begin
     if Assigned(aSortedCompare) then
-      if @aSortedCompare = @StrComp then // use branchless asm for StrComp()
+      if @aSortedCompare = @StrComp then
+        // use our branchless asm for StrComp()
         ndx := FastFindPUTF8CharSorted(
           pointer(VName), VCount - 1, pointer(aName))
       else
@@ -5435,7 +5439,7 @@ function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
 var
   Up: array[byte] of AnsiChar;
   temp: TTextWriterStackBuffer;
-  ndx: integer;
+  ndx: PtrInt;
   W: TTextWriter;
 begin
   if not (dvoIsObject in VOptions) or
@@ -5478,7 +5482,7 @@ function TDocVariantData.GetValuesByStartName(const aStartName: RawUTF8;
   TrimLeftStartName: boolean): variant;
 var
   Up: array[byte] of AnsiChar;
-  ndx: integer;
+  ndx: PtrInt;
   name: RawUTF8;
 begin
   if aStartName = '' then
@@ -5674,7 +5678,6 @@ var
   row: PDocVariantData;
   temp: TTextWriterStackBuffer;
 begin
-  fields := nil; // to please Kylix
   fieldsCount := 0;
   if not (dvoIsArray in VOptions) then
   begin
@@ -5733,7 +5736,7 @@ end;
 
 procedure TDocVariantData.ToRawUTF8DynArray(out Result: TRawUTF8DynArray);
 var
-  ndx: integer;
+  ndx: PtrInt;
   wasString: boolean;
 begin
   if dvoIsObject in VOptions then
@@ -5762,7 +5765,7 @@ end;
 procedure TDocVariantData.ToTextPairsVar(out result: RawUTF8;
   const NameValueSep, ItemSep: RawUTF8; escape: TTextWriterKind);
 var
-  ndx: integer;
+  ndx: PtrInt;
   temp: TTextWriterStackBuffer;
 begin
   if dvoIsArray in VOptions then
@@ -5795,7 +5798,7 @@ end;
 
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   if dvoIsObject in VOptions then
     raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
@@ -5929,7 +5932,7 @@ end;
 function TDocVariantData.GetDocVariantOrAddByName(const aName: RawUTF8;
   aKind: TDocVariantKind): PDocVariantData;
 var
-  ndx: integer;
+  ndx: PtrInt;
 begin
   ndx := GetOrAddIndexByName(aName);
   result := _Safe(VValue[ndx]);
@@ -6185,7 +6188,7 @@ end;
 function TLockedDocVariant.Exists(const Name: RawUTF8;
   out Value: Variant): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   fLock.Enter;
   try
@@ -6205,7 +6208,7 @@ end;
 function TLockedDocVariant.ExistsOrLock(const Name: RawUTF8;
   out Value: Variant): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := true;
   fLock.Enter;
@@ -6234,7 +6237,7 @@ end;
 
 function TLockedDocVariant.AddExistingPropOrLock(const Name: RawUTF8;
   var Obj: variant): boolean;
-var i: integer;
+var i: PtrInt;
 begin
   result := true;
   fLock.Enter;
@@ -6243,7 +6246,7 @@ begin
     if i < 0 then
       result := false
     else
-      _ObjAddProps([Name,fValue.Values[i]], Obj);
+      _ObjAddProps([Name, fValue.Values[i]], Obj);
   finally
     if result then
       fLock.Leave;
@@ -6254,8 +6257,8 @@ procedure TLockedDocVariant.AddNewPropAndUnlock(const Name: RawUTF8;
   const Value: variant; var Obj: variant);
 begin // caller made fLock.Enter
   try
-    SetValue(Name,Value);
-    _ObjAddProps([Name,Value], Obj);
+    SetValue(Name, Value);
+    _ObjAddProps([Name, Value], Obj);
   finally
     fLock.Leave;
   end;
@@ -6264,7 +6267,7 @@ end;
 function TLockedDocVariant.AddExistingProp(const Name: RawUTF8;
   var Obj: variant): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := true;
   fLock.Enter;
@@ -6273,7 +6276,8 @@ begin
     if i < 0 then
       result := false
     else
-      _ObjAddProps([Name,fValue.Values[i]], Obj);
+      _ObjAddProps([Name,
+      fValue.Values[i]], Obj);
   finally
     fLock.Leave;
   end;
@@ -6461,9 +6465,14 @@ begin
   result := varString;
   c := json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
-     (((c >= '1') and (c <= '9')) or // is first char numeric?
-     ((c = '0') and ((json[1] = '.') or (json[1] = #0))) or // '012' not JSON
-     ((c = '-') and (json[1] >= '0') and (json[1] <= '9'))) then
+     (((c >= '1') and
+       (c <= '9')) or      // is first char numeric?
+     ((c = '0') and
+      ((json[1] = '.') or
+       (json[1] = #0))) or // '012' is not JSON, but '0.xx' and '0' are
+     ((c = '-') and
+      (json[1] >= '0') and
+      (json[1] <= '9'))) then  // negative number
   begin
     start := json;
     repeat
@@ -6472,14 +6481,21 @@ begin
           (json^ > '9'); // check digits
     case json^ of
       #0:
-        if json - start <= 19 then // signed Int64 precision
+        if json - start <= 19 then
+          // no decimal, and matcthing signed Int64 precision
           result := varInt64;
       '.':
-        if (json[1] >= '0') and (json[1] <= '9') and
+        if (json[1] >= '0') and
+           (json[1] <= '9') and
            (json[2] in [#0, '0'..'9']) then
-          if (json[2] = #0) or (json[3] = #0) or
-             ((json[3] >= '0') and (json[3] <= '9') and (json[4] = #0) or
-              ((json[4] >= '0') and (json[4] <= '9') and (json[5] = #0))) then
+          if (json[2] = #0) or
+             (json[3] = #0) or
+             ((json[3] >= '0') and
+              (json[3] <= '9') and
+              (json[4] = #0) or
+             ((json[4] >= '0') and
+              (json[4] <= '9') and
+              (json[5] = #0))) then
             result := varCurrency; // currency ###.1234 number
     end;
   end;
@@ -6496,9 +6512,14 @@ begin
   result := varString;
   c := json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
-     (((c >= '1') and (c <= '9')) or // is first char numeric?
-     ((c = '0') and ((json[1] = '.') or (json[1] = #0))) or // '012' not JSON
-     ((c = '-') and (json[1] >= '0') and (json[1] <= '9'))) then
+     (((c >= '1') and
+       (c <= '9')) or      // is first char numeric?
+     ((c = '0') and
+      ((json[1] = '.') or
+       (json[1] = #0))) or // '012' is not JSON, but '0.xx' and '0' are
+     ((c = '-') and
+      (json[1] >= '0') and
+      (json[1] <= '9'))) then  // negative number
   begin
     start := json;
     repeat
@@ -6512,11 +6533,17 @@ begin
         else
           result := varDouble; // we may lost precision, but still a number
       '.':
-        if (json[1] >= '0') and (json[1] <= '9') and
-           (json[2] in [#0, 'e', 'E', '0'..'9']) then
-          if (json[2] = #0) or (json[3] = #0) or
-             ((json[3] >= '0') and (json[3] <= '9') and (json[4] = #0) or
-             ((json[4] >= '0') and (json[4] <= '9') and (json[5] = #0))) then
+        if (json[1] >= '0') and
+           (json[1] <= '9') and
+           (json[2] in [#0, '0'..'9']) then
+          if (json[2] = #0) or
+             (json[3] = #0) or
+             ((json[3] >= '0') and
+              (json[3] <= '9') and
+              (json[4] = #0) or
+             ((json[4] >= '0') and
+              (json[4] <= '9') and
+              (json[5] = #0))) then
             result := varCurrency // currency ###.1234 number
           else
           begin

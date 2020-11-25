@@ -3096,7 +3096,9 @@ begin
   if (P = nil) or
      (UpperName = nil) then
     goto _0;
-  {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  table := @NormToUpperAnsi7;
+  {$endif CPUX86NOTPIC}
   repeat
     c := UpperName^;
     if table[P^] = c then // first character is likely not to match
@@ -6364,7 +6366,7 @@ end;
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
   NoDuplicates, CaseSensitive: boolean): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if NoDuplicates then
   begin
@@ -6395,7 +6397,7 @@ end;
 
 function RawUTF8DynArrayEquals(const A, B: TRawUTF8DynArray): boolean;
 var
-  n, i: integer;
+  n, i: PtrInt;
 begin
   result := false;
   n := length(A);
@@ -6409,7 +6411,7 @@ end;
 
 function RawUTF8DynArrayEquals(const A, B: TRawUTF8DynArray; Count: integer): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   for i := 0 to Count - 1 do
@@ -6421,7 +6423,7 @@ end;
 procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
   var Result: TRawUTF8DynArray);
 var
-  i: integer;
+  i: PtrInt;
 begin
   Finalize(Result);
   SetLength(Result, length(Source));
@@ -6431,7 +6433,7 @@ end;
 
 procedure StringListToRawUTF8DynArray(Source: TStringList; var Result: TRawUTF8DynArray);
 var
-  i: integer;
+  i: PtrInt;
 begin
   Finalize(Result);
   SetLength(Result, Source.Count);
@@ -6448,7 +6450,8 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
   Value: PUTF8Char; Compare: TUTF8Compare): PtrInt;
 var
   L, i, cmp: PtrInt;
-begin // fast O(log(n)) binary search
+begin
+  // fast O(log(n)) binary search
   if not Assigned(Compare) or
      (R < 0) then
     result := 0
@@ -6478,7 +6481,8 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt;
   Value: PUTF8Char; Compare: TUTF8Compare): PtrInt;
 var
   L, cmp: PtrInt;
-begin // fast O(log(n)) binary search
+begin
+  // fast O(log(n)) binary search
   L := 0;
   if Assigned(Compare) and (R >= 0) then
     repeat
@@ -6567,7 +6571,8 @@ var
   L: PtrInt;
   c: byte;
   piv, val: PByte;
-begin // fast O(log(n)) binary search using inlined StrCompFast()
+begin
+  // fast O(log(n)) binary search using inlined StrCompFast()
   if R >= 0 then
     if Value <> nil then
     begin
@@ -6621,10 +6626,12 @@ begin
 end;
 
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
-  var SortedIndexes: TCardinalDynArray; Value: PUTF8Char; ItemComp: TUTF8Compare): PtrInt;
+  var SortedIndexes: TCardinalDynArray; Value: PUTF8Char;
+  ItemComp: TUTF8Compare): PtrInt;
 var
   L, cmp: PtrInt;
-begin // fast O(log(n)) binary search
+begin
+  // fast O(log(n)) binary search
   L := 0;
   if 0 <= R then
     repeat
@@ -7006,12 +7013,14 @@ begin
   result := @tmp[31] - P;
   if result > 4 then
   begin
-    Decim := PCardinal(P + result - SizeOf(cardinal))^; // 4 last digits = 4 decimals
+    // Decim = 4 last digits = 4 decimals
+    Decim := PCardinal(P + result - SizeOf(cardinal))^;
     if Decim = ord('0') + ord('0') shl 8 + ord('0') shl 16 + ord('0') shl 24 then
+      // no decimal -> trunc trailing *.0000 chars
       dec(result, 5)
-    else // no decimal
-    if Decim and $ffff0000 = ord('0') shl 16 + ord('0') shl 24 then
-      dec(result, 2); // 2 decimals
+    else if Decim and $ffff0000 = ord('0') shl 16 + ord('0') shl 24 then
+      // 2 decimals -> trunc trailing *.??00 chars
+      dec(result, 2);
   end;
   MoveSmall(P, Dest, result);
 end;
@@ -7092,7 +7101,8 @@ begin
     end
     else
       NoDecimal^ := false;
-  if Dec <> 5 then // Dec=5 most of the time
+  if Dec <> 5 then
+    // Dec=5 most of the time
     case Dec of
       0, 1:
         result := result * 10000;
@@ -7244,14 +7254,16 @@ begin
   prec := result; // if no decimal
   if S[1] = '-' then
     dec(prec);
+  // test if scientific format -> return as this
   for i := 2 to result do
-  begin // test if scientific format -> return as this
+  begin
     c := S[i];
     if c = 'E' then // should not appear
       exit
     else if c = '.' then
       if i >= Precision then
-      begin // return huge decimal number as is
+      begin
+        // return huge decimal number as is
         result := i - 1;
         exit;
       end
@@ -7263,7 +7275,8 @@ begin
   begin
     dec(result, prec - Precision);
     if S[result + 1] > '5' then
-    begin // manual rounding
+    begin
+      // manual rounding
       prec := result;
       repeat
         c := S[prec];
@@ -7276,7 +7289,8 @@ begin
             begin
               i := result;
               inc(S, prec);
-              repeat // inlined Move(S[prec],S[prec+1],result);
+              repeat
+                // inlined MoveFast(S[prec],S[prec+1],result);
                 S[i] := S[i - 1];
                 dec(i);
               until i = 0;
@@ -7298,7 +7312,8 @@ begin
   end;
   if S[result] = '0' then
     repeat
-      dec(result); // trunc any trimming 0
+      // trunc any trailing 0
+      dec(result);
       c := S[result];
       if c <> '.' then
         if c <> '0' then
@@ -7395,7 +7410,7 @@ begin
   end
   else
   begin
-    str(Value: 0: Precision, S); // not str(Value:0,S) -> '  0.0E+0000'
+    str(Value: 0:Precision, S); // not str(Value:0,S) -> '  0.0E+0000'
     result := FloatStringNoExp(@S, Precision);
     S[0] := AnsiChar(result);
   end;
@@ -7607,7 +7622,7 @@ const
   nDig_exp10 = 3;
 
 type
-  // "Do-It-Yourself Floating Point" structures
+  // "Do-It-Yourself Floating-Point" structures
   TDIY_FP = record
     f: qword;
     e: integer;
@@ -8517,16 +8532,19 @@ begin
     inc(s);
     c := s^;
   end;
-  if (c >= '0') and (c <= '9') then
+  if (c >= '0') and
+     (c <= '9') then
     repeat
       inc(s);
       d^ := c;
       inc(d);
       c := s^;
-      if ((c >= '0') and (c <= '9')) or
+      if ((c >= '0') and
+          (c <= '9')) or
          (c = '.') then
         continue;
-      if (c <> 'e') and (c <> 'E') then
+      if (c <> 'e') and
+         (c <> 'E') then
         break;
       inc(s);
       d^ := c; // 1.23e120 or 1.23e-45
@@ -8539,7 +8557,8 @@ begin
         inc(d);
         c := s^;
       end;
-      while (c >= '0') and (c <= '9') do
+      while (c >= '0') and
+            (c <= '9') do
       begin
         inc(s);
         d^ := c;
@@ -9667,7 +9686,9 @@ var {$ifdef CPUX86NOTPIC}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
     {$endif CPUX86NOTPIC}
 begin
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexW; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitsHexW;
+  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
     repeat
       PWord(Hex)^ := tab[Bin^];
@@ -9720,7 +9741,9 @@ var {$ifdef CPUX86NOTPIC}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
     {$endif CPUX86NOTPIC}
 begin
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexW; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitsHexW;
+  {$endif CPUX86NOTPIC}
   inc(Hex, BinBytes * 2);
   if BinBytes > 0 then
     repeat
@@ -9744,7 +9767,9 @@ var {$ifdef CPUX86NOTPIC}
     tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
     {$endif CPUX86NOTPIC}
 begin
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexWLower; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitsHexWLower;
+  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
     repeat
       PWord(Hex)^ := tab[Bin^];
@@ -9781,7 +9806,9 @@ begin
      (Hex = nil) or
      (BinBytes <= 0) then
     exit;
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitsHexWLower; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitsHexWLower;
+  {$endif CPUX86NOTPIC}
   inc(Hex, BinBytes * 2);
   repeat
     dec(Hex, 2);
@@ -9917,7 +9944,9 @@ begin
   if (Hex = nil) or
      (Bin = nil) then
     exit;
-  {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @ConvertHexToBin;
+  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
   begin
     inc(Bin, BinBytes - 1);
@@ -9970,7 +9999,9 @@ begin
   result := false; // return false if any invalid char
   if Hex = nil then
     exit;
-  {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @ConvertHexToBin;
+  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
     if Bin <> nil then
       repeat
@@ -10006,7 +10037,9 @@ var
   {$endif CPUX86NOTPIC}
   c: byte;
 begin
-  {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @ConvertHexToBin;
+  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
     repeat
       c := tab[ord(Hex[0])];
@@ -10042,7 +10075,9 @@ var
 begin
   if Hex <> nil then
   begin
-    {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    tab := @ConvertHexToBin;
+    {$endif CPUX86NOTPIC}
     B := tab[Ord(Hex[0])];
     C := tab[Ord(Hex[1])];
     if (B <= 15) and
@@ -10110,7 +10145,8 @@ _nxt:   Bin^ := c;
         goto _nxt;
       dec(c, ord('0'));
       if c > 3 then
-        break; // stop at malformated input (includes #0)
+        // stop at malformated input (includes #0)
+        break;
       c := c shl 6;
       v := c;
       c := ord(Oct[0]);
@@ -10512,7 +10548,8 @@ begin
     result := S.Write(L, 4) = 4
   else
     {$ifdef FPC}
-    result := (S.Write(L, 4) = 4) and (S.Write(pointer(Text)^, L) = L);
+    result := (S.Write(L, 4) = 4) and
+              (S.Write(pointer(Text)^, L) = L);
     {$else}
     result := S.Write(pointer(PtrInt(Text) - SizeOf(integer))^, L + 4) = L + 4;
     {$endif FPC}
