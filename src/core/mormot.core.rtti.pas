@@ -1915,13 +1915,7 @@ type
     // - it will individually fill the properties, not the whole memory
     // as TRttiCustom.FinalizeAndClear would on a record
     procedure FinalizeAndClearPublishedProperties(Instance: TObject);
-    // set AutoCreate* and AutoResolve internal fields
-    procedure SetAutoCreateFields;
-  public
-    // as set by SetAutoCreateFields
-    AutoCreateClasses,
-    AutoCreateObjArrays: PRttiCustomPropDynArray;
-  private
+  protected
     // store AddFromText() ShortStrings
     fFromTextPropNames: TRawUTF8DynArray;
     /// points to List[] items which are managed
@@ -1969,6 +1963,8 @@ type
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
+    fAutoCreateClasses,
+    fAutoCreateObjArrays: PRttiCustomPropDynArray; // set by SetAutoCreateFields
     // used by NoRttiSetAndRegister()
     fNoRttiInfo: TByteDynArray;
     // customize class process
@@ -1993,6 +1989,8 @@ type
     // - returns self to allow cascaded calls as a fluent interface
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; virtual;
+    // set AutoCreate* and AutoResolve internal fields
+    procedure SetAutoCreateFields;
   public
     /// initialize the customizer class from known RTTI
     constructor Create(aInfo: PRttiInfo); virtual;
@@ -2238,7 +2236,7 @@ type
     // !     E1,E2: double;
     // !   end;
     // ! end;
-    // - call this method with RTTIDefinition='' to return back to the default
+    // - call this method with RttiDefinition='' to return back to the default
     // binary + Base64 encoding serialization (i.e. undefine custom serializer)
     // - RTTI textual information shall be supplied as text, with the
     // same format as any pascal record:
@@ -2257,12 +2255,7 @@ type
     // - it will return the cached TRttiCustom instance corresponding to the
     // supplied RTTI text definition - i.e. the rkRecord if TypeInfo(SomeArray)
     function RegisterFromText(DynArrayOrRecord: PRttiInfo;
-      const RTTIDefinition: RawUTF8): TRttiCustom; overload;
-    /// register by name a custom serialization for a given dynamic array or record
-    // - use overloaded RegisterFromText(TypeName) if the record has TypeInfo()
-    // - the RTTI information will here be defined as plain text
-    function RegisterFromText(const TypeName: RawUTF8;
-      const RTTIDefinition: RawUTF8): TRttiCustom; overload;
+      const RttiDefinition: RawUTF8): TRttiCustom; overload;
     /// define a custom serialization for several dynamic arrays or records
     // - the TypeInfo() and textual RTTI information will here be defined as
     // ([TypeInfo(TType1),_TType1, TypeInfo(TType2),_TType2]) pairs
@@ -2292,7 +2285,7 @@ implementation
 {$ifdef FPC_X64MM}
 {$ifdef CPUX64}
 uses
-  mormot.core.fpcx64mm;
+  mormot.core.fpcx64mm; // for direct call of _getmem/_freemem x86_64 asm
 {$else}
   {$undef FPC_X64MM}
 {$endif CPUX64}
@@ -5968,28 +5961,6 @@ begin
   SetLength(fManaged, n);
 end;
 
-procedure TRttiCustomProps.SetAutoCreateFields;
-var
-  i: integer;
-  p: PRttiCustomProp;
-begin
-  p := pointer(List);
-  for i := 1 to Count do
-  begin
-    case p^.Value.Kind of
-      rkClass:
-        if (p^.OffsetGet >= 0) and
-           (p^.OffsetSet >= 0) then
-          PtrArrayAdd(AutoCreateClasses, p);
-      rkDynArray:
-        if (rcfObjArray in p^.Value.Flags) and
-           (p^.OffsetGet >= 0) then
-          PtrArrayAdd(AutoCreateObjArrays, p);
-    end;
-    inc(p);
-  end;
-end;
-
 procedure TRttiCustomProps.AsText(out Result: RawUTF8; IncludePropType: boolean;
   const Prefix, Suffix: RawUTF8);
 var
@@ -6399,6 +6370,29 @@ begin
   result := self;
 end;
 
+procedure TRttiCustom.SetAutoCreateFields;
+var
+  i: integer;
+  p: PRttiCustomProp;
+begin
+  p := pointer(Props.List);
+  for i := 1 to Props.Count do
+  begin
+    case p^.Value.Kind of
+      rkClass:
+        if (p^.OffsetGet >= 0) and
+           (p^.OffsetSet >= 0) then
+          PtrArrayAdd(fAutoCreateClasses, p);
+      rkDynArray:
+        if (rcfObjArray in p^.Value.Flags) and
+           (p^.OffsetGet >= 0) then
+          PtrArrayAdd(fAutoCreateObjArrays, p);
+    end;
+    inc(p);
+  end;
+  include(fFlags, rcfAutoCreateFields);
+end;
+
 procedure TRttiCustom.NoRttiArrayFinalize(Data: PAnsiChar);
 var
   n: integer;
@@ -6727,6 +6721,7 @@ begin
     // use optimized "hash table of the poor" (tm) lists
     result := pointer(Pairs[Info^.Kind, (PtrUInt(Info.RawName[0]) xor
       PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]);
+    // note: we tried to include RawName[1] and $df, but with no gain
     if result = nil then
       exit;
     PEnd := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF];
@@ -6813,15 +6808,19 @@ var
   k: TRttiKind;
 begin
   // not very optimized, but called only at startup from Rtti.RegisterFromText()
-  if Kinds = [] then
-    Kinds := rkAllTypes;
-  for k := low(Pairs) to high(Pairs) do
-    if k in Kinds then
-    begin
-      result := Find(Name, NameLen, k);
-      if result <> nil then
-        exit;
-    end;
+  if (Name <> nil) and
+     (NameLen > 0) then
+  begin
+    if Kinds = [] then
+      Kinds := rkAllTypes;
+    for k := low(Pairs) to high(Pairs) do
+      if k in Kinds then
+      begin
+        result := Find(Name, NameLen, k);
+        if result <> nil then
+          exit;
+      end;
+  end;
   result := nil;
 end;
 

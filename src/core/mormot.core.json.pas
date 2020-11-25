@@ -26,6 +26,9 @@ uses
   classes,
   contnrs,
   sysutils,
+  {$ifndef FPC}
+  typinfo, // for proper Delphi inlining
+  {$endif FPC}
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
@@ -1601,8 +1604,8 @@ type
     procedure AddDateTime(Value: PDateTime; WithMS: boolean);
   public
     /// initialize this low-level context
-    procedure Init(WR: TTextWriter; WriteOptions: TTextWriterWriteObjectOptions;
-      TypeInfo: TRttiCustom);
+    procedure Init(WR: TTextWriter;
+      WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -1741,7 +1744,7 @@ var
      jpoIgnoreUnknownProperty, jpoIgnoreStringType, jpoAllowInt64Hex];
 
   /// access default (false) or tolerant (true) JSON parser options
-  // - used as JSONPARSER_DEFAULTORTOLERANTOPTIONS[tolerant]
+  // - to be used as JSONPARSER_DEFAULTORTOLERANTOPTIONS[tolerant]
   JSONPARSER_DEFAULTORTOLERANTOPTIONS: array[boolean] of TJsonParserOptions = (
     [],
     [jpoHandleCustomVariants, jpoIgnoreUnknownEnum,
@@ -1794,6 +1797,8 @@ type
     // mormot.core.rtti has no dependency on TSynPersistent and such
     fClassNewInstance: TRttiJsonNewInstance;
     fCompare: array[boolean] of TRttiCompare;
+    fIncludeReadOptions: TJsonParserOptions;
+    fIncludeWriteOptions: TTextWriterWriteObjectOptions;
     // overriden for proper JSON process - set fJsonSave and fJsonLoad
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; override;
@@ -1815,14 +1820,34 @@ type
     procedure ValueLoadJson(Data: pointer; var JSON: PUTF8Char; EndOfObject: PUTF8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
       ObjectListItemClass: TClass = nil);
+    /// efficient search of TRttiJson from a given RTTI TypeInfo()
+    // - to be used instead of Rtti.Find() to return directly the TRttiJson instance
+    class function Find(Info: PRttiInfo): TRttiJson;
+      {$ifdef HASINLINE}inline;{$endif}
     /// register a custom callback for JSON serialization of a given TypeInfo()
     // - replace deprecated TJSONSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
-      const Writer: TOnRttiJsonWrite; const Reader: TOnRttiJsonRead): TRttiCustom; overload;
+      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON; overload;
     /// register a custom callback for JSON serialization of a given class
     // - replace deprecated TJSONSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(ObjectClass: TClass;
-      const Writer: TOnRttiJsonWrite; const Reader: TOnRttiJsonRead): TRttiCustom; overload;
+      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON; overload;
+    /// register TypeInfo() custom JSON serialization for a given dynamic
+    // array or record
+    // - to be used instead of homonomous Rtti.RegisterFromText() to supply
+    // an additional set of serialization/unserialization JSON options
+    class function RegisterFromText(DynArrayOrRecord: PRttiInfo;
+      const RTTIDefinition: RawUTF8;
+      IncludeReadOptions: TJsonParserOptions;
+      IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJSON;
+    /// define an additional set of unserialization JSON options
+    // - is included for this type to the supplied TJsonParserOptions
+    property IncludeReadOptions: TJsonParserOptions
+      read fIncludeReadOptions write fIncludeReadOptions;
+    /// define an additional set of serialization JSON options
+    // - is included for this type to the supplied TTextWriterWriteObjectOptions
+    property IncludeWriteOptions: TTextWriterWriteObjectOptions
+      read fIncludeWriteOptions write fIncludeWriteOptions;
   end;
 
 
@@ -2119,7 +2144,7 @@ procedure AutoDestroyFields(ObjectInstance: TObject);
 
 /// internal function called by AutoCreateFields() when inlined
 // - do not call this internal function, but always AutoCreateFields()
-function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
+function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiJson;
 
 
 type
@@ -4713,11 +4738,11 @@ end;
 { TJsonSaveContext }
 
 procedure TJsonSaveContext.Init(WR: TTextWriter;
-  WriteOptions: TTextWriterWriteObjectOptions; TypeInfo: TRttiCustom);
+  WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
 begin
   W := WR;
-  Options := WriteOptions;
-  Info := TypeInfo;
+  Info := Rtti;
+  Options := WriteOptions + TRttiJson(Rtti).fIncludeWriteOptions;
   Prop := nil;
 end;
 
@@ -6669,7 +6694,7 @@ procedure TJsonParserContext.Init(P: PUTF8Char; Rtti: TRttiCustom;
 begin
   JSON := P;
   Valid := true;
-  Options := O;
+  Options := O + TRttiJson(Rtti).fIncludeReadOptions;
   if CV <> nil then
   begin
     DVO := CV^;
@@ -9202,29 +9227,45 @@ begin
   TRttiJsonLoad(fJsonLoad)(Data, Ctxt);
 end;
 
-procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char;
-  EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+class function TRttiJson.Find(Info: PRttiInfo): TRttiJson;
 begin
-  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(Data, JSON, EndOfObject,
-    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
+  result := pointer(Rtti.Find(Info));
 end;
 
 class function TRttiJson.RegisterCustomSerializer(Info: PRttiInfo;
-  const Writer: TOnRttiJsonWrite; const Reader: TOnRttiJsonRead): TRttiCustom;
+  const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
 var
   res: TRttiJson absolute result;
 begin
-  result := Rtti.RegisterType(Info);
+  result := Rtti.RegisterType(Info) as TRttiJson;
   res.fJsonWriter := TMethod(Writer);
   res.fJsonReader := TMethod(Reader);
   res.SetParserType(res.Parser, res.ParserComplex); // (re)set fJsonSave/fJsonLoad
 end;
 
 class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
-  const Writer: TOnRttiJsonWrite; const Reader: TOnRttiJsonRead): TRttiCustom;
+  const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
 begin
-  result := RegisterCustomSerializer(ObjectClass.ClassInfo, Writer, Reader);
+  result := RegisterCustomSerializer(ObjectClass.ClassInfo, Reader, Writer);
+end;
+
+class function TRttiJson.RegisterFromText(DynArrayOrRecord: PRttiInfo;
+  const RTTIDefinition: RawUTF8;
+  IncludeReadOptions: TJsonParserOptions;
+  IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJSON;
+begin
+  result := Rtti.RegisterFromText(DynArrayOrRecord, RTTIDefinition) as TRttiJson;
+  result.fIncludeReadOptions := IncludeReadOptions;
+  result.fIncludeWriteOptions := IncludeWriteOptions;
+end;
+
+
+procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char;
+  EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
+begin
+  TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(Data, JSON, EndOfObject,
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
 end;
 
 
@@ -9593,19 +9634,18 @@ end;
 
 { ********************* Abstract Classes with Auto-Create-Fields }
 
-function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiCustom;
+function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiJson;
 begin
-  result := Rtti.RegisterType(ObjectInstance.ClassInfo);
+  result := Rtti.RegisterType(ObjectInstance.ClassInfo) as TRttiJson;
   if PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^ <> result then
     raise ERttiException.CreateUTF8( // paranoid check
       'AutoCreateFields(%): unexpected vmtAutoTable', [ObjectInstance]);
-  result.Props.SetAutoCreateFields;
-  result.Flags := result.Flags + [rcfAutoCreateFields];
+  result.SetAutoCreateFields;
 end;
 
 procedure AutoCreateFields(ObjectInstance: TObject);
 var
-  rtti: TRttiCustom;
+  rtti: TRttiJson;
   n: integer;
   p: ^PRttiCustomProp;
 begin
@@ -9616,7 +9656,7 @@ begin
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then
     rtti := DoRegisterAutoCreateFields(ObjectInstance);
-  p := pointer(rtti.Props.AutoCreateClasses);
+  p := pointer(rtti.fAutoCreateClasses);
   if p = nil then
     exit;
   // create all published class fields
@@ -9632,16 +9672,15 @@ end;
 
 procedure AutoDestroyFields(ObjectInstance: TObject);
 var
-  props: PRttiCustomProps;
+  rtti: TRttiJson;
   n: integer;
   p: ^PRttiCustomProp;
   arr: PPAnsiChar;
   o: TObject;
 begin
-  props := @TRttiCustom(
-    PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^).Props;
+  rtti := PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^;
   // free all published class fields
-  p := pointer(props.AutoCreateClasses);
+  p := pointer(rtti.fAutoCreateClasses);
   if p <> nil then
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
@@ -9655,7 +9694,7 @@ begin
     until n = 0;
   end;
   // release all published T*ObjArray fields
-  p := pointer(props.AutoCreateObjArrays);
+  p := pointer(rtti.fAutoCreateObjArrays);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
