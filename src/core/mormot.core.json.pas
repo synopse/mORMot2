@@ -7610,21 +7610,25 @@ end;
 function TSynNameValue.ValueEnum(const aName: RawUTF8; aEnumTypeInfo: PRttiInfo;
   out aEnum; aEnumDefault: byte): boolean;
 var
+  rtti: PRttiEnumType;
   v: RawUTF8;
   err, i: integer;
 begin
   result := false;
-  byte(aEnum) := aEnumDefault;
+  rtti := aEnumTypeInfo.EnumBaseType;
+  if rtti = nil then
+    exit;
+  ToRttiOrd(rtti.RttiOrd, @aEnum, aEnumDefault);
   v := TrimU(Value(aName, ''));
   if v = '' then
     exit;
   i := GetInteger(pointer(v), err);
   if (err <> 0) or
      (i < 0) then
-    i := GetEnumNameValue(aEnumTypeInfo, v, true);
+    i := rtti.GetEnumNameValue(pointer(v), length(v), {alsotrimleft=}true);
   if i >= 0 then
   begin
-    byte(aEnum) := i;
+    ToRttiOrd(rtti.RttiOrd, @aEnum, i);
     result := true;
   end;
 end;
