@@ -2267,6 +2267,16 @@ type
     // - a wrapper around the overloaded RegisterFromText() method
     procedure RegisterFromText(
       const TypeInfoTextDefinitionPairs: array of const); overload;
+    /// register by name a custom serialization for a given dynamic array or record
+    // - use overloaded RegisterFromText(TypeName) if the record has TypeInfo()
+    // - the RTTI information will here be defined as plain text
+    function RegisterFromText(const TypeName: RawUTF8;
+      const RttiDefinition: RawUTF8): TRttiCustom; overload;
+    /// register an abstract custom serialization for a given dynamic array or record
+    // - no name is needed, but the RttiDefinition, defined as plain text,
+    // will be cached for efficient reuse of the computed TRttiCustom
+    function RegisterFromTextOnly(
+       const RttiDefinition: RawUTF8): TRttiCustom; overload;
     /// default property to access a given RTTI TypeInfo() customization
     // - you can access or register one type by using this default property:
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
@@ -7038,7 +7048,7 @@ begin
 end;
 
 function TRttiCustomList.RegisterFromText(DynArrayOrRecord: PRttiInfo;
-  const RTTIDefinition: RawUTF8): TRttiCustom;
+  const RttiDefinition: RawUTF8): TRttiCustom;
 var
   P: PUTF8Char;
 begin
@@ -7049,14 +7059,14 @@ begin
   if result.Kind = rkDynArray then
     if result.ArrayRtti = nil then
     begin
-      result.fArrayRtti := RegisterFromText('', RTTIDefinition);
+      result.fArrayRtti := RegisterFromText('', RttiDefinition);
       result := result.fArrayRtti;
       exit;
     end
     else
       result := result.ArrayRtti;
-  result.Props.Clear;
-  P := pointer(RTTIDefinition);
+  result.Props.Clear; // reset to the Base64 serialization if RttiDefinition=''
+  P := pointer(RttiDefinition);
   if P <> nil then
   begin
     result.SetPropsFromText(P, eeNothing);
@@ -7068,7 +7078,7 @@ begin
 end;
 
 function TRttiCustomList.RegisterFromText(const TypeName: RawUTF8;
-  const RTTIDefinition: RawUTF8): TRttiCustom;
+  const RttiDefinition: RawUTF8): TRttiCustom;
 var
   P: PUTF8Char;
   new: boolean;
@@ -7081,7 +7091,7 @@ begin
     raise ERttiException.CreateUTF8('Rtti.RegisterFromText: existing % is a %',
       [TypeName, ToText(result.Kind)^]);
   result.Props.Clear;
-  P := pointer(RTTIDefinition);
+  P := pointer(RttiDefinition);
   result.SetPropsFromText(P, eeNothing);
   if new then
     result.NoRttiSetAndRegister(ptRecord, TypeName, nil);
@@ -7104,10 +7114,15 @@ begin
          RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
 end;
 
+function TRttiCustomList.RegisterFromTextOnly(
+  const RttiDefinition: RawUTF8): TRttiCustom;
+begin
+  //todo
+end;
 
 procedure CopyCollection(Source, Dest: TCollection);
 var
-  i: integer;
+  i: integer; // Items[] uses an integer
 begin
   if (Source = nil) or
      (Dest = nil) or
