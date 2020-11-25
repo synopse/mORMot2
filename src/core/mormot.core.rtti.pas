@@ -1257,6 +1257,11 @@ type
 function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
+/// retrieve the code address of a published method of a class
+// - returns nil if this method name doesn't exist in the class RTTI
+function GetPublishedMethodAddr(aClass: TClass; const aName: RawUTF8): pointer;
+
+
 /// copy object properties
 // - copy integer, Int64, enumerates (including boolean), variant, records,
 // dynamic arrays, classes and any string properties (excluding shortstring)
@@ -4343,6 +4348,22 @@ begin
 end;
 
 
+function GetPublishedMethodAddr(aClass: TClass; const aName: RawUTF8): pointer;
+var
+  methods: TPublishedMethodInfoDynArray;
+  m: PtrInt;
+begin
+  if (aClass <> nil) and
+     (aName <> '') then
+    for m := 0 to GetPublishedMethods(nil, methods, aClass) - 1 do
+      if IdemPropNameU(methods[m].Name, aName) then
+      begin
+        result := methods[m].Method.Code;
+        exit;
+      end;
+  result := nil;
+end;
+
 { *************** Enumerations RTTI }
 
 function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
@@ -5148,6 +5169,16 @@ begin
   begin
     V^.Destroy;
     V^ := nil;
+  end;
+  result := SizeOf(V^);
+end;
+
+function _ObjArrayClear(V: PPointer; Info: PRttiInfo): PtrInt;
+begin
+  if V^ <> nil then
+  begin
+    RawObjectsClear(pointer(V), PDALen(PAnsiChar(V^) - _DALEN)^ + _DAOFF);
+    _DynArrayClear(V, Info);
   end;
   result := SizeOf(V^);
 end;
@@ -6206,16 +6237,6 @@ end;
 
 
 { TRttiCustom }
-
-function _ObjArrayClear(V: PPointer; Info: PRttiInfo): PtrInt;
-begin
-  if V^ <> nil then
-  begin
-    RawObjectsClear(pointer(V), PDALen(PAnsiChar(V^) - _DALEN)^ + _DAOFF);
-    _DynArrayClear(V, Info);
-  end;
-  result := SizeOf(V^);
-end;
 
 type
   EHook = class(Exception)
