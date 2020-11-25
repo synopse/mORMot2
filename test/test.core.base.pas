@@ -48,6 +48,8 @@ type
     property Imaginary: Double read fImaginary write fImaginary;
   end;
 
+  TComplexNumberObjArray = array of TComplexNumber;
+
   // a record mapping used in the test classes of the framework
   // - this class can be used for debugging purposes, with the database
   // created by TTestFileBased in mORMotSQLite3.pas
@@ -88,6 +90,44 @@ type
     // - you could also call the same servce from the ModelRoot/People/ID/Sum URL,
     // but it won't make any difference)
     class function Sum(aClient: TRestClientURI; a, b: double; Method2: boolean): double;
+  end;
+
+  /// a record used to test dynamic array serialization
+  TFV = packed record
+    Major, Minor, Release, Build: integer;
+    Main, Detailed: string;
+    BuildDateTime: TDateTime;
+    BuildYear: integer;
+  end;
+  PFV = ^TFV;
+  TFVs = array of TFV;
+
+  TPersistentAutoCreateFieldsTest = class(TPersistentAutoCreateFields)
+  private
+    fText: RawUTF8;
+    fValue1: TComplexNumber;
+    fValue2: TComplexNumber;
+  public
+    constructor CreateFake;
+  published
+    property Text: RawUTF8 read fText write fText;
+    property Value1: TComplexNumber read fValue1;
+    property Value2: TComplexNumber read fValue2;
+  end;
+  TPersistentAutoCreateFieldsTestObjArray = array of TPersistentAutoCreateFieldsTest;
+
+  TObjArrayTest = class(TPersistentAutoCreateFieldsTest)
+  private
+    fValues: TComplexNumberObjArray;
+  published
+    property values: TComplexNumberObjArray read fValues write fValues;
+  end;
+
+  TOrmArrayTest = class(TOrm)
+  private
+    fValues: TComplexNumberObjArray;
+  published
+    property values: TComplexNumberObjArray read fValues write fValues;
   end;
 
 function TOrmPeopleCompareByFirstName(const A, B): integer;
@@ -223,6 +263,19 @@ constructor TComplexNumber.Create(aReal, aImaginary: double);
 begin
   Real := aReal;
   Imaginary := aImaginary;
+end;
+
+
+{ TPersistentAutoCreateFieldsTest }
+
+constructor TPersistentAutoCreateFieldsTest.CreateFake;
+begin
+  inherited Create;
+  text := 'text';
+  Value1.Real := 1.5;
+  Value1.Imaginary := 2.5;
+  Value2.Real := 1.7;
+  Value2.Imaginary := 2.7;
 end;
 
 
@@ -1011,14 +1064,6 @@ type
     Year: cardinal;
     Cities: TCityDynArray;
   end;
-
-  TFV = packed record
-    Major, Minor, Release, Build: integer;
-    Main, Detailed: string;
-    BuildDateTime: TDateTime;
-    BuildYear: integer;
-  end;
-  TFVs = array of TFV;
 
   TFV2 = packed record
     V1: TFV;
@@ -5848,48 +5893,6 @@ begin
   end;
 end;
 
-type
-  TPersistentAutoCreateFieldsTest = class(TPersistentAutoCreateFields)
-  private
-    fText: RawUTF8;
-    fValue1: TComplexNumber;
-    fValue2: TComplexNumber;
-  public
-    constructor CreateFake;
-  published
-    property Text: RawUTF8 read fText write fText;
-    property Value1: TComplexNumber read fValue1;
-    property Value2: TComplexNumber read fValue2;
-  end;
-
-  TPersistentAutoCreateFieldsTestObjArray = array of TPersistentAutoCreateFieldsTest;
-
-  TComplexNumberObjArray = array of TComplexNumber;
-
-  TObjArrayTest = class(TPersistentAutoCreateFieldsTest)
-  private
-    fValues: TComplexNumberObjArray;
-  published
-    property values: TComplexNumberObjArray read fValues write fValues;
-  end;
-
-  TOrmArrayTest = class(TOrm)
-  private
-    fValues: TComplexNumberObjArray;
-  published
-    property values: TComplexNumberObjArray read fValues write fValues;
-  end;
-
-constructor TPersistentAutoCreateFieldsTest.CreateFake;
-begin
-  inherited Create;
-  text := 'text';
-  Value1.Real := 1.5;
-  Value1.Imaginary := 2.5;
-  Value2.Real := 1.7;
-  Value2.Imaginary := 2.7;
-end;
-
 procedure TTestCoreBase._TObjArray;
 const
   MAX = 200;
@@ -5918,7 +5921,7 @@ begin
   Rtti.RegisterObjArray(TypeInfo(TPersistentAutoCreateFieldsTestObjArray),
     TPersistentAutoCreateFieldsTest);
   try
-    tmp := DynArraySaveJSON(arr, TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
+    tmp := DynArraySaveJSON(arr{%H-}, TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
     check(tmp = '[]');
     p := TPersistentAutoCreateFieldsTest.CreateFake;
     ObjArrayAdd(arr, p);
@@ -5977,7 +5980,7 @@ begin
     JSONToObject(test2, pointer(tmp), valid);
     Check(valid);
     CheckValues(test2.Values);
-    check(ObjectEquals(test, test2) = 0);
+    check(ObjectEquals(test, test2));
   finally
     test2.Free;
     test.Free;
