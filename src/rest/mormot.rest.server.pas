@@ -2361,6 +2361,70 @@ type
     // table access
     property SQLAuthGroupClass: TAuthGroupClass
       read fSQLAuthGroupClass;
+
+    { standard method-based services }
+  published
+    /// REST service accessible from ModelRoot/Stat URI to gather detailed information
+    // - returns the current execution statistics of this server, as a JSON object
+    // - this method will require an authenticated client, for safety
+    // - by default, will return the high-level information of this server
+    // - will return human-readable JSON layout if ModelRoot/Stat/json is used, or
+    // the corresponding XML content if ModelRoot/Stat/xml is used
+    // - you can define withtables, withmethods, withinterfaces, withsessions or
+    // withsqlite3 additional parameters to return detailed information about
+    // method-based services, interface-based services, per session statistics,
+    // or prepared SQLite3 SQL statement timing (for a TRestServerDB instance)
+    // ! Client.CallBackGet('stat',['withtables',true,'withmethods',true,
+    // !   'withinterfaces',true,'withsessions',true,'withsqlite3',true],stats);
+    // - defining a 'withall' parameter will retrieve all available statistics
+    // - note that TRestServer.StatLevels property will enable statistics
+    // gathering for tables, methods, interfaces, sqlite3 or sessions
+    // - a specific findservice=ServiceName parameter will not return any
+    // statistics, but matching URIs from the server AssociatedServices list
+    procedure Stat(Ctxt: TRestServerURIContext);
+    /// REST service accessible from ModelRoot/Auth URI
+    // - called by the clients for authentication and session management
+    // - this method won't require an authenticated client, since it is used to
+    // initiate authentication
+    // - this global callback method is thread-safe
+    procedure Auth(Ctxt: TRestServerURIContext);
+    /// REST service accessible from the ModelRoot/Timestamp URI
+    // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
+    // - this method will not require an authenticated client
+    // - hidden ModelRoot/Timestamp/info command will return basic execution
+    // information, less verbose (and sensitive) than Stat(), calling virtual
+    // InternalInfo() protected method
+    procedure Timestamp(Ctxt: TRestServerURIContext);
+    /// REST service accessible from the ModelRoot/CacheFlush URI
+    // - it will flush the server result cache
+    // - this method shall be called by the clients when the Server cache may be
+    // not consistent any more (e.g. after a direct write to an external database)
+    // - this method will require an authenticated client, for safety
+    // - GET ModelRoot/CacheFlush URI will flush the whole Server cache,
+    // for all tables
+    // - GET ModelRoot/CacheFlush/TableName URI will flush the specified
+    // table cache
+    // - GET ModelRoot/CacheFlush/TableName/TableID URI will flush the content
+    // of the specified record
+    // - POST ModelRoot/CacheFlush/_callback_ URI will be called by the client
+    // to notify the server that an interface callback instance has been released
+    // - POST ModelRoot/CacheFlush/_ping_ URI will be called by the client after
+    // every half session timeout (or at least every hour) to notify the server
+    // that the connection is still alive
+    procedure CacheFlush(Ctxt: TRestServerURIContext);
+    /// REST service accessible from the ModelRoot/Batch URI
+    // - will execute a set of RESTful commands, in a single step, with optional
+    // automatic SQL transaction generation
+    // - this method will require an authenticated client, for safety
+    // - expect input as JSON commands:
+    // & '{"Table":["cmd":values,...]}'
+    // or for multiple tables:
+    // & '["cmd@Table":values,...]'
+    // with cmd in POST/PUT with {object} as value or DELETE with ID
+    // - returns an array of integers: '[200,200,...]' or '["OK"]' if all
+    // returned status codes are 200 (HTTP_SUCCESS)
+    // - URI are either 'ModelRoot/TableName/Batch' or 'ModelRoot/Batch'
+    procedure Batch(Ctxt: TRestServerURIContext);
   end;
 
   /// class-reference type (metaclass) of a REST server
@@ -7274,6 +7338,146 @@ begin
       fOnIdleLastTix := elapsed;
     end;
   end;
+end;
+
+procedure TRestServer.Stat(Ctxt: TRestServerURIContext);
+var
+  W: TTextWriter;
+  json, xml, name: RawUTF8;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TJSONSerializer.CreateOwnedStream(temp);
+  try
+    name := Ctxt.InputUTF8OrVoid['findservice'];
+    if name = '' then
+    begin
+      InternalStat(Ctxt, W);
+      name := 'Stats';
+    end
+    else
+      AssociatedServices.FindServiceAll(name, W);
+    W.SetText(json);
+    if Ctxt.InputExists['format'] or
+       IdemPropNameU(Ctxt.URIBlobFieldName, 'json') then
+      json := JSONReformat(json)
+    else if IdemPropNameU(Ctxt.URIBlobFieldName, 'xml') then
+    begin
+      JSONBufferToXML(pointer(json), XMLUTF8_HEADER, '<' + name + '>', xml);
+      Ctxt.Returns(xml, 200, XML_CONTENT_TYPE_HEADER);
+      exit;
+    end;
+    Ctxt.Returns(json);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TRestServer.Auth(Ctxt: TRestServerURIContext);
+var
+  i: PtrInt;
+begin
+  if fSessionAuthentication = nil then
+    exit;
+  fSessions.Safe.Lock;
+  try
+    for i := 0 to length(fSessionAuthentication) - 1 do
+      if fSessionAuthentication[i].Auth(Ctxt) then
+        // found an authentication, which may be successfull or not
+        break;
+  finally
+    fSessions.Safe.UnLock;
+  end;
+end;
+
+procedure TRestServer.Timestamp(Ctxt: TRestServerURIContext);
+
+  procedure DoInfo;
+  var
+    info: TDocVariantData;
+  begin
+    info.InitFast;
+    InternalInfo(info);
+    Ctxt.Returns(info.ToJSON('', '', jsonHumanReadable));
+  end;
+
+begin
+  if IdemPropNameU(Ctxt.URIBlobFieldName, 'info') and
+     not (rsoTimestampInfoURIDisable in fOptions) then
+    DoInfo
+  else
+    Ctxt.Returns(Int64ToUtf8(GetServerTimestamp),
+      HTTP_SUCCESS, TEXT_CONTENT_TYPE_HEADER);
+end;
+
+procedure TRestServer.CacheFlush(Ctxt: TRestServerURIContext);
+var
+  i, count: PtrInt;
+  cache: TRestCache;
+begin
+  case Ctxt.Method of
+    mGET:
+      begin
+        // POST root/cacheflush[/table[/id]]
+        cache := TRestOrmServer(fOrmInstance).CacheOrNil;
+        if cache <> nil then
+          if Ctxt.Table = nil then
+            cache.Flush
+          else if Ctxt.TableID = 0 then
+            cache.Flush(Ctxt.Table)
+          else
+            cache.SetCache(Ctxt.Table, Ctxt.TableID);
+        Ctxt.Success;
+      end;
+    mPOST:
+      if Ctxt.URIBlobFieldName = '_callback_' then
+        // POST root/cacheflush/_callback_
+        // as called from TSQLHttpClientWebsockets.FakeCallbackUnregister
+        (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt)
+      else if Ctxt.URIBlobFieldName = '_ping_' then
+      begin
+        // POST root/cacheflush/_ping_
+        count := 0;
+        if Ctxt.Session > CONST_AUTHENTICATION_NOT_USED then
+          for i := 0 to Services.Count - 1 do
+            inc(count, TServiceFactoryServer(Services.InterfaceList[i].service).
+              RenewSession(Ctxt.Session));
+        InternalLog('Renew % authenticated session % from %: count=%',
+          [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, count], sllUserAuth);
+        Ctxt.Returns(['count', count]);
+      end;
+  end;
+end;
+
+procedure TRestServer.Batch(Ctxt: TRestServerURIContext);
+var
+  Results: TInt64DynArray;
+  i: PtrInt;
+begin
+  if not (Ctxt.Method in [mPUT, mPOST]) then
+  begin
+    Ctxt.Error('PUT/POST only');
+    exit;
+  end;
+  try
+    TRestOrmServer(fOrmInstance).EngineBatchSend(
+      Ctxt.Table, Ctxt.Call.InBody, TIDDynArray(Results), 0);
+  except
+    on E: Exception do
+    begin
+      Ctxt.Error(E, 'did break % BATCH process', [Ctxt.Table], HTTP_SERVERERROR);
+      exit;
+    end;
+  end;
+  // send back operation status array
+  Ctxt.Call.OutStatus := HTTP_SUCCESS;
+  for i := 0 to length({%H-}Results) - 1 do
+    if Results[i] <> HTTP_SUCCESS then
+    begin
+      Ctxt.Call.OutBody := Int64DynArrayToCSV(
+        pointer(Results), length(Results), '[', ']');
+      exit;
+    end;
+  Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
 end;
 
 
