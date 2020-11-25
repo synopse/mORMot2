@@ -3691,6 +3691,15 @@ end;
 
 { TAESAbstract }
 
+function SetMainAESPRNG: TAESPRNG;
+begin
+  GlobalLock;
+  if MainAESPRNG = nil then
+    MainAESPRNG := TAESPRNG.Create;
+  GlobalUnLock;
+  result := MainAESPRNG;
+end;
+
 // defined here for proper inlining :)
 class function TAESPRNG.Main: TAESPRNG;
 begin
@@ -5612,15 +5621,6 @@ begin
   until (Len <= 4) or
         (haspunct and
          (LowerCase(result) <> result));
-end;
-
-function SetMainAESPRNG: TAESPRNG;
-begin
-  GlobalLock;
-  if MainAESPRNG = nil then
-    MainAESPRNG := TAESPRNG.Create;
-  GlobalUnLock;
-  result := MainAESPRNG;
 end;
 
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
