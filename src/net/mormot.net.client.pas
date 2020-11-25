@@ -2207,7 +2207,7 @@ begin
       if PosExChar('<', rec) = 0 then
         rec := '<' + rec + '>';
       Exec('RCPT TO:' + rec, '25');
-      if ToList = '' then
+      if {%H-}ToList = '' then
         ToList := #13#10'To: ' + rec
       else
         ToList := ToList + ', ' + rec;

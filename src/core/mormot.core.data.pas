@@ -857,11 +857,11 @@ function BinaryCompare(A, B: pointer; Info: PRttiInfo; CaseInSensitive: boolean)
 function ObjectCompare(A, B: TObject; CaseInSensitive: boolean): integer;
 
 /// case-sensitive comparison of two TObject published properties, using RTTI
-function ObjectEquals(A, B: TObject): integer;
+function ObjectEquals(A, B: TObject): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case-insensitive comparison of two TObject published properties, using RTTI
-function ObjectEqualsI(A, B: TObject): integer;
+function ObjectEqualsI(A, B: TObject): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef PUREMORMOT2}
@@ -5579,14 +5579,14 @@ begin
   result := SizeOf(pointer);
 end;
 
-function ObjectEquals(A, B: TObject): integer;
+function ObjectEquals(A, B: TObject): boolean;
 begin
-  result := ObjectCompare(A, B, {caseinsensitive=}false);
+  result := ObjectCompare(A, B, {caseinsensitive=}false) = 0;
 end;
 
-function ObjectEqualsI(A, B: TObject): integer;
+function ObjectEqualsI(A, B: TObject): boolean;
 begin
-  result := ObjectCompare(A, B, {caseinsensitive=}true);
+  result := ObjectCompare(A, B, {caseinsensitive=}true) = 0;
 end;
 
 
