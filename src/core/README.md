@@ -223,6 +223,7 @@ High-Level Zip/Deflate Compression features shared by all framework units
 - `TSynZipCompressor` Stream Class
 - GZ Read/Write Support
 - `.zip` Archive File Support
+- `TAlgoDeflate` and `TAlgoDeflate` High-Level Compression Algorithms
 
 ### mormot.core.mustache
 

@@ -171,8 +171,6 @@ type
     procedure SetTimeoutSecInt(value: cardinal);
     function GetTimeoutSec: cardinal;
     function GetStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
-    // from client CacheFlush/_ping_
-    function RenewSession(aSession: cardinal): integer;
     /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
     procedure OnLogRestExecuteMethod(Sender: TInterfaceMethodExecute;
       Step: TInterfaceMethodExecuteEventStep);
@@ -268,6 +266,8 @@ type
     function SetServiceLog(const aMethod: array of RawUTF8;
       const aLogRest: IRestOrm;
       aLogClass: TOrmServiceLogClass = nil): TServiceFactoryServerAbstract; override;
+    /// low-level method called from client CacheFlush/_ping_ URI
+    function RenewSession(aSession: cardinal): integer;
 
     /// the associated TRestServer instance
     property RestServer: TRestServer
@@ -306,7 +306,8 @@ type
   IServiceRecordVersion = interface(IInvokable)
     ['{06A355CA-19EB-4CC6-9D87-7B48967D1D9F}']
     /// will register the supplied callback for the given table
-    function Subscribe(const SQLTableName: RawUTF8; const revision: TRecordVersion;
+    function Subscribe(const SQLTableName: RawUTF8;
+      const revision: TRecordVersion;
       const callback: IServiceRecordVersionCallback): boolean;
   end;
 
@@ -327,7 +328,8 @@ type
     // !   if interfaceName='IChatCallback' then
     // !     InterfaceArrayDelete(fConnected,callback);
     // ! end;
-    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
+    procedure CallbackReleased(const callback: IInvokable;
+      const interfaceName: RawUTF8);
   end;
 
   /// event signature triggerred when a callback instance is released
@@ -364,7 +366,6 @@ type
     fSessionTimeout: cardinal;
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
-    procedure FakeCallbackRelease(Ctxt: TRestServerURIContext);
     procedure RecordVersionCallbackNotify(TableIndex: integer;
       Occasion: TOrmOccasion; const DeletedID: TID;
       const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUTF8);
@@ -392,6 +393,8 @@ type
     /// initialize and register a server-side interface callback instance
     procedure GetFakeCallback(Ctxt: TRestServerURIContext;
       ParamInterfaceInfo: PRttiInfo; FakeID: PtrInt; out Obj);
+    /// low-level function called from TRestServer.CacheFlush URI method
+    procedure FakeCallbackRelease(Ctxt: TRestServerURIContext);
     /// class method able to check if a given server-side callback event fake
     // instance has been released on the client side
     // - may be used to automatically purge a list of subscribed callbacks,
@@ -484,7 +487,8 @@ type
   // notifications to the local DB
   // - could be supplied as callback parameter, possibly via WebSockets
   // transmission, to TRestServer.RecordVersionSynchronizeSubscribeMaster()
-  TServiceRecordVersionCallback = class(TInterfacedCallback, IServiceRecordVersionCallback)
+  TServiceRecordVersionCallback = class(TInterfacedCallback,
+    IServiceRecordVersionCallback)
   protected
     fTable: TOrmClass;
     fRecordVersionField: TOrmPropInfoRTTIRecordVersion;
@@ -529,6 +533,7 @@ implementation
 
 uses
   mormot.orm.server;
+
 
 { ***************** TInjectableObjectRest Service Implementation Parent Class }
 
@@ -971,7 +976,8 @@ procedure TServiceFactoryServer.OnLogRestExecuteMethod(
   Sender: TInterfaceMethodExecute; Step: TInterfaceMethodExecuteEventStep);
 var
   W: TTextWriter;
-  a, len: integer;
+  a: PtrInt;
+  len: integer;
 begin
   W := Sender.TempTextWriter;
   with Sender.Method^ do
