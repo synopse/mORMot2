@@ -4742,7 +4742,9 @@ procedure TJsonSaveContext.Init(WR: TTextWriter;
 begin
   W := WR;
   Info := Rtti;
-  Options := WriteOptions + TRttiJson(Rtti).fIncludeWriteOptions;
+  Options := WriteOptions;
+  if Rtti <> nil then
+    Options := Options + TRttiJson(Rtti).fIncludeWriteOptions;
   Prop := nil;
 end;
 
