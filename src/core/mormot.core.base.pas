@@ -3945,7 +3945,7 @@ procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 var
   r: pointer;
 begin
-  r := FastNewString(len, CP_UTF8);
+  r := FastNewString(len, CP_UTF8); // FPC will do proper constant propagation
   if p <> nil then
     MoveFast(p^, r^, len);
   FastAssignNew(s, r);

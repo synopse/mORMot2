@@ -1484,10 +1484,10 @@ begin
   if fReleasedOnClientSide then
   begin
     // there is no client side to call
-    if not IdemPropName(fFactory.InterfaceTypeInfo^.Name^, 'ISynLogCallback') then
+    if not IdemPropName(fFactory.InterfaceTypeInfo^.RawName, 'ISynLogCallback') then
       fServer.InternalLog('%.CallbackInvoke: % instance has been released on ' +
         'the client side, so I% callback notification was NOT sent', [self,
-        fFactory.InterfaceTypeInfo^.Name^, aMethod.InterfaceDotMethodName], sllWarning);
+        fFactory.InterfaceTypeInfo^.RawName, aMethod.InterfaceDotMethodName], sllWarning);
     if fRaiseExceptionOnInvokeError or
        ((fServer.Services <> nil) and
         (coRaiseExceptionIfReleasedByClient in
@@ -1564,7 +1564,7 @@ begin
   for j := 0 to high(UID) do
     if UID[j] <> nil then
       raise EServiceException.CreateUTF8('%.AddImplementation: % not found in %',
-        [self, aInterfaces[j]^.Name^, aImplementationClass]);
+        [self, aInterfaces[j]^.RawName, aImplementationClass]);
   // register this implementation class
   for j := 0 to high(aInterfaces) do
   begin

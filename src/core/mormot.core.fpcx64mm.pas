@@ -32,7 +32,7 @@ unit mormot.core.fpcx64mm;
     - It was so fun diving into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
 
-    IMPORTANT NOTICE: seems stable on Linux and Win64 but feedback is welcome!
+    DISCLAMER: seems stable on Linux and Win64 but feedback is welcome!
 
   *****************************************************************************
 }
@@ -303,7 +303,7 @@ implementation
   - Medium and Large blocks have one giant lock each (seldom used)
   - SwitchToThread/FpNanoSleep OS call is done after initial spinning
   - FPCMM_LOCKLESSFREE reduces OS calls on Freemem() thread contention
-  - FPCMM_DEBUG / WriteHeapStatus allows to identify the lock contention
+  - FPCMM_DEBUG / WriteHeapStatus allow to identify the lock contention
 
 }
 
@@ -1139,8 +1139,8 @@ asm
         {$ifdef FPCMM_ASSUMEMULTITHREAD}
         call    LockGetMem
         {$else}
-        cmp     byte ptr [rax], 0
-        jne     @CheckTinySmallLock
+        cmp     byte ptr [rax], false
+        jne     @CheckTinySmallLock // no lock if IsMultiThread=false
         add     rbx, rcx
         {$endif FPCMM_ASSUMEMULTITHREAD}
         { ---------- TINY/SMALL block registration ---------- }
@@ -1216,7 +1216,7 @@ asm
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
         mov     rax, [rcx + TMediumBlockinfo.IsMultiThreadPtr]
         cmp     byte ptr [rax], false
-        je      @MediumLocked1
+        je      @MediumLocked1 // no lock if IsMultiThread=false
         {$endif FPCMM_ASSUMEMULTITHREAD}
         mov     eax, $100
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
@@ -1356,7 +1356,7 @@ asm
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
         mov     rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
         cmp     byte ptr [rax], false
-        je      @MediumLocked2
+        je      @MediumLocked2 // no lock if IsMultiThread=false
         {$endif FPCMM_ASSUMEMULTITHREAD}
         mov     eax, $100
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
@@ -1507,7 +1507,7 @@ asm
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
         mov     rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
         cmp     byte ptr [rax], false
-        je      @MediumBlocksLocked
+        je      @MediumBlocksLocked // no lock if IsMultiThread=false
         {$endif FPCMM_ASSUMEMULTITHREAD}
         mov     eax, $100
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
@@ -1704,8 +1704,8 @@ asm
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.BlockTypeLocked, ah
         jne     @CheckTinySmallLock
         {$else}
-        cmp     byte ptr [rax], 0
-        jne     @TinySmallLockLoop
+        cmp     byte ptr [rax], false
+        jne     @TinySmallLockLoop // lock if IsMultiThread=true
         {$endif FPCMM_ASSUMEMULTITHREAD}
 @FreeAndUnlock:
         call    FreeSmallLocked
@@ -1947,7 +1947,7 @@ asm
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
         mov     rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
         cmp     byte ptr [rax], false
-        je      @MediumBlocksLocked1
+        je      @MediumBlocksLocked1 // no lock if IsMultiThread=false
         {$endif FPCMM_ASSUMEMULTITHREAD}
         mov     eax, $100
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
@@ -2013,7 +2013,7 @@ asm
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
         mov     rax, [r10 + TMediumBlockinfo.IsMultiThreadPtr]
         cmp     byte ptr [rax], false
-        je      @MediumBlocksLocked2
+        je      @MediumBlocksLocked2 // no lock if IsMultiThread=false
         {$endif FPCMM_ASSUMEMULTITHREAD}
         mov     eax, $100
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
@@ -2112,9 +2112,10 @@ end;
 function _AllocMem(Size: PtrUInt): pointer; nostackframe; assembler;
 asm
         push    rbx
-        // Get rbx = size rounded down to the previous multiple of SizeOf(pointer)
+        // Compute rbx = size rounded down to the last pointer
         lea     rbx, [Size - 1]
         and     rbx,  - 8
+        // Perform the memory allocation
         call    _GetMem
         // Could a block be allocated? rcx = 0 if yes, -1 if no
         cmp     rax, 1
@@ -2134,6 +2135,7 @@ asm
         movaps  oword ptr [rdx + rbx], xmm0
         add     rbx, 16
         js      @FillLoop
+        // fill the last pointer
 @LastQ: xor     rcx, rcx
         mov     qword ptr [rdx], rcx
 @Done:  pop     rbx
@@ -2576,7 +2578,7 @@ begin
     end;
   assert(small = @SmallBlockInfo.GetmemLookup);
   {$ifndef FPCMM_ASSUMEMULTITHREAD}
-  SmallBlockInfo.IsMultiThreadPtr := @IsMultiThread;
+  SmallBlockInfo.IsMultiThreadPtr  := @IsMultiThread;
   MediumBlockInfo.IsMultiThreadPtr := @IsMultiThread;
   {$endif FPCMM_ASSUMEMULTITHREAD}
   start := 0;

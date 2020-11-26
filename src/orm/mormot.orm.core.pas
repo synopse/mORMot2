@@ -10467,7 +10467,7 @@ constructor TOrmPropInfoRTTIRecordReference.Create(aPropInfo: PRttiProp;
   aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
 begin
   inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
-  fCascadeDelete := IdemPropName(fPropType^.Name^, 'TRecordReferenceToBeDeleted')
+  fCascadeDelete := IdemPropName(fPropType^.RawName, 'TRecordReferenceToBeDeleted')
 end;
 
 
@@ -11848,7 +11848,7 @@ begin
   if fTypeInfo = nil then
     result := inherited GetSQLFieldRTTITypeName
   else
-    result := ToUTF8(fTypeInfo^.Name^);
+    result := ToUTF8(fTypeInfo^.RawName);
 end;
 
 constructor TOrmPropInfoRecordRTTI.Create(aRecordInfo: PRttiInfo;
@@ -11968,7 +11968,7 @@ begin
   if fTypeInfo = nil then
     result := inherited GetSQLFieldRTTITypeName
   else
-    result := ToUTF8(fTypeInfo^.Name^);
+    result := ToUTF8(fTypeInfo^.RawName);
 end;
 
 constructor TOrmPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
@@ -12133,7 +12133,7 @@ begin
   if fTypeInfo = nil then
     result := inherited GetSQLFieldRTTITypeName
   else
-    result := ToUTF8(fTypeInfo^.Name^);
+    result := ToUTF8(fTypeInfo^.RawName);
 end;
 
 procedure TOrmPropInfoCustomJSON.SetCustomParser(aCustomParser: TRttiJson);

@@ -5194,12 +5194,12 @@ begin
         if // handle Props.NameChange() set to New='' to ignore this field
            (p^.Name <> nil) and
            // handle woStoreStoredFalse flag and "stored" attribute in code
-           ((p^.Prop = nil) or
-            (woStoreStoredFalse in c.Options) or
+           ((woStoreStoredFalse in c.Options) or
+            (p^.Prop = nil) or
             (p^.Prop.IsStored(pointer(Data)))) and
            // handle woDontStoreDefault flag over "default" attribute in code
-           ((p^.Prop = nil) or
-            not (woDontStoreDefault in c.Options) or
+           (not (woDontStoreDefault in c.Options) or
+            (p^.Prop = nil) or
             (p.PropDefault = NO_DEFAULT) or
             not p.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
@@ -7268,7 +7268,7 @@ begin
                       (propname <> nil);
         if not Ctxt.Valid then
           break;
-        // O(1) optimistic process of the propertyname
+        // O(1) optimistic process of the property name, following RTTI order
         if (prop^.Name <> nil) and
            IdemPropName(prop^.Name^, propname, propnamelen) then
           if JsonLoadProp(Data, prop^, Ctxt) then

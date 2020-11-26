@@ -890,7 +890,7 @@ begin
             FileName := ViewTemplateFolder + ShortFileName;
             info := ContextFromMethod(fFactory.Methods[m]);
             _ObjAddProp(
-              'interfaceName', fFactory.InterfaceTypeInfo^.Name^, info);
+              'interfaceName', fFactory.InterfaceTypeInfo^.RawName, info);
             FileFromString(StringReplaceChars(StringReplaceChars(
               TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),
               '<', '{'), '>', '}'), FileName);

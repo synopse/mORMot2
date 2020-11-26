@@ -1740,7 +1740,7 @@ begin
     for i := 0 to high(services) do
       if i < length(queries) then
       begin
-        intf := ToUTF8(TInterfaceFactory.GUID2TypeInfo(services[i])^.Name^);
+        intf := ToUTF8(TInterfaceFactory.GUID2TypeInfo(services[i])^.RawName);
         if _Safe(context.soa.services)^.
             GetDocVariantByProp('interfaceName', intf, false, service) then
           service^.AddValue('query', queries[i].ClassName)

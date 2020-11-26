@@ -4092,14 +4092,15 @@ var
   n, i: PtrInt;
 begin
   result := nil;
-  props := ClassFieldAllProps(ClassType, Types);
+  props := ClassFieldAllProps(ClassType, Types); // recursive in-order list
   n := length(props);
   SetLength(result, n);
   for i := 0 to n - 1 do
-    if IncludePropType then
-      FormatUTF8('%: %', [props[i]^.Name^, props[i]^.TypeInfo^.Name], result[i])
-    else
-      ShortStringToAnsi7String(props[i]^.Name^, result[i]);
+    with props[i]^ do
+      if IncludePropType then
+        FormatUTF8('%: %', [Name^, TypeInfo^.Name], result[i])
+      else
+        ShortStringToAnsi7String(Name^, result[i]);
 end;
 
 function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean;
@@ -5872,7 +5873,7 @@ begin
     n := Count;
     repeat
       s := pointer(result.Name);
-      if (s <> nil) and
+      if (s <> nil) and // s=nil for Props.NameChange() with New=''
          (PtrInt(s[0]) = PropNameLen) and
          IdemPropNameUSameLen(s + 1, PropName, PropNameLen) then
         exit;
@@ -7053,7 +7054,7 @@ begin
     if result.Props.Size <> result.Size then
       raise ERttiException.CreateUTF8('Rtti.RegisterFromText(%): text ' +
         'definition  covers % bytes, but RTTI defined %',
-        [DynArrayOrRecord^.Name^, result.Props.Size, result.Size]);
+        [DynArrayOrRecord^.RawName, result.Props.Size, result.Size]);
   end;
 end;
 
