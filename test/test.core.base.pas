@@ -420,23 +420,21 @@ var
   Bits64: Int64 absolute Bits;
   Si, i: integer;
   c: cardinal;
-    {$ifdef FPC}
+  {$ifdef FPC}
   u: PtrUInt;
   timer: TPrecisionTimer;
-    {$endif FPC}
+  {$endif FPC}
 begin
   {$ifdef CPUINTEL}
   GetBitsCountPtrInt := @GetBitsCountPurePascal;
   TestPopCnt('pas');
   GetBitsCountPtrInt := @GetBitsCountPas; // x86/x86_64 assembly
   TestPopCnt('asm');
-  {$ifndef ABSOLUTEPASCAL}
   if cfPOPCNT in CpuFeatures then
   begin
     GetBitsCountPtrInt := @GetBitsCountSSE42;
     TestPopCnt('sse4.2');
   end;
-  {$endif ABSOLUTEPASCAL}
   {$else}
   TestPopCnt('pas');
   {$endif CPUINTEL}
@@ -1955,12 +1953,6 @@ begin
   result := true;
 end;
 
-{$ifndef ABSOLUTEPASCAL}
-{$ifdef CPUX64} // will define its own self-dispatched SSE2/AVX functions
-  {$define HASCPUIDX64}
-{$endif CPUX64}
-{$endif ABSOLUTEPASCAL}
-
 procedure TTestCoreBase.CustomRTL;
 // note: FPC uses the RTL for FillCharFast/MoveFast
 var
@@ -2013,9 +2005,9 @@ var
         inc(len, 777 + len shr 4);
     until len >= length(buf);
     timer.Stop;
-     {$ifdef HASCPUIDX64}
+    {$ifdef ASMX64}
     cpu := GetSetName(TypeInfo(TX64CpuFeatures), CPUIDX64);
-     {$endif HASCPUIDX64}
+    {$endif ASMX64}
     if rtl then
       msg := 'FillChar'
     else
@@ -2101,14 +2093,14 @@ var
       end;
     CheckEqual(Hash32(buf), 1646145792);
   end;
-{$ifdef HASCPUIDX64}
+{$ifdef ASMX64}
 
 var
   cpu: TX64CpuFeatures;
-{$endif HASCPUIDX64}
+{$endif ASMX64}
 begin
   SetLength(buf, 16 shl 20); // 16MB
-  {$ifdef HASCPUIDX64} // activate and validate SSE2 + AVX branches
+  {$ifdef ASMX64} // activate and validate SSE2 + AVX branches
   cpu := CPUIDX64;
   CPUIDX64 := []; // default SSE2 128-bit process
   Validate({rtl=}false);
@@ -2128,7 +2120,7 @@ begin
   {$else}
   Validate({rtl=}true);
   Validate(false);
-  {$endif HASCPUIDX64}
+  {$endif ASMX64}
 end;
 {$endif CPUINTEL}
 
