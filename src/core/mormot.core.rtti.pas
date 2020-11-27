@@ -1977,11 +1977,12 @@ type
     function SetObjArray(Item: TClass): TRttiCustom;
     function SetBinaryType(BinarySize: integer): TRttiCustom;
     procedure SetPropsFromText(var P: PUTF8Char;
-      ExpectedEnd: TRttiCustomFromTextExpectedEnd);
+      ExpectedEnd: TRttiCustomFromTextExpectedEnd; NoRegister: boolean);
     // initialize from fProps, with no associated RTTI - and calls DoRegister()
     // - will create a "fake" rkRecord/rkDynArray PRttiInfo (TypeName may be '')
     procedure NoRttiSetAndRegister(ParserType: TRttiParserType;
-      const TypeName: RawUTF8; DynArrayElemType: TRttiCustom);
+      const TypeName: RawUTF8; DynArrayElemType: TRttiCustom;
+      NoRegister: boolean);
     // called by ValueFinalize() for dynamic array defined from text
     procedure NoRttiArrayFinalize(Data: PAnsiChar);
     /// initialize this Value process for Parser and Parser Complex kinds
@@ -1995,6 +1996,10 @@ type
   public
     /// initialize the customizer class from known RTTI
     constructor Create(aInfo: PRttiInfo); virtual;
+    /// initialize abstract custom serialization for a given record
+    // - not registered in the main TRttiCustomList: caller should free it
+    // - in practice, is used only during regression tests
+    constructor CreateFromText(const RttiDefinition: RawUTF8);
     /// finalize this instance
     destructor Destroy; override;
     /// efficiently finalize a stored value of this type
@@ -2268,11 +2273,6 @@ type
     // - the RTTI information will here be defined as plain text
     function RegisterFromText(const TypeName: RawUTF8;
       const RttiDefinition: RawUTF8): TRttiCustom; overload;
-    /// register an abstract custom serialization for a given dynamic array or record
-    // - no name is needed, but the RttiDefinition, defined as plain text,
-    // will be cached for efficient reuse of the computed TRttiCustom
-    function RegisterFromTextOnly(
-       const RttiDefinition: RawUTF8): TRttiCustom; overload;
     /// default property to access a given RTTI TypeInfo() customization
     // - you can access or register one type by using this default property:
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
@@ -6316,8 +6316,17 @@ begin
   fPrivate.Free;
 end;
 
+constructor TRttiCustom.CreateFromText(const RttiDefinition: RawUTF8);
+var
+  P: PUTF8Char;
+begin
+  Create(nil); // no associated RTTI
+  P := pointer(RttiDefinition);
+  SetPropsFromText(P, eeNothing, {NoRegister=}true);
+end;
+
 procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRttiParserType;
-  const TypeName: RawUTF8; DynArrayElemType: TRttiCustom);
+  const TypeName: RawUTF8; DynArrayElemType: TRttiCustom; NoRegister: boolean);
 begin
   if (fNoRttiInfo <> nil) or
      not (rcfWithoutRtti in fFlags) then
@@ -6342,6 +6351,12 @@ begin
   else
     raise ERttiException.CreateUTF8('Unexpected %.CreateWithoutRtti(%)',
       [self, ToText(ParserType)^]);
+  end;
+  if NoRegister then
+  begin
+    // initialize the instance, but don't register to TRttiCustomList
+    SetParserType(ParserType, pctNone);
+    exit;
   end;
   // create fake RTTI which should be enough for our purpose
   SetLength(fNoRttiInfo, length(TypeName) + 64); // all filled with zeros
@@ -6530,7 +6545,7 @@ begin
 end;
 
 procedure TRttiCustom.SetPropsFromText(var P: PUTF8Char;
-  ExpectedEnd: TRttiCustomFromTextExpectedEnd);
+  ExpectedEnd: TRttiCustomFromTextExpectedEnd; NoRegister: boolean);
 var
   prop: TIntegerDynArray;
   propcount: integer;
@@ -6657,8 +6672,8 @@ begin
         raise ERttiException.CreateUTF8(
           'Unexpected nested % %', [c, ToText(pt)^]);
       nested := Rtti.GlobalClass.Create(nil);
-      nested.SetPropsFromText(P, ee);
-      nested.NoRttiSetAndRegister(ptRecord, '', nil);
+      nested.SetPropsFromText(P, ee, NoRegister);
+      nested.NoRttiSetAndRegister(ptRecord, '', nil, NoRegister);
       if pt = ptRecord then
         // rec: record .. end  or  rec: { ... }
         c := nested
@@ -6673,7 +6688,7 @@ begin
         raise ERttiException.CreateUTF8(
           'Unexpected array % %', [c, ToText(pt)^]);
       c := Rtti.GlobalClass.Create(nil);
-      c.NoRttiSetAndRegister(ptDynArray, typname, ac);
+      c.NoRttiSetAndRegister(ptDynArray, typname, ac, NoRegister);
     end;
     // set type for all prop[]
     for i := 0 to propcount - 1 do
@@ -7050,7 +7065,7 @@ begin
   P := pointer(RttiDefinition);
   if P <> nil then
   begin
-    result.SetPropsFromText(P, eeNothing);
+    result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
     if result.Props.Size <> result.Size then
       raise ERttiException.CreateUTF8('Rtti.RegisterFromText(%): text ' +
         'definition  covers % bytes, but RTTI defined %',
@@ -7073,9 +7088,9 @@ begin
       [TypeName, ToText(result.Kind)^]);
   result.Props.Clear;
   P := pointer(RttiDefinition);
-  result.SetPropsFromText(P, eeNothing);
+  result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
   if new then
-    result.NoRttiSetAndRegister(ptRecord, TypeName, nil);
+    result.NoRttiSetAndRegister(ptRecord, TypeName, nil, {NoRegister=}false);
 end;
 
 procedure TRttiCustomList.RegisterFromText(
@@ -7093,12 +7108,6 @@ begin
         raise ERttiException.Create('Rtti.RegisterFromText[?]')
       else
          RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
-end;
-
-function TRttiCustomList.RegisterFromTextOnly(
-  const RttiDefinition: RawUTF8): TRttiCustom;
-begin
-  //todo
 end;
 
 procedure CopyCollection(Source, Dest: TCollection);
@@ -7365,9 +7374,9 @@ begin
   ClassUnit := _ClassUnit;
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}
+  {$ifndef NOPATCHRTL}
   RedirectCode(@system.Move, @MoveFast);
   RedirectCode(@system.FillChar, @FillCharFast);
-  {$ifndef NOPATCHRTL}
   PatchCode(@fpc_ansistr_incr_ref, @_ansistr_incr_ref, $17); // fpclen=$2f
   PatchJmp(@fpc_ansistr_decr_ref, @_ansistr_decr_ref, $27); // fpclen=$3f
   PatchJmp(@fpc_ansistr_assign, @_ansistr_assign, $3f);    // fpclen=$3f
