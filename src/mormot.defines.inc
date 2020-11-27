@@ -184,6 +184,7 @@
       {$define FPC_CPUINTEL}
       {$define FPC_CPUX64}
       {$ifndef DARWIN}
+        {$define FPC_ASMX64}
         {$define ASMX64}     // supports asm with globals
         {$define ASMINTEL}   // either ASMX86 or ASMX64
         {$define ASMX64AVX}  // supports AVX/AVX2/AVX512

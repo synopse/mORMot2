@@ -542,6 +542,10 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     [rax], dl
 end;
 
+{$endif ASMX64}
+
+{$ifdef CPUX64ASM} /// proper compilation on FPC and Delphi XE7+
+
 {$ifdef FPC}
 
 {$ifndef FPC_X64MM}
@@ -566,10 +570,6 @@ lock    dec     qword ptr[rax - _STRREFCNT]
 end;
 
 {$endif FPC}
-
-{$endif ASMX64}
-
-{$ifdef CPUX64ASM} /// proper compilation on FPC and Delphi XE7+
 
 { some numbers, with CITIES_MAX=200000, deleting 1/128 entries
   first column (3..23) is the max number of indexes[] chunk to rehash

@@ -53,6 +53,7 @@ type
   {$ifdef HASAESNI}
     {$define USEAESNI}
     {$define USEAESNI64}
+    {$define USECLMUL} // gf_mul_pclmulqdq() requires some complex opcodes
   {$endif USEAESNI}
   {$ifndef BSD}
     {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
@@ -63,6 +64,9 @@ type
 {$ifdef ASMX86}
   {$define USEAESNI}
   {$define USEAESNI32}
+  {$ifdef HASAESNI}
+    {$define USECLMUL} // gf_mul_pclmulqdq() requires some complex opcodes
+  {$endif HASAESNI}
   {$ifndef BSD}
     {$define SHA512_X86} // external sha512-x86 for win32/lin32
   {$endif BSD}
@@ -3290,22 +3294,22 @@ end;
 procedure gf_mul(var a: TAESBlock; const b: TAESBlock);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifdef HASAESNI}
+  {$ifdef USECLMUL}
   if cfCLMUL in CpuFeatures then
     gf_mul_pclmulqdq(@a, @b)
   else
-  {$endif HASAESNI}
+  {$endif USECLMUL}
     gf_mul_pas(a, b);
 end;
 
 procedure gf_mul_h(const eng: TAESGCMEngine; var a: TAESBlock);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifdef HASAESNI}
+  {$ifdef USECLMUL}
   if flagCLMUL in eng.flags then
     gf_mul_pclmulqdq(@a, @eng.ghash_h)
   else
-  {$endif HASAESNI}
+  {$endif USECLMUL}
     // use pure pascal efficient code with 4KB pre-computed table
     eng.gf_mul_h_pas(a);
 end;
@@ -3470,11 +3474,11 @@ begin
   if not result then
     exit;
   actx.Encrypt(ghash_h, ghash_h);
-  {$ifdef HASAESNI}
+  {$ifdef USECLMUL}
   if cfCLMUL in CpuFeatures then
     include(flags, flagCLMUL)
   else
-  {$endif HASAESNI}
+  {$endif USECLMUL}
     Make4K_Table;
 end;
 
@@ -3532,10 +3536,10 @@ begin
   aad_cnt.V := 0;
   atx_cnt.V := 0;
   flags := [];
-  {$ifdef HASAESNI}
+  {$ifdef USECLMUL}
   if cfCLMUL in CpuFeatures then
     include(flags, flagCLMUL);
-  {$endif HASAESNI}
+  {$endif USECLMUL}
   result := true;
 end;
 
@@ -9167,7 +9171,8 @@ begin
   {$ifdef ASMX64}
   {$ifdef CRC32C_X64}
   if (cfSSE42 in CpuFeatures) and
-     (cfAesNi in CpuFeatures) then
+     (cfAesNi in CpuFeatures) and
+     (cfCLMUL in CpuFeatures) then
   begin
     // use SSE4.2+pclmulqdq instructions
     crc32c := @crc32c_sse42_aesni;

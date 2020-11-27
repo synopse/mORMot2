@@ -3871,7 +3871,7 @@ begin // algorithm similar to TFPList.Expand for the increasing ranges
     inc(result, 16 shl 20);
 end;
 
-{$ifndef FPC_CPUX64}
+{$ifndef FPC_ASMX64}
 
 procedure FastAssignNew(var d; s: pointer);
 var
@@ -3886,7 +3886,7 @@ begin
     FreeMem(sr);
 end;
 
-{$endif FPC_CPUX64}
+{$endif FPC_ASMX64}
 
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
 begin
