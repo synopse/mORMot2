@@ -542,6 +542,30 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     [rax], dl
 end;
 
+{$ifdef FPC}
+
+{$ifndef FPC_X64MM}
+procedure _Getmem; external name 'FPC_GETMEM';
+procedure _Freemem; external name 'FPC_FREEMEM';
+{$endif FPC_X64MM}
+
+procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[d]
+        mov     qword ptr[d], s
+        test    rax, rax
+        jz      @z
+        mov     d, rax
+        cmp     qword ptr[rax - _STRREFCNT], 0
+        jl      @z
+lock    dec     qword ptr[rax - _STRREFCNT]
+        jbe     @free
+@z:     ret
+@free:  sub     d, _STRRECSIZE
+        jmp     _Freemem
+end;
+
+{$endif FPC}
 
 {$endif ASMX64}
 

@@ -202,7 +202,7 @@ type
   WinAnsiString = type AnsiString(CODEPAGE_US); // WinAnsi Codepage
   {$else}
   WinAnsiString = type AnsiString;
-  {$endif}
+  {$endif HASCODEPAGE}
 
   {$ifdef HASCODEPAGE}
   {$ifdef FPC}
@@ -789,7 +789,6 @@ type
   TSynExtendedDynArray = array of TSynExtended;
   PSynExtendedDynArray = ^TSynExtendedDynArray;
   PSynExtended = ^TSynExtended;
-
   {$else}
   /// ARM/Delphi 64-bit does not support 80bit extended -> double is enough
   TSynExtended = double;
@@ -797,7 +796,6 @@ type
   TSynExtendedDynArray = TDoubleDynArray;
   PSynExtendedDynArray = PDoubleDynArray;
   PSynExtended = PDouble;
-
   {$endif TSYNEXTENDED80}
 
   /// the non-number values potentially stored in an IEEE floating point
@@ -1021,7 +1019,8 @@ function UTF8ToInt64(const text: RawUTF8; const default: Int64 = 0): Int64;
 /// get and check range of a signed 32-bit integer stored in a RawUTF8 string
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
-function UTF8ToInteger(const value: RawUTF8; min,max: PtrInt; default: PtrInt = 0): PtrInt; overload;
+function UTF8ToInteger(const value: RawUTF8; min,max: PtrInt;
+  default: PtrInt = 0): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 32-bit integer value stored in a RawUTF8 string
@@ -1031,7 +1030,8 @@ function ToInteger(const text: RawUTF8; out value: integer): boolean;
 
 /// get the unsigned 32-bit cardinal value stored in a RawUTF8 string
 // - returns TRUE if the supplied text was successfully converted into a cardinal
-function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal = 0): boolean;
+function ToCardinal(const text: RawUTF8; out value: cardinal;
+  minimal: cardinal = 0): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 64-bit integer value stored in a RawUTF8 string
@@ -1577,6 +1577,7 @@ function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
 
 /// compute GCD of two integers using substraction-based Euclidean algorithm
 function gcd(a, b: cardinal): cardinal;
+
 
 
 { ************ ObjArray PtrArray InterfaceArray Wrapper Functions }
@@ -3870,30 +3871,7 @@ begin // algorithm similar to TFPList.Expand for the increasing ranges
     inc(result, 16 shl 20);
 end;
 
-{$ifdef FPC_CPUX64}
-
-{$ifndef FPC_X64MM}
-procedure _Getmem; external name 'FPC_GETMEM';
-procedure _Freemem; external name 'FPC_FREEMEM';
-{$endif FPC_X64MM}
-
-procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
-asm
-        mov     rax, qword ptr[d]
-        mov     qword ptr[d], s
-        test    rax, rax
-        jz      @z
-        mov     d, rax
-        cmp     qword ptr[rax - _STRREFCNT], 0
-        jl      @z
-lock    dec     qword ptr[rax - _STRREFCNT]
-        jbe     @free
-@z:     ret
-@free:  sub     d, _STRRECSIZE
-        jmp     _Freemem
-end;
-
-{$else}
+{$ifndef FPC_CPUX64}
 
 procedure FastAssignNew(var d; s: pointer);
 var
@@ -8507,7 +8485,7 @@ begin
   PIntegerArray(@CpuFeatures)^[4] := regs.edx;
   {$ifdef DISABLE_SSE42}
   // paranoid basic execution on Darwin x64 (as reported by alf)
-  CpuFeatures := CpuFeatures - [cfSSE42, cfAESNI, cfAVX, cfAVX2, cfFMA];
+  CpuFeatures := CpuFeatures - [cfSSE42, cfAESNI, cfCLMUL, cfAVX, cfAVX2, cfFMA];
   {$else}
   if not (cfOSXS in CpuFeatures) or
      not IsXmmYmmOSEnabled then
