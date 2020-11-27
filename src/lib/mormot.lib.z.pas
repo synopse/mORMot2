@@ -123,8 +123,6 @@ type
   public
     /// raw zlib Stream information
     Stream: TZStream;
-    /// reset the internal Stream structure
-    procedure Clear;
     /// reset and prepare the internal Stream structure for two memory buffers
     procedure Init(src, dst: pointer; srcLen, dstLen: integer); overload;
     /// reset and prepare the internal Stream structure for a destination stream
@@ -331,16 +329,14 @@ const
     'incompatible version',  // Z_VERSION_ERROR (-6)
     '');
 
-function memset(P: Pointer; B: integer; count: integer): pointer; cdecl;
+procedure memset(P: Pointer; B: integer; count: integer); cdecl;
 begin
   FillCharFast(P^, count, B);
-  result := P;
 end;
 
-function memcpy(dest, source: Pointer; count: integer): pointer; cdecl;
+procedure memcpy(dest, source: Pointer; count: integer); cdecl;
 begin
   MoveFast(source^, dest^, count);
-  result := dest;
 end;
 
 procedure _llmod; // this C++ Builder intrisinc is not cdecl
@@ -425,11 +421,6 @@ end;
 
 { TZLib }
 
-procedure TZLib.Clear;
-begin
-  FillCharFast(Stream, SizeOf(Stream), 0);
-end;
-
 {$ifndef ZLIBPAS}
 
 function zlibAllocMem(AppData: Pointer; Items, Size: cardinal): Pointer; cdecl;
@@ -446,34 +437,37 @@ end;
 
 procedure TZLib.Init(src, dst: pointer; srcLen, dstLen: integer);
 begin
-  Clear;
+  FillCharFast(Stream, SizeOf(Stream), 0);
+  FlushStream := nil;
+  FlushCheckCRC := nil;
+  FlushBufferOwned := false;
   Stream.next_in := src;
   Stream.avail_in := srcLen;
   Stream.next_out := dst;
   Stream.avail_out := dstLen;
   {$ifndef ZLIBPAS}
-  Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
-  Stream.zfree := @zlibFreeMem;
+//  Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
+//  Stream.zfree  := @zlibFreeMem;
   {$endif ZLIBPAS}
 end;
 
 procedure TZLib.Init(src: pointer; srcLen: integer; dst: TStream;
   checkcrc: PCardinal; temp: pointer; tempsize, expectedsize: integer);
 begin
-  Init(src, temp, srcLen, tempsize);
   if tempsize < expectedsize then
   begin
     GetMem(FlushBuffer, expectedsize);
     FlushBufferOwned := true;
     FlushSize := expectedsize;
-    Stream.next_out := FlushBuffer;
-    Stream.avail_out := FlushSize;
   end
   else
   begin
     FlushBuffer := temp;
     FlushSize := tempsize;
   end;
+  Init(src, FlushBuffer, srcLen, FlushSize);
+  FlushStream := dst;
+  FlushCheckCRC := checkcrc;
 end;
 
 function TZLib.CompressInit(CompressionLevel: integer; ZlibFormat: boolean): boolean;
@@ -483,12 +477,15 @@ begin
   if ZlibFormat then
     bits := MAX_WBITS
   else
-    bits := - MAX_WBITS;
+    bits := -MAX_WBITS;
   result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, bits,
     DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream)) >= 0;
   if FlushBufferOwned and
      not result then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
 function TZLib.Compress(Flush: integer): integer;
@@ -500,7 +497,10 @@ function TZLib.CompressEnd: integer;
 begin
   result := deflateEnd(Stream);
   if FlushBufferOwned then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
 function TZLib.UncompressInit(ZlibFormat: boolean): boolean;
@@ -510,11 +510,14 @@ begin
   if ZlibFormat then
     bits := MAX_WBITS
   else
-    bits := - MAX_WBITS;
+    bits := -MAX_WBITS;
   result := inflateInit2_(Stream, bits, ZLIB_VERSION, SizeOf(Stream)) >= 0;
   if FlushBufferOwned and
      not result then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
 function TZLib.Uncompress(Flush: integer): integer;
@@ -526,7 +529,10 @@ function TZLib.UncompressEnd: integer;
 begin
   result := inflateEnd(Stream);
   if FlushBufferOwned then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
 procedure TZLib.DoFlush;
@@ -555,8 +561,8 @@ begin
   for i := Low(ValidCodes) to High(ValidCodes) do
     if ValidCodes[i] = Code then
       exit;
-  raise ESynZip.CreateFmt('Error %d during %s process [%s]',
-    [Code, Context, {$ifndef ZLIBPAS} PAnsiChar {$endif} (Stream.msg)]);
+  raise ESynZip.CreateFmt('Error %d during %s process (avail_in=%d avail_out=%d)',
+    [Code, Context, Stream.avail_in, Stream.avail_out]);
 end;
 
 
@@ -664,6 +670,7 @@ end;
 function UncompressZipString(src: pointer; srcLen: integer;
   checkCRC: PCardinal; ZlibFormat: boolean; TempBufSize: integer): RawByteString;
 var
+  // we don't know the uncompressed size -> use a resizable TStream
   s: TRawByteStringStream;
 begin
   if (src = nil) or
@@ -684,8 +691,8 @@ end;
 function UncompressZipString(const src: RawByteString; ZlibFormat: boolean;
   TempBufSize: integer): RawByteString;
 begin
-  result := UncompressZipString(pointer(src), length(src), nil, ZlibFormat,
-    TempBufSize);
+  result := UncompressZipString(
+    pointer(src), length(src), nil, ZlibFormat, TempBufSize);
 end;
 
 function CRC32string(const aString: RawByteString): cardinal;
