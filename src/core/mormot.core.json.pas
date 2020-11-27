@@ -803,9 +803,11 @@ type
     // - handle rkClass as WriteObject, rkEnumeration/rkSet with proper options,
     // rkRecord, rkDynArray or rkVariant using proper JSON serialization
     // - other types will append 'null'
-    // - returns the size of the Value, in bytes
     procedure AddTypedJSON(Value, TypeInfo: pointer;
       WriteOptions: TTextWriterWriteObjectOptions = []); override;
+    /// serialize as JSON the given object
+    procedure WriteObject(Value: TObject;
+      WriteOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]); override;
     /// append complex types as JSON content using TRttiCustom
     // - called e.g. by TTextWriter.AddVariant() for varAny / TRttiVarData
     procedure AddRttiCustomJSON(Value: pointer; RttiCustom: TObject;
@@ -4740,6 +4742,13 @@ end;
 
 { ********** Low-Level JSON Serialization for all TRttiParserType }
 
+procedure TTextWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
+begin // defined here for proper inlining
+  Add(',');
+  if woHumanReadable in Options then
+    AddCRAndIndent;
+end;
+
 { TJsonSaveContext }
 
 procedure TJsonSaveContext.Init(WR: TTextWriter;
@@ -4958,13 +4967,6 @@ end;
 procedure _JS_Interface(Data: PInterface; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.AddNull;
-end;
-
-procedure TTextWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
-begin // defined here for proper inlining
-  Add(',');
-  if woHumanReadable in Options then
-    AddCRAndIndent;
 end;
 
 procedure _JS_ID(Data: PInt64; const Ctxt: TJsonSaveContext);
@@ -5981,11 +5983,34 @@ var
   save: TRttiJsonSave;
 begin
   {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterType(TypeInfo));
-  save := ctxt.Info.JsonSave;
+  if ctxt.Info = nil then
+    save := nil // paranoid check
+  else
+    save := ctxt.Info.JsonSave;
   if Assigned(save) then
     save(Value, ctxt)
   else
     AddNull;
+end;
+
+procedure TTextWriter.WriteObject(Value: TObject;
+  WriteOptions: TTextWriterWriteObjectOptions);
+var
+  ctxt: TJsonSaveContext;
+  save: TRttiJsonSave;
+begin
+  if Value = nil then
+    AddNull
+  else
+  begin
+    // Rtti.RegisterClass() may create fake RTTI if {$M+} was not used
+    {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterClass(PClass(Value)^));
+    save := ctxt.Info.JsonSave;
+    if Assigned(save) then
+      save(@Value, ctxt)
+    else
+      AddNull;
+  end;
 end;
 
 procedure TTextWriter.AddRttiCustomJSON(Value: pointer; RttiCustom: TObject;
@@ -9261,20 +9286,28 @@ end;
 class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
   const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
 begin
-  result := RegisterCustomSerializer(ObjectClass.ClassInfo, Reader, Writer);
+  // without {$M+ ObjectClasss.ClassInfo=nil -> ensure fake RTTI if needed
+  result := Rtti.RegisterClass(ObjectClass) as TRttiJson;
+  result.fJsonWriter := TMethod(Writer);
+  result.fJsonReader := TMethod(Reader);
+  result.SetParserType(ptClass, pctNone);
 end;
 
 class function TRttiJson.UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON;
 begin
   result := Rtti.RegisterType(Info) as TRttiJson;
-  result.fJsonWriter.Code := nil; // this force reset of the JSON serialization
+  result.fJsonWriter.Code := nil; // force reset of the JSON serialization
   result.fJsonReader.Code := nil;
   result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
 class function TRttiJson.UnRegisterCustomSerializer(ObjectClass: TClass): TRttiJSON;
 begin
-  result := UnRegisterCustomSerializer(ObjectClass.ClassInfo);
+  // without {$M+ ObjectClasss.ClassInfo=nil -> ensure fake ObjectClass RTTI is used
+  result := Rtti.RegisterClass(ObjectClass) as TRttiJson;
+  result.fJsonWriter.Code := nil; // force reset of the JSON serialization
+  result.fJsonReader.Code := nil;
+  result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
 class function TRttiJson.RegisterFromText(DynArrayOrRecord: PRttiInfo;
