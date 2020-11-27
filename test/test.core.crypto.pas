@@ -86,7 +86,7 @@ begin
   // 2. one update call for all chars
   for i := 1 to length(s) do
     SHA.Update(@s[i], 1);
-  SHA.final(Digest);
+  SHA.Final(Digest);
   result := IsEqual(Digest, TDig);
 end;
 
@@ -147,7 +147,7 @@ begin
   SHA.Init;
   for i := 1 to length(s) do
     SHA.Update(@s[i], 1);
-  SHA.final(Digest);
+  SHA.Final(Digest);
   result := IsEqual(Digest, TDig);
 end;
 
@@ -200,7 +200,7 @@ procedure TTestCoreCrypto._SHA256;
     sha.Init;
     for i := 1 to 1000000 do
       sha.Update(@c, 1);
-    sha.final(Digest.Lo);
+    sha.Final(Digest.Lo);
     Check(SHA256DigestToString(Digest.Lo) =
       'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0');
   end;
@@ -323,14 +323,14 @@ begin // includes SHA-384, which is a truncated SHA-512
   sha.Init;
   for i := 1 to length(FOX) do
     sha.Update(@FOX[i], 1);
-  sha.final(dig);
+  sha.Final(dig);
   Check(SHA512DigestToString(dig) = '07e547d9586f6a73f73fbac0435ed76951218fb7d0c' +
     '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
   c := 'a';
   sha.Init;
   for i := 1 to 1000 do
     sha.Update(@c, 1);
-  sha.final(dig);
+  sha.Final(dig);
   Check(SHA512DigestToString(dig) =
     '67ba5535a46e3f86dbfbed8cbbaf0125c76ed549ff8' +
     'b0b9e03e0c88cf90fa634fa7b12b47d77b694de488ace8d9a65967dc96df599727d3292a8d9d447709c97');
@@ -339,7 +339,7 @@ begin // includes SHA-384, which is a truncated SHA-512
   Check(SHA512(temp) = SHA512DigestToString(dig));
   for i := 1 to 1000000 do
     sha.Update(@c, 1);
-  sha.final(dig);
+  sha.Final(dig);
   Check(SHA512DigestToString(dig) =
     'e718483d0ce769644e2e42c7bc15b4638e1f98b13b2' +
     '044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b');
@@ -424,7 +424,7 @@ begin
   instance.Init(SHA3_256);
   for i := 1 to length(data) do
     instance.Update(pointer(data), 1);
-  instance.final(dig);
+  instance.Final(dig);
   Check(SHA256DigestToString(dig) = HASH1);
   Check(sign.Full(saSha3256, data, nil, 0) = HASH1);
   instance.Init(SHA3_256);
@@ -435,18 +435,18 @@ begin
   instance.Update(pointer(data), 10);
   instance.Update(pointer(data), 5);
   instance.Update(pointer(data), 5);
-  instance.final(dig, true); // NoInit=true to check Extendable-Output Function
+  instance.Final(dig, true); // NoInit=true to check Extendable-Output Function
   Check(SHA256DigestToString(dig) = HASH1);
-  instance.final(dig, true);
+  instance.Final(dig, true);
   Check(SHA256DigestToString(dig) =
     'f85500852a5b9bb4a35440e7e4b4dba9184477a4c97b97ab0b24b91a8b04d1c8');
   for i := 1 to 200 do
   begin
     FillZero(dig);
-    instance.final(dig, true);
+    instance.Final(dig, true);
     Check(not IsZero(dig), 'XOF mode');
   end;
-  instance.final(dig);
+  instance.Final(dig);
   Check(SHA256DigestToString(dig) =
     '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252', 'XOF vector');
   encrypted := instance.Cypher('secret', 'toto');
@@ -994,9 +994,9 @@ var
   noaesni: boolean;
   Timer: array[boolean] of TPrecisionTimer;
   ValuesCrypted, ValuesOrig: array[0..1] of RawByteString;
-    {$ifdef CPUINTEL}
+  {$ifdef CPUINTEL}
   backup: TIntelCpuFeatures;
-    {$endif CPUINTEL}
+  {$endif CPUINTEL}
 const
   MAX = 4096 * 1024;  // test 4 MB data, i.e. multi-threaded AES
   MODES: array[0..6 {$ifdef USE_PROV_RSA_AES} + 2{$endif}] of TAESAbstractClass =
@@ -1072,7 +1072,7 @@ begin
       try
         Check(len = MAX);
         Check(CompareMem(AES.outStreamCreated.Memory, pointer(orig), MAX));
-        {$endif PUREMORMOT2}
+      {$endif PUREMORMOT2}
         if not noaesni then
         begin
           for m := low(MODES) to high(MODES) do
@@ -1121,9 +1121,7 @@ begin
       end;
       {$endif PUREMORMOT2}
     end;
-    {$ifndef CPUINTEL}
-    break;
-    {$else}
+    {$ifdef CPUINTEL}
     if noaesni then
     begin
       fRunConsole := format('%s cypher 1..%d bytes with AES-NI: %s, without: %s',
@@ -1133,8 +1131,8 @@ begin
     if A.UsesAESNI then
       Exclude(CpuFeatures, cfAESNI)
     else
-      break;
     {$endif CPUINTEL}
+      break;
   end;
   {$ifdef CPUINTEL}
   CpuFeatures := backup;
@@ -1324,7 +1322,7 @@ begin
     Check(ctxt.Reset(@hex32, n));
     Check(ctxt.Add_AAD(@hex32, n));
     Check(ctxt.Encrypt(@hex32, @buf, n));
-    Check(ctxt.final(tag));
+    Check(ctxt.Final(tag));
     key := tag;
   end;
   Check(CompareMem(@buf32, @buf, SizeOf(buf32)));
@@ -1391,7 +1389,7 @@ begin
     md.Init;
     for i := 1 to n do
       md.Update(tmp[0], 1);
-    md.final(dig);
+    md.Final(dig);
     md.Full(pointer(tmp), n, dig2);
     check(IsEqual(dig, dig2));
     check(CompareMem(@dig, @dig2, sizeof(dig)));

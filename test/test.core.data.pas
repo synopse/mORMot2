@@ -526,7 +526,8 @@ begin
   mustache := TSynMustache.Parse(
     '{{newguid}}');
   html := mustache.RenderJSON('{}', nil, TSynMustache.HelpersGetStandardList);
-  check((html <> '') and (TextToGUID(@html[2], @guid) <> nil));
+  check((html <> '') and
+        (TextToGUID(@html[2], @guid) <> nil));
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A +
     '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A +
@@ -710,8 +711,8 @@ var
   Values: array[0..5] of TValuePUTF8Char;
 begin
   // '{"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"},..
-  if not Context.ParseObject(['Major', 'Minor', 'Release', 'Build', 'Main',
-    'Detailed'], @Values) then
+  if not Context.ParseObject([
+     'Major', 'Minor', 'Release', 'Build', 'Main', 'Detailed'], @Values) then
     exit; // result^ = ',' or ']' for last item of array
   PFV(Data)^.Major := Values[0].ToInteger;
   PFV(Data)^.Minor := Values[1].ToInteger;
@@ -735,8 +736,8 @@ var
   Values: array[0..5] of TValuePUTF8Char;
 begin
   // '{"Major":2,"Minor":2002,"Release":3002,"Build":4002,"Main":"2","BuildDateTime":"1911-03-15"}'
-  if not Context.ParseObject(['Major', 'Minor', 'Release', 'Build', 'Main',
-    'BuildDateTime'], @Values) then
+  if not Context.ParseObject([
+     'Major', 'Minor', 'Release', 'Build', 'Main', 'BuildDateTime'], @Values) then
     exit;
   PFV(Data)^.Major := Values[0].ToInteger;
   PFV(Data)^.Minor := Values[1].ToInteger;
@@ -1952,7 +1953,8 @@ begin
       Check(P <> nil);
       Check(Va = c);
       P := VariantLoadJSON(Va, P);
-      Check((P <> nil) and (P^ = #0));
+      Check((P <> nil) and
+            (P^ = #0));
       Check(Va = U);
       Vb := VariantLoad(VariantSave(Va), @JSON_OPTIONS[true]);
       Check(Vb = U);
@@ -2071,11 +2073,13 @@ begin
   check(IsValidJSON('{' + U));
   P := UniqueRawUTF8(U);
   Check(GetJSONPropName(P) = 'filters');
-  Check((P <> nil) and (P^ = '['));
+  Check((P <> nil) and
+        (P^ = '['));
   P := GotoNextJSONItem(P, 1, @EndOfObject);
   Check(EndOfObject = ',');
   Check(GetJSONPropName(P) = 'Limit');
-  Check((P <> nil) and (P^ = '1'));
+  Check((P <> nil) and
+        (P^ = '1'));
   P := GotoNextJSONItem(P, 1, @EndOfObject);
   Check(P <> nil);
   Check(EndOfObject = '}');
@@ -2318,42 +2322,50 @@ begin
     C2.Free;
     Coll.Free;
   end;
-  // test TJSONRecordTextDefinition parsing
-  Parser := Rtti.RegisterFromTextOnly('Int: double');
+  // test RTTI definition from text
+  Parser := TRttiCustom.CreateFromText('Int: double');
   Check(Parser.Props.Count = 1);
   Check(Parser.Props.List[0].Name^ = 'Int');
   Check(Parser.Props.List[0].Value.Parser = ptDouble);
-  Parser := Rtti.RegisterFromTextOnly(
+  Parser.Free; // should be released by caller (not registered in Rtti list)
+  Parser := TRttiCustom.CreateFromText(
     'A , B,C  : integer; D: RawUTF8');
   Check(Parser.Props.Count = 4);
   ABCD;
-  Parser := Rtti.RegisterFromTextOnly(
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
     'A,B,C: integer; D: RawUTF8; E: record E1,E2: double; end;');
   Check(Parser.Props.Count = 5);
   ABCDE(ptRecord);
-  Parser := Rtti.RegisterFromTextOnly(
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
     'A,B: integer; C: integer; D: RawUTF8; E: array of record E1,E2: double; end;');
   Check(Parser.Props.Count = 5);
   ABCDE(ptArray);
-  Parser := Rtti.RegisterFromTextOnly(
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E{E1,E2 double}');
   Check(Parser.Props.Count = 5);
   ABCDE(ptRecord);
-  Parser := Rtti.RegisterFromTextOnly(
-    'A,B,C integer D RawUTF8 E{E1,E2 double}');
-  Check(Parser.Props.Count = 5, 'from cache');
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
+    'A,B,C: integer, D: RawUTF8, E{E1: double, E2: double}');
+  Check(Parser.Props.Count = 5);
   ABCDE(ptRecord);
-  Parser := Rtti.RegisterFromTextOnly(
-    'A,B,C integer D RawUTF8 E[E1,E2 double]');
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
+    'A,B,C integer D:RawUTF8 E[E1,E2:double]');
   Check(Parser.Props.Count = 5);
   ABCDE(ptArray);
-  Parser := Rtti.RegisterFromTextOnly(
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E[E1,E2 double] F: string');
   Check(Parser.Props.Count = 6);
   ABCDE(ptArray);
   Check(Parser.Props.List[5].Name^ = 'F');
   Check(Parser.Props.List[5].Value.Parser = ptString);
-  Parser := Rtti.RegisterFromTextOnly(
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E[E1,E2 double] F: array of string');
   Check(Parser.Props.Count = 6);
   ABCDE(ptArray);
@@ -2361,7 +2373,8 @@ begin
   Check(Parser.Props.List[5].Value.Parser = ptArray);
   Check(Parser.Props.List[5].Value.Props.Count = 1);
   Check(Parser.Props.List[5].Value.Props.List[0].Value.Parser = ptString);
-  Parser := Rtti.RegisterFromTextOnly(
+  Parser.Free;
+  Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E[E1:{E1A:integer E1B:tdatetime E1C TDatetimeMS}E2 double]');
   Check(Parser.Props.Count = 5);
   ABCD;
@@ -2385,9 +2398,10 @@ begin
     Check(Value.Props.List[1].Name^ = 'E2');
     Check(Value.Props.List[1].Value.Parser = ptDouble);
   end;
+  Parser.Free;
 
   {$ifdef ISDELPHI2010}
-  // test JSON serialization defined by Enhanced RTTI
+  // test JSON serialization defined by Enhanced RTTI available since Delphi 2010
   TestJSONSerialization;
   {$endif ISDELPHI2010}
   // test TJSONRecordTextDefinition JSON serialization
@@ -2718,7 +2732,8 @@ procedure TTestLowLevelTypes._TDecimal128;
   begin
     Check(v.FromText(fromvalue) = dsvValue);
     Check(v.ToText = expected);
-    if (h = 0) and (l = 0) then
+    if (h = 0) and
+       (l = 0) then
       exit;
     Check(v.Bits.lo = l);
     Check(v.Bits.hi = h);
@@ -3680,7 +3695,10 @@ begin
   {$else}
   j := V.Database;
   {$endif}
-  Check((j <> '') and (j[1] = #$E2) and (j[2] = #$80) and (j[3] = #$9D));
+  Check((j <> '') and
+        (j[1] = #$E2) and
+        (j[2] = #$80) and
+        (j[3] = #$9D));
   V1 := _Arr([]);
   vs := 1.5;
   _Safe(V1)^.AddItem(vs);
@@ -4090,8 +4108,9 @@ begin
   Check(Stmt.Where[1].Operation = opIsNotNull);
   Check(Stmt.Limit = 20);
   Check(Stmt.Offset = 10);
-  Check((length(Stmt.Select) = 2) and (Stmt.Select[1].Field = 0) and (Props.Fields.List
-    [Stmt.Select[0].Field - 1].name = 'Data'));
+  Check((length(Stmt.Select) = 2) and
+        (Stmt.Select[1].Field = 0) and
+        (Props.Fields.List[Stmt.Select[0].Field - 1].name = 'Data'));
   Check(Stmt.OrderByField = nil);
   NewStmt('select data,iD from tab where firstname like "monet" or data is null limit 20 offset 10');
   Check(Stmt.TableName = 'tab');
@@ -4111,14 +4130,18 @@ begin
   NewStmt('select count(*) from tab');
   Check(Stmt.TableName = 'tab');
   Check(Stmt.Where = nil);
-  Check((length(Stmt.Select) = 1) and (Stmt.Select[0].Field = 0));
-  Check((length(Stmt.Select) = 1) and (Stmt.Select[0].FunctionName = 'count'));
+  Check((length(Stmt.Select) = 1) and
+        (Stmt.Select[0].Field = 0));
+  Check((length(Stmt.Select) = 1) and
+        (Stmt.Select[0].FunctionName = 'count'));
   Check(Stmt.Limit = 0);
   NewStmt('select count(*) from tab limit 10');
   Check(Stmt.TableName = 'tab');
   Check(Stmt.Where = nil);
-  Check((length(Stmt.Select) = 1) and (Stmt.Select[0].Field = 0));
-  Check((length(Stmt.Select) = 1) and (Stmt.Select[0].FunctionName = 'count'));
+  Check((length(Stmt.Select) = 1) and
+        (Stmt.Select[0].Field = 0));
+  Check((length(Stmt.Select) = 1) and
+        (Stmt.Select[0].FunctionName = 'count'));
   Check(Stmt.Limit = 10);
   NewStmt('select count(*) from tab where yearofbirth>1000 limit 10');
   Check(Stmt.TableName = 'tab');
@@ -4126,8 +4149,10 @@ begin
   Check(Props.Fields.List[Stmt.Where[0].Field - 1].name = 'YearOfBirth');
   Check(Stmt.Where[0].Operation = opGreaterThan);
   Check(Stmt.Where[0].ValueInteger = 1000);
-  Check((length(Stmt.Select) = 1) and (Stmt.Select[0].Field = 0));
-  Check((length(Stmt.Select) = 1) and (Stmt.Select[0].FunctionName = 'count'));
+  Check((length(Stmt.Select) = 1) and
+        (Stmt.Select[0].Field = 0));
+  Check((length(Stmt.Select) = 1) and
+        (Stmt.Select[0].FunctionName = 'count'));
   Check(Stmt.Limit = 10);
   NewStmt('select distinct ( yearofdeath )  from  tab where yearofbirth > :(1000): limit 20');
   Check(Stmt.TableName = 'tab');
@@ -4171,7 +4196,8 @@ begin
   Check(Stmt.Where[0].ValueInteger = 1000);
   Check((length(Stmt.Select) = 1) and
         (Props.Fields.List[Stmt.Select[0].Field - 1].name = 'YearOfDeath'));
-  Check((length(Stmt.Select) = 1) and (Stmt.Select[0].FunctionName = 'max'));
+  Check((length(Stmt.Select) = 1) and
+        (Stmt.Select[0].FunctionName = 'max'));
   Check(Stmt.Limit = 0);
   NewStmt('select max(yearofdeath)+115 as maxYOD from tab where yearofbirth > :(1000):');
   Check(Stmt.TableName = 'tab');
@@ -4624,7 +4650,8 @@ procedure TTestCompression._TAlgoCompress;
       s2 := algo.Decompress(t, aclNoCrcFast);
       inc(timedecomp, timer.StopInMicroSec);
       Check(s2 = s, algo.ClassName);
-      if (log <> '') and (s2 <> s) then
+      if (log <> '') and
+         (s2 <> s) then
         FileFromString(s2, 'bigTest' + algo.ClassName + '.log');
       inc(plain, length(s));
       inc(comp, length(t));
@@ -4639,7 +4666,8 @@ procedure TTestCompression._TAlgoCompress;
        ((plain * Int64(1000 * 1000)) div timedecomp) shr 20]));
     s2 := algo.Decompress(algo.Compress(s), aclNoCrcFast);
     Check(s2 = s, algo.ClassName);
-    if (log <> '') and (s2 <> s) then
+    if (log <> '') and
+       (s2 <> s) then
       FileFromString(s2, 'bigTestPartial' + algo.ClassName + '.log');
   end;
 
