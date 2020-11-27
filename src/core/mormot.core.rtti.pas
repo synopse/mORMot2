@@ -224,7 +224,7 @@ const
 
   /// maps ordinal values which should call TRttiProp.GetOrdProp/SetOrdProp
   rkGetOrdProp =
-     [rkInteger, rkChar, rkWChar, rkEnumeration, rkSet
+     [rkInteger, rkChar, rkWChar, rkEnumeration, rkSet 
       {$ifdef FPC} , rkBool {$endif} ];
 
   /// maps ordinal values which should call TRttiProp.GetInt64Prop/SetInt64Prop
@@ -2119,6 +2119,7 @@ type
     Instances: array of TRttiCustom;
     // called by FindOrRegister() for proper inlining
     function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
+    function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
     procedure DoRegister(Instance: TRttiCustom); overload;
   public
     /// which kind of TRttiCustom class is to be used for registration
@@ -6348,6 +6349,11 @@ begin
           fCache.ItemInfo := DynArrayElemType.Info; // as regular dynarray RTTI
         fCache.ItemSize := DynArrayElemType.Size;
       end;
+    ptClass:
+      begin
+        fCache.Kind := rkClass;
+        fCache.Size := SizeOf(pointer);
+      end;
   else
     raise ERttiException.CreateUTF8('Unexpected %.CreateWithoutRtti(%)',
       [self, ToText(ParserType)^]);
@@ -6897,6 +6903,30 @@ begin
   assert(Find(Info) = result); // paranoid check
 end;
 
+function TRttiCustomList.DoRegister(ObjectClass: TClass): TRttiCustom;
+var
+  info: PRttiInfo;
+begin
+  info := PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^;
+  if info <> nil then
+    result := DoRegister(info)
+  else
+  begin
+    // generate fake RTTI for classes without {$M+}, e.g. TObject or Exception
+    EnterCriticalSection(Lock);
+    try
+      result := GlobalClass.Create(nil);
+      result.fValueClass := ObjectClass;
+      if ObjectClass.InheritsFrom(Exception) then
+        result.Props.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
+      result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass), nil, {noreg=}false);
+      GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
+    finally
+      LeaveCriticalSection(Lock);
+    end;
+  end;
+end;
+
 procedure TRttiCustomList.DoRegister(Instance: TRttiCustom);
 var
   hash, n: PtrInt;
@@ -6959,7 +6989,7 @@ function TRttiCustomList.RegisterClass(ObjectClass: TClass): TRttiCustom;
 begin
   result := ClassPropertiesGet(ObjectClass, GlobalClass);
   if result = nil then
-    result := DoRegister(ObjectClass.ClassInfo);
+    result := DoRegister(ObjectClass);
 end;
 
 procedure TRttiCustomList.RegisterClasses(const ObjectClass: array of TClass);
