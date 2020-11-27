@@ -4865,6 +4865,15 @@ begin
   Ctxt.W.Add('"');
 end;
 
+{$ifndef UNICODE}
+procedure _JS_AnsiString(Data: PRawByteString; const Ctxt: TJsonSaveContext);
+begin
+  Ctxt.W.Add('"');
+  Ctxt.W.AddJSONEscapeAnsiString(Data^);
+  Ctxt.W.Add('"');
+end;
+{$endif UNICODE}
+
 procedure _JS_Single(Data: PSingle; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.AddSingle(Data^);
@@ -5110,7 +5119,7 @@ const
     nil, nil, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
     @_JS_RawByteString, @_JS_RawJSON, @_JS_RawUTF8, nil, @_JS_Single,
-    {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_RawByteString {$endif},
+    {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_AnsiString {$endif},
     @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_GUID, @_JS_Hash,
     @_JS_Hash, @_JS_Hash, nil, @_JS_TimeLog, @_JS_Unicode, @_JS_UnixTime,
     @_JS_UnixMSTime, @_JS_Variant, @_JS_Unicode, @_JS_WinAnsi, @_JS_Word,

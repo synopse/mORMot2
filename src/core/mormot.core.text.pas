@@ -1112,9 +1112,9 @@ type
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
 
     /// serialize as JSON the given object
-    // - is just a wrapper around AddTypeJSON()
+    // - use overriden TTextWriter version instead!
     procedure WriteObject(Value: TObject;
-      Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
+      WriteOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]); virtual;
     /// append a T*ObjArray dynamic array as a JSON array
     // - as expected by Rtti.RegisterObjArray()
     procedure AddObjArrayJSON(const aObjArray;
@@ -4690,12 +4690,11 @@ begin
   inc(B, 4);
 end;
 
-procedure TBaseWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
+procedure TBaseWriter.WriteObject(Value: TObject;
+  WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  if Value <> nil then
-    AddTypedJSON(@Value, Value.ClassInfo, Options)
-  else
-    AddNull;
+  raise ESynException.CreateUTF8(
+    '%.WriteObject unimplemented: use TTextWriter', [self]);
 end;
 
 procedure TBaseWriter.AddObjArrayJSON(const aObjArray;
