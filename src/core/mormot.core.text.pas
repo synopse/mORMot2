@@ -135,7 +135,8 @@ function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8; ov
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast version of several cascaded StringReplaceAll()
-function StringReplaceAll(const S: RawUTF8; const OldNewPatternPairs: array of RawUTF8): RawUTF8; overload;
+function StringReplaceAll(const S: RawUTF8;
+  const OldNewPatternPairs: array of RawUTF8): RawUTF8; overload;
 
 /// fast replace of a specified char by a given string
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
@@ -2736,7 +2737,13 @@ begin
     result := S
   else
   begin
-    found := PosEx(OldPattern, S, 1); // our PosEx() is faster than Pos()
+    {$ifdef FPC} // will use fast FPC SSE version
+    if length(OldPattern) = 1 then
+      found := IndexByte(pointer(S)^, PStrLen(PtrUInt(S) - _STRLEN)^,
+        byte(OldPattern[1])) + 1
+    else
+    {$endif FPC}
+      found := PosEx(OldPattern, S, 1); // our PosEx() is faster than RTL Pos()
     if found = 0 then
       result := S
     else
