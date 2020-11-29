@@ -4255,7 +4255,7 @@ var
   MaxValue: integer;
 begin
   if (Info <> nil) and
-     (Info^.Kind = rkEnumeration) and
+     (Info^.Kind = rkSet) and
      (Info^.SetEnumType(Names, MaxValue) <> nil) then
     result := GetSetNameValue(Names, MaxValue, P, EndOfObject)
   else
@@ -5052,8 +5052,9 @@ begin
       begin
         if GetBitPtr(Data, i) then
         begin
+          Ctxt.W.Add('"');
           Ctxt.W.AddShort(PS^);
-          Ctxt.W.Add(',');
+          Ctxt.W.Add('"', ',');
         end;
         inc(PByte(PS), PByte(PS)^ + 1); // next
       end;
