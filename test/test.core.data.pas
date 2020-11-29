@@ -539,7 +539,7 @@ begin
     '{"header":"Colors","items":[{"name":"red","first":true,"url":"#Red"},' +
     '{"name":"green","link":true,"url":"#Green"},{"name":"blue","first":true,' +
     '"link":true,"url":"#Blue"}],"empty":true}');
-  Check(trim(html) =
+  Check(TrimU(html) =
     '<h1>Colors</h1>'#$D#$A'<li><strong>red</strong></li>'#$D#$A +
     '<li><a href="#Green">green</a></li>'#$D#$A'<li><strong>blue</strong></li>'#$D#$A +
     '<li><a href="#Blue">blue</a></li>'#$D#$A#$D#$A'<p>The list is empty.</p>');
@@ -1290,7 +1290,7 @@ var
         check(value <> nil);
         GetJSONItemAsRawJSON(value, s);
         check(IsValidJSON(s));
-        check(trim(s) = '"' + name + '"');
+        check(TrimU(s) = '"' + name + '"');
         check(GetInteger(JsonObjectByPath(item, 'owner.id')) = owner.id);
         check(GetInteger(JsonObjectByPath(item, 'owner.i*')) = owner.id);
         check(JsonObjectByPath(item, 'owner.name') = '');
@@ -3922,7 +3922,7 @@ begin
     Check(not InheritsFrom(TOrmPeople));
   end;
   Check(GetDisplayNameFromClass(nil) = '');
-  Check(GetDisplayNameFromClass(TOrm) = 'Record');
+  Check(GetDisplayNameFromClass(TOrm) = 'Orm');
   Check(GetDisplayNameFromClass(TOrmPeople) = 'People');
   Check(GetDisplayNameFromClass(TObject) = 'Object');
   Check(GetDisplayNameFromClass(TOrmTable) = 'Table');

@@ -2201,7 +2201,7 @@ begin
     Expect('250');
     repeat
       GetNextItem(P, ',', rec);
-      rec := Trim(rec);
+      rec := TrimU(rec);
       if rec = '' then
         continue;
       if PosExChar('<', rec) = 0 then
@@ -2213,7 +2213,7 @@ begin
         ToList := ToList + ', ' + rec;
     until P = nil;
     Exec('DATA', '354');
-    head := trim(Headers);
+    head := trimU(Headers);
     if head <> '' then
       head := head + #13#10;
     writeln(TCP.SockOut^,

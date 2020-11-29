@@ -4187,7 +4187,7 @@ procedure TTestCoreBase._UTF8;
     t: RawUTF8;
   begin
     trimcopy(S, start, count, t);
-    checkEqual(t, trim(copy(S, start, count)));
+    checkEqual(t, TrimU(copy(S, start, count)));
   end;
 
 var
