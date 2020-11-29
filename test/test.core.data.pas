@@ -80,9 +80,10 @@ type
   // implemented e.g. in the mormot.core.zip / mormot.lib.lizard units
   TTestCompression = class(TSynTestCase)
   protected
-    Data: RawByteString;
+    Data: RawByteString; // contains the first 1MB of mormot2tests executable
+    DataFile: TFileName; // (may be truncated) mormot2tests executable copy
     M: TMemoryStream;
-    crc0, crc1: cardinal;
+    crc0, crc1: cardinal; // crc0=plain crc1=deflated
   public
     procedure Setup; override;
     procedure CleanUp; override;
@@ -2892,7 +2893,6 @@ const
 
 var
   o, od, o2, value: variant;
-  c: currency;
   d, d2: TDateTime;
   oid, oid2: TBSONObjectID;
   oids: array of TBSONObjectID;
@@ -4262,11 +4262,16 @@ end;
 procedure TTestCompression.Setup;
 begin
   Data := StringFromFile(ExeVersion.ProgramFileName);
+  if length(Data) > 1 shl 20 then
+    SetLength(Data, 1 shl 20); // no need to compress more than 1MB
+  DataFile := ChangeFileExt(ExeVersion.ProgramFileName, '.1mb');
+  FileFromString(Data, DataFile);
 end;
 
 procedure TTestCompression.CleanUp;
 begin
   FreeAndNil(M);
+  DeleteFile(DataFile);
 end;
 
 const
@@ -4310,7 +4315,7 @@ const
     $B3667A2E, $C4614AB8, $5D681B02, $2A6F2B94, $B40BBE37, $C30C8EA1, $5A05DF1B,
     $2D02EF8D);
 
-function UpdateCrc32(aCRC32: cardinal; inBuf: pointer; inLen: integer): cardinal;
+function ReferenceCrc32(aCRC32: cardinal; inBuf: pointer; inLen: integer): cardinal;
 var
   i: integer;
 begin // slowest reference version
@@ -4334,15 +4339,15 @@ var
   gzr: TGZRead;
 begin
   Check(crc32(0, @crc32tab, 5) = $DF4EC16C, 'crc32');
-  Check(UpdateCrc32(0, @crc32tab, 5) = $DF4EC16C, 'crc32');
+  Check(ReferenceCrc32(0, @crc32tab, 5) = $DF4EC16C, 'crc32');
   Check(crc32(0, @crc32tab, 1024) = $6FCF9E13, 'crc32');
-  Check(UpdateCrc32(0, @crc32tab, 1024) = $6FCF9E13);
+  Check(ReferenceCrc32(0, @crc32tab, 1024) = $6FCF9E13);
   Check(crc32(0, @crc32tab, 1024 - 5) = $70965738, 'crc32');
-  Check(UpdateCrc32(0, @crc32tab, 1024 - 5) = $70965738);
+  Check(ReferenceCrc32(0, @crc32tab, 1024 - 5) = $70965738);
   Check(crc32(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF, 'crc32');
-  Check(UpdateCrc32(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF);
+  Check(ReferenceCrc32(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF);
   Check(crc32(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
-  Check(UpdateCrc32(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
+  Check(ReferenceCrc32(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
   M := TMemoryStream.Create;
   Z := TSynZipCompressor.Create(M, 6, szcfGZ);
   L := length(Data);
@@ -4357,10 +4362,11 @@ begin
       n := L;
     Z.Write(P^, n); // compress by little chunks to test streaming
     crc0 := crc32(crc0, P, n);
-    crc2 := UpdateCrc32(crc2, P, n);
+    crc2 := ReferenceCrc32(crc2, P, n);
     inc(P, n);
     dec(L, n);
   end;
+  Check(crc0 = ReferenceCrc32(0, Pointer(Data), length(Data)));
   Check(crc0 = Z.CRC, 'crc32');
   Check(crc2 = crc0, 'crc32');
   Z.Free;
@@ -4402,22 +4408,26 @@ end;
 
 procedure TTestCompression.InMemoryCompression;
 var
-  comp: Integer;
   tmp: RawByteString;
   hash: cardinal;
+  len, i: Integer;
 begin
   Check(CRC32string('TestCRC32') = $2CB8CDF3);
-  tmp := RandomTextParagraph(100);
-  hash := Hash32(tmp);
-  CompressZLib(tmp, true);
-  CompressZLib(tmp, false);
-  CheckEqual(Hash32(tmp), hash);
+  for i := 1 to 10 do
+  begin
+    tmp := RandomTextParagraph(1000 * i * i * i);
+    len := length(tmp);
+    hash := Hash32(tmp);
+    CompressZLib(tmp, true);
+    Check(len div length(tmp) > 2, 'compressible');
+    CompressZLib(tmp, false);
+    CheckEqual(Hash32(tmp), hash);
+  end;
 end;
 
 procedure TTestCompression.ZipFormat;
 var
   FN, FN2: TFileName;
-  ExeName: string;
   S: TRawByteStringStream;
 
   procedure test(Z: TZipRead; aCount: integer);
@@ -4443,7 +4453,7 @@ var
       tmp := UnZip(i);
       Check(tmp <> '', 'unzip3');
       Check(crc32(0, pointer(tmp), length(tmp)) = crc1, 'crc1b');
-      i := NameToIndex(ExeName);
+      i := NameToIndex(ExtractFileName(DataFile));
       Check(i = 2, 'unzip4');
       Check(UnZip(i) = Data, 'unzip6');
       Check(Entry[i].infoLocal^.zcrc32 = info.zcrc32, 'crc32');
@@ -4457,8 +4467,8 @@ var
         Exit;
       i := NameToIndex('REP1\twO.exe');
       Check(i = 4, 'unzip8');
-      Check(UnZip(i) = Data, 'unzip9');
-      tmpFN := 'TestSQL3zipformat.tmp';
+      Check(UnZip(i) = Data, 'unzip6');
+      tmpFN := 'mormot2zipformat.tmp';
       Check(UnZip('REP1\one.exe', tmpFN, true), 'unzipa');
       Check(StringFromFile(tmpFN) = Data, 'unzipb');
       Check(DeleteFile(tmpFN), 'unzipc');
@@ -4476,9 +4486,9 @@ var
       AddDeflated('rep2\ident.gz', M.Memory, M.Position);
       Check(Count = 2, 'cnt2');
       if Z is TZipWrite then
-        TZipWrite(Z).AddDeflated(ExeVersion.ProgramFileName)
+        TZipWrite(Z).AddDeflated(DataFile)
       else
-        Z.AddDeflated(ExeName, pointer(Data), length(Data));
+        Z.AddDeflated(ExtractFileName(DataFile), pointer(Data), length(Data));
       Check(Count = 3, 'cnt3');
       AddStored('rep2\ident2.gz', M.Memory, M.Position);
       Check(Count = 4, 'cnt4');
@@ -4490,7 +4500,6 @@ var
 var
   i: integer;
 begin
-  ExeName := ExtractFileName(ExeVersion.ProgramFileName);
   FN := ChangeFileExt(ExeVersion.ProgramFileName, '.zip');
   Prepare(TZipWrite.Create(FN));
   test(TZipRead.Create(FN), 4);
