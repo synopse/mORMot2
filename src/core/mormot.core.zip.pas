@@ -446,7 +446,8 @@ procedure TSynZipCompressor.Flush;
 begin
   if not fInitialized then
     exit;
-  while (Z.Check(Z.Compress(Z_FINISH), [Z_OK, Z_STREAM_END], 'Flush') <> Z_STREAM_END) and
+  while (Z.Check(Z.Compress(Z_FINISH),
+          [Z_OK, Z_STREAM_END], 'TSynZipCompressor.Flush') <> Z_STREAM_END) and
         (Z.Stream.avail_out = 0) do
     Z.DoFlush;
   Z.DoFlush;
@@ -464,9 +465,9 @@ end;
 
 destructor TSynZipCompressor.Destroy;
 begin
-  if FInitialized then
+  if fInitialized then
   begin
-    Z.DoFlush;
+    Flush;
     Z.CompressEnd;
   end;
   if fFormat = szcfGZ then
@@ -493,7 +494,7 @@ end;
 
 function TSynZipCompressor.Seek(Offset: Longint; Origin: Word): Longint;
 begin
-  if not FInitialized then
+  if not fInitialized then
     result := 0
   else if (Offset = 0) and
           (Origin = soFromCurrent) then
@@ -512,7 +513,7 @@ end;
 function TSynZipCompressor.Write(const Buffer; Count: Longint): Longint;
 begin
   if (self = nil) or
-     not FInitialized or
+     not fInitialized or
      (Count <= 0) then
   begin
     result := 0;
@@ -690,7 +691,7 @@ begin
   if zscode <> Z_STREAM_END then
   begin
     zscode := z.Check(z.Uncompress(Z_FINISH),
-      [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'ZStreamNext');
+      [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'TGZRead.ZStreamNext');
     result := zssize - integer(z.Stream.avail_out);
     if result = 0 then
       exit;

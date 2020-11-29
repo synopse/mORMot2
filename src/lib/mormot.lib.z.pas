@@ -446,8 +446,8 @@ begin
   Stream.next_out := dst;
   Stream.avail_out := dstLen;
   {$ifndef ZLIBPAS}
-//  Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
-//  Stream.zfree  := @zlibFreeMem;
+  Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
+  Stream.zfree  := @zlibFreeMem;
   {$endif ZLIBPAS}
 end;
 
@@ -457,7 +457,6 @@ begin
   if tempsize < expectedsize then
   begin
     GetMem(FlushBuffer, expectedsize);
-    FlushBufferOwned := true;
     FlushSize := expectedsize;
   end
   else
@@ -466,7 +465,10 @@ begin
     FlushSize := tempsize;
   end;
   Init(src, FlushBuffer, srcLen, FlushSize);
+  FlushBufferOwned := FlushBuffer <> temp;
   FlushStream := dst;
+  if checkcrc <> nil then
+    checkcrc^ := 0;
   FlushCheckCRC := checkcrc;
 end;
 
@@ -634,6 +636,7 @@ begin
           [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'UncompressStream');
         z.DoFlush;
       until code = Z_STREAM_END;
+      z.DoFlush;
     finally
       z.UncompressEnd;
     end;
