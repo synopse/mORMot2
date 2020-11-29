@@ -7837,7 +7837,8 @@ function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
 begin
   if Str <> '' then
   {$ifdef FPC} // will use fast FPC SSE version
-    result := IndexByte(pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
+    result := IndexByte(pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^,
+      byte(Chr)) + 1
   else
   {$else}
     for result := 1 to PInteger(PtrInt(Str) - sizeof(integer))^ do
@@ -7860,7 +7861,8 @@ var
   ch: char;
   pStart, pStop: PChar;
 label
-  Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4, AfterTestT, AfterTest0, Ret, Exit;
+  Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4,
+  AfterTestT, AfterTest0, Ret, Exit;
 begin
   result := 0;
   if (p = nil) or

@@ -4818,6 +4818,9 @@ var
   n: TShort31;
 begin
   FormatUTF8(Format, Args, name);
+  for i := 1 to length(name) do
+    if name[i] < ' ' then
+      name[i] := ' '; // ensure on same line
   name := StringReplaceAll(name, [
     'TSQLRest', '',
     'TRest', '',
@@ -4825,20 +4828,22 @@ begin
     'TOrmRest', '',
     'TOrm', '',
     'TWebSocket', 'WS',
+    'TServiceFactory', 'SF',
     'TSyn', '',
     'Thread', '',
     'Process', '',
     'Background', 'Bgd',
-    'Server', 'Svr',
-    'Client', 'Clt',
     'WebSocket', 'WS',
+    'Asynch', 'A',
     'Parallel', 'Par',
     'Timer', 'Tmr',
-    'Thread', 'Thd']);
-  for i := 1 to length(name) do
-    if name[i] < ' ' then
-      name[i] := ' '; // ensure on same line
-  name := StringReplaceAll(name, '  ', ' ');
+    'Thread', 'Thd',
+    {$ifdef MSWINDOWS}
+    '  ', ' '
+    {$else}
+    ' ', '' // on POSIX, pthread 16 chars limitation -> the shorter, the better
+    {$endif MSWINDOWS}
+    ]);
   L := length(name);
   if L > 31 then
     L := 31;
