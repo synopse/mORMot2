@@ -1760,7 +1760,7 @@ type
   TJSONToObjectOptions = TJsonParserOptions;
 
 const
-  woSQLRawBlobAsBase64 = woRawBlobAsBase64;
+  j2oSQLRawBlobAsBase64 = woRawBlobAsBase64;
   j2oIgnoreUnknownProperty = jpoIgnoreUnknownProperty;
   j2oIgnoreStringType = jpoIgnoreStringType;
   j2oIgnoreUnknownEnum = jpoIgnoreUnknownEnum;
@@ -4856,7 +4856,7 @@ end;
 procedure _JS_RawByteString(Data: PRawByteString; const Ctxt: TJsonSaveContext);
 begin
   if (rcfIsRawBlob in Ctxt.Info.Cache.Flags) and
-     (woRawBlobAsBase64 in Ctxt.Options) then
+     not (woRawBlobAsBase64 in Ctxt.Options) then
     Ctxt.W.AddNull
   else
     Ctxt.W.WrBase64(pointer(Data^), length(Data^), {withmagic=}true);
