@@ -5462,15 +5462,16 @@ begin
     vt := VARIANT_SIZE[vt];
     if vt <> 0 then
       if vt = 255 then // valOleStr
-        Dest.WriteVar(Data^.vAny, length(PWideString(Data^.vAny)^) * 2)
+        Dest.WriteVar(Data^.vAny, length(WideString(Data^.vAny)) * 2)
       else
-        Dest.Write(@Data^.VInt64, vt); // simple types
+        Dest.Write(@Data^.VInt64, vt); // simple types are stored as binary
   end
-  else if vt = varString then // expect only RawUTF8
-    Dest.WriteVar(Data^.vAny, length(PRawByteString(Data^.vAny)^))
+  else if (vt = varString) and  // expect only RawUTF8
+          (Data^.vAny <> nil) then
+    Dest.WriteVar(Data^.vAny, PStrLen(PtrUInt(Data^.VAny) - _STRLEN)^)
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
-    Dest.WriteVar(Data^.vAny, length(PUnicodeString(Data^.vAny)^) * 2)
+    Dest.WriteVar(Data^.vAny, length(UnicodeString(Data^.vAny)) * 2)
   {$endif HASVARUSTRING}
   else
     _BS_VariantComplex(pointer(Data), Dest);
@@ -5491,17 +5492,17 @@ begin
     if vt <> 0 then
       if vt = 255 then
         with Source.VarBlob do // valOleStr
-          SetString(PWideString(Data^.vAny)^, PWideChar(Ptr), Len shr 1)
+          SetString(WideString(Data^.vAny), PWideChar(Ptr), Len shr 1)
       else
         Source.Copy(@Data^.VInt64, vt); // simple types
   end
   else if vt = varString then
     with Source.VarBlob do
-      FastSetString(PRawUTF8(Data^.vAny)^, Ptr, Len) // expect only RawUTF8
+      FastSetString(RawUTF8(Data^.vAny), Ptr, Len) // expect only RawUTF8
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
     with Source.VarBlob do
-      SetString(PUnicodeString(Data^.vAny)^, PWideChar(Ptr), Len shr 1)
+      SetString(UnicodeString(Data^.vAny), PWideChar(Ptr), Len shr 1)
   {$endif HASVARUSTRING}
   else if Assigned(BinaryVariantLoadAsJSON) then
     _BL_VariantComplex(pointer(Data), Source)
