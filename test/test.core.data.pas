@@ -1050,7 +1050,7 @@ procedure TTestLowLevelTypes.EncodeDecodeJSON;
 var
   J, U, U2: RawUTF8;
   P: PUTF8Char;
-  binary, zendframeworkJson, discogsJson: RawByteString;
+  b, binary, zendframeworkJson, discogsJson: RawByteString;
   V: array[0..4] of TValuePUTF8Char;
   i, a, err: integer;
   r: Double;
@@ -1681,7 +1681,7 @@ begin
   TestGetJsonField('"true",false', 'true', true, false, ',', 'f');
   TestGetJsonField('"",false', '', true, false, ',', 'f');
   TestGetJsonField('12,false', '12', false, false, ',', 'f');
-  TestGetJsonField('12]', '12', false, true, ']', #0);
+  TestGetJsonField('12]', '12', false, false, ']', #0);
   TestGetJsonField('12],', '12', false, false, ']', ',');
   TestGetJsonField('1.2],', '1.2', false, false, ']', ',');
   TestGetJsonField('1.2  ],', '1.2', false, false, ']', ',');
@@ -1957,7 +1957,8 @@ begin
       Check((P <> nil) and
             (P^ = #0));
       Check(Va = U);
-      Vb := VariantLoad(VariantSave(Va), @JSON_OPTIONS[true]);
+      binary := VariantSave(Va);
+      Vb := VariantLoad(binary, @JSON_OPTIONS[true]);
       Check(Vb = U);
     finally
       Free;
@@ -2012,7 +2013,7 @@ begin
     J := ObjectToJSON(O, [woHumanReadable]);
     check(IsValidJSON(J));
     CheckEqual(J,
-      '{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
+      #13#10'{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
     with PRttiInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
       for E := low(E) to high(E) do
       begin
@@ -2021,8 +2022,8 @@ begin
         include(O.fSets, E);
         J := ObjectToJSON(O, []);
         check(IsValidJSON(J));
-        CheckEqual(J, FormatUTF8('{"Name":"%","Enum":%,"Sets":%}', [ord(E), ord(E),
-          byte(O.fSets)]));
+        CheckEqual(J, FormatUTF8('{"Name":"%","Enum":%,"Sets":%}',
+          [ord(E), ord(E), byte(O.fSets)]));
         JSONToObject(O2, pointer(J), Valid);
         Check(Valid);
         Check(O.Name = O2.Name);
@@ -2031,7 +2032,7 @@ begin
         J := ObjectToJSON(O, [woHumanReadable]);
         check(IsValidJSON(J));
         U := FormatUTF8(
-          '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["FLAGIDLE"',
+          #13#10'{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["FLAGIDLE"',
           [ord(E), UpperCaseU(RawUTF8(GetEnumName(E)^))]);
         Check(IdemPChar(pointer(J), pointer(U)));
         JSONToObject(O2, pointer(J), Valid);
@@ -2046,12 +2047,15 @@ begin
     J := ObjectToJSON(O, [woHumanReadable, woHumanReadableFullSetsAsStar]);
     check(IsValidJSON(J));
     CheckEqual(J,
-      '{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
+      #13#10'{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying",' +
+      #$D#$A#9'"Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O, [woHumanReadable, woHumanReadableFullSetsAsStar,
       woHumanReadableEnumSetAsComment]);
     CheckEqual(J,
-      '{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying", // "flagIdle","flagStarted","flagFinished","flagDestroying"' +
-      #$D#$A#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted","flagFinished","flagDestroying"'#$D#$A'}');
+      #13#10'{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying", ' +
+      '// "flagIdle","flagStarted","flagFinished","flagDestroying"' +
+      #$D#$A#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted",' +
+      '"flagFinished","flagDestroying"'#$D#$A'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
@@ -2100,33 +2104,39 @@ begin
   try
     U := ObjectToJSON(Coll);
     check(IsValidJSON(U));
-    Check(Hash32(U) = $95B54414);
+    CheckEqual(U,
+      '{"One":{"Color":0,"Length":0,"Name":""},"Coll":[],"Str":null}');
     Check(ObjectToJSON(C2) = U);
     Coll.One.Name := 'test"\2';
     Coll.One.Color := 1;
     U := ObjectToJSON(Coll);
     check(IsValidJSON(U));
-    Check(Hash32(U) = $CE2C2DED);
-    Check(JSONToObject(C2, pointer(U), Valid) = nil);
+    CheckEqual(U,
+      '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[],"Str":null}');
+    Check(JSONToObject(C2, pointer(U), Valid) <> nil);
     Check(Valid);
     U := ObjectToJSON(C2);
     check(IsValidJSON(U));
-    Check(Hash32(U) = $CE2C2DED);
+    CheckEqual(U,
+      '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[],"Str":null}');
     Coll.Coll.Add.Color := 10;
     Coll.Coll.Add.Name := 'name';
     Check(Coll.Coll.Count = 2);
     U := ObjectToJSON(Coll);
     check(IsValidJSON(U));
-    Check(Hash32(U) = $36B02F0E);
-    Check(JSONToObject(C2, pointer(U), Valid) = nil);
+    CheckEqual(U, '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":' +
+      '[{"Color":10,"Length":0,"Name":""},{"Color":0,"Length":0,"Name":"name"}],"Str":null}');
+    Check(JSONToObject(C2, pointer(U), Valid) <> nil);
     Check(Valid);
     Check(C2.Coll.Count = 2);
     U := ObjectToJSON(C2);
     check(IsValidJSON(U));
-    Check(Hash32(U) = $36B02F0E);
+    CheckEqual(U, '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":' +
+      '[{"Color":10,"Length":0,"Name":""},{"Color":0,"Length":0,"Name":"name"}],"Str":null}');
     J := ObjectToJSON(Coll, [woHumanReadable]);
+    writeln(J);
     check(IsValidJSON(U));
-    Check(Hash32(J) = $9FAFF11F);
+    Check(Hash32(J) = $7694E4C1);
     Check(JSONReformat(J, jsonCompact) = U);
     Check(JSONReformat('{ "empty": {} }') =
       '{'#$D#$A#9'"empty": {'#$D#$A#9#9'}'#$D#$A'}');
@@ -2135,16 +2145,18 @@ begin
     CheckEqual(U,
       '{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,' +
       '"Length":0,"Name":"test\"\\2"},"Coll":[{"ClassName":"TCollTest","Color":10,' +
-      '"Length":0,"Name":""},{"ClassName":"TCollTest","Color":0,"Length":0,"Name":"name"}]}');
+      '"Length":0,"Name":""},{"ClassName":"TCollTest","Color":0,"Length":0,"Name":"name"}],"Str":null}');
     C2.Coll.Clear;
-    Check(JSONToObject(C2, pointer(U), Valid) = nil);
+    Check(C2.Coll.Count = 0);
+    Check(JSONToObject(C2, pointer(U), Valid) <> nil);
     Check(Valid);
     Check(C2.Coll.Count = 2);
     U := ObjectToJSON(C2);
-    Check(Hash32(U) = $36B02F0E);
+    CheckEqual(U, '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":' +
+      '[{"Color":10,"Length":0,"Name":""},{"Color":0,"Length":0,"Name":"name"}],"Str":null}');
     Rtti.RegisterClasses([TComplexNumber, TCollTst]);
     J := '{"ClassName":"TComplexNumber", "Real": 10.3, "Imaginary": 7.92 }';
-    P := UniqueRawUTF8(J); // make local copy of constant
+    P := UniqueRawUTF8(J); // make local copy of source constant
     Comp := TComplexNumber(JSONToNewObject(P, Valid));
     if not CheckFailed(Comp <> nil) then
     begin
