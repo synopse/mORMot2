@@ -2969,7 +2969,7 @@ type
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
     // should better rely on OnProgress() callback for any GUI application
-    // - by default, it will wait for ever so that process is finished, but you
+    // - by default, it will wait forever so that process is finished, but you
     // can set a time out (in seconds) after which the process will be aborted
     // - could be used with BackupBackground() and StepPageNumber=-1 to perform
     // a whole copy of a database in one shot:
@@ -4898,33 +4898,34 @@ end;
 
 procedure TSQLDataBase.BackupBackgroundWaitUntilFinished(
   TimeOutSeconds: integer);
-var i: integer;
+var
+  endtix: Int64;
 begin
   if fBackupBackgroundInProcess <> nil then
     if TimeOutSeconds < 0 then
-      // TimeOutSeconds=-1 for infinite wait
+      // TimeOutSeconds=-1 for infinite wait (unsafe!)
       while fBackupBackgroundInProcess <> nil do
         SleepHiRes(10)
     else
     begin
-      for i := 1 to TimeOutSeconds*100 do
-      begin
-        // wait for process ending
+      endtix := GetTickCount64 + TimeOutSeconds * 1000;
+      repeat
+        // wait for "natural" process ending
         SleepHiRes(10);
         if fBackupBackgroundInProcess = nil then
           exit;
-      end;
+      until GetTickCount64 > endtix;
       Lock;
       if fBackupBackgroundInProcess <> nil then
-        fBackupBackgroundInProcess.Terminate; // notify Execute loop abortion
+        // notify Execute to force loop abortion
+        fBackupBackgroundInProcess.Terminate;
       UnLock;
-      for i := 1 to 500 do
-      begin
+      endtix := GetTickCount64 + 5000;
+      repeat
         // wait 5 seconds for process to be actually aborted
         SleepHiRes(10);
-        if fBackupBackgroundInProcess = nil then
-          break;
-      end;
+      until (fBackupBackgroundInProcess = nil) or
+            (GetTickCount64 > endtix);
     end;
 end;
 
