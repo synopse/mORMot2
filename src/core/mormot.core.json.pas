@@ -5948,7 +5948,7 @@ begin
     varDate:
       AddDateTime(@v.VDate, 'T', '"');
     varCurrency:
-      AddCurr64(v.VInt64);
+      AddCurr64(@v.VInt64);
     varBoolean:
       Add(v.VBoolean); // 'true'/'false'
     varVariant:
@@ -6474,7 +6474,7 @@ begin
       vtExtended:
         AddDouble(VExtended^);
       vtCurrency:
-        AddCurr64(VInt64^);
+        AddCurr64(VInt64);
       vtObject:
         WriteObject(VObject);
       vtVariant:
@@ -6522,7 +6522,7 @@ begin
       vtExtended:
         AddDouble(VExtended^);
       vtCurrency:
-        AddCurr64(VInt64^);
+        AddCurr64(VInt64);
       vtInt64:
         Add(VInt64^);
       {$ifdef FPC}

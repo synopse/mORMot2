@@ -1381,7 +1381,7 @@ begin
         ftDouble:
           WR.AddDouble(unaligned(PDouble(Data)^));
         ftCurrency:
-          WR.AddCurr64(PInt64(Data)^);
+          WR.AddCurr64(PInt64(Data));
         ftDate:
           begin
             WR.Add('"');

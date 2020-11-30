@@ -5567,7 +5567,7 @@ begin
         ftDouble:
           WR.AddDouble(ColumnDouble(col));
         ftCurrency:
-          WR.AddCurr64(ColumnCurrency(col));
+          WR.AddCurr(ColumnCurrency(col));
         ftDate:
           begin
             WR.Add('"');
@@ -5790,7 +5790,7 @@ begin
           ftDouble:
             W.AddDouble(V.VDouble);
           ftCurrency:
-            W.AddCurr64(V.VCurrency);
+            W.AddCurr(V.VCurrency);
           ftDate:
             begin
               if not Tab then
@@ -7156,7 +7156,7 @@ begin
           ftDouble:
             Dest.AddDouble(unaligned(PDouble(@VInt64)^));
           ftCurrency:
-            Dest.AddCurr64(VInt64);
+            Dest.AddCurr64(@VInt64);
           ftDate:
             Dest.AddDateTime(PDateTime(@VInt64), ' ', '''');
           ftUTF8:

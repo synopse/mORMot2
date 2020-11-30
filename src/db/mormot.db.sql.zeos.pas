@@ -1357,7 +1357,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           if fDBMS = dSQLite then
             WR.AddDouble(fResultSet.GetDouble(col + FirstDbcIndex))
           else
-            WR.AddCurr64(fResultSet.GetCurrency(col + FirstDbcIndex));
+            WR.AddCurr(fResultSet.GetCurrency(col + FirstDbcIndex));
         ftDate:
           begin
             WR.Add('"');

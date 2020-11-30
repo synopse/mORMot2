@@ -994,7 +994,7 @@ begin
               ftFloat, ftCurrency: // TCurrencyField is sadly a TFloatField
                 W.Add(AsFloat, TFloatField(Data.Fields[f]).Precision);
               ftBCD:
-                W.AddCurr64(AsCurrency);
+                W.AddCurr(AsCurrency);
               ftFMTBcd:
                 AddBcd(W, AsBCD);
               ftTimeStamp, ftDate, ftTime, ftDateTime:
@@ -1576,7 +1576,7 @@ begin
             if TField(ColumnAttr).DataType in [ftBCD, ftFMTBcd] then
               AddBcd(WR, TField(ColumnAttr).AsBCD)
             else
-              WR.AddCurr64(TField(ColumnAttr).AsCurrency);
+              WR.AddCurr(TField(ColumnAttr).AsCurrency);
           mormot.db.core.ftDate:
             begin
               WR.Add('"');

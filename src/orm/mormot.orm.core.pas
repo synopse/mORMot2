@@ -10234,7 +10234,7 @@ var
   curr: currency;
 begin
   fPropInfo.GetCurrencyProp(Instance, curr);
-  W.AddCurr64(curr);
+  W.AddCurr(curr);
 end;
 
 procedure TOrmPropInfoRTTICurrency.GetValueVar(Instance: TObject; ToSQL: boolean;

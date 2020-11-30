@@ -854,9 +854,11 @@ type
     procedure Add(Value: boolean); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append a Currency from its Int64 in-memory representation
-    procedure AddCurr64(Value: PInt64); overload;
-    /// append a Currency from its Int64 in-memory representation
-    procedure AddCurr64(const Value: currency); overload;
+    // - expects a PInt64 to avoid ambiguity with the AddCurr() method
+    procedure AddCurr64(Value: PInt64);
+    /// append a Currency value
+    // - just an inlined wrapper around AddCurr64(PInt64(@Value))
+    procedure AddCurr(const Value: currency); 
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: cardinal);
@@ -5008,18 +5010,22 @@ begin
       if P[Len - 2] = '0' then
         if P[Len - 3] = '0' then
           if P[Len - 4] = '0' then
+            // 'xxx.0000' -> 'xxx'
             dec(Len, 5)
           else
+            // 'xxx.1000' -> 'xxx.1'
             dec(Len, 3)
         else
+          // 'xxx.1200' -> 'xxx.12'
           dec(Len, 2)
       else
+        // 'xxx.1220' -> 'xxx.123'
         dec(Len);
   MoveSmall(P, B + 1, Len);
   inc(B, Len);
 end;
 
-procedure TBaseWriter.AddCurr64(const Value: currency);
+procedure TBaseWriter.AddCurr(const Value: currency);
 begin
   AddCurr64(PInt64(@Value));
 end;

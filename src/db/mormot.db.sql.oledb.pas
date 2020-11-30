@@ -1122,7 +1122,7 @@ Write:    case ColumnType of
             ftDouble:
               WR.AddDouble(V^.Double);
             ftCurrency:
-              WR.AddCurr64(V^.Int64);
+              WR.AddCurr64(@V^.Int64);
             ftDate:
               begin
                 WR.Add('"');
