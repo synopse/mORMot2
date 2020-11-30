@@ -273,31 +273,33 @@ begin
 end;
 
 procedure TRestServerDB.InternalStat(Ctxt: TRestServerURIContext; W: TTextWriter);
-var i: PtrInt;
-    ndx: TIntegerDynArray;
+var
+  i: PtrInt;
+  ndx: TIntegerDynArray;
 begin
-  inherited InternalStat(Ctxt,W);
-  if Ctxt.InputExists['withall'] or Ctxt.InputExists['withsqlite3'] then
-  with fOrmInstance as TRestOrmServerDB do
-  begin
-    W.CancelLastChar('}');
-    W.AddShort(',"sqlite3":[');
-    DB.Lock;
-    try
-      StatementCache.SortCacheByTotalTime(ndx);
-      with StatementCache do
-      for i := 0 to Count-1 do
-        with Cache[ndx[i]] do
-        begin
-          W.AddJSONEscape([StatementSQL,Timer]);
-          W.Add(',');
-        end;
-    finally
-      DB.UnLock;
+  inherited InternalStat(Ctxt, W);
+  if Ctxt.InputExists['withall'] or
+     Ctxt.InputExists['withsqlite3'] then
+    with fOrmInstance as TRestOrmServerDB do
+    begin
+      W.CancelLastChar('}');
+      W.AddShort(',"sqlite3":[');
+      DB.Lock;
+      try
+        StatementCache.SortCacheByTotalTime(ndx);
+        with StatementCache do
+        for i := 0 to Count - 1 do
+          with Cache[ndx[i]] do
+          begin
+            W.AddJSONEscape([StatementSQL, Timer]);
+            W.Add(',');
+          end;
+      finally
+        DB.UnLock;
+      end;
+      W.CancelLastComma;
+      W.Add(']', '}');
     end;
-    W.CancelLastComma;
-    W.Add(']','}');
-  end;
 end;
 
 procedure TRestServerDB.InternalInfo(var info: TDocVariantData);

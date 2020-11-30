@@ -1884,22 +1884,22 @@ begin
     J := ObjectToJSON(peop);
     check(IsValidJSON(J));
     CheckEqual(J, '{"ID":1234,"FirstName":"FN","LastName":"LN",' +
-      '"Data":"","YearOfBirth":1000,"YearOfDeath":0}');
+      '"Data":null,"YearOfBirth":1000,"YearOfDeath":0}');
     ClearObject(peop);
     J := ObjectToJSON(peop);
     check(IsValidJSON(J));
-    CheckEqual(J, '{"ID":1234,"FirstName":"","LastName":"",' +
-      '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
+    CheckEqual(J, '{"ID":0,"FirstName":"","LastName":"",' +
+      '"Data":null,"YearOfBirth":0,"YearOfDeath":0}');
     peop.IDValue := -1234;
     J := ObjectToJSON(peop);
     check(IsValidJSON(J));
     CheckEqual(J, '{"ID":-1234,"FirstName":"","LastName":"",' +
-      '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
+      '"Data":null,"YearOfBirth":0,"YearOfDeath":0}');
     peop.YearOfDeath := 10;
     peop.LastName := 'john';
     J := ObjectToJSON(peop);
     check(IsValidJSON(J));
-    CheckEqual(J, '{"ID":-1234,"FirstName":"","LastName":"john","Data":"",' +
+    CheckEqual(J, '{"ID":-1234,"FirstName":"","LastName":"john","Data":null,' +
       '"YearOfBirth":0,"YearOfDeath":10}');
   finally
     peop.Free;
@@ -1920,7 +1920,7 @@ begin
     Check(V[2].ToInteger = a);
     Check(V[3].Value = nil);
     J := BinToBase64WithMagic(U);
-    check(PInteger(J)^ and $00ffffff = JSON_BASE64_MAGIC);
+    check(PInteger(J)^ and $00ffffff = JSON_BASE64_MAGIC_C);
     RB := BlobToRawBlob(pointer(J));
     check(length(RB) = length(U)); // RB=U is buggy under FPC :(
     check(CompareMem(pointer(RB), pointer(U), length(U)));
