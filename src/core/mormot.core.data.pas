@@ -1525,7 +1525,7 @@ type
     // TTimeLogDynArray and TDateTimeDynArray as JSON array - or any customized
     // valid JSON serialization as set by TTextWriter.RegisterCustomJSONSerializer
     // - or any other kind of array as Base64 encoded binary stream precessed
-    // via JSON_BASE64_MAGIC (UTF-8 encoded \uFFF0 special code)
+    // via JSON_BASE64_MAGIC_C (UTF-8 encoded \uFFF0 special code)
     // - typical handled content could be
     // ! '[1,2,3,4]' or '["\uFFF0base64encodedbinary"]'
     // - return a pointer at the end of the data read from P, nil in case

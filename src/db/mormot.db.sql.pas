@@ -5191,7 +5191,7 @@ begin
     result := (VType = varNull) or
               ((VType = varString) and
                (VString <> nil) and
-               (PCardinal(VString)^ and $ffffff = JSON_BASE64_MAGIC));
+               (PCardinal(VString)^ and $ffffff = JSON_BASE64_MAGIC_C));
 end;
 
 procedure TSQLDBStatement.Bind(const Params: array of const; IO: TSQLDBParamInOutType);
@@ -5209,18 +5209,18 @@ begin
           else
           begin
             c := PInteger(VAnsiString)^ and $00ffffff;
-            if c = JSON_BASE64_MAGIC then
+            if c = JSON_BASE64_MAGIC_C then
               BindBlob(i, Base64ToBin(PAnsiChar(VAnsiString) + 3, length(RawUTF8
                 (VAnsiString)) - 3))
             else if c = JSON_SQLDATE_MAGIC then
               BindDateTime(i, Iso8601ToDateTimePUTF8Char(PUTF8Char(VAnsiString)
                 + 3, length(RawUTF8(VAnsiString)) - 3))
             else          // expect UTF-8 content only for AnsiString, i.e. RawUTF8 variables
-          {$ifdef HASCODEPAGE}
+              {$ifdef HASCODEPAGE}
               BindTextU(i, AnyAnsiToUTF8(RawByteString(VAnsiString)), IO);
-          {$else}
+              {$else}
               BindTextU(i, RawUTF8(VAnsiString), IO);
-          {$endif}
+              {$endif HASCODEPAGE}
           end;
         vtPChar:
           BindTextP(i, PUTF8Char(VPChar), IO);
@@ -5232,25 +5232,25 @@ begin
           BindTextU(i, RawUnicodeToUtf8(VPWideChar, StrLenW(VPWideChar)), IO);
         vtWideString:
           BindTextW(i, WideString(VWideString), IO);
-    {$ifdef HASVARUSTRING}
-    {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
+        {$ifdef UNICODE}
         vtUnicodeString:
           BindTextS(i, string(VUnicodeString), IO);
-    {$else}
+        {$else}
         vtUnicodeString:
           BindTextU(i, UnicodeStringToUtf8(UnicodeString(VUnicodeString)), IO);
-    {$endif}
-    {$endif}
+        {$endif UNICODE}
+        {$endif HASVARUSTRING}
         vtboolean:
           Bind(i, integer(Vboolean), IO);
         vtInteger:
           Bind(i, VInteger, IO);
         vtInt64:
           Bind(i, VInt64^, IO);
-    {$ifdef FPC}
+        {$ifdef FPC}
         vtQWord:
           Bind(i, VQWord^, IO);
-    {$endif}
+        {$endif FPC}
         vtCurrency:
           BindCurrency(i, VCurrency^, IO);
         vtExtended:
@@ -5259,12 +5259,13 @@ begin
           if VPointer = nil then
             BindNull(i, IO)
           else
-            raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer', [self]);
+            raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer',
+              [self]);
         vtVariant:
           BindVariant(i, VVariant^, VariantIsBlob(VVariant^), IO);
       else
-        raise ESQLDBException.CreateUTF8('%.BindArrayOfConst(Param=%,Type=%)', [self,
-          i, VType]);
+        raise ESQLDBException.CreateUTF8('%.BindArrayOfConst(Param=%,Type=%)',
+          [self, i, VType]);
       end;
 end;
 
@@ -5318,11 +5319,11 @@ begin
             '%.BindVariant: BLOB should not be UnicodeString', [self])
         else
           BindTextU(Param, UnicodeStringToUtf8(UnicodeString(VAny)), IO);
-      {$endif}
+      {$endif HASVARUSTRING}
       varString:
         if DataIsBlob then
           if (VAny <> nil) and
-             (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC) then
+             (PInteger(VAny)^ and $00ffffff = JSON_BASE64_MAGIC_C) then
             // recognized as Base64 encoded text
             BindBlob(Param, Base64ToBin(PAnsiChar(VAny) + 3,
               length(RawByteString(VAny)) - 3))
@@ -5335,7 +5336,7 @@ begin
           BindTextU(Param, AnyAnsiToUTF8(RawByteString(VAny)), IO);
           {$else} // on older Delphi, we assume AnsiString = RawUTF8
           BindTextU(Param, RawUTF8(VAny), IO);
-          {$endif}
+          {$endif HASCODEPAGE}
     else
       if VType = varByRef or varVariant then
         BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)
@@ -5499,7 +5500,7 @@ begin
               V.VBlobLen := length(tmp)
             else
               V.VBlobLen := StrLen(V.VText);
-          {$ifndef UNICODE}
+            {$ifndef UNICODE}
             if (fConnection <> nil) and
                not fConnection.Properties.VariantStringAsWideString then
             begin
@@ -5512,7 +5513,7 @@ begin
                   V.VText, V.VBlobLen, RawByteString(VAny));
             end
             else
-          {$endif UNICODE}
+            {$endif UNICODE}
               UTF8ToSynUnicode(V.VText, V.VBlobLen, SynUnicode(VAny));
           end
           else
@@ -5588,7 +5589,8 @@ begin
             WR.WrBase64(pointer(blob), length(blob), {withMagic=}true);
           end;
       else
-        raise ESQLDBException.CreateUTF8('%.ColumnsToJSON: invalid ColumnType(%)=%',
+        raise ESQLDBException.CreateUTF8(
+          '%.ColumnsToJSON: invalid ColumnType(%)=%',
           [self, col, ord(ColumnType(col))]);
       end;
     WR.Add(',');
@@ -5656,13 +5658,13 @@ begin
     ftBlob:
       VariantToRawByteString(Temp, RawByteString(Dest));
   else
-    raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type [%]', [self,
-      ToText(result)^]);
+    raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type [%]',
+      [self, ToText(result)^]);
   end;
 end;
 
 function TSQLDBStatement.ParamToVariant(Param: integer; var Value: Variant;
-  CheckIsOutParameter: boolean = true): TSQLDBFieldType;
+  CheckIsOutParameter: boolean): TSQLDBFieldType;
 begin
   dec(Param); // start at #1
   if (self = nil) or

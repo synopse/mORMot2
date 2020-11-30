@@ -6237,7 +6237,8 @@ end;
 
 function TLockedDocVariant.AddExistingPropOrLock(const Name: RawUTF8;
   var Obj: variant): boolean;
-var i: PtrInt;
+var
+  i: PtrInt;
 begin
   result := true;
   fLock.Enter;

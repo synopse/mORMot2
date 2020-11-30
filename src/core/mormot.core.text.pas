@@ -651,7 +651,7 @@ type
   // $ "Enum": "Destroying", // Idle,Started,Finished,Destroying
   // - woEnumSetsAsText will store sets and enumerables as text (is also
   // included in woFullExpand or woHumanReadable)
-  // - woDateTimeWithMagic will append the JSON_SQLDATE_MAGIC (i.e. U+FFF1)
+  // - woDateTimeWithMagic will append the JSON_SQLDATE_MAGIC_C (i.e. U+FFF1)
   // before the ISO-8601 encoded TDateTime value
   // - woDateTimeWithZSuffix will append the Z suffix to the ISO-8601 encoded
   // TDateTime value, to identify the content as strict UTC value

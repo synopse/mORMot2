@@ -313,7 +313,7 @@ type
     // This option might be usefull if you export sql rows using a
     // json streamed file which will be used as an import-file with your mongodb
     // If set the options jcoDATETIME_MAGIC and jcoMilliseconds are ignored
-    // - jcoDATETIME_MAGIC add the JSON_SQLDATE_MAGIC on top of data
+    // - jcoDATETIME_MAGIC add the JSON_BASE64_MAGIC_C on top of data
     // before adding the ISO date,time,datetime value quoted strings
     // - jcoMilliseconds compose the time/datetime values with milliseconds
     // - jcsSkipNulls ignore null columns. So neither fieldname nor the null

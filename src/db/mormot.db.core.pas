@@ -1398,7 +1398,7 @@ begin
         result := ftUTF8;
     ftUTF8:
       if (VD.VString <> nil) and
-         (PCardinal(VD.VString)^ and $ffffff = JSON_BASE64_MAGIC) then
+         (PCardinal(VD.VString)^ and $ffffff = JSON_BASE64_MAGIC_C) then
         result := ftBlob;
   end;
 end;
@@ -1678,7 +1678,7 @@ begin
         if L > 0 then
         begin
           c := PInteger(ParamValue)^ and $00ffffff;
-          if c = JSON_BASE64_MAGIC then
+          if c = JSON_BASE64_MAGIC_C then
           begin
             // ':("\uFFF0base64encodedbinary"):' format -> decode
             Base64MagicDecode(ParamValue); // wrapper function to avoid temp. string

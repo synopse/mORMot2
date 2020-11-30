@@ -5621,7 +5621,7 @@ begin
   if L = 0 then
     exit;
   if (L > 2) and
-     (PInteger(s)^ and $ffffff = JSON_BASE64_MAGIC) then
+     (PInteger(s)^ and $ffffff = JSON_BASE64_MAGIC_C) then
   begin
     AddNoJSONEscape(pointer(s), L); // was marked as a BLOB content
     exit;
@@ -5664,7 +5664,7 @@ begin
         AddW(PWord(P), 0, Escape);
       CP_RAWBLOB:    // RawBlob written with Base-64 encoding
         begin
-          AddNoJSONEscape(@PByteArray(@JSON_BASE64_MAGIC_QUOTE_VAR)[1], 3);
+          AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
           WrBase64(P, Len, {withMagic=}false);
         end;
     else
@@ -5711,7 +5711,7 @@ begin
       exit;
     end
     else
-      AddNoJSONEscape(@JSON_BASE64_MAGIC_QUOTE_VAR, 4);
+      AddShorter(JSON_BASE64_MAGIC_QUOTE_S); // "\uFFF0
   if Len > 0 then
   begin
     n := Len div 3;
@@ -6273,7 +6273,7 @@ begin
       else
       begin
         c := PInteger(Value)^ and $ffffff;
-        if (c = JSON_BASE64_MAGIC) or
+        if (c = JSON_BASE64_MAGIC_C) or
            (c = JSON_SQLDATE_MAGIC) then
           inc(Value, 3); // just ignore the Magic codepoint encoded as UTF-8
         AddXmlEscape(Value);
@@ -7130,12 +7130,12 @@ begin
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
     exit;
-  if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE then
+  if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE_C then
     // legacy binary layout with a single Base-64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
                   (Ctxt.EndOfObject = ']') and
                   (Ctxt.Value <> nil) and
-      (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC) and
+      (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
       BinaryLoadBase64(PAnsiChar(pointer(Ctxt.Value)) + 3, Ctxt.ValueLen - 3,
         Data, Ctxt.Info.Info, {uri=}false, [rkDynArray], {nocrc=}true)
   else

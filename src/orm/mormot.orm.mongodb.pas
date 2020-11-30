@@ -589,7 +589,7 @@ begin
                     // try to store dynamic array as BSON array (via JSON)
                     js := DynArrayBlobSaveJSON(rtti.Info, pointer(blob));
                   if (js <> '') and
-                     (PInteger(js)^ and $00ffffff <> JSON_BASE64_MAGIC) then
+                     (PInteger(js)^ and $00ffffff <> JSON_BASE64_MAGIC_C) then
                     BSONVariantType.FromJSON(pointer(js), Variant(V^))
                   else
                     BSONVariantType.FromBinary(blob, bbtGeneric, Variant(V^));

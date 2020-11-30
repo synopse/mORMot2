@@ -9915,13 +9915,14 @@ begin
 end;
 
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
-var d100: PtrUInt;
-    tab: PWordArray;
+var
+  d100: PtrUInt;
+  tab: PWordArray;
 begin
   tab := @TwoDigitLookupW;
   d100 := Y div 100; // FPC will use fast reciprocal
   PWordArray(P)[0] := tab[d100];
-  PWordArray(P)[1] := tab[Y-(d100*100)];
+  PWordArray(P)[1] := tab[Y - (d100 * 100)];
 end;
 
 {$endif ASMX86}

@@ -1658,7 +1658,7 @@ begin
   if wasString and
      (pointer(tmp) <> nil) then
   begin
-    if PInteger(tmp)^ and $00ffffff = JSON_BASE64_MAGIC then
+    if PInteger(tmp)^ and $00ffffff = JSON_BASE64_MAGIC_C then
       delete(tmp, 1, 3);
     RawUTF8ToVariant(tmp, result);
   end

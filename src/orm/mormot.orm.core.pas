@@ -565,7 +565,7 @@ type
     /// contains the decoded field values
     FieldValues: array[0..MAX_SQLFIELDS - 1] of RawUTF8;
     /// Decode() will set each field type approximation
-    // - will recognize also JSON_BASE64_MAGIC/JSON_SQLDATE_MAGIC prefix
+    // - will recognize also JSON_BASE64_MAGIC_C/JSON_SQLDATE_MAGIC_C prefix
     FieldTypeApproximation: array[0..MAX_SQLFIELDS - 1] of TJSONObjectDecoderFieldType;
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
@@ -7833,7 +7833,7 @@ begin
       if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
         exit; // valid hexa data
     end
-    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC) and
+    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
        Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
       exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
   // TEXT format
@@ -7862,7 +7862,7 @@ begin
       if mormot.core.text.HexToBin(@P[2], pointer(result), LenHex) then
         exit; // valid hexa data
     end
-    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC) and
+    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
         Base64ToBinSafe(@P[3], Len - 3, RawByteString(result)) then
       exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
   // TEXT format
@@ -7893,7 +7893,7 @@ begin
       if mormot.core.text.HexToBin(@P[2], pointer(result), LenResult) then
         exit; // valid hexa data
     end
-    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC) and
+    else if (PInteger(P)^ and $00ffffff = JSON_BASE64_MAGIC_C) and
             IsBase64(@P[3], Len - 3) then
     begin
       // Base-64 encoded content ('\uFFF0base64encodedbinary')
@@ -8024,7 +8024,7 @@ begin
     else
     begin
       c := PInteger(P)^ and $00ffffff;
-      if (c = JSON_BASE64_MAGIC) or
+      if (c = JSON_BASE64_MAGIC_C) or
          ((P^ = '''') and
           isBlobHex(P)) then
         result := oftBlob
@@ -8335,7 +8335,7 @@ var
           if wasString then
           begin
             c := PInteger(res)^ and $00ffffff;
-            if c = JSON_BASE64_MAGIC then
+            if c = JSON_BASE64_MAGIC_C then
             begin
               FieldTypeApproximation[ndx] := ftaBlob;
               case Params of

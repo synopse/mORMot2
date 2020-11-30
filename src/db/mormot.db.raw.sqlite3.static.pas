@@ -515,7 +515,8 @@ end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
-var i: integer;
+var
+  i: integer;
 begin // a fast full pascal version of the standard C library function
   for i := 1 to Size do
   begin
