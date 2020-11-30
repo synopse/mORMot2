@@ -2932,7 +2932,7 @@ begin
   if aVarType = VarType then
     CustomType := self
   else
-    CustomType := FindSynVariantTypeFromVType(VarType);
+    CustomType := FindSynVariantTypeFromVType(aVarType);
   result := CustomType <> nil;
 end;
 
