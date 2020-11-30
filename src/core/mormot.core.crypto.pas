@@ -5817,18 +5817,22 @@ var
   __h: THash256;
   __hmac: THMAC_SHA256; // initialized from CryptProtectDataEntropy salt
 
-// don't use BinToBase64uri() to avoid linking mormot.core.data.pas
+// don't use BinToBase64uri() to avoid linking mormot.core.buffers.pas
 
-procedure RawBase64URI(rp, sp: PAnsiChar; len: integer);
 const
-  b64: array[0..63] of AnsiChar =
+  _b64: array[0..63] of AnsiChar =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-var i: integer;
-    c: cardinal;
+
+procedure RawBase64URI(rp, sp: PAnsiChar; lendiv, lenmod: integer);
+var
+  i: integer;
+  c: cardinal;
+  b64: PAnsiChar;
 begin
-  for i := 1 to len div 3 do
+  b64 := @_b64;
+  for i := 1 to lendiv do
   begin
-    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
+    c := cardinal(sp[0]) shl 16 + cardinal(sp[1]) shl 8 + cardinal(sp[2]);
     rp[0] := b64[(c shr 18) and $3f];
     rp[1] := b64[(c shr 12) and $3f];
     rp[2] := b64[(c shr 6) and $3f];
@@ -5836,34 +5840,38 @@ begin
     inc(rp, 4);
     inc(sp, 3);
   end;
-  case len mod 3 of
-    1: begin
-      c := ord(sp[0]) shl 16;
-      rp[0] := b64[(c shr 18) and $3f];
-      rp[1] := b64[(c shr 12) and $3f];
-    end;
-    2: begin
-      c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
-      rp[0] := b64[(c shr 18) and $3f];
-      rp[1] := b64[(c shr 12) and $3f];
-      rp[2] := b64[(c shr 6) and $3f];
-    end;
+  case lenmod of
+    1:
+      begin
+        c := cardinal(sp[0]) shl 16;
+        rp[0] := b64[(c shr 18) and $3f];
+        rp[1] := b64[(c shr 12) and $3f];
+      end;
+    2:
+      begin
+        c := cardinal(sp[0]) shl 16 + cardinal(sp[1]) shl 8;
+        rp[0] := b64[(c shr 18) and $3f];
+        rp[1] := b64[(c shr 12) and $3f];
+        rp[2] := b64[(c shr 6) and $3f];
+      end;
   end;
 end;
 
 function Base64URI(P: pointer; len: integer): RawUTF8;
 var
-  blen: integer;
+  blen, bdiv, bmod: integer;
 begin
-  blen := (len div 3) * 4;
-  case len mod 3 of
+  bdiv := len div 3;
+  bmod := len mod 3;
+  blen := bdiv * 4;
+  case bmod of
     1:
       inc(blen, 2);
     2:
       inc(blen, 3);
   end;
   FastSetString(result, nil, blen);
-  RawBase64URI(pointer(result), P, len);
+  RawBase64URI(pointer(result), P, bdiv, bmod);
 end;
 
 procedure read__h__hmac;
