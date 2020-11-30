@@ -2503,6 +2503,7 @@ begin
   result := false;
   if (P = nil) or
      (len <= 0) or
+     // ensure there is no unexpected/unsupported #0 in the middle of input
      (StrLen(P) <> len) then
     exit;
   B := P;
@@ -2782,19 +2783,20 @@ num:    result := P;
     exit;
   end;
   while not (jcEndOfJSONFieldOr0 in jsonset[P^]) do
-    // loop until #0 , ] } : delimiter
-    inc(P);
+    if P^ = #0 then
+      // leave PDest=nil for unexpected end
+      exit
+    else
+      // loop until #0 , ] } : delimiter
+      inc(P);
   if EndOfObject <> nil then
     EndOfObject^ := P^;
+  // ensure JSON value is zero-terminated, and continue after it
   if P^ = #0 then
-    // reached end of input buffer: keep position in trailing #0
-    PDest := P
-  else
-  begin
-    // ensure JSON value is zero-terminated, and continue after it
-    P^ := #0;
+    exit;
+  P^ := #0;
+  if P[1] <> #0 then
     PDest := P + 1;
-  end;
 end;
 
 function GotoEndOfJSONString(P: PUTF8Char; tab: PJsonCharSet): PUTF8Char;
@@ -3409,7 +3411,11 @@ end;
 function GotoNextJSONObjectOrArrayInternal(P, PMax: PUTF8Char;
   EndChar: AnsiChar): PUTF8Char;
 var
-  tab: PJsonCharSet;
+  {$ifdef CPUX86NOTPIC}
+  jsonset: TJsonCharSet absolute JSON_CHARS; // not enough registers
+  {$else}
+  jsonset: PJsonCharSet;
+  {$endif CPUX86NOTPIC}
 label
   Prop;
 begin // should match GetJSONPropName()
@@ -3462,10 +3468,12 @@ begin // should match GetJSONPropName()
         end;
       '-', '+', '0'..'9':
         begin // '0123' excluded by JSON, but not here
-          tab := @JSON_CHARS;
+          {$ifndef CPUX86NOTPIC}
+          jsonset := @JSON_CHARS;
+          {$endif CPUX86NOTPIC}
           repeat
             inc(P);
-          until not (jcDigitFloatChar in tab[P^]);
+          until not (jcDigitFloatChar in jsonset[P^]);
           // not ['-', '+', '0'..'9', '.', 'E', 'e']
         end;
       't':
@@ -3511,12 +3519,14 @@ begin // should match GetJSONPropName()
         end;
     else
       begin
-Prop:   tab := @JSON_CHARS;
-        if not (jcJsonIdentifierFirstChar in tab[P^]) then
+Prop:   {$ifndef CPUX86NOTPIC}
+        jsonset := @JSON_CHARS;
+        {$endif CPUX86NOTPIC}
+        if not (jcJsonIdentifierFirstChar in jsonset[P^]) then
           exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
         repeat
           inc(P);
-        until not (jcJsonIdentifier in tab[P^]);
+        until not (jcJsonIdentifier in jsonset[P^]);
         // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
         while (P^ <= ' ') and
               (P^ <> #0) do
@@ -3529,7 +3539,7 @@ Prop:   tab := @JSON_CHARS;
             inc(P);
           if P^ = '"' then
           begin
-            P := GotoEndOfJSONString(P, tab);
+            P := GotoEndOfJSONString(P, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
             if P^ <> '"' then
               exit;
           end;
@@ -5405,7 +5415,7 @@ procedure TTextWriter.WriteObjectPropName(const PropName: ShortString;
 begin
   if woHumanReadable in Options then
     AddCRAndIndent; // won't do anything if has already been done
-  AddPropName(PropName); // handle twoForceJSONExtended in CustomOptions
+  AddProp(@PropName[1], ord(PropName[0])); // handle twoForceJSONExtended
   if woHumanReadable in Options then
     Add(' ');
 end;
