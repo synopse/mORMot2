@@ -2795,8 +2795,7 @@ num:    result := P;
   if P^ = #0 then
     exit;
   P^ := #0;
-  if P[1] <> #0 then
-    PDest := P + 1;
+  PDest := P + 1;
 end;
 
 function GotoEndOfJSONString(P: PUTF8Char; tab: PJsonCharSet): PUTF8Char;
@@ -5147,6 +5146,7 @@ type
   TSPHook = class(TSynPersistent); // to access its protected methods
   TSPHookClass = class of TSPHook;
 
+// serialization of published props for records and classes
 procedure _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 var
   c: TJsonSaveContext;
@@ -5209,6 +5209,7 @@ begin
     end
     else
       n := Ctxt.Info.Props.Count;
+    done := false;
     if n > 0 then
       // this is the main loop serializing Info.Props[]
       repeat
@@ -5229,6 +5230,10 @@ begin
             not p.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
+          if done then
+            // append ',' and proper indentation if a field was just appended
+            c.W.BlockAfterItem(c.Options);
+          done := true;
           c.W.WriteObjectPropName(p^.Name^, c.Options);
           if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
              not TSPHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
@@ -5249,16 +5254,10 @@ begin
               if rvd.NeedsClear then
                 VarClearProc(rvd.Data);
             end;
-          done := true;
-        end
-        else
-          done := false;
+        end;
         dec(n);
         if n = 0 then
           break;
-        if done then
-          // append ',' and proper indentation
-          c.W.BlockAfterItem(c.Options);
         inc(c.Prop);
       until false;
     if rcfSynPersistentHook in Ctxt.Info.Flags then
@@ -5311,13 +5310,21 @@ end;
 
 procedure _JS_TList(Data: PList; const Ctxt: TJsonSaveContext);
 begin
-  _JS_Objects(Ctxt.W, pointer(Data^.List), Data^.Count, Ctxt.Options);
+  if Data^ = nil then
+    Ctxt.W.AddNull
+  else
+    _JS_Objects(Ctxt.W, pointer(Data^.List), Data^.Count, Ctxt.Options);
 end;
 
 procedure _JS_TObjectList(Data: PObjectList; const Ctxt: TJsonSaveContext);
 var
   o: TTextWriterWriteObjectOptions;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.W.AddNull;
+    exit;
+  end;
   o := Ctxt.Options;
   if not (woObjectListWontStoreClassName in o) then
     include(o, woStoreClassName);
@@ -5330,6 +5337,11 @@ var
   i, last: PtrInt;
   c: TJsonSaveContext; // reuse same context for all collection items
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.W.AddNull;
+    exit;
+  end;
   // can't use AddObjects() since we don't have access to the TCollection list
   {%H-}c.Init(Ctxt.W, Ctxt.Options, Rtti.RegisterClass(Data^.ItemClass));
   c.W.BlockBegin('[', c.Options);
@@ -5351,6 +5363,11 @@ procedure _JS_TStrings(Data: PStrings; const Ctxt: TJsonSaveContext);
 var
   i, last: PtrInt;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.W.AddNull;
+    exit;
+  end;
   Ctxt.W.BlockBegin('[', Ctxt.Options);
   i := 0;
   last := Data^.Count - 1;
@@ -5372,6 +5389,11 @@ var
   i, last: PtrInt;
   u: PPUtf8CharArray;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.W.AddNull;
+    exit;
+  end;
   Ctxt.W.BlockBegin('[', Ctxt.Options);
   i := 0;
   u := Data^.TextPtr;
@@ -5391,13 +5413,21 @@ end;
 
 procedure _JS_TSynList(Data: PSynList; const Ctxt: TJsonSaveContext);
 begin
-  _JS_Objects(Ctxt.W, pointer(Data^.List), Data^.Count, Ctxt.Options);
+  if Data^ = nil then
+    Ctxt.W.AddNull
+  else
+    _JS_Objects(Ctxt.W, pointer(Data^.List), Data^.Count, Ctxt.Options);
 end;
 
 procedure _JS_TSynObjectList(Data: PSynObjectList; const Ctxt: TJsonSaveContext);
 var
   o: TTextWriterWriteObjectOptions;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.W.AddNull;
+    exit;
+  end;
   o := Ctxt.Options;
   if not (woObjectListWontStoreClassName in o) then
     include(o, woStoreClassName);
@@ -6746,7 +6776,9 @@ procedure TJsonParserContext.Init(P: PUTF8Char; Rtti: TRttiCustom;
 begin
   JSON := P;
   Valid := true;
-  Options := O + TRttiJson(Rtti).fIncludeReadOptions;
+  if Rtti <> nil then
+    O := O + TRttiJson(Rtti).fIncludeReadOptions;
+  Options := O;
   if CV <> nil then
   begin
     DVO := CV^;
@@ -6788,7 +6820,8 @@ procedure TJsonParserContext.ParseEndOfObject;
 begin
   if Valid then
   begin
-    JSON := mormot.core.json.ParseEndOfObject(JSON, EndOfObject);
+    if JSON^ <> #0 then
+      JSON := mormot.core.json.ParseEndOfObject(JSON, EndOfObject);
     Valid := JSON <> nil;
   end;
 end;
@@ -6801,6 +6834,7 @@ begin
   if Valid then
   begin
     P := GotoNextNotSpace(JSON);
+    JSON := P;
     if PCardinal(P)^ = NULL_LOW then
     begin
       P := mormot.core.json.ParseEndOfObject(P + 4, EndOfObject);
@@ -6821,6 +6855,7 @@ var
 begin
   result := false; // no need to parse
   P := GotoNextNotSpace(JSON);
+  JSON := P;
   if P^ = '[' then
   begin
     P := GotoNextNotSpace(P + 1); // ignore trailing [
@@ -7259,6 +7294,8 @@ var
   prop: PRttiCustomProp;
   propname: PUTF8Char;
   propnamelen: integer;
+label
+  nxt;
 begin
   Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON);
   if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
@@ -7277,9 +7314,8 @@ begin
       if PPointer(Data)^ = nil then
         // e.g. from _JL_DynArray for T*ObjArray
         PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
-      else
-        if jpoClearClassPublishedProperties in Ctxt.Options then
-          Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
+      else if jpoClearClassPublishedProperties in Ctxt.Options then
+        Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;
       if (rcfSynPersistentHook in Ctxt.Info.Flags) and
@@ -7308,7 +7344,7 @@ begin
       prop := pointer(root.Props.List);
       for p := 1 to root.Props.Count do
       begin
-        propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
+nxt:    propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
         Ctxt.Valid := (Ctxt.JSON <> nil) and
                       (propname <> nil);
         if not Ctxt.Valid then
@@ -7320,6 +7356,16 @@ begin
             inc(prop)
           else
             break
+        else if (Ctxt.Info.Kind = rkClass) and
+                IdemPropName('ClassName', propname, propnamelen) then
+        begin
+          // woStoreClassName was used -> just ignore the class name
+          Ctxt.JSON := GotoNextJSONItem(Ctxt.JSON, 1, @Ctxt.EndOfObject);
+          Ctxt.Valid := Ctxt.JSON <> nil;
+          if Ctxt.Valid then
+            goto nxt;
+          break;
+        end
         else
         begin
           // we didn't find the property in its natural place -> full lookup
@@ -7360,8 +7406,14 @@ var
   root: TRttiCustom;
   item: TObject;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.Valid := Ctxt.ParseNull;
+    exit;
+  end;
   Data^.Clear;
-  if not Ctxt.ParseArray then
+  if Ctxt.ParseNull or
+     not Ctxt.ParseArray then
     exit;
   root := Ctxt.Info;
   Ctxt.Info := Ctxt.ObjectListItem;
@@ -7377,20 +7429,36 @@ end;
 
 procedure _JL_TCollection(Data: PCollection; var Ctxt: TJsonParserContext);
 var
-  root: TRttiCustom;
+  root: TRttiJSON;
   load: TRttiJsonLoad;
   item: TCollectionItem;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.Valid := Ctxt.ParseNull;
+    exit;
+  end;
   Data^.BeginUpdate;
   try
     Data^.Clear;
-    if not Ctxt.ParseArray then
+    if Ctxt.ParseNull or
+       not Ctxt.ParseArray then
       exit;
-    root := Ctxt.Info;
-    Ctxt.Info := TRttiJSON(root).fCollectionItemRtti;
-    load := TRttiJSON(Ctxt.Info).fJsonLoad;
+    root := TRttiJSON(Ctxt.Info);
+    load := nil;
     repeat
       item := Data^.Add;
+      if not Assigned(load) then
+      begin
+        if root.fCollectionItemRtti = nil then
+        begin
+          // RegisterCollection() was not called -> compute after Data^.Add
+          root.fCollectionItem := PPointer(item)^;
+          root.fCollectionItemRtti := Rtti.RegisterClass(PClass(item)^);
+        end;
+        Ctxt.Info := root.fCollectionItemRtti;
+        load := TRttiJSON(Ctxt.Info).fJsonLoad;
+      end;
       load(@item, Ctxt);
     until (not Ctxt.Valid) or
           (Ctxt.EndOfObject = ']');
@@ -7406,8 +7474,14 @@ var
   root: TRttiCustom;
   item: TObject;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.Valid := Ctxt.ParseNull;
+    exit;
+  end;
   Data^.Clear;
-  if not Ctxt.ParseArray then
+  if Ctxt.ParseNull or
+     not Ctxt.ParseArray then
     exit;
   root := Ctxt.Info;
   Ctxt.Info := Ctxt.ObjectListItem;
@@ -7425,10 +7499,16 @@ procedure _JL_TStrings(Data: PStrings; var Ctxt: TJsonParserContext);
 var
   item: string;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.Valid := Ctxt.ParseNull;
+    exit;
+  end;
   Data^.BeginUpdate;
   try
     Data^.Clear;
-    if not Ctxt.ParseArray then
+    if Ctxt.ParseNull or
+       not Ctxt.ParseArray then
       exit;
     repeat
       if Ctxt.ParseNext then
@@ -7448,10 +7528,16 @@ procedure _JL_TRawUTF8List(Data: PRawUTF8List; var Ctxt: TJsonParserContext);
 var
   item: RawUTF8;
 begin
+  if Data^ = nil then
+  begin
+    Ctxt.Valid := Ctxt.ParseNull;
+    exit;
+  end;
   Data^.BeginUpdate;
   try
     Data^.Clear;
-    if not Ctxt.ParseArray then
+    if Ctxt.ParseNull or
+       not Ctxt.ParseArray then
       exit;
     repeat
       if Ctxt.ParseNext then

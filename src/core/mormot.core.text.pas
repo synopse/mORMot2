@@ -5149,14 +5149,16 @@ var
   ntabs: cardinal;
 begin
   if B^ = #9 then
-    exit; // we most probably just added an indentation level
+    // we just already added an indentation level - do it once
+    exit;
   ntabs := fHumanReadableLevel;
   if ntabs >= cardinal(fTempBufSize) then
-    ntabs := 0; // avoid buffer overflow
+    ntabs := 0; // fHumanReadableLevel=-1 after the last level of a document
   if BEnd - B <= PtrInt(ntabs) then
     FlushToStream;
   PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
-  FillCharFast(B[3], ntabs, 9);   // #9=tab
+  if ntabs > 0 then
+    FillCharFast(B[3], ntabs, 9); // #9=tab
   inc(B, ntabs + 2);
 end;
 
