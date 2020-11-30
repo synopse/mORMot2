@@ -6894,7 +6894,7 @@ end;
 function VariantLoad(const Bin: RawByteString;
   CustomVariantOptions: PDocVariantOptions): variant;
 begin
-  result := BinaryLoad(@result, Bin, TypeInfo(Variant),
+  BinaryLoad(@result, Bin, TypeInfo(Variant),
     [rkVariant], CustomVariantOptions);
 end;
 

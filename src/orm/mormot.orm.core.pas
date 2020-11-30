@@ -4072,6 +4072,9 @@ type
     // EOrmException: in this case, you should use a TID / T*ID kind of
     // published property, and not a TOrm, which is limited to the
     // pointer size
+    // - on FPC, if you get an Error: Incompatible types: got "Pointer" expected
+    // "T...", then you are missing a {$mode Delphi} conditional in your unit:
+    // the easiest is to include {$I mormot.define.inc} at the top of your unit
     property AsTOrm: pointer read GetIDAsPointer;
     /// this property is set to true, if any published property is a BLOB (RawBlob)
     property HasBlob: boolean read GetHasBlob;
