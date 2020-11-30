@@ -5927,7 +5927,9 @@ begin
 end;
 
 procedure TRttiCustomProps.Add(Info: PRttiInfo; Offset: PtrInt;
-  const PropName: shortstring);
+  const PropName: shortstring; AddFirst: boolean);
+var
+  n: PtrInt;
 begin
   if (Info = nil) or
      (Offset < 0) or

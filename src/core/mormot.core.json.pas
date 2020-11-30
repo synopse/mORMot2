@@ -4795,7 +4795,7 @@ end;
 procedure TJsonSaveContext.AddDateTime(Value: PDateTime; WithMS: boolean);
 begin
   if woDateTimeWithMagic in Options then
-    W.AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR, 4)
+    W.AddShorter(JSON_SQLDATE_MAGIC_QUOTE_STR)
   else
     W.Add('"');
   W.AddDateTime(Value^, WithMS);
@@ -6274,7 +6274,7 @@ begin
       begin
         c := PInteger(Value)^ and $ffffff;
         if (c = JSON_BASE64_MAGIC_C) or
-           (c = JSON_SQLDATE_MAGIC) then
+           (c = JSON_SQLDATE_MAGIC_C) then
           inc(Value, 3); // just ignore the Magic codepoint encoded as UTF-8
         AddXmlEscape(Value);
       end;

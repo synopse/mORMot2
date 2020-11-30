@@ -8028,7 +8028,7 @@ begin
          ((P^ = '''') and
           isBlobHex(P)) then
         result := oftBlob
-      else if c = JSON_SQLDATE_MAGIC then
+      else if c = JSON_SQLDATE_MAGIC_C then
         result := oftDateTime
       else
         result := oftUTF8Text;
@@ -8352,7 +8352,7 @@ var
             end
             else
             begin
-              if c = JSON_SQLDATE_MAGIC then
+              if c = JSON_SQLDATE_MAGIC_C then
               begin
                 FieldTypeApproximation[ndx] := ftaDate;
                 inc(res, 3); // ignore \uFFF1 magic marker

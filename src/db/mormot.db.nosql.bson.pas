@@ -2212,7 +2212,7 @@ var
       end;
     if P^ <> '"' then
       exit;
-    if PCardinal(P)^ = JSON_SQLDATE_MAGIC_QUOTE then
+    if PCardinal(P)^ = JSON_SQLDATE_MAGIC_QUOTE_C then
       inc(P, 3); // ignore\uFFF1 code for DateTimeToSQL/TimeLogToSQL functions
     L := 1;
     while P[L] <> '"' do
@@ -2906,7 +2906,7 @@ begin
       end;
     varString:
       if (v.VAny <> nil) and
-         (PInteger(v.VAny)^ and $ffffff = JSON_SQLDATE_MAGIC) and
+         (PInteger(v.VAny)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
          Iso8601CheckAndDecode(PUTF8Char(v.VAny) + 3, Length(RawUTF8(v.VAny)) - 3,
            PDateTime(@Data.InternalStorage)^) then
       begin
@@ -3478,7 +3478,7 @@ begin
         BSONWrite(name, VCurrency);
       varString:
         if (VAny <> nil) and
-           (PInteger(VAny)^ and $ffffff = JSON_SQLDATE_MAGIC) and
+           (PInteger(VAny)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
            Iso8601CheckAndDecode(PUTF8Char(VAny) + 3, Length(RawUTF8(VAny)) - 3, dt) then
           // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
           BSONWriteDateTime(name, dt)
@@ -3728,7 +3728,7 @@ begin
         else if Iso8601CheckAndDecode(Value, ValueLen, ValueDateTime) then
           // recognized TTextWriter.AddDateTime() pattern
           BSONWriteDateTime(name, ValueDateTime)
-        else if (PInteger(Value)^ and $ffffff = JSON_SQLDATE_MAGIC) and
+        else if (PInteger(Value)^ and $ffffff = JSON_SQLDATE_MAGIC_C) and
            Iso8601CheckAndDecode(Value + 3, ValueLen - 3, ValueDateTime) then
           // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) pattern
           BSONWriteDateTime(name, ValueDateTime)

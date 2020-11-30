@@ -5212,7 +5212,7 @@ begin
             if c = JSON_BASE64_MAGIC_C then
               BindBlob(i, Base64ToBin(PAnsiChar(VAnsiString) + 3, length(RawUTF8
                 (VAnsiString)) - 3))
-            else if c = JSON_SQLDATE_MAGIC then
+            else if c = JSON_SQLDATE_MAGIC_C then
               BindDateTime(i, Iso8601ToDateTimePUTF8Char(PUTF8Char(VAnsiString)
                 + 3, length(RawUTF8(VAnsiString)) - 3))
             else          // expect UTF-8 content only for AnsiString, i.e. RawUTF8 variables
