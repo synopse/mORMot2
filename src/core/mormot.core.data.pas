@@ -3157,7 +3157,8 @@ end;
 class procedure TSynPersistentWithID.RttiCustomSet(Rtti: TRttiCustom);
 begin
   // will be recognized as a TID property with all associated options
-  Rtti.Props.Add(TypeInfo(TID), PtrInt(@TSynPersistentWithID(nil).fID), 'ID');
+  Rtti.Props.Add(
+    TypeInfo(TID), PtrInt(@TSynPersistentWithID(nil).fID), 'ID', {first=}true);
 end;
 
 

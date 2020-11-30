@@ -1897,7 +1897,9 @@ type
     // TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, ...)
     procedure NameChanges(const Old, New: array of shortstring);
     /// manuall adding of a property/field definition
-    procedure Add(Info: PRttiInfo; Offset: PtrInt; const PropName: shortstring);
+    // - append as last field, unless AddFirst is set to true
+    procedure Add(Info: PRttiInfo; Offset: PtrInt; const PropName: shortstring;
+      AddFirst: boolean = false);
     /// register the published properties of a given class
     // - is called recursively if IncludeParents is true
     procedure AddFromClass(ClassInfo: PRttiInfo; IncludeParents: boolean);
@@ -5932,16 +5934,25 @@ begin
      (PropName = '') then
     exit;
   SetLength(List, Count + 1);
-  with List[Count] do
+  if AddFirst then
+  begin
+    if Count > 0 then
+      MoveFast(List[0], List[1], SizeOf(List[0]) * Count);
+    n := 0;
+  end
+  else
+    n := Count;
+  inc(Count);
+  with List[n] do
   begin
     Value := Rtti.RegisterType(Info);
     OffsetGet := Offset;
     OffsetSet := Offset;
     Name := @PropName;
+    Prop := nil;
     PropDefault := NO_DEFAULT;
     inc(Size, Value.Size);
   end;
-  inc(Count);
 end;
 
 function TRttiCustomProps.FromTextPrepare(const PropName: RawUTF8): integer;
