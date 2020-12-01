@@ -268,7 +268,8 @@ type
       doEncrypt: boolean); overload;
     /// performs AES-OFB encryption and decryption on whole blocks
     // - may be called instead of TAESOFB when only a raw TAES is available
-    // - this method is thread-safe
+    // - as used e.g. by mormot.db.raw.sqlite3.static.pas for its DB encryption
+    // - this method is thread-safe, and is optimized for AES-NI on x86_64
     procedure DoBlocksOFB(const iv: TAESBlock; src, dst: pointer;
       blockcount: PtrUInt);
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
@@ -2389,7 +2390,7 @@ type
     buf: TAESBlock;  // Work buffer
     DoBlock: procedure(const ctxt, Source, Dest); // main AES function
     {$ifdef USEAESNI32}
-    AesNi32: pointer;
+    AesNi32: pointer; // xmm7 AES-NI encoding
     {$endif USEAESNI32}
     Initialized: boolean;
     Rounds: byte;    // Number of rounds
@@ -3131,6 +3132,21 @@ procedure TAES.DoBlocksOFB(const iv: TAESBlock; src, dst: pointer;
 var
   cv: TAESBlock;
 begin
+  {$ifdef USEAESNI64}
+  if cfAESNI in CpuFeatures then
+    case integer(TAESContext(Context).KeyBits) of
+      128:
+        begin
+          AesNiEncryptOFB_128(@iv, @Context, src, dst, blockcount);
+          exit;
+        end;
+      256:
+        begin
+          AesNiEncryptOFB_256(@iv, @Context, src, dst, blockcount);
+          exit;
+        end;
+    end;
+  {$endif USEAESNI64}
   cv := iv;
   if blockcount > 0 then
     repeat
@@ -4500,9 +4516,9 @@ begin
         pxor    xmm0, xmm7
         movaps  xmm7, xmm1              // fCV := fIn
         movups  dqword ptr[edi], xmm0  // fOut := fIn xor fCV
+        add     esi, 16
+        add     edi, 16
         dec     ecx
-        lea     esi, [esi + 16]
-        lea     edi, [edi + 16]
         jnz     @s
 @z:     pop     ecx
         and     ecx, 15
@@ -4553,9 +4569,9 @@ begin
         movups  xmm0, dqword ptr[esi]
         pxor    xmm7, xmm0
         movups  dqword ptr[edi], xmm7  // fOut := fIn xor fCV
+        add     esi, 16
+        add     edi, 16
         dec     ecx
-        lea     esi, [esi + 16]
-        lea     edi, [edi + 16]
         jnz     @s
 @z:     pop     ecx
         and     ecx, 15
@@ -4670,9 +4686,9 @@ begin
         lea     eax, [ebx].TAESCFBCRC.fMAC.plain
         mov     edx, edi
         call    crcblock
+        add     esi, 16
+        add     edi, 16
         sub     dword ptr[Count], 16
-        lea     esi, [esi + 16]
-        lea     edi, [edi + 16]
         ja      @s
 @z:     pop     edi
         pop     esi
@@ -4733,9 +4749,9 @@ begin
         lea     eax, [ebx].TAESCFBCRC.fMAC.encrypted
         mov     edx, edi
         call    crcblock
+        add     esi, 16
+        add     edi, 16
         sub     dword ptr[Count], 16
-        lea     esi, [esi + 16]
-        lea     edi, [edi + 16]
         ja      @s
         pop     edi
         pop     esi
@@ -4798,9 +4814,9 @@ begin
         lea     eax, [ebx].TAESOFBCRC.fMAC.plain
         mov     edx, edi
         call    crcblock
+        add     esi, 16
+        add     edi, 16
         sub     dword ptr[Count], 16
-        lea     esi, [esi + 16]
-        lea     edi, [edi + 16]
         ja      @s
         pop     edi
         pop     esi
@@ -4859,9 +4875,9 @@ begin
         lea     eax, [ebx].TAESOFBCRC.fMAC.encrypted
         mov     edx, edi
         call    crcblock
+        add     esi, 16
+        add     edi, 16
         sub     dword ptr[Count], 16
-        lea     esi, [esi + 16]
-        lea     edi, [edi + 16]
         ja      @s
         pop     edi
         pop     esi
@@ -4910,12 +4926,12 @@ begin
       case KeyBits of
         128:
           begin
-            AesNiEncryptOFB_128(self, BufIn, BufOut, Count shr AESBlockShift);
+            AesNiEncryptOFB_128(@fIV, @aes, BufIn, BufOut, Count shr AESBlockShift);
             exit;
           end;
         256:
           begin
-            AesNiEncryptOFB_256(self, BufIn, BufOut, Count shr AESBlockShift);
+            AesNiEncryptOFB_256(@fIV, @aes, BufIn, BufOut, Count shr AESBlockShift);
             exit;
           end;
       end;
@@ -4938,9 +4954,9 @@ begin
         movups  xmm0, dqword ptr[esi]
         pxor    xmm0, xmm7
         movups  dqword ptr[edi], xmm0  // fOut := fIn xor fCV
+        add     esi, 16
+        add     edi, 16
         dec     ecx
-        lea     esi, [esi + 16]
-        lea     edi, [edi + 16]
         jnz     @s
 @z:     pop     ecx
         and     ecx, 15

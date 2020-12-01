@@ -241,7 +241,7 @@ uses
     {$endif CPUX64}
   {$ifend}
 
-function log(x: double): double; cdecl; public name _PREFIX+'log'; export;
+function log(x: double): double; cdecl; public name _PREFIX + 'log'; export;
 begin
   result := ln(x);
 end;
@@ -727,28 +727,32 @@ var
 
 // some external functions as expected by codecext.c and our sqlite3mc.c wrapper
 
-procedure CodecGenerateKey(var aes: TAES; userPassword: pointer; passwordLength: integer);
+const
+  _CODEC_PBKDF2_SALT = 'J6CuDftfPr22FnYn';
+
+procedure CodecGenerateKey(var aes: TAES;
+  userPassword: pointer; passwordLength: integer);
 var
   s: TSynSigner;
   k: THash512Rec;
 begin
-  s.PBKDF2(userPassword, passwordLength, k, 'J6CuDftfPr22FnYn');
+  s.PBKDF2(userPassword, passwordLength, k, _CODEC_PBKDF2_SALT);
   s.AssignTo(k, aes, {encrypt=}true);
 end;
 
-function CodecGetReadKey(codec: pointer): PAES; cdecl; external;
+function CodecGetReadKey(codec: pointer): PAES;  cdecl; external;
 function CodecGetWriteKey(codec: pointer): PAES; cdecl; external;
 
 procedure CodecGenerateReadKey(codec: pointer;
   userPassword: PAnsiChar; passwordLength: integer); cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecGenerateReadKey';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecGenerateReadKey';{$endif} export;
 begin
   CodecGenerateKey(CodecGetReadKey(codec)^, userPassword, passwordLength);
 end;
 
 procedure CodecGenerateWriteKey(codec: pointer;
   userPassword: PAnsiChar; passwordLength: integer); cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecGenerateWriteKey';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecGenerateWriteKey';{$endif} export;
 begin
   CodecGenerateKey(CodecGetWriteKey(codec)^, userPassword, passwordLength);
 end;
@@ -771,7 +775,8 @@ begin
   if not ForceSQLite3LegacyAES then
     aes^.encrypt(iv.b); // avoid potential brute force attack
   len := len shr AESBlockShift;
-  if page = 1 then // ensure header bytes 16..23 are stored unencrypted
+  if page = 1 then
+    // ensure header bytes 16..23 are stored unencrypted
     if (PInt64(data)^ = SQLITE_FILE_HEADER128.lo) and
        (data[21] = #64) and
        (data[22] = #32) and
@@ -798,12 +803,13 @@ begin
     else
       FillZero(PHash128(data)^)
   else
+    // whole page encryption if not the first one
     aes^.DoBlocksOFB(iv.b, data, data, len);
 end;
 
 function CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar;
   len, useWriteKey: integer): integer; cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecEncrypt';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecEncrypt';{$endif} export;
 begin
   if useWriteKey = 1 then
      CodecAESProcess(page, data, len, CodecGetWriteKey(codec), true)
@@ -814,14 +820,14 @@ end;
 
 function CodecDecrypt(codec: pointer; page: integer;
   data: PAnsiChar; len: integer): integer; cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecDecrypt';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecDecrypt';{$endif} export;
 begin
   CodecAESProcess(page, data, len, CodecGetReadKey(codec), false);
   result := SQLITE_OK;
 end;
 
 function CodecTerm(codec: pointer): integer; cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecTerm';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecTerm';{$endif} export;
 begin
   CodecGetReadKey(codec)^.Done;
   CodecGetWriteKey(codec)^.Done;

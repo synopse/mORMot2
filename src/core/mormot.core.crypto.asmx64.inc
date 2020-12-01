@@ -2676,23 +2676,23 @@ procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
         jnz     @loop
 end;
 
-procedure AesNiEncryptOFB_128(self: TAESOFB; source, dest: pointer; blockcount: PtrUInt);
+procedure AesNiEncryptOFB_128(iv, aes, source, dest: pointer; blockcount: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        test    blockcount, blockcount
+        mov     rax, blockcount  // on Win64 ABI, blockcount is not a register
+        test    eax, eax
         jz      @z
-        movups  xmm7, dqword ptr[self].TAESOFB.fIV  // xmm7 = fCV
-        lea     rax,  qword ptr [self].TAESOFB.AES
-        movups  xmm0, dqword ptr[rax + 16 * 0]
-        movups  xmm1, dqword ptr[rax + 16 * 1]
-        movups  xmm2, dqword ptr[rax + 16 * 2]
-        movups  xmm3, dqword ptr[rax + 16 * 3]
-        movups  xmm4, dqword ptr[rax + 16 * 4]
-        movups  xmm5, dqword ptr[rax + 16 * 5]
-        movups  xmm6, dqword ptr[rax + 16 * 6]
-        movups  xmm8, dqword ptr[rax + 16 * 7]
-        movups  xmm9, dqword ptr[rax + 16 * 8]
-        movups  xmm10, dqword ptr[rax + 16 * 9]
-        movups  xmm11, dqword ptr[rax + 16 * 10]
+        movups  xmm7, dqword ptr[iv]  // xmm7 = CV
+        movups  xmm0, dqword ptr[aes + 16 * 0]
+        movups  xmm1, dqword ptr[aes + 16 * 1]
+        movups  xmm2, dqword ptr[aes + 16 * 2]
+        movups  xmm3, dqword ptr[aes + 16 * 3]
+        movups  xmm4, dqword ptr[aes + 16 * 4]
+        movups  xmm5, dqword ptr[aes + 16 * 5]
+        movups  xmm6, dqword ptr[aes + 16 * 6]
+        movups  xmm8, dqword ptr[aes + 16 * 7]
+        movups  xmm9, dqword ptr[aes + 16 * 8]
+        movups  xmm10, dqword ptr[aes + 16 * 9]
+        movups  xmm11, dqword ptr[aes + 16 * 10]
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     movups  xmm15, dqword ptr[source]
         pxor    xmm7, xmm0
@@ -2707,37 +2707,37 @@ procedure AesNiEncryptOFB_128(self: TAESOFB; source, dest: pointer; blockcount: 
         aesenc  xmm7, xmm10
         aesenclast xmm7, xmm11
         pxor    xmm15, xmm7
-        movups  dqword ptr[dest], xmm15  // fOut := fIn xor fCV
+        movups  dqword ptr[dest], xmm15  // fOut := fIn xor CV
         add     source, 16
         add     dest, 16
-        dec     blockcount
+        dec     eax
         jnz     @s
 @z:
 end;
 
-procedure AesNiEncryptOFB_256(self: TAESOFB; source, dest: pointer; blockcount: PtrUInt);
+procedure AesNiEncryptOFB_256(iv, aes, source, dest: pointer; blockcount: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        test    blockcount, blockcount
+        mov     rax, blockcount
+        test    eax, eax
         jz      @z
-        movups  xmm7, dqword ptr[self].TAESOFB.fIV  // xmm7 = fCV
-        lea     rax,  qword ptr [self].TAESOFB.AES  // rax = TAES
-        movups  xmm0, dqword ptr[rax + 16 * 0]
-        movups  xmm1, dqword ptr[rax + 16 * 1]
-        movups  xmm2, dqword ptr[rax + 16 * 2]
-        movups  xmm3, dqword ptr[rax + 16 * 3]
-        movups  xmm4, dqword ptr[rax + 16 * 4]
-        movups  xmm5, dqword ptr[rax + 16 * 5]
-        movups  xmm6, dqword ptr[rax + 16 * 6]
-        movups  xmm8, dqword ptr[rax + 16 * 7]
-        movups  xmm9, dqword ptr[rax + 16 * 8]
-        movups  xmm10, dqword ptr[rax + 16 * 9]
-        movups  xmm11, dqword ptr[rax + 16 * 10]
-        movups  xmm12, dqword ptr[rax + 16 * 11]
-        movups  xmm13, dqword ptr[rax + 16 * 12]
-        movups  xmm14, dqword ptr[rax + 16 * 13]
-        add     rax,  16 * 14  // rax = last key
+        movups  xmm7, dqword ptr[iv]  // xmm7 = CV
+        movups  xmm0, dqword ptr[aes + 16 * 0]
+        movups  xmm1, dqword ptr[aes + 16 * 1]
+        movups  xmm2, dqword ptr[aes + 16 * 2]
+        movups  xmm3, dqword ptr[aes + 16 * 3]
+        movups  xmm4, dqword ptr[aes + 16 * 4]
+        movups  xmm5, dqword ptr[aes + 16 * 5]
+        movups  xmm6, dqword ptr[aes + 16 * 6]
+        movups  xmm8, dqword ptr[aes + 16 * 7]
+        movups  xmm9, dqword ptr[aes + 16 * 8]
+        movups  xmm10, dqword ptr[aes + 16 * 9]
+        movups  xmm11, dqword ptr[aes + 16 * 10]
+        movups  xmm12, dqword ptr[aes + 16 * 11]
+        movups  xmm13, dqword ptr[aes + 16 * 12]
+        movups  xmm14, dqword ptr[aes + 16 * 13]
+        add     aes,  16 * 14  // aes = last key
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@s:     movups  xmm15, dqword ptr[rax]
+@s:     movups  xmm15, dqword ptr[aes]
         pxor    xmm7, xmm0
         aesenc  xmm7, xmm1
         aesenc  xmm7, xmm2
@@ -2758,7 +2758,7 @@ procedure AesNiEncryptOFB_256(self: TAESOFB; source, dest: pointer; blockcount: 
         movups  dqword ptr[dest], xmm15  // fOut := fIn xor fCV
         add     source, 16
         add     dest, 16
-        dec     blockcount
+        dec     eax
         jnz     @s
 @z:
 end;
