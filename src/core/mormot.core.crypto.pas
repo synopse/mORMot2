@@ -4017,20 +4017,14 @@ function TAESAbstract.DecryptPKCS7Buffer(Input: pointer; InputLen: integer;
   IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 var
   ivsize, padding: integer;
-  tmp: array[0..1023] of AnsiChar;
   P: PAnsiChar;
 begin
   result := '';
   if not DecryptPKCS7Len(InputLen, ivsize, Input,
       IVAtBeginning, RaiseESynCryptoOnError) then
     exit;
-  if InputLen < SizeOf(tmp) then
-    P := @tmp
-  else
-  begin
-    SetString(result, nil, InputLen);
-    P := pointer(result);
-  end;
+  SetString(result, nil, InputLen);
+  P := pointer(result);
   Decrypt(@PByteArray(Input)^[ivsize], P, InputLen);
   padding := ord(P[InputLen - 1]); // result[1..len]
   if padding > SizeOf(TAESBlock) then
@@ -4038,10 +4032,15 @@ begin
       raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid Input', [self])
     else
       result := ''
-  else if P = @tmp then
-    SetString(result, P, InputLen - padding)
   else
-    SetLength(result, InputLen - padding); // fast in-place resize
+  begin
+    // fast in-place set result length without any memory resize
+    dec(InputLen, padding);
+    if InputLen = 0 then
+      result := ''
+    else
+      PStrLen(P - _STRLEN)^ := InputLen;
+  end;
 end;
 
 function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
