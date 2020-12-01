@@ -3090,7 +3090,7 @@ begin
   result := UTF8;
   {$ifdef HASCODEPAGE}
   SetCodePage(result, CP_UTF8, false);
-  {$endif}
+  {$endif HASCODEPAGE}
 end;
 
 function TSynAnsiUTF8.AnsiToUTF8(const AnsiText: RawByteString): RawUTF8;
@@ -3098,7 +3098,7 @@ begin
   result := AnsiText;
   {$ifdef HASCODEPAGE}
   SetCodePage(RawByteString(result), CP_UTF8, false);
-  {$endif}
+  {$endif HASCODEPAGE}
 end;
 
 function TSynAnsiUTF8.AnsiBufferToRawUTF8(Source: PAnsiChar;
@@ -3166,7 +3166,7 @@ procedure AnyAnsiToUTF8(const s: RawByteString; var result: RawUTF8);
 {$ifdef HASCODEPAGE}
 var
   cp: cardinal;
-{$endif}
+{$endif HASCODEPAGE}
 begin
   if s = '' then
     result := ''
@@ -3647,7 +3647,7 @@ end;
 
 function UTF8ToString(const Text: RawUTF8): string;
 begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(pointer(Text), length(Text), RawByteString(result));
+  result := CurrentAnsiConvert.UTF8ToAnsi(Text);
 end;
 
 {$endif UNICODE}
@@ -4656,7 +4656,7 @@ begin
   result := AnsiICompW(PWideChar(A), PWideChar(B));
   {$else}
   result := StrIComp(PUTF8Char(A), PUTF8Char(B));
-  {$endif}
+  {$endif UNICODE}
 end;
 
 function SortDynArrayUnicodeStringI(const A, B): integer;
