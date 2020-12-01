@@ -5844,7 +5844,7 @@ end;
 procedure Base64MagicDecode(var ParamValue: RawUTF8);
 var
   tmp: RawUTF8;
-begin // '\uFFF0base64encodedbinary' decode into binary (input shall have been checked)
+begin
   tmp := ParamValue;
   if not Base64ToBinSafe(PAnsiChar(pointer(tmp)) + 3, length(tmp) - 3,
           RawByteString(ParamValue)) then
@@ -5854,7 +5854,7 @@ end;
 function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: RawByteString): boolean;
 var
   ValueLen: integer;
-begin // '\uFFF0base64encodedbinary' checked and decode into binary
+begin
   if (Value = nil) or
      (Value[0] = #0) or
      (Value[1] = #0) or
@@ -5874,7 +5874,7 @@ end;
 function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: TSynTempBuffer): boolean;
 var
   ValueLen: integer;
-begin // '\uFFF0base64encodedbinary' checked and decode into binary
+begin
   if (Value = nil) or
      (Value[0] = #0) or
      (Value[1] = #0) or
@@ -5893,7 +5893,7 @@ end;
 
 function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: integer;
   var Blob: RawByteString): boolean;
-begin // '\uFFF0base64encodedbinary' checked and decode into binary
+begin
   if (ValueLen < 4) or
      (PCardinal(Value)^ and $ffffff <> JSON_BASE64_MAGIC_C) then
     result := false
@@ -5958,7 +5958,7 @@ begin
       begin
         part.ContentType := TEXT_CONTENT_TYPE;
         {$ifdef HASCODEPAGE}
-        SetCodePage(part.Content, CP_UTF8, false); // ensure raw field value is UTF-8
+        SetCodePage(part.Content, CP_UTF8, false); // ensure raw value is UTF-8
         {$endif HASCODEPAGE}
       end;
       if IdemPropNameU(part.Encoding, 'base64') then

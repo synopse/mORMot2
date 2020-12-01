@@ -774,7 +774,9 @@ begin
   end
   else
   begin
-    {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    tab := @ConvertHexToBin;
+    {$endif CPUX86NOTPIC}
     B := tab[ord(P[0])]; // first digit
     if B > 9 then
       exit
@@ -1055,7 +1057,9 @@ begin // use Thhmmss[.sss] format
     P^ := FirstChar;
     inc(P);
   end;
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitLookupW;
+  {$endif CPUX86NOTPIC}
   PWord(P)^ := tab[H];
   inc(P, 2);
   if Expanded then
@@ -1594,7 +1598,9 @@ begin
     WR.FlushToStream;
     P := WR.B + 1;
   end;
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitLookupW;
+  {$endif CPUX86NOTPIC}
   Div100(Year, d100{%H-});
   PWord(P)^ := tab[d100.D];
   PWord(P + 2)^ := tab[d100.M];
@@ -1624,7 +1630,9 @@ var
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
 begin
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitLookupW;
+  {$endif CPUX86NOTPIC}
   PWord(P)^ := tab[Day];
   PCardinal(P + 2)^ := PCardinal(@HTML_MONTH_NAMES[Month])^;
   P[2] := '/'; // overwrite HTML_MONTH_NAMES[][0]
@@ -1881,7 +1889,9 @@ begin // use 'YYMMDDHHMMSS' format
   else
     T.Year := 0;
   T.FromTime(DateTime);
-  {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @TwoDigitLookupW;
+  {$endif CPUX86NOTPIC}
   result[0] := #12;
   PWord(@result[1])^ := tab[T.Year];
   PWord(@result[3])^ := tab[T.Month];
@@ -2335,7 +2345,9 @@ begin
     dec(P, 8)
   else
   begin // 'YYYY' -> year decode
-    {$ifndef CPUX86NOTPIC} tab := @ConvertHexToBin; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    tab := @ConvertHexToBin;
+    {$endif CPUX86NOTPIC}
     V := tab[ord(P[0])];
     if V > 9 then
       exit;

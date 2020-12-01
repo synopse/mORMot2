@@ -4948,7 +4948,9 @@ begin
     P := StrUInt32(P, PCardinal(@val)^)
   else
   begin
-    {$ifndef CPUX86NOTPIC} tab := @TwoDigitLookupW; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    tab := @TwoDigitLookupW;
+    {$endif CPUX86NOTPIC}
     c := val;
     repeat
       {$ifdef CPUX86}

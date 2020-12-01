@@ -3369,7 +3369,9 @@ begin // expect UpperName as 'NAME='
      (P^ <> '[') and
      (UpperName <> nil) then
   begin
-    {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
     PBeg := nil;
     u := P;
     repeat

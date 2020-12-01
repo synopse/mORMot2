@@ -206,8 +206,8 @@
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
       {$ifndef DARWIN}
-        {$define ASMX86}     // supports asm with globals
-        {$define ASMINTEL}   // either ASMX86 or ASMX64
+        {$define ASMX86}       // supports asm with globals
+        {$define ASMINTEL}     // either ASMX86 or ASMX64
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
       {$endif DARWIN}
       {$define HASAESNI}

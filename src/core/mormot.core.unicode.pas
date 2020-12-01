@@ -3888,7 +3888,9 @@ begin
   if up <> nil then
   begin
     dec(PtrUInt(p), PtrUInt(up));
-    {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
     repeat
       if up^ = #0 then
         break;
@@ -3919,10 +3921,16 @@ begin
   result := true;
 end;
 
-function IdemPCharAnsi(const table:
-  {$ifdef CPUX86NOTPIC}TNormTable{$else}PNormTable{$endif};
-  p: PUTF8Char; up: PAnsiChar): boolean; {$ifdef HASINLINE}inline;{$endif}
-begin // here p and up are expected to be <> nil
+function IdemPCharAnsi(
+  {$ifdef CPUX86NOTPIC}
+  const table: TNormTable;
+  {$else}
+  const table: PNormTable;
+  {$endif CPUX86NOTPIC}
+  p: PUTF8Char; up: PAnsiChar): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  // in this local IdemPChar() version, p and up are expected to be <> nil
   result := false;
   dec(PtrUInt(p), PtrUInt(up));
   repeat
@@ -3935,10 +3943,16 @@ begin // here p and up are expected to be <> nil
   result := true;
 end;
 
-function IdemPCharByte(const table:
-  {$ifdef CPUX86NOTPIC}TNormTableByte{$else}PNormTableByte{$endif};
-  p: PUTF8Char; up: PAnsiChar): boolean; {$ifdef HASINLINE}inline;{$endif}
-begin // here p and up are expected to be <> nil
+function IdemPCharByte(
+  {$ifdef CPUX86NOTPIC}
+  const table: TNormTableByte;
+  {$else}
+  const table: PNormTableByte;
+  {$endif CPUX86NOTPIC}
+  p: PUTF8Char; up: PAnsiChar): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  // in this local IdemPChar() version, p and up are expected to be <> nil
   result := false;
   dec(PtrUInt(p), PtrUInt(up));
   repeat
@@ -3984,7 +3998,9 @@ var
 begin
   if p <> nil then
   begin
-    {$ifndef CPUX86NOTPIC} tab := @NormToUpperAnsi7; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    tab := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
     w := tab[ord(p[0])] + tab[ord(p[1])] shl 8;
     up := @upArray[0];
     for result := 0 to high(upArray) do
@@ -4064,7 +4080,9 @@ begin
   t := length(text);
   if t > 0 then
   begin
-    {$ifndef CPUX86NOTPIC} tab := @NormToUpperAnsi7; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    tab := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
     for result := 0 to high(upArray) do
     begin
       o := t - length(upArray[result]);
@@ -4191,7 +4209,9 @@ var
 begin
   if uppersubstr <> nil then
   begin
-    {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
     u := uppersubstr^;
     for result := 1 to Length(str) do
       if table[str[result]] = u then
@@ -4214,7 +4234,9 @@ begin
   if (uppersubstr <> nil) and
      (str <> nil) then
   begin
-    {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
     u := uppersubstr^;
     inc(uppersubstr);
     result := str;
@@ -4358,7 +4380,9 @@ var
   {$endif CPUX86NOTPIC}
 begin
   i := 0;
-  {$ifndef CPUX86NOTPIC} tab := @NormToUpperAnsi7Byte; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  tab := @NormToUpperAnsi7Byte;
+  {$endif CPUX86NOTPIC}
   repeat
     if tab[PByteArray(P1)[i]] = tab[PByteArray(P2)[i]] then
     begin
@@ -4388,7 +4412,9 @@ begin
     if Str1 <> nil then
       if Str2 <> nil then
       begin
-        {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7Byte; {$endif}
+        {$ifndef CPUX86NOTPIC}
+        table := @NormToUpperAnsi7Byte;
+        {$endif CPUX86NOTPIC}
         repeat
           C1 := table[PByteArray(Str1)[0]];
           C2 := table[PByteArray(Str1)[result]];
@@ -4419,7 +4445,9 @@ begin
   if (p <> nil) and
      (up <> nil) then
   begin
-    {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
     if pEnd = nil then
       repeat
         if p^ <= #13 then // p^ into a temp var is slower
@@ -4556,7 +4584,9 @@ begin
     if u1 <> nil then
       if u2 <> nil then
       begin
-        {$ifndef CPUX86NOTPIC} table := @NormToUpperAnsi7Byte; {$endif}
+        {$ifndef CPUX86NOTPIC}
+        table := @NormToUpperAnsi7Byte;
+        {$endif CPUX86NOTPIC}
         repeat
           C1 := PtrInt(u1^);
           C2 := PtrInt(u2^);
@@ -4719,7 +4749,9 @@ var
   table: PNormTableByte;
   {$endif CPUX86NOTPIC}
 begin // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
-  {$ifndef CPUX86NOTPIC} table := @NormToUpperByte; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  table := @NormToUpperByte;
+  {$endif CPUX86NOTPIC}
   if u1 <> u2 then
     if u1 <> nil then
       if u2 <> nil then
@@ -4796,7 +4828,9 @@ label
   neg, pos;
 begin
   // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
-  {$ifndef CPUX86NOTPIC} table := @NormToUpperByte; {$endif}
+  {$ifndef CPUX86NOTPIC}
+  table := @NormToUpperByte;
+  {$endif CPUX86NOTPIC}
   if u1 <> u2 then
     if (u1 <> nil) and
        (L1 <> 0) then
@@ -5156,7 +5190,9 @@ begin
     if L > 250 then
       L := 250; // avoid buffer overflow
     result := dest + L;
-    {$ifndef CPUX86NOTPIC} tab := @NormToUpperByte; {$endif}
+    {$ifndef CPUX86NOTPIC}
+    tab := @NormToUpperByte;
+    {$endif CPUX86NOTPIC}
     for i := 0 to L - 1 do
       dest[i] := AnsiChar(tab[PByteArray(source)[i]]);
   end;
