@@ -6767,7 +6767,7 @@ var
 begin
   temp.InitRtti(Info, Value^);
   AddDynArrayJSON(temp, WriteOptions);
-  result := temp.ElemSize;
+  result := temp.Info.Cache.ItemSize;
 end;
 
 
@@ -7299,7 +7299,7 @@ var
   propname: PUTF8Char;
   propnamelen: integer;
 label
-  nxt;
+  nxt, any;
 begin
   Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON);
   if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
@@ -8471,15 +8471,14 @@ const
 
 function TSynDictionary.KeyFullHash(const Elem): cardinal;
 begin
-  result := fKeys.Hasher.Hasher(0, @Elem, fKeys.ElemSize);
+  result := fKeys.Hasher.Hasher(0, @Elem, fKeys.Info.Cache.ItemSize);
 end;
 
 function TSynDictionary.KeyFullCompare(const A, B): integer;
 var
   i: PtrInt;
 begin
-
-  for i := 0 to fKeys.ElemSize - 1 do
+  for i := 0 to fKeys.Info.Cache.ItemSize - 1 do
   begin
     result := TByteArray(A)[i] - TByteArray(B)[i];
     if result <> 0 then
@@ -8823,7 +8822,7 @@ begin
   if ndx < 0 then
     result := nil
   else
-    result := PAnsiChar(fValues.Value^) + PtrUInt(ndx) * fValues.ElemSize;
+    result := PAnsiChar(fValues.Value^) + ndx * fValues.Info.Cache.ItemSize;
 end;
 
 function TSynDictionary.FindValueOrAdd(const aKey; var added: boolean;
@@ -8917,7 +8916,7 @@ function TSynDictionary.ForEach(const OnEach: TOnSynDictionary;
   Opaque: pointer): integer;
 var
   k, v: PAnsiChar;
-  i, n, ks, vs: integer;
+  i, n, ks, vs: PtrInt;
 begin
   result := 0;
   fSafe.Lock;
@@ -8927,9 +8926,9 @@ begin
        not Assigned(OnEach) then
       exit;
     k := fKeys.Value^;
-    ks := fKeys.ElemSize;
+    ks := fKeys.Info.Cache.ItemSize;
     v := fValues.Value^;
-    vs := fValues.ElemSize;
+    vs := fValues.Info.Cache.ItemSize;
     for i := 0 to n - 1 do
     begin
       inc(result);
@@ -8948,7 +8947,7 @@ function TSynDictionary.ForEach(const OnMatch: TOnSynDictionary;
   Opaque: pointer): integer;
 var
   k, v: PAnsiChar;
-  i, n, ks, vs: integer;
+  i, n, ks, vs: PtrInt;
 begin
   fSafe.Lock;
   try
@@ -8959,9 +8958,9 @@ begin
       exit;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     k := fKeys.Value^;
-    ks := fKeys.ElemSize;
+    ks := fKeys.Info.Cache.ItemSize;
     v := fValues.Value^;
-    vs := fValues.ElemSize;
+    vs := fValues.Info.Cache.ItemSize;
     for i := 0 to n - 1 do
     begin
       if (Assigned(KeyCompare) and

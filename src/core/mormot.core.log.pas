@@ -1732,7 +1732,7 @@ begin
     L := FromVarUInt32(P); // inlined R.Read(S^.Name)
     FastSetString(S^.Name, P, L);
     inc(P, L);
-    inc(PByte(S), A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S), A.Info.Cache.ItemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Addr := FromVarUInt32(P);
@@ -1741,7 +1741,7 @@ begin
   begin
     inc(Addr, FromVarUInt32(P));
     S^.Stop := Addr - 1;
-    inc(PByte(S), A.ElemSize);
+    inc(PByte(S), A.Info.Cache.ItemSize);
     S^.Start := Addr;
   end;
   S^.Stop := Addr + FromVarUInt32(P);
@@ -2122,7 +2122,7 @@ begin
   for i := 0 to n - 1 do
   begin
     W.Write(S^.Name);
-    inc(PByte(S), A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S), A.Info.Cache.ItemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Diff := S^.Start;
@@ -2131,7 +2131,7 @@ begin
   Beg := P;
   for i := 1 to n - 1 do
   begin
-    inc(PByte(S), A.ElemSize);
+    inc(PByte(S), A.Info.Cache.ItemSize);
     P := ToVarUInt32(S^.Start - Diff, P);
     Diff := S^.Start;
   end;
