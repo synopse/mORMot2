@@ -645,8 +645,8 @@ function Iso8601ToSQL(const S: RawByteString): RawUTF8;
 
 { ************ SQL Parameters Inlining and Processing }
 
-/// guess the content type of an UTF-8 SQL value, in :(....): format
-// - will be used e.g. by ExtractInlineParameters() to un-inline a SQL statement
+/// parse an UTF-8 SQL value, as encoded in our inlined :(....): format
+// - used e.g. by ExtractInlineParameters() to un-inline a SQL statement
 // - oftInteger is returned for an INTEGER value, e.g. :(1234):
 // - oftFloat is returned for any floating point value (i.e. some digits
 // separated by a '.' character), e.g. :(12.34): or :(12E-34):
@@ -666,7 +666,7 @@ function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType;
 
 /// this function will extract inlined :(1234): parameters into Types[]/Values[]
 // - will return the generic SQL statement with ? place holders for inlined
-// parameters and setting Values with SQLParamContent() decoded content
+// parameters and setting Values/Nulls with SQLParamContent() decoded content
 // - will set maxParam=0 in case of no inlined parameters
 // - recognized types are sptInteger, sptFloat, sptDateTime ('\uFFF1...'),
 // sptUTF8Text and sptBlob ('\uFFF0...')
@@ -1804,7 +1804,7 @@ begin
     inc(maxParam);
   until false;
   // return generic SQL statement, with ? place-holders and params in Values[]
-  SetLength(result, Gen - pointer(result));
+  PStrLen(PtrUInt(result) - _STRLEN)^ := Gen - pointer(result); // no MM resize
   inc(maxParam);
 end;
 
@@ -1826,7 +1826,8 @@ begin
   if P <> nil then
   begin
     P := SQLBegin(P);
-    case IdemPCharArray(P, ['SELECT', 'EXPLAIN ', 'VACUUM', 'PRAGMA', 'WITH']) of
+    case IdemPCharArray(P,
+      ['SELECT', 'EXPLAIN ', 'VACUUM', 'PRAGMA', 'WITH']) of
       0:
         if P[6] <= ' ' then
         begin

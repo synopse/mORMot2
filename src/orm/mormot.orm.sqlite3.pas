@@ -1110,8 +1110,8 @@ var
 begin
   // prepare statement
   fStatementSQL := SQL;
-  fStatementGenericSQL := ExtractInlineParameters(SQL, Types, Values,
-    fStatementMaxParam, Nulls);
+  fStatementGenericSQL := ExtractInlineParameters(
+    SQL, Types, Values, fStatementMaxParam, Nulls);
   PrepareStatement(ForceCacheStatement or (fStatementMaxParam <> 0));
   // bind parameters
   if fStatementMaxParam = 0 then
