@@ -2792,10 +2792,13 @@ num:    result := P;
   if EndOfObject <> nil then
     EndOfObject^ := P^;
   // ensure JSON value is zero-terminated, and continue after it
-  if P^ = #0 then
-    exit;
-  P^ := #0;
-  PDest := P + 1;
+  if P^ <> #0 then
+  begin
+    P^ := #0;
+    PDest := P + 1;
+  end
+  else
+    PDest := P;
 end;
 
 function GotoEndOfJSONString(P: PUTF8Char; tab: PJsonCharSet): PUTF8Char;
@@ -3250,8 +3253,9 @@ begin
   inc(P);
   Field := P;
   tab := @JSON_CHARS;
-  while jcJSONStringMarker in tab[P^] do
-    inc(P);   // not [#0, '"', '\']
+  while not (jcJSONStringMarker in tab[P^]) do
+    // not [#0, '"', '\']
+    inc(P); // very fast parsing of most UTF-8 chars within "string"
   if P^ <> '"' then
     exit; // here P^ should be '"'
   FieldLen := P - Field;
@@ -7353,7 +7357,10 @@ nxt:    propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
         if (prop^.Name <> nil) and
            IdemPropName(prop^.Name^, propname, propnamelen) then
           if JsonLoadProp(Data, prop^, Ctxt) then
-            inc(prop)
+            if Ctxt.EndOfObject = '}' then
+              break
+            else
+              inc(prop)
           else
             break
         else if (Ctxt.Info.Kind = rkClass) and
@@ -7386,13 +7393,18 @@ nxt:    propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
             if (not Ctxt.Valid) or
                (Ctxt.EndOfObject = '}') then
                break;
-            propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
+any:        propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
             Ctxt.Valid := (Ctxt.JSON <> nil) and
                           (propname <> nil);
           until not Ctxt.Valid;
           break;
         end;
       end;
+      if Ctxt.Valid and
+         (Ctxt.EndOfObject = ',') and
+         ((rcfReadIgnoreUnknownFields in root.Flags) or
+          (jpoIgnoreUnknownProperty in Ctxt.Options)) then
+        goto any;
       Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
       Ctxt.Info := root; // restore
     end;
