@@ -424,6 +424,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into a VCL/generic string
     function ToString: string;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into a signed integer
     function ToInteger: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1790,6 +1791,17 @@ type
   TOnRttiJsonRead = procedure(var Context: TJsonParserContext;
     Data: pointer) of object;
 
+  /// the callback signature used by TRttiJson for serializing JSON
+  // - is in fact a convenient alias to the TOnRttiJsonWrite callback
+  TOnClassJsonWrite = procedure(W: TTextWriter; Data: TObject;
+    Options: TTextWriterWriteObjectOptions) of object;
+
+  /// the callback signature used by TRttiJson for unserializing JSON
+  // - set Context.Valid=true if Context.JSON has been parsed into Data^
+  // - is in fact a convenient alias to the TOnRttiJsonRead callback
+  TOnClassJsonRead = procedure(var Context: TJsonParserContext;
+    Data: TObject) of object;
+
   /// used internally by TRttiJson for fast allocation of a rkClass instance
   TRttiJsonNewInstance = function(Rtti: TRttiCustom): pointer;
 
@@ -1827,13 +1839,14 @@ type
     class function Find(Info: PRttiInfo): TRttiJson;
       {$ifdef HASINLINE}inline;{$endif}
     /// register a custom callback for JSON serialization of a given TypeInfo()
+    // - for a dynamic array, will customize the item serialization callbacks
     // - replace deprecated TJSONSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
       const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON; overload;
     /// register a custom callback for JSON serialization of a given class
     // - replace deprecated TJSONSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(ObjectClass: TClass;
-      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON; overload;
+      const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJSON; overload;
     /// unregister any custom callback for JSON serialization of a given TypeInfo()
     // - will also work after RegisterFromText()
     class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON; overload;
@@ -4494,6 +4507,7 @@ begin
     result := '""'
   else if (pointer(result) = pointer(P)) or
           NeedsJsonEscape(P, PLen) then
+    // use TTextWriter.AddJSONEscape() for proper JSON escape
     with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(aPrefix);
@@ -4508,6 +4522,7 @@ begin
     end
   else
   begin
+    // direct allocation if no JSON escape is needed
     Lp := length(aPrefix);
     Ls := length(aSuffix);
     FastSetString(result, nil, PLen + Lp + Ls + 2);
@@ -5082,14 +5097,21 @@ begin
   begin
     // standard serialization as unsigned integer (up to 64 items)
     v := 0;
-    MoveSmall(Data, @v, Ctxt.Info.Cache.Size);
+    MoveSmall(Data, @v, Ctxt.Info.Size);
     Ctxt.W.AddQ(v);
   end;
 end;
 
+procedure _JS_DynArray_Custom(Data: pointer; const Ctxt: TJsonSaveContext);
+begin
+  // TRttiJson.RegisterCustomSerializer() custom callback for each item
+  TOnRttiJsonWrite(TRttiJson(Ctxt.Info).fJsonWriter)(
+    Ctxt.W, Data, Ctxt.Options);
+end;
+
 procedure _JS_DynArray(Data: PPointer; const Ctxt: TJsonSaveContext);
 var
-  n: PtrInt;
+  n, s: PtrInt;
   jsonsave: TRttiJsonSave;
   P: PAnsiChar;
   c: TJsonSaveContext;
@@ -5098,25 +5120,33 @@ begin
   c.W.BlockBegin('[', c.Options);
   if Data^ <> nil then
   begin
-    if (c.Info <> nil) and
-       Assigned(c.Info.JsonSave) then
+    if TRttiJson(Ctxt.Info).fJsonWriter.Code <> nil then
     begin
-      // efficient JSON serialization from recognized PT_JSONSAVE/PTC_JSONSAVE
+      // TRttiJson.RegisterCustomSerializer() custom callbacks
+      c.Info := Ctxt.Info;
+      jsonsave := @_JS_DynArray_Custom;
+    end
+    else if c.Info = nil then
+      jsonsave := nil
+    else
+      jsonsave := c.Info.JsonSave; // e.g. PT_JSONSAVE/PTC_JSONSAVE
+    if Assigned(jsonsave) then
+    begin
+      // efficient JSON serialization
       P := Data^;
       n := PDALen(P - _DALEN)^ + _DAOFF; // length(Data)
-      jsonsave := c.Info.JsonSave;
-      if Assigned(jsonsave) then
-        repeat
-          jsonsave(P, c);
-          dec(n);
-          if n = 0 then
-            break;
-          c.W.BlockAfterItem(c.Options);
-          inc(P, c.Info.Size);
-        until false;
+      s := Ctxt.Info.Cache.ItemSize; // c.Info may be nil
+      repeat
+        jsonsave(P, c);
+        dec(n);
+        if n = 0 then
+          break;
+        c.W.BlockAfterItem(c.Options);
+        inc(P, s);
+      until false;
     end
     else
-      // fallback to binary serialization with Base64 encoding
+      // fallback to raw RTTI binary serialization with Base64 encoding
       c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkDynArray], {withMagic=}true);
   end
   else if (woHumanReadableEnumSetAsComment in Ctxt.Options) and
@@ -5171,7 +5201,7 @@ begin
     // append 'null' for nil class instance
     c.W.AddNull
   else if TRttiJson(Ctxt.Info).fJsonWriter.Code <> nil then
-    // custom JSON serialization via a callback
+    // TRttiJson.RegisterCustomSerializer() custom callbacks
     TOnRttiJsonWrite(TRttiJson(Ctxt.Info).fJsonWriter)(c.W, Data, c.Options)
   else if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
           not TSPHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
@@ -6348,7 +6378,7 @@ var
   tab: TNormTableByte absolute JSON_ESCAPE;
   {$else}
   tab: PNormTableByte;
-  {$endif}
+  {$endif CPUX86NOTPIC}
 label
   noesc;
 begin
@@ -6359,8 +6389,8 @@ begin
   i := 0;
   {$ifndef CPUX86NOTPIC}
   tab := @JSON_ESCAPE;
-  {$endif}
-  if tab[PByteArray(P)[i]] = 0 then
+  {$endif CPUX86NOTPIC}
+  if tab[PByteArray(P)[i]] = JSON_ESCAPE_NONE then
   begin
 noesc:
     start := i;
@@ -6905,7 +6935,9 @@ function TJsonParserContext.ParseObject(const Names: array of RawUTF8;
 begin
   JSON := JSONDecode(JSON, Names, Values, HandleValuesAsObjectOrArray);
   if JSON = nil then
-    Valid := false;
+    Valid := false
+  else
+    ParseEndOfObject;
   result := Valid;
 end;
 
@@ -7166,6 +7198,12 @@ begin
   MoveSmall(@v, Data, Ctxt.Info.Size);
 end;
 
+procedure _JL_DynArray_Custom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
+begin
+  // TRttiJson.RegisterCustomSerializer() custom callback for each item
+  TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data);
+end;
+
 procedure _JL_DynArray(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 var
   load: TRttiJsonLoad;
@@ -7180,7 +7218,7 @@ begin
     // detect void (i.e. []) or invalid array
     exit;
   if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE_C then
-    // legacy binary layout with a single Base-64 encoded item
+    // raw RTTI binary layout with a single Base-64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
                   (Ctxt.EndOfObject = ']') and
                   (Ctxt.Value <> nil) and
@@ -7191,8 +7229,17 @@ begin
   begin
     // efficient load of all JSON items
     arrinfo := Ctxt.Info;
-    Ctxt.Info := Ctxt.Info.ArrayRtti;
-    load := Ctxt.Info.JsonLoad;
+    if TRttiJson(arrinfo).fJsonReader.Code <> nil then
+      // TRttiJson.RegisterCustomSerializer() custom callbacks
+      load := @_JL_DynArray_Custom
+    else
+    begin
+      Ctxt.Info := arrinfo.ArrayRtti;
+      if Ctxt.Info = nil then
+        load := nil
+      else
+        load := Ctxt.Info.JsonLoad;
+    end;
     // initial guess of the JSON array count - will browse up to 256KB of input
     cap := abs(JSONArrayCount(Ctxt.JSON, Ctxt.JSON + 256 shl 10));
     if (cap = 0) or
@@ -7201,7 +7248,7 @@ begin
       Ctxt.Valid := false;
       exit;
     end;
-    Data := DynArrayNew(arr, cap, Ctxt.Info.Size); // allocate new zeroed memory
+    Data := DynArrayNew(arr, cap, arrinfo.Cache.ItemSize); // alloc zeroed mem
     // main JSON unserialization loop
     n := 0;
     repeat
@@ -7209,15 +7256,17 @@ begin
       begin
         // grow if our initial guess was aborted due to huge input
         cap := NextGrow(cap);
-        Data := DynArrayGrow(arr, cap, Ctxt.Info.Size) + (n * Ctxt.Info.Size);
+        Data := DynArrayGrow(arr, cap, arrinfo.Cache.ItemSize) +
+                  (n * arrinfo.Cache.ItemSize);
       end;
-      // unserialize the next item
+      // unserialize one item
       load(Data, Ctxt); // will call _JL_RttiCustom() for T*ObjArray
       inc(n);
       if Ctxt.Valid then
         if Ctxt.EndOfObject = ',' then
         begin
-          inc(Data, Ctxt.Info.Size);
+          // continue with the next item
+          inc(Data, arrinfo.Cache.ItemSize);
           continue;
         end
         else if Ctxt.EndOfObject = ']' then
@@ -7303,7 +7352,12 @@ label
 begin
   Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON);
   if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
+  begin
+    // TRttiJson.RegisterCustomSerializer() custom callbacks
+    if Ctxt.Info.Kind = rkClass then
+      Data := PPointer(Data)^; // as expected by the callback
     TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data)
+  end
   else
   begin
     // always finalize and reset the existing values (in case of missing props)
@@ -9385,23 +9439,20 @@ class function TRttiJson.RegisterCustomSerializer(Info: PRttiInfo;
 begin
   result := Rtti.RegisterType(Info) as TRttiJson;
   // (re)set fJsonSave/fJsonLoad
-  result.SetParserType(result.Parser, result.ParserComplex);
-  if Assigned(Writer) then
-    result.fJsonWriter := TMethod(Writer);
-  if Assigned(Reader) then
-    result.fJsonReader := TMethod(Reader);
+  result.fJsonWriter := TMethod(Writer);
+  result.fJsonReader := TMethod(Reader);
+  if result.Kind <> rkDynArray then // Reader/Writer are for items, not array
+    result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
 class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
-  const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
+  const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJson;
 begin
-  // without {$M+ ObjectClasss.ClassInfo=nil -> ensure fake RTTI if needed
+  // without {$M+} ObjectClasss.ClassInfo=nil -> ensure fake RTTI is available
   result := Rtti.RegisterClass(ObjectClass) as TRttiJson;
+  result.fJsonWriter := TMethod(Writer);
+  result.fJsonReader := TMethod(Reader);
   result.SetParserType(ptClass, pctNone);
-  if Assigned(Writer) then
-    result.fJsonWriter := TMethod(Writer);
-  if Assigned(Reader) then
-    result.fJsonReader := TMethod(Reader);
 end;
 
 class function TRttiJson.UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON;
@@ -9409,12 +9460,13 @@ begin
   result := Rtti.RegisterType(Info) as TRttiJson;
   result.fJsonWriter.Code := nil; // force reset of the JSON serialization
   result.fJsonReader.Code := nil;
-  result.SetParserType(result.Parser, result.ParserComplex);
+  if result.Kind <> rkDynArray then // Reader/Writer are for items, not array
+    result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
 class function TRttiJson.UnRegisterCustomSerializer(ObjectClass: TClass): TRttiJSON;
 begin
-  // without {$M+ ObjectClasss.ClassInfo=nil -> ensure fake ObjectClass RTTI is used
+  // without {$M+} ObjectClasss.ClassInfo=nil -> ensure fake RTTI is available
   result := Rtti.RegisterClass(ObjectClass) as TRttiJson;
   result.fJsonWriter.Code := nil; // force reset of the JSON serialization
   result.fJsonReader.Code := nil;
