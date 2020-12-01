@@ -1895,7 +1895,7 @@ type
     // - the New shortstring should be a local constant, to avoid random GPF
     // - Rtti.ByClass[TMyClass].Props.NameChanges() replaces deprecated
     // TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, ...)
-    procedure NameChanges(const Old, New: array of shortstring);
+    procedure NameChanges(const Old, New: array of RawUTF8);
     /// manuall adding of a property/field definition
     // - append as last field, unless AddFirst is set to true
     procedure Add(Info: PRttiInfo; Offset: PtrInt; const PropName: shortstring;
@@ -1919,10 +1919,12 @@ type
     // as TRttiCustom.FinalizeAndClear would on a record
     procedure FinalizeAndClearPublishedProperties(Instance: TObject);
   protected
-    // store AddFromText() ShortStrings
+    // store AddFromText/AddFromTextPropName ShortStrings
     fFromTextPropNames: TRawUTF8DynArray;
     /// points to List[] items which are managed
     fManaged: PRttiCustomPropDynArray;
+    /// mimics a PShortString stored in this instance
+    function AddFromTextPropName(Name: PUTF8Char; NameLen: integer): PShortString;
     /// finalize the managed properties of this instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     procedure FinalizeManaged(Data: PAnsiChar);
@@ -5900,7 +5902,7 @@ begin
       result^.Name := @New;
 end;
 
-procedure TRttiCustomProps.NameChanges(const Old, New: array of shortstring);
+procedure TRttiCustomProps.NameChanges(const Old, New: array of RawUTF8);
 var
   i: PtrInt;
   p: PRttiCustomProp;
@@ -5909,21 +5911,31 @@ begin
     raise ERttiException.CreateUTF8(
       'NameChanges(%,%) fields count', [high(Old), high(New)]);
   // first reset the names from RTTI (if available)
-  for i := 0 to Count - 1 do
-    if List[i].Prop <> nil then
-      List[i].Name := List[i].Prop^.Name;
+  p := pointer(List);
+  for i := 1 to Count do
+  begin
+    if (p^.Prop <> nil) and
+       (p^.Name <> p^.Prop^.Name) then
+    begin
+      if p^.Name <> nil then
+        // unregister from local copy
+        PtrArrayDelete(fFromTextPropNames, p^.Name);
+      p^.Name := p^.Prop^.Name;
+    end;
+    inc(p);
+  end;
   // customize field names
   for i := 0 to high(Old) do
   begin
-    p := Find(Old[i]);
+    p := Find(pointer(Old[i]), length(Old[i]));
     if p = nil then
       raise ERttiException.CreateUTF8('NameChanges(%) unknown', [Old[i]]);
     if New[i] = '' then
       // mark ignore this field in JSON serialized object
       p^.Name := nil
     else
-      // customize this field
-      p^.Name := @New[i];
+      // customize this field name, making a local copy
+      p^.Name := AddFromTextPropName(pointer(New[i]), length(New[i]));
   end;
 end;
 
@@ -5958,10 +5970,20 @@ begin
   end;
 end;
 
+function TRttiCustomProps.AddFromTextPropName(
+  Name: PUTF8Char; NameLen: integer): PShortString;
+var
+  s: RawUTF8;
+begin
+  FastSetString(s, Name - 1, NameLen + 1);
+  s[1] := AnsiChar(NameLen); // emulate shortstring
+  AddRawUTF8(fFromTextPropNames, s);
+  result := pointer(s);
+end;
+
 function TRttiCustomProps.FromTextPrepare(const PropName: RawUTF8): integer;
 var
   L: integer;
-  s: RawUTF8;
 begin
   L := length(PropName);
   if L = 0 then
@@ -5971,10 +5993,7 @@ begin
   result := Count;
   inc(Count);
   SetLength(List, Count);
-  FastSetString(s, PUTF8Char(pointer(PropName)) - 1, L + 1);
-  s[1] := AnsiChar(L); // emulate shortstring
-  AddRawUTF8(fFromTextPropNames, s);
-  List[result].Name := pointer(s); // PShortString
+  List[result].Name := AddFromTextPropName(pointer(PropName), L);
 end;
 
 procedure TRttiCustomProps.AdjustAfterAdded;

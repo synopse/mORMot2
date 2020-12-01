@@ -2336,7 +2336,7 @@ begin
       Rtti.ByClass[TCollTest].Props.NameChanges([], []);
       J := ObjectToJSON(MyItem);
       Check(IsValidJSON(J));
-      CheckEqual(J, '{"Color":20,"Length":10,"Name":"ABC"}');
+      CheckEqual(J, '{"Color":20,"Length":10,"Name":"ABC"}', 'back to default');
     finally
       MyItem.Free;
     end;

@@ -5235,12 +5235,12 @@ begin
       end;
     end;
     if woDontStoreInherited in c.Options then
-    with Ctxt.Info.Props do
-    begin
-      // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
-      n := Count - NotInheritedIndex;
-      inc(c.Prop, NotInheritedIndex);
-    end
+      with Ctxt.Info.Props do
+      begin
+        // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
+        n := Count - NotInheritedIndex;
+        inc(c.Prop, NotInheritedIndex);
+      end
     else
       n := Ctxt.Info.Props.Count;
     done := false;
