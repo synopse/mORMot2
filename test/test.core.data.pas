@@ -1240,18 +1240,23 @@ var
   end;
 
   procedure ABCDE(pt: TRttiParserType);
+  var
+    p: PRttiCustomProp;
+    v: TRttiCustom;
   begin
     ABCD;
-    with Parser.Props.List[4] do
-    begin
-      Check(Name^ = 'E');
-      Check(Value.Parser = pt);
-      Check(Value.Props.Count = 2);
-      Check(Value.Props.List[0].Name^ = 'E1');
-      Check(Value.Props.List[0].Value.Parser = ptDouble);
-      Check(Value.Props.List[1].Name^ = 'E2');
-      Check(Value.Props.List[1].Value.Parser = ptDouble);
-    end;
+    p := @Parser.Props.List[4];
+    Check(p^.Name^ = 'E');
+    Check(p^.Value.Parser = pt);
+    if pt = ptDynArray then
+      v := p^.Value.ArrayRtti
+    else
+      v := p^.Value;
+    Check(v.Props.Count = 2);
+    Check(v.Props.List[0].Name^ = 'E1');
+    Check(v.Props.List[0].Value.Parser = ptDouble);
+    Check(v.Props.List[1].Name^ = 'E2');
+    Check(v.Props.List[1].Value.Parser = ptDouble);
   end;
 
   procedure TestGit(ro: TJsonParserOptions; wo: TTextWriterWriteObjectOptions);
@@ -2363,7 +2368,7 @@ begin
   Parser := TRttiCustom.CreateFromText(
     'A,B: integer; C: integer; D: RawUTF8; E: array of record E1,E2: double; end;');
   Check(Parser.Props.Count = 5);
-  ABCDE(ptArray);
+  ABCDE(ptDynArray);
   Parser.Free;
   Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E{E1,E2 double}');
@@ -2378,23 +2383,23 @@ begin
   Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D:RawUTF8 E[E1,E2:double]');
   Check(Parser.Props.Count = 5);
-  ABCDE(ptArray);
+  ABCDE(ptDynArray);
   Parser.Free;
   Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E[E1,E2 double] F: string');
   Check(Parser.Props.Count = 6);
-  ABCDE(ptArray);
+  ABCDE(ptDynArray);
   Check(Parser.Props.List[5].Name^ = 'F');
   Check(Parser.Props.List[5].Value.Parser = ptString);
   Parser.Free;
   Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E[E1,E2 double] F: array of string');
   Check(Parser.Props.Count = 6);
-  ABCDE(ptArray);
+  ABCDE(ptDynArray);
   Check(Parser.Props.List[5].Name^ = 'F');
-  Check(Parser.Props.List[5].Value.Parser = ptArray);
-  Check(Parser.Props.List[5].Value.Props.Count = 1);
-  Check(Parser.Props.List[5].Value.Props.List[0].Value.Parser = ptString);
+  Check(Parser.Props.List[5].Value.Parser = ptDynArray);
+  Check(Parser.Props.List[5].Value.ArrayRtti.Props.Count = 0);
+  Check(Parser.Props.List[5].Value.ArrayRtti.Parser = ptString);
   Parser.Free;
   Parser := TRttiCustom.CreateFromText(
     'A,B,C integer D RawUTF8 E[E1:{E1A:integer E1B:tdatetime E1C TDatetimeMS}E2 double]');
@@ -2403,11 +2408,11 @@ begin
   with Parser.Props.List[4] do
   begin
     Check(Name^ = 'E');
-    Check(Value.Parser = ptArray);
-    Check(Value.Props.Count = 2);
-    Check(Value.Props.List[0].Name^ = 'E1');
-    Check(Value.Props.List[0].Value.Parser = ptRecord);
-    with Value.Props.List[0].Value.Props do
+    Check(Value.Parser = ptDynArray);
+    Check(Value.ArrayRtti.Props.Count = 2);
+    Check(Value.ArrayRtti.Props.List[0].Name^ = 'E1');
+    Check(Value.ArrayRtti.Props.List[0].Value.Parser = ptRecord);
+    with Value.ArrayRtti.Props.List[0].Value.Props do
     begin
       Check(Count = 3);
       Check(List[0].Name^ = 'E1A');
@@ -2417,8 +2422,8 @@ begin
       Check(List[2].Name^ = 'E1C');
       Check(List[2].Value.Parser = ptDateTimeMS);
     end;
-    Check(Value.Props.List[1].Name^ = 'E2');
-    Check(Value.Props.List[1].Value.Parser = ptDouble);
+    Check(Value.ArrayRtti.Props.List[1].Name^ = 'E2');
+    Check(Value.ArrayRtti.Props.List[1].Value.Parser = ptDouble);
   end;
   Parser.Free;
 

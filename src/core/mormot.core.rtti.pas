@@ -5975,7 +5975,7 @@ function TRttiCustomProps.AddFromTextPropName(
 var
   s: RawUTF8;
 begin
-  FastSetString(s, Name - 1, NameLen + 1);
+  FastSetString(s, Name - 1, NameLen + 1); // local temp storage
   s[1] := AnsiChar(NameLen); // emulate shortstring
   AddRawUTF8(fFromTextPropNames, s);
   result := pointer(s);
@@ -6378,7 +6378,8 @@ begin
         fCache.Kind := rkDynArray;
         fCache.Size := SizeOf(pointer);
         fArrayRtti := DynArrayElemType;
-        if DynArrayElemType.Info.Kind in rkManagedTypes then
+        if (DynArrayElemType.Info <> nil) and
+           (DynArrayElemType.Info.Kind in rkManagedTypes) then
           fCache.ItemInfo := DynArrayElemType.Info; // as regular dynarray RTTI
         fCache.ItemSize := DynArrayElemType.Size;
       end;
@@ -6422,7 +6423,8 @@ function TRttiCustom.SetParserType(aParser: TRttiParserType;
 begin
   fParser := aParser;
   fParserComplex := aParserComplex;
-  ShortStringToAnsi7String(fCache.Info.Name^, fName);
+  if fCache.Info <> nil then
+    ShortStringToAnsi7String(fCache.Info.Name^, fName);
   if fProps.Count > 0 then
   begin
     include(fFlags, rcfHasNestedProperties);
@@ -6562,6 +6564,9 @@ begin
   result := self;
 end;
 
+var
+  RttiArrayCount: integer;
+
 function TRttiCustom.SetBinaryType(BinarySize: integer): TRttiCustom;
 begin
   if self <> nil then
@@ -6602,6 +6607,8 @@ begin
         (P^ <> #0) do
   begin
     // fill prop[] from new properties, and set associated type
+    if P^ = ',' then
+      inc(P);
     if P^ in ['''', '"'] then
     begin
       // parse identifier as SQL string (e.g. "@field0")
@@ -6663,8 +6670,11 @@ begin
             begin
               // array of ....   or   array of record ... end
               P := GotoNextNotSpace(P + 2);
-              if not GetNextFieldProp(P, atypname) then
+              if not GetNextFieldProp(P, atypname) or
+                 (P = nil) then
                 ERttiException.Create('Missing array field type');
+              FormatUTF8('[%%]', [atypname, RttiArrayCount], typname);
+              InterlockedIncrement(RttiArrayCount); // ensure genuine type name
               ac := Rtti.RegisterTypeFromName(atypname, @apt);
               if ac = nil then
                 if apt = ptRecord then
