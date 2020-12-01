@@ -1804,7 +1804,7 @@ begin
     inc(maxParam);
   until false;
   // return generic SQL statement, with ? place-holders and params in Values[]
-  PStrLen(PtrUInt(result) - _STRLEN)^ := Gen - pointer(result); // no MM resize
+  PStrLen(PAnsiChar(PtrUInt(result)) - _STRLEN)^ := Gen - pointer(result);
   inc(maxParam);
 end;
 

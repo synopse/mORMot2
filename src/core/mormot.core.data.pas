@@ -5469,7 +5469,7 @@ begin
   end
   else if (vt = varString) and  // expect only RawUTF8
           (Data^.vAny <> nil) then
-    Dest.WriteVar(Data^.vAny, PStrLen(PtrUInt(Data^.VAny) - _STRLEN)^)
+    Dest.WriteVar(Data^.vAny, PStrLen(PAnsiChar(Data^.VAny) - _STRLEN)^)
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
     Dest.WriteVar(Data^.vAny, length(UnicodeString(Data^.vAny)) * 2)
