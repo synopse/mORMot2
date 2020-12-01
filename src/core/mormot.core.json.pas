@@ -5726,17 +5726,22 @@ var
   engine: TSynAnsiConvert;
 begin
   if Len > 0 then
+  begin
+    {$ifdef FPC} // CP_UTF8 is very likely on POSIX or LCL
+    if CodePage = 0 then
+      CodePage := CurrentAnsiConvert.CodePage;
+    {$endif FPC}
     case CodePage of
       CP_UTF8:          // direct write of RawUTF8 content
         if Escape = twJSONEscape then
-          Add(PUTF8Char(P), 0, Escape) // faster with no Len
+          Add(PUTF8Char(P), 0, Escape)    // faster with no Len
         else
           Add(PUTF8Char(P), Len, Escape); // expects a supplied Len
       CP_RAWBYTESTRING: // direct write of RawByteString content
         Add(PUTF8Char(P), Len, Escape);
       CP_UTF16:         // direct write of UTF-16 content
         AddW(PWord(P), 0, Escape);
-      CP_RAWBLOB:    // RawBlob written with Base-64 encoding
+      CP_RAWBLOB:       // RawBlob written with Base-64 encoding
         begin
           AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
           WrBase64(P, Len, {withMagic=}false);
@@ -5772,6 +5777,7 @@ begin
           EngineAppendUTF8(self, engine, P, Len, Escape);
       end;
     end;
+  end;
 end;
 
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
@@ -7220,11 +7226,11 @@ begin
   if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE_C then
     // raw RTTI binary layout with a single Base-64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
-                  (Ctxt.EndOfObject = ']') and
-                  (Ctxt.Value <> nil) and
-      (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
-      BinaryLoadBase64(PAnsiChar(pointer(Ctxt.Value)) + 3, Ctxt.ValueLen - 3,
-        Data, Ctxt.Info.Info, {uri=}false, [rkDynArray], {nocrc=}true)
+              (Ctxt.EndOfObject = ']') and
+              (Ctxt.Value <> nil) and
+              (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
+              BinaryLoadBase64(pointer(Ctxt.Value + 3), Ctxt.ValueLen - 3,
+                Data, Ctxt.Info.Info, {uri=}false, [rkDynArray], {nocrc=}true)
   else
   begin
     // efficient load of all JSON items

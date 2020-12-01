@@ -817,7 +817,7 @@ function DynArraySave(var Value; TypeInfo: PRttiInfo): RawByteString; overload;
 // - Value shall be set to the target dynamic array field
 // - is a wrapper around BinaryLoad(rkDynArray)
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: PRttiInfo;
-  TryCustomVariants: PDocVariantOptions = nil): PAnsiChar;
+  TryCustomVariants: PDocVariantOptions = nil; SourceMax: PAnsiChar = nil): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level binary unserialization as saved by DynArraySave/TDynArray.Save
@@ -5059,10 +5059,13 @@ begin
 end;
 
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: PRttiInfo;
-  TryCustomVariants: PDocVariantOptions): PAnsiChar;
+  TryCustomVariants: PDocVariantOptions; SourceMax: PAnsiChar): PAnsiChar;
 begin
+  if SourceMax = nil then
+    // backward compatible: assume fake 100MB Source input buffer
+    SourceMax := Source + 100 shl 20;
   result := BinaryLoad(
-    @Value, source, TypeInfo, nil, nil, [rkDynArray], TryCustomVariants);
+    @Value, source, TypeInfo, nil, SourceMax, [rkDynArray], TryCustomVariants);
 end;
 
 function DynArraySave(var Value; TypeInfo: PRttiInfo): RawByteString;
