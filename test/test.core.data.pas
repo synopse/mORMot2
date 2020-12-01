@@ -169,7 +169,7 @@ begin
   test.Check(i <> 0);
   test.CheckUtf8(ID = i, 'id=%=%', [ID, i]);
   test.Check(Int = i);
-  test.Check(self.Test = Int32ToUtf8(i));
+  test.Check(GetInteger(pointer(self.Test)) = i);
   test.Check(Ansi = WinAnsiString(self.Test));
   test.Check(Unicode = WinAnsiToRawUnicode(Ansi));
   test.Check(ValFloat = i * 2.5);
@@ -643,7 +643,7 @@ type
     fColl: TCollTests;
     fTCollTest: TCollTest;
     fStr: TStringList;
-    procedure SetColl(const Value: TCollTests);
+    procedure SetColl(const Value: TCollTests); // validate Setter
   public
     constructor Create;
     destructor Destroy; override;
@@ -1101,7 +1101,7 @@ var
     try
       CA.Str := TStringList.Create;
       tmp := J;
-      Check(JSONToObject(CA, UniqueRawUTF8(RawUTF8(tmp)), Valid) = nil);
+      Check(JSONToObject(CA, UniqueRawUTF8(RawUTF8(tmp)), Valid)^ = #0);
       Check(Valid);
       Check(CA.One.Color = 2);
       Check(CA.One.Name = 'test2');
@@ -1110,7 +1110,7 @@ var
       Check(CA.One.Length = 10);
       Check(CA.Str.Count = 10000);
       for i := 1 to CA.Str.Count do
-        Check(CA.Str[i - 1] = IntToStr(i));
+        Check(StrToInt(CA.Str[i - 1]) = i);
       SetLength(CA.fInts, 20000);
       for i := 0 to high(CA.Ints) do
         CA.Ints[i] := i;
@@ -1122,11 +1122,11 @@ var
     CA := TCollTstDynArray.Create;
     try
       CA.Str := TStringList.Create;
-      Check(JSONToObject(CA, pointer(U), Valid) = nil);
+      Check(JSONToObject(CA, pointer(U), Valid)^ = #0);
       Check(Valid);
       Check(CA.Str.Count = 10000);
       for i := 1 to CA.Str.Count do
-        Check(CA.Str[i - 1] = IntToStr(i));
+        Check(StrToInt(CA.Str[i - 1]) = i);
       Check(length(CA.Ints) = 20000);
       for i := 0 to high(CA.Ints) do
         CA.Ints[i] := i;
@@ -1137,7 +1137,7 @@ var
       U := ObjectToJSON(CA);
       SetLength(CA.fInts, 2);
       SetLength(CA.fTimeLog, 2);
-      Check(JSONToObject(CA, pointer(U), Valid) = nil);
+      Check(JSONToObject(CA, pointer(U), Valid)^ = #0);
       Check(Valid);
       Check(Length(CA.Ints) = 20000);
       Check(Length(CA.TimeLog) = CA.Str.Count);
@@ -1161,7 +1161,7 @@ var
       DA.Clear;
       Check(Length(CA.FileVersion) = 0);
       pu := JSONToObject(CA, pointer(U), Valid);
-      Check(pu = nil);
+      Check(pu^ = #0);
       Check(Valid);
       Check(Length(CA.Ints) = 20000);
       Check(Length(CA.TimeLog) = CA.Str.Count);
@@ -1173,8 +1173,8 @@ var
           Check(Minor = i + 2000);
           Check(Release = i + 3000);
           Check(Build = i + 4000);
-          Check(Main = IntToStr(i));
-          Check(Detailed = IntToStr(i + 1000));
+          Check(StrToInt(Main) = i);
+          Check(StrToInt(Detailed) = i + 1000);
         end;
     finally
       CA.Free;
@@ -1266,8 +1266,8 @@ var
     FillCharFast(git2, sizeof(git2), 0);
     U := zendframeworkJson; // need unique string for procedure re-entrance
     check(IsValidJSON(U));
-    Check(DynArrayLoadJSON(git, UniqueRawUTF8(U), TypeInfo(TTestCustomJSONGitHubs))
-      <> nil);
+    Check(DynArrayLoadJSON(
+      git, UniqueRawUTF8(U), TypeInfo(TTestCustomJSONGitHubs)) <> nil);
     U := DynArraySaveJSON(git, TypeInfo(TTestCustomJSONGitHubs));
     check(IsValidJSON(U));
     if woHumanReadable in wo then
@@ -1312,7 +1312,8 @@ var
         check(JSONReformat(s, jsonCompact) =
           FormatUTF8('{"login":"%","id":%}', [owner.login, owner.id]));
       end;
-    Check(DynArrayLoadJSON(git2, pointer(U), TypeInfo(TTestCustomJSONGitHubs)) <> nil);
+    Check(DynArrayLoadJSON(
+      git2, pointer(U), TypeInfo(TTestCustomJSONGitHubs)) <> nil);
     if not CheckFailed(length(git) = Length(git2)) then
       for i := 0 to high(git) do
       begin
@@ -1445,7 +1446,8 @@ var
       end;
     end;
     binary := DynArraySave(AA, TypeInfo(TRawUTF8DynArrayDynArray));
-    Check(DynArrayLoad(AB, pointer(binary), TypeInfo(TRawUTF8DynArrayDynArray)) <> nil);
+    Check(DynArrayLoad(
+      AB, pointer(binary), TypeInfo(TRawUTF8DynArrayDynArray)) <> nil);
     Check(length(AA) = length(AB));
     for i := 0 to high(AA) do
     begin
@@ -1456,7 +1458,8 @@ var
     J := DynArraySaveJSON(AA, TypeInfo(TRawUTF8DynArrayDynArray));
     check(IsValidJSON(J));
     Finalize(AB);
-    Check(DynArrayLoadJSON(AB, pointer(J), TypeInfo(TRawUTF8DynArrayDynArray)) <> nil);
+    Check(DynArrayLoadJSON(
+      AB, pointer(J), TypeInfo(TRawUTF8DynArrayDynArray)) <> nil);
     Check(length(AA) = length(AB));
     for i := 0 to high(AA) do
     begin
@@ -2113,7 +2116,7 @@ begin
     check(IsValidJSON(U));
     CheckEqual(U,
       '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[],"Str":null}');
-    Check(JSONToObject(C2, pointer(U), Valid) <> nil);
+    Check(JSONToObject(C2, pointer(U), Valid)^ = #0);
     Check(Valid);
     U := ObjectToJSON(C2);
     check(IsValidJSON(U));
@@ -2126,7 +2129,7 @@ begin
     check(IsValidJSON(U));
     CheckEqual(U, '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":' +
       '[{"Color":10,"Length":0,"Name":""},{"Color":0,"Length":0,"Name":"name"}],"Str":null}');
-    Check(JSONToObject(C2, pointer(U), Valid) <> nil);
+    Check(JSONToObject(C2, pointer(U), Valid)^ = #0);
     Check(Valid);
     Check(C2.Coll.Count = 2);
     U := ObjectToJSON(C2);
@@ -2148,7 +2151,7 @@ begin
       '"Length":0,"Name":""},{"ClassName":"TCollTest","Color":0,"Length":0,"Name":"name"}],"Str":null}');
     C2.Coll.Clear;
     Check(C2.Coll.Count = 0);
-    Check(JSONToObject(C2, pointer(U), Valid) <> nil);
+    Check(JSONToObject(C2, pointer(U), Valid)^ = #0);
     Check(Valid);
     Check(C2.Coll.Count = 2);
     U := ObjectToJSON(C2);
@@ -2175,7 +2178,8 @@ begin
     C2.Coll.Clear;
     U := ObjectToJSON(C2);
     check(IsValidJSON(U));
-    Check(Hash32(U) = $CE2C2DED);
+    CheckEqual(U,
+      '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[],"Str":null}');
     Coll.Coll.BeginUpdate;
     for i := 1 to 10000 do
       with Coll.Coll.Add do
@@ -2189,7 +2193,7 @@ begin
     check(IsValidJSON(U));
     Check(Hash32(U) = $DB782098);
     C2.Coll.Clear;
-    Check(JSONToObject(C2.fColl, pointer(U), Valid) = nil);
+    Check(JSONToObject(C2.fColl, pointer(U), Valid)^ = #0);
     Check(Valid);
     Check(C2.Coll.Count = Coll.Coll.Count);
     for i := 1 to C2.Coll.Count - 2 do
@@ -2197,27 +2201,27 @@ begin
       begin
         Check(Color = i * 3);
         Check(Length = i * 5);
-        Check(Name = Int32ToUtf8(i));
+        Check(GetInteger(pointer(Name)) = i);
       end;
     U := ObjectToJSON(Coll);
     check(IsValidJSON(U));
-    Check(length(U) = 443103);
-    Check(Hash32(U) = $7EACF12A);
+    Check(length(U) = 443114);
+    Check(Hash32(U) = $B1BD5123);
     C2.One.Name := '';
     C2.Coll.Clear;
-    Check(JSONToObject(C2, pointer(U), Valid) = nil);
+    Check(JSONToObject(C2, pointer(U), Valid)^ = #0);
     Check(Valid);
     Check(C2.Coll.Count = Coll.Coll.Count);
     U := ObjectToJSON(C2);
     check(IsValidJSON(U));
-    Check(length(U) = 443103);
-    Check(Hash32(U) = $7EACF12A);
+    Check(length(U) = 443114);
+    Check(Hash32(U) = $B1BD5123);
     for i := 1 to C2.Coll.Count - 2 do
       with C2.Coll[i + 1] do
       begin
         Check(Color = i * 3);
         Check(Length = i * 5);
-        Check(Name = Int32ToUtf8(i));
+        Check(GetInteger(pointer(Name)) = i);
       end;
     Coll.Coll.Clear;
     Coll.Str := TStringList.Create;
@@ -2234,19 +2238,19 @@ begin
     check(IsValidJSON(U2));
     Check(U2 = U);
     C2.Str := TStringList.Create;
-    Check(JSONToObject(C2, pointer(U), Valid) = nil);
+    Check(JSONToObject(C2, pointer(U), Valid)^ = #0);
     Check(Valid);
     Check(C2.Str.Count = Coll.Str.Count);
     for i := 1 to C2.Str.Count do
-      Check(C2.Str[i - 1] = IntToStr(i));
+      Check(StrToInt(C2.Str[i - 1]) = i);
     J := ObjectToJSON(C2);
     check(IsValidJSON(J));
     Check(Hash32(J) = $85926050);
     C2.One.Color := 0;
     C2.One.Name := '';
     U := '{"One":{"Color":1,"Length":0,"Name":"test","Unknown":123},"Coll":[]}';
-    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid, nil, [jpoIgnoreUnknownProperty])
-      = nil, 'Ignore unknown');
+    Check(JSONToObject(C2, UniqueRawUTF8(U),       
+      Valid, nil, [jpoIgnoreUnknownProperty])^ = #0, 'Ignore unknown');
     Check(Valid);
     Check(C2.One.Color = 1);
     Check(C2.One.Name = 'test');
@@ -2255,24 +2259,26 @@ begin
     U :=
       '{"One":{"Color":1,"Length":0,"wtf":{"one":1},"Name":"test","Unknown":123},"dummy":null,"Coll":[]}';
     check(IsValidJSON(U));
-    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid, nil, [jpoIgnoreUnknownProperty])
-      = nil, 'Ignore unknown');
+    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid, nil,
+      [jpoIgnoreUnknownProperty])^ = #0, 'Ignore unknown');
     Check(Valid);
     Check(C2.One.Color = 1);
     Check(C2.One.Name = 'test');
     U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2},"Coll":[]}';
-    Check(IdemPChar(JSONToObject(C2, UniqueRawUTF8(U), Valid), '"TEST'), 'invalid JSON');
+    P := JSONToObject(C2, UniqueRawUTF8(U), Valid);
+    Check(IdemPChar(P, '}'), 'invalid JSON');
     Check(not Valid);
     U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[]';
-    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid) <> nil);
+    P := JSONToObject(C2, UniqueRawUTF8(U), Valid);
+    Check(P = nil);
     Check(not Valid);
     U := '{"One":{"Color":,"Length":0,"Name":"test\"\\2"},"Coll":[]';
-    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid) <> nil, 'invalid JSON');
+    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid) = nil, 'invalid JSON');
     Check(not Valid);
     U := '{"Coll":[{"Color":1,"Length":0,"Name":"test"}],' +
       '"One":{"Color":2,"Length":0,"Name":"test2"}}';
-    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid, nil, [jpoIgnoreUnknownProperty])
-      = nil, 'Ignore unknown');
+    Check(JSONToObject(C2, UniqueRawUTF8(U), Valid, nil,
+      [jpoIgnoreUnknownProperty])^ = #0, 'Ignore unknown');
     Check(Valid);
     Check(C2.One.Color = 2);
     Check(C2.One.Name = 'test2');
@@ -2284,16 +2290,16 @@ begin
     Check(Hash32(J) = $41281936);
     // (custom) dynamic array serialization
     TCollTstDynArrayTest;
-    TRttiJson.RegisterCustomSerializer(TypeInfo(TFVs), TCollTstDynArray.FVReader,
-      TCollTstDynArray.FVWriter);
+    TRttiJson.RegisterCustomSerializer(TypeInfo(TFVs),
+      TCollTstDynArray.FVReader, TCollTstDynArray.FVWriter);
     TCollTstDynArrayTest;
-    TRttiJson.RegisterCustomSerializer(TypeInfo(TFVs), TCollTstDynArray.FVReader2,
-      TCollTstDynArray.FVWriter2);
+    TRttiJson.RegisterCustomSerializer(TypeInfo(TFVs),
+      TCollTstDynArray.FVReader2, TCollTstDynArray.FVWriter2);
     TCollTstDynArrayTest;
     // (custom) class serialization
     TFileVersionTest(false);
-    TRttiJson.RegisterCustomSerializer(TFileVersion, TCollTstDynArray.FVClassReader,
-      TCollTstDynArray.FVClassWriter);
+    TRttiJson.RegisterCustomSerializer(TFileVersion,
+      TCollTstDynArray.FVClassReader, TCollTstDynArray.FVClassWriter);
     TFileVersionTest(true);
     TRttiJson.UnRegisterCustomSerializer(TFileVersion);
     TFileVersionTest(false);
@@ -2843,7 +2849,7 @@ begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal12
     else
       v.Bits.c[0] := i;
     str := v.ToText;
-    Check(str = UInt32ToUTF8(v.Bits.c[0]));
+    Check(GetCardinal(pointer(str)) = v.Bits.c[0]);
     if i = 0 then
       continue;
     Check(v2.FromText(str) = dsvValue);
@@ -2853,7 +2859,7 @@ begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal12
   begin
     v.FromInt32(i);
     str := v.ToText;
-    Check(str = Int32ToUTF8(i));
+    Check(GetInteger(pointer(str)) = i);
     if i = 0 then
       continue;
     Check(v2.FromText(str) = dsvValue);
