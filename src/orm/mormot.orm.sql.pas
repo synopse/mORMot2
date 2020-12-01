@@ -398,7 +398,7 @@ type
 // inherit from TOrmVirtualTableAutoID (it can be any plain TOrm or
 // TOrmMany sub-class for instance)
 // - note that TOrmModel.Create() will reset all supplied classes to be defined
-// as non virtual (i.e. Kind=rSQLite3)
+// as non virtual (i.e. Kind=ovkSQLite3)
 // - this function shall be called BEFORE TRestServer.Create (the server-side
 // ORM must know if the database is to be managed as internal or external)
 // - this function (and the whole unit) is NOT to be used on the client-side
@@ -2396,7 +2396,7 @@ begin
   if Props = nil then
     // if aClass is not part of the model
     exit;
-  Props.Kind := rCustomAutoID; // force creation use of SQLite3 virtual table
+  Props.Kind := ovkCustomAutoID; // force creation use of SQLite3 virtual table
   if aExternalTableName = '' then
     ExternalTableName := Props.Props.SQLTableName
   else

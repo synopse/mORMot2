@@ -431,7 +431,7 @@ begin
     try
       n := 0;
       JSONCached := R.ExecuteJSON(aDB.DB, aSQL, Expand, @n);
-      // big JSON is faster than sqlite3_get_table(): memory has less allocation
+      // big JSON is faster than sqlite3_get_table(): less heap allocations
       inherited CreateFromTables(Tables, aSQL, JSONCached);
       Assert(n = fRowCount);
     finally
@@ -448,26 +448,11 @@ end;
 
 { *********** TOrmVirtualTableModuleServerDB for SQLite3 Virtual Tables }
 
-{ TOrmVirtualTableModuleSQLite3 }
+// asssociated low-level vt*() SQlite3 wrapper functions
 
 procedure Notify(const Format: RawUTF8; const Args: array of const);
 begin
   TSynLog.DebuggerNotify(sllWarning, Format, Args);
-end;
-
-function TOrmVirtualTableModuleSQLite3.FileName(
-  const aTableName: RawUTF8): TFileName;
-begin
-  if FilePath <> '' then
-    // if a file path is specified (e.g. by SynDBExplorer) -> always use this
-    result := inherited FileName(aTableName)
-  else if SameText(DB.FileName, SQLITE_MEMORY_DATABASE_NAME) then
-    // in-memory databases virtual tables should remain in memory
-    result := ''
-  else
-    // change file path to current DB folder
-    result := ExtractFilePath(DB.FileName) +
-              ExtractFileName(inherited FileName(aTableName));
 end;
 
 function vt_Create(DB: TSQLite3DB; pAux: Pointer; argc: integer;
@@ -483,8 +468,7 @@ begin
     ModuleName := Module.ModuleName;
   if (Module = nil) or
      (Module.DB.DB <> DB) or
-     (StrIComp(pointer(ModuleName),
-    argv[0]) <> 0) then
+     (StrIComp(pointer(ModuleName), argv[0]) <> 0) then
   begin
     Notify('vt_Create(%<>%)', [argv[0], ModuleName]);
     result := SQLITE_ERROR;
@@ -544,7 +528,8 @@ end;
 function vt_BestIndex(var pVTab: TSQLite3VTab;
   var pInfo: TSQLite3IndexInfo): integer; cdecl;
 const
-  COST: array[TOrmVirtualTablePreparedCost] of double = (1E10, 1E8, 10, 1);
+  COST: array[TOrmVirtualTablePreparedCost] of double = (
+         1E10, 1E8, 10, 1);
       // costFullScan, costScanWhere, costSecondaryIndex, costPrimaryIndex
 var
   Prepared: POrmVirtualTablePrepared;
@@ -886,6 +871,24 @@ begin
   if (p <> nil) and
      (TOrmVirtualTableModuleSQLite3(p).fDB <> nil) then
     TOrmVirtualTableModuleSQLite3(p).Free;
+end;
+
+
+{ TOrmVirtualTableModuleSQLite3 }
+
+function TOrmVirtualTableModuleSQLite3.FileName(
+  const aTableName: RawUTF8): TFileName;
+begin
+  if FilePath <> '' then
+    // if a file path is specified (e.g. by SynDBExplorer) -> always use this
+    result := inherited FileName(aTableName)
+  else if SameText(DB.FileName, SQLITE_MEMORY_DATABASE_NAME) then
+    // in-memory databases virtual tables should remain in memory
+    result := ''
+  else
+    // change file path to current DB folder
+    result := ExtractFilePath(DB.FileName) +
+              ExtractFileName(inherited FileName(aTableName));
 end;
 
 procedure TOrmVirtualTableModuleSQLite3.Attach(aDB: TSQLDataBase);
@@ -1311,14 +1314,15 @@ var
 begin
   for i := 0 to high(model.TableProps) do
     case model.TableProps[i].Kind of
-      rRTree, rRTreeInteger: // register all *_in() SQL functions
+      ovkRTree, ovkRTreeInteger:
+        // register all RTREE associated *_in() SQL functions
         sqlite3_check(DB.DB, sqlite3.create_function_v2(
           DB.DB, pointer(TOrmRTreeClass(model.Tables[i]).RTreeSQLFunctionName),
           2, SQLITE_ANY, model.Tables[i], InternalRTreeIn, nil, nil, nil));
-      rCustomForcedID, rCustomAutoID:
+      ovkCustomForcedID, ovkCustomAutoID:
         begin
-          module := TOrmVirtualTableClass(
-            fModel.VirtualTableModule(fModel.Tables[i]));
+          // register once each TOrmVirtualTableModuleServerDB
+          module := pointer(fModel.VirtualTableModule(fModel.Tables[i]));
           if (module <> nil) and
              (PtrArrayFind(registered, module) < 0) then
           begin
