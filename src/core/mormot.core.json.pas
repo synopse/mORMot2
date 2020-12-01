@@ -1649,8 +1649,8 @@ type
   // TObjectList serialized field with the global Classes.FindClass() function
   // - null will release any class instance, unless jpoNullDontReleaseObjectInstance
   // is set which will leave the instance untouched
-  // - class instances will be left untouched before parsing, unless
-  // jpoClearClassPublishedProperties is defined
+  // - values will be left untouched before parsing, unless jpoClearValues
+  // is defined, to void existing record fields or class published properties
   TJsonParserOption = (
     jpoIgnoreUnknownProperty,
     jpoIgnoreStringType,
@@ -1663,7 +1663,7 @@ type
     jpoAllowDouble,
     jpoObjectListClassNameGlobalFindClass,
     jpoNullDontReleaseObjectInstance,
-    jpoClearClassPublishedProperties);
+    jpoClearValues);
 
   /// set of options for JsonParser() parsing process
   TJsonParserOptions = set of TJsonParserOption;
@@ -2948,7 +2948,7 @@ begin
     tab := @JSON_CHARS;
     repeat
       inc(P);
-    until not (jcJSONStringMarker in tab[P^]);
+    until jcJSONStringMarker in tab[P^]; // end at [#0, '"', '\']
     if P^ <> '"' then
       exit;
     SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
@@ -7378,7 +7378,7 @@ begin
       if PPointer(Data)^ = nil then
         // e.g. from _JL_DynArray for T*ObjArray
         PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
-      else if jpoClearClassPublishedProperties in Ctxt.Options then
+      else if jpoClearValues in Ctxt.Options then
         Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;
@@ -7388,7 +7388,8 @@ begin
     end
     else
     begin
-      Ctxt.Info.ValueFinalizeAndClear(Data);
+      if jpoClearValues in Ctxt.Options then
+        Ctxt.Info.ValueFinalizeAndClear(Data);
       if Ctxt.ParseNull then
         exit;
     end;
@@ -7401,7 +7402,10 @@ begin
     end;
     Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON + 1);
     if Ctxt.JSON^ = '}' then
-      Ctxt.ParseEndOfObject
+    begin
+      inc(Ctxt.JSON);
+      Ctxt.ParseEndOfObject;
+    end
     else
     begin
       root := pointer(Ctxt.Info); // Ctxt.Info overriden in JsonLoadProp()

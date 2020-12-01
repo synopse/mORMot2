@@ -1491,7 +1491,8 @@ procedure FastDynArrayClear(Value: PPointer; ElemInfo: PRttiInfo);
 procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
   Count: integer);
 
-/// clear a record content
+/// clear the managed fields of a record content
+// - won't reset all values to zero - see RecordZero() instead
 // - caller should ensure the type is indeed a record/object
 // - see also TRttiInfo.Clear if you want to finalize any type
 // - same as RTTI_FINALIZE[rkRecord]()
@@ -1871,8 +1872,6 @@ type
     Size: integer;
     /// List[NotInheritedIndex]..List[Count-1] store the last level of properties
     NotInheritedIndex: integer;
-    /// reset all properties
-    procedure Clear;
     /// locate a property/field by name
     function Find(const PropName: shortstring): PRttiCustomProp; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1923,6 +1922,8 @@ type
     fFromTextPropNames: TRawUTF8DynArray;
     /// points to List[] items which are managed
     fManaged: PRttiCustomPropDynArray;
+    /// reset all properties
+    procedure InternalClear;
     /// mimics a PShortString stored in this instance
     function AddFromTextPropName(Name: PUTF8Char; NameLen: integer): PShortString;
     /// finalize the managed properties of this instance
@@ -2029,6 +2030,8 @@ type
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
     function ClassNewInstance: pointer; virtual;
+    /// reset all stored Props[] and associated flags
+    procedure PropsClear;
     /// low-level RTTI kind, taken from Rtti property
     property Kind: TRttiKind
       read fCache.Kind;
@@ -6046,7 +6049,7 @@ begin
     end;
 end;
 
-procedure TRttiCustomProps.Clear;
+procedure TRttiCustomProps.InternalClear;
 begin
   List := nil;
   Count := 0;
@@ -6098,7 +6101,7 @@ begin
      not (RecordInfo^.Kind in rkRecordTypes) then
     exit;
   all := RecordInfo^.RecordAllFields(dummy);
-  Clear;
+  InternalClear;
   if all = nil then
     exit;
   Count := length(all);
@@ -6537,6 +6540,12 @@ begin
     'please include mormot.core.json unit to register TRttiJson', [self]);
 end;
 
+procedure TRttiCustom.PropsClear;
+begin
+  Props.InternalClear;
+  fFlags := fFlags - [rcfHasNestedProperties, rcfHasNestedManagedProperties];
+end;
+
 function TRttiCustom.SetObjArray(Item: TClass): TRttiCustom;
 begin
   if (self <> nil) and
@@ -6600,7 +6609,7 @@ var
   c, ac, nested: TRttiCustom;
   cp: PRttiCustomProp;
 begin
-  Props.Clear;
+  PropsClear;
   fCache.Size := 0;
   propcount := 0;
   while (P <> nil) and
@@ -7134,7 +7143,7 @@ begin
     end
     else
       result := result.ArrayRtti;
-  result.Props.Clear; // reset to the Base64 serialization if RttiDefinition=''
+  result.PropsClear; // reset to the Base64 serialization if RttiDefinition=''
   P := pointer(RttiDefinition);
   if P <> nil then
   begin
@@ -7144,6 +7153,7 @@ begin
         'definition  covers % bytes, but RTTI defined %',
         [DynArrayOrRecord^.RawName, result.Props.Size, result.Size]);
   end;
+  result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
 function TRttiCustomList.RegisterFromText(const TypeName: RawUTF8;
@@ -7159,7 +7169,7 @@ begin
   else if not (result.Kind in rkRecordTypes) then
     raise ERttiException.CreateUTF8('Rtti.RegisterFromText: existing % is a %',
       [TypeName, ToText(result.Kind)^]);
-  result.Props.Clear;
+  result.PropsClear;
   P := pointer(RttiDefinition);
   result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
   if new then

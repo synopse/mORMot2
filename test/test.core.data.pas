@@ -2264,8 +2264,8 @@ begin
     Check(C2.One.Name = 'test');
     C2.One.Color := 0;
     C2.One.Name := '';
-    U :=
-      '{"One":{"Color":1,"Length":0,"wtf":{"one":1},"Name":"test","Unknown":123},"dummy":null,"Coll":[]}';
+    U := '{"One":{"Color":1,"Length":0,"wtf":{"one":1},"Name":"test",' +
+      '"Unknown":123},"dummy":null,"Coll":[]}';
     check(IsValidJSON(U));
     Check(JSONToObject(C2, UniqueRawUTF8(U), Valid, nil,
       [jpoIgnoreUnknownProperty])^ = #0, 'Ignore unknown');
@@ -2401,8 +2401,8 @@ begin
   Check(Parser.Props.List[5].Value.ArrayRtti.Props.Count = 0);
   Check(Parser.Props.List[5].Value.ArrayRtti.Parser = ptString);
   Parser.Free;
-  Parser := TRttiCustom.CreateFromText(
-    'A,B,C integer D RawUTF8 E[E1:{E1A:integer E1B:tdatetime E1C TDatetimeMS}E2 double]');
+  Parser := TRttiCustom.CreateFromText('A,B,C integer D RawUTF8 ' +
+    'E[E1:{E1A:integer E1B:tdatetime E1C TDatetimeMS}E2 double]');
   Check(Parser.Props.Count = 5);
   ABCD;
   with Parser.Props.List[4] do
@@ -2533,7 +2533,7 @@ begin
   FillCharFast(Trans, sizeof(Trans), 0);
   U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
   Check(IsValidJSON(U));
-  CheckEqual(U, '{'#$D#$A#9'"Transactions": []'#$D#$A'}');
+  CheckEqual(U,  #13#10'{'#13#10#9'"Transactions": '#13#10#9'['#13#10#9']'#13#10'}');
   for i := 1 to 10 do
   begin
     U :=
@@ -2550,11 +2550,19 @@ begin
     Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
     Check(Trans.Transactions[0].TRRMK = 'Remark');
     U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
-    Check(Hash32(U) = $CC7167FC);
+    RecordZero(@Trans, TypeInfo(TTestCustomJSON2));
+    Check(length(Trans.Transactions) = 0);
+    RecordLoadJSON(Trans, UniqueRawUTF8(U), TypeInfo(TTestCustomJSON2));
+    Check(length(Trans.Transactions) = 1);
+    Check(Trans.Transactions[0].TRTYPE = 'INCOME');
+    Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
+    Check(Trans.Transactions[0].TRRMK = 'Remark');
   end;
+  U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
   FileFromString(U, 'transactions.json');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJSON2Title), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJSON2), '');
+  U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
 
   Parser := TRttiJson.RegisterFromText(TypeInfo(TTestCustomDiscogs),
     __TTestCustomDiscogs, [jpoIgnoreUnknownProperty], []);
@@ -2616,7 +2624,8 @@ begin
   Rtti.RegisterFromText(TypeInfo(TTestCustomDiscogs), '');
   SetString(U, PAnsiChar('true'#0'footer,'), 12);
   Check(IdemPChar(GetJSONField(pointer(U), P), 'TRUE'));
-  Check(P = nil);
+  Check((P <> nil) and
+        (P^ = #0));
   CheckEqual(U, 'true'#0'footer,', '3cce80e8df');
   // validates RawJSON (custom) serialization
   Enemy := TEnemy.Create;
