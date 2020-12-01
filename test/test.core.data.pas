@@ -664,8 +664,9 @@ type
     class procedure FVReader2(var Context: TJsonParserContext; Data: pointer);
     class procedure FVWriter2(W: TTextWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
-    class procedure FVClassReader(var Context: TJsonParserContext; Data: pointer);
-    class procedure FVClassWriter(W: TTextWriter; Data: pointer;
+    class procedure FVClassReader(var Context: TJsonParserContext;
+       Data: TObject);
+    class procedure FVClassWriter(W: TTextWriter; Data: TObject;
       Options: TTextWriterWriteObjectOptions);
   published
     property Ints: TIntegerDynArray read fInts write fInts;
@@ -714,7 +715,7 @@ begin
   // '{"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"},..
   if not Context.ParseObject([
      'Major', 'Minor', 'Release', 'Build', 'Main', 'Detailed'], @Values) then
-    exit; // result^ = ',' or ']' for last item of array
+    exit;
   PFV(Data)^.Major := Values[0].ToInteger;
   PFV(Data)^.Minor := Values[1].ToInteger;
   PFV(Data)^.Release := Values[2].ToInteger;
@@ -732,27 +733,29 @@ begin
 end;
 
 class procedure TCollTstDynArray.FVClassReader(var Context: TJsonParserContext;
-  Data: pointer);
+  Data: TObject);
 var
   Values: array[0..5] of TValuePUTF8Char;
 begin
   // '{"Major":2,"Minor":2002,"Release":3002,"Build":4002,"Main":"2","BuildDateTime":"1911-03-15"}'
-  if not Context.ParseObject([
+  if Context.ParseObject([
      'Major', 'Minor', 'Release', 'Build', 'Main', 'BuildDateTime'], @Values) then
-    exit;
-  PFV(Data)^.Major := Values[0].ToInteger;
-  PFV(Data)^.Minor := Values[1].ToInteger;
-  PFV(Data)^.Release := Values[2].ToInteger;
-  PFV(Data)^.Build := Values[3].ToInteger;
-  PFV(Data)^.Main := Values[4].ToString;
-  PFV(Data)^.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5].Value, Values
-    [5].ValueLen);
+    with TFileVersion(Data) do
+    begin
+      Major := Values[0].ToInteger;
+      Minor := Values[1].ToInteger;
+      Release := Values[2].ToInteger;
+      Build := Values[3].ToInteger;
+      Main := Values[4].ToString;
+      BuildDateTime :=
+        Iso8601ToDateTimePUTF8Char(Values[5].Value, Values[5].ValueLen);
+    end;
 end;
 
-class procedure TCollTstDynArray.FVClassWriter(W: TTextWriter; Data: pointer;
+class procedure TCollTstDynArray.FVClassWriter(W: TTextWriter; Data: TObject;
   Options: TTextWriterWriteObjectOptions);
 begin
-  with PFV(Data)^ do
+  with TFileVersion(Data) do
     W.AddJSONEscape(['Major', Major, 'Minor', Minor, 'Release', Release, 'Build',
       Build, 'Main', Main, 'BuildDateTime', DateTimeToIso8601Text(BuildDateTime)]);
 end;
@@ -1161,7 +1164,8 @@ var
       DA.Clear;
       Check(Length(CA.FileVersion) = 0);
       pu := JSONToObject(CA, pointer(U), Valid);
-      Check(pu^ = #0);
+      Check((pu <> nil) and
+            (pu^ = #0));
       Check(Valid);
       Check(Length(CA.Ints) = 20000);
       Check(Length(CA.TimeLog) = CA.Str.Count);
@@ -2137,7 +2141,6 @@ begin
     CheckEqual(U, '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":' +
       '[{"Color":10,"Length":0,"Name":""},{"Color":0,"Length":0,"Name":"name"}],"Str":null}');
     J := ObjectToJSON(Coll, [woHumanReadable]);
-    writeln(J);
     check(IsValidJSON(U));
     Check(Hash32(J) = $7694E4C1);
     Check(JSONReformat(J, jsonCompact) = U);
