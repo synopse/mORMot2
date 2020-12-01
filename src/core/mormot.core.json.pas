@@ -6715,7 +6715,7 @@ begin
   begin
     // we know the fields from text definition
     {%H-}ctxt.Init(self, WriteOptions, RecordInfo);
-    _JS_RttiCustom(Value, ctxt);
+    TRttiJsonSave(ctxt.Info.JsonSave)(Value, ctxt);
   end
   else
     // fallback to binary serialization and Base64 encoding
@@ -7192,7 +7192,7 @@ begin
     // efficient load of all JSON items
     arrinfo := Ctxt.Info;
     Ctxt.Info := Ctxt.Info.ArrayRtti;
-    load := TRttiJson(Ctxt.Info).fJsonLoad;
+    load := Ctxt.Info.JsonLoad;
     // initial guess of the JSON array count - will browse up to 256KB of input
     cap := abs(JSONArrayCount(Ctxt.JSON, Ctxt.JSON + 256 shl 10));
     if (cap = 0) or
@@ -7250,7 +7250,7 @@ var
 begin
   Ctxt.Info := Prop.Value; // caller will restore it afterwards
   Ctxt.Prop := @Prop;
-  load := TRttiJson(Ctxt.Info).fJsonLoad;
+  load := Ctxt.Info.JsonLoad;
   if not Assigned(load) then
     Ctxt.Valid := false
   else if Prop.OffsetSet >= 0 then
@@ -7469,7 +7469,7 @@ begin
           root.fCollectionItemRtti := Rtti.RegisterClass(PClass(item)^);
         end;
         Ctxt.Info := root.fCollectionItemRtti;
-        load := TRttiJSON(Ctxt.Info).fJsonLoad;
+        load := Ctxt.Info.JsonLoad;
       end;
       load(@item, Ctxt);
     until (not Ctxt.Valid) or
@@ -9190,6 +9190,9 @@ end;
 
 function _New_Collection(Rtti: TRttiCustom): pointer;
 begin
+  if Rtti.CollectionItem = nil then
+    raise ERttiException.CreateUTF8('% with CollectionItem=nil: please call ' +
+      'Rtti.RegisterCollection()', [Rtti.ValueClass]);
   result := TCollectionClass(Rtti.ValueClass).Create(Rtti.CollectionItem);
 end;
 
@@ -9244,11 +9247,7 @@ begin
       else if C = TInterfacedCollection then
         fClassNewInstance := @_New_InterfacedCollection
       else if C = TCollection then
-        if CollectionItem = nil then
-          raise EJSONException.CreateUTF8(
-            '%.SetParserType: % has no CollectionItem', [self, Name])
-        else
-          fClassNewInstance := @_New_Collection
+        fClassNewInstance := @_New_Collection
       else if C = TCollectionItem then
         fClassNewInstance := @_New_CollectionItem
       else if C = TObject then
@@ -9386,9 +9385,11 @@ class function TRttiJson.RegisterCustomSerializer(Info: PRttiInfo;
 begin
   result := Rtti.RegisterType(Info) as TRttiJson;
   // (re)set fJsonSave/fJsonLoad
-  result.fJsonWriter := TMethod(Writer);
-  result.fJsonReader := TMethod(Reader);
   result.SetParserType(result.Parser, result.ParserComplex);
+  if Assigned(Writer) then
+    result.fJsonWriter := TMethod(Writer);
+  if Assigned(Reader) then
+    result.fJsonReader := TMethod(Reader);
 end;
 
 class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
@@ -9396,9 +9397,11 @@ class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
 begin
   // without {$M+ ObjectClasss.ClassInfo=nil -> ensure fake RTTI if needed
   result := Rtti.RegisterClass(ObjectClass) as TRttiJson;
-  result.fJsonWriter := TMethod(Writer);
-  result.fJsonReader := TMethod(Reader);
   result.SetParserType(ptClass, pctNone);
+  if Assigned(Writer) then
+    result.fJsonWriter := TMethod(Writer);
+  if Assigned(Reader) then
+    result.fJsonReader := TMethod(Reader);
 end;
 
 class function TRttiJson.UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON;
@@ -9659,7 +9662,7 @@ begin
     raise ERttiException.Create('JSONToObject(nil)');
   ctxt.Init(From, Rtti.RegisterClass(PPointer(ObjectInstance)^), Options,
     nil, TObjectListItemClass);
-  _JL_RttiCustom(@ObjectInstance, ctxt);
+  TRttiJsonLoad(Ctxt.Info.JsonLoad)(@ObjectInstance, ctxt);
   Valid := ctxt.Valid;
   result := ctxt.JSON;
 end;
