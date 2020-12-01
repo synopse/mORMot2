@@ -2039,7 +2039,8 @@ type
       read fName;
     /// direct access to the low-level size in bytes used to store a value
     // of this type, as taken from Rtti property
-    // - warning: for rkArray/rkDynArray, equals SizeOf(pointer), not the item size
+    // - warning: for rkArray/rkDynArray, equals SizeOf(pointer), not the item
+    // size, which is hold in Cache.ItemSize
     property Size: integer
       read fCache.Size;
     /// direct access to the ready-to-use RTTI
@@ -5014,10 +5015,10 @@ begin
   result := Dest^;
   dec(PDynArrayRec(result));
   ReallocMem(result, (Count * ItemSize) + SizeOf(TDynArrayRec));
-  old := PDynArrayRec(result)^.length * ItemSize;
+  old := PDynArrayRec(result)^.length;
   PDynArrayRec(result)^.length := Count;
   inc(PDynArrayRec(result));
-  FillCharFast(result[old], (Count - old) * ItemSize, 0);
+  FillCharFast(result[old * ItemSize], (Count - old) * ItemSize, 0);
   Dest^ := result;
 end;
 
