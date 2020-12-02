@@ -2365,7 +2365,7 @@ begin
   result := ((aCodePage >= 1250) and
              (aCodePage <= 1258)) or
             (aCodePage = CODEPAGE_LATIN1) or
-            (aCodePage = CP_RAWBYTESTRING);
+            (aCodePage >= CP_RAWBLOB);
 end;
 
 function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
@@ -2732,7 +2732,7 @@ begin
   SetLength(fAnsiToWide, 256);
   if (aCodePage = CODEPAGE_US) or
      (aCodePage = CODEPAGE_LATIN1) or
-     (aCodePage = CP_RAWBYTESTRING) then
+     (aCodePage >= CP_RAWBLOB) then
   begin
     // do not trust the Windows API for the 1252 code page :(
     for i := 0 to 255 do
@@ -3176,7 +3176,7 @@ begin
     cp := StringCodePage(s);
     if cp = CP_UTF8 then
       result := s
-    else if cp = CP_RAWBYTESTRING then
+    else if cp >= CP_RAWBLOB then
     begin
       result := s;
       SetCodePage(RawByteString(result), CP_UTF8, false);
