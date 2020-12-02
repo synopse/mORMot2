@@ -2038,6 +2038,7 @@ procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: boolean;
 // - returns FALSE if the supplied input has no expected JSON format
 function GetVariantFromNotStringJSON(JSON: PUTF8Char;
   var Value: TVarData; AllowDouble: boolean): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// identify either varInt64, varDouble, varCurrency types following JSON format
 // - any non valid number is returned as varString
@@ -2706,7 +2707,12 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean); forward;
 
 
-var // owned by Variants.pas as TInvokeableVariantType/TCustomVariantType
+var
+  /// internal list of our TSynInvokeableVariantType instances
+  // - SynVariantTypes[0] is always DocVariantVType
+  // - SynVariantTypes[1] is typically BSONVariantType from mormot.db.nosql.bson
+  // - instances are owned by Variants.pas as TInvokeableVariantType /
+  // TCustomVariantType
   SynVariantTypes: array of TSynInvokeableVariantType;
 
 function FindSynVariantTypeFromVType(aVarType: word): TSynInvokeableVariantType;
@@ -6372,93 +6378,130 @@ end;
 
 { ************** JSON Parsing into Variant }
 
+function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
+  AllowDouble: boolean): boolean;
+begin
+  if JSON <> nil then
+    while (JSON^ <= ' ') and
+          (JSON^ <> #0) do
+      inc(JSON);
+  if (JSON = nil) or
+     ((PInteger(JSON)^ = NULL_LOW) and
+      (jcEndOfJSONValueField in JSON_CHARS[JSON[4]])) then
+    Value.VType := varNull
+  else if (PInteger(JSON)^ = FALSE_LOW) and
+          (JSON[4] = 'e') and
+          (jcEndOfJSONValueField in JSON_CHARS[JSON[5]]) then
+  begin
+    Value.VType := varBoolean;
+    Value.VBoolean := false;
+  end
+  else if (PInteger(JSON)^ = TRUE_LOW) and
+          (jcEndOfJSONValueField in JSON_CHARS[JSON[4]]) then
+  begin
+    Value.VType := varBoolean;
+    Value.VBoolean := true;
+  end
+  else if not GetNumericVariantFromJSON(JSON, Value, AllowDouble) then
+  begin
+    result := false;
+    exit;
+  end;
+  result := true;
+end;
+
 // internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSON()
 procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean);
 var
   V: TVarData absolute Value;
-  n, len: integer;
+  n, Plen: integer;
   t: ^TSynInvokeableVariantType;
-  ToBeParsed: PUTF8Char;
+  P, P2: PUTF8Char;
   wasParsedWithinString: boolean;
   wasString: boolean;
 label
-  s;
+  s, w;
 begin
   VarClear(Value);
-  if (Options <> nil) and
-     (dvoAllowDoubleValue in Options^) then
+  P := pointer(Options);
+  if (P <> nil) and
+     (dvoAllowDoubleValue in PDocVariantOptions(P)^) then
     AllowDouble := true; // for ProcessField() above
   if EndOfObject <> nil then
     EndOfObject^ := ' ';
-  while (JSON^ <= ' ') and
-        (JSON^ <> #0) do
-    inc(JSON);
+  P := JSON;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
   if (Options = nil) or
-     (JSON^ in ['-', '0'..'9']) or
-     (PInteger(JSON)^ = NULL_LOW) or
-     (PInteger(JSON)^ = TRUE_LOW) or
-     (PInteger(JSON)^ = FALSE_LOW) then
+     (P^ = '-')  or
+     ((P^ >= '0') and
+      (P^ <='9')) or
+     (PInteger(P)^ = NULL_LOW) or
+     (PInteger(P)^ = TRUE_LOW) or
+     (PInteger(P)^ = FALSE_LOW) then
   begin
-s:  ToBeParsed := GetJSONField(JSON, JSON, @wasString, EndOfObject, @len);
+s:  P := GetJSONField(P, JSON, @wasString, EndOfObject, @Plen);
     // try any numerical value
-    if wasString or
-       not GetVariantFromNotStringJSON(ToBeParsed, V, AllowDouble) then
+w:  if {%H-}wasString or
+       not GetVariantFromNotStringJSON(P, V, AllowDouble) then
     begin
       // found no numerical value -> return a string in the expected format
       V.VType := varString;
       V.VAny := nil; // avoid GPF below
-      FastSetString(RawUTF8(V.VAny), ToBeParsed, len);
+      FastSetString(RawUTF8(V.VAny), P, Plen{%H-});
     end;
     exit;
   end;
   wasParsedWithinString := false;
-  if JSON^ = '"' then
+  if P^ = '"' then
     if dvoJSONObjectParseWithinString in Options^ then
     begin
-      ToBeParsed := GetJSONField(JSON, JSON, @wasString, EndOfObject);
+      P := GetJSONField(P, JSON, @wasString, EndOfObject, @Plen);
       EndOfObject := nil; // already set just above
       wasParsedWithinString := true;
     end
     else
-      goto s
-  else
-    ToBeParsed := JSON;
+      goto s;
   t := pointer(SynVariantTypes);
   if (t <> nil) and
      not (dvoJSONParseDoNotTryCustomVariants in Options^) then
   begin
     n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
     repeat
-      if t^.TryJSONToVariant(ToBeParsed, Value, EndOfObject) then
+      inc(t); // SynVariantTypes[0] is always DocVariantVType -> ignore
+      dec(n);
+      if n = 0 then
+        break;
+      P2 := P;
+      if t^.TryJSONToVariant(P2, Value, EndOfObject) then
       begin
         if not wasParsedWithinString then
-          JSON := ToBeParsed;
+          JSON := P2;
         exit;
       end;
-      inc(t);
-      dec(n);
-    until n = 0;
+    until false;
   end;
-  if ToBeParsed^ in ['[', '{'] then
+  if P^ in ['[', '{'] then
   begin
     // default JSON parsing and conversion to TDocVariant instance
-    ToBeParsed := TDocVariantData(Value).
-      InitJSONInPlace(ToBeParsed, Options^, EndOfObject);
-    if ToBeParsed = nil then
+    P := TDocVariantData(Value).
+      InitJSONInPlace(P, Options^, EndOfObject);
+    if P = nil then
     begin
       TDocVariantData(Value).Clear;
       exit; // eror parsing
     end;
     if not wasParsedWithinString then
-      JSON := ToBeParsed;
+      JSON := P;
   end
   else // back to simple variant types
-  if wasParsedWithinString then
-    GetVariantFromJSON(ToBeParsed, wasString{%H-}, Value, nil, AllowDouble)
-  else
-    goto s;
+    if wasParsedWithinString then
+      goto w
+    else
+      goto s;
 end;
 
 function TextToVariantNumberTypeNoDouble(json: PUTF8Char): cardinal;
@@ -6811,38 +6854,6 @@ begin
   end;
 end;
 
-function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
-  AllowDouble: boolean): boolean;
-begin
-  if JSON <> nil then
-    while (JSON^ <= ' ') and
-          (JSON^ <> #0) do
-      inc(JSON);
-  if (JSON = nil) or
-     ((PInteger(JSON)^ = NULL_LOW) and
-      (jcEndOfJSONValueField in JSON_CHARS[JSON[4]])) then
-    Value.VType := varNull
-  else if (PInteger(JSON)^ = FALSE_LOW) and
-          (JSON[4] = 'e') and
-          (jcEndOfJSONValueField in JSON_CHARS[JSON[5]]) then
-  begin
-    Value.VType := varBoolean;
-    Value.VBoolean := false;
-  end
-  else if (PInteger(JSON)^ = TRUE_LOW) and
-          (jcEndOfJSONValueField in JSON_CHARS[JSON[4]]) then
-  begin
-    Value.VType := varBoolean;
-    Value.VBoolean := true;
-  end
-  else if not GetNumericVariantFromJSON(JSON, Value, AllowDouble) then
-  begin
-    result := false;
-    exit;
-  end;
-  result := true;
-end;
-
 procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions;
   AllowDouble: boolean);
@@ -6999,6 +7010,7 @@ initialization
   // register the TDocVariant custom type
   DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   DocVariantVType := DocVariantType.VarType;
+  assert({%H-}SynVariantTypes[0].VarType = DocVariantVType);
   // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJSON := _BinaryVariantLoadAsJSON;
   VariantClearSeveral := _VariantClearSeveral;

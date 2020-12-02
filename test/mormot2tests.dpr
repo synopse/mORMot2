@@ -114,9 +114,9 @@ type
 procedure TIntegrationTests.CoreUnits;
 begin
   //
-  AddCase([TTestCoreBase, TTestCoreCrypto, TTestCompression]);
+  AddCase([TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreCompress]);
   //
-  AddCase(TTestLowLevelTypes);
+  AddCase([]);
 end;
 
 
