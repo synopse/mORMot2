@@ -46,7 +46,7 @@ uses
 type
   /// this test case will test most high-level functions, classes and types
   // defined and implemented in the mormot.core.*.pas units
-  TTestLowLevelTypes = class(TSynTestCase)
+  TTestCoreProcess = class(TSynTestCase)
   protected
     procedure MustacheTranslate(var English: string);
     procedure MustacheHelper(const Value: variant; out result: variant);
@@ -78,7 +78,7 @@ type
 
   /// this test case will test most functions, classes and types defined and
   // implemented e.g. in the mormot.core.zip / mormot.lib.lizard units
-  TTestCompression = class(TSynTestCase)
+  TTestCoreCompress = class(TSynTestCase)
   protected
     Data: RawByteString; // contains the first 1MB of mormot2tests executable
     DataFile: TFileName; // (may be truncated) mormot2tests executable copy
@@ -184,9 +184,9 @@ begin
 end;
 
 
-{ TTestLowLevelTypes }
+{ TTestCoreProcess }
 
-procedure TTestLowLevelTypes.Variants;
+procedure TTestCoreProcess.Variants;
 var
   v: Variant;
   vd: TVarData absolute v;
@@ -370,7 +370,7 @@ const
   MUSTACHE_SPECS: array[0..4] of TFileName = ('interpolation', 'comments',
     'sections', 'inverted', 'partials');
 
-procedure TTestLowLevelTypes.MustacheRenderer;
+procedure TTestCoreProcess.MustacheRenderer;
 var
   mustacheJson: RawByteString;
   mus: TMustacheTests;
@@ -604,7 +604,7 @@ begin
   Rtti.RegisterFromText(TypeInfo(TMustacheTests), '');
 end;
 
-procedure TTestLowLevelTypes.MustacheTranslate(var English: string);
+procedure TTestCoreProcess.MustacheTranslate(var English: string);
 begin
   if English = 'Hello' then
     English := 'Bonjour'
@@ -612,7 +612,7 @@ begin
     English := 'Vous venez de gagner';
 end;
 
-procedure TTestLowLevelTypes.MustacheHelper(const Value: variant; out result: variant);
+procedure TTestCoreProcess.MustacheHelper(const Value: variant; out result: variant);
 begin
   with _Safe(Value)^ do
     result := RawUTF8ToVariant(FormatUTF8('a=%,b=%', [U['a'], i['b']]));
@@ -1063,7 +1063,7 @@ const
   discogsFileName = 'discogs.json';
 
 
-procedure TTestLowLevelTypes.EncodeDecodeJSON;
+procedure TTestCoreProcess.EncodeDecodeJSON;
 var
   J, U, U2: RawUTF8;
   P: PUTF8Char;
@@ -2674,7 +2674,7 @@ begin
   end;
 end;
 
-procedure TTestLowLevelTypes.WikiMarkdownToHtml;
+procedure TTestCoreProcess.WikiMarkdownToHtml;
 begin
   // wiki
   CheckEqual(HtmlEscapeWiki('test'), '<p>test</p>');
@@ -2757,7 +2757,7 @@ begin
   CheckEqual(HtmlEscapeMarkdown(':test: (:)'), '<p>:test: (:)</p>');
 end;
 
-procedure TTestLowLevelTypes._TDecimal128;
+procedure TTestCoreProcess._TDecimal128;
 
   procedure test(const hi, lo: QWord; const expected: RawUTF8;
     special: TDecimal128SpecialValue = dsvValue);
@@ -2923,7 +2923,7 @@ begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal12
   end;
 end;
 
-procedure TTestLowLevelTypes._BSON;
+procedure TTestCoreProcess._BSON;
 const
   BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
   BSONAWESOMEBIN = #$31#0#0#0#4'BSON'#0#$26#0#0#0#2'0'#0#8#0#0#0'awesome'#0 +
@@ -3388,7 +3388,7 @@ begin
   CheckEqual(u, '{"$numberDecimal":"123.5600"}');
 end;
 
-procedure TTestLowLevelTypes._TDocVariant;
+procedure TTestCoreProcess._TDocVariant;
 
   procedure CheckDoc(var Doc: TDocVariantData; ExpectedYear: integer = 1972);
   var
@@ -3873,7 +3873,7 @@ begin
 end;
 
 
-procedure TTestLowLevelTypes._RTTI;
+procedure TTestCoreProcess._RTTI;
 var
   i: Integer;
   tmp: RawUTF8;
@@ -4006,7 +4006,7 @@ begin
   end;
 end;
 
-procedure TTestLowLevelTypes.UrlEncoding;
+procedure TTestCoreProcess.UrlEncoding;
 var
   i: integer;
   s, t: RawUTF8;
@@ -4022,7 +4022,7 @@ begin
   end;
 end;
 
-procedure TTestLowLevelTypes._TSelectStatement;
+procedure TTestCoreProcess._TSelectStatement;
 var
   Stmt: TSelectStatement;
   Props: TOrmProperties;
@@ -4278,7 +4278,7 @@ begin
   Stmt.Free;
 end;
 
-procedure TTestLowLevelTypes._TSynMonitorUsage;
+procedure TTestCoreProcess._TSynMonitorUsage;
 var
   id: TSynMonitorUsageID;
   now, id2: TTimelog;
@@ -4318,9 +4318,9 @@ begin
 end;
 
 
-{ TTestCompression }
+{ TTestCoreCompress }
 
-procedure TTestCompression.Setup;
+procedure TTestCoreCompress.Setup;
 begin
   Data := StringFromFile(ExeVersion.ProgramFileName);
   if length(Data) > 1 shl 20 then
@@ -4329,7 +4329,7 @@ begin
   FileFromString(Data, DataFile);
 end;
 
-procedure TTestCompression.CleanUp;
+procedure TTestCoreCompress.CleanUp;
 begin
   FreeAndNil(M);
   DeleteFile(DataFile);
@@ -4389,7 +4389,7 @@ begin // slowest reference version
   result := not result;
 end;
 
-procedure TTestCompression.GZipFormat;
+procedure TTestCoreCompress.GZipFormat;
 var
   Z: TSynZipCompressor;
   L, n: integer;
@@ -4467,7 +4467,7 @@ begin
   Check(s = Data, 'CompressDeflate');
 end;
 
-procedure TTestCompression.InMemoryCompression;
+procedure TTestCoreCompress.InMemoryCompression;
 var
   tmp: RawByteString;
   hash: cardinal;
@@ -4486,7 +4486,7 @@ begin
   end;
 end;
 
-procedure TTestCompression.ZipFormat;
+procedure TTestCoreCompress.ZipFormat;
 var
   FN, FN2: TFileName;
   S: TRawByteStringStream;
@@ -4615,7 +4615,7 @@ begin
     PIntegerArray(result)[i] := pattern;
 end;
 
-procedure TTestCompression._SynLZ;
+procedure TTestCoreCompress._SynLZ;
 var
   s, t, rle: RawByteString;
   i, j, complen2: integer;
@@ -4685,11 +4685,11 @@ begin
   Check(s = Data);
 end;
 
-procedure TTestCompression._TAlgoCompress;
+procedure TTestCoreCompress._TAlgoCompress;
 
   procedure TestAlgo(algo: TAlgoCompress);
   var
-    s, t, s2, log: RawByteString;
+    log, s, t, s2: RawByteString;
     i, plain, comp: integer;
     timer: TPrecisionTimer;
     timecomp, timedecomp: Int64;
@@ -4709,10 +4709,10 @@ procedure TTestCompression._TAlgoCompress;
     log := StringFromFile('bigTest.log');
     for i := 0 to 100 do
     begin
-      if log <> '' then
-        s := log
+      if log = '' then
+        s := copy(Data, 1, i * 800) // first 80KB from executable
       else
-        s := RandomTextParagraph(i * 8);
+        s := log;
       timer.Start;
       t := algo.Compress(s);
       inc(timecomp, timer.StopInMicroSec);
@@ -4736,9 +4736,6 @@ procedure TTestCompression._TAlgoCompress;
        ((plain * Int64(1000 * 1000)) div timedecomp) shr 20]));
     s2 := algo.Decompress(algo.Compress(s), aclNoCrcFast);
     Check(s2 = s, algo.ClassName);
-    if (log <> '') and
-       (s2 <> s) then
-      FileFromString(s2, 'bigTestPartial' + algo.ClassName + '.log');
   end;
 
 begin
@@ -4771,6 +4768,10 @@ end;
      TAlgoDeflate 53 MB->4.8 MB: comp 25:2MB/s decomp 19:214MB/s
      TAlgoDeflateFast 53 MB->7 MB: comp 52:6MB/s decomp 23:176MB/s
   speed difference may come from the FPC/Delphi heap manager, and/or the Linux VM
+
+  From realistic tests, SynLZ may focus on small buffers, or very compressible
+  log files like above. But Lizard/LizardFast seem a better candidate for
+  fast decompression of any kind of data, especially large JSON/binary buffers.
 }
 
 end.
