@@ -5724,7 +5724,7 @@ begin
     if AlwaysDateAndTime or
        (trunc(Value^) <> 0) then
     begin
-      T.FromDate(Date);
+      T.FromDate(Value^);
       B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
     end;
     if AlwaysDateAndTime or
