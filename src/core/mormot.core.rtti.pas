@@ -2008,7 +2008,7 @@ type
     constructor Create(aInfo: PRttiInfo); virtual;
     /// initialize abstract custom serialization for a given record
     // - not registered in the main TRttiCustomList: caller should free it
-    // - in practice, is used only during regression tests
+    // - in practice, is used only by test.core.data.pas regression tests
     constructor CreateFromText(const RttiDefinition: RawUTF8);
     /// finalize this instance
     destructor Destroy; override;

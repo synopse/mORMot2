@@ -53,6 +53,7 @@ type
     jcJsonIdentifierFirstChar,
     jcJsonIdentifier,
     jcEndOfJSONFieldOr0,
+    jcEndOfJSONFieldNotName,
     jcEndOfJSONValueField,
     jcJSONStringMarker,
     jcDigitFirstChar,
@@ -3753,7 +3754,7 @@ ok:     while (P^ <= ' ') and
     exit; // no value
   repeat
     inc(P);
-  until jcEndOfJSONFieldOr0 in jsonset[P^];
+  until jcEndOfJSONFieldNotName in jsonset[P^]; // : exists in MongoDB IsoDate()
   if (P^ = #0) or
      ((PMax <> nil) and
       (P > PMax)) then
@@ -10114,6 +10115,8 @@ begin
   begin
     if c in [#0, ',', ']', '}', ':'] then
       include(JSON_CHARS[c], jcEndOfJSONFieldOr0);
+    if c in [#0, ',', ']', '}'] then
+      include(JSON_CHARS[c], jcEndOfJSONFieldNotName);
     if c in [#0, #9, #10, #13, ' ',  ',', '}', ']'] then
       include(JSON_CHARS[c], jcEndOfJSONValueField);
     if c in [#0, '"', '\'] then
