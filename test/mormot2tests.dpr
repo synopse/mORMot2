@@ -99,6 +99,7 @@ uses
   {$endif FPC}
   mormot.app.daemon        in '..\src\app\mormot.app.daemon.pas',
   test.core.base           in '.\test.core.base.pas',
+  test.core.data           in '.\test.core.data.pas',
   test.core.crypto         in '.\test.core.crypto.pas';
 
 
@@ -112,9 +113,11 @@ type
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  AddCase([TTestCoreBase, TTestCoreCrypto]);
+  //
+  AddCase([TTestCoreBase, TTestCoreCrypto, TTestCompression]);
+  //
+  AddCase(TTestLowLevelTypes);
 end;
-
 
 
 

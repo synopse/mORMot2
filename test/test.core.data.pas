@@ -3221,23 +3221,25 @@ begin
   u2 := FormatUTF8('{"id":"%","name":"John","date":"%"}', [BSONID, st]);
   CheckEqual(u, u2);
   u3 := VariantSaveJson(BSONVariant(u));
-  Check(u3 = FormatUTF8('{"id":"%","name":"John","date":{"$date":"%"}}', [BSONID, st]));
+  Check(u3 = FormatUTF8('{"id":"%","name":"John","date":{"$date":"%"}}',
+    [BSONID, st]));
   u3 := VariantSaveMongoJSON(BSONVariant(u), modNoMongo);
   Check(u3 = u);
   u := VariantSaveMongoJSON(o, modMongoShell);
-  CheckEqual(u, FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}', [BSONID,
-    st]));
+  CheckEqual(u, FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',
+    [BSONID, st]));
   u3 := VariantSaveJson(BSONVariant(u));
   u := VariantSaveJSON(o);
-  CheckEqual(u, FormatUTF8('{"id":{"$oid":"%"},"name":"John","date":"%"}', [BSONID, st]));
+  CheckEqual(u, FormatUTF8('{"id":{"$oid":"%"},"name":"John","date":"%"}',
+    [BSONID, st]));
   u := VariantSaveMongoJSON(o, modMongoStrict);
   CheckEqual(u, FormatUTF8('{"id":{"$oid":"%"},"name":"John","date":{"$date":"%"}}',
     [BSONID, st]));
   Check(u3 = u);
   _Json(u, o2);
   u := VariantSaveMongoJSON(o2, modMongoShell);
-  CheckEqual(u, FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}', [BSONID,
-    st]));
+  CheckEqual(u, FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',
+    [BSONID, st]));
   _Json(u, o2);
   u := VariantSaveMongoJSON(o2, modNoMongo);
   CheckEqual(u, u2);
@@ -3245,12 +3247,13 @@ begin
     [BSONID, st], []);
   u := VariantSaveMongoJSON(o2, modNoMongo);
   CheckEqual(u, u2);
-  o2 := _JsonFmt('{id:objectID(?),name:?,date:ISODate(?)}', [], [BSONID, 'John', st]);
+  o2 := _JsonFmt('{id:objectID(?),name:?,date:ISODate(?)}', [],
+    [BSONID, 'John', st]);
   u := VariantSaveMongoJSON(o2, modNoMongo);
   CheckEqual(u, u2);
   u := VariantSaveMongoJSON(o2, modMongoShell);
-  CheckEqual(u, FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}', [BSONID,
-    st]));
+  CheckEqual(u, FormatUTF8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',
+    [BSONID, st]));
   _Json(u, o2);
   u := VariantSaveMongoJSON(o2, modNoMongo);
   CheckEqual(u, u2);
@@ -3274,9 +3277,11 @@ begin
   check(string(o) = '{"hello":null}');
   o := _JSON('{"hello": world}');
   Check(TVarData(o).VType = varEmpty, 'invalid JSON content');
-  CheckRegEx(_Json('{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
+  CheckRegEx(_Json(
+    '{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
   CheckRegEx(_Json(REGEX2));
-  CheckRegEx(_JsonFast('{"name":"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
+  CheckRegEx(_JsonFast(
+    '{"name":"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
   CheckRegEx(_JsonFast(REGEX2));
   temp := BSON(REGEX2);
   b := pointer(temp);
@@ -3289,10 +3294,10 @@ begin
   b := pointer(temp);
   u2 := BSONToJSON(b, betDoc, 0, modMongoStrict);
   CheckEqual(u, u2);
-  u := VariantSaveMongoJSON(_Json('{name:"John",date: new date() , field: /acme.*corp/i}'),
-    modMongoStrict);
-  u2 := VariantSaveMongoJSON(_Json('{name:"John",date:new date(),field:/acme.*corp/i}'),
-    modMongoStrict);
+  u := VariantSaveMongoJSON(_Json(
+    '{name:"John",date: new date() , field: /acme.*corp/i}'), modMongoStrict);
+  u2 := VariantSaveMongoJSON(_Json(
+    '{name:"John",date:new date(),field:/acme.*corp/i}'), modMongoStrict);
   o := _JSON(u);
   o2 := _JSON(u2);
   Check(o.name = o2.name);
@@ -3328,7 +3333,8 @@ begin
   CheckEqual(u, u2);
   u2 := BSONToJSON(b, betDoc, 0, modMongoShell);
   CheckEqual(u, u2);
-  temp := BSON('{id:ObjectId(),doc:{name:?,date:ISODate(?)}}', [], ['John', NowUTC]);
+  temp := BSON('{id:ObjectId(),doc:{name:?,date:ISODate(?)}}', [],
+    ['John', NowUTC]);
   b := pointer(temp);
   u := BSONToJSON(b, betDoc, 0, modMongoShell);
   Check(IdemPChar(pointer(u), '{ID:OBJECTID("'));

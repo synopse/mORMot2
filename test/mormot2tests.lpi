@@ -63,6 +63,14 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <OtherDefines Count="6">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item2>
@@ -167,7 +175,7 @@
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
-              <Define4 Value="MAX_SQLFIELDS_128"/>
+              <Define4 Value="PUREMORMOT2"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -200,6 +208,9 @@
             </Checks>
             <TargetCPU Value="x86_64"/>
             <TargetOS Value="linux"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
           </CodeGeneration>
           <Linking>
             <Debugging>
@@ -219,13 +230,15 @@
 -dFPC_X64MM
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS
--dPUREMORMOT2"/>
-            <OtherDefines Count="5">
+-dPUREMORMOT2
+-dFPCMM_SERVER"/>
+            <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -538,7 +551,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="78">
+    <Units Count="80">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -851,6 +864,14 @@
         <Filename Value="..\src\rest\mormot.rest.mvc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit77>
+      <Unit78>
+        <Filename Value="..\src\app\mormot.app.daemon.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit78>
+      <Unit79>
+        <Filename Value="test.core.data.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit79>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -894,7 +915,7 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="6">
+    <Exceptions Count="8">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -913,6 +934,12 @@
       <Item6>
         <Name Value="ERttiException"/>
       </Item6>
+      <Item7>
+        <Name Value="EFastReader"/>
+      </Item7>
+      <Item8>
+        <Name Value="RunError(216)"/>
+      </Item8>
     </Exceptions>
   </Debugging>
 </CONFIG>
