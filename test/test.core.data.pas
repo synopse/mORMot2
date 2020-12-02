@@ -323,6 +323,9 @@ begin
   v := JSONToVariant('[]');
   Check(v._kind = ord(dvArray));
   Check(v._count = 0);
+  v := JSONToVariant('[ ]');
+  Check(v._kind = ord(dvArray));
+  Check(v._count = 0);
   v := JSONToVariant('{  }');
   Check(v._kind = ord(dvObject));
   Check(v._count = 0);

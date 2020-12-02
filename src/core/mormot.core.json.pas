@@ -1722,7 +1722,7 @@ type
       Values: PValuePUTF8CharArray;
       HandleValuesAsObjectOrArray: boolean = false): boolean;
     /// parse a property value, properly calling any setter
-    procedure ParseProp(Data: pointer; const Prop: TRttiCustomProp);
+    procedure ParseProp(Data: pointer);
   end;
 
   PJsonParserContext = ^TJsonParserContext;
@@ -6971,6 +6971,8 @@ begin
   result := Valid;
 end;
 
+
+
 procedure _JL_Boolean(Data: PBoolean; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
@@ -7319,6 +7321,29 @@ begin
   Data^ := nil;
 end;
 
+// defined here to have _JL_RawJSON and _JL_Variant known
+procedure TJsonParserContext.ParseProp(Data: pointer);
+var
+  v: TRttiVarData;
+begin
+  if Info.Parser = ptRawJSON then
+  begin
+    v.VType := varString;
+    v.Data.VAny := nil;
+    _JL_RawJSON(@v.Data.VAny, self);
+    if Valid then
+      Prop^.Prop.SetLongStrProp(Data, RawJson(v.Data.VAny));
+  end
+  else
+  begin
+    v.VType := 0;
+    _JL_Variant(@v, self); // VariantLoadJSON() over Ctxt
+    if Valid then
+      Valid := Prop^.Prop.SetValue(Data, variant(v));
+  end;
+  VarClearProc(v.Data);
+end;
+
 function JsonLoadProp(Data: PAnsiChar; const Prop: TRttiCustomProp;
   var Ctxt: TJsonParserContext): boolean;
 var
@@ -7357,31 +7382,9 @@ begin
     end
   else
     // we need to call a setter -> use a temp variant
-    Ctxt.ParseProp(Data, Prop);
+    Ctxt.ParseProp(Data);
   Ctxt.Prop := nil;
   result := Ctxt.Valid;
-end;
-
-procedure TJsonParserContext.ParseProp(Data: pointer; const Prop: TRttiCustomProp);
-var
-  v: TRttiVarData;
-begin
-  if Info.Parser = ptRawJSON then
-  begin
-    v.VType := varString;
-    v.Data.VAny := nil;
-    _JL_RawJSON(@v.Data.VAny, self);
-    if Valid then
-      Prop.Prop.SetLongStrProp(Data, RawJson(v.Data.VAny));
-  end
-  else
-  begin
-    v.VType := 0;
-    _JL_Variant(@v, self); // VariantLoadJSON() over Ctxt
-    if Valid then
-      Valid := Prop.Prop.SetValue(Data, variant(v));
-  end;
-  VarClearProc(v.Data);
 end;
 
 procedure _JL_RttiCustom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
