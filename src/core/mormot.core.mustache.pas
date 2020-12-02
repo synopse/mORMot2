@@ -1794,4 +1794,9 @@ begin
 end;
 
 
+initialization
+
+finalization
+  SynMustacheCache.Free;
+
 end.
