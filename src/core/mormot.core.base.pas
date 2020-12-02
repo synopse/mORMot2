@@ -1005,6 +1005,21 @@ function GetExtended(P: PUTF8Char; out err: integer): TSynExtended; overload;
 function GetExtended(P: PUTF8Char): TSynExtended; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  /// most common 10 ^ exponent constants, including 0 and -1 special values
+  POW10: array[-31..33] of TSynExtended = (
+    1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
+    1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
+    1E-11, 1E-10, 1E-9,  1E-8,  1E-7,  1E-6,  1E-5,  1E-4,  1E-3,  1E-2,
+    1E-1,  1E0,   1E1,   1E2,   1E3,   1E4,   1E5,   1E6,   1E7,   1E8,
+    1E9,   1E10,  1E11,  1E12,  1E13,  1E14,  1E15,  1E16,  1E17,  1E18,
+    1E19,  1E20,  1E21,  1E22,  1E23,  1E24,  1E25,  1E26,  1E27,  1E28,
+    1E29,  1E30,  1E31,  0,     -1);
+
+/// low-level computation of 10 ^ exponent, if POW10[] is not enough
+function HugePower10(exponent: integer): TSynExtended;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// get the signed 32-bit integer value stored in a RawUTF8 string
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
@@ -4719,20 +4734,7 @@ begin
     result := 0;
 end;
 
-{$ifndef CPU32DELPHI}
-
-const
-  POW10: array[-31..33] of TSynExtended = (
-    1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
-    1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
-    1E-11, 1E-10, 1E-9,  1E-8,  1E-7,  1E-6,  1E-5,  1E-4,  1E-3,  1E-2,
-    1E-1,  1E0,   1E1,   1E2,   1E3,   1E4,   1E5,   1E6,   1E7,   1E8,
-    1E9,   1E10,  1E11,  1E12,  1E13,  1E14,  1E15,  1E16,  1E17,  1E18,
-    1E19,  1E20,  1E21,  1E22,  1E23,  1E24,  1E25,  1E26,  1E27,  1E28,
-    1E29,  1E30,  1E31,  0,     -1);
-
 function HugePower10(exponent: integer): TSynExtended;
-  {$ifdef HASINLINE}inline;{$endif}
 var
   e: TSynExtended;
 begin
@@ -4754,6 +4756,8 @@ begin
     dec(exponent);
   until exponent = 0;
 end;
+
+{$ifndef CPU32DELPHI}
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 var
@@ -4800,7 +4804,7 @@ begin
         v := v * 10;
         {$else}
         v := v shl 3 + v + v;
-        {$endif}
+        {$endif CPU64}
         inc(v, byte(c));
         dec(digit); // over-required digits are just ignored
         include(flags, fValid);

@@ -217,6 +217,17 @@ begin
   GetVariantFromJSON('-123', False, v, nil);
   Check(vd.VType = varInteger);
   Check(v = -123);
+  GetVariantFromJSON('123456789', False, v, nil);
+  Check(vd.VType = varInteger);
+  Check(v = 123456789);
+  GetVariantFromJSON('9876543210', False, v, nil);
+  Check(vd.VType = varInt64);
+  Check(v = 9876543210);
+  GetVariantFromJSON('12345678901', False, v, nil);
+  Check(vd.VType = varInt64);
+  Check(v = 12345678901);
+  GetVariantFromJSON('12345678901234567', False, v, nil);
+  Check(vd.VType = varInt64);
   GetVariantFromJSON('123456789012345678', False, v, nil);
   Check(vd.VType = varInt64);
   Check(v = 123456789012345678);
