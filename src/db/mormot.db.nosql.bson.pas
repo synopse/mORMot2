@@ -1918,8 +1918,8 @@ begin
       count := LastCounter + 1;
       if count and COUNTER_MASK = Default.Counter then
       begin
-        count := Default.Counter; // collision -> cheat on timestamp
-        inc(LastCreateTime);
+        count := Default.Counter;
+        inc(LastCreateTime); // collision -> cheat on timestamp
       end;
     end;
     Counter.b1 := count shr 16; // stored as bigendian
@@ -4345,6 +4345,8 @@ function BSONVariantFromInt64s(const Integers: array of Int64): variant;
 begin
   BSONVariantType.FromBSONDocument(BSONFromInt64s(Integers), result, betArray);
 end;
+
+
 
 initialization
   Assert(sizeof(TDecimal128) = 16);

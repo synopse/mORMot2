@@ -5614,7 +5614,7 @@ begin
     exit;
   bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
   FillRandom(bin, Len);
-  mormot.core.text.BinToHex(bin, pointer(result), Len);
+  BinToHexLower(bin, pointer(result), Len);
 end;
 
 function TAESPRNG.Random32: cardinal;

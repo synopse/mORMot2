@@ -440,6 +440,9 @@ type
     // - may be used e.g. as system-depending salt
     property CryptoCRC: cardinal
       read fCryptoCRC;
+    /// low-level access to the last generated timestamp
+    property LastUnixCreateTime: cardinal
+      read fUnixCreateTime;
     /// direct access to the associated mutex
     property Safe: TSynLocker
       read fSafe;
@@ -1632,7 +1635,8 @@ begin
       fLastCounter := 0; // reset
     end;
     if fLastCounter = $7fff then
-    begin // collision (unlikely) -> cheat on timestamp
+    begin
+      // collision (unlikely) -> cheat on timestamp
       inc(fUnixCreateTime);
       fLastCounter := 0;
     end
@@ -1680,7 +1684,7 @@ begin
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
   fSafe.Init;
-  fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VType := varInt64; // reset to 0
+  fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT] := 0;
   // compute obfuscation key using hash diffusion of the supplied text
   len := length(aSharedObfuscationKey);
   crc := crc32ctab[0, len and 1023];
@@ -1734,7 +1738,7 @@ begin
   bits.crc := crc32c(bits.id.ProcessID, @bits.id, SizeOf(bits.id)) xor key;
   if self <> nil then
     bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto) - 1])^;
-  result := BinToHex(@bits, SizeOf(bits));
+  result := BinToHexLower(@bits, SizeOf(bits));
 end;
 
 function TSynUniqueIdentifierGenerator.FromObfuscated(
