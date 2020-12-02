@@ -1336,6 +1336,18 @@ var
     Rtti.RegisterFromText(TypeInfo(TTestCustomJSONGitHub), '');
   end;
 
+  procedure TestTrans;
+  begin
+    Check(IsValidJSON(U));
+    RecordZero(@Trans, TypeInfo(TTestCustomJSON2));
+    Check(length(Trans.Transactions) = 0);
+    RecordLoadJSON(Trans, UniqueRawUTF8(U), TypeInfo(TTestCustomJSON2));
+    Check(length(Trans.Transactions) = 1);
+    Check(Trans.Transactions[0].TRTYPE = 'INCOME');
+    Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
+    Check(Trans.Transactions[0].TRRMK = 'Remark');
+  end;
+
   function uct(const s: RawUTF8): TOrmFieldType;
   begin
     result := UTF8ContentNumberType(pointer(s));
@@ -2297,13 +2309,13 @@ begin
     check(IsValidJSON(J));
     Check(Hash32(J) = $41281936);
     // (custom) dynamic array serialization
-    TCollTstDynArrayTest;
+    TCollTstDynArrayTest; // first TFVs prop is serialized as binary+base64
     TRttiJson.RegisterCustomSerializer(TypeInfo(TFVs),
       TCollTstDynArray.FVReader, TCollTstDynArray.FVWriter);
-    TCollTstDynArrayTest;
+    TCollTstDynArrayTest; // TFVs serialized with FVReader/FVWriter
     TRttiJson.RegisterCustomSerializer(TypeInfo(TFVs),
       TCollTstDynArray.FVReader2, TCollTstDynArray.FVWriter2);
-    TCollTstDynArrayTest;
+    TCollTstDynArrayTest; // TFVs serialized with FVReader2/FVWriter2
     // (custom) class serialization
     TFileVersionTest(false);
     TRttiJson.RegisterCustomSerializer(TFileVersion,
@@ -2526,6 +2538,9 @@ begin
   Check(IsValidJSON(zendframeworkJson));
   TestGit([jpoIgnoreUnknownProperty], []);
   TestGit([jpoIgnoreUnknownProperty], [woHumanReadable]);
+
+  U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
+  Check(IsStringJSON(pointer(U)), 'bin rec1');
   TRttiJson.RegisterFromText(TypeInfo(TTestCustomJSON2Title),
     __TTestCustomJSON2Title, [], [woHumanReadable]);
   TRttiJson.RegisterFromText(TypeInfo(TTestCustomJSON2), __TTestCustomJSON2, [],
@@ -2543,26 +2558,17 @@ begin
       '"TRCAT3":{"TITYPE":"C3","TIID":"3","TICID":"","TIDSC30":"description3","TIORDER":"0","TIDEL":"false"},' +
       '"TRRMK":"Remark",' +
       '"TRACID":{"TITYPE":"AC","TIID":"4","TICID":"","TIDSC30":"account1","TIORDER":"0","TIDEL":"false"}}]}';
-    Check(IsValidJSON(U));
-    RecordLoadJSON(Trans, UniqueRawUTF8(U), TypeInfo(TTestCustomJSON2));
-    Check(length(Trans.Transactions) = 1);
-    Check(Trans.Transactions[0].TRTYPE = 'INCOME');
-    Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
-    Check(Trans.Transactions[0].TRRMK = 'Remark');
+    TestTrans;
     U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
-    RecordZero(@Trans, TypeInfo(TTestCustomJSON2));
-    Check(length(Trans.Transactions) = 0);
-    RecordLoadJSON(Trans, UniqueRawUTF8(U), TypeInfo(TTestCustomJSON2));
-    Check(length(Trans.Transactions) = 1);
-    Check(Trans.Transactions[0].TRTYPE = 'INCOME');
-    Check(Trans.Transactions[0].TRACID.TIDEL = 'false');
-    Check(Trans.Transactions[0].TRRMK = 'Remark');
+    TestTrans;
   end;
   U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
   FileFromString(U, 'transactions.json');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJSON2Title), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJSON2), '');
   U := RecordSaveJSON(Trans, TypeInfo(TTestCustomJSON2));
+  Check(IsStringJSON(pointer(U)), 'bin rec2');
+  TestTrans;
 
   Parser := TRttiJson.RegisterFromText(TypeInfo(TTestCustomDiscogs),
     __TTestCustomDiscogs, [jpoIgnoreUnknownProperty], []);
@@ -2634,7 +2640,7 @@ begin
     Check(IsValidJSON(U));
     CheckEqual(U,
       '{"Enabled":false,"Name":"","Offense":{"damage":{"min":0,"max":0},' +
-      '"attackspeed":{"min":0,"max":0}}}');
+      '"attackspeed":{"min":0,"max":0}}}', 'RawJson');
     Enemy.Off.Damage.Min := 10;
     Enemy.Off.AttackSpeed.Max := 100;
     U := ObjectToJSON(Enemy);
