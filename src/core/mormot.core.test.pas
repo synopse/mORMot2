@@ -618,7 +618,7 @@ begin
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
-  InterlockedIncrement(fAssertions);
+  inc(fAssertions);
   if not condition then
     TestFailed(msg);
 end;
@@ -633,7 +633,7 @@ begin
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
-  InterlockedIncrement(fAssertions);
+  inc(fAssertions);
   if condition then
     result := false
   else
@@ -700,7 +700,7 @@ end;
 
 procedure TSynTestCase.CheckUTF8(condition: boolean; const msg: RawUTF8);
 begin
-  InterlockedIncrement(fAssertions);
+  inc(fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
     CheckUTF8(condition, '%', [msg]);
@@ -711,7 +711,7 @@ procedure TSynTestCase.CheckUTF8(condition: boolean; const msg: RawUTF8;
 var
   str: string; // using a sub-proc may be faster, but unstable on Android
 begin
-  InterlockedIncrement(fAssertions);
+  inc(fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
   begin
