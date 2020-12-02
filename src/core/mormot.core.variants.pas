@@ -24,6 +24,7 @@ uses
   sysutils,
   variants,
   mormot.core.base,
+  mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.data, // already included in mormot.core.json
@@ -236,6 +237,7 @@ type
   TSynInvokeableVariantTypeClass = class of TSynInvokeableVariantType;
 
 /// register a custom variant type to handle properties
+// - the registration process is thread-safe
 // - this will implement an internal mechanism used to bypass the default
 // _DispInvoke() implementation in Variant.pas, to use a faster version
 // - is called in case of TDocVariant, TBSONVariant or TSQLDBRowVariant
@@ -2745,15 +2747,20 @@ function SynRegisterCustomVariantType(
 var
   i: PtrInt;
 begin
-  for i := 0 to length(SynVariantTypes) - 1 do
-  begin
-    result := SynVariantTypes[i];
-    if PPointer(result)^ = pointer(aClass) then
-      // returns already registered instance
-      exit;
+  GlobalLock;
+  try
+    for i := 0 to length(SynVariantTypes) - 1 do
+    begin
+      result := SynVariantTypes[i];
+      if PPointer(result)^ = pointer(aClass) then
+        // returns already registered instance
+        exit;
+    end;
+    result := aClass.Create; // register variant type
+    ObjArrayAdd(SynVariantTypes, result);
+  finally
+    GlobalUnLock;
   end;
-  result := aClass.Create; // register variant type
-  ObjArrayAdd(SynVariantTypes, result);
 end;
 
 

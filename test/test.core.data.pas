@@ -1898,8 +1898,7 @@ begin
   J := JSONEncode('{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}',
     [], []);
   CheckEqual(J, '{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}');
-  // the below only works if unit mormot.db.nosql.bson is included in the uses
-  // list of the project for virtual function TryJSONToVariant
+  // below only works if unit mormot.db.nosql.bson is included in uses
   CheckEqual(JSONEncode('{name:?,field:/%/i}', ['acme.*corp'], ['John']), J);
   peop := TOrmPeople.Create;
   try
