@@ -1967,6 +1967,7 @@ type
     fCopy: TRttiCopier;
     fName: RawUTF8;
     fProps: TRttiCustomProps;
+    fOwnedRtti: array of TRttiCustom;
     fArrayFirstField: TRttiParserType;
     // used by mormot.core.json.pas
     fBinarySize: integer;
@@ -6372,6 +6373,7 @@ end;
 destructor TRttiCustom.Destroy;
 begin
   inherited Destroy;
+  ObjArrayClear(fOwnedRtti);
   fPrivate.Free;
 end;
 
@@ -6754,6 +6756,8 @@ begin
       nested := Rtti.GlobalClass.Create(nil);
       nested.SetPropsFromText(P, ee, NoRegister);
       nested.NoRttiSetAndRegister(ptRecord, '', nil, NoRegister);
+      if NoRegister then
+        ObjArrayAdd(fOwnedRtti, nested);
       if pt = ptRecord then
         // rec: record .. end  or  rec: { ... }
         c := nested
@@ -6769,6 +6773,8 @@ begin
           'Unexpected array % %', [c, ToText(pt)^]);
       c := Rtti.GlobalClass.Create(nil);
       c.NoRttiSetAndRegister(ptDynArray, typname, ac, NoRegister);
+      if NoRegister then
+        ObjArrayAdd(fOwnedRtti, c);
     end;
     // set type for all prop[]
     for i := 0 to propcount - 1 do

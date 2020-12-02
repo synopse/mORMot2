@@ -6708,11 +6708,11 @@ begin
      (digit >= 0) then
   begin
     // return an integer or Int64 value
+    Value.VInt64 := V;
     if digit <= 9 then
       Value.VType := varInt64
     else
       Value.VType := varInteger;
-    Value.VInt64 := V;
   end
   else if (frac < 0) and
           (frac >= -4) then
