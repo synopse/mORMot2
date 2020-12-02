@@ -1590,10 +1590,10 @@ function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
 function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger=nil): integer; overload;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil): integer; overload;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger=nil); overload;
+procedure PtrArrayDelete(var aPtrArray; aIndex: integer; aCount: PInteger = nil); overload;
 
 /// wrapper to find an item to a array of pointer dynamic array storage
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -6979,6 +6979,7 @@ begin
   dec(n);
   if n > result then
     MoveFast(a[result + 1], a[result], (n - result) * SizeOf(pointer));
+  a[n] := nil; // is used sometimes on managed arrays to search by pointer
   if aCount = nil then
     SetLength(a, n)
   else

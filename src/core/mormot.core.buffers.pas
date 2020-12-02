@@ -5553,7 +5553,8 @@ end;
 function Base64ToBin(sp: PAnsiChar; len: PtrInt; var blob: TSynTempBuffer): boolean;
 begin
   blob.Init(Base64ToBinLength(sp, len));
-  result := (blob.len > 0) and Base64Decode(sp, blob.buf, len shr 2);
+  result := (blob.len > 0) and
+            Base64Decode(sp, blob.buf, len shr 2);
 end;
 
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
@@ -5561,7 +5562,7 @@ function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
 begin // nofullcheck is just ignored and deprecated
   result := (bin <> nil) and
             (Base64ToBinLength(base64, base64len) = binlen) and
-    Base64Decode(base64, bin, base64len shr 2);
+            Base64Decode(base64, bin, base64len shr 2);
 end;
 
 function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
@@ -5800,7 +5801,7 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): b
 begin
   temp.Init(Base64uriToBinLength(len));
   result := (temp.len > 0) and
-    Base64AnyDecode(ConvertBase64URIToBin, sp, temp.buf, len);
+            Base64AnyDecode(ConvertBase64URIToBin, sp, temp.buf, len);
 end;
 
 function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean;
@@ -5814,7 +5815,7 @@ var
 begin
   resultLen := Base64uriToBinLength(base64len);
   result := (resultLen = binlen) and
-    Base64AnyDecode(ConvertBase64URIToBin, base64, bin, base64len);
+            Base64AnyDecode(ConvertBase64URIToBin, base64, bin, base64len);
 end;
 
 procedure Base64ToURI(var base64: RawUTF8);

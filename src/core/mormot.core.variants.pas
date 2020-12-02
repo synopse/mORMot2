@@ -3993,7 +3993,7 @@ begin
                 (JSON^ > ' ')
         else
         begin
-          // initial guess of the JSON array count - will browse up to 256KB of input
+          // guess of the JSON array count - will browse up to 256KB of input
           include(VOptions, dvoIsArray);
           cap := abs(JSONArrayCount(JSON, JSON + 256 shl 10));
           if cap = 0 then

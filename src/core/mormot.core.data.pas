@@ -4932,16 +4932,16 @@ var
   Len: TStrLen;
 begin
   Data := PPointer(Data)^;
-  if Data = nil then
-    Len := 0
-  else
+  if Data <> nil then
   begin
     Len := PStrLen(Data - _STRLEN)^;
     {$ifdef HASVARUSTRING}
     if Info^.Kind = rkUString then
       Len := Len * 2; // UnicodeString length in WideChars
     {$endif HASVARUSTRING}
-  end;
+  end
+  else
+    Len := 0;
   Dest.WriteVar(Data, Len);
   result := SizeOf(pointer);
 end;
