@@ -56,8 +56,7 @@ type
     jcEndOfJSONValueField,
     jcJSONStringMarker,
     jcDigitFirstChar,
-    jcDigitFloatChar,
-    jcUTF8Char);
+    jcDigitFloatChar);
 
   /// defines a lookup table used for branch-less JSON parsing
   TJsonCharSet = array[AnsiChar] of TJsonChar;
@@ -1722,6 +1721,8 @@ type
     function ParseObject(const Names: array of RawUTF8;
       Values: PValuePUTF8CharArray;
       HandleValuesAsObjectOrArray: boolean = false): boolean;
+    /// parse a property value, properly calling any setter
+    procedure ParseProp(Data: pointer; const Prop: TRttiCustomProp);
   end;
 
   PJsonParserContext = ^TJsonParserContext;
@@ -2555,6 +2556,29 @@ begin
     result := false;
 end;
 
+type
+  TJsonToken = (
+    jtNone,
+    jtDoubleQuote,
+    jtFirstDigit,
+    jtNullFirstChar,
+    jtTrueFirstChar,
+    jtFalseFirstChar,
+    jtObjectStart,
+    jtObjectStop,
+    jtArrayStart,
+    jtArrayStop,
+    jtAssign,
+    jtComma,
+    jtSingleQuote,
+    jtIdentifierFirstChar,
+    jtSlash);
+  TJsonTokens = array[AnsiChar] of TJsonToken;
+  PJsonTokens = ^TJsonTokens;
+
+var
+  JSON_TOKENS: TJsonTokens;
+
 function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char; WasString: PBoolean;
   EndOfObject: PUTF8Char; Len: PInteger): PUTF8Char;
 var
@@ -2567,7 +2591,7 @@ var
   jsonset: PJsonCharSet;
   {$endif CPUX86NOTPIC}
 label
-  num, lit;
+  lit;
 begin
   // see http://www.ietf.org/rfc/rfc4627.txt
   if WasString <> nil then
@@ -2586,8 +2610,8 @@ begin
   {$ifndef CPUX86NOTPIC}
   jsonset := @JSON_CHARS;
   {$endif CPUX86NOTPIC}
-  case P^ of
-    '"':
+  case JSON_TOKENS[P^] of
+    jtDoubleQuote: // '"'
       begin
         // " -> unescape P^ into D^
         if WasString <> nil then
@@ -2724,18 +2748,15 @@ lit:        inc(P);
         if Len <> nil then
           Len^ := D - result;
       end;
-    '0':
-      if (P[1] >= '0') and
-         (P[1] <= '9') then
-        // 0123 excluded by JSON!
-        exit
-      else
-        // leave PDest=nil for unexpected end
-        goto num; // may be 0.123
-    '-', '1'..'9':
+    jtFirstDigit: // '-', '+', '0'..'9'
       begin
         // numerical field: all chars before end of field
-num:    result := P;
+        if P^ = '0' then
+          if (P[1] >= '0') and
+             (P[1] <= '9') then
+            // 0123 excluded by JSON!
+            exit;
+        result := P;
         repeat
           if not (jcDigitFloatChar in jsonset[P^]) then
             // not ['-', '+', '0'..'9', '.', 'E', 'e']
@@ -2752,7 +2773,7 @@ num:    result := P;
           inc(P);
         end;
       end;
-    'n':
+    jtNullFirstChar: // 'n'
       if (PInteger(P)^ = NULL_LOW) and
          (jcEndOfJSONValueField in jsonset[P[4]]) then
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
@@ -2765,7 +2786,7 @@ num:    result := P;
       end
       else
         exit;
-    'f':
+    jtFalseFirstChar: // 'f'
       if (PInteger(P + 1)^ = FALSE_LOW2) and
          (jcEndOfJSONValueField in jsonset[P[5]]) then
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
@@ -2778,7 +2799,7 @@ num:    result := P;
       end
       else
         exit;
-    't':
+    jtTrueFirstChar: // 't'
       if (PInteger(P)^ = TRUE_LOW) and
          (jcEndOfJSONValueField in jsonset[P[4]]) then
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
@@ -3427,18 +3448,24 @@ end;
 function GotoNextJSONObjectOrArrayInternal(P, PMax: PUTF8Char;
   EndChar: AnsiChar): PUTF8Char;
 var
-  {$ifdef CPUX86NOTPIC}
-  jsonset: TJsonCharSet absolute JSON_CHARS; // not enough registers
+  {$ifdef CPUX86NOTPIC} // not enough registers
+  jt: TJsonTokens absolute JSON_TOKENS;
+  jsonset: TJsonCharSet absolute JSON_CHARS;
   {$else}
+  jt: PJsonTokens;
   jsonset: PJsonCharSet;
   {$endif CPUX86NOTPIC}
 label
   Prop;
 begin // should match GetJSONPropName()
   result := nil;
+  {$ifndef CPUX86NOTPIC}
+  jt := @JSON_TOKENS;
+  {$endif CPUX86NOTPIC}
   repeat
-    case P^ of // quick parsing without full validation
-      '{':
+    // main loop for quick parsing without full validation
+    case jt[P^] of
+      jtObjectStart: // '{'
         begin
           repeat
             inc(P)
@@ -3448,7 +3475,7 @@ begin // should match GetJSONPropName()
           if P = nil then
             exit;
         end;
-      '[':
+      jtArrayStart: // '['
         begin
           repeat
             inc(P)
@@ -3458,31 +3485,31 @@ begin // should match GetJSONPropName()
           if P = nil then
             exit;
         end;
-      ':':
+      jtAssign: // ':'
         if EndChar <> '}' then
           exit
         else
           inc(P); // syntax for JSON object only
-      ',':
+      jtComma: // ','
         inc(P); // comma appears in both JSON objects and arrays
-      '}':
+      jtObjectStop: // '}'
         if EndChar = '}' then
           break
         else
           exit;
-      ']':
+      jtArrayStop: // ']'
         if EndChar = ']' then
           break
         else
           exit;
-      '"':
+      jtDoubleQuote: // '"'
         begin
           P := GotoEndOfJSONString(P, @JSON_CHARS);
           if P^ <> '"' then
             exit;
           inc(P);
         end;
-      '-', '+', '0'..'9':
+      jtFirstDigit: // '-', '+', '0'..'9'
         begin // '0123' excluded by JSON, but not here
           {$ifndef CPUX86NOTPIC}
           jsonset := @JSON_CHARS;
@@ -3492,23 +3519,23 @@ begin // should match GetJSONPropName()
           until not (jcDigitFloatChar in jsonset[P^]);
           // not ['-', '+', '0'..'9', '.', 'E', 'e']
         end;
-      't':
+      jtTrueFirstChar: // 't'
         if PInteger(P)^ = TRUE_LOW then
           inc(P, 4)
         else
           goto Prop;
-      'f':
+      jtFalseFirstChar: // 'f'
         if PInteger(P + 1)^ = FALSE_LOW2 then
           inc(P, 5)
         else
           goto Prop;
-      'n':
+      jtNullFirstChar: // 'n'
         if PInteger(P)^ = NULL_LOW then
           inc(P, 4)
         else
           goto Prop;
-      '''':
-        begin // single-quoted identifier
+      jtSingleQuote: // '''' as single-quoted identifier
+        begin
           repeat
             inc(P);
             if P^ <= ' ' then
@@ -3521,9 +3548,9 @@ begin // should match GetJSONPropName()
           if P^ <> ':' then
             exit;
         end;
-      '/':
+      jtSlash: // '/' to allow extended /regex/ syntax
         begin
-          repeat // allow extended /regex/ syntax
+          repeat
             inc(P);
             if P^ = #0 then
               exit;
@@ -3533,43 +3560,44 @@ begin // should match GetJSONPropName()
           until (P^ > ' ') or
                 (P^ = #0);
         end;
-    else
-      begin
-Prop:   {$ifndef CPUX86NOTPIC}
-        jsonset := @JSON_CHARS;
-        {$endif CPUX86NOTPIC}
-        if not (jcJsonIdentifierFirstChar in jsonset[P^]) then
-          exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
-        repeat
-          inc(P);
-        until not (jcJsonIdentifier in jsonset[P^]);
-        // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
-        while (P^ <= ' ') and
-              (P^ <> #0) do
-          inc(P);
-        if P^ = '(' then
-        begin // handle e.g. "born":isodate("1969-12-31")
-          inc(P);
+      jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
+        begin
+Prop:     {$ifndef CPUX86NOTPIC}
+          jsonset := @JSON_CHARS;
+          {$endif CPUX86NOTPIC}
+          repeat
+            inc(P);
+          until not (jcJsonIdentifier in jsonset[P^]);
+          // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
           while (P^ <= ' ') and
                 (P^ <> #0) do
             inc(P);
-          if P^ = '"' then
-          begin
-            P := GotoEndOfJSONString(P, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
-            if P^ <> '"' then
+          if P^ = '(' then
+          begin // handle e.g. "born":isodate("1969-12-31")
+            inc(P);
+            while (P^ <= ' ') and
+                  (P^ <> #0) do
+              inc(P);
+            if P^ = '"' then
+            begin
+              P := GotoEndOfJSONString(P, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
+              if P^ <> '"' then
+                exit;
+            end;
+            inc(P);
+            while (P^ <= ' ') and
+                  (P^ <> #0) do
+              inc(P);
+            if P^ <> ')' then
               exit;
-          end;
-          inc(P);
-          while (P^ <= ' ') and
-                (P^ <> #0) do
             inc(P);
-          if P^ <> ')' then
+          end
+          else if P^ <> ':' then
             exit;
-          inc(P);
         end
-        else if P^ <> ':' then
-          exit;
-      end;
+    else
+      // unexpected character in input JSON
+      exit;
     end;
     while (P^ <= ' ') and
           (P^ <> #0) do
@@ -3600,9 +3628,9 @@ begin
   {$ifndef CPUX86NOTPIC}
   jsonset := @JSON_CHARS;
   {$endif CPUX86NOTPIC}
-  case P^ of
+  case JSON_TOKENS[P^] of
     // complex JSON string, object or array
-    '"':
+    jtDoubleQuote: // '"'
       begin
         P := GotoEndOfJSONString(P {$ifndef CPUX86NOTPIC}, jsonset{$endif} );
         if P^ <> '"' then
@@ -3610,7 +3638,7 @@ begin
         inc(P);
         goto ok;
       end;
-    '[':
+    jtArrayStart: // '['
       begin
         repeat
           inc(P)
@@ -3619,7 +3647,7 @@ begin
         P := GotoNextJSONObjectOrArrayInternal(P, nil, ']');
         goto pok;
       end;
-    '{':
+    jtObjectStart: // '{'
       begin
         repeat
           inc(P)
@@ -3635,25 +3663,25 @@ ok:     while (P^ <= ' ') and
         exit;
       end;
     // strict JSON numbers and constants validation
-    't':
+    jtTrueFirstChar: // 't'
       if PInteger(P)^ = TRUE_LOW then
       begin
         inc(P, 4);
         goto ok;
       end;
-    'f':
+    jtFalseFirstChar: // 'f'
       if PInteger(P + 1)^ = FALSE_LOW2 then
       begin
         inc(P, 5);
         goto ok;
       end;
-    'n':
+    jtNullFirstChar: // 'n'
       if PInteger(P)^ = NULL_LOW then
       begin
         inc(P, 4);
         goto ok;
       end;
-    '-', '+', '0'..'9':
+    jtFirstDigit: // '-', '+', '0'..'9'
       begin
         repeat
           inc(P)
@@ -5186,7 +5214,6 @@ var
   c: TJsonSaveContext;
   p: PRttiCustomProp;
   n: integer;
-  rvd: TRttiVarData;
   done: boolean;
 begin
   c.W := Ctxt.W;
@@ -5281,13 +5308,8 @@ begin
               TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c);
             end
             else
-            begin
               // need to call a getter method
-              p^.Prop.GetValue(pointer(Data), p^.Value, rvd);
-              c.W.AddVariant(variant(rvd), twJSONEscape, c.Options);
-              if rvd.NeedsClear then
-                VarClearProc(rvd.Data);
-            end;
+              p^.AddValueJson(c.W, Data, c.Options);
         end;
         dec(n);
         if n = 0 then
@@ -6032,7 +6054,7 @@ begin
     varBoolean:
       Add(v.VBoolean); // 'true'/'false'
     varVariant:
-      AddVariant(PVariant(v.VPointer)^, Escape);
+      AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions);
     varString:
       AddText(RawByteString(v.VString), Escape);
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
@@ -6042,7 +6064,7 @@ begin
       AddRttiCustomJSON(V.VAny, TRttiVarData(V).RttiCustom, WriteOptions);
   else
     if vt = varVariant or varByRef then
-      AddVariant(PVariant(v.VPointer)^, Escape)
+      AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions)
     else if vt = varByRef or varString then
       AddText(PRawByteString(v.VAny)^, Escape)
     else if (vt = varByRef or varOleStr)
@@ -6065,13 +6087,15 @@ var
 begin
   {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterType(TypeInfo));
   if ctxt.Info = nil then
-    save := nil // paranoid check
+    AddNull // paranoid check
   else
+  begin
     save := ctxt.Info.JsonSave;
-  if Assigned(save) then
-    save(Value, ctxt)
-  else
-    AddNull;
+    if Assigned(save) then
+      save(Value, ctxt)
+    else
+      BinarySaveBase64(Value, TypeInfo, rkRecordTypes, {withMagic=}true);
+  end;
 end;
 
 procedure TTextWriter.WriteObject(Value: TObject;
@@ -6947,7 +6971,6 @@ begin
   result := Valid;
 end;
 
-
 procedure _JL_Boolean(Data: PBoolean; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
@@ -7299,7 +7322,6 @@ end;
 function JsonLoadProp(Data: PAnsiChar; const Prop: TRttiCustomProp;
   var Ctxt: TJsonParserContext): boolean;
 var
-  v: TVarData;
   tmp: TObject;
   load: TRttiJsonLoad;
 begin
@@ -7334,16 +7356,32 @@ begin
       end;
     end
   else
-  begin
     // we need to call a setter -> use a temp variant
-    PInteger(@v)^ := 0;
-    _JL_Variant(@v, Ctxt); // VariantLoadJSON() over Ctxt
-    if Ctxt.Valid then
-      Ctxt.Valid := Prop.Prop.SetValue(pointer(Data), variant(v));
-    VarClear(PVariant(@v)^);
-  end;
+    Ctxt.ParseProp(Data, Prop);
   Ctxt.Prop := nil;
   result := Ctxt.Valid;
+end;
+
+procedure TJsonParserContext.ParseProp(Data: pointer; const Prop: TRttiCustomProp);
+var
+  v: TRttiVarData;
+begin
+  if Info.Parser = ptRawJSON then
+  begin
+    v.VType := varString;
+    v.Data.VAny := nil;
+    _JL_RawJSON(@v.Data.VAny, self);
+    if Valid then
+      Prop.Prop.SetLongStrProp(Data, RawJson(v.Data.VAny));
+  end
+  else
+  begin
+    v.VType := 0;
+    _JL_Variant(@v, self); // VariantLoadJSON() over Ctxt
+    if Valid then
+      Valid := Prop.Prop.SetValue(Data, variant(v));
+  end;
+  VarClearProc(v.Data);
 end;
 
 procedure _JL_RttiCustom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
@@ -9376,10 +9414,10 @@ begin
       fJsonSave := @_JS_RttiCustom;
    fJsonLoad := PT_JSONLOAD[aParser];
    if not Assigned(fJsonLoad) and
-     (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
+      (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
     fJsonLoad := @_JL_RttiCustom
   end;
-  // ensure custom fJsonWriter/fJsonReader events are called
+  // TRttiJson.RegisterCustomSerializer() custom callbacks have priority
   if Assigned(fJsonWriter.Code) then
     fJsonSave := @_JS_RttiCustom;
   if Assigned(fJsonReader.Code) then
@@ -9414,12 +9452,20 @@ procedure TRttiJson.ValueLoadJson(Data: pointer; var JSON: PUTF8Char;
 var
   ctxt: TJsonParserContext;
 begin
-  if Assigned(self) and
-     Assigned(fJsonLoad) then
+  if Assigned(self) then
   begin
     ctxt.Init(
       JSON, self, ParserOptions, CustomVariantOptions, ObjectListItemClass);
-    TRttiJsonLoad(fJsonLoad)(Data, ctxt);
+    if Assigned(fJsonLoad) then
+      // efficient direct JSON parsing
+      TRttiJsonLoad(fJsonLoad)(Data, ctxt)
+    else
+      // try if binary serialization was used
+      ctxt.Valid := ctxt.ParseNext and
+            (Ctxt.Value <> nil) and
+            (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
+            BinaryLoadBase64(pointer(Ctxt.Value + 3), Ctxt.ValueLen - 3,
+              Data, Ctxt.Info.Info, {uri=}false, rkAllTypes, {nocrc=}true);
     if ctxt.Valid then
       JSON := ctxt.JSON
     else
@@ -9670,7 +9716,7 @@ begin
     raise EJSONException.CreateUTF8('RecordLoadJSON: % is not a record',
       [TypeInfo.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Rec, JSON, EndOfObject,
-    JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
+      JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
   result := JSON;
 end;
 
@@ -10070,14 +10116,32 @@ begin
     if c in [#0, '"', '\'] then
       include(JSON_CHARS[c], jcJSONStringMarker);
     if c in ['-', '0'..'9'] then
+    begin
       include(JSON_CHARS[c], jcDigitFirstChar);
+      JSON_TOKENS[c] := jtFirstDigit;
+    end;
     if c in ['-', '+', '0'..'9', '.', 'E', 'e'] then
       include(JSON_CHARS[c], jcDigitFloatChar);
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$'] then
       include(JSON_CHARS[c], jcJsonIdentifierFirstChar);
+    if c in ['_', 'a'..'z', 'A'..'Z', '$'] then
+      // exclude '0'..'9' as already in jcDigitFirstChar
+      JSON_TOKENS[c] := jtIdentifierFirstChar;
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']'] then
       include(JSON_CHARS[c], jcJsonIdentifier);
   end;
+  JSON_TOKENS['{'] := jtObjectStart;
+  JSON_TOKENS['}'] := jtObjectStop;
+  JSON_TOKENS['['] := jtArrayStart;
+  JSON_TOKENS[']'] := jtArrayStop;
+  JSON_TOKENS[':'] := jtAssign;
+  JSON_TOKENS[','] := jtComma;
+  JSON_TOKENS[''''] := jtSingleQuote;
+  JSON_TOKENS['"'] := jtDoubleQuote;
+  JSON_TOKENS['t'] := jtTrueFirstChar;
+  JSON_TOKENS['f'] := jtFalseFirstChar;
+  JSON_TOKENS['n'] := jtNullFirstChar;
+  JSON_TOKENS['/'] := jtSlash;
   // initialize JSON serialization
   if Rtti.Count > 0 then
     raise EJSONException.CreateUTF8(
