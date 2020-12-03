@@ -2148,7 +2148,8 @@ var
   bsonvalue: TBSONVariantData absolute Value;
   varvalue: TVarData absolute Value;
 
-  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar);
+  procedure Return(kind: TBSONElementType; P: PUTF8Char;
+    GotoEndOfObject: AnsiChar);
   begin
     if GotoEndOfObject <> #0 then
       while P^ <> GotoEndOfObject do
@@ -2179,7 +2180,8 @@ var
     result := true;
   end;
 
-  procedure ReturnInt(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar);
+  procedure ReturnInt(kindint: integer; P: PUTF8Char;
+    GotoEndOfObject: AnsiChar);
     {$ifdef HASINLINE}inline;{$endif}
   // redirection function to circumvent FPC trunk limitation
   var
@@ -2258,7 +2260,8 @@ var
     if dec.FromText(P, L) = dsvError then
       exit;
     bsonvalue.VBlob := nil; // avoid GPF
-    SetString(RawByteString(bsonvalue.VBlob), PAnsiChar(@dec), sizeof(TDecimal128));
+    SetString(RawByteString(bsonvalue.VBlob),
+      PAnsiChar(@dec), sizeof(TDecimal128));
     Return(betDecimal128, P + L + 1, GotoEndOfObject);
   end;
 
@@ -2356,11 +2359,11 @@ begin
   // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
   result := false;
   // here JSON does not start with " or 1..9 (obvious simple types)
-  case NormToUpperAnsi7[JSON^] of
+  P := JSON;
+  case NormToUpperAnsi7[P^] of
     '{':
       begin
         // strict MongoDB objects e.g. {"$undefined":true} or {"$oid":".."}
-        P := JSON;
         repeat
           inc(P)
         until not (P^ in [#1..' ']);
@@ -2395,33 +2398,33 @@ begin
       end;
     // MongoDB Shell Mode extended syntax
     'U':
-      if StrCompIL(JSON + 1,
+      if StrCompIL(P + 1,
           @BSON_JSON_UNDEFINED[true][2], 8) = 0 then
-        Return(betDeprecatedUndefined, JSON + 8, #0);
+        Return(betDeprecatedUndefined, P + 8, #0);
     'M':
-      if StrCompIL(JSON + 1,
+      if StrCompIL(P + 1,
           @BSON_JSON_MINKEY[true][2], 5) = 0 then
-        ReturnInt(betMinKey, JSON + 5, #0)
-      else if StrCompIL(JSON + 1,
+        ReturnInt(betMinKey, P + 5, #0)
+      else if StrCompIL(P + 1,
                @BSON_JSON_MAXKEY[true][2], 7) = 0 then
-        ReturnInt(betMaxKey, JSON + 5, #0);
+        ReturnInt(betMaxKey, P + 5, #0);
     'O':
-      if StrCompIL(JSON + 1,
+      if StrCompIL(P + 1,
           @BSON_JSON_OBJECTID[false, modMongoShell][2], 8) = 0 then
-        TryObjectID(JSON + 9, ')');
+        TryObjectID(P + 9, ')');
     'N':
-      if StrCompIL(JSON + 1,
+      if StrCompIL(P + 1,
           @BSON_JSON_NEWDATE[1], 8) = 0 then
-        TryDate(JSON + 9, ')')
-      else if StrCompIL(JSON + 1,
+        TryDate(P + 9, ')')
+      else if StrCompIL(P + 1,
                @BSON_JSON_DECIMAL[false, modMongoShell][2], 13) = 0 then
-        TryDecimal(JSON + 14, ')');
+        TryDecimal(P + 14, ')');
     'I':
-      if StrCompIL(JSON + 1,
+      if StrCompIL(P + 1,
           @BSON_JSON_DATE[modMongoShell, false][2], 7) = 0 then
-        TryDate(JSON + 8, ')');
+        TryDate(P + 8, ')');
     '/':
-      TryRegExShell(JSON + 1);
+      TryRegExShell(P + 1);
   end;
 end;
 

@@ -2814,8 +2814,8 @@ begin
 end;
 
 {$ifdef FPC_VARIANTSETVAR} // see http://mantis.freepascal.org/view.php?id=26773
-function TSynInvokeableVariantType.SetProperty(var V: TVarData; const Name: string;
-  const Value: TVarData): boolean;
+function TSynInvokeableVariantType.SetProperty(var V: TVarData;
+  const Name: string; const Value: TVarData): boolean;
 {$else}
 function TSynInvokeableVariantType.SetProperty(const V: TVarData;
   const Name: string; const Value: TVarData): boolean;
@@ -2830,14 +2830,14 @@ var
   Buf: array[byte] of AnsiChar; // to avoid heap allocation
   {$endif UNICODE}
 begin
-{$ifdef UNICODE}
+  {$ifdef UNICODE}
   PropNameLen := RawUnicodeToUtf8(
     Buf, SizeOf(Buf), pointer(Name), length(Name), []);
   PropName := @Buf[0];
-{$else}
+  {$else}
   PropName := pointer(Name);
   PropNameLen := length(Name);
-{$endif UNICODE}
+  {$endif UNICODE}
   vt := Value.VType;
   if vt = varByRef or varOleStr then
   begin
@@ -6426,6 +6426,7 @@ var
   n, Plen: integer;
   t: ^TSynInvokeableVariantType;
   P, P2: PUTF8Char;
+  EndOfObject2: AnsiChar;
   wasParsedWithinString: boolean;
   wasString: boolean;
 label
@@ -6467,7 +6468,6 @@ w:  if {%H-}wasString or
     if dvoJSONObjectParseWithinString in Options^ then
     begin
       P := GetJSONField(P, JSON, @wasString, EndOfObject, @Plen);
-      EndOfObject := nil; // already set just above
       wasParsedWithinString := true;
     end
     else
@@ -6483,10 +6483,14 @@ w:  if {%H-}wasString or
       if n = 0 then
         break;
       P2 := P;
-      if t^.TryJSONToVariant(P2, Value, EndOfObject) then
+      if t^.TryJSONToVariant(P2, Value, @EndOfObject2) then
       begin
         if not wasParsedWithinString then
+        begin
+          if EndOfObject <> nil then
+            EndOfObject^ := EndOfObject2;
           JSON := P2;
+        end;
         exit;
       end;
     until false;
