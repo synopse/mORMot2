@@ -1784,34 +1784,31 @@ const
 { ********** Custom JSON Serialization }
 
 type
-  /// the callback signature used by TRttiJson for serializing JSON
+  /// the callback signature used by TRttiJson for serializing JSON data
+  // - Data^ should be written into W, with the supplied Options
   TOnRttiJsonWrite = procedure(W: TTextWriter; Data: pointer;
     Options: TTextWriterWriteObjectOptions) of object;
 
-  /// the callback signature used by TRttiJson for unserializing JSON
+  /// the callback signature used by TRttiJson for unserializing JSON data
   // - set Context.Valid=true if Context.JSON has been parsed into Data^
   TOnRttiJsonRead = procedure(var Context: TJsonParserContext;
     Data: pointer) of object;
 
-  /// the callback signature used by TRttiJson for serializing JSON
+  /// the callback signature used by TRttiJson for serializing JSON classes
+  // - Instance should be written into W, with the supplied Options
   // - is in fact a convenient alias to the TOnRttiJsonWrite callback
-  TOnClassJsonWrite = procedure(W: TTextWriter; Data: TObject;
+  TOnClassJsonWrite = procedure(W: TTextWriter; Instance: TObject;
     Options: TTextWriterWriteObjectOptions) of object;
 
-  /// the callback signature used by TRttiJson for unserializing JSON
-  // - set Context.Valid=true if Context.JSON has been parsed into Data^
+  /// the callback signature used by TRttiJson for unserializing JSON classes
+  // - set Context.Valid=true if Context.JSON has been parsed into Instance
   // - is in fact a convenient alias to the TOnRttiJsonRead callback
   TOnClassJsonRead = procedure(var Context: TJsonParserContext;
-    Data: TObject) of object;
-
-  /// used internally by TRttiJson for fast allocation of a rkClass instance
-  TRttiJsonNewInstance = function(Rtti: TRttiCustom): pointer;
+    Instance: TObject) of object;
 
   /// JSON-aware TRttiCustom class - used for global RttiCustom: TRttiCustomList
   TRttiJson = class(TRttiCustom)
   protected
-    // mormot.core.rtti has no dependency on TSynPersistent and such
-    fClassNewInstance: TRttiJsonNewInstance;
     fCompare: array[boolean] of TRttiCompare;
     fIncludeReadOptions: TJsonParserOptions;
     fIncludeWriteOptions: TTextWriterWriteObjectOptions;
@@ -1819,9 +1816,6 @@ type
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; override;
   public
-    /// create a new TObject instance of this rkClass
-    // - ensure the proper virtual constructor is called (if any)
-    function ClassNewInstance: pointer; override;
     /// simple wrapper around TRttiJsonSave(fJsonSave)
     procedure RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
       {$ifdef HASINLINE}inline;{$endif}
@@ -9427,11 +9421,6 @@ begin
   if Assigned(fJsonReader.Code) then
     fJsonLoad := @_JL_RttiCustom;
   result := self;
-end;
-
-function TRttiJson.ClassNewInstance: pointer;
-begin
-  result := fClassNewInstance(self);
 end;
 
 function TRttiJson.ParseNewInstance(var Context: TJsonParserContext): TObject;

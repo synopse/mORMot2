@@ -679,8 +679,8 @@ type
     class procedure FVWriter2(W: TTextWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
     class procedure FVClassReader(var Context: TJsonParserContext;
-       Data: TObject);
-    class procedure FVClassWriter(W: TTextWriter; Data: TObject;
+       Value: TObject);
+    class procedure FVClassWriter(W: TTextWriter; Value: TObject;
       Options: TTextWriterWriteObjectOptions);
   published
     property Ints: TIntegerDynArray read fInts write fInts;
@@ -747,14 +747,14 @@ begin
 end;
 
 class procedure TCollTstDynArray.FVClassReader(var Context: TJsonParserContext;
-  Data: TObject);
+  Value: TObject);
 var
   Values: array[0..5] of TValuePUTF8Char;
 begin
   // '{"Major":2,"Minor":2002,"Release":3002,"Build":4002,"Main":"2","BuildDateTime":"1911-03-15"}'
   if Context.ParseObject([
      'Major', 'Minor', 'Release', 'Build', 'Main', 'BuildDateTime'], @Values) then
-    with TFileVersion(Data) do
+    with TFileVersion(Value) do
     begin
       Major := Values[0].ToInteger;
       Minor := Values[1].ToInteger;
@@ -766,10 +766,10 @@ begin
     end;
 end;
 
-class procedure TCollTstDynArray.FVClassWriter(W: TTextWriter; Data: TObject;
+class procedure TCollTstDynArray.FVClassWriter(W: TTextWriter; Value: TObject;
   Options: TTextWriterWriteObjectOptions);
 begin
-  with TFileVersion(Data) do
+  with TFileVersion(Value) do
     W.AddJSONEscape(['Major', Major, 'Minor', Minor, 'Release', Release, 'Build',
       Build, 'Main', Main, 'BuildDateTime', DateTimeToIso8601Text(BuildDateTime)]);
 end;

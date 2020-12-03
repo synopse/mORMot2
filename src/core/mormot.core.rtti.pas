@@ -1945,6 +1945,10 @@ type
 
   PRttiCustomProps = ^TRttiCustomProps;
 
+  /// used internally for fast allocation of a rkClass instance
+  // - member is properly initialized by TRttiJson from mormot.core.json.pas
+  TRttiCustomNewInstance = function(Rtti: TRttiCustom): pointer;
+
   TRttiCustomFromTextExpectedEnd = (
     eeNothing,
     eeSquare,
@@ -1974,6 +1978,7 @@ type
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
+    fClassNewInstance: TRttiCustomNewInstance;
     fAutoCreateClasses,
     fAutoCreateObjArrays: PRttiCustomPropDynArray; // set by SetAutoCreateFields
     // used by NoRttiSetAndRegister()
@@ -2034,7 +2039,8 @@ type
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
-    function ClassNewInstance: pointer; virtual;
+    function ClassNewInstance: pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// reset all stored Props[] and associated flags
     procedure PropsClear;
     /// low-level RTTI kind, taken from Rtti property
@@ -6445,6 +6451,13 @@ begin
   Rtti.DoRegister(self);
 end;
 
+function _New_NotImplemented(Rtti: TRttiCustom): pointer;
+begin
+  raise ERttiException.CreateUTF8('%.ClassNewInstance(%) not implemented -> ' +
+    'please include mormot.core.json unit to register TRttiJson',
+    [Rtti, Rtti.Name]);
+end;
+
 function TRttiCustom.SetParserType(aParser: TRttiParserType;
   aParserComplex: TRttiParserComplexType): TRttiCustom;
 begin
@@ -6462,6 +6475,7 @@ begin
   if (fArrayRtti <> nil) and
      (rcfIsManaged in fArrayRtti.Flags) then
     include(fFlags, rcfArrayItemManaged);
+  fClassNewInstance := @_New_NotImplemented;
   result := self;
 end;
 
@@ -6558,10 +6572,9 @@ begin
     'include mormot.core.json unit to register TRttiJson', [self]);
 end;
 
-function TRttiCustom.{%H-}ClassNewInstance: pointer;
+function TRttiCustom.ClassNewInstance: pointer;
 begin
-  raise ERttiException.CreateUTF8('%.ClassNewInstance not implemented -> ' +
-    'please include mormot.core.json unit to register TRttiJson', [self]);
+  result := fClassNewInstance(self);
 end;
 
 procedure TRttiCustom.PropsClear;
