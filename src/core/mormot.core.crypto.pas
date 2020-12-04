@@ -5529,7 +5529,23 @@ end;
 
 procedure TAESPRNG.FillRandom(out Buffer: THash256);
 begin
-  FillRandom(@Buffer, SizeOf(Buffer));
+  if fBytesSinceSeed > fSeedAfterBytes then
+    Seed;
+  EnterCriticalSection(fSafe);
+  with TAESContext(fAES.Context) do
+  begin
+    DoBlock(rk, iv, THash256Rec({%H-}Buffer).Lo);
+    inc(iv.L);
+    if iv.L = 0 then
+      inc(iv.H);
+    DoBlock(rk, iv, THash256Rec(Buffer).Hi);
+    inc(iv.L);
+    if iv.L = 0 then
+      inc(iv.H);
+  end;
+  inc(fBytesSinceSeed, 32);
+  inc(fTotalBytes, 32);
+  LeaveCriticalSection(fSafe);
 end;
 
 procedure TAESPRNG.FillRandom(Buffer: pointer; Len: PtrInt);
