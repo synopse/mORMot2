@@ -2,7 +2,7 @@
 
 ## Folder Content
 
-This folder holds the (Micro)Services/Daemons and Application high-level features of the *mORMot* Open Source framework, version 2.
+This folder holds the (Micro)Services/Daemons and Applications related features of the *mORMot* Open Source framework, version 2.
 
 ## (Micro)Services and Daemons
 
@@ -12,6 +12,11 @@ This folder holds the (Micro)Services/Daemons and Application high-level feature
 *MicroServices* are a specific kind self-sufficent and uncoupled SOA servers. *mORMot* excels in implementing such services, as a stand-alone and self-configuring daemons. In particular, SOA endpoints can be implemented via interface-based services, and *SQLite3* local database(s) could be used for local persistence.
 
 ## Units Presentation
+
+### mormot.app.console
+
+Some Features Dedicated to Console Apps
+- `ICommandLine` for Parsing Command Line Arguments
 
 ### mormot.app.daemon
 
