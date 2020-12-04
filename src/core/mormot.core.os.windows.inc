@@ -2058,7 +2058,7 @@ const
     'Paused',
     'Error');
 
-function ToText(st: TServiceState): PShortString;
+function ToText(st: TServiceState): PShortString; overload;
 begin
   result := @_SERVICESTATE[st];
 end;
@@ -2190,7 +2190,7 @@ end;
 
 function TServiceController.GetStatus: TServiceStatus;
 begin
-  FillChar(fStatus, SizeOf(fStatus), 0);
+  FillCharFast(fStatus, SizeOf(fStatus), 0);
   QueryServiceStatus(fHandle, fStatus);
   Result := fStatus;
 end;

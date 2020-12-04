@@ -1304,6 +1304,25 @@ function FileFromString(const Content: RawByteString; const FileName: TFileName;
 // - following 'exename_123.tmp' pattern, in the system temporary folder
 function TemporaryFileName: TFileName;
 
+/// delete the content of a specified directory
+// - only one level of file is deleted within the folder: no recursive deletion
+// is processed by this function (for safety)
+// - if DeleteOnlyFilesNotDirectory is TRUE, it won't remove the folder itself,
+// but just the files found in it
+function DirectoryDelete(const Directory: TFileName;
+  const Mask: TFileName = FILES_ALL; DeleteOnlyFilesNotDirectory: boolean = false;
+  DeletedCount: PInteger = nil): boolean;
+
+/// delete the files older than a given age in a specified directory
+// - for instance, to delete all files older than one day:
+// ! DirectoryDeleteOlderFiles(FolderName, 1);
+// - only one level of file is deleted within the folder: no recursive deletion
+// is processed by this function, unless Recursive is TRUE
+// - if Recursive=true, caller should set TotalSize^=0 to have an accurate value
+function DirectoryDeleteOlderFiles(const Directory: TFileName;
+  TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
+  Recursive: boolean = false; TotalSize: PInt64 = nil): boolean;
+
 /// check if the directory is writable for the current user
 // - try to write a small file with a random name
 function IsDirectoryWritable(const Directory: TFileName): boolean;
@@ -2539,7 +2558,7 @@ const
 // should be considered as indicative only with posix=false
 function ParseCommandArgs(const cmd: RawUTF8; argv: PParseCommandsArgs = nil;
   argc: PInteger = nil; temp: PRawUTF8 = nil;
-  posix: boolean = {$ifdef MSWINDOWS}false{$else}true{$endif}): TParseCommands;
+  posix: boolean = {$ifdef MSWINDOWS} false {$else} true {$endif}): TParseCommands;
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
@@ -2555,6 +2574,7 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName = ''; envaddexisting: boolean = false;
   parsed: PParseCommands = nil): integer;
+
 
 
 
@@ -2959,6 +2979,73 @@ begin // fast cross-platform implementation
     dec(retry); // no endless loop
   until retry = 0;
   raise EOSException.Create('TemporaryFileName failed');
+end;
+
+function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
+  DeleteOnlyFilesNotDirectory: boolean; DeletedCount: PInteger): boolean;
+var
+  F: TSearchRec;
+  Dir: TFileName;
+  n: integer;
+begin
+  n := 0;
+  result := true;
+  if DirectoryExists(Directory) then
+  begin
+    Dir := IncludeTrailingPathDelimiter(Directory);
+    if FindFirst(Dir + Mask, faAnyFile - faDirectory, F) = 0 then
+    begin
+      repeat
+        if SearchRecValidFile(F) then
+          if DeleteFile(Dir + F.Name) then
+            inc(n)
+          else
+            result := false;
+      until FindNext(F) <> 0;
+      FindClose(F);
+    end;
+    if not DeleteOnlyFilesNotDirectory and
+       not RemoveDir(Dir) then
+      result := false;
+  end;
+  if DeletedCount <> nil then
+    DeletedCount^ := n;
+end;
+
+function DirectoryDeleteOlderFiles(const Directory: TFileName;
+  TimePeriod: TDateTime; const Mask: TFileName; Recursive: boolean;
+  TotalSize: PInt64): boolean;
+var
+  F: TSearchRec;
+  Dir: TFileName;
+  old: TDateTime;
+begin
+  if not Recursive and
+     (TotalSize <> nil) then
+    TotalSize^ := 0;
+  result := true;
+  if (Directory = '') or
+     not DirectoryExists(Directory) then
+    exit;
+  Dir := IncludeTrailingPathDelimiter(Directory);
+  if FindFirst(Dir + Mask, faAnyFile, F) = 0 then
+  begin
+    old := Now - TimePeriod;
+    repeat
+      if F.Name[1] <> '.' then
+        if Recursive and
+           (F.Attr and faDirectory <> 0) then
+          DirectoryDeleteOlderFiles(
+            Dir + F.Name, TimePeriod, Mask, true, TotalSize)
+        else if SearchRecValidFile(F) and
+                (SearchRecToDateTime(F) < old) then
+          if not DeleteFile(Dir + F.Name) then
+            result := false
+          else if TotalSize <> nil then
+            inc(TotalSize^, F.Size);
+    until FindNext(F) <> 0;
+    FindClose(F);
+  end;
 end;
 
 function IsDirectoryWritable(const Directory: TFileName): boolean;
@@ -4146,6 +4233,9 @@ begin
 end;
 
 
+
+
+
 procedure FinalizeUnit;
 var
   i: PtrInt;
@@ -4173,6 +4263,6 @@ initialization
 
 finalization
   FinalizeUnit;
-  
+
 end.
 
