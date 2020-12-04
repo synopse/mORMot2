@@ -314,10 +314,12 @@ type
 
 const
   /// TECCValidity results indicating a valid digital signature
-  ECC_VALIDSIGN = [ecvValidSigned, ecvValidSelfSigned];
+  ECC_VALIDSIGN =
+    [ecvValidSigned, ecvValidSelfSigned];
 
   /// TECCDecrypt results indicating a valid decryption process
-  ECC_VALIDDECRYPT = [ecdDecrypted, ecdDecryptedWithSignature];
+  ECC_VALIDDECRYPT =
+    [ecdDecrypted, ecdDecryptedWithSignature];
 
 function ToText(val: TECCValidity): PShortString; overload;
 function ToText(res: TECCDecrypt): PShortString; overload;
@@ -1552,7 +1554,9 @@ begin
     TAESPRNG.Fill(THash256(PrivateK));
     if tries >= MAX_TRIES then
       exit;
-    if _isZero(PrivateK) or _equals(PrivateK, _1) or _equals(PrivateK, _11) then
+    if _isZero(PrivateK) or
+       _equals(PrivateK, _1) or
+       _equals(PrivateK, _11) then
       continue;
     // Make sure the private key is in the range [1, n-1]
     // For the supported curves, n is always large enough that we only need
@@ -1682,7 +1686,9 @@ begin
     TAESPRNG.Fill(THash256(k));
     if Tries >= MAX_TRIES then
       exit;
-    if _isZero(k) or _equals(k, _1) or _equals(k, _11) then
+    if _isZero(k) or
+       _equals(k, _1) or
+       _equals(k, _11) then
       continue;
     if _cmp(Curve_N_32, k) <> 1 then
       _sub(k, k, Curve_N_32);
@@ -1813,6 +1819,56 @@ begin
   PInt64Array(@Priv)^[3] := 0;
 end;
 
+function IsEqual(const issuer1, issuer2: TECCCertificateIssuer): boolean;
+var
+  a: TPtrIntArray absolute issuer1;
+  b: TPtrIntArray absolute issuer2;
+begin
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifndef CPU64} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU64};
+end;
+
+function IsEqual(const id1, id2: TECCCertificateID): boolean;
+var
+  a: TPtrIntArray absolute id1;
+  b: TPtrIntArray absolute id2;
+begin
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifndef CPU64} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU64};
+end;
+
+function IsZero(const issuer: TECCCertificateIssuer): boolean;
+var
+  a: TPtrIntArray absolute issuer;
+begin
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifndef CPU64} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU64};
+end;
+
+function IsZero(const id: TECCCertificateID): boolean;
+var
+  a: TPtrIntArray absolute id;
+begin
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifndef CPU64} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU64};
+end;
+
 const
   // Mon, 01 Aug 2016 encoded as COM/TDateTime value
   ECC_DELTA = 42583;
@@ -1928,56 +1984,6 @@ begin
                (ValidityStart <= now)) and
               ((ValidityEnd = 0) or
                (ValidityEnd >= now));
-end;
-
-function IsEqual(const issuer1, issuer2: TECCCertificateIssuer): boolean;
-var
-  a: TPtrIntArray absolute issuer1;
-  b: TPtrIntArray absolute issuer2;
-begin
-  result := (a[0] = b[0]) and
-            (a[1] = b[1])
-            {$ifndef CPU64} and
-            (a[2] = b[2]) and
-            (a[3] = b[3])
-            {$endif CPU64};
-end;
-
-function IsEqual(const id1, id2: TECCCertificateID): boolean;
-var
-  a: TPtrIntArray absolute id1;
-  b: TPtrIntArray absolute id2;
-begin
-  result := (a[0] = b[0]) and
-            (a[1] = b[1])
-            {$ifndef CPU64} and
-            (a[2] = b[2]) and
-            (a[3] = b[3])
-            {$endif CPU64};
-end;
-
-function IsZero(const issuer: TECCCertificateIssuer): boolean;
-var
-  a: TPtrIntArray absolute issuer;
-begin
-  result := (a[0] = 0) and
-            (a[1] = 0)
-            {$ifndef CPU64} and
-            (a[2] = 0) and
-            (a [3] = 0)
-            {$endif CPU64};
-end;
-
-function IsZero(const id: TECCCertificateID): boolean;
-var
-  a: TPtrIntArray absolute id;
-begin
-  result := (a[0] = 0) and
-            (a[1] = 0)
-            {$ifndef CPU64} and
-            (a[2] = 0) and
-            (a [3] = 0)
-            {$endif CPU64};
 end;
 
 function ECCSelfSigned(const content: TECCCertificateContent): boolean;

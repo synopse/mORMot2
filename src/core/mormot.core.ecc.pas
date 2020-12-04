@@ -29,9 +29,9 @@ uses
   mormot.core.data,
   mormot.core.datetime,
   mormot.core.secure,
+  mormot.core.variants,
   mormot.core.json,
   mormot.core.rtti,
-  mormot.core.variants,
   mormot.core.search,
   mormot.core.ecc256r1;
 
@@ -1419,14 +1419,27 @@ begin
 end;
 
 function ECIESHeaderText(const head: TECIESHeader): RawUTF8;
+var
+  s: variant;
+  sign: TECCSignatureCertified;
 begin
+  sign := TECCSignatureCertified.CreateFrom(head.sign, true);
+  try
+    if sign.Check then
+    begin
+      s := sign.ToVariant;
+      _ObjAddProp('ECDSA', ECCText(head.sign.Signature), s);
+    end;
+  finally
+    sign.Free;
+  end;
   with head do
     FormatUTF8('{"Date":"%","Size":%,"Recipient":"%","RecipientSerial":"%",' +
       '"FileTime":"%","Algorithm":"%","RandomPublicKey":"%","HMAC":"%",' +
-      '"Signature":"%","Meta":%}', [ECCText(date), size, ECCText(rec),
+      '"Signature":%,"Meta":%}', [ECCText(date), size, ECCText(rec),
       ECCText(recid), DateTimeToIso8601Text(UnixTimeToDateTime(unixts)),
       ToText(algo)^, mormot.core.text.BinToHex(@rndpub, sizeof(rndpub)),
-      SHA256DigestToString(hmac), ECCText(head.sign),
+      SHA256DigestToString(hmac), _Safe(s)^.ToJSON,
       BOOL_STR[efMetaData in ECIESFeatures(head)]], result);
 end;
 
@@ -1571,12 +1584,14 @@ end;
 
 function TECCCertificate.GetIsSelfSigned: boolean;
 begin
-  result := (self <> nil) and ECCSelfSigned(fContent);
+  result := (self <> nil) and
+            ECCSelfSigned(fContent);
 end;
 
 function TECCCertificate.CheckCRC: boolean;
 begin
-  result := (self <> nil) and ECCCheck(fContent);
+  result := (self <> nil) and
+            ECCCheck(fContent);
 end;
 
 function TECCCertificate.FromBase64(const base64: RawUTF8): boolean;
@@ -1623,7 +1638,8 @@ begin
   if AuthSerial <> '' then
   begin
     authfilename := UTF8ToString(AuthSerial);
-    if ECCKeyFileFind(authfilename, false) and FromFile(authfilename) then
+    if ECCKeyFileFind(authfilename, false) and
+       FromFile(authfilename) then
       exit;
   end;
   result := false;
