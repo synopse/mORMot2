@@ -652,7 +652,8 @@ begin
                 'Enter the first chars of the .private file name of the signing authority.'#13#10 +
                 'Will create a self-signed certificate if left void.');
             until (auth = '') or
-                  ECCKeyFileFind(auth, true) or sw.NoPrompt;
+                  ECCKeyFileFind(auth, true) or
+                  sw.NoPrompt;
             if auth <> '' then
             begin
               sw.Text('Will use: %'#13#10, [ExtractFileName(auth)]);
@@ -898,7 +899,8 @@ begin
               newfile := SysUtils.Trim(sw.AsString(
                 'Out', origfile + AEAD_FILEEXT,
                 'Enter the name of the encrypted file'));
-            until (newfile <> '') or sw.NoPrompt;
+            until (newfile <> '') or
+                  sw.NoPrompt;
             authpass := sw.AsUTF8('Pass', '',
               'Enter the PassPhrase to be used for encryption.');
             savepass := sw.AsUTF8('Salt', 'salt',

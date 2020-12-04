@@ -190,7 +190,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\app;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\tools\ecc;..\src\orm;..\src\soa"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -551,7 +551,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="80">
+    <Units Count="83">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -872,6 +872,18 @@
         <Filename Value="test.core.data.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit79>
+      <Unit80>
+        <Filename Value="test.core.ecc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit80>
+      <Unit81>
+        <Filename Value="..\src\app\mormot.app.console.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit81>
+      <Unit82>
+        <Filename Value="..\src\tools\ecc\mormot.tools.ecc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit82>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

@@ -97,10 +97,13 @@ uses
   //mormot.db.rad.unidac     in '..\src\db\mormot.db.rad.unidac.pas',
   //mormot.db.rad.nexusdb    in '..\src\db\mormot.db.rad.nexusdb.pas',
   {$endif FPC}
+  mormot.app.console       in '..\src\app\mormot.app.console.pas',
   mormot.app.daemon        in '..\src\app\mormot.app.daemon.pas',
+  mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.data           in '.\test.core.data.pas',
-  test.core.crypto         in '.\test.core.crypto.pas';
+  test.core.crypto         in '.\test.core.crypto.pas',
+  test.core.ecc            in '.\test.core.ecc.pas';
 
 
 { TIntegrationTests }
@@ -113,10 +116,11 @@ type
 
 procedure TIntegrationTests.CoreUnits;
 begin
+  AddCase([
   //
-  AddCase([TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreCompress]);
-  //
-  AddCase([]);
+    TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress
+  // ,
+  ]);
 end;
 
 
