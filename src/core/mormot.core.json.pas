@@ -2606,13 +2606,35 @@ begin
   jsonset := @JSON_CHARS;
   {$endif CPUX86NOTPIC}
   case JSON_TOKENS[P^] of
+    jtFirstDigit: // '-', '0'..'9'
+      begin
+        // numerical value
+        result := P;
+        if P^ = '0' then
+          if (P[1] >= '0') and
+             (P[1] <= '9') then
+            // 0123 excluded by JSON!
+            exit;
+        repeat // loop all '-', '+', '0'..'9', '.', 'E', 'e'
+          inc(P);
+        until not (jcDigitFloatChar in jsonset[P^]);
+        if P^ = #0 then
+          exit; // a JSON number value should be followed by , } or ]
+        if Len <> nil then
+          Len^ := P - result;
+        if P^ <= ' ' then
+        begin
+          P^ := #0; // force numerical field with no trailing ' '
+          inc(P);
+        end;
+      end;
     jtDoubleQuote: // '"'
       begin
         // " -> unescape P^ into D^
+       inc(P);
+       result := P; // result points to the unescaped JSON string
         if WasString <> nil then
           WasString^ := true;
-        inc(P);
-        result := P;
         while not (jcJSONStringMarker in jsonset[P^]) do
           // not [#0, '"', '\']
           inc(P); // very fast parsing of most UTF-8 chars within "string"
@@ -2626,14 +2648,14 @@ begin
 lit:        inc(P);
             D^ := c;
             inc(D);
-            continue; // very fast parsing of most UTF-8 chars within "string"
+            continue; // very fast parsing of most UTF-8 chars within "str\bing"
           end;
           // P^ is either #0, '"' or '\'
           if c = '"' then
             // end of string
             break;
           if c = #0 then
-            // premature ending
+            // premature ending (PDest=nil)
             exit;
           // unescape JSON text: get char after \
           inc(P); // P^ was '\' here
@@ -2742,31 +2764,6 @@ lit:        inc(P);
         D^ := #0; // make zero-terminated
         if Len <> nil then
           Len^ := D - result;
-      end;
-    jtFirstDigit: // '-', '+', '0'..'9'
-      begin
-        // numerical field: all chars before end of field
-        if P^ = '0' then
-          if (P[1] >= '0') and
-             (P[1] <= '9') then
-            // 0123 excluded by JSON!
-            exit;
-        result := P;
-        repeat
-          if not (jcDigitFloatChar in jsonset[P^]) then
-            // not ['-', '+', '0'..'9', '.', 'E', 'e']
-            break;
-          inc(P);
-        until false;
-        if P^ = #0 then
-          exit;
-        if Len <> nil then
-          Len^ := P - result;
-        if P^ <= ' ' then
-        begin
-          P^ := #0; // force numerical field with no trailing ' '
-          inc(P);
-        end;
       end;
     jtNullFirstChar: // 'n'
       if (PInteger(P)^ = NULL_LOW) and
@@ -3504,7 +3501,7 @@ begin // should match GetJSONPropName()
             exit;
           inc(P);
         end;
-      jtFirstDigit: // '-', '+', '0'..'9'
+      jtFirstDigit: // '-', '0'..'9'
         begin // '0123' excluded by JSON, but not here
           {$ifndef CPUX86NOTPIC}
           jsonset := @JSON_CHARS;
@@ -3676,7 +3673,7 @@ ok:     while (P^ <= ' ') and
         inc(P, 4);
         goto ok;
       end;
-    jtFirstDigit: // '-', '+', '0'..'9'
+    jtFirstDigit: // '-', '0'..'9'
       begin
         repeat
           inc(P)
