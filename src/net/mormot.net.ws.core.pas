@@ -108,7 +108,7 @@ const
   HTTP_WEBSOCKETCLOSED = 0;
 
 
-/// used to return the text corresponding to a specified WebSockets frame data
+/// used to return the text corresponding to a specified WebSockets frame type
 function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
 
 
@@ -707,6 +707,8 @@ type
 /// returns the text corresponding to a specified WebSockets sending mode
 function ToText(mode: TWebSocketProcessNotifyCallback): PShortString; overload;
 
+/// returns the text corresponding to a specified WebSockets state
+function ToText(st: TWebSocketProcessState): PShortString; overload;
 
 
 var
@@ -754,7 +756,7 @@ begin
   result := _TWebSocketProcessNotifyCallback[mode];
 end;
 
-function ToText(st: TWebSocketProcessState): PShortString; overload;
+function ToText(st: TWebSocketProcessState): PShortString;
 begin
   result := GetEnumName(TypeInfo(TWebSocketProcessState), ord(st));
 end;

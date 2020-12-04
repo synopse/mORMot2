@@ -268,7 +268,7 @@ begin
   try
     FA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Fields, @n);
     FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-    FillChar(F, sizeof(F), 0);
+    FillCharFast(F, sizeof(F), 0);
     meta.MetaDataKind := 'Columns';
     Split(aTableName, '.', Owner, Table);
     if Table = '' then
@@ -323,7 +323,7 @@ var
 begin
   SetLength(Indexes, 0);
   FA.Init(TypeInfo(TSQLDBIndexDefineDynArray), Indexes, @n);
-  fillchar(F, sizeof(F), 0);
+  FillCharFast(F, sizeof(F), 0);
   meta := (MainConnection as TSQLDBUniDACConnection).fDatabase.CreateMetaData;
   indexs := (MainConnection as TSQLDBUniDACConnection).fDatabase.CreateMetaData;
   try

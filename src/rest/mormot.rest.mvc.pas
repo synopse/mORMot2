@@ -922,7 +922,7 @@ constructor TMVCViewsMustache.Create(aInterface: PRttiInfo;
 var
   params: TMVCViewsMustacheParameters;
 begin
-  fillchar(params, sizeof(params), 0);
+  FillcharFast(params, sizeof(params), 0);
   params.FileTimestampMonitorAfterSeconds := 5;
   params.ExtensionForNotExistingTemplate := aExtensionForNotExistingTemplate;
   params.Helpers := TSynMustache.HelpersGetStandardList;
