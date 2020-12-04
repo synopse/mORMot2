@@ -689,6 +689,9 @@ type
     fInternalJSONWriter: TTextWriter;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
       AnsiToWide: PWordArray; Escape: TTextWriterKind);
+    // called after TRttiCustomProp.GetValueDirect/GetValueGetter
+    procedure AddRttiVarData(const Value: TRttiVarData;
+      WriteOptions: TTextWriterWriteObjectOptions);
   public
     /// release all internal structures
     destructor Destroy; override;
@@ -6052,15 +6055,16 @@ begin
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
       AddTextW(v.VAny, Escape);
     varAny:
-      // Value is a TRttiVarData from TRttiProp.GetValue: V.VAny = GetFieldAddr
-      AddRttiCustomJSON(V.VAny, TRttiVarData(V).RttiCustom, WriteOptions);
+      // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
+      // from TRttiCustomProp.GetValueDirect/GetValueGetter
+      AddRttiVarData(TRttiVarData(V), WriteOptions);
   else
     if vt = varVariant or varByRef then
       AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions)
     else if vt = varByRef or varString then
       AddText(PRawByteString(v.VAny)^, Escape)
-    else if (vt = varByRef or varOleStr)
-      {$ifdef HASVARUSTRING} or (vt = varByRef or varUString) {$endif} then
+    else if {$ifdef HASVARUSTRING} (vt = varByRef or varUString) or {$endif}
+            (vt = varByRef or varOleStr) then
       AddTextW(PPointer(v.VAny)^, Escape)
     else if vt >= varArray then // complex types are always < varArray
       AddNull
@@ -6122,6 +6126,30 @@ begin
     save(Value, ctxt)
   else
     AddNull;
+end;
+
+procedure TTextWriter.AddRttiVarData(const Value: TRttiVarData;
+  WriteOptions: TTextWriterWriteObjectOptions);
+var
+  V64: Int64;
+begin
+  if Value.PropValueIsInstance then
+  begin
+    // from TRttiCustomProp.GetValueGetter
+    if rcfGetOrdProp in Value.Prop.Value.Cache.Flags then
+    begin
+      // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface
+      V64 := Value.Prop.Prop.GetOrdProp(Value.PropValue);
+      AddRttiCustomJSON(@V64, Value.Prop.Value, WriteOptions);
+    end
+    else
+      // rkRecord,rkObject have no getter methods
+      raise EJSONException.CreateUTF8('%.AddRttiVarData: unsupported % (%)',
+        [self, Value.Prop.Value.Name, ToText(Value.Prop.Value.Kind)^]);
+  end
+  else
+    // from TRttiCustomProp.GetValueDirect
+    AddRttiCustomJSON(Value.PropValue, Value.Prop.Value, WriteOptions);
 end;
 
 procedure TTextWriter.AddText(const Text: RawByteString; Escape: TTextWriterKind);
