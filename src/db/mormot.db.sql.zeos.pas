@@ -28,6 +28,7 @@ implementation // compile a void unit if NOSYNDBZEOS conditional is set
 {$I ..\mormot.defines.inc}
 
 uses
+  types,
   sysutils,
   classes,
   variants,
@@ -85,6 +86,7 @@ uses
   mormot.core.datetime,
   mormot.core.data,
   mormot.core.perf,
+  mormot.core.rtti,
   mormot.core.log,
   mormot.db.core,
   mormot.db.sql;

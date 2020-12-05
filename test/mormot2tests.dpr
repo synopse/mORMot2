@@ -91,7 +91,7 @@ uses
   mormot.db.sql.zeos       in '..\src\db\mormot.db.sql.zeos.pas',
   {$endif USEZEOS}
   {$ifndef FPC}
-  //mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
+  mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
   //mormot.db.rad.bde        in '..\src\db\mormot.db.rad.bde.pas',
   //mormot.db.rad.firedac    in '..\src\db\mormot.db.rad.firedac.pas',
   //mormot.db.rad.unidac     in '..\src\db\mormot.db.rad.unidac.pas',
