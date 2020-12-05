@@ -194,7 +194,7 @@ var
   // - also always appended to OSVersionText high-level description
   OSVersionInfoEx: RawUTF8;
   /// the current Operating System version, as retrieved for the current process
-  // and computed as ToTextOS(OSVersionInt32)
+  // and computed by ToTextOS(OSVersionInt32)
   // - returns e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
   OSVersionShort: RawUTF8;
 
@@ -213,7 +213,7 @@ var
 function ToText(const osv: TOperatingSystemVersion): RawUTF8; overload;
 
 /// convert a 32-bit Operating System type into its full text representation
-// including the kernel revision on POSIX systems
+// including the kernel revision (not the distribution version) on POSIX systems
 // - returns e.g. 'Windows Vista' or 'Ubuntu 5.4.0'
 function ToTextOS(osint32: integer): RawUTF8;
 
@@ -256,7 +256,7 @@ const
       {$elseif defined(VER320)} + ' 10.2 Tokyo'
       {$elseif defined(VER330)} + ' 10.3 Rio'
       {$elseif defined(VER340)} + ' 10.4 Sydney'
-      {$elseif defined(VER350)} + ' 10.4 Next'
+      {$elseif defined(VER350)} + ' 10.5 Next'
       {$ifend}
     {$endif CONDITIONALEXPRESSIONS}
   {$endif FPC}
@@ -274,11 +274,13 @@ function GetDelphiCompilerVersion: RawUTF8; deprecated;
 {$ifdef UNICODE}
 
 const
+  /// a global constant to be appended for Windows Ansi or wide API names
   _AW = 'W';
 
 {$else}
 
 const
+  /// a global constant to be appended for Windows Ansi or wide API names
   _AW = 'A';
 
 type
@@ -1047,14 +1049,14 @@ function SysErrorMessagePerModule(Code: cardinal; ModuleName: PChar): string;
 /// raise an Exception from the last system error
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 
-/// compatibility function, wrapping GetACP() Win32 API function
-// - returns the curent system code page (default WinAnsi)
-function Unicode_CodePage: integer;
-
 /// compatibility function, wrapping Win32 API function
 // - returns the current main Window handle on Windows, or 0 on POSIX/Linux
 function GetDesktopWindow: PtrInt;
   {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+
+/// compatibility function, wrapping GetACP() Win32 API function
+// - returns the curent system code page (default WinAnsi)
+function Unicode_CodePage: integer;
 
 /// compatibility function, wrapping CompareStringW() Win32 API text comparison
 // - returns 1 if PW1>PW2, 2 if PW1=PW2, 3 if PW1<PW2 - so substract 2 to have
@@ -1066,13 +1068,16 @@ function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: 
 
 /// compatibility function, wrapping MultiByteToWideChar() Win32 API call
 // - returns the number of WideChar written into W^ destination buffer
+// - on POSIX, use FPC RTL widestringmanager with a temporary variable
 function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 
 /// compatibility function, wrapping WideCharToMultiByte() Win32 API call
 // - returns the number of AnsiChar written into A^ destination buffer
+// - on POSIX, use FPC RTL widestringmanager with a temporary variable
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 
 /// conversion of some UTF-16 buffer into a temporary shortstring
+// - used when mormot.core.unicode is an overkill, e.g. TCrtSocket.SockSend()
 procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
 
 /// returns a system-wide current monotonic timestamp as milliseconds
@@ -2610,6 +2615,7 @@ begin
   result := ToText(osv);
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
+    // include the kernel number to the distribution name, e.g. 'Ubuntu 5.4.0'
     result := RawUTF8(Format('%s %d.%d.%d', [result, osv.utsrelease[2],
       osv.utsrelease[1], osv.utsrelease[0]]));
 end;
@@ -3032,17 +3038,18 @@ begin
   begin
     old := Now - TimePeriod;
     repeat
-      if F.Name[1] <> '.' then
-        if Recursive and
-           (F.Attr and faDirectory <> 0) then
+      if SearchRecValidFolder(F) then
+      begin
+        if Recursive then
           DirectoryDeleteOlderFiles(
-            Dir + F.Name, TimePeriod, Mask, true, TotalSize)
-        else if SearchRecValidFile(F) and
-                (SearchRecToDateTime(F) < old) then
-          if not DeleteFile(Dir + F.Name) then
-            result := false
-          else if TotalSize <> nil then
-            inc(TotalSize^, F.Size);
+            Dir + F.Name, TimePeriod, Mask, true, TotalSize);
+      end
+      else if SearchRecValidFile(F) and
+              (SearchRecToDateTime(F) < old) then
+        if not DeleteFile(Dir + F.Name) then
+          result := false
+        else if TotalSize <> nil then
+          inc(TotalSize^, F.Size);
     until FindNext(F) <> 0;
     FindClose(F);
   end;
