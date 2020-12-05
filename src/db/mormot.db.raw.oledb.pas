@@ -680,16 +680,10 @@ type
     constructor Create(cTotalRows: UINT);
     function SetupAccessors(pIAccessorTVP: IAccessor): HRESULT; virtual; abstract;
     destructor Destroy; override;
-    {$ifdef FPC}
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      iid : tguid; out obj) : longint;{$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    function _AddRef : longint;{$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    function _Release : longint;{$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    {$else}
-    function QueryInterface(const IID: TGUID; out Obj): HRESULT; stdcall;
-    function _AddRef: integer; stdcall;
-    function _Release: integer; stdcall;
-    {$endif FPC}
+      IID: TGUID; out Obj): TIntQry; {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _AddRef: TIntCnt;       {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _Release: TIntCnt;      {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
     /// Adds a reference count to an existing row handle
     function AddRefRows(cRows: PtrUInt; rghRows: PPtrUIntArray;
       rgRefCounts, rgRowStatus: PCardinalArray): HRESULT; stdcall;
@@ -813,13 +807,9 @@ begin
     result := DB_S_ENDOFROWSET;
 end;
 
-{$ifdef FPC}
 function TBaseAggregatingRowset.QueryInterface(
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid : tguid;out obj) : longint;
-  {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-{$else}
-function TBaseAggregatingRowset.QueryInterface(const IID: TGUID; out Obj): HResult;
-{$endif FPC}
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+  out Obj): TIntQry;
 begin
   if IsEqualGUID(@IID, @IID_IUnknown) then
     IUnknown(Obj) := Self
@@ -857,28 +847,18 @@ begin
   result := S_OK;
 end;
 
-procedure TBaseAggregatingRowset.SetAccessorHandle(idxAccessor: ULONG; hAccessor:
-  hAccessor);
+procedure TBaseAggregatingRowset.SetAccessorHandle(idxAccessor: ULONG;
+  hAccessor: hAccessor);
 begin
   fhAccessor[idxAccessor] := hAccessor;
 end;
 
-{$ifdef FPC}
-function TBaseAggregatingRowset._AddRef: longint;
-  {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
-{$else}
-function TBaseAggregatingRowset._AddRef: integer;
-{$endif FPC}
+function TBaseAggregatingRowset._AddRef: TIntCnt;
 begin
   result := 1;
 end;
 
-{$ifdef FPC}
-function TBaseAggregatingRowset._Release: longint;
-  {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
-{$else}
-function TBaseAggregatingRowset._Release: integer;
-{$endif FPC}
+function TBaseAggregatingRowset._Release: TIntCnt;
 begin
   result := 1;
 end;

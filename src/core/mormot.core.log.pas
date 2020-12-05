@@ -861,17 +861,10 @@ type
     fCurrentLevel: TSynLogInfo;
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     fDisableRemoteLog: boolean;
-    {$ifdef FPC}
-    function QueryInterface(
-      {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID; out Obj): longint;
-      {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    function _AddRef:  longint; {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
-    function _Release: longint; {$ifndef WINDOWS} cdecl {$else} stdcall {$endif};
-    {$else}
-    function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
-    function _AddRef:  integer; stdcall;
-    function _Release: integer; stdcall;
-    {$endif FPC}
+    function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      iid: TGUID; out obj): TIntQry; {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _AddRef: TIntCnt;       {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _Release: TIntCnt;      {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
     procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUTF8;
@@ -3242,11 +3235,7 @@ begin
   end;
 end;
 
-{$ifdef FPC}
-function TSynLog._AddRef: longint;
-{$else}
-function TSynLog._AddRef: integer;
-{$endif}
+function TSynLog._AddRef: TIntCnt;
 begin
   if fFamily.Level * [sllEnter, sllLeave] <> [] then
   begin
@@ -3288,11 +3277,7 @@ end;
   {$endif MSWINDOWS}
 {$endif FPC}
 
-{$ifdef FPC}
-function TSynLog._Release: longint;
-{$else}
-function TSynLog._Release: integer;
-{$endif FPC}
+function TSynLog._Release: TIntCnt;
 var
   addr: PtrUInt;
 begin
@@ -3414,12 +3399,9 @@ begin
   end;
 end;
 
-{$ifdef FPC}
-function TSynLog.QueryInterface({$ifdef FPC_HAS_CONSTREF}constref
-  {$else}const{$endif} IID: TGUID; out Obj): longint;
-{$else}
-function TSynLog.QueryInterface(const IID: TGUID; out Obj): HResult;
-{$endif FPC}
+function TSynLog.QueryInterface(
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} iid: TGUID;
+  out obj): TIntQry;
 begin
   result := E_NOINTERFACE;
 end;

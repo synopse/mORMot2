@@ -2087,7 +2087,6 @@ type
     // should be overriden to support interface parameters (i.e. callbacks)
     procedure InterfaceWrite(W: TTextWriter; const aMethod: TInterfaceMethod;
       const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); virtual;
-    {$ifdef FPC}
     {$ifdef CPUARM}
     // on ARM, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
     procedure ArmFakeStub;
@@ -2096,16 +2095,10 @@ type
     // on Aarch64, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
     procedure AArch64FakeStub;
     {$endif CPUAARCH64}
-    function FakeQueryInterface(
-      {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
-      out Obj): longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    function Fake_AddRef: longint;  {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    function Fake_Release: longint; {$ifndef WINDOWS}cdecl{$else}stdcall{$endif};
-    {$else}
-    function FakeQueryInterface(const IID: TGUID; out obj): HResult; stdcall;
-    function Fake_AddRef: integer; stdcall;
-    function Fake_Release: integer; stdcall;
-    {$endif FPC}
+    function FakeQueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+      IID: TGUID; out Obj): TIntQry; {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+    function Fake_AddRef: TIntCnt;   {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+    function Fake_Release: TIntCnt;  {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
   public
     /// create an instance, using the specified interface and factory
     constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TObject;
@@ -2985,22 +2978,19 @@ asm
 end;
 {$endif HASINLINE}
 
-function TInterfacedObjectFake.Fake_AddRef: {$ifdef FPC}longint{$else}integer{$endif};
+function TInterfacedObjectFake.Fake_AddRef: TIntCnt;
 begin
   result := SelfFromInterface._AddRef;
 end;
 
-function TInterfacedObjectFake.Fake_Release: {$ifdef FPC}longint{$else}integer{$endif};
+function TInterfacedObjectFake.Fake_Release: TIntCnt;
 begin
   result := SelfFromInterface._Release;
 end;
 
-{$ifdef FPC}
 function TInterfacedObjectFake.FakeQueryInterface(
-  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID; out Obj): longint;
-{$else}
-function TInterfacedObjectFake.FakeQueryInterface(const IID: TGUID; out Obj): HResult;
-{$endif FPC}
+  {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
+  out Obj): TIntQry;
 begin
   self := SelfFromInterface;
   if IsEqualGUID(@IID, @fFactory.fInterfaceIID) then
@@ -3012,7 +3002,7 @@ begin
   else if GetInterface(IID, Obj) then
     result := S_OK
   else
-    result := {$ifdef FPC}longint{$endif}(E_NOINTERFACE);
+    result := TIntQry(E_NOINTERFACE);
 end;
 
 procedure TInterfacedObjectFake.Get(out Obj);

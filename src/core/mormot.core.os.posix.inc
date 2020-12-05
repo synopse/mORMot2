@@ -48,8 +48,8 @@ const
   NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD;
-  lpString1: PWideChar; cchCount1: longint;
-  lpString2: PWideChar; cchCount2: longint): longint;
+  lpString1: PWideChar; cchCount1: integer;
+  lpString2: PWideChar; cchCount2: integer): PtrInt;
 var
   U1, U2: UnicodeString; // faster than WideString on Windows
 begin

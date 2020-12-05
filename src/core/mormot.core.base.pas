@@ -473,6 +473,13 @@ type
   /// pointer to cross-compiler type used for dynamic array length
   PDALen = ^TDALen;
 
+  /// cross-compiler return type of IUnknown._AddRef/_Release methods
+  // - used to reduce the $ifdef when implementing interfaces in Delphi and FPC
+  TIntCnt = {$ifdef FPC} longint {$else} integer {$endif};
+  /// cross-compiler return type of IUnknown.QueryInterface method
+  // - used to reduce the $ifdef when implementing interfaces in Delphi and FPC
+  TIntQry = {$ifdef FPC} longint {$else} HRESULT {$endif};
+
   type
     {$ifdef FPC}
 
