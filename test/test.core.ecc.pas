@@ -366,7 +366,7 @@ procedure TTestCoreEcc.ECCCommandLineTool;
 var
   sw: ICommandLine;
   ctxt: TCommandLine;
-  i: integer;
+  i: PtrInt;
   previd, prevpass: RawUTF8;
   plainfn, rawfn: TFileName;
   keys: array of record
@@ -395,7 +395,7 @@ var
 
 begin
   if DirectoryExists('synecc') then
-    DirectoryDelete('synecc', FILES_ALL, true)
+    check(DirectoryDelete('synecc', FILES_ALL, {filesnotdir=}true), 'rmdir')
   else
     CreateDir('synecc');
   SetCurrentDir('synecc');
@@ -408,8 +408,8 @@ begin
         formatUTF8('pass%', [i], pass);
         rounds := 1000 + i;
         ctxt := TCommandLine.Create([
-          'auth', previd,
-          'authpass', prevpass,
+          'auth', {%H-}previd,
+          'authpass', {%H-}prevpass,
           'authrounds', rounds - 1,
           'issuer', issuer,
           'days', 30 + i,

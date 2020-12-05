@@ -6424,7 +6424,7 @@ begin
   Rtti.DoRegister(self);
 end;
 
-function _New_NotImplemented(Rtti: TRttiCustom): pointer;
+function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
 begin
   raise ERttiException.CreateUTF8('%.ClassNewInstance(%) not implemented -> ' +
     'please include mormot.core.json unit to register TRttiJson',

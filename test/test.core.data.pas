@@ -4697,8 +4697,8 @@ procedure TTestCoreCompress._TAlgoCompress;
       exit;
     for i := 1 to 50 do
     begin
-      t := StringOfChar(AnsiChar(i), i){%H-} + {%H-}t;
-      s := StringOfChar(AnsiChar(i), i){%H-} + {%H-}s;
+      t := StringOfChar(AnsiChar(i), i){%H-}+{%H-}t;
+      s := StringOfChar(AnsiChar(i), i){%H-}+{%H-}s;
       Check(algo.Decompress(algo.Compress(s)) = t);
     end;
     plain := 0;

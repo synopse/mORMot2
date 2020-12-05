@@ -2,7 +2,7 @@
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-   POSIX Sockets API calls via the libc, as used by mormot.net.sock.pas
+  POSIX Sockets API calls via the libc, as used by mormot.net.sock.pas
 }
 
 uses
@@ -19,8 +19,8 @@ uses
 { ******** Sockets Type Definitions }
 
 const
-  NI_MAXHOST	   = 1025;
-  NI_MAXSERV	   = 32;
+  NI_MAXHOST = 1025;
+  NI_MAXSERV = 32;
 
   NO_ERROR = 0;
   WSAEINTR = ESysEINTR;
@@ -59,15 +59,22 @@ const
     {$endif OPENBSD}
     {$else}
     {$ifdef SUNOS}
-    MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
+    MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
-    MSG_NOSIGNAL  = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
+    MSG_NOSIGNAL = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
     {$endif SUNOS}
 
   {$endif BSD}
 
-  _ST: array[TNetLayer] of integer = (SOCK_STREAM, SOCK_DGRAM, SOCK_STREAM);
-  _IP: array[TNetLayer] of integer = (IPPROTO_TCP, IPPROTO_UDP, 0);
+  _ST: array[TNetLayer] of integer = (
+    SOCK_STREAM,
+    SOCK_DGRAM,
+    SOCK_STREAM);
+
+  _IP: array[TNetLayer] of integer = (
+    IPPROTO_TCP,
+    IPPROTO_UDP,
+    0);
 
 {$packrecords C}
 
@@ -81,9 +88,12 @@ type
     h_addrtype: integer;
     h_length: socklen_t;
     case integer of
-     0: (h_addr_list: PPAnsiChar);
-     1: (h_addr: ^pin_addr);
-     2: (h_addr6: ^pin6_addr);
+       0: (
+          h_addr_list: PPAnsiChar);
+       1: (
+          h_addr: ^pin_addr);
+       2: (
+          h_addr6: ^pin6_addr);
   end;
   PHostEnt = ^THostEnt;
 
@@ -153,11 +163,16 @@ type
   /// application-level data structure for epoll
   TEPollData = record
     case integer of
-      0: (ptr: pointer);
-      1: (fd: integer);
-      2: (u32: cardinal);
-      3: (u64: Int64);
-      4: (obj: TObject);
+      0: (
+         ptr: pointer);
+      1: (
+         fd: integer);
+      2: (
+         u32: cardinal);
+      3: (
+         u64: Int64);
+      4: (
+         obj: TObject);
   end;
   PEPollData = ^TEPollData;
 

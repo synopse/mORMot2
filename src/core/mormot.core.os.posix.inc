@@ -35,8 +35,8 @@ uses
 
 { ****************** Unicode, Time, File process }
 var
-  /// contains the curent system code page (default WinAnsi)
-  GetACP: integer = CODEPAGE_US;
+  /// contains the curent system code page (default UTF-8 on POSIX systems)
+  GetACP: integer = CP_UTF8;
 
   /// contains the current Linux kernel revision, as one 24-bit integer
   // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32

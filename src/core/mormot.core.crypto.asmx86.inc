@@ -779,7 +779,7 @@ end;
 {$endif ASMX86}
 
 
-procedure bswap256(s,d: PIntegerArray);
+procedure bswap256(s, d: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -811,7 +811,7 @@ asm
         pop     ebx
 end;
 
-procedure bswap160(s,d: PIntegerArray);
+procedure bswap160(s, d: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -834,7 +834,7 @@ asm
         pop     ebx
 end;
 
-function gf2_multiply(x,y,m: PtrUInt): PtrUInt;
+function gf2_multiply(x, y, m: PtrUInt): PtrUInt;
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=x edx=y ecx=m
         push    esi

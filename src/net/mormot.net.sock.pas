@@ -12,13 +12,15 @@ unit mormot.net.sock;
    - Efficient Multiple Sockets Polling
    - TCrtSocket Buffered Socket Read/Write Class
 
-   The Low-Level Sockets API is encapsultated into a single set of functions,
-   and wrapped around a TNetSocket abstract helper, and never made public.
+   The Low-Level Sockets API, which is complex and inconsistent among OS, is
+   not made public and shouldn't be used in end-user code. This unit
+   encapsultates all Sockets features into a single set of functions, and
+   around the TNetSocket abstract wrapper.
 
   *****************************************************************************
 
   Notes:
-    Oldest Delphis didn't include WinSock2.pas.
+    Oldest Delphis didn't include WinSock2.pas, so we defined our own.
     Under POSIX, will redirect to the libc or regular FPC units.
 
 }

@@ -190,7 +190,7 @@ begin
     if p <> '' then
       if p[1] in ['-', '/'] then
       begin
-        if sw <> '' then
+        if {%H-}sw <> '' then
           fValues.AddValue(sw, true); // -flag -switch value -> flag=true
         sw := LowerCase(copy(p, 2, 100));
         if sw = 'noprompt' then
