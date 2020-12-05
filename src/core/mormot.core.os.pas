@@ -659,8 +659,8 @@ type
     SessionID: cardinal;
     PEBBaseAddress: Pointer;
     AffinityMask: cardinal;
-    BasePriority: LongInt;
-    ExitStatus: LongInt;
+    BasePriority: integer;
+    ExitStatus: integer;
     BeingDebugged: byte;
     ImagePath: SynUnicode;
     CommandLine: SynUnicode;
@@ -921,22 +921,22 @@ type
     is_socket_unix: function(fd, typr, listening: integer;
       var path: TFileName; pathLength: PtrUInt): integer; cdecl;
     /// systemd: submit simple, plain text log entries to the system journal
-    // - priority value can be obtained using longint(LOG_TO_SYSLOG[logLevel])
-    journal_print: function(priority: longint; args: array of const): longint; cdecl;
+    // - priority value can be obtained using integer(LOG_TO_SYSLOG[logLevel])
+    journal_print: function(priority: integer; args: array of const): integer; cdecl;
     /// systemd: submit array of iov structures instead of the format string to the system journal.
     //  - each structure should reference one field of the entry to submit.
     //  - the second argument specifies the number of structures in the array.
-    journal_sendv: function(var iov: TIoVec; n: longint): longint; cdecl;
+    journal_sendv: function(var iov: TIoVec; n: integer): integer; cdecl;
     /// sends notification to systemd
     // - see https://www.freedesktop.org/software/systemd/man/notify.html
     // status notification sample: sd.notify(0, 'READY=1');
     // watchdog notification: sd.notify(0, 'WATCHDOG=1');
-    notify: function(unset_environment: longint; state: PUTF8Char): longint; cdecl;
+    notify: function(unset_environment: integer; state: PUTF8Char): integer; cdecl;
     /// check whether the service manager expects watchdog keep-alive
     // notifications from a service
     // - if result > 0 then usec contains the notification interval (app should
     // notify every usec/2)
-    watchdog_enabled: function(unset_environment: longint; usec: Puint64): longint; cdecl;
+    watchdog_enabled: function(unset_environment: integer; usec: Puint64): integer; cdecl;
     /// returns true in case process is started by systemd
     // - For systemd v232+
     function ProcessIsStartedBySystemd: boolean;
@@ -1031,16 +1031,16 @@ procedure FlushFileBuffers(F: THandle);
   {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// compatibility function, wrapping Win32 API last error code
-function GetLastError: longint;
+function GetLastError: integer;
   {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// compatibility function, wrapping Win32 API last error code
-procedure SetLastError(error: longint);
+procedure SetLastError(error: integer);
   {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// returns a given error code as plain text
 // - calls FormatMessageW on Windows, or StrError() on POSIX
-function GetErrorText(error: longint): RawUTF8;
+function GetErrorText(error: integer): RawUTF8;
 
 /// retrieve the text corresponding to an error message for a given Windows module
 // - use RTL SysErrorMessage() as fallback
@@ -3088,7 +3088,7 @@ var
   OldRaiseProc: TExceptProc;
 
 procedure SynRaiseProc(Obj: TObject; Addr: CodePointer;
-  FrameCount: Longint; Frame: PCodePointer);
+  FrameCount: integer; Frame: PCodePointer);
 var
   ctxt: TSynLogExceptionContext;
   backuplasterror: DWORD;

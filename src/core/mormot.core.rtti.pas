@@ -871,7 +871,7 @@ type
     /// contains the default value for an ordinal or set property
     // - NO_DEFAULT=$80000000 indicates none was defined in source code
     // - see also TPropInfo.DefaultOr0
-    function Default: Longint;
+    function Default: integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// return the Default RTTI value defined for this property, or 0 if not set
     function DefaultOr0: integer;
@@ -994,7 +994,7 @@ type
   end;
 
 const
-  NO_DEFAULT = longint($80000000);
+  NO_DEFAULT = integer($80000000);
 
 /// retrieve the text name of one TRttiKind enumerate
 function ToText(k: TRttiKind): PShortString; overload;
@@ -1037,7 +1037,7 @@ function GetTypeData(TypeInfo: pointer): PTypeData; inline;
 {$ifdef ISDELPHI}// Delphi requires those definitions for proper inlining
 
 const
-  NO_INDEX = longint($80000000);
+  NO_INDEX = integer($80000000);
 
   ptField = $ff;
   ptVirtual = $fe;
@@ -3115,7 +3115,7 @@ begin
   result := PPropInfo(@self)^.Index;
 end;
 
-function TRttiProp.Default: Longint;
+function TRttiProp.Default: integer;
 begin
   result := PPropInfo(@self)^.Default;
 end;

@@ -534,7 +534,7 @@ type
     ExceptionFlags: DWord;
     OuterException: PExceptionRecord;
     ExceptionAddress: PtrUInt;
-    NumberParameters: Longint;
+    NumberParameters: integer;
     case {IsOsException:} boolean of
       true:
         (ExceptionInformation: array[0..14] of PtrUInt);
@@ -1756,13 +1756,13 @@ type
 
   PMS_PROCESS_BASIC_INFORMATION = ^MS_PROCESS_BASIC_INFORMATION;
   MS_PROCESS_BASIC_INFORMATION = packed record
-    ExitStatus: Longint;
+    ExitStatus: integer;
     {$ifdef CPUX64}
     _align1: array[0..3] of byte;
     {$endif CPUX64}
     PebBaseAddress: PMS_PEB;
     AffinityMask: PtrUInt;
-    BasePriority: Longint;
+    BasePriority: integer;
     {$ifdef CPUX64}
     _align2: array[0..3] of byte;
     {$endif CPUX64}
@@ -1780,7 +1780,7 @@ type
     ProcessSubsystemInformation = 75);
   {$Z1}
 
-  NTSTATUS = LongInt;
+  NTSTATUS = integer;
 
 function NtQueryInformationProcess(ProcessHandle: THandle;
   ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;

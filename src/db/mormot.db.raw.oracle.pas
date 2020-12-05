@@ -39,9 +39,9 @@ type
   { Generic Oracle Types }
   sword   = integer;
   eword   = integer;
-  uword   = LongInt;
+  uword   = cardinal;
   sb4     = integer;
-  ub4     = LongInt;
+  ub4     = cardinal;
   sb2     = SmallInt;
   ub2     = Word;
   sb1     = ShortInt;
@@ -792,13 +792,13 @@ type
       errhp: POCIError; locp: POCIDescriptor): ub4;
     function BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4;
-      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): integer;
+      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
     function BlobReadToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
-      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): integer;
+      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
     function BlobWriteFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
-      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): integer;
+      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
   public
     ClientVersion: function(var major_version, minor_version,
       update_num, patch_num, port_update_num: sword): sword; cdecl;
@@ -982,7 +982,7 @@ var
   OCI_CHARSET_WIN1252: cardinal = OCI_WE8MSWIN1252;
 
   /// how many blob chunks should be handled at once
-  SynDBOracleBlobChunksCount: integer = 250;
+  SynDBOracleBlobChunksCount: ub4 = 250;
 
 /// check if two Oracle Charset codes are similar
 function SimilarCharSet(aCharset1, aCharset2: cardinal): boolean;
@@ -1301,7 +1301,7 @@ end;
 
 function TSQLDBOracleLib.BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4; csid: ub2;
-  csfrm: ub1): integer;
+  csfrm: ub1): ub4;
 var
   Read, ChunkSize: ub4;
   Status: sword;
@@ -1329,7 +1329,7 @@ end;
 
 function TSQLDBOracleLib.BlobReadToStream(Stmt: TSQLDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
-  BlobLen: ub4; csid: ub2; csfrm: ub1): integer;
+  BlobLen: ub4; csid: ub2; csfrm: ub1): ub4;
 var
   Read, ChunkSize: ub4;
   Status: sword;
@@ -1415,9 +1415,9 @@ end;
 
 function TSQLDBOracleLib.BlobWriteFromStream(Stmt: TSQLDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
-  BlobLen: ub4; csid: ub2; csfrm: ub1): integer;
+  BlobLen: ub4; csid: ub2; csfrm: ub1): ub4;
 var
-  ChunkSize, l_Read, l_Write, l_Offset: Longint;
+  ChunkSize, l_Read, l_Write, l_Offset: ub4;
   tmp: RawByteString;
 begin
   Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);

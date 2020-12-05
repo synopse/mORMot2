@@ -504,7 +504,7 @@ type
     {$ifdef HASCODEPAGE}
       {$ifdef CPU64}
       /// padding bytes for 16 byte alignment of the header
-      _Padding: LongInt;
+      _Padding: cardinal;
       {$endif CPU64}
       /// the string code page - e.g. CP_UTF8 for RawUTF8
       codePage: Word;
@@ -521,7 +521,7 @@ type
     TDynArrayRec = packed record
       {$ifdef CPUX64}
       /// padding bytes for 16 byte alignment of the header
-      _Padding: LongInt;
+      _Padding: cardinal;
       {$endif}
       /// dynamic array reference count (basic garbage memory mechanism)
       refCnt: TRefCnt;

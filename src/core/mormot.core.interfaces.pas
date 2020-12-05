@@ -4479,7 +4479,7 @@ function ObjectFromInterface(const aValue: IInterface): TObject;
       Stub: cardinal;
       case integer of
         0: (ShortJmp: shortint);
-        1: (LongJmp:  longint)
+        1: (LongJmp:  integer)
     end;
     PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
 begin

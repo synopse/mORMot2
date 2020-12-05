@@ -1895,7 +1895,7 @@ var
   P: PUTF8Char;
   s: RawUTF8;
   i: integer;
-  rc: longint; // needed on Linux x86-64
+  rc: PtrInt; // needed on Linux x86-64
 begin
   res := curl.easy_perform(fHandle);
   if res <> crOK then

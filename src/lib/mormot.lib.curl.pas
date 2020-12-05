@@ -365,13 +365,13 @@ type
     version: PAnsiChar;
     version_num: cardinal;
     host: PAnsiChar;
-    features: longint;
+    features: integer;
     ssl_version: PAnsiChar;
     ssl_version_num: PAnsiChar;
     libz_version: PAnsiChar;
     protocols: ^TPAnsiCharArray;
     ares: PAnsiChar;
-    ares_num: longint;
+    ares_num: integer;
     libidn: PAnsiChar;
   end;
   PCurlVersionInfo = ^TCurlVersionInfo;
