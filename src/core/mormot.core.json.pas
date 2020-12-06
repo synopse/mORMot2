@@ -709,8 +709,13 @@ type
     procedure BlockEnd(Stopper: AnsiChar; Options: TTextWriterWriteObjectOptions);
     /// used internally by WriteObject() when serializing a published property
     // - will call AddCRAndIndent then append "PropName":
-    procedure WriteObjectPropName(const PropName: ShortString;
+    procedure WriteObjectPropName(PropName: PUTF8Char; PropNameLen: PtrInt;
       Options: TTextWriterWriteObjectOptions);
+    /// used internally by WriteObject() when serializing a published property
+    // - will call AddCRAndIndent then append "PropName":
+    procedure WriteObjectPropNameShort(const PropName: shortstring;
+      Options: TTextWriterWriteObjectOptions);
+      {$ifdef HASINLINE}inline;{$endif}
     /// same as WriteObject(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure WriteObjectAsString(Value: TObject;
@@ -5029,13 +5034,13 @@ begin
   begin
     Ctxt.W.BlockAfterItem(Ctxt.Options);
     if (Ctxt.Prop <> nil) and
-       (Ctxt.Prop^.Name <> nil) then
+       (Ctxt.Prop^.Name <> '') then
     begin
-      FormatShort('%_str', [Ctxt.Prop^.Name^], _str);
-      Ctxt.W.WriteObjectPropName(_str, Ctxt.Options);
+      FormatShort('%_str', [Ctxt.Prop^.Name], _str);
+      Ctxt.W.WriteObjectPropNameShort(_str, Ctxt.Options);
     end
     else
-      Ctxt.W.WriteObjectPropName('ID_str', Ctxt.Options);
+      Ctxt.W.WriteObjectPropNameShort('ID_str', Ctxt.Options);
     Ctxt.W.Add('"');
     Ctxt.W.Add(Data^);
     Ctxt.W.Add('"');
@@ -5240,7 +5245,7 @@ begin
       end;
       if woStoreClassName in c.Options then
       begin
-        c.W.WriteObjectPropName('ClassName', c.Options);
+        c.W.WriteObjectPropNameShort('ClassName', c.Options);
         c.W.Add('"');
         c.W.AddShort(ClassNameShort(PClass(Data)^)^);
         c.W.Add('"');
@@ -5250,7 +5255,7 @@ begin
       end;
       if woStorePointer in c.Options then
       begin
-        c.W.WriteObjectPropName('Address', c.Options);
+        c.W.WriteObjectPropNameShort('Address', c.Options);
         c.W.AddPointer(PtrUInt(Data), '"');
         if c.Prop <> nil then
           c.W.BlockAfterItem(c.Options);
@@ -5271,7 +5276,7 @@ begin
       repeat
         p := c.Prop;
         if // handle Props.NameChange() set to New='' to ignore this field
-           (p^.Name <> nil) and
+           (p^.Name <> '') and
            // handle woStoreStoredFalse flag and "stored" attribute in code
            ((woStoreStoredFalse in c.Options) or
             (p^.Prop = nil) or
@@ -5279,7 +5284,7 @@ begin
            // handle woDontStoreDefault flag over "default" attribute in code
            (not (woDontStoreDefault in c.Options) or
             (p^.Prop = nil) or
-            (p.PropDefault = NO_DEFAULT) or
+            (p.OrdinalDefault = NO_DEFAULT) or
             not p.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
            (not (woDontStoreVoid in c.Options) or
@@ -5290,7 +5295,7 @@ begin
             // append ',' and proper indentation if a field was just appended
             c.W.BlockAfterItem(c.Options);
           done := true;
-          c.W.WriteObjectPropName(p^.Name^, c.Options);
+          c.W.WriteObjectPropName(pointer(p^.Name), length(p^.Name), c.Options);
           if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
              not TSPHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             if (woHideSensitivePersonalInformation in c.Options) and
@@ -5491,14 +5496,20 @@ end;
 
 { TTextWriter }
 
-procedure TTextWriter.WriteObjectPropName(const PropName: ShortString;
-  Options: TTextWriterWriteObjectOptions);
+procedure TTextWriter.WriteObjectPropName(PropName: PUTF8Char;
+  PropNameLen: PtrInt; Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
     AddCRAndIndent; // won't do anything if has already been done
-  AddProp(@PropName[1], ord(PropName[0])); // handle twoForceJSONExtended
+  AddProp(PropName, PropNameLen); // handle twoForceJSONExtended
   if woHumanReadable in Options then
     Add(' ');
+end;
+
+procedure TTextWriter.WriteObjectPropNameShort(const PropName: shortstring;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  WriteObjectPropName(@PropName[1], ord(PropName[0]), Options);
 end;
 
 procedure TTextWriter.WriteObjectAsString(Value: TObject;
@@ -7479,8 +7490,8 @@ nxt:    propname := GetJSONPropName(Ctxt.JSON, @propnamelen);
         if not Ctxt.Valid then
           break;
         // O(1) optimistic process of the property name, following RTTI order
-        if (prop^.Name <> nil) and
-           IdemPropName(prop^.Name^, propname, propnamelen) then
+        if (prop^.Name <> '') and
+           IdemPropNameU(prop^.Name, propname, propnamelen) then
           if JsonLoadProp(Data, prop^, Ctxt) then
             if Ctxt.EndOfObject = '}' then
               break

@@ -1115,17 +1115,17 @@ var
 begin
   level := 0;
   if parentName = '' then
-    ShortStringToAnsi7String(prop.Name^, fullName)
+    fullName := prop.Name
   else
   begin
-    FormatUTF8('%.%', [parentName, prop.Name^], fullName);
+    FormatUTF8('%.%', [parentName, prop.Name], fullName);
     for l := 1 to length(fullName) do
       if fullName[l] = '.' then
         inc(level);
   end;
   result := ContextFromRtti(wUnknown, prop.Value, '', fullName);
   _ObjAddProps([
-    'propName', prop.Name^,
+    'propName', prop.Name,
     'fullPropName', fullName], result);
   if level > 0 then
     _ObjAddProp('nestedIdentation', StringOfChar(' ', level * 2), result);

@@ -481,8 +481,10 @@ end;
 
 function TSynZipCompressor.Read(var Buffer; Count: Longint): Longint;
 begin
-  raise ESynZip.Create('TSynZipCompressor.Read is not supported');
+  {$ifdef DELPHI20062007}
   result := 0;
+  {$endif DELPHI20062007}
+  raise ESynZip.Create('TSynZipCompressor.Read is not supported');
 end;
 
 {$ifdef FPC}

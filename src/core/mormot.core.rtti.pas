@@ -120,7 +120,6 @@ type
 
 const
   /// potentially managed types in TRttiKind enumerates
-  // - should match ManagedType*() functions
   rkManagedTypes = [rkLStringOld, rkLString, rkWstring, rkUstring, rkArray,
                     rkObject, rkRecord, rkDynArray, rkInterface, rkVariant];
 
@@ -204,7 +203,6 @@ const
 
 const
   /// potentially managed types in TRttiKind enumerates
-  // - should match ManagedType*() functions
   rkManagedTypes = [rkLString, rkWstring, {$ifdef UNICODE} rkUstring, {$endif}
                     rkArray, rkRecord, rkDynArray, rkInterface, rkVariant];
   /// maps record or object in TTypeKind RTTI enumerates
@@ -686,6 +684,9 @@ type
     /// compute in how many bytes this type is stored
     // - will use Kind (and RttiOrd/RttiFloat) to return the exact value
     function RttiSize: PtrInt;
+    /// check if this type is a managed type, or has any managed field
+    // - will also check for the nested fields e.g. for rkRecordTypes
+    function IsManaged: boolean;
     /// for rkRecordTypes: get the record size
     // - returns 0 if the type is not a record/object
     function RecordSize: PtrInt;
@@ -698,6 +699,9 @@ type
     // - note: if FPC_OLDRTTI is defined, unmanaged fields are included
     procedure RecordManagedFields(out Fields: TRttiRecordManagedFields);
       {$ifdef HASINLINE}inline;{$endif}
+    /// for rkRecordTypes: check if this record as any managed fields
+    function RecordManagedFieldsCount: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkRecordTypes: retrieve enhanced RTTI information about all fields
     // of this record, for JSON serialization without text definition
     // - this information is currently only available since Delphi 2010
@@ -707,10 +711,15 @@ type
     // within the SOA (e.g. as DTOs) calling RegisterFromText, and don't rely on
     // this RTTI, since it will be more cross-platform, and more customizable
     function RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
-    /// for rkDynArray: get the dynamic array type information of the stored item
+    /// for rkDynArray: get the dynamic array standard RTTI of the stored item
+    // - returns nil if the item has no managed field
     // - caller should ensure the type is indeed a dynamic array
     function DynArrayItemType: PRttiInfo; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// for rkDynArray: get the dynamic array deep RTTI of the stored item
+    // - works for both managed and unmanaged types, on FPC and Delphi 2010+
+    // - caller should ensure the type is indeed a dynamic array
+    function DynArrayItemTypeEvenUnmanaged: PRttiInfo;
     /// for rkDynArray: get the dynamic array type information of the stored item
     // - this overloaded method will also return the item size in bytes
     // - caller should ensure the type is indeed a dynamic array
@@ -1824,16 +1833,16 @@ type
     /// write field/property offset in the record/class instance memory
     // - equals -1 if Prop has a setter
     OffsetSet: PtrInt;
-    /// map to Prop^.Name or a customized field/property name
+    /// contains Prop^.Name or a customized field/property name
     // - e.g. 'SubProp'
-    // - equals nil if Props.NameChange() was set to New='', meaning this field
+    // - equals '' if Props.NameChange() was set to New='', meaning this field
     // should not be part of the serialized JSON object
-    Name: PShortString;
+    Name: RawUTF8;
     /// store standard RTTI of this published property
     // - equals nil for rkRecord/rkObject nested field
     Prop: PRttiProp;
     /// equals NO_DEFAULT or the default value
-    PropDefault: integer;
+    OrdinalDefault: integer;
     /// very fast retrieval of any field value into a TVarData-like
     // - works if Prop is defined or not, calling any getter method if needed
     // - complex TRttiVarData with varAny pointer will be properly handled by
@@ -1880,17 +1889,17 @@ type
     /// List[NotInheritedIndex]..List[Count-1] store the last level of properties
     NotInheritedIndex: integer;
     /// locate a property/field by name
-    function Find(const PropName: shortstring): PRttiCustomProp; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// locate a property/field by name
     function Find(PropName: PUTF8Char; PropNameLen: PtrInt): PRttiCustomProp; overload;
+    /// locate a property/field by name
+    function Find(const PropName: RawUTF8): PRttiCustomProp; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// customize a property/field name
     // - New is expected to be only plain pascal identifier, i.e.
     // A-Z a-z 0-9 and _ characters, up to 63 in length
     // - if New equals '', this published property will be excluded from
     // the JSON serialized object
     // - the New shortstring should be a local constant, to avoid random GPF
-    function NameChange(const Old, New: shortstring): PRttiCustomProp;
+    function NameChange(const Old, New: RawUTF8): PRttiCustomProp;
     /// customize property/field name, specified as old/new pairs
     // - each Old[] field name will be replaced by the corresponding New[] name
     // - New[] is expected to be only plain pascal identifier, i.e.
@@ -1904,7 +1913,7 @@ type
     procedure NameChanges(const Old, New: array of RawUTF8);
     /// manuall adding of a property/field definition
     // - append as last field, unless AddFirst is set to true
-    procedure Add(Info: PRttiInfo; Offset: PtrInt; const PropName: shortstring;
+    procedure Add(Info: PRttiInfo; Offset: PtrInt; const PropName: RawUTF8;
       AddFirst: boolean = false);
     /// register the published properties of a given class
     // - is called recursively if IncludeParents is true
@@ -1925,14 +1934,10 @@ type
     // as TRttiCustom.FinalizeAndClear would on a record
     procedure FinalizeAndClearPublishedProperties(Instance: TObject);
   protected
-    // store AddFromText/AddFromTextPropName ShortStrings
-    fFromTextPropNames: TRawUTF8DynArray;
     /// points to List[] items which are managed
     fManaged: PRttiCustomPropDynArray;
     /// reset all properties
     procedure InternalClear;
-    /// mimics a PShortString stored in this instance
-    function AddFromTextPropName(Name: PUTF8Char; NameLen: integer): PShortString;
     /// finalize the managed properties of this instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     procedure FinalizeManaged(Data: PAnsiChar);
@@ -2080,8 +2085,8 @@ type
       read fProps;
     /// shortcut to the TRttiCustom of the item of a (dynamic) array
     // - only set for rkArray and rkDynArray
-    // - may be set also for unmanaged types - use Cache.ItemInfo if you want the
-    // PRttiInfo TypeInfo() pointer for rkManagedTypes only
+    // - may be set also for unmanaged types - use Cache.ItemInfo if you want
+    // the raw PRttiInfo TypeInfo() pointer for rkManagedTypes only
     property ArrayRtti: TRttiCustom
       read fArrayRtti;
     /// best guess of first field type for a rkDynArray
@@ -2861,6 +2866,15 @@ begin
   else
     result := 0;
   end;
+end;
+
+function TRttiInfo.IsManaged: boolean;
+begin
+  if Kind in rkRecordTypes then
+    result := RecordManagedFieldsCount > 0
+  else
+    result := Kind in rkManagedTypes;
+  // should rkArray be handled specificically? we guess returning true is fine
 end;
 
 function TRttiInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
@@ -5602,12 +5616,12 @@ begin
     OffsetSet := addr
   else
     OffsetSet := -1;
-  Name := RttiProp^.Name;
+  Name := ToUTF8(RttiProp^.Name^);
   Prop := RttiProp;
   if rcfHasRttiOrd in Value.Cache.Flags then
-    PropDefault := RttiProp.Default
+    OrdinalDefault := RttiProp.Default
   else
-    PropDefault := NO_DEFAULT;
+    OrdinalDefault := NO_DEFAULT;
   result := Value.Size;
 end;
 
@@ -5655,14 +5669,14 @@ begin
   if rcfHasRttiOrd in Value.Cache.Flags then
     if OffsetGet >= 0 then
       result := FromRttiOrd(
-        Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet) = PropDefault
+        Value.Cache.RttiOrd, PAnsiChar(Data) + OffsetGet) = OrdinalDefault
     else
-      result := Prop.GetOrdProp(Data) = PropDefault
+      result := Prop.GetOrdProp(Data) = OrdinalDefault
   else if rcfGetInt64Prop in Value.Cache.Flags then
     if OffsetGet >= 0 then
-      result := PInt64(PAnsiChar(Data) + OffsetGet)^ = PropDefault
+      result := PInt64(PAnsiChar(Data) + OffsetGet)^ = OrdinalDefault
     else
-      result := Prop.GetInt64Prop(Data) = PropDefault
+      result := Prop.GetInt64Prop(Data) = OrdinalDefault
   else
     // only ordinals have default values
     result := false;
@@ -5866,44 +5880,38 @@ end;
 
 { TRttiCustomProps }
 
-function TRttiCustomProps.Find(const PropName: shortstring): PRttiCustomProp;
-begin
-  result := Find(@PropName[1], ord(PropName[0]));
-end;
-
-function TRttiCustomProps.Find(PropName: PUTF8Char;
-  PropNameLen: PtrInt): PRttiCustomProp;
+function TRttiCustomProps.Find(
+  PropName: PUTF8Char; PropNameLen: PtrInt): PRttiCustomProp;
 var
   n: integer;
-  s: PUTF8Char;
 begin
-  result := pointer(List);
-  if result <> nil then
+  if PropNameLen <> 0 then
   begin
-    n := Count;
-    repeat
-      s := pointer(result.Name);
-      if (s <> nil) and // s=nil for Props.NameChange() with New=''
-         (PtrInt(s[0]) = PropNameLen) and
-         IdemPropNameUSameLen(s + 1, PropName, PropNameLen) then
-        exit;
-      inc(result);
-      dec(n);
-    until n = 0;
+    result := pointer(List);
+    if result <> nil then
+    begin
+      n := Count;
+      repeat
+        if IdemPropNameU(result^.Name, PropName, PropNameLen) then
+          exit;
+        inc(result);
+        dec(n);
+      until n = 0;
+    end;
   end;
   result := nil;
 end;
 
-function TRttiCustomProps.NameChange(const Old, New: shortstring): PRttiCustomProp;
+function TRttiCustomProps.Find(const PropName: RawUTF8): PRttiCustomProp;
+begin
+  result := Find(pointer(PropName), length(PropName));
+end;
+
+function TRttiCustomProps.NameChange(const Old, New: RawUTF8): PRttiCustomProp;
 begin
   result := Find(Old);
   if result <> nil then
-    if New = '' then
-      // mark ignore this field in JSON serialized object
-      result^.Name := nil
-    else
-      // customize this field
-      result^.Name := @New;
+    result^.Name := New;
 end;
 
 procedure TRttiCustomProps.NameChanges(const Old, New: array of RawUTF8);
@@ -5918,34 +5926,22 @@ begin
   p := pointer(List);
   for i := 1 to Count do
   begin
-    if (p^.Prop <> nil) and
-       (p^.Name <> p^.Prop^.Name) then
-    begin
-      if (p^.Name <> nil) and
-         (PtrArrayDelete(fFromTextPropNames, p^.Name) >= 0) then
-        // unregistered from local copy - free the temp RawUTF8
-        RawUTF8(pointer(p^.Name)) := '';
-      p^.Name := p^.Prop^.Name;
-    end;
+    if p^.Prop <> nil then
+      p^.Name := ToUTF8(p^.Prop^.Name^);
     inc(p);
   end;
   // customize field names
   for i := 0 to high(Old) do
   begin
-    p := Find(pointer(Old[i]), length(Old[i]));
+    p := Find(Old[i]);
     if p = nil then
       raise ERttiException.CreateUTF8('NameChanges(%) unknown', [Old[i]]);
-    if New[i] = '' then
-      // mark ignore this field in JSON serialized object
-      p^.Name := nil
-    else
-      // customize this field name, making a local copy
-      p^.Name := AddFromTextPropName(pointer(New[i]), length(New[i]));
+    p^.Name := New[i];
   end;
 end;
 
 procedure TRttiCustomProps.Add(Info: PRttiInfo; Offset: PtrInt;
-  const PropName: shortstring; AddFirst: boolean);
+  const PropName: RawUTF8; AddFirst: boolean);
 var
   n: PtrInt;
 begin
@@ -5957,7 +5953,10 @@ begin
   if AddFirst then
   begin
     if Count > 0 then
+    begin
       MoveFast(List[0], List[1], SizeOf(List[0]) * Count);
+      pointer(List[0].Name) := nil; // avoid GPF below
+    end;
     n := 0;
   end
   else
@@ -5968,37 +5967,23 @@ begin
     Value := Rtti.RegisterType(Info);
     OffsetGet := Offset;
     OffsetSet := Offset;
-    Name := @PropName;
+    Name := PropName;
     Prop := nil;
-    PropDefault := NO_DEFAULT;
+    OrdinalDefault := NO_DEFAULT;
     inc(Size, Value.Size);
   end;
 end;
 
-function TRttiCustomProps.AddFromTextPropName(
-  Name: PUTF8Char; NameLen: integer): PShortString;
-var
-  s: RawUTF8;
-begin
-  FastSetString(s, Name - 1, NameLen + 1); // local temp storage
-  s[1] := AnsiChar(NameLen); // emulate shortstring
-  AddRawUTF8(fFromTextPropNames, s);
-  result := pointer(s);
-end;
-
 function TRttiCustomProps.FromTextPrepare(const PropName: RawUTF8): integer;
-var
-  L: integer;
 begin
-  L := length(PropName);
-  if L = 0 then
-    raise ERttiException.Create('Void property name');
-  if Find(pointer(PropName), L) <> nil then
+  if PropName = '' then
+    raise ERttiException.Create('FromTextPrepare: Void property name');
+  if Find(PropName) <> nil then
     raise ERttiException.CreateUTF8('Duplicated % property name', [PropName]);
   result := Count;
   inc(Count);
   SetLength(List, Count);
-  List[result].Name := AddFromTextPropName(pointer(PropName), L);
+  List[result].Name := PropName;
 end;
 
 procedure TRttiCustomProps.AdjustAfterAdded;
@@ -6037,7 +6022,7 @@ begin
         begin
           if i > 0 then
             Add(',', ' ');
-          AddShort(Name^);
+          AddNoJSONEscapeUTF8(Name);
           if IncludePropType then
           begin
             Add(':', ' ');
@@ -6057,7 +6042,6 @@ begin
   Count := 0;
   Size := 0;
   NotInheritedIndex := 0;
-  fFromTextPropNames := nil;
   fManaged := nil;
 end;
 
@@ -6116,8 +6100,8 @@ begin
       inc(Size, Value.Size);
       OffsetGet := f^.Offset;
       OffsetSet := f^.Offset;
-      Name := f^.Name;
-      PropDefault := NO_DEFAULT;
+      Name := ToUTF8(f^.Name^);
+      OrdinalDefault := NO_DEFAULT;
       inc(f);
     end;
 end;
@@ -6176,8 +6160,8 @@ begin
         inc(p, PtrInt(Instance));
         rtti := pp^.Value;
         rtti.ValueFinalize(pointer(p));
-        if pp^.PropDefault <> NO_DEFAULT then
-          MoveSmall(@pp^.PropDefault, pointer(p), rtti.Size)
+        if pp^.OrdinalDefault <> NO_DEFAULT then
+          MoveSmall(@pp^.OrdinalDefault, pointer(p), rtti.Size)
         else
           FillZeroSmall(pointer(p), rtti.Size);
       end
@@ -6284,6 +6268,7 @@ var
   dummy: integer;
   pt: TRttiParserType;
   pct: TRttiParserComplexType;
+  item: PRttiInfo;
 begin
   if aInfo = nil then
   begin
@@ -6319,15 +6304,20 @@ begin
   case fCache.Kind of
     rkDynArray:
       begin
-        if fCache.ItemInfo = nil then
+        item := fCache.ItemInfo;
+        if item = nil then // =nil for unmanaged types
         begin
-          pt := DynArrayTypeInfoToStandardParserType(aInfo, nil,
-            fCache.ItemSize, {exacttype=}true, dummy, @pct);
-          fArrayFirstField := pt;
-          fArrayRtti := Rtti.RegisterType(ParserTypeToTypeInfo(pt, pct));
-        end
-        else
-          fArrayRtti := Rtti.RegisterType(fCache.ItemInfo);
+          // try to guess the actual type, e.g. a TGUID or an integer
+          item := aInfo^.DynArrayItemTypeEvenUnmanaged; // FPC or Delphi 2010+
+          if item = nil then
+          begin
+            // on oldest Delphi, recognize at least the most common types
+            pt := DynArrayTypeInfoToStandardParserType(aInfo, nil,
+              fCache.ItemSize, {exacttype=}true, dummy, @pct);
+            item := ParserTypeToTypeInfo(pt, pct);
+          end;
+        end;
+        fArrayRtti := Rtti.RegisterType(item);
         if (fArrayRtti <> nil) and
            (fArrayFirstField = ptNone) then
           if fArrayRtti.Kind in rkRecordOrDynArrayTypes then
@@ -6342,7 +6332,8 @@ begin
   end;
   // initialize processing callbacks
   fFinalize := RTTI_FINALIZE[fCache.Kind];
-  if fCache.Kind in rkManagedTypes then
+  if aInfo^.IsManaged then
+    // also check nested record fields
     include(fFlags, rcfIsManaged);
   fCopy := RTTI_COPY[fCache.Kind];
   pt := TypeInfoToStandardParserType(aInfo, {byname=}true, @pct);
@@ -6385,7 +6376,7 @@ begin
         fCache.Size := SizeOf(pointer);
         fArrayRtti := DynArrayElemType;
         if (DynArrayElemType.Info <> nil) and
-           (DynArrayElemType.Info.Kind in rkManagedTypes) then
+           DynArrayElemType.Info.IsManaged then
           fCache.ItemInfo := DynArrayElemType.Info; // as regular dynarray RTTI
         fCache.ItemSize := DynArrayElemType.Size;
       end;
@@ -6769,7 +6760,7 @@ begin
       cp^.Value := c;
       cp^.OffsetGet := fCache.Size;
       cp^.OffsetSet := fCache.Size;
-      cp^.PropDefault := NO_DEFAULT;
+      cp^.OrdinalDefault := NO_DEFAULT;
       inc(fCache.Size, c.fCache.Size);
     end;
     // continue until we reach end of buffer or ExpectedEnd
@@ -7234,45 +7225,45 @@ end;
 
 procedure CopyObject(aFrom, aTo: TObject);
 var
-  cFrom: TRttiCustom;
-  rFrom, rTo: PRttiCustomProps;
-  n: PShortString;
-  p: PRttiCustomProp;
-  i: PtrInt;
+  cf: TRttiCustom;
+  rf, rt: PRttiCustomProps;
+  pf, pt: PRttiCustomProp;
+  i: integer;
   rvd: TRttiVarData;
 begin
   if (aFrom <> nil) and
      (aTo <> nil) then
   begin
-    cFrom := Rtti.RegisterClass(PClass(aFrom)^);
-    if (cFrom.ValueRTLClass = TCollection) and
+    cf := Rtti.RegisterClass(PClass(aFrom)^);
+    if (cf.ValueRTLClass = TCollection) and
        (PClass(aFrom)^ = PClass(aTo)^)  then
       // specific process of TCollection items
       CopyCollection(TCollection(aFrom), TCollection(aTo))
-    else if (cFrom.ValueRTLClass = TStrings) and
+    else if (cf.ValueRTLClass = TStrings) and
             PClass(aTo)^.InheritsFrom(TStrings) then
       // specific process of TStrings items using VCL-style copy
       TStrings(aTo).Assign(TStrings(aFrom))
     else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
       // fast copy from RTTI properties of the common (or same) hierarchy
-      cFrom.Props.CopyProperties(pointer(aFrom), pointer(aTo))
+      cf.Props.CopyProperties(pointer(aFrom), pointer(aTo))
     else
     begin
       // no common inheritance -> slower lookup by property name
-      rFrom := @cFrom.Props;
-      rTo := @Rtti.RegisterClass(PClass(aTo)^).Props;
-      for i := 0 to rFrom.Count - 1 do
+      rf := @cf.Props;
+      rt := @Rtti.RegisterClass(PClass(aTo)^).Props;
+      pf := pointer(rf.List);
+      for i := 1 to rf.Count do
       begin
-        n := rFrom.List[i].Name;
-        if n <> nil then
+        if pf^.Name <> '' then
         begin
-          p := rTo.Find(n^);
-          if p <> nil then
+          pt := rt.Find(pf^.Name);
+          if pt <> nil then
           begin
-            rFrom.List[i].GetValue(pointer(aFrom), rvd);
-            p^.SetValue(pointer(aTo), rvd, {andclear=}true);
+            pf^.GetValue(pointer(aFrom), rvd);
+            pt^.SetValue(pointer(aTo), rvd, {andclear=}true);
           end;
         end;
+        inc(pf);
       end;
     end;
   end;
@@ -7303,8 +7294,8 @@ begin
   begin
     if p^.Value.Kind = rkClass then
       SetDefaultValuesObject(p^.Prop.GetObjProp(Value))
-    else if p^.PropDefault <> NO_DEFAULT then
-      p^.Prop.SetInt64Value(Value, p^.PropDefault);
+    else if p^.OrdinalDefault <> NO_DEFAULT then
+      p^.Prop.SetInt64Value(Value, p^.OrdinalDefault);
     inc(p);
   end;
 end;

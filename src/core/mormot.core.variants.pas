@@ -3612,7 +3612,7 @@ begin
       objRtti := Rtti.RegisterClass(PClass(obj)^);
     for p := 0 to doc.Count - 1 do
     begin
-      prop := objRtti.Props.Find(pointer(doc.Names[p]), length(doc.Names[p]));
+      prop := objRtti.Props.Find(doc.Names[p]);
       if prop <> nil then
         prop^.Prop.SetValue(obj, doc.Values[p]);
     end;

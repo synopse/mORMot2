@@ -1570,12 +1570,13 @@ begin
   W.CancelAll;
   W.AddDynArrayJSON(ARP);
   U := W.Text;
-  // no check(Hash32(U)) since it is very platform-dependent: LoadFromJSON is enough
+  {$ifndef ISDELPHI2010} // enhanced RTTI won't let binary serialization
   P := pointer(U);
   JSON_BASE64_MAGIC_UTF8 := RawUnicodeToUtf8(@MAGIC, 2);
   U2 := RawUTF8('[') + JSON_BASE64_MAGIC_UTF8 +
         RawUTF8(BinToBase64(ARP.SaveTo)) + RawUTF8('"]');
   Check(U = U2);
+  {$endif ISDELPHI2010}
   ARP.Clear;
   Check(ARP.LoadFromJSON(pointer(U)) <> nil);
   if not CheckFailed(ARP.Count = 1001) then

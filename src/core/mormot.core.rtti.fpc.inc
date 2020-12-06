@@ -376,6 +376,17 @@ begin
   Fields.Fields := AlignToPtr(d);
 end;
 
+function TRttiInfo.RecordManagedFieldsCount: integer;
+var
+  info: PTypeData;
+  d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
+begin
+  info := GetTypeData(@self);
+  if Assigned(info^.RecInitInfo) then
+    d := pointer(GetTypeData(info^.RecInitInfo));
+  result := d^.ManagedFieldCount;
+end;
+
 {$else}
 
 procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
@@ -388,7 +399,25 @@ begin
   end; // warning: older FPC RTTI includes all fields, not only managed fields
 end;
 
+
+function TRttiInfo.RecordManagedFieldsCount: integer;
+var
+  fields: TRttiRecordManagedFields;
+begin
+  result := 0;
+  RecordManagedFields(fields);
+  while fields.Count > 0 do
+  begin
+    if PRttiInfo(DeRef(fields.Fields^.{$ifdef HASDIRECTTYPEINFO}TypeInfo
+         {$else}TypeInfoRef^{$endif}))^.IsManaged then
+      inc(result);
+    inc(fields.Fields);
+    dec(fields.Count);
+  end;
+end;
+
 {$endif FPC_NEWRTTI}
+
 
 function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 begin
@@ -416,6 +445,17 @@ end;
 function TRttiInfo.DynArrayItemType: PRttiInfo;
 begin
   result := DeRef(GetTypeData(@self)^.elTypeRef);
+end;
+
+function TRttiInfo.DynArrayItemTypeEvenUnmanaged: PRttiInfo;
+begin
+  with GetTypeData(@self)^ do
+  begin
+    result := DeRef(elTypeRef);
+    if result = nil then
+      // try the second slot, which may be set even for unmanaged types
+      result := DeRef(elType2Ref);
+  end;
 end;
 
 function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;

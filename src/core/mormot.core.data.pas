@@ -2774,6 +2774,12 @@ begin
   n := n shr 1;
   if n = 0 then
     exit;
+  if n = 1 then
+  begin
+    fObject := varObjPairs[1];
+    PPointer(varObjPairs[0])^ := fObject;
+    exit;
+  end;
   SetLength(fObjectList, n);
   for i := 0 to n - 1 do
   begin
@@ -5556,9 +5562,9 @@ begin
     rB := Rtti.RegisterClass(PPointer(B)^);
     for i := 1 to rA.Props.Count do
     begin
-      if pA^.Name <> nil then
+      if pA^.Name <> '' then
       begin
-        pB := rB.Props.Find(pA^.Name^);
+        pB := rB.Props.Find(pA^.Name);
         if pB <> nil then
         begin
           result := pA^.CompareValue(A, B, pB^, CaseInSensitive);
@@ -6044,7 +6050,7 @@ end;
 procedure TDynArray.ItemCopy(Source, Dest: pointer);
 begin
   if fInfo.ArrayRtti <> nil then
-    fInfo.ArrayRtti.ValueCopy(Dest, Source)
+    fInfo.ArrayRtti.ValueCopy(Dest, Source) // also for T*ObjArray
   else
     MoveFast(Source^, Dest^, fInfo.Cache.ItemSize);
 end;
@@ -6054,7 +6060,7 @@ begin
   if Item = nil then
     exit;
   if fInfo.ArrayRtti <> nil then
-    fInfo.ArrayRtti.ValueFinalize(Item);
+    fInfo.ArrayRtti.ValueFinalize(Item); // also for T*ObjArray
   FillCharFast(Item^, fInfo.Cache.ItemSize, 0); // always
 end;
 
@@ -6204,8 +6210,8 @@ begin
   dec(n);
   s := fInfo.Cache.ItemSize;
   P := PAnsiChar(fValue^) + PtrUInt(aIndex) * s;
-  if fInfo.ArrayRtti <> nil then
-    fInfo.ArrayRtti.ValueFinalize(P);
+  if fInfo.Cache.ItemInfo <> nil then
+    fInfo.ArrayRtti.ValueFinalize(P); // also for T*ObjArray
   if n > aIndex then
   begin
     len := PtrUInt(n - aIndex) * s;
@@ -6266,7 +6272,7 @@ begin
   if (p = nil) or
      (Dest = nil) then
     exit;
-  if fInfo.ArrayRtti <> nil then
+  if fInfo.Cache.ItemInfo <> nil then
     fInfo.ArrayRtti.ValueFinalize(Dest); // also handle T*ObjArray
   MoveFast(p^, Dest^, fInfo.Cache.ItemSize);
   FillCharFast(p^, fInfo.Cache.ItemSize, 0);
@@ -7281,14 +7287,18 @@ var
   cmp: TRttiCompare;
   comp: integer;
   P: PAnsiChar;
+label
+  bin;
 begin
   if (fValue <> nil) and
      (@Item <> nil) then
     if not(rcfArrayItemManaged in fInfo.Flags) then
-      result := AnyScanIndex(fValue^, @Item, GetCount, fInfo.Cache.ItemSize)
+bin:  result := AnyScanIndex(fValue^, @Item, GetCount, fInfo.Cache.ItemSize)
     else
     begin
       rtti := fInfo.Cache.ItemInfo;
+      if rtti = nil then
+        goto bin;
       cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
       if Assigned(cmp) then
       begin
@@ -7299,7 +7309,9 @@ begin
           if comp = 0 then
             exit;
         end;
-      end;
+      end
+      else
+        goto bin;
       result := -1;
     end
   else
@@ -7354,8 +7366,8 @@ begin
   {$ifndef CPU64}
   if NeededSize > 1 shl 30 then
     // in practice, consider that max workable memory block is 1 GB on 32-bit
-    raise EDynArray.CreateFmt('TDynArray SetLength(%s,%d) size concern',
-      [fInfo.ArrayRtti.Name, NewLength]);
+    raise EDynArray.CreateFmt('TDynArray.InternalSetLength(%s,%d) size concern',
+      [fInfo.Name, NewLength]);
   {$endif CPU64}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if p = nil then
