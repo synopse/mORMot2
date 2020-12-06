@@ -16091,8 +16091,8 @@ class function TOrm.RecordProps: TOrmProperties;
 begin
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if result <> nil then
-    // we know TRttiCustom is the first slot, and Private is TOrmProperties
-    result := TOrmProperties(PRttiCustom(result)^.Private)
+    // we know TRttiCustom is in the slot, and Private is TOrmProperties
+    result := TOrmProperties(TRttiCustom(pointer(result)).Private)
   else
     // first time we use this TOrm: generate information from RTTI
     result := PropsCreate;
@@ -16328,7 +16328,7 @@ var
 begin
   // private sub function for proper TOrm.RecordProps method inlining
   rtticustom := Rtti.RegisterClass(self);
-  vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
+  vmt := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if (rtticustom = nil) or (vmt <> rtticustom) then
     // TOrm.RecordProps expects TRttiCustom in the first slot
     raise EModelException.CreateUTF8('%.RecordProps: vmtAutoTable=% not %',
@@ -17428,7 +17428,7 @@ end;
 function TOrm.ClassProp: TRttiJson;
 begin
   if self <> nil then
-    result := ClassPropertiesGet(PClass(self)^, TRttiJson)
+    result := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^
   else
     result := nil; // avoid GPF
 end;

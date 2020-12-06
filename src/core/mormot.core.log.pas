@@ -2989,11 +2989,11 @@ begin
   result := pointer(Self);
   if result <> nil then
   begin
-    // faster than ClassPropertiesGet: we know it is the first slot
+    // inlined ClassPropertiesGet
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if result <> nil then
-      // we know TRttiCustom is the first slot, and Private is TSynLogFamily
-      result := TSynLogFamily(PRttiCustom(result)^.Private)
+      // we know TRttiCustom is in the slot, and Private is TSynLogFamily
+      result := TSynLogFamily(TRttiCustom(pointer(result)).Private)
     else
       result := FamilyCreate;
   end;
@@ -3012,8 +3012,8 @@ begin
     P := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if P <> nil then
     begin
-      // we know TRttiCustom is the first slot, and Private is TSynLogFamily
-      P := PRttiCustom(P)^.Private;
+      // we know TRttiCustom is in the slot, and Private is TSynLogFamily
+      P := TRttiCustom(P).Private;
       result := TSynLogFamily(P).fGlobalLog;
       // <>nil for ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
       if result = nil then
@@ -3037,7 +3037,7 @@ begin
      InheritsFrom(TSynLog) then // paranoid
   begin
     rtticustom := Rtti.RegisterClass(self);
-    vmt := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
+    vmt := PPointer(PAnsiChar(self) + vmtAutoTable)^;
     if (rtticustom = nil) or
        (vmt <> rtticustom) then
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot

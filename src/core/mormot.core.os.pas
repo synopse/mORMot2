@@ -1676,7 +1676,7 @@ procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
 // - quickly returns the PropertiesClass instance for this class on success
 // - returns nil if no Properties was registered for this class; caller should
 // call ClassPropertiesAdd() to initialize
-function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
+function ClassPropertiesGet(ObjectClass: TClass): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// try to register a given Properties instance for a given class
@@ -2623,55 +2623,28 @@ end;
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
-const
-  { TODO : don't use MAX_AUTOSLOT since one slot seems enough -
-    use TRttiCustom.Private nested fields }
-  MAX_AUTOSLOT = 7;
-
-type
-  TAutoSlots = array[0..MAX_AUTOSLOT] of TObject; // always end with last=nil
-  PAutoSlots = ^TAutoSlots;
-
 var
   AutoSlotsLock: TRTLCriticalSection;
-  AutoSlots: array of PAutoSlots; // not "of TAutoSlots" to have static pointers
-
 
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt; LeaveUnprotected: boolean);
 begin
   PatchCode(Code, @Value, SizeOf(Code^), nil, LeaveUnprotected);
 end;
 
-
-function ClassPropertiesGet(ObjectClass, PropertiesClass: TClass): pointer;
-var
-  slots: PObject;
+function ClassPropertiesGet(ObjectClass: TClass): pointer;
 begin
-  slots := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
-  if slots <> nil then
-  begin
-    ObjectClass := PropertiesClass; // better TClass constant inlining on FPC
-    repeat
-      result := slots^;
-      if (result = nil) or
-         (PClass(result)^ = ObjectClass) then
-        exit; // reached end of list, or found the expected class type
-      inc(slots);
-    until false;
-  end;
-  result := nil;
+  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
 end;
 
 function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
   FreeExistingPropertiesInstance: boolean): TObject;
 var
   vmt: PPointer;
-  slots: PAutoSlots;
-  i: PtrInt;
 begin
   EnterCriticalSection(AutoSlotsLock);
   try
-    result := ClassPropertiesGet(ObjectClass, PropertiesInstance.ClassType);
+    vmt := Pointer(PAnsiChar(ObjectClass) + vmtAutoTable);
+    result := vmt^;
     if result <> nil then
     begin
       // thread-safe registration
@@ -2681,30 +2654,14 @@ begin
       exit;
     end;
     // actually store the properties into the unused VMT AutoTable slot
-    vmt := Pointer(PAnsiChar(ObjectClass) + vmtAutoTable);
-    slots := vmt^;
-    if slots = nil then
-    begin
-      slots := AllocMem(SizeOf(slots^));
-      PtrArrayAdd(AutoSlots, slots);
-      PatchCodePtrUInt(pointer(vmt), PtrUInt(slots), {leaveunprotected=}true);
-      if vmt^ <> slots then
-        raise EOSException.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
-          [ClassNameShort(ObjectClass)^]);
-    end;
-    for i := 0 to high(slots^) - 1 do
-      if slots^[i] = nil then
-      begin
-        // use the first void slot
-        slots^[i] := PropertiesInstance;
-        result := PropertiesInstance;
-        exit;
-      end;
+    result := PropertiesInstance;
+    PatchCodePtrUInt(pointer(vmt), PtrUInt(result), {leaveunprotected=}true);
+    if vmt^ <> result then
+      raise EOSException.CreateFmt('ClassPropertiesAdd: mprotect failed for %s',
+        [ClassNameShort(ObjectClass)^]);
   finally
     LeaveCriticalSection(AutoSlotsLock);
   end;
-  raise EOSException.CreateFmt('ClassPropertiesAdd: no slot available on %s',
-    [ClassNameShort(ObjectClass)^]);
 end;
 
 
@@ -4248,11 +4205,7 @@ end;
 
 
 procedure FinalizeUnit;
-var
-  i: PtrInt;
 begin
-  for i := 0 to high(AutoSlots) do
-    FreeMem(AutoSlots[i]);
   ObjArrayClear(CurrentFakeStubBuffers);
   ExeVersion.Version.Free;
   DeleteCriticalSection(AutoSlotsLock);

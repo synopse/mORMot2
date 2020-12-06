@@ -2850,15 +2850,14 @@ end;
 
 constructor TSynPersistent.Create;
 begin
-  // quick check if this class type is already registered
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    // use RegisterClasses() since we don't need to inline RegisterClass()
-    Rtti.RegisterClasses([PClass(self)^]);
+    Rtti.RegisterClass(PClass(self)^); // ensure TRttiCustom is set
 end;
 
 class function TSynPersistent.RttiCustom: TRttiCustom;
-begin // faster than ClassPropertiesGet: we know it is the first slot
-  result := PPPointer(PAnsiChar(self) + vmtAutoTable)^^;
+begin
+  // inlined ClassPropertiesGet: we know it is the first slot
+  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   // assert(result.InheritsFrom(TRttiCustom));
 end;
 

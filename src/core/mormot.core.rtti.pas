@@ -6840,12 +6840,12 @@ begin
   end
   else
     // it is (slightly) faster to use the vmtAutoTable slot for classes
-    result := ClassPropertiesGet(Info.RttiClass.RttiClass, GlobalClass);
+    result := PPointer(PAnsiChar(Info.RttiClass.RttiClass) + vmtAutoTable)^;
 end;
 
 function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
 begin
-  result := ClassPropertiesGet(ObjectClass, GlobalClass);
+  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
 end;
 
 function FindNameInPairs(Pairs: PPointerArray; Name: PUTF8Char; NameLen: PtrInt): TRttiCustom;
@@ -7044,7 +7044,7 @@ end;
 
 function TRttiCustomList.RegisterClass(ObjectClass: TClass): TRttiCustom;
 begin
-  result := ClassPropertiesGet(ObjectClass, GlobalClass);
+  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
   if result = nil then
     result := DoRegister(ObjectClass);
 end;

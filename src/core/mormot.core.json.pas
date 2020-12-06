@@ -9945,8 +9945,8 @@ end;
 
 function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiJson;
 begin
-  result := Rtti.RegisterType(ObjectInstance.ClassInfo) as TRttiJson;
-  if PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^ <> result then
+  result := Rtti.RegisterClass(PClass(ObjectInstance)^) as TRttiJson;
+  if PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^ <> result then
     raise ERttiException.CreateUTF8( // paranoid check
       'AutoCreateFields(%): unexpected vmtAutoTable', [ObjectInstance]);
   result.SetAutoCreateFields;
@@ -9958,10 +9958,8 @@ var
   n: integer;
   p: ^PRttiCustomProp;
 begin
-  // faster than ClassPropertiesGet: we know it is the first slot
+  // inlined ClassPropertiesGet: we know it is the first slot
   rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
-  if rtti <> nil then
-    rtti := PPointer(rtti)^;
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then
     rtti := DoRegisterAutoCreateFields(ObjectInstance);
@@ -9987,7 +9985,7 @@ var
   arr: PPAnsiChar;
   o: TObject;
 begin
-  rtti := PPPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^^;
+  rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
   // free all published class fields
   p := pointer(rtti.fAutoCreateClasses);
   if p <> nil then
