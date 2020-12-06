@@ -2179,7 +2179,6 @@ type
        overload; {$ifdef HASINLINE}inline;{$endif}
     /// register a given RTTI TypeInfo()
     // - returns a new (or existing if it was already registered) TRttiCustom
-    // - will use GlobalClass to instantiate a new TRttiCustom
     // - if Info.Kind is rkDynArray, it will also register the nested rkRecord
     function RegisterType(Info: PRttiInfo): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2188,17 +2187,15 @@ type
     // - will just call RegisterType() for each Info[]
     procedure RegisterTypes(const Info: array of PRttiInfo);
     /// recognize (and register if needed) a standard simple type
-    // - calls TypeNameToStandardParserType() to check for known type names
+    // - will call TypeNameToStandardParserType() to check for known type names
     // - returns a new (or existing if it was already registered) TRttiCustom if
     // the supplied name matches a known type - returns nil if nothing was found
-    // - will use GlobalClass to instantiate a new TRttiCustom
     function RegisterTypeFromName(Name: PUTF8Char; NameLen: PtrInt;
       ParserType: PRTTIParserType = nil): TRttiCustom; overload;
     /// recognize (and register if needed) a standard simple type
     // - calls TypeNameToStandardParserType() to check for known type names
     // - returns a new (or existing if it was already registered) TRttiCustom if
     // the supplied name matches a known type - returns nil if nothing was found
-    // - will use GlobalClass to instantiate a new TRttiCustom
     function RegisterTypeFromName(const Name: RawUTF8;
       ParserType: PRTTIParserType = nil): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2209,8 +2206,8 @@ type
     function RegisterClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     /// register one or several RTTI TypeInfo()
-    // - to ensure that those types will be recognized by text definition
-    // - will just call RegisterType() for each Info[]
+    // - to ensure that those classes will be recognized by text definition
+    // - will just call RegisterClass() for each ObjectClass[]
     procedure RegisterClasses(const ObjectClass: array of TClass);
     /// define how a given TCollectionClass should instantiate its items
     // - we need to know the CollectionItem to propertly initialize a TCollection
@@ -2248,7 +2245,8 @@ type
     // - then you can use ObjArrayAdd/ObjArrayFind/ObjArrayDelete to manage
     // the stored items, and never forget to call ObjArrayClear to release
     // the memory
-    // - set Item=nil to unregister the type as a T*ObjArray
+    // - set Item=nil to unregister the type as a T*ObjArray - may be needed
+    // to bypass the FPC and Delphi 2010+ automatic recognition
     // - may return nil if DynArray is not a rkDynArray
     // - replace deprecated TJSONSerializer.RegisterObjArrayForJSON() method
     function RegisterObjArray(DynArray: PRttiInfo; Item: TClass): TRttiCustom;
@@ -5951,7 +5949,8 @@ var
 begin
   if (Info = nil) or
      (Offset < 0) or
-     (PropName = '') then
+     (PropName = '') or
+     (Find(PropName) <> nil) then // don't register if already existing
     exit;
   SetLength(List, Count + 1);
   if AddFirst then
@@ -6298,14 +6297,14 @@ begin
           if fValueClass.InheritsFrom(Exception) then
             // manual registration of the Exception.Message property
             fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
+        // set vmtAutoTable slot for efficient Find(TClass)
+        ClassPropertiesAdd(fValueClass, self, {freexist=}false);
       end;
     rkRecord:
       fProps.SetFromRecordExtendedRtti(aInfo); // only for Delphi 2010+
     rkLString:
       if aInfo = TypeInfo(SPIUTF8) then
         include(fFlags, rcfSPI);
-  end;
-  case fCache.Kind of
     rkDynArray:
       begin
         item := fCache.ItemInfo;
@@ -6840,7 +6839,7 @@ begin
     until false;
   end
   else
-    // it is faster to use the vmtAutoTable slot for classes
+    // it is (slightly) faster to use the vmtAutoTable slot for classes
     result := ClassPropertiesGet(Info.RttiClass.RttiClass, GlobalClass);
 end;
 
@@ -6955,15 +6954,6 @@ begin
       exit; // already registered in the background
     result := GlobalClass.Create(Info);
     DoRegister(result);
-    case result.Kind of
-     rkDynArray, rkArray:
-       // also register associated internal type
-       if result.fCache.ItemInfo <> nil then
-         RegisterType(result.fCache.ItemInfo);
-     rkClass:
-       // set vmtAutoTable slot for efficient Find(TClass)
-       ClassPropertiesAdd(Info.RttiClass.RttiClass, result, {freexist=}false);
-    end;
   finally
     LeaveCriticalSection(Lock);
   end;

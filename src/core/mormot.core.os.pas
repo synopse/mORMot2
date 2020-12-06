@@ -2624,6 +2624,8 @@ end;
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
 const
+  { TODO : don't use MAX_AUTOSLOT since one slot seems enough -
+    use TRttiCustom.Private nested fields }
   MAX_AUTOSLOT = 7;
 
 type
@@ -2672,11 +2674,13 @@ begin
     result := ClassPropertiesGet(ObjectClass, PropertiesInstance.ClassType);
     if result <> nil then
     begin
-      // some background thread registered its own
-      if FreeExistingPropertiesInstance then
+      // thread-safe registration
+      if FreeExistingPropertiesInstance and
+         (PropertiesInstance <> result) then
         PropertiesInstance.Free;
       exit;
     end;
+    // actually store the properties into the unused VMT AutoTable slot
     vmt := Pointer(PAnsiChar(ObjectClass) + vmtAutoTable);
     slots := vmt^;
     if slots = nil then
