@@ -5946,8 +5946,10 @@ var
   end;
 
 begin
+  {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TPersistentAutoCreateFieldsTestObjArray),
     TPersistentAutoCreateFieldsTest);
+  {$endif HASDYNARRAYTYPE}
   try
     tmp := DynArraySaveJSON(arr{%H-}, TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
     check(tmp = '[]');
@@ -5978,7 +5980,9 @@ begin
   finally
     ObjArrayClear(arr);
   end;
+  {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TComplexNumberObjArray), TComplexNumber);
+  {$endif HASDYNARRAYTYPE}
   test := TObjArrayTest.CreateFake;
   try
     for i := 0 to max do

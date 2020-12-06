@@ -447,13 +447,13 @@ begin
   result := DeRef(GetTypeData(@self)^.elTypeRef);
 end;
 
-function TRttiInfo.DynArrayItemTypeEvenUnmanaged: PRttiInfo;
+function TRttiInfo.DynArrayItemTypeAny: PRttiInfo;
 begin
   with GetTypeData(@self)^ do
   begin
-    result := DeRef(elTypeRef);
+    result := DeRef(elTypeRef); // only managed fields by default
     if result = nil then
-      // try the second slot, which may be set even for unmanaged types
+      // try the second RTTI slot, which is set even for unmanaged types
       result := DeRef(elType2Ref);
   end;
 end;

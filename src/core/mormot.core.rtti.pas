@@ -719,7 +719,7 @@ type
     /// for rkDynArray: get the dynamic array deep RTTI of the stored item
     // - works for both managed and unmanaged types, on FPC and Delphi 2010+
     // - caller should ensure the type is indeed a dynamic array
-    function DynArrayItemTypeEvenUnmanaged: PRttiInfo;
+    function DynArrayItemTypeAny: PRttiInfo;
     /// for rkDynArray: get the dynamic array type information of the stored item
     // - this overloaded method will also return the item size in bytes
     // - caller should ensure the type is indeed a dynamic array
@@ -2237,8 +2237,10 @@ type
     // - a wrapper around the RegisterBinaryType() method
     procedure RegisterBinaryTypes(const InfoBinarySize: array of const);
     /// register one dynamic array RTTI TypeInfo() to be serialized as T*ObjArray
-    // - will allow JSON serialization and unserialization of the registered
-    // dynamic array property defined in any TPersistent or TOrm
+    // - allow JSON serialization and unserialization of the registered dynamic
+    // array property defined in any TPersistent or TOrm for oldest Delphi
+    // - not needed on FPC and Delphi 2010+ since "array of TSomeClass" will be
+    // recognized directly - you may use HASDYNARRAYTYPE conditional
     // - could be used as such (note the T*ObjArray type naming convention):
     // ! TUserObjArray = array of TUser;
     // ! ...
@@ -2252,6 +2254,8 @@ type
     function RegisterObjArray(DynArray: PRttiInfo; Item: TClass): TRttiCustom;
     /// register one or several dynamic array RTTI TypeInfo() to be serialized
     // as T*ObjArray
+    // - not needed on FPC and Delphi 2010+ since "array of TSomeClass" will be
+    // recognized directly - you may use HASDYNARRAYTYPE conditional
     // - will call the RegisterObjArray() class method by pair:
     // ! Rtti.RegisterObjArrays([
     // !   TypeInfo(TAddressObjArray), TAddress,
@@ -6308,13 +6312,19 @@ begin
         if item = nil then // =nil for unmanaged types
         begin
           // try to guess the actual type, e.g. a TGUID or an integer
-          item := aInfo^.DynArrayItemTypeEvenUnmanaged; // FPC or Delphi 2010+
+          item := aInfo^.DynArrayItemTypeAny; // FPC or Delphi 2010+
           if item = nil then
           begin
             // on oldest Delphi, recognize at least the most common types
             pt := DynArrayTypeInfoToStandardParserType(aInfo, nil,
               fCache.ItemSize, {exacttype=}true, dummy, @pct);
             item := ParserTypeToTypeInfo(pt, pct);
+          end
+          else if item.Kind = rkClass then
+          begin
+            // no need to call RegisterObjArray() on FPC and Delphi 2010+ :)
+            include(fFlags, rcfObjArray);
+            fObjArrayClass := item.RttiClass^.RttiClass;
           end;
         end;
         fArrayRtti := Rtti.RegisterType(item);

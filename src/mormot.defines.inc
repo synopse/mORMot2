@@ -240,7 +240,7 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
-  {$define ISDELPHI2010_OR_FPC} // eltype2 field
+  {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
@@ -381,7 +381,7 @@
     {$ifend}
     {$if CompilerVersion >= 21.0}
       {$define ISDELPHI2010}
-      {$define ISDELPHI2010_OR_FPC} // eltype2 field
+      {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}

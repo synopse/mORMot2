@@ -2201,7 +2201,7 @@ type
   // class published properties: any class defined as a published property will
   // be owned by this instance - i.e. with strong reference
   // - will also release any T*ObjArray dynamic array storage of persistents,
-  // previously registered via Rtti.RegisterObjArray()
+  // previously registered via Rtti.RegisterObjArray() for Delphi 7-2009
   // - nested published classes (or T*ObjArray) don't need to inherit from
   // TSynAutoCreateFields: they may be from any TPersistent/TSynPersistent type
   // - note that non published (e.g. public) properties won't be instantiated,
@@ -2262,8 +2262,8 @@ type
   // Domain objects in DDD, especially for list of value objects
   // - consider using T*ObjArray dynamic array published properties in your
   // value types instead of TCollection storage: T*ObjArray have a lower overhead
-  // and are easier to work with, once Rtti.RegisterObjArray
-  // is called to register the T*ObjArray type
+  // and are easier to work with, once Rtti.RegisterObjArray is called on Delphi
+  // 7-2009 to register the T*ObjArray type (not needed on FPC and Delphi 2010+)
   // - note that non published (e.g. public) properties won't be instantiated,
   // serialized, nor released - but may contain weak references to other classes
   // - please take care that you will not create any endless recursion: you should

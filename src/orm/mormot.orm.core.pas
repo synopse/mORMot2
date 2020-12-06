@@ -22163,11 +22163,13 @@ end;
 procedure InitializeUnit;
 begin
   InitializeCriticalSection(vmtAutoTableLock);
+  {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(
     TypeInfo(TOrmModelPropertiesObjArray), TOrmModelProperties);
   // ensure TOrmObjArray is recognized as a T*ObjArray
   // - needed e.g. by TRestStorageInMemory.Create
   Rtti.RegisterObjArray(TypeInfo(TOrmObjArray), TOrm);
+  {$endif HASDYNARRAYTYPE}
   // manual setting of OrmFieldTypeComp[] values which are not TUTF8Compare
   pointer(@OrmFieldTypeComp[oftAnsiText]) := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUTF8Custom]) := @AnsiIComp;

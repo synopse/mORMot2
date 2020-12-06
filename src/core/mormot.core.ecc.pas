@@ -3804,7 +3804,9 @@ end;
 initialization
   assert(sizeof(TECDHEFrameClient) = 290); // on all platforms/compilers
   assert(sizeof(TECDHEFrameServer) = 306);
+  {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TECCCertificateObjArray), TECCCertificate);
+  {$endif HASDYNARRAYTYPE}
 
 end.
 
