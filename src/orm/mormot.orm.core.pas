@@ -1335,7 +1335,7 @@ type
     property DynArrayElemType: TRttiCustom read GetDynArrayElemType;
     /// dynamic array item information for a T*ObjArray
     // - equals nil if this dynamic array was not previously registered via
-    // Rtti.RegisterObjArray()
+    // Rtti.RegisterObjArray() on Delphi 7-2009
     // - note that if the field is a T*ObjArray, you could create a new item
     // by calling ObjArray^.ClassNewInstance
     // - T*ObjArray database column will be stored as text
@@ -3091,7 +3091,7 @@ type
   // source with GetSQLValues or GetSQLSet or into JSON format with GetJSONValues
   // - BLOB fields are decoded to auto-freeing RawBlob properties
   // - any published property defined as a T*ObjArray dynamic array storage
-  // of persistents (via Rtti.RegisterObjArray) will be freed
+  // of persistents (via Rtti.RegisterObjArray on Delphi 7-2009) will be freed
   // - consider inherit from TOrmNoCase and TOrmNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence

@@ -1119,7 +1119,7 @@ type
     procedure WriteObject(Value: TObject;
       WriteOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]); virtual;
     /// append a T*ObjArray dynamic array as a JSON array
-    // - as expected by Rtti.RegisterObjArray()
+    // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
     procedure AddObjArrayJSON(const aObjArray;
       aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// return the last char appended

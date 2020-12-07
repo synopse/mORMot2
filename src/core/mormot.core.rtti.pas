@@ -2234,10 +2234,10 @@ type
     // - a wrapper around the RegisterBinaryType() method
     procedure RegisterBinaryTypes(const InfoBinarySize: array of const);
     /// register one dynamic array RTTI TypeInfo() to be serialized as T*ObjArray
-    // - allow JSON serialization and unserialization of the registered dynamic
-    // array property defined in any TPersistent or TOrm for oldest Delphi
     // - not needed on FPC and Delphi 2010+ since "array of TSomeClass" will be
     // recognized directly - you may use HASDYNARRAYTYPE conditional
+    // - allow JSON serialization and unserialization of the registered dynamic
+    // array property defined in any TPersistent or TOrm for oldest Delphi
     // - could be used as such (note the T*ObjArray type naming convention):
     // ! TUserObjArray = array of TUser;
     // ! ...
@@ -6314,7 +6314,7 @@ begin
           item := aInfo^.DynArrayItemTypeAny; // FPC or Delphi 2010+
           if item = nil then
           begin
-            // on oldest Delphi, recognize at least the most common types
+            // on Delphi 7-2009, recognize at least the most common types
             pt := DynArrayTypeInfoToStandardParserType(aInfo, nil,
               fCache.ItemSize, {exacttype=}true, dummy, @pct);
             item := ParserTypeToTypeInfo(pt, pct);

@@ -550,7 +550,7 @@ function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUTF8;
   IncludeQueryDelimiter: boolean = true): RawUTF8; overload;
 
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 function ObjArrayToJSON(const aObjArray;
   aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUTF8;
 

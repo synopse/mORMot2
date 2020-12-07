@@ -1623,7 +1623,7 @@ function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
 
 
 /// wrapper to add an item to a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - could be used as such (note the T*ObjArray type naming convention):
 // ! TUserObjArray = array of TUser;
 // ! ...
@@ -1656,13 +1656,13 @@ function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - this overloaded function will use a separated variable to store the items
 // count, so will be slightly faster: but you should call SetLength() when done,
-// to have an array as expected by Rtti.RegisterObjArray()
+// to have a stand-alone array as expected by our ORM/SOA serialziation
 // - return the index of the item in the dynamic array
 function ObjArrayAddCount(var aObjArray; aItem: TObject;
   var aObjArrayCount: integer): PtrInt;
 
 /// wrapper to add once an item to a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - if the object is already in the array (searching by address/reference,
 // not by content), return its current index in the dynamic array
 // - if the object does not appear in the array, add it at the end
@@ -1680,45 +1680,46 @@ procedure ObjArraySetLength(var aObjArray; aLength: integer);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to search an item in a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - search is performed by address/reference, not by content
 // - returns -1 if the item is not found in the dynamic array
 function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to search an item in a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - search is performed by address/reference, not by content
 // - returns -1 if the item is not found in the dynamic array
 function ObjArrayFind(const aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to count all not nil items in a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 function ObjArrayCount(const aObjArray): integer;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - do nothing if the index is out of range in the dynamic array
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
   aContinueOnException: boolean=false; aCount: PInteger=nil); overload;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
 function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt; overload;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
 function ObjArrayDelete(var aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
 
 /// wrapper to release all items stored in a T*ObjArray dynamic array
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - you should always use ObjArrayClear() before the array storage is released,
 // e.g. in the owner class destructor
+// - when T*ObjArray are used as SOA parameters, no need to release the values
 // - will also set the dynamic array length to 0, so could be used to re-use
 // an existing T*ObjArray
 procedure ObjArrayClear(var aObjArray); overload;
@@ -1732,7 +1733,7 @@ procedure ObjArrayClear(var aObjArray); overload;
 procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
 
 /// wrapper to release all items stored in a T*ObjArray dynamic array
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - you should always use ObjArrayClear() before the array storage is released,
 // e.g. in the owner class destructor
 // - will also set the dynamic array length to 0, so could be used to re-use
@@ -1745,7 +1746,7 @@ procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean;
 procedure ObjArrayObjArrayClear(var aObjArray);
 
 /// wrapper to release all items stored in several T*ObjArray dynamic arrays
-// - as expected by Rtti.RegisterObjArray()
+// - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 procedure ObjArraysClear(const aObjArray: array of pointer);
 
 /// low-level function calling FreeAndNil(o^) successively n times
