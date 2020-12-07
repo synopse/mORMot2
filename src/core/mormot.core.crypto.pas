@@ -54,7 +54,7 @@ type
     {$define USEAESNI}
     {$define USEAESNI64}
     {$define USECLMUL} // gf_mul_pclmulqdq() requires some complex opcodes
-  {$endif USEAESNI}
+  {$endif HASAESNI}
   {$ifndef BSD}
     {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
     {$define SHA512_X64} // external sha512_sse4 for win64/lin64
@@ -2383,7 +2383,7 @@ type
 
   /// low-level content of TAES.Context (AESContextSize bytes)
   // - is defined privately in the implementation section
-  // - don't change this structure: it is fixed in the asm code
+  // - do NOT change this structure: it is fixed in the asm code
   TAESContext = packed record
     RK: TKeyArray;   // Key (encr. or decr.)
     iv: THash128Rec; // IV or CTR
@@ -4920,21 +4920,9 @@ var
   i: integer;
 begin
   {$ifdef USEAESNI64}
-  if (Count and AESBlockMod = 0) and
-     (cfAESNI in CpuFeatures) then
-    with TAESContext(aes.Context) do
-      case KeyBits of
-        128:
-          begin
-            AesNiEncryptOFB_128(@fIV, @aes, BufIn, BufOut, Count shr AESBlockShift);
-            exit;
-          end;
-        256:
-          begin
-            AesNiEncryptOFB_256(@fIV, @aes, BufIn, BufOut, Count shr AESBlockShift);
-            exit;
-          end;
-      end;
+  if Count and AESBlockMod = 0 then
+    aes.DoBlocksOFB(fCV, BufIn, BufOut, Count shr AESBlockShift)
+  else
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(aes.Context).AesNi32) then
@@ -9233,6 +9221,7 @@ begin
   end;
   {$endif ASMX64}
   assert(SizeOf(TMD5Buf) = SizeOf(TMD5Digest));
+  assert(SizeOf(TAES) = AESContextSize);
   assert(SizeOf(TAESContext) = AESContextSize);
   assert(AESContextSize <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
   assert(SizeOf(TSHAContext) = SHAContextSize);
