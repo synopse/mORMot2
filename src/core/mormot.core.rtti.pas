@@ -2273,7 +2273,7 @@ type
     // !   end;
     // ! end;
     // - call this method with RttiDefinition='' to return back to the default
-    // binary + Base64 encoding serialization (i.e. undefine custom serializer)
+    // serialization, i.e. binary + Base64 or Delphi 2010+ extended RTTI
     // - RTTI textual information shall be supplied as text, with the
     // same format as any pascal record:
     // ! 'A,B,C: integer; D: RawUTF8; E: record E1,E2: double;'
@@ -2308,11 +2308,11 @@ type
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
     property ByTypeInfo[P: PRttiInfo]: TRttiCustom
       read RegisterType; default;
-      /// default property to access a given RTTI customization of a class
-      // - you can access or register one type by using this default property:
-      // ! Rtti.ByClass[TMyClass].Props.NameChanges(['old', 'new'])
-      property ByClass[C: TClass]: TRttiCustom
-        read RegisterClass;
+    /// default property to access a given RTTI customization of a class
+    // - you can access or register one type by using this default property:
+    // ! Rtti.ByClass[TMyClass].Props.NameChanges(['old', 'new'])
+    property ByClass[C: TClass]: TRttiCustom
+      read RegisterClass;
   end;
 
 
@@ -7161,7 +7161,9 @@ begin
       raise ERttiException.CreateUTF8('Rtti.RegisterFromText(%): text ' +
         'definition  covers % bytes, but RTTI defined %',
         [DynArrayOrRecord^.RawName, result.Props.Size, result.Size]);
-  end;
+  end
+  else if result.Kind in rkRecordTypes then
+    result.Props.SetFromRecordExtendedRtti(result.Info); // only for Delphi 2010+
   result.SetParserType(result.Parser, result.ParserComplex);
 end;
 

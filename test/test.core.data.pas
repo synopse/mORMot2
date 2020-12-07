@@ -10,6 +10,7 @@ interface
 uses
   sysutils,
   classes,
+  variants,
   {$ifndef FPC}
   typinfo, // for proper Delphi inlining
   {$endif FPC}
@@ -1067,7 +1068,7 @@ procedure TTestCoreProcess.EncodeDecodeJSON;
 var
   J, U, U2: RawUTF8;
   P: PUTF8Char;
-  b, binary, zendframeworkJson, discogsJson: RawByteString;
+  binary, zendframeworkJson, discogsJson: RawByteString;
   V: array[0..4] of TValuePUTF8Char;
   i, a, err: integer;
   r: Double;
@@ -2454,7 +2455,7 @@ begin
 
   {$ifdef ISDELPHI2010}
   // test JSON serialization defined by Enhanced RTTI available since Delphi 2010
-//  TestJSONSerialization;
+  TestJSONSerialization;
   {$endif ISDELPHI2010}
   // test TJSONRecordTextDefinition JSON serialization
   Rtti.RegisterFromText(TypeInfo(TSubAB), __TSubAB);

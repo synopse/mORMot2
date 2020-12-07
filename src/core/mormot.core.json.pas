@@ -5132,7 +5132,7 @@ end;
 
 procedure _JS_Array(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 var
-  n: PtrInt;
+  n: integer;
   jsonsave: TRttiJsonSave;
   c: TJsonSaveContext;
 begin
@@ -5761,7 +5761,7 @@ begin
     CodePage := StringCodePage(s);
     {$else}
     CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
-    {$endif}
+    {$endif HASCODEPAGE}
   AddAnyAnsiBuffer(pointer(s), L, Escape, CodePage);
 end;
 
@@ -6199,7 +6199,7 @@ begin
   AddAnyAnsiString(Text, Escape);
   {$else}
   Add(pointer(Text), length(Text), Escape);
-  {$endif}
+  {$endif HASCODEPAGE}
   if Escape = twJSONEscape then
     Add('"');
 end;
@@ -6610,7 +6610,7 @@ begin
             vtUnicodeString:
               AddJSONEscapeW(pointer(UnicodeString(VUnicodeString)),
                 length(UnicodeString(VUnicodeString)));
-            {$endif}
+            {$endif HASVARUSTRING}
             vtPChar:
               AddJSONEscape(VPChar);
             vtChar:
@@ -6633,7 +6633,7 @@ begin
       {$ifdef FPC}
       vtQWord:
         AddQ(V.VQWord^);
-      {$endif}
+      {$endif FPC}
       vtExtended:
         AddDouble(VExtended^);
       vtCurrency:
@@ -6691,7 +6691,7 @@ begin
       {$ifdef FPC}
       vtQWord:
         AddQ(VQWord^);
-      {$endif}
+      {$endif FPC}
       vtVariant:
         AddVariant(VVariant^, Escape);
       vtString:
@@ -6719,7 +6719,7 @@ begin
       vtUnicodeString:
         if VUnicodeString <> nil then // convert to UTF-8
           AddW(VUnicodeString, length(UnicodeString(VUnicodeString)), Escape);
-      {$endif}
+      {$endif HASVARUSTRING}
     end;
 end;
 
@@ -7290,7 +7290,6 @@ end;
 
 procedure _JL_Array(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 var
-  load: TRttiJsonLoad;
   n: integer;
   arrinfo: TRttiCustom;
 begin
@@ -7309,12 +7308,10 @@ begin
   begin
     // efficient load of all JSON items
     arrinfo := Ctxt.Info;
-    Ctxt.Info := arrinfo.ArrayRtti;
-    load := Ctxt.Info.JsonLoad;
-    // main JSON unserialization loop
+    Ctxt.Info := arrinfo.ArrayRtti; // nested context = item
     n := arrInfo.Cache.ItemCount;
     repeat
-      load(Data, Ctxt); // will call _JL_RttiCustom() for T*ObjArray
+      TRttiJsonLoad(Ctxt.Info.JsonLoad)(Data, Ctxt);
       dec(n);
       if Ctxt.Valid then
         if (n > 0) and

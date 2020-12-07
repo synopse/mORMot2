@@ -1122,7 +1122,9 @@ var
   ST: TCustomMemoryStream;
   Index: TIntegerDynArray;
   W: TTextWriter;
+  {$ifndef ISDELPHI2010}
   JSON_BASE64_MAGIC_UTF8: RawUTF8;
+  {$endif ISDELPHI2010}
   tmp: TSynTempBuffer;
 const
   MAGIC: array[0..1] of word = (34, $fff0);
