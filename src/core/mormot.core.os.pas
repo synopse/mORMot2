@@ -1690,6 +1690,8 @@ function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
+  { TODO : introduce light read/write lockers }
+
 type
   /// allow to add cross-platform locking methods to any class instance
   // - typical use is to define a Safe: TSynLocker property, call Safe.Init

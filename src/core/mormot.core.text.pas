@@ -3174,9 +3174,9 @@ begin
     while P^ in [#9, ' '] do // trim left
       inc(P);
     L := 0;
-    while P[L] > #13 do // end of line/value
+    while P[L] > #13 do      // end of line/value
       inc(L);
-    while P[L - 1] = ' ' do // trim right
+    while P[L - 1] = ' ' do  // trim right
       dec(L);
     FastSetString(Value, P, L);
     result := true;

@@ -209,6 +209,7 @@ type
     procedure InternalSetTableFromTableIndex(Index: integer); virtual;
     procedure InternalSetTableFromTableName(TableName: PUTF8Char); virtual;
     procedure InternalExecuteSOAByInterface; virtual;
+    function IsRemoteIPBanned: boolean;
     /// retrieve RESTful URI routing
     // - should set URI, Table,TableIndex,TableRecordProps,TableEngine,
     // ID, URIBlobFieldName and Parameters members
@@ -4317,6 +4318,17 @@ begin
   result := Call^.HeaderOnce(fRemoteIP, HEADER_REMOTEIP_UPPER);
 end;
 
+function TRestServerURIContext.IsRemoteIPBanned: boolean;
+begin
+  if Server.fIPBan.Exists(GetRemoteIP) then
+  begin
+    Error('Banned IP %', [fRemoteIP]);
+    result := true;
+  end
+  else
+    result := true;
+end;
+
 function TRestServerURIContext.GetRemoteIPNotLocal: RawUTF8;
 begin
   result := Call^.HeaderOnce(fRemoteIP, HEADER_REMOTEIP_UPPER);
@@ -7197,10 +7209,8 @@ begin
       Ctxt.Error('Server is shutting down', HTTP_UNAVAILABLE)
     else if Ctxt.Method = mNone then
       Ctxt.Error('Unknown Verb %', [Call.Method])
-    else if (fIPBan <> nil) and
-            fIPBan.Exists(Ctxt.RemoteIP) then
-      Ctxt.Error('Banned IP %', [Ctxt.fRemoteIP])
-    else
+    else if (fIPBan = nil) or
+            not Ctxt.IsRemoteIPBanned then
     // 1. decode URI
     if not Ctxt.URIDecodeREST then
       Ctxt.Error('Invalid Root', HTTP_NOTFOUND)
@@ -7336,10 +7346,10 @@ begin
     if fStatUsage <> nil then
       fStatUsage.Modified(fStats, []);
     if Assigned(OnAfterURI) then
-    try
-      OnAfterURI(Ctxt);
-    except
-    end;
+      try
+        OnAfterURI(Ctxt);
+      except
+      end;
     Ctxt.Free;
   end;
   if Assigned(OnIdle) then
