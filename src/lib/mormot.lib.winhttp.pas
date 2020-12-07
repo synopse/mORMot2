@@ -2264,6 +2264,7 @@ initialization
     (sizeof(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
+  WinHttpAPIInitialize;
 
 {$endif USEWININET}
 
