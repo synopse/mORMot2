@@ -737,7 +737,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkArray: get the size in bytes of all the static array items
     // - caller should ensure the type is indeed a static array
-    function ArrayItemSize: PtrInt;
+    function ArraySize: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// recognize most used string types, returning their code page
     // - will return the exact code page on FPC and since Delphi 2009, from RTTI
@@ -2235,7 +2235,7 @@ type
     procedure RegisterBinaryTypes(const InfoBinarySize: array of const);
     /// register one dynamic array RTTI TypeInfo() to be serialized as T*ObjArray
     // - not needed on FPC and Delphi 2010+ since "array of TSomeClass" will be
-    // recognized directly - you may use HASDYNARRAYTYPE conditional
+    // recognized directly - see HASDYNARRAYTYPE conditional
     // - allow JSON serialization and unserialization of the registered dynamic
     // array property defined in any TPersistent or TOrm for oldest Delphi
     // - could be used as such (note the T*ObjArray type naming convention):
@@ -2253,7 +2253,7 @@ type
     /// register one or several dynamic array RTTI TypeInfo() to be serialized
     // as T*ObjArray
     // - not needed on FPC and Delphi 2010+ since "array of TSomeClass" will be
-    // recognized directly - you may use HASDYNARRAYTYPE conditional
+    // recognized directly - see HASDYNARRAYTYPE conditional
     // - will call the RegisterObjArray() class method by pair:
     // ! Rtti.RegisterObjArrays([
     // !   TypeInfo(TAddressObjArray), TAddress,
@@ -2860,7 +2860,7 @@ begin
     rkVariant:
       result := SizeOf(variant);
     rkArray:
-      result := ArrayItemSize;
+      result := ArraySize;
     rkRecord {$ifdef FPC}, rkObject {$endif} :
       result := RecordSize;
     rkSString:
@@ -2985,7 +2985,11 @@ begin
     rkArray:
       begin
         Cache.ItemInfo := ArrayItemType(cnt, siz);
-        Cache.ItemSize := siz;
+        if (cnt = 0) or
+           (siz mod cnt <> 0) then
+          raise ERttiException.CreateUTF8('ComputeCache(%): array siz=% cnt=%',
+            [RawName, siz, cnt]);
+        Cache.ItemSize := siz div cnt;
         Cache.ItemCount := cnt;
       end;
     rkLString:

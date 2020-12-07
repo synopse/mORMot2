@@ -472,7 +472,7 @@ begin
     result := nil;
 end;
 
-function TRttiInfo.ArrayItemSize: PtrInt;
+function TRttiInfo.ArraySize: PtrInt;
 var
   info: ^TArrayTypeData;
 begin

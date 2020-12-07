@@ -5130,6 +5130,34 @@ begin
   end;
 end;
 
+procedure _JS_Array(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
+var
+  n: PtrInt;
+  jsonsave: TRttiJsonSave;
+  c: TJsonSaveContext;
+begin
+  {%H-}c.Init(Ctxt.W, Ctxt.Options, Ctxt.Info.ArrayRtti);
+  c.W.BlockBegin('[', c.Options);
+  jsonsave := c.Info.JsonSave; // e.g. PT_JSONSAVE/PTC_JSONSAVE
+  if Assigned(jsonsave) then
+  begin
+    // efficient JSON serialization
+    n := Ctxt.Info.Cache.ItemCount;
+    repeat
+      jsonsave(Data, c);
+      dec(n);
+      if n = 0 then
+        break;
+      c.W.BlockAfterItem(c.Options);
+      inc(Data, c.Info.Cache.Size);
+    until false;
+  end
+  else
+    // fallback to raw RTTI binary serialization with Base64 encoding
+    c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkArray], {withMagic=}true);
+  c.W.BlockEnd(']', c.Options);
+end;
+
 procedure _JS_DynArray_Custom(Data: pointer; const Ctxt: TJsonSaveContext);
 begin
   // TRttiJson.RegisterCustomSerializer() custom callback for each item
@@ -5188,9 +5216,9 @@ end;
 const
   /// use pointer to allow any kind of Data^ type in above functions
   // - typecast to TRttiJsonSave for proper function call
-  // - rkRecord, rkArray and rkClass are handled in TRttiJson
+  // - rkRecord and rkClass are handled in TRttiJson.SetParserType
   PT_JSONSAVE: array[TRttiParserType] of pointer = (
-    nil, nil, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
+    nil, @_JS_Array, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
     @_JS_RawByteString, @_JS_RawJSON, @_JS_RawUTF8, nil, @_JS_Single,
     {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_AnsiString {$endif},
@@ -7260,6 +7288,54 @@ begin
   MoveSmall(@v, Data, Ctxt.Info.Size);
 end;
 
+procedure _JL_Array(Data: PAnsiChar; var Ctxt: TJsonParserContext);
+var
+  load: TRttiJsonLoad;
+  n: integer;
+  arrinfo: TRttiCustom;
+begin
+  if not Ctxt.ParseArray then
+    // detect void (i.e. []) or invalid array
+    exit;
+  if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE_C then
+    // raw RTTI binary layout with a single Base-64 encoded item
+    Ctxt.Valid := Ctxt.ParseNext and
+              (Ctxt.EndOfObject = ']') and
+              (Ctxt.Value <> nil) and
+              (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
+              BinaryLoadBase64(pointer(Ctxt.Value + 3), Ctxt.ValueLen - 3,
+                Data, Ctxt.Info.Info, {uri=}false, [rkArray], {nocrc=}true)
+  else
+  begin
+    // efficient load of all JSON items
+    arrinfo := Ctxt.Info;
+    Ctxt.Info := arrinfo.ArrayRtti;
+    load := Ctxt.Info.JsonLoad;
+    // main JSON unserialization loop
+    n := arrInfo.Cache.ItemCount;
+    repeat
+      load(Data, Ctxt); // will call _JL_RttiCustom() for T*ObjArray
+      dec(n);
+      if Ctxt.Valid then
+        if (n > 0) and
+           (Ctxt.EndOfObject = ',') then
+        begin
+          // continue with the next item
+          inc(Data, arrinfo.Cache.ItemSize);
+          continue;
+        end
+        else if (n = 0) and
+                (Ctxt.EndOfObject = ']') then
+          // reached end of arrray
+          break;
+      Ctxt.Valid := false; // unexpected end
+      exit;
+    until false;
+    Ctxt.Info := arrinfo;
+  end;
+  Ctxt.ParseEndOfObject; // mimics GetJsonField() / Ctxt.ParseNext
+end;
+
 procedure _JL_DynArray_Custom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 begin
   // TRttiJson.RegisterCustomSerializer() custom callback for each item
@@ -7704,9 +7780,9 @@ end;
 var
   /// use pointer to allow any kind of Data^ type in above functions
   // - typecast to TRttiJsonSave for proper function call
-  // - rkRecord, rkArray and rkClass are handled in TRttiJson
+  // - rkRecord and rkClass are set in TRttiJson.SetParserType
   PT_JSONLOAD: array[TRttiParserType] of pointer = (
-    nil, nil, @_JL_Boolean, @_JL_Byte, @_JL_Cardinal, @_JL_Currency,
+    nil, @_JL_Array, @_JL_Boolean, @_JL_Byte, @_JL_Cardinal, @_JL_Currency,
     @_JL_Double, @_JL_Extended, @_JL_Int64, @_JL_Integer, @_JL_QWord,
     @_JL_RawByteString, @_JL_RawJSON, @_JL_RawUTF8, nil,
     @_JL_Single, @_JL_String, @_JL_SynUnicode, @_JL_DateTime, @_JL_DateTime,
@@ -9440,13 +9516,15 @@ begin
   end
   else
   begin
+    // default well-known serialization
     fJsonSave := PTC_JSONSAVE[aParserComplex];
     if not Assigned(fJsonSave) then
       fJsonSave := PT_JSONSAVE[aParser];
+    fJsonLoad := PT_JSONLOAD[aParser];
+    // rkRecordTypes serialization with proper fields RTTI
     if not Assigned(fJsonSave) and
        (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
       fJsonSave := @_JS_RttiCustom;
-   fJsonLoad := PT_JSONLOAD[aParser];
    if not Assigned(fJsonLoad) and
       (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
     fJsonLoad := @_JL_RttiCustom

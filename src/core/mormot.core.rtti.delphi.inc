@@ -514,7 +514,7 @@ begin
     result := PPointer(result)^;
 end;
 
-function TRttiInfo.ArrayItemSize: PtrInt;
+function TRttiInfo.ArraySize: PtrInt;
 begin
   result := PArrayInfo(GetTypeData(@self))^.ArraySize;
 end;
