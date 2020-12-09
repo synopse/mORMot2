@@ -1956,7 +1956,7 @@ begin
         {$ifdef HASVARUSTRING}
         vtUnicodeString:
           begin
-            Unicode_WideToShort(VUnicodeString,
+            Unicode_WideToShort(VUnicodeString, // assume WinAnsi encoding
               length(UnicodeString(VUnicodeString)), 1252, tmp);
             SockSend(@tmp[1], Length(tmp));
           end;

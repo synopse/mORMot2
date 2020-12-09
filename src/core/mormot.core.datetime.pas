@@ -738,8 +738,10 @@ begin
     result := false
   else if (((L = 9) or (L = 13)) and
             (P[0] = 'T') and (P[3] = ':')) or // 'Thh:mm:ss[.sss]'
-          ((L = 10) and (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
-          (((L = 19) or (L = 23)) and (P[4] = '-') and (P[10] = 'T')) then
+          ((L = 10) and
+           (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
+          (((L = 19) or (L = 23)) and
+           (P[4] = '-') and (P[10] = 'T')) then
   begin
     Iso8601ToDateTimePUTF8CharVar(P, L, Value);
     result := PInt64(@Value)^ <> 0;

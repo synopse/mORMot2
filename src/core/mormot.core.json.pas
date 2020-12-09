@@ -2421,7 +2421,8 @@ begin
       repeat
         inc(P);
       until not (P^ in ['0'..'9']); // check fractional digits
-    if ((P^ = 'e') or (P^ = 'E')) and
+    if ((P^ = 'e') or
+        (P^ = 'E')) and
        (P[1] in ['0'..'9', '+', '-']) then
     begin
       inc(P);
@@ -2472,7 +2473,8 @@ begin
   c := P^;
   if (jcDigitFirstChar in tab[c]) and
      (((c >= '1') and (c <= '9')) or // is first char numeric?
-     ((c = '0') and ((P[1] < '0') or (P[1] > '9'))) or // '012' excluded by JSON
+     ((c = '0') and ((P[1] < '0') or
+                     (P[1] > '9'))) or // '012' excluded by JSON
      ((c = '-') and (P[1] >= '0') and (P[1] <= '9'))) then
   begin
     // check if c is a true numerical value
@@ -2485,7 +2487,8 @@ begin
         inc(P);
       until (P^ < '0') or
             (P^ > '9'); // check fractional digits
-    if ((P^ = 'e') or (P^ = 'E')) and
+    if ((P^ = 'e') or
+        (P^ = 'E')) and
        (jcDigitFirstChar in tab[P[1]]) then
     begin
       inc(P);

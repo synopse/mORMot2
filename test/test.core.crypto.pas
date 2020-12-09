@@ -460,7 +460,8 @@ begin
     begin
       data := RandomString(i);
       encrypted := instance.Cypher(secret, data);
-      Check((i < 16) or (encrypted <> data));
+      Check((i < 16) or
+            (encrypted <> data));
       instance.InitCypher(secret);
       Check(instance.Cypher(encrypted) = data);
     end;
@@ -618,9 +619,11 @@ begin
     check(length(plain) = i);
     UInt32ToUtf8(i, appsec);
     enc := func(plain, appsec, true);
-    if not ((plain = '') or (enc <> '')) then
+    if not ((plain = '') or
+            (enc <> '')) then
       enc := func(plain, appsec, true);
-    check((plain = '') or (enc <> ''));
+    check((plain = '') or
+          (enc <> ''));
     check(length(enc) >= length(plain));
     test := func(enc, appsec, false);
     check(length(test) = i);
@@ -892,7 +895,9 @@ begin
           bSHAKE256:
             SHAKE256.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
         end;
-        Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
+        Check((b >= bRC4) or
+              (dig.d0 <> 0) or
+              (dig.d1 <> 0));
       end;
       inc(time[b], NotifyTestSpeed('% %', [TXT[b], SIZ[s]], COUNT, SIZ[s] *
         COUNT, @timer, {onlylog=}true));
@@ -1093,8 +1098,9 @@ begin
                 Encrypt(AES.outStreamCreated.Memory, pointer(crypted), len);
                 FillCharFast(pointer(orig)^, len, 0);
                 Decrypt(pointer(crypted), pointer(orig), len);
-                Check((len = 0) or (not isZero(pointer(orig), len)) or isZero(AES.outStreamCreated.Memory,
-                  len));
+                Check((len = 0) or
+                      (not isZero(pointer(orig), len)) or
+                      isZero(AES.outStreamCreated.Memory, len));
                 Check(CompareMem(AES.outStreamCreated.Memory, pointer(orig), len));
                 {$endif PUREMORMOT2}
                 s2 := copy(orig, 1, len);

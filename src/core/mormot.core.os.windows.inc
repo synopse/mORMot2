@@ -1158,11 +1158,19 @@ end;
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
 var
   tmp: SynUnicode;
+  i: integer;
 begin
-  tmp := UTF8Decode(S);
-  SetLength(result, length(tmp) * 4);
-  CharToOemW(pointer(tmp), pointer(result));
-  SetLength(result, StrLen(pointer(result)));
+  for i := 1 to length(S) do
+    if S[i] > #127 then
+    begin
+      tmp := UTF8Decode(S);
+      SetLength(result, length(tmp) * 4);
+      CharToOemW(pointer(tmp), pointer(result));
+      SetLength(result, StrLen(pointer(result)));
+      exit;
+    end
+  else
+    result := S;
 end;
 
 {$I+}

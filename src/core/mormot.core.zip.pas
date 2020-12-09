@@ -479,7 +479,7 @@ begin
   inherited Destroy;
 end;
 
-function TSynZipCompressor.Read(var Buffer; Count: Longint): Longint;
+function TSynZipCompressor.{%H-}Read(var Buffer; Count: Longint): Longint;
 begin
   {$ifdef DELPHI20062007}
   result := 0;

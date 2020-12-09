@@ -2230,7 +2230,8 @@ begin
           (ord(Source^) >= 128);
   if SourceChars > 0 then
     // rely on the Operating System for all remaining ASCII characters
-    inc(Dest, Unicode_AnsiToWide(Source, Dest, SourceChars, SourceChars, fCodePage));
+    inc(Dest,
+      Unicode_AnsiToWide(Source, Dest, SourceChars, SourceChars, fCodePage));
   if not NoTrailingZero then
     Dest^ := #0;
   result := Dest;
@@ -2447,7 +2448,8 @@ begin
           (ord(Source^) >= 128);
   // rely on the Operating System for all remaining ASCII characters
   if SourceChars > 0 then
-    inc(Dest, Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars, fCodePage));
+    inc(Dest,
+      Unicode_WideToAnsi(Source, Dest, SourceChars, SourceChars, fCodePage));
   result := Dest;
 end;
 

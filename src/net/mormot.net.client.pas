@@ -2141,7 +2141,8 @@ begin
   result := SendEmail(
     Server.Host, From, CSVDest, Subject, Text, Headers,
     Server.User, Server.Pass, Server.Port, TextCharSet,
-    (Server.Port = '465') or (Server.Port = '587'));
+    (Server.Port = '465') or
+    (Server.Port = '587'));
 end;
 
 {$I-}

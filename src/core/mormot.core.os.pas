@@ -2824,14 +2824,16 @@ begin
   result := GetACP;
 end;
 
-function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
+function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt;
+  IgnoreCase: boolean): integer;
 const
   _CASEFLAG: array[boolean] of DWORD = (0, NORM_IGNORECASE);
 begin
   result := CompareStringW(LOCALE_USER_DEFAULT, _CASEFLAG[IgnoreCase], PW1, L1, PW2, L2);
 end;
 
-procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
+procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt;
+  var res: shortstring);
 begin
   if LW <= 0 then
     res[0] := #0
