@@ -28,7 +28,7 @@ begin
   PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
   {$else}
   I64 := PInt64(@FT)^;
-  {$endif}
+  {$endif CPU64}
 end;
 
 const
@@ -40,28 +40,28 @@ function FileTimeToUnixTime(const FT: TFileTime): Int64;
 {$ifdef CPU64}
 var
   nano100: Int64; // TFileTime is in 100 ns unit
-{$endif}
+{$endif CPU64}
 begin
   {$ifdef CPU64}
   FileTimeToInt64(ft, nano100);
   result := (nano100 - UnixFileTimeDelta) div 10000000;
   {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
   result := (PInt64(@ft)^ - UnixFileTimeDelta) div 10000000;
-  {$endif}
+  {$endif CPU64}
 end;
 
 function FileTimeToUnixMSTime(const FT: TFileTime): Int64;
 {$ifdef CPU64}
 var
   nano100: Int64; // TFileTime is in 100 ns unit
-{$endif}
+{$endif CPU64}
 begin
   {$ifdef CPU64}
   FileTimeToInt64(ft, nano100);
   result := (nano100 - UnixFileTimeDelta) div 10000;
   {$else} 
   result := (PInt64(@ft)^ - UnixFileTimeDelta) div 10000;
-  {$endif}
+  {$endif CPU64}
 end;
 
 function UnixTimeUTC: Int64;
@@ -116,6 +116,8 @@ function  CreateIoCompletionPort;     external kernel32;
 function  GetQueuedCompletionStatus;  external kernel32;
 function  PostQueuedCompletionStatus; external kernel32;
 function  GetDesktopWindow;           external user32;
+function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
+function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
 procedure DisplayFatalError(const title, msg: RawUTF8);
 begin
@@ -516,13 +518,13 @@ var
   {$else}
     // Win32, Linux: intercept via the RaiseProc global variable
     {$define WITH_RAISEPROC} // RaiseProc is set in main mormot.core.os.pas
-  {$endif}
+  {$endif WIN64}
 {$else}
   {$ifdef CPU64}
     {$define WITH_VECTOREXCEPT}
   {$else}
     {$define WITH_RTLUNWINDPROC} //  use x86_64 asm -> Win32 only
-  {$endif}
+  {$endif CPU64}
 {$endif FPC}
 
 {$ifndef WITH_RAISEPROC}
@@ -1959,7 +1961,7 @@ end;
 type
   {$ifdef FPC}
   {$PACKRECORDS C} // mandatory under Win64
-  {$endif}
+  {$endif FPC}
   DATA_BLOB = record
     cbData: DWORD;
     pbData: PAnsiChar;
@@ -1968,7 +1970,7 @@ type
   PDATA_BLOB = ^DATA_BLOB;
   {$ifdef FPC}
   {$PACKRECORDS DEFAULT}
-  {$endif}
+  {$endif FPC}
 
 const
   CRYPTDLL = 'Crypt32.dll';

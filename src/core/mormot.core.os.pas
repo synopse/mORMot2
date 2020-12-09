@@ -886,6 +886,66 @@ function GetFileOpenLimit(hard: boolean = false): integer;
 // ! SetFileOpenLimit(GetFileOpenLimit(true));
 function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 
+type
+  /// Low-level access to the ICU library installed on this system
+  TICULibrary = packed object
+  protected
+    icu, icudata, icui18n: pointer;
+    Loaded: boolean;
+    procedure DoLoad(const LibName: TFileName = ''; const Version: string = '');
+    procedure Done;
+  public
+    /// Initialize an ICU text converter for a given encoding
+    ucnv_open: function (converterName: PAnsiChar; var err: SizeInt): pointer; cdecl;
+    /// finalize the ICU text converter for a given encoding
+    ucnv_close: procedure (converter: pointer); cdecl;
+    /// customize the ICU text converter substitute char
+    ucnv_setSubstChars: procedure (converter: pointer;
+      subChars: PAnsiChar; len: byte; var err: SizeInt); cdecl;
+    /// enable the ICU text converter fallback
+    ucnv_setFallback: procedure (cnv: pointer; usesFallback: LongBool); cdecl;
+    /// ICU text conversion from UTF-16 to a given encoding
+    ucnv_fromUChars: function (cnv: pointer; dest: PAnsiChar; destCapacity: cardinal;
+      src: PWideChar; srcLength: cardinal; var err: SizeInt): cardinal; cdecl;
+    /// ICU text conversion from a given encoding to UTF-16
+    ucnv_toUChars: function (cnv: pointer; dest: PWideChar; destCapacity: cardinal;
+      src: PAnsiChar; srcLength: cardinal; var err: SizeInt): cardinal; cdecl;
+    /// ICU UTF-16 text conversion to uppercase
+    u_strToUpper: function (dest: PWideChar; destCapacity: cardinal;
+      src: PWideChar; srcLength: cardinal; locale: PAnsiChar;
+      var err: SizeInt): cardinal; cdecl;
+    /// ICU UTF-16 text conversion to lowercase
+    u_strToLower: function (dest: PWideChar; destCapacity: cardinal;
+      src: PWideChar; srcLength: cardinal; locale: PAnsiChar;
+      var err: SizeInt): cardinal; cdecl;
+    /// ICU UTF-16 text comparison
+    u_strCompare: function (s1: PWideChar; length1: cardinal;
+      s2: PWideChar; length2: cardinal; codePointOrder: LongBool): cardinal; cdecl;
+    /// ICU UTF-16 text comparison with options, e.g. for case-insensitive
+    u_strCaseCompare: function (s1: PWideChar; length1: cardinal;
+      s2: PWideChar; length2: cardinal; options: cardinal;
+      var err: SizeInt): cardinal; cdecl;
+    /// get the ICU data folder
+    u_getDataDirectory: function: PAnsiChar; cdecl;
+    /// set the ICU data folder
+    u_setDataDirectory: procedure(directory: PAnsiChar); cdecl;
+    /// initialize the ICU library
+    u_init: procedure(var status: SizeInt); cdecl;
+    /// try to initialize a specific version of the ICU library
+    // - returns true if was successfully loaded and setup
+    function ForceLoad(const LibName: TFileName; const Version: string): boolean;
+    /// returns TRUE if a ICU library is available on this system
+    // - will thread-safely load and initialize it if necessary
+    function IsAvailable: boolean; inline;
+    /// Initialize an ICU text converter for a given codepage
+    // - returns nil if ICU is not available on this system
+    function ucnv(codepage: cardinal): pointer;
+  end;
+
+var
+  /// late-binding of the ICU library
+  icu: TICULibrary;
+
 {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
 
 const
@@ -1062,23 +1122,41 @@ function Unicode_CodePage: integer;
 // - returns 1 if PW1>PW2, 2 if PW1=PW2, 3 if PW1<PW2 - so substract 2 to have
 // -1,0,1 as regular StrCompW/StrICompW comparison function result
 // - will compute StrLen(PW1/PW2) if L1 or L2 < 0
-// - somewhat slow by using two temporary UnicodeString on POSIX - but seldom
-// called, unless our proprietary WIN32CASE collation is used in mormot.db.raw.sqlite3
-function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
+// - on POSIX, use the ICU library, or fallback to FPC RTL widestringmanager
+// with a temporary variable - you would need to include cwstring unit
+// - in practice, is seldom called, unless our proprietary WIN32CASE collation
+// is used in mormot.db.raw.sqlite3
+function Unicode_CompareString(
+  PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
 
 /// compatibility function, wrapping MultiByteToWideChar() Win32 API call
 // - returns the number of WideChar written into W^ destination buffer
-// - on POSIX, use FPC RTL widestringmanager with a temporary variable
-function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
+// - on POSIX, use the ICU library, or fallback to FPC RTL widestringmanager
+// with a temporary variable - you would need to include cwstring unit
+function Unicode_AnsiToWide(
+  A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 
 /// compatibility function, wrapping WideCharToMultiByte() Win32 API call
 // - returns the number of AnsiChar written into A^ destination buffer
-// - on POSIX, use FPC RTL widestringmanager with a temporary variable
-function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
+// - on POSIX, use the ICU library, or fallback to FPC RTL widestringmanager
+// with a temporary variable - you would need to include cwstring unit
+function Unicode_WideToAnsi(
+  W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 
 /// conversion of some UTF-16 buffer into a temporary shortstring
 // - used when mormot.core.unicode is an overkill, e.g. TCrtSocket.SockSend()
-procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
+procedure Unicode_WideToShort(
+  W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
+
+/// compatibility function, wrapping Win32 API CharUpperBuffW()
+// - on POSIX, use the ICU library, or fallback to 'a'..'z' conversion only
+function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;
+  {$ifdef MSWINDOWS} stdcall; {$endif}
+
+/// compatibility function, wrapping Win32 API CharLowerBuffW()
+// - on POSIX, use the ICU library, or fallback to 'A'..'Z' conversion only
+function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
+  {$ifdef MSWINDOWS} stdcall; {$endif}
 
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
@@ -2694,7 +2772,7 @@ function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
 var
   tmpLen: DWORD;
   err: PChar;
-{$endif}
+{$endif MSWINDOWS}
 begin
   result := '';
   if Code = 0 then
@@ -3431,7 +3509,11 @@ begin
     result := false // avoid GPF
   else
   begin
+    {$ifdef MSWINDOWS}
     Entry^ := GetProcAddress(fHandle, ProcName);
+    {$else}
+    Entry^ := dlsym(fHandle, ProcName);
+    {$endif MSWINDOWS}
     result := Entry^ <> nil;
   end;
   if (RaiseExceptionOnFailure <> nil) and
@@ -3447,7 +3529,11 @@ procedure TSynLibrary.FreeLib;
 begin
   if fHandle = 0 then
     exit; // nothing to free
+  {$ifdef MSWINDOWS}
   FreeLibrary(fHandle);
+  {$else}
+  dlclose(fHandle);
+  {$endif MSWINDOWS}
   fHandle := 0;
 end;
 
@@ -3473,7 +3559,7 @@ begin
     if nwd <> '' then
       SetCurrentDir(cwd{%H-});
     {$else}
-    fHandle := SafeLoadLibrary(lib);
+    fHandle := TSynLibraryHandle(dlopen(pointer(lib), RTLD_LAZY));
     {$endif MSWINDOWS}
     if fHandle <> 0 then
     begin

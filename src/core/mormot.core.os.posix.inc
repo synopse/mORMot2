@@ -42,53 +42,306 @@ var
   // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
   KernelRevision: cardinal;
 
+
+{ TICULibrary }
+
+procedure TICULibrary.Done;
+begin
+  if icui18n <> nil then
+    dlclose(icui18n);
+  if icu <> nil then
+    dlclose(icu);
+  if icudata <> nil then
+    dlclose(icudata);
+  icu := nil;
+  icudata := nil;
+  icui18n := nil;
+  @ucnv_open := nil;
+end;
+
+function TICULibrary.IsAvailable: boolean;
+begin
+  if not Loaded then
+    DoLoad;
+  result := Assigned(ucnv_open);
+end;
+
+procedure TICULibrary.DoLoad(const LibName: TFileName; const Version: string);
+const
+  NAMES: array[0..12] of string = (
+    'ucnv_open', 'ucnv_close', 'ucnv_setSubstChars', 'ucnv_setFallback',
+    'ucnv_fromUChars', 'ucnv_toUChars', 'u_strToUpper', 'u_strToLower',
+    'u_strCompare', 'u_strCaseCompare', 'u_getDataDirectory',
+    'u_setDataDirectory', 'u_init');
+  {$ifdef ANDROID}
+  // from https://developer.android.com/guide/topics/resources/internationalization
+  ICU_VER: array[1..13] of string = (
+    '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55',
+    '_56', '_58', '_60', '_63');
+  SYSDATA: PAnsiChar = '/system/usr/icu';
+  {$else}
+  SYSDATA: PAnsiChar = '';
+  {$endif ANDROID}
+var
+  i, j: integer;
+  err: SizeInt;
+  P: PPointer;
+  v, vers: string;
+  data: PAnsiChar;
+begin
+  GlobalLock;
+  try
+    if Loaded then
+      exit;
+    Loaded := true;
+    if LibName <> '' then
+    begin
+      icu := dlopen(pointer(LibName), RTLD_LAZY);
+      if icu = nil then
+        exit;
+    end
+    else
+    begin
+      {$ifdef DARWIN}
+      icu := dlopen('libicuuc.dylib', RTLD_LAZY);
+      if icu <> nil then
+        icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);
+      {$else}
+      // libicudata should be loaded first because other two depend on it
+      icudata := dlopen('libicudata.so', RTLD_LAZY);
+      if icudata <> nil then
+      begin
+        icu := dlopen('libicuuc.so', RTLD_LAZY);
+        if icu <> nil then
+          icui18n := dlopen('libicui18n.so', RTLD_LAZY);
+      end;
+      {$endif DARWIN}
+      if icui18n = nil then
+      begin
+        Done;
+        exit;
+      end
+    end;
+    // ICU append a version prefix to all its functions e.g. ucnv_open_66
+    if (Version <> '') and
+       (dlsym(icu, pointer('ucnv_open_' + Version)) <> nil) then
+      vers := '_' + Version
+    else
+    begin
+      {$ifdef ANDROID}
+      for i := high(ICU_VER) downto 1 do
+      begin
+        if dlsym(icu, pointer(NAMES[0] + ICU_VER[i])) <> nil then
+        begin
+          vers := ICU_VER[i];
+          break;
+        end;
+      end;
+      if vers <> '' then
+      {$endif ANDROID}
+      if dlsym(icu, 'ucnv_open') = nil then
+        for i := 80 downto 44 do
+        begin
+          str(i, v);
+          if dlsym(icu, pointer('ucnv_open_' + v)) <> nil then
+          begin
+            vers := '_' + v;
+            break;
+          end;
+        end;
+    end;
+    P := @@ucnv_open;
+    for i := 0 to high(NAMES) do
+    begin
+      P[i] := dlsym(icu, pointer(NAMES[i] + vers));
+      if P[i] = nil then
+      begin
+        @ucnv_open := nil;
+        exit;
+      end;
+    end;
+    data := u_getDataDirectory;
+    if (data = nil) or (data^ = #0) then
+      if SYSDATA <> '' then
+        u_setDataDirectory(SYSDATA);
+    err := 0;
+    u_init(err);
+  finally
+    GlobalUnLock;
+  end;
+end;
+
+function TICULibrary.ForceLoad(const LibName: TFileName; const Version: string): boolean;
+begin
+  Done;
+  Loaded := false;
+  DoLoad(LibName, Version);
+  result := Assigned(ucnv_open);
+end;
+
+function TICULibrary.ucnv(codepage: cardinal): pointer;
+var
+  s: shortstring;
+  err: SizeInt;
+  {$ifdef CPUINTEL}
+  mask: cardinal;
+  {$endif CPUINTEL}
+begin
+  if not IsAvailable then
+    exit(nil);
+  str(codepage, s);
+  MoveFast(s[1], s[3], ord(s[0]));
+  PWord(@s[1])^ := ord('c') + ord('p') shl 8;
+  inc(s[0], 3);
+  s[ord(s[0])] := #0;
+  {$ifdef CPUINTEL}
+  mask := GetMXCSR;
+  SetMXCSR(mask or $0080 {MM_MaskInvalidOp} or $1000 {MM_MaskPrecision});
+  {$endif CPUINTEL}
+  result := ucnv_open(@s[1], err);
+  if result <> nil then
+  begin
+    ucnv_setSubstChars(result, '?', 1, err);
+    ucnv_setFallback(result, true);
+  end;
+  {$ifdef CPUINTEL}
+  SetMXCSR(mask);
+  {$endif CPUINTEL}
+end;
+
+
 const
   // for CompareStringW()
   LOCALE_USER_DEFAULT = $400;
   NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
 
-function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD;
-  lpString1: PWideChar; cchCount1: integer;
-  lpString2: PWideChar; cchCount2: integer): PtrInt;
+function CompareStringRTL(A, B: PWideChar; AL, BL, flags: integer): integer;
 var
-  U1, U2: UnicodeString; // faster than WideString on Windows
+  U1, U2: UnicodeString; // allocate two temporary strings
 begin
-  // not inlined to avoid try..finally UnicodeString protection overhead
-  if cchCount1 < 0 then
-    cchCount1 := StrLenW(lpString1);
-  SetString(U1, lpString1, cchCount1);
-  if cchCount2 < 0 then
-    cchCount2 := StrLenW(lpString2);
-  SetString(U2, lpString2, cchCount2);
+  SetString(U1, A, AL);
+  SetString(U2, B, BL);
   result := widestringmanager.CompareUnicodeStringProc(
-    U1, U2, TCompareOptions(dwCmpFlags)) + 2;
+    U1, U2, TCompareOptions(flags));
+end;
+
+function CompareStringW(locale, flags: DWORD;
+  A: PWideChar; AL: integer; B: PWideChar; BL: integer): PtrInt;
+const
+  CODE_POINT_ORDER = $8000;
+var
+  err: SizeInt;
+begin
+  if AL < 0 then
+    AL := StrLenW(A);
+  if BL < 0 then
+    BL := StrLenW(B);
+  err := 0;
+  if icu.IsAvailable then
+    if flags and NORM_IGNORECASE <> 0 then
+      result := icu.u_strCaseCompare(A, AL, B, BL, CODE_POINT_ORDER, err)
+    else
+      result := icu.u_strCompare(A, AL, B, BL, true)
+  else
+    result := CompareStringRTL(A, B, AL, BL, flags);
+  inc(result, 2); // caller would make -2 to get regular -1/0/1 comparison values
+end;
+
+function AnsiToWideRTL(CodePage: cardinal; A: PAnsiChar; W: PWideChar;
+  AL: PtrInt): PtrInt;
+var
+  tmp: UnicodeString;
+begin
+  widestringmanager.Ansi2UnicodeMoveProc(A, CodePage, tmp, AL);
+  result := length(tmp);
+  MoveFast(pointer(tmp)^, W, result * 2);
 end;
 
 function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar;
   LA, LW, CodePage: PtrInt): integer;
 var
-  tmp: UnicodeString; // not called often on UNIX which is likely to be UTF-8
+  cnv: pointer;
+  err: SizeInt;
 begin
-  widestringmanager.Ansi2UnicodeMoveProc(
-    A, {$ifdef ISFPC27}CodePage, {$endif} tmp, LA);
+  if codepage = CP_UTF8 then
+    exit(Utf8ToUnicode(W, A, LA));
+  cnv := icu.ucnv(codepage);
+  if cnv = nil then
+    exit(AnsiToWideRTL(codepage, A, W, LA));
+  err := 0;
+  result := icu.ucnv_toUChars(cnv, W, LW, A, LA, err);
+  if result < 0 then
+    result := 0;
+  icu.ucnv_close(cnv);
+end;
+
+function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
+  WL: PtrInt): PtrInt;
+var
+  tmp: RawByteString;
+begin
+  widestringmanager.Unicode2AnsiMoveProc(W, tmp, CodePage, WL);
   result := length(tmp);
-  MoveFast(Pointer(tmp)^, W^, result * 2);
+  MoveFast(pointer(tmp)^, A, result);
 end;
 
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar;
   LW, LA, CodePage: PtrInt): integer;
 var
-  tmp: RawByteString;
+  cnv: pointer;
+  err: SizeInt;
 begin
-  widestringmanager.Unicode2AnsiMoveProc(
-    W, tmp, {$ifdef ISFPC27}CodePage, {$endif} LA);
-  result := length(tmp);
-  MoveFast(Pointer(tmp)^, A^, result);
+  if CodePage = CP_UTF8 then
+    exit(UnicodeToUTF8(A, W, LW));
+  cnv := icu.ucnv(CodePage);
+  if cnv = nil then
+    exit(WideToAnsiRTL(CodePage, W, A, LW));
+  err := 0;
+  result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
+  if result < 0 then
+    result := 0;
+  icu.ucnv_close(cnv);
+end;
+
+function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;
+var
+  err, i: SizeInt;
+begin
+  if icu.IsAvailable then
+  begin
+    err := 0;
+    result := icu.u_strToUpper(W, WLen, W, WLen, nil, err);
+  end
+  else
+  begin
+    for i := 0 to WLen - 1 do
+      if ord(W[i]) in [ord('a')..ord('z')] then
+        dec(W[i], 32);
+    result := WLen;
+  end;
+end;
+
+function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
+var
+  err, i: SizeInt;
+begin
+  if icu.IsAvailable then
+  begin
+    err := 0;
+    result := icu.u_strToLower(W, WLen, W, WLen, nil, err);
+  end
+  else
+  begin
+    for i := 0 to WLen - 1 do
+      if ord(W[i]) in [ord('A')..ord('Z')] then
+        inc(W[i], 32);
+    result := WLen;
+  end;
 end;
 
 function GetDesktopWindow: PtrInt;
 begin
-  result := 0; // fixed result
+  result := 0; // fixed result on a window-less system
 end;
 
 const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
@@ -254,7 +507,7 @@ const
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
 function clock_gettime(clk_id : clockid_t; tp: ptimespec) : cint;
-  cdecl; external name 'clock_gettime';
+  cdecl; external 'c' name 'clock_gettime';
 
 {$endif BSD}
 
@@ -2003,6 +2256,7 @@ procedure FinalizeSpecificUnit;
 begin
   if pthread <> nil then
     dlclose(pthread);
+  icu.Done;
   {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
   sd.Done;
   {$endif LINUXNOTBSD}

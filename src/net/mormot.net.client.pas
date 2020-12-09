@@ -2092,7 +2092,7 @@ begin
         aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
       raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aURI])
-      {$endif}
+      {$endif USELIBCURL}
       {$endif USEWININET}
     else
       result := OpenHttpGet(

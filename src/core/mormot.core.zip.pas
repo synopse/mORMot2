@@ -636,8 +636,8 @@ begin
   else
     result := (comp <> nil) and
               (stream <> nil) and
-              (UnCompressStream(comp, complen, stream, @crc, {zlib=}false,
-                tempBufSize) = uncomplen32) and
+              (UnCompressStream(comp, complen,
+                stream, @crc, {zlib=}false, tempBufSize) = uncomplen32) and
               (crc = crc32);
 end;
 
@@ -875,12 +875,12 @@ begin
       intName := AnsiString(zipName);
       {$else}  // intName := zipName -> error reference count under Delphi 6
       SetString(intName, PAnsiChar(pointer(zipName)), length(zipName));
-      {$endif}
+      {$endif UNICODE}
       fHr.fileInfo.UnSetUTF8FileName;
     end
     else
     begin
-      intName := UTF8Encode(SynUnicode(zipName));
+      intName := StringToUTF8(zipName);
       fHr.fileInfo.SetUTF8FileName;
     end;
     fHr.fileInfo.nameLen := length(intName);

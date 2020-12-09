@@ -1401,7 +1401,7 @@ begin
   {$endif}
   {$else}
   Size := F.Size;
-  {$endif}
+  {$endif MSWINDOWS}
   Attr := F.Attr;
   Timestamp := SearchRecToDateTime(F);
 end;
@@ -2370,7 +2370,7 @@ begin
               {$ifdef CPU64}
                 else if pmax >= 7 then
                   Search := SearchContains8
-              {$endif}
+              {$endif CPU64}
                 else if pmax >= 3 then
                   Search := SearchContains4
                 else

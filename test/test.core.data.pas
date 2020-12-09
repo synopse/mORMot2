@@ -2766,13 +2766,13 @@ procedure TTestCoreProcess._TDecimal128;
   begin
     v.Bits.hi := hi;
     v.Bits.lo := lo;
-    Check(v.ToText = expected);
+    CheckEqual(v.ToText, expected);
     v2.SetZero;
     Check(v2.FromText(expected) = special);
     if special <> dsvValue then
       exit;
     Check(v2.Equals(v));
-    Check(v2.ToText = expected);
+    CheckEqual(v2.ToText, expected);
     v2.SetZero;
     if expected[1] <> '-' then
       Check(v2.FromText('000' + LowerCase(expected)) = dsvValue)
@@ -2819,8 +2819,8 @@ begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal12
   for s := dsvNan to high(s) do
   begin
     v.SetSpecial(s);
-    Check(v.ToText = DECIMAL128_SPECIAL_TEXT[s]);
-    Check(v.IsSpecial = s);
+    CheckEqual(v.ToText, DECIMAL128_SPECIAL_TEXT[s], ToText(s)^);
+    CheckEqual(ord(v.IsSpecial), ord(s));
     if s < dsvMin then
     begin
       v.SetZero;

@@ -14,9 +14,9 @@
   {$ifdef Unix} // we may also be on Darwin / OSX
     cthreads, // if you use threads: always needed for servers
     {$ifdef Darwin}
-      iosxwstr, // optional WideString manager for Mac, but won't hurt
+      // iosxwstr, // optional WideString manager for Mac
     {$else}
-      cwstring, // optional WideString manager, but won't hurt
+      // cwstring, // optional WideString manager
     {$endif Darwin}
   {$else}
     {$ifopt D-} // at the moment, debug mode with cmem causes trouble

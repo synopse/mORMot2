@@ -3771,7 +3771,7 @@ var
   tmp: TSynTempBuffer;
 begin
   if (Text = nil) or
-     (Len = 0) then
+     (Len <= 0) then
     result := ''
   else
   begin
@@ -4690,12 +4690,12 @@ begin
     begin
       extra := UTF8_EXTRABYTES[c];
       if extra = 0 then
-        exit
-      else // invalid leading byte
+        exit // invalid leading byte
+      else
         for i := 0 to extra - 1 do
           if byte(P[i]) and $c0 <> $80 then
-            exit
-          else // invalid input content
+            exit // invalid input content
+          else
             c := (c shl 6) + byte(P[i]);
       with UTF8_EXTRA[extra] do
       begin
@@ -5365,13 +5365,35 @@ begin
 end;
 
 function UpperCaseUnicode(const S: RawUTF8): RawUTF8;
+var
+  tmp: TSynTempBuffer;
+  len: integer;
 begin
-  result := WideStringToUTF8(WideUpperCase(UTF8ToWideString(S)));
+  if S = '' then
+  begin
+    result := '';
+    exit;
+  end;
+  tmp.Init(length(s) * 2);
+  len := UTF8ToWideChar(tmp.buf, pointer(S), length(S)) shr 1;
+  RawUnicodeToUtf8(tmp.buf, Unicode_InPlaceUpper(tmp.buf, len),result);
+  tmp.Done;
 end;
 
 function LowerCaseUnicode(const S: RawUTF8): RawUTF8;
+var
+  tmp: TSynTempBuffer;
+  len: integer;
 begin
-  result := WideStringToUTF8(WideLowerCase(UTF8ToWideString(S)));
+  if S = '' then
+  begin
+    result := '';
+    exit;
+  end;
+  tmp.Init(length(s) * 2);
+  len := UTF8ToWideChar(tmp.buf, pointer(S), length(S)) shr 1;
+  RawUnicodeToUtf8(tmp.buf, Unicode_InPlaceLower(tmp.buf, len),result);
+  tmp.Done;
 end;
 
 function IsCaseSensitive(const S: RawUTF8): boolean;

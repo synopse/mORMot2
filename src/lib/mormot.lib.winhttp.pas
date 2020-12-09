@@ -2046,7 +2046,7 @@ begin
      nil, UserInfo^.Sid, P + DomainSize, UserSize, P, DomainSize, NameUse) then
     exit;
   P[DomainSize] := '\';
-  result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
+  result := SynUnicodeToUtf8(tmp);
 end;
 
 

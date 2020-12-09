@@ -8525,7 +8525,7 @@ end;
 
 {$ifdef ISDELPHI20062007}
   {$WARNINGS OFF} // circumvent Delphi 2007 false positive warning
-{$endif}
+{$endif ISDELPHI20062007}
 
 const
   PG_FT: array[TSQLDBFieldType] of string[9] = (
@@ -8642,7 +8642,7 @@ end;
 
 {$ifdef ISDELPHI20062007}
   {$WARNINGS ON}
-{$endif}
+{$endif ISDELPHI20062007}
 
 function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
 var
