@@ -1371,20 +1371,28 @@ end;
 
 function div128bits9digits(var value: THash128Rec): PtrUInt;
 var
-  r64: QWord;
-  i: PtrInt;
+  r, t: QWord;
+  i: PtrUInt;
 begin
-  r64 := 0;
+  r := 0;
   for i := 0 to high(value.c) do
   begin
-    r64 := r64 shl 32;   // adjust remainder to match value of next dividend
-    inc(r64, value.c[i]); // add the divided to _rem
-    if r64 = 0 then
+    {$ifdef FPC_32} // circumvent bug at least with FPC 3.2
+    Int64Rec(r).Hi := Int64Rec(r).Lo;
+    Int64Rec(r).Lo := 0;
+    {$else}
+    r := r shl 32;    // adjust remainder to match value of next dividend
+    {$endif FPC_32}
+    t := value.c[i];
+    inc(r, t); // add the divided to _rem
+    if r = 0 then
       continue;
-    value.c[i] := r64 div 1000000000;
-    dec(r64, QWord(value.c[i]) * 1000000000);
+    t := r div 1000000000;
+    value.c[i] := t;
+    t := t * 1000000000;
+    dec(r, t);
   end;
-  result := r64;
+  result := r;
 end;
 
 procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt);
@@ -1457,14 +1465,16 @@ begin
   _128.c[3] := Bits.c[0];
   FillCharFast(digbuffer, sizeof(digbuffer), 0);
   dig := @digbuffer;
-  if ((_128.lo = 0) and (_128.hi = 0)) or
+  if ((_128.lo = 0) and
+      (_128.hi = 0)) or
      (_128.c[0] >= 1 shl 17) then
     signdig := 1 // non-canonical or zero -> 0
   else
   begin
     for k := 3 downto 0 do
     begin
-      if (_128.lo = 0) and (_128.hi = 0) then
+      if (_128.lo = 0) and
+         (_128.hi = 0) then
         break;
       leastdig := div128bits9digits(_128);
       if leastdig = 0 then
