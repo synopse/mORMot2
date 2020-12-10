@@ -2528,7 +2528,8 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 // - calls RTL Now(), Random(), CreateGUID(), GetCurrentThreadID() and
 // current gsl_rng_taus2 Lecuyer state
 // - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs
-// - execution is fast, but not good as unique seed for a cryptographic PRNG
+// - execution is fast, but not good as unique seed for a cryptographic PRNG:
+// TAESPRNG.GetEntropy will call it several times as one of the entropy sources
 procedure XorEntropy(entropy: PBlock128);
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian

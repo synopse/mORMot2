@@ -1102,6 +1102,7 @@ type
     fAESKeySize: integer;
     fSeedPBKDF2Rounds: cardinal;
     fTotalBytes: QWord;
+    fSeeding: boolean;
   public
     /// initialize the internal secret key, using Operating System entropy
     // - entropy is gathered from the OS, using GetEntropy() method
@@ -5420,20 +5421,16 @@ end;
 
 class function TAESPRNG.GetEntropy(Len: integer; SystemOnly: boolean): RawByteString;
 var
-  ext: TSynExtended;
   data: THash512Rec;
   fromos: RawByteString;
   sha3: TSHA3;
 
   procedure sha3update;
   begin
-    QueryPerformanceMicroSeconds(data.d2);
-    data.c[4] := data.c[4] xor mormot.core.base.Random32; // gsl_rng_taus2
-    data.c[5] := data.c[5] xor mormot.core.base.Random32;
-    data.c[6] := data.c[6] xor mormot.core.base.Random32;
-    data.c[7] := data.c[7] xor mormot.core.base.Random32;
+    QueryPerformanceMicroSeconds(data.d2); // set data.h1 low 64-bit
     XorEntropy(@data.h2); // RdRand32+Rdtsc+Now+Random+CreateGUID
     XorEntropy(@data.h3);
+    QueryPerformanceMicroSeconds(data.d3); // set data.h1 high 64-bit
     sha3.Update(@data, SizeOf(data));
   end;
 
@@ -5450,22 +5447,22 @@ begin
     end;
     // xor some explicit entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
-    XorEntropy(@data.h0);
+    mormot.core.base.FillRandom(@data, SizeOf(data) shr 2); // gsl_rng_taus2
     sha3update;
-    ext := NowUTC;
-    sha3.Update(@ext, SizeOf(ext));
     sha3.Update(ExeVersion.Host);
     sha3.Update(ExeVersion.User);
     sha3.Update(ExeVersion.ProgramFullSpec);
     data.h0 := ExeVersion.Hash.b;
     sha3update;
-    ext := Random; // why not?
-    sha3.Update(@ext, SizeOf(ext));
     data.i0 := integer(HInstance); // override data.d0d1/h0
     data.i1 := PtrInt(GetCurrentThreadId);
     data.i2 := PtrInt(MainThreadID);
     data.i3 := integer(UnixMSTimeUTCFast);
-    SleepHiRes(0); // force non deterministic time shift
+    {$ifdef FPC}
+    ThreadSwitch; // non deterministic time shift
+    {$else}
+    SleepHiRes(0);
+    {$endif FPC}
     sha3update;
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
@@ -5478,24 +5475,31 @@ end;
 
 procedure TAESPRNG.Seed;
 var
+  alreadyseeding: boolean;
   key: THash512Rec;
   entropy: RawByteString;
 begin
-  try
-    entropy := GetEntropy(128); // 128 bytes is the HMAC_SHA512 key block size
-    PBKDF2_HMAC_SHA512(entropy, ExeVersion.User, fSeedPBKDF2Rounds, key.b);
-    EnterCriticalSection(fSafe);
+  EnterCriticalSection(fSafe);
+  alreadyseeding := fSeeding;
+  fSeeding := true;
+  LeaveCriticalSection(fSafe);
+  if not alreadyseeding then
     try
-      fAES.EncryptInit(key.Lo, fAESKeySize);
-      crcblocks(@TAESContext(fAES.Context).iv, @key.Hi, 2);
-      fBytesSinceSeed := 0;
+      entropy := GetEntropy(128); // 128 bytes is the HMAC_SHA512 key block size
+      PBKDF2_HMAC_SHA512(entropy, ExeVersion.User, fSeedPBKDF2Rounds, key.b);
+      EnterCriticalSection(fSafe);
+      try
+        fAES.EncryptInit(key.Lo, fAESKeySize);
+        crcblocks(@TAESContext(fAES.Context).iv, @key.Hi, 2);
+        fBytesSinceSeed := 0;
+      finally
+        LeaveCriticalSection(fSafe);
+      end;
     finally
-      LeaveCriticalSection(fSafe);
+      FillZero(key.b); // avoid the key appear in clear on stack
+      FillZero(entropy);
+      fSeeding := false;
     end;
-  finally
-    FillZero(key.b); // avoid the key appear in clear on stack
-    FillZero(entropy);
-  end;
 end;
 
 procedure TAESPRNG.FillRandom(out Block: TAESBlock);
