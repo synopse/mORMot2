@@ -6288,6 +6288,8 @@ begin
     rkClass:
       begin
         fValueClass := aInfo.RttiClass.RttiClass;
+        // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
+        ClassPropertiesAdd(fValueClass, self, {freexist=}false);
         if fValueClass.InheritsFrom(TCollection) then
           fValueRTLClass := TCollection
         else if fValueClass.InheritsFrom(TStrings) then
@@ -6301,8 +6303,6 @@ begin
           if fValueClass.InheritsFrom(Exception) then
             // manual registration of the Exception.Message property
             fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
-        // set vmtAutoTable slot for efficient Find(TClass)
-        ClassPropertiesAdd(fValueClass, self, {freexist=}false);
       end;
     rkRecord:
       fProps.SetFromRecordExtendedRtti(aInfo); // only for Delphi 2010+
