@@ -1060,6 +1060,7 @@ type
     procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a Value as significant hexadecimal text
+    // - expects BinBytes to be > 0
     // - append its minimal size, i.e. excluding highest bytes containing 0
     // - use GetNextItemHexa() to decode such a text value
     procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
@@ -5480,7 +5481,7 @@ begin
   if IncludePointer then
   begin
     Add('(');
-    AddBinToHexDisplayMinChars(@Instance,SizeOf(Instance));
+    AddBinToHexDisplayMinChars(@Instance, SizeOf(Instance));
     Add(')');
   end;
   if SepChar<>#0 then
@@ -5863,20 +5864,21 @@ begin
   AddBinToHexDisplayLower(Bin, BinBytes, '"');
 end;
 
+function DisplayMinChars(Bin: PByteArray; BinBytes: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := BinBytes;
+  repeat // append hexa chars up to the last non zero byte
+    dec(result);
+  until (result = 0) or
+        (Bin[result] <> 0);
+  inc(result);
+end;
+
 procedure TBaseWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 begin
-  if BinBytes <= 0 then
-    BinBytes := 0
-  else
-  begin
-    repeat // append hexa chars up to the last non zero byte
-      dec(BinBytes);
-    until (BinBytes = 0) or
-          (PByteArray(Bin)[BinBytes] <> 0);
-    inc(BinBytes);
-  end;
-  AddBinToHexDisplayLower(Bin, BinBytes, QuotedChar);
+  AddBinToHexDisplayLower(Bin, DisplayMinChars(Bin, BinBytes), QuotedChar);
 end;
 
 procedure TBaseWriter.AddPointer(P: PtrUInt; QuotedChar: AnsiChar);
@@ -8990,9 +8992,9 @@ smlu32:   Res.Text := pointer(SmallUInt32UTF8[result]);
     vtPointer, vtInterface:
       begin
         Res.Text := @Res.Temp;
-        Res.Len := SizeOf(pointer) * 2;
-        BinToHexDisplayLower(V.VPointer, @Res.Temp, SizeOf(Pointer));
-        result := SizeOf(pointer) * 2;
+        Res.Len := DisplayMinChars(@V.VPointer, SizeOf(pointer)) * 2;
+        BinToHexDisplayLower(@V.VPointer, @Res.Temp, Res.Len shr 1);
+        result := Res.Len;
         exit;
       end;
     vtClass:
