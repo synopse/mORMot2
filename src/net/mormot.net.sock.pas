@@ -432,6 +432,7 @@ type
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTCPNoDelay(aTCPNoDelay: boolean); virtual;
+    function GetRawSocket: PtrInt;
   public
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
@@ -642,6 +643,9 @@ type
     /// IP address, initialized after Open() with Server name
     property Server: RawUTF8
       read fServer;
+    /// contains Sock, but transtyped as number for log display
+    property RawSocket: PtrInt
+      read GetRawSocket;
     /// IP port, initialized after Open() with port number
     property Port: RawUTF8
       read fPort;
@@ -732,12 +736,27 @@ implementation
   {$I mormot.net.sock.posix.inc}
 {$endif LINUX}
 
+const
+  // we don't use RTTI to avoid linking mormot.core.rtti.pas
+  _NR: array[TNetResult] of string[20] = (
+    'OK',
+    'Retry',
+    'No Socket',
+    'Not Found',
+    'Not Implemented',
+    'Closed',
+    'Fatal Error',
+    'Unknown Error',
+    'Too Many Connections');
 
-function NetLastError(AnotherNonFatal: integer = NO_ERROR): TNetResult;
+function NetLastError(AnotherNonFatal: integer = NO_ERROR;
+  Error: PInteger = nil): TNetResult;
 var
   err: integer;
 begin
   err := sockerrno;
+  if Error <> nil then
+    Error^ := err;
   if err = NO_ERROR then
     result := nrOK
   else if {$ifdef MSWINDOWS}
@@ -753,6 +772,16 @@ begin
       result := nrFatalError
   else
     result := nrRetry;
+end;
+
+function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): shortstring;
+var
+  nr: TNetResult;
+  err: integer;
+begin
+  nr := NetLastError(AnotherNonFatal, @err);
+  str(err, result);
+  result := _NR[nr] + ' ' + result;
 end;
 
 function NetCheck(res: integer): TNetResult;
@@ -793,12 +822,6 @@ begin
     FastSetString(result, @s[1], ord(s[0]));
   end;
 end;
-
-const
-  // we don't use RTTI to avoid linking mormot.core.rtti.pas
-  _NR: array[TNetResult] of string[18] = (
-    'OK', 'Retry', 'NoSocket', 'NotFound', 'NotImplemented', 'Closed',
-    'FatalError', 'UnknownError','TooManyConnections');
 
 function ToText(res: TNetResult): PShortString;
 begin
@@ -973,9 +996,13 @@ begin
       if connecttimeout > 0 then
       begin
         TNetSocket(sock).SetReceiveTimeout(connecttimeout);
+        if recvtimeout = connecttimeout then
+          recvtimeout := 0; // call SetReceiveTimeout() once
         TNetSocket(sock).SetSendTimeout(connecttimeout);
+        if sendtimeout = connecttimeout then
+          sendtimeout := 0; // call SetSendTimeout() once
       end;
-      if connect(sock, @addr, addr.Size)  <> NO_ERROR then
+      if connect(sock, @addr, addr.Size) <> NO_ERROR then
         result := NetLastError(WSAEADDRNOTAVAIL);
     end;
     if (result = nrOK) or
@@ -998,13 +1025,14 @@ end;
 
 { TNetSocketWrap }
 
-procedure TNetSocketWrap.SetOpt(prot, name: integer; value: pointer; valuelen: integer);
+procedure TNetSocketWrap.SetOpt(prot, name: integer;
+  value: pointer; valuelen: integer);
 begin
   if @self = nil then
     raise ENetSock.CreateFmt('SetOptions(%d,%d) with no socket', [prot, name]);
   if setsockopt(TSocket(@self), prot, name, value, valuelen)  <> NO_ERROR then
-    raise ENetSock.CreateFmt('SetOptions(%d,%d) failed as %',
-      [prot, name, _NR[NetLastError]]);
+    raise ENetSock.CreateFmt('SetOptions(%d,%d) failed as %s',
+      [prot, name, NetLastErrorMsg]);
 end;
 
 procedure TNetSocketWrap.SetKeepAlive(keepalive: boolean);
@@ -1421,6 +1449,11 @@ const
 
 { TCrtSocket }
 
+function TCrtSocket.GetRawSocket: PtrInt;
+begin
+  result := PtrInt(fSock);
+end;
+
 procedure TCrtSocket.SetKeepAlive(aKeepAlive: boolean);
 begin
   fSock.SetKeepAlive(aKeepAlive);
@@ -1479,8 +1512,8 @@ const
   BINDTXT: array[boolean] of string[4] = (
     'open', 'bind');
   BINDMSG: array[boolean] of string = (
-    'Is a server running on this address:port?',
-    'Another process may be currently listening to this port!');
+    'is a server available on this address:port?',
+    'another process may be currently listening to this port!');
 
 constructor TCrtSocket.Bind(const aAddress: RawUTF8; aLayer: TNetLayer;
   aTimeOut: integer);
@@ -1547,28 +1580,22 @@ begin
     res := NewSocket(aServer, aPort, aLayer, doBind, Timeout, Timeout, Timeout,
       retry, fSock);
     if res <> nrOK then
-      raise ENetSock.CreateFmt('OpenBind(%s:%s,%s) failed as %s: %s',
+      raise ENetSock.CreateFmt('OpenBind(%s:%s,%s) failed as ''%s'': %s',
         [aServer, fPort, BINDTXT[doBind], _NR[res], BINDMSG[doBind]]);
   end
   else
+  begin
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
-  if TimeOut > 0 then
-  begin // set timout values for both directions
-    ReceiveTimeout := TimeOut;
-    SendTimeout := TimeOut;
+    if TimeOut > 0 then
+    begin // set timout values for both directions
+      ReceiveTimeout := TimeOut;
+      SendTimeout := TimeOut;
+    end;
   end;
   if aLayer = nlTCP then
-  begin
-    if ({%H-}PtrInt(aSock) < 0) or
-       (({%H-}PtrInt(aSock) > 0) and
-        not doBind) then
-    begin // do not touch externally created socket
-      aSock.SetNoDelay(true); // disable Nagle algorithm since we use our own buffers
-      aSock.SetKeepAlive(true); // enable TCP keepalive (even if we rely on transport layer)
-    end;
     if aTLS and
-       ({%H-}PtrInt(aSock)<=0) and
-       not doBind then
+       not doBind and
+       ({%H-}PtrInt(aSock) <= 0) then
     try
       if Assigned(NewNetTLS) then
         fSecure := NewNetTLS;
@@ -1580,14 +1607,13 @@ begin
       on E: Exception do
       begin
         fSecure := nil;
-        raise ENetSock.CreateFmt('OpenBind(%s:%s,%s): TLS failed [%s %s]', [aServer,
-          port, BINDTXT[doBind], ClassNameShort(E)^, E.Message]);
+        raise ENetSock.CreateFmt('OpenBind(%s:%s,%s): TLS failed [%s %s]',
+          [aServer, port, BINDTXT[doBind], ClassNameShort(E)^, E.Message]);
       end;
     end;
-  end;
   {$ifdef SYNCRTDEBUGLOW}
-  TSynLog.Add.Log(sllCustom2, 'OpenBind(%:%) % sock=% (accept=%) ', [fServer,
-    fPort, BINDTXT[doBind], fSock, aSock], self);
+  TSynLog.Add.Log(sllCustom2, 'OpenBind(%:%) % sock=% (accept=%) ',
+    [fServer, fPort, BINDTXT[doBind], fSock, aSock], self);
   {$endif SYNCRTDEBUGLOW}
 end;
 
@@ -2011,7 +2037,7 @@ begin
   {$endif SYNCRTDEBUGLOW}
   if not TrySockSendFlush then
     raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s',
-      [fServer, fSndBufLen, _NR[NetLastError]]);
+      [fServer, fSndBufLen, NetLastErrorMsg]);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
 end;
@@ -2253,7 +2279,8 @@ end;
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 begin
   if not TrySndLow(P, Len) then
-    raise ENetSock.CreateFmt('SndLow(%s) len=%d %s', [fServer, Len, _NR[NetLastError]]);
+    raise ENetSock.CreateFmt('SndLow(%s) len=%d %s',
+      [fServer, Len, NetLastErrorMsg]);
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;

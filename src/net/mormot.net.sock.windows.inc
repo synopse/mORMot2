@@ -8,7 +8,8 @@
 uses
   Windows;
   
-function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR}): TNetResult; forward;
+function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR};
+  Error: PInteger = nil): TNetResult; forward;
 
 
 { ******** WinSock2 Type Definitions }
