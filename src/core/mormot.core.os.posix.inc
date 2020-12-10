@@ -161,7 +161,8 @@ begin
       end;
     end;
     data := u_getDataDirectory;
-    if (data = nil) or (data^ = #0) then
+    if (data = nil) or
+       (data^ = #0) then
       if SYSDATA <> '' then
         u_setDataDirectory(SYSDATA);
     err := 0;
@@ -198,9 +199,11 @@ begin
   mask := GetMXCSR;
   SetMXCSR(mask or $0080 {MM_MaskInvalidOp} or $1000 {MM_MaskPrecision});
   {$endif CPUINTEL}
+  err := 0;
   result := ucnv_open(@s[1], err);
   if result <> nil then
   begin
+    err := 0;
     ucnv_setSubstChars(result, '?', 1, err);
     ucnv_setFallback(result, true);
   end;
