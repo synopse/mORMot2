@@ -12446,44 +12446,54 @@ begin
     result := fList[i];
 end;
 
-function TOrmPropInfoList.IndexByName(aName: PUTF8Char): integer;
+function TOrmPropInfoList.IndexByName(aName: PUTF8Char): PtrInt;
 var
-  cmp, L, R: integer;
+  cmp, L, R, s: PtrInt;
+  C1, C2: byte; // integer/PtrInt are actually slower on FPC
+  {$ifdef CPUX86NOTPIC}
+  table: TNormTableByte absolute NormToUpperAnsi7Byte;
+  {$else}
+  table: PNormTableByte;
+  {$endif CPUX86NOTPIC}
 begin
   if (self <> nil) and (aName <> nil) and (fCount > 0) then
-    if fCount < 5 then
+  begin
+    if fOrderedByName = nil then
     begin
-      // no need to use binary search for a few fields
-      for result := 0 to fCount - 1 do
-        if StrIComp(pointer(fList[result].fName), aName) = 0 then
-          exit;
-    end
-    else
-    begin
-      if fOrderedByName = nil then
-      begin
-        // initialize once the ordered lookup indexes, for binary search
-        SetLength(fOrderedByName, fCount);
-        FillIncreasing(pointer(fOrderedByName), 0, fCount);
-        QuickSortByName(0, fCount - 1);
-      end;
-      L := 0;
-      R := fCount - 1;
-      repeat
-        // fast O(log(n)) binary search
-        result := (L + R) shr 1;
-        cmp := StrIComp(pointer(fList[fOrderedByName[result]].fName), aName);
-        if cmp = 0 then
-        begin
-          result := fOrderedByName[result];
-          exit;
-        end;
-        if cmp < 0 then
-          L := result + 1
-        else
-          R := result - 1;
-      until L > R;
+      // initialize once the ordered lookup indexes, for binary search
+      SetLength(fOrderedByName, fCount);
+      FillIncreasing(pointer(fOrderedByName), 0, fCount);
+      QuickSortByName(0, fCount - 1);
     end;
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7Byte;
+    {$endif CPUX86NOTPIC}
+    L := 0;
+    R := fCount - 1;
+    repeat
+      // fast O(log(n)) binary search using inlined StrIComp()
+      result := (L + R) shr 1;
+      s := PtrUInt(aName);
+      cmp := PtrInt(PtrUInt(fList[fOrderedByName[result]].fName)) - s;
+      repeat
+        C1 := table[PByteArray(s)[0]];
+        C2 := table[PByteArray(s)[cmp]];
+        inc(s);
+      until (C1 = 0) or
+            (C1 <> C2);
+      if C1 = C2 then
+      begin
+        result := fOrderedByName[result];
+        exit;
+      end;
+      cmp := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
+      dec(result);
+      if C1 > C2 then
+        L := cmp
+      else
+        R := result;
+    until L > R;
+  end;
   result := -1;
 end;
 
