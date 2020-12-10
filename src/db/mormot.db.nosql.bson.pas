@@ -198,7 +198,7 @@ const
   BSON_DECIMAL128_HI_NAN = $7c00000000000000;
   BSON_DECIMAL128_HI_INT64POS = $3040000000000000; // 0 fixed decimals
   BSON_DECIMAL128_HI_INT64NEG = $b040000000000000;
-  BSON_DECIMAL128_HI_CURRPOS = $3038000000000000; // 4 fixed decimals
+  BSON_DECIMAL128_HI_CURRPOS = $3038000000000000;  // 4 fixed decimals
   BSON_DECIMAL128_HI_CURRNEG = $b038000000000000;
   BSON_DECIMAL128_EXPONENT_MAX = 6111;
   BSON_DECIMAL128_EXPONENT_MIN = -6176;
@@ -1377,20 +1377,18 @@ begin
   r := 0;
   for i := 0 to high(value.c) do
   begin
-    {$ifdef FPC_32} // circumvent bug at least with FPC 3.2
+    {$ifdef CPU32} // circumvent bug at least with FPC 3.2
     Int64Rec(r).Hi := Int64Rec(r).Lo;
     Int64Rec(r).Lo := 0;
     {$else}
     r := r shl 32;    // adjust remainder to match value of next dividend
-    {$endif FPC_32}
-    t := value.c[i];
-    inc(r, t); // add the divided to _rem
+    {$endif CPU32}
+    inc(r, value.c[i]); // add the divided to _rem
     if r = 0 then
       continue;
     t := r div 1000000000;
     value.c[i] := t;
-    t := t * 1000000000;
-    dec(r, t);
+    dec(r, t * 1000000000);
   end;
   result := r;
 end;
@@ -1722,8 +1720,8 @@ begin
     diglast := digstored - 1;
     signdig := digcount;
     // handle trailing zeros as non-significant
-    while text[firstnon0 + signdig - 1 + ord(radix in flags) + ord(signed in
-      flags)] = '0' do
+    while text[firstnon0 + signdig - 1 +
+               ord(radix in flags) + ord(signed in flags)] = '0' do
       dec(signdig);
   end;
   if (exp <= radixpos) and
@@ -1774,7 +1772,8 @@ begin
       exit;
   end;
   if diglast - digfirst + 1 < signdig then
-    if text[firstnon0 + diglast + ord(signed in flags) + ord(radix in flags)] <> '0' then
+    if text[firstnon0 + diglast +
+            ord(signed in flags) + ord(radix in flags)] <> '0' then
       exit; // inexact rouding
   signhi := 0;
   signlo := 0;

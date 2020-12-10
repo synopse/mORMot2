@@ -2391,7 +2391,8 @@ begin
       end;
     end
     else
-    begin // no .map info available -> display address
+    begin
+      // no .map info available -> display address
       W.AddBinToHexDisplayMinChars(@aAddressAbsolute, SizeOf(aAddressAbsolute));
       W.Add(' ');
     end;

@@ -56,7 +56,7 @@ type
   ULONGLONG = Int64;
   {$else}
   ULONGLONG = Windows.ULONGLONG;
-  {$endif}
+  {$endif UNICODE}
 
   TOverlapped = Windows.TOverlapped;
 

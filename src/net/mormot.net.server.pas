@@ -2527,7 +2527,7 @@ begin
         Http.CloseUrlGroup(fUrlGroupID);
         fUrlGroupID := 0;
       end;
-      CloseHandle(FReqQueue);
+      CloseHandle(fReqQueue);
       if fServerSessionID <> 0 then
       begin
         Http.CloseServerSession(fServerSessionID);
@@ -2575,7 +2575,8 @@ begin
   result := 0;
 end;
 
-function GetNextItemUInt64(var P: PUTF8Char): ULONGLONG;
+// returned P^ points to the first non digit char - not as GetNextItemQWord()
+function GetNextNumber(var P: PUTF8Char): Qword;
 var
   c: PtrUInt;
 begin
@@ -2586,10 +2587,10 @@ begin
       if c > 9 then
         break
       else
-        result := result * 10 + ULONGLONG(c);
+        result := result * 10 + Qword(c);
       inc(P);
     until false;
-end; // P^ will point to the first non digit char
+end;
 
 procedure THttpApiServer.Execute;
 type
@@ -2722,7 +2723,7 @@ var
           begin
             FastSetString(Range, pRawValue + 6, RawValueLength - 6); // need #0 end
             R := pointer(Range);
-            RangeStart := GetNextItemUInt64(R);
+            RangeStart := GetNextNumber(R);
             if R^ = '-' then
             begin
               OutContentLength.QuadPart := FileSize(FileHandle);
@@ -2733,7 +2734,7 @@ var
               DataChunkFile.ByteRange.StartingOffset.QuadPart := RangeStart;
               if R^ in ['0'..'9'] then
               begin
-                RangeLength := GetNextItemUInt64(R) - RangeStart + 1;
+                RangeLength := GetNextNumber(R) - RangeStart + 1;
                 if RangeLength < DataChunkFile.ByteRange.Length.QuadPart then
                   // "bytes=0-499" -> start=0, len=500
                   DataChunkFile.ByteRange.Length.QuadPart := RangeLength;
@@ -2847,7 +2848,7 @@ begin
                   begin
                     FastSetString(RemoteConn, P^.pRawValue, P^.RawValueLength); // need #0 end
                     R := pointer(RemoteConn);
-                    Context.fConnectionID := GetNextItemUInt64(R);
+                    Context.fConnectionID := GetNextNumber(R);
                     break;
                   end
                   else
