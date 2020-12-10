@@ -91,7 +91,7 @@ uses
   mormot.db.sql.zeos       in '..\src\db\mormot.db.sql.zeos.pas',
   {$endif USEZEOS}
   {$ifndef FPC}
-  mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
+  //mormot.db.rad            in '..\src\db\mormot.db.rad.pas',
   //mormot.db.rad.bde        in '..\src\db\mormot.db.rad.bde.pas',
   //mormot.db.rad.firedac    in '..\src\db\mormot.db.rad.firedac.pas',
   //mormot.db.rad.unidac     in '..\src\db\mormot.db.rad.unidac.pas',
@@ -103,7 +103,8 @@ uses
   test.core.base           in '.\test.core.base.pas',
   test.core.data           in '.\test.core.data.pas',
   test.core.crypto         in '.\test.core.crypto.pas',
-  test.core.ecc            in '.\test.core.ecc.pas';
+  test.core.ecc            in '.\test.core.ecc.pas',
+  test.net.proto           in '.\test.net.proto.pas';
 
 
 { TIntegrationTests }
@@ -116,9 +117,9 @@ type
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  AddCase([
-  //
-    TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress
+  AddCase([//
+  TNetProtocols
+  //TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress
   // ,
   ]);
 end;
