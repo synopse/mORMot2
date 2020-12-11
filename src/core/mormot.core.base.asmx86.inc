@@ -1319,7 +1319,7 @@ asm
 @p:     mov     eax, 1
 end;
 
-function GetBitsCountSSE42(value: PtrInt): PtrInt;
+function GetBitsCountSse42(value: PtrInt): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=value
@@ -1330,7 +1330,7 @@ asm
         {$endif}
 end;
 
-function crc32cBy4SSE42(crc, value: cardinal): cardinal;
+function crc32cby4sse42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=crc, edx=value
@@ -1341,7 +1341,7 @@ asm
         {$endif FPC_OR_UNICODE}
 end;
 
-procedure crcblockSSE42(crc128, data128: PBlock128);
+procedure crcblocksse42(crc128, data128: PBlock128);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=crc128, edx=data128

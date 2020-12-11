@@ -1192,7 +1192,7 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
 @ok:
 end;
 
-function GetBitsCountSSE42(value: PtrInt): PtrInt;
+function GetBitsCountSse42(value: PtrInt): PtrInt;
 {$ifdef FPC} assembler; nostackframe;
 asm
         popcnt  rax, value
@@ -1202,13 +1202,13 @@ asm     .noframe
         {$else}        db $f3,$48,$0f,$B8,$c7 {$endif}
 {$endif FPC}
 end;
-function crc32cBy4SSE42(crc, value: cardinal): cardinal;
+function crc32cby4sse42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, crc
         crc32   eax, value
 end;
 
-procedure crcblockSSE42(crc128, data128: PBlock128);
+procedure crcblocksse42(crc128, data128: PBlock128);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax,  dword ptr[crc128] // we can't use two qword ptr here
         mov     r8d,  dword ptr[crc128 + 4]

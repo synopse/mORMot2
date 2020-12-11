@@ -236,7 +236,8 @@ type
   /// a RawByteString sub-type used to store the BLOB content in our ORM
   // - equals RawByteString for byte storage
   // - TRttiInfo.AnsiStringCodePage will identify this type, and return
-  // CP_RAWBLOB fake codepage for such a published property
+  // CP_RAWBLOB fake codepage for such a published property, even if it is
+  // just an alias to CP_RAWBYTESTRING
   // - our ORM will therefore identify such properties as BLOB
   // - by default, the BLOB fields are not retrieved or updated with raw
   // TRest.Retrieve() method, that is "Lazy loading" is enabled by default
@@ -3908,7 +3909,8 @@ begin
   if sr = nil then
     exit;
   dec(sr);
-  if (sr^.refcnt >= 0) and RefCntDecFree(sr^.refcnt) then
+  if (sr^.refcnt >= 0) and
+     RefCntDecFree(sr^.refcnt) then
     FreeMem(sr);
 end;
 
@@ -8552,12 +8554,12 @@ begin
   begin
     crc32c := @crc32csse42;
     crc32cby4 := @crc32cby4sse42;
-    crcblock := @crcblockSSE42;
-    crcblocks := @crcblocksSSE42;
+    crcblock := @crcblocksse42;
+    crcblocks := @crcblockssse42;
     DefaultHasher := @crc32csse42;
     InterningHasher := @crc32csse42;
     if cfPOPCNT in CpuFeatures then
-      GetBitsCountPtrInt := @GetBitsCountSSE42;
+      GetBitsCountPtrInt := @GetBitsCountSse42;
   end;
 end;
 
