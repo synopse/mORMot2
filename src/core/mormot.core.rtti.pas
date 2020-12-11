@@ -592,6 +592,9 @@ type
     case TRttiKind of
       rkFloat: (
         RttiFloat: TRttiFloat);
+      rkLString: (
+        CodePage: cardinal; // RawBlob=CP_RAWBYTESTRING not CP_RAWBLOB
+        Engine: TSynAnsiConvert);
       rkEnumeration, rkSet: (
         EnumMax:  cardinal;
         EnumInfo: PRttiEnumType;
@@ -2994,7 +2997,16 @@ begin
       end;
     rkLString:
       if IsRawBlob then
+      begin
         include(Cache.Flags, rcfIsRawBlob);
+        Cache.CodePage := CP_RAWBYTESTRING; // CP_RAWBLOB is internal
+        Cache.Engine := nil;
+      end
+      else
+      begin
+        Cache.CodePage := AnsiStringCodePage;
+        Cache.Engine := TSynAnsiConvert.Engine(Cache.CodePage);
+      end;
    end;
 end;
 
@@ -3021,8 +3033,7 @@ begin
     result := CODEPAGE_US
   else if @self = TypeInfo(RawUnicode) then
     result := CP_UTF16
-  else if (@self = TypeInfo(RawByteString)) or
-          (@self = TypeInfo(RawBlob)) then
+  else if @self = TypeInfo(RawByteString) then
     result := CP_RAWBYTESTRING // RawBlob has same internal code page
   else if @self = TypeInfo(AnsiString) then
     result := CP_ACP
@@ -4681,7 +4692,7 @@ begin
     r := r.ArrayRtti;
   result := (r <> nil) and
             (r.Parser = ptRawUTF8) and
-            (r.Cache.Info.AnsiStringCodePage = CP_UTF8);
+            (r.Cache.CodePage = CP_UTF8);
 end;
 
 procedure _RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
@@ -5359,7 +5370,9 @@ begin
       if cp >= CP_RAWBLOB then
         result := ptRawByteString
       {$ifndef UNICODE}
-      else if cp <> CP_UTF8 then
+      else if (cp <> CP_UTF8) and
+              ((cp = CP_ACP) or
+               (cp = Unicode_CodePage)) then
         result := ptString
       {$endif UNICODE}
       else

@@ -4930,22 +4930,9 @@ begin
   result := 8;
 end;
 
-function _BS_String(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
-var
-  Len: TStrLen;
+function _BS_String(Data: PRawByteString; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 begin
-  Data := PPointer(Data)^;
-  if Data <> nil then
-  begin
-    Len := PStrLen(Data - _STRLEN)^;
-    {$ifdef HASVARUSTRING}
-    if Info^.Kind = rkUString then
-      Len := Len * 2; // UnicodeString length in WideChars
-    {$endif HASVARUSTRING}
-  end
-  else
-    Len := 0;
-  Dest.WriteVar(Data, Len);
+  Dest.WriteVar(pointer(Data^), length(Data^));
   result := SizeOf(pointer);
 end;
 
@@ -4962,6 +4949,14 @@ end;
 
 {$ifdef HASVARUSTRING}
 
+function _BS_UString(Data: PUnicodeString; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
+var
+  Len: TStrLen;
+begin
+  Dest.WriteVar(pointer(Data^), length(Data^) * 2);
+  result := SizeOf(pointer);
+end;
+
 function _BL_UString(Data: PUnicodeString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 begin
   with Source.VarBlob do
@@ -4972,7 +4967,7 @@ end;
 {$endif HASVARUSTRING}
 
 function _BS_WString(Data: PWideString; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
-begin // PStrLen() doesn't match WideString header
+begin
   Dest.WriteVar(pointer(Data^), length(Data^) * 2);
   result := SizeOf(pointer);
 end;
@@ -9019,24 +9014,22 @@ begin
           RTTI_COMPARE[false, k] := @_BC_Float;
           RTTI_COMPARE[true, k] := @_BC_Float;
         end;
-      {$ifdef HASVARUSTRING} rkUString, {$endif} rkLString:
+      rkLString:
         begin
           RTTI_BINARYSAVE[k] := @_BS_String;
-          if k = rkLString then
-          begin
-            RTTI_BINARYLOAD[k] := @_BL_LString;
-            RTTI_COMPARE[false, k] := @_BC_LString;
-            RTTI_COMPARE[true, k] := @_BCI_LString;
-          end
-          {$ifdef HASVARUSTRING}
-          else if k = rkUString then
-          begin
-            RTTI_BINARYLOAD[k] := @_BL_UString;
-            RTTI_COMPARE[false, k] := @_BC_WString;
-            RTTI_COMPARE[true, k] := @_BCI_WString;
-          end;
-          {$endif HASVARUSTRING}
-        end; // rkLStringOld not generated any more
+          RTTI_BINARYLOAD[k] := @_BL_LString;
+          RTTI_COMPARE[false, k] := @_BC_LString;
+          RTTI_COMPARE[true, k] := @_BCI_LString;
+        end;
+      {$ifdef HASVARUSTRING}
+      rkUString:
+        begin
+          RTTI_BINARYSAVE[k] := @_BS_UString;
+          RTTI_BINARYLOAD[k] := @_BL_UString;
+          RTTI_COMPARE[false, k] := @_BC_WString;
+          RTTI_COMPARE[true, k] := @_BCI_WString;
+        end;
+      {$endif HASVARUSTRING}
       rkWString:
         begin
           RTTI_BINARYSAVE[k] := @_BS_WString;

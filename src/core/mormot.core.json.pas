@@ -4926,21 +4926,16 @@ begin
   Ctxt.W.AddRawJSON(Data^);
 end;
 
-procedure _JS_RawUTF8(Data: PPointer; const Ctxt: TJsonSaveContext);
+procedure _JS_RawUTF8(Data: PPAnsiChar; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
-  Ctxt.W.AddJSONEscape(Data^);
+  if Data^ <> nil then
+    with PStrRec(Data^ - SizeOf(TStrRec))^ do
+      // will handle RawUTF8 but also AnsiString, WinAnsiString and RawUnicode
+      Ctxt.W.AddAnyAnsiBuffer(Data^, length, twJSONEscape,
+       {$ifdef HASCODEPAGE} codePage {$else} Ctxt.Info.Cache.CodePage {$endif});
   Ctxt.W.Add('"');
 end;
-
-{$ifndef UNICODE}
-procedure _JS_AnsiString(Data: PRawByteString; const Ctxt: TJsonSaveContext);
-begin
-  Ctxt.W.Add('"');
-  Ctxt.W.AddJSONEscapeAnsiString(Data^);
-  Ctxt.W.Add('"');
-end;
-{$endif UNICODE}
 
 procedure _JS_Single(Data: PSingle; const Ctxt: TJsonSaveContext);
 begin
@@ -5224,7 +5219,7 @@ const
     nil, @_JS_Array, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
     @_JS_RawByteString, @_JS_RawJSON, @_JS_RawUTF8, nil, @_JS_Single,
-    {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_AnsiString {$endif},
+    {$ifdef UNICODE} @_JS_Unicode {$else} @_JS_RawUTF8 {$endif},
     @_JS_Unicode, @_JS_DateTime, @_JS_DateTimeMS, @_JS_GUID, @_JS_Hash,
     @_JS_Hash, @_JS_Hash, nil, @_JS_TimeLog, @_JS_Unicode, @_JS_UnixTime,
     @_JS_UnixMSTime, @_JS_Variant, @_JS_Unicode, @_JS_WinAnsi, @_JS_Word,
@@ -5772,9 +5767,9 @@ procedure EngineAppendUTF8(W: TTextWriter; Engine: TSynAnsiConvert;
   P: PAnsiChar; Len: PtrInt; Escape: TTextWriterKind);
 var
   tmp: TSynTempBuffer;
-begin // explicit conversion using a temporary buffer on stack
-  Len := Engine.AnsiBufferToUTF8(tmp.Init(Len * 3), P, Len) - PUTF8Char({%H-}tmp.buf);
-  W.Add(tmp.buf, Len, Escape);
+begin // explicit conversion using a temporary UTF-16 buffer on stack
+  Engine.AnsiBufferToUnicode(tmp.Init(Len * 3), P, Len); // includes ending #0
+  W.AddW(tmp.buf, 0, Escape);
   tmp.Done;
 end;
 
@@ -5829,7 +5824,7 @@ begin
           exit;
         // rely on explicit conversion for all remaining ASCII characters
         engine := TSynAnsiConvert.Engine(CodePage);
-        if engine.InheritsFrom(TSynAnsiFixedWidth) then
+        if PClass(engine)^ = TSynAnsiFixedWidth then
           InternalAddFixedAnsi(P, Len,
             pointer(TSynAnsiFixedWidth(engine).AnsiToWide), Escape)
         else
@@ -6556,6 +6551,7 @@ procedure TTextWriter.AddJSONEscapeW(P: PWord; Len: PtrInt);
 var
   i, c, s: PtrInt;
   esc: byte;
+  tab: PNormTableByte;
 begin
   if P = nil then
     exit;
@@ -6565,10 +6561,11 @@ begin
   while i < Len do
   begin
     s := i;
+    tab := @JSON_ESCAPE;
     repeat
       c := PWordArray(P)[i];
       if (c <= 127) and
-         (JSON_ESCAPE[c] <> JSON_ESCAPE_NONE) then
+         (tab[c] <> JSON_ESCAPE_NONE) then
         break;
       inc(i);
     until i >= Len;
@@ -6579,7 +6576,7 @@ begin
     c := PWordArray(P)[i];
     if c = 0 then
       exit;
-    esc := JSON_ESCAPE[c];
+    esc := tab[c];
     if esc = JSON_ESCAPE_ENDINGZERO then // #0
       exit
     else if esc = JSON_ESCAPE_UNICODEHEX then
@@ -7124,10 +7121,16 @@ begin
   Ctxt.Valid := Ctxt.JSON <> nil;
 end;
 
-procedure _JL_RawUTF8(Data: PRawUTF8; var Ctxt: TJsonParserContext);
+procedure _JL_RawUTF8(Data: PRawByteString; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
-    FastSetString(Data^, Ctxt.Value, Ctxt.ValueLen);
+    // will handle RawUTF8 but also AnsiString, WinAnsiString and RawUnicode
+    if Ctxt.Info.Cache.CodePage = CP_UTF8 then
+      FastSetString(RawUTF8(Data^), Ctxt.Value, Ctxt.ValueLen)
+    else if Ctxt.Info.Cache.Engine = nil then
+      Ctxt.Valid := false // paranoid check (RawByteString should handle it)
+    else
+      Ctxt.Info.Cache.Engine.UTF8BufferToAnsi(Ctxt.Value, Ctxt.ValueLen, Data^);
 end;
 
 procedure _JL_Single(Data: PSingle; var Ctxt: TJsonParserContext);
@@ -9418,6 +9421,13 @@ begin
   result := Rtti.ValueClass.Create;
 end;
 
+function _BC_RawByteString(A, B: PPUTF8Char; Info: PRttiInfo;
+  out Compared: integer): PtrInt;
+begin
+  compared := SortDynArrayRawByteString(A^, B^); // will use length not #0
+  result := SizeOf(pointer);
+end;
+
 function TRttiJson.SetParserType(aParser: TRttiParserType;
   aParserComplex: TRttiParserComplexType): TRttiCustom;
 var
@@ -9425,7 +9435,7 @@ var
 begin
   // set Name and Flags from Props[]
   inherited SetParserType(aParser, aParserComplex);
-  // handle default comparison
+  // set comparison functions
   if rcfObjArray in fFlags then
   begin
     fCompare[true] := _BC_ObjArray;
@@ -9435,79 +9445,92 @@ begin
   begin
     fCompare[true] := RTTI_COMPARE[true][Kind];
     fCompare[false] := RTTI_COMPARE[false][Kind];
+    if Kind = rkLString then
+      // RTTI_COMPARE[rkLString] is StrCmp/StrICmp which is mostly fine
+      if Cache.CodePage >= CP_RAWBLOB then
+      begin
+        // should use RawByteString length, and ignore any #0
+        fCompare[true] := @_BC_RawByteString;
+        fCompare[false] := @_BC_RawByteString;
+      end else if Cache.CodePage = CP_UTF16 then
+      begin
+        // RawUnicode expects _BC_WString=StrCompW and _BCI_WString=StrICompW
+        fCompare[true] := RTTI_COMPARE[true][rkWString];
+        fCompare[false] := RTTI_COMPARE[false][rkWString];
+      end;
   end;
-  // handle default JSON serialization/unserialization
+  // set class serialization and initialization
   if aParser = ptClass then
   begin
-    // prepare efficient ClassNewInstance() wrapper function
+    // default JSON serialization of published props
+    fJsonSave := @_JS_RttiCustom;
+    fJsonLoad := @_JL_RttiCustom;
+    // prepare efficient ClassNewInstance() and recognize most parents
     C := fValueClass;
     repeat
       if C = TObjectList then
-        fClassNewInstance := @_New_ObjectList
+      begin
+        fClassNewInstance := @_New_ObjectList;
+        fJsonSave := @_JS_TObjectList;
+        fJsonLoad := @_JL_TObjectList;
+      end
       else if C = TInterfacedObjectWithCustomCreate then
         fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
       else if C = TPersistentWithCustomCreate then
         fClassNewInstance := @_New_PersistentWithCustomCreate
       else if C = TSynPersistent then
-        fClassNewInstance := @_New_SynPersistent
+      begin
+        fClassNewInstance := @_New_SynPersistent;
+        // allow any kind of customization for TSynPersistent children
+        TSPHookClass(fValueClass).RttiCustomSet(self)
+      end
       else if C = TSynObjectList then
-        fClassNewInstance := @_New_SynObjectList
+      begin
+        fClassNewInstance := @_New_SynObjectList;
+        fJsonSave := @_JS_TSynObjectList;
+        fJsonLoad := @_JL_TSynObjectList;
+      end
       else if C = TSynLocked then
         fClassNewInstance := @_New_SynLocked
       else if C = TComponent then
         fClassNewInstance := @_New_Component
       else if C = TInterfacedCollection then
-        fClassNewInstance := @_New_InterfacedCollection
+      begin
+        fClassNewInstance := @_New_InterfacedCollection;
+        fJsonSave := @_JS_TCollection;
+        fJsonLoad := @_JL_TCollection;
+      end
       else if C = TCollection then
-        fClassNewInstance := @_New_Collection
+      begin
+        fClassNewInstance := @_New_Collection;
+        fJsonSave := @_JS_TCollection;
+        fJsonLoad := @_JL_TCollection;
+      end
       else if C = TCollectionItem then
         fClassNewInstance := @_New_CollectionItem
       else if C = TObject then
         fClassNewInstance := @_New_Object
       else
       begin
+        if C = TSynList then
+          fJsonSave := @_JS_TSynList
+        else if C = TRawUTF8List then
+        begin
+          fJsonSave := @_JS_TRawUTF8List;
+          fJsonLoad := @_JL_TRawUTF8List;
+        end;
         C := C.ClassParent;
         continue;
       end;
       break;
     until false;
-    // default serialization of published props
-    fJsonSave := @_JS_RttiCustom;
-    fJsonLoad := @_JL_RttiCustom;
-    // recognize mormot.core.data classes
-    if fValueClass.InheritsFrom(TSynObjectList) then
-    begin
-      fJsonSave := @_JS_TSynObjectList;
-      fJsonLoad := @_JL_TSynObjectList;
-    end
-    else if fValueClass.InheritsFrom(TSynList) then
-      fJsonSave := @_JS_TSynList
-    else if fValueClass.InheritsFrom(TRawUTF8List) then
-    begin
-      fJsonSave := @_JS_TRawUTF8List;
-      fJsonLoad := @_JL_TRawUTF8List;
-    end
-    else if fValueClass.InheritsFrom(TSynPersistent) then
-      // allow any kind of customization for TSynPersistent children
-      TSPHookClass(fValueClass).RttiCustomSet(self)
-    // recognize most known RTL classes
-    else if fValueRTLClass = TStrings then
+    if fValueRTLClass = TStrings then
     begin
       fJsonSave := @_JS_TStrings;
       fJsonLoad := @_JL_TStrings;
     end
-    else if fValueRTLClass = TObjectList then
-    begin
-      fJsonSave := @_JS_TObjectList;
-      fJsonLoad := @_JL_TObjectList;
-    end
     else if fValueRTLClass = TList then
-      fJsonSave := @_JS_TList
-    else if fValueRTLClass = TCollection then
-    begin
-      fJsonSave := @_JS_TCollection;
-      fJsonLoad := @_JL_TCollection;
-    end;
+      fJsonSave := @_JS_TList;
   end
   else if rcfBinary in Flags then
   begin
