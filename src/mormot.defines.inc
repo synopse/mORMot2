@@ -158,13 +158,19 @@
     // LINUX conditional includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
     {$ifdef DARWIN}
-      {$define FPCSQLITE3STATIC} // we supply Darwin static libs
       {$ifdef CPUINTEL}
         {$define FPC_PIC} // may have not be defined by the compiler options
       {$endif}
     {$else}
       {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
     {$endif}
+   {$define FPCSQLITE3STATIC} // we supply Darwin+FreeBSD+OpenBSD static libs
+    {$ifdef OPENBSD}
+      {$ifdef FPC_CROSSCOMPILING}
+      // OpenBSD has linking problems with fpcupdeluxe libgcc.a
+      {$undef FPCSQLITE3STATIC}
+      {$endif FPC_CROSSCOMPILING}
+    {$endif OPENBSD}
   {$else}
     {$ifdef LINUX}
       {$define LINUXNOTBSD} // e.g. to disable epoll API
@@ -206,11 +212,13 @@
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
       {$ifndef DARWIN}
-        {$define ASMX86}       // supports asm with globals
-        {$define ASMINTEL}     // either ASMX86 or ASMX64
-        {$define CPUX86NOTPIC} // use "absolute" instead of local register
+        {$ifndef OPENBSD}
+          {$define ASMX86}       // supports asm with globals
+          {$define ASMINTEL}     // either ASMX86 or ASMX64
+          {$define CPUX86NOTPIC} // use "absolute" instead of local register
+          {$define HASAESNI}
+        {$endif OPENBSD}
       {$endif DARWIN}
-      {$define HASAESNI}
       {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
     {$endif CPUX86}
     {$ifdef CPUARM}

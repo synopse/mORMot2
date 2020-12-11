@@ -1323,22 +1323,22 @@ function GetBitsCountSse42(value: PtrInt): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=value
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         popcnt  eax, eax
         {$else} // oldest Delphi don't support this opcode
         db      $f3,$0f,$B8,$c0
-        {$endif}
+        {$endif HASAESNI}
 end;
 
 function crc32cby4sse42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=crc, edx=value
-        {$ifdef FPC_OR_UNICODE}
+        {$ifdef HASAESNI}
         crc32   eax, edx
         {$else} // oldest Delphi don't support this opcode
         db      $F2, $0F, $38, $F1, $C2
-        {$endif FPC_OR_UNICODE}
+        {$endif HASAESNI}
 end;
 
 procedure crcblocksse42(crc128, data128: PBlock128);
@@ -1346,7 +1346,7 @@ procedure crcblocksse42(crc128, data128: PBlock128);
 asm
         // eax=crc128, edx=data128
         mov     ecx, eax
-        {$ifdef FPC_OR_UNICODE}
+        {$ifdef HASAESNI}
         mov     eax, dword ptr[ecx]
         crc32   eax, dword ptr[edx]
         mov     dword ptr[ecx], eax
@@ -1372,7 +1372,7 @@ asm
         mov     eax, dword ptr[ecx + 12]
         db      $F2, $0F, $38, $F1, $42, $0C
         mov     dword ptr[ecx + 12], eax
-        {$endif FPC_OR_UNICODE}
+        {$endif HASAESNI}
 end;
 
 procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
@@ -1392,8 +1392,10 @@ asm
           mov     ebx, dword ptr[esi + 4]
           mov     ecx, dword ptr[esi + 8]
           mov     edx, dword ptr[esi + 12]
+          {$ifdef HASAESNI}
           {$ifdef FPC}
           align 8
+          {$endif FPC}
 @s:       crc32   eax, dword ptr[edi]
           crc32   ebx, dword ptr[edi + 4]
           crc32   ecx, dword ptr[edi + 8]
@@ -1403,7 +1405,7 @@ asm
           db $F2, $0F, $38, $F1, $5F, $04
           db $F2, $0F, $38, $F1, $4F, $08
           db $F2, $0F, $38, $F1, $57, $0C
-          {$endif FPC}
+          {$endif HASAESNI}
           add     edi, 16
           dec     ebp
           jnz     @s
@@ -1427,11 +1429,11 @@ asm
         test    edx, edx
         jz      @0
         jmp     @align
-@a:     {$ifdef FPC}
+@a:     {$ifdef HASAESNI}
         crc32   eax, byte ptr[edx]
         {$else} // oldest Delphi don't support these opcodes
         db      $F2, $0F, $38, $F0, $02
-        {$endif FPC}
+        {$endif HASAESNI}
         inc     edx
         dec     ecx
         jz      @0
@@ -1443,36 +1445,36 @@ asm
 @rem:   pop     ecx
         test    cl, 4
         jz      @4
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         crc32   eax, dword ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F1, $02
-        {$endif FPC}
+        {$endif HASAESNI}
         add     edx, 4
 @4:     test    cl, 2
         jz      @2
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         crc32   eax, word ptr[edx]
         {$else}
         db      $66, $F2, $0F, $38, $F1, $02
-        {$endif FPC}
+        {$endif HASAESNI}
         add     edx, 2
 @2:     test    cl, 1
         jz      @0
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         crc32   eax, byte ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F0, $02
-        {$endif}
+        {$endif HASAESNI}
 @0:     not     eax
         ret
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
 @by8:   crc32   eax, dword ptr[edx]
         crc32   eax, dword ptr[edx + 4]
         {$else}
 @by8:   db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
-        {$endif FPC}
+        {$endif HASAESNI}
         add     edx, 8
         dec     ecx
         jnz     @by8
