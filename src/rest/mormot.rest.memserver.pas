@@ -205,7 +205,7 @@ type
 
 
 /// create an external static in-memory database for a specific class
-// - call it after TRestServer.Create, before TRestServer.CreateMissingTables;
+// - call it after TRestServer.Create, before IRestOrmServer.CreateMissingTables;
 // warning: if you don't call this method before CreateMissingTable method
 // is called, the table will be created as a regular table by the main
 // database engine, and won't be static

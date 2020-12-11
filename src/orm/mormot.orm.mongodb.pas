@@ -208,7 +208,7 @@ type
 // ORM class be stored on a remote MongoDB server
 // - will associate the supplied class with a MongoDB collection for a
 // specified MongoDB database
-// - to be called before Server.CreateMissingTables
+// - to be called before IRestOrmServer.CreateMissingTables
 // - by default, the collection name will match TOrm.SQLTableName, but
 // you can customize it with the corresponding parameter
 // - the TOrm.ID (RowID) field is always mapped to MongoDB's _id field

@@ -118,6 +118,8 @@ begin
       {$endif DARWIN}
       if icui18n = nil then
       begin
+        DisplayFatalError('ICU is not available on this system',
+          'Put cwstring in your uses clause as fallback');
         Done;
         exit;
       end
@@ -257,7 +259,7 @@ var
 begin
   widestringmanager.Ansi2UnicodeMoveProc(A, CodePage, tmp, AL);
   result := length(tmp);
-  MoveFast(pointer(tmp)^, W, result * 2);
+  MoveFast(pointer(tmp)^, W^, result * 2);
 end;
 
 function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar;
@@ -285,7 +287,7 @@ var
 begin
   widestringmanager.Unicode2AnsiMoveProc(W, tmp, CodePage, WL);
   result := length(tmp);
-  MoveFast(pointer(tmp)^, A, result);
+  MoveFast(pointer(tmp)^, A^, result);
 end;
 
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar;
