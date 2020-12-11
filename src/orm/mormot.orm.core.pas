@@ -12659,12 +12659,12 @@ end;
 
 function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 begin
-  with Int64Rec(TOrm(Elem).fID) do
-  {$ifdef CPUINTEL}
+  with PInt64Rec(@TOrm(Elem).fID)^ do
+    {$ifdef CPUINTEL}
     result := crc32cBy4(Lo, Hi);
-  {$else}
+    {$else}
     result := xxHash32Mixup(Lo) xor xxHash32Mixup(Hi);
-  {$endif CPUINTEL}
+    {$endif CPUINTEL}
 end;
 
 function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;

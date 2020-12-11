@@ -2014,7 +2014,7 @@ var
     if rtl then
       msg := 'FillChar'
     else
-      FormatString('FillCharFast [%]', [cpu], msg);
+      FormatString('FillCharFast [%]', [{%H-}cpu], msg);
     NotifyTestSpeed(msg, 1, filled, @timer);
      // validates overlapping forward Move/MoveFast
     if rtl then
