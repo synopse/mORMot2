@@ -1831,12 +1831,14 @@ procedure TRest.SetOrmInstance(aORM: TInterfacedObject);
 begin
   if fOrmInstance <> nil then
     raise ERestException.CreateUTF8('%.SetOrmInstance twice', [self]);
-  if aORM = nil then
-    raise ERestException.CreateUTF8('%.SetOrmInstance(nil)', [self]);
+  if (aORM = nil) or
+     not aORM.GetInterface(IRestOrm, fOrm) then
+    raise ERestException.CreateUTF8(
+      '%.SetOrmInstance(%) is not an IRestOrm', [self, aORM]);
   fOrmInstance := aORM;
   if not fOrmInstance.GetInterface(IRestOrm, fOrm) then
-    raise ERestException.CreateUTF8('%.Create with invalid %',
-      [self, fOrmInstance]);
+    raise ERestException.CreateUTF8(
+      '%.Create with invalid %', [self, fOrmInstance]);
 end;
 
 destructor TRest.Destroy;

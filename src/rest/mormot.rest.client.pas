@@ -510,7 +510,7 @@ type
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
   TRestClientURI = class(TRest)
   protected
-    fOrmClient: IRestOrmClient;
+    fClient: IRestOrmClient;
     fSession: TRestClientSession;
     fComputeSignature: TOnRestAuthenticationSignedURIComputeSignature;
     fOnIdle: TOnIdleSynBackgroundThread;
@@ -654,6 +654,15 @@ type
     // - do nothing by default, but overriden e.g. in TRestHttpClientWebsockets
     procedure CallbackNonBlockingSetHeader(out Header: RawUTF8); virtual;
 
+    /// access or initialize the internal IoC resolver, used for interface-based
+    // remote services, and more generaly any Services.Resolve() call
+    // - create and initialize the internal TServiceContainerClient if no
+    // service interface has been registered yet
+    // - may be used to inject some dependencies, which are not interface-based
+    // remote services, but internal IoC, without the ServiceRegister()
+    // or ServiceDefine() methods - e.g.
+    // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
+    function ServiceContainer: TServiceContainer; override;
     /// register one or several Services on the client side via their interfaces
     // - this methods expects a list of interfaces to be registered to the client
     // (e.g. [TypeInfo(IMyInterface)])
@@ -835,6 +844,9 @@ type
     // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
     property SessionHttpHeader: RawUTF8
       read fSession.HttpHeader write fSession.HttpHeader;
+    /// main access to the IRestOrmClient methods of this instance
+    property Client: IRestOrmClient
+      read fClient;
 
     {$ifdef MSWINDOWS}
 
@@ -1899,7 +1911,7 @@ end;
 procedure TRestClientURI.SetOrmInstance(aORM: TInterfacedObject);
 begin
   inherited SetOrmInstance(aORM); // set fOrm
-  if not fOrmInstance.GetInterface(IRestOrmClient, fOrmClient) then
+  if not fOrmInstance.GetInterface(IRestOrmClient, fClient) then
     raise ERestException.CreateUTF8('%.Create with invalid %', [self, fOrmInstance]);
   // enable redirection of URI() from IRestOrm/IRestOrmClient into this class
   (fOrmInstance as TRestOrmClientURI).URI := URI;
@@ -2279,6 +2291,13 @@ begin
   // nothing to do by default (plain REST/HTTP works in blocking mode)
 end;
 
+function TRestClientURI.ServiceContainer: TServiceContainer;
+begin
+  if fServices = nil then
+    fServices := TServiceContainerClient.Create(self);
+  result := fServices;
+end;
+
 function TRestClientURI.ServiceRegister(const aInterfaces: array of PRttiInfo;
   aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8): boolean;
@@ -2477,80 +2496,80 @@ end;
 function TRestClientURI.Refresh(aID: TID; Value: TOrm;
   var Refreshed: boolean): boolean;
 begin
-  result := fOrmClient.Refresh(aID, Value, Refreshed);
+  result := fClient.Refresh(aID, Value, Refreshed);
 end;
 
 function TRestClientURI.List(const Tables: array of TOrmClass;
   const SQLSelect: RawUTF8; const SQLWhere: RawUTF8): TOrmTable;
 begin
-  result := fOrmClient.List(Tables, SQLSelect, SQLWhere);
+  result := fClient.List(Tables, SQLSelect, SQLWhere);
 end;
 
 function TRestClientURI.ListFmt(const Tables: array of TOrmClass;
   const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TOrmTable;
 begin
-  result := fOrmClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args);
+  result := fClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args);
 end;
 
 function TRestClientURI.ListFmt(const Tables: array of TOrmClass;
   const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable;
 begin
-  result := fOrmClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args, Bounds);
+  result := fClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args, Bounds);
 end;
 
 function TRestClientURI.TransactionBeginRetry(aTable: TOrmClass;
   Retries: integer): boolean;
 begin
-  result := fOrmClient.TransactionBeginRetry(aTable, Retries);
+  result := fClient.TransactionBeginRetry(aTable, Retries);
 end;
 
 function TRestClientURI.BatchStart(aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions): boolean;
 begin
-  result := fOrmClient.BatchStart(aTable, AutomaticTransactionPerRow, Options);
+  result := fClient.BatchStart(aTable, AutomaticTransactionPerRow, Options);
 end;
 
 function TRestClientURI.BatchStartAny(AutomaticTransactionPerRow: cardinal;
   Options: TRestBatchOptions): boolean;
 begin
-  result := fOrmClient.BatchStartAny(AutomaticTransactionPerRow, Options);
+  result := fClient.BatchStartAny(AutomaticTransactionPerRow, Options);
 end;
 
 function TRestClientURI.BatchAdd(Value: TOrm; SendData: boolean;
   ForceID: boolean; const CustomFields: TFieldBits): integer;
 begin
-  result := fOrmClient.BatchAdd(Value, SendData, ForceID, CustomFields);
+  result := fClient.BatchAdd(Value, SendData, ForceID, CustomFields);
 end;
 
 function TRestClientURI.BatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
-  result := fOrmClient.BatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
+  result := fClient.BatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
 function TRestClientURI.BatchDelete(ID: TID): integer;
 begin
-  result := fOrmClient.BatchDelete(ID);
+  result := fClient.BatchDelete(ID);
 end;
 
 function TRestClientURI.BatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
-  result := fOrmClient.BatchDelete(Table, ID);
+  result := fClient.BatchDelete(Table, ID);
 end;
 
 function TRestClientURI.BatchCount: integer;
 begin
-  result := fOrmClient.BatchCount;
+  result := fClient.BatchCount;
 end;
 
 function TRestClientURI.BatchSend(var Results: TIDDynArray): integer;
 begin
-  result := fOrmClient.BatchSend(Results);
+  result := fClient.BatchSend(Results);
 end;
 
 procedure TRestClientURI.BatchAbort;
 begin
-  fOrmClient.BatchAbort;
+  fClient.BatchAbort;
 end;
 
 {$endif PUREMORMOT2}

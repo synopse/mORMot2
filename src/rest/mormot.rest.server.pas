@@ -1827,6 +1827,7 @@ type
     fOnIdleLastTix: cardinal;
     fServicesRouting: TRestServerURIContextClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
+    fServer: IRestOrmServer;
     procedure SetNoAJAXJSON(const Value: boolean);
     function GetNoAJAXJSON: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1964,6 +1965,8 @@ type
     constructor CreateWithOwnModel(const Tables: array of TOrmClass;
       aHandleUserAuthentication: boolean = false;
       const aRoot: RawUTF8 = 'root');
+    /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
+    procedure SetOrmInstance(aORM: TInterfacedObject); override;
 
     /// implement a generic local, piped or HTTP/1.1 provider
     // - this is the main entry point of the server, from the client side
@@ -2277,6 +2280,10 @@ type
     function RecordVersionSynchronizeSubscribeMaster(Table: TOrmClass;
       RecordVersion: TRecordVersion;
       const SlaveCallback: IServiceRecordVersionCallback): boolean; overload;
+
+    /// main access to the IRestOrmServer methods of this instance
+    property Server: IRestOrmServer
+      read fServer;
     /// set this property to true to transmit the JSON data in a "not expanded" format
     // - not directly compatible with Javascript object list decode: not to be
     // used in AJAX environnement (like in TSQLite3HttpServer)
@@ -3488,8 +3495,8 @@ begin
                   if StaticOrm <> nil then
                     Call.OutBody := StaticOrm.EngineRetrieve(TableIndex, TableID)
                   else
-                    Call.OutBody := TRestOrmServer(Server.fOrmInstance).MainEngineRetrieve
-                      (TableIndex, TableID);
+                    Call.OutBody := TRestOrmServer(Server.fOrmInstance).
+                      MainEngineRetrieve(TableIndex, TableID);
                   // cache if expected
                   if cache <> nil then
                     if Call.OutBody = '' then
@@ -3576,9 +3583,9 @@ begin
                       // if ORDER BY already in the SQLWhere clause
                       SetLength(SQLWhereCount, i - 1);
                   end;
-                  ResultList := TRestOrmServer(Server.fOrmInstance).ExecuteList([Table],
-                    Server.fModel.TableProps[TableIndex].SQLFromSelectWhere('Count(*)',
-                    SQLWhereCount));
+                  ResultList := TRestOrmServer(Server.fOrmInstance).
+                    ExecuteList([Table], Server.fModel.TableProps[TableIndex].
+                      SQLFromSelectWhere('Count(*)', SQLWhereCount));
                   if ResultList <> nil then
                   try
                     SQLTotalRowsCount := ResultList.GetAsInteger(1, 0);
@@ -3710,7 +3717,7 @@ begin
     Call.OutStatus := HTTP_FORBIDDEN;
     exit;
   end;
-  orm := Server.fOrmInstance as TRestOrmServer;
+  orm := TRestOrmServer(Server.fOrmInstance);
   case Method of
     mPOST:
       // POST=ADD=INSERT
@@ -6110,6 +6117,14 @@ begin
   Model := TOrmModel.Create(Tables, aRoot);
   Create(Model, aHandleUserAuthentication);
   Model.Owner := self;
+end;
+
+procedure TRestServer.SetOrmInstance(aORM: TInterfacedObject);
+begin
+  inherited SetOrmInstance(aORM);
+  if not aORM.GetInterface(IRestOrmServer, fServer) then
+    raise ERestException.CreateUTF8(
+      '%.SetOrmInstance(%) is not an IRestOrmServer', [self, aORM]);
 end;
 
 function TRestServer.OrmInstance: TRestOrm;

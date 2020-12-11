@@ -1794,7 +1794,7 @@ var
       on E: Exception do
       begin
         // error reading or sending file
-        ErrorMsg := E.ClassName + ': ' + E.Message;
+        FormatString('%: %', [E, E.Message], ErrorMsg);
         Code := HTTP_NOTFOUND;
         result := false; // fatal error
       end;

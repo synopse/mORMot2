@@ -184,7 +184,7 @@ type
     // - this default implementation will call the EndCurrentThread methods
     // of all its internal TRestStorage instances
     procedure EndCurrentThread(Sender: TThread); override;
-    /// Missing tables are created if they don't exist yet for every TOrm
+    /// missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
     // - you must call explicitely this before having called StaticDataCreate()
     // - all table description (even Unique feature) is retrieved from the Model
@@ -259,7 +259,7 @@ type
       out Kind: TRestServerKind): TRestOrm; overload;
        {$ifdef HASINLINE}inline;{$endif}
     /// create an external static redirection for a specific class
-    // - call it just after Create, before TSQLRestServerDB.CreateMissingTables;
+    // - call it just after Create, before IRestOrmServer.CreateMissingTables;
     // warning: if you don't call this method before CreateMissingTable method
     // is called, the table will be created as a regular table by the main
     // database engine, and won't be static
@@ -483,8 +483,11 @@ constructor TRestOrmServer.Create(aRest: TRest);
 var
   t: PtrInt;
 begin
-  inherited Create(aRest); // set fRest+fModel
-  fVirtualTableDirect := true; // faster direct Static call by default
+  fOwner := aRest as TRestServer;
+  // set fRest+fModel
+  inherited Create(aRest);
+  // faster direct Static call by default
+  fVirtualTableDirect := true;
   // initialize TrackChanges() associated tables
   fTrackChangesHistoryTableIndexCount := length(fModel.Tables);
   SetLength(fTrackChangesHistory, fTrackChangesHistoryTableIndexCount);
