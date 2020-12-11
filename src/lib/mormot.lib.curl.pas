@@ -662,7 +662,7 @@ var
   api: integer;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PChar = (
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PAnsiChar = (
     'curl_global_init', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
@@ -746,7 +746,7 @@ begin
         ], ECurl);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do
-        curl.GetProc(NAMES[api], @P[api], ECurl);
+        curl.Resolve(NAMES[api], @P[api], ECurl);
     except
       FreeAndNil(curl); // ECurl raised during initialization above
       exit;

@@ -1269,7 +1269,7 @@ const
     Text: 'WE8ISO8859P1'
   ));
 
-  OCI_ENTRIES: array[0..40] of PChar = (
+  OCI_ENTRIES: array[0..40] of PAnsiChar = (
     'OCIClientVersion', 'OCIEnvNlsCreate',
     'OCIHandleAlloc', 'OCIHandleFree', 'OCIServerAttach', 'OCIServerDetach',
     'OCIAttrGet', 'OCIAttrSet', 'OCISessionBegin', 'OCISessionEnd',
@@ -1635,7 +1635,7 @@ begin
   TryLoadLibrary([{%H-}l1, l2, l3, LIBNAME], ESQLDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do
-    GetProc(OCI_ENTRIES[i], @P[i], ESQLDBOracle); // raise an ESQLDBOracle on error
+    Resolve(OCI_ENTRIES[i], @P[i], ESQLDBOracle); // raise an ESQLDBOracle on error
   ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
   SupportsInt64Params := (major_version > 11) or
                          ((major_version = 11) and

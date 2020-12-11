@@ -43,6 +43,22 @@ var
   KernelRevision: cardinal;
 
 
+function LibraryOpen(const LibraryName: TFileName): TLibHandle;
+begin
+  result := TLibHandle(dlopen(pointer(LibraryName), RTLD_LAZY));
+end;
+
+procedure LibraryClose(Lib: TLibHandle);
+begin
+  dlclose(Lib);
+end;
+
+function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
+begin
+  result := dlsym(Lib, ProcName);
+end;
+
+
 { TICULibrary }
 
 procedure TICULibrary.Done;
@@ -224,6 +240,7 @@ function CompareStringRTL(A, B: PWideChar; AL, BL, flags: integer): integer;
 var
   U1, U2: UnicodeString; // allocate two temporary strings
 begin
+  // cwstring as fallback, using iconv on systems where ICU is not available
   SetString(U1, A, AL);
   SetString(U2, B, BL);
   result := widestringmanager.CompareUnicodeStringProc(
@@ -257,6 +274,7 @@ function AnsiToWideRTL(CodePage: cardinal; A: PAnsiChar; W: PWideChar;
 var
   tmp: UnicodeString;
 begin
+  // cwstring as fallback, using iconv on systems where ICU is not available
   widestringmanager.Ansi2UnicodeMoveProc(A, CodePage, tmp, AL);
   result := length(tmp);
   MoveFast(pointer(tmp)^, W^, result * 2);
@@ -285,6 +303,7 @@ function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
 var
   tmp: RawByteString;
 begin
+  // cwstring as fallback, using iconv on systems where ICU is not available
   widestringmanager.Unicode2AnsiMoveProc(W, tmp, CodePage, WL);
   result := length(tmp);
   MoveFast(pointer(tmp)^, A^, result);
@@ -319,6 +338,7 @@ begin
   end
   else
   begin
+    // simple fallback code only handling 'a'..'z' -> 'A'..'Z' basic conversion
     for i := 0 to WLen - 1 do
       if ord(W[i]) in [ord('a')..ord('z')] then
         dec(W[i], 32);
@@ -337,6 +357,7 @@ begin
   end
   else
   begin
+    // simple fallback code only handling 'A'..'Z' -> 'a'..'z' basic conversion
     for i := 0 to WLen - 1 do
       if ord(W[i]) in [ord('A')..ord('Z')] then
         inc(W[i], 32);
@@ -346,7 +367,7 @@ end;
 
 function GetDesktopWindow: PtrInt;
 begin
-  result := 0; // fixed result on a window-less system
+  result := 0; // fixed result on a window-abstracted system
 end;
 
 const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day

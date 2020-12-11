@@ -1027,10 +1027,15 @@ type
   // consistent field order (FPC POSIX/Windows fields do not match!)
   TSystemTime = Windows.TSystemTime;
 
-  {$ifdef ISDELPHI}
+{$ifdef ISDELPHI}
+
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
   TRTLCriticalSection = Windows.TRTLCriticalSection;
-  {$endif ISDELPHI}
+
+  /// defined as in FPC RTL, to avoid dependency to Windows.pas unit
+  TLibHandle = THandle;
+
+{$endif ISDELPHI}
 
 /// returns the current UTC time as TSystemTime
 // - under Delphi/Windows, directly call the homonymous Win32 API
@@ -1041,6 +1046,21 @@ type
 procedure GetLocalTime(out result: TSystemTime); stdcall;
 
 {$endif MSWINDOWS}
+
+/// raw cross-platform library loading function
+// - alternative to LoadLibrary() Windows API and FPC RTL
+// - consider inheriting TSynLibrary if you want to map a set of API functions
+function LibraryOpen(const LibraryName: TFileName): TLibHandle;
+
+/// raw cross-platform library unloading function
+// - alternative to FreeLibrary() Windows API and FPC RTL
+procedure LibraryClose(Lib: TLibHandle);
+
+/// raw cross-platform library resolution function, as defined in FPC RTL
+// - alternative to GetProcAddr() Windows API and FPC RTL
+function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
+  {$ifdef MSWINDOWS} stdcall; {$endif}
+
 
 const
   /// redefined here to avoid dependency to Windows or SyncObjs
@@ -1705,19 +1725,16 @@ var
 
 
 type
-  /// cross-platform and cross-compiler raw access to a loaded library handle
-  TSynLibraryHandle = {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
-
   /// encapsulate cross-platform loading of library files
   // - this generic class can be used for any external library (.dll/.so)
   TSynLibrary = class
   protected
-    fHandle: TSynLibraryHandle;
+    fHandle: TLibHandle;
     fLibraryPath: TFileName;
   public
     /// cross-platform resolution of a function entry in this library
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
-    function GetProc(ProcName: PChar; Entry: PPointer;
+    function Resolve(ProcName: PAnsiChar; Entry: PPointer;
       RaiseExceptionOnFailure: ExceptionClass = nil): boolean;
     /// cross-platform call to FreeLibrary() + set fHandle := 0
     // - as called by Destroy, but you can use it directly to reload the library
@@ -1728,7 +1745,7 @@ type
     /// release associated memory and linked library
     destructor Destroy; override;
     /// the associated library handle
-    property Handle: TSynLibraryHandle
+    property Handle: TLibHandle
       read fHandle write fHandle;
     /// the loaded library path
     property LibraryPath: TFileName
@@ -3503,27 +3520,24 @@ end;
 
 { TSynLibrary }
 
-function TSynLibrary.GetProc(ProcName: PChar; Entry: PPointer;
+function TSynLibrary.Resolve(ProcName: PAnsiChar; Entry: PPointer;
   RaiseExceptionOnFailure: ExceptionClass): boolean;
 begin
   if (Entry = nil) or
-     (fHandle = 0) then
+     (fHandle = 0) or
+     (ProcName = nil) then
     result := false // avoid GPF
   else
   begin
-    {$ifdef MSWINDOWS}
-    Entry^ := GetProcAddress(fHandle, ProcName);
-    {$else}
-    Entry^ := dlsym(fHandle, ProcName);
-    {$endif MSWINDOWS}
+    Entry^ := LibraryResolve(fHandle, ProcName);
     result := Entry^ <> nil;
   end;
   if (RaiseExceptionOnFailure <> nil) and
      not result then
   begin
     FreeLib;
-    raise RaiseExceptionOnFailure.CreateFmt('Invalid %s: missing %s',
-      [LibraryPath, ProcName]);
+    raise RaiseExceptionOnFailure.CreateFmt('%s.Resolve(%s): not found in %s',
+      [ClassNameShort(self)^, ProcName, LibraryPath]);
   end;
 end;
 
@@ -3531,11 +3545,7 @@ procedure TSynLibrary.FreeLib;
 begin
   if fHandle = 0 then
     exit; // nothing to free
-  {$ifdef MSWINDOWS}
-  FreeLibrary(fHandle);
-  {$else}
-  dlclose(fHandle);
-  {$endif MSWINDOWS}
+  LibraryClose(fHandle);
   fHandle := 0;
 end;
 
@@ -3561,7 +3571,7 @@ begin
     if nwd <> '' then
       SetCurrentDir(cwd{%H-});
     {$else}
-    fHandle := TSynLibraryHandle(dlopen(pointer(lib), RTLD_LAZY));
+    fHandle := LibraryOpen(lib); // use regular .so loading behavior
     {$endif MSWINDOWS}
     if fHandle <> 0 then
     begin
@@ -3577,7 +3587,7 @@ begin
   result := false;
   if aRaiseExceptionOnFailure <> nil then
     raise aRaiseExceptionOnFailure.CreateFmt(
-      '%s.LoadLibray failed - searched in %s', [ClassNameShort(self)^, libs]);
+      '%s.TryLoadLibray failed - searched in %s', [ClassNameShort(self)^, libs]);
 end;
 
 destructor TSynLibrary.Destroy;

@@ -3703,7 +3703,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..91] of PChar = (
+  SQLITE3_ENTRIES: array[0..91] of PAnsiChar = (
     'sqlite3_initialize',
     'sqlite3_shutdown',
     'sqlite3_open',
@@ -3820,7 +3820,7 @@ begin
   fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESQLite3Exception);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
-    fLoader.GetProc(SQLITE3_ENTRIES[i], @P^[i]);
+    fLoader.Resolve(SQLITE3_ENTRIES[i], @P^[i]);
   if not Assigned(initialize) or
      not Assigned(libversion) or
      not Assigned(open) or

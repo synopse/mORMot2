@@ -380,7 +380,7 @@ end;
 { TSynLizardDynamic }
 
 const
-  LIZARD_ENTRIES: array[0..6] of PChar = (
+  LIZARD_ENTRIES: array[0..6] of PAnsiChar = (
    'Lizard_versionNumber',
    'Lizard_compressBound',
    'Lizard_compress',
@@ -401,7 +401,7 @@ begin
   begin
     P := @@versionNumber;
     for i := 0 to High(LIZARD_ENTRIES) do
-      if fLibrary.GetProc(LIZARD_ENTRIES[i], P, EAlgoCompress) then
+      if fLibrary.Resolve(LIZARD_ENTRIES[i], P, EAlgoCompress) then
         inc(P);
     if versionNumber div 10000 <> 1 then
       if aRaiseNoException then

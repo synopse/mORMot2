@@ -489,7 +489,7 @@ begin
 end;
 
 const
-  GSS_NAMES: array[0 .. 17] of PChar = (
+  GSS_NAMES: array[0 .. 17] of PAnsiChar = (
     'gss_import_name', 'gss_display_name', 'gss_release_name',
     'gss_acquire_cred', 'gss_acquire_cred_with_password', 'gss_release_cred',
     'gss_init_sec_context', 'gss_accept_sec_context', 'gss_inquire_context',
@@ -512,10 +512,10 @@ begin
   begin
     P := @@api.gss_import_name;
     for i := 0 to high(GSS_NAMES) do
-      api.GetProc(GSS_NAMES[i], @P^[i]);
+      api.Resolve(GSS_NAMES[i], @P^[i]);
     if not Assigned(api.krb5_gss_register_acceptor_identity) then
       // try alternate function name
-      api.GetProc('gsskrb5_register_acceptor_identity',
+      api.Resolve('gsskrb5_register_acceptor_identity',
         @api.krb5_gss_register_acceptor_identity);
     if Assigned(api.gss_acquire_cred) and
        Assigned(api.gss_accept_sec_context) and

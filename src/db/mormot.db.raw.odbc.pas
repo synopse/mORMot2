@@ -884,7 +884,7 @@ const
   ODBC_LIB = 'libodbc.so.1';
   {$endif MSWINDOWS}
 
-  ODBC_ENTRIES: array[0..66] of PChar = (
+  ODBC_ENTRIES: array[0..66] of PAnsiChar = (
     'SQLAllocEnv', 'SQLAllocHandle', 'SQLAllocStmt',
     'SQLBindCol', 'SQLBindParameter', 'SQLCancel', 'SQLCloseCursor',
     'SQLColAttribute', 'SQLColAttributeW', 'SQLColumns',
@@ -973,7 +973,7 @@ begin
   TryLoadLibrary([ODBC_LIB], EODBCException);
   P := @@AllocEnv;
   for i := 0 to High(ODBC_ENTRIES) do
-    GetProc(ODBC_ENTRIES[i], @P[i], EODBCException); // raise EODBCException on error
+    Resolve(ODBC_ENTRIES[i], @P[i], EODBCException); // raise EODBCException on error
 end;
 
 function TODBCLib.GetDiagField(StatementHandle: SqlHStmt): RawUTF8;

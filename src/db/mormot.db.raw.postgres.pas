@@ -212,7 +212,7 @@ implementation
 { ************ PostgreSQL Client Library Loading }
 
 const
-  PQ_ENTRIES: array[0..22] of PChar = (
+  PQ_ENTRIES: array[0..22] of PAnsiChar = (
     'PQlibVersion', 'PQisthreadsafe', 'PQsetdbLogin', 'PQstatus', 'PQfinish',
     'PQresultStatus', 'PQresultErrorField', 'PQerrorMessage', 'PQsetNoticeProcessor',
     'PQclear', 'PQfreemem', 'PQexec', 'PQprepare', 'PQexecPrepared', 'PQexecParams',
@@ -248,7 +248,7 @@ begin
     {%H-}l2, LIBNAME, LIBNAME2], ESQLDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do
-    GetProc(PQ_ENTRIES[i], @P[I], ESQLDBPostgres);
+    Resolve(PQ_ENTRIES[i], @P[I], ESQLDBPostgres);
 end;
 
 procedure TSQLDBPostgresLib.GetRawUTF8(res: PPGresult;

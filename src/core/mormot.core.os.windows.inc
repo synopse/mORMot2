@@ -21,6 +21,22 @@ begin
   result := WideCharToMultiByte(CodePage, 0, W, LW, A, LA, @DefaultCharVar, nil);
 end;
 
+
+function LibraryOpen(const LibraryName: TFileName): TLibHandle;
+begin
+  result := Windows.LoadLibrary(pointer(LibraryName));
+end;
+
+procedure LibraryClose(Lib: TLibHandle);
+begin
+  if pointer(Lib) <> nil then
+    Windows.FreeLibrary(Lib);
+end;
+
+// Delphi Unicode has an ambiguous GetProcAddress() overload with PWideChar
+function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
+  external kernel32 name 'GetProcAddress';
+
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
 begin
   {$ifdef CPU64}
@@ -1935,7 +1951,7 @@ end;
 
 procedure TWinCryptoAPI.Resolve;
 const
-  NAMES: array[0..7] of PChar = (
+  NAMES: array[0..7] of PAnsiChar = (
     'CryptAcquireContextA',
     'CryptReleaseContext',
     'CryptImportKey',
@@ -2889,7 +2905,7 @@ begin
   @GetSystemTimes := GetProcAddress(h, 'GetSystemTimes');
   @GetProcessTimes := GetProcAddress(h, 'GetProcessTimes');
   @QueryFullProcessImageNameW := GetProcAddress(h, 'QueryFullProcessImageNameW');
-  h := LoadLibrary('Psapi.dll');
+  h := Windows.LoadLibrary('Psapi.dll');
   if h >= 32 then
   begin
     @EnumProcesses := GetProcAddress(h, 'EnumProcesses');
@@ -2973,7 +2989,7 @@ begin
         'Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
          wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
   OSVersionInt32 := (integer(Vers) shl 8) + ord(osWindows);
-  h := LoadLibrary(ntdll);
+  h := Windows.LoadLibrary(ntdll);
   if h > 0 then
   begin
     wine_get_version := GetProcAddress(h, 'wine_get_version');
@@ -2982,7 +2998,7 @@ begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
     end;
-    FreeLibrary(h);
+    Windows.FreeLibrary(h);
   end;
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
@@ -3033,7 +3049,7 @@ end;
 procedure FinalizeSpecificUnit;
 begin
   if CryptoAPI.Handle <> 0 then
-    FreeLibrary(CryptoAPI.Handle);
+    Windows.FreeLibrary(CryptoAPI.Handle);
   if OleDBCoinitialized <> 0 then
   begin
     writeln('Missing ', OleDBCoInitialized, ' TOleDBConnection.Destroy call');
