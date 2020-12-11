@@ -2159,17 +2159,17 @@ begin
           nil, nil, OCI_DEFAULT), fError);
         case ColumnType of
           ftCurrency: // currency content is returned as SQLT_STR
-            Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE, @OCI_CHARSET_WIN1252,
-              0, OCI_ATTR_CHARSET_ID, fError), fError);
+            Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE,
+              @OCI_CHARSET_WIN1252, 0, OCI_ATTR_CHARSET_ID, fError), fError);
           ftUTF8:
             case ColumnValueDBForm of
               SQLCS_IMPLICIT: // force CHAR + VARCHAR2 inlined fields charset
                 // -> a conversion into UTF-8 would probably truncate the inlined result
-                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE, @ColumnValueDBCharSet,
-                  0, OCI_ATTR_CHARSET_ID, fError), fError);
+                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE,
+                  @ColumnValueDBCharSet, 0, OCI_ATTR_CHARSET_ID, fError), fError);
               SQLCS_NCHAR: // NVARCHAR2 + NCLOB will be retrieved directly as UTF-8 content
-                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE, @OCI_CHARSET_UTF8,
-                  0, OCI_ATTR_CHARSET_ID, fError), fError);
+                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE,
+                  @OCI_CHARSET_UTF8, 0, OCI_ATTR_CHARSET_ID, fError), fError);
             end;
         end;
         inc(RowSize, fRowBufferCount * ColumnValueDBSize);
@@ -2203,7 +2203,8 @@ begin
       // allow one trailing ';' by writing ';;' or allows 'END;' at the end of a statement
       if (L > 5) and
          (fSQLPrepared[L] = ';') and
-         not IdemPChar(@fSQLPrepared[L - 3], 'END') then
+         not (IdemPChar(@fSQLPrepared[L - 3], 'END') and
+              (fSQLPrepared[L - 4] <= 'A')) then
         dec(L);
       if L <> Length(fSQLPrepared) then
         SetLength(fSQLPrepared, L); // trim trailing spaces or ';' if needed
