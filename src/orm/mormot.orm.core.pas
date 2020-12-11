@@ -77,6 +77,15 @@ const
   /// after how many parameters inlining is not worth it
   INLINED_MAX = 10;
 
+  /// the used TAuthSession.IDCardinal value if the session not started yet
+  // - i.e. if the session handling is still in its handshaking phase
+  CONST_AUTHENTICATION_SESSION_NOT_STARTED = 0;
+
+  /// the used TAuthSession.IDCardinal value if authentication mode is not set
+  // - i.e. if TRest.HandleAuthentication equals FALSE
+  CONST_AUTHENTICATION_NOT_USED = 1;
+
+
 type
   /// generic parent class of all custom Exception types of this unit
   EOrmException = class(ESynException);
@@ -1630,7 +1639,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list
     // - returns -1 if not found
-    function IndexByName(aName: PUTF8Char): integer; overload;
+    function IndexByName(aName: PUTF8Char): PtrInt; overload;
     /// find an item by name in the list, including RowID/ID
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EOrmException if not found in the internal list
@@ -2596,7 +2605,8 @@ type
     // this method when accessed from RESTful clients in the same thread, e.g.:
     // ! AcquireExecutionMode[execOrmWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
-    function TransactionBegin(aTable: TOrmClass; SessionID: cardinal): boolean;
+    function TransactionBegin(aTable: TOrmClass;
+      SessionID: cardinal = CONST_AUTHENTICATION_NOT_USED): boolean;
     /// check current transaction status (to be used on Server side)
     // - warning: from CLIENT side, you should better use a BATCH process
     // - returns the session ID if a transaction is active
@@ -2620,7 +2630,8 @@ type
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     // - by default, any exception will be catch and ignored, unless RaiseException
     // is set to TRUE so that the caller will be able to handle it
-    procedure Commit(SessionID: cardinal; RaiseException: boolean = false);
+    procedure Commit(SessionID: cardinal = CONST_AUTHENTICATION_NOT_USED;
+      RaiseException: boolean = false);
     /// abort a transaction (to be used on Server side)
     // - implements REST ABORT collection
     // - warning: from CLIENT side, you should better use a BATCH process
@@ -2636,7 +2647,7 @@ type
     // this method when accessed from RESTful clients in the same thread, e.g.:
     // ! AcquireExecutionMode[execOrmWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
-    procedure RollBack(SessionID: cardinal);
+    procedure RollBack(SessionID: cardinal = CONST_AUTHENTICATION_NOT_USED);
     /// enter the Mutex associated with the write operations of this instance
     // - just a wrapper around TRest.AcquireExecution[execOrmWrite].Safe.Lock
     procedure WriteLock;
@@ -2916,11 +2927,79 @@ type
     // sequence is closed
     // - will Free the TRestBatch stored in this class instance
     procedure BatchAbort;
+    function GetForceBlobTransfert: boolean;
+    procedure SetForceBlobTransfert(Value: boolean);
+    function GetForceBlobTransfertTable(aTable: TOrmClass): boolean;
+    procedure SetForceBlobTransfertTable(aTable: TOrmClass; aValue: boolean);
+    /// if set to TRUE, all BLOB fields of all tables will be transferred
+    // between the Client and the remote Server
+    // - i.e. Add() Update() will use Blob-related RESTful PUT/POST request
+    // - i.e. Retrieve() will use Blob-related RESTful GET request
+    // - note that the Refresh method won't handle BLOB fields, even if this
+    // property setting is set to TRUE
+    // - by default, this property is set to FALSE, which setting will spare
+    // bandwidth and CPU
+    // - this property is global to all tables of the model - you can also use
+    // ForceBlobTransfertTable[] to force it for a particular table
+    property ForceBlobTransfert: boolean
+      read GetForceBlobTransfert write SetForceBlobTransfert;
+    /// if set to TRUE for a specified table of the model, all BLOB fields of
+    // this tables will be transferred between the Client and the remote Server
+    // - i.e. Add() Update() will use BLOB-related RESTful PUT/POST request for
+    // this table
+    // - i.e. Retrieve() will use BLOB-related RESTful GET request for
+    // this table
+    // - note that the Refresh method won't handle BLOB fields, even if this
+    // property setting is set to TRUE
+    // - by default, all items of this property are set to FALSE, which
+    // setting will spare bandwidth and CPU
+    // - this property is particular to a given tables of the model - you can
+    // also use ForceBlobTransfert to force it for a all tables of this model
+    property ForceBlobTransfertTable[aTable: TOrmClass]: boolean
+      read GetForceBlobTransfertTable write SetForceBlobTransfertTable;
   end;
+
+  /// the possible options for IRestOrmServer.CreateMissingTables and
+  // TOrm.InitializeTable methods
+  // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
+  // TAuthGroup.InitializeTable to fill the TAuthGroup and TAuthUser
+  // tables with default records
+  // - itoNoCreateMissingField will avoid to create the missing fields on a table
+  // - itoNoIndex4ID won't create the index for the main ID field (do nothing
+  // on SQLite3, by design - but may be used for tables on external databases)
+  // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
+  // - itoNoIndex4NestedRecord won't create indexes for TOrm fields
+  // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
+  // - itoNoIndex4TID won't create indexes for TID fields
+  // - itoNoIndex4RecordVersion won't create indexes for TRecordVersion fields
+  // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
+  TOrmInitializeTableOption = (
+    itoNoAutoCreateGroups, itoNoAutoCreateUsers, itoNoCreateMissingField,
+    itoNoIndex4ID, itoNoIndex4UniqueField, itoNoIndex4NestedRecord,
+    itoNoIndex4RecordReference, itoNoIndex4TID, itoNoIndex4RecordVersion);
+
+  /// the options to be specified for IRestOrmServer.CreateMissingTables and
+  // TOrm.InitializeTable methods
+  TOrmInitializeTableOptions = set of TOrmInitializeTableOption;
 
   /// Server-Specific Object-Relational-Mapping calls for CRUD access to a database
   IRestOrmServer = interface(IRestOrm)
     ['{F8FB2109-5629-4DFB-A74C-7A0F86F91362}']
+    /// missing tables are created if they don't exist yet for every TOrm
+    // class of the Database Model
+    // - you must call explicitely this before having called StaticDataCreate()
+    // - all table description (even Unique feature) is retrieved from the Model
+    // - this method should also create additional fields, if the TOrm definition
+    // has been modified; only field adding is mandatory, field renaming or
+    // field deleting are not allowed in the FrameWork (in such cases, you must
+    // create a new TOrm type)
+    // - this virtual method do nothing by default - overridden versions should
+    // implement it as expected by the underlying storage engine (e.g. SQLite3
+    // or TRestServerFullInMemory)
+    // - you can tune some options transmitted to the TOrm.InitializeTable
+    // virtual methods, e.g. to avoid the automatic create of indexes
+    procedure CreateMissingTables(user_version: cardinal = 0;
+      options: TOrmInitializeTableOptions = []);
     /// create an index for the specific FieldName
     // - will call CreateSQLMultiIndex() internaly
     function CreateSQLIndex(Table: TOrmClass; const FieldName: RawUTF8;
@@ -3057,29 +3136,6 @@ type
     function TableMapFields: TFieldBits;
   end;
 
-
-  /// the possible options for TRestServer.CreateMissingTables and
-  // TOrm.InitializeTable methods
-  // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
-  // TAuthGroup.InitializeTable to fill the TAuthGroup and TAuthUser
-  // tables with default records
-  // - itoNoCreateMissingField will avoid to create the missing fields on a table
-  // - itoNoIndex4ID won't create the index for the main ID field (do nothing
-  // on SQLite3, by design - but may be used for tables on external databases)
-  // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
-  // - itoNoIndex4NestedRecord won't create indexes for TOrm fields
-  // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
-  // - itoNoIndex4TID won't create indexes for TID fields
-  // - itoNoIndex4RecordVersion won't create indexes for TRecordVersion fields
-  // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
-  TOrmInitializeTableOption = (
-    itoNoAutoCreateGroups, itoNoAutoCreateUsers, itoNoCreateMissingField,
-    itoNoIndex4ID, itoNoIndex4UniqueField, itoNoIndex4NestedRecord,
-    itoNoIndex4RecordReference, itoNoIndex4TID, itoNoIndex4RecordVersion);
-
-  /// the options to be specified for TRestServer.CreateMissingTables and
-  // TOrm.InitializeTable methods
-  TOrmInitializeTableOptions = set of TOrmInitializeTableOption;
 
 
   /// root class for defining and mapping database records
@@ -3233,7 +3289,7 @@ type
       const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8 = ''): IAutoFree; overload;
 
-    /// virtual method called when the associated table is created in the database
+    /// called when the associated table is created in the database
     // - if FieldName is '', initialization regarding all fields must be made;
     // if FieldName is specified, initialization regarding this field must be processed
     // - override this method in order to initialize indexs or create default records
@@ -7354,7 +7410,7 @@ const
   /// used as "stored AS_UNIQUE" published property definition in TOrm
   AS_UNIQUE = false;
 
-  /// options to specify no index createon for TRestServer.CreateMissingTables
+  /// options to specify no index createon for IRestOrmServer.CreateMissingTables
   // and TOrm.InitializeTable methods
   INITIALIZETABLE_NOINDEX: TOrmInitializeTableOptions =
     [itoNoIndex4ID.. itoNoIndex4RecordVersion];
@@ -9199,7 +9255,7 @@ var
   tmp: RawUTF8;
 begin
   GetValueVar(Instance, false, tmp, nil);
-  result := crc32c(0, pointer(tmp), length(tmp));
+  result := DefaultHasher(0, pointer(tmp), length(tmp));
 end;
 
 procedure TOrmPropInfo.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -9710,7 +9766,7 @@ var
   v: integer;
 begin
   v := fPropInfo.GetOrdProp(Instance);
-  result := crc32cBy4(0, v); // better hash distribution using crc32c
+  result := DefaultHasher(0, @v, 4);
 end;
 
 procedure TOrmPropInfoRTTIInt32.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -9988,13 +10044,13 @@ end;
 function TOrmPropInfoRTTIInt64.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
-  V64: TQWordRec;
+  V64: Int64;
 begin
   if fGetterIsFieldPropOffset <> 0 then
-    V64.V := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
+    V64 := PInt64(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
   else
-    V64.V := fPropInfo.GetInt64Prop(Instance);
-  result := crc32cBy4(V64.L, V64.H); // better hash distribution using crc32c
+    V64 := fPropInfo.GetInt64Prop(Instance);
+  result := DefaultHasher(0, @V64, SizeOf(V64));
 end;
 
 procedure TOrmPropInfoRTTIInt64.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -10200,8 +10256,7 @@ var
   V: double;
 begin
   V := fPropInfo.GetDoubleProp(Instance);
-  with PQWordRec(@V)^ do
-    result := crc32cBy4(L, H); // better hash distribution using crc32c
+  result := DefaultHasher(0, @V, SizeOf(V));
 end;
 
 procedure TOrmPropInfoRTTIDouble.GetBinary(Instance: TObject; W: TBufferWriter);
@@ -10332,8 +10387,7 @@ var
   V: currency;
 begin
   fPropInfo.GetCurrencyProp(Instance, V);
-  with PQWordRec(@V)^ do
-    result := crc32cBy4(L, H); // better hash distribution using crc32c
+  result := DefaultHasher(0, @V, SizeOf(V));
 end;
 
 procedure TOrmPropInfoRTTICurrency.GetFieldSQLVar(Instance: TObject;
@@ -10643,7 +10697,7 @@ var
   tmp: RawUTF8;
 begin // JSON is case-sensitive by design -> ignore CaseInsensitive parameter
   tmp := ObjectToJSON(GetInstance(Instance));
-  result := crc32c(0, pointer(tmp), length(tmp));
+  result := DefaultHasher(0, pointer(tmp), length(tmp));
 end;
 
 procedure TOrmPropInfoRTTIObject.NormalizeValue(var Value: RawUTF8);
@@ -10665,7 +10719,7 @@ constructor TOrmPropInfoRTTIAnsi.Create(aPropInfo: PRttiProp;
   aPropIndex: integer; aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
 begin
   inherited;
-  fEngine := TSynAnsiConvert.Engine(aPropInfo^.typeInfo^.AnsiStringCodePage);
+  fEngine := fPropRtti.Cache.Engine;
 end;
 
 procedure TOrmPropInfoRTTIAnsi.CopySameClassProp(Source: TObject;
@@ -10702,11 +10756,11 @@ begin
   fPropInfo.GetLongStrProp(Instance, Value);
   if CaseInsensitive then
     if fEngine.CodePage = CODEPAGE_US then
-      result := crc32c(0, Up{%H-}, UpperCopyWin255(Up{%H-}, Value) - {%H-}Up)
+      result := DefaultHasher(0, Up{%H-}, UpperCopyWin255(Up{%H-}, Value) - {%H-}Up)
     else
-      result := crc32c(0, Up, UpperCopy255Buf(Up, pointer(Value), length(Value)) - Up)
+      result := DefaultHasher(0, Up, UpperCopy255Buf(Up, pointer(Value), length(Value)) - Up)
   else
-    result := crc32c(0, pointer(Value), length(Value));
+    result := DefaultHasher(0, pointer(Value), length(Value));
 end;
 
 procedure TOrmPropInfoRTTIAnsi.GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -10843,9 +10897,9 @@ var
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
   if CaseInsensitive then
-    result := crc32c(0, Up{%H-}, UTF8UpperCopy255(Up{%H-}, Value) - {%H-}Up)
+    result := DefaultHasher(0, Up{%H-}, UTF8UpperCopy255(Up{%H-}, Value) - {%H-}Up)
   else
-    result := crc32c(0, pointer(Value), length(Value));
+    result := DefaultHasher(0, pointer(Value), length(Value));
 end;
 
 procedure TOrmPropInfoRTTIRawUTF8.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -10986,10 +11040,10 @@ var
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
   if CaseInsensitive then
-    result := crc32c(0, Up{%H-},
+    result := DefaultHasher(0, Up{%H-},
       UpperCopy255W(Up{%H-}, pointer(Value), length(Value) shr 1) - {%H-}Up)
   else
-    result := crc32c(0, pointer(Value), length(Value));
+    result := DefaultHasher(0, pointer(Value), length(Value));
 end;
 
 procedure TOrmPropInfoRTTIRawUnicode.GetValueVar(Instance: TObject;
@@ -11059,7 +11113,7 @@ var
   Value: RawByteString;
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
-  result := crc32c(0, pointer(Value), length(Value)); // binary -> case sensitive
+  result := DefaultHasher(0, pointer(Value), length(Value)); // binary -> case sensitive
 end;
 
 procedure TOrmPropInfoRTTIRawBlob.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -11192,10 +11246,10 @@ var
 begin
   fPropInfo.GetWideStrProp(Instance, Value);
   if CaseInsensitive then
-    result := crc32c(0, Up{%H-},
+    result := DefaultHasher(0, Up{%H-},
       UpperCopy255W(Up{%H-}, pointer(Value), length(Value)) - {%H-}Up)
   else
-    result := crc32c(0, pointer(Value), length(Value) * 2);
+    result := DefaultHasher(0, pointer(Value), length(Value) * 2);
 end;
 
 procedure TOrmPropInfoRTTIWide.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -11307,10 +11361,10 @@ var
 begin
   fPropInfo.GetUnicodeStrProp(Instance, Value);
   if CaseInsensitive then
-    result := crc32c(0, Up{%H-},
+    result := DefaultHasher(0, Up{%H-},
       UpperCopy255W(Up{%H-}, pointer(Value), length(Value)) - {%H-}Up)
   else
-    result := crc32c(0, pointer(Value), length(Value) * 2);
+    result := DefaultHasher(0, pointer(Value), length(Value) * 2);
 end;
 
 procedure TOrmPropInfoRTTIUnicode.GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -11497,7 +11551,7 @@ var
   tmp: RawByteString;
 begin
   Serialize(Instance, tmp, true);
-  result := crc32c(0, pointer(tmp), length(tmp));
+  result := DefaultHasher(0, pointer(tmp), length(tmp));
 end;
 
 procedure TOrmPropInfoRTTIDynArray.GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -11924,7 +11978,7 @@ var
   tmp: TSynTempBuffer;
 begin
   RecordSave(GetFieldAddr(Instance)^, tmp, fTypeInfo);
-  result := crc32c(0, tmp.buf, tmp.len);
+  result := DefaultHasher(0, tmp.buf, tmp.len);
   tmp.Done;
 end;
 
@@ -12037,7 +12091,7 @@ end;
 function TOrmPropInfoRecordFixedSize.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 begin
-  result := crc32c(0, GetFieldAddr(Instance), fRecordSize);
+  result := DefaultHasher(0, GetFieldAddr(Instance), fRecordSize);
 end;
 
 procedure TOrmPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
@@ -12605,8 +12659,12 @@ end;
 
 function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 begin
-  with PQWordRec(@TOrm(Elem).fID)^ do
-    result := crc32cBy4(L, H);
+  with Int64Rec(TOrm(Elem).fID) do
+  {$ifdef CPUINTEL}
+    result := crc32cBy4(Lo, Hi);
+  {$else}
+    result := xxHash32Mixup(Lo) xor xxHash32Mixup(Hi);
+  {$endif CPUINTEL}
 end;
 
 function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
@@ -15818,7 +15876,7 @@ var
 begin
   if aUpdateHash then
   begin
-    Hash := crc32c(0, pointer(aJSON), aLen);
+    Hash := DefaultHasher(0, pointer(aJSON), aLen);
     result := (fPrivateCopyHash = 0) or (Hash = 0) or (Hash <> fPrivateCopyHash);
     if not result then
       exit;
@@ -20146,10 +20204,12 @@ begin
   if self = nil then
     raise EModelException.Create('nil.GetTableIndexExisting');
   if aTable = nil then
-    raise EModelException.CreateUTF8('%.GetTableIndexExisting(nil) %', [self, Root]);
+    raise EModelException.CreateUTF8(
+      '%.GetTableIndexExisting(nil) for root=%', [self, Root]);
   result := GetTableIndex(aTable);
   if result < 0 then
-    raise EModelException.CreateUTF8('% is not part of % %', [aTable, self, Root]);
+    raise EModelException.CreateUTF8('% is not part of % root=%',
+      [aTable, self, Root]);
 end;
 
 function TOrmModel.GetTableExactIndex(const TableName: RawUTF8): PtrInt;
@@ -20171,7 +20231,7 @@ function TOrmModel.GetTableIndex(const SQLTableName: RawUTF8): PtrInt;
 begin
   if (self <> nil) and (SQLTableName <> '') then
   begin
-    result := FastFindUpperPUTF8CharSorted( // O(log(n)) binary search
+    result := FastFindUpperPUTF8CharSorted( // branchless O(log(n)) binary search
       pointer(fSortedTablesNameUpper), fTablesMax,
       pointer(SQLTableName), length(SQLTableName));
     if result >= 0 then
@@ -20185,8 +20245,9 @@ function TOrmModel.GetTableIndexPtr(SQLTableName: PUTF8Char): PtrInt;
 begin
   if (self <> nil) and (SQLTableName <> nil) then
   begin
-    result := FastFindUpperPUTF8CharSorted( // O(log(n)) binary search
-      pointer(fSortedTablesNameUpper), fTablesMax, SQLTableName, StrLen(SQLTableName));
+    result := FastFindUpperPUTF8CharSorted( // branchless O(log(n)) binary search
+      pointer(fSortedTablesNameUpper), fTablesMax,
+      SQLTableName, StrLen(SQLTableName));
     if result >= 0 then
       result := fSortedTablesNameIndex[result];
   end
@@ -20619,7 +20680,7 @@ end;
 
 procedure TOrmModelProperties.SetKind(Value: TOrmVirtualKind);
 
-  function InTOrmTableSimpleFields(withID, withTableName: boolean): RawUTF8;
+  function ComputeSimpleFields(withID, withTableName: boolean): RawUTF8;
   const
     IDComma: array[TOrmVirtualKind] of rawUTF8 = ('ID,', 'RowID,',
       'RowID,', 'RowID,', 'RowID,', 'RowID,', 'RowID,', 'RowID,');
@@ -20689,10 +20750,10 @@ begin
   end;
   fKind := Value;
   // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-  SQL.TableSimpleFields[false, false] := InTOrmTableSimpleFields(false, false);
-  SQL.TableSimpleFields[false, true]  := InTOrmTableSimpleFields(false, true);
-  SQL.TableSimpleFields[true, false]  := InTOrmTableSimpleFields(true, false);
-  SQL.TableSimpleFields[true, true]   := InTOrmTableSimpleFields(true, true);
+  SQL.TableSimpleFields[false, false] := ComputeSimpleFields(false, false);
+  SQL.TableSimpleFields[false, true]  := ComputeSimpleFields(false, true);
+  SQL.TableSimpleFields[true, false]  := ComputeSimpleFields(true, false);
+  SQL.TableSimpleFields[true, true]   := ComputeSimpleFields(true, true);
   if Props.SQLTableSimpleFieldsNoRowID <> SQL.TableSimpleFields[false, false] then
     raise EModelException.CreateUTF8('SetKind(%)', [Props.Table]);
   SQL.SelectAllWithRowID := SQLFromSelectWhere('*', '');
