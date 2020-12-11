@@ -12,6 +12,9 @@ program mormot2tests;
 
 uses
   {$I ..\src\mormot.uses.inc}
+  {$ifdef UNIX}
+  cwstring, // needed as fallback if ICU is not available
+  {$endif UNIX}
   mormot.core.base         in '..\src\core\mormot.core.base.pas',
   mormot.core.os           in '..\src\core\mormot.core.os.pas',
   mormot.core.unicode      in '..\src\core\mormot.core.unicode.pas',
@@ -117,10 +120,9 @@ type
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  AddCase([//
-  TNetProtocols
-  //TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress
-  // ,
+  AddCase([// 
+  //
+  TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
   ]);
 end;
 

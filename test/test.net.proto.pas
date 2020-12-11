@@ -28,7 +28,7 @@ uses
 
 type
   /// this test case will validate several low-level protocols
-  TNetProtocols = class(TSynTestCase)
+  TNetworkProtocols = class(TSynTestCase)
   published
     /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
     procedure RTSPOverHTTP;
@@ -159,7 +159,7 @@ begin
   end;
 end;
 
-procedure TNetProtocols.RTSPOverHTTP;
+procedure TNetworkProtocols.RTSPOverHTTP;
 const
   {$ifdef DARWIN}
   N = 10;
