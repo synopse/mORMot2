@@ -4950,8 +4950,6 @@ end;
 {$ifdef HASVARUSTRING}
 
 function _BS_UString(Data: PUnicodeString; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
-var
-  Len: TStrLen;
 begin
   Dest.WriteVar(pointer(Data^), length(Data^) * 2);
   result := SizeOf(pointer);

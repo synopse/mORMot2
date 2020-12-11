@@ -3000,7 +3000,7 @@ begin
       begin
         include(Cache.Flags, rcfIsRawBlob);
         Cache.CodePage := CP_RAWBYTESTRING; // CP_RAWBLOB is internal
-        Cache.Engine := nil;
+        Cache.Engine := TSynAnsiConvert.Engine(CP_RAWBYTESTRING);
       end
       else
       begin

@@ -7127,7 +7127,7 @@ begin
     // will handle RawUTF8 but also AnsiString, WinAnsiString and RawUnicode
     if Ctxt.Info.Cache.CodePage = CP_UTF8 then
       FastSetString(RawUTF8(Data^), Ctxt.Value, Ctxt.ValueLen)
-    else if Ctxt.Info.Cache.Engine = nil then
+    else if Ctxt.Info.Cache.CodePage >= CP_RAWBLOB then
       Ctxt.Valid := false // paranoid check (RawByteString should handle it)
     else
       Ctxt.Info.Cache.Engine.UTF8BufferToAnsi(Ctxt.Value, Ctxt.ValueLen, Data^);
