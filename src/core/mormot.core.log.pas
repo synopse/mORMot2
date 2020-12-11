@@ -2994,8 +2994,9 @@ begin
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if result <> nil then
       // we know TRttiCustom is in the slot, and Private is TSynLogFamily
-      result := TSynLogFamily(TRttiCustom(pointer(result)).Private)
-    else
+      result := TSynLogFamily(TRttiCustom(pointer(result)).Private);
+    if result = nil then
+      // register the TSynLogFamily to the TRttiCustom.Private field
       result := FamilyCreate;
   end;
 end;

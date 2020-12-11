@@ -16102,8 +16102,8 @@ begin
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if result <> nil then
     // we know TRttiCustom is in the slot, and Private is TOrmProperties
-    result := TOrmProperties(TRttiCustom(pointer(result)).Private)
-  else
+    result := TOrmProperties(TRttiCustom(pointer(result)).Private);
+  if result = nil then
     // first time we use this TOrm: generate information from RTTI
     result := PropsCreate;
 end;
