@@ -10,6 +10,7 @@ unit mormot.rest.client;
     - Client Authentication and Authorization Logic
     - TRestClientRoutingREST/TRestClientRoutingJSON_RPC Routing Schemes
     - TRestClientURI Base Class for Actual Clients
+    - TRestClientLibraryRequest after TRestServer.ExportServerGlobalLibraryRequest
 
   *****************************************************************************
 }
@@ -973,16 +974,49 @@ const
   REST_COOKIE_SESSION = 'mORMot_session_signature';
 
 
+function ToText(a: TRestAuthenticationSignedURIAlgo): PShortString; overload;
+
+
+
+{ ************ TRestClientLibraryRequest after TRestServer.ExportServerGlobalLibraryRequest }
+
+type
+  /// REST client with direct access to a server logic through a .dll/.so library
+  // - use only one TLibraryRequest function for the whole communication
+  // - the data is stored in Global system memory, and freed by GlobalFree()
+  TRestClientLibraryRequest = class(TRestClientURI)
+  protected
+    fRequest: TLibraryRequest;
+    /// used by Create(from dll) constructor
+    fLibraryHandle: TLibHandle;
+    /// method calling the RESTful server through a DLL or executable, using
+    // direct memory
+    procedure InternalURI(var Call: TRestURIParams); override;
+    /// overridden protected method do nothing (direct DLL access has no connection)
+    function InternalCheckOpen: boolean; override;
+    /// overridden protected method do nothing (direct DLL access has no connection)
+    procedure InternalClose; override;
+  public
+    /// connect to a server from a remote function
+    constructor Create(aModel: TOrmModel; aRequest: TLibraryRequest); reintroduce; overload;
+    /// connect to a server contained in a shared library
+    // - this .dll/.so must contain at least a LibraryRequest entry
+    // - raise an exception if the shared library is not found or invalid
+    constructor Create(aModel: TOrmModel; const LibraryName: TFileName); reintroduce; overload;
+    /// release memory and handles
+    destructor Destroy; override;
+  end;
+
+
+
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
 type
   TSQLRestClientURI = TRestClientURI;
+  TSQLRestClientURIDll = TRestClientLibraryRequest;
 
 {$endif PUREMORMOT2}
-
-function ToText(a: TRestAuthenticationSignedURIAlgo): PShortString; overload;
-
 
 
 implementation
@@ -2573,6 +2607,87 @@ begin
 end;
 
 {$endif PUREMORMOT2}
+
+
+{ ************ TRestClientLibraryRequest after TRestServer.ExportServerGlobalLibraryRequest }
+
+{ TRestClientLibraryRequest }
+
+constructor TRestClientLibraryRequest.Create(aModel: TOrmModel;
+  const LibraryName: TFileName);
+var
+  call: TRestURIParams;
+  h: TLibHandle;
+begin
+  h := LibraryOpen(LibraryName);
+  if h = 0 then
+    raise ERestException.CreateUTF8('%.Create: LoadLibrary(%) failed',
+      [self, LibraryName]);
+  fRequest := LibraryResolve(h, 'LibraryRequest');
+  call.Init;
+  InternalURI(call);
+  if call.OutStatus <> HTTP_NOTFOUND then
+  begin
+    @fRequest := nil;
+    LibraryClose(h);
+    raise ERestException.CreateUTF8(
+      '%.Create: % doesn''t export a valid LibraryRequest() function (ret=%)',
+      [self, LibraryName, call.OutStatus]);
+  end;
+  fLibraryHandle := h;
+  Create(aModel, fRequest);
+end;
+
+constructor TRestClientLibraryRequest.Create(aModel: TOrmModel;
+  aRequest: TLibraryRequest);
+begin
+  inherited Create(aModel);
+  fRequest := aRequest;
+end;
+
+destructor TRestClientLibraryRequest.Destroy;
+begin
+  if fLibraryHandle<>0 then
+    LibraryClose(fLibraryHandle);
+  inherited;
+end;
+
+procedure TRestClientLibraryRequest.InternalURI(var Call: TRestURIParams);
+var
+  f: TLibraryRequestFree;
+  h, r: PUTF8Char;
+  hl, rl: cardinal;
+begin
+  if @fRequest = nil then
+  begin
+    // 501 (no valid application or library)
+    Call.OutStatus := HTTP_NOTIMPLEMENTED;
+    exit;
+  end;
+  h := pointer(call.InHead);
+  hl := length(call.InHead);
+  r := nil;
+  rl := 0;
+  Call.OutStatus := fRequest(
+    pointer(Call.Url), pointer(Call.Method), pointer(call.InBody),
+    length(Call.Url), length(Call.Method), length(call.InBody),
+    f, h, hl, r, rl, Call.OutInternalState);
+  FastSetString(Call.OutHead, h, hl);
+  FastSetString(Call.OutBody, r, rl);
+  f(h);
+  f(r);
+  Call.LowLevelFlags := [llfSecured]; // direct library execution seems safe
+end;
+
+function TRestClientLibraryRequest.InternalCheckOpen: boolean;
+begin
+  result := @fRequest <> nil;
+end;
+
+procedure TRestClientLibraryRequest.InternalClose;
+begin
+end;
+
 
 
 initialization

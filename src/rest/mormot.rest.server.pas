@@ -2280,6 +2280,11 @@ type
     function RecordVersionSynchronizeSubscribeMaster(Table: TOrmClass;
       RecordVersion: TRecordVersion;
       const SlaveCallback: IServiceRecordVersionCallback): boolean; overload;
+    /// grant access to this database content from a dll using the global
+    // LibraryRequest() function
+    // - returns true if the LibraryRequest() function is set to this TRestServer
+    // - returns false if a TRestServer was already exported
+    function ExportServerGlobalLibraryRequest: boolean;
 
     /// main access to the IRestOrmServer methods of this instance
     property Server: IRestOrmServer
@@ -2494,6 +2499,19 @@ function ServiceRunningContext: PServiceRunningContext;
 // - this function is very fast, even if cryptographically-level SHA-3 secure
 function CurrentServerNonce(Previous: boolean = false): RawUTF8;
 
+/// this function can be exported from a DLL to remotely access to a TRestServer
+// - use TRestServer.ExportServerGlobalLibraryRequest to assign a server to this function
+// - return the HTTP status, e.g. 501 HTTP_NOTIMPLEMENTED if no
+// TRestServer.ExportServerGlobalLibraryRequest has been assigned yet
+// - once used, memory for Resp and Head should be released with
+// LibraryRequestFree() returned function
+// - the Server current Internal State counter will be set to State
+// - simply use TRestClientLibraryRequest to access to an exported LibraryRequest() function
+// - match TLibraryRequest function signature
+function LibraryRequest(
+  Url, Method, SendData: PUTF8Char; UrlLen, MethodLen, SendDataLen: cardinal;
+  out HeadRespFree: TLibraryRequestFree; var Head: PUTF8Char; var HeadLen: cardinal;
+  out Resp: PUTF8Char; out RespLen, State: cardinal): cardinal; cdecl;
 
 
 { ************ TRestHttpServerDefinition Settings for a HTTP Server }
@@ -5393,6 +5411,7 @@ begin
 end;
 
 
+
 { TRestServerAuthenticationDefault }
 
 function TRestServerAuthenticationDefault.Auth(Ctxt: TRestServerURIContext): boolean;
@@ -7517,6 +7536,99 @@ begin
     end;
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
 end;
+
+var
+  GlobalLibraryRequestServer: TRestServer = nil;
+
+function TRestServer.ExportServerGlobalLibraryRequest: boolean;
+begin
+  {$ifdef MSWINDOWS2}
+  if (fServerWindow <> 0) or
+     (fExportServerNamedPipeThread <> nil) then
+    // another named pipe server was running
+    result := false
+  else
+  {$endif MSWINDOWS}
+    if (GlobalLibraryRequestServer = nil) or
+       (GlobalLibraryRequestServer = self) then
+    begin
+      GlobalLibraryRequestServer := self;
+      result := true;
+    end
+    else
+      // another server was running
+      result := false;
+end;
+
+procedure LibraryRequestFree(Data: pointer);
+begin
+  if Data <> nil then
+    RawUTF8(Data) := '';
+end;
+
+procedure LibraryRequestString(var s: RawUTF8; p: PUTF8Char; l: PtrInt);
+begin
+  if p <> nil then
+  try
+    with PStrRec(p - SizeOf(TStrRec))^ do
+      if (refCnt > 0) and
+         {$ifdef HASCODEPAGE}
+         (elemSize = 1) and
+         ((codepage = CP_UTF8) or
+          (codepage = CP_RAWBYTESTRING)) and
+         {$endif HASCODEPAGE}
+         (length = l) then
+      begin
+        // no memory allocation if comes from pascal code -> byref assignment
+        inc(refCnt);
+        pointer(s) := p;
+        exit;
+      end
+  except
+  end;
+  // standard allocation
+  FastSetString(s, p, l);
+end;
+
+function LibraryRequest(
+  Url, Method, SendData: PUTF8Char; UrlLen, MethodLen, SendDataLen: cardinal;
+  out HeadRespFree: TLibraryRequestFree; var Head: PUTF8Char; var HeadLen: cardinal;
+  out Resp: PUTF8Char; out RespLen, State: cardinal): cardinal; cdecl;
+var
+  call: TRestURIParams;
+  h: RawUTF8;
+begin
+  if GlobalLibraryRequestServer = nil then
+  begin
+    result := HTTP_NOTIMPLEMENTED; // 501
+    exit;
+  end;
+  HeadRespFree := @LibraryRequestFree;
+  call.Init;
+  LibraryRequestString(call.Url, Url, UrlLen);
+  LibraryRequestString(call.Method, Method, MethodLen);
+  call.LowLevelConnectionID := PtrInt(GlobalLibraryRequestServer);
+  call.LowLevelFlags := [llfSecured]; // in-process communication is safe
+  call.InHead := 'RemoteIP: 127.0.0.1';
+  if (Head <> nil) and
+     (HeadLen <> 0) then
+  begin
+    LibraryRequestString(h, Head, HeadLen);
+    call.InHead := h + call.InHead + #13#10;
+  end;
+  LibraryRequestString(call.InBody, SendData, SendDataLen);
+  call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
+  GlobalLibraryRequestServer.URI(call);
+  result := call.OutStatus;
+  State := call.OutInternalState;
+  Head := pointer(call.OutHead);
+  HeadLen := length(call.OutHead);
+  Resp := pointer(call.OutBody);
+  RespLen := length(call.OutBody);
+  pointer(call.OutHead) := nil; // will be released by HeadRespFree()
+  pointer(call.OutBody) := nil;
+end;
+
 
 
 initialization
