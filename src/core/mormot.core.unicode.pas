@@ -36,10 +36,14 @@ const
   UTF16_LOSURROGATE_MIN = $dc00;
   UTF16_LOSURROGATE_MAX = $dfff;
   UTF8_EXTRABYTES: array[$80..$ff] of byte = (
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,4,4,4,4,5,5,0,0);
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 0, 0);
   // see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
   UTF8_EXTRA: array[0..6] of record
     offset, minimum: cardinal;
@@ -352,7 +356,8 @@ type
       SourceChars: cardinal; NoTrailingZero: boolean = false): PUTF8Char; override;
     /// convert any Ansi buffer into an Unicode String
     // - returns a value using our RawUnicode kind of string
-    function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: cardinal): RawUnicode; override;
+    function AnsiToRawUnicode(Source: PAnsiChar;
+      SourceChars: cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this overridden version will use internal lookup tables for fast process
@@ -418,13 +423,15 @@ type
       SourceChars: cardinal; NoTrailingZero: boolean = false): PUTF8Char; override;
     /// convert any UTF-8 Ansi buffer into an Unicode String
     // - returns a value using our RawUnicode kind of string
-    function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: cardinal): RawUnicode; override;
+    function AnsiToRawUnicode(Source: PAnsiChar;
+      SourceChars: cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
       SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an Unicode buffer into an Ansi Text
-    function UnicodeBufferToAnsi(Source: PWideChar; SourceChars: cardinal): RawByteString; override;
+    function UnicodeBufferToAnsi(Source: PWideChar;
+      SourceChars: cardinal): RawByteString; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -440,7 +447,8 @@ type
     // - directly assign the input as result, since no conversion is needed
     function AnsiToUTF8(const AnsiText: RawByteString): RawUTF8; override;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
-    function AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: cardinal): RawUTF8; override;
+    function AnsiBufferToRawUTF8(Source: PAnsiChar;
+      SourceChars: cardinal): RawUTF8; override;
   end;
 
   /// a class to handle UTF-16 to/from Unicode translation
@@ -466,10 +474,12 @@ type
       SourceChars: cardinal; NoTrailingZero: boolean = false): PUTF8Char; override;
     /// convert any UTF-16 Ansi buffer into an Unicode String
     // - returns a value using our RawUnicode kind of string
-    function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: cardinal): RawUnicode; override;
+    function AnsiToRawUnicode(Source: PAnsiChar;
+      SourceChars: cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-16 buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar;
+      SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-16 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -567,7 +577,8 @@ function WinAnsiToUtf8(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): RawUTF8; overloa
 /// direct conversion of a WinAnsi PAnsiChar buffer into a UTF-8 encoded buffer
 // - Dest^ buffer must be reserved with at least SourceChars*3
 // - call internally WinAnsiConvert fast conversion class
-function WinAnsiBufferToUtf8(Dest: PUTF8Char; Source: PAnsiChar; SourceChars: cardinal): PUTF8Char;
+function WinAnsiBufferToUtf8(Dest: PUTF8Char;
+  Source: PAnsiChar; SourceChars: cardinal): PUTF8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of a WinAnsi shortstring into a UTF-8 text
@@ -582,7 +593,8 @@ function WinAnsiToRawUnicode(const S: WinAnsiString): RawUnicode;
 /// direct conversion of a WinAnsi (CodePage 1252) string into a Unicode buffer
 // - very fast, by using a fixed pre-calculated array for individual chars conversion
 // - text will be truncated if necessary to avoid buffer overflow in Dest[]
-procedure WinAnsiToUnicodeBuffer(const S: WinAnsiString; Dest: PWordArray; DestLen: PtrInt);
+procedure WinAnsiToUnicodeBuffer(const S: WinAnsiString;
+  Dest: PWordArray; DestLen: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of a UTF-8 encoded string into a WinAnsi String
@@ -615,11 +627,13 @@ function Utf8DecodeToRawUnicode(const S: RawUTF8): RawUnicode; overload;
 // - this version doesn't resize the length of the result RawUnicode
 // and is therefore useful before a Win32 Unicode API call (with nCount=-1)
 // - if DestLen is not nil, the resulting length (in bytes) will be stored within
-function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; DestLen: PInteger = nil): RawUnicode; overload;
+function Utf8DecodeToRawUnicodeUI(const S: RawUTF8;
+  DestLen: PInteger = nil): RawUnicode; overload;
 
 /// convert a UTF-8 string into a RawUnicode string
 // - returns the resulting length (in bytes) will be stored within Dest
-function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; var Dest: RawUnicode): integer; overload;
+function Utf8DecodeToRawUnicodeUI(const S: RawUTF8;
+  var Dest: RawUnicode): integer; overload;
 
 /// convert a RawUnicode string into a UTF-8 string
 function RawUnicodeToUtf8(const Unicode: RawUnicode): RawUTF8; overload;
@@ -632,11 +646,13 @@ function WideStringToUTF8(const aText: WideString): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of a Unicode encoded buffer into a WinAnsi PAnsiChar buffer
-procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: integer);
+procedure RawUnicodeToWinPChar(dest: PAnsiChar;
+  source: PWideChar; WideCharCount: integer);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a RawUnicode PWideChar into a WinAnsi (code page 1252) string
-function RawUnicodeToWinAnsi(WideChar: PWideChar; WideCharCount: integer): WinAnsiString; overload;
+function RawUnicodeToWinAnsi(
+  WideChar: PWideChar; WideCharCount: integer): WinAnsiString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a RawUnicode string into a WinAnsi (code page 1252) string
@@ -655,7 +671,8 @@ function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any Raw Unicode encoded String into a generic SynUnicode Text
-function RawUnicodeToSynUnicode(WideChar: PWideChar; WideCharCount: integer): SynUnicode; overload;
+function RawUnicodeToSynUnicode(
+  WideChar: PWideChar; WideCharCount: integer): SynUnicode; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an Unicode buffer into a WinAnsi (code page 1252) string
@@ -676,7 +693,8 @@ function UTF8DecodeToUnicodeString(const S: RawUTF8): UnicodeString; overload; i
 /// convert our UTF-8 encoded buffer into a Delphi 2009+ or FPC Unicode string
 // - this function is the same as direct assignment, since RawUTF8=AnsiString(CP_UTF8),
 // but is faster, since use no Win32 API call
-procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString); overload;
+procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer;
+  var result: UnicodeString); overload;
 
 /// convert a Delphi 2009+ or FPC Unicode string into a WinAnsi (code page 1252) string
 function UnicodeStringToWinAnsi(const S: UnicodeString): WinAnsiString; inline;
@@ -2372,6 +2390,7 @@ begin
 end;
 
 function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
+  {$ifdef HASINLINE} inline; {$endif}
 var
   n: integer;
   p: ^TSynAnsiConvert;
@@ -2391,16 +2410,8 @@ begin
   result := nil;
 end;
 
-class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
+function TSynAnsiConvertInitialize(aCodePage: cardinal): TSynAnsiConvert;
 begin
-  if aCodePage <= 0 then
-  begin
-    result := CurrentAnsiConvert;
-    exit;
-  end;
-  result := GetEngine(aCodePage);
-  if result <> nil then
-    exit;
   GlobalLock; // paranoid multi-threading
   try
     result := GetEngine(aCodePage);
@@ -2418,6 +2429,18 @@ begin
   finally
     GlobalUnLock;
   end;
+end;
+
+class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
+begin
+  if aCodePage > 0 then
+  begin
+    result := GetEngine(aCodePage);
+    if result = nil then
+      result := TSynAnsiConvertInitialize(aCodePage)
+  end
+  else
+    result := CurrentAnsiConvert;
 end;
 
 function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar;
@@ -2479,17 +2502,28 @@ end;
 procedure TSynAnsiConvert.UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: cardinal;
   var result: RawByteString);
 var
-  tmp: TSynTempBuffer;
+  tmp: array[word] of AnsiChar;
+  max: PtrInt;
+  buf: PAnsiChar;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
     result := ''
   else
   begin
-    tmp.Init((SourceChars + 1) shl fAnsiCharShift);
-    FastSetStringCP(result, tmp.buf, Utf8BufferToAnsi(
-      tmp.buf, Source, SourceChars) - PAnsiChar(tmp.buf), fCodePage);
-    tmp.Done;
+    max := (SourceChars + 1) shl fAnsiCharShift;
+    if max < SizeOf(tmp) then
+      // use a temporary stack buffer up to 64KB
+      FastSetStringCP(result, @tmp,
+        Utf8BufferToAnsi(@tmp, Source, SourceChars) - PAnsiChar(@tmp), fCodePage)
+    else
+    begin
+      // huge strings will be allocated once and truncated, not resized
+      FastSetStringCP(result, nil, max, fCodePage);
+      buf := Utf8BufferToAnsi(pointer(result), Source, SourceChars);
+      buf^ := #0; // mandatory to emulate a regular string
+      PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := buf - pointer(result);
+    end;
   end;
 end;
 
@@ -2723,7 +2757,7 @@ const
 
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var
-  i: PtrInt;
+  i, len: PtrInt;
   A256: array[0..255] of AnsiChar;
   U256: array[0..255] of WideChar;
 begin
@@ -2731,7 +2765,7 @@ begin
   if not IsFixedWidthCodePage(aCodePage) then
     // warning: CreateUTF8() uses UTF8ToString() -> call CreateFmt() now
     raise ESynUnicode.CreateFmt('%s.Create - Invalid code page %d',
-      [ClassName, fCodePage]);
+      [ClassNameShort(self)^, fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide, 256);
   if (aCodePage = CODEPAGE_US) or
@@ -2751,10 +2785,12 @@ begin
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
     FillcharFast(U256, SizeOf(U256), 0);
-    if PtrUInt(inherited AnsiBufferToUnicode(U256, A256, 256)) - PtrUInt(@U256) > 512 then
+    len := PtrUInt(inherited AnsiBufferToUnicode(U256, A256, 256)) - PtrUInt(@U256);
+    if (len < 500) or
+       (len > 512) then
       // warning: CreateUTF8() uses UTF8ToString() -> call CreateFmt() now
       raise ESynUnicode.CreateFmt('OS error for %s.Create(%d)',
-        [ClassName, aCodePage]);
+        [ClassNameShort(self)^, aCodePage]);
     MoveFast(U256[0], fAnsiToWide[0], 512);
   end;
   SetLength(fWideToAnsi, 65536);
