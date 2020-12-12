@@ -66,7 +66,7 @@ type
     /// add or replace mapping of OID into TSQLDBFieldType
     // - in case mapping for OID is not defined, returns ftUTF8
     function Oid2FieldType(cOID: cardinal): TSQLDBFieldType;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// add new (or override existed) OID to FieldType mapping
     procedure MapOid(cOid: cardinal; fieldType: TSQLDBFieldType);
   end;
@@ -114,9 +114,11 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// direct access to the associated PPGconn connection
-    property Direct: pointer read fPGConn;
+    property Direct: pointer
+      read fPGConn;
     /// how many prepared statements are currently cached for this connection
-    property PreparedCount: integer read fPreparedCount;
+    property PreparedCount: integer
+      read fPreparedCount;
   end;
 
 
@@ -188,7 +190,8 @@ type
     // - overriden method to avoid temporary memory allocation or conversion
     procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// how many parameters founded during prepare stage
-    property PreparedParamsCount: integer read fPreparedParamsCount;
+    property PreparedParamsCount: integer
+      read fPreparedParamsCount;
   end;
 
 
@@ -256,7 +259,8 @@ end;
 
 function BlobInPlaceDecode(P: PAnsiChar; PLen: integer): integer;
 begin
-  if (P = nil) or (PLen <= 0) then
+  if (P = nil) or
+     (PLen <= 0) then
     result := 0
   else
   if PWord(P)^ = ord('\') + ord('x') shl 8 then {ssByteAasHex in fServerSettings}
@@ -425,7 +429,7 @@ begin
   // DecodedFieldTypesToUnnest -> fast bulk insert/delete/update
   fBatchSendingAbilities := [cCreate, cDelete, cUpdate, cPostgreBulkArray];
   // disable MultiInsert SQL and rely on cPostgreBulkArray process for cCreate
-  fOnBatchInsert := nil; // see TSQLRestStorageExternal.InternalBatchStop
+  fOnBatchInsert := nil; // see TRestStorageExternal.InternalBatchStop
 end;
 
 function TSQLDBPostgresConnectionProperties.NewConnection: TSQLDBConnection;
@@ -495,7 +499,8 @@ end;
 procedure TSQLDBPostgresStatement.CheckColAndRowset(const Col: integer);
 begin
   CheckCol(Col);
-  if (fRes = nil) or (fResStatus <> PGRES_TUPLES_OK) then
+  if (fRes = nil) or
+     (fResStatus <> PGRES_TUPLES_OK) then
     raise ESQLDBPostgres.CreateUTF8('%.Execute not called before Column*', [self]);
 end;
 
@@ -632,7 +637,8 @@ end;
 
 function TSQLDBPostgresStatement.Step(SeekFirst: boolean): boolean;
 begin
-  if (fRes = nil) or (fResStatus <> PGRES_TUPLES_OK) then
+  if (fRes = nil) or
+     (fResStatus <> PGRES_TUPLES_OK) then
     raise ESQLDBPostgres.CreateUTF8('%.Execute should be called before Step', [self]);
   if SeekFirst then
     fCurrentRow := -1;
@@ -703,7 +709,9 @@ var
   col: integer;
   P: pointer;
 begin
-  if (fRes = nil) or (fResStatus <> PGRES_TUPLES_OK) or (fCurrentRow < 0) then
+  if (fRes = nil) or
+     (fResStatus <> PGRES_TUPLES_OK) or
+     (fCurrentRow < 0) then
     raise ESQLDBPostgres.CreateUTF8('%.ColumnToJSON unexpected', [self]);
   if WR.Expand then
     WR.Add('{');
@@ -713,17 +721,18 @@ begin
     if WR.Expand then
       WR.AddFieldName(ColumnName); // add '"ColumnName":'
     if PQ.GetIsNull(fRes, fCurrentRow, col) = 1 then
-      WR.AddShort('null')
+      WR.AddNull
     else
     begin
       P := PQ.GetValue(fRes, fCurrentRow, col);
       case ColumnType of
         ftNull:
-          WR.AddShort('null');
+          WR.AddNull;
         ftInt64, ftDouble, ftCurrency:
           WR.AddNoJSONEscape(P, PQ.GetLength(fRes, fCurrentRow, col));
         ftUTF8:
-          if (ColumnAttr = JSONOID) or (ColumnAttr = JSONBOID) then
+          if (ColumnAttr = JSONOID) or
+             (ColumnAttr = JSONBOID) then
             WR.AddNoJSONEscape(P, PQ.GetLength(fRes, fCurrentRow, col))
           else
           begin
@@ -734,14 +743,15 @@ begin
         ftDate:
           begin
             WR.Add('"');
-            if (PQ.GetLength(fRes, fCurrentRow, col) > 10) and (PAnsiChar(P)[10] = ' ') then
+            if (PQ.GetLength(fRes, fCurrentRow, col) > 10) and
+               (PAnsiChar(P)[10] = ' ') then
               PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
             WR.AddJSONEscape(P);
             WR.Add('"');
           end;
         ftBlob:
           if fForceBlobAsNull then
-            WR.AddShort('null')
+            WR.AddNull
           else
             WR.WrBase64(P, BlobInPlaceDecode(P,
               PQ.GetLength(fRes, fCurrentRow, col)), {withmagic=}true);

@@ -65,8 +65,13 @@ type
   // TJWTAbstract.Compute will set an obfuscated TSynUniqueIdentifierGenerator
   // hexadecimal value
   TJWTClaim = (
-    jrcIssuer, jrcSubject, jrcAudience, jrcExpirationTime,
-    jrcNotBefore, jrcIssuedAt, jrcJwtID);
+    jrcIssuer,
+    jrcSubject,
+    jrcAudience,
+    jrcExpirationTime,
+    jrcNotBefore,
+    jrcIssuedAt,
+    jrcJwtID);
 
   /// set of JWT Registered Claims, as in TJWTAbstract.Claims
   TJWTClaims = set of TJWTClaim;
@@ -76,10 +81,19 @@ type
 
   /// TJWTContent.result codes after TJWTAbstract.Verify method call
   TJWTResult = (
-    jwtValid, jwtNoToken, jwtWrongFormat, jwtInvalidAlgorithm,
-    jwtInvalidPayload, jwtUnexpectedClaim, jwtMissingClaim,
-    jwtUnknownAudience, jwtExpired, jwtNotBeforeFailed,
-    jwtInvalidIssuedAt, jwtInvalidID, jwtInvalidSignature);
+    jwtValid,
+    jwtNoToken,
+    jwtWrongFormat,
+    jwtInvalidAlgorithm,
+    jwtInvalidPayload,
+    jwtUnexpectedClaim,
+    jwtMissingClaim,
+    jwtUnknownAudience,
+    jwtExpired,
+    jwtNotBeforeFailed,
+    jwtInvalidIssuedAt,
+    jwtInvalidID,
+    jwtInvalidSignature);
 
   //// set of TJWTContent.result codes
   TJWTResults = set of TJWTResult;
@@ -114,8 +128,12 @@ type
 
   /// available options for TJWTAbstract process
   TJWTOption = (
-    joHeaderParse, joAllowUnexpectedClaims, joAllowUnexpectedAudience,
-    joNoJwtIDGenerate, joNoJwtIDCheck, joDoubleInData);
+    joHeaderParse,
+    joAllowUnexpectedClaims,
+    joAllowUnexpectedAudience,
+    joNoJwtIDGenerate,
+    joNoJwtIDCheck,
+    joDoubleInData);
 
   /// store options for TJWTAbstract process
   TJWTOptions = set of TJWTOption;
@@ -237,18 +255,23 @@ type
       IgnoreTime: boolean = false; NotBeforeDelta: TUnixTime = 15): TJWTResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
-    property Algorithm: RawUTF8 read fAlgorithm;
+    property Algorithm: RawUTF8
+      read fAlgorithm;
     /// allow to tune the Verify and Compute method process
-    property Options: TJWTOptions read fOptions write fOptions;
+    property Options: TJWTOptions
+      read fOptions write fOptions;
     /// the JWT Registered Claims, as implemented by this instance
     // - Verify() method will ensure all claims are defined in the payload,
     // then fill TJWTContent.reg[] with all corresponding values
-    property Claims: TJWTClaims read fClaims;
+    property Claims: TJWTClaims
+      read fClaims;
     /// the period, in seconds, for the "exp" claim
-    property ExpirationSeconds: integer read fExpirationSeconds;
+    property ExpirationSeconds: integer
+      read fExpirationSeconds;
     /// the audience string values associated with this instance
     // - will be checked by Verify() method, and set in TJWTContent.audience
-    property Audience: TRawUTF8DynArray read fAudience;
+    property Audience: TRawUTF8DynArray
+      read fAudience;
     /// delay of optional in-memory cache of Verify() TJWTContent
     // - equals 0 by default, i.e. cache is disabled
     // - may be useful if the signature process is very resource consumming
@@ -260,7 +283,8 @@ type
     // - default is [jwtValid] but you may also include jwtInvalidSignature
     // if signature checking uses a lot of resources
     // - only used if CacheTimeoutSeconds>0
-    property CacheResults: TJWTResults read fCacheResults write fCacheResults;
+    property CacheResults: TJWTResults
+      read fCacheResults write fCacheResults;
   end;
 
   /// class-reference type (metaclass) of a JWT algorithm process
@@ -335,11 +359,14 @@ type
     /// finalize the instance
     destructor Destroy; override;
     /// the digital signature size, in byte
-    property SignatureSize: integer read fSignPrepared.SignatureSize;
+    property SignatureSize: integer
+      read fSignPrepared.SignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
-    property SignatureAlgo: TSignAlgo read fSignPrepared.Algo;
+    property SignatureAlgo: TSignAlgo
+      read fSignPrepared.Algo;
     /// low-level read access to the internal signature structure
-    property SignPrepared: TSynSigner read fSignPrepared;
+    property SignPrepared: TSynSigner
+      read fSignPrepared;
   end;
 
   /// meta-class for TJWTSynSignerAbstract creations
@@ -484,9 +511,11 @@ type
     destructor Destroy; override;
     /// access to the associated TECCCertificate instance
     // - which may be a TECCCertificateSecret for Compute() private key
-    property Certificate: TECCCertificate read fCertificate;
+    property Certificate: TECCCertificate
+      read fCertificate;
     /// if the associated TECCCertificate is to be owned by this instance
-    property OwnCertificate: boolean read fOwnCertificate write fOwnCertificate;
+    property OwnCertificate: boolean
+      read fOwnCertificate write fOwnCertificate;
   end;
 
 
@@ -632,7 +661,8 @@ procedure TJWTAbstract.SetCacheTimeoutSeconds(value: integer);
 begin
   fCacheTimeoutSeconds := value;
   FreeAndNil(fCache);
-  if (value > 0) and (fCacheResults <> []) then
+  if (value > 0) and
+     (fCacheResults <> []) then
     fCache := TSynDictionary.Create(
       TypeInfo(TRawUTF8DynArray), TypeInfo(TJWTContentDynArray), false, value);
 end;
@@ -645,7 +675,8 @@ var
   fromcache: boolean;
 begin
   JWT.result := jwtNoToken;
-  if (self = nil) or (fCache = nil) then
+  if (self = nil) or
+     (fCache = nil) then
     fromcache := false
   else
   begin
@@ -655,10 +686,13 @@ begin
   if not fromcache then
     Parse(Token, JWT, headpayload, signature, ExcludedClaims);
   if JWT.result in [jwtValid, jwtNotBeforeFailed] then
-    if CheckAgainstActualTimestamp(JWT) and not fromcache then
+    if CheckAgainstActualTimestamp(JWT) and
+       not fromcache then
       // depending on the algorithm used
       CheckSignature(headpayload{%H-}, signature{%H-}, JWT);
-  if not fromcache and (self <> nil) and (fCache <> nil) and
+  if not fromcache and
+     (self <> nil) and
+     (fCache <> nil) and
      (JWT.result in fCacheResults) then
     fCache.Add(Token, JWT);
 end;
@@ -729,7 +763,8 @@ begin
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
   toklen := length(Token);
-  if (toklen = 0) or (self = nil) then
+  if (toklen = 0) or
+     (self = nil) then
   begin
     JWT.result := jwtNoToken;
     exit;
@@ -739,12 +774,14 @@ begin
   if joHeaderParse in fOptions then
   begin // slower parsing
     headerlen := PosExChar('.', Token);
-    if (headerlen = 0) or (headerlen > 512) then
+    if (headerlen = 0) or
+       (headerlen > 512) then
       exit;
     Base64URIToBin(tok, headerlen - 1, signature);
     JSONDecode(pointer(signature), ['alg', 'typ'], @head);
-    if not head[0].Idem(fAlgorithm) or ((head[1].value <> nil) and
-       not head[1].Idem('JWT')) then
+    if not head[0].Idem(fAlgorithm) or
+       ((head[1].value <> nil) and
+        not head[1].Idem('JWT')) then
       exit;
   end
   else
@@ -759,10 +796,12 @@ begin
   if toklen > JWT_MAXSIZE then
     exit;
   payloadend := PosEx('.', Token, headerlen + 1);
-  if (payloadend = 0) or (payloadend - headerlen > 2700) then
+  if (payloadend = 0) or
+     (payloadend - headerlen > 2700) then
     exit;
   Base64URIToBin(tok + payloadend, toklen - payloadend, signature);
-  if (signature = '') and (payloadend <> toklen) then
+  if (signature = '') and
+     (payloadend <> toklen) then
     exit;
   JWT.result := jwtInvalidPayload;
   Base64URIToBin(tok + headerlen, payloadend - headerlen - 1, RawByteString(payload));
@@ -914,31 +953,38 @@ begin
     _Json(text, Payload^, JSON_OPTIONS_FAST);
   JSONDecode(pointer(text), ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true);
   result := jwtUnexpectedClaim;
-  if ((ExpectedSubject <> '') and not V[4].Idem(ExpectedSubject)) or
-     ((ExpectedIssuer <> '') and not V[0].Idem(ExpectedIssuer)) then
+  if ((ExpectedSubject <> '') and
+      not V[4].Idem(ExpectedSubject)) or
+     ((ExpectedIssuer <> '') and
+      not V[0].Idem(ExpectedIssuer)) then
     exit;
   result := jwtUnknownAudience;
-  if (ExpectedAudience <> '') and not V[1].Idem(ExpectedAudience) then
+  if (ExpectedAudience <> '') and
+     not V[1].Idem(ExpectedAudience) then
     exit;
   if Expiration <> nil then
     Expiration^ := 0;
-  if (V[2].value <> nil) or (V[3].value <> nil) then
+  if (V[2].value <> nil) or
+     (V[3].value <> nil) then
   begin
     now := UnixTimeUTC;
     if V[2].value <> nil then
     begin
       time := V[2].ToCardinal;
       result := jwtExpired;
-      if not IgnoreTime and (now > time) then
+      if not IgnoreTime and
+         (now > time) then
         exit;
       if Expiration <> nil then
         Expiration^ := time;
     end;
-    if not IgnoreTime and (V[3].value <> nil) then
+    if not IgnoreTime and
+       (V[3].value <> nil) then
     begin
       time := V[3].ToCardinal;
       result := jwtNotBeforeFailed;
-      if (time = 0) or (now + PtrUInt(NotBeforeDelta) < time) then
+      if (time = 0) or
+         (now + PtrUInt(NotBeforeDelta) < time) then
         exit;
     end;
   end;
@@ -1016,7 +1062,8 @@ begin
   algo := GetAlgo;
   inherited Create(JWT_TEXT[algo], aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey);
-  if (aSecret <> '') and (aSecretPBKDF2Rounds > 0) then
+  if (aSecret <> '') and
+     (aSecretPBKDF2Rounds > 0) then
     fSignPrepared.Init(algo, aSecret, fHeaderB64, aSecretPBKDF2Rounds, aPBKDF2Secret)
   else
     fSignPrepared.Init(algo, aSecret);
@@ -1184,14 +1231,8 @@ begin
   GetEnumNames(TypeInfo(TJWTClaim), @_TJWTClaim);
 end;
 
-procedure FinalizeUnit;
-begin
-end;
-
 
 initialization
   InitializeUnit;
-
-finalization
-  FinalizeUnit;
+  
 end.

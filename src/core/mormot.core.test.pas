@@ -34,11 +34,12 @@ uses
 type
   /// the prototype of an individual test
   // - to be used with TSynTest descendants
-  TSynTestEvent = procedure of object;
+  TOnSynTest = procedure of object;
 
   /// allows to tune TSynTest process
   // - tcoLogEachCheck will log as sllCustom4 each non void Check() message
-  TSynTestOption = (tcoLogEachCheck);
+  TSynTestOption = (
+    tcoLogEachCheck);
 
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
@@ -54,7 +55,7 @@ type
     /// raw method name, as defined in pascal code (not uncamelcased)
     MethodName: RawUTF8;
     /// direct access to the method execution
-    Method: TSynTestEvent;
+    Method: TOnSynTest;
     /// the test case holding this method
     Test: TSynTest;
     /// the index of this method in the TSynTestCase
@@ -76,7 +77,7 @@ type
     fIdent: string;
     fInternalTestsCount: integer;
     fOptions: TSynTestOptions;
-    function GetCount: Integer;
+    function GetCount: integer;
     function GetIdent: string;
   public
     /// create the test instance
@@ -88,22 +89,26 @@ type
     /// register a specified test to this class instance
     // - Create will register all published methods of this class, but
     // your code may initialize its own set of methods on need
-    procedure Add(const aMethod: TSynTestEvent; const aMethodName: RawUTF8; const aIdent: string);
+    procedure Add(const aMethod: TOnSynTest; const aMethodName: RawUTF8; const aIdent: string);
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
-    property Ident: string read GetIdent;
+    property Ident: string
+      read GetIdent;
     /// return the number of tests associated with this class
     // - i.e. the number of registered tests by the Register() method PLUS
     // the number of published methods defined within this class
-    property Count: Integer read GetCount;
+    property Count: integer
+      read GetCount;
     /// return the number of published methods defined within this class as tests
     // - i.e. the number of tests added by the Create() constructor from RTTI
     // - any TestName/TestMethod[] index higher or equal to this value has been
     // added by a specific call to the Add() method
-    property InternalTestsCount: integer read fInternalTestsCount;
+    property InternalTestsCount: integer
+      read fInternalTestsCount;
     /// allows to tune the test case process
-    property Options: TSynTestOptions read fOptions write fOptions;
+    property Options: TSynTestOptions
+      read fOptions write fOptions;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter }
@@ -140,7 +145,7 @@ type
     procedure MethodSetup; virtual;
     /// called after each published properties execution
     procedure MethodCleanUp; virtual;
-    procedure AddLog(condition: Boolean; const msg: string);
+    procedure AddLog(condition: boolean; const msg: string);
   public
     /// create the test case instance
     // - must supply a test suit owner
@@ -152,62 +157,62 @@ type
     destructor Destroy; override;
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
-    procedure Check(condition: Boolean; const msg: string = '');
+    procedure Check(condition: boolean; const msg: string = '');
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
     // - function return TRUE if the condition failed, in order to allow the
     // caller to stop testing with such code:
     // ! if CheckFailed(A=10) then exit;
-    function CheckFailed(condition: Boolean; const msg: string = ''): Boolean;
+    function CheckFailed(condition: boolean; const msg: string = ''): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion
     // - condition must equals FALSE to pass the test
     // - function return TRUE if the condition failed, in order to allow the
     // caller to stop testing with such code:
     // ! if CheckNot(A<>10) then exit;
-    function CheckNot(condition: Boolean; const msg: string = ''): Boolean;
+    function CheckNot(condition: boolean; const msg: string = ''): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(a, b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+    function CheckEqual(a, b: Int64; const msg: RawUTF8 = ''): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+    function CheckEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(a, b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+    function CheckEqual(a, b: pointer; const msg: RawUTF8 = ''): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(a, b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+    function CheckNotEqual(a, b: Int64; const msg: RawUTF8 = ''): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+    function CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(a, b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
-      {$ifdef HASINLINE} inline;{$endif}
+    function CheckNotEqual(a, b: pointer; const msg: RawUTF8 = ''): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
     // - includes some optional precision argument
     function CheckSame(const Value1, Value2: double;
-      const Precision: double = DOUBLE_SAME; const msg: string = ''): Boolean;
+      const Precision: double = DOUBLE_SAME; const msg: string = ''): boolean;
     /// perform a string comparison with several value
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
     function CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
-      CaseSentitive: Boolean = true; ExpectedResult: Boolean = true; const msg: string = ''): Boolean;
+      CaseSentitive: boolean = true; ExpectedResult: boolean = true; const msg: string = ''): boolean;
     /// used by the published methods to run a test assertion, with an UTF-8 error message
     // - condition must equals TRUE to pass the test
-    procedure CheckUTF8(condition: Boolean; const msg: RawUTF8); overload;
+    procedure CheckUTF8(condition: boolean; const msg: RawUTF8); overload;
     /// used by the published methods to run a test assertion, with a error
     // message computed via FormatUTF8()
     // - condition must equals TRUE to pass the test
-    procedure CheckUTF8(condition: Boolean; const msg: RawUTF8; const args: array of const); overload;
+    procedure CheckUTF8(condition: boolean; const msg: RawUTF8; const args: array of const); overload;
     /// used by published methods to start some timing on associated log
     // - call this once, before one or several consecutive CheckLogTime()
     // - warning: this method is not thread-safe
@@ -222,24 +227,24 @@ type
     procedure CheckLogTime(condition: boolean; const msg: RawUTF8; const args: array of const;
       level: TSynLogInfo = sllTrace);
     /// create a temporary string random content, WinAnsi (code page 1252) content
-    class function RandomString(CharCount: Integer): RawByteString;
+    class function RandomString(CharCount: integer): RawByteString;
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
-    class function RandomUTF8(CharCount: Integer): RawUTF8;
+    class function RandomUTF8(CharCount: integer): RawUTF8;
     /// create a temporary UTF-16 string random content, using WinAnsi
     // (code page 1252) content
-    class function RandomUnicode(CharCount: Integer): SynUnicode;
+    class function RandomUnicode(CharCount: integer): SynUnicode;
     /// create a temporary string random content, using ASCII 7 bit content
-    class function RandomAnsi7(CharCount: Integer): RawByteString;
+    class function RandomAnsi7(CharCount: integer): RawByteString;
     /// create a temporary string random content, using A..Z,_,0..9 chars only
-    class function RandomIdentifier(CharCount: Integer): RawByteString;
+    class function RandomIdentifier(CharCount: integer): RawByteString;
     /// create a temporary string random content, using uri-compatible chars only
-    class function RandomURI(CharCount: Integer): RawByteString;
+    class function RandomURI(CharCount: integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
-    class function RandomTextParagraph(WordCount: Integer; LastPunctuation: AnsiChar = '.';
+    class function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
       const RandomInclude: RawUTF8 = ''): RawUTF8;
     /// add containing some "bla bli blo blu" fake text, with paragraphs
-    class procedure AddRandomTextParagraph(WR: TBaseWriter; WordCount: Integer;
+    class procedure AddRandomTextParagraph(WR: TBaseWriter; WordCount: integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUTF8 = '';
       NoLineFeed: boolean = false);
     /// this method is triggered internaly - e.g. by Check() - when a test failed
@@ -260,15 +265,19 @@ type
     // - OnlyLog will compute and append the info to the log, but not on the console
     procedure AddConsole(const msg: string; OnlyLog: boolean = false);
     /// the test suit which owns this test case
-    property Owner: TSynTests read fOwner;
+    property Owner: TSynTests
+      read fOwner;
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // an uncameled text from the class name
-    property Ident: string read GetIdent;
+    property Ident: string
+      read GetIdent;
     /// the number of assertions (i.e. Check() method call) for this test case
-    property Assertions: integer read fAssertions;
+    property Assertions: integer
+      read fAssertions;
     /// the number of assertions (i.e. Check() method call) for this test case
-    property AssertionsFailed: integer read fAssertionsFailed;
+    property AssertionsFailed: integer
+      read fAssertionsFailed;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter
@@ -291,7 +300,7 @@ type
   TSynTestFaileds = array of TSynTestFailed;
 
   /// event signature for TSynTests.CustomOutput callback
-  TSynTestOutput = procedure(const value: RawUTF8) of object;
+  TOnSynTestOutput = procedure(const value: RawUTF8) of object;
 
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
@@ -334,7 +343,7 @@ type
     CustomVersions: string;
     /// allow redirection to any kind of output
     // - will be called in addition to default console write()
-    CustomOutput: TSynTestOutput;
+    CustomOutput: TOnSynTestOutput;
     /// contains the run elapsed time
     RunTimer, TestTimer, TotalTimer: TPrecisionTimer;
     /// create the test suit
@@ -385,28 +394,33 @@ type
     // - Assertions and AssertionsFailed counter properties are reset and
     // computed during the run
     // - you may override this method to provide additional information, e.g.
-    // ! function TMySynTests.Run: Boolean;
+    // ! function TMySynTests.Run: boolean;
     // ! begin // need mormot.db.raw.sqlite3 unit in the uses clause
     // !   CustomVersions := format(#13#10#13#10'%s'#13#10'    %s'#13#10 +
     // !     'Using mORMot %s'#13#10'    %s %s', [OSVersionText, CpuInfoText,
     // !      SYNOPSE_FRAMEWORK_FULLVERSION, sqlite3.ClassName, sqlite3.Version]);
     // !   result := inherited Run;
     // ! end;
-    function Run: Boolean; virtual;
+    function Run: boolean; virtual;
     /// number of failed tests after the last call to the Run method
-    property FailedCount: integer read GetFailedCount;
+    property FailedCount: integer
+      read GetFailedCount;
     /// method information currently running
     // - is set by Run and available within TTestCase methods
-    property CurrentMethodInfo: PSynTestMethodInfo read fCurrentMethodInfo;
+    property CurrentMethodInfo: PSynTestMethodInfo
+      read fCurrentMethodInfo;
     /// retrieve the information associated with a failure
-    property Failed[Index: integer]: TSynTestFailed read GetFailed;
+    property Failed[Index: integer]: TSynTestFailed
+      read GetFailed;
   published
     /// the number of assertions (i.e. Check() method call) in all tests
     // - this property is set by the Run method above
-    property Assertions: integer read fAssertions;
+    property Assertions: integer
+      read fAssertions;
     /// the number of assertions (i.e. Check() method call) which failed in all tests
     // - this property is set by the Run method above
-    property AssertionsFailed: integer read fAssertionsFailed;
+    property AssertionsFailed: integer
+      read fAssertionsFailed;
   published
     { all published methods of the children will be run as test cases registering
       - these methods must be declared as procedure with no parameter
@@ -435,9 +449,11 @@ type
     /// release associated memory
     destructor Destroy; override;
     /// the .log file generator created if any test case failed
-    property LogFile: TSynLog read fLogFile;
+    property LogFile: TSynLog
+      read fLogFile;
     /// a replicate of the text written to the console
-    property ConsoleDup: RawUTF8 read fConsoleDup;
+    property ConsoleDup: RawUTF8
+      read fConsoleDup;
   end;
 
 
@@ -461,7 +477,7 @@ uses
 
 { TSynTest }
 
-procedure TSynTest.Add(const aMethod: TSynTestEvent; const aMethodName: RawUTF8;
+procedure TSynTest.Add(const aMethod: TOnSynTest; const aMethodName: RawUTF8;
   const aIdent: string);
 var
   n: integer;
@@ -513,11 +529,11 @@ begin
         s := Ansi7ToString(copy(Name, 2, 100))
       else
         s := Ansi7ToString(UnCamelCase(Name));
-      Add(TSynTestEvent(Method), Name, s);
+      Add(TOnSynTest(Method), Name, s);
     end;
 end;
 
-function TSynTest.GetCount: Integer;
+function TSynTest.GetCount: integer;
 begin
   if self = nil then
     result := 0
@@ -569,9 +585,10 @@ begin
   inherited;
 end;
 
-procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
+procedure TSynTestCase.AddLog(condition: boolean; const msg: string);
 const
-  LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
+  LEV: array[boolean] of TSynLogInfo = (
+    sllFail, sllCustom4);
 var
   tix, crc: cardinal; // use a crc since strings are not thread-safe
 begin
@@ -594,27 +611,29 @@ begin
       fOwner.fCurrentMethodInfo^.TestName, msg]);
 end;
 
-procedure TSynTestCase.Check(condition: Boolean; const msg: string);
+procedure TSynTestCase.Check(condition: boolean; const msg: string);
 begin
   if self = nil then
     exit;
-  if (msg <> '') and (tcoLogEachCheck in fOptions) then
+  if (msg <> '') and
+     (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
-  InterlockedIncrement(fAssertions);
+  inc(fAssertions);
   if not condition then
     TestFailed(msg);
 end;
 
-function TSynTestCase.CheckFailed(condition: Boolean; const msg: string): Boolean;
+function TSynTestCase.CheckFailed(condition: boolean; const msg: string): boolean;
 begin
   if self = nil then
   begin
     result := false;
     exit;
   end;
-  if (msg <> '') and (tcoLogEachCheck in fOptions) then
+  if (msg <> '') and
+     (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
-  InterlockedIncrement(fAssertions);
+  inc(fAssertions);
   if condition then
     result := false
   else
@@ -624,75 +643,77 @@ begin
   end;
 end;
 
-function TSynTestCase.CheckNot(condition: Boolean; const msg: string): Boolean;
+function TSynTestCase.CheckNot(condition: boolean; const msg: string): boolean;
 begin
   result := CheckFailed(not condition, msg);
 end;
 
-function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUTF8): Boolean;
+function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUTF8): boolean;
 begin
   result := a = b;
   CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqual(const a, b: RawUTF8; const msg: RawUTF8): Boolean;
+function TSynTestCase.CheckEqual(const a, b: RawUTF8; const msg: RawUTF8): boolean;
 begin
   result := a = b;
   CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUTF8): Boolean;
+function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUTF8): boolean;
 begin
   result := a = b;
   CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckNotEqual(a, b: Int64; const msg: RawUTF8): Boolean;
+function TSynTestCase.CheckNotEqual(a, b: Int64; const msg: RawUTF8): boolean;
 begin
   result := a <> b;
   CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8): Boolean;
+function TSynTestCase.CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8): boolean;
 begin
   result := a <> b;
   CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckNotEqual(a, b: pointer; const msg: RawUTF8): Boolean;
+function TSynTestCase.CheckNotEqual(a, b: pointer; const msg: RawUTF8): boolean;
 begin
   result := a <> b;
   CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
 function TSynTestCase.CheckSame(const Value1, Value2: double; const Precision: double;
-  const msg: string): Boolean;
+  const msg: string): boolean;
 begin
   result := SameValue(Value1, Value2, Precision);
   CheckUTF8(result, EQUAL_MSG, [Value1, Value2, msg]);
 end;
 
 function TSynTestCase.CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
-  CaseSentitive: Boolean; ExpectedResult: Boolean; const msg: string): Boolean;
+  CaseSentitive: boolean; ExpectedResult: boolean; const msg: string): boolean;
 begin
   result := (FindRawUTF8(Values, Value, CaseSentitive) >= 0) = ExpectedResult;
   Check(result);
 end;
 
-procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8);
+procedure TSynTestCase.CheckUTF8(condition: boolean; const msg: RawUTF8);
 begin
-  InterlockedIncrement(fAssertions);
-  if not condition or (tcoLogEachCheck in fOptions) then
+  inc(fAssertions);
+  if not condition or
+     (tcoLogEachCheck in fOptions) then
     CheckUTF8(condition, '%', [msg]);
 end;
 
-procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
+procedure TSynTestCase.CheckUTF8(condition: boolean; const msg: RawUTF8;
   const args: array of const);
 var
   str: string; // using a sub-proc may be faster, but unstable on Android
 begin
-  InterlockedIncrement(fAssertions);
-  if not condition or (tcoLogEachCheck in fOptions) then
+  inc(fAssertions);
+  if not condition or
+     (tcoLogEachCheck in fOptions) then
   begin
     if msg <> '' then
     begin
@@ -721,7 +742,7 @@ begin
   fCheckLogTime.Start;
 end;
 
-class function TSynTestCase.RandomString(CharCount: Integer): RawByteString;
+class function TSynTestCase.RandomString(CharCount: integer): RawByteString;
 var
   i: PtrInt;
   R: PByteArray;
@@ -734,7 +755,7 @@ begin
   tmp.Done;
 end;
 
-class function TSynTestCase.RandomAnsi7(CharCount: Integer): RawByteString;
+class function TSynTestCase.RandomAnsi7(CharCount: integer): RawByteString;
 var
   i: PtrInt;
   R: PByteArray;
@@ -760,7 +781,7 @@ begin
   tmp.Done;
 end;
 
-class function TSynTestCase.RandomIdentifier(CharCount: Integer): RawByteString;
+class function TSynTestCase.RandomIdentifier(CharCount: integer): RawByteString;
 const
   IDENT_CHARS: array[0..63] of AnsiChar =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
@@ -768,7 +789,7 @@ begin
   InitRandom64(@IDENT_CHARS, CharCount, result);
 end;
 
-class function TSynTestCase.RandomURI(CharCount: Integer): RawByteString;
+class function TSynTestCase.RandomURI(CharCount: integer): RawByteString;
 const
   URL_CHARS: array[0..63] of AnsiChar =
     'abcdefghijklmnopqrstuvwxyz0123456789-abCdEfGH.JKlmnOP.RsTuVWxyz.';
@@ -776,17 +797,17 @@ begin
   InitRandom64(@URL_CHARS, CharCount, result);
 end;
 
-class function TSynTestCase.RandomUTF8(CharCount: Integer): RawUTF8;
+class function TSynTestCase.RandomUTF8(CharCount: integer): RawUTF8;
 begin
   result := WinAnsiToUtf8(WinAnsiString(RandomString(CharCount)));
 end;
 
-class function TSynTestCase.RandomUnicode(CharCount: Integer): SynUnicode;
+class function TSynTestCase.RandomUnicode(CharCount: integer): SynUnicode;
 begin
   result := WinAnsiConvert.AnsiToUnicodeString(RandomString(CharCount));
 end;
 
-class function TSynTestCase.RandomTextParagraph(WordCount: Integer;
+class function TSynTestCase.RandomTextParagraph(WordCount: integer;
   LastPunctuation: AnsiChar; const RandomInclude: RawUTF8): RawUTF8;
 var
   tmp: TTextWriterStackBuffer;
@@ -802,10 +823,11 @@ begin
 end;
 
 class procedure TSynTestCase.AddRandomTextParagraph(WR: TBaseWriter;
-  WordCount: Integer; LastPunctuation: AnsiChar; const RandomInclude: RawUTF8;
+  WordCount: integer; LastPunctuation: AnsiChar; const RandomInclude: RawUTF8;
   NoLineFeed: boolean);
 type
-  TKind = (space, comma, dot, question, paragraph);
+  TKind = (
+    space, comma, dot, question, paragraph);
 const
   bla: array[0..7] of string[3] = (
     'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo');
@@ -872,7 +894,8 @@ begin
         WR.AddShorter('.'#13#10);
     end;
   end;
-  if not (last in endKind) and (LastPunctuation <> ' ') then
+  if not (last in endKind) and
+     (LastPunctuation <> ' ') then
   begin
     WR.AddShorter('bla');
     WR.Add(LastPunctuation);
@@ -978,7 +1001,8 @@ end;
 
 procedure TSynTests.Color(aColor: TConsoleColor);
 begin
-  if (StdOut <> 0) and (THandle(TTextRec(fSaveToFile).Handle) = StdOut) then
+  if (StdOut <> 0) and
+     (THandle(TTextRec(fSaveToFile).Handle) = StdOut) then
     TextColor(aColor);
 end;
 
@@ -1044,7 +1068,8 @@ end;
 
 function TSynTests.GetFailed(Index: integer): TSynTestFailed;
 begin
-  if (self = nil) or (cardinal(Index) >= cardinal(fFailedCount)) then
+  if (self = nil) or
+     (cardinal(Index) >= cardinal(fFailedCount)) then
     Finalize(result)
   else
     result := fFailed[Index];
@@ -1058,7 +1083,7 @@ begin
     result := fFailedCount;
 end;
 
-function TSynTests.Run: Boolean;
+function TSynTests.Run: boolean;
 var
   i, t, m: integer;
   Elapsed, Version: RawUTF8;
@@ -1310,7 +1335,7 @@ begin
   end;
 end;
 
-function SynTestsTextOut(var t: TTextRec): Integer;
+function SynTestsTextOut(var t: TTextRec): integer;
 begin
   if t.BufPos = 0 then
     result := 0
@@ -1338,7 +1363,8 @@ end;
 
 destructor TSynTestsLogged.Destroy;
 begin
-  if (fLogFile <> nil) and (fConsoleDup <> '') then
+  if (fLogFile <> nil) and
+     (fConsoleDup <> '') then
     fLogFile.LogLines(sllCustom1, pointer(fConsoleDup), nil, '  ----');
   fLogFile.Log(sllMemory, '', self);
   inherited Destroy;

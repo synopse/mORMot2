@@ -9,6 +9,7 @@ unit mormot.net.http;
    HTTP/HTTPS Abstract Process Classes and Definitions
    - Shared HTTP Constants and Functions
    - THttpSocket Implementing HTTP over plain sockets
+   - Abstract Server-Side Types used e.g. for Client-Server Protocol
 
   *****************************************************************************
 
@@ -36,17 +37,17 @@ var
   HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
   /// THttpRequest timeout default value for remote connection
   // - default is 60 seconds
-  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
   HTTP_DEFAULT_CONNECTTIMEOUT: integer = 60000;
   /// THttpRequest timeout default value for data sending
   // - default is 30 seconds
-  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
   // THttpRequest.Create() constructor
   HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
   /// THttpRequest timeout default value for data receiving
   // - default is 30 seconds
-  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
   // THttpRequest.Create() constructor
   HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
@@ -108,6 +109,14 @@ type
   // - filled from ACCEPT-ENCODING: header value
   THttpSocketCompressSet = set of 0..31;
 
+  /// map the presence of some HTTP headers for THttpSocket.HeaderFlags
+  THttpSocketHeaderFlags = set of (
+    hfTransferChuked,
+    hfConnectionClose,
+    hfConnectionUpgrade,
+    hfConnectionKeepAlive,
+    hfHasRemoteIP);
+
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
@@ -163,8 +172,7 @@ type
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: RawUTF8;
     /// map the presence of some HTTP headers, but retrieved during Request
-    HeaderFlags: set of (transferChuked, connectionClose, connectionUpgrade,
-      connectionKeepAlive, hasRemoteIP);
+    HeaderFlags: THttpSocketHeaderFlags;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     // - only relevant headers are retrieved, unless HeadersUnFiltered is set
     procedure GetHeader(HeadersUnFiltered: boolean = false);
@@ -208,7 +216,157 @@ function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
   P: PUTF8Char): THttpSocketCompressSet;
 
 
+{ ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
+
+type
+  {$M+} // to have existing RTTI for published properties
+  THttpServerRequestAbstract = class;
+  {$M-}
+
+  /// a genuine identifier for a given client connection on server side
+  // - maps http.sys ID, or is a genuine 31-bit value from increasing sequence
+  THttpServerConnectionID = Int64;
+
+  /// a dynamic array of client connection identifiers, e.g. for broadcasting
+  THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
+
+  /// event handler used by THttpServerGeneric.OnRequest property
+  // - Ctxt defines both input and output parameters
+  // - result of the function is the HTTP error code (200 if OK, e.g.)
+  // - OutCustomHeader will handle Content-Type/Location
+  // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
+  // then OutContent is the UTF-8 filename of a file to be sent directly
+  // to the client via http.sys or NGINX's X-Accel-Redirect; the
+  // OutCustomHeader should contain the eventual 'Content-type: ....' value
+  TOnHttpServerRequest = function(Ctxt: THttpServerRequestAbstract): cardinal of object;
+
+  /// event handler used by THttpServerGeneric.OnAfterResponse property
+  // - Ctxt defines both input and output parameters
+  // - Code defines the HTTP response code the (200 if OK, e.g.)
+  TOnHttpServerAfterResponse = procedure(Ctxt: THttpServerRequestAbstract;
+    const Code: cardinal) of object;
+
+  /// event handler used by THttpServerGeneric.OnBeforeBody property
+  // - if defined, is called just before the body is retrieved from the client
+  // - supplied parameters reflect the current input state
+  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
+  // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
+  // the request
+  TOnHttpServerBeforeBody = function(const aURL, aMethod, aInHeaders,
+    aInContentType, aRemoteIP: RawUTF8; aContentLength: integer;
+    aUseSSL: boolean): cardinal of object;
+
+  /// the server-side available authentication schemes
+  // - as used by THttpServerRequest.AuthenticationStatus
+  // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
+  // defined in HTTP 2.0 API and
+  THttpServerRequestAuthentication = (
+    hraNone,
+    hraFailed,
+    hraBasic,
+    hraDigest,
+    hraNtlm,
+    hraNegotiate,
+    hraKerberos);
+
+  /// abstract generic input/output structure used for HTTP server requests
+  // - URL/Method/InHeaders/InContent properties are input parameters
+  // - OutContent/OutContentType/OutCustomHeader are output parameters
+  // - this abstract class may be used in communication protocols, without
+  // the need to add mormot.net.server.pas dependency
+  THttpServerRequestAbstract = class
+  protected
+    fRemoteIP,
+    fURL,
+    fMethod,
+    fInHeaders,
+    fInContentType,
+    fAuthenticatedUser,
+    fOutContentType,
+    fOutCustomHeaders: RawUTF8;
+    fInContent, fOutContent: RawByteString;
+    fRequestID: integer;
+    fConnectionID: THttpServerConnectionID;
+    fUseSSL: boolean;
+    fAuthenticationStatus: THttpServerRequestAuthentication;
+  public
+    /// low-level property which may be used during requests processing
+    Status: integer;
+    /// prepare an incoming request
+    // - will set input parameters URL/Method/InHeaders/InContent/InContentType
+    // - will reset output parameters
+    procedure Prepare(const aURL, aMethod, aInHeaders: RawUTF8;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUTF8;
+      aUseSSL: boolean = false); virtual; abstract;
+    /// append some lines to the InHeaders input parameter
+    procedure AddInHeader(additionalHeader: RawUTF8);
+    /// input parameter containing the caller URI
+    property URL: RawUTF8
+      read fURL;
+    /// input parameter containing the caller method (GET/POST...)
+    property Method: RawUTF8
+      read fMethod;
+    /// input parameter containing the caller message headers
+    property InHeaders: RawUTF8
+      read fInHeaders;
+    /// input parameter containing the caller message body
+    // - e.g. some GET/POST/PUT JSON data can be specified here
+    property InContent: RawByteString
+      read fInContent;
+    // input parameter defining the caller message body content type
+    property InContentType: RawUTF8
+      read fInContentType;
+    /// output parameter to be set to the response message body
+    property OutContent: RawByteString
+      read fOutContent write fOutContent;
+    /// output parameter to define the reponse message body content type
+    // - if OutContentType is STATICFILE_CONTENT_TYPE (i.e. '!STATICFILE'),
+    // then OutContent is the UTF-8 file name of a file to be sent to the
+    // client via http.sys or NGINX's X-Accel-Redirect header (faster than
+    // local buffering/sending)
+    // - if OutContentType is NORESPONSE_CONTENT_TYPE (i.e. '!NORESPONSE'), then
+    // the actual transmission protocol may not wait for any answer - used
+    // e.g. for WebSockets
+    property OutContentType: RawUTF8
+      read fOutContentType write fOutContentType;
+    /// output parameter to be sent back as the response message header
+    // - e.g. to set Content-Type/Location
+    property OutCustomHeaders: RawUTF8
+      read fOutCustomHeaders write fOutCustomHeaders;
+    /// the client remote IP, as specified to Prepare()
+    property RemoteIP: RawUTF8
+      read fRemoteIP write fRemoteIP;
+    /// a 31-bit sequential number identifying this instance on the server
+    property RequestID: integer
+      read fRequestID;
+    /// the ID of the connection which called this execution context
+    // - e.g. mormot.net.websocket's TWebSocketProcess.NotifyCallback method
+    // would use this property to specify the client connection to be notified
+    // - is set as an Int64 to match http.sys ID type, but will be an
+    // increasing 31-bit integer sequence for (web)socket-based servers
+    property ConnectionID: THttpServerConnectionID
+      read fConnectionID;
+    /// is TRUE if the caller is connected via HTTPS
+    // - only set for THttpApiServer class yet
+    property UseSSL: boolean
+      read fUseSSL;
+    /// contains the THttpServer-side authentication status
+    // - e.g. when using http.sys authentication with HTTP API 2.0
+    property AuthenticationStatus: THttpServerRequestAuthentication
+      read fAuthenticationStatus;
+    /// contains the THttpServer-side authenticated user name, UTF-8 encoded
+    // - e.g. when using http.sys authentication with HTTP API 2.0, the
+    // domain user name is retrieved from the supplied AccessToken
+    // - could also be set by the THttpServerGeneric.Request() method, after
+    // proper authentication, so that it would be logged as expected
+    property AuthenticatedUser: RawUTF8
+      read fAuthenticatedUser;
+  end;
+
+
+
 implementation
+
 
 { ******************** Shared HTTP Constants and Functions }
 
@@ -296,14 +454,17 @@ var
   compressible: boolean;
   OutContentTypeP: PUTF8Char absolute OutContentType;
 begin
-  if (integer(Accepted) <> 0) and (OutContentType <> '') and (Handled <> nil) then
+  if (integer(Accepted) <> 0) and
+     (OutContentType <> '') and
+     (Handled <> nil) then
   begin
     OutContentLen := length(OutContent);
     case IdemPCharArray(OutContentTypeP, ['TEXT/', 'IMAGE/', 'APPLICATION/']) of
       0:
         compressible := true;
       1:
-        compressible := IdemPCharArray(OutContentTypeP + 6, ['SVG', 'X-ICO']) >= 0;
+        compressible := IdemPCharArray(OutContentTypeP + 6,
+          ['SVG', 'X-ICO']) >= 0;
       2:
         compressible := IdemPCharArray(OutContentTypeP + 12,
           ['JSON', 'XML', 'JAVASCRIPT']) >= 0;
@@ -313,8 +474,9 @@ begin
     for i := 0 to high(Handled) do
       if i in Accepted then
         with Handled[i] do
-          if (CompressMinSize = 0) or // 0 here means "always" (e.g. for encryption)
-             (compressible and (OutContentLen >= CompressMinSize)) then
+          if (CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
+             (compressible and
+              (OutContentLen >= CompressMinSize)) then
           begin
             // compression of the OutContent + update header
             result := Func(OutContent, true);
@@ -352,12 +514,14 @@ procedure GetTrimmed(P: PUTF8Char; out result: RawUTF8);
 var
   B: PUTF8Char;
 begin
-  while (P^ > #0) and (P^ <= ' ') do
+  while (P^ > #0) and
+        (P^ <= ' ') do
     inc(P);
   B := P;
   while P^ <> #0 do
     inc(P);
-  while (P > B) and (P[-1] <= ' ') do
+  while (P > B) and
+        (P[-1] <= ' ') do
     dec(P);
   FastSetString(result, B, P - B);
 end;
@@ -389,6 +553,7 @@ begin
 end;
 
 
+
 { ******************** THttpSocket Implementing HTTP over plain sockets }
 
 { THttpSocket }
@@ -406,7 +571,8 @@ begin
       SockSend(['Content-Encoding: ', OutContentEncoding]);
   end;
   SockSend(['Content-Length: ', length(OutContent)]); // needed even 0
-  if (OutContentType <> '') and (OutContentType <> STATICFILE_CONTENT_TYPE) then
+  if (OutContentType <> '') and
+     (OutContentType <> STATICFILE_CONTENT_TYPE) then
     SockSend(['Content-Type: ', OutContentType]);
 end;
 
@@ -426,16 +592,18 @@ begin
   Upgrade := '';
   ContentLength := -1;
   ServerInternalState := 0;
-  fSndBufLen := 0; // SockSend() internal buffer is used when adding headers
+  fSndBufLen := 0; // SockSend() used as headers temp buffer to avoid getmem
   repeat
     P := @line;
-    if (SockIn <> nil) and not HeadersUnFiltered then
+    if (SockIn <> nil) and
+       not HeadersUnFiltered then
     begin
       {$I-}
       readln(SockIn^, line);
       err := ioresult;
       if err <> 0 then
-        raise EHttpSocket.CreateFmt('%s.GetHeader error=%d', [ClassName, err]);
+        raise EHttpSocket.CreateFmt('%s.GetHeader error=%d',
+          [ClassNameShort(self)^, err]);
       {$I+}
       if line[0] = #0 then
         break; // HTTP headers end with a void line
@@ -445,17 +613,21 @@ begin
       SockRecvLn(s);
       if s = '' then
         break;
-      P := pointer(s); // set P=nil below to store in Headers[]
+      P := pointer(s);
     end;
+    // note: set P=nil below to store in Headers[]
     case IdemPCharArray(P, ['CONTENT-', 'TRANSFER-ENCODING: CHUNKED',
       'CONNECTION: ', 'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:',
       'X-POWERED-BY:']) of
       0:
+        // 'CONTENT-'
         case IdemPCharArray(P + 8, ['LENGTH:', 'TYPE:', 'ENCODING:']) of
           0:
+            // 'CONTENT-LENGTH:'
             ContentLength := GetCardinal(P + 16);
           1:
             begin
+              // 'CONTENT-TYPE:'
               inc(P, 13);
               while P^ = ' ' do
                 inc(P);
@@ -465,10 +637,12 @@ begin
               begin
                 GetTrimmed(P, ContentType);
                 if ContentType <> '' then
-                  P := nil; // is searched by HEADER_CONTENT_TYPE_UPPER later on
+                  // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
+                  P := nil;
               end;
             end;
           2:
+            // 'CONTENT-ENCODING:'
             if fCompress <> nil then
             begin
               GetTrimmed(P + 17, c);
@@ -483,43 +657,56 @@ begin
           P := nil;
         end;
       1:
-        include(HeaderFlags, transferChuked);
+        // 'TRANSFER-ENCODING: CHUNKED'
+        include(HeaderFlags, hfTransferChuked);
       2:
+        // 'CONNECTION: '
         case IdemPCharArray(P + 12, ['CLOSE', 'UPGRADE', 'KEEP-ALIVE']) of
           0:
-            include(HeaderFlags, connectionClose);
+            // 'CONNECTION: CLOSE'
+            include(HeaderFlags, hfConnectionClose);
           1:
-            include(HeaderFlags, connectionUpgrade);
+            // 'CONNECTION: UPGRADE'
+            include(HeaderFlags, hfConnectionUpgrade);
           2:
             begin
-              include(HeaderFlags, connectionKeepAlive);
+              // 'CONNECTION: KEEP-ALIVE'
+              include(HeaderFlags, hfConnectionKeepAlive);
               if P[22] = ',' then
               begin
                 inc(P, 23);
-                if P^ = ' ' then
+                while P^ = ' ' do
                   inc(P);
                 if IdemPChar(P, 'UPGRADE') then
-                  include(HeaderFlags, connectionUpgrade);
+                  // 'CONNECTION: KEEP-ALIVE, UPGRADE'
+                  include(HeaderFlags, hfConnectionUpgrade);
               end;
             end;
         else
           P := nil;
         end;
       3:
+        // 'ACCEPT-ENCODING:'
         if fCompress <> nil then
           fCompressAcceptHeader := ComputeContentEncoding(fCompress, P + 16)
         else
           P := nil;
       4:
+        // 'UPGRADE:'
         GetTrimmed(P + 8, Upgrade);
       5:
+        // 'SERVER-INTERNALSTATE:'
         ServerInternalState := GetCardinal(P + 21);
       6:
+        // 'X-POWERED-BY:'
         GetTrimmed(P + 13, XPoweredBy);
     else
+      // unrecognized name should be stored in Headers
       P := nil;
     end;
-    if (P = nil) or HeadersUnFiltered then // only store meaningful headers
+    if (P = nil) or
+       HeadersUnFiltered then
+      // store meaningful headers into SockSend() fSndBuf/fSndLen as temp buffer
       if {%H-}s = '' then
       begin
         len := StrLen(@line);
@@ -531,6 +718,7 @@ begin
       else
         SockSend(s);
   until false;
+  // retrieve meaningful headers from SockSend() fSndBuf/fSndLen temp buffer
   Headers := copy(fSndBuf, 1, fSndBufLen);
   fSndBufLen := 0;
 end;
@@ -545,7 +733,7 @@ begin
   Content := '';
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
-  if transferChuked in HeaderFlags then
+  if hfTransferChuked in HeaderFlags then
   begin // we ignore the Length
     LContent := 0; // current read position in Content
     repeat
@@ -603,7 +791,7 @@ begin
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',
     [fSock, SockInPending(0), PTextRec(SockIn)^.BufEnd - PTextRec(SockIn)^.bufpos,
     ContentLength, LogEscapeFull(Content)], self);
-  {$endif}
+  {$endif SYNCRTDEBUGLOW}
   if SockIn <> nil then
   begin
     Error := ioresult;
@@ -634,10 +822,11 @@ end;
 
 function THttpSocket.HeaderGetText(const aRemoteIP: RawUTF8): RawUTF8;
 begin
-  if (aRemoteIP <> '') and not (hasRemoteIP in HeaderFlags) then
+  if (aRemoteIP <> '') and
+     not (hfHasRemoteIP in HeaderFlags) then
   begin
     Headers := Headers + 'RemoteIP: ' + aRemoteIP + #13#10;
-    include(HeaderFlags, hasRemoteIP);
+    include(HeaderFlags, hfHasRemoteIP);
   end;
   result := Headers;
 end;
@@ -655,9 +844,20 @@ begin
 end;
 
 
-initialization
+{ ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
 
-finalization
+{ THttpServerRequestAbstract }
+
+procedure THttpServerRequestAbstract.AddInHeader(additionalHeader: RawUTF8);
+begin
+  additionalHeader := TrimU(additionalHeader);
+  if additionalHeader <> '' then
+    if fInHeaders = '' then
+      fInHeaders := additionalHeader
+    else
+      fInHeaders := fInHeaders + #13#10 + additionalHeader;
+end;
+
 
 end.
 

@@ -542,10 +542,34 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     [rax], dl
 end;
 
-
 {$endif ASMX64}
 
 {$ifdef CPUX64ASM} /// proper compilation on FPC and Delphi XE7+
+
+{$ifdef FPC}
+
+{$ifndef FPC_X64MM}
+procedure _Getmem; external name 'FPC_GETMEM';
+procedure _Freemem; external name 'FPC_FREEMEM';
+{$endif FPC_X64MM}
+
+procedure FastAssignNew(var d; s: pointer); nostackframe; assembler;
+asm
+        mov     rax, qword ptr[d]
+        mov     qword ptr[d], s
+        test    rax, rax
+        jz      @z
+        mov     d, rax
+        cmp     qword ptr[rax - _STRREFCNT], 0
+        jl      @z
+lock    dec     qword ptr[rax - _STRREFCNT]
+        jbe     @free
+@z:     ret
+@free:  sub     d, _STRRECSIZE
+        jmp     _Freemem
+end;
+
+{$endif FPC}
 
 { some numbers, with CITIES_MAX=200000, deleting 1/128 entries
   first column (3..23) is the max number of indexes[] chunk to rehash
@@ -1168,7 +1192,7 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
 @ok:
 end;
 
-function GetBitsCountSSE42(value: PtrInt): PtrInt;
+function GetBitsCountSse42(value: PtrInt): PtrInt;
 {$ifdef FPC} assembler; nostackframe;
 asm
         popcnt  rax, value
@@ -1178,13 +1202,13 @@ asm     .noframe
         {$else}        db $f3,$48,$0f,$B8,$c7 {$endif}
 {$endif FPC}
 end;
-function crc32cBy4SSE42(crc, value: cardinal): cardinal;
+function crc32cby4sse42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, crc
         crc32   eax, value
 end;
 
-procedure crcblockSSE42(crc128, data128: PBlock128);
+procedure crcblocksse42(crc128, data128: PBlock128);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax,  dword ptr[crc128] // we can't use two qword ptr here
         mov     r8d,  dword ptr[crc128 + 4]
@@ -1495,7 +1519,7 @@ asm // rcx=src, edx=size, r8=dest
         jnz     @26
         movzx   r11, byte ptr [rcx]
         add     rcx, 1
-        lea     r11, [r11 + 12]
+        lea     r11, [r11 + 12H]
 @26:    mov     r14, qword ptr [off + rbx * 8] // r14=o
         mov     rbx, r8
         xor     rsi, rsi
@@ -1575,7 +1599,7 @@ function Rdtsc: Int64;
         or      rax, rdx
 end;
 
-function InterlockedIncrement(var I: Integer): Integer;
+function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, I
         mov     edx, 1
@@ -1584,7 +1608,7 @@ function InterlockedIncrement(var I: Integer): Integer;
         inc     eax
 end;
 
-function InterlockedDecrement(var I: Integer): Integer;
+function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, I
         mov     edx, -1
@@ -1646,14 +1670,14 @@ end;
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
 // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
-        xor     ecx, ecx  // specify control register XCR0 = XFEATURE_ENABLED_MASK
-        db  $0f, $01, $d0 // XGETBV reads XCR0 into EDX:EAX
-        and     eax, 6    // check OS has enabled both XMM (bit 1) and YMM (bit 2)
+        xor     ecx, ecx  // specify control register XCR0=XFEATURE_ENABLED_MASK
+        db $0f, $01, $d0  // XGETBV opcode reads XCR0 into EDX:EAX
+        and     eax, 6
         cmp     al, 6
-        sete    al
+        sete    al   // check if OS enabled both XMM (bit 1=2) and YMM (bit 2=4)
 end;
 
-procedure GetCPUID(Param: Cardinal; var Registers: TIntelRegisters);
+procedure GetCPUID(Param: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, Param
         mov     r9, Registers

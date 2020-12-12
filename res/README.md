@@ -12,7 +12,7 @@ The framework source code is licensed under a disjunctive three-license giving t
 - *GNU Lesser General Public License*, version 2.1 or later (LGPL), with *linking exception* of the *FPC modified LGPL*.
 This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
 
-See LICENSE.md file in the root folder of this repository for more information.
+See [the full licensing terms](../LICENCE.md) in the root folder of this repository for more information.
 
 ## Resources From Source
 

@@ -31,6 +31,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.data,
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
@@ -111,7 +112,8 @@ type
     // - by default, ServerName, DatabaseName, UserID and Password are set by
     // the Create() constructor according to the underlying FireDAC driver
     // - you can add some additional options here
-    property Parameters: TStringList read fFireDACOptions;
+    property Parameters: TStringList
+      read fFireDACOptions;
   end;
 
 
@@ -143,7 +145,8 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated FireDAC connection instance
-    property Database: {$ifdef ISDELPHIXE5}TFDConnection{$else}TADConnection{$endif} read fDatabase;
+    property Database: {$ifdef ISDELPHIXE5}TFDConnection{$else}TADConnection{$endif}
+      read fDatabase;
   end;
 
   ///	implements a statement via a FireDAC connection
@@ -176,7 +179,7 @@ type
 
 
 const
-  /// FireDAC DriverID values corresponding to SynDB recognized SQL engines
+  /// FireDAC DriverID values corresponding to mormot.db.sql recognized SQL engines
   {$ifdef ISDELPHIXE5}
   FIREDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
     'Ora', 'MSSQL', 'MSAcc', 'MySQL', 'SQLite', 'FB', '', 'PG', 'DB2', 'Infx');
@@ -235,7 +238,8 @@ begin
   inherited Create(server, aDatabaseName, aUserID, aPassWord);
   fOnBatchInsert := nil; // MultipleValuesInsert is slower than FireDAC ArrayDML
   fFireDACOptions := TStringList.Create;
-  if ((fDBMS < low(FIREDAC_PROVIDER)) or (fDBMS > high(FIREDAC_PROVIDER))) and
+  if ((fDBMS < low(FIREDAC_PROVIDER)) or
+      (fDBMS > high(FIREDAC_PROVIDER))) and
      (fDBMS <> dNexusDB) then
     if SameTextU(server, 'ASA') then
       fDBMS := dMSSQL
@@ -261,24 +265,29 @@ begin
   case fDBMS of
     dSQLite:
       begin
-        if fFireDACOptions.Values['CharacterSet'] = '' then // force UTF-8 for SynDB
+        if fFireDACOptions.Values['CharacterSet'] = '' then
+          // force UTF-8 for mormot.db.sql
           fFireDACOptions.Values['CharacterSet'] := 'UTF8';
-      {$ifdef UNICODE}
+        {$ifdef UNICODE}
         // CreateUTF16 is the default value for Delphi 2009+
-        if fFireDACOptions.Values['OpenMode'] = '' then // force UTF-8 for SynDB
+        if fFireDACOptions.Values['OpenMode'] = '' then
+          // force UTF-8 for mormot.db.sql
           fFireDACOptions.Values['OpenMode'] := 'CreateUTF8';
-      {$else}
-        ForceUseWideString := true; // as expected by FireDAC when UTF-8 is enabled
-      {$endif UNICODE}
-        fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for FireDAC
+        {$else}
+        // as expected by FireDAC when UTF-8 is enabled
+        ForceUseWideString := true;
+        {$endif UNICODE}
+        // SQLite3 INTEGER = 32bit for FireDAC
+        fSQLCreateField[ftInt64] := ' BIGINT';
       end;
     dFirebird, dMySQL, dPostgreSQL, dDB2:
       begin
-        if fFireDACOptions.Values['CharacterSet'] = '' then // force UTF-8 for SynDB
+        if fFireDACOptions.Values['CharacterSet'] = '' then
+          // force UTF-8 for mormot.db.sql
           fFireDACOptions.Values['CharacterSet'] := 'UTF8';
-      {$ifndef UNICODE}
+        {$ifndef UNICODE}
         ForceUseWideString := true; // as expected by FireDAC when UTF-8 is enabled
-      {$endif}
+        {$endif}
       end;
   end;
 end;
@@ -479,7 +488,8 @@ end;
 
 function TSQLDBFireDACConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and fDatabase.Connected;
+  result := Assigned(fDatabase) and
+            fDatabase.Connected;
 end;
 
 function TSQLDBFireDACConnection.NewStatement: TSQLDBStatement;
@@ -537,15 +547,17 @@ procedure TSQLDBFireDACStatement.DataSetBindSQLParam(const aArrayIndex,
   aParamIndex: integer; const aParam: TSQLDBParam);
 var
   P: TADParam;
-  i: integer;
+  i: PtrInt;
   tmp: RawUTF8;
   StoreVoidStringAsNull: boolean;
 begin
   if fDatasetSupportBatchBinding then
-    fPreparedUseArrayDML := (aArrayIndex < 0) and (fParamsArrayCount > 0)
+    fPreparedUseArrayDML := (aArrayIndex < 0) and
+                            (fParamsArrayCount > 0)
   else
     fPreparedUseArrayDML := false;
-  if fPreparedUseArrayDML and (fQueryParams.ArraySize <> fParamsArrayCount) then
+  if fPreparedUseArrayDML and
+     (fQueryParams.ArraySize <> fParamsArrayCount) then
     fQueryParams.ArraySize := fParamsArrayCount;
   with aParam do
   begin
@@ -628,7 +640,8 @@ begin
             StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
             for i := 0 to fParamsArrayCount - 1 do
               if (VArray[i] = 'null') or
-                 (StoreVoidStringAsNull and (VArray[i] = #39#39)) then
+                 (StoreVoidStringAsNull and
+                  (VArray[i] = #39#39)) then
                 P.Clear(i)
               else
               begin

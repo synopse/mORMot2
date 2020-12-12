@@ -104,7 +104,7 @@ type
 // - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
 function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean;
-  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE} inline; {$endif}{$endif}
+  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compute a shared secret given your secret key and someone else's public key
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
@@ -116,7 +116,7 @@ function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean
 // - this function is thread-safe and does not perform any memory allocation
 function ecdh_shared_secret(const pub: TECCPublicKey; const priv: TECCPrivateKey;
   out secret: TECCSecretKey): boolean;
-  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE} inline; {$endif}{$endif}
+  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// generate an ECDSA signature for a given hash value
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
@@ -126,7 +126,7 @@ function ecdh_shared_secret(const pub: TECCPublicKey; const priv: TECCPrivateKey
 // - this function is thread-safe and does not perform any memory allocation
 function ecdsa_sign(const priv: TECCPrivateKey; const hash: TECCHash;
   out sign: TECCSignature): boolean;
-  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE} inline; {$endif}{$endif}
+  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// verify an ECDSA signature
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
@@ -136,7 +136,7 @@ function ecdsa_sign(const priv: TECCPrivateKey; const hash: TECCHash;
 // - this function is thread-safe and does not perform any memory allocation
 function ecdsa_verify(const pub: TECCPublicKey; const hash: TECCHash;
   const sign: TECCSignature): boolean;
-  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE} inline; {$endif}{$endif}
+  {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 
 /// pascal function to create a secp256r1 public/private key pair
@@ -288,23 +288,38 @@ type
   // TECCCertificateChain.IsSigned methods
   // - see also ECC_VALIDSIGN constant
   TECCValidity = (
-    ecvUnknown, ecvValidSigned, ecvValidSelfSigned, ecvNotSupported,
-    ecvBadParameter, ecvCorrupted, ecvInvalidDate, ecvUnknownAuthority,
-    ecvDeprecatedAuthority, ecvInvalidSignature);
+    ecvUnknown,
+    ecvValidSigned,
+    ecvValidSelfSigned,
+    ecvNotSupported,
+    ecvBadParameter,
+    ecvCorrupted,
+    ecvInvalidDate,
+    ecvUnknownAuthority,
+    ecvDeprecatedAuthority,
+    ecvInvalidSignature);
 
   /// the error codes returned by TECCCertificateSecret.Decrypt()
   // - see also ECC_VALIDDECRYPT constant
   TECCDecrypt = (
-    ecdDecrypted, ecdDecryptedWithSignature, ecdNoContent, ecdCorrupted,
-    ecdInvalidSerial, ecdNoPrivateKey, ecdInvalidMAC, ecdDecryptError,
+    ecdDecrypted,
+    ecdDecryptedWithSignature,
+    ecdNoContent,
+    ecdCorrupted,
+    ecdInvalidSerial,
+    ecdNoPrivateKey,
+    ecdInvalidMAC,
+    ecdDecryptError,
     ecdWriteFileError);
 
 const
   /// TECCValidity results indicating a valid digital signature
-  ECC_VALIDSIGN = [ecvValidSigned, ecvValidSelfSigned];
+  ECC_VALIDSIGN =
+    [ecvValidSigned, ecvValidSelfSigned];
 
   /// TECCDecrypt results indicating a valid decryption process
-  ECC_VALIDDECRYPT = [ecdDecrypted, ecdDecryptedWithSignature];
+  ECC_VALIDDECRYPT =
+    [ecdDecrypted, ecdDecryptedWithSignature];
 
 function ToText(val: TECCValidity): PShortString; overload;
 function ToText(res: TECCDecrypt): PShortString; overload;
@@ -317,7 +332,7 @@ procedure FillZero(out Priv: TECCPrivateKey); overload;
 /// returns the current UTC date, as a TECCDate integer value
 // - i.e. 16-bit number of days since 1 August 2016
 function NowECCDate: TECCDate;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a supplied TDateTime value into a TECCDate integer value
 // - i.e. 16-bit number of days since 1 August 2016
@@ -327,29 +342,29 @@ function ECCDate(const DateTime: TDateTime): TECCDate;
 /// convert a supplied a TECCDate integer value into a TDateTime value
 // - i.e. 16-bit number of days since 1 August 2016
 function ECCToDateTime(ECCDate: TECCDate): TDateTime;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a supplied a TECCDate integer value into a ISO-8601 text value
 // - i.e. 16-bit number of days since 1 August 2016
 function ECCText(ECCDate: TECCDate; Expanded: boolean = true): RawUTF8; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TECCCertificateIssuer binary buffer values
 function IsEqual(const issuer1, issuer2: TECCCertificateIssuer): boolean; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TECCCertificateID binary buffer values
 function IsEqual(const id1, id2: TECCCertificateID): boolean; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure a TECCCertificateIssuer binary buffer is not void, i.e. filled with 0
 
 function IsZero(const issuer: TECCCertificateIssuer): boolean; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure a TECCCertificateID binary buffer is not void, i.e. filled with 0
 function IsZero(const id: TECCCertificateID): boolean; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a supplied TECCCertificateIssuer binary buffer into proper text
 // - returns Ascii-7 text if was stored using Baudot encoding
@@ -715,7 +730,7 @@ const
                UInt64($0101010101010101), UInt64($0101010101010101));
 
 procedure _clear(out VLI: TVLI);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   VLI[0] := 0;
   VLI[1] := 0;
@@ -724,16 +739,21 @@ begin
 end;
 
 function _isZero(const VLI: TVLI): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := (VLI[0] = 0) and (VLI[1] = 0) and (VLI[2] = 0) and (VLI[3] = 0);
+  result := (VLI[0] = 0) and
+            (VLI[1] = 0) and
+            (VLI[2] = 0) and
+            (VLI[3] = 0);
 end;
 
 function _equals(const Left, Right: TVLI): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := (Left[0] = Right[0]) and (Left[1] = Right[1]) and (Left[2] = Right[2])
-    and (Left[3] = Right[3]);
+  result := (Left[0] = Right[0]) and
+            (Left[1] = Right[1]) and
+            (Left[2] = Right[2]) and
+            (Left[3] = Right[3]);
 end;
 
 // counts the number of bits required for VLI
@@ -767,7 +787,7 @@ end;
 
 // returns sign of Left - Right
 function _cmp(const Left, Right: TVLI): integer;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if Left[3] > Right[3] then
     result := 1
@@ -874,7 +894,7 @@ end;
 {$else}
 
 procedure _rshift1(var VLI: TVLI);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   carry, temp: UInt64;
 begin
@@ -891,7 +911,7 @@ begin
 end;
 
 function _lshift1(var VLI: TVLI): UInt64;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   temp: UInt64;
 begin
@@ -1139,9 +1159,10 @@ end;
 // computes result = (Left + Right) mod Modulo
 // assumes that p_left < p_mod and p_right < p_mod, p_result != p_mod
 procedure _modAdd(var Output: TVLI; const Left, Right, Modulo: TVLI);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  if (_add(Output, Left, Right) <> 0) or (_cmp(Output, Modulo) >= 0) then
+  if (_add(Output, Left, Right) <> 0) or
+     (_cmp(Output, Modulo) >= 0) then
     // result > Modulo (result = Modulo + Remainder), so subtract Modulo to get remainder
     _sub(Output, Output, Modulo);
 end;
@@ -1149,7 +1170,7 @@ end;
 // computes result = (Left - Right) mod Modulo.
 // assumes that Left < Modulo and Right < Modulo, result != Modulo
 procedure _modSub(out Output: TVLI; const Left, Right, Modulo: TVLI);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if _sub(Output{%H-}, Left, Right) > 0 then
     // In this case, Output == -diff == (max int) - diff.
@@ -1220,13 +1241,14 @@ begin
       inc(carry, _add(Output, Output, Curve_P_32));
     until carry >= 0
   else
-    while (carry <> 0) or (_cmp(Curve_P_32, Output) <> 1) do
+    while (carry <> 0) or
+          (_cmp(Curve_P_32, Output) <> 1) do
       dec(carry, _sub(Output, Output, Curve_P_32));
 end;
 
 // computes result = (Left * Right) mod Curve
 procedure _modMult_fast(out Output: TVLI; const Left, Right: TVLI);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   Product: TVLI2;
 begin
@@ -1236,7 +1258,7 @@ end;
 
 // computes result = Left^2 mod Curve
 procedure _modSquare_fast(out Output: TVLI; const Left: TVLI);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 var
   Product: TVLI2;
 begin
@@ -1532,7 +1554,9 @@ begin
     TAESPRNG.Fill(THash256(PrivateK));
     if tries >= MAX_TRIES then
       exit;
-    if _isZero(PrivateK) or _equals(PrivateK, _1) or _equals(PrivateK, _11) then
+    if _isZero(PrivateK) or
+       _equals(PrivateK, _1) or
+       _equals(PrivateK, _11) then
       continue;
     // Make sure the private key is in the range [1, n-1]
     // For the supported curves, n is always large enough that we only need
@@ -1626,10 +1650,13 @@ begin
     VLI^ := Modulo;
   end;
   // Subtract all multiples of Modulo to get the remainder
-  while (ProductBits > NUM_ECC_DIGITS * 64) or (_cmp(ModMultipleVLI_Lo^, Modulo) >= 0) do
+  while (ProductBits > NUM_ECC_DIGITS * 64) or
+        (_cmp(ModMultipleVLI_Lo^, Modulo) >= 0) do
   begin
     cmp := _cmp(ModMultipleVLI_Hi^, ProductVLI_Hi^);
-    if (cmp < 0) or ((cmp = 0) and (_cmp(ModMultipleVLI_Lo^, ProductVLI_Lo^) <= 0)) then
+    if (cmp < 0) or
+       ((cmp = 0) and
+        (_cmp(ModMultipleVLI_Lo^, ProductVLI_Lo^) <= 0)) then
     begin
       if _sub(ProductVLI_Lo^, ProductVLI_Lo^, ModMultipleVLI_Lo^) > 0 then
         _sub(ProductVLI_Hi^, ProductVLI_Hi^, _1); // borrow
@@ -1659,7 +1686,9 @@ begin
     TAESPRNG.Fill(THash256(k));
     if Tries >= MAX_TRIES then
       exit;
-    if _isZero(k) or _equals(k, _1) or _equals(k, _11) then
+    if _isZero(k) or
+       _equals(k, _1) or
+       _equals(k, _11) then
       continue;
     if _cmp(Curve_N_32, k) <> 1 then
       _sub(k, k, Curve_N_32);
@@ -1693,7 +1722,9 @@ begin
   result := false;
   _bswap256(@l_r, @Signature);
   _bswap256(@l_s, @Signature[ECC_BYTES]);
-  if _isZero(l_r) or _isZero(l_s) or (_cmp(Curve_N_32, l_r) <> 1) or
+  if _isZero(l_r) or
+     _isZero(l_s) or
+     (_cmp(Curve_N_32, l_r) <> 1) or
      (_cmp(Curve_N_32, l_s) <> 1) then
     exit; // r, s must be <> 0 and < n
   // calculate u1 and u2
@@ -1788,6 +1819,56 @@ begin
   PInt64Array(@Priv)^[3] := 0;
 end;
 
+function IsEqual(const issuer1, issuer2: TECCCertificateIssuer): boolean;
+var
+  a: TPtrIntArray absolute issuer1;
+  b: TPtrIntArray absolute issuer2;
+begin
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifndef CPU64} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU64};
+end;
+
+function IsEqual(const id1, id2: TECCCertificateID): boolean;
+var
+  a: TPtrIntArray absolute id1;
+  b: TPtrIntArray absolute id2;
+begin
+  result := (a[0] = b[0]) and
+            (a[1] = b[1])
+            {$ifndef CPU64} and
+            (a[2] = b[2]) and
+            (a[3] = b[3])
+            {$endif CPU64};
+end;
+
+function IsZero(const issuer: TECCCertificateIssuer): boolean;
+var
+  a: TPtrIntArray absolute issuer;
+begin
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifndef CPU64} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU64};
+end;
+
+function IsZero(const id: TECCCertificateID): boolean;
+var
+  a: TPtrIntArray absolute id;
+begin
+  result := (a[0] = 0) and
+            (a[1] = 0)
+            {$ifndef CPU64} and
+            (a[2] = 0) and
+            (a [3] = 0)
+            {$endif CPU64};
+end;
+
 const
   // Mon, 01 Aug 2016 encoded as COM/TDateTime value
   ECC_DELTA = 42583;
@@ -1878,8 +1959,12 @@ end;
 function ECCCheck(const content: TECCCertificateContent): boolean;
 begin
   with content.Signed do
-    if (IssueDate = 0) or (IssueDate = 65535) or IsZero(Serial) or
-       IsZero(Issuer) or IsZero(AuthoritySerial) or IsZero(AuthorityIssuer) or
+    if (IssueDate = 0) or
+       (IssueDate = 65535) or
+       IsZero(Serial) or
+       IsZero(Issuer) or
+       IsZero(AuthoritySerial) or
+       IsZero(AuthorityIssuer) or
        IsZero(@PublicKey, sizeof(PublicKey)) or
        IsZero(@content.Signature, sizeof(content.Signature)) then
       result := false
@@ -1894,56 +1979,28 @@ var
 begin
   now := NowECCDate;
   with content.Signed do
-    result := (IssueDate <= now) and ((ValidityStart = 0) or
-      (ValidityStart <= now)) and ((ValidityEnd = 0) or (ValidityEnd >= now));
-end;
-
-function IsEqual(const issuer1, issuer2: TECCCertificateIssuer): boolean;
-var
-  a: TPtrIntArray absolute issuer1;
-  b: TPtrIntArray absolute issuer2;
-begin
-  result := (a[0] = b[0]) and (a[1] = b[1])
-  {$ifndef CPU64} and (a[2] = b[2]) and (a[3] = b[3]) {$endif};
-end;
-
-function IsEqual(const id1, id2: TECCCertificateID): boolean;
-var
-  a: TPtrIntArray absolute id1;
-  b: TPtrIntArray absolute id2;
-begin
-  result := (a[0] = b[0]) and (a[1] = b[1])
-  {$ifndef CPU64} and (a[2] = b[2]) and (a[3] = b[3]) {$endif};
-end;
-
-function IsZero(const issuer: TECCCertificateIssuer): boolean;
-var
-  a: TPtrIntArray absolute issuer;
-begin
-  result := (a[0] = 0) and (a[1] = 0)
-  {$ifndef CPU64} and (a[2] = 0) and (a [3] = 0) {$endif};
-end;
-
-function IsZero(const id: TECCCertificateID): boolean;
-var
-  a: TPtrIntArray absolute id;
-begin
-  result := (a[0] = 0) and (a[1] = 0)
-    {$ifndef CPU64} and (a[2] = 0) and (a [3] = 0) {$endif};
+    result := (IssueDate <= now) and
+              ((ValidityStart = 0) or
+               (ValidityStart <= now)) and
+              ((ValidityEnd = 0) or
+               (ValidityEnd >= now));
 end;
 
 function ECCSelfSigned(const content: TECCCertificateContent): boolean;
 begin
   with content.Signed do
-    result := IsEqual(AuthoritySerial, Serial) and not IsZero(Serial) and
-      IsEqual(AuthorityIssuer, Issuer);
+    result := IsEqual(AuthoritySerial, Serial) and
+              not IsZero(Serial) and
+              IsEqual(AuthorityIssuer, Issuer);
 end;
 
 function ECCCheck(const content: TECCSignatureCertifiedContent): boolean;
 begin
-  result := (content.Version in [1]) and (content.Date <> 0) and
-    not IsZero(content.AuthoritySerial) and not IsZero(content.AuthorityIssuer) and
-    not IsZero(@content.Signature, sizeof(content.Signature));
+  result := (content.Version in [1]) and
+            (content.Date <> 0) and
+            not IsZero(content.AuthoritySerial) and
+            not IsZero(content.AuthorityIssuer) and
+            not IsZero(@content.Signature, sizeof(content.Signature));
 end;
 
 function ECCSign(const base64: RawUTF8; out content:

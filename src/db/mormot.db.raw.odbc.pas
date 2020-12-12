@@ -395,19 +395,19 @@ const
 
 type
   SqlSmallint = Smallint;
-  SqlDate = Byte;
-  SqlTime = Byte;
-  SqlDecimal = Byte;
+  SqlDate = byte;
+  SqlTime = byte;
+  SqlDecimal = byte;
   SqlDouble = Double;
   SqlFloat = Double;
   SqlInteger = integer;
   SqlUInteger = cardinal;
-  SqlNumeric = Byte;
+  SqlNumeric = byte;
   SqlPointer = Pointer;
   SqlReal = Single;
   SqlUSmallint = Word;
-  SqlTimestamp = Byte;
-  SqlVarchar = Byte;
+  SqlTimestamp = byte;
+  SqlVarchar = byte;
   PSqlSmallint = ^SqlSmallint;
   PSqlInteger = ^SqlInteger;
 
@@ -755,13 +755,13 @@ type
     constructor Create;
     /// raise an exception on error
     procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status: SqlReturn;
-      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: Boolean = false;
+      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// generic process of error handle
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
       Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-      InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+      InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
     /// wrapper around SQLGetDiagField() API call
     function GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
     /// wrapper around GetInfo() API call
@@ -780,7 +780,7 @@ var
 // create a new TStringList), or any existing TStrings instance (may be from VCL
 // - aIncludeVersion: include the DLL driver version as <driver name>=<dll version>
 // in aDrivers (somewhat slower)
-function ODBCInstalledDriversList(const aIncludeVersion: Boolean; var aDrivers: TStrings): boolean;
+function ODBCInstalledDriversList(const aIncludeVersion: boolean; var aDrivers: TStrings): boolean;
 
 {$endif MSWINDOWS}
 
@@ -834,8 +834,9 @@ begin
     result := 0
   else
     result := EncodeDate(Year, Month, Day);
-  if (DataType <> SQL_TYPE_DATE) and (PInt64(@Hour)^ <> 0) and TryEncodeTime(Hour,
-    Minute, Second, Fraction div 1000000, time) then
+  if (DataType <> SQL_TYPE_DATE) and
+     (PInt64(@Hour)^ <> 0)  and
+     TryEncodeTime(Hour, Minute, Second, Fraction div 1000000, time) then
     result := result  +  time;
 end;
 
@@ -849,8 +850,11 @@ begin
     DateToIso8601PChar(Dest, true, Year, Month, Day);
     inc(Dest, 10);
   end;
-  if (DataType <> SQL_TYPE_DATE) and (PInt64(@Hour)^ <> 0) and (Hour < 24) and
-     (Minute < 60) and (Second < 60) then
+  if (DataType <> SQL_TYPE_DATE) and
+     (PInt64(@Hour)^ <> 0) and
+     (Hour < 24) and
+     (Minute < 60) and
+     (Second < 60) then
   begin // we use 'T' as TTextWriter.AddDateTime
     TimeToIso8601PChar(Dest, true, Hour, Minute, Second, Fraction div 1000000,
       'T', WithMS);
@@ -880,7 +884,7 @@ const
   ODBC_LIB = 'libodbc.so.1';
   {$endif MSWINDOWS}
 
-  ODBC_ENTRIES: array[0..66] of PChar = (
+  ODBC_ENTRIES: array[0..66] of PAnsiChar = (
     'SQLAllocEnv', 'SQLAllocHandle', 'SQLAllocStmt',
     'SQLBindCol', 'SQLBindParameter', 'SQLCancel', 'SQLCloseCursor',
     'SQLColAttribute', 'SQLColAttributeW', 'SQLColumns',
@@ -901,8 +905,8 @@ const
 
 
 {$ifdef MSWINDOWS}
-function ODBCInstalledDriversList(const aIncludeVersion: Boolean;
-  var aDrivers: TStrings): Boolean;
+function ODBCInstalledDriversList(const aIncludeVersion: boolean;
+  var aDrivers: TStrings): boolean;
 
   function GetFullFileVersion(const aFileName: TFileName): string;
   begin
@@ -954,7 +958,7 @@ end;
 
 procedure TODBCLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status:
   SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-  InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 begin
   if Status <> SQL_SUCCESS then
     HandleError(Conn, Stmt, Status, HandleType, Handle, InfoRaiseException,
@@ -964,12 +968,12 @@ end;
 constructor TODBCLib.Create;
 var
   P: PPointerArray;
-  i: integer;
+  i: PtrInt;
 begin
   TryLoadLibrary([ODBC_LIB], EODBCException);
   P := @@AllocEnv;
   for i := 0 to High(ODBC_ENTRIES) do
-    GetProc(ODBC_ENTRIES[i], @P[i], EODBCException); // raise EODBCException on error
+    Resolve(ODBC_ENTRIES[i], @P[i], EODBCException); // raise EODBCException on error
 end;
 
 function TODBCLib.GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
@@ -999,7 +1003,7 @@ end;
 
 procedure TODBCLib.HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-  InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 const
   FMT: PUTF8Char = '%[%] % (%)'#13#10;
 var
@@ -1009,7 +1013,8 @@ var
   TextLength: SqlSmallint;
   msg: RawUTF8;
 begin
-  if (Handle = nil) or (Status = SQL_INVALID_HANDLE) then
+  if (Handle = nil) or
+     (Status = SQL_INVALID_HANDLE) then
     msg := 'Invalid handle'
   else
   begin
@@ -1017,7 +1022,8 @@ begin
     while ODBC.GetDiagRecW(HandleType, Handle, RecNum, Sqlstate{%H-},
       NativeError, MessageText{%H-}, 1024, TextLength) and (not 1) = 0 do
     begin
-      while (TextLength > 0) and (MessageText[TextLength - 1] < ' ') do
+      while (TextLength > 0) and
+            (MessageText[TextLength - 1] < ' ') do
       begin
         dec(TextLength);
         MessageText[TextLength] := #0; // trim #13/#10 right of MessageText
@@ -1027,10 +1033,12 @@ begin
     end;
     if msg = '' then
       msg := 'Unspecified error';
-    if (Status = SQL_SUCCESS_WITH_INFO) and not InfoRaiseException then
+    if (Status = SQL_SUCCESS_WITH_INFO) and
+       not InfoRaiseException then
     begin
       LogLevelNoRaise := sllInfo;
-      if (Conn = nil) and (Stmt <> nil) then
+      if (Conn = nil) and
+         (Stmt <> nil) then
         Conn := Stmt.Connection;
       if Conn <> nil then
         with Conn.Properties do
@@ -1051,5 +1059,6 @@ initialization
 
 finalization
   FreeAndNil(ODBC);
+  
 end.
 

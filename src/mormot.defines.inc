@@ -22,8 +22,9 @@
 
 {.$define PUREMORMOT2}
 // if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
-// - by default, existing projects should compile with mORMot 2 - you may define
-// this conditional to make a perfect code conversion to the new expectations
+// - by default, existing projects should compile with mORMot 2
+// - you should eventually define this conditional to make a perfect code
+// conversion to the new types and methods definitions
 
 {.$define NEWRTTINOTUSED}
 // if defined, the new RTTI (available since Delphi 2010) won't be linked to
@@ -70,6 +71,12 @@
 // mormot.db.sql external SQL DB won't be linked to the executable by mormot.app
 {.$define DISABLEAPPNOSQL}
 // Mongo DB client won't be linked to the executable by mormot.app
+
+{.$define NOSSPIAUTH}
+// disable Windows mormot.lib.sspi support in mormot.rest.client/server units
+
+{.$define NOGSSAPIAUTH}
+// disable Posix mormot.lib.gsssapi support in mormot.rest.client/server units
 
 
 {$ifdef FPC}
@@ -151,13 +158,19 @@
     // LINUX conditional includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
     {$ifdef DARWIN}
-      {$define FPCSQLITE3STATIC} // we supply Darwin static libs
       {$ifdef CPUINTEL}
         {$define FPC_PIC} // may have not be defined by the compiler options
       {$endif}
     {$else}
       {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
     {$endif}
+   {$define FPCSQLITE3STATIC} // we supply Darwin+FreeBSD+OpenBSD static libs
+    {$ifdef OPENBSD}
+      {$ifdef FPC_CROSSCOMPILING}
+      // OpenBSD has linking problems with fpcupdeluxe libgcc.a
+      {$undef FPCSQLITE3STATIC}
+      {$endif FPC_CROSSCOMPILING}
+    {$endif OPENBSD}
   {$else}
     {$ifdef LINUX}
       {$define LINUXNOTBSD} // e.g. to disable epoll API
@@ -177,6 +190,7 @@
       {$define FPC_CPUINTEL}
       {$define FPC_CPUX64}
       {$ifndef DARWIN}
+        {$define FPC_ASMX64}
         {$define ASMX64}     // supports asm with globals
         {$define ASMINTEL}   // either ASMX86 or ASMX64
         {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
@@ -198,11 +212,13 @@
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
       {$ifndef DARWIN}
-        {$define ASMX86}     // supports asm with globals
-        {$define ASMINTEL}   // either ASMX86 or ASMX64
-        {$define CPUX86NOTPIC} // use "absolute" instead of local register
+        {$ifndef OPENBSD}
+          {$define ASMX86}       // supports asm with globals
+          {$define ASMINTEL}     // either ASMX86 or ASMX64
+          {$define CPUX86NOTPIC} // use "absolute" instead of local register
+          {$define HASAESNI}
+        {$endif OPENBSD}
       {$endif DARWIN}
-      {$define HASAESNI}
       {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
     {$endif CPUX86}
     {$ifdef CPUARM}
@@ -232,7 +248,7 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
-  {$define ISDELPHI2010_OR_FPC} // eltype2 field
+  {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
@@ -373,7 +389,7 @@
     {$ifend}
     {$if CompilerVersion >= 21.0}
       {$define ISDELPHI2010}
-      {$define ISDELPHI2010_OR_FPC} // eltype2 field
+      {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
@@ -487,7 +503,6 @@
   {$define NOSQLITE3ENCRYPT}
 {$endif NOSQLITE3STATIC}
 
-
 {$ifdef MSWINDOWS}
 
   {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
@@ -496,16 +511,25 @@
 
   {$define USE_WINIOCP} // I/O completion ports API is the best option under Windows
   // (under Linux/POSIX, we fallback to a classical event-driven pool)
+  {$ifndef NOSSPIAUTH}
+    {$define DOMAINRESTAUTH}
+    // enable Windows SSPI authentication in mormot.rest.client/server
+  {$endif NOSSPIAUTH}
 
 {$else}
 
   {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
-  // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
+  // cross-platform libcurl for https -> TCurlHttp and TRestHttpClientCurl
   {$define USELIBCURL}
   {$ifdef ANDROID}
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
     {$define LIBCURLSTATIC}
+  {$else}
+    {$ifndef NOGSSAPIAUTH} // mormot.lib.gssapi is not Android compatible
+      {$define DOMAINRESTAUTH}
+      // enable Kerberos authentication via libgss in mormot.rest.client/server
+    {$endif NOGSSAPIAUTH}
   {$endif ANDROID}
 
 {$endif MSWINDOWS}

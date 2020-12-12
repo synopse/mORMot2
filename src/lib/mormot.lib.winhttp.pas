@@ -56,7 +56,7 @@ type
   ULONGLONG = Int64;
   {$else}
   ULONGLONG = Windows.ULONGLONG;
-  {$endif}
+  {$endif UNICODE}
 
   TOverlapped = Windows.TOverlapped;
 
@@ -73,12 +73,19 @@ type
   /// http.sys API 2.0 logging file supported layouts
   // - match low-level HTTP_LOGGING_TYPE as defined in HTTP 2.0 API
   THttpApiLoggingType = (
-    hltW3C, hltIIS, hltNCSA, hltRaw);
+    hltW3C,
+    hltIIS,
+    hltNCSA,
+    hltRaw);
 
   /// http.sys API 2.0 logging file rollover types
   // - match low-level HTTP_LOGGING_ROLLOVER_TYPE as defined in HTTP 2.0 API
   THttpApiLoggingRollOver = (
-    hlrSize, hlrDaily, hlrWeekly, hlrMonthly, hlrHourly);
+    hlrSize,
+    hlrDaily,
+    hlrWeekly,
+    hlrMonthly,
+    hlrHourly);
 
   /// http.sys API 2.0 logging option flags
   // - used to alter the default logging behavior
@@ -91,21 +98,46 @@ type
   // errors or success logging
   // - match low-level HTTP_LOGGING_FLAG_* constants as defined in HTTP 2.0 API
   THttpApiLoggingFlags = set of (
-    hlfLocalTimeRollover, hlfUseUTF8Conversion, hlfLogErrorsOnly, hlfLogSuccessOnly);
+    hlfLocalTimeRollover,
+    hlfUseUTF8Conversion,
+    hlfLogErrorsOnly,
+    hlfLogSuccessOnly);
 
   /// http.sys API 2.0 fields used for W3C logging
   // - match low-level HTTP_LOG_FIELD_* constants as defined in HTTP 2.0 API
   THttpApiLogFields = set of (
-    hlfDate, hlfTime, hlfClientIP, hlfUserName, hlfSiteName, hlfComputerName,
-    hlfServerIP, hlfMethod, hlfURIStem, hlfURIQuery, hlfStatus, hlfWIN32Status,
-    hlfBytesSent, hlfBytesRecv, hlfTimeTaken, hlfServerPort, hlfUserAgent,
-    hlfCookie, hlfReferer, hlfVersion, hlfHost, hlfSubStatus);
+    hlfDate,
+    hlfTime,
+    hlfClientIP,
+    hlfUserName,
+    hlfSiteName,
+    hlfComputerName,
+    hlfServerIP,
+    hlfMethod,
+    hlfURIStem,
+    hlfURIQuery,
+    hlfStatus,
+    hlfWIN32Status,
+    hlfBytesSent,
+    hlfBytesRecv,
+    hlfTimeTaken,
+    hlfServerPort,
+    hlfUserAgent,
+    hlfCookie,
+    hlfReferer,
+    hlfVersion,
+    hlfHost,
+    hlfSubStatus);
 
   /// http.sys API 2.0 fields used for server-side authentication
   // - as used by THttpApiServer.SetAuthenticationSchemes/AuthenticationSchemes
   // - match low-level HTTP_AUTH_ENABLE_* constants as defined in HTTP 2.0 API
   THttpApiRequestAuthentications = set of (
-    haBasic, haDigest, haNtlm, haNegotiate, haKerberos);
+    haBasic,
+    haDigest,
+    haNtlm,
+    haNegotiate,
+    haKerberos);
 
 type
   // HTTP version used
@@ -116,33 +148,96 @@ type
 
   // the req* values identify Request Headers, and resp* Response Headers
   THttpHeader = (
-    reqCacheControl, reqConnection, reqDate, reqKeepAlive,
-    reqPragma, reqTrailer, reqTransferEncoding, reqUpgrade, reqVia, reqWarning,
-    reqAllow, reqContentLength, reqContentType, reqContentEncoding,
-    reqContentLanguage, reqContentLocation, reqContentMd5, reqContentRange,
-    reqExpires, reqLastModified, reqAccept, reqAcceptCharset, reqAcceptEncoding,
-    reqAcceptLanguage, reqAuthorization, reqCookie, reqExpect, reqFrom, reqHost,
-    reqIfMatch, reqIfModifiedSince, reqIfNoneMatch, reqIfRange,
-    reqIfUnmodifiedSince, reqMaxForwards, reqProxyAuthorization, reqReferrer,
-    reqRange, reqTe, reqTranslate, reqUserAgent, respAcceptRanges = 20, respAge,
-    respEtag, respLocation, respProxyAuthenticate, respRetryAfter, respServer,
-    respSetCookie, respVary, respWwwAuthenticate);
+    reqCacheControl,
+    reqConnection,
+    reqDate,
+    reqKeepAlive,
+    reqPragma,
+    reqTrailer,
+    reqTransferEncoding,
+    reqUpgrade,
+    reqVia,
+    reqWarning,
+    reqAllow,
+    reqContentLength,
+    reqContentType,
+    reqContentEncoding,
+    reqContentLanguage,
+    reqContentLocation,
+    reqContentMd5,
+    reqContentRange,
+    reqExpires,
+    reqLastModified,
+    reqAccept,
+    reqAcceptCharset,
+    reqAcceptEncoding,
+    reqAcceptLanguage,
+    reqAuthorization,
+    reqCookie,
+    reqExpect,
+    reqFrom,
+    reqHost,
+    reqIfMatch,
+    reqIfModifiedSince,
+    reqIfNoneMatch,
+    reqIfRange,
+    reqIfUnmodifiedSince,
+    reqMaxForwards,
+    reqProxyAuthorization,
+    reqReferrer,
+    reqRange,
+    reqTe,
+    reqTranslate,
+    reqUserAgent,
+    respAcceptRanges = 20,
+    respAge,
+    respEtag,
+    respLocation,
+    respProxyAuthenticate,
+    respRetryAfter,
+    respServer,
+    respSetCookie,
+    respVary,
+    respWwwAuthenticate);
 
   THttpVerb = (
-    hvUnparsed, hvUnknown, hvInvalid,
-    hvOPTIONS, hvGET, hvHEAD, hvPOST, hvPUT, hvDELETE, hvTRACE, hvCONNECT,
+    hvUnparsed,
+    hvUnknown,
+    hvInvalid,
+    hvOPTIONS,
+    hvGET,
+    hvHEAD,
+    hvPOST,
+    hvPUT,
+    hvDELETE,
+    hvTRACE,
+    hvCONNECT,
     hvTRACK,  // used by Microsoft Cluster Server for a non-logged trace
-    hvMOVE, hvCOPY, hvPROPFIND, hvPROPPATCH, hvMKCOL, hvLOCK, hvUNLOCK, hvSEARCH,
+    hvMOVE,
+    hvCOPY,
+    hvPROPFIND,
+    hvPROPPATCH,
+    hvMKCOL,
+    hvLOCK,
+    hvUNLOCK,
+    hvSEARCH,
     hvMaximum);
 
   THttpChunkType = (
-    hctFromMemory, hctFromFileHandle, hctFromFragmentCache);
+    hctFromMemory,
+    hctFromFileHandle,
+    hctFromFragmentCache);
 
   THttpServiceConfigID = (
-    hscIPListenList, hscSSLCertInfo, hscUrlAclInfo, hscMax);
+    hscIPListenList,
+    hscSSLCertInfo,
+    hscUrlAclInfo,
+    hscMax);
 
   THttpServiceConfigQueryType = (
-    hscQueryExact, hscQueryNext, hscQueryMax);
+    hscQueryExact,
+    hscQueryNext,
+    hscQueryMax);
 
   HTTP_URL_CONTEXT = HTTP_OPAQUE_ID;
 
@@ -176,7 +271,7 @@ type
 
   PHTTP_UNKNOWN_HEADER = ^HTTP_UNKNOWN_HEADER;
 
-  HTTP_UNKNOWN_HEADERs = array of HTTP_UNKNOWN_HEADER;
+  HTTP_UNKNOWN_HEADERS = array of HTTP_UNKNOWN_HEADER;
 
   HTTP_KNOWN_HEADER = record
     RawValueLength: word;     // in bytes not including the #0
@@ -284,22 +379,31 @@ type
   end;
 
   HTTP_REQUEST_INFO_TYPE = (
-    HttpRequestInfoTypeAuth, HttpRequestInfoTypeChannelBind,
-    HttpRequestInfoTypeSslProtocol, HttpRequestInfoTypeSslTokenBindingDraft,
-    HttpRequestInfoTypeSslTokenBinding, HttpRequestInfoTypeRequestTiming,
-    HttpRequestInfoTypeTcpInfoV0, HttpRequestInfoTypeRequestSizing,
-    HttpRequestInfoTypeQuicStats, HttpRequestInfoTypeTcpInfoV1);
+    HttpRequestInfoTypeAuth,
+    HttpRequestInfoTypeChannelBind,
+    HttpRequestInfoTypeSslProtocol,
+    HttpRequestInfoTypeSslTokenBindingDraft,
+    HttpRequestInfoTypeSslTokenBinding,
+    HttpRequestInfoTypeRequestTiming,
+    HttpRequestInfoTypeTcpInfoV0,
+    HttpRequestInfoTypeRequestSizing,
+    HttpRequestInfoTypeQuicStats,
+    HttpRequestInfoTypeTcpInfoV1);
 
   // about Authentication in HTTP Version 2.0
   // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
   HTTP_AUTH_STATUS = (
-    HttpAuthStatusSuccess, HttpAuthStatusNotAuthenticated,
+    HttpAuthStatusSuccess,
+    HttpAuthStatusNotAuthenticated,
     HttpAuthStatusFailure);
 
   HTTP_REQUEST_AUTH_TYPE = (
-    HttpRequestAuthTypeNone, HttpRequestAuthTypeBasic,
-    HttpRequestAuthTypeDigest, HttpRequestAuthTypeNTLM,
-    HttpRequestAuthTypeNegotiate, HttpRequestAuthTypeKerberos);
+    HttpRequestAuthTypeNone,
+    HttpRequestAuthTypeBasic,
+    HttpRequestAuthTypeDigest,
+    HttpRequestAuthTypeNTLM,
+    HttpRequestAuthTypeNegotiate,
+    HttpRequestAuthTypeKerberos);
 
   SECURITY_STATUS = ULONG;
 
@@ -383,7 +487,8 @@ type
 
   HTTP_RESPONSE_INFO_TYPE = (
     HttpResponseInfoTypeMultipleKnownHeaders,
-    HttpResponseInfoTypeAuthenticationProperty, HttpResponseInfoTypeQosProperty,
+    HttpResponseInfoTypeAuthenticationProperty,
+    HttpResponseInfoTypeQosProperty,
     HttpResponseInfoTypeChannelBind);
 
   HTTP_RESPONSE_INFO = record
@@ -427,12 +532,12 @@ type
     /// will set all header values from lines
     // - Content-Type/Content-Encoding/Location will be set in KnownHeaders[]
     // - all other headers will be set in temp UnknownHeaders[]
-    procedure SetHeaders(P: PUTF8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERs);
+    procedure SetHeaders(P: PUTF8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
     /// add one header value to the internal headers
     // - SetHeaders() method should have been called before to initialize the
     // internal UnknownHeaders[] array
     function AddCustomHeader(P: PUTF8Char; var UnknownHeaders:
-      HTTP_UNKNOWN_HEADERs; ForceCustomHeader: boolean): PUTF8Char;
+      HTTP_UNKNOWN_HEADERS; ForceCustomHeader: boolean): PUTF8Char;
   end;
 
   PHTTP_RESPONSE = ^HTTP_RESPONSE;
@@ -440,7 +545,8 @@ type
   HTTP_PROPERTY_FLAGS = ULONG;
 
   HTTP_ENABLED_STATE = (
-    HttpEnabledStateActive, HttpEnabledStateInactive);
+    HttpEnabledStateActive,
+    HttpEnabledStateInactive);
 
   PHTTP_ENABLED_STATE = ^HTTP_ENABLED_STATE;
 
@@ -452,13 +558,15 @@ type
   PHTTP_STATE_INFO = ^HTTP_STATE_INFO;
 
   THTTP_503_RESPONSE_VERBOSITY = (
-    Http503ResponseVerbosityBasic, Http503ResponseVerbosityLimited,
+    Http503ResponseVerbosityBasic,
+    Http503ResponseVerbosityLimited,
     Http503ResponseVerbosityFull);
 
   PHTTP_503_RESPONSE_VERBOSITY = ^THTTP_503_RESPONSE_VERBOSITY;
 
   HTTP_QOS_SETTING_TYPE = (
-    HttpQosSettingTypeBandwidth, HttpQosSettingTypeConnectionLimit,
+    HttpQosSettingTypeBandwidth,
+    HttpQosSettingTypeConnectionLimit,
     HttpQosSettingTypeFlowRate // Windows Server 2008 R2 and Windows 7 only
   );
 
@@ -500,7 +608,8 @@ const
 
 type
   HTTP_SERVICE_CONFIG_TIMEOUT_KEY = (
-    IdleConnectionTimeout, HeaderWaitTimeout);
+    IdleConnectionTimeout,
+    HeaderWaitTimeout);
 
   PHTTP_SERVICE_CONFIG_TIMEOUT_KEY = ^HTTP_SERVICE_CONFIG_TIMEOUT_KEY;
 
@@ -576,7 +685,8 @@ type
 
   HTTP_SERVICE_BINDING_TYPE = (
     HttpServiceBindingTypeNone,
-    HttpServiceBindingTypeW, HttpServiceBindingTypeA);
+    HttpServiceBindingTypeW,
+    HttpServiceBindingTypeA);
 
   HTTP_SERVICE_BINDING_BASE = record
     BindingType: HTTP_SERVICE_BINDING_TYPE;
@@ -602,7 +712,8 @@ type
 
   HTTP_AUTHENTICATION_HARDENING_LEVELS = (
     HttpAuthenticationHardeningLegacy,
-    HttpAuthenticationHardeningMedium, HttpAuthenticationHardeningStrict);
+    HttpAuthenticationHardeningMedium,
+    HttpAuthenticationHardeningStrict);
 
 const
   HTTP_CHANNEL_BIND_PROXY = $1;
@@ -689,12 +800,17 @@ const
 
 type
   HTTP_LOGGING_TYPE = (
-    HttpLoggingTypeW3C, HttpLoggingTypeIIS,
-    HttpLoggingTypeNCSA, HttpLoggingTypeRaw);
+    HttpLoggingTypeW3C,
+    HttpLoggingTypeIIS,
+    HttpLoggingTypeNCSA,
+    HttpLoggingTypeRaw);
 
   HTTP_LOGGING_ROLLOVER_TYPE = (
-    HttpLoggingRolloverSize, HttpLoggingRolloverDaily, HttpLoggingRolloverWeekly,
-    HttpLoggingRolloverMonthly, HttpLoggingRolloverHourly);
+    HttpLoggingRolloverSize,
+    HttpLoggingRolloverDaily,
+    HttpLoggingRolloverWeekly,
+    HttpLoggingRolloverMonthly,
+    HttpLoggingRolloverHourly);
 
   HTTP_LOGGING_INFO = record
     Flags: HTTP_PROPERTY_FLAGS;
@@ -766,7 +882,8 @@ type
 
   HTTP_PROTECTION_LEVEL_TYPE = (
     HttpProtectionLevelUnrestricted,
-    HttpProtectionLevelEdgeRestricted, HttpProtectionLevelRestricted);
+    HttpProtectionLevelEdgeRestricted,
+    HttpProtectionLevelRestricted);
 
   HTTP_PROTECTION_LEVEL_INFO = record
     Flags: HTTP_PROPERTY_FLAGS;
@@ -777,7 +894,6 @@ type
 
 const
   // some values to avoid including the Windows unit in mormot.net.server
-  NO_ERROR = Windows.NO_ERROR;
   ERROR_ALREADY_EXISTS = Windows.ERROR_ALREADY_EXISTS;
   ERROR_HANDLE_EOF = Windows.ERROR_HANDLE_EOF;
   ERROR_MORE_DATA = Windows.ERROR_MORE_DATA;
@@ -901,7 +1017,7 @@ type
     /// sends entity-body data associated with an HTTP response.
     SendResponseEntityBody: function(ReqQueueHandle: THandle; RequestId:
       HTTP_REQUEST_ID; Flags: integer; EntityChunkCount: word;
-      pEntityChunks: pointer; var pBytesSent: Cardinal; pReserved1: Pointer = nil;
+      pEntityChunks: pointer; var pBytesSent: cardinal; pReserved1: Pointer = nil;
       pReserved2: Pointer = nil; pOverlapped: POverlapped = nil;
       pLogData: PHTTP_LOG_DATA = nil): HRESULT; stdcall;
     /// set specified data, such as IP addresses or SSL Certificates, from the
@@ -1037,9 +1153,11 @@ type
     constructor Create(api: THttpAPIs; Error: integer); reintroduce;
   published
     /// the error code of this exception
-    property LastError: integer read fLastError;
+    property LastError: integer
+      read fLastError;
     /// the execution context of this exception
-    property LastApi: THttpAPIs read fLastApi;
+    property LastApi: THttpAPIs
+      read fLastApi;
   end;
 
 
@@ -1239,7 +1357,7 @@ type
     /// access to the winhttp.dll loaded library
     LibraryHandle: THandle;
     /// depends on the published .dll functions
-    WebSocketEnabled: Boolean;
+    WebSocketEnabled: boolean;
     /// Initializes an application's use of the WinHTTP functions.
     Open: function(pwszUserAgent: PWideChar; dwAccessType: DWORD; pwszProxyName,
       pwszProxyBypass: PWideChar; dwFlags: DWORD): HINTERNET; stdcall;
@@ -1354,7 +1472,7 @@ type
     WEB_SOCKET_KEEPALIVE_INTERVAL_PROPERTY_TYPE,
     WEB_SOCKET_SUPPORTED_VERSIONS_PROPERTY_TYPE);
 
-  WEB_SOCKET_ACTION_QUEUE = Cardinal;
+  WEB_SOCKET_ACTION_QUEUE = cardinal;
 
   WEB_SOCKET_ACTION = (
     WEB_SOCKET_NO_ACTION, //0
@@ -1403,7 +1521,7 @@ type
     /// acces to the loaded library handle
     LibraryHandle: THandle;
     /// depends on Windows version
-    WebSocketEnabled: Boolean;
+    WebSocketEnabled: boolean;
     /// aborts a WebSocket session handle created by WebSocketCreateClientHandle
     // or WebSocketCreateServerHandle
     AbortHandle: procedure(hWebSocket: WEB_SOCKET_HANDLE); stdcall;
@@ -1475,9 +1593,11 @@ type
     constructor Create(api: TWebSocketAPIs; Error: integer); reintroduce; overload;
   published
     /// the error code of this exception
-    property LastError: integer read fLastError;
+    property LastError: integer
+      read fLastError;
     /// the execution context of this exception
-    property LastApi: TWebSocketAPIs read fLastApi;
+    property LastApi: TWebSocketAPIs
+      read fLastApi;
   end;
 
 const
@@ -1559,7 +1679,7 @@ function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): W
 
 /// retrieve the linefeed separated text from WebSockets array of headers
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
-  const aHeadersCount: Integer): RawUTF8;
+  const aHeadersCount: integer): RawUTF8;
 
 {$endif USEWININET}
 
@@ -1580,8 +1700,8 @@ const
 begin
   if aPort = '' then
     aPort := DEFAULT_PORT[Https];
-  aRoot := trim(aRoot);
-  aDomainName := trim(aDomainName);
+  aRoot := TrimU(aRoot);
+  aDomainName := TrimU(aDomainName);
   if aDomainName = '' then
   begin
     result := '';
@@ -1621,7 +1741,8 @@ begin
     P := Request.Headers.pUnknownHeaders;
     if P <> nil then
       for i := 1 to Request.Headers.UnknownHeaderCount do
-        if (P^.NameLength = L) and IdemPChar(P^.pName, Pointer(RemoteIPHeadUp)) then
+        if (P^.NameLength = L) and
+           IdemPChar(P^.pName, Pointer(RemoteIPHeadUp)) then
         begin
           FastSetString(RemoteIP, P^.pRawValue, P^.RawValueLength);
           break;
@@ -1629,7 +1750,8 @@ begin
         else
           inc(P);
   end;
-  if (RemoteIP = '') and (Request.Address.pRemoteAddress <> nil) then
+  if (RemoteIP = '') and
+     (Request.Address.pRemoteAddress <> nil) then
     RemoteIP := Request.Address.pRemoteAddress.IP(RemoteIPLocalHostAsVoidInServers);
   // compute headers length
   Lip := length(RemoteIP);
@@ -1649,7 +1771,7 @@ begin
       inc(P);
     end;
   // set headers content
-  FastSetString(result, nil, L);
+  FastSetString(result{%H-}, nil, L);
   D := pointer(result);
   for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
     if Request.Headers.KnownHeaders[H].RawValueLength <> 0 then
@@ -1785,8 +1907,8 @@ const
   XPV: PUTF8Char = XPOWEREDVALUE;
 {$endif NOXPOWEREDNAME}
 
-procedure HTTP_RESPONSE.SetHeaders(P: PUTF8Char; var UnknownHeaders:
-  HTTP_UNKNOWN_HEADERs);
+procedure HTTP_RESPONSE.SetHeaders(P: PUTF8Char;
+  var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
 begin
   Headers.pUnknownHeaders := pointer(UnknownHeaders);
   {$ifdef NOXPOWEREDNAME}
@@ -1811,8 +1933,9 @@ begin
     until false;
 end;
 
-function HTTP_RESPONSE.AddCustomHeader(P: PUTF8Char; var UnknownHeaders:
-  HTTP_UNKNOWN_HEADERs; ForceCustomHeader: boolean): PUTF8Char;
+function HTTP_RESPONSE.AddCustomHeader(P: PUTF8Char;
+  var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
+  ForceCustomHeader: boolean): PUTF8Char;
 const
   KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
     'CACHE-CONTROL:', 'CONNECTION:', 'DATE:', 'KEEP-ALIVE:', 'PRAGMA:',
@@ -1831,7 +1954,8 @@ begin
   else
     i := IdemPCharArray(P, KNOWNHEADERS);
   // WebSockets need CONNECTION as unknown header
-  if (i >= 0) and (THttpHeader(i) <> reqConnection) then
+  if (i >= 0) and
+     (THttpHeader(i) <> reqConnection) then
     with Headers.KnownHeaders[THttpHeader(i)] do
     begin
       while P^ <> ':' do
@@ -1847,7 +1971,8 @@ begin
   else
   begin
     UnknownName := pointer(P);
-    while (P^ >= ' ') and (P^ <> ':') do
+    while (P^ >= ' ') and
+          (P^ <> ':') do
       inc(P);
     if P^ = ':' then
       with UnknownHeaders[Headers.UnknownHeaderCount] do
@@ -1901,7 +2026,7 @@ var
   Buffer: array[0..511] of byte;
   BufferSize, UserSize, DomainSize: DWORD;
   UserInfo: PSIDAndAttributes;
-  NameUse: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
+  NameUse: {$ifdef FPC}SID_NAME_USE{$else}cardinal{$endif};
   tmp: SynUnicode;
   P: PWideChar;
 begin
@@ -1912,7 +2037,8 @@ begin
   UserSize := 0;
   DomainSize := 0;
   LookupAccountSidW(nil, UserInfo^.Sid, nil, UserSize, nil, DomainSize, NameUse);
-  if (UserSize = 0) or (DomainSize = 0) then
+  if (UserSize = 0) or
+     (DomainSize = 0) then
     exit;
   SetLength(tmp, UserSize + DomainSize - 1);
   P := pointer(tmp);
@@ -1920,7 +2046,7 @@ begin
      nil, UserInfo^.Sid, P + DomainSize, UserSize, P, DomainSize, NameUse) then
     exit;
   P[DomainSize] := '\';
-  result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
+  result := SynUnicodeToUtf8(tmp);
 end;
 
 
@@ -2016,11 +2142,13 @@ end;
 function HttpSys2ToWebSocketHeaders(
   const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 var
-  headerCnt: Integer;
-  i, idx: PtrInt;
+  headerCnt: integer;
+  i: PtrInt;
   h: THttpHeader;
   p: PHTTP_UNKNOWN_HEADER;
+  r: PWEB_SOCKET_HTTP_HEADER;
 begin
+  result := nil;
   headerCnt := 0;
   for h := Low(HTTP_KNOWNHEADERS) to High(HTTP_KNOWNHEADERS) do
     if aHttpHeaders.KnownHeaders[h].RawValueLength <> 0 then
@@ -2029,35 +2157,35 @@ begin
   if p <> nil then
     inc(headerCnt, aHttpHeaders.UnknownHeaderCount);
   SetLength(result, headerCnt);
-  idx := 0;
+  r := pointer(result);
   for h := Low(HTTP_KNOWNHEADERS) to High(HTTP_KNOWNHEADERS) do
     if aHttpHeaders.KnownHeaders[h].RawValueLength <> 0 then
     begin
-      result[idx].pcName := @HTTP_KNOWNHEADERS[h][1];
-      result[idx].ulNameLength := ord(HTTP_KNOWNHEADERS[h][0]);
-      result[idx].pcValue := aHttpHeaders.KnownHeaders[h].pRawValue;
-      result[idx].ulValueLength := aHttpHeaders.KnownHeaders[h].RawValueLength;
-      inc(idx);
+      r^.pcName := @HTTP_KNOWNHEADERS[h][1];
+      r^.ulNameLength := ord(HTTP_KNOWNHEADERS[h][0]);
+      r^.pcValue := aHttpHeaders.KnownHeaders[h].pRawValue;
+      r^.ulValueLength := aHttpHeaders.KnownHeaders[h].RawValueLength;
+      inc(r);
     end;
   p := aHttpHeaders.pUnknownHeaders;
   if p <> nil then
     for i := 1 to aHttpHeaders.UnknownHeaderCount do
     begin
-      result[idx].pcName := pointer(p^.pName);
-      result[idx].ulNameLength := p^.NameLength;
-      result[idx].pcValue := pointer(p^.pRawValue);
-      result[idx].ulValueLength := p^.RawValueLength;
-      inc(idx);
+      r^.pcName := pointer(p^.pName);
+      r^.ulNameLength := p^.NameLength;
+      r^.pcValue := pointer(p^.pRawValue);
+      r^.ulValueLength := p^.RawValueLength;
+      inc(r);
       inc(p);
     end;
 end;
 
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER; const
-  aHeadersCount: Integer): RawUTF8;
+  aHeadersCount: integer): RawUTF8;
 var
-  i: Integer;
+  i: integer;
   h: PWEB_SOCKET_HTTP_HEADER;
-  len: Integer;
+  len: integer;
   d: PAnsiChar;
 begin
   len := 0;
@@ -2068,7 +2196,7 @@ begin
       inc(len, h^.ulNameLength + h^.ulValueLength + 4);
     inc(h);
   end;
-  FastSetString(result, nil, len);
+  FastSetString(result{%H-}, nil, len);
   d := Pointer(result);
   h := aHeaders;
   for i := 1 to aHeadersCount do
@@ -2136,8 +2264,7 @@ initialization
     (sizeof(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
-
-finalization
+  WinHttpAPIInitialize;
 
 {$endif USEWININET}
 

@@ -36,15 +36,11 @@ uses
 { ************ TSQLDBOracleConnection* and TSQLDBOracleStatement Classes }
 
 type
-  /// event triggered when an expired password is detected
-  // - will allow to provide a new password
-  TOnPasswordExpired = function (Sender: TSQLDBConnection; var APassword: RawUTF8): boolean of object;
-
   /// will implement properties shared by native Oracle Client Interface connections
   TSQLDBOracleConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
   protected
-    fRowsPrefetchSize: Integer;
-    fBlobPrefetchSize: Integer;
+    fRowsPrefetchSize: integer;
+    fBlobPrefetchSize: integer;
     fStatementCacheSize: integer;
     fInternalBufferSize: integer;
     fEnvironmentInitializationMode: integer;
@@ -79,10 +75,11 @@ type
     /// determine if the SQL statement can be cached
     // - always returns false, to force server-side caching only on this driver
     function IsCachable(P: PUTF8Char): boolean; override;
-    function SQLLimitClause(AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; override;
+    function SQLLimitClause(AStmt: TSelectStatement): TSQLDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
-    property ClientVersion: RawUTF8 read GetClientVersion;
+    property ClientVersion: RawUTF8
+      read GetClientVersion;
     /// the OCI initialization mode used for the connection
     // - equals OCI_EVENTS or OCI_THREADED by default, since will likely be
     // used in a multi-threaded context (even if this class is inheriting from
@@ -93,25 +90,32 @@ type
       read fEnvironmentInitializationMode write fEnvironmentInitializationMode;
     /// the size (in bytes) of the internal buffer used to retrieve rows in statements
     // - default is 128 KB, which gives very good results
-    property InternalBufferSize: integer read fInternalBufferSize write fInternalBufferSize;
+    property InternalBufferSize: integer
+      read fInternalBufferSize write fInternalBufferSize;
     /// the size (in bytes) of rows data prefecth at OCI driver level
     // - is set to 128 KB by default, but may be changed for tuned performance
-    property RowsPrefetchSize: integer read fRowsPrefetchSize write fRowsPrefetchSize;
+    property RowsPrefetchSize: integer
+      read fRowsPrefetchSize write fRowsPrefetchSize;
     /// the size (in bytes) of LOB prefecth
     // - is set to 4096 (4 KB) by default, but may be changed for tuned performance
-    property BlobPrefetchSize: integer read fBlobPrefetchSize write fBlobPrefetchSize;
+    property BlobPrefetchSize: integer
+      read fBlobPrefetchSize write fBlobPrefetchSize;
     /// Password Expired event
-    property OnPasswordExpired: TOnPasswordExpired read FOnPasswordExpired write FOnPasswordExpired;
+    property OnPasswordExpired: TOnPasswordExpired
+      read FOnPasswordExpired write FOnPasswordExpired;
     /// Password changed event
-    property OnPasswordChanged: TNotifyEvent read FOnPasswordChanged write FOnPasswordChanged;
+    property OnPasswordChanged: TNotifyEvent
+      read FOnPasswordChanged write FOnPasswordChanged;
     /// the number of prepared statements cached by OCI on the Client side
     // - is set to 30 by default
     // - only used if UseCache=true
-    property StatementCacheSize: integer read fStatementCacheSize write fStatementCacheSize;
+    property StatementCacheSize: integer
+      read fStatementCacheSize write fStatementCacheSize;
     /// use the Secure External Password Store for Password Credentials
     // - see Oracle documentation
     // http://docs.oracle.com/cd/B28359_01/network.111/b28531/authentication.htm#DBSEG97906
-    property UseWallet: boolean read fUseWallet write fUseWallet;
+    property UseWallet: boolean
+      read fUseWallet write fUseWallet;
     /// When we execute a SELECT statement across a database link, a transaction lock is placed
     // on the undo segments (transaction is implicity started).
     // Setting this options to true allow to ignore ORA-01453 during
@@ -137,10 +141,10 @@ type
     // match DB charset for CHAR/NVARCHAR2, nil for OCI_UTF8/OCI_AL32UTF8
     fAnsiConvert: TSynAnsiConvert;
     procedure STRToUTF8(P: PAnsiChar; var result: RawUTF8;
-      ColumnDBCharSet,ColumnDBForm: Cardinal);
+      ColumnDBCharSet,ColumnDBForm: cardinal);
     {$ifndef UNICODE}
     procedure STRToAnsiString(P: PAnsiChar; var result: AnsiString;
-      ColumnDBCharSet,ColumnDBForm: Cardinal);
+      ColumnDBCharSet,ColumnDBForm: cardinal);
     {$endif}
   public
     /// prepare a connection to a specified Oracle database server
@@ -219,7 +223,7 @@ type
     procedure FreeHandles(AfterError: boolean);
     procedure FetchTest(Status: integer);
     /// Col=0...fColumnCount-1
-    function GetCol(Col: Integer; out Column: PSQLDBColumnProperty): pointer;
+    function GetCol(Col: integer; out Column: PSQLDBColumnProperty): pointer;
     // called by Prepare and CreateFromExistingStatement
     procedure SetColumnsForPreparedStatement;
     // called by Step and CreateFromExistingStatement
@@ -308,9 +312,9 @@ type
     // - this implementation will retrieve the data with no temporary variable,
     // and handling ftCurrency/NUMBER(22,0) as fast as possible, directly from
     // the memory buffers returned by OCI: it will ensure best performance
-    // possible when called from TSQLVirtualTableCursorExternal.Column method
-    // as defined in mORMotDB unit (i.e. mORMot external DB access)
-    procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
+    // possible when called from TOrmVirtualTableCursorExternal.Column method
+    // as defined in mormot.orm.sql unit (i.e. mORMot external DB access)
+    procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar;
       var Temp: RawByteString); override;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
@@ -341,7 +345,7 @@ type
     // Oracle) usually use such structures to get data from strored procedures
     // - this method allow direct access to the data rows after execution
     // - this overridden method will allow direct access to the data rows
-    function BoundCursor(Param: Integer): ISQLDBRows; override;
+    function BoundCursor(Param: integer): ISQLDBRows; override;
 
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
@@ -421,7 +425,8 @@ begin
   result := TSQLDBOracleConnection.Create(self);
 end;
 
-procedure TSQLDBOracleConnectionProperties.PasswordChanged(const ANewPassword: RawUTF8);
+procedure TSQLDBOracleConnectionProperties.PasswordChanged(
+  const ANewPassword: RawUTF8);
 begin
   SynDBLog.Add.Log(sllDB, 'PasswordChanged method called', self);
   fPassWord := ANewPassword;
@@ -429,8 +434,8 @@ begin
     FOnPasswordChanged(Self);
 end;
 
-function TSQLDBOracleConnectionProperties.SQLLimitClause(AStmt:
-  TSynTableStatement): TSQLDBDefinitionLimitClause;
+function TSQLDBOracleConnectionProperties.SQLLimitClause(
+  AStmt: TSelectStatement): TSQLDBDefinitionLimitClause;
 begin
   if AStmt.OrderByField <> nil then
   begin
@@ -588,7 +593,8 @@ end;
 destructor TSQLDBOracleConnection.Destroy;
 begin
   inherited Destroy;
-  if (OCI <> nil) and (fEnv <> nil) then
+  if (OCI <> nil) and
+     (fEnv <> nil) then
     OCI.HandleFree(fEnv, OCI_HTYPE_ENV);
 end;
 
@@ -597,7 +603,8 @@ begin
   try
     inherited Disconnect; // flush any cached statement
   finally
-    if (fError <> nil) and (OCI <> nil) then
+    if (fError <> nil) and
+       (OCI <> nil) then
       with SynDBLog.Enter(self, 'Disconnect'), OCI do
       begin
         if fTrans <> nil then
@@ -679,8 +686,9 @@ begin
   except
     on E: Exception do
     begin
-      if (Properties as TSQLDBOracleConnectionProperties).IgnoreORA01453OnStartTransaction
-        and (Pos('ORA-01453', E.Message) > 0) then
+      if (Properties as TSQLDBOracleConnectionProperties).
+          IgnoreORA01453OnStartTransaction and
+         (Pos('ORA-01453', E.Message) > 0) then
       begin
         if log <> nil then
           log.Log(sllWarning, 'It seems that we use DBLink, and Oracle ' +
@@ -702,8 +710,10 @@ var
   L: integer;
 begin
   L := StrLen(PUTF8Char(P));
-  if (L = 0) or (ColumnDBCharSet = OCI_AL32UTF8) or (ColumnDBCharSet = OCI_UTF8)
-    or (ColumnDBForm = SQLCS_NCHAR) then
+  if (L = 0) or
+     (ColumnDBCharSet = OCI_AL32UTF8) or
+     (ColumnDBCharSet = OCI_UTF8) or
+     (ColumnDBForm = SQLCS_NCHAR) then
     FastSetString(result, P, L)
   else
     result := fAnsiConvert.AnsiBufferToRawUTF8(P, L);
@@ -717,7 +727,8 @@ var
 begin
   L := StrLen(PUTF8Char(P));
   if (L = 0) or
-     ((ColumnDBCharSet <> OCI_AL32UTF8) and (ColumnDBCharSet <> OCI_UTF8) and
+     ((ColumnDBCharSet <> OCI_AL32UTF8) and
+      (ColumnDBCharSet <> OCI_UTF8) and
       (ColumnDBForm <> SQLCS_NCHAR) and
       (fAnsiConvert.CodePage = cardinal(Unicode_CodePage))) then
     SetString(result, P, L)
@@ -901,7 +912,8 @@ var
   U: RawUTF8;
 begin
   // dedicated version to avoid as much memory allocation than possible
-  if not Assigned(fStatement) or (CurrentRow <= 0) then
+  if not Assigned(fStatement) or
+      (CurrentRow <= 0) then
     raise ESQLDBOracle.CreateUTF8('%.ColumnsToJSON() with no prior Step', [self]);
   if WR.Expand then
     WR.Add('{');
@@ -912,8 +924,9 @@ begin
         WR.AddFieldName(ColumnName); // add '"ColumnName":'
       indicator := PSmallIntArray(fRowBuffer)[cardinal(col) * fRowCount +
         fRowFetchedCurrent];
-      if (indicator = -1) or (ColumnType = ftNull) then // ftNull for SQLT_RSET
-        WR.AddShort('null')
+      if (indicator = -1) or
+         (ColumnType = ftNull) then // ftNull for SQLT_RSET
+        WR.AddNull
       else
       begin
         if indicator <> 0 then
@@ -952,7 +965,7 @@ begin
             end;
           ftBlob:
             if fForceBlobAsNull then
-              WR.AddShort('null')
+              WR.AddNull
             else if ColumnValueInlined then
               SetString(U, PAnsiChar(V), ColumnValueDBSize)
             else
@@ -973,7 +986,7 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBOracleStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
+procedure TSQLDBOracleStatement.ColumnToSQLVar(Col: integer; var Value: TSQLVar;
   var Temp: RawByteString);
 var
   C: PSQLDBColumnProperty;
@@ -1172,7 +1185,7 @@ begin
   CheckParam(Param, ftUnknown, paramOut); // ftUnknown+paramOut indicate SQLT_RSET
 end;
 
-function TSQLDBOracleStatement.BoundCursor(Param: Integer): ISQLDBRows;
+function TSQLDBOracleStatement.BoundCursor(Param: integer): ISQLDBRows;
 begin
   dec(Param);
   if (cardinal(Param) >= cardinal(length(fBoundCursor))) or
@@ -1314,7 +1327,7 @@ var
 label
   txt;
 begin
-  if (fStatement = nil) then
+  if fStatement = nil then
     raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare', [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   SQLLogBegin(sllSQL);
@@ -1331,8 +1344,9 @@ begin
           [self, fPreparedParamsCount, fParamCount]);
       if not fExpectResults then
         fRowCount := 1; // to avoid ORA-24333 error
-      if (fParamCount > 0) then
-        if (fParamsArrayCount > 0) and not fExpectResults then
+      if fParamCount > 0 then
+        if (fParamsArrayCount > 0) and
+           not fExpectResults then
         begin
           // 1.1. Array DML binding
           SetLength(aIndicator, fParamCount);
@@ -1539,7 +1553,8 @@ begin
                       else
                       // before 11.2, we will use either SQLT_INT, SQLT_STR or SQLT_FLT
                       if VInOut = paramIn then
-                        if (VInt64 > low(integer)) and (VInt64 < high(Integer)) then
+                        if (VInt64 > low(integer)) and
+                           (VInt64 < high(integer)) then
                         begin
                           // map to 32 bit will always work
                           VDBType := SQLT_INT;
@@ -1618,13 +1633,13 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                               'blob length exceeds max size for parameter #%',
                               [self, KB(oLength), i + 1]);
                           UniqueString(VData); // for thread-safety
-                          PInteger(PtrInt(VData) - sizeof(Integer))^ := oLength;
+                          PInteger(PtrInt(VData) - sizeof(integer))^ := oLength;
                           if {%H-}wasStringHacked = nil then
                             SetLength(wasStringHacked, fParamCount shr 3 + 1);
                           SetBitPtr(pointer(wasStringHacked), i); // for unpatching below
                           {$endif FPC_64}
-                          oData := Pointer(PtrInt(VData) - sizeof(Integer));
-                          Inc(oLength, sizeof(Integer));
+                          oData := Pointer(PtrInt(VData) - sizeof(integer));
+                          Inc(oLength, sizeof(integer));
                         end;
                       end;
                   else
@@ -1639,14 +1654,16 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
               end;
         end;
       // 2. retrieve column information (if not already done)
-      if fExpectResults and (fColumn.Count = 0) then
+      if fExpectResults and
+         (fColumn.Count = 0) then
         // We move this after params binding to prevent "ORA-00932: inconsistent
         // datatypes" during call to StmtExecute with OCI_DESCRIBE_ONLY.
         // Because if called here sometimes it breaks the Oracle shared pool and
         // only `ALTER system flush shared_pool` seems to fix the DB state
         SetColumnsForPreparedStatement;
       // 3. execute prepared statement and dispatch data in row buffers
-      if (fColumnCount = 0) and (Connection.TransactionCount = 0) then
+      if (fColumnCount = 0) and
+         (Connection.TransactionCount = 0) then
         // for INSERT/UPDATE/DELETE without a transaction: AutoCommit after execution
         mode := OCI_COMMIT_ON_SUCCESS
       else        // for SELECT or inside a transaction: wait for an explicit COMMIT
@@ -1661,7 +1678,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
       if wasStringHacked <> nil then // restore patched strings length ASAP
         for i := 0 to fParamCount - 1 do
           if GetBitPtr(pointer(wasStringHacked), i) then
-            PInteger(PtrInt(fParams[i].VData) - sizeof(Integer))^ := 0;
+            PInteger(PtrInt(fParams[i].VData) - sizeof(integer))^ := 0;
       {$endif FPC_64}
       for i := 0 to ociArraysCount - 1 do
         OCI.Check(nil, self, OCI.ObjectFree(Env, fError, ociArrays[i],
@@ -1840,11 +1857,13 @@ begin
     fColumn.Clear;
 end;
 
-function TSQLDBOracleStatement.GetCol(Col: Integer; out Column:
+function TSQLDBOracleStatement.GetCol(Col: integer; out Column:
   PSQLDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value  against fColumnCount
-  if not Assigned(fStatement) or (fColumnCount = 0) or (fRowCount = 0) or
+  if not Assigned(fStatement) or
+     (fColumnCount = 0) or
+     (fRowCount = 0) or
      (fRowBuffer = nil) then
     raise ESQLDBOracle.CreateUTF8('%.Column*() with no prior Execute', [self]);
   if CurrentRow <= 0 then
@@ -1965,12 +1984,16 @@ begin
               AttrGet(oHandle, OCI_DTYPE_PARAM, @oScale, nil, OCI_ATTR_SCALE, fError);
               ColumnValueDBSize := sizeof(Double);
               case oScale of
-               {0: if (major_version>11) or ((major_version=11) and (minor_version>1)) then
+               {0: if (major_version>11) or
+                      ((major_version=11) and
+                       (minor_version>1)) then
                begin
                  // starting with 11.2, OCI supports NUMBER conversion into Int64
                  ColumnType := ftInt64;
                  ColumnValueDBType := SQLT_INT;
-               end else begin
+               end
+               else
+               begin
                  // we'll work out with null-terminated string
                  ColumnType := ftCurrency;
                  ColumnValueDBType := SQLT_STR;
@@ -2055,8 +2078,8 @@ begin
                 oCharSet := TSQLDBOracleConnection(Connection).fOCICharSet;
                 if ColumnValueDBCharSet = SQLCS_IMPLICIT then
                   ColumnValueDBCharSet := oCharSet
-                else if (ColumnValueDBCharSet <> oCharSet) and not
-                  SimilarCharSet(ColumnValueDBCharSet, oCharSet) then
+                else if (ColumnValueDBCharSet <> oCharSet) and
+                        not SimilarCharSet(ColumnValueDBCharSet, oCharSet) then
                   // log a warning, but use the connection-level code page
                   SynDBLog.Add.Log(sllWarning, 'Column [%] has % (%) charset - ' +
                     'expected % (%) -> possible data loss', [ColumnName,
@@ -2087,7 +2110,8 @@ begin
       fRowCount := 1;
     end
     else if (TSQLDBOracleConnectionProperties(Connection.Properties).
-      RowsPrefetchSize > 1024) and (ColumnLongTypes = []) then
+               RowsPrefetchSize > 1024) and
+            (ColumnLongTypes = []) then
     begin
       // prefetching if no LOB nor LONG column(s)
       Prefetch := 0; // set prefetch by Memory, not by row count
@@ -2099,7 +2123,8 @@ begin
     end;
     Setlength(fRowBuffer, fInternalBufferSize);
     assert(fRowCount > 0);
-    if ((hasLOB in ColumnLongTypes) or (hasCURS in ColumnLongTypes)) and
+    if ((hasLOB in ColumnLongTypes) or
+        (hasCURS in ColumnLongTypes)) and
        (fRowCount > 100) then
       fRowCount := 100; // do not create too much POCILobLocator items
     fRowBufferCount := fRowCount; // fRowCount may be set to 0: avoid leaking
@@ -2134,17 +2159,17 @@ begin
           nil, nil, OCI_DEFAULT), fError);
         case ColumnType of
           ftCurrency: // currency content is returned as SQLT_STR
-            Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE, @OCI_CHARSET_WIN1252,
-              0, OCI_ATTR_CHARSET_ID, fError), fError);
+            Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE,
+              @OCI_CHARSET_WIN1252, 0, OCI_ATTR_CHARSET_ID, fError), fError);
           ftUTF8:
             case ColumnValueDBForm of
               SQLCS_IMPLICIT: // force CHAR + VARCHAR2 inlined fields charset
                 // -> a conversion into UTF-8 would probably truncate the inlined result
-                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE, @ColumnValueDBCharSet,
-                  0, OCI_ATTR_CHARSET_ID, fError), fError);
+                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE,
+                  @ColumnValueDBCharSet, 0, OCI_ATTR_CHARSET_ID, fError), fError);
               SQLCS_NCHAR: // NVARCHAR2 + NCLOB will be retrieved directly as UTF-8 content
-                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE, @OCI_CHARSET_UTF8,
-                  0, OCI_ATTR_CHARSET_ID, fError), fError);
+                Check(nil, self, AttrSet(oDefine, OCI_HTYPE_DEFINE,
+                  @OCI_CHARSET_UTF8, 0, OCI_ATTR_CHARSET_ID, fError), fError);
             end;
         end;
         inc(RowSize, fRowBufferCount * ColumnValueDBSize);
@@ -2164,17 +2189,22 @@ begin
   SQLLogBegin(sllDB);
   try
     try
-      if (fStatement <> nil) or (fColumnCount > 0) then
-        raise ESQLDBOracle.CreateUTF8('%.Prepare should be called only once', [self]);
+      if (fStatement <> nil) or
+         (fColumnCount > 0) then
+        raise ESQLDBOracle.CreateUTF8(
+          '%.Prepare should be called only once', [self]);
       // 1. process SQL
       inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
       fPreparedParamsCount := ReplaceParamsByNumbers(aSQL, fSQLPrepared, ':', true);
       L := Length(fSQLPrepared);
-      while (L > 0) and (fSQLPrepared[L] <= ' ') do // trim right
+      while (L > 0) and
+            (fSQLPrepared[L] <= ' ') do // trim right
         dec(L);
       // allow one trailing ';' by writing ';;' or allows 'END;' at the end of a statement
-      if (L > 5) and (fSQLPrepared[L] = ';') and not IdemPChar(@fSQLPrepared[L -
-        3], 'END') then
+      if (L > 5) and
+         (fSQLPrepared[L] = ';') and
+         not (IdemPChar(@fSQLPrepared[L - 3], 'END') and
+              (fSQLPrepared[L - 4] <= 'A')) then
         dec(L);
       if L <> Length(fSQLPrepared) then
         SetLength(fSQLPrepared, L); // trim trailing spaces or ';' if needed
@@ -2222,7 +2252,8 @@ begin
   if not Assigned(fStatement) then
     raise ESQLDBOracle.CreateUTF8('%.Execute should be called before Step', [self]);
   result := false;
-  if (fCurrentRow < 0) or (fRowCount = 0) then
+  if (fCurrentRow < 0) or
+     (fRowCount = 0) then
     exit; // no data available at all
   sav := fCurrentRow;
   fCurrentRow := -1;
@@ -2274,7 +2305,5 @@ end;
 initialization
   TSQLDBOracleConnectionProperties.RegisterClassNameForDefinition;
 
-finalization
-  FreeAndNil(OCI);
 end.
 

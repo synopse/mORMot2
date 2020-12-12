@@ -12,6 +12,9 @@ program mormot2tests;
 
 uses
   {$I ..\src\mormot.uses.inc}
+  {$ifdef UNIX}
+  cwstring, // needed as fallback if ICU is not available
+  {$endif UNIX}
   mormot.core.base         in '..\src\core\mormot.core.base.pas',
   mormot.core.os           in '..\src\core\mormot.core.os.pas',
   mormot.core.unicode      in '..\src\core\mormot.core.unicode.pas',
@@ -33,20 +36,44 @@ uses
   mormot.core.search       in '..\src\core\mormot.core.search.pas',
   mormot.core.threads      in '..\src\core\mormot.core.threads.pas',
   mormot.core.interfaces   in '..\src\core\mormot.core.interfaces.pas',
+  mormot.core.mustache     in '..\src\core\mormot.core.mustache.pas',
   mormot.core.zip          in '..\src\core\mormot.core.zip.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
-  mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
-  mormot.net.http          in '..\src\net\mormot.net.http.pas',
+  mormot.lib.lizard        in '..\src\lib\mormot.lib.lizard.pas',
   mormot.lib.winhttp       in '..\src\lib\mormot.lib.winhttp.pas',
   mormot.lib.curl          in '..\src\lib\mormot.lib.curl.pas',
+  mormot.lib.sspi          in '..\src\lib\mormot.lib.sspi.pas',
+  mormot.lib.gssapi        in '..\src\lib\mormot.lib.gssapi.pas',
+  mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
+  mormot.net.http          in '..\src\net\mormot.net.http.pas',
+  mormot.net.relay         in '..\src\net\mormot.net.relay.pas',
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
   mormot.net.asynch        in '..\src\net\mormot.net.asynch.pas',
-  mormot.net.websock       in '..\src\net\mormot.net.websock.pas',
+  mormot.net.ws.core       in '..\src\net\mormot.net.ws.core.pas',
+  mormot.net.ws.client     in '..\src\net\mormot.net.ws.client.pas',
+  mormot.net.ws.server     in '..\src\net\mormot.net.ws.server.pas',
+  mormot.net.rtsphttp      in '..\src\net\mormot.net.rtsphttp.pas',
   mormot.orm.core          in '..\src\orm\mormot.orm.core.pas',
   mormot.orm.rest          in '..\src\orm\mormot.orm.rest.pas',
+  mormot.orm.client        in '..\src\orm\mormot.orm.client.pas',
+  mormot.orm.storage       in '..\src\orm\mormot.orm.storage.pas',
+  mormot.orm.server        in '..\src\orm\mormot.orm.server.pas',
+  mormot.orm.sql           in '..\src\orm\mormot.orm.sql.pas',
+  mormot.orm.sqlite3       in '..\src\orm\mormot.orm.sqlite3.pas',
+  mormot.orm.mongodb       in '..\src\orm\mormot.orm.mongodb.pas',
   mormot.soa.core          in '..\src\soa\mormot.soa.core.pas',
+  mormot.soa.client        in '..\src\soa\mormot.soa.client.pas',
+  mormot.soa.server        in '..\src\soa\mormot.soa.server.pas',
+  mormot.soa.codegen       in '..\src\soa\mormot.soa.codegen.pas',
   mormot.rest.core         in '..\src\rest\mormot.rest.core.pas',
+  mormot.rest.client       in '..\src\rest\mormot.rest.client.pas',
+  mormot.rest.server       in '..\src\rest\mormot.rest.server.pas',
+  mormot.rest.memserver    in '..\src\rest\mormot.rest.memserver.pas',
+  mormot.rest.sqlite3      in '..\src\rest\mormot.rest.sqlite3.pas',
+  mormot.rest.http.client  in '..\src\rest\mormot.rest.http.client.pas',
+  mormot.rest.http.server  in '..\src\rest\mormot.rest.http.server.pas',
+  mormot.rest.mvc          in '..\src\rest\mormot.rest.mvc.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
   mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
   mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',
@@ -73,8 +100,14 @@ uses
   //mormot.db.rad.unidac     in '..\src\db\mormot.db.rad.unidac.pas',
   //mormot.db.rad.nexusdb    in '..\src\db\mormot.db.rad.nexusdb.pas',
   {$endif FPC}
+  mormot.app.console       in '..\src\app\mormot.app.console.pas',
+  mormot.app.daemon        in '..\src\app\mormot.app.daemon.pas',
+  mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
   test.core.base           in '.\test.core.base.pas',
-  test.core.crypto         in '.\test.core.crypto.pas';
+  test.core.data           in '.\test.core.data.pas',
+  test.core.crypto         in '.\test.core.crypto.pas',
+  test.core.ecc            in '.\test.core.ecc.pas',
+  test.net.proto           in '.\test.net.proto.pas';
 
 
 { TIntegrationTests }
@@ -87,8 +120,12 @@ type
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  AddCase([TTestCoreBase, TTestCoreCrypto]);
+  AddCase([// 
+  //
+  TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
+  ]);
 end;
+
 
 
 begin

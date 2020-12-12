@@ -2,13 +2,15 @@
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-  Implements WinSock2 API calls, as used by mormot.net.sock.pas
+  Implements WinSock2 API calls, as used by mormot.net.sock.pas on Windows.
 }
 
 uses
   Windows;
   
-function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR}): TNetResult; forward;
+function NetLastError(AnotherNonFatal: integer = 0{NO_ERROR};
+  Error: PInteger = nil): TNetResult; forward;
+
 
 { ******** WinSock2 Type Definitions }
 
@@ -40,8 +42,8 @@ const
 type
   PTimeVal = ^TTimeVal;
   TTimeVal = record
-    tv_sec: Longint;
-    tv_usec: Longint;
+    tv_sec: integer;
+    tv_usec: integer;
   end;
 
 const
@@ -419,13 +421,16 @@ begin
     h.ai_protocol := 0;
     result := getaddrinfo(pointer(ip), nil, @h, res) = NO_ERROR;
   end
-  else if (ip = cAnyHost) or (ip = c6AnyHost) then
+  else if (ip = cAnyHost) or
+          (ip = c6AnyHost) then
   begin
     // 0.0.0.0
     h.ai_flags := AI_PASSIVE;
     result := getaddrinfo(nil, pointer(port), @h, res) = NO_ERROR;
   end
-  else if (ip = '') or (ip = cLocalhost) or (ip = c6Localhost) or
+  else if (ip = '') or
+          (ip = cLocalhost) or
+          (ip = c6Localhost) or
           (PropNameEquals(ip, 'localhost')) then
     // 127.0.0.1
     result := getaddrinfo(nil, pointer(port), @h, res) = NO_ERROR
@@ -523,7 +528,8 @@ begin
     rd.fd_count := 1;
     rdp := @rd;
   end;
-  if (neWrite in scope) or not (neRead in scope) then // a least one is needed
+  if (neWrite in scope) or
+     not (neRead in scope) then // a least one is needed
   begin
     wr.fd_array[0] := sock;
     wr.fd_count := 1;
@@ -537,7 +543,9 @@ begin
   if res = 0 then
     // nothing new detected
     exit;
-  if (rdp <> nil) and ({%H-}rd.fd_count = 1) and (rd.fd_array[0] = sock) then
+  if (rdp <> nil) and
+     ({%H-}rd.fd_count = 1) and
+     (rd.fd_array[0] = sock) then
   begin
     // Windows expects to check FIONREAD for graceful disconnection
     if ioctlsocket(sock, FIONREAD, @pending) <> NO_ERROR then
@@ -547,7 +555,9 @@ begin
     else
       include(result, neClosed);
   end;
-  if (wrp <> nil) and ({%H-}wr.fd_count = 1) and (wr.fd_array[0] = sock) then
+  if (wrp <> nil) and
+     ({%H-}wr.fd_count = 1) and
+     (wr.fd_array[0] = sock) then
     include(result, neWrite);
 end;
 
@@ -555,7 +565,7 @@ end;
 { ******************** Efficient Multiple Sockets Polling }
 
 function FD_ISSET(Socket: TNetSocket; const FDSet: TFDSet): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   result := PtrUIntScanExists(@FDSet.fd_array, FDSet.fd_count, PtrUInt(Socket));
 end;
@@ -615,7 +625,9 @@ function TPollSocketSelect.Subscribe(socket: TNetSocket;
   events: TPollSocketEvents; tag: TPollSocketTag): boolean;
 begin
   result := false;
-  if (self = nil) or (socket = nil) or (byte(events) = 0) or
+  if (self = nil) or
+     (socket = nil) or
+     (byte(events) = 0) or
      (fCount = fMaxSockets) or
      PtrUIntScanExists(pointer(fTagSocket), fCount, PtrUInt(socket)) then
     exit;
@@ -636,7 +648,8 @@ var
   i: PtrInt;
 begin
   result := false;
-  if (self <> nil) and (socket <> nil) then
+  if (self <> nil) and
+     (socket <> nil) then
   begin
     i := PtrUIntScanIndex(pointer(fTagSocket), fCount, PtrUInt(socket));
     if i < 0 then
@@ -668,7 +681,8 @@ var
   tmp: array[0..FD_SETSIZE - 1] of TPollSocketResult;
 begin
   result := -1; // error
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   if fRead.fd_count > 0 then
   begin
@@ -736,10 +750,6 @@ type
 
   TCtxtHandle = type TCredHandle;
   PCtxtHandle = ^TCtxtHandle;
-
-  {$ifdef DELPHI5OROLDER}
-  PCardinal = ^Cardinal;
-  {$endif}
 
   TSChannelCred = record
     dwVersion: cardinal;
@@ -867,7 +877,9 @@ const
   ISC_REQ_FLAGS =
     ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or
     ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or
-    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
+    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM or
+    // this last one to prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
+    ISC_REQ_MANUAL_CRED_VALIDATION;
 
   SECBUFFER_VERSION = 0;
   SECBUFFER_EMPTY = 0;
@@ -879,8 +891,9 @@ const
 
   SEC_E_OK = 0;
   SEC_I_CONTINUE_NEEDED = $00090312;
-  SEC_I_RENEGOTIATE = $00090321;
   SEC_I_CONTEXT_EXPIRED	= $00090317;
+  SEC_I_INCOMPLETE_CREDENTIALS = $00090320;
+  SEC_I_RENEGOTIATE = $00090321;
   SEC_E_INCOMPLETE_MESSAGE = $80090318;
   SEC_E_INVALID_TOKEN = $80090308;
 
@@ -894,7 +907,7 @@ const
 
 procedure ESChannelRaiseLastError; // not defined e.g. with Delphi 5
 var
-  LastError: Integer;
+  LastError: integer;
 begin
   LastError := GetLastError;
   raise ESChannel.CreateFmt('System Error %d [%s]', [LastError, SysErrorMessage(LastError)]);
@@ -920,8 +933,11 @@ const
   TLSRECMAXSIZE = 19000; // stack buffers for TSChannelClient.Receive/Send
 
 type
-  {$ifdef USERECORDWITHMETHODS}THandshakeBuf = record
-    {$else}THandshakeBuf = object{$endif}
+  {$ifdef USERECORDWITHMETHODS}
+  THandshakeBuf = record
+  {$else}
+  THandshakeBuf = object
+  {$endif}
   public
     buf: array[0..2] of TSecBuffer;
     input, output: TSecBufferDesc;
@@ -958,7 +974,8 @@ begin
   inc(DataCount, aBuffer.cbBuffer);
 end;
 
-procedure TSChannelClient.AfterConnection(aSocket: TNetSocket; const aServerAddress: RawUTF8);
+procedure TSChannelClient.AfterConnection(aSocket: TNetSocket;
+  const aServerAddress: RawUTF8);
 var
   buf: THandshakeBuf;
   res, f: cardinal;
@@ -996,7 +1013,8 @@ begin
   len := 0;
   SetLength(tmp, 65536);
   res := SEC_I_CONTINUE_NEEDED;
-  while (res = SEC_I_CONTINUE_NEEDED) or (res = SEC_E_INCOMPLETE_MESSAGE) do
+  while (res = SEC_I_CONTINUE_NEEDED) or
+        (res = SEC_E_INCOMPLETE_MESSAGE) do
   begin
     if res <> SEC_E_INCOMPLETE_MESSAGE then
       len := 0;
@@ -1007,12 +1025,19 @@ begin
     buf.buf[0].pvBuffer := pointer(tmp);
     res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
       SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
-    if (res = SEC_E_OK) or (res = SEC_I_CONTINUE_NEEDED) or
+    if res = SEC_I_INCOMPLETE_CREDENTIALS then
+      // check https://stackoverflow.com/a/47479968/458259
+      res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
+        SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
+    if (res = SEC_E_OK) or
+       (res = SEC_I_CONTINUE_NEEDED) or
        ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
     begin
-      if (buf.buf[2].cbBuffer <> 0) and (buf.buf[2].pvBuffer <> nil) then
+      if (buf.buf[2].cbBuffer <> 0) and
+         (buf.buf[2].pvBuffer <> nil) then
       begin
-        CheckSocket(mormot.net.sock.Send(aSocket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+        CheckSocket(mormot.net.sock.Send(
+          aSocket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
         CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
       end;
     end;
@@ -1205,7 +1230,8 @@ begin
         dec(len, s);
         inc(sent, s);
       end;
-      Sleep(1); // try again
+      SleepHiRes(0); // warning: Sleep(1) waits typically 1-15 ms on Windows
+      // loop to try again
     until false;
   end;
   result := nrOK;

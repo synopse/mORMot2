@@ -12,20 +12,22 @@ The framework source code is licensed under a disjunctive three-license giving t
 - *GNU Lesser General Public License*, version 2.1 or later (LGPL), with *linking exception* of the *FPC modified LGPL*.
 This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
 
-See LICENSE.md file in the root folder of this repository for more information.
+See [the full licensing terms](../LICENCE.md) in the root folder of this repository for more information.
 
 ## Sub-Folders
 
 The source code tree is split into the following sub-folders:
 
-- `core` for low-level shared components like text, JSON, compression, crypto, network;
-- `lib` for external third-party libraries like zlib or openssl;
-- `net` for the client/server communication layer;
-- `db` for our SQLite3 kernel, and SQL/NoSQL direct access;
-- `orm` for high-level ORM features;
-- `soa` for high-level SOA features;
-- `app` for hosting REST (micro)services/daemons and applications;
-- `ddd` for *Domain-Driven-Design* related code.
+- [`core`](core) for low-level shared components like text, RTTI, JSON, compression, crypto;
+- [`lib`](lib) for external third-party libraries like *zlib* or *openssl*;
+- [`net`](net) for the client/server communication layer;
+- [`db`](db) for our *SQLite3* kernel, and SQL/NoSQL direct access;
+- [`rest`](rest) for the RESTful client/server processing;
+- [`orm`](orm) for high-level ORM features;
+- [`soa`](soa) for high-level SOA features;
+- [`app`](app) for hosting (micro)services/daemons and applications;
+- [`ddd`](ddd) for *Domain-Driven-Design* related code;
+- [`tools`](tools) for some useful tools tied to our framework.
 
 
 ## Units Naming
@@ -39,5 +41,6 @@ By convention:
 ## Include Files
 
 To clean the design and enhance source maintainibility, some units have associated `*.inc` source files:
-- To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc` to include non-Windows OS calls;
-- To regroup CPU-specific (asm) code - e.g. `mormot.core.crypto.asmx64.inc` to include `x86_64` assembly.
+- To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc` to include non-Windows OS calls in `mormot.core.os`;
+- To regroupe Compiler-specific code - e.g. `mormot.core.rtti.fpc.inc` to include FPC RTTI in `mormot.core.rtti`;
+- To regroup CPU-specific (asm) code - e.g. `mormot.core.crypto.asmx64.inc` to include `x86_64` assembly in `mormot.core.crypto`.

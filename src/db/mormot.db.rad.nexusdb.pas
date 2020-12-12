@@ -39,6 +39,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.data,
   mormot.core.datetime,
   mormot.core.variants,
   mormot.core.rtti,
@@ -127,7 +128,8 @@ type
     function NewConnection: TSQLDBConnection; override;
   published
     /// the transport protocol used to connect to the NexusDB engine
-    property Protocol: TNXProtocol read fProtocol;
+    property Protocol: TNXProtocol
+      read fProtocol;
   end;
 
 
@@ -162,9 +164,11 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated NexusDB connection instance
-    property Database: TnxDatabase read fDatabase;
+    property Database: TnxDatabase
+      read fDatabase;
     /// associated NexusDB server engine
-    property ServerEngine: TnxBaseServerEngine read fServerEngine write SetServerEngine;
+    property ServerEngine: TnxBaseServerEngine
+      read fServerEngine write SetServerEngine;
   end;
 
   // implements a statement via the native NexusDB connection
@@ -282,7 +286,8 @@ end;
 
 function TSQLDBNexusDBConnectionProperties.DatabaseExists: boolean;
 begin
-  if (fProtocol = nxpFOLDER) and (fDatabaseName <> NEXUSDB_INMEMORY) then
+  if (fProtocol = nxpFOLDER) and
+     (fDatabaseName <> NEXUSDB_INMEMORY) then
     result := DirectoryExists(UTF8ToString(fDatabaseName))
   else
     result := True; // if we cannot determine directly, assume it exists
@@ -424,7 +429,8 @@ end;
 
 function TSQLDBNexusDBConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and fDatabase.Connected;
+  result := Assigned(fDatabase) and
+            fDatabase.Connected;
 end;
 
 function TSQLDBNexusDBConnection.NewStatement: TSQLDBStatement;

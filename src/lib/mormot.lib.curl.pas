@@ -177,27 +177,81 @@ type
 
   /// low-level result codes for libcurl library API calls
   TCurlResult = (
-    crOK, crUnsupportedProtocol, crFailedInit, crURLMalformat, crURLMalformatUser,
-    crCouldNotResolveProxy, crCouldNotResolveHost, crCouldNotConnect,
-    crFTPWeirdServerReply, crFTPAccessDenied, crFTPUserPasswordIncorrect,
-    crFTPWeirdPassReply, crFTPWeirdUserReply, crFTPWeirdPASVReply,
-    crFTPWeird227Format, crFTPCantGetHost, crFTPCantReconnect, crFTPCouldNotSetBINARY,
-    crPartialFile, crFTPCouldNotRetrFile, crFTPWriteError, crFTPQuoteError,
-    crHTTPReturnedError, crWriteError, crMalFormatUser, crFTPCouldNotStorFile,
-    crReadError, crOutOfMemory, crOperationTimeouted,
-    crFTPCouldNotSetASCII, crFTPPortFailed, crFTPCouldNotUseREST, crFTPCouldNotGetSize,
-    crHTTPRangeError, crHTTPPostError, crSSLConnectError, crBadDownloadResume,
-    crFileCouldNotReadFile, crLDAPCannotBind, crLDAPSearchFailed,
-    crLibraryNotFound, crFunctionNotFound, crAbortedByCallback,
-    crBadFunctionArgument, crBadCallingOrder, crInterfaceFailed,
-    crBadPasswordEntered, crTooManyRedirects, crUnknownTelnetOption,
-    crTelnetOptionSyntax, crObsolete, crSSLPeerCertificate, crGotNothing,
-    crSSLEngineNotFound, crSSLEngineSetFailed, crSendError, crRecvError,
-    crShareInUse, crSSLCertProblem, crSSLCipher, crSSLCACert, crBadContentEncoding,
-    crLDAPInvalidURL, crFileSizeExceeded, crFTPSSLFailed, crSendFailRewind,
-    crSSLEngineInitFailed, crLoginDenied, crTFTPNotFound, crTFTPPerm,
-    crTFTPDiskFull, crTFTPIllegal, crTFTPUnknownID, crTFTPExists, crTFTPNoSuchUser
-  );
+    crOK,
+    crUnsupportedProtocol,
+    crFailedInit,
+    crURLMalformat,
+    crURLMalformatUser,
+    crCouldNotResolveProxy,
+    crCouldNotResolveHost,
+    crCouldNotConnect,
+    crFTPWeirdServerReply,
+    crFTPAccessDenied,
+    crFTPUserPasswordIncorrect,
+    crFTPWeirdPassReply,
+    crFTPWeirdUserReply,
+    crFTPWeirdPASVReply,
+    crFTPWeird227Format,
+    crFTPCantGetHost,
+    crFTPCantReconnect,
+    crFTPCouldNotSetBINARY,
+    crPartialFile,
+    crFTPCouldNotRetrFile,
+    crFTPWriteError,
+    crFTPQuoteError,
+    crHTTPReturnedError,
+    crWriteError,
+    crMalFormatUser,
+    crFTPCouldNotStorFile,
+    crReadError,
+    crOutOfMemory,
+    crOperationTimeouted,
+    crFTPCouldNotSetASCII,
+    crFTPPortFailed,
+    crFTPCouldNotUseREST,
+    crFTPCouldNotGetSize,
+    crHTTPRangeError,
+    crHTTPPostError,
+    crSSLConnectError,
+    crBadDownloadResume,
+    crFileCouldNotReadFile,
+    crLDAPCannotBind,
+    crLDAPSearchFailed,
+    crLibraryNotFound,
+    crFunctionNotFound,
+    crAbortedByCallback,
+    crBadFunctionArgument,
+    crBadCallingOrder,
+    crInterfaceFailed,
+    crBadPasswordEntered,
+    crTooManyRedirects,
+    crUnknownTelnetOption,
+    crTelnetOptionSyntax,
+    crObsolete,
+    crSSLPeerCertificate,
+    crGotNothing,
+    crSSLEngineNotFound,
+    crSSLEngineSetFailed,
+    crSendError,
+    crRecvError,
+    crShareInUse,
+    crSSLCertProblem,
+    crSSLCipher,
+    crSSLCACert,
+    crBadContentEncoding,
+    crLDAPInvalidURL,
+    crFileSizeExceeded,
+    crFTPSSLFailed,
+    crSendFailRewind,
+    crSSLEngineInitFailed,
+    crLoginDenied,
+    crTFTPNotFound,
+    crTFTPPerm,
+    crTFTPDiskFull,
+    crTFTPIllegal,
+    crTFTPUnknownID,
+    crTFTPExists,
+    crTFTPNoSuchUser);
 
   /// low-level information enumeration for libcurl library API calls
   TCurlInfo = (
@@ -286,16 +340,24 @@ type
 
   /// low-level version identifier of the libcurl library
   TCurlVersion = (
-    cvFirst, cvSecond, cvThird, cvFour, cvLast);
+    cvFirst,
+    cvSecond,
+    cvThird,
+    cvFour,
+    cvLast);
 
   /// low-level initialization option for libcurl library API
   // - currently, only giSSL is set, since giWin32 is redundant with WinHTTP
   TCurlGlobalInit = set of (
-    giNone, giSSL, giWin32, giAll);
+    giNone,
+    giSSL,
+    giWin32,
+    giAll);
 
   /// low-level message state for libcurl library API
   TCurlMsg = (
-    cmNone, cmDone);
+    cmNone,
+    cmDone);
 
   /// low-level version information for libcurl library
   TCurlVersionInfo = record
@@ -303,13 +365,13 @@ type
     version: PAnsiChar;
     version_num: cardinal;
     host: PAnsiChar;
-    features: longint;
+    features: integer;
     ssl_version: PAnsiChar;
     ssl_version_num: PAnsiChar;
     libz_version: PAnsiChar;
     protocols: ^TPAnsiCharArray;
     ares: PAnsiChar;
-    ares_num: longint;
+    ares_num: integer;
     libidn: PAnsiChar;
   end;
   PCurlVersionInfo = ^TCurlVersionInfo;
@@ -436,7 +498,7 @@ type
     /// set options for a curl multi handle
     multi_setopt: function(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs;
     /// reads/writes available data given an action
-    multi_socket_action: function(mcurl: TCurlMulti; socket: TCurlSocket; mask: Integer; out runningh: integer): TCurlMultiCode; cdecl;
+    multi_socket_action: function(mcurl: TCurlMulti; socket: TCurlSocket; mask: integer; out runningh: integer): TCurlMultiCode; cdecl;
     /// reads/writes available data - deprecated call
     multi_socket_all: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
     /// return string describing error code
@@ -544,7 +606,7 @@ implementation
   /// set options for a curl multi handle
   function curl_multi_setopt(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs; external;
   /// reads/writes available data given an action
-  function curl_multi_socket_action(mcurl: TCurlMulti; socket: TCurlSocket; mask: Integer; out runningh: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_socket_action(mcurl: TCurlMulti; socket: TCurlSocket; mask: integer; out runningh: integer): TCurlMultiCode; cdecl; external;
   /// reads/writes available data - deprecated call
   function curl_multi_socket_all(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl; external;
   /// return string describing error code
@@ -600,7 +662,7 @@ var
   api: integer;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PChar = (
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PAnsiChar = (
     'curl_global_init', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
@@ -616,7 +678,10 @@ const
 {$endif LIBCURLSTATIC}
 
 begin
-  if curl_initialized {$ifndef LIBCURLSTATIC} and (curl <> nil) {$endif} then
+  if curl_initialized
+     {$ifndef LIBCURLSTATIC} and
+     (curl <> nil)
+     {$endif LIBCURLSTATIC} then
     exit; // set it once, but allow to retry a given dllname
 
   GlobalLock;
@@ -681,7 +746,7 @@ begin
         ], ECurl);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do
-        curl.GetProc(NAMES[api], @P[api], ECurl);
+        curl.Resolve(NAMES[api], @P[api], ECurl);
     except
       FreeAndNil(curl); // ECurl raised during initialization above
       exit;
@@ -694,14 +759,19 @@ begin
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
       curl.infoText := format('%s using %s',[curl.infoText, curl.info.ssl_version]);
-    // api := 0; with curl.info do while protocols[api]<>nil do begin
-    // write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
+    // api := 0; with curl.info do while protocols[api]<>nil do
+    // begin write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally
     curl_initialized := true; // should be set last
     GlobalUnLock;
   end;
 end;
 
+
+initialization
+
+finalization
+  curl.Free;
 
 end.
 

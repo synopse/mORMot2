@@ -2,7 +2,7 @@
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-   POSIX Sockets API calls via the libc, as used by mormot.net.sock.pas
+  POSIX Sockets API calls via the libc, as used by mormot.net.sock.pas
 }
 
 uses
@@ -19,8 +19,8 @@ uses
 { ******** Sockets Type Definitions }
 
 const
-  NI_MAXHOST	   = 1025;
-  NI_MAXSERV	   = 32;
+  NI_MAXHOST = 1025;
+  NI_MAXSERV = 32;
 
   NO_ERROR = 0;
   WSAEINTR = ESysEINTR;
@@ -59,15 +59,22 @@ const
     {$endif OPENBSD}
     {$else}
     {$ifdef SUNOS}
-    MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
+    MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
-    MSG_NOSIGNAL  = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
+    MSG_NOSIGNAL = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
     {$endif SUNOS}
 
   {$endif BSD}
 
-  _ST: array[TNetLayer] of integer = (SOCK_STREAM, SOCK_DGRAM, SOCK_STREAM);
-  _IP: array[TNetLayer] of integer = (IPPROTO_TCP, IPPROTO_UDP, 0);
+  _ST: array[TNetLayer] of integer = (
+    SOCK_STREAM,
+    SOCK_DGRAM,
+    SOCK_STREAM);
+
+  _IP: array[TNetLayer] of integer = (
+    IPPROTO_TCP,
+    IPPROTO_UDP,
+    0);
 
 {$packrecords C}
 
@@ -81,9 +88,12 @@ type
     h_addrtype: integer;
     h_length: socklen_t;
     case integer of
-     0: (h_addr_list: PPAnsiChar);
-     1: (h_addr: ^pin_addr);
-     2: (h_addr6: ^pin6_addr);
+       0: (
+          h_addr_list: PPAnsiChar);
+       1: (
+          h_addr: ^pin_addr);
+       2: (
+          h_addr6: ^pin6_addr);
   end;
   PHostEnt = ^THostEnt;
 
@@ -153,11 +163,16 @@ type
   /// application-level data structure for epoll
   TEPollData = record
     case integer of
-      0: (ptr: pointer);
-      1: (fd: integer);
-      2: (u32: cardinal);
-      3: (u64: Int64);
-      4: (obj: TObject);
+      0: (
+         ptr: pointer);
+      1: (
+         fd: integer);
+      2: (
+         u32: cardinal);
+      3: (
+         u64: Int64);
+      4: (
+         obj: TObject);
   end;
   PEPollData = ^TEPollData;
 
@@ -277,14 +292,16 @@ begin
     exit;
   // handle simple cases
   result := nrOk;
-  if (address = cLocalhost) or (address = c6Localhost) or
+  if (address = cLocalhost) or
+     (address = c6Localhost) or
      PropNameEquals(address, 'localhost') then
   begin
     ip4.sin_family := AF_INET;
     PCardinal(@ip4.sin_addr)^ := cLocalhost32; // 127.0.0.1
     exit;
   end
-  else if (address = cAnyHost) or (address = c6AnyHost) then
+  else if (address = cAnyHost) or
+          (address = c6AnyHost) then
   begin
     ip4.sin_family := AF_INET; // 0.0.0.0
     exit;
@@ -384,7 +401,8 @@ begin
   if res < 0 then
   begin
     res := sockerrno;
-    if (res = WSATRY_AGAIN) or (res = WSAEINTR) then
+    if (res = WSATRY_AGAIN) or
+       (res = WSAEINTR) then
       // timeout, not a true error
       result := [];
     exit;
@@ -435,7 +453,9 @@ var
   n, e, fd, s: integer;
 begin
   result := false;
-  if (self = nil) or (socket = nil) or (byte(events) = 0) or
+  if (self = nil) or
+     (socket = nil) or
+     (byte(events) = 0) or
      (fCount = fMaxSockets) then
     exit;
   if pseRead in events then
@@ -539,7 +559,8 @@ var
   ev: integer;
 begin
   result := -1; // error
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   result := poll(pointer(fFD), fFDCount, timeoutMS);
   if result <= 0 then
@@ -549,7 +570,8 @@ begin
   for i := 0 to fFDCount - 1 do
   begin
     ev := fFD[i].revents;
-    if (ev <> 0) and (fFD[i].fd > 0) then
+    if (ev <> 0) and
+       (fFD[i].fd > 0) then
     begin
       byte(e) := 0;
       if ev and POLLIN <> 0 then
@@ -620,8 +642,11 @@ var
   e: TEPollEvent;
 begin
   result := false;
-  if (self = nil) or (socket = nil) or (PtrUInt(socket) = PtrUInt(fEPFD)) or
-     (byte(events) = 0) or (fCount = fMaxSockets) then
+  if (self = nil) or
+     (socket = nil) or
+     (PtrUInt(socket) = PtrUInt(fEPFD)) or
+     (byte(events) = 0) or
+     (fCount = fMaxSockets) then
     exit;
   e.data.u64 := tag;
   if pseRead in events then
@@ -640,7 +665,9 @@ function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   e: TEPollEvent; // should be there even if not used
 begin
-  if (self = nil) or (socket = nil) or (PtrUInt(socket) = PtrUInt(fEPFD)) then
+  if (self = nil) or
+     (socket = nil) or
+     (PtrUInt(socket) = PtrUInt(fEPFD)) then
     result := false
   else
   begin
@@ -659,7 +686,8 @@ var
   t: TPollSocketTag;
 begin
   result := -1; // error
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   result := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
   if result <= 0 then

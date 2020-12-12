@@ -31,6 +31,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.data,
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
@@ -65,8 +66,9 @@ type
     /// initialize the properties to connect via UniDAC database access
     // - aServerName shall contain the UniDAC provider name, e.g. 'Oracle' - you
     // can use the TSQLDBUniDACConnectionProperties.URI() to retrieve the
-    // provider name from its SynDB.TSQLDBDefinition enumeration, and optionally
-    // set some options, which will be added to the internal SpecificOptions[]:
+    // provider name from its mormot.db.sql.TSQLDBDefinition enumeration,
+    // and optionally set some options, which will be added to the internal
+    // SpecificOptions[]:
     // ! 'Oracle?ClientLibrary=oci64\oci.dll'
     // ! 'MySQL?Server=192.168.2.60;Port=3306', 'world', 'root', 'dev'
     // - aDatabaseName shall contain the database server name
@@ -108,7 +110,8 @@ type
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
     // ! Props.SpecificOptions.Values['ClientLibrary'] := ClientDllName;
-    property SpecificOptions: TStringList read fSpecificOptions;
+    property SpecificOptions: TStringList
+      read fSpecificOptions;
   end;
 
 
@@ -140,7 +143,8 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated UniDAC connection instance
-    property Database: TUniConnection read fDatabase;
+    property Database: TUniConnection
+      read fDatabase;
   end;
 
   ///	implements a statement via a UniDAC connection
@@ -160,7 +164,7 @@ type
 
 
 const
-  /// UniDAC provider names corresponding to SynDB recognized SQL engines
+  /// UniDAC provider names corresponding to mormot.db.sql recognized SQL engines
   UNIDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
     'Oracle', 'SQL Server', 'Access', 'MySQL', 'SQLite', 'InterBase', 
     'NexusDB', 'PostgreSQL', 'DB2', '');
@@ -264,7 +268,7 @@ begin
   try
     FA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Fields, @n);
     FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-    FillChar(F, sizeof(F), 0);
+    FillCharFast(F, sizeof(F), 0);
     meta.MetaDataKind := 'Columns';
     Split(aTableName, '.', Owner, Table);
     if Table = '' then
@@ -319,7 +323,7 @@ var
 begin
   SetLength(Indexes, 0);
   FA.Init(TypeInfo(TSQLDBIndexDefineDynArray), Indexes, @n);
-  fillchar(F, sizeof(F), 0);
+  FillCharFast(F, sizeof(F), 0);
   meta := (MainConnection as TSQLDBUniDACConnection).fDatabase.CreateMetaData;
   indexs := (MainConnection as TSQLDBUniDACConnection).fDatabase.CreateMetaData;
   try
@@ -434,10 +438,11 @@ end;
 constructor TSQLDBUniDACConnection.Create(aProperties: TSQLDBConnectionProperties);
 var
   options: TStrings;
-  PortNumber, i: Integer;
+  PortNumber, i: integer;
 begin
   inherited Create(aProperties);
-  if (aProperties.DBMS = dMSSQL) and (not SameText(cMSSQLProvider, 'prDirect')) then
+  if (aProperties.DBMS = dMSSQL) and
+     not SameText(cMSSQLProvider, 'prDirect') then
     CoInit;
   fDatabase := TUniConnection.Create(nil);
   fDatabase.LoginPrompt := false;
@@ -485,7 +490,8 @@ begin
   try
     case fProperties.DBMS of
       dFirebird:
-        if (fDatabase.Server = '') and not FileExists(fDatabase.Database) then
+        if (fDatabase.Server = '') and
+           not FileExists(fDatabase.Database) then
           with TUniScript.Create(nil) do // always create database for embedded Firebird
           try
             NoPreconnect := true;
@@ -523,7 +529,8 @@ destructor TSQLDBUniDACConnection.Destroy;
 begin
   try
     Disconnect;
-    if (fProperties.DBMS = dMSSQL) and (not SameText(cMSSQLProvider, 'prDirect')) then
+    if (fProperties.DBMS = dMSSQL) and
+       not SameText(cMSSQLProvider, 'prDirect') then
       CoUnInit;
   except
     on Exception do
@@ -535,7 +542,8 @@ end;
 
 function TSQLDBUniDACConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and fDatabase.Connected;
+  result := Assigned(fDatabase) and
+            fDatabase.Connected;
 end;
 
 function TSQLDBUniDACConnection.NewStatement: TSQLDBStatement;
@@ -567,7 +575,8 @@ begin
   P := TDAParam(fQueryParams[aParamIndex]);
   if P.InheritsFrom(TDAParam) then
     with aParam do
-      if (VinOut <> paramInOut) and (VType = SynTable.ftBlob) then
+      if (VinOut <> paramInOut) and
+         (VType = SynTable.ftBlob) then
       begin
         P.ParamType := SQLParamTypeToDBParamType(VInOut);
         {$ifdef UNICODE}

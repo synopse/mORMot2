@@ -37,15 +37,15 @@ uses
 
 type
   { Generic Oracle Types }
-  sword   = Integer;
-  eword   = Integer;
-  uword   = LongInt;
-  sb4     = Integer;
-  ub4     = LongInt;
+  sword   = integer;
+  eword   = integer;
+  uword   = cardinal;
+  sb4     = integer;
+  ub4     = cardinal;
   sb2     = SmallInt;
   ub2     = Word;
   sb1     = ShortInt;
-  ub1     = Byte;
+  ub1     = byte;
   dvoid   = Pointer;
   text    = PAnsiChar;
   OraText = PAnsiChar;
@@ -786,19 +786,19 @@ type
   TSQLDBOracleLib = class(TSynLibrary)
   protected
     procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-      Status: Integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
+      Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
     function BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor): ub4;
     function BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4;
-      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): integer;
+      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
     function BlobReadToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
-      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): integer;
+      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
     function BlobWriteFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
-      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): integer;
+      csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
   public
     ClientVersion: function(var major_version, minor_version,
       update_num, patch_num, port_update_num: sword): sword; cdecl;
@@ -914,11 +914,11 @@ type
     function CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
     /// raise an exception on error
     procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-      Status: Integer; ErrorHandle: POCIError;
+      Status: integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     procedure CheckSession(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-      Status: Integer; ErrorHandle: POCIError;
+      Status: integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
     /// retrieve some BLOB content
     procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
@@ -982,7 +982,7 @@ var
   OCI_CHARSET_WIN1252: cardinal = OCI_WE8MSWIN1252;
 
   /// how many blob chunks should be handled at once
-  SynDBOracleBlobChunksCount: integer = 250;
+  SynDBOracleBlobChunksCount: ub4 = 250;
 
 /// check if two Oracle Charset codes are similar
 function SimilarCharSet(aCharset1, aCharset2: cardinal): boolean;
@@ -1005,7 +1005,8 @@ implementation
 
 function TOracleDate.ToDateTime: TDateTime;
 begin
-  if (PInteger(@self)^ = 0) and (PInteger(PtrUInt(@self) + 3)^ = 0) then
+  if (PInteger(@self)^ = 0) and
+     (PInteger(PtrUInt(@self) + 3)^ = 0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> returns 0
     result := 0
   else
@@ -1015,7 +1016,9 @@ begin
       result := 0
     else
       result := EncodeDate((Cent - 100) * 100 + Year - 100, Month, Day);
-    if (Hour > 1) or (Min > 1) or (Sec > 1) then
+    if (Hour > 1) or
+       (Min > 1) or
+       (Sec > 1) then
       result := result + EncodeTime(Hour - 1, Min - 1, Sec - 1, 0);
   end;
 end;
@@ -1024,13 +1027,16 @@ procedure TOracleDate.ToIso8601(var aIso8601: RawByteString);
 var
   tmp: array[0..23] of AnsiChar;
 begin
-  if (PInteger(@self)^ = 0) and (PInteger(PtrUInt(@self) + 3)^ = 0) then
+  if (PInteger(@self)^ = 0) and
+     (PInteger(PtrUInt(@self) + 3)^ = 0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     aIso8601 := ''
   else
   begin
     DateToIso8601PChar(tmp{%H-}, true, (Cent - 100) * 100 + Year - 100, Month, Day);
-    if (Hour > 1) or (Min > 1) or (Sec > 1) then
+    if (Hour > 1) or
+       (Min > 1) or
+       (Sec > 1) then
     begin
       TimeToIso8601PChar(@tmp[10], true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
       SetString(aIso8601, tmp, 19); // we use 'T' as TTextWriter.AddDateTime
@@ -1045,7 +1051,8 @@ var
   Y: cardinal;
 begin
   Dest^ := '"';
-  if (PInteger(@self)^ = 0) and (PInteger(PtrUInt(@self) + 3)^ = 0) then
+  if (PInteger(@self)^ = 0) and
+     (PInteger(PtrUInt(@self) + 3)^ = 0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     result := 2
   else
@@ -1057,7 +1064,9 @@ begin
     else
     begin
       DateToIso8601PChar(Dest + 1, true, Y, Month, Day);
-      if (Hour > 1) or (Min > 1) or (Sec > 1) then
+      if (Hour > 1) or
+         (Min > 1) or
+         (Sec > 1) then
       begin
         TimeToIso8601PChar(Dest + 11, true, Hour - 1, Min - 1, Sec - 1, 0, 'T');
         result := 21; // we use 'T' as TTextWriter.AddDateTime
@@ -1084,7 +1093,9 @@ begin
   Year := (T.Year mod 100) + 100;
   Month := T.Month;
   Day := T.Day;
-  if (T.Hour <> 0) or (T.Minute <> 0) or (T.Second <> 0) then
+  if (T.Hour <> 0) or
+     (T.Minute <> 0) or
+     (T.Second <> 0) then
   begin
     Hour := T.Hour + 1;
     Min := T.Minute + 1;
@@ -1258,7 +1269,7 @@ const
     Text: 'WE8ISO8859P1'
   ));
 
-  OCI_ENTRIES: array[0..40] of PChar = (
+  OCI_ENTRIES: array[0..40] of PAnsiChar = (
     'OCIClientVersion', 'OCIEnvNlsCreate',
     'OCIHandleAlloc', 'OCIHandleFree', 'OCIServerAttach', 'OCIServerDetach',
     'OCIAttrGet', 'OCIAttrSet', 'OCISessionBegin', 'OCISessionEnd',
@@ -1290,7 +1301,7 @@ end;
 
 function TSQLDBOracleLib.BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4; csid: ub2;
-  csfrm: ub1): integer;
+  csfrm: ub1): ub4;
 var
   Read, ChunkSize: ub4;
   Status: sword;
@@ -1318,7 +1329,7 @@ end;
 
 function TSQLDBOracleLib.BlobReadToStream(Stmt: TSQLDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
-  BlobLen: ub4; csid: ub2; csfrm: ub1): integer;
+  BlobLen: ub4; csid: ub2; csfrm: ub1): ub4;
 var
   Read, ChunkSize: ub4;
   Status: sword;
@@ -1404,9 +1415,9 @@ end;
 
 function TSQLDBOracleLib.BlobWriteFromStream(Stmt: TSQLDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
-  BlobLen: ub4; csid: ub2; csfrm: ub1): integer;
+  BlobLen: ub4; csid: ub2; csfrm: ub1): ub4;
 var
-  ChunkSize, l_Read, l_Write, l_Offset: Longint;
+  ChunkSize, l_Read, l_Write, l_Offset: ub4;
   tmp: RawByteString;
 begin
   Check(nil, Stmt, LobGetChunkSize(svchp, errhp, locp, ChunkSize), errhp);
@@ -1450,7 +1461,7 @@ begin
 end;
 
 procedure TSQLDBOracleLib.HandleError(Conn: TSQLDBConnection;
-  Stmt: TSQLDBStatement; Status: Integer; ErrorHandle: POCIError;
+  Stmt: TSQLDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;
@@ -1463,17 +1474,20 @@ begin
         tmp[0] := #0;
         ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, sizeof(tmp), OCI_HTYPE_ERROR);
         L := mormot.core.base.StrLen(@tmp);
-        while (L > 0) and (tmp[L - 1] < ' ') do
+        while (L > 0) and
+              (tmp[L - 1] < ' ') do
         begin
           tmp[L - 1] := #0; // trim right #10
           dec(L);
         end;
         msg := CurrentAnsiConvert.AnsiBufferToRawUTF8(tmp, L);
-        if (Status = OCI_SUCCESS_WITH_INFO) and not InfoRaiseException then
+        if (Status = OCI_SUCCESS_WITH_INFO) and
+           not InfoRaiseException then
         begin
           if LogLevelNoRaise = sllNone then // may be e.g. sllWarning
             LogLevelNoRaise := sllInfo;
-          if (Conn = nil) and (Stmt <> nil) then
+          if (Conn = nil) and
+             (Stmt <> nil) then
             Conn := Stmt.Connection;
           if Conn <> nil then
             with Conn.Properties do
@@ -1501,7 +1515,7 @@ begin
 end;
 
 procedure TSQLDBOracleLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
-  Status: Integer; ErrorHandle: POCIError; InfoRaiseException: boolean;
+  Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean;
   LogLevelNoRaise: TSynLogInfo);
 begin
   if Status <> OCI_SUCCESS then
@@ -1509,7 +1523,7 @@ begin
 end;
 
 procedure TSQLDBOracleLib.CheckSession(Conn: TSQLDBConnection;
-  Stmt: TSQLDBStatement; Status: Integer; ErrorHandle: POCIError;
+  Stmt: TSQLDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;
@@ -1523,7 +1537,8 @@ begin
     tmp[0] := #0;
     ErrorGet(ErrorHandle, 1, nil, ErrNum, tmp, sizeof(tmp), OCI_HTYPE_ERROR);
     L := mormot.core.base.StrLen(@tmp);
-    while (L > 0) and (tmp[L - 1] < ' ') do
+    while (L > 0) and
+          (tmp[L - 1] < ' ') do
     begin
       tmp[L - 1] := #0; // trim right #10
       dec(L);
@@ -1599,7 +1614,8 @@ var
   i: PtrInt;
   l1, l2, l3: TFileName;
 begin
-  if (SynDBOracleOCIpath <> '') and DirectoryExists(SynDBOracleOCIpath) then
+  if (SynDBOracleOCIpath <> '') and
+     DirectoryExists(SynDBOracleOCIpath) then
     l1 := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath + PathDelim)) + LIBNAME;
   l2 := ExeVersion.ProgramFilePath + LIBNAME;
   if not FileExists(l2) then
@@ -1619,10 +1635,11 @@ begin
   TryLoadLibrary([{%H-}l1, l2, l3, LIBNAME], ESQLDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do
-    GetProc(OCI_ENTRIES[i], @P[i], ESQLDBOracle); // raise an ESQLDBOracle on error
+    Resolve(OCI_ENTRIES[i], @P[i], ESQLDBOracle); // raise an ESQLDBOracle on error
   ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
   SupportsInt64Params := (major_version > 11) or
-                         ((major_version = 11) and (minor_version > 1));
+                         ((major_version = 11) and
+                          (minor_version > 1));
   UseLobChunks := true; // by default
 end;
 
@@ -1655,7 +1672,8 @@ begin
       V := Value;
       Value := 0;
     end;
-    if (V <> 0) or (Size > 1) then
+    if (V <> 0) or
+       (Size > 1) then
     begin
       if minus then
         inc(V)
@@ -1669,7 +1687,8 @@ begin
     for i := 0 to Size - 1 do
       OutData[Size - i] := Mant[i];
   Exp := (Exp + 65) or $80;
-  if not minus and (Size < high(TSQLT_VNU)) then
+  if not minus and
+     (Size < high(TSQLT_VNU)) then
   begin
     Exp := not Exp;
     inc(Size);
@@ -1729,5 +1748,6 @@ initialization
 
 finalization
   FreeAndNil(OCI);
+  
 end.
 

@@ -92,12 +92,30 @@ type
   // - cExceptionRaised is a pseudo-command, used only for sending an exception
   // to the client in case of execution problem on the server side
   TSQLDBProxyConnectionCommand = (
-    cGetToken,cGetDBMS,
-    cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
+    cGetToken,
+    cGetDBMS,
+    cConnect,
+    cDisconnect,
+    cTryStartTransaction,
+    cCommit,
+    cRollback,
     cServerTimestamp,
-    cGetFields, cGetIndexes, cGetTableNames, cGetForeignKeys,
-    cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON,
-    cQuit, cExceptionRaised);
+    cGetFields,
+    cGetIndexes,
+    cGetTableNames,
+    cGetForeignKeys,
+    cExecute,
+    cExecuteToBinary,
+    cExecuteToJSON,
+    cExecuteToExpandedJSON,
+    cQuit,
+    cExceptionRaised);
+
+  /// server-side process flags for TSQLDBProxyConnectionCommandExecute.Force
+  TSQLDBProxyConnectionCommandExecuteForce = set of (
+    fBlobAsNull,
+    fDateWithMS,
+    fNoUpdateCount);
 
   /// structure to embedd all needed parameters to execute a SQL statement
   // - used for cExecute, cExecuteToBinary, cExecuteToJSON and cExecuteToExpandedJSON
@@ -116,7 +134,7 @@ type
     // ISQLDBStatement properties
     // - fNoUpdateCount avoids to call ISQLDBStatement.UpdateCount method, e.g.
     // for performance reasons
-    Force: set of (fBlobAsNull, fDateWithMS, fNoUpdateCount);
+    Force: TSQLDBProxyConnectionCommandExecuteForce;
   end;
 
 
@@ -165,7 +183,8 @@ type
       out Output: RawByteString; Connection: TSQLDBConnection); virtual;
     /// the associated authentication information
     // - you can manage users via AuthenticateUser/DisauthenticateUser methods
-    property Authenticate: TSynAuthenticationAbstract read GetAuthenticate write fAuthenticate;
+    property Authenticate: TSynAuthenticationAbstract
+      read GetAuthenticate write fAuthenticate;
   end;
 
   /// server-side implementation of a remote connection to any mormot.db.sql engine
@@ -232,7 +251,8 @@ type
     // - you can set this property to TRUE if you expect the remote connection
     // by in synch with the remote proxy connection (should not be used in
     // most cases, unless you are sure you have only one single client at a time
-    property HandleConnection: boolean read fHandleConnection write fHandleConnection;
+    property HandleConnection: boolean
+      read fHandleConnection write fHandleConnection;
     /// milliseconds to way until StartTransaction is allowed by the server
     // - in the current implementation, there should be a single transaction
     // at once on the server side: this is the time to try before reporting
@@ -282,7 +302,7 @@ type
     fDataCurrentRowNull: TByteDynArray;
     fDataCurrentRowValues: array of pointer;
     fDataCurrentRowValuesStart: pointer;
-    fDataCurrentRowValuesSize: Cardinal;
+    fDataCurrentRowValuesSize: cardinal;
     // per-row column type (SQLite3 only) e.g. select coalesce(column,0) from ..
     fDataCurrentRowColTypes: array of TSQLDBFieldType;
     function IntColumnType(Col: integer; out Data: PByte): TSQLDBFieldType;
@@ -325,7 +345,8 @@ type
       const ColTypes: TSQLDBFieldTypeDynArray); override;
 
     /// read-only access to the number of data rows stored
-    property DataRowCount: integer read fDataRowCount;
+    property DataRowCount: integer
+      read fDataRowCount;
   end;
 
   /// implements a proxy-like virtual connection statement to a DB engine
@@ -352,13 +373,13 @@ type
     // - if Expanded is true, JSON data is an array of objects, for direct use
     // with any Ajax or .NET client:
     // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expanded is false, JSON data is serialized (used in TSQLTableJSON)
+    // - if Expanded is false, JSON data is serialized (used in TOrmTableJSON)
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     // - this overridden implementation will use JSON for transmission, and
     // binary encoding only for parameters (to avoid unneeded conversions, e.g.
-    // when called from mORMotDB.pas)
+    // when called from mormot.orm.sql.pas)
     procedure ExecutePreparedAndFetchAllAsJSON(Expanded: boolean; out JSON: RawUTF8); override;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
@@ -378,7 +399,8 @@ type
     function UpdateCount: integer; override;
     /// force no UpdateCount method call on server side
     // - may be needed to reduce server load, if this information is not needed
-    property ForceNoUpdateCount: boolean read fForceNoUpdateCount write fForceNoUpdateCount;
+    property ForceNoUpdateCount: boolean
+      read fForceNoUpdateCount write fForceNoUpdateCount;
 
     /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     //   Execute(), this method must be called one or more times to evaluate it
@@ -475,7 +497,7 @@ type
     fSafe: TSynLocker;
     fProcessLocked: boolean;
     // this is where the process would take place
-    function Process(Ctxt: THttpServerRequest): cardinal;
+    function Process(Ctxt: THttpServerRequestAbstract): cardinal;
   public
     /// publish the mormot.db.sql connection on a given HTTP port and URI
     // - this generic constructor won't initialize the HTTP server itself:
@@ -500,19 +522,24 @@ type
     /// released used memory
     destructor Destroy; override;
     /// the associated database connection properties
-    property Properties: TSQLDBConnectionProperties read fProperties write fProperties;
+    property Properties: TSQLDBConnectionProperties
+      read fProperties write fProperties;
     /// the associated port number
-    property Port: RawUTF8 read fPort;
+    property Port: RawUTF8
+      read fPort;
     /// the associated database name
-    property DatabaseName: RawUTF8 read fDatabaseName;
+    property DatabaseName: RawUTF8
+      read fDatabaseName;
     /// the associated communication protocol
     // - to manage user authentication, use AuthenticateUser/DisauthenticateUser
     // methods of Protocol.Authenticate
-    property Protocol: TSQLDBProxyConnectionProtocol read fProtocol write fProtocol;
+    property Protocol: TSQLDBProxyConnectionProtocol
+      read fProtocol write fProtocol;
     /// if the internal Process() method would be protected by a critical section
     // - set to TRUE if constructor's aThreadMode is left to its default
     // tmMainConnection value
-    property ProcessLocked: boolean read fProcessLocked write fProcessLocked;
+    property ProcessLocked: boolean
+      read fProcessLocked write fProcessLocked;
   end;
 
   /// implements a mormot.db.proxy HTTP server via the user-land Sockets API
@@ -575,8 +602,10 @@ type
   protected
     fKeepAliveMS: cardinal;
     fURI: TURI;
-    function GetServer: RawByteString; {$ifdef HASINLINE}inline;{$endif}
-    function GetPort: RawByteString;   {$ifdef HASINLINE}inline;{$endif}
+    function GetServer: RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetPort: RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
     /// you could inherit from it and set your custom fProtocol instance
     procedure SetInternalProperties; override;
     procedure SetServerName(const aServerName: RawUTF8);
@@ -586,12 +615,15 @@ type
     function InternalRequest(var Data, DataType: RawByteString): integer; virtual; abstract;
   published
     /// the associated server IP address or name
-    property Server: RawByteString read GetServer;
+    property Server: RawByteString
+      read GetServer;
     /// the associated port number
-    property Port: RawByteString read GetPort;
+    property Port: RawByteString
+      read GetPort;
     /// time (in milliseconds) to keep the connection alive with the server
     // - default is 60000, i.e. one minute
-    property KeepAliveMS: cardinal read fKeepAliveMS write fKeepAliveMS;
+    property KeepAliveMS: cardinal
+      read fKeepAliveMS write fKeepAliveMS;
   end;
 
   /// implements a HTTP client via sockets, able to access remotely any mormot.db.sql
@@ -608,7 +640,8 @@ type
     /// released used memory
     destructor Destroy; override;
     /// low-level direct access to the Socket implementation instance
-    property Socket: THttpClientSocket read fSocket;
+    property Socket: THttpClientSocket
+      read fSocket;
   end;
 
 
@@ -624,7 +657,8 @@ type
     /// released used memory
     destructor Destroy; override;
     /// low-level direct access to the WinHTTP implementation instance
-    property Client: THttpRequest read fClient;
+    property Client: THttpRequest
+      read fClient;
   end;
 
   {$ifdef USELIBCURL}
@@ -757,7 +791,8 @@ begin
     finally
       LeaveCriticalSection(fLock);
     end;
-    if result or (tix > endTrial) then
+    if result or
+       (tix > endTrial) then
       break;
     SleepHiRes(1);
     tix := GetTickCount64;
@@ -811,7 +846,7 @@ var
   msgInput, msgOutput: RawByteString;
   header: PRemoteMessageHeader;
   O: PAnsiChar;
-  i, session: Integer;
+  i, session: integer;
   user: RawUTF8;
   InputExecute: TSQLDBProxyConnectionCommandExecute;
   ExecuteWithResults: boolean;
@@ -836,9 +871,11 @@ begin
     raise ESQLDBRemote.CreateUTF8('%.RemoteProcessMessage(connection=nil)', [self]);
   msgInput := HandleInput(Input);
   header := pointer(msgInput);
-  if (header = nil) or (header.Magic <> REMOTE_MAGIC) then
+  if (header = nil) or
+     (header.Magic <> REMOTE_MAGIC) then
     raise ESQLDBRemote.CreateUTF8('Wrong %.RemoteProcessMessage() input', [self]);
-  if (Authenticate <> nil) and (Authenticate.UsersCount > 0) and
+  if (Authenticate <> nil) and
+     (Authenticate.UsersCount > 0) and
      not (header.Command in [cGetToken, cGetDBMS]) then
     if not Authenticate.SessionExists(header.SessionID) then
       raise ESQLDBRemote.Create('You do not have the right to be here');
@@ -852,7 +889,8 @@ begin
       cGetDBMS:
         begin
           session := 0;
-          if (Authenticate <> nil) and (Authenticate.UsersCount > 0) then
+          if (Authenticate <> nil) and
+             (Authenticate.UsersCount > 0) then
           begin
             GetNextItem(PUTF8Char(O), #1, user);
             session := Authenticate.CreateSession(user, PCardinal(O)^);
@@ -1087,7 +1125,8 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   ProcessMessage(fProtocol.HandleOutput(msgInput), msgRaw);
   msgOutput := fProtocol.HandleInput(msgRaw);
   outheader := pointer(msgOutput);
-  if (outheader = nil) or (outheader.Magic <> REMOTE_MAGIC) then
+  if (outheader = nil) or
+     (outheader.Magic <> REMOTE_MAGIC) then
     raise ESQLDBRemote.CreateUTF8('Wrong %.Process() returned content', [self]);
   O := pointer(msgOutput);
   inc(O, sizeof(header));
@@ -1208,7 +1247,8 @@ begin
   endTrial := GetTickCount64 + fProxy.StartTransactionTimeOut;
   repeat
     fProxy.Process(cTryStartTransaction, self, started);
-    if started or (GetTickCount64 > endTrial) then
+    if started or
+       (GetTickCount64 > endTrial) then
       break;
     SleepHiRes(10); // retry every 10 ms
   until false;
@@ -1236,7 +1276,7 @@ begin
   repeat
     if DataLen <= 5 then
       break; // to raise ESQLDBRemote
-    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - sizeof(Integer)))^;
+    fDataRowCount := PInteger(PAnsiChar(Data) + (DataLen - sizeof(integer)))^;
     Magic := FromVarUInt32(Data);
     if Magic <> FETCHALLTOBINARY_MAGIC then
       break; // corrupted
@@ -1270,7 +1310,7 @@ end;
 procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
   IgnoreColumnDataSize: boolean);
 var
-  F, Len: Integer;
+  F, Len: integer;
   ft: TSQLDBFieldType;
 begin
   // format match TSQLDBStatement.FetchAllToBinary()
@@ -1333,7 +1373,7 @@ begin
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
     Data := fDataCurrentRowValues[col];
     if Data = nil then
-      WR.AddShort('null')
+      WR.AddNull
     else
       case fDataCurrentRowColTypes[col] of
         ftInt64:
@@ -1341,7 +1381,7 @@ begin
         ftDouble:
           WR.AddDouble(unaligned(PDouble(Data)^));
         ftCurrency:
-          WR.AddCurr64(PInt64(Data)^);
+          WR.AddCurr64(PInt64(Data));
         ftDate:
           begin
             WR.Add('"');
@@ -1357,7 +1397,7 @@ begin
           end;
         ftBlob:
           if fForceBlobAsNull then
-            WR.AddShort('null')
+            WR.AddNull
           else
           begin
             DataLen := FromVarUInt32(Data);
@@ -1379,7 +1419,8 @@ end;
 
 function TSQLDBProxyStatementAbstract.ColumnData(Col: integer): pointer;
 begin
-  if (fDataCurrentRowValues <> nil) and (cardinal(Col) < cardinal(fColumnCount)) then
+  if (fDataCurrentRowValues <> nil) and
+     (cardinal(Col) < cardinal(fColumnCount)) then
     result := fDataCurrentRowValues[Col]
   else
     result := nil;
@@ -1388,7 +1429,8 @@ end;
 function TSQLDBProxyStatementAbstract.ColumnType(Col: integer;
   FieldSize: PInteger): TSQLDBFieldType;
 begin
-  if (fDataRowCount > 0) and (cardinal(Col) < cardinal(fColumnCount)) then
+  if (fDataRowCount > 0) and
+     (cardinal(Col) < cardinal(fColumnCount)) then
     if GetBitPtr(pointer(fDataCurrentRowNull), Col) then
       result := ftNull
     else
@@ -1405,7 +1447,8 @@ end;
 function TSQLDBProxyStatementAbstract.IntColumnType(Col: integer;
   out Data: PByte): TSQLDBFieldType;
 begin
-  if (cardinal(Col) >= cardinal(fColumnCount)) or (fDataCurrentRowValues = nil) then
+  if (cardinal(Col) >= cardinal(fColumnCount)) or
+     (fDataCurrentRowValues = nil) then
     result := ftUnknown
   else
   begin
@@ -1568,7 +1611,8 @@ end;
 procedure TSQLDBProxyStatement.ParamsToCommand(
   var Input: TSQLDBProxyConnectionCommandExecute);
 begin
-  if (fColumnCount > 0) or (fDataInternalCopy <> '') then
+  if (fColumnCount > 0) or
+     (fDataInternalCopy <> '') then
     raise ESQLDBRemote.CreateUTF8('Invalid %.ExecutePrepared* call', [self]);
   Input.SQL := fSQL;
   if length(fParams) <> fParamCount then // strip to only needed memory
@@ -1626,7 +1670,8 @@ end;
 function TSQLDBProxyStatement.FetchAllToBinary(Dest: TStream;
   MaxRowCount: cardinal; DataRowPosition: PCardinalDynArray): cardinal;
 begin
-  if (MaxRowCount > 0) and (MaxRowCount < cardinal(fDataRowCount)) then
+  if (MaxRowCount > 0) and
+     (MaxRowCount < cardinal(fDataRowCount)) then
   begin
     result := inherited FetchAllToBinary(Dest, MaxRowCount, DataRowPosition);
     exit;
@@ -1642,7 +1687,7 @@ function TSQLDBProxyStatement.Step(SeekFirst: boolean): boolean;
 begin // retrieve one row of data from TSQLDBStatement.FetchAllToBinary() format
   if SeekFirst then
     fCurrentRow := 0;
-  if (cardinal(fCurrentRow) >= cardinal(fDataRowCount)) then
+  if cardinal(fCurrentRow) >= cardinal(fDataRowCount) then
   begin
     result := false; // no data was retrieved
     exit;
@@ -1669,7 +1714,8 @@ begin
   inherited Create(nil);
   IntHeaderProcess(Data, DataLen);
   Reader := fDataRowReaderOrigin;
-  if (DataRowPosition <> nil) and (DataRowPosition^ <> nil) then
+  if (DataRowPosition <> nil) and
+     (DataRowPosition^ <> nil) then
   begin
     fRowData := DataRowPosition^; // fast copy-on-write
     if not IgnoreColumnDataSize then
@@ -1701,7 +1747,8 @@ function TSQLDBProxyStatementRandomAccess.GotoRow(Index: integer;
 var
   Reader: PByte;
 begin
-  result := (cardinal(Index) < cardinal(fDataRowCount)) and (fColumnCount > 0);
+  result := (cardinal(Index) < cardinal(fDataRowCount)) and
+            (fColumnCount > 0);
   if not result then
     if RaiseExceptionOnWrongIndex then
       raise ESQLDBRemote.CreateUTF8('Invalid %.GotoRow(%)', [self, Index])
@@ -1763,12 +1810,13 @@ begin
   fSafe.Done;
 end;
 
-function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequest): cardinal;
+function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   o: RawByteString;
 begin
-  if (Ctxt.Method <> 'POST') or (Ctxt.InContent = '') or
-     not IdemPropNameU(trim(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
+  if (Ctxt.Method <> 'POST') or
+     (Ctxt.InContent = '') or
+     not IdemPropNameU(TrimU(Ctxt.InContentType), BINARY_CONTENT_TYPE) then
   begin
     result := HTTP_NOTFOUND;
     exit;
@@ -1790,10 +1838,6 @@ end;
 {$ifndef ONLYUSEHTTPSOCKET}
 
 { TSQLDBServerHttpApi }
-
-const
-  NO_ERROR = 0; // no need to link the Windows unit
-  ERROR_ACCESS_DENIED = 5;
 
 constructor TSQLDBServerHttpApi.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName, aPassword: RawUTF8; aHttps: boolean;
@@ -1995,5 +2039,5 @@ initialization
   {$ifdef USELIBCURL}
   TSQLDBCurlConnectionProperties.RegisterClassNameForDefinition;
   {$endif USELIBCURL}
+  
 end.
-

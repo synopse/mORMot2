@@ -53,7 +53,10 @@ type
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
-  result := pointer(GetTypeData(@self));
+  if @self <> nil then
+    result := pointer(GetTypeData(@self))
+  else
+    result := nil;
 end;
 
 function TRttiClass.ParentInfo: PRttiInfo;
@@ -165,9 +168,9 @@ begin
     result := result^.EnumBaseType;
 end;
 
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 begin
-  result := PRttiInfo(aTypeInfo)^.EnumBaseType.GetEnumNameOrd(aIndex);
+  result := aTypeInfo^.EnumBaseType.GetEnumNameOrd(aIndex);
 end;
 
 
@@ -285,7 +288,8 @@ begin
   begin
     if SetProc = nil then
       // no 'write' was defined -> try from 'read' field
-      if (GetProc <> nil) and (integer(PropProcs) and 3 = ptField) then
+      if (GetProc <> nil) and
+         (integer(PropProcs) and 3 = ptField) then
       begin // bits 0..1 = GetProc
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc));
         exit(rpcField);
@@ -319,11 +323,14 @@ end;
 
 
 const
-  INTEGER_NAME:  string[7] = 'Integer';   // FPC names integer  as "longint"
-  CARDINAL_NAME: string[8] = 'Cardinal';  // FPC names cardinal as "longword"
+  // FPC RTTI names integer type as "longint"
+  INTEGER_NAME:  string[7] = 'Integer';
+  // FPC RTTI names cardinal type as "longword"
+  CARDINAL_NAME: string[8] = 'Cardinal';
 
 function TRttiInfo.Name: PShortString;
-begin // TypeInfo(Integer/Cardinal)=TypeInfo(LongInt/LongWord)
+begin
+  // recognize TypeInfo(integer/cardinal)=TypeInfo(LongInt/LongWord) on FPC
   result := pointer(@self);
   if result <> nil then
     if result <> TypeInfo(integer) then
@@ -339,7 +346,8 @@ end;
 
 function TRttiInfo.RecordSize: PtrInt;
 begin
-  if (Kind <> rkRecord) and (Kind <> rkObject) then
+  if (Kind <> rkRecord) and
+     (Kind <> rkObject) then
     result := 0
   else
     result := GetTypeData(@self)^.RecSize;
@@ -368,6 +376,17 @@ begin
   Fields.Fields := AlignToPtr(d);
 end;
 
+function TRttiInfo.RecordManagedFieldsCount: integer;
+var
+  info: PTypeData;
+  d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
+begin
+  info := GetTypeData(@self);
+  if Assigned(info^.RecInitInfo) then
+    d := pointer(GetTypeData(info^.RecInitInfo));
+  result := d^.ManagedFieldCount;
+end;
+
 {$else}
 
 procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
@@ -380,7 +399,25 @@ begin
   end; // warning: older FPC RTTI includes all fields, not only managed fields
 end;
 
+
+function TRttiInfo.RecordManagedFieldsCount: integer;
+var
+  fields: TRttiRecordManagedFields;
+begin
+  result := 0;
+  RecordManagedFields(fields);
+  while fields.Count > 0 do
+  begin
+    if PRttiInfo(DeRef(fields.Fields^.{$ifdef HASDIRECTTYPEINFO}TypeInfo
+         {$else}TypeInfoRef^{$endif}))^.IsManaged then
+      inc(result);
+    inc(fields.Fields);
+    dec(fields.Count);
+  end;
+end;
+
 {$endif FPC_NEWRTTI}
+
 
 function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 begin
@@ -410,6 +447,17 @@ begin
   result := DeRef(GetTypeData(@self)^.elTypeRef);
 end;
 
+function TRttiInfo.DynArrayItemTypeAny: PRttiInfo;
+begin
+  with GetTypeData(@self)^ do
+  begin
+    result := DeRef(elTypeRef); // only managed fields by default
+    if result = nil then
+      // try the second RTTI slot, which is set even for unmanaged types
+      result := DeRef(elType2Ref);
+  end;
+end;
+
 function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
 var
   info: ^TArrayTypeData;
@@ -418,11 +466,13 @@ begin
   aDataCount := info^.ElCount;
   aDataSize := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
   result := DeRef(info^.ElTypeRef);
-  if (info^.DimCount <> 1) or (result = nil) or not (result^.Kind in rkManagedTypes) then
+  if (info^.DimCount <> 1) or
+     (result = nil) or
+     not (result^.Kind in rkManagedTypes) then
     result := nil;
 end;
 
-function TRttiInfo.ArrayItemSize: PtrInt;
+function TRttiInfo.ArraySize: PtrInt;
 var
   info: ^TArrayTypeData;
 begin
@@ -430,8 +480,8 @@ begin
   result := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
 end;
 
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
-  aClass: TClass): integer;
+function GetPublishedMethods(Instance: TObject;
+  out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
 
   procedure AddParentsFirst(C: TClass);
   type
@@ -470,7 +520,6 @@ begin
   else if Instance <> nil then
     AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
-
 
 const
   {$if defined(CPUI386) or defined(CPUI8086) or defined(CPUX86_64) or defined(CPUM68K)}
@@ -555,7 +604,9 @@ var
     Distance: integer; // relative jump is 32-bit even on CPU64
   end;
 begin
-  if (Func = nil) or (RedirectFunc = nil) or (Func = RedirectFunc) then
+  if (Func = nil) or
+     (RedirectFunc = nil) or
+     (Func = RedirectFunc) then
     exit; // nothing to redirect to
   NewJump.Code := $e9;
   NewJump.Distance := integer(PtrUInt(RedirectFunc) - PtrUInt(Func) - SizeOf(NewJump));
@@ -751,7 +802,7 @@ begin
   begin
     Info := PPointer(Info)^;
     if Info <> nil then
-     FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), Info, p^.high + 1);
+      FastFinalizeArray(pointer(PAnsiChar(p) + SizeOf(p^)), Info, p^.high + 1);
   end;
   _Freemem(p);
 end;
@@ -820,7 +871,10 @@ end;
 
 function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
 begin
-  if (len = 0) or (cp = CP_UTF8) or (cp >= CP_SQLRAWBLOB) or IsAnsiCompatible(p, len) then
+  if (len = 0) or
+     (cp = CP_UTF8) or
+     (cp >= CP_RAWBLOB) or
+     IsAnsiCompatible(p, len) then
   begin
     temp.buf := nil;
     temp.len := len;
@@ -844,8 +898,10 @@ var
 begin
   p1 := ToTempUTF8(t1, pointer(s1), length(s1), cp1);
   p2 := ToTempUTF8(t2, pointer(s2), length(s2), cp2);
-  if (cp = CP_UTF8) or (cp >= CP_SQLRAWBLOB) or
-     ((t1.buf = nil) and (t2.buf = nil)) then
+  if (cp = CP_UTF8) or
+     (cp >= CP_RAWBLOB) or
+     ((t1.buf = nil) and
+      (t2.buf = nil)) then
   begin
     p := FastNewString(t1.len + t2.len, cp);
     MoveFast(p1^, p[0], t1.len);
@@ -891,10 +947,14 @@ begin
     cp := CP_UTF8;
   cp1 := _lstrcp(s1, cp);
   cp2 := _lstrcp(s2, cp1);
-  if (cp1 = cp2) and ((cp >= CP_SQLRAWBLOB) or (cp = cp1)) then
+  if (cp1 = cp2) and
+     ((cp >= CP_RAWBLOB) or
+      (cp = cp1)) then
     cp := cp1
-  else if ((cp1 <> cp) and (cp1 < CP_SQLRAWBLOB)) or
-          ((cp2 <> cp) and (cp2 < CP_SQLRAWBLOB)) then
+  else if ((cp1 <> cp) and
+           (cp1 < CP_RAWBLOB)) or
+          ((cp2 <> cp) and
+           (cp2 < CP_RAWBLOB)) then
   begin
     _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
     exit;
@@ -944,7 +1004,8 @@ begin
   finally
     t.Free;
   end;
-  if (cp = CP_UTF8) or (cp >= CP_SQLRAWBLOB) then
+  if (cp = CP_UTF8) or
+     (cp >= CP_RAWBLOB) then
     dest := u
   else
     TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u), length(u), dest);
@@ -974,7 +1035,8 @@ begin
   until false;
   len := _lstrlen(RawByteString(p));
   cpf := _lstrcp(RawByteString(p), cp);
-  if (cpf <> cp) and (cpf < CP_SQLRAWBLOB) then
+  if (cpf <> cp) and
+     (cpf < CP_RAWBLOB) then
     cpf := 0
   else
     for i := first + 1 to high(s) do
@@ -986,7 +1048,8 @@ begin
         cpi := PStrRec(PtrUInt(p) - _STRRECSIZE)^.codePage;
         if cpi <= CP_OEMCP then
           cpi := CP_UTF8;
-        if (cpi <> cpf) and (cpi < CP_SQLRAWBLOB) then
+        if (cpi <> cpf) and
+           (cpi < CP_RAWBLOB) then
         begin
           cpf := 0;
           break;
@@ -1038,7 +1101,8 @@ end;
 procedure RedirectRtl(dummy, dest: PByteArray);
 begin
   repeat
-    if (dummy[0] = $b9) and (PCardinal(@dummy[1])^ = CP_UTF8) then
+    if (dummy[0] = $b9) and
+       (PCardinal(@dummy[1])^ = CP_UTF8) then
       case dummy[5] of
         $e8:
           begin
@@ -1047,7 +1111,8 @@ begin
             exit;
           end;
         $ba:
-          if (PCardinal(@dummy[6])^ = 2) and (dummy[10] = $e8) then
+          if (PCardinal(@dummy[6])^ = 2) and
+             (dummy[10] = $e8) then
           begin
             // found "mov ecx,65001; mov edx,2; call fpc_ansistr_concat_multi"
             RedirectCode(@dummy[PInteger(@dummy[11])^ + 15], dest);

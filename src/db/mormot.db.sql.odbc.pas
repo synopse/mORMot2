@@ -77,7 +77,8 @@ type
     // !   'Host=localhost;Server=<instance name on host>;Service=<service name
     // !   in ../drivers/etc/services>;Protocol=olsoctcp;UID=<Windows/Linux user account>;
     // !   Pwd=<Windows/Linux user account password>'
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName,
+      aUserID, aPassWord: RawUTF8); override;
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
@@ -153,16 +154,21 @@ type
     procedure Rollback; override;
 
     /// the remote DBMS type, as retrieved at ODBC connection opening
-    property DBMS: TSQLDBDefinition read fDBMS;
+    property DBMS: TSQLDBDefinition
+      read fDBMS;
     /// the full connection string (expanded from ServerName)
-    property SQLDriverFullString: RawUTF8 read fSQLDriverFullString;
+    property SQLDriverFullString: RawUTF8
+      read fSQLDriverFullString;
   published
     /// the remote DBMS name, as retrieved at ODBC connection opening
-    property DBMSName: RawUTF8 read fDBMSName;
+    property DBMSName: RawUTF8
+      read fDBMSName;
     /// the remote DBMS version, as retrieved at ODBC connection opening
-    property DBMSVersion: RawUTF8 read fDBMSVersion;
+    property DBMSVersion: RawUTF8
+      read fDBMSVersion;
     /// the local driver name, as retrieved at ODBC connection opening
-    property DriverName: RawUTF8 read fDriverName;
+    property DriverName: RawUTF8
+      read fDriverName;
   end;
 
   /// implements a statement using a ODBC connection
@@ -248,7 +254,8 @@ type
   end;
 
 
-{$ifndef PUREMORMOT2} // some backward compatibility class names
+{$ifndef PUREMORMOT2}
+// backward compatibility types redirections
 
 type
   TODBCConnectionProperties = TSQLDBODBCConnectionProperties;
@@ -366,7 +373,8 @@ end;
 destructor TSQLDBODBCConnection.Destroy;
 begin
   inherited Destroy;
-  if (ODBC <> nil) and (fEnv <> nil) then
+  if (ODBC <> nil) and
+     (fEnv <> nil) then
     ODBC.FreeHandle(SQL_HANDLE_ENV, fEnv);
 end;
 
@@ -377,7 +385,8 @@ begin
   try
     inherited Disconnect; // flush any cached statement
   finally
-    if (ODBC <> nil) and (fDbc <> nil) then
+    if (ODBC <> nil) and
+       (fDbc <> nil) then
       with ODBC do
       begin
         log := SynDBLog.Enter(self, 'Disconnect');
@@ -575,7 +584,8 @@ var
 
   function IsTruncated: boolean;
   begin
-    result := (Indicator > 0) and (ODBC.GetDiagField(fStatement) = '01004');
+    result := (Indicator > 0) and
+              (ODBC.GetDiagField(fStatement) = '01004');
   end;
 
   procedure CheckStatus;
@@ -647,17 +657,19 @@ end;
 function TSQLDBODBCStatement.GetCol(Col: integer;
   ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
 var
-  c: Integer;
+  c: integer;
 begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
-  if not Assigned(fStatement) or (fColData = nil) then
+  if not Assigned(fStatement) or
+     (fColData = nil) then
     raise EODBCException.CreateUTF8('%.Column*() with no prior Execute', [self]);
   // get all fColData[] (driver may be without SQL_GD_ANY_ORDER)
   for c := 0 to fColumnCount - 1 do
     if fColumns[c].ColumnDataState = colNone then
       GetData(fColumns[c], c);
   // retrieve information for the specified column
-  if (ExpectedType = ftNull) or (fColumns[Col].ColumnType = ExpectedType) or
+  if (ExpectedType = ftNull) or
+     (fColumns[Col].ColumnType = ExpectedType) or
      (fColumns[Col].ColumnDataState = colNull) then
     result := fColumns[Col].ColumnDataState
   else
@@ -772,7 +784,8 @@ var
   col: integer;
   tmp: array[0..31] of AnsiChar;
 begin
-  if not Assigned(fStatement) or (CurrentRow <= 0) then
+  if not Assigned(fStatement) or
+     (CurrentRow <= 0) then
     raise EODBCException.CreateUTF8('%.ColumnsToJSON() with no prior Step', [self]);
   if WR.Expand then
     WR.Add('{');
@@ -783,7 +796,7 @@ begin
         WR.AddFieldName(ColumnName); // add '"ColumnName":'
       res := GetCol(col, ColumnType);
       if res = colNull then
-        WR.AddShort('null')
+        WR.AddNull
       else
         case ColumnType of
           ftInt64:
@@ -803,7 +816,7 @@ begin
             end;
           ftBlob:
             if fForceBlobAsNull then
-              WR.AddShort('null')
+              WR.AddNull
             else
               WR.WrBase64(pointer(fColData[col]), ColumnDataSize, true);
         else
@@ -833,7 +846,7 @@ begin
 end;
 
 const
-  NULCHAR: WideChar = #0;
+  NULWCHAR: WideChar = #0;
 
 procedure TSQLDBODBCStatement.ExecutePrepared;
 const
@@ -898,15 +911,17 @@ begin
     raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',
       [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  ansitext := TSQLDBODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
+  ansitext := TSQLDBODBCConnection(fConnection).fODBCProperties.
+    fDriverDoesNotHandleUnicode;
   try
     // 1. bind parameters
-    if (fParamsArrayCount > 0) and (fDBMS <> dMSSQL) then
+    if (fParamsArrayCount > 0) and
+       (fDBMS <> dMSSQL) then
       raise EODBCException.CreateUTF8('%.BindArray() not supported', [self]);
     if fParamCount > 0 then
     begin
       SetLength(StrLen_or_Ind, fParamCount);
-      if (fParamsArrayCount > 0) then
+      if fParamsArrayCount > 0 then
         SetLength(ArrayData, fParamCount);
       for p := 0 to fParamCount - 1 do
         with fParams[p] do
@@ -918,11 +933,13 @@ begin
           InputOutputType := ODBC_IOTYPE_TO_PARAM[VInOut];
           ColumnSize := 0;
           DecimalDigits := 0;
-          if (fDBMS = dMSSQL) and (VArray <> nil) then
+          if (fDBMS = dMSSQL) and
+             (VArray <> nil) then
           begin
             // bind an array as one object - metadata only at the moment
-            if (VInOut <> paramIn) then
-              raise EODBCException.CreateUTF8('%.ExecutePrepared: Unsupported array parameter direction #%',
+            if VInOut <> paramIn then
+              raise EODBCException.CreateUTF8(
+                '%.ExecutePrepared: Unsupported array parameter direction #%',
                 [self, p + 1]);
             CValueType := SQL_C_DEFAULT;
             ParameterType := SQL_SS_TABLE;
@@ -992,7 +1009,15 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
                   CValueType := SQL_C_CHAR;
                 end
                 else
+                begin
                   VData := Utf8DecodeToRawUnicode(VData);
+                  if fDBMS = dMSSQL then
+                  begin // CONTAINS(field, ?) do not accept NVARCHAR(max)
+                    ColumnSize := length(VData) shr 1; // length in characters
+                    if ColumnSize > 4000 then // > 8000 bytes - use varchar(max)
+                      ColumnSize := 0;
+                  end;
+                end;
               ftBlob:
                 StrLen_or_Ind[p] := length(VData);
             else
@@ -1002,7 +1027,7 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
             if ParameterValue = nil then
             begin
               if pointer(VData) = nil then
-                ParameterValue := @NULCHAR
+                ParameterValue := @NULWCHAR
               else
                 ParameterValue := pointer(VData);
               BufferSize := length(VData);
@@ -1018,7 +1043,8 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
           status := ODBC.BindParameter(fStatement, p + 1, InputOutputType,
             CValueType, ParameterType, ColumnSize, DecimalDigits, ParameterValue,
             BufferSize, StrLen_or_Ind[p]);
-          if (status = SQL_ERROR) and not ansitext and
+          if (status = SQL_ERROR) and
+             not ansitext and
              (ODBC.GetDiagField(fStatement) = 'HY004') then
           begin
             TSQLDBODBCConnection(fConnection).fODBCProperties.
@@ -1029,7 +1055,8 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
           end;
           ODBC.Check(nil, self, status, SQL_HANDLE_STMT, fStatement);
           // populate array data
-          if (fDBMS = dMSSQL) and (VArray <> nil) then
+          if (fDBMS = dMSSQL) and
+             (VArray <> nil) then
           begin
             // first set focus on param
             status := ODBC.SetStmtAttrA(fStatement, SQL_SOPT_SS_PARAM_FOCUS,
@@ -1134,7 +1161,8 @@ function TSQLDBODBCStatement.UpdateCount: integer;
 var
   RowCount: SqlLen;
 begin
-  if (fStatement <> nil) and not fExpectResults then
+  if (fStatement <> nil) and
+     not fExpectResults then
     ODBC.Check(nil, self,
       ODBC.RowCount(fStatement, RowCount),
       SQL_HANDLE_STMT, fStatement)
@@ -1146,8 +1174,10 @@ end;
 procedure TSQLDBODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
-  if (fStatement <> nil) or (fColumnCount > 0) then
-    raise EODBCException.CreateUTF8('%.Prepare should be called only once', [self]);
+  if (fStatement <> nil) or
+     (fColumnCount > 0) then
+    raise EODBCException.CreateUTF8(
+      '%.Prepare should be called only once', [self]);
   // 1. process SQL
   inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
   fSQLW := Utf8DecodeToRawUnicode(fSQL);
@@ -1179,7 +1209,8 @@ begin
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
-  if not Assigned(fStatement) or (fColumnCount = 0) then
+  if not Assigned(fStatement) or
+     (fColumnCount = 0) then
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   for i := 0 to fColumnCount - 1 do
     fColumns[i].ColumnDataState := colNone; // force load all fColData[]
@@ -1269,9 +1300,9 @@ begin
       FillcharFast(F, SizeOf(F), 0);
       if fCurrentRow > 0 then // Step done above
         repeat
-          F.ColumnName := Trim(ColumnUTF8(3)); // Column*() should be done in order
+          F.ColumnName := TrimU(ColumnUTF8(3)); // Column*() should be done in order
           DataType := ColumnInt(4);
-          F.ColumnTypeNative := Trim(ColumnUTF8(5));
+          F.ColumnTypeNative := TrimU(ColumnUTF8(5));
           F.ColumnLength := ColumnInt(6);
           F.ColumnScale := ColumnInt(8);
           F.ColumnPrecision := ColumnInt(9);
@@ -1298,7 +1329,7 @@ begin
         BindColumns;
         while Step do
         begin
-          F.ColumnName := Trim(ColumnUTF8(8));
+          F.ColumnName := TrimU(ColumnUTF8(8));
           i := FA.Find(F);
           if i >= 0 then
             Fields[i].ColumnIndexed := true;
@@ -1331,8 +1362,8 @@ begin
       n := 0;
       while Step do
       begin
-        schema := Trim(ColumnUTF8(1));
-        tablename := Trim(ColumnUTF8(2));
+        schema := TrimU(ColumnUTF8(1));
+        tablename := TrimU(ColumnUTF8(2));
         if schema <> '' then
           tablename := schema + '.' + tablename;
         AddSortedRawUTF8(Tables, n, tablename);
@@ -1366,8 +1397,8 @@ begin
       n := 0;
       while Step do
       begin
-        schema := Trim(ColumnUTF8(1));
-        tablename := Trim(ColumnUTF8(2));
+        schema := TrimU(ColumnUTF8(1));
+        tablename := TrimU(ColumnUTF8(2));
         if schema <> '' then
           tablename := schema + '.' + tablename;
         AddSortedRawUTF8(Views, n, tablename);
@@ -1393,9 +1424,12 @@ begin
         SQL_HANDLE_STMT, fStatement);
       BindColumns;
       while Step do
-        fForeignKeys.Add(Trim(ColumnUTF8(5)) + '.' + Trim(ColumnUTF8(6)) + '.' +
-          Trim(ColumnUTF8(7)), Trim(ColumnUTF8(1)) + '.' + Trim(ColumnUTF8(2)) +
-          '.' + Trim(ColumnUTF8(3)));
+        fForeignKeys.Add(TrimU(ColumnUTF8(5)) + '.' +
+                         TrimU(ColumnUTF8(6)) + '.' +
+                         TrimU(ColumnUTF8(7)),
+                         TrimU(ColumnUTF8(1)) + '.' +
+                         TrimU(ColumnUTF8(2)) + '.' +
+                         TrimU(ColumnUTF8(3)));
     finally
       Free; // TSQLDBODBCStatement release
     end;
@@ -1429,7 +1463,8 @@ begin
       Stmt.BindColumns;
       n := 0;
       while Stmt.Step do
-        AddSortedRawUTF8(Procedures, n, Trim(Stmt.ColumnUTF8(2))); // PROCEDURE_NAME column
+        AddSortedRawUTF8(Procedures, n,
+          TrimU(Stmt.ColumnUTF8(2))); // PROCEDURE_NAME column
       SetLength(Procedures, n);
     finally
       Stmt.Free; // TSQLDBODBCStatement release
@@ -1464,8 +1499,8 @@ begin
     Stmt := TSQLDBODBCStatement.Create(MainConnection);
     try
       Stmt.AllocStatement;
-      status := ODBC.SQLProcedureColumnsA(Stmt.fStatement, nil, 0, pointer(schem),
-        SQL_NTS, pointer(proc), SQL_NTS, nil, 0);
+      status := ODBC.SQLProcedureColumnsA(Stmt.fStatement, nil, 0,
+        pointer(schem), SQL_NTS, pointer(proc), SQL_NTS, nil, 0);
       if status = SQL_SUCCESS then
       begin
         Stmt.BindColumns;
@@ -1486,7 +1521,7 @@ begin
       FillcharFast(P, SizeOf(P), 0);
       if Stmt.fCurrentRow > 0 then // Step done above
         repeat
-          P.ColumnName := Trim(Stmt.ColumnUTF8(3)); // Column*() should be in order
+          P.ColumnName := TrimU(Stmt.ColumnUTF8(3)); // Column*() should be in order
           case Stmt.ColumnInt(4) of
             SQL_PARAM_INPUT:
               P.ColumnParamType := paramIn;
@@ -1496,11 +1531,12 @@ begin
             P.ColumnParamType := paramOut;
           end;
           DataType := Stmt.ColumnInt(5);
-          P.ColumnTypeNative := Trim(Stmt.ColumnUTF8(6));
+          P.ColumnTypeNative := TrimU(Stmt.ColumnUTF8(6));
           P.ColumnLength := Stmt.ColumnInt(7);
           P.ColumnScale := Stmt.ColumnInt(8);
           P.ColumnPrecision := Stmt.ColumnInt(9);
-          P.ColumnType := ODBCColumnToFieldType(DataType, P.ColumnPrecision, P.ColumnScale);
+          P.ColumnType := ODBCColumnToFieldType(
+            DataType, P.ColumnPrecision, P.ColumnScale);
           PA.Add(P);
         until not Stmt.Step;
       SetLength(Parameters, n);
@@ -1536,7 +1572,8 @@ end;
 
 initialization
   TSQLDBODBCConnectionProperties.RegisterClassNameForDefinition;
-  {$ifndef PUREMORMOT2} // backward compatibility class name
+  {$ifndef PUREMORMOT2}
+  // backward compatibility class registration
   TODBCConnectionProperties.RegisterClassNameForDefinition;
   {$endif PUREMORMOT2}
 

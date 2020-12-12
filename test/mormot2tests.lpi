@@ -63,6 +63,14 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <OtherDefines Count="6">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item2>
@@ -112,7 +120,7 @@
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
-              <Define4 Value="MAX_SQLFIELDS_128"/>
+              <Define4 Value="PUREMORMOT2"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -167,7 +175,7 @@
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
-              <Define4 Value="MAX_SQLFIELDS_128"/>
+              <Define4 Value="PUREMORMOT2"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -182,7 +190,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\app;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\tools\ecc;..\src\orm;..\src\soa"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -221,13 +229,16 @@
             <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_X64MM
 -dFPCMM_DEBUG
--dFPCMM_REPORTMEMORYLEAKS"/>
-            <OtherDefines Count="5">
+-dFPCMM_REPORTMEMORYLEAKS
+-dPUREMORMOT2
+-dFPCMM_SERVER"/>
+            <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -540,7 +551,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="54">
+    <Units Count="83">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -730,7 +741,7 @@
         <IsPartOfProject Value="True"/>
       </Unit46>
       <Unit47>
-        <Filename Value="..\src\net\mormot.net.websock.pas"/>
+        <Filename Value="..\src\net\mormot.net.ws.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit47>
       <Unit48>
@@ -757,6 +768,122 @@
         <Filename Value="..\src\orm\mormot.orm.rest.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit53>
+      <Unit54>
+        <Filename Value="..\src\rest\mormot.rest.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit54>
+      <Unit55>
+        <Filename Value="..\src\orm\mormot.orm.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit55>
+      <Unit56>
+        <Filename Value="..\src\orm\mormot.orm.server.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit56>
+      <Unit57>
+        <Filename Value="..\src\rest\mormot.rest.server.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit57>
+      <Unit58>
+        <Filename Value="..\src\soa\mormot.soa.server.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit58>
+      <Unit59>
+        <Filename Value="..\src\orm\mormot.orm.storage.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit59>
+      <Unit60>
+        <Filename Value="..\src\soa\mormot.soa.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit60>
+      <Unit61>
+        <Filename Value="..\src\rest\mormot.rest.memserver.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit61>
+      <Unit62>
+        <Filename Value="..\src\orm\mormot.orm.sql.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit62>
+      <Unit63>
+        <Filename Value="..\src\orm\mormot.orm.sqlite3.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit63>
+      <Unit64>
+        <Filename Value="..\src\rest\mormot.rest.sqlite3.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit64>
+      <Unit65>
+        <Filename Value="..\src\orm\mormot.orm.mongodb.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit65>
+      <Unit66>
+        <Filename Value="..\src\lib\mormot.lib.lizard.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit66>
+      <Unit67>
+        <Filename Value="..\src\rest\mormot.rest.http.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit67>
+      <Unit68>
+        <Filename Value="..\src\rest\mormot.rest.http.server.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit68>
+      <Unit69>
+        <Filename Value="..\src\net\mormot.net.ws.server.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit69>
+      <Unit70>
+        <Filename Value="..\src\net\mormot.net.ws.client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit70>
+      <Unit71>
+        <Filename Value="..\src\lib\mormot.lib.gssapi.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit71>
+      <Unit72>
+        <Filename Value="..\src\lib\mormot.lib.sspi.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit72>
+      <Unit73>
+        <Filename Value="..\src\core\mormot.core.mustache.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit73>
+      <Unit74>
+        <Filename Value="..\src\net\mormot.net.relay.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit74>
+      <Unit75>
+        <Filename Value="..\src\net\mormot.net.rtsphttp.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit75>
+      <Unit76>
+        <Filename Value="..\src\soa\mormot.soa.codegen.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit76>
+      <Unit77>
+        <Filename Value="..\src\rest\mormot.rest.mvc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit77>
+      <Unit78>
+        <Filename Value="..\src\app\mormot.app.daemon.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit78>
+      <Unit79>
+        <Filename Value="test.core.data.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit79>
+      <Unit80>
+        <Filename Value="test.core.ecc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit80>
+      <Unit81>
+        <Filename Value="..\src\app\mormot.app.console.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit81>
+      <Unit82>
+        <Filename Value="..\src\tools\ecc\mormot.tools.ecc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit82>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -800,7 +927,7 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="6">
+    <Exceptions Count="8">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -819,6 +946,12 @@
       <Item6>
         <Name Value="ERttiException"/>
       </Item6>
+      <Item7>
+        <Name Value="EFastReader"/>
+      </Item7>
+      <Item8>
+        <Name Value="RunError(216)"/>
+      </Item8>
     </Exceptions>
   </Debugging>
 </CONFIG>

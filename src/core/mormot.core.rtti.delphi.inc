@@ -34,7 +34,10 @@ end;
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
-  result := pointer(GetTypeData(@self));
+  if @self <> nil then
+    result := pointer(GetTypeData(@self))
+  else
+    result := nil;
 end;
 
 function TRttiClass.PropCount: integer;
@@ -131,7 +134,7 @@ end;
 
 {$ifdef CPUX86} // Delphi is not efficient when inlining code :(
 
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
   {$ifdef FPC}nostackframe; assembler; {$endif}
 asm // eax=aTypeInfo edx=aIndex
         test    eax, eax
@@ -176,7 +179,7 @@ end;
 
 {$else}
 
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 begin
   if PRttiKind(aTypeInfo)^ = rkEnumeration then
     with GetTypeData(aTypeInfo).BaseType^^ do
@@ -224,7 +227,8 @@ end;
 
 function TRttiProp.IsStored(Instance: TObject): boolean;
 begin
-  if (PtrUInt(PPropInfo(@self)^.StoredProc) and (not PtrUInt($ff))) = 0 then
+  if (PtrUInt(PPropInfo(@self)^.StoredProc) and
+     (not PtrUInt($ff))) = 0 then
     result := boolean(PtrUInt(PPropInfo(@self)^.StoredProc))
   else
     result := GetIsStored(Instance);
@@ -238,18 +242,21 @@ var
   call: TMethod;
 begin
   with PPropInfo(@self)^ do
-    if (PtrUInt(StoredProc) and (not PtrUInt($ff))) = 0 then
+    if (PtrUInt(StoredProc) and
+       (not PtrUInt($ff))) = 0 then
       result := boolean(PtrUInt(StoredProc))
     else
     begin
       case PropWrap(StoredProc).Kind of
         ptField:
           begin
-            result := PBoolean(PtrUInt(Instance) + PtrUInt(StoredProc) and $00ffffff)^;
+            result := PBoolean(
+              PtrUInt(Instance) + PtrUInt(StoredProc) and $00ffffff)^;
             exit;
           end;
         ptVirtual:
-          call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(StoredProc) and $00ffffff)^;
+          call.Code := PPointer(
+            PPtrUInt(Instance)^ + PtrUInt(StoredProc) and $00ffffff)^;
         else
           call.Code := pointer(StoredProc);
       end;
@@ -268,9 +275,11 @@ begin
     if GetProc = nil then
     begin
       // no 'read' was defined -> try from 'write' field
-      if (SetProc <> nil) and (PropWrap(SetProc).Kind = ptField) then
+      if (SetProc <> nil) and
+         (PropWrap(SetProc).Kind = ptField) then
       begin
-        Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
+        Call.Data := pointer(
+          PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
         result := rpcField;
       end
       else
@@ -282,14 +291,16 @@ begin
       ptField:
         begin
           // GetProc is an offset to the instance fields
-          Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
+          Call.Data := pointer(
+            PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
           result := rpcField;
           exit;
         end;
       ptVirtual:
         // GetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from GetterCall()
-          Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(GetProc) and $00ffffff)^;
+          Call.Code := PPointer(
+            PPtrUInt(Instance)^ + PtrUInt(GetProc) and $00ffffff)^;
     else
       // ptStatic: GetProc is the method code itself
       Call.Code := pointer(GetProc);
@@ -308,27 +319,32 @@ begin
     if SetProc = nil then
     begin
       // no 'write' was defined -> try from 'read' field
-      if (GetProc <> nil) and (PropWrap(GetProc).Kind = ptField) then
+      if (GetProc <> nil) and
+         (PropWrap(GetProc).Kind = ptField) then
       begin
-        Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
+        Call.Data := pointer(
+          PtrUInt(Instance) + PtrUInt(GetProc) and $00ffffff);
         result := rpcField;
       end
       else
         result := rpcNone;
       exit;
-    end else
+    end
+    else
     case PropWrap(SetProc).Kind of
       ptField:
         begin
           // SetProc is an offset to the instance fields
-          Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
+          Call.Data := pointer(
+            PtrUInt(Instance) + PtrUInt(SetProc) and $00ffffff);
           result := rpcField;
           exit;
         end;
       ptVirtual:
         // SetProc is an offset to the class VMT
         if Instance <> nil then // e.g. from SetterCall()
-          Call.Code := PPointer(PPtrUInt(Instance)^ + PtrUInt(SetProc) and $00ffffff)^;
+          Call.Code := PPointer(
+            PPtrUInt(Instance)^ + PtrUInt(SetProc) and $00ffffff)^;
     else
       // ptStatic: SetProc is the method code itself
       Call.Code := pointer(SetProc);
@@ -352,13 +368,18 @@ begin
 end;
 
 procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
+var
+  nfo: PRecordInfo;
 begin
-  with PRecordInfo(GetTypeData(@self))^ do
-  begin
-    Fields.Size := RecSize;
-    Fields.Count := ManagedFldCount;
-    Fields.Fields := @PIntegerArray(@ManagedFldCount)[1];
-  end;
+  nfo := pointer(GetTypeData(@self));
+  Fields.Size := nfo^.RecSize;
+  Fields.Count := nfo^.ManagedFldCount;
+  Fields.Fields := @PIntegerArray(@nfo^.ManagedFldCount)[1];
+end;
+
+function TRttiInfo.RecordManagedFieldsCount: integer;
+begin
+  result := PRecordInfo(GetTypeData(@self))^.ManagedFldCount;
 end;
 
 {$ifdef ISDELPHI2010} // read enhanced RTTI available since Delphi 2010
@@ -369,9 +390,9 @@ type
     RecSize: cardinal;
     ManagedCount: integer;
     // ManagedFields: array[0..0] of TManagedField;
-    NumOps: Byte;
+    NumOps: byte;
     // RecOps: array[0..0] of pointer;
-    AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
+    AllCount: integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
     AllFields: array[0..0] of TRecordTypeField; // as defined in TypInfo.pas
   end;
 
@@ -392,7 +413,14 @@ begin
     begin
       with result[f] do
       begin
-        TypeInfo := PPointer(p^.Field.TypeRef)^;
+        TypeInfo := pointer(p^.Field.TypeRef);
+        if TypeInfo = nil then
+        begin
+          // this field has no RTTI -> we can't trust it for serialization
+          result := nil;
+          exit;
+        end;
+        TypeInfo := PPointer(TypeInfo)^;
         Offset := p^.Field.FldOffset;
         Name := @p^.Name;
       end;
@@ -427,7 +455,8 @@ end;
 
 function TRttiInfo.IsBoolean: boolean;
 begin
-  result := (@self = TypeInfo(boolean)) or (@self = TypeInfo(wordbool));
+  result := (@self = TypeInfo(boolean)) or
+            (@self = TypeInfo(wordbool));
 end;
 
 function TRttiInfo.EnumBaseType: PRttiEnumType;
@@ -439,10 +468,28 @@ end;
 function TRttiInfo.DynArrayItemType: PRttiInfo;
 begin
  result := pointer(GetTypeData(@self)^.elType);
- if result <> nil then // nil e.g. for TIntegerDynArray
+ if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
    result := PPointer(result)^;
 end;
 
+function TRttiInfo.DynArrayItemTypeAny: PRttiInfo;
+begin
+  with GetTypeData(@self)^ do
+  begin
+    result := pointer(elType);
+    if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
+      result := PPointer(result)^;
+    {$ifdef ISDELPHI2010}
+    if result = nil then
+    begin
+      // try the second slot, which may be set even for unmanaged types
+      result := pointer(elType2);
+      if result <> nil then
+        result := PPointer(result)^;
+    end;
+    {$endif ISDELPHI2010}
+  end;
+end;
 function TRttiInfo.DynArrayItemType(out aDataSize: PtrInt): PRttiInfo;
 begin
   with GetTypeData(@self)^ do
@@ -455,19 +502,19 @@ begin
 end;
 
 function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+var
+  nfo: PArrayInfo;
 begin
-  with PArrayInfo(GetTypeData(@self))^ do
-  begin
-    aDataCount := ElCount;
-    aDataSize := ArraySize;
-    if (DimCount = 1) and (ArrayType <> nil) then
-      result := ArrayType^
-    else
-      result := nil;
-  end;
+  // nfo^.DimCount=1 is not tested explicitly -> assume single dimension array
+  nfo := pointer(GetTypeData(@self));
+  aDataCount := nfo^.ElCount;
+  aDataSize := nfo^.ArraySize;
+  result := pointer(nfo^.ArrayType);
+  if result <> nil then
+    result := PPointer(result)^;
 end;
 
-function TRttiInfo.ArrayItemSize: PtrInt;
+function TRttiInfo.ArraySize: PtrInt;
 begin
   result := PArrayInfo(GetTypeData(@self))^.ArraySize;
 end;
@@ -546,7 +593,7 @@ const
     ManagedCount5: 0);
 
   _THASH128: TFakeTypeInfo = ( // stored in PT_INFO[ptHash128]
-    Kind: tkRecord;
+    Kind: tkRecord; // note: is a tkArray when HASNOSTATICRTTI
     Name8: 'THash128';
     RecSize8: SizeOf(THash128);
     ManagedCount8: 0);
@@ -617,7 +664,8 @@ begin
   p := @pi^.IntfUnit[ord(pi^.IntfUnit[0]) + 1];
   mn := pw^;
   inc(pw);
-  if (pw^ = $ffff) or (mn = 0) then
+  if (pw^ = $ffff) or
+     (mn = 0) then
     exit; // no method
   inc(pw);
   SetLength(Definition.Methods, MethodCount + mn);

@@ -17,7 +17,8 @@
 // fast x87 versions by John O'Harrow - SSE2 is not really faster
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm     // eax=Dest edx=Count cl=Value
+asm
+        // eax=Dest edx=Count cl=Value
         mov     ch, cl                 // copy value into both bytes of cx
         cmp     edx, 32
         jl      @small
@@ -74,7 +75,8 @@ end;
 // fast x87 versions by John O'Harrow - SSE2 is not really faster
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=source edx=dest ecx=count
+asm
+        // eax=source edx=dest ecx=count
         cmp     eax, edx
         jz      @exit                  // exit if source=dest
         cmp     ecx, 32
@@ -175,9 +177,10 @@ asm // eax=source edx=dest ecx=count
         mov     [edx + 4], eax
 end;
 
-function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm     // eax=P1 edx=P2 ecx=Length
+asm
+        // eax=P1 edx=P2 ecx=Length
         cmp     eax, edx
         je      @0                 // P1=P2
         sub     ecx, 8
@@ -244,7 +247,8 @@ end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm  // adapted from Aleksandr Sharahov code and Maxim Masiutin remarks
+asm
+        // adapted from Aleksandr Sharahov code and Maxim Masiutin remarks
         test    edx, edx
         jz      @z
         neg     ecx
@@ -317,7 +321,8 @@ end;
 
 procedure crcblockfast(crc128, data128: PBlock128);
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // Delphi is not efficient about corresponding pascal code
+asm
+        // Delphi is not efficient about corresponding pascal code
         push    ebp
         push    edi
         push    esi
@@ -378,7 +383,8 @@ end;
 
 function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=crc, edx=buf, ecx=len
+asm
+        // eax=crc, edx=buf, ecx=len
         push    ebx
         test    edx, edx
         jz      @0
@@ -395,7 +401,8 @@ end; // we tried an unrolled version, but it was slower on our Core i7!
 
 function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=crc, edx=buf, ecx=len
+asm
+        // eax=crc, edx=buf, ecx=len
         test    ecx, ecx
         push    edi
         push    esi
@@ -463,7 +470,8 @@ end;
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=P, edx=Count, Value=ecx
+asm
+        // eax=P, edx=Count, Value=ecx
         test    eax, eax
         jz      @ok0 // avoid GPF
         cmp     edx, 8
@@ -539,7 +547,8 @@ end;
 
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=P, edx=Count, Value=ecx
+asm
+        // eax=P, edx=Count, Value=ecx
         test    eax, eax
         jz      @z // avoid GPF
         cmp     edx, 8
@@ -589,7 +598,8 @@ end;
 
 function StrLenSSE2(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
+asm
+        // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         mov     ecx, eax            // copy pointer
         test    eax, eax
         jz      @null               // returns 0 if S=nil
@@ -624,7 +634,8 @@ end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=P, edx=val
+asm
+        // eax=P, edx=val
         mov     ecx, edx
         sar     ecx, 31         // 0 if val>=0 or -1 if val<0
         push    ecx
@@ -675,7 +686,8 @@ end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm     // eax=P, edx=val
+asm
+        // eax=P, edx=val
         cmp     edx, 10
         jb      @3  // direct process of common val=0 (or val<10)
         push    edi
@@ -714,7 +726,8 @@ end;
 
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=Y, edx=P
+asm
+        // eax=Y, edx=P
         push    edx
         mov     ecx, eax
         mov     edx, 1374389535 // use power of two reciprocal to avoid division
@@ -735,7 +748,8 @@ end;
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm  // eax=Data edx=Len
+asm
+        // eax=Data edx=Len
         push    esi
         push    edi
         mov     cl, dl
@@ -890,7 +904,8 @@ end;
 
 function GetBitsCountPas(value: PtrInt): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // branchless Wilkes-Wheeler-Gill i386 asm implementation
+asm
+        // branchless Wilkes-Wheeler-Gill i386 asm implementation
         mov     edx, eax
         shr     eax, 1
         and     eax, $55555555
@@ -915,7 +930,8 @@ end;
 
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$ifdef FPC}nostackframe; assembler; {$endif}
-asm // adapted from FPC compiler output, which is much better than Delphi's here
+asm
+        // adapted from FPC compiler output, which is much better than Delphi's here
         {$ifdef FPC}
         push    ebp
         mov     ebp, esp
@@ -989,7 +1005,7 @@ asm
         pop     ebx
 end;
 
-function InterlockedIncrement(var I: Integer): Integer;
+function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         mov     edx, 1
@@ -998,7 +1014,7 @@ asm
         inc     eax
 end;
 
-function InterlockedDecrement(var I: Integer): Integer;
+function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         mov     edx, -1
@@ -1009,7 +1025,8 @@ end;
 
 function StrLenSafe(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // slower than StrLenSSE2(), but won't read any byte beyond the string
+asm
+        // slower than StrLenSSE2(), but won't read any byte beyond the string
         mov     edx, eax
         test    eax, eax
         jz      @0
@@ -1031,7 +1048,8 @@ end;
 
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm     // eax=SubStr, edx=S, ecx=Offset
+asm
+        // eax=SubStr, edx=S, ecx=Offset
         push    ebx
         push    esi
         push    edx
@@ -1109,7 +1127,8 @@ end;
 
 function StrComp(Str1, Str2: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // no branch taken in case of not equal first char
+asm
+        // no branch taken in case of not equal first char
         cmp     eax, edx
         je      @zero  // same string or both nil
         test    eax, edx
@@ -1174,7 +1193,8 @@ end;
 
 function SortDynArrayInt64(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // Delphi x86 compiler is not efficient at compiling Int64 comparisons
+asm
+        // Delphi x86 compiler is not efficient at compiling Int64 comparisons
         mov     ecx, [eax]
         mov     eax, [eax + 4]
         cmp     eax, [edx + 4]
@@ -1192,7 +1212,8 @@ end;
 
 function SortDynArrayQWord(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // Delphi x86 compiler is not efficient, and oldest even incorrect
+asm
+        // Delphi x86 compiler is not efficient, and oldest even incorrect
         mov     ecx, [eax]
         mov     eax, [eax + 4]
         cmp     eax, [edx + 4]
@@ -1209,7 +1230,8 @@ end;
 
 function SortDynArrayAnsiString(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // x86 version optimized for AnsiString/RawUTF8/RawByteString types
+asm
+        // x86 version optimized for AnsiString/RawUTF8/RawByteString types
         mov     eax, [eax]
         mov     edx, [edx]
         cmp     eax, edx
@@ -1297,68 +1319,34 @@ asm
 @p:     mov     eax, 1
 end;
 
-{$ifndef FPC_OR_UNICODE}
-
-function CompareInt64(const A, B: Int64): integer;
-asm // Delphi x86 compiler is not efficient at compiling Int64 comparisons
-        mov     ecx, [eax]
-        mov     eax, [eax + 4]
-        cmp     eax, [edx + 4]
-        jnz     @nz
-        cmp     ecx, [edx]
-        jz      @0
-        jnb     @p
-@n:     mov     eax, -1
-        ret
-@0:     xor     eax, eax
-        ret
-@nz:    jl      @n
-@p:     mov     eax, 1
-end;
-
-function CompareQword(const A, B: QWord): integer;
-asm // Delphi x86 compiler is not efficient, and oldest even incorrect
-        mov     ecx, [eax]
-        mov     eax, [eax + 4]
-        cmp     eax, [edx + 4]
-        jnz     @nz
-        cmp     ecx, [edx]
-        jz      @0
-@nz:    jnb     @p
-        mov     eax, -1
-        ret
-@0:     xor     eax, eax
-        ret
-@p:     mov     eax, 1
-end;
-
-{$endif FPC_OR_UNICODE}
-
-function GetBitsCountSSE42(value: PtrInt): PtrInt;
+function GetBitsCountSse42(value: PtrInt): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        {$ifdef FPC}
+        // eax=value
+        {$ifdef HASAESNI}
         popcnt  eax, eax
         {$else} // oldest Delphi don't support this opcode
         db      $f3,$0f,$B8,$c0
-        {$endif}
+        {$endif HASAESNI}
 end;
 
-function crc32cBy4SSE42(crc, value: cardinal): cardinal;
+function crc32cby4sse42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=crc, edx=value
-        {$ifdef FPC_OR_UNICODE}
+asm
+        // eax=crc, edx=value
+        {$ifdef HASAESNI}
         crc32   eax, edx
-        {$else}
+        {$else} // oldest Delphi don't support this opcode
         db      $F2, $0F, $38, $F1, $C2
-        {$endif}
+        {$endif HASAESNI}
 end;
 
-procedure crcblockSSE42(crc128, data128: PBlock128);
+procedure crcblocksse42(crc128, data128: PBlock128);
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=crc128, edx=data128
+asm
+        // eax=crc128, edx=data128
         mov     ecx, eax
-        {$ifdef FPC_OR_UNICODE}
+        {$ifdef HASAESNI}
         mov     eax, dword ptr[ecx]
         crc32   eax, dword ptr[edx]
         mov     dword ptr[ecx], eax
@@ -1371,7 +1359,7 @@ asm // eax=crc128, edx=data128
         mov     eax, dword ptr[ecx + 12]
         crc32   eax, dword ptr[edx + 12]
         mov     dword ptr[ecx + 12], eax
-        {$else}
+        {$else} // oldest Delphi don't support these opcodes
         mov     eax, dword ptr[ecx]
         db      $F2, $0F, $38, $F1, $02
         mov     dword ptr[ecx], eax
@@ -1384,12 +1372,13 @@ asm // eax=crc128, edx=data128
         mov     eax, dword ptr[ecx + 12]
         db      $F2, $0F, $38, $F1, $42, $0C
         mov     dword ptr[ecx + 12], eax
-        {$endif FPC_OR_UNICODE}
+        {$endif HASAESNI}
 end;
 
 procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=crc128 edx=data128 ecx=count
+asm
+          // eax=crc128 edx=data128 ecx=count
           push    ebx
           push    esi
           push    edi
@@ -1403,16 +1392,21 @@ asm // eax=crc128 edx=data128 ecx=count
           mov     ebx, dword ptr[esi + 4]
           mov     ecx, dword ptr[esi + 8]
           mov     edx, dword ptr[esi + 12]
-{$ifdef FPC} align 8
+          {$ifdef HASAESNI}
+          {$ifdef FPC}
+          align 8
+          {$endif FPC}
 @s:       crc32   eax, dword ptr[edi]
           crc32   ebx, dword ptr[edi + 4]
           crc32   ecx, dword ptr[edi + 8]
           crc32   edx, dword ptr[edi + 12]
-{$else}@s:db $F2, $0F, $38, $F1, $07
+          {$else}  // oldest Delphi don't support these opcodes
+@s:       db $F2, $0F, $38, $F1, $07
           db $F2, $0F, $38, $F1, $5F, $04
           db $F2, $0F, $38, $F1, $4F, $08
           db $F2, $0F, $38, $F1, $57, $0C
-{$endif}  add     edi, 16
+          {$endif HASAESNI}
+          add     edi, 16
           dec     ebp
           jnz     @s
           mov     dword ptr[esi], eax
@@ -1427,19 +1421,19 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=crc, edx=buf, ecx=len
+asm
+        // eax=crc, edx=buf, ecx=len
         not     eax
         test    ecx, ecx
         jz      @0
         test    edx, edx
         jz      @0
         jmp     @align
-        db      $8D, $0B4, $26, $00, $00, $00, $00 // manual @by8 align 16
-@a:     {$ifdef FPC}
+@a:     {$ifdef HASAESNI}
         crc32   eax, byte ptr[edx]
-        {$else}
+        {$else} // oldest Delphi don't support these opcodes
         db      $F2, $0F, $38, $F0, $02
-        {$endif}
+        {$endif HASAESNI}
         inc     edx
         dec     ecx
         jz      @0
@@ -1451,36 +1445,36 @@ asm // eax=crc, edx=buf, ecx=len
 @rem:   pop     ecx
         test    cl, 4
         jz      @4
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         crc32   eax, dword ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F1, $02
-        {$endif}
+        {$endif HASAESNI}
         add     edx, 4
 @4:     test    cl, 2
         jz      @2
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         crc32   eax, word ptr[edx]
         {$else}
         db      $66, $F2, $0F, $38, $F1, $02
-        {$endif}
+        {$endif HASAESNI}
         add     edx, 2
 @2:     test    cl, 1
         jz      @0
-        {$ifdef FPC}
+        {$ifdef HASAESNI}
         crc32   eax, byte ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F0, $02
-        {$endif}
+        {$endif HASAESNI}
 @0:     not     eax
         ret
-@by8:   {$ifdef FPC}
-        crc32   eax, dword ptr[edx]
+        {$ifdef HASAESNI}
+@by8:   crc32   eax, dword ptr[edx]
         crc32   eax, dword ptr[edx + 4]
         {$else}
-        db      $F2, $0F, $38, $F1, $02
+@by8:   db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
-        {$endif}
+        {$endif HASAESNI}
         add     edx, 8
         dec     ecx
         jnz     @by8
@@ -1818,14 +1812,15 @@ end;
 function RdRand32: cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-  // rdrand eax: same opcodes for x86 and x64
-  db $0f, $c7, $f0
-  // returns in eax, ignore carry flag (eax=0 won't hurt)
+        // rdrand eax: same opcodes for x86 and x64
+        db $0f, $c7, $f0
+        // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
 
 function Rdtsc: Int64;
 {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // returns the TSC in EDX:EAX
+asm
+        // returns the TSC in EDX:EAX
         rdtsc
 end;
 
@@ -1846,7 +1841,7 @@ asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         sete    al
 end;
 
-procedure GetCPUID(Param: Cardinal; var Registers: TIntelRegisters);
+procedure GetCPUID(Param: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
@@ -1880,8 +1875,10 @@ end;
 
 // inspired by ValExt_JOH_PAS_8_a by John O'Harrow - calls Delphi System.@Pow10
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
-const Ten: double = 10.0;
-asm     // in: eax=text, edx=@err  out: st(0)=result
+const
+  Ten: double = 10.0;
+asm
+        // in: eax=text, edx=@err  out: st(0)=result
         push    ebx                 // save used registers
         push    esi
         push    edi

@@ -6,7 +6,7 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.33.0 engine with optional AES encryption
+    Statically linked SQLite3 3.34.0 engine with optional AES encryption
     - TSQLite3LibraryStatic Implementation
     - Encryption-Related Functions
 
@@ -28,11 +28,11 @@ interface
 
 uses
   sysutils,
+  mormot.core.base,
+  mormot.core.os,
   mormot.db.raw.sqlite3;
 
 implementation
-
-uses mormot.core.os;
 
 procedure DoInitialization;
 begin
@@ -44,7 +44,7 @@ begin
     on E: Exception do
       {$ifdef LINUX} // there is always an error console ouput on POSIX
       writeln(SQLITE_LIBRARY_DEFAULT_NAME + ' initialization failed with ',
-        E.ClassName, ': ', E.Message);
+        ClassNameShort(E)^, ': ', E.Message);
       {$endif LINUX}
   end;
 end;
@@ -241,7 +241,7 @@ uses
     {$endif CPUX64}
   {$ifend}
 
-function log(x: double): double; cdecl; public name _PREFIX+'log'; export;
+function log(x: double): double; cdecl; public name _PREFIX + 'log'; export;
 begin
   result := ln(x);
 end;
@@ -249,7 +249,8 @@ end;
 {$ifdef MSWINDOWS}
 {$ifdef CPUX86} // not a compiler intrinsic on x86
 
-function _InterlockedCompareExchange(var Dest: longint; New,Comp: longint): longint; stdcall;
+function _InterlockedCompareExchange(
+  var Dest: integer; New, Comp: integer): longint; stdcall;
   public alias: '_InterlockedCompareExchange@12';
 begin
   result := InterlockedCompareExchange(Dest,New,Comp);
@@ -319,7 +320,7 @@ begin
   FreeMem(P);
 end;
 
-function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
+function realloc(P: Pointer; Size: integer): Pointer; cdecl; { always cdecl }
 begin
   result := P;
   ReallocMem(result, Size);
@@ -418,14 +419,14 @@ end;
 {$endif CPU32}
 {$endif MSWINDOWS}
 
-function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
+function memset(P: Pointer; B: integer; count: integer): pointer; cdecl; { always cdecl }
 // a fast full pascal version of the standard C library function
 begin
   FillCharFast(P^, count, B);
   result := P;
 end;
 
-function memmove(dest, source: pointer; count: Integer): pointer; cdecl; { always cdecl }
+function memmove(dest, source: pointer; count: integer): pointer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'memmove'{$else}'_memmove'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
@@ -433,7 +434,7 @@ begin
   result := dest;
 end;
 
-function memcpy(dest, source: Pointer; count: Integer): pointer; cdecl; { always cdecl }
+function memcpy(dest, source: Pointer; count: integer): pointer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
@@ -483,7 +484,8 @@ end;
 {$else}
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
 begin // full pascal version of the standard C library function
-  if (p1 <> p2) and (Size <> 0) then
+  if (p1 <> p2) and
+     (Size <> 0) then
     if p1 <> nil then
       if p2 <> nil then
       begin
@@ -514,12 +516,14 @@ end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
-var i: integer;
+var
+  i: integer;
 begin // a fast full pascal version of the standard C library function
   for i := 1 to Size do
   begin
     result := p1^ - p2^;
-    if (result <> 0) or (p1^ = 0) then
+    if (result <> 0) or
+       (p1^ = 0) then
       exit;
     inc(p1);
     inc(p2);
@@ -532,9 +536,9 @@ type
   // this function type is defined for calling termDataCmp() in sqlite3.c
   qsort_compare_func = function(P1, P2: pointer): integer; cdecl; { always cdecl }
 
-procedure QuickSortPtr(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
+procedure QuickSortPtr(base: PPointerArray; L, R: integer; comparF: qsort_compare_func);
 var
-  I, J, P: Integer;
+  I, J, P: integer;
   PP, C: PAnsiChar;
 begin
   repeat // from SQLite (FTS), With=sizeof(PAnsiChar) AFAIK
@@ -566,7 +570,7 @@ begin
   until I >= R;
 end;
 
-procedure QuickSort(baseP: PAnsiChar; Width: integer; L, R: Integer;
+procedure QuickSort(baseP: PAnsiChar; Width: integer; L, R: integer;
   comparF: qsort_compare_func);
 
   procedure Exchg(P1, P2: PAnsiChar; Size: integer);
@@ -583,7 +587,7 @@ procedure QuickSort(baseP: PAnsiChar; Width: integer; L, R: Integer;
   end;
 
 var
-  I, J, P: Integer;
+  I, J, P: integer;
   PP, C: PAnsiChar;
 begin
   repeat // generic sorting algorithm
@@ -625,7 +629,8 @@ procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'qsort'{$else}'_qsort'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
-  if (cardinal(NElem) > 1) and (Width > 0) then
+  if (cardinal(NElem) > 1) and
+     (Width > 0) then
     if Width = sizeof(pointer) then
       QuickSortPtr(baseP, 0, NElem-1, qsort_compare_func(comparF))
     else
@@ -638,16 +643,16 @@ var
   Each call of these functions overwrites the content of this structure.
   -> since timing is not thread-dependent, it's OK to share this buffer :) }
   atm: packed record
-    tm_sec: Integer;            { Seconds.      [0-60] (1 leap second) }
-    tm_min: Integer;            { Minutes.      [0-59]  }
-    tm_hour: Integer;           { Hours.        [0-23]  }
-    tm_mday: Integer;           { Day.          [1-31]  }
-    tm_mon: Integer;            { Month.        [0-11]  }
-    tm_year: Integer;           { Year          - 1900. }
-    tm_wday: Integer;           { Day of week.  [0-6]   }
-    tm_yday: Integer;           { Days in year. [0-365] }
-    tm_isdst: Integer;          { DST.          [-1/0/1]}
-    __tm_gmtoff: Integer;       { Seconds east of UTC.  }
+    tm_sec: integer;            { Seconds.      [0-60] (1 leap second) }
+    tm_min: integer;            { Minutes.      [0-59]  }
+    tm_hour: integer;           { Hours.        [0-23]  }
+    tm_mday: integer;           { Day.          [1-31]  }
+    tm_mon: integer;            { Month.        [0-11]  }
+    tm_year: integer;           { Year          - 1900. }
+    tm_wday: integer;           { Day of week.  [0-6]   }
+    tm_yday: integer;           { Days in year. [0-365] }
+    tm_isdst: integer;          { DST.          [-1/0/1]}
+    __tm_gmtoff: integer;       { Seconds east of UTC.  }
     __tm_zone: ^Char;           { Timezone abbreviation.}
   end;
 
@@ -723,28 +728,32 @@ var
 
 // some external functions as expected by codecext.c and our sqlite3mc.c wrapper
 
-procedure CodecGenerateKey(var aes: TAES; userPassword: pointer; passwordLength: integer);
+const
+  _CODEC_PBKDF2_SALT = 'J6CuDftfPr22FnYn';
+
+procedure CodecGenerateKey(var aes: TAES;
+  userPassword: pointer; passwordLength: integer);
 var
   s: TSynSigner;
   k: THash512Rec;
 begin
-  s.PBKDF2(userPassword, passwordLength, k, 'J6CuDftfPr22FnYn');
+  s.PBKDF2(userPassword, passwordLength, k, _CODEC_PBKDF2_SALT);
   s.AssignTo(k, aes, {encrypt=}true);
 end;
 
-function CodecGetReadKey(codec: pointer): PAES; cdecl; external;
+function CodecGetReadKey(codec: pointer): PAES;  cdecl; external;
 function CodecGetWriteKey(codec: pointer): PAES; cdecl; external;
 
 procedure CodecGenerateReadKey(codec: pointer;
   userPassword: PAnsiChar; passwordLength: integer); cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecGenerateReadKey';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecGenerateReadKey';{$endif} export;
 begin
   CodecGenerateKey(CodecGetReadKey(codec)^, userPassword, passwordLength);
 end;
 
 procedure CodecGenerateWriteKey(codec: pointer;
   userPassword: PAnsiChar; passwordLength: integer); cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecGenerateWriteKey';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecGenerateWriteKey';{$endif} export;
 begin
   CodecGenerateKey(CodecGetWriteKey(codec)^, userPassword, passwordLength);
 end;
@@ -755,8 +764,11 @@ var
   plain: Int64;    // bytes 16..23 should always be unencrypted
   iv: THash128Rec; // is genuine and AES-protected (since not random)
 begin
-  if (len and AESBlockMod <> 0) or (len <= 0) or (integer(page) <= 0) then
-    raise ESQLite3Exception.CreateUTF8('CodecAESProcess(page=%,len=%)', [page, len]);
+  if (len and AESBlockMod <> 0) or
+     (len <= 0) or
+     (integer(page) <= 0) then
+    raise ESQLite3Exception.CreateUTF8(
+      'CodecAESProcess(page=%,len=%)', [page, len]);
   iv.c0 := page xor 668265263; // prime-based initialization
   iv.c1 := page * 2654435761;
   iv.c2 := page * 2246822519;
@@ -764,9 +776,12 @@ begin
   if not ForceSQLite3LegacyAES then
     aes^.encrypt(iv.b); // avoid potential brute force attack
   len := len shr AESBlockShift;
-  if page = 1 then // ensure header bytes 16..23 are stored unencrypted
+  if page = 1 then
+    // ensure header bytes 16..23 are stored unencrypted
     if (PInt64(data)^ = SQLITE_FILE_HEADER128.lo) and
-       (data[21] = #64) and (data[22] = #32) and (data[23] = #32) then
+       (data[21] = #64) and
+       (data[22] = #32) and
+       (data[23] = #32) then
       if encrypt then
       begin
         plain := PInt64(data + 16)^;
@@ -779,7 +794,9 @@ begin
       begin
         PInt64(data + 16)^ := PInt64(data + 8)^;
         aes^.DoBlocksOFB(iv.b, data + 16, data + 16, len - 1);
-        if (data[21] = #64) and (data[22] = #32) and (data[23] = #32) then
+        if (data[21] = #64) and
+           (data[22] = #32) and
+           (data[23] = #32) then
           PHash128(data)^ := SQLITE_FILE_HEADER128.b
         else
           FillZero(PHash128(data)^); // report incorrect password
@@ -787,12 +804,13 @@ begin
     else
       FillZero(PHash128(data)^)
   else
+    // whole page encryption if not the first one
     aes^.DoBlocksOFB(iv.b, data, data, len);
 end;
 
 function CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar;
   len, useWriteKey: integer): integer; cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecEncrypt';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecEncrypt';{$endif} export;
 begin
   if useWriteKey = 1 then
      CodecAESProcess(page, data, len, CodecGetWriteKey(codec), true)
@@ -803,14 +821,14 @@ end;
 
 function CodecDecrypt(codec: pointer; page: integer;
   data: PAnsiChar; len: integer): integer; cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecDecrypt';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecDecrypt';{$endif} export;
 begin
   CodecAESProcess(page, data, len, CodecGetReadKey(codec), false);
   result := SQLITE_OK;
 end;
 
 function CodecTerm(codec: pointer): integer; cdecl;
-  {$ifdef FPC}public name _PREFIX+'CodecTerm';{$endif} export;
+  {$ifdef FPC}public name _PREFIX + 'CodecTerm';{$endif} export;
 begin
   CodecGetReadKey(codec)^.Done;
   CodecGetWriteKey(codec)^.Done;
@@ -848,8 +866,10 @@ begin
       bufsize := size;
     pagesize := cardinal(head.b[16]) shl 8 + head.b[17];
     pagecount := size div pagesize;
-    if (pagesize < 1024) or (pagesize and AESBlockMod <> 0) or
-       (pagesize > bufsize) or (QWord(pagecount) * pagesize <> size) or
+    if (pagesize < 1024) or
+       (pagesize and AESBlockMod <> 0) or
+       (pagesize > bufsize) or
+       (QWord(pagecount) * pagesize <> size) or
        (head.d0 <> SQLITE_FILE_HEADER128.Lo) or
        ((head.d1 = SQLITE_FILE_HEADER128.Hi) <> (OldPassWord = '')) then
       exit;
@@ -872,7 +892,9 @@ begin
         if OldPassWord <> '' then
         begin
           CodecAESProcess(page + p, buf, pagesize, @old, false);
-          if (p = 0) and (page = 1) and (PInteger(buf)^ = 0) then
+          if (p = 0) and
+             (page = 1) and
+             (PInteger(buf)^ = 0) then
             exit; // OldPassword is obviously incorrect
         end;
         if NewPassword <> '' then
@@ -932,7 +954,7 @@ const
     for i := 0 to SQLEncryptTableSize - 1 do
     begin
       Table^[i] := (ord(PassWord[j + 1])) xor byte(k);
-      k := Integer(k * 3 + i); // fast prime-based pseudo random generator
+      k := integer(k * 3 + i); // fast prime-based pseudo random generator
       if j = L then
         j := 0
       else
@@ -994,19 +1016,19 @@ end;
 function sqlite3_initialize: integer; cdecl; external;
 function sqlite3_shutdown: integer; cdecl; external;
 function sqlite3_open(filename: PUTF8Char; var DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: Integer; vfs: PUTF8Char): integer; cdecl; external;
+function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: integer; vfs: PUTF8Char): integer; cdecl; external;
 function sqlite3_close(DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl; external;
-function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl; external;
+function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
+function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
 function sqlite3_create_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal): Integer; cdecl; external;
+  xFinal: TSQLFunctionFinal): integer; cdecl; external;
 function sqlite3_create_function_v2(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer; cdecl; external;
+  xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): integer; cdecl; external;
 function sqlite3_create_window_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xStep: TSQLFunctionFunc;
-  xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc; xDestroy: TSQLDestroyPtr): Integer;   cdecl; external;
+  xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc; xDestroy: TSQLDestroyPtr): integer;   cdecl; external;
 function sqlite3_create_collation(DB: TSQLite3DB; CollationName: PUTF8Char;
   StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl; external;
 function sqlite3_libversion: PUTF8Char; cdecl; external;
@@ -1046,9 +1068,9 @@ procedure sqlite3_result_null(Context: TSQLite3FunctionContext); cdecl; external
 procedure sqlite3_result_int64(Context: TSQLite3FunctionContext; Value: Int64); cdecl; external;
 procedure sqlite3_result_double(Context: TSQLite3FunctionContext; Value: double); cdecl; external;
 procedure sqlite3_result_blob(Context: TSQLite3FunctionContext; Value: Pointer;
-  Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
+  Value_bytes: integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
 procedure sqlite3_result_text(Context: TSQLite3FunctionContext; Value: PUTF8Char;
-  Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
+  Value_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
 procedure sqlite3_result_value(Context: TSQLite3FunctionContext; Value: TSQLite3Value); cdecl; external;
 procedure sqlite3_result_error(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); cdecl; external;
 function sqlite3_user_data(Context: TSQLite3FunctionContext): pointer; cdecl; external;
@@ -1068,30 +1090,30 @@ function sqlite3_bind_null(S: TSQLite3Statement; Param: integer): integer; cdecl
 function sqlite3_clear_bindings(S: TSQLite3Statement): integer; cdecl; external;
 function sqlite3_bind_parameter_count(S: TSQLite3Statement): integer; cdecl; external;
 function sqlite3_blob_open(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
-  RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl; external;
-function sqlite3_blob_reopen(DB: TSQLite3DB; RowID: Int64): Integer; cdecl; external;
-function sqlite3_blob_close(Blob: TSQLite3Blob): Integer; cdecl; external;
-function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
-function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
-function sqlite3_blob_bytes(Blob: TSQLite3Blob): Integer; cdecl; external;
+  RowID: Int64; Flags: integer; var Blob: TSQLite3Blob): integer; cdecl; external;
+function sqlite3_blob_reopen(DB: TSQLite3DB; RowID: Int64): integer; cdecl; external;
+function sqlite3_blob_close(Blob: TSQLite3Blob): integer; cdecl; external;
+function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
+function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
+function sqlite3_blob_bytes(Blob: TSQLite3Blob): integer; cdecl; external;
 function sqlite3_create_module_v2(DB: TSQLite3DB; const zName: PAnsiChar;
-  var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer; cdecl; external;
-function sqlite3_declare_vtab(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer; cdecl; external;
+  var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): integer; cdecl; external;
+function sqlite3_declare_vtab(DB: TSQLite3DB; const zSQL: PAnsiChar): integer; cdecl; external;
 function sqlite3_set_authorizer(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
-  pUserData: Pointer): Integer;   cdecl; external;
+  pUserData: Pointer): integer;   cdecl; external;
 function sqlite3_update_hook(DB: TSQLite3DB; xCallback: TSQLUpdateCallback;
   pArg: pointer): pointer; cdecl; external;
 function sqlite3_commit_hook(DB: TSQLite3DB; xCallback: TSQLCommitCallback;
   pArg: Pointer): Pointer; cdecl; external;
 function sqlite3_rollback_hook(DB: TSQLite3DB;  xCallback: TSQLCommitCallback;
   pArg: Pointer): Pointer; cdecl; external;
-function sqlite3_changes(DB: TSQLite3DB): Integer; cdecl; external;
-function sqlite3_total_changes(DB: TSQLite3DB): Integer; cdecl; external;
-function sqlite3_malloc(n: Integer): Pointer; cdecl; external;
-function sqlite3_realloc(pOld: Pointer; n: Integer): Pointer; cdecl; external;
+function sqlite3_changes(DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_total_changes(DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_malloc(n: integer): Pointer; cdecl; external;
+function sqlite3_realloc(pOld: Pointer; n: integer): Pointer; cdecl; external;
 procedure sqlite3_free(p: Pointer); cdecl; external;
 function sqlite3_memory_used: Int64; cdecl; external;
-function sqlite3_memory_highwater(resetFlag: Integer): Int64; cdecl; external;
+function sqlite3_memory_highwater(resetFlag: integer): Int64; cdecl; external;
 function sqlite3_limit(DB: TSQLite3DB; id,newValue: integer): integer; cdecl; external;
 function sqlite3_backup_init(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
   SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup; cdecl; external;
@@ -1113,7 +1135,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.33.0'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.34.0'{$endif};
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD = 'https://github.com/synopse/mORMot2/releases/' +
@@ -1235,7 +1257,7 @@ begin
       '.' + CRLF + CRLF + 'Please download latest SQLite3 ' + EXPECTED_SQLITE3_VERSION +
       ' revision from'+ CRLF + EXPECTED_STATIC_DOWNLOAD,
       [ExeVersion.ProgramName, fVersionText], error);
-    // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
+    // SQLite3Log.Add.Log() would do nothing: we are in .exe initialization
     DisplayFatalError(' WARNING: deprecated SQLite3 engine', error);
   end;
 end;

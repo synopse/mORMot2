@@ -779,7 +779,7 @@ end;
 {$endif ASMX86}
 
 
-procedure bswap256(s,d: PIntegerArray);
+procedure bswap256(s, d: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -811,7 +811,7 @@ asm
         pop     ebx
 end;
 
-procedure bswap160(s,d: PIntegerArray);
+procedure bswap160(s, d: PIntegerArray);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -834,7 +834,7 @@ asm
         pop     ebx
 end;
 
-function gf2_multiply(x,y,m: PtrUInt): PtrUInt;
+function gf2_multiply(x, y, m: PtrUInt): PtrUInt;
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=x edx=y ecx=m
         push    esi
@@ -1454,9 +1454,99 @@ asm
         pxor    xmm7, xmm7
 end;
 
+{$ifdef HASAESNI} // oldest Delphi don't handle some opcode used below
+
+// compute a := a * b in GF(2^128) using pclmulqdq on WestMere CPUs
+// - two times faster than the pascal version using lookup tables
+procedure gf_mul_pclmulqdq(a, b: pointer);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        movups  xmm0, dqword ptr[a]
+        movups  xmm1, dqword ptr[b]
+        movdqu  xmm2, dqword ptr[@swap]
+        pshufb  xmm0, xmm2
+        pshufb  xmm1, xmm2
+        movdqa  xmm5, xmm0
+        movdqa  xmm4, xmm0
+        movdqa  xmm2, xmm0
+        // pclmulqdq xmm0, xmm1, 16
+        db $66, $0f, $3a, $44, $c1, $10
+        // pclmulqdq xmm5, xmm1, 17
+        db $66, $0f, $3a, $44, $e9, $11
+        movdqa  xmm3, xmm5
+        // pclmulqdq xmm4, xmm1, 0
+        db $66, $0f, $3a, $44, $e1, $00
+        // pclmulqdq xmm2, xmm1, 1
+        db $66, $0f, $3a, $44, $d1, $01
+        pslldq  xmm3, 8
+        pxor    xmm0, xmm2
+        movdqa  xmm2, xmm4
+        pxor    xmm3, xmm0
+        pslldq  xmm2, 8
+        punpckhqdq xmm3, xmm5
+        movdqa  xmm1, xmm3
+        pslldq  xmm0, 8
+        pxor    xmm0, xmm4
+        pslldq  xmm1, 8
+        punpckhqdq xmm2, xmm0
+        movdqa  xmm4, xmm2
+        movdqa  xmm7, xmm1
+        pslldq  xmm4, 8
+        movdqa  xmm1, xmm2
+        psrlq   xmm4, 63
+        psrldq  xmm1, 8
+        psllq   xmm3, 1
+        movdqa  xmm6, xmm1
+        psllq   xmm2, 1
+        movdqa  xmm1, xmm3
+        por     xmm2, xmm4
+        movdqa  xmm3, xmm2
+        psrlq   xmm7, 63
+        pslldq  xmm3, 8
+        por     xmm1, xmm7
+        movdqa  xmm4, xmm3
+        psrlq   xmm6, 63
+        movdqa  xmm0, xmm3
+        psllq   xmm4, 63
+        por     xmm1, xmm6
+        psllq   xmm3, 57
+        psllq   xmm0, 62
+        pxor    xmm2, xmm3
+        pxor    xmm0, xmm4
+        pxor    xmm2, xmm0
+        movdqa  xmm3, xmm2
+        movdqa  xmm7, xmm2
+        psrldq  xmm3, 8
+        movdqa  xmm0, xmm2
+        movdqa  xmm6, xmm2
+        movdqa  xmm4, xmm3
+        psrlq   xmm7, 1
+        movdqa  xmm5, xmm3
+        psllq   xmm4, 63
+        psllq   xmm3, 57
+        por     xmm4, xmm7
+        psrlq   xmm0, 7
+        movdqu  xmm7, dqword ptr[@swap]
+        por     xmm0, xmm3
+        psllq   xmm5, 62
+        pxor    xmm1, xmm0
+        movdqa  xmm0, xmm4
+        psrlq   xmm6, 2
+        por     xmm5, xmm6
+        pxor    xmm0, xmm5
+        pxor    xmm0, xmm1
+        pxor    xmm0, xmm2
+        pshufb  xmm0, xmm7
+        movups  dqword ptr[a], xmm0
+        ret
+@swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+end;
+
+{$endif HASAESNI}
+
 {$endif USEAESNI}
 
-function Adler32Asm(Adler: cardinal; p: pointer; Count: Integer): cardinal;
+function Adler32Asm(Adler: cardinal; p: pointer; Count: integer): cardinal;
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx

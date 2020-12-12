@@ -35,9 +35,6 @@ uses
   mormot.core.log,
   mormot.db.core;
 
-{$define WITHLOG}
-// if defined, logging will be generated - set by default since it won't hurt
-
 
 { ************ Raw SQLite3 API Constants and Functions }
 
@@ -114,7 +111,7 @@ const
   {$endif Linux}
   {$endif MSWINDOWS}
 
-  /// internal SQLite3 type as Integer
+  /// internal SQLite3 type as integer
   SQLITE_INTEGER = 1;
   /// internal SQLite3 type as Floating point value
   SQLITE_FLOAT = 2;
@@ -126,15 +123,15 @@ const
   SQLITE_NULL = 5;
 
   /// text is UTF-8 encoded
-  SQLITE_UTF8     = 1;
+  SQLITE_UTF8 = 1;
   /// text is UTF-16 LE encoded
-  SQLITE_UTF16LE  = 2;
+  SQLITE_UTF16LE = 2;
   /// text is UTF-16 BE encoded
-  SQLITE_UTF16BE  = 3;
+  SQLITE_UTF16BE = 3;
   /// text is UTF-16 encoded, using the system native byte order
-  SQLITE_UTF16    = 4;
+  SQLITE_UTF16 = 4;
   /// sqlite3.create_function don't care about text encoding
-  SQLITE_ANY      = 5;
+  SQLITE_ANY = 5;
   /// used by sqlite3.create_collation() only
   SQLITE_UTF16_ALIGNED = 8;
 
@@ -365,14 +362,13 @@ type
   // access the database and SQLITE_BUSY or SQLITE_IOERR_BLOCKED is returned.
   // - If the callback returns non-zero, then another attempt is made to open
   // the database for reading and the cycle repeats.
-  TSQLBusyHandler = function(user: pointer; count: integer): integer;
-     cdecl;
+  TSQLBusyHandler = function(user: pointer; count: integer): integer; cdecl;
 
   PFTSMatchInfo = ^TFTSMatchInfo;
   /// map the matchinfo function returned BLOB value
   // - i.e. the default 'pcx' layout, for both FTS3 and FTS4
   // - see http://www.sqlite.org/fts3.html#matchinfo
-  // - used for the FTS3/FTS4 ranking of results by TSQLRest.FTSMatch method
+  // - used for the FTS3/FTS4 ranking of results by TRest.FTSMatch method
   // and the internal RANK() function as proposed in
   // http://www.sqlite.org/fts3.html#appendix_a
   TFTSMatchInfo = packed record
@@ -421,8 +417,10 @@ type
     /// Used internally - xBestIndex() should ignore this field
     iTermOffset: integer;
   end;
+
   PSQLite3IndexConstraintArray = ^TSQLite3IndexConstraintArray;
-  TSQLite3IndexConstraintArray = array[0..MaxInt div SizeOf(TSQLite3IndexConstraint)-1] of TSQLite3IndexConstraint;
+  TSQLite3IndexConstraintArray = array[0 ..
+    MaxInt div SizeOf(TSQLite3IndexConstraint) - 1] of TSQLite3IndexConstraint;
 
   /// ORDER BY clause, one item per column
   TSQLite3IndexOrderBy = record
@@ -435,7 +433,8 @@ type
     desc: bytebool;
   end;
   PSQLite3IndexOrderByArray = ^TSQLite3IndexOrderByArray;
-  TSQLite3IndexOrderByArray = array[0..MaxInt div SizeOf(TSQLite3IndexOrderBy)-1] of TSQLite3IndexOrderBy;
+  TSQLite3IndexOrderByArray = array[0 ..
+    MaxInt div SizeOf(TSQLite3IndexOrderBy) - 1] of TSQLite3IndexOrderBy;
 
   /// define what information is to be passed to xFilter() for a given WHERE
   // clause constraint of the form "column OP expr"
@@ -449,7 +448,7 @@ type
     // - For example, if the aConstraint[3].argvIndex is set to 1, then when
     // xFilter() is called, the argv[0] passed to xFilter will have the EXPR
     // value of the aConstraint[3] constraint.
-    argvIndex: Integer;
+    argvIndex: integer;
     /// If omit is true, then the constraint is assumed to be fully handled
     // by the virtual table and is not checked again by SQLite
     // - By default, the SQLite core double checks all constraints on each
@@ -458,7 +457,8 @@ type
     omit: bytebool;
   end;
   PSQLite3IndexConstraintUsageArray = ^TSQLite3IndexConstraintUsageArray;
-  TSQLite3IndexConstraintUsageArray = array[0..MaxInt div SizeOf(TSQLite3IndexConstraintUsage) - 1] of TSQLite3IndexConstraintUsage;
+  TSQLite3IndexConstraintUsageArray = array[0 ..
+    MaxInt div SizeOf(TSQLite3IndexConstraintUsage) - 1] of TSQLite3IndexConstraintUsage;
 
   /// Structure used as part of the virtual table interface to pass information
   // into and receive the reply from the xBestIndex() method of a virtual table module
@@ -519,7 +519,7 @@ type
     // table will return only zero or one rows given the input constraints.
     // Additional bits of the idxFlags field might be understood in later
     // versions of SQLite
-    idxFlags: Integer;
+    idxFlags: integer;
     /// input: Mask of columns used by statement   (since 3.10.0)
     // - indicates which fields of the virtual table are actually used by the
     // statement being prepared. If the lowest bit of colUsed is set, that means
@@ -539,7 +539,7 @@ type
   // implementation. The purpose of this superclass is to define certain fields
   // that are common to all module implementations. This structure therefore
   // contains a pInstance field, which will be used to store a class instance
-  // handling the virtual table as a pure class: the TSQLVirtualTableModule
+  // handling the virtual table as a pure class: the TOrmVirtualTableModule
   // class will use it internaly
   TSQLite3VTab = record
     /// The module for this virtual table
@@ -571,7 +571,7 @@ type
   // - This superclass exists in order to define fields of the cursor that are
   // common to all implementationsThis structure therefore contains a pInstance
   // field, which will be used to store a class instance handling the virtual
-  // table as a pure class: the TSQLVirtualTableModule class will use
+  // table as a pure class: the TOrmVirtualTableModule class will use
   // it internaly
   TSQLite3VTabCursor = record
     /// Virtual table of this cursor
@@ -623,8 +623,8 @@ type
     // must invoke sqlite3.declare_vtab() to tell the SQLite core about the
     // columns and datatypes in the virtual table
     xCreate: function(DB: TSQLite3DB; pAux: Pointer;
-      argc: Integer; const argv: PPUTF8CharArray;
-      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; cdecl;
+      argc: integer; const argv: PPUTF8CharArray;
+      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): integer; cdecl;
     /// xConnect is called to establish a new connection to an existing virtual table,
     // whereas xCreate is called to create a new virtual table from scratch
     // - It has the same parameters and constructs a new PSQLite3VTab structure
@@ -633,8 +633,8 @@ type
     // virtual table is created. The xCreate method creates and initializes the
     // backing store. The xConnect method just connects to an existing backing store.
     xConnect: function(DB: TSQLite3DB; pAux: Pointer;
-      argc: Integer; const argv: PPUTF8CharArray;
-      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; cdecl;
+      argc: integer; const argv: PPUTF8CharArray;
+      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): integer; cdecl;
     /// Used to determine the best way to access the virtual table
     // - The pInfo parameter is used for input and output parameters
     // - The SQLite core calls the xBestIndex() method when it is compiling a query
@@ -654,20 +654,20 @@ type
     // it should make a copy. Care must be taken to store the copy in a place
     // where it will be deallocated, such as in the idxStr field with
     // needToFreeIdxStr set to 1.
-    xBestIndex: function(var pVTab: TSQLite3VTab; var pInfo: TSQLite3IndexInfo): Integer;
-      cdecl;
+    xBestIndex: function(var pVTab: TSQLite3VTab;
+      var pInfo: TSQLite3IndexInfo): integer; cdecl;
     /// Releases a connection to a virtual table
     // - Only the pVTab object is destroyed. The virtual table is not destroyed and
     // any backing store associated with the virtual table persists. This method
     // undoes the work of xConnect.
-    xDisconnect: function(pVTab: PSQLite3VTab): Integer; cdecl;
+    xDisconnect: function(pVTab: PSQLite3VTab): integer; cdecl;
     /// Releases a connection to a virtual table, just like the xDisconnect method,
     // and it also destroys the underlying table implementation.
     // - This method undoes the work of xCreate
     // - The xDisconnect method is called whenever a database connection that uses
     // a virtual table is closed. The xDestroy method is only called when a
     // DROP TABLE statement is executed against the virtual table.
-    xDestroy: function(pVTab: PSQLite3VTab): Integer; cdecl;
+    xDestroy: function(pVTab: PSQLite3VTab): integer; cdecl;
     /// Creates a new cursor used for accessing (read and/or writing) a virtual table
     // - A successful invocation of this method will allocate the memory for the
     // TPSQLite3VTabCursor (or a subclass), initialize the new object, and
@@ -681,14 +681,14 @@ type
     // - When initially opened, the cursor is in an undefined state. The SQLite core
     // will invoke the xFilter method on the cursor prior to any attempt to
     // position or read from the cursor.
-    xOpen: function(var pVTab: TSQLite3VTab; var ppCursor: PSQLite3VTabCursor): Integer;
-      cdecl;
+    xOpen: function(var pVTab: TSQLite3VTab;
+      var ppCursor: PSQLite3VTabCursor): integer; cdecl;
     /// Closes a cursor previously opened by xOpen
     // - The SQLite core will always call xClose once for each cursor opened using xOpen.
     // - This method must release all resources allocated by the corresponding xOpen call.
     // - The routine will not be called again even if it returns an error. The
     // SQLite core will not use the pVtabCursor again after it has been closed.
-    xClose: function(pVtabCursor: PSQLite3VTabCursor): Integer; cdecl;
+    xClose: function(pVtabCursor: PSQLite3VTabCursor): integer; cdecl;
     /// Begins a search of a virtual table
     // - The first argument is a cursor opened by xOpen.
     // - The next two arguments define a particular search index previously chosen
@@ -706,8 +706,9 @@ type
     // The xNext method will be used to advance to the next row.
     // - This method must return SQLITE_OK if successful, or an sqlite error code
     // if an error occurs.
-    xFilter: function(var pVtabCursor: TSQLite3VTabCursor; idxNum: Integer; const idxStr: PAnsiChar;
-      argc: Integer; var argv: TSQLite3ValueArray): Integer; cdecl;
+    xFilter: function(var pVtabCursor: TSQLite3VTabCursor; idxNum: integer;
+      const idxStr: PAnsiChar; argc: integer;
+      var argv: TSQLite3ValueArray): integer; cdecl;
     /// Advances a virtual table cursor to the next row of a result set initiated by xFilter
     // - If the cursor is already pointing at the last row when this routine is called,
     // then the cursor no longer points to valid data and a subsequent call to the
@@ -716,11 +717,11 @@ type
     // subsequent calls to xEof must return false (zero).
     // - This method must return SQLITE_OK if successful, or an sqlite error code
     // if an error occurs.
-    xNext: function(var pVtabCursor: TSQLite3VTabCursor): Integer; cdecl;
+    xNext: function(var pVtabCursor: TSQLite3VTabCursor): integer; cdecl;
     /// Checks if cursor reached end of rows
     // - Must return false (zero) if the specified cursor currently points to a
     // valid row of data, or true (non-zero) otherwise
-    xEof: function(var pVtabCursor: TSQLite3VTabCursor): Integer; cdecl;
+    xEof: function(var pVtabCursor: TSQLite3VTabCursor): integer; cdecl;
     /// The SQLite core invokes this method in order to find the value for the
     // N-th column of the current row
     // - N is zero-based so the first column is numbered 0.
@@ -731,12 +732,12 @@ type
     // - The xColumn method must return SQLITE_OK on success.
     // - To raise an error, the xColumn method should use one of the result_text()
     // methods to set the error message text, then return an appropriate error code.
-    xColumn: function(var pVtabCursor: TSQLite3VTabCursor; sContext: TSQLite3FunctionContext;
-      N: Integer): Integer; cdecl;
+    xColumn: function(var pVtabCursor: TSQLite3VTabCursor;
+      sContext: TSQLite3FunctionContext; N: integer): integer; cdecl;
     /// Should fill pRowid with the rowid of row that the virtual table cursor
     // pVtabCursor is currently pointing at
-    xRowid: function(var pVtabCursor: TSQLite3VTabCursor; var pRowid: Int64): Integer;
-      cdecl;
+    xRowid: function(var pVtabCursor: TSQLite3VTabCursor;
+      var pRowid: Int64): integer; cdecl;
     /// Makes a change to a virtual table content (insert/delete/update)
     // - The nArg parameter specifies the number of entries in the ppArg[] array
     // - The value of nArg will be 1 for a pure delete operation or N+2 for an
@@ -794,8 +795,8 @@ type
     // must be prepared for attempts to delete or modify rows of the table out
     // from other existing cursors. If the virtual table cannot accommodate such
     // changes, the xUpdate() method must return an error code.
-    xUpdate: function(var pVTab: TSQLite3VTab; nArg: Integer;
-      var ppArg: TSQLite3ValueArray; var pRowid: Int64): Integer; cdecl;
+    xUpdate: function(var pVTab: TSQLite3VTab; nArg: integer;
+      var ppArg: TSQLite3ValueArray; var pRowid: Int64): integer; cdecl;
     /// Begins a transaction on a virtual table
     // - This method is always followed by one call to either the xCommit or
     // xRollback method.
@@ -805,18 +806,18 @@ type
     // xSavepoint, xRelease and xRollBackTo methods.
     // - Multiple calls to other methods can and likely will occur in between the
     // xBegin and the corresponding xCommit or xRollback.
-    xBegin: function(var pVTab: TSQLite3VTab): Integer; cdecl;
+    xBegin: function(var pVTab: TSQLite3VTab): integer; cdecl;
     /// Signals the start of a two-phase commit on a virtual table
     // - This method is only invoked after call to the xBegin method and prior
     // to an xCommit or xRollback.
     // - In order to implement two-phase commit, the xSync method on all virtual
     // tables is invoked prior to invoking the xCommit method on any virtual table.
     // - If any of the xSync methods fail, the entire transaction is rolled back.
-    xSync: function(var pVTab: TSQLite3VTab): Integer; cdecl;
+    xSync: function(var pVTab: TSQLite3VTab): integer; cdecl;
     /// Causes a virtual table transaction to commit
-    xCommit: function(var pVTab: TSQLite3VTab): Integer; cdecl;
+    xCommit: function(var pVTab: TSQLite3VTab): integer; cdecl;
     /// Causes a virtual table transaction to rollback
-    xRollback: function(var pVTab: TSQLite3VTab): Integer; cdecl;
+    xRollback: function(var pVTab: TSQLite3VTab): integer; cdecl;
     /// Called during sqlite3.prepare() to give the virtual table implementation
     // an opportunity to overload SQL functions
     // - When a function uses a column from a virtual table as its first argument,
@@ -832,21 +833,22 @@ type
     // function. But for "like(A,B)" the A term is considered the first argument.
     // - The function pointer returned by this routine must be valid for the
     // lifetime of the pVTab object given in the first parameter.
-    xFindFunction: function(var pVTab: TSQLite3VTab; nArg: Integer; const zName: PAnsiChar;
-      var pxFunc: TSQLFunctionFunc; var ppArg: Pointer): Integer; cdecl;
+    xFindFunction: function(var pVTab: TSQLite3VTab; nArg: integer;
+      const zName: PAnsiChar; var pxFunc: TSQLFunctionFunc;
+      var ppArg: Pointer): integer; cdecl;
     /// Provides notification that the virtual table implementation that the
     // virtual table will be given a new name
     // - If this method returns SQLITE_OK then SQLite renames the table.
     // - If this method returns an error code then the renaming is prevented.
-    xRename: function(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): Integer;
-       cdecl;
+    xRename: function(var pVTab: TSQLite3VTab;
+      const zNew: PAnsiChar): integer; cdecl;
     /// Starts a new transaction with the virtual table
     // - SAVEPOINTs are a method of creating transactions, similar to BEGIN and
     // COMMIT, except that the SAVEPOINT and RELEASE commands are named and
     // may be nested. See @http://www.sqlite.org/lang_savepoint.html
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
-    xSavepoint: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
-       cdecl;
+    xSavepoint: function(var pVTab: TSQLite3VTab;
+      iSavepoint: integer): integer; cdecl;
     /// Merges a transaction into its parent transaction, so that the specified
     // transaction and its parent become the same transaction
     // - Causes all savepoints back to and including the most recent savepoint
@@ -856,13 +858,13 @@ type
     // changes committed by an inner transaction might later be undone by a
     // rollback in an outer transaction.
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
-    xRelease: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
-       cdecl;
+    xRelease: function(var pVTab: TSQLite3VTab;
+      iSavepoint: integer): integer; cdecl;
     /// Reverts the state of the virtual table content back to what it was just
     // after the corresponding SAVEPOINT
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
-    xRollbackTo: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
-       cdecl;
+    xRollbackTo: function(var pVTab: TSQLite3VTab;
+      iSavepoint: integer): integer; cdecl;
   end;
 
   /// Compile-Time Authorization Callback prototype
@@ -921,8 +923,8 @@ type
   // - The 6th parameter to the authorizer callback is the name of the inner-most
   // trigger or view that is responsible for the access attempt or nil if this
   // access attempt is directly from top-level SQL code.
-  TSQLAuthorizerCallback = function(pUserData: Pointer; code: Integer;
-    const zTab, zCol, zDb, zAuthContext: PAnsiChar): Integer; cdecl;
+  TSQLAuthorizerCallback = function(pUserData: Pointer; code: integer;
+    const zTab, zCol, zDb, zAuthContext: PAnsiChar): integer; cdecl;
 
   /// Callback function invoked when a row is updated, inserted or deleted,
   // after sqlite3.update_hook() registration
@@ -940,7 +942,7 @@ type
   // sqlite3.step() call that triggered the update hook. Note that
   // sqlite3.prepare_v2() and sqlite3.step() both modify their database
   // connections for the meaning of "modify" in this paragraph.
-  TSQLUpdateCallback = procedure(pUpdateArg: Pointer; op: Integer;
+  TSQLUpdateCallback = procedure(pUpdateArg: Pointer; op: integer;
     const zDb, zTbl: PUTF8Char; iRowID: Int64); cdecl;
 
   /// Commit And Rollback Notification Callback function after
@@ -961,7 +963,7 @@ type
   // constraint causes an implicit rollback to occur. The rollback callback
   // is not invoked if a transaction is automatically rolled back because the
   // database connection is closed.
-  TSQLCommitCallback = function(pArg: Pointer): Integer; cdecl;
+  TSQLCommitCallback = function(pArg: Pointer): integer; cdecl;
 
 
   /// events monitored by sqlite3.trace_v2() tracing logic
@@ -983,7 +985,11 @@ type
   // - stmClose callback is invoked when a database connection closes. The
   // P argument is a pointer to the database connection object and the X
   // argument is unused.
-  TSQLTraceMask = set of (stmStmt, stmProfile, stmRow, stmClose);
+  TSQLTraceMask = set of (
+    stmStmt,
+    stmProfile,
+    stmRow,
+    stmClose);
 
   /// Callback function registered by sqlite3.trace_v2()
   // - the Trace argument has one of the TSQLTraceMask items set, to indicate
@@ -992,8 +998,8 @@ type
   // sqlite3.trace_v2() call
   // - P and X arguments are pointers whose meanings depend on Trace content:
   // see TSQLTraceMask for the various use cases
-  TSQLTraceCallback = procedure(Trace: TSQLTraceMask; UserData,P,X: pointer);
-    cdecl;
+  TSQLTraceCallback = procedure(Trace: TSQLTraceMask;
+    UserData, P, X: pointer); cdecl;
 
   /// Callback function registered by sqlite3.profile()
   // - this procedure will be invoked as each SQL statement finishes
@@ -1029,8 +1035,8 @@ type
   // (TSQLite3LibrayStatic) or with an external library (TSQLite3LibraryDynamic)
   // - a global sqlite3: TSQLite3Library will be defined in this unit, so
   // you should call sqlite3.open() instead of sqlite3_open() for instance
-  // - if your project refers to SynSQLite3Static unit, it will initialize a
-  // TSQLite3LibrayStatic instance
+  // - if your project refers to mormot.db.raw.sqlite3.static unit, it will
+  // initialize a TSQLite3LibrayStatic instance
   TSQLite3Library = class
   protected
     fUseInternalMM: boolean;
@@ -1079,10 +1085,10 @@ type
 
     ///  specify the encryption key on a newly opened database connection
     // - Assigned(key)=false if encryption is not available for this .dll
-    // - SynSQLite3Static will use its own internal encryption format
+    // - mormot.db.raw.sqlite3.static will use its own internal encryption format
     // - key/keylen may be a JSON-serialized TSynSignerParams object, or will use
     // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
-    key: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl;
+    key: function(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl;
 
     /// change the encryption key on a database connection that is already opened
     // -  can also decrypt a previously encrypted database (so that it is accessible
@@ -1090,19 +1096,19 @@ type
     // - Assigned(rekey)=false if encryption is not available, i.e. if
     // NOSQLITE3STATIC is defined
     // - also see ChangeSQLEncryptTablePassWord() procedure
-    rekey: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl;
+    rekey: function(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl;
 
     /// Destructor for the sqlite3 object, which handle is DB
     //  - Applications should finalize all prepared statements and close all BLOB handles
     // associated with the sqlite3 object prior to attempting to close the object
     // (sqlite3.next_stmt() interface can be used for this task)
     // - if invoked while a transaction is open, the transaction is automatically rolled back
-    //  - SynSQLite3Static will use its own internal function for handling properly
-    // its own encryption format
+    // - mormot.db.raw.sqlite3.static will use its own internal function for
+    // handling properly its own encryption format
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.33.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.34.0', when used with our mormot.db.raw.sqlite3.static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
@@ -1158,7 +1164,7 @@ type
     // that most closely matches the way in which the SQL function is used.
     create_function: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-      xFinal: TSQLFunctionFinal): Integer; cdecl;
+      xFinal: TSQLFunctionFinal): integer; cdecl;
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates, including destruction
@@ -1171,7 +1177,7 @@ type
     // - this function is not available in older revisions - e.g. 3.6.*
     create_function_v2: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-      xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer; cdecl;
+      xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): integer; cdecl;
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates, including  extra callback functions needed
@@ -1188,7 +1194,7 @@ type
     create_window_function: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xStep: TSQLFunctionFunc;
       xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc;
-      xDestroy: TSQLDestroyPtr): Integer; cdecl;
+      xDestroy: TSQLDestroyPtr): integer; cdecl;
 
     /// Define New Collating Sequences
     // - add new collation sequences to the database connection specified
@@ -1197,7 +1203,8 @@ type
     // - StringEncoding is either SQLITE_UTF8 either SQLITE_UTF16
     // - TSQLDataBase.Create add WIN32CASE, WIN32NOCASE and ISO8601 collations
     create_collation: function(DB: TSQLite3DB; CollationName: PUTF8Char;
-      StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl;
+      StringEncoding: integer; CollateParam: pointer;
+      cmp: TSQLCollateFunc): integer; cdecl;
 
     /// Returns the rowid of the most recent successful INSERT into the database
     last_insert_rowid: function(DB: TSQLite3DB): Int64; cdecl;
@@ -1436,8 +1443,9 @@ type
     // copy of the data (this is the prefered way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
-    result_blob: procedure(Context: TSQLite3FunctionContext; Value: Pointer;
-      Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl;
+    result_blob: procedure(Context: TSQLite3FunctionContext;
+      Value: Pointer; Value_bytes: integer = 0;
+      DestroyPtr: TSQLDestroyPtr = SQLITE_TRANSIENT); cdecl;
 
     /// sets the return value of the application-defined function to be a text string
     // which is represented as UTF-8
@@ -1451,21 +1459,24 @@ type
     // copy of the data (this is the prefered way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
-    result_text: procedure(Context: TSQLite3FunctionContext; Value: PUTF8Char;
-      Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl;
+    result_text: procedure(Context: TSQLite3FunctionContext;
+      Value: PUTF8Char; Value_bytes: integer = -1;
+      DestroyPtr: TSQLDestroyPtr = SQLITE_TRANSIENT); cdecl;
 
     /// sets the result of the application-defined function to be a copy the unprotected
     // sqlite3.value object specified by the 2nd parameter
     // - The sqlite3.result_value() interface makes a copy of the sqlite3.value so
     // that the sqlite3.value specified in the parameter may change or be deallocated
     // after sqlite3.result_value() returns without harm
-    result_value: procedure(Context: TSQLite3FunctionContext; Value: TSQLite3Value); cdecl;
+    result_value: procedure(Context: TSQLite3FunctionContext;
+      Value: TSQLite3Value); cdecl;
 
     /// cause the implemented SQL function to throw an exception
     // - SQLite interprets the error message string from sqlite3.result_error() as UTF-8
     // - if MsgLen is negative, Msg must be #0 ended, or MsgLen must tell the numnber of
     // characters in the Msg UTF-8 buffer
-    result_error: procedure(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); cdecl;
+    result_error: procedure(Context: TSQLite3FunctionContext;
+      Msg: PUTF8Char; MsgLen: integer = -1); cdecl;
 
     /// returns a copy of the pointer that was the pUserData parameter (the 5th
     // parameter) of the sqlite3.create_function() routine that originally
@@ -1477,7 +1488,8 @@ type
     /// returns a copy of the pointer to the database connection (the 1st parameter)
     // of the sqlite3.create_function() routine that originally registered the
     // application defined function
-    context_db_handle: function(Context: TSQLite3FunctionContext): TSQLite3DB; cdecl;
+    context_db_handle: function(
+      Context: TSQLite3FunctionContext): TSQLite3DB; cdecl;
 
     /// Implementations of aggregate SQL functions use this routine to allocate
     // memory for storing their state.
@@ -1514,9 +1526,9 @@ type
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
     // copy of the data (this is the prefered way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
-    bind_text: function(S: TSQLite3Statement; Param: integer;
-      Text: PUTF8Char; Text_bytes: integer=-1;
-      DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; cdecl;
+    bind_text: function(S: TSQLite3Statement;
+      Param: integer; Text: PUTF8Char; Text_bytes: integer = -1;
+      DestroyPtr: TSQLDestroyPtr = SQLITE_TRANSIENT): integer; cdecl;
       // note that the official SQLite3 documentation could lead into misunderstanding:
       // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
       // all column values
@@ -1531,8 +1543,9 @@ type
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
     // copy of the data (this is the prefered way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
-    bind_blob: function(S: TSQLite3Statement; Param: integer; Buf: pointer; Buf_bytes: integer;
-      DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; cdecl;
+    bind_blob: function(S: TSQLite3Statement;
+      Param: integer; Buf: pointer; Buf_bytes: integer;
+      DestroyPtr: TSQLDestroyPtr = SQLITE_TRANSIENT): integer; cdecl;
 
     /// bind a ZeroBlob buffer to a parameter
     // - uses a fixed amount of memory (just an integer to hold its size) while
@@ -1540,34 +1553,39 @@ type
     // for BLOBs whose content is later written using incremental BLOB I/O routines.
     // - a negative value for the Size parameter results in a zero-length BLOB
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-    bind_zeroblob: function(S: TSQLite3Statement; Param: integer; Size: integer): integer; cdecl;
+    bind_zeroblob: function(S: TSQLite3Statement;
+      Param: integer; Size: integer): integer; cdecl;
 
     /// Bind a floating point Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
     // - Value is the floating point number to bind
-    bind_double: function(S: TSQLite3Statement; Param: integer; Value: double): integer; cdecl;
+    bind_double: function(S: TSQLite3Statement;
+      Param: integer; Value: double): integer; cdecl;
 
-    /// Bind a 32 bits Integer Value to a parameter of a prepared statement
+    /// Bind a 32 bits integer Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
-    // - Value is the 32 bits Integer to bind
-    bind_int: function(S: TSQLite3Statement; Param: integer; Value: integer): integer; cdecl;
+    // - Value is the 32 bits integer to bind
+    bind_int: function(S: TSQLite3Statement;
+      Param: integer; Value: integer): integer; cdecl;
 
-    /// Bind a 64 bits Integer Value to a parameter of a prepared statement
+    /// Bind a 64 bits integer Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
-    // - Value is the 64 bits Integer to bind
-    bind_int64: function(S: TSQLite3Statement; Param: integer; Value: Int64): integer; cdecl;
+    // - Value is the 64 bits integer to bind
+    bind_int64: function(S: TSQLite3Statement;
+      Param: integer; Value: Int64): integer; cdecl;
 
     /// Bind a NULL Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
-    bind_null: function(S: TSQLite3Statement; Param: integer): integer; cdecl;
+    bind_null: function(S: TSQLite3Statement;
+      Param: integer): integer; cdecl;
 
     /// Reset All Bindings On A Prepared Statement
     clear_bindings: function(S: TSQLite3Statement): integer; cdecl;
@@ -1583,24 +1601,26 @@ type
     // in database DBName; in other words, the same BLOB that would be selected by:
     // ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID;
     blob_open: function(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
-      RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl;
+      RowID: Int64; Flags: integer; var Blob: TSQLite3Blob): integer; cdecl;
 
     /// Move a BLOB Handle to a New Row
     // - will point to a different row of the same database table
     // - this is faster than closing the existing handle and opening a new one
-    blob_reopen: function(Blob: TSQLite3Blob; RowID: Int64): Integer; cdecl;
+    blob_reopen: function(Blob: TSQLite3Blob; RowID: Int64): integer; cdecl;
 
     /// Close A BLOB Handle
-    blob_close: function(Blob: TSQLite3Blob): Integer; cdecl;
+    blob_close: function(Blob: TSQLite3Blob): integer; cdecl;
 
     /// Read Data From a BLOB Incrementally
-    blob_read: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl;
+    blob_read: function(Blob: TSQLite3Blob;
+      const Data; Count, Offset: integer): integer; cdecl;
 
     /// Write Data To a BLOB Incrementally
-    blob_write: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl;
+    blob_write: function(Blob: TSQLite3Blob;
+      const Data; Count, Offset: integer): integer; cdecl;
 
     /// Return The Size Of An Open BLOB
-    blob_bytes: function(Blob: TSQLite3Blob): Integer; cdecl;
+    blob_bytes: function(Blob: TSQLite3Blob): integer; cdecl;
 
     /// Used to register a new virtual table module name
     // - The module name is registered on the database connection specified by the
@@ -1615,8 +1635,9 @@ type
     // pClientData buffer. SQLite will invoke the destructor function (if it is
     // not nil) when SQLite no longer needs the pClientData pointer. The
     // destructor will also be invoked if call to sqlite3.create_module_v2() fails.
-    create_module_v2: function(DB: TSQLite3DB; const zName: PAnsiChar;
-      var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer; cdecl;
+    create_module_v2: function(DB: TSQLite3DB;
+      const zName: PAnsiChar; var p: TSQLite3Module;
+      pClientData: Pointer; xDestroy: TSQLDestroyPtr): integer; cdecl;
 
     /// Declare the Schema of a virtual table
     // - The xCreate() and xConnect() methods of a virtual table module call this
@@ -1632,7 +1653,8 @@ type
     // the result set of a SELECT, and 3. Hidden columns are not included in the
     // implicit column-list used by an INSERT statement that lacks an explicit
     // column-list.
-    declare_vtab: function(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer; cdecl;
+    declare_vtab: function(DB: TSQLite3DB;
+      const zSQL: PAnsiChar): integer; cdecl;
 
     /// Registers an authorizer callback to a specified DB connection
     // - Only a single authorizer can be in place on a database connection at a time
@@ -1640,7 +1662,7 @@ type
     // - Disable the authorizer by installing a nil callback
     // - The authorizer is disabled by default
     set_authorizer: function(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
-      pUserData: Pointer): Integer; cdecl;
+      pUserData: Pointer): integer; cdecl;
 
     /// Register Data Change Notification Callbacks
     // - The sqlite3.update_hook() interface registers a callback function with
@@ -1699,7 +1721,7 @@ type
     // - If a separate thread makes changes on the same database connection while
     // sqlite3.changes() is running then the value returned is unpredictable and not
     // meaningful.
-    changes: function(DB: TSQLite3DB): Integer; cdecl;
+    changes: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Total Number Of Rows Modified
     // - This function returns the number of row changes caused by INSERT, UPDATE or
@@ -1716,15 +1738,15 @@ type
     // - If a separate thread makes changes on the same database connection while
     // sqlite3.total_changes() is running then the value returned is unpredictable
     // and not meaningful.
-    total_changes: function(DB: TSQLite3DB): Integer; cdecl;
+    total_changes: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Returns a pointer to a block of memory at least N bytes in length
     // - should call native malloc() function, i.e. GetMem() in this unit
-    malloc: function(n: Integer): Pointer; cdecl;
+    malloc: function(n: integer): Pointer; cdecl;
 
     /// Attempts to resize a prior memory allocation
     // - should call native realloc() function, i.e. ReallocMem() in this unit
-    realloc: function(pOld: Pointer; n: Integer): Pointer; cdecl;
+    realloc: function(pOld: Pointer; n: integer): Pointer; cdecl;
 
     /// Releases memory previously returned by sqlite3.malloc() or sqlite3.realloc()
     // - should call native free() function, i.e. FreeMem() in this unit
@@ -1736,7 +1758,7 @@ type
 
     /// Returns the maximum value of sqlite3.memory_used() since the high-water mark
     // was last reset
-    memory_highwater: function(resetFlag: Integer): Int64; cdecl;
+    memory_highwater: function(resetFlag: integer): Int64; cdecl;
 
     /// Register callback function that can be used for tracing the execution of
     // SQL statements
@@ -1745,8 +1767,8 @@ type
     // - if the Callback parameter is nil or if the TSQLTraceMask mask is zero,
     // then tracing is disabled
     // - parameters of the Callback functions depend of the TSQLTraceMask involved
-    trace_v2: function(DB: TSQLite3DB; Mask: TSQLTraceMask; Callback: TSQLTraceCallback;
-      UserData: Pointer): Pointer; cdecl;
+    trace_v2: function(DB: TSQLite3DB; Mask: TSQLTraceMask;
+      Callback: TSQLTraceCallback; UserData: Pointer): Pointer; cdecl;
 
     /// Allows the size of various constructs to be limited on a connection
     // by connection basis
@@ -1822,7 +1844,8 @@ type
     // as is used by the backup operation (which is the case in the
     // mormot.db.raw.sqlite3 and  mORMotSQLite3 units), then the backup database
     // is automatically updated at the same time, so you won't loose any data.
-    backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer; cdecl;
+    backup_step: function(Backup: TSQLite3Backup;
+      nPages: integer): integer; cdecl;
     /// finalize a Backup process on a given database
     // - When backup_step() has returned SQLITE_DONE, or when the application
     // wishes to abandon the backup operation, the application should destroy the
@@ -1900,7 +1923,8 @@ type
     config: function(operation: integer): integer; cdecl varargs;
 
     /// used to make global configuration changes to current database connection
-    db_config: function(DestDB: TSQLite3DB; operation: integer): integer; cdecl varargs;
+    db_config: function(DestDB: TSQLite3DB;
+      operation: integer): integer; cdecl varargs;
 
     /// initialize the internal version numbers
     constructor Create; virtual;
@@ -1911,15 +1935,18 @@ type
     procedure ForceToUseSharedMemoryManager; virtual;
     /// returns the current version number as a plain integer
     // - equals e.g. 3008003001 for '3.8.3.1'
-    property VersionNumber: cardinal read fVersionNumber;
+    property VersionNumber: cardinal
+      read fVersionNumber;
     /// returns the current version number as a text
     // - equals e.g. '3.8.3.1'
     // - use the Version property for the full information about this instance
-    property VersionText: RawUTF8 read fVersionText;
+    property VersionText: RawUTF8
+      read fVersionText;
   published
     /// will return the class name and SQLite3 version number
     // - if self (e.g. global sqlite3) is nil, will return ''
-    property Version: RawUTF8 read GetVersion;
+    property Version: RawUTF8
+      read GetVersion;
   end;
   {$M-}
 
@@ -1934,11 +1961,13 @@ type
   public
     /// initialize the specified external library
     // - raise an ESQLite3Exception on error
-    constructor Create(const LibraryName: TFileName = SQLITE_LIBRARY_DEFAULT_NAME); reintroduce;
+    constructor Create(
+      const LibraryName: TFileName = SQLITE_LIBRARY_DEFAULT_NAME); reintroduce;
     /// unload the external library
     destructor Destroy; override;
   published
-    property LibraryName: TFileName read GetLibraryName;
+    property LibraryName: TFileName
+      read GetLibraryName;
   end;
 
 
@@ -1962,7 +1991,8 @@ procedure sqlite3InternalFreeRawByteString(p: pointer); cdecl;
 procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
 
 /// wrapper around sqlite3.result_error() validating the expected number of arguments
-function CheckNumberOfArgs(Context: TSQLite3FunctionContext; expected,sent: integer): boolean;
+function CheckNumberOfArgs(Context: TSQLite3FunctionContext;
+  expected, sent: integer): boolean;
 
 /// create a TSQLite3Module.pzErr UTF-8 text buffer according to the given
 // Exception class
@@ -1971,23 +2001,26 @@ procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUTF8Char);
 /// set a TSQLVar into a SQlite3 result context
 // - will call the corresponding sqlite3.result_*() function and return true,
 // or will return false if the TSQLVar type is not handled
-function SQLVarToSQlite3Context(const Res: TSQLVar; Context: TSQLite3FunctionContext): boolean;
+function SQLVarToSQlite3Context(const Res: TSQLVar;
+  Context: TSQLite3FunctionContext): boolean;
 
 /// set a UTF-8 string into a SQlite3 result context
 // - this function will use copy-on-write assignment of Text, with no memory
 // allocation, then let sqlite3InternalFreeRawByteString release its reference count
-procedure RawUTF8ToSQlite3Context(const Text: RawUTF8; Context: TSQLite3FunctionContext;
-  VoidTextAsNull: boolean);
+procedure RawUTF8ToSQlite3Context(const Text: RawUTF8;
+  Context: TSQLite3FunctionContext; VoidTextAsNull: boolean);
 
 /// set a variant value into a SQlite3 result context
 // - will call the corresponding sqlite3.result_*() function, using
 // SQLVarToSQlite3Context() after a call to VariantToSQLVar()
-procedure VariantToSQlite3Context(const Value: Variant; Context: TSQLite3FunctionContext);
+procedure VariantToSQlite3Context(const Value: Variant;
+  Context: TSQLite3FunctionContext);
 
 /// set a JSON value into a SQlite3 result context
 // - a JSON object or array would be returned at plain TEXT, or other simple
 // JSON text or number would be returned as the corresponding SQLite3 value
-procedure JsonToSQlite3Context(json: PUTF8Char; Context: TSQLite3FunctionContext);
+procedure JsonToSQlite3Context(json: PUTF8Char;
+  Context: TSQLite3FunctionContext);
 
 /// set a SQLite3 value into a TSQLVar
 // - will call the corresponding sqlite3.value_*() function to retrieve the
@@ -2053,10 +2086,35 @@ type
   /// the main possible return codes, including error codes
   TSQLite3ErrorCode = (
     secUnknown,
-    secOK,secERROR,secINTERNAL,secPERM,secABORT,secBUSY,secLOCKED,secNOMEM,
-    secREADONLY,secINTERRUPT,secIOERR,secCORRUPT,secNOTFOUND,secFULL,secCANTOPEN,
-    secPROTOCOL,secEMPTY,secSCHEMA,secTOOBIG,secCONSTRAINT,secMISMATCH,secMISUSE,
-    secNOLFS,secAUTH,secFORMAT,secRANGE,secNOTADB, secROW,secDONE);
+    secOK,
+    secERROR,
+    secINTERNAL,
+    secPERM,
+    secABORT,
+    secBUSY,
+    secLOCKED,
+    secNOMEM,
+    secREADONLY,
+    secINTERRUPT,
+    secIOERR,
+    secCORRUPT,
+    secNOTFOUND,
+    secFULL,
+    secCANTOPEN,
+    secPROTOCOL,
+    secEMPTY,
+    secSCHEMA,
+    secTOOBIG,
+    secCONSTRAINT,
+    secMISMATCH,
+    secMISUSE,
+    secNOLFS,
+    secAUTH,
+    secFORMAT,
+    secRANGE,
+    secNOTADB,
+    secROW,
+    secDONE);
 
   /// custom SQLite3 dedicated Exception type
   ESQLite3Exception = class(ESynException)
@@ -2067,12 +2125,15 @@ type
     /// the DB which raised this exception
     DB: TSQLite3DB;
     /// create the exception, getting the message from DB
-    constructor Create(aDB: TSQLite3DB; aErrorCode: integer; const aSQL: RawUTF8); reintroduce; overload;
+    constructor Create(aDB: TSQLite3DB; aErrorCode: integer;
+      const aSQL: RawUTF8); reintroduce; overload;
   published
     /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
-    property ErrorCode: integer read fErrorCode;
+    property ErrorCode: integer
+      read fErrorCode;
     /// the corresponding error code, e.g. secMISUSE
-    property SQLite3ErrorCode: TSQLite3ErrorCode read fSQLite3ErrorCode;
+    property SQLite3ErrorCode: TSQLite3ErrorCode
+      read fSQLite3ErrorCode;
   end;
 
 /// convert a SQLite3 result code into a TSQLite3ErrorCode item
@@ -2089,15 +2150,16 @@ function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 /// test the result state of a sqlite3.*() function
 // - raise a ESQLite3Exception if the result state is within SQLITE_ERRORS
 // - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
-function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8=''): integer;
+function sqlite3_check(DB: TSQLite3DB; aResult: integer;
+  const SQL: RawUTF8=''): integer;
 
 var
   /// global access to linked SQLite3 library API calls
   // - you should call sqlite3.open() instead of sqlite3_open() for instance
   // - points either to the statically linked sqlite3.obj, or to an external
   // library (e.g. sqlite3.dll under Windows)
-  // - your project should use EITHER SynSQLite3Static unit OR create a
-  // TSQLite3LibraryDynamic instance:
+  // - your project should use EITHER mormot.db.raw.sqlite3.static unit
+  // OR create a TSQLite3LibraryDynamic instance:
   // ! FreeAndNil(sqlite3); // release any previous instance
   // ! sqlite3 := TSQLite3LibraryDynamic.Create;
   // - caller should free the sqlite3 instance only with
@@ -2128,7 +2190,9 @@ type
   // before that data has been written to the disk surface. On the other hand,
   // some operations are as much as 50 or more times faster with synchronous OFF.
   TSQLSynchronousMode = (
-    smOff, smNormal, smFull);
+    smOff,
+    smNormal,
+    smFull);
 
   /// available file-level database connection locking-mode
   // - lmNormal locking-mode (the default unless overridden at compile-time using
@@ -2146,7 +2210,8 @@ type
   // - lmExclusive gives much better write performance, and could be used when
   // needed, in case of a heavy loaded mORMot server
   TSQLLockingMode = (
-    lmNormal, lmExclusive);
+    lmNormal,
+    lmExclusive);
 
   /// available Run-Time limit categories
   // - as expected by sqlite3.limit() function and TSQLDatabase.Limit property
@@ -2167,9 +2232,17 @@ type
   // - lcVariableNumber The maximum number of parameters in an SQL statement.
   // - lcTriggerDepth The maximum depth of recursion for triggers.
   TSQLLimitCategory = (
-    lcLength, lcSQLLength, lcColumn, lcExprDepth, lcCompoundSelect,
-    lcVDBEop, lcFunctionArg, lcAttached, lcLikePatternLength,
-    lcVariableNumber, lcTriggerDepth);
+    lcLength,
+    lcSQLLength,
+    lcColumn,
+    lcExprDepth,
+    lcCompoundSelect,
+    lcVDBEop,
+    lcFunctionArg,
+    lcAttached,
+    lcLikePatternLength,
+    lcVariableNumber,
+    lcTriggerDepth);
 
   {$M+}
   TSQLDatabase = class;
@@ -2192,7 +2265,7 @@ type
     fRequest: TSQLite3Statement;
     fNextSQL: PUTF8Char;
     fFieldCount: integer;
-    function GetReadOnly: Boolean;
+    function GetReadOnly: boolean;
     function GetParamCount: integer;
 
   // 1. general request process
@@ -2201,7 +2274,8 @@ type
     // - compile the SQL into byte-code
     // - parameters ? ?NNN :VV @VV $VV can be bound with Bind*() functions below
     // - raise an ESQLite3Exception on any error, unless NoExcept is TRUE
-    function Prepare(DB: TSQLite3DB; const SQL: RawUTF8; NoExcept: boolean = false): integer;
+    function Prepare(DB: TSQLite3DB; const SQL: RawUTF8;
+      NoExcept: boolean = false): integer;
     /// Prepare a WinAnsi SQL statement
     // - behave the same as Prepare()
     function PrepareAnsi(DB: TSQLite3DB; const SQL: WinAnsiString): integer;
@@ -2250,25 +2324,29 @@ type
     // - return result as a dynamic array of Int64 in ID
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESQLite3Exception on any error
-    function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; var ID: TInt64DynArray): integer; overload;
+    function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8;
+      var ID: TInt64DynArray): integer; overload;
     /// Execute a SQL statement which return one integer from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
     // - this statement must get (at least) one field/column result of INTEGER
     // - return result as an unique Int64 in ID
     // - raise an ESQLite3Exception on any error }
-    procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; out ID: Int64); overload;
+    procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8;
+      out ID: Int64); overload;
     /// Execute a SQL statement which return one TEXT value from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
     // - this statement must get (at least) one field/column result of TEXT
     // - raise an ESQLite3Exception on any error
-    procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; out Value: RawUTF8); overload;
+    procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8;
+      out Value: RawUTF8); overload;
     /// Execute a SQL statement which return TEXT from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
     // - this statement must get (at least) one field/column result of TEXT
     // - return result as a dynamic array of RawUTF8 in ID
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESQLite3Exception on any error
-    function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer; overload;
+    function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8;
+      var Values: TRawUTF8DynArray): integer; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - JSON format is more compact than XML and well supported
     // - Execute the first statement in aSQL
@@ -2278,11 +2356,11 @@ type
     // - if Expand is true, JSON data is an array of objects, for direct use
     // with any Ajax or .NET client:
     // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expand is false, JSON data is serialized (used in TSQLTableJSON)
+    // - if Expand is false, JSON data is serialized (used in TOrmTableJSON)
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data (no conversion into TEXT, as with
-    // TSQLTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
+    // TOrmTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
       Expand: boolean = false): PtrInt; overload;
@@ -2292,19 +2370,22 @@ type
     // - returns the number of data rows added to JSON (excluding the headers)
     // in the integer variable mapped by aResultCount (if any)
     // - if any error occurs, the ESQLite3Exception is handled and '' is returned
-    function ExecuteJSON(aDB: TSQLite3DB; const aSQL: RawUTF8; Expand: boolean = false;
-      aResultCount: PPtrInt = nil): RawUTF8;
+    function ExecuteJSON(aDB: TSQLite3DB; const aSQL: RawUTF8;
+      Expand: boolean = false; aResultCount: PPtrInt = nil): RawUTF8;
     /// Execute all SQL statements in the aSQL UTF-8 encoded string, results will
     // be written as ANSI text in OutFile
-    procedure ExecuteDebug(aDB: TSQLite3DB; const aSQL: RawUTF8; var OutFile: Text);
+    procedure ExecuteDebug(aDB: TSQLite3DB; const aSQL: RawUTF8;
+      var OutFile: Text);
     /// close the Request handle
     // - call it even if an ESQLite3Exception has been raised
     procedure Close;
 
     /// read-only access to the Request (SQLite3 statement) handle
-    property Request: TSQLite3Statement read fRequest;
+    property Request: TSQLite3Statement
+      read fRequest;
     /// read-only access to the SQLite3 database handle
-    property RequestDB: TSQLite3DB read fDB;
+    property RequestDB: TSQLite3DB
+      read fDB;
     /// returns true if the current prepared statement makes no direct changes
     // to the content of the database file
     // - Transaction control statements such as BEGIN, COMMIT, ROLLBACK, SAVEPOINT,
@@ -2314,7 +2395,8 @@ type
     // statements also cause this property to return true since, while
     // those statements change the configuration of a database connection, they
     // do not make changes to the content of the database files on disk.
-    property IsReadOnly: Boolean read GetReadOnly;
+    property IsReadOnly: boolean
+      read GetReadOnly;
 
   // 2. Bind parameters to a SQL query (for the last prepared statement)
   public
@@ -2325,41 +2407,41 @@ type
     /// bind a NULL value to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
-    procedure BindNull(Param: Integer);
+    procedure BindNull(Param: integer);
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
-    procedure Bind(Param: Integer; Value: Int64); overload;
+    procedure Bind(Param: integer; Value: Int64); overload;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
-    procedure Bind(Param: Integer; Value: double); overload;
+    procedure Bind(Param: integer; Value: double); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
     // - this function will use copy-on-write assignment of Value, with no memory
     // allocation, then let sqlite3InternalFreeRawByteString release the variable
-    procedure Bind(Param: Integer; const Value: RawUTF8); overload;
+    procedure Bind(Param: integer; const Value: RawUTF8); overload;
     /// bind a generic VCL string to a parameter
     // - with versions prior to Delphi 2009, you may loose some content here:
     // Bind(Param: integer; Value: RawUTF8) is the prefered method
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
-    procedure BindS(Param: Integer; const Value: string);
+    procedure BindS(Param: integer; const Value: string);
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
-    procedure Bind(Param: Integer; Data: pointer; Size: integer); overload;
+    procedure Bind(Param: integer; Data: pointer; Size: integer); overload;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
     // - this function will use copy-on-write assignment of Data, with no memory
     // allocation, then let sqlite3InternalFreeRawByteString release the variable
-    procedure BindBlob(Param: Integer; const Data: RawByteString);
+    procedure BindBlob(Param: integer; const Data: RawByteString);
     /// bind a Blob TCustomMemoryStream buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
-    procedure Bind(Param: Integer; Data: TCustomMemoryStream); overload;
+    procedure Bind(Param: integer; Data: TCustomMemoryStream); overload;
     /// bind a ZeroBlob buffer to a parameter
     // - uses a fixed amount of memory (just an integer to hold its size) while
     // it is being processed. Zeroblobs are intended to serve as placeholders
@@ -2368,7 +2450,7 @@ type
     // - a negative value for the Size parameter results in a zero-length BLOB
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
-    procedure BindZero(Param: Integer; Size: integer);
+    procedure BindZero(Param: integer; Size: integer);
 
   // 3. Field attributes after a sucessfull Step() (returned SQLITE_ROW)
   public
@@ -2392,27 +2474,27 @@ type
     function FieldA(Col: integer): WinAnsiString;
     /// return a field RawUnicode encoded text value, first Col is 0
     function FieldW(Col: integer): RawUnicode;
-    /// return a field as a blob value (RawByteString/TSQLRawBlob is an AnsiString),
+    /// return a field as a blob value (RawByteString/RawBlob is an AnsiString),
     // first Col is 0
     function FieldBlob(Col: integer): RawByteString;
     /// return a field as a TStream blob value, first Col is 0
     // - caller shall release the returned TStream instance
     function FieldBlobToStream(Col: integer): TStream;
     /// return TRUE if the column value is NULL, first Col is 0
-    function FieldNull(Col: Integer): Boolean;
+    function FieldNull(Col: integer): boolean;
     /// return the field type of this column
     // - retrieve the "SQLite3" column type as returned by sqlite3.column_type -
     //  i.e. SQLITE_NULL, SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, or SQLITE_BLOB
-    function FieldType(Col: Integer): integer;
+    function FieldType(Col: integer): integer;
     /// return the type of this column, as declared at creation
     // - textual type used for CREATE TABLE of the corresponding column, as
     // returned by sqlite3.column_decltype()
-    function FieldDeclaredType(Col: Integer): RawUTF8;
+    function FieldDeclaredType(Col: integer): RawUTF8;
     /// return the generic VCL string type of this column, as declared at creation
     // - textual type used for CREATE TABLE of corresponding column, as
     // returned by sqlite3.column_decltype()
     // - note that prior to Delphi 2009, you may loose content during conversion
-    function FieldDeclaredTypeS(Col: Integer): string;
+    function FieldDeclaredTypeS(Col: integer): string;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
@@ -2420,12 +2502,14 @@ type
     procedure FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean = false);
     /// the column/field count of the current ROW
     // - fields numerotation starts with 0
-    property FieldCount: integer read fFieldCount;
+    property FieldCount: integer
+      read fFieldCount;
     /// the bound parameters count
-    property ParamCount: integer read GetParamCount;
+    property ParamCount: integer
+      read GetParamCount;
   end;
 
-  /// used to retrieve a prepared statement
+  /// used to retrieve a SQLite3 prepared statement
   TSQLStatementCache = record
     /// associated SQL statement
     StatementSQL: RawUTF8;
@@ -2437,7 +2521,7 @@ type
   /// used to store all prepared statement
   TSQLStatementCacheDynArray = array of TSQLStatementCache;
 
-  /// handle a cache of prepared statements
+  /// handle a cache of SQLite3 prepared statements
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
@@ -2459,8 +2543,9 @@ type
     /// intialize the cache
     procedure Init(aDB: TSQLite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
-    function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean=nil;
-      ExecutionTimer: PPPrecisionTimer=nil; ExecutionMonitor: PSynMonitor=nil): PSQLRequest;
+    function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean = nil;
+      ExecutionTimer: PPPrecisionTimer = nil;
+      ExecutionMonitor: PSynMonitor = nil): PSQLRequest;
     /// used internaly to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
     /// could be used e.g. for statistics
@@ -2474,24 +2559,28 @@ type
     fInternalFunction: TSQLFunctionFunc;
     fSQLName: RawUTF8;
     fFunctionParametersCount: integer;
-    function CreateFunction(DB: TSQLite3DB): Integer; virtual;
+    function CreateFunction(DB: TSQLite3DB): integer; virtual;
   public
     /// initialize the corresponding SQL function
     // - expects at least the low-level TSQLFunctionFunc implementation (in
     // sqlite3.create_function() format) and the number of expected parameters
     // - if the function name is not specified, it will be retrieved from the type
     // information (e.g. TReferenceDynArray will declare 'ReferenceDynArray')
-    constructor Create(aFunction: TSQLFunctionFunc; aFunctionParametersCount: Integer;
+    constructor Create(aFunction: TSQLFunctionFunc;
+      aFunctionParametersCount: integer;
       const aFunctionName: RawUTF8=''); reintroduce;
     /// the internal function prototype
     // - ready to be assigned to sqlite3.create_function() xFunc parameter
-    property InternalFunction: TSQLFunctionFunc read fInternalFunction;
+    property InternalFunction: TSQLFunctionFunc
+      read fInternalFunction;
     /// the SQL function name, as called from the SQL statement
     // - the same function name may be registered several times with a diverse
     // number of parameters (e.g. to implement optional parameters)
-    property FunctionName: RawUTF8 read fSQLName;
+    property FunctionName: RawUTF8
+      read fSQLName;
     /// the number of parameters expected by the SQL function
-    property FunctionParametersCount: integer read fFunctionParametersCount;
+    property FunctionParametersCount: integer
+      read fFunctionParametersCount;
   end;
 
   /// to be used to define custom SQL functions for dynamic arrays BLOB search
@@ -2511,8 +2600,8 @@ type
     // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains() if possible
     // (this implementation will allocate each dynamic array into memory before
     // comparison, and will be therefore slower than those optimized versions)
-    constructor Create(aTypeInfo: pointer; aCompare: TDynArraySortCompare;
-      const aFunctionName: RawUTF8=''); reintroduce;
+    constructor Create(aTypeInfo: PRttiInfo; aCompare: TDynArraySortCompare;
+      const aFunctionName: RawUTF8 = ''); reintroduce;
   end;
 
   /// Stored Procedure prototype, used by TSQLDataBase.Execute() below
@@ -2563,7 +2652,8 @@ type
   // TSQLDatabaseBackupThread properties (especialy the Step property)
   // - this method will be executed in the context of the associated
   // TSQLDatabaseBackupThread: so you should use Synchronize() to update the UI
-  TSQLDatabaseBackupEvent = function(Sender: TSQLDatabaseBackupThread): boolean of object;
+  TOnSQLDatabaseBackup =
+    function(Sender: TSQLDatabaseBackupThread): boolean of object;
 
   /// simple wrapper for direct SQLite3 database manipulation
   // - embed the SQLite3 database calls into a common object
@@ -2583,23 +2673,22 @@ type
     /// if not nil, cache is used - see UseCache property
     fCache: TSynCache;
     fInternalState: PCardinal;
-    fBusyTimeout: Integer;
-    fOpenV2Flags: Integer;
+    fBusyTimeout: integer;
+    fOpenV2Flags: integer;
     fBackupBackgroundInProcess: TSQLDatabaseBackupThread;
     fBackupBackgroundLastTime: RawUTF8;
     fBackupBackgroundLastFileName: TFileName;
-    {$ifdef WITHLOG}
+    fUseCacheSize: integer;
     fLogResultMaximumSize: integer;
     fLog: TSynLogClass;
-    {$endif WITHLOG}
     /// store TSQLDataBaseSQLFunction instances
     fSQLFunctions: TSynObjectList;
     function GetUseCache: boolean;
     procedure SetUseCache(const Value: boolean);
-    procedure SetBusyTimeout(const ms: Integer);
+    procedure SetBusyTimeout(const ms: integer);
     function GetUserVersion: cardinal;
     procedure SetUserVersion(const Value: cardinal);
-    procedure SetWALMode(Value: Boolean);
+    procedure SetWALMode(Value: boolean);
     function GetWALMode: boolean;
     procedure SetSynchronous(const Value: TSQLSynchronousMode);
     function GetSynchronous: TSQLSynchronousMode;
@@ -2689,8 +2778,9 @@ type
     // Byte/Word/Integer/Cardinal/Int64/Currency/RawUTF8DynArrayContains
     // - initialize a internal mutex to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
-    constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096); reintroduce;
+    constructor Create(const aFileName: TFileName; const aPassword: RawUTF8 = '';
+      aOpenV2Flags: integer = 0; aDefaultCacheSize: integer = 10000;
+      aDefaultPageSize: integer = 4096); reintroduce;
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -2708,24 +2798,28 @@ type
     // - return result as a dynamic array of RawUTF8, as TEXT result
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESQLite3Exception on any error
-    function Execute(const aSQL: RawUTF8; var ID: TInt64DynArray): integer; overload;
+    function Execute(const aSQL: RawUTF8;
+      var ID: TInt64DynArray): integer; overload;
     /// Execute one SQL statement returning TEXT from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
     // - this statement must get (at least) one field/column result of TEXT
     // - return result as a dynamic array of RawUTF8 in ID
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESQLite3Exception on any error
-    function Execute(const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer; overload;
+    function Execute(const aSQL: RawUTF8;
+      var Values: TRawUTF8DynArray): integer; overload;
     /// Execute one SQL statement which returns one integer from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
     // - this statement must get a one field/column result of INTEGER
     // - raise an ESQLite3Exception on any error
-    procedure Execute(const aSQL: RawUTF8; out ID: Int64; NoLog: boolean=false); overload;
+    procedure Execute(const aSQL: RawUTF8;
+      out ID: Int64; NoLog: boolean = false); overload;
     /// Execute one SQL statement which returns one UTF-8 encoded string value
     // - Execute the first statement in aSQL
     // - this statement must get a one field/column result of TEXT
     // - raise an ESQLite3Exception on any error
-    procedure Execute(const aSQL: RawUTF8; out ID: RawUTF8; NoLog: boolean=false); overload;
+    procedure Execute(const aSQL: RawUTF8;
+      out ID: RawUTF8; NoLog: boolean = false); overload;
     /// Execute one SQL statements in aSQL UTF-8 encoded string
     // - can be prepared with TransactionBegin()
     // - raise no Exception on error, but returns FALSE in such case
@@ -2742,13 +2836,15 @@ type
     function ExecuteNoExceptionUTF8(const aSQL: RawUTF8): RawUTF8;
     /// Execute one SQL statement returning its results in JSON format
     // - the BLOB data is encoded as '"\uFFF0base64encodedbinary"'
-    function ExecuteJSON(const aSQL: RawUTF8; Expand: boolean=false; aResultCount: PPtrInt=nil): RawUTF8;
+    function ExecuteJSON(const aSQL: RawUTF8; Expand: boolean = false;
+      aResultCount: PPtrInt = nil): RawUTF8;
     /// begin a transaction
     // - Execute SQL statements with Execute() procedure below
     // - must be ended with Commit on success
     // - must be aborted with Rollback after an ESQLite3Exception raised
     // - The default transaction behavior is tbDeferred
-    procedure TransactionBegin(aBehavior: TSQLDataBaseTransactionBehaviour = tbDeferred);
+    procedure TransactionBegin(
+      aBehavior: TSQLDataBaseTransactionBehaviour = tbDeferred);
     /// end a transaction: write all Execute() statements to the disk
     procedure Commit;
     /// abort a transaction: restore the previous state of the database
@@ -2770,7 +2866,8 @@ type
     /// get all table names contained in this database file
     procedure GetTableNames(var Names: TRawUTF8DynArray);
     /// get all field names for a specified Table
-    procedure GetFieldNames(var Names: TRawUTF8DynArray; const TableName: RawUTF8);
+    procedure GetFieldNames(var Names: TRawUTF8DynArray;
+      const TableName: RawUTF8);
     /// check if the given table do exist
     function HasTable(const Name: RawUTF8): boolean;
     /// add a SQL custom function to the SQLite3 database engine
@@ -2790,7 +2887,7 @@ type
     // - typical use may be:
     // ! Demo.RegisterSQLFunction(InternalSQLFunctionCharIndex,2,'CharIndex');
     procedure RegisterSQLFunction(aFunction: TSQLFunctionFunc;
-      aFunctionParametersCount: Integer; const aFunctionName: RawUTF8); overload;
+      aFunctionParametersCount: integer; const aFunctionName: RawUTF8); overload;
     /// add a SQL custom function for a dynamic array to the database
     // - the resulting SQL function will expect two parameters: the first is the
     // BLOB field content, and the 2nd is the array element to search (as set with
@@ -2803,8 +2900,9 @@ type
     // (this implementation will allocate each dynamic array into memory before
     // comparison, and will be therefore slower than those optimized versions -
     // but it will be always faster than Client-Server query, in all cases)
-    procedure RegisterSQLFunction(aDynArrayTypeInfo: pointer; aCompare: TDynArraySortCompare;
-      const aFunctionName: RawUTF8=''); overload;
+    procedure RegisterSQLFunction(aDynArrayTypeInfo: PRttiInfo;
+      aCompare: TDynArraySortCompare;
+      const aFunctionName: RawUTF8 = ''); overload;
 
     /// open a BLOB incrementally for read[/write] access
     // - find a BLOB located in row RowID, column ColumnName, table TableName
@@ -2815,13 +2913,13 @@ type
     // value won't be thread-safe, if another thread run another INSERT)
     // - will raise an ESQLite3Exception on any error
     function Blob(const DBName, TableName, ColumnName: RawUTF8;
-      RowID: Int64; ReadWrite: boolean=false): TSQLBlobStream;
+      RowID: Int64; ReadWrite: boolean = false): TSQLBlobStream;
     /// backup of the opened Database into an external file name
     // - warning: this method won't use the SQLite Online Backup API
     // - database is closed, VACCUUMed, copied, then reopened: it's very fast for
     // small databases, but is blocking and should be an issue
     // - if you use some virtual tables, they won't be restored after backup:
-    // this method would probably fail e.g. in the context of mORMot.pas
+    // this method would probably fail e.g. in the context of our ORM
     function Backup(const BackupFileName: TFileName): boolean;
     /// backup of the opened Database into an external file name
     // - this method will use the SQLite Online Backup API and a dedicated
@@ -2846,10 +2944,10 @@ type
     // - if only one connection to the database does exist (e.g. if you use only
     // one TSQLDataBase instance on the same database file), any modification
     // to the source database during the background process will be included in
-    // the backup - so this method will work perfectly e.g. for mORMot.pas
+    // the backup - so this method will work perfectly e.g. for our ORM
     // - if specified, a password will be used to cypher BackupFileName on disk
-    // (it will work only with SynSQLite3Static) - you can uncypher the resulting
-    // encrypted database file later via ChangeSQLEncryptTablePassWord()
+    // (it will work only with mormot.db.raw.sqlite3.static) - you can uncypher
+    // the resulting encrypted database file via ChangeSQLEncryptTablePassWord()
     // - returns TRUE if backup started as expected, or FALSE in case of error
     // (e.g. if there is already another backup started, if the source or
     // destination databases are locked or invalid, or if the sqlite3.dll is too
@@ -2857,25 +2955,27 @@ type
     // - you can also use this method to save an SQLite3 ':memory:' database,
     // perhaps in conjunction with the BackupBackgroundWaitUntilFinished method
     function BackupBackground(const BackupFileName: TFileName;
-      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
-      SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean;
+      StepPageNumber, StepSleepMS: integer;
+      const OnProgress: TOnSQLDatabaseBackup;
+      SynLzCompress: boolean = false; const aPassword: RawUTF8 = ''): boolean;
     /// background backup to another opened database instance
     // - in respect to BackupBackground method, it will use an existing database
     // the actual process
     // - by design, SynLZCompress or aPassword parameters are unavailable
     function BackupBackgroundToDB(BackupDB: TSQLDatabase;
-      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
+      StepPageNumber, StepSleepMS: integer;
+      const OnProgress: TOnSQLDatabaseBackup): boolean;
     /// wait until any previous BackupBackground() is finished
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
     // should better rely on OnProgress() callback for any GUI application
-    // - by default, it will wait for ever so that process is finished, but you
+    // - by default, it will wait forever so that process is finished, but you
     // can set a time out (in seconds) after which the process will be aborted
     // - could be used with BackupBackground() and StepPageNumber=-1 to perform
     // a whole copy of a database in one shot:
     // ! if aDB.BackupBackground('backup.db3',-1,0,nil) then
     // !   aDB.BackupBackgroundWaitUntilFinished;
-    procedure BackupBackgroundWaitUntilFinished(TimeOutSeconds: Integer=-1);
+    procedure BackupBackgroundWaitUntilFinished(TimeOutSeconds: integer = -1);
     /// uncompress a .dbsynlz backup file as previously compressed with BackupSynLZ()
     // or if SynLZCompress parameter is TRUE for BackupBackground() method
     // - any DestDB file name would be overwritten
@@ -2900,50 +3000,65 @@ type
     procedure CacheFlush;
 
     /// read-only access to the SQLite3 database handle
-    property DB: TSQLite3DB read fDB;
+    property DB: TSQLite3DB
+      read fDB;
     /// read-only access to the SQlite3 password used for encryption
     // - may be a JSON-serialized TSynSignerParams object, or will use AES-OFB-128
     // after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
-    property Password: RawUTF8 read fPassword;
+    property Password: RawUTF8
+      read fPassword;
     /// read-only access to the SQLite3 database filename opened without its path
-    property FileNameWithoutPath: TFileName read fFileNameWithoutPath;
+    property FileNameWithoutPath: TFileName
+      read fFileNameWithoutPath;
     /// access to the internal JSON cache, used by ExecuteJSON() method
     // - see UseCache property and CacheFlush method
-    property Cache: TSynCache read fCache;
+    property Cache: TSynCache
+      read fCache;
     /// retrieve of define a limit on the current database connection
     // - see TSQLLimitCategory for a details of all available limits
     // - see @http://www.sqlite.org/c3ref/limit.html
-    property Limit[Category: TSQLLimitCategory]: integer read GetLimit write SetLimit;
-    {$ifdef WITHLOG}
+    property Limit[Category: TSQLLimitCategory]: integer
+      read GetLimit write SetLimit;
     /// access to the log class associated with this SQLite3 database engine
-    // - can be customized, e.g. by overriden TSQLRestServerDB.SetLogClass()
-    property Log: TSynLogClass read fLog write fLog;
+    // - can be customized, e.g. by overriden TRestServerDB.SetLogClass()
+    property Log: TSynLogClass
+      read fLog write fLog;
     /// sets a maximum size (in bytes) to be logged as sllResult rows
     // - by default, is set to 512 bytes, which sounds a good compromise
     // since it does not make sense to log all the JSON content retrieved from
     // the database engine, when a huge SELECT is executed
-    property LogResultMaximumSize: integer read fLogResultMaximumSize write fLogResultMaximumSize;
-    {$endif WITHLOG}
+    property LogResultMaximumSize: integer
+      read fLogResultMaximumSize write fLogResultMaximumSize;
     /// this integer pointer (if not nil) is incremented when any SQL statement
     // changes the database contents (i.e. any not SELECT statement)
     // - this pointer is thread-safe updated, inside a critical section
-    property InternalState: PCardinal read fInternalState write fInternalState;
+    property InternalState: PCardinal
+      read fInternalState write fInternalState;
   published
     /// read-only access to the SQLite3 database filename opened
-    property FileName: TFileName read fFileName;
+    property FileName: TFileName
+      read fFileName;
     /// equals TRUE if the SQLite3 database was created as ':memory:'
     // (i.e. SQLITE_MEMORY_DATABASE_NAME)
-    property IsMemory: boolean read fIsMemory;
+    property IsMemory: boolean
+      read fIsMemory;
     /// if this property is set, all ExecuteJSON() responses will be cached
     // - cache is flushed on any write access to the DB (any not SELECT statement)
     // - cache is consistent only if ExecuteJSON() Expand parameter is constant
-    // - cache is used by TSQLDataBase.ExecuteJSON() and TSQLTableDB.Create()
-    property UseCache: boolean read GetUseCache write SetUseCache;
+    // - cache is used by TSQLDataBase.ExecuteJSON() and TOrmTableDB.Create()
+    property UseCache: boolean
+      read GetUseCache write SetUseCache;
+    /// cache size in JSON bytes, to be set before UseCache is set to true
+    // - default is 16MB
+    property UseCacheSize: integer
+      read fUseCacheSize write fUseCacheSize;
     /// return TRUE if a Transaction begun
-    property TransactionActive: boolean read fTransactionActive;
+    property TransactionActive: boolean
+      read fTransactionActive;
     /// sets a busy handler that sleeps for a specified amount of time
     // (in milliseconds) when a table is locked, before returning an error
-    property BusyTimeout: Integer read fBusyTimeout write SetBusyTimeout;
+    property BusyTimeout: integer
+      read fBusyTimeout write SetBusyTimeout;
     /// query or change the suggested maximum number of database disk pages
     // that SQLite will hold in memory at once per open database file
     // - DBOpen method will set this cache size to a big 10000 default, which
@@ -2954,7 +3069,8 @@ type
     // default value when the database is closed and reopened
     // - we do not handle negative values here (i.e. KB of RAM), since it won't
     // work if the linked SQLite3 library is version 3.7.9 and earlier
-    property CacheSize: cardinal read GetCacheSize write SetCacheSize;
+    property CacheSize: cardinal
+      read GetCacheSize write SetCacheSize;
     /// query or change the page size of the database
     // - the page size must be a power of two between 512 and 65536 inclusive
     // - DBOpen method will set the PageSize to 4096 (if the database is not
@@ -2966,12 +3082,15 @@ type
     // page size just prior to running the VACUUM command and if the database
     // is not in WAL journal mode then VACUUM will change the page size to the
     // new value for the newly created database file
-    property PageSize: cardinal read GetPageSize write SetPageSize;
+    property PageSize: cardinal
+      read GetPageSize write SetPageSize;
     /// return the total number of pages in the database file
-    property PageCount: cardinal read GetPageCount;
+    property PageCount: cardinal
+      read GetPageCount;
     /// return the total number of bytes in the database file
     // - computes PageSize*PageCount
-    property FileSize: Int64 read GetFileSize;
+    property FileSize: Int64
+      read GetFileSize;
     /// query or change the Write-Ahead Logging mode for the database
     // - beginning with version 3.7 of the SQLite3 engine, a new "Write-Ahead Log"
     // option (hereafter referred to as "WAL") is optionaly available
@@ -2984,14 +3103,16 @@ type
     // but our SQlite3 framework use locked access to the databse, so there
     // should be no benefit of WAL for the framework; but if you call
     // directly TSQLDatabase instances in your code, it may be useful to you
-    property WALMode: Boolean read GetWALMode write SetWALMode;
+    property WALMode: boolean
+      read GetWALMode write SetWALMode;
     /// query or change the SQlite3 file-based syncrhonization mode, i.e. the
     // way it waits for the data to be flushed on hard drive
     // - default smFull is very slow, but achieve 100% ACID behavior
     // - smNormal is faster, and safe until a catastrophic hardware failure occurs
     // - smOff is the fastest, data should be safe if the application crashes,
     // but database file may be corrupted in case of failure at the wrong time
-    property Synchronous: TSQLSynchronousMode read GetSynchronous write SetSynchronous;
+    property Synchronous: TSQLSynchronousMode
+      read GetSynchronous write SetSynchronous;
     /// query or change the SQlite3 file-based locking mode, i.e. the
     // way it locks the file
     // - default lmNormal is ACID and safe
@@ -2999,31 +3120,39 @@ type
     // transactions, so can be used to release a mORMot server power: but you
     // won't be able to access the database file from outside the process (like
     // a "normal" database engine)
-    property LockingMode: TSQLLockingMode read GetLockingMode write SetLockingMode;
+    property LockingMode: TSQLLockingMode
+      read GetLockingMode write SetLockingMode;
     /// enables or disables disk content access using memory-mapped I/O
     // - 0 to disable it (the default, because of potential disadvantages)
     // - set to a number of Mega Bytes value of memory for the mapping
     // - expects a SQLite3 engine version >= 3.7.17
     // - Memory-Mapped I/O is NOT compatible with password encryption as
-    // implemented in our SynSQLite3Static unit
-    property MemoryMappedMB: cardinal read GetMemoryMappedMB write SetMemoryMappedMB;
+    // implemented in our mormot.db.raw.sqlite3.static unit
+    property MemoryMappedMB: cardinal
+      read GetMemoryMappedMB write SetMemoryMappedMB;
     /// retrieve or set the user_version stored in the SQLite3 database file
     // - user-version is a 32-bit signed integer stored in the database header
     //- it can be used to change the database in case of format upgrade (e.g.
     // refresh some hand-made triggers)
-    property user_version: cardinal read GetUserVersion write SetUserVersion;
+    property user_version: cardinal
+      read GetUserVersion write SetUserVersion;
     /// reflects how the database connection was created in the constructor
-    property OpenV2Flags: Integer read fOpenV2Flags;
+    property OpenV2Flags: integer
+      read fOpenV2Flags;
     /// is set to TRUE while a BackupBackground() process is still running
     // - see also BackupBackgroundWaitUntilFinished() method
-    property BackupBackgroundInProcess: boolean read GetBackupBackgroundInProcess;
+    property BackupBackgroundInProcess: boolean
+      read GetBackupBackgroundInProcess;
     /// how much time did the latest BackupBackground() finished process take
-    property BackupBackgroundLastTime: RawUTF8 read fBackupBackgroundLastTime;
+    property BackupBackgroundLastTime: RawUTF8
+      read fBackupBackgroundLastTime;
     /// the latest BackupBackground() process file name
-    property BackupBackgroundLastFileName: TFileName read fBackupBackgroundLastFileName;
+    property BackupBackgroundLastFileName: TFileName
+      read fBackupBackgroundLastFileName;
     /// the SQLite3 library which is currently running
     // - part of TSQLDatabase published properties, to publish e.g. Version
-    property SQLite3Library: TSQLite3Library read GetSQLite3Library;
+    property SQLite3Library: TSQLite3Library
+      read GetSQLite3Library;
   end;
 
   /// used to read or write a BLOB Incrementaly
@@ -3056,15 +3185,22 @@ type
     // - it is actually faster than creating a new TSQLBlobStream instance
     procedure ChangeRow(RowID: Int64);
     /// read-only access to the BLOB object handle
-    property Handle: TSQLite3Blob read fBlob;
+    property Handle: TSQLite3Blob
+      read fBlob;
   end;
 
   /// kind of event triggerred during TSQLDatabase.BackupBackground() process
   // - you can use (Sender.Step in backupAnyStep), to check for normal step,
   // or (Sender.Step in backupFinished) to check for process end
-  TSQLDatabaseBackupEventStep = (
-    backupNone, backupStart, backupSuccess, backupFailure,
-    backupStepOk, backupStepBusy, backupStepLocked, backupStepSynLz);
+  TOnSQLDatabaseBackupStep = (
+    backupNone,
+    backupStart,
+    backupSuccess,
+    backupFailure,
+    backupStepOk,
+    backupStepBusy,
+    backupStepLocked,
+    backupStepSynLz);
 
   /// background thread used for TSQLDatabase.BackupBackground() process
   TSQLDatabaseBackupThread = class(TThread)
@@ -3072,12 +3208,12 @@ type
     fBackupDestFile: TFileName;
     fSourceDB: TSQLDatabase;
     fDestDB: TSQLDatabase;
-    fStepPageNumber, fStepSleepMS: Integer;
+    fStepPageNumber, fStepSleepMS: integer;
     fBackup: TSQLite3Backup;
-    fStep: TSQLDatabaseBackupEventStep;
+    fStep: TOnSQLDatabaseBackupStep;
     fStepNumberToFinish, fStepNumberTotal: integer;
     fStepSynLzCompress: boolean;
-    fOnProgress: TSQLDatabaseBackupEvent;
+    fOnProgress: TOnSQLDatabaseBackup;
     fError: Exception;
     fTimer: TPrecisionTimer;
     fOwnerDest: boolean;
@@ -3088,60 +3224,68 @@ type
     // - execution is started immediately - caller may call the WaitFor
     // inherited method to run the process in blocking mode
     constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
-      StepPageNumber,StepSleepMS: Integer; SynLzCompress: boolean;
-      OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean=true); reintroduce;
+      StepPageNumber,StepSleepMS: integer; SynLzCompress: boolean;
+      const OnProgress: TOnSQLDatabaseBackup; OwnerDest: boolean = true); reintroduce;
     /// the source database of the backup process
-    property SourceDB: TSQLDatabase read fSourceDB;
+    property SourceDB: TSQLDatabase
+      read fSourceDB;
     /// the destination database of the backup process
-    property DestDB: TSQLDatabase read fDestDB;
+    property DestDB: TSQLDatabase
+      read fDestDB;
     /// the raised exception in case of backupFailure notification
-    property FailureError: Exception read fError;
+    property FailureError: Exception
+      read fError;
     /// the backup target database file name
-    property BackupDestFile: TFileName read fBackupDestFile;
+    property BackupDestFile: TFileName
+      read fBackupDestFile;
   published
     /// the current state of the backup process
-    // - only set before a call to TSQLDatabaseBackupEvent
-    property Step: TSQLDatabaseBackupEventStep read fStep;
+    // - only set before a call to TOnSQLDatabaseBackup
+    property Step: TOnSQLDatabaseBackupStep
+      read fStep;
     /// the number of pages which remain before end of backup
-    // - only set before a call to TSQLDatabaseBackupEvent with backupStep* event
-    property StepNumberToFinish: integer read fStepNumberToFinish;
+    // - only set before a call to TOnSQLDatabaseBackup with backupStep* event
+    property StepNumberToFinish: integer
+      read fStepNumberToFinish;
     /// the number of pages for the whole database
-    // - only set before a call to TSQLDatabaseBackupEvent with backupStep* event
-    property StepNumberTotal: integer read fStepNumberTotal;
+    // - only set before a call to TOnSQLDatabaseBackup with backupStep* event
+    property StepNumberTotal: integer
+      read fStepNumberTotal;
     /// if .dbsynlz compression would be done on the backup file
     // - would use FileSynLZ(), so compress in chunks of 128 MB
-    property StepSynLzCompress: boolean read fStepSynLzCompress;
+    property StepSynLzCompress: boolean
+      read fStepSynLzCompress;
   end;
 
 const
   /// identify the iterative step events during TSQLDatabase.BackupBackground()
   // - you can use (Sender.Step in backupAnyStep), to check for normal step
-  backupAnyStep = [backupStepOk,backupStepBusy,backupStepLocked,backupStepSynLz];
+  backupAnyStep =
+      [backupStepOk, backupStepBusy, backupStepLocked, backupStepSynLz];
   /// identify the end step events during TSQLDatabase.BackupBackground()
   // - you can use (Sender.Step in backupFinished) to check for process end
-  backupFinished = [backupSuccess,backupFailure];
+  backupFinished =
+    [backupSuccess, backupFailure];
 
 
-{$ifdef WITHLOG}
 var
-  /// the TSynLog class used for logging for all our mormot.db.raw.sqlite3 related functions
-  // - you may override it with TSQLLog, if available from mORMot.pas
+  /// the TSynLog class used for logging our mormot.db.raw.sqlite3 functions
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
-  SynSQLite3Log: TSynLogClass = TSynLog;
-{$endif WITHLOG}
+  SQLite3Log: TSynLogClass = TSynLog;
 
 
 /// check from the file beginning if sounds like a valid SQLite3 file
 // - returns true if a database file is encrypted or not
 // - optional retrieve the file page size from header
-function IsSQLite3File(const FileName: TFileName; PageSize: PInteger=nil): boolean;
+function IsSQLite3File(const FileName: TFileName;
+  PageSize: PInteger = nil): boolean;
 
 /// check if sounds like an encrypted SQLite3 file
 function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
 
 /// comparison function using TSQLStatementCache.Timer.TimeInMicroSec
-function StatementCacheTotalTimeCompare(const A,B): integer;
+function StatementCacheTotalTimeCompare(const A, B): integer;
 
 
 const
@@ -3168,9 +3312,6 @@ implementation
 
 
 { ************ Raw SQLite3 API Constants and Functions }
-
-const
-  NULCHAR: AnsiChar = #0;
 
 function SQLVarToSQlite3Context(const Res: TSQLVar;
   Context: TSQLite3FunctionContext): boolean;
@@ -3205,10 +3346,8 @@ begin
   else
     begin
       sqlite3.result_null(Context);
-      {$ifdef WITHLOG}
-      SynSQLite3Log.DebuggerNotify(sllWarning, 'SQLVarToSQlite3Context(%)', [ord
-        (Res.VType)]);
-      {$endif}
+      SQLite3Log.DebuggerNotify(sllWarning, 'SQLVarToSQlite3Context(%)',
+        [ord(Res.VType)]);
       result := false; // not handled type (will set null value)
       exit;
     end;
@@ -3218,7 +3357,7 @@ end;
 
 procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
 var
-  ValueType: Integer;
+  ValueType: integer;
 begin
   Res.Options := [];
   ValueType := sqlite3.value_type(Value);
@@ -3248,9 +3387,8 @@ begin
       end;
   else
     begin
-    {$ifdef WITHLOG}
-      SynSQLite3Log.DebuggerNotify(sllWarning, 'SQlite3ValueToSQLVar(%)', [ValueType]);
-    {$endif}
+      SQLite3Log.DebuggerNotify(
+        sllWarning, 'SQlite3ValueToSQLVar(%)', [ValueType]);
       Res.VType := ftUnknown;
     end;
   end;
@@ -3283,7 +3421,8 @@ var
 begin
   if sent <> expected then
   begin
-    FormatShort('wrong number of arguments: expected %, got %', [expected, sent], msg);
+    FormatShort('wrong number of arguments: expected %, got %',
+      [expected, sent], msg);
     sqlite3.result_error(Context, @msg[1], ord(msg[0]));
     result := false;
   end
@@ -3300,8 +3439,8 @@ begin
   MoveFast(pointer(U)^, pzErr^, length(U));
 end;
 
-procedure RawUTF8ToSQlite3Context(const Text: RawUTF8; Context:
-  TSQLite3FunctionContext; VoidTextAsNull: boolean);
+procedure RawUTF8ToSQlite3Context(const Text: RawUTF8;
+  Context: TSQLite3FunctionContext; VoidTextAsNull: boolean);
 var
   tmp: pointer;
 begin
@@ -3314,11 +3453,13 @@ begin
   begin
     tmp := nil;
     RawUTF8(tmp) := Text; // fast COW assignment
-    sqlite3.result_text(Context, tmp, length(Text) + 1, sqlite3InternalFreeRawByteString);
+    sqlite3.result_text(
+      Context, tmp, length(Text) + 1, sqlite3InternalFreeRawByteString);
   end;
 end;
 
-procedure VariantToSQlite3Context(const Value: Variant; Context: TSQLite3FunctionContext);
+procedure VariantToSQlite3Context(const Value: Variant;
+  Context: TSQLite3FunctionContext);
 var
   res: TSQLVar;
   tmp: RawByteString;
@@ -3327,7 +3468,8 @@ begin
   SQLVarToSQlite3Context(res, Context);
 end;
 
-procedure JsonToSQlite3Context(json: PUTF8Char; Context: TSQLite3FunctionContext);
+procedure JsonToSQlite3Context(json: PUTF8Char;
+  Context: TSQLite3FunctionContext);
 var
   tmp: Variant;
   start: PUTF8Char;
@@ -3375,15 +3517,18 @@ begin
   begin
     msg := FormatUTF8('% - %', [msg, sqlite3.errmsg(aDB)]);
     if Assigned(sqlite3.extended_errcode) then
-      msg := FormatUTF8('%, extended_errcode=%', [msg, sqlite3.extended_errcode(aDB)]);
+      msg := FormatUTF8('%, extended_errcode=%',
+        [msg, sqlite3.extended_errcode(aDB)]);
   end;
   DB := aDB;
   inherited Create(UTF8ToString(msg));
 end;
 
-function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8): integer;
+function sqlite3_check(DB: TSQLite3DB; aResult: integer;
+  const SQL: RawUTF8): integer;
 begin
-  if (DB = 0) or (aResult in SQLITE_ERRORS) then // possible error codes
+  if (DB = 0) or
+     (aResult in SQLITE_ERRORS) then // possible error codes
     raise ESQLite3Exception.Create(DB, aResult, SQL);
   result := aResult;
 end;
@@ -3423,14 +3568,18 @@ begin
   begin
     V := libversion;
     fVersionText := RawUTF8(V);
+    // convert into e.g. 3008003001
     fVersionNumber := GetNextItemCardinal(V, '.') * 1000000000 +
-      GetNextItemCardinal(V, '.') * 1000000 +
-      GetNextItemCardinal(V, '.') * 1000 +
-      GetNextItemCardinal(V, '.'); // convert into e.g. 3008003001
+                      GetNextItemCardinal(V, '.') * 1000000 +
+                      GetNextItemCardinal(V, '.') * 1000 +
+                      GetNextItemCardinal(V, '.');
   end;
 end;
 
-{$ifdef FPC} // under FPC, MemSize() returns the value expected by xSize()
+// under FPC, MemSize() returns the value expected by xSize()
+// under Delphi, we need to store the size as 4 bytes header for xSize()
+
+{$ifdef FPC}
 
 function xMalloc(size: integer): pointer; cdecl;
 begin
@@ -3452,7 +3601,7 @@ begin
   result := MemSize(ptr);
 end;
 
-{$else} // under Delphi, we need to store the size as 4 bytes header for xSize()
+{$else}
 
 function xMalloc(size: integer): pointer; cdecl;
 begin
@@ -3508,9 +3657,9 @@ procedure TSQLite3Library.ForceToUseSharedMemoryManager;
 var
   mem: TSQLite3MemMethods;
   res: integer;
-    {$ifdef FPC_X64}
+  {$ifdef FPC_X64}
   mm: TMemoryManager;
-    {$endif FPC_X64}
+  {$endif FPC_X64}
 begin
   if not Assigned(config) then
     exit;
@@ -3535,11 +3684,7 @@ begin
     res := SQLITE_INTERNAL;
   end;
   if res <> SQLITE_OK then
-  begin
-    {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllError, 'SQLITE_CONFIG_MALLOC failed as %', [res]);
-    {$endif}
-  end
+    SQLite3Log.Add.Log(sllError, 'SQLITE_CONFIG_MALLOC failed as %', [res])
   else
     fUseInternalMM := true;
 end;
@@ -3558,43 +3703,104 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..91] of PChar = (
-    'sqlite3_initialize', 'sqlite3_shutdown',
-    'sqlite3_open', 'sqlite3_open_v2', 'sqlite3_key', 'sqlite3_rekey',
-    'sqlite3_close', 'sqlite3_libversion', 'sqlite3_errmsg',
-    'sqlite3_extended_errcode', 'sqlite3_create_function',
-    'sqlite3_create_function_v2', 'create_window_function',
-    'sqlite3_create_collation', 'sqlite3_last_insert_rowid',
-    'sqlite3_busy_timeout', 'sqlite3_busy_handler', 'sqlite3_prepare_v2',
-    'sqlite3_finalize', 'sqlite3_next_stmt', 'sqlite3_reset',
-    'sqlite3_stmt_readonly', 'sqlite3_step', 'sqlite3_column_count',
-    'sqlite3_column_type', 'sqlite3_column_decltype', 'sqlite3_column_name',
-    'sqlite3_column_bytes', 'sqlite3_column_value', 'sqlite3_column_double',
-    'sqlite3_column_int', 'sqlite3_column_int64', 'sqlite3_column_text',
-    'sqlite3_column_text16', 'sqlite3_column_blob', 'sqlite3_value_type',
-    'sqlite3_value_numeric_type', 'sqlite3_value_bytes', 'sqlite3_value_double',
-    'sqlite3_value_int64', 'sqlite3_value_text', 'sqlite3_value_blob',
-    'sqlite3_result_null', 'sqlite3_result_int64', 'sqlite3_result_double',
-    'sqlite3_result_blob', 'sqlite3_result_text', 'sqlite3_result_value',
-    'sqlite3_result_error', 'sqlite3_user_data', 'sqlite3_context_db_handle',
-    'sqlite3_aggregate_context', 'sqlite3_bind_text', 'sqlite3_bind_blob',
-    'sqlite3_bind_zeroblob', 'sqlite3_bind_double', 'sqlite3_bind_int',
-    'sqlite3_bind_int64', 'sqlite3_bind_null', 'sqlite3_clear_bindings',
-    'sqlite3_bind_parameter_count', 'sqlite3_blob_open', 'sqlite3_blob_reopen',
-    'sqlite3_blob_close', 'sqlite3_blob_read', 'sqlite3_blob_write',
-    'sqlite3_blob_bytes', 'sqlite3_create_module_v2', 'sqlite3_declare_vtab',
-    'sqlite3_set_authorizer', 'sqlite3_update_hook', 'sqlite3_commit_hook',
-    'sqlite3_rollback_hook', 'sqlite3_changes', 'sqlite3_total_changes',
-    'sqlite3_malloc', 'sqlite3_realloc', 'sqlite3_free', 'sqlite3_memory_used',
-    'sqlite3_memory_highwater', 'sqlite3_trace_v2', 'sqlite3_limit',
-    'sqlite3_backup_init', 'sqlite3_backup_step', 'sqlite3_backup_finish',
-    'sqlite3_backup_remaining', 'sqlite3_backup_pagecount', 'sqlite3_serialize',
-    'sqlite3_deserialize', 'sqlite3_soft_heap_limit64', 'sqlite3_config',
+  SQLITE3_ENTRIES: array[0..91] of PAnsiChar = (
+    'sqlite3_initialize',
+    'sqlite3_shutdown',
+    'sqlite3_open',
+    'sqlite3_open_v2',
+    'sqlite3_key',
+    'sqlite3_rekey',
+    'sqlite3_close',
+    'sqlite3_libversion',
+    'sqlite3_errmsg',
+    'sqlite3_extended_errcode',
+    'sqlite3_create_function',
+    'sqlite3_create_function_v2',
+    'create_window_function',
+    'sqlite3_create_collation',
+    'sqlite3_last_insert_rowid',
+    'sqlite3_busy_timeout',
+    'sqlite3_busy_handler',
+    'sqlite3_prepare_v2',
+    'sqlite3_finalize',
+    'sqlite3_next_stmt',
+    'sqlite3_reset',
+    'sqlite3_stmt_readonly',
+    'sqlite3_step',
+    'sqlite3_column_count',
+    'sqlite3_column_type',
+    'sqlite3_column_decltype',
+    'sqlite3_column_name',
+    'sqlite3_column_bytes',
+    'sqlite3_column_value',
+    'sqlite3_column_double',
+    'sqlite3_column_int',
+    'sqlite3_column_int64',
+    'sqlite3_column_text',
+    'sqlite3_column_text16',
+    'sqlite3_column_blob',
+    'sqlite3_value_type',
+    'sqlite3_value_numeric_type',
+    'sqlite3_value_bytes',
+    'sqlite3_value_double',
+    'sqlite3_value_int64',
+    'sqlite3_value_text',
+    'sqlite3_value_blob',
+    'sqlite3_result_null',
+    'sqlite3_result_int64',
+    'sqlite3_result_double',
+    'sqlite3_result_blob',
+    'sqlite3_result_text',
+    'sqlite3_result_value',
+    'sqlite3_result_error',
+    'sqlite3_user_data',
+    'sqlite3_context_db_handle',
+    'sqlite3_aggregate_context',
+    'sqlite3_bind_text',
+    'sqlite3_bind_blob',
+    'sqlite3_bind_zeroblob',
+    'sqlite3_bind_double',
+    'sqlite3_bind_int',
+    'sqlite3_bind_int64',
+    'sqlite3_bind_null',
+    'sqlite3_clear_bindings',
+    'sqlite3_bind_parameter_count',
+    'sqlite3_blob_open',
+    'sqlite3_blob_reopen',
+    'sqlite3_blob_close',
+    'sqlite3_blob_read',
+    'sqlite3_blob_write',
+    'sqlite3_blob_bytes',
+    'sqlite3_create_module_v2',
+    'sqlite3_declare_vtab',
+    'sqlite3_set_authorizer',
+    'sqlite3_update_hook',
+    'sqlite3_commit_hook',
+    'sqlite3_rollback_hook',
+    'sqlite3_changes',
+    'sqlite3_total_changes',
+    'sqlite3_malloc',
+    'sqlite3_realloc',
+    'sqlite3_free',
+    'sqlite3_memory_used',
+    'sqlite3_memory_highwater',
+    'sqlite3_trace_v2',
+    'sqlite3_limit',
+    'sqlite3_backup_init',
+    'sqlite3_backup_step',
+    'sqlite3_backup_finish',
+    'sqlite3_backup_remaining',
+    'sqlite3_backup_pagecount',
+    'sqlite3_serialize',
+    'sqlite3_deserialize',
+    'sqlite3_soft_heap_limit64',
+    'sqlite3_config',
     'sqlite3_db_config');
 
 function TSQLite3LibraryDynamic.GetLibraryName: TFileName;
 begin
-  if (self = nil) or (fLoader = nil) then
+  if (self = nil) or
+     (fLoader = nil) then
     result := ''
   else
     result := fLoader.LibraryPath;
@@ -3614,24 +3820,27 @@ begin
   fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESQLite3Exception);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
-    fLoader.GetProc(SQLITE3_ENTRIES[i], @P^[i]);
-  if not Assigned(initialize) or not Assigned(libversion) or
-     not Assigned(open) or not Assigned(close) or
-     not Assigned(create_function) or not Assigned(prepare_v2) or
+    fLoader.Resolve(SQLITE3_ENTRIES[i], @P^[i]);
+  if not Assigned(initialize) or
+     not Assigned(libversion) or
+     not Assigned(open) or
+     not Assigned(close) or
+     not Assigned(create_function) or
+     not Assigned(prepare_v2) or
      not Assigned(create_module_v2) then
+     // note: some APIs like config() key() or trace() may not be available
   begin
     if Assigned(libversion) then
       vers := libversion
     else
-      vers := nil;
+      vers := 'unknown';
     FreeAndNil(fLoader);
-    raise ESQLite3Exception.CreateUTF8('%.Create: TOO OLD % % - need 3.7 at least',
-      [self, LibraryName, vers]);
-  end; // some APIs like config() key() or trace() may not be available
+    raise ESQLite3Exception.CreateUTF8(
+      '%.Create: TOO OLD % % - need 3.7 at least', [self, LibraryName, vers]);
+  end;
   inherited Create; // set fVersionNumber/fVersionText
-  {$ifdef WITHLOG}
-  SynSQLite3Log.Add.Log(sllInfo, 'Loaded external % version %', [LibraryName, Version]);
-  {$endif}
+  SQLite3Log.Add.Log(sllInfo,
+    'Loaded external % version %', [LibraryName, Version]);
 end;
 
 destructor TSQLite3LibraryDynamic.Destroy;
@@ -3709,7 +3918,8 @@ begin
   begin
     Iso8601ToDateTimePUTF8CharVar(s1, s1Len, V1);
     Iso8601ToDateTimePUTF8CharVar(s2, s2Len, V2);
-    if (V1 = 0) or (V2 = 0) then
+    if (V1 = 0) or
+       (V2 = 0) then
       // any invalid date -> compare as UTF-8 strings
       result := UTF8ILComp(s1, s2, s1Len, s2Len)
     else if SameValue(V1, V2, 1 / MSecsPerDay) then
@@ -3873,7 +4083,8 @@ var
   Blob: pointer;
   PI: PIntegerArray;
   Count: integer;
-begin // SQL function: IntegerDynArrayContains(BlobField,10) returning a boolean
+begin
+  // SQL function: IntegerDynArrayContains(BlobField,10) returning a boolean
   if not CheckNumberOfArgs(Context, 2, argc) then
     exit;
   Blob := sqlite3.value_blob(argv[0]);
@@ -3892,15 +4103,16 @@ var
   Blob: pointer;
   Count, ElemSize: PtrInt;
   V: Int64;
-begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
+begin
+  // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
   // for currency, expect I64 value = aCurrency*10000 = PInt64(@aCurrency)^
   if not CheckNumberOfArgs(Context, 2, argc) then
     exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob <> nil then
   begin // search into direct in-memory mapping (no allocation)
-    Blob := SimpleDynArrayLoadFrom(Blob, sqlite3.user_data(Context),
-      Count, ElemSize, {nohash32=}true);
+    Blob := SimpleDynArrayLoadFrom(
+      Blob, sqlite3.user_data(Context), Count, ElemSize);
     if Blob <> nil then
     begin
       V := sqlite3.value_int64(argv[1]);
@@ -3917,7 +4129,8 @@ procedure InternalRawUTF8DynArray(Context: TSQLite3FunctionContext;
 var
   Blob: pointer;
   Value: PUTF8Char;
-begin // SQL function: RawUTF8DynArrayContainsCase/NoCase(BlobField,'Text') returning a boolean
+begin
+  // SQL function: RawUTF8DynArrayContainsCase/NoCase(BlobField,'Text'): boolean
   if not CheckNumberOfArgs(Context, 2, argc) then
     exit;
   Blob := sqlite3.value_blob(argv[0]);
@@ -4070,7 +4283,8 @@ end;
 
 procedure TSQLDataBase.Rollback;
 begin
-  if (self = nil) or not fTransactionActive then
+  if (self = nil) or
+     not fTransactionActive then
     exit;
   Execute('ROLLBACK TRANSACTION;');
   fTransactionActive := false;
@@ -4096,7 +4310,8 @@ end;
 
 procedure TSQLDataBase.Commit;
 begin
-  if (Self <> nil) and fTransactionActive then
+  if (Self <> nil) and
+     fTransactionActive then
   try
     Execute('COMMIT TRANSACTION;');
   finally
@@ -4104,20 +4319,19 @@ begin
   end;
 end;
 
-constructor TSQLDataBase.Create(const aFileName: TFileName;
-  const aPassword: RawUTF8; aOpenV2Flags, aDefaultCacheSize, aDefaultPageSize: integer);
+constructor TSQLDataBase.Create(
+  const aFileName: TFileName; const aPassword: RawUTF8;
+  aOpenV2Flags, aDefaultCacheSize, aDefaultPageSize: integer);
 var
   result: integer;
 begin
   inherited Create; // initialize fSafe
   if sqlite3 = nil then
     raise ESQLite3Exception.CreateUTF8('%.Create: No SQLite3 libray available' +
-      ' - you shall either add SynSQLite3Static to your project uses clause, ' +
+      ' - you shall either add mormot.db.raw.sqlite3.static to your project uses clause, ' +
       'or run sqlite3 := TSQLite3LibraryDynamic.Create(..)', [self]);
-  {$ifdef WITHLOG}
-  fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
+  fLog := SQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
-  {$endif}
   if SysUtils.Trim(aFileName) = '' then
     raise ESQLite3Exception.CreateUTF8('%.Create('''')', [self]);
   if aOpenV2Flags = 0 then
@@ -4137,6 +4351,7 @@ begin
   else
     fFileNameWithoutPath := ExtractFileName(fFileName);
   fPassword := aPassword;
+  fUseCacheSize := 16384 * 1024;
   fSQLFunctions := TSynObjectList.Create;
   result := DBOpen;
   if result <> SQLITE_OK then
@@ -4144,14 +4359,10 @@ begin
 end;
 
 destructor TSQLDataBase.Destroy;
-{$ifdef WITHLOG}
 var
   FPCLog: ISynLog;
 begin
   FPCLog := fLog.Enter('Destroy %', [fFileNameWithoutPath], self);
-{$else}
-begin
-{$endif}
   if DB <> 0 then
   try
     Rollback; // any unfinished transaction is rollbacked
@@ -4185,31 +4396,28 @@ end;
 function TSQLDataBase.SQLShouldBeLogged(const aSQL: RawUTF8): boolean;
 begin
   result := false;
-  {$ifdef WITHLOG}
-  if (self = nil) or (fLog = nil) or not (sllSQL in fLog.Family.Level) then
+  if (self = nil) or
+     (fLog = nil) or
+     not (sllSQL in fLog.Family.Level) then
     exit;
-  if not IdemPChar(pointer(aSQL), 'PRAGMA ') or (PosEx('=', aSQL) > 0) then
+  if not IdemPChar(pointer(aSQL), 'PRAGMA ') or
+     (PosEx('=', aSQL) > 0) then
     result := true;
-  {$endif WITHLOG}
 end;
 
 procedure TSQLDataBase.ExecuteAll(const aSQL: RawUTF8);
 var
   R: TSQLRequest;
-  {$ifdef WITHLOG}
   log: ISynLog;
-  {$endif WITHLOG}
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then
   begin
     log := fLog.Enter(self, 'ExecuteAll');
     if log <> nil then
       log.Log(sllSQL, aSQL, self, 4096);
   end;
-  {$endif WITHLOG}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB, aSQL);
@@ -4231,30 +4439,27 @@ begin
     R.Execute(DB, aSQL);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % %', [Timer.Stop, FileNameWithoutPath, aSQL], self);
-    {$endif WITHLOG}
   end;
 end;
 
-function TSQLDataBase.Execute(const aSQL: RawUTF8; var ID: TInt64DynArray): integer;
+function TSQLDataBase.Execute(const aSQL: RawUTF8;
+  var ID: TInt64DynArray): integer;
 var
   R: TSQLRequest;
-{$ifdef WITHLOG}   log: ISynLog; {$endif}
+  log: ISynLog;
 begin
   if self = nil then
   begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
-  {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then
   begin
     log := fLog.Enter(self, 'Execute');
     if log <> nil then
       log.Log(sllSQL, aSQL, self, 2048);
   end;
-  {$endif}
   Lock(aSQL);
   try
     result := R.Execute(DB, aSQL, ID);
@@ -4263,7 +4468,8 @@ begin
   end;
 end;
 
-procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: Int64; NoLog: boolean);
+procedure TSQLDataBase.Execute(const aSQL: RawUTF8;
+  out ID: Int64; NoLog: boolean);
 var
   R: TSQLRequest;
   Timer: TPrecisionTimer;
@@ -4276,15 +4482,14 @@ begin
     R.Execute(DB, aSQL, ID);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     if not NoLog then
       fLog.Add.Log(sllSQL, '% % returned % for %', [Timer.Stop,
         FileNameWithoutPath, ID, aSQL], self);
-    {$endif}
   end;
 end;
 
-procedure TSQLDataBase.Execute(const aSQL: RawUTF8; out ID: RawUTF8; NoLog: boolean);
+procedure TSQLDataBase.Execute(const aSQL: RawUTF8;
+  out ID: RawUTF8; NoLog: boolean);
 var
   R: TSQLRequest;
   Timer: TPrecisionTimer;
@@ -4297,11 +4502,9 @@ begin
     R.Execute(DB, aSQL, ID);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     if not NoLog then
       fLog.Add.Log(sllSQL, '% % returned [%] for %', [Timer.Stop,
         FileNameWithoutPath, ID, aSQL], self);
-    {$endif}
   end;
 end;
 
@@ -4311,7 +4514,8 @@ var
   Timer: TPrecisionTimer;
 begin
   result := false;
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
   Lock(aSQL); // run one statement -> we can trust IsCacheable()
@@ -4319,16 +4523,15 @@ begin
     result := R.ExecuteNoException(DB, aSQL);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % % = %', [Timer.Stop, FileNameWithoutPath, aSQL,
       BOOL_STR[result]], self);
-    {$endif}
   end;
 end;
 
 function TSQLDataBase.ExecuteNoExceptionInt64(const aSQL: RawUTF8): Int64;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := 0
   else
   try
@@ -4340,7 +4543,8 @@ end;
 
 function TSQLDataBase.ExecuteNoExceptionUTF8(const aSQL: RawUTF8): RawUTF8;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := ''
   else
   try
@@ -4364,21 +4568,21 @@ begin
   end;
   Timer.Start;
   result := LockJSON(aSQL, aResultCount); // lock and try getting the request from the cache
-  if result = '' then // only Execute the DB request if not got from cache
+  if result = '' then
+  // only Execute the DB request if not got from cache
   try
     result := R.ExecuteJSON(DB, aSQL, Expand, @Count);
     if aResultCount <> nil then
       aResultCount^ := Count;
   finally
     UnLockJSON(result, Count);
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
       FileNameWithoutPath, length(result), aSQL], self);
-    {$endif}
   end;
 end;
 
-function TSQLDataBase.Execute(const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer;
+function TSQLDataBase.Execute(const aSQL: RawUTF8;
+  var Values: TRawUTF8DynArray): integer;
 var
   R: TSQLRequest;
   Timer: TPrecisionTimer;
@@ -4392,16 +4596,15 @@ begin
     result := R.Execute(DB, aSQL, Values);
   finally
     UnLock;
-    {$ifdef WITHLOG}
     fLog.Add.Log(sllSQL, '% % returned % rows %', [Timer.Stop,
       FileNameWithoutPath, length(Values), aSQL], self);
-    {$endif}
   end;
 end;
 
 function TSQLDataBase.LastInsertRowID: Int64;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := 0
   else
   try
@@ -4414,7 +4617,8 @@ end;
 
 function TSQLDataBase.LastChangeCount: integer;
 begin
-  if (self = nil) or (DB = 0) then
+  if (self = nil) or
+     (DB = 0) then
     result := 0
   else
   try
@@ -4427,7 +4631,9 @@ end;
 
 function TSQLDataBase.TotalChangeCount: integer;
 begin
-  if (self = nil) or (DB = 0) or not Assigned(sqlite3.total_changes) then
+  if (self = nil) or
+     (DB = 0) or
+     not Assigned(sqlite3.total_changes) then
     result := 0
   else
   try
@@ -4439,7 +4645,8 @@ begin
 end;
 
 procedure TSQLDataBase.GetTableNames(var Names: TRawUTF8DynArray);
-begin // SQL statement taken from official SQLite3 FAQ
+begin
+  // SQL statement taken from official SQLite3 FAQ
   SetLength(Names, Execute(SQL_GET_TABLE_NAMES, Names));
 end;
 
@@ -4451,20 +4658,22 @@ begin
   result := FindPropName(names, Name) >= 0;
 end;
 
-procedure TSQLDataBase.GetFieldNames(var Names: TRawUTF8DynArray; const
-  TableName: RawUTF8);
+procedure TSQLDataBase.GetFieldNames(var Names: TRawUTF8DynArray;
+  const TableName: RawUTF8);
 var
   R: TSQLRequest;
   n: integer;
 begin
-  if (self = nil) or (fDB = 0) then
+  if (self = nil) or
+     (fDB = 0) then
     exit; // avoid GPF in case of call from a static-only server
   Lock;
   try
     try
       R.Prepare(fDB, 'PRAGMA table_info(' + TableName + ');'); // ESQLite3Exception
       n := 0;
-      while R.Step = SQLITE_ROW do // cid,name,type,notnull,dflt_value,pk
+      while R.Step = SQLITE_ROW do
+        // cid,name,type,notnull,dflt_value,pk
         AddRawUTF8(Names, n, sqlite3.column_text(R.Request, 1));
       SetLength(Names, n);
     finally
@@ -4477,29 +4686,33 @@ end;
 
 function TSQLDataBase.GetUseCache: boolean;
 begin
-  result := (self <> nil) and (fCache <> nil);
+  result := (self <> nil) and
+            (fCache <> nil);
 end;
 
 procedure TSQLDataBase.SetUseCache(const Value: boolean);
 begin
   if self <> nil then
     if Value <> UseCache then
-      if Value then
-        fCache := TSynCache.Create(16384 * 1024, true)
+      if Value and
+         (fUseCacheSize > 0) then
+        fCache := TSynCache.Create(fUseCacheSize, true)
       else
         FreeAndNil(fCache);
 end;
 
 function IsCacheable(const aSQL: RawUTF8): boolean;
 begin
-  result := isSelect(pointer(aSQL)) and (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
+  result := isSelect(pointer(aSQL)) and
+            (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
 end;
 
 procedure TSQLDataBase.Lock(const aSQL: RawUTF8);
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  if (aSQL = '') or IsCacheable(aSQL) then
+  if (aSQL = '') or
+     IsCacheable(aSQL) then
     fSafe.Lock
   else // on non-concurent calls, is very fast
     LockAndFlushCache; // INSERT UPDATE DELETE statements need to flush cache
@@ -4533,7 +4746,8 @@ begin
     fSafe.UnLock; // on non-concurent calls, this API is very fast
 end;
 
-function TSQLDataBase.LockJSON(const aSQL: RawUTF8; aResultCount: PPtrInt): RawUTF8;
+function TSQLDataBase.LockJSON(const aSQL: RawUTF8;
+  aResultCount: PPtrInt): RawUTF8;
 begin
   if self = nil then
   begin
@@ -4547,13 +4761,11 @@ begin
       result := fCache.Find(aSQL, aResultCount); // try to get JSON result from cache
       if result <> '' then
       begin
-        {$ifdef WITHLOG}
         if fLog <> nil then
         begin
           fLog.Add.Log(sllSQL, 'from cache % %', [FileNameWithoutPath, aSQL], self);
           fLog.Add.Log(sllResult, result, self, fLogResultMaximumSize);
         end;
-        {$endif}
         fSafe.UnLock; // found in cache -> leave critical section
       end;
     end
@@ -4572,14 +4784,13 @@ begin
   end;
 end;
 
-procedure TSQLDataBase.UnLockJSON(const aJSONResult: RawUTF8; aResultCount: PtrInt);
+procedure TSQLDataBase.UnLockJSON(const aJSONResult: RawUTF8;
+  aResultCount: PtrInt);
 begin
   if self <> nil then
   try
-    {$ifdef WITHLOG}
     if fLog <> nil then
       fLog.Add.Log(sllResult, aJSONResult, self, fLogResultMaximumSize);
-    {$endif}
     fCache.Add(aJSONResult, aResultCount); // no-op if Reset was made just before
   finally
     fSafe.UnLock; // on non-concurent calls, this API is very fast
@@ -4587,14 +4798,11 @@ begin
 end;
 
 function TSQLDataBase.Backup(const BackupFileName: TFileName): boolean;
-{$ifdef WITHLOG}
 var
   Log: ISynLog;
 begin
-  Log := fLog.Enter('Backup % -> %', [fFileNameWithoutPath, BackupFileName], self);
-{$else}
-begin
-{$endif}
+  Log := fLog.Enter('Backup % -> %',
+    [fFileNameWithoutPath, BackupFileName], self);
   if self = nil then
   begin
     result := false;
@@ -4605,21 +4813,15 @@ begin
   LockAndFlushCache;
   try
     try
-    {$ifdef WITHLOG}
       if Log <> nil then
         Log.Log(sllTrace, 'close', self);
-    {$endif}
       DBClose;
-    {$ifdef WITHLOG}
       if Log <> nil then
         Log.Log(sllTrace, 'copy file', self);
-    {$endif}
       result := CopyFile(fFileName, BackupFileName, false);
     finally
-    {$ifdef WITHLOG}
       if Log <> nil then
         Log.Log(sllTrace, 'reopen', self);
-    {$endif}
       DBOpen;
     end;
   finally
@@ -4629,7 +4831,8 @@ end;
 
 function TSQLDataBase.GetBackupBackgroundInProcess: boolean;
 begin
-  result := (self <> nil) and (fBackupBackgroundInProcess <> nil);
+  result := (self <> nil) and
+            (fBackupBackgroundInProcess <> nil);
 end;
 
 function TSQLDataBase.GetSQLite3Library: TSQLite3Library;
@@ -4638,20 +4841,20 @@ begin // class function may be better, but fails on Delphi 2005
 end;
 
 function TSQLDataBase.BackupBackground(const BackupFileName: TFileName;
-  StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
+  StepPageNumber, StepSleepMS: integer; const OnProgress: TOnSQLDatabaseBackup;
   SynLzCompress: boolean; const aPassword: RawUTF8): boolean;
 var
   Dest: TSQLDatabase;
   Backup: TSQLite3Backup;
 begin
   result := false;
-  if (self = nil) or (BackupFileName = '') or
-     not Assigned(sqlite3.backup_init) or (fBackupBackgroundInProcess <> nil) then
+  if (self = nil) or
+     (BackupFileName = '') or
+     not Assigned(sqlite3.backup_init) or
+     (fBackupBackgroundInProcess <> nil) then
     exit;
-  {$ifdef WITHLOG}
   fLog.Add.Log(sllDB,'BackupBackground("%") started on %',
     [BackupFileName, FileNameWithoutPath],self);
-  {$endif}
   if FileExists(BackupFileName) then
     if not DeleteFile(BackupFileName) then
       exit;
@@ -4667,92 +4870,101 @@ begin
     Dest.Free;
     exit;
   end;
-  fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(
-    Backup, self, Dest, StepPageNumber, StepSleepMS, SynLzCompress, OnProgress);
+  fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(Backup,
+    self, Dest, StepPageNumber, StepSleepMS, SynLzCompress, OnProgress);
   result := true;
 end;
 
 function TSQLDataBase.BackupBackgroundToDB(BackupDB: TSQLDatabase;
-  StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
+  StepPageNumber, StepSleepMS: integer;
+  const OnProgress: TOnSQLDatabaseBackup): boolean;
 var Backup: TSQLite3Backup;
 begin
   result := false;
-  if (self = nil) or (BackupDB = nil) or not Assigned(sqlite3.backup_init) or
+  if (self = nil) or
+     (BackupDB = nil) or
+     not Assigned(sqlite3.backup_init) or
      (fBackupBackgroundInProcess <> nil) then
     exit;
-  {$ifdef WITHLOG}
   fLog.Add.Log(sllDB,'BackupBackgroundToDB("%") started on %',
     [BackupDB.FileName,FileNameWithoutPath],self);
-  {$endif}
   Backup := sqlite3.backup_init(BackupDB.DB, 'main', DB, 'main');
   if Backup = 0 then
     exit;
-  fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(
-    Backup, self, BackupDB, StepPageNumber, StepSleepMS, false, OnProgress, false);
+  fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(Backup,
+    self, BackupDB, StepPageNumber, StepSleepMS, false, OnProgress, false);
   result := true;
 end;
 
-procedure TSQLDataBase.BackupBackgroundWaitUntilFinished(TimeOutSeconds: Integer);
-var i: integer;
+procedure TSQLDataBase.BackupBackgroundWaitUntilFinished(
+  TimeOutSeconds: integer);
+var
+  endtix: Int64;
 begin
   if fBackupBackgroundInProcess <> nil then
-    if TimeOutSeconds < 0 then // TimeOutSeconds=-1 for infinite wait
+    if TimeOutSeconds < 0 then
+      // TimeOutSeconds=-1 for infinite wait (unsafe!)
       while fBackupBackgroundInProcess <> nil do
         SleepHiRes(10)
     else
     begin
-      for i := 1 to TimeOutSeconds*100 do
-      begin // wait for process end
+      endtix := GetTickCount64 + TimeOutSeconds * 1000;
+      repeat
+        // wait for "natural" process ending
         SleepHiRes(10);
         if fBackupBackgroundInProcess = nil then
           exit;
-      end;
+      until GetTickCount64 > endtix;
       Lock;
       if fBackupBackgroundInProcess <> nil then
-        fBackupBackgroundInProcess.Terminate; // notify Execute loop abortion
+        // notify Execute to force loop abortion
+        fBackupBackgroundInProcess.Terminate;
       UnLock;
-      for i := 1 to 500 do
-      begin // wait 5 seconds for process to be aborted
+      endtix := GetTickCount64 + 5000;
+      repeat
+        // wait 5 seconds for process to be actually aborted
         SleepHiRes(10);
-        if fBackupBackgroundInProcess = nil then
-          break;
-      end;
+      until (fBackupBackgroundInProcess = nil) or
+            (GetTickCount64 > endtix);
     end;
 end;
 
 class function TSQLDataBase.BackupSynLZ(const SourceDB, DestSynLZ: TFileName;
   EraseSourceDB: boolean): boolean;
 begin
-  result := AlgoSynLZ.FileCompress(SourceDB, DestSynLZ, SQLITE3_MAGIC, {hash32=}true);
+  result := AlgoSynLZ.FileCompress(
+    SourceDB, DestSynLZ, SQLITE3_MAGIC, {hash32=}true);
   if result and EraseSourceDB then
     result := DeleteFile(SourceDB);
 end;
 
-class function TSQLDataBase.BackupUnSynLZ(const SourceSynLZ, DestDB: TFileName): boolean;
+class function TSQLDataBase.BackupUnSynLZ(
+  const SourceSynLZ, DestDB: TFileName): boolean;
 begin
-  result := AlgoSynLZ.FileUnCompress(SourceSynLZ, DestDB, SQLITE3_MAGIC, {hash32=}true);
+  result := AlgoSynLZ.FileUnCompress(
+    SourceSynLZ, DestDB, SQLITE3_MAGIC, {hash32=}true);
 end;
 
-class function TSQLDataBase.IsBackupSynLZFile(const SynLZFile: TFileName): boolean;
+class function TSQLDataBase.IsBackupSynLZFile(
+  const SynLZFile: TFileName): boolean;
 begin
   result := AlgoSynLZ.FileIsCompressed(SynLZFile, SQLITE3_MAGIC);
 end;
 
 function TSQLDataBase.DBClose: integer;
-{$ifdef WITHLOG}
 var log: ISynLog;
-{$endif}
 begin
   result := SQLITE_OK;
-  if (self=nil) or (fDB=0) then
+  if (self=nil) or
+     (fDB=0) then
     exit;
-  {$ifdef WITHLOG}
   log := fLog.Enter(self,'DBClose');
   if log<>nil then
     log.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
-  {$endif}
-  if (sqlite3 = nil) or not Assigned(sqlite3.close) then
-    raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
+  if (sqlite3 = nil) or
+     not Assigned(sqlite3.close) then
+    raise ESQLite3Exception.CreateUTF8(
+      '%.DBClose called with no sqlite3 global',[self]);
   if fBackupBackgroundInProcess<>nil then
     BackupBackgroundWaitUntilFinished;
   result := sqlite3.close(fDB);
@@ -4761,19 +4973,17 @@ begin
 end;
 
 function TSQLDataBase.EnableCustomTokenizer: integer;
-{$ifdef WITHLOG}
 var log: ISynLog;
-{$endif}
 begin
   result := SQLITE_OK;
-  if (self=nil) or (fDB=0) then
+  if (self=nil) or
+     (fDB=0) then
     exit;
-  {$ifdef WITHLOG}
   log := fLog.Enter;
   if log<>nil then
     log.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
-  {$endif}
-  if (sqlite3=nil) or not Assigned(sqlite3.db_config) then
+  if (sqlite3=nil) or
+     not Assigned(sqlite3.db_config) then
     raise ESQLite3Exception.CreateUTF8(
       '%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
   result := sqlite3.db_config(fDB, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1);
@@ -4783,22 +4993,20 @@ function TSQLDataBase.DBOpen: integer;
 var
   utf8: RawUTF8;
   i: integer;
-{$ifdef WITHLOG}
   log: ISynLog;
 begin
   log := fLog.Enter('DBOpen %', [fFileNameWithoutPath], self);
-{$else}
-begin
-{$endif WITHLOG}
   if fDB <> 0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
   // open the database with the proper API call
-  if (sqlite3 = nil) or not Assigned(sqlite3.open) then
+  if (sqlite3 = nil) or
+     not Assigned(sqlite3.open) then
     raise ESQLite3Exception.Create('DBOpen called with no sqlite3 global');
   utf8 := StringToUTF8(fFileName);
   {$ifdef LINUX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
-  if assigned(sqlite3.open_v2) and (fPassword = '') then
+  if assigned(sqlite3.open_v2) and
+     (fPassword = '') then
   begin
     result := sqlite3.open_v2(pointer(utf8), fDB, fOpenV2Flags, 'unix-excl');
     if result <> SQLITE_OK then // may be 'unix-excl' is not supported by the library
@@ -4813,17 +5021,17 @@ begin
     result := sqlite3.open(pointer(utf8), fDB);
   if result <> SQLITE_OK then
   begin
-  {$ifdef WITHLOG}
     if log <> nil then
-      log.Log(sllError, 'sqlite3_open ("%") failed with error % (%): %', [utf8,
-        sqlite3_resultToErrorText(result), result, sqlite3.errmsg(fDB)]);
-  {$endif WITHLOG}
+      log.Log(sllError, 'sqlite3_open ("%") failed with error % (%): %',
+        [utf8, sqlite3_resultToErrorText(result), result, sqlite3.errmsg(fDB)]);
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
     exit;
   end;
   // initialize optional encryption (if supported by the compiled engine)
-  if Assigned(sqlite3.key) and (fPassword <> '') and (fFileName <> '') and
+  if Assigned(sqlite3.key) and
+     (fPassword <> '') and
+     (fFileName <> '') and
      (fFileName <> SQLITE_MEMORY_DATABASE_NAME) then
     sqlite3.key(fDB, pointer(fPassword), length(fPassword));
   // tune up execution context (before accessing the database)
@@ -4844,25 +5052,36 @@ begin
     exit;
   end;
   // our custom fast UTF-8 WinAnsi case insensitive compare, using NormToUpper[]
-  sqlite3.create_collation(DB, 'SYSTEMNOCASE', SQLITE_UTF8, nil, Utf8SQLCompNoCase);
+  sqlite3.create_collation(DB, 'SYSTEMNOCASE', SQLITE_UTF8, nil,
+    Utf8SQLCompNoCase);
   // our custom fast ISO-8601 date time encoded
-  sqlite3.create_collation(DB, 'ISO8601', SQLITE_UTF8, nil, Utf8SQLDateTime);
+  sqlite3.create_collation(DB, 'ISO8601', SQLITE_UTF8, nil,
+    Utf8SQLDateTime);
   // two slow but always accurate compare, using the Win32 Unicode API
-  sqlite3.create_collation(DB, 'WIN32CASE', SQLITE_UTF16, nil, Utf16SQLCompCase);
-  sqlite3.create_collation(DB, 'WIN32NOCASE', SQLITE_UTF16, nil, Utf16SQLCompNoCase);
+  sqlite3.create_collation(DB, 'WIN32CASE', SQLITE_UTF16, nil,
+    Utf16SQLCompCase);
+  sqlite3.create_collation(DB, 'WIN32NOCASE', SQLITE_UTF16, nil,
+    Utf16SQLCompNoCase);
   // note: standard SQLite3 NOCASE collation is used for AnsiString
   // register the MOD() user function, similar to the standard % operator
-  sqlite3.create_function(DB, 'MOD', 2, SQLITE_ANY, nil, InternalMod, nil, nil);
+  sqlite3.create_function(DB, 'MOD', 2, SQLITE_ANY, nil,
+    InternalMod, nil, nil);
   // register TIMELOG(), returning a ISO-8601 date/time from TTimeLog value
-  sqlite3.create_function(DB, 'TIMELOG', 1, SQLITE_ANY, nil, InternalTimeLog, nil, nil);
+  sqlite3.create_function(DB, 'TIMELOG', 1, SQLITE_ANY, nil,
+    InternalTimeLog, nil, nil);
   // register TIMELOGUNIX(), returning Unix Epoch seconds from TTimeLog value
-  sqlite3.create_function(DB, 'TIMELOGUNIX', 1, SQLITE_ANY, nil, InternalTimeLogUnix, nil, nil);
+  sqlite3.create_function(DB, 'TIMELOGUNIX', 1, SQLITE_ANY, nil,
+    InternalTimeLogUnix, nil, nil);
   // some user functions
-  sqlite3.create_function(DB, 'SOUNDEX', 1, SQLITE_UTF8, nil, InternalSoundex, nil, nil);
-  sqlite3.create_function(DB, 'SOUNDEXFR', 1, SQLITE_UTF8, nil, InternalSoundexFr, nil, nil);
-  sqlite3.create_function(DB, 'SOUNDEXES', 1, SQLITE_UTF8, nil, InternalSoundexEs, nil, nil);
+  sqlite3.create_function(DB, 'SOUNDEX', 1, SQLITE_UTF8, nil,
+    InternalSoundex, nil, nil);
+  sqlite3.create_function(DB, 'SOUNDEXFR', 1, SQLITE_UTF8, nil,
+    InternalSoundexFr, nil, nil);
+  sqlite3.create_function(DB, 'SOUNDEXES', 1, SQLITE_UTF8, nil,
+    InternalSoundexEs, nil, nil);
   // rank() function as proposed in http://www.sqlite.org/fts3.html#appendix_a
-  sqlite3.create_function(DB, 'RANK', -1, SQLITE_ANY, nil, InternalRank, nil, nil);
+  sqlite3.create_function(DB, 'RANK', -1, SQLITE_ANY, nil,
+    InternalRank, nil, nil);
   // CONCAT() function to process fast string concatenation
   sqlite3.create_function(DB, 'CONCAT', 2, SQLITE_UTF8, nil, nil,
     InternalConcatStep, InternalConcatFinal);
@@ -4871,14 +5090,14 @@ begin
   sqlite3.create_function(DB, 'INTEGERDYNARRAYCONTAINS', 2, SQLITE_ANY, nil,
     InternalIntegerDynArray, nil, nil);
   // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
-  sqlite3.create_function(DB, 'BYTEDYNARRAYCONTAINS', 2, SQLITE_ANY, TypeInfo(TByteDynArray),
-    InternalSimpleInt64DynArray, nil, nil);
-  sqlite3.create_function(DB, 'WORDDYNARRAYCONTAINS', 2, SQLITE_ANY, TypeInfo(TWordDynArray),
-    InternalSimpleInt64DynArray, nil, nil);
+  sqlite3.create_function(DB, 'BYTEDYNARRAYCONTAINS', 2, SQLITE_ANY,
+    TypeInfo(TByteDynArray), InternalSimpleInt64DynArray, nil, nil);
+  sqlite3.create_function(DB, 'WORDDYNARRAYCONTAINS', 2, SQLITE_ANY,
+    TypeInfo(TWordDynArray), InternalSimpleInt64DynArray, nil, nil);
   sqlite3.create_function(DB, 'CARDINALDYNARRAYCONTAINS', 2, SQLITE_ANY,
     TypeInfo(TCardinalDynArray), InternalSimpleInt64DynArray, nil, nil);
-  sqlite3.create_function(DB, 'INT64DYNARRAYCONTAINS', 2, SQLITE_ANY, TypeInfo
-    (TInt64DynArray), InternalSimpleInt64DynArray, nil, nil);
+  sqlite3.create_function(DB, 'INT64DYNARRAYCONTAINS', 2, SQLITE_ANY,
+    TypeInfo(TInt64DynArray), InternalSimpleInt64DynArray, nil, nil);
   sqlite3.create_function(DB, 'CURRENCYDYNARRAYCONTAINS', 2, SQLITE_ANY,
     TypeInfo(TInt64DynArray), InternalSimpleInt64DynArray, nil, nil);
   // RawUTF8DynArrayContainsCase/NoCase(BlobField,'Text') returning a boolean
@@ -4887,23 +5106,23 @@ begin
   sqlite3.create_function(DB, 'RAWUTF8DYNARRAYCONTAINSNOCASE', 2, SQLITE_ANY,
     @UTF8ILComp, InternalRawUTF8DynArray, nil, nil);
   // JSON related functions (e.g. for ORM storing variants as JSON UTF-8 text)
-  sqlite3.create_function(DB, 'JSONGET', 2, SQLITE_ANY, nil, InternalJsonGet, nil, nil);
-  sqlite3.create_function(DB, 'JSONHAS', 2, SQLITE_ANY, nil, InternalJsonHas, nil, nil);
-  sqlite3.create_function(DB, 'JSONSET', 3, SQLITE_ANY, nil, InternalJsonSet, nil, nil);
-  // reallocate all TSQLDataBaseSQLFunction for re-Open (TSQLRestServerDB.Backup)
+  sqlite3.create_function(DB, 'JSONGET', 2, SQLITE_ANY, nil,
+    InternalJsonGet, nil, nil);
+  sqlite3.create_function(DB, 'JSONHAS', 2, SQLITE_ANY, nil,
+    InternalJsonHas, nil, nil);
+  sqlite3.create_function(DB, 'JSONSET', 3, SQLITE_ANY, nil,
+    InternalJsonSet, nil, nil);
+  // reallocate all TSQLDataBaseSQLFunction for re-Open (TRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count - 1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
-{$ifdef WITHLOG}
   i := CacheSize;
   if i < 0 then
     i := (-i) shr 10
   else
     i := PageSize * CacheSize;
   if log <> nil then
-    log.Log(sllDB,
-      '"%" database file (%) opened with PageSize=% CacheSize=% (%)', [FileName,
-      KB(GetFileSize), PageSize, CacheSize, KB(i)], self);
-{$endif}
+    log.Log(sllDB, '"%" database file (%) opened with PageSize=% CacheSize=% (%)',
+      [FileName, KB(GetFileSize), PageSize, CacheSize, KB(i)], self);
 end;
 
 function TSQLDataBase.GetUserVersion: cardinal;
@@ -4928,7 +5147,8 @@ end;
 
 function TSQLDataBase.GetPageSize: cardinal;
 begin
-  if fPageSize = 0 then // can be cached, since not change once opened
+  if fPageSize = 0 then
+    // can be cached, since not change once opened
     fPageSize := ExecuteNoExceptionInt64('PRAGMA page_size');
   result := fPageSize;
 end;
@@ -4989,7 +5209,7 @@ begin
     result := lmNormal;
 end;
 
-procedure TSQLDataBase.SetWALMode(Value: Boolean);
+procedure TSQLDataBase.SetWALMode(Value: boolean);
 const
   CMD: array[boolean] of RawUTF8 = (
     'DELETE;', 'WAL;');
@@ -5002,9 +5222,10 @@ begin
   result := IdemPropNameU(ExecuteNoExceptionUTF8('PRAGMA journal_mode'), 'wal');
 end;
 
-procedure TSQLDataBase.SetBusyTimeout(const ms: Integer);
+procedure TSQLDataBase.SetBusyTimeout(const ms: integer);
 begin
-  if (self = nil) or (fDB = 0) then
+  if (self = nil) or
+     (fDB = 0) then
     exit;
   sqlite3.busy_timeout(DB, ms);
   fBusyTimeout := ms;
@@ -5012,7 +5233,9 @@ end;
 
 function TSQLDataBase.GetLimit(Category: TSQLLimitCategory): integer;
 begin
-  if (self = nil) or (fDB = 0) or not Assigned(sqlite3.limit) then
+  if (self = nil) or
+     (fDB = 0) or
+     not Assigned(sqlite3.limit) then
     result := 0
   else
     result := sqlite3.limit(fDB, ord(Category), -1);
@@ -5020,7 +5243,8 @@ end;
 
 procedure TSQLDataBase.SetLimit(Category: TSQLLimitCategory; Value: integer);
 begin
-  if (self <> nil) and Assigned(sqlite3.limit) then
+  if (self <> nil) and
+     Assigned(sqlite3.limit) then
     sqlite3.limit(fDB, ord(Category), Value);
 end;
 
@@ -5031,17 +5255,16 @@ begin
   if InternalState <> nil then
     inc(InternalState^);
   if fCache.Reset then
-   {$ifdef WITHLOG}
     if fLog <> nil then
       fLog.Add.Log(sllCache, '% cache flushed', [FileNameWithoutPath], self);
-    {$endif}
 end;
 
 procedure TSQLDataBase.RegisterSQLFunction(aFunction: TSQLDataBaseSQLFunction);
 var
-  i: integer;
+  i: PtrInt;
 begin
-  if (self = nil) or (aFunction = nil) then
+  if (self = nil) or
+     (aFunction = nil) then
     exit;
   for i := 0 to fSQLFunctions.Count - 1 do
     with TSQLDataBaseSQLFunction(fSQLFunctions.List[i]) do
@@ -5051,18 +5274,16 @@ begin
         aFunction.Free;
         exit; // already registered with the same name and parameters count
       end;
-  {$ifdef WITHLOG}
   if fLog <> nil then
-    fLog.Add.Log(sllDB, '% RegisterSQLFunction("%") %', [FileNameWithoutPath,
-      aFunction.FunctionName], self);
-  {$endif}
+    fLog.Add.Log(sllDB, '% RegisterSQLFunction("%") %',
+      [FileNameWithoutPath, aFunction.FunctionName], self);
   fSQLFunctions.Add(aFunction);
   if DB <> 0 then
     // DB already opened -> register this custom function
     aFunction.CreateFunction(DB);
 end;
 
-procedure TSQLDataBase.RegisterSQLFunction(aDynArrayTypeInfo: pointer;
+procedure TSQLDataBase.RegisterSQLFunction(aDynArrayTypeInfo: PRttiInfo;
   aCompare: TDynArraySortCompare; const aFunctionName: RawUTF8);
 begin
   RegisterSQLFunction(TSQLDataBaseSQLFunctionDynArray.Create(aDynArrayTypeInfo,
@@ -5070,7 +5291,7 @@ begin
 end;
 
 procedure TSQLDataBase.RegisterSQLFunction(aFunction: TSQLFunctionFunc;
-  aFunctionParametersCount: Integer; const aFunctionName: RawUTF8);
+  aFunctionParametersCount: integer; const aFunctionName: RawUTF8);
 begin
   RegisterSQLFunction(TSQLDataBaseSQLFunction.Create(aFunction,
     aFunctionParametersCount, aFunctionName));
@@ -5080,17 +5301,19 @@ end;
 
 { TSQLRequest }
 
-procedure TSQLRequest.Bind(Param: Integer; Value: Int64);
+procedure TSQLRequest.Bind(Param: integer; Value: Int64);
 begin
-  sqlite3_check(RequestDB, sqlite3.bind_int64(Request, Param, Value), 'bind_int64');
+  sqlite3_check(RequestDB,
+    sqlite3.bind_int64(Request, Param, Value), 'bind_int64');
 end;
 
-procedure TSQLRequest.Bind(Param: Integer; Value: double);
+procedure TSQLRequest.Bind(Param: integer; Value: double);
 begin
-  sqlite3_check(RequestDB, sqlite3.bind_double(Request, Param, Value), 'bind_double');
+  sqlite3_check(RequestDB,
+    sqlite3.bind_double(Request, Param, Value), 'bind_double');
 end;
 
-procedure TSQLRequest.Bind(Param: Integer; const Value: RawUTF8);
+procedure TSQLRequest.Bind(Param: integer; const Value: RawUTF8);
 var
   tmp: pointer;
 begin
@@ -5099,20 +5322,21 @@ begin
   // #0 is appended to all column values -> so length(Value) is needed below
   if pointer(Value) = nil then
     // avoid to bind '' as null
-    sqlite3_check(RequestDB, sqlite3.bind_text(Request, Param, @NULCHAR, 0,
-      SQLITE_STATIC))
+    sqlite3_check(RequestDB,
+      sqlite3.bind_text(Request, Param, @NULCHAR, 0, SQLITE_STATIC))
   else
   begin
     // assign RawUTF8 value by reference, to avoid memory allocation
     tmp := nil;
     RawByteString(tmp) := Value;
     // sqlite3InternalFreeRawByteString will decrease RefCount
-    sqlite3_check(RequestDB, sqlite3.bind_text(Request, Param, tmp, length(Value),
-      sqlite3InternalFreeRawByteString), 'bind_text');
+    sqlite3_check(RequestDB,
+      sqlite3.bind_text(Request, Param, tmp, length(Value),
+        sqlite3InternalFreeRawByteString), 'bind_text');
   end;
 end;
 
-procedure TSQLRequest.BindS(Param: Integer; const Value: string);
+procedure TSQLRequest.BindS(Param: integer; const Value: string);
 var
   P: PUTF8Char;
   len: integer;
@@ -5134,13 +5358,14 @@ begin
     sqlite3.bind_text(Request, Param, P, len, @sqlite3InternalFree), 'bind_text');
 end;
 
-procedure TSQLRequest.Bind(Param: Integer; Data: pointer; Size: integer);
+procedure TSQLRequest.Bind(Param: integer; Data: pointer; Size: integer);
 begin
-  sqlite3_check(RequestDB, sqlite3.bind_blob(Request, Param, Data, Size,
-    SQLITE_TRANSIENT), 'bind_blob'); // make private copy of the data
+  sqlite3_check(RequestDB,
+    sqlite3.bind_blob(Request, Param, Data, Size, SQLITE_TRANSIENT),
+      'bind_blob'); // SQLITE_TRANSIENT = make private copy of the data
 end;
 
-procedure TSQLRequest.BindBlob(Param: Integer; const Data: RawByteString);
+procedure TSQLRequest.BindBlob(Param: integer; const Data: RawByteString);
 var
   tmp: pointer;
 begin
@@ -5148,16 +5373,17 @@ begin
   tmp := nil;
   RawByteString(tmp) := Data;
   // sqlite3InternalFreeRawByteString will decrease RefCount
-  sqlite3_check(RequestDB, sqlite3.bind_blob(Request, Param, tmp, length(Data),
-    sqlite3InternalFreeRawByteString), 'bind_blob');
+  sqlite3_check(RequestDB,
+    sqlite3.bind_blob(Request, Param, tmp, length(Data),
+      sqlite3InternalFreeRawByteString), 'bind_blob');
 end;
 
-procedure TSQLRequest.Bind(Param: Integer; Data: TCustomMemoryStream);
+procedure TSQLRequest.Bind(Param: integer; Data: TCustomMemoryStream);
 begin
   Bind(Param, Data.Memory, Data.Size);
 end;
 
-procedure TSQLRequest.BindNull(Param: Integer);
+procedure TSQLRequest.BindNull(Param: integer);
 begin
   sqlite3_check(RequestDB, sqlite3.bind_null(Request, Param));
 end;
@@ -5192,7 +5418,6 @@ begin
   try
     repeat
       repeat
-
       until Step <> SQLITE_ROW; // all steps of this statement
     until PrepareNext = SQLITE_DONE; // all statements
   finally
@@ -5206,7 +5431,6 @@ begin
     raise ESQLite3Exception.Create(0, SQLITE_CANTOPEN, 'Execute');
   try
     repeat
-
     until Step <> SQLITE_ROW; // Execute all steps of the first statement
   finally
     Close; // always release statement
@@ -5233,13 +5457,16 @@ begin
   end;
 end;
 
-function TSQLRequest.ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
+function TSQLRequest.ExecuteNoException(aDB: TSQLite3DB;
+  const aSQL: RawUTF8): boolean;
 begin // avoid sqlite3_check() calls for no ESQLite3Exception
   result := false;
-  if (aDB <> 0) and (aSQL <> '') then
+  if (aDB <> 0) and
+     (aSQL <> '') then
   try
     if not (Prepare(aDB, aSQL, {noexcept=}true) in SQLITE_ERRORS) and
-       (Request <> 0) and not (sqlite3.step(Request) in SQLITE_ERRORS) then
+       (Request <> 0) and
+       not (sqlite3.step(Request) in SQLITE_ERRORS) then
       result := true;
   finally
     Close; // always release statement, even if done normally in Execute
@@ -5258,34 +5485,39 @@ begin
       repeat
         Res := Step;
         if Res = SQLITE_ROW then
-          AddInt64(ID, result, sqlite3.column_int64(Request, 0)); // first column value
+          // retrieve first column values
+          AddInt64(ID, result, sqlite3.column_int64(Request, 0));
       until Res = SQLITE_DONE;
   finally
     Close; // always release statement
   end;
 end;
 
-procedure TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; out ID: Int64);
+procedure TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8;
+  out ID: Int64);
 begin
   ID := 0;
   try
     Prepare(aDB, aSQL); // will raise an ESQLite3Exception on error
     if FieldCount > 0 then
       if Step = SQLITE_ROW then
-        ID := sqlite3.column_int64(Request, 0); // get first column value
+        // retrieve first column value
+        ID := sqlite3.column_int64(Request, 0);
   finally
     Close; // always release statement
   end;
 end;
 
-procedure TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; out Value: RawUTF8);
+procedure TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8;
+  out Value: RawUTF8);
 begin
   Value := '';
   try
     Prepare(aDB, aSQL); // will raise an ESQLite3Exception on error
     if FieldCount > 0 then
       if Step = SQLITE_ROW then
-        Value := sqlite3.column_text(Request, 0); // get first column value
+        // retrieve first column value
+        Value := sqlite3.column_text(Request, 0);
   finally
     Close; // always release statement
   end;
@@ -5303,19 +5535,20 @@ begin
       repeat
         Res := Step;
         if Res = SQLITE_ROW then
-          AddRawUTF8(Values, result, sqlite3.column_text(Request, 0)); // first column value
+          // retrieve first column values
+          AddRawUTF8(Values, result, sqlite3.column_text(Request, 0));
       until Res = SQLITE_DONE;
   finally
     Close; // always release statement
   end;
 end;
 
-function TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; JSON: TStream;
-  Expand: boolean): PtrInt;
+function TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8;
+  JSON: TStream; Expand: boolean): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
 var
-  i: integer;
+  i: PtrInt;
   W: TJSONWriter;
   tmp: TTextWriterStackBuffer;
 begin
@@ -5350,7 +5583,8 @@ begin
           break;
       end;
     until false;
-    if (result = 0) and W.Expand then
+    if (result = 0) and
+       W.Expand then
     begin
       // we want the field names at least, even with no data: we allow RowCount=0
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
@@ -5410,7 +5644,8 @@ begin
   Stream := TRawByteStringStream.Create;
   try
     try
-      RowCount := Execute(aDB, aSQL, Stream, Expand); // create JSON data in Stream
+      // create JSON data in Stream
+      RowCount := Execute(aDB, aSQL, Stream, Expand);
       if aResultCount <> nil then
         aResultCount^ := RowCount;
       result := Stream.DataString;
@@ -5466,7 +5701,7 @@ begin
 end;
 
 function TSQLRequest.FieldInt(Col: integer): Int64;
-begin // internaly, SQLite always uses Int64 -> pure Integer function is useless
+begin // internaly, SQLite always uses Int64 -> pure integer function is useless
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldInt');
   result := sqlite3.column_int64(Request, Col);
@@ -5492,21 +5727,21 @@ begin
   result := -1; // not found
 end;
 
-function TSQLRequest.FieldNull(Col: Integer): Boolean;
+function TSQLRequest.FieldNull(Col: integer): boolean;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldNull');
   result := sqlite3.column_type(Request, Col) = SQLITE_NULL;
 end;
 
-function TSQLRequest.FieldType(Col: Integer): integer;
+function TSQLRequest.FieldType(Col: integer): integer;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldType');
   result := sqlite3.column_type(Request, Col);
 end;
 
-function TSQLRequest.FieldDeclaredType(Col: Integer): RawUTF8;
+function TSQLRequest.FieldDeclaredType(Col: integer): RawUTF8;
 var
   P: PUTF8Char;
 begin
@@ -5516,7 +5751,7 @@ begin
   FastSetString(result, P, StrLen(P));
 end;
 
-function TSQLRequest.FieldDeclaredTypeS(Col: Integer): string;
+function TSQLRequest.FieldDeclaredTypeS(Col: integer): string;
 var
   P: PUTF8Char;
 begin
@@ -5589,28 +5824,40 @@ begin
   begin
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL) + 1,
       fRequest, fNextSQL);
-    while (result = SQLITE_OK) and (Request = 0) do // comment or white-space
-      result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
+    while (result = SQLITE_OK) and
+          (Request = 0) do
+    begin
+      // loop handling comment or white-space
+      result := sqlite3.prepare_v2(RequestDB,
+        fNextSQL, -1, fRequest, fNextSQL);
+      if fNextSQL^ = #0 then
+        // statement contains only comment
+       raise ESQLite3Exception.Create(DB, SQLITE_EMPTY, SQL);
+    end;
     fFieldCount := sqlite3.column_count(fRequest);
     if not NoExcept then
       sqlite3_check(RequestDB, result, SQL);
   end;
 end;
 
-function TSQLRequest.PrepareAnsi(DB: TSQLite3DB; const SQL: WinAnsiString): integer;
+function TSQLRequest.PrepareAnsi(DB: TSQLite3DB;
+  const SQL: WinAnsiString): integer;
 begin
   result := Prepare(DB, WinAnsiToUtf8(SQL));
 end;
 
 function TSQLRequest.PrepareNext: integer;
 begin
-  if (Request = 0) or (fNextSQL^ = #0) then
+  if (Request = 0) or
+     (fNextSQL^ = #0) then
     result := SQLITE_DONE
   else
   begin
-    Close; // free previous statement
+    Close; // free any previous statement
     result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
-    while (result = SQLITE_OK) and (Request = 0) and (fNextSQL^ <> #0) do
+    while (result = SQLITE_OK) and
+          (Request = 0) and
+          (fNextSQL^ <> #0) do
       // comment or white-space -> ignore
       result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
     fFieldCount := sqlite3.column_count(fRequest);
@@ -5623,11 +5870,13 @@ end;
 function TSQLRequest.Reset: integer;
 begin
   if Request = 0 then
-    raise ESQLite3Exception.Create('TSQLRequest.Reset called with no previous Request');
+    raise ESQLite3Exception.Create(
+      'TSQLRequest.Reset called with no previous Request');
   {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
   with TSynFPUException.ForLibraryCode do
   {$endif RESETFPUEXCEPTION}
-    result := sqlite3.reset(Request); // no check here since it was PREVIOUS state
+    // no check here since it was PREVIOUS state
+    result := sqlite3.reset(Request);
 end;
 
 function TSQLRequest.Step: integer;
@@ -5650,7 +5899,7 @@ begin
   {$endif RESETFPUEXCEPTION}
 end;
 
-function TSQLRequest.GetReadOnly: Boolean;
+function TSQLRequest.GetReadOnly: boolean;
 begin
   if Request = 0 then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_MISUSE, 'IsReadOnly');
@@ -5659,7 +5908,7 @@ end;
 
 procedure TSQLRequest.FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
 var
-  i: integer;
+  i: PtrInt;
 begin
   if Request = 0 then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_MISUSE, 'FieldsToJSON');
@@ -5776,7 +6025,7 @@ end;
 { TSQLDataBaseSQLFunction }
 
 constructor TSQLDataBaseSQLFunction.Create(aFunction: TSQLFunctionFunc;
-  aFunctionParametersCount: Integer; const aFunctionName: RawUTF8);
+  aFunctionParametersCount: integer; const aFunctionName: RawUTF8);
 begin
   fInternalFunction := aFunction;
   fFunctionParametersCount := aFunctionParametersCount;
@@ -5786,7 +6035,7 @@ begin
     fSQLName := aFunctionName;
 end;
 
-function TSQLDataBaseSQLFunction.CreateFunction(DB: TSQLite3DB): Integer;
+function TSQLDataBaseSQLFunction.CreateFunction(DB: TSQLite3DB): integer;
 begin
   if self <> nil then
     result := sqlite3.create_function(DB, pointer(fSQLName),
@@ -5798,8 +6047,8 @@ end;
 
 { TSQLDataBaseSQLFunctionDynArray }
 
-procedure InternalSQLFunctionDynArrayBlob(Context: TSQLite3FunctionContext; argc:
-  integer; var argv: TSQLite3ValueArray); cdecl;
+procedure InternalSQLFunctionDynArrayBlob(Context: TSQLite3FunctionContext;
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var
   P, item: PAnsiChar;
   PLen, itemLen: PtrInt;
@@ -5807,18 +6056,23 @@ var
 begin
   if argc <> 2 then
   begin
+    // two parameters expected
     ErrorWrongNumberOfArgs(Context);
-    exit; // two parameters expected
+    exit;
   end;
   P := sqlite3.value_blob(argv[0]);
   PLen := sqlite3.value_bytes(argv[0]);
   item := sqlite3.value_blob(argv[1]);
   itemLen := sqlite3.value_bytes(argv[1]);
   caller := sqlite3.user_data(Context);
-  if (P <> nil) and (PLen > 0) and (item <> nil) and (itemLen > 0) and (caller
-    <> nil) then
+  if (P <> nil) and
+     (PLen > 0) and
+     (item <> nil) and
+     (itemLen > 0) and
+     (caller <> nil) then
     with caller.fDummyDynArray do
-    try // temporary allocate all dynamic array content
+    try
+      // temporary allocate all dynamic array content
       try
         if (LoadFrom(P, P + PLen) = nil) or
            (ItemLoadFind(item, item + itemLen) < 0) then
@@ -5838,7 +6092,7 @@ begin
   sqlite3.result_int64(Context, Int64(P <> nil));
 end;
 
-constructor TSQLDataBaseSQLFunctionDynArray.Create(aTypeInfo: pointer;
+constructor TSQLDataBaseSQLFunctionDynArray.Create(aTypeInfo: PRttiInfo;
   aCompare: TDynArraySortCompare; const aFunctionName: RawUTF8);
 begin
   fDummyDynArray.Init(aTypeInfo, fDummyDynArrayValue);
@@ -5851,12 +6105,14 @@ end;
 
 procedure TSQLStatementCached.Init(aDB: TSQLite3DB);
 begin
-  Caches.InitSpecific(TypeInfo(TSQLStatementCacheDynArray), Cache, ptRawUTF8, @Count);
+  Caches.InitSpecific(
+    TypeInfo(TSQLStatementCacheDynArray), Cache, ptRawUTF8, @Count);
   DB := aDB;
 end;
 
 function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8; WasPrepared:
-  PBoolean; ExecutionTimer: PPPrecisionTimer; ExecutionMonitor: PSynMonitor): PSQLRequest;
+  PBoolean; ExecutionTimer: PPPrecisionTimer;
+  ExecutionMonitor: PSynMonitor): PSQLRequest;
 var
   added: boolean;
   ndx: integer;
@@ -5911,7 +6167,7 @@ var
   i64: Int64;
 begin
   i64 := TSQLStatementCache(A).Timer.InternalTimer.TimeInMicroSec -
-    TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
+         TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
   if i64 < 0 then
     result := -1
   else if i64 > 0 then
@@ -5930,8 +6186,8 @@ end;
 { TSQLDatabaseBackupThread }
 
 constructor TSQLDatabaseBackupThread.Create(Backup: TSQLite3Backup;
-  Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: Integer;
-  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean);
+  Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: integer;
+  SynLzCompress: boolean; const OnProgress: TOnSQLDatabaseBackup; OwnerDest: boolean);
 begin
   fTimer.Start;
   fBackup := Backup;
@@ -5942,7 +6198,8 @@ begin
     fStepPageNumber := 1
   else
     fStepPageNumber := StepPageNumber;
-  if (cardinal(StepSleepMS) <= 1000) and (StepPageNumber > 0) then
+  if (cardinal(StepSleepMS) <= 1000) and
+     (StepPageNumber > 0) then
     fStepSleepMS := StepSleepMS;
   fOnProgress := OnProgress;
   fStepSynLzCompress := SynLzCompress;
@@ -5952,22 +6209,18 @@ begin
 end;
 
 procedure TSQLDatabaseBackupThread.Execute;
-{$ifdef WITHLOG}
 var
   log: ISynLog;
-{$endif}
 
-  procedure NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep);
+  procedure NotifyProgressAndContinue(aStep: TOnSQLDatabaseBackupStep);
   begin
     fStep := aStep;
-    {$ifdef WITHLOG}
     if Assigned(log) then
       log.Log(sllTrace, '%', [self]);
-    {$endif}
     if Assigned(fOnProgress) then
       if not fOnProgress(self) then
-        raise ESQLite3Exception.CreateUtf8('%.Execute aborted by OnProgress=false',
-          [self]);
+        raise ESQLite3Exception.CreateUtf8(
+          '%.Execute aborted by OnProgress=false', [self]);
   end;
 
 var
@@ -5975,10 +6228,8 @@ var
   fn, fn2: TFileName;
 begin
   fn := fDestDB.FileName;
-  {$ifdef WITHLOG}
   SetCurrentThreadName('% [%] [%]', [self, fSourceDB.FileName, fn]);
-  log := SynSQLite3Log.Enter(self, 'Execute');
-  {$endif}
+  log := SQLite3Log.Enter(self, 'Execute');
   try
     try
       NotifyProgressAndContinue(backupStart);
@@ -6024,16 +6275,14 @@ begin
           fn2 := ChangeFileExt(fn, '.db.tmp');
           DeleteFile(fn2);
           if not RenameFile(fn, fn2) then
-            raise ESQLite3Exception.CreateUTF8('%.Execute: RenameFile(%,%) failed',
-              [self, fn, fn2]);
+            raise ESQLite3Exception.CreateUTF8(
+              '%.Execute: RenameFile(%,%) failed', [self, fn, fn2]);
           if not TSQLDatabase.BackupSynLZ(fn2, fn, true) then
-            raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
-              [self, fn, fn2]);
-          {$ifdef WITHLOG}
+            raise ESQLite3Exception.CreateUTF8(
+              '%.Execute: BackupSynLZ(%,%) failed', [self, fn, fn2]);
           if Assigned(log) then
-            log.Log(sllTrace, 'TSQLDatabase.BackupSynLZ into % %', [KB(FileSize(fn)),
-              fn], self);
-          {$endif}
+            log.Log(sllTrace, 'TSQLDatabase.BackupSynLZ into % %',
+              [KB(FileSize(fn)), fn], self);
         end;
         fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       end;
@@ -6043,7 +6292,8 @@ begin
       begin
         sqlite3.backup_finish(fBackup);
         if fOwnerDest then
-          fDestDB.Free; // close destination backup database if not already
+          // close destination backup database if not already
+          fDestDB.Free;
       end;
       fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
       fSourceDB.Lock;
@@ -6059,10 +6309,8 @@ begin
         fOnProgress(self);
     end;
   end;
-  {$ifdef WITHLOG}
   log := nil;
-  SynSQLite3Log.Add.NotifyThreadEnded;
-  {$endif}
+  SQLite3Log.Add.NotifyThreadEnded;
 end;
 
 function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;
@@ -6078,10 +6326,13 @@ begin
     result := (FileRead(F, Header, sizeof(Header)) = SizeOf(Header)) and
               (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
               // don't check header 8..15 (may equal encrypted bytes 16..23)
-              (Header.b[21] = 64) and (Header.b[22] = 32) and (Header.b[23] = 32);
-    if result and (PageSize <> nil) then
+              (Header.b[21] = 64) and
+              (Header.b[22] = 32) and
+              (Header.b[23] = 32);
+    if result and
+       (PageSize <> nil) then
       // header bytes 16..23 are always stored unencrypted
-      PageSize^ := Integer(Header.b[16]) shl 8 + Header.b[17];
+      PageSize^ := integer(Header.b[16]) shl 8 + Header.b[17];
     FileClose(F);
   end;
 end;
@@ -6090,7 +6341,8 @@ function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
 var
   F: THandle;
   Header: THash256Rec;
-begin // see CodecEncrypt/CodecDecrypt in SynSQLite3Static
+begin
+  // see CodecEncrypt/CodecDecrypt in mormot.db.raw.sqlite3.static
   result := false;
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
   if F <= 0 then
@@ -6100,7 +6352,9 @@ begin // see CodecEncrypt/CodecDecrypt in SynSQLite3Static
      // header bytes 16..23 are stored unencrypted
      (Header.d0 = SQLITE_FILE_HEADER128.Lo) and
      (Header.d1 <> SQLITE_FILE_HEADER128.Hi) and
-     (Header.b[21] = 64) and (Header.b[22] = 32) and (Header.b[23] = 32) then
+     (Header.b[21] = 64) and
+     (Header.b[22] = 32) and
+     (Header.b[23] = 32) then
     result := true;
   FileClose(F);
 end;

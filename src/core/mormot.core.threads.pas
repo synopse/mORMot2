@@ -33,9 +33,16 @@ uses
 
 { ************ Thread-Safe Pending Tasks List }
 
+const
+  /// defined here to avoid explicit link to syncobjs in uses clause
+  wrSignaled = syncobjs.wrSignaled;
+
 type
   /// defined here to avoid explicit link to syncobjs in uses clause
   TWaitResult = syncobjs.TWaitResult;
+
+  /// defined here to avoid explicit link to syncobjs in uses clause
+  TEvent = syncobjs.TEvent;
 
   /// exception class raised by this unit
   ESynThread = class(ESynException);
@@ -62,7 +69,7 @@ type
   // - this implementation is thread-safe, thanks to the Safe internal locker
   TPendingTaskList = class(TSynLocked)
   protected
-    fCount: Integer;
+    fCount: integer;
     fTask: TPendingTaskListItemDynArray;
     fTasks: TDynArray;
     function GetCount: integer;
@@ -88,9 +95,11 @@ type
     // - corresponding to the current time
     // - default implementation is to return GetTickCount64, with a 16 ms
     // typical resolution under Windows
-    property Timestamp: Int64 read GetTimestamp;
+    property Timestamp: Int64
+      read GetTimestamp;
     /// how many pending tasks are currently defined
-    property Count: integer read GetCount;
+    property Count: integer
+      read GetCount;
     /// direct low-level access to the internal task list
     // - warning: this dynamic array length is the list capacity: use Count
     // property to retrieve the exact number of stored items
@@ -98,7 +107,8 @@ type
     // thread-safe access to this array
     // - items are stored in increasing Timestamp, i.e. the first item is
     // the next one which would be returned by the NextPendingTask method
-    property Task: TPendingTaskListItemDynArray read fTask;
+    property Task: TPendingTaskListItemDynArray
+      read fTask;
   end;
 
 
@@ -113,7 +123,7 @@ type
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
   // during remote blocking process in a background thread
   // - typical use is to run Application.ProcessMessages, e.g. for
-  // TSQLRestClientURI.URI() to provide a responsive UI even in case of slow
+  // TRestClientURI.URI() to provide a responsive UI even in case of slow
   // blocking remote access
   // - provide the time elapsed (in milliseconds) from the request start (can be
   // used e.g. to popup a temporary message to wait)
@@ -121,10 +131,10 @@ type
   // - is call once with ElapsedMS=-1 at request ending
   // - see TLoginForm.OnIdleProcess and OnIdleProcessForm in mORMotUILogin.pas
   TOnIdleSynBackgroundThread = procedure(Sender: TSynBackgroundThreadAbstract;
-    ElapsedMS: Integer) of object;
+    ElapsedMS: integer) of object;
 
   /// event prototype used e.g. by TSynBackgroundThreadAbstract and TSynThread callbacks
-  TNotifyThreadEvent = procedure(Sender: TThread) of object;
+  TOnNotifyThread = procedure(Sender: TThread) of object;
 
   /// abstract TThread with its own execution content
   // - you should not use this class directly, but use either
@@ -133,8 +143,8 @@ type
   TSynBackgroundThreadAbstract = class(TThread)
   protected
     fProcessEvent: TEvent;
-    fOnBeforeExecute: TNotifyThreadEvent;
-    fOnAfterExecute: TNotifyThreadEvent;
+    fOnBeforeExecute: TOnNotifyThread;
+    fOnAfterExecute: TOnNotifyThread;
     fThreadName: RawUTF8;
     fExecute: (exCreated, exRun, exFinished);
     fExecuteLoopPause: boolean;
@@ -145,11 +155,11 @@ type
   public
     /// initialize the thread
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, or
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, or
     // at least set OnAfterExecute to TSynLogFamily.OnThreadEnded
     constructor Create(const aThreadName: RawUTF8;
-      OnBeforeExecute: TNotifyThreadEvent = nil;
-      OnAfterExecute: TNotifyThreadEvent = nil;
+      const OnBeforeExecute: TOnNotifyThread = nil;
+      const OnAfterExecute: TOnNotifyThread = nil;
       CreateSuspended: boolean = false); reintroduce;
     /// release used resources
     // - calls WaitForNotExecuting(100) for proper finalization
@@ -163,7 +173,7 @@ type
     {$endif HASTTHREADSTART}
     {$ifdef HASTTHREADTERMINATESET}
     /// properly terminate the thread
-    // - called by TThread.Terminate
+    // - called by TThread.Terminate since Delphi XE2
     procedure TerminatedSet; override;
     {$else}
     /// properly terminate the thread
@@ -183,18 +193,23 @@ type
     /// temporary stop the execution of ExecuteLoop, until set back to false
     // - may be used e.g. by TSynBackgroundTimer to delay the process of
     // background tasks
-    property Pause: boolean read fExecuteLoopPause write SetExecuteLoopPause;
+    property Pause: boolean
+      read fExecuteLoopPause write SetExecuteLoopPause;
     /// access to the low-level associated event used to notify task execution
     // to the background thread
     // - you may call ProcessEvent.SetEvent to trigger the internal process loop
-    property ProcessEvent: TEvent read fProcessEvent;
+    property ProcessEvent: TEvent
+      read fProcessEvent;
     /// defined as public since may be used to terminate the processing methods
     property Terminated;
   end;
 
   /// state machine status of the TSynBackgroundThreadAbstract process
   TSynBackgroundThreadProcessStep = (
-    flagIdle, flagStarted, flagFinished, flagDestroying);
+    flagIdle,
+    flagStarted,
+    flagFinished,
+    flagDestroying);
 
   /// state machine statuses of the TSynBackgroundThreadAbstract process
   TSynBackgroundThreadProcessSteps = set of TSynBackgroundThreadProcessStep;
@@ -202,7 +217,7 @@ type
   /// abstract TThread able to run a method in its own execution content
   // - typical use is a background thread for processing data or remote access,
   // while the UI will be still responsive by running OnIdle event in loop: see
-  // e.g. how TSQLRestClientURI.OnIdle handle this in mORMot.pas unit
+  // e.g. how TRestClientURI.OnIdle handle this in mormot.rest.client.pas unit
   // - you should not use this class directly, but inherit from it and override
   // the Process method, or use either TSynBackgroundThreadEvent /
   // TSynBackgroundThreadMethod and provide a much more convenient callback
@@ -213,8 +228,8 @@ type
     fCallerThreadID: TThreadID;
     fBackgroundException: Exception;
     fOnIdle: TOnIdleSynBackgroundThread;
-    fOnBeforeProcess: TNotifyThreadEvent;
-    fOnAfterProcess: TNotifyThreadEvent;
+    fOnBeforeProcess: TOnNotifyThread;
+    fOnAfterProcess: TOnNotifyThread;
     fPendingProcessFlag: TSynBackgroundThreadProcessStep;
     fPendingProcessLock: TSynLocker;
     procedure ExecuteLoop; override;
@@ -232,10 +247,10 @@ type
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
-    constructor Create(aOnIdle: TOnIdleSynBackgroundThread;
-      const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent = nil;
-      OnAfterExecute: TNotifyThreadEvent = nil); reintroduce;
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
+    constructor Create(const aOnIdle: TOnIdleSynBackgroundThread;
+      const aThreadName: RawUTF8; const OnBeforeExecute: TOnNotifyThread = nil;
+      const OnAfterExecute: TOnNotifyThread = nil); reintroduce;
     /// finalize the thread
     destructor Destroy; override;
     /// launch Process abstract method asynchronously in the background thread
@@ -262,15 +277,19 @@ type
     // mORMotUILogin.pas will match this property expectations
     // - if OnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
-    property OnIdle: TOnIdleSynBackgroundThread read fOnIdle write fOnIdle;
+    property OnIdle: TOnIdleSynBackgroundThread
+      read fOnIdle write fOnIdle;
     /// TRUE if the background thread is active, and OnIdle event is called
     // during process
     // - to be used e.g. to ensure no re-entrance from User Interface messages
-    property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
+    property OnIdleBackgroundThreadActive: boolean
+      read GetOnIdleBackgroundThreadActive;
     /// optional callback event triggered in Execute before each Process
-    property OnBeforeProcess: TNotifyThreadEvent read fOnBeforeProcess write fOnBeforeProcess;
+    property OnBeforeProcess: TOnNotifyThread
+      read fOnBeforeProcess write fOnBeforeProcess;
     /// optional callback event triggered in Execute after each Process
-    property OnAfterProcess: TNotifyThreadEvent read fOnAfterProcess write fOnAfterProcess;
+    property OnAfterProcess: TOnNotifyThread
+      read fOnAfterProcess write fOnAfterProcess;
   end;
 
   /// background process method called by TSynBackgroundThreadEvent
@@ -289,12 +308,14 @@ type
     /// initialize the thread
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
-    constructor Create(aOnProcess: TOnProcessSynBackgroundThread;
-      aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8); reintroduce;
+    constructor Create(const aOnProcess: TOnProcessSynBackgroundThread;
+      const aOnIdle: TOnIdleSynBackgroundThread;
+      const aThreadName: RawUTF8); reintroduce;
     /// provide a method handler to be execute in the background thread
     // - triggered by RunAndWait() method - which will wait until finished
     // - the OpaqueParam as specified to RunAndWait() will be supplied here
-    property OnProcess: TOnProcessSynBackgroundThread read fOnProcess write fOnProcess;
+    property OnProcess: TOnProcessSynBackgroundThread
+      read fOnProcess write fOnProcess;
   end;
 
   /// allow background thread process of a variable TThreadMethod callback
@@ -324,11 +345,13 @@ type
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
     constructor Create(aOnProcess: TOnProcessSynBackgroundThreadProc;
-      aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8); reintroduce;
+      const aOnIdle: TOnIdleSynBackgroundThread;
+      const aThreadName: RawUTF8); reintroduce;
     /// provide a procedure handler to be execute in the background thread
     // - triggered by RunAndWait() method - which will wait until finished
     // - the OpaqueParam as specified to RunAndWait() will be supplied here
-    property OnProcess: TOnProcessSynBackgroundThreadProc read fOnProcess write fOnProcess;
+    property OnProcess: TOnProcessSynBackgroundThreadProc
+      read fOnProcess write fOnProcess;
   end;
 
 
@@ -355,25 +378,30 @@ type
     // aOnProcessMS milliseconds period was elapse since last process
     // - if aOnProcessMS is 0, will wait until ProcessEvent.SetEvent is called
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(const aThreadName: RawUTF8;
-      aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-      aOnBeforeExecute: TNotifyThreadEvent = nil;
-      aOnAfterExecute: TNotifyThreadEvent = nil; aStats: TSynMonitorClass = nil;
+      const aOnProcess: TOnSynBackgroundThreadProcess;
+      aOnProcessMS: cardinal; const aOnBeforeExecute: TOnNotifyThread = nil;
+      const aOnAfterExecute: TOnNotifyThread = nil;
+      aStats: TSynMonitorClass = nil;
       CreateSuspended: boolean = false); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
     /// access to the implementation event of the periodic task
-    property OnProcess: TOnSynBackgroundThreadProcess read fOnProcess;
+    property OnProcess: TOnSynBackgroundThreadProcess
+      read fOnProcess;
     /// event callback executed when OnProcess did raise an exception
     // - supplied Sender parameter is the raised Exception instance
-    property OnException: TNotifyEvent read fOnException write fOnException;
+    property OnException: TNotifyEvent
+      read fOnException write fOnException;
   published
     /// access to the delay, in milliseconds, of the periodic task processing
-    property OnProcessMS: cardinal read fOnProcessMS write fOnProcessMS;
+    property OnProcessMS: cardinal
+      read fOnProcessMS write fOnProcessMS;
     /// processing statistics
     // - may be nil if aStats was nil in the class constructor
-    property Stats: TSynMonitor read fStats;
+    property Stats: TSynMonitor
+      read fStats;
   end;
 
   TSynBackgroundTimer = class;
@@ -399,8 +427,8 @@ type
 
   /// TThread able to run one or several tasks at a periodic pace in a
   // background thread
-  // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods, via the
-  // inherited TSQLRestBackgroundTimer
+  // - as used e.g. by TRest.TimerEnable/TimerDisable methods, via the
+  // inherited TRestBackgroundTimer
   // - each process can have its own FIFO of text messages
   // - if you expect to update some GUI, you should rather use a TTimer
   // component (with a period of e.g. 200ms), since TSynBackgroundTimer will
@@ -410,46 +438,48 @@ type
     fTask: TSynBackgroundTimerTaskDynArray;
     fTasks: TDynArray;
     fTaskLock: TSynLocker;
-    procedure EverySecond(Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
+    procedure EverySecond(Sender: TSynBackgroundThreadProcess;
+      Event: TWaitResult);
     function Find(const aProcess: TMethod): integer;
-    function Add(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8;
-      aExecuteNow: boolean): boolean;
+    function Add(const aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
   public
     /// initialize the thread for a periodic task processing
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, as
-    // made by TSQLRestBackgroundTimer.Create
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread, as
+    // made by TRestBackgroundTimer.Create
     constructor Create(const aThreadName: RawUTF8;
-      aOnBeforeExecute: TNotifyThreadEvent = nil;
-      aOnAfterExecute: TNotifyThreadEvent = nil;
+      const aOnBeforeExecute: TOnNotifyThread = nil;
+      const aOnAfterExecute: TOnNotifyThread = nil;
       aStats: TSynMonitorClass = nil); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
     /// define a process method for a task running on a periodic number of seconds
-    // - for background process on a mORMot service, consider using TSQLRest
+    // - for background process on a mORMot service, consider using TRest
     // TimerEnable/TimerDisable methods, and its associated BackgroundTimer thread
-    procedure Enable(aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
+    procedure Enable(const aOnProcess: TOnSynBackgroundTimerProcess;
+      aOnProcessSecs: cardinal);
     /// undefine a task running on a periodic number of seconds
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    // - for background process on a mORMot service, consider using TSQLRestServer
+    // - for background process on a mORMot service, consider using TRestServer
     // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
-    function Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    function Disable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// add a message to be processed during the next execution of a task
     // - supplied message will be added to the internal FIFO list associated
     // with aOnProcess, then supplied to as aMsg parameter for each call
     // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8;
-      aExecuteNow: boolean = false): boolean; overload;
+    function EnQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8; aExecuteNow: boolean = false): boolean; overload;
     /// add a message to be processed during the next execution of a task
     // - supplied message will be added to the internal FIFO list associated
     // with aOnProcess, then supplied to as aMsg parameter for each call
     // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+    function EnQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsgFmt: RawUTF8; const Args: array of const;
       aExecuteNow: boolean = false): boolean; overload;
     /// remove a message from the processing list
@@ -457,29 +487,36 @@ type
     // with aOnProcess, then removed from the list if found
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied message was not registered
-    function DeQueue(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8): boolean;
+    function DeQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8): boolean;
     /// execute a task without waiting for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
-    function ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    function ExecuteNow(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// returns true if there is currenly one task processed
     function Processing: boolean;
     /// wait until no background task is processed
     procedure WaitUntilNotProcessing(timeoutsecs: integer = 10);
     /// low-level access to the internal task list
-    property Task: TSynBackgroundTimerTaskDynArray read fTask;
+    property Task: TSynBackgroundTimerTaskDynArray
+      read fTask;
     /// low-level access to the internal task mutex
-    property TaskLock: TSynLocker read fTaskLock;
+    property TaskLock: TSynLocker
+      read fTaskLock;
   end;
+
 
 type
   /// the current state of a TBlockingProcess instance
   TBlockingEvent = (
-    evNone, evWaiting, evTimeOut, evRaised);
+    evNone,
+    evWaiting,
+    evTimeOut,
+    evRaised);
 
   {$M+}
   /// a semaphore used to wait for some process to be finished
-  // - used e.g. by TBlockingCallback in mORMot.pas
+  // - used e.g. by TBlockingCallback in mormot.rest.server.pas
   // - once created, process would block via a WaitFor call, which would be
   // released when NotifyFinished is called by the process background thread
   TBlockingProcess = class(TEvent)
@@ -494,7 +531,8 @@ type
     // - specify a time out millliseconds period after which blocking execution
     // should be handled as failure (if 0 is set, default 3000 would be used)
     // - an associated mutex shall be supplied
-    constructor Create(aTimeOutMs: integer; aSafe: PSynLocker); reintroduce; overload; virtual;
+    constructor Create(aTimeOutMs: integer; aSafe: PSynLocker);
+      reintroduce; overload; virtual;
     /// initialize the semaphore instance
     // - specify a time out millliseconds period after which blocking execution
     // should be handled as failure (if 0 is set, default 3000 would be used)
@@ -528,9 +566,11 @@ type
   published
     /// the current state of process
     // - use Reset method to re-use this instance after a WaitFor process
-    property Event: TBlockingEvent read fEvent;
+    property Event: TBlockingEvent
+      read fEvent;
     /// the time out period, in ms, as defined at constructor level
-    property TimeOutMs: integer read fTimeOutMS;
+    property TimeOutMs: integer
+      read fTimeOutMS;
   end;
   {$M-}
 
@@ -547,7 +587,8 @@ type
   published
     /// an unique identifier, when owned by a TBlockingProcessPool
     // - Reset would restore this field to its 0 default value
-    property Call: TBlockingProcessPoolCall read fCall;
+    property Call: TBlockingProcessPoolCall
+      read fCall;
   end;
 
   /// class-reference type (metaclass) of a TBlockingProcess
@@ -592,14 +633,15 @@ type
 type
   /// callback implementing some parallelized process for TSynParallelProcess
   // - if 0<=IndexStart<=IndexStop, it should execute some process
-  TSynParallelProcessMethod = procedure(IndexStart, IndexStop: integer) of object;
+  TOnSynParallelProcess = procedure(IndexStart, IndexStop: integer) of object;
 
   /// thread executing process for TSynParallelProcess
   TSynParallelProcessThread = class(TSynBackgroundThreadMethodAbstract)
   protected
-    fMethod: TSynParallelProcessMethod;
+    fMethod: TOnSynParallelProcess;
     fIndexStart, fIndexStop: integer;
-    procedure Start(Method: TSynParallelProcessMethod; IndexStart, IndexStop: integer);
+    procedure Start(const Method: TOnSynParallelProcess;
+      IndexStart, IndexStop: integer);
     /// executes fMethod(fIndexStart,fIndexStop)
     procedure Process; override;
   public
@@ -617,15 +659,15 @@ type
   public
     /// initialize the thread pool
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // assigned to TRestServer.BeginCurrentThread/EndCurrentThread
     // - up to MaxThreadPoolCount=32 threads could be setup (you may allow a
     // bigger value, but interrest of this thread pool is to have its process
     // saturating each CPU core)
     // - if ThreadPoolCount is 0, no thread would be created, and process
     // would take place in the current thread
     constructor Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
-      OnBeforeExecute: TNotifyThreadEvent = nil;
-      OnAfterExecute: TNotifyThreadEvent = nil;
+      const OnBeforeExecute: TOnNotifyThread = nil;
+      const OnAfterExecute: TOnNotifyThread = nil;
       MaxThreadPoolCount: integer = 32); reintroduce; virtual;
     /// finalize the thread pool
     destructor Destroy; override;
@@ -636,15 +678,18 @@ type
     // - if OnMainThreadIdle is set, the current thread (which is expected to be
     // e.g. the main UI thread) won't process anything, but call this event
     // during waiting for the background threads
-    procedure ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+    procedure ParallelRunAndWait(const Method: TOnSynParallelProcess;
       MethodCount: integer; const OnMainThreadIdle: TNotifyEvent = nil);
   published
     /// how many threads have been activated
-    property ParallelRunCount: integer read fParallelRunCount;
+    property ParallelRunCount: integer
+      read fParallelRunCount;
     /// how many threads are currently in this instance thread pool
-    property ThreadPoolCount: integer read fThreadPoolCount;
+    property ThreadPoolCount: integer
+      read fThreadPoolCount;
     /// some text identifier, used to distinguish each owned thread
-    property ThreadName: RawUTF8 read fThreadName;
+    property ThreadName: RawUTF8
+      read fThreadName;
   end;
 
 
@@ -667,7 +712,7 @@ type
     // we defined an fOnThreadTerminate event which would be run in the terminated
     // thread context (whereas TThread.OnTerminate is called in the main thread)
     // -> see THttpServerGeneric.OnHttpThreadTerminate event property
-    fOnThreadTerminate: TNotifyThreadEvent;
+    fOnThreadTerminate: TOnNotifyThread;
     procedure DoTerminate; override;
   public
     /// initialize the server instance, in non suspended state
@@ -684,7 +729,8 @@ type
     // - returns FALSE if successfully waited up to MS milliseconds
     function SleepOrTerminated(MS: cardinal): boolean;
     /// ensure fOnThreadTerminate is called only if NotifyThreadStart has been done
-    property StartNotified: TObject read fStartNotified write fStartNotified;
+    property StartNotified: TObject
+      read fStartNotified write fStartNotified;
     /// defined as public since may be used to terminate the processing methods
     property Terminated;
   end;
@@ -721,8 +767,8 @@ type
     fSubThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
-    fOnThreadTerminate: TNotifyThreadEvent;
-    fOnThreadStart: TNotifyThreadEvent;
+    fOnThreadTerminate: TOnNotifyThread;
+    fOnThreadStart: TOnNotifyThread;
     fTerminated: boolean;
     fContentionAbortCount: cardinal;
     fContentionTime: Int64;
@@ -753,10 +799,10 @@ type
     // - aQueuePendingContext=true will store the pending context into
     // an internal queue, so that Push() always returns true
     {$ifdef USE_WINIOCP}
-    constructor Create(NumberOfThreads: Integer = 32;
+    constructor Create(NumberOfThreads: integer = 32;
       aOverlapHandle: THandle = INVALID_HANDLE_VALUE);
     {$else}
-    constructor Create(NumberOfThreads: Integer = 32;
+    constructor Create(NumberOfThreads: integer = 32;
       aQueuePendingContext: boolean = false);
     {$endif USE_WINIOCP}
     /// shut down the Thread pool, releasing all associated threads
@@ -778,12 +824,19 @@ type
     property QueuePendingContext: boolean read fQueuePendingContext;
     {$endif USE_WINIOCP}
   published
-    /// how many threads are currently running in this thread pool
-    property RunningThreads: integer read fRunningThreads;
+    /// how many threads are available in the pool
+    // - maps Create() parameter, i.e. 32 by default
+    property SubThreadCount: integer
+      read fSubThreadCount;
+    /// how many threads are currently processing tasks in this thread pool
+    // - is in the range 0..SubThreadCount
+    property RunningThreads: integer
+      read fRunningThreads;
     /// how many tasks were rejected due to thread pool contention
     // - if this number is high, consider setting a higher number of threads,
     // or profile and tune the Task method
-    property ContentionAbortCount: cardinal read fContentionAbortCount;
+    property ContentionAbortCount: cardinal
+      read fContentionAbortCount;
     /// milliseconds delay to reject a connection due to contention
     // - default is 5000, i.e. 5 seconds wait for some room to be available
     // in the IOCP or aQueuePendingContext internal list
@@ -791,20 +844,23 @@ type
     // called), so that a load balancer could detect the contention and switch
     // to another instance in the pool, or a direct client may eventually have
     // its connection rejected, so won't start sending data
-    property ContentionAbortDelay: integer read fContentionAbortDelay
-      write fContentionAbortDelay;
+    property ContentionAbortDelay: integer
+      read fContentionAbortDelay write fContentionAbortDelay;
     /// total milliseconds spent waiting for an available slot in the queue
     // - contention won't fail immediately, but will retry until ContentionAbortDelay
     // - any high number here requires code refactoring of the Task method
-    property ContentionTime: Int64 read fContentionTime;
+    property ContentionTime: Int64
+      read fContentionTime;
     /// how many times the pool waited for an available slot in the queue
     // - contention won't fail immediately, but will retry until ContentionAbortDelay
     // - any high number here may better increase the threads count
     // - use this property and ContentionTime to compute the average contention time
-    property ContentionCount: cardinal read fContentionCount;
+    property ContentionCount: cardinal
+      read fContentionCount;
     {$ifndef USE_WINIOCP}
     /// how many input tasks are currently waiting to be affected to threads
-    property PendingContextCount: integer read GetPendingContextCount;
+    property PendingContextCount: integer
+      read GetPendingContextCount;
     {$endif USE_WINIOCP}
   end;
 
@@ -812,16 +868,8 @@ type
 
 
 const
-  // up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
+  // allow up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
   THREADPOOL_MAXSUBTHREADS = 256;
-
-  // kept-alive or big HTTP requests will create a dedicated THttpServerResp
-  // - each thread reserves 2 MB of memory so it may break the server
-  // - keep the value to a decent number, to let resources be constrained up to 1GB
-  THREADPOOL_MAXWORKTHREADS = 512;
-
-  // if HTTP body length is bigger than 16 MB, creates a dedicated THttpServerResp
-  THREADPOOL_BIGBODYSIZE = 16 * 1024 * 1024;
 
 
 implementation
@@ -902,7 +950,8 @@ end;
 function TPendingTaskList.NextPendingTask: RawByteString;
 begin
   result := '';
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   fSafe.Lock;
   try
@@ -919,7 +968,8 @@ end;
 
 procedure TPendingTaskList.Clear;
 begin
-  if (self = nil) or (fCount = 0) then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   fSafe.Lock;
   try
@@ -935,7 +985,7 @@ end;
 { TSynBackgroundThreadAbstract }
 
 constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
-  OnBeforeExecute: TNotifyThreadEvent; OnAfterExecute: TNotifyThreadEvent;
+  const OnBeforeExecute: TOnNotifyThread; const OnAfterExecute: TOnNotifyThread;
   CreateSuspended: boolean);
 begin
   fProcessEvent := TEvent.Create(nil, false, false, '');
@@ -974,7 +1024,8 @@ begin
     endtix := mormot.core.os.GetTickCount64 + maxMS;
     repeat
       SleepHiRes(1); // wait for Execute to finish
-    until (fExecute <> exRun) or (mormot.core.os.GetTickCount64 >= endtix);
+    until (fExecute <> exRun) or
+          (mormot.core.os.GetTickCount64 >= endtix);
   end;
 end;
 
@@ -1013,7 +1064,9 @@ end;
 
 procedure TSynBackgroundThreadAbstract.SetExecuteLoopPause(dopause: boolean);
 begin
-  if Terminated or (dopause = fExecuteLoopPause) or (fExecute = exFinished) then
+  if Terminated or
+     (dopause = fExecuteLoopPause) or
+     (fExecute = exFinished) then
     exit;
   fExecuteLoopPause := dopause;
   fProcessEvent.SetEvent; // notify Execute main loop
@@ -1048,8 +1101,8 @@ end;
 { TSynBackgroundThreadMethodAbstract }
 
 constructor TSynBackgroundThreadMethodAbstract.Create(
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8;
-  OnBeforeExecute, OnAfterExecute: TNotifyThreadEvent);
+  const aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8;
+  const OnBeforeExecute, OnAfterExecute: TOnNotifyThread);
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fCallerEvent := TEvent.Create(nil, false, false, '');
@@ -1153,7 +1206,8 @@ procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64;
 var
   E: Exception;
 begin
-  if (self = nil) or not (fPendingProcessFlag in [flagStarted, flagFinished]) then
+  if (self = nil) or
+     not (fPendingProcessFlag in [flagStarted, flagFinished]) then
     exit; // nothing to wait for
   try
     if Assigned(onmainthreadidle) then
@@ -1196,7 +1250,8 @@ var
 begin
   result := false;
   ThreadID := GetCurrentThreadId;
-  if (self = nil) or (ThreadID = fCallerThreadID) then
+  if (self = nil) or
+     (ThreadID = fCallerThreadID) then
     // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
     exit;
   // 1. wait for any previous request to be finished (should not happen often)
@@ -1230,14 +1285,17 @@ end;
 
 function TSynBackgroundThreadMethodAbstract.GetOnIdleBackgroundThreadActive: boolean;
 begin
-  result := (self <> nil) and Assigned(fOnIdle) and (GetPendingProcess <> flagIdle);
+  result := (self <> nil) and
+            Assigned(fOnIdle) and
+            (GetPendingProcess <> flagIdle);
 end;
 
 
 { TSynBackgroundThreadEvent }
 
-constructor TSynBackgroundThreadEvent.Create(aOnProcess: TOnProcessSynBackgroundThread;
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+constructor TSynBackgroundThreadEvent.Create(
+  const aOnProcess: TOnProcessSynBackgroundThread;
+  const aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
 begin
   inherited Create(aOnIdle, aThreadName);
   fOnProcess := aOnProcess;
@@ -1273,8 +1331,9 @@ end;
 
 { TSynBackgroundThreadProcedure }
 
-constructor TSynBackgroundThreadProcedure.Create(aOnProcess: TOnProcessSynBackgroundThreadProc;
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+constructor TSynBackgroundThreadProcedure.Create(
+  aOnProcess: TOnProcessSynBackgroundThreadProc;
+  const aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
 begin
   inherited Create(aOnIdle, aThreadName);
   fOnProcess := aOnProcess;
@@ -1291,9 +1350,9 @@ end;
 { TSynBackgroundThreadProcess }
 
 constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
-  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass;
-  CreateSuspended: boolean);
+  const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread;
+  aStats: TSynMonitorClass; CreateSuspended: boolean);
 begin
   if not Assigned(aOnProcess) then
     raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)', [self]);
@@ -1322,7 +1381,8 @@ var
   wait: TWaitResult;
 begin
   wait := fProcessEvent.WaitFor(fOnProcessMS);
-  if not Terminated and (wait in [wrSignaled, wrTimeout]) then
+  if not Terminated and
+     (wait in [wrSignaled, wrTimeout]) then
     if fExecuteLoopPause then // pause -> try again later
       fProcessEvent.SetEvent
     else
@@ -1353,7 +1413,7 @@ var
   ProcessSystemUse: TSystemUse;
 
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
-  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass);
+  const aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread; aStats: TSynMonitorClass);
 begin
   fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray), fTask);
   fTaskLock.Init;
@@ -1363,7 +1423,8 @@ end;
 
 destructor TSynBackgroundTimer.Destroy;
 begin
-  if (ProcessSystemUse <> nil) and (ProcessSystemUse.Timer = self) then
+  if (ProcessSystemUse <> nil) and
+     (ProcessSystemUse.Timer = self) then
     ProcessSystemUse.Timer := nil; // allows processing by another background timer
   inherited Destroy;
   fTaskLock.Done;
@@ -1380,7 +1441,8 @@ var
   t: ^TSynBackgroundTimerTask;
   todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
 begin
-  if (fTask = nil) or Terminated then
+  if (fTask = nil) or
+     Terminated then
     exit;
   tix := mormot.core.os.GetTickCount64;
   n := 0;
@@ -1425,18 +1487,21 @@ function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
 begin // caller should have made fTaskLock.Lock;
   for result := length(fTask) - 1 downto 0 do
     with TMethod(fTask[result].OnProcess) do
-      if (Code = aProcess.Code) and (Data = aProcess.Data) then
+      if (Code = aProcess.Code) and
+         (Data = aProcess.Data) then
         exit;
   result := -1;
 end;
 
-procedure TSynBackgroundTimer.Enable(aOnProcess: TOnSynBackgroundTimerProcess;
-  aOnProcessSecs: cardinal);
+procedure TSynBackgroundTimer.Enable(
+  const aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
 var
   task: TSynBackgroundTimerTask;
   found: integer;
 begin
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   if aOnProcessSecs = 0 then
   begin
@@ -1472,22 +1537,26 @@ begin
   timeout := mormot.core.os.GetTickCount64 + timeoutsecs * 1000;
   repeat
     SleepHiRes(1);
-  until not Processing or (mormot.core.os.GetTickcount64 > timeout);
+  until not Processing or
+        (mormot.core.os.GetTickcount64 > timeout);
 end;
 
-function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+function TSynBackgroundTimer.ExecuteNow(
+  const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
   result := Add(aOnProcess, #0, true);
 end;
 
-function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+function TSynBackgroundTimer.EnQueue(
+  const aOnProcess: TOnSynBackgroundTimerProcess;
   const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
 begin
   result := Add(aOnProcess, aMsg, aExecuteNow);
 end;
 
-function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
-  const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean): boolean;
+function TSynBackgroundTimer.EnQueue(
+  const aOnProcess: TOnSynBackgroundTimerProcess; const aMsgFmt: RawUTF8;
+  const Args: array of const; aExecuteNow: boolean): boolean;
 var
   msg: RawUTF8;
 begin
@@ -1495,13 +1564,16 @@ begin
   result := Add(aOnProcess, msg, aExecuteNow);
 end;
 
-function TSynBackgroundTimer.Add(aOnProcess: TOnSynBackgroundTimerProcess;
-  const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
+function TSynBackgroundTimer.Add(
+  const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8;
+  aExecuteNow: boolean): boolean;
 var
   found: integer;
 begin
   result := false;
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   fTaskLock.Lock;
   try
@@ -1524,13 +1596,15 @@ begin
   end;
 end;
 
-function TSynBackgroundTimer.DeQueue(aOnProcess: TOnSynBackgroundTimerProcess;
-  const aMsg: RawUTF8): boolean;
+function TSynBackgroundTimer.DeQueue(
+  const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8): boolean;
 var
   found: integer;
 begin
   result := false;
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   fTaskLock.Lock;
   try
@@ -1543,12 +1617,15 @@ begin
   end;
 end;
 
-function TSynBackgroundTimer.Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+function TSynBackgroundTimer.Disable(
+  const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 var
   found: integer;
 begin
   result := false;
-  if (self = nil) or Terminated or not Assigned(aOnProcess) then
+  if (self = nil) or
+     Terminated or
+     not Assigned(aOnProcess) then
     exit;
   fTaskLock.Lock;
   try
@@ -1751,7 +1828,8 @@ var
   p: ^TBlockingProcessPoolItem;
 begin
   result := nil;
-  if (fCallCounter = CALL_DESTROYING) or (call <= 0) then
+  if (fCallCounter = CALL_DESTROYING) or
+     (call <= 0) then
     exit;
   fPool.Safe.Lock;
   try
@@ -1784,8 +1862,8 @@ begin
   fMethod := nil;
 end;
 
-procedure TSynParallelProcessThread.Start(Method: TSynParallelProcessMethod;
-  IndexStart, IndexStop: integer);
+procedure TSynParallelProcessThread.Start(
+  const Method: TOnSynParallelProcess; IndexStart, IndexStop: integer);
 begin
   fMethod := Method;
   fIndexStart := IndexStart;
@@ -1797,7 +1875,7 @@ end;
 { TSynParallelProcess }
 
 constructor TSynParallelProcess.Create(ThreadPoolCount: integer;
-  const ThreadName: RawUTF8; OnBeforeExecute, OnAfterExecute: TNotifyThreadEvent;
+  const ThreadName: RawUTF8; const OnBeforeExecute, OnAfterExecute: TOnNotifyThread;
   MaxThreadPoolCount: integer);
 var
   i: PtrInt;
@@ -1823,16 +1901,19 @@ begin
   inherited;
 end;
 
-procedure TSynParallelProcess.ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+procedure TSynParallelProcess.ParallelRunAndWait(const Method: TOnSynParallelProcess;
   MethodCount: integer; const OnMainThreadIdle: TNotifyEvent);
 var
   use, t, n, perthread: integer;
   error: RawUTF8;
 begin
-  if (MethodCount <= 0) or not Assigned(Method) then
+  if (MethodCount <= 0) or
+     not Assigned(Method) then
     exit;
   if not Assigned(OnMainThreadIdle) then
-    if (self = nil) or (MethodCount = 1) or (fThreadPoolCount = 0) then
+    if (self = nil) or
+       (MethodCount = 1) or
+       (fThreadPoolCount = 0) then
     begin
       Method(0, MethodCount - 1); // no need (or impossible) to use background thread
       exit;
@@ -1939,7 +2020,8 @@ end;
 
 procedure TSynThread.DoTerminate;
 begin
-  if Assigned(fStartNotified) and Assigned(fOnThreadTerminate) then
+  if Assigned(fStartNotified) and
+     Assigned(fOnThreadTerminate) then
   begin
     fOnThreadTerminate(self);
     fStartNotified := nil;
@@ -1958,12 +2040,12 @@ end;
 { TSynThreadPool }
 
 {$ifdef USE_WINIOCP}
-constructor TSynThreadPool.Create(NumberOfThreads: Integer; aOverlapHandle: THandle);
+constructor TSynThreadPool.Create(NumberOfThreads: integer; aOverlapHandle: THandle);
 {$else}
-constructor TSynThreadPool.Create(NumberOfThreads: Integer; aQueuePendingContext: boolean);
+constructor TSynThreadPool.Create(NumberOfThreads: integer; aQueuePendingContext: boolean);
 {$endif USE_WINIOCP}
 var
-  i: integer;
+  i: PtrInt;
 begin
   if NumberOfThreads = 0 then
     NumberOfThreads := 1
@@ -1990,7 +2072,7 @@ end;
 
 destructor TSynThreadPool.Destroy;
 var
-  i: integer;
+  i: PtrInt;
   endtix: Int64;
 begin
   fTerminated := true; // fSubThread[].Execute will check this flag
@@ -2007,7 +2089,8 @@ begin
     {$endif USE_WINIOCP}
     // wait for threads to finish, with 30 seconds TimeOut
     endtix := GetTickCount64 + 30000;
-    while (fRunningThreads > 0) and (GetTickCount64 < endtix) do
+    while (fRunningThreads > 0) and
+          (GetTickCount64 < endtix) do
       SleepHiRes(5);
     for i := 0 to fSubThreadCount - 1 do
       fSubThread[i].Free;
@@ -2076,13 +2159,15 @@ var
   tix, starttix, endtix: Int64;
 begin
   result := false;
-  if (self = nil) or fTerminated then
+  if (self = nil) or
+     fTerminated then
     exit;
   result := Enqueue;
   if result then
     exit;
   inc(fContentionCount);
-  if (fContentionAbortDelay > 0) and aWaitOnContention then
+  if (fContentionAbortDelay > 0) and
+     aWaitOnContention then
   begin
     tix := GetTickCount64;
     starttix := tix;
@@ -2100,7 +2185,8 @@ begin
         result := true; // thread pool acquired or queued the client sock
         break;
       end;
-    until fTerminated or (tix > endtix);
+    until fTerminated or
+          (tix > endtix);
     inc(fContentionTime, tix - starttix);
   end;
   if not result then
@@ -2112,7 +2198,9 @@ end;
 function TSynThreadPool.GetPendingContextCount: integer;
 begin
   result := 0;
-  if (self = nil) or fTerminated or (fPendingContext = nil) then
+  if (self = nil) or
+     fTerminated or
+     (fPendingContext = nil) then
     exit;
   EnterCriticalsection(fSafe);
   try
@@ -2131,7 +2219,9 @@ end;
 function TSynThreadPool.PopPendingContext: pointer;
 begin
   result := nil;
-  if (self = nil) or fTerminated or (fPendingContext = nil) then
+  if (self = nil) or
+     fTerminated or
+     (fPendingContext = nil) then
     exit;
   EnterCriticalsection(fSafe);
   try
@@ -2254,7 +2344,8 @@ begin
   end;
 {$endif LINUX}
 {$endif FPC}
-  if Assigned(fOwner.fOnThreadStart) and not Assigned(Sender.fStartNotified) then
+  if Assigned(fOwner.fOnThreadStart) and
+     not Assigned(Sender.fStartNotified) then
   begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;

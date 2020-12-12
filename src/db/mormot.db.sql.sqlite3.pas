@@ -62,7 +62,7 @@ type
       overload; override;
     /// initialize access to an existing SQLite3 engine
     // - this overloaded constructor allows to access via SynDB methods to an
-    // existing SQLite3 database, e.g. TSQLRestServerDB.DB (from mORMotSQLite3.pas)
+    // existing SQLite3 database, e.g. TRestServerDB.DB (from mORMotSQLite3.pas)
     constructor Create(aDB: TSQLDatabase); reintroduce; overload;
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
@@ -71,7 +71,8 @@ type
     function NewConnection: TSQLDBConnection; override;
     /// direct access to the main SQlite3 DB instance
     // - can be used to tune directly the database properties
-    property MainSQLite3DB: TSQLDataBase read GetMainDB;
+    property MainSQLite3DB: TSQLDataBase
+      read GetMainDB;
   published
     /// TRUE if you want the SQL creation fields to use mORMot collation
     // - default value is TRUE for use within the mORMot framework, to use
@@ -115,14 +116,16 @@ type
     procedure Rollback; override;
     /// the associated SQLite3 DB instance
     // - assigned to not nil after successfull connection
-    property DB: TSQLDataBase read fDB;
+    property DB: TSQLDataBase
+      read fDB;
     /// query or change the SQlite3 file-based syncrhonization mode, i.e. the
     // way it waits for the data to be flushed on hard drive
     // - default smFull is very slow, but achieve 100% ACID behavior
     // - smNormal is faster, and safe until a catastrophic hardware failure occurs
     // - smOff is the fastest, data should be safe if the application crashes,
     // but database file may be corrupted in case of failure at the wrong time
-    property Synchronous: TSQLSynchronousMode read GetSynchronous write SetSynchronous;
+    property Synchronous: TSQLSynchronousMode
+      read GetSynchronous write SetSynchronous;
     /// query or change the SQlite3 file-based locking mode, i.e. the
     // way it locks the file
     // - default lmNormal is ACID and safe
@@ -130,7 +133,8 @@ type
     // transactions, so can be used to release a mORMot server power: but you
     // won't be able to access the database file from outside the process (like
     // a "normal" database engine)
-    property LockingMode: TSQLLockingMode read GetLockingMode write SetLockingMode;
+    property LockingMode: TSQLLockingMode
+      read GetLockingMode write SetLockingMode;
   end;
 
   /// implements a statement using the SQLite3 engine
@@ -155,47 +159,47 @@ type
 
     /// bind a NULL value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType = paramIn;
+    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
       BoundType: TSQLDBFieldType = ftNull); override;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: Int64;
+    procedure Bind(Param: integer; Value: Int64;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: Integer; Value: double;
+    procedure Bind(Param: integer; Value: double;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindDateTime(Param: Integer; Value: TDateTime;
+    procedure BindDateTime(Param: integer; Value: TDateTime;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindCurrency(Param: Integer; Value: currency;
+    procedure BindCurrency(Param: integer; Value: currency;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextU(Param: Integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextP(Param: Integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextS(Param: Integer; const Value: string;
+    procedure BindTextS(Param: integer; const Value: string;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextW(Param: Integer; const Value: WideString;
+    procedure BindTextW(Param: integer; const Value: WideString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a  parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
+    procedure BindBlob(Param: integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindBlob(Param: Integer; const Data: RawByteString;
+    procedure BindBlob(Param: integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType = paramIn); overload; override;
 
     /// Prepare an UTF-8 encoded SQL statement
@@ -284,7 +288,9 @@ var
   Conn: TSQLDBSQLite3Connection;
 begin
   result := 0;
-  if (Dest = '') or (Rows = nil) or (Rows.ColumnCount = 0) then
+  if (Dest = '') or
+     (Rows = nil) or
+     (Rows.ColumnCount = 0) then
     exit;
   // we do not call DeleteFile(Dest) since DB may be completed on purpose
   DB := TSQLDBSQLite3ConnectionProperties.Create(StringToUTF8(Dest), '', '', '');
@@ -453,7 +459,7 @@ end;
 
 { TSQLDBSQLite3Statement }
 
-procedure TSQLDBSQLite3Statement.Bind(Param: Integer; Value: double;
+procedure TSQLDBSQLite3Statement.Bind(Param: integer; Value: double;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -462,7 +468,7 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.Bind(Param: Integer; Value: Int64;
+procedure TSQLDBSQLite3Statement.Bind(Param: integer; Value: Int64;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -471,7 +477,7 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.BindBlob(Param: Integer; Data: pointer;
+procedure TSQLDBSQLite3Statement.BindBlob(Param: integer; Data: pointer;
   Size: integer; IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -480,7 +486,7 @@ begin
   fStatement.Bind(Param, Data, Size);
 end;
 
-procedure TSQLDBSQLite3Statement.BindBlob(Param: Integer; const Data:
+procedure TSQLDBSQLite3Statement.BindBlob(Param: integer; const Data:
   RawByteString; IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -489,7 +495,7 @@ begin
   fStatement.BindBlob(Param, Data);
 end;
 
-procedure TSQLDBSQLite3Statement.BindCurrency(Param: Integer; Value: currency;
+procedure TSQLDBSQLite3Statement.BindCurrency(Param: integer; Value: currency;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -498,22 +504,19 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.BindDateTime(Param: Integer; Value: TDateTime;
+procedure TSQLDBSQLite3Statement.BindDateTime(Param: integer; Value: TDateTime;
   IO: TSQLDBParamInOutType);
 begin // see http://www.sqlite.org/lang_datefunc.html
   BindTextU(Param, DateTimeToIso8601Text(Value, 'T'));
 end;
 
-procedure TSQLDBSQLite3Statement.BindNull(Param: Integer;
+procedure TSQLDBSQLite3Statement.BindNull(Param: integer;
   IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
   fStatement.BindNull(Param);
 end;
 
-const
-  NULCHAR: AnsiChar = #0;
-
-procedure TSQLDBSQLite3Statement.BindTextP(Param: Integer; Value: PUTF8Char;
+procedure TSQLDBSQLite3Statement.BindTextP(Param: integer; Value: PUTF8Char;
   IO: TSQLDBParamInOutType);
 var
   V: RawUTF8;
@@ -522,13 +525,13 @@ begin
   BindTextU(Param, V);
 end;
 
-procedure TSQLDBSQLite3Statement.BindTextS(Param: Integer; const Value: string;
+procedure TSQLDBSQLite3Statement.BindTextS(Param: integer; const Value: string;
   IO: TSQLDBParamInOutType);
 begin
   BindTextU(Param, StringToUTF8(Value));
 end;
 
-procedure TSQLDBSQLite3Statement.BindTextU(Param: Integer; const Value: RawUTF8;
+procedure TSQLDBSQLite3Statement.BindTextU(Param: integer; const Value: RawUTF8;
   IO: TSQLDBParamInOutType);
 begin
   if fShouldLogSQL and
@@ -537,7 +540,7 @@ begin
   fStatement.Bind(Param, Value);
 end;
 
-procedure TSQLDBSQLite3Statement.BindTextW(Param: Integer;
+procedure TSQLDBSQLite3Statement.BindTextW(Param: integer;
   const Value: WideString; IO: TSQLDBParamInOutType);
 begin
   BindTextU(Param, WideStringToUTF8(Value));
@@ -631,7 +634,8 @@ begin
   if not aConnection.InheritsFrom(TSQLDBSQLite3Connection) then
     raise ESQLDBException.CreateUTF8('%.Create(%)', [self, aConnection]);
   inherited Create(aConnection);
-  if (SynDBLog <> nil) and (sllSQL in SynDBLog.Family.Level) then
+  if (SynDBLog <> nil) and
+     (sllSQL in SynDBLog.Family.Level) then
     fShouldLogSQL := true;
 end;
 
@@ -677,7 +681,8 @@ var
   v: PVarData;
 begin
   dec(Param);
-  if fShouldLogSQL and (cardinal(Param) < cardinal(length(fLogSQLValues))) then
+  if fShouldLogSQL and
+     (cardinal(Param) < cardinal(length(fLogSQLValues))) then
   begin
     v := @fLogSQLValues[Param];
     if v^.vtype = varString then

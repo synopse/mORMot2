@@ -14,7 +14,8 @@ unit mormot.db.sql.zeos;
 
 interface
 
-{$ifdef NOSYNDBZEOS} // defined in mormot_base.lpk Lazarus package > Custom Options > Defines
+{$ifdef NOSYNDBZEOS}
+// NOSYNDBZEOS from mormot_base.lpk Lazarus package > Custom Options > Defines
 
 implementation // compile a void unit if NOSYNDBZEOS conditional is set
 
@@ -27,6 +28,7 @@ implementation // compile a void unit if NOSYNDBZEOS conditional is set
 {$I ..\mormot.defines.inc}
 
 uses
+  types,
   sysutils,
   classes,
   variants,
@@ -84,6 +86,7 @@ uses
   mormot.core.datetime,
   mormot.core.data,
   mormot.core.perf,
+  mormot.core.rtti,
   mormot.core.log,
   mormot.db.core,
   mormot.db.sql;
@@ -126,13 +129,16 @@ type
     // maintain one single connection, by setting after Create:
     // ! aExternalDBProperties.ThreadingMode := tmMainConnection;
     // or by adding 'syndb_singleconnection=true' as URI property
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName,
+      aUserID, aPassWord: RawUTF8); override;
     /// initialize raw properties to connect to the ZEOS engine
     // - using Zeos' TZURL detailed class - see: src\core\ZURL.pas
     // - this gives all possibilities to add Properties before a connection is opened
-    // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define TSQLDBDefinition
-    // to describe the server syntax SynDB and the ORM use behind the abstract driver
-    constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSQLDBDefinition; aOwnsURL: Boolean); virtual;
+    // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define
+    // TSQLDBDefinition to describe the server syntax mormot.db.sql and the ORM
+    // use behind the abstract driver
+    constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSQLDBDefinition;
+      aOwnsURL: boolean); virtual;
     /// finalize properties internal structures
     destructor Destroy; override;
     /// create a new connection
@@ -142,7 +148,8 @@ type
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use ZDBC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8;
+      out Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use ZDBC metadata to retrieve the information
     // - PostgreSQL note: it was reported that some table names expects to be
@@ -182,16 +189,20 @@ type
       aLibraryLocationAppendExePath: boolean = true): RawUTF8; overload;
   published
     /// the remote DBMS name, as retrieved from ServerName, i.e. ZEOS URL
-    property DBMSName: RawUTF8 read fDBMSName;
+    property DBMSName: RawUTF8
+      read fDBMSName;
     /// direct access to the internal TZURL connection parameters
-    property ZeosURL: TZURL read fURL;
+    property ZeosURL: TZURL
+      read fURL;
     /// direct access to the internal statement parameters
     // - i.e. will be used by IZConnection.PrepareStatementWithParams()
     // - default values (set in Create method) try to achieve best permormance
-    property ZeosStatementParams: TStrings read fStatementParams;
+    property ZeosStatementParams: TStrings
+      read fStatementParams;
     /// if the associated ZDBC provider supports parameters array binding
     // - you should use the BindArray() methods only if this property is TRUE
-    property SupportsArrayBindings: boolean read fSupportsArrayBindings;
+    property SupportsArrayBindings: boolean
+      read fSupportsArrayBindings;
   end;
 
 
@@ -221,7 +232,8 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// access to the associated ZEOS connection instance
-    property Database: IZConnection read fDatabase;
+    property Database: IZConnection
+      read fDatabase;
   end;
 
   /// implements a statement via a ZEOS database connection
@@ -257,7 +269,7 @@ type
     // - this overriden implementation will call fReultSet methods to avoid
     // creating most temporary variable
     procedure ColumnsToJSON(WR: TJSONWriter); override;
-    {$endif}
+    {$endif ZEOS72UP}
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
     /// Reset the previous prepared statement
@@ -275,19 +287,19 @@ type
     /// free IZResultSet/IZResultSetMetaData when ISQLDBStatement is back in cache
     procedure ReleaseRows; override;
     /// return a Column integer value of the current Row, first Col is 0
-    function ColumnInt(Col: Integer): Int64; override;
+    function ColumnInt(Col: integer): Int64; override;
     /// returns TRUE if the column contains NULL
-    function ColumnNull(Col: Integer): boolean; override;
+    function ColumnNull(Col: integer): boolean; override;
     /// return a Column floating point value of the current Row, first Col is 0
-    function ColumnDouble(Col: Integer): double; override;
+    function ColumnDouble(Col: integer): double; override;
     /// return a Column date and time value of the current Row, first Col is 0
-    function ColumnDateTime(Col: Integer): TDateTime; override;
+    function ColumnDateTime(Col: integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
-    function ColumnCurrency(Col: Integer): currency; override;
+    function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
-    function ColumnUTF8(Col: Integer): RawUTF8; override;
+    function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
-    function ColumnBlob(Col: Integer): RawByteString; override;
+    function ColumnBlob(Col: integer): RawByteString; override;
   {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
   public
     /// the ColumnsToJSON options provided by ZDBC
@@ -303,14 +315,15 @@ type
     // This option might be usefull if you export sql rows using a
     // json streamed file which will be used as an import-file with your mongodb
     // If set the options jcoDATETIME_MAGIC and jcoMilliseconds are ignored
-    // - jcoDATETIME_MAGIC add the JSON_SQLDATE_MAGIC on top of data
+    // - jcoDATETIME_MAGIC add the JSON_BASE64_MAGIC_C on top of data
     // before adding the ISO date,time,datetime value quoted strings
     // - jcoMilliseconds compose the time/datetime values with milliseconds
     // - jcsSkipNulls ignore null columns. So neither fieldname nor the null
     // value will be composed into your JSON. For real big JSON contents
     // it saves loads of space. e.g. if you import a JSON into a mongo cluster
     // you'll have a significant space difference if null's are simply ignored.
-    property JSONComposeOptions: TZJSONComposeOptions read fJSONComposeOptions write fJSONComposeOptions 
+    property JSONComposeOptions: TZJSONComposeOptions
+      read fJSONComposeOptions write fJSONComposeOptions
       default [jcoEndJSONObject];
   {$ifend}
   end;
@@ -338,6 +351,7 @@ const
   TableColColumnDecimalDigitsIndex = 9;
   IndexInfoColColumnNameIndex = 9;
 
+
 { ************  TSQLDBZeosConnection* and TSQLDBZeosStatement Classes }
 
 { TSQLDBZEOSConnectionProperties }
@@ -352,7 +366,7 @@ const
     dSQLite, dPostgreSQL, dJet {e.g. ADO[JET]} );
     // expecting Sybase + ASA support in TSQLDBDefinition
 var
-  BrakedPos: Integer;
+  BrakedPos: integer;
 begin
   // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   // make syntax like "ADO[ORACLE]"/"ADO[MSSQL]:"/"ADO[JET]" etc... possible
@@ -367,7 +381,8 @@ begin
   end
   else
     fServerName := aServerName;
-  if (fServerName <> '') and (PosExChar(':', fServerName) = 0) then
+  if (fServerName <> '') and
+     (PosExChar(':', fServerName) = 0) then
     fServerName := fServerName + ':';
   if not IdemPChar(Pointer(aServerName), 'ZDBC:') then
     fServerName := 'zdbc:' + fServerName;
@@ -394,7 +409,7 @@ begin
 end;
 
 constructor TSQLDBZEOSConnectionProperties.CreateWithZURL(const aURL: TZURL;
-  aDBMS: TSQLDBDefinition; aOwnsURL: Boolean);
+  aDBMS: TSQLDBDefinition; aOwnsURL: boolean);
 {$ifdef ZEOS73UP}
 var
   protocol: RawUTF8;
@@ -451,26 +466,31 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     //EH: switch off tds support in any kind -> deprecated and our 64bit lib isn't compiled with libiconv support
     //users permanently run into the encoding issues which can't be resolved using the dblib tds-types:
     //tdsNVarchar/tdsNText is defined but will never be used by DBLIB + SQLServer)
-    if {$IFDEF MSWINDOWS}(protocol <> 'ado') and (protocol <> 'oledb') and {$endif}
-       (protocol <> 'odbc_w') and (protocol <> 'odbc_a') then
-      {$IFDEF MSWINDOWS}
+    if {$ifdef MSWINDOWS}
+       (protocol <> 'ado') and
+       (protocol <> 'oledb') and
+       {$endif MSWINDOWS}
+       (protocol <> 'odbc_w') and
+       (protocol <> 'odbc_a') then
+      {$ifdef MSWINDOWS}
       FURL.Protocol := 'OleDB';
       {$else}
       FURL.Protocol := 'odbc_w'
-      {$endif}
+      {$endif MSWINDOWS}
   end;
-  {$endif}
+  {$endif ZEOS73UP}
   inherited Create(StringToUTF8(FURL.HostName), StringToUTF8(FURL.Database),
     StringToUTF8(FURL.UserName), StringToUTF8(FURL.Password));
   if StrToBoolDef(fURL.Properties.Values['syndb_singleconnection'], false) then
     ThreadingMode := tmMainConnection;
-  fUseCache := {$ifdef ZEOS72UP}true{$else}false{$endif}; // caching disabled by default - enabled if stable enough
+  // caching disabled by default - enabled if stable enough
+  fUseCache := {$ifdef ZEOS72UP}true{$else}false{$endif ZEOS72UP};
   case fDBMS of
     dSQLite:
       begin
         {$ifndef ZEOS72UP}
         fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for ZDBC!
-        {$endif}
+        {$endif ZEOS72UP}
       end;
     dFirebird:
       begin
@@ -505,14 +525,14 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
         //fStatementParams.Add('row_prefetch_size=131072');
         //max mem in bytes which Zeos can for batch or resultset buffers
         //fStatementParams.Add('internal_buffer_size=131072');
-        {$endif}
+        {$endif ZEOS72UP}
       end;
     dSQLite:
       begin
         {$ifdef ZEOS72UP} // new since 7.2up
         // Bind double values instead of ISO formated DateTime-strings
         //fStatementParams.Add('BindDoubleDateTimeValues=True');
-        {$endif}
+        {$endif ZEOS72UP}
       end;
     dMySQL:
       begin
@@ -531,9 +551,9 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
       begin
         // see https://synopse.info/forum/viewtopic.php?pid=13260#p13260
         fURL.Properties.Add('NoTableInfoCache=true');
-        {$IFDEF ZEOS73UP}
+        {$ifdef ZEOS73UP}
         //fURL.Properties.Add(DSProps_BinaryWireResultMode+'=False');
-        {$endif}
+        {$endif ZEOS73UP}
       end;
     dMSSQL:
       begin
@@ -541,8 +561,9 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
         fStatementParams.Add('enhanced_column_info=false');
         //fStatementParams.Add('use_ole_update_params=True'); //see 'ADO'
         //fStatementParams.Add('internal_buffer_size=131072'); //see 'ADO'
-        // EH: hooking a syndb bug. Void strings are not accepted by SQLServer if:
-        // fixed-width columns are used and option ANSI_PADDING is set to !off!.
+        // EH: hooking a mormot.db.sql limitation. Void strings are not
+        // accepted by SQLServer if: fixed-width columns are used and
+        // option ANSI_PADDING is set to !off!.
         StoreVoidStringAsNull := False;
       end;
   end;
@@ -560,7 +581,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     // Always load the lobs? Or just on accessing them?
     // if you allways copy the data by fetching the row than it doesn't make sense.
     fStatementParams.Add('cachedlob=false'); //default = False
-    {$endif}
+    {$endif ZEOS72UP}
   end;
 end;
 
@@ -615,7 +636,7 @@ begin
     OnBatchInsert := nil;
     fSupportsArrayBindings := True;
   end;
-  {$endif}
+  {$endif ZEOS72UP}
 end;
 
 procedure TSQLDBZEOSConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
@@ -631,11 +652,14 @@ begin
     TableTypes[0] := 'TABLE';
     res := meta.GetTables('', '', '', TableTypes);
     n := 0;
-    while res.Next do      {$IFDEF ZEOS72UP}
-      AddSortedRawUTF8(Tables, n, res.GetUTF8String(TableNameIndex));
+    while res.Next do
+      {$ifdef ZEOS72UP}
+      AddSortedRawUTF8(Tables, n,
+        res.GetUTF8String(TableNameIndex));
       {$else}
-    AddSortedRawUTF8(Tables, n, SynUnicodeToUtf8(res.GetUnicodeString(TableNameIndex)));
-      {$endif}
+      AddSortedRawUTF8(Tables, n,
+        SynUnicodeToUtf8(res.GetUnicodeString(TableNameIndex)));
+      {$endif ZEOS72UP}
     SetLength(Tables, n);
   end
   else
@@ -666,14 +690,17 @@ begin
     FillCharFast(F, sizeof(F), 0);
     while res.Next do
     begin
-      {$IFDEF ZEOS72UP}
+      {$ifdef ZEOS72UP}
       F.ColumnName := res.GetUTF8String(ColumnNameIndex);
       F.ColumnTypeNative := res.GetUTF8String(TableColColumnTypeNameIndex);
       {$else}
-      F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(ColumnNameIndex));
-      F.ColumnTypeNative := SynUnicodeToUtf8(res.GetUnicodeString(TableColColumnTypeNameIndex));
-      {$endif}
-      F.ColumnType := TZSQLTypeToTSQLDBFieldType(TZSQLType(res.GetInt(TableColColumnTypeIndex)));
+      F.ColumnName := SynUnicodeToUtf8(
+        res.GetUnicodeString(ColumnNameIndex));
+      F.ColumnTypeNative := SynUnicodeToUtf8(
+        res.GetUnicodeString(TableColColumnTypeNameIndex));
+      {$endif ZEOS72UP}
+      F.ColumnType := TZSQLTypeToTSQLDBFieldType(
+        TZSQLType(res.GetInt(TableColColumnTypeIndex)));
       F.ColumnLength := res.GetInt(TableColColumnSizeIndex);  // for char or date types this is the maximum number of characters
       F.ColumnPrecision := res.GetInt(TableColColumnSizeIndex);  // for numeric or decimal types this is precision
       F.ColumnScale := res.GetInt(TableColColumnDecimalDigitsIndex);  // the number of fractional digits
@@ -684,11 +711,12 @@ begin
       res := meta.GetIndexInfo('', sSchema, sTableName, false, true);
       while res.Next do
       begin
-        {$IFDEF ZEOS72UP}
+        {$ifdef ZEOS72UP}
         F.ColumnName := res.GetUTF8String(IndexInfoColColumnNameIndex);
         {$else}
-        F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(IndexInfoColColumnNameIndex));
-        {$endif}
+        F.ColumnName := SynUnicodeToUtf8(
+          res.GetUnicodeString(IndexInfoColColumnNameIndex));
+        {$endif ZEOS72UP}
         i := FA.Find(F);
         if i >= 0 then
           Fields[i].ColumnIndexed := true;
@@ -702,17 +730,18 @@ function TSQLDBZEOSConnectionProperties.TZSQLTypeToTSQLDBFieldType(aNativeType:
   TZSQLType): TSQLDBFieldType;
 begin
   case aNativeType of
-    stBoolean, stByte, stShort, stInteger, stLong    {$ifdef ZEOS72UP}, stSmall,
-      stWord, stLongWord, stULong{$endif}:
+    stBoolean, stByte, stShort, stInteger, stLong
+    {$ifdef ZEOS72UP}, stSmall, stWord, stLongWord, stULong {$endif ZEOS72UP}:
       result := ftInt64;
     stFloat, stDouble:
       result := ftDouble;
-    stBigDecimal{$ifdef ZEOS72UP}, stCurrency{$endif}:
+    stBigDecimal
+    {$ifdef ZEOS72UP}, stCurrency {$endif ZEOS72UP}:
       result := ftCurrency;
     stDate, stTime, stTimestamp:
       result := ftDate;
-    stString, stUnicodeString, {$ifdef ZEOS72UP}stGUID, {$endif} stAsciiStream,
-      stUnicodeStream:
+    {$ifdef ZEOS72UP}stGUID, {$endif ZEOS72UP}
+    stString, stUnicodeString, stAsciiStream, stUnicodeStream:
       result := ftUTF8;
     stBytes, stBinaryStream:
       result := ftBlob;
@@ -726,7 +755,7 @@ class function TSQLDBZEOSConnectionProperties.URI(aServer: TSQLDBDefinition;
   const aServerName: RawUTF8; const aLibraryLocation: TFileName;
   aLibraryLocationAppendExePath: boolean): RawUTF8;
 const
-  /// ZDBC provider names corresponding to SynDB recognized SQL engines
+  /// ZDBC provider names corresponding to mormot.db.sql recognized SQL engines
   ZEOS_PROVIDER: array[TSQLDBDefinition] of RawUTF8 = ('', '', 'oracle:',
     'mssql:', '', 'mysql:', 'sqlite:', 'firebird:', '', 'postgresql:', '', '');
 begin
@@ -738,14 +767,15 @@ class function TSQLDBZEOSConnectionProperties.URI(const aProtocol, aServerName:
   RawUTF8; const aLibraryLocation: TFileName; aLibraryLocationAppendExePath:
   boolean): RawUTF8;
 begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
-  result := trim(aProtocol);
+  result := TrimU(aProtocol);
   if result = '' then
     exit;
   if aServerName <> '' then
     result := result + '//' + aServerName;
   if aLibraryLocation <> '' then
   begin
-    if (aServerName <> '') and (aServerName[1] = '?') then
+    if (aServerName <> '') and
+       (aServerName[1] = '?') then
       result := result + ';LibLocation='
     else
       result := result + '?LibLocation=';
@@ -804,14 +834,16 @@ begin
   try
     inherited Disconnect; // flush any cached statement
   finally
-    if (fDatabase <> nil) and not fDatabase.IsClosed then
+    if (fDatabase <> nil) and
+       not fDatabase.IsClosed then
       fDatabase.Close;
   end;
 end;
 
 function TSQLDBZEOSConnection.IsConnected: boolean;
 begin
-  result := Assigned(fDatabase) and not fDatabase.IsClosed;
+  result := Assigned(fDatabase) and
+            not fDatabase.IsClosed;
 end;
 
 function TSQLDBZEOSConnection.NewStatement: TSQLDBStatement;
@@ -827,11 +859,11 @@ var
 begin
   log := SynDBLog.Enter(self, 'StartTransaction');
   inherited StartTransaction;
-  {$IFDEF ZEOS73UP}
+  {$ifdef ZEOS73UP}
   fDatabase.StartTransaction; //returns the txn level
-  {$ELSE}
+  {$else}
   fDatabase.SetAutoCommit(false);
-  {$endif}
+  {$endif ZEOS73UP}
 end;
 procedure TSQLDBZEOSConnection.Commit;
 begin
@@ -842,9 +874,9 @@ begin
     inc(fTransactionCount); // the transaction is still active
     raise;
   end;
-  {$IFNDEF ZEOS73UP} //no longer required zdbc falls back to AC automatically
+  {$ifndef ZEOS73UP} //no longer required zdbc falls back to AC automatically
   fDatabase.SetAutoCommit(true);
-  {$endif}
+  {$endif ZEOS73UP}
 end;
 
 procedure TSQLDBZEOSConnection.Rollback;
@@ -853,7 +885,7 @@ begin
   fDatabase.Rollback;
   {$ifndef ZEOS73UP} //no longer required zdbc falls back to AC automatically
   fDatabase.SetAutoCommit(true);
-  {$endif}
+  {$endif ZEOS73UP}
 end;
 
 
@@ -862,7 +894,8 @@ end;
 procedure TSQLDBZEOSStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
-  if (fStatement <> nil) or (fResultSet <> nil) then
+  if (fStatement <> nil) or
+     (fResultSet <> nil) then
     raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once', [self]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
   fStatement := (fConnection as TSQLDBZEOSConnection).fDatabase.
@@ -887,7 +920,7 @@ type
     fDateDynArray: array of TDateTimeDynArray;
     fUTF8DynArray: array of TRawUTF8DynArray;
     fBlobDynArray: array of TInterfaceDynArray;
-    fDynArraySize: array[ftInt64..ftBlob] of Integer;
+    fDynArraySize: array[ftInt64..ftBlob] of integer;
   public
     constructor Create(aStatement: TSQLDBZEOSStatement);
   end;
@@ -1036,12 +1069,14 @@ begin
   try
     if arrayBinding=nil then
   {$else}
-  if (fParamsArrayCount>0) and not fExpectResults then
+  if (fParamsArrayCount>0) and
+     not fExpectResults then
     raise ESQLDBZEOS.CreateUTF8('%.BindArray() not supported', [self])
   else
   {$endif ZEOS72UP}
     for i := fParamCount-1 downto 0 do // EG: downto minimize memallocs
-    with fParams[i] do begin
+    with fParams[i] do
+    begin
       if (Length(VArray) > 0) and
          (fConnection.Properties.DBMS = dPostgreSQL) then
       begin
@@ -1080,7 +1115,7 @@ begin
         ftBlob:
           fStatement.SetBlob(i + FirstDbcIndex,stBinaryStream,
             TZAbstractBlob.CreateWithData(Pointer(VData), length(VData)
-            {$ifndef ZEOS72UP} ,fStatement.GetConnection{$endif}));
+            {$ifndef ZEOS72UP} ,fStatement.GetConnection{$endif ZEOS72UP}));
       else
         raise ESQLDBZEOS.CreateUTF8(
           '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
@@ -1177,23 +1212,26 @@ begin
 end;
 {$ifend}
 
-function TSQLDBZEOSStatement.ColumnBlob(Col: Integer): RawByteString;
+function TSQLDBZEOSStatement.ColumnBlob(Col: integer): RawByteString;
 var
   blob: IZBlob;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnBlob(%) ResultSet=%',
       [self, Col, fResultSet]);
   blob := fResultSet.GetBlob(Col + FirstDbcIndex);
-  if (blob = nil) or blob.IsEmpty then
+  if (blob = nil) or
+     blob.IsEmpty then
     result := ''
   else
     result := blob.GetString; // ZAnsiString = RawByteString
 end;
 
-function TSQLDBZEOSStatement.ColumnCurrency(Col: Integer): currency;
+function TSQLDBZEOSStatement.ColumnCurrency(Col: integer): currency;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnCurrency(%) ResultSet=%',
       [self, Col, fResultSet]);
   {$ifdef ZEOS72UP}
@@ -1203,40 +1241,45 @@ begin
   {$endif ZEOS72UP}
 end;
 
-function TSQLDBZEOSStatement.ColumnDateTime(Col: Integer): TDateTime;
+function TSQLDBZEOSStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnDateTime(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetTimestamp(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnDouble(Col: Integer): double;
+function TSQLDBZEOSStatement.ColumnDouble(Col: integer): double;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnDouble(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetDouble(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnInt(Col: Integer): Int64;
+function TSQLDBZEOSStatement.ColumnInt(Col: integer): Int64;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnInt(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetLong(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnNull(Col: Integer): boolean;
+function TSQLDBZEOSStatement.ColumnNull(Col: integer): boolean;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnNull(%) ResultSet=%', [self, Col, fResultSet]);
   result := fResultSet.IsNull(Col + FirstDbcIndex);
 end;
 
-function TSQLDBZEOSStatement.ColumnUTF8(Col: Integer): RawUTF8;
+function TSQLDBZEOSStatement.ColumnUTF8(Col: integer): RawUTF8;
 begin
-  if (fResultSet = nil) or (cardinal(Col) >= cardinal(fColumnCount)) then
+  if (fResultSet = nil) or
+     (cardinal(Col) >= cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnUTF8(%) ResultSet=%',
       [self, Col, fResultSet]);
   {$ifdef ZEOS72UP}
@@ -1246,7 +1289,7 @@ begin
     StringToUTF8(fResultSet.GetString(Col + FirstDbcIndex), result);
     {$else}
     result := fResultSet.GetString(Col + FirstDbcIndex); // thanks to controls_cp=CP_UTF8
-    {$endif}
+    {$endif UNICODE}
   {$endif ZEOS72UP}
 end;
 
@@ -1290,12 +1333,12 @@ begin // take care of the layout of internal ZDBC buffers for each provider
     if WR.Expand then
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
     if fResultSet.IsNull(col + FirstDbcIndex) then
-      WR.AddShort('null')
+      WR.AddNull
     else
     begin
       case fColumns[col].ColumnType of
         ftNull:
-          WR.AddShort('null');
+          WR.AddNull;
         ftInt64:
           if fDBMS in [dMySQL, dPostgreSQL] then
           begin
@@ -1316,7 +1359,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           if fDBMS = dSQLite then
             WR.AddDouble(fResultSet.GetDouble(col + FirstDbcIndex))
           else
-            WR.AddCurr64(fResultSet.GetCurrency(col + FirstDbcIndex));
+            WR.AddCurr(fResultSet.GetCurrency(col + FirstDbcIndex));
         ftDate:
           begin
             WR.Add('"');
@@ -1341,7 +1384,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           end;
         ftBlob:
           if fForceBlobAsNull then
-            WR.AddShort('null')
+            WR.AddNull
           else if fDBMS in [dMySQL, dSQLite] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
@@ -1350,7 +1393,8 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           else
             WriteIZBlob;
       else
-        raise ESQLDBException.CreateUTF8('%.ColumnsToJSON: invalid ColumnType(#% "%")=%',
+        raise ESQLDBException.CreateUTF8(
+          '%.ColumnsToJSON: invalid ColumnType(#% "%")=%',
           [self, col, fColumns[col].ColumnName, ord(fColumns[col].ColumnType)]);
       end;
     end;
@@ -1367,7 +1411,8 @@ end;
 initialization
   TSQLDBZEOSConnectionProperties.RegisterClassNameForDefinition;
 
-{$endif NOSYNDBZEOS} // defined in mormot_base.lpk Lazarus package > Custom Options > Defines
+{$endif NOSYNDBZEOS}
+// defined in mormot_base.lpk Lazarus package > Custom Options > Defines
 
 end.
 

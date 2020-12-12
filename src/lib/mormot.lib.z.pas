@@ -123,8 +123,6 @@ type
   public
     /// raw zlib Stream information
     Stream: TZStream;
-    /// reset the internal Stream structure
-    procedure Clear;
     /// reset and prepare the internal Stream structure for two memory buffers
     procedure Init(src, dst: pointer; srcLen, dstLen: integer); overload;
     /// reset and prepare the internal Stream structure for a destination stream
@@ -134,14 +132,14 @@ type
     /// prepare the Deflate Compression
     // - by default, will use the deflate/.zip header-less format, but you may set
     // ZlibFormat=true to add an header, as expected by zlib (and pdf)
-    function CompressInit(CompressionLevel: integer; ZlibFormat: Boolean): Boolean;
+    function CompressInit(CompressionLevel: integer; ZlibFormat: boolean): boolean;
     /// apply Deflate Compression over one memory block as defined in STream
     function Compress(Flush: integer): integer;
     /// finalize the Deflate Compression
     function CompressEnd: integer;
     /// prepare the Inflate Uncompression
     // - ZLibFormat defines the expected layout, and should match CompressInit()
-    function UncompressInit(ZlibFormat: Boolean): Boolean;
+    function UncompressInit(ZlibFormat: boolean): boolean;
     /// apply Inflate Uncompression over one memory block as defined in STream
     function Uncompress(Flush: integer): integer;
     /// finalize the Inflate Uncompression
@@ -150,7 +148,7 @@ type
     procedure DoFlush;
     /// low-level check of the code returned by the ZLib library
     // - raise ESynZipException on error
-    function Check(const Code: Integer; const ValidCodes: array of Integer;
+    function Check(const Code: integer; const ValidCodes: array of integer;
       const Context: string = ''): integer;
   end;
 
@@ -208,18 +206,18 @@ const
 // - by default, will use the deflate/.zip header-less format, but you may set
 // ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  CompressionLevel: integer = 6; ZlibFormat: Boolean = false) : integer;
+  CompressionLevel: integer = 6; ZlibFormat: boolean = false) : integer;
 
 /// in-memory ZLib uncompression
 // - ZLibFormat defines the expected layout, and should match CompressMem()
 function UncompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  ZlibFormat: Boolean = false) : integer;
+  ZlibFormat: boolean = false) : integer;
 
 /// ZLib compression from memory into a stream
 // - by default, will use the deflate/.zip header-less format, but you may set
 // ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressStream(src: pointer; srcLen: integer;
-  tmp: TStream; CompressionLevel: integer = 6; ZlibFormat: Boolean = false;
+  tmp: TStream; CompressionLevel: integer = 6; ZlibFormat: boolean = false;
   TempBufSize: integer = 0): cardinal;
 
 /// ZLib decompression from memory into a stream
@@ -228,21 +226,21 @@ function CompressStream(src: pointer; srcLen: integer;
 // will only calculate the crc of the the Uncompressed memory block
 // - ZLibFormat defines the expected layout, and should match CompressStream()
 function UncompressStream(src: pointer; srcLen: integer; tmp: TStream;
-  checkCRC: PCardinal = nil; ZlibFormat: Boolean = false;
+  checkCRC: PCardinal = nil; ZlibFormat: boolean = false;
   TempBufSize: integer = 0): cardinal;
 
 /// ZLib compression from memory into a RawByteString variable
 // - by default, will use the deflate/.zip header-less format, but you may set
 // ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressZipString(src: pointer; srcLen: integer;
-  CompressionLevel: integer = 6; ZlibFormat: Boolean = false;
+  CompressionLevel: integer = 6; ZlibFormat: boolean = false;
   TempBufSize: integer = 0): RawByteString; overload;
 
 /// ZLib compression to and from RawByteString variables
 // - by default, will use the deflate/.zip header-less format, but you may set
 // ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressZipString(const src: RawByteString;
-  CompressionLevel: integer = 6; ZlibFormat: Boolean = false;
+  CompressionLevel: integer = 6; ZlibFormat: boolean = false;
   TempBufSize: integer = 0): RawByteString; overload;
 
 /// ZLib decompression from memory into a RawByteString variable
@@ -250,13 +248,13 @@ function CompressZipString(const src: RawByteString;
 // will only calculate the crc of the the Uncompressed memory block
 // - ZLibFormat defines the expected layout, and should match CompressZipString()
 function UncompressZipString(src: pointer; srcLen: integer;
-  checkCRC: PCardinal = nil; ZlibFormat: Boolean = false;
+  checkCRC: PCardinal = nil; ZlibFormat: boolean = false;
   TempBufSize: integer = 0): RawByteString; overload;
 
 /// ZLib decompression to and from RawByteString variables
 // - ZLibFormat defines the expected layout, and should match CompressZipString()
 function UncompressZipString(const src: RawByteString;
-  ZlibFormat: Boolean = false; TempBufSize: integer = 0): RawByteString; overload;
+  ZlibFormat: boolean = false; TempBufSize: integer = 0): RawByteString; overload;
 
 /// just hash aString with CRC32 algorithm
 // - crc32 is better than adler32 for short strings
@@ -331,16 +329,14 @@ const
     'incompatible version',  // Z_VERSION_ERROR (-6)
     '');
 
-function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl;
+procedure memset(P: Pointer; B: integer; count: integer); cdecl;
 begin
   FillCharFast(P^, count, B);
-  result := P;
 end;
 
-function memcpy(dest, source: Pointer; count: Integer): pointer; cdecl;
+procedure memcpy(dest, source: Pointer; count: integer); cdecl;
 begin
   MoveFast(source^, dest^, count);
-  result := dest;
 end;
 
 procedure _llmod; // this C++ Builder intrisinc is not cdecl
@@ -425,11 +421,6 @@ end;
 
 { TZLib }
 
-procedure TZLib.Clear;
-begin
-  FillCharFast(Stream, SizeOf(Stream), 0);
-end;
-
 {$ifndef ZLIBPAS}
 
 function zlibAllocMem(AppData: Pointer; Items, Size: cardinal): Pointer; cdecl;
@@ -446,48 +437,57 @@ end;
 
 procedure TZLib.Init(src, dst: pointer; srcLen, dstLen: integer);
 begin
-  Clear;
+  FillCharFast(Stream, SizeOf(Stream), 0);
+  FlushStream := nil;
+  FlushCheckCRC := nil;
+  FlushBufferOwned := false;
   Stream.next_in := src;
   Stream.avail_in := srcLen;
   Stream.next_out := dst;
   Stream.avail_out := dstLen;
   {$ifndef ZLIBPAS}
   Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
-  Stream.zfree := @zlibFreeMem;
+  Stream.zfree  := @zlibFreeMem;
   {$endif ZLIBPAS}
 end;
 
 procedure TZLib.Init(src: pointer; srcLen: integer; dst: TStream;
   checkcrc: PCardinal; temp: pointer; tempsize, expectedsize: integer);
 begin
-  Init(src, temp, srcLen, tempsize);
   if tempsize < expectedsize then
   begin
     GetMem(FlushBuffer, expectedsize);
-    FlushBufferOwned := true;
     FlushSize := expectedsize;
-    Stream.next_out := FlushBuffer;
-    Stream.avail_out := FlushSize;
   end
   else
   begin
     FlushBuffer := temp;
     FlushSize := tempsize;
   end;
+  Init(src, FlushBuffer, srcLen, FlushSize);
+  FlushBufferOwned := FlushBuffer <> temp;
+  FlushStream := dst;
+  if checkcrc <> nil then
+    checkcrc^ := 0;
+  FlushCheckCRC := checkcrc;
 end;
 
-function TZLib.CompressInit(CompressionLevel: integer; ZlibFormat: Boolean): Boolean;
+function TZLib.CompressInit(CompressionLevel: integer; ZlibFormat: boolean): boolean;
 var
   bits: integer;
 begin
   if ZlibFormat then
     bits := MAX_WBITS
   else
-    bits := - MAX_WBITS;
+    bits := -MAX_WBITS;
   result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, bits,
     DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream)) >= 0;
-  if FlushBufferOwned and not result then
+  if FlushBufferOwned and
+     not result then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
 function TZLib.Compress(Flush: integer): integer;
@@ -499,20 +499,27 @@ function TZLib.CompressEnd: integer;
 begin
   result := deflateEnd(Stream);
   if FlushBufferOwned then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
-function TZLib.UncompressInit(ZlibFormat: Boolean): Boolean;
+function TZLib.UncompressInit(ZlibFormat: boolean): boolean;
 var
   bits: integer;
 begin
   if ZlibFormat then
     bits := MAX_WBITS
   else
-    bits := - MAX_WBITS;
+    bits := -MAX_WBITS;
   result := inflateInit2_(Stream, bits, ZLIB_VERSION, SizeOf(Stream)) >= 0;
-  if FlushBufferOwned and not result then
+  if FlushBufferOwned and
+     not result then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
 function TZLib.Uncompress(Flush: integer): integer;
@@ -524,7 +531,10 @@ function TZLib.UncompressEnd: integer;
 begin
   result := inflateEnd(Stream);
   if FlushBufferOwned then
+  begin
     FreeMem(FlushBuffer);
+    FlushBufferOwned := false;
+  end;
 end;
 
 procedure TZLib.DoFlush;
@@ -542,7 +552,7 @@ begin
   Stream.avail_out := FlushSize;
 end;
 
-function TZLib.Check(const Code: Integer; const ValidCodes: array of Integer;
+function TZLib.Check(const Code: integer; const ValidCodes: array of integer;
   const Context: string): integer;
 var
   i: PtrInt;
@@ -553,15 +563,15 @@ begin
   for i := Low(ValidCodes) to High(ValidCodes) do
     if ValidCodes[i] = Code then
       exit;
-  raise ESynZip.CreateFmt('Error %d during %s process [%s]',
-    [Code, Context, {$ifndef ZLIBPAS} PAnsiChar {$endif} (Stream.msg)]);
+  raise ESynZip.CreateFmt('Error %d during %s process (avail_in=%d avail_out=%d)',
+    [Code, Context, Stream.avail_in, Stream.avail_out]);
 end;
 
 
 { ******************* Simple Wrapper Functions for Deflate/ZLib Process }
 
 function CompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  CompressionLevel: integer; ZlibFormat: Boolean): integer;
+  CompressionLevel: integer; ZlibFormat: boolean): integer;
 var
   z: TZLib;
 begin
@@ -576,7 +586,7 @@ begin
 end;
 
 function UncompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  ZlibFormat: Boolean): integer;
+  ZlibFormat: boolean): integer;
 var
   z: TZLib;
 begin
@@ -591,7 +601,7 @@ begin
 end;
 
 function CompressStream(src: pointer; srcLen: integer; tmp: TStream;
-  CompressionLevel: integer; ZlibFormat: Boolean; TempBufSize: integer): cardinal;
+  CompressionLevel: integer; ZlibFormat: boolean; TempBufSize: integer): cardinal;
 var
   z: TZLib;
   code: integer;
@@ -612,7 +622,7 @@ begin
 end;
 
 function UncompressStream(src: pointer; srcLen: integer; tmp: TStream;
-  checkCRC: PCardinal; ZlibFormat: Boolean; TempBufSize: integer): cardinal;
+  checkCRC: PCardinal; ZlibFormat: boolean; TempBufSize: integer): cardinal;
 var
   z: TZLib;
   code: integer;
@@ -626,6 +636,7 @@ begin
           [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'UncompressStream');
         z.DoFlush;
       until code = Z_STREAM_END;
+      z.DoFlush;
     finally
       z.UncompressEnd;
     end;
@@ -633,11 +644,12 @@ begin
 end;
 
 function CompressZipString(src: pointer; srcLen: integer; CompressionLevel: integer;
-  ZlibFormat: Boolean; TempBufSize: integer): RawByteString;
+  ZlibFormat: boolean; TempBufSize: integer): RawByteString;
 var
   s: TRawByteStringStream;
 begin
-  if (src = nil) or (srcLen <= 0) then
+  if (src = nil) or
+     (srcLen <= 0) then
   begin
     result := '';
     exit;
@@ -652,18 +664,20 @@ begin
 end;
 
 function CompressZipString(const src: RawByteString; CompressionLevel: integer;
-  ZlibFormat: Boolean; TempBufSize: integer): RawByteString;
+  ZlibFormat: boolean; TempBufSize: integer): RawByteString;
 begin
   result := CompressZipString(pointer(src), length(src), CompressionLevel,
     ZlibFormat, TempBufSize);
 end;
 
 function UncompressZipString(src: pointer; srcLen: integer;
-  checkCRC: PCardinal; ZlibFormat: Boolean; TempBufSize: integer): RawByteString;
+  checkCRC: PCardinal; ZlibFormat: boolean; TempBufSize: integer): RawByteString;
 var
+  // we don't know the uncompressed size -> use a resizable TStream
   s: TRawByteStringStream;
 begin
-  if (src = nil) or (srcLen <= 0) then
+  if (src = nil) or
+     (srcLen <= 0) then
   begin
     result := '';
     exit;
@@ -677,11 +691,11 @@ begin
   end;
 end;
 
-function UncompressZipString(const src: RawByteString; ZlibFormat: Boolean;
+function UncompressZipString(const src: RawByteString; ZlibFormat: boolean;
   TempBufSize: integer): RawByteString;
 begin
-  result := UncompressZipString(pointer(src), length(src), nil, ZlibFormat,
-    TempBufSize);
+  result := UncompressZipString(
+    pointer(src), length(src), nil, ZlibFormat, TempBufSize);
 end;
 
 function CRC32string(const aString: RawByteString): cardinal;
@@ -690,7 +704,6 @@ begin
   if result <> 0 then
     result := crc32(0, pointer(aString), result);
 end;
-
 
 end.
 
