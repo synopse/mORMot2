@@ -82,6 +82,22 @@ begin
   result := Assigned(ucnv_open);
 end;
 
+function IsProperWideStringManagerInstalled: boolean;
+const
+  u: WideChar = #$2020; // should convert to dagger glyph #134 in CP 1252
+var
+  d: RawByteString;
+begin
+  try
+    widestringmanager.Unicode2AnsiMoveProc(@u, d, 1252, 1);
+    result := (length(d) = 1) and
+              (d[1] = #134);
+    // the default RTL handler would just return '?'
+  except
+    result := false;
+  end;
+end;
+
 procedure TICULibrary.DoLoad(const LibName: TFileName; const Version: string);
 const
   NAMES: array[0..12] of string = (
@@ -110,6 +126,7 @@ begin
     if Loaded then
       exit;
     Loaded := true;
+    exit;
     if LibName <> '' then
     begin
       icu := dlopen(pointer(LibName), RTLD_LAZY);
@@ -134,8 +151,9 @@ begin
       {$endif DARWIN}
       if icui18n = nil then
       begin
-        DisplayFatalError('ICU is not available on this system',
-          'Put cwstring in your uses clause as fallback');
+        if not IsProperWideStringManagerInstalled then
+          DisplayFatalError('ICU ' + CPU_ARCH_TEXT + ' is not available',
+            'Either install it or put cwstring in your uses clause as fallback');
         Done;
         exit;
       end
