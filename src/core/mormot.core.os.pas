@@ -810,7 +810,7 @@ function GetCurrentThreadId: DWORD; stdcall;
 function GetCurrentProcessId: DWORD; stdcall;
 
 /// redefined in mormot.core.os to avoid dependency to Windows
-function WaitForSingleObject(hHandle: HANDLE; dwMilliseconds: DWORD): DWORD; stdcall;
+function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWORD): DWORD; stdcall;
 
 /// redefined in mormot.core.os to avoid dependency to Windows
 function GetEnvironmentStringsW: PWideChar; stdcall;
