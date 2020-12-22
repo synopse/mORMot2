@@ -1184,12 +1184,16 @@ function TRestOrm.Retrieve(const SQLWhere: RawUTF8; Value: TOrm;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var
   T: TOrmTable;
+  sql: RawUTF8;
 begin
   result := false;
   if (self = nil) or
      (Value = nil) then
     exit;
-  T := MultiFieldValues(POrmClass(Value)^, aCustomFieldsCSV, SQLWhere);
+  sql := Trim(SQLWhere);
+  if not EndWith(sql, ' LIMIT 1') then
+    sql := sql + ' LIMIT 1'; // we keep a single record below
+  T := MultiFieldValues(POrmClass(Value)^, aCustomFieldsCSV, sql);
   if T <> nil then
   try
     if T.RowCount >= 1 then

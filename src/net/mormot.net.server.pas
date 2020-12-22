@@ -691,7 +691,6 @@ type
     fRegisteredUnicodeUrl: TSynUnicodeDynArray;
     fServerSessionID: HTTP_SERVER_SESSION_ID;
     fUrlGroupID: HTTP_URL_GROUP_ID;
-    fExecuting: boolean;
     fLogData: pointer;
     fLogDataStorage: array of byte;
     fLoggingServiceName: RawUTF8;
@@ -2541,6 +2540,8 @@ begin
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
     fReqQueue := 0;
+    for i := 0 to length(fClones)-1 do
+      WaitForSingleObject(fClones[i].Handle, 1000); // sometimes needed on FPC
     for i := 0 to length(fClones) - 1 do
       fClones[i].Free;
     fClones := nil;
@@ -2549,22 +2550,13 @@ begin
 end;
 
 destructor THttpApiServer.Destroy;
-var
-  endtix: Int64;
 begin
   Terminate; // for Execute to be notified about end of process
   try
     if (fOwner = nil) and
        (Http.Module <> 0) then // fOwner<>nil for cloned threads
       DestroyMainThread;
-    if fExecuting then
-    begin
-      endtix := mormot.core.os.GetTickCount64 + 5000; // never wait forever
-      repeat
-        Sleep(1); // warning: waits typically 1-15 ms on Windows
-      until not fExecuting or
-        (mormot.core.os.GetTickCount64 > endtix); // ensure Execute has ended
-    end;
+    WaitForSingleObject(Handle, 5000); // sometimes needed on FPC
   finally
     inherited Destroy;
   end;
@@ -2788,7 +2780,6 @@ var
 begin
   if Terminated then
     exit;
-  fExecuting := true;
   Context := nil;
   try
     // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
@@ -2997,7 +2988,6 @@ begin
     until Terminated;
   finally
     Context.Free;
-    fExecuting := false;
   end;
 end;
 
