@@ -1677,7 +1677,7 @@ end;
 
 constructor TRestStorage.Create(aClass: TOrmClass; aServer: TRestOrmServer);
 begin
-  inherited Create(nil);
+  inherited Create(nil); // calls fRest.SetOrmInstance(self)
   if aClass = nil then
     raise ERestStorage.CreateUTF8('%.Create(aClass=nil)', [self]);
   InitializeCriticalSection(fStorageCriticalSection);

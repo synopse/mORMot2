@@ -1838,9 +1838,6 @@ begin
     raise ERestException.CreateUTF8(
       '%.SetOrmInstance(%) is not an IRestOrm', [self, aORM]);
   fOrmInstance := aORM;
-  if not fOrmInstance.GetInterface(IRestOrm, fOrm) then
-    raise ERestException.CreateUTF8(
-      '%.Create with invalid %', [self, fOrmInstance]);
 end;
 
 destructor TRest.Destroy;

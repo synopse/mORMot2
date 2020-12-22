@@ -381,8 +381,8 @@ type
 
   /// abstract Client side service routing
   // - match TRestServerURIContext reciprocal class
-  // - never use this abstract class, but rather TRestRoutingREST or
-  // TRestRoutingJSON_RPC classes
+  // - never use this abstract class, but rather TRestClientRoutingREST or
+  // TRestClientRoutingJSON_RPC classes
   TRestClientRouting = class
   public
     /// at Client Side, compute URI and BODY according to the routing scheme
@@ -402,8 +402,8 @@ type
   // - match TRestServerURIContextClass reciprocal meta-class
   // - most of the internal methods are declared as virtual, so it allows any
   // kind of custom routing or execution scheme
-  // - TRestRoutingREST and TRestRoutingJSON_RPC classes are provided
-  // in this unit, to allow RESTful and JSON/RPC protocols
+  // - TRestClientRoutingREST and TRestClientRoutingJSON_RPC classes are provided
+  // in this unit, to allow RESTful and JSON/RPC protocols on Client side
   TRestClientRoutingClass = class of TRestClientRouting;
 
   /// client calling context using simple REST for interface-based services
@@ -509,6 +509,8 @@ type
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
+  // - never call this abstract class, but inherit and override the
+  // InternalURI/InternalCheckOpen/InternalClose virtual abstract methods
   TRestClientURI = class(TRest)
   protected
     fClient: IRestOrmClient;
@@ -1894,6 +1896,8 @@ begin
   {$else}
   fSafe := TAutoLocker.Create;
   {$endif USELOCKERDEBUG}
+  fServicesRouting := TRestClientRoutingREST;
+  TRestOrmClientURI.Create(self); // asssign the URI-based ORM kernel
 end;
 
 destructor TRestClientURI.Destroy;
@@ -2668,6 +2672,7 @@ begin
   hl := length(call.InHead);
   r := nil;
   rl := 0;
+  Call.LowLevelFlags := [llfSecured]; // direct library execution seems safe
   Call.OutStatus := fRequest(
     pointer(Call.Url), pointer(Call.Method), pointer(call.InBody),
     length(Call.Url), length(Call.Method), length(call.InBody),
@@ -2676,7 +2681,6 @@ begin
   FastSetString(Call.OutBody, r, rl);
   f(h);
   f(r);
-  Call.LowLevelFlags := [llfSecured]; // direct library execution seems safe
 end;
 
 function TRestClientLibraryRequest.InternalCheckOpen: boolean;

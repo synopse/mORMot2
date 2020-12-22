@@ -256,7 +256,7 @@ constructor TRestOrmServerFullMemory.Create(aRest: TRest);
 var
   t: PtrInt;
 begin
-  inherited Create(aRest);
+  inherited Create(aRest); // calls fRest.SetOrmInstance(self)
   // pre-allocate all TRestStorageInMemory instances
   fStaticDataCount := length(fModel.Tables);
   for t := 0 to fStaticDataCount - 1 do

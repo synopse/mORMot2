@@ -921,7 +921,7 @@ type
   // - match TRestClientRoutingClass reciprocal meta-class
   // - most of the internal methods are declared as virtual, so it allows any
   // kind of custom routing or execution scheme
-  // - TRestRoutingREST and TRestRoutingJSON_RPC classes
+  // - TRestServerRoutingREST and TRestServerRoutingJSON_RPC classes
   // are provided in this unit, to allow RESTful and JSON/RPC protocols
   TRestServerURIContextClass = class of TRestServerURIContext;
 
@@ -2811,8 +2811,8 @@ begin
     // if we reached here, no session was found
     if Service <> nil then
       // you can allow a service to be called directly
-      //TODOresult := Service.ByPassAuthentication else
-      if MethodIndex >= 0 then
+      result := TServiceFactoryServerAbstract(Service).ByPassAuthentication
+    else if MethodIndex >= 0 then
         // /auth + /timestamp are e.g. allowed methods without signature
         result := Server.fPublishedMethod[MethodIndex].ByPassAuthentication
       else if (Table <> nil) and
@@ -6084,6 +6084,7 @@ begin
       TRestServerAuthenticationSSPI
       {$endif DOMAINRESTAUTH}]);
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
+  fServicesRouting := TRestServerRoutingREST;
   inherited Create(aModel);
   fAfterCreation := true;
   fStats := TRestServerMonitor.Create(self);
@@ -6093,8 +6094,8 @@ begin
     // ensure the counter is a random but positive 31-bit integer
     fSessionCounter := -fSessionCounter;
   // retrieve published methods
-  fPublishedMethods.InitSpecific(TypeInfo(TRestServerMethods), fPublishedMethod,
-    ptRawUTF8, nil, true);
+  fPublishedMethods.InitSpecific(
+    TypeInfo(TRestServerMethods), fPublishedMethod, ptRawUTF8, nil, true);
   ServiceMethodRegisterPublishedMethods('', self);
   fPublishedMethodAuthIndex := ServiceMethodByPassAuthentication('Auth');
   fPublishedMethodTimestampIndex := ServiceMethodByPassAuthentication('Timestamp');
