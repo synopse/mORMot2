@@ -10,6 +10,7 @@ unit mormot.net.client;
    - THttpClientSocket Implementing HTTP client over plain sockets
    - THttpRequest Abstract HTTP client class
    - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP
+   - TSimpleHttpClient Wrapper Class
    - Cached HTTP Connection to a Remote Server
    - Send Email using the SMTP Protocol
 
@@ -617,6 +618,61 @@ type
   end;
 
 {$endif USELIBCURL}
+
+
+{ ******************** TSimpleHttpClient Wrapper Class }
+
+type
+  /// simple wrapper around THttpClientSocket/THttpRequest instances
+  // - this class will reuse the previous connection if possible, and select the
+  // best connection class available on this platform for a given URI
+  TSimpleHttpClient = class
+  protected
+    fHttp: THttpClientSocket;
+    fHttps: THttpRequest;
+    fProxy, fHeaders, fUserAgent: RawUTF8;
+    fBody: RawByteString;
+    fOnlyUseClientSocket, fIgnoreSSLCertificateErrors: boolean;
+  public
+    /// initialize the instance
+    constructor Create(aOnlyUseClientSocket: boolean = false); reintroduce;
+    /// finalize the connection
+    destructor Destroy; override;
+    /// low-level entry point of this instance
+    function RawRequest(const Uri: TURI; const Method, Header: RawUTF8;
+     const Data: RawByteString; const DataType: RawUTF8;
+      KeepAlive: cardinal): integer; overload;
+    /// simple-to-use entry point of this instance
+    // - use Body and Headers properties to retrieve the HTTP body and headers
+    function Request(const uri: RawUTF8; const method: RawUTF8 = 'GET';
+      const header: RawUTF8 = ''; const data: RawByteString = '';
+      const datatype: RawUTF8 = ''; keepalive: cardinal = 10000): integer; overload;
+    /// returns the HTTP body as returnsd by a previous call to Request()
+    property Body: RawByteString
+      read fBody;
+    /// returns the HTTP headers as returnsd by a previous call to Request()
+    property Headers: RawUTF8
+      read fHeaders;
+    /// allows to customize the user-agent header
+    property UserAgent: RawUTF8
+      read fUserAgent write fUserAgent;
+    /// allows to customize HTTPS connection and allow weak certificates
+    property IgnoreSSLCertificateErrors: boolean
+      read fIgnoreSSLCertificateErrors write fIgnoreSSLCertificateErrors;
+    /// alows to customize the connection using a proxy
+    property Proxy: RawUTF8
+      read fProxy write fProxy;
+  end;
+
+/// returns the best THttpRequest class, depending on the system it runs on
+// - e.g. TWinHTTP or TCurlHTTP
+// - consider using TSimpleHttpClient if you just need a simple connection
+function MainHttpClass: THttpRequestClass;
+
+/// low-level forcing of another THttpRequest class
+// - could be used if we found out that the current MainHttpClass failed (which
+// could easily happen with TCurlHTTP if the library is missing or deprecated)
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
 
 
 { ************** Cached HTTP Connection to a Remote Server }
@@ -1939,6 +1995,120 @@ begin
 end;
 
 {$endif USELIBCURL}
+
+
+{ ******************** TSimpleHttpClient Wrapper Class }
+
+
+{ TSimpleHttpClient }
+
+constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
+begin
+  fOnlyUseClientSocket := aOnlyUseClientSocket;
+  inherited Create;
+end;
+
+destructor TSimpleHttpClient.Destroy;
+begin
+  FreeAndNil(fHttp);
+  FreeAndNil(fHttps);
+  inherited Destroy;
+end;
+
+function TSimpleHttpClient.RawRequest(const Uri: TURI;
+  const Method, Header: RawUTF8; const Data: RawByteString;
+  const DataType: RawUTF8; KeepAlive: cardinal): integer;
+begin
+  result := 0;
+  if (Uri.Https or
+      (Proxy <> '')) and
+     not fOnlyUseClientSocket then
+  try
+    if (fHttps = nil) or
+       (fHttps.Server <> Uri.Server) or
+       (integer(fHttps.Port) <> Uri.PortInt) then
+    begin
+      FreeAndNil(fHttp);
+      FreeAndNil(fHttps); // need a new HTTPS connection
+      fHttps := MainHttpClass.Create(
+        Uri.Server, Uri.Port, Uri.Https, Proxy, '', 5000, 5000, 5000);
+      fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
+      if fUserAgent <> '' then
+        fHttps.UserAgent := fUserAgent;
+    end;
+    result := fHttps.Request(
+      Uri.Address, Method, KeepAlive, Header, Data, DataType, fHeaders, fBody);
+    if KeepAlive = 0 then
+      FreeAndNil(fHttps);
+  except
+    FreeAndNil(fHttps);
+  end
+  else
+  try
+    if (fHttp = nil) or
+       (fHttp.Server <> Uri.Server) or
+       (fHttp.Port <> Uri.Port) or
+       // server may close after a few requests (e.g. nginx keepalive_requests)
+       (hfConnectionClose in fHttp.HeaderFlags) then
+    begin
+      FreeAndNil(fHttps);
+      FreeAndNil(fHttp); // need a new HTTP connection
+      fHttp := THttpClientSocket.Open(
+        Uri.Server, Uri.Port, nlTCP, 5000, Uri.Https);
+      if fUserAgent <> '' then
+        fHttp.UserAgent := fUserAgent;
+    end;
+    if not fHttp.SockConnected then
+      exit
+    else
+      result := fHttp.Request(
+        Uri.Address, Method, KeepAlive, Header, Data, DataType, true);
+    fBody := fHttp.Content;
+    fHeaders := fHttp.HeaderGetText;
+    if KeepAlive = 0 then
+      FreeAndNil(fHttp);
+  except
+    FreeAndNil(fHttp);
+  end;
+end;
+
+function TSimpleHttpClient.Request(const uri, method, header: RawUTF8;
+  const data: RawByteString; const datatype: RawUTF8; keepalive: cardinal): integer;
+var
+  u: TURI;
+begin
+  if u.From(uri) then
+    result := RawRequest(u, method, header, data, datatype, keepalive)
+  else
+    result := HTTP_NOTFOUND;
+end;
+
+
+var
+  _MainHttpClass: THttpRequestClass;
+
+function MainHttpClass: THttpRequestClass;
+begin
+  if _MainHttpClass = nil then
+  begin
+    {$ifdef USEWININET}
+    _MainHttpClass := TWinHTTP;
+    {$else}
+    {$ifdef USELIBCURL}
+    _MainHttpClass := TCurlHTTP
+    {$else}
+    raise EHttpSocket.Create('No THttpRequest class known!');
+    {$endif USELIBCURL}
+    {$endif USEWININET}
+  end;
+  result := _MainHttpClass;
+end;
+
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+begin
+  _MainHttpClass := aClass;
+end;
+
 
 
 { ************** Cached HTTP Connection to a Remote Server }
