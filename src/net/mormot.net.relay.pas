@@ -1010,7 +1010,7 @@ begin
   finally
     Safe.UnLock;
   end;
-  InterLockedIncrement(fRestPending); // now wait for the response to come
+  LockedInc32(@fRestPending); // now wait for the response to come
   try
     start := GetTickCount64;
     repeat
@@ -1039,7 +1039,7 @@ begin
       break;
     until false;
   finally
-    InterLockedDecrement(fRestPending);
+    LockedDec32(@fRestPending);
     Safe.Lock;
     try
       if PtrArrayDelete(fRestFrame, Ctxt, @fRestFrameCount) < 0 then

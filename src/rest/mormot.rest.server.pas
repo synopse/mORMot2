@@ -3098,13 +3098,7 @@ begin
       end;
     end;
   end;
-  with Server.fStats do
-  begin
-    // try...finally not mandatory (slower)
-    fSafe^.Lock;
-    inc(fServiceMethod); // TRestServerMonitor.Changed method is void
-    fSafe^.UnLock;
-  end;
+  LockedInc64(@Server.fStats.fServiceMethod);
 end;
 
 procedure TRestServerURIContext.ServiceResultStart(WR: TTextWriter);

@@ -3295,7 +3295,7 @@ begin
         SetResultToSameConnection(i);
         case action of
           transBegin: // nested StartTransaction
-            InterlockedIncrement(fSharedTransactions[i].RefCount);
+            LockedInc32(@fSharedTransactions[i].RefCount);
         else
           begin  // (nested) commit/rollback
             if InterlockedDecrement(fSharedTransactions[i].RefCount) = 0 then

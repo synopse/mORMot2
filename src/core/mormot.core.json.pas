@@ -8834,16 +8834,16 @@ var
   added: boolean;
   tim: cardinal;
 begin
+  tim := ComputeNextTimeOut;
   fSafe.Lock;
   try
     result := fKeys.FindHashedForAdding(aKey, added);
     if added then
     begin
-      with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+      fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif}.
         ItemCopyFrom(@aKey, result); // fKey[result] := aKey;
       if fValues.Add(aValue) <> result then
         raise ESynDictionary.CreateUTF8('%.Add fValues.Add', [self]);
-      tim := ComputeNextTimeOut;
       if tim > 0 then
         fTimeOuts.Add(tim);
     end
@@ -8859,13 +8859,13 @@ var
   added: boolean;
   tim: cardinal;
 begin
+  tim := ComputeNextTimeOut;
   fSafe.Lock;
   try
-    tim := ComputeNextTimeOut;
     result := fKeys.FindHashedForAdding(aKey, added);
     if added then
     begin
-      with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+      fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif}.
         ItemCopyFrom(@aKey, result); // fKey[result] := aKey
       if fValues.Add(aValue) <> result then
         raise ESynDictionary.CreateUTF8('%.AddOrUpdate fValues.Add', [self]);
@@ -9052,7 +9052,7 @@ begin
   ndx := fKeys.FindHashedForAdding(aKey, added);
   if added then
   begin
-    with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+    fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif}.
       ItemCopyFrom(@aKey, ndx); // fKey[i] := aKey
     fValues.Count := ndx + 1; // reserve new place for associated value
     if tim > 0 then
@@ -9224,7 +9224,7 @@ begin
   try
     if fSafe.Padding[DIC_KEYCOUNT].VInteger > 0 then
     begin
-      fKeys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}
+      fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif}.
         SaveToJSON(k, EnumSetsAsText);
       fValues.SaveToJSON(v, EnumSetsAsText);
     end;

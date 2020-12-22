@@ -227,12 +227,6 @@ type
   // transmission of TOrmTableJSON result
   RawJSON = type RawUTF8;
 
-  /// a RawUTF8 value which may contain Sensitive Personal Information
-  // (e.g. a bank card number or a plain password)
-  // - identified as a specific type e.g. to be hidden in the logs when the
-  // woHideSensitivePersonalInformation TTextWriterWriteObjectOption is set
-  SPIUTF8 = type RawUTF8;
-
   /// a RawByteString sub-type used to store the BLOB content in our ORM
   // - equals RawByteString for byte storage
   // - TRttiInfo.AnsiStringCodePage will identify this type, and return
@@ -248,6 +242,12 @@ type
   // ! property Blob: RawBlob read fBlob write fBlob;
   // - is defined here for proper TRttiProp.WriteAsJSON serialization
   RawBlob = type RawByteString;
+
+  /// a RawUTF8 value which may contain Sensitive Personal Information
+  // (e.g. a bank card number or a plain password)
+  // - identified as a specific type e.g. to be hidden in the logs when the
+  // woHideSensitivePersonalInformation TTextWriterWriteObjectOption is set
+  SPIUTF8 = type RawUTF8;
 
   /// SynUnicode is the fastest available Unicode native string type, depending
   //  on the compiler used
@@ -2256,12 +2256,32 @@ function InterlockedIncrement(var I: integer): integer;
 // - FPC will define this function as intrinsic for non-Intel CPUs
 function InterlockedDecrement(var I: integer): integer;
 
+/// slightly faster than InterlockedIncrement()
+procedure LockedInc32(int32: PInteger);
+
+/// slightly faster than InterlockedDecrement()
+procedure LockedDec32(int32: PInteger);
+
+/// slightly faster than InterlockedIncrement64()
+procedure LockedInc64(int64: PInt64);
+
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 
 // defined here for mormot.core.search and mormot.test.base low-level access
 // - use rather global crc32c() variable
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
+{$else}
+
+/// redirect to FPC InterlockedIncrement() on non Intel CPU
+procedure LockedInc32(int32: PInteger); inline;
+
+/// redirect to FPC InterlockedDecrement() on non Intel CPU
+procedure LockedDec32(int32: PInteger); inline;
+
+/// redirect to FPC InterlockedIncrement64() on non Intel CPU
+procedure LockedInc64(int64: PInt64); inline;
 
 {$endif CPUINTEL}
 
@@ -8767,28 +8787,49 @@ end;
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 begin
-  result := SynLZcompress1pas(src,size,dst);
+  result := SynLZcompress1pas(src, size, dst);
 end;
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 begin
-  result := SynLZdecompress1pas(src,size,dst);
+  result := SynLZdecompress1pas(src, size, dst);
 end;
 
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
 begin // fallback to RTL asm e.g. for ARM
   {$ifdef FPC_64}
-  result := InterLockedDecrement64(refcnt)<=0;
+  result := InterLockedDecrement64(refcnt) <= 0;
   {$else}
-  result := InterLockedDecrement(refcnt)<=0;
+  result := InterLockedDecrement(refcnt) <= 0;
   {$endif FPC_64}
 end; // we don't check for ismultithread global
+
+procedure LockedInc32(int32: PInteger);
+begin
+  InterlockedIncrement(int32^);
+end;
+
+procedure LockedDec32(int32: PInteger);
+begin
+  InterlockedDecrement(int32^);
+end;
+
+procedure LockedInc64(int64: PInt64);
+begin
+  {$ifdef FPC_64}
+  InterlockedIncrement64(int64^);
+  {$else}
+  with PInt64Rec(int64)^ do
+    if InterlockedIncrement(Lo) = 0 then
+      InterlockedIncrement(Hi); // collission is highly unprobable
+  {$endif FPC_64}
+end;
 
 procedure bswap64array(a,b: PQWordArray; n: PtrInt);
 var
   i: PtrInt;
 begin
-  for i := 0 to n-1 do
+  for i := 0 to n - 1 do
     b^[i] := {$ifdef FPC}SwapEndian{$else}bswap64{$endif}(a^[i]);
 end;
 

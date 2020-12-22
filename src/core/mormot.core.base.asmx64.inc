@@ -1599,6 +1599,21 @@ function Rdtsc: Int64;
         or      rax, rdx
 end;
 
+procedure LockedInc32(int32: PInteger);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+   lock inc     dword ptr [int32]
+end;
+
+procedure LockedDec32(int32: PInteger);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+   lock dec     dword ptr [int32]
+end;
+
+procedure LockedInc64(int64: PInt64);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+   lock inc     qword ptr [int64]
+end;
+
 function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rax, I

@@ -1005,6 +1005,27 @@ asm
         pop     ebx
 end;
 
+procedure LockedInc32(int32: PInteger);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+   lock inc     dword ptr [int32]
+end;
+
+procedure LockedDec32(int32: PInteger);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+   lock dec     dword ptr [int32]
+end;
+
+procedure LockedInc64(int64: PInt64);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+   lock inc     dword ptr [int64]
+        jnz     @ok
+   lock inc     dword ptr [int64 + 4] // collision is very unlikely
+@ok:
+end;
+
 function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

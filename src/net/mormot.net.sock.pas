@@ -1382,7 +1382,7 @@ begin
   if result or
      (timeoutMS < 0) then
     exit;
-  InterlockedIncrement(fGettingOne);
+  LockedInc32(@fGettingOne);
   try
     byte(notif.events) := 0;
     if fTerminated then
@@ -1431,7 +1431,7 @@ begin
       result := GetOneWithinPending(notif); // retrieved from another thread?
     until result or fTerminated;
   finally
-    InterlockedDecrement(fGettingOne);
+    LockedDec32(@fGettingOne);
   end;
 end;
 

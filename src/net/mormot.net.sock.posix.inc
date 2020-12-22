@@ -184,7 +184,7 @@ function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer
   external clib name 'getpeername';
 
 {$ifdef DARWIN}
-function poll(fds: PPollFD; nfds, timeout: integer): integer;
+function poll(fds: PPollFD; nfds, timeout: integer): integer; inline;
 begin // circumvent linking issue on Mac OSX
   result := fppoll(pointer(fds), nfds, timeout);
 end;

@@ -2328,7 +2328,7 @@ begin
      {$endif USE_WINIOCP}
     until fOwner.fTerminated or Terminated;
   finally
-    InterlockedDecrement(fOwner.fRunningThreads);
+    LockedDec32(@fOwner.fRunningThreads);
   end;
 end;
 

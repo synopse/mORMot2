@@ -485,13 +485,13 @@ function TPollSocketsSlot.Lock(writer: boolean): boolean;
 begin
   result := InterlockedIncrement(lockcounter[writer]) = 1;
   if not result then
-    InterlockedDecrement(lockcounter[writer]);
+    LockedDec32(@lockcounter[writer]);
 end;
 
 procedure TPollSocketsSlot.Unlock(writer: boolean);
 begin
   if @self <> nil then
-    InterlockedDecrement(lockcounter[writer]);
+    LockedDec32(@lockcounter[writer]);
 end;
 
 function TPollSocketsSlot.TryLock(writer: boolean; timeoutMS: cardinal): boolean;
@@ -556,7 +556,7 @@ begin
   if (fRead.Terminated) or
      (connection = nil) then
     exit;
-  InterlockedIncrement(fProcessing);
+  LockedInc32(@fProcessing);
   try
     slot := SlotFromConnection(connection);
     if (slot = nil) or
@@ -567,7 +567,7 @@ begin
     result := fRead.Subscribe(slot.socket, [pseRead], TPollSocketTag(connection));
     // now, ProcessRead will handle pseRead + pseError/pseClosed on this socket
   finally
-    InterlockedDecrement(fProcessing);
+    LockedDec32(@fProcessing);
   end;
 end;
 
@@ -584,7 +584,7 @@ begin
   if fRead.Terminated or
      (connection = nil) then
     exit;
-  InterlockedIncrement(fProcessing);
+  LockedInc32(@fProcessing);
   try
     slot := SlotFromConnection(connection);
     if slot = nil then
@@ -615,7 +615,7 @@ begin
       until GetTickCount64 >= endtix;
     end;
   finally
-    InterlockedDecrement(fProcessing);
+    LockedDec32(@fProcessing);
   end;
 end;
 
@@ -678,7 +678,7 @@ begin
      (connection = nil) or
      fWrite.Terminated then
     exit;
-  InterlockedIncrement(fProcessing);
+  LockedInc32(@fProcessing);
   try
     tag := TPollSocketTag(connection);
     slot := SlotFromConnection(connection);
@@ -732,7 +732,7 @@ begin
       slot.UnLock({writer=}true);
     end;
   finally
-    InterlockedDecrement(fProcessing);
+    LockedDec32(@fProcessing);
   end;
 end;
 
@@ -762,7 +762,7 @@ begin
   if (self = nil) or
      fRead.Terminated then
     exit;
-  InterlockedIncrement(fProcessing);
+  LockedInc32(@fProcessing);
   try
     if not fRead.GetOne(timeoutMS, notif) then
       exit;
@@ -821,7 +821,7 @@ begin
       exit;
     end;
   finally
-    InterlockedDecrement(fProcessing);
+    LockedDec32(@fProcessing);
   end;
 end;
 
@@ -837,7 +837,7 @@ begin
   if (self = nil) or
      fWrite.Terminated then
     exit;
-  InterlockedIncrement(fProcessing);
+  LockedInc32(@fProcessing);
   try
     if not fWrite.GetOne(timeoutMS, notif) then
       exit;
@@ -887,7 +887,7 @@ begin
       slot.UnLock(true);
     end;
   finally
-    InterlockedDecrement(fProcessing);
+    LockedDec32(@fProcessing);
   end;
 end;
 

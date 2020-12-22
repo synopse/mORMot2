@@ -6710,7 +6710,7 @@ begin
                  (P = nil) then
                 ERttiException.Create('Missing array field type');
               FormatUTF8('[%%]', [atypname, RttiArrayCount], typname);
-              InterlockedIncrement(RttiArrayCount); // ensure genuine type name
+              LockedInc32(@RttiArrayCount); // ensure genuine type name
               ac := Rtti.RegisterTypeFromName(atypname, @apt);
               if ac = nil then
                 if apt = ptRecord then

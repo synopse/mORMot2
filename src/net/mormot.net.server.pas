@@ -1682,13 +1682,13 @@ end;
 
 procedure THttpServer.OnConnect;
 begin
-  InterLockedIncrement(fServerConnectionCount);
-  InterLockedIncrement(fServerConnectionActive);
+  LockedInc32(@fServerConnectionCount);
+  LockedInc32(@fServerConnectionActive);
 end;
 
 procedure THttpServer.OnDisconnect;
 begin
-  InterLockedDecrement(fServerConnectionActive);
+  LockedDec32(@fServerConnectionActive);
 end;
 
 function IdemPCharNotVoid(p: PByteArray; up: PByte; toup: PByteArray): boolean;
@@ -2141,12 +2141,12 @@ procedure THttpServerResp.Execute;
                    fServer.Terminated then
                   // server is down -> disconnect the client
                   exit;
-                InterLockedIncrement(fServer.fStats[res]);
+                LockedInc32(@fServer.fStats[res]);
                 case res of
                   grBodyReceived, grHeaderReceived:
                     begin
                       if res = grBodyReceived then
-                        InterlockedIncrement(fServer.fStats[grHeaderReceived]);
+                        LockedInc32(@fServer.fStats[grHeaderReceived]);
                       // calc answer and send response
                       fServer.Process(fServerSock, ConnectionID, self);
                       // keep connection only if necessary
@@ -2269,7 +2269,7 @@ begin
        fServer.Terminated then
       exit;
     // properly get the incoming body and process the request
-    InterlockedIncrement(fServer.fStats[res]);
+    LockedInc32(@fServer.fStats[res]);
     case res of
       grHeaderReceived:
         begin
@@ -2291,7 +2291,7 @@ begin
                (IdemPCharArray(pointer(ServerSock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
             begin
               ServerSock.GetBody; // we need to get it now
-              InterlockedIncrement(fServer.fStats[grBodyReceived]);
+              LockedInc32(@fServer.fStats[grBodyReceived]);
             end;
             // multi-connection -> process now
             fServer.Process(ServerSock, ServerSock.RemoteConnectionID, aCaller);

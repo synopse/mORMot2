@@ -1814,7 +1814,7 @@ begin
   begin
     if log <> nil then
       log.Log(sllTrace, 'Destroy: notify focConnectionClose', self);
-    InterlockedIncrement(fProcessCount);
+    LockedInc32(@fProcessCount);
     try
       fState := wpsDestroy;
       if fOutgoing.Count > 0 then
@@ -1827,7 +1827,7 @@ begin
         if log <> nil then // expects an answer from peer
           log.Log(sllWarning, 'Destroy: no focConnectionClose ACK %', [dummyerror], self);
     finally
-      InterlockedDecrement(fProcessCount);
+      LockedDec32(@fProcessCount);
     end;
   end;
   fState := wpsDestroy;
@@ -1930,7 +1930,7 @@ var
 begin
   if fState = wpsRun then
   begin
-    InterlockedIncrement(fProcessCount); // flag currently processing
+    LockedInc32(@fProcessCount); // flag currently processing
     try
       if CanGetFrame({timeout=}1, @sockerror) and
          GetFrame(request, @sockerror) then
@@ -1967,7 +1967,7 @@ begin
         fState := wpsClose;
       end;
     finally
-      InterlockedDecrement(fProcessCount); // release flag
+      LockedDec32(@fProcessCount); // release flag
     end;
   end;
   result := (fState = wpsRun);
@@ -1980,7 +1980,7 @@ var
 begin
   if fState = wpsRun then
   begin
-    InterlockedIncrement(fProcessCount); // flag currently processing
+    LockedInc32(@fProcessCount); // flag currently processing
     try
       elapsed := LastPingDelay;
       if elapsed > fSettings.SendDelay then
@@ -2000,7 +2000,7 @@ begin
               SetLastPingTicks(true); // mark invalid, and avoid immediate retry
         end;
     finally
-      InterlockedDecrement(fProcessCount); // release flag
+      LockedDec32(@fProcessCount); // release flag
     end;
   end;
   result := (fState = wpsRun);
@@ -2166,7 +2166,7 @@ begin
       else
         HiResDelay(start);
   finally
-    InterlockedDecrement(fProcessCount);
+    LockedDec32(@fProcessCount);
   end;
   result := TWebSocketProtocolRest(fProtocol).FrameToOutput(answer, aRequest);
 end;
