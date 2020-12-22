@@ -120,6 +120,7 @@ function  CloseHandle;                external kernel32;
 procedure FileClose;                  external kernel32 name 'CloseHandle';
 function  GetCurrentThreadId;         external kernel32;
 function  GetCurrentProcessId;        external kernel32;
+function  WaitForSingleObject;        external kernel32;
 function  GetEnvironmentStringsW;     external kernel32;
 function  FreeEnvironmentStringsW;    external kernel32;
 function  RtlCaptureStackBackTrace;   external kernel32;

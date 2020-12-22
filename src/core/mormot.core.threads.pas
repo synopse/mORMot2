@@ -2077,11 +2077,13 @@ var
 begin
   fTerminated := true; // fSubThread[].Execute will check this flag
   try
+    {$ifdef USE_WINIOCP}
     // notify the threads we are shutting down
     for i := 0 to fSubThreadCount - 1 do
-      {$ifdef USE_WINIOCP}
       PostQueuedCompletionStatus(fRequestQueue, 0, nil, nil);
-      {$else}
+    {$else}
+    // notify the threads we are shutting down using the event
+    for i := 0 to fSubThreadCount - 1 do
       fSubThread[i].fEvent.SetEvent;
     // cleanup now any pending task (e.g. THttpServerSocket instance)
     for i := 0 to fPendingContextCount - 1 do
@@ -2095,11 +2097,11 @@ begin
     for i := 0 to fSubThreadCount - 1 do
       fSubThread[i].Free;
   finally
-  {$ifdef USE_WINIOCP}
-  CloseHandle(fRequestQueue);
-  {$else}
-  DeleteCriticalSection(fSafe);
-  {$endif USE_WINIOCP}
+    {$ifdef USE_WINIOCP}
+    CloseHandle(fRequestQueue);
+    {$else}
+    DeleteCriticalSection(fSafe);
+    {$endif USE_WINIOCP}
   end;
   inherited Destroy;
 end;
