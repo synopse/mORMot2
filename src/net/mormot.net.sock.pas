@@ -1884,11 +1884,12 @@ begin
         res := InputSock(PTextRec(SockIn)^);
         if res < 0 then
           ENetSock.CheckLastError('SockInRead', {forceraise=}true);
+        // loop until Timeout
       until Timeout = 0;
   // direct receiving of the remaining bytes from socket
   if Length > 0 then
   begin
-    SockRecv(Content, Length); // raise ECrtSocket if failed to read Length
+    SockRecv(Content, Length); // raise ENetSock if failed to read Length
     inc(result, Length);
   end;
 end;
