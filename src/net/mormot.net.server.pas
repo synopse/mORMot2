@@ -2541,7 +2541,7 @@ begin
     end;
     fReqQueue := 0;
     {$ifdef FPC}
-    for i := 0 to length(fClones)-1 do
+    for i := 0 to length(fClones) - 1 do
       WaitForSingleObject(fClones[i].Handle, 30000); // sometimes needed on FPC
     {$endif FPC}
     for i := 0 to length(fClones) - 1 do

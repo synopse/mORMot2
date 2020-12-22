@@ -9,6 +9,9 @@ uses
   baseunix,
   termio,
   sockets,
+  {$ifndef BSD}
+  linux, // for epoll
+  {$endif BSD}
   initc; // link clib='c' for our socket purpose
 
 {$ifdef BSD}
@@ -136,55 +139,6 @@ type
   PPollFD = ^TPollFD;
   TPollFDDynArray = array of TPollFD;
 
-{$ifndef USEPOLL}
-
-const
-  // associated file is available for read operations
-  EPOLLIN  = $01;
-  // urgent data available for read operations
-  EPOLLPRI = $02;
-  // associated file is available for write operations
-  EPOLLOUT = $04;
-  // error condition happened on the associated file descriptor
-  EPOLLERR = $08;
-  // hang up happened on the associated file descriptor
-  EPOLLHUP = $10;
-  // sets the One-Shot behaviour for the associated file descriptor
-  // - i.e. after an event is pulled out, the file descriptor is disabled
-  EPOLLONESHOT = $40000000;
-  // sets the Edge-Triggered (ET) behaviour  for  the  associated file descriptor
-  EPOLLET = $80000000;
-
-  EPOLL_CTL_ADD = 1;
-  EPOLL_CTL_DEL = 2;
-  EPOLL_CTL_MOD = 3;
-
-type
-  /// application-level data structure for epoll
-  TEPollData = record
-    case integer of
-      0: (
-         ptr: pointer);
-      1: (
-         fd: integer);
-      2: (
-         u32: cardinal);
-      3: (
-         u64: Int64);
-      4: (
-         obj: TObject);
-  end;
-  PEPollData = ^TEPollData;
-
-  /// epoll descriptor data structure
-  TEPollEvent = packed record
-    events: cardinal;
-    data: TEpollData;
-  end;
-  PEPollEvent = ^TEPollEvent;
-  TEPollEventDynArray = array of TEPollEvent;
-
-{$endif USEPOLL}
 
 
 { ******** Sockets API calls via the libc }
@@ -238,18 +192,6 @@ end;
 function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll';
 {$endif DARWIN}
-
-{$ifndef USEPOLL}
-// epoll is Linux-Specific
-function epoll_create(size: integer): integer;
-  external clib name 'epoll_create';
-function epoll_ctl(epfd, op, fd: integer; event: PEPollEvent): integer;
-  external clib name 'epoll_ctl';
-function epoll_wait(epfd: integer; events: PEPollEvent; maxevents, timeout: integer): integer;
-  external clib name 'epoll_wait';
-function epoll_close(epfd: integer): integer;
-  external clib name 'close';
-{$endif USEPOLL}
 
 function sockerrno: integer; inline;
 begin
@@ -606,7 +548,7 @@ type
   TPollSocketEpoll = class(TPollSocketAbstract)
   protected
     fEPFD: integer;
-    fResults: TEPollEventDynArray;
+    fResults: array of EPoll_Event;
   public
     constructor Create; override;
     destructor Destroy; override;
@@ -632,14 +574,14 @@ end;
 
 destructor TPollSocketEpoll.Destroy;
 begin
-  epoll_close(fEPFD);
+  fpClose(fEPFD);
   inherited;
 end;
 
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
-  e: TEPollEvent;
+  e: EPoll_Event;
 begin
   result := false;
   if (self = nil) or
@@ -648,22 +590,22 @@ begin
      (byte(events) = 0) or
      (fCount = fMaxSockets) then
     exit;
-  e.data.u64 := tag;
+  e.data.ptr := pointer(tag); // don't use data.u64
   if pseRead in events then
     e.events := EPOLLIN
   else
     e.events := 0;
   if pseWrite in events then
     e.events := e.events or EPOLLOUT;
-  // EPOLLERR and EPOLLHUP are always implicitly defined
-  result := epoll_ctl(fEPFD,EPOLL_CTL_ADD, TSocket(socket), @e) = NO_ERROR;
+  // EPOLLERR and EPOLLHUP are always implicitly tracked
+  result := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e) = NO_ERROR;
   if result then
     inc(fCount);
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
-  e: TEPollEvent; // should be there even if not used
+  e: EPoll_Event; // should be there even if not used
 begin
   if (self = nil) or
      (socket = nil) or

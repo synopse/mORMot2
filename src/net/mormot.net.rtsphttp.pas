@@ -361,7 +361,12 @@ begin
     postconn.fRtspTag := rtspconn.Handle;
     rtspconn.fGetBlocking := get;
     if not fClients.Start(rtspconn) then
+    begin
+    if log <> nil then
+      log.Log(sllWarning,
+        'ConnectionCreate fClients.Start failed for %', [rtspconn], self);
       exit;
+    end;
     get := nil;
     result := true;
     if log <> nil then
