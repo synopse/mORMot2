@@ -317,6 +317,8 @@ type
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
     function ExecuteList(const Tables: array of TOrmClass;
       const SQL: RawUTF8): TOrmTable; override;
+    function List(const Tables: array of TOrmClass; const SQLSelect: RawUTF8 = 'RowID';
+      const SQLWhere: RawUTF8 = ''): TOrmTable; override;
     function UnLock(Table: TOrmClass; aID: TID): boolean; override;
     function TransactionBegin(aTable: TOrmClass;
       SessionID: cardinal = CONST_AUTHENTICATION_NOT_USED): boolean; override;
@@ -928,6 +930,54 @@ begin
       // no data on error
       result := nil;
   end;
+end;
+
+function TRestOrmClientURI.List(const Tables: array of TOrmClass;
+  const SQLSelect: RawUTF8; const SQLWhere: RawUTF8): TOrmTable;
+var
+  Resp, SQL: RawUTF8;
+  U: RawUTF8;
+  InternalState: cardinal;
+begin
+  result := nil;
+  if high(Tables) < 0 then
+  exit;
+  // GET Collection
+  SQL := Model.SQLFromSelectWhere(Tables, SQLSelect, SQLWhere);
+  if high(Tables) = 0 then
+  begin
+    // one Table -> use REST protocol (SQL as parameters)
+    if not IsRowID(pointer(SQLSelect)) then
+      // ID selected by default
+      U := '?select=' + UrlEncode(SQLSelect)
+    else
+      U := '';
+    if SQLWhere <> '' then
+    begin
+      if U <> '' then
+        U := U + '&where='
+      else
+        U := U + '?where=';
+      U := U + UrlEncode(SQLWhere);
+    end;
+    with URI(Model.URI[Tables[0]] + U, 'GET', @Resp) do
+      if Lo <> HTTP_SUCCESS then
+        exit
+      else
+        InternalState := Hi;
+    result := TOrmTableJSON.CreateFromTables([Tables[0]], SQL, Resp); // get data
+  end
+  else
+  begin
+    // multiple tables -> send SQL statement as HTTP body
+    with URI(Model.Root,'GET', @Resp, nil, @SQL) do
+      if Lo <> HTTP_SUCCESS then
+        exit
+      else
+        InternalState := Hi;
+    result := TOrmTableJSON.CreateFromTables(Tables, SQL, Resp); // get data
+  end;
+  result.InternalState := InternalState;
 end;
 
 function TRestOrmClientURI.ServerInternalState: cardinal;

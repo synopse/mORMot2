@@ -348,7 +348,6 @@ constructor TRestClientDB.Create(aClientModel, aServerModel: TOrmModel;
 begin
   aDB.UseCache := true;      // we better use caching in this JSON oriented use
   inherited Create(aClientModel);
-
   if aServerModel = nil then
     // clone the server model from client, if none specified
     aServerModel := TOrmModel.Create(aClientModel);
