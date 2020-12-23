@@ -123,6 +123,21 @@ procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest)
 
 { ******************** WebSockets Protocols Implementation }
 
+var
+  /// the raw class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAES
+  // - was TAESCFB on mORMot 1.18, but we switched to TAESOFB with mORMot 2
+  // - you can put back the TAESCFB class here for backward compatibility
+  ProtocolAesClass: TAESAbstractClass = TAESOFB;
+
+  /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
+  // - we use PBKDF2 over SHA-3 in 256-bit, for a future-proof derivation
+  // - if you set 0, it will use the mORMot 1.18 deprecated SHA256Weak() function
+  ProtocolAesRounds: integer = 1024;
+
+  /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
+  ProtocolAesSalt: RawUTF8 = 'E750ACCA-2C6F-4B0E-999B-D31C9A14EFAB';
+
+
 type
   {$M+}
   TWebSocketProcess = class;
@@ -200,11 +215,11 @@ type
     function SetSubprotocol(const aProtocolName: RawUTF8): boolean; virtual;
     /// set the fEncryption: IProtocol according to the supplied key
     // - any asymmetric algorithm needs to know which side (client/server) to work on
-    // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESCFB)
+    // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESOFB)
     // using the deprecated SHA256Weak(aKey) - consider using a safer hasher
     // and SetEncryptKeyAES() with a safer derivated key
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
-    /// set the fEncryption: IProtocol as TProtocolAES.Create(TAESCFB)
+    /// set the fEncryption: IProtocol as TProtocolAES.Create(TAESOFB)
     procedure SetEncryptKeyAES(const aKey; aKeySize: cardinal);
     /// redirect to Encryption.ProcessHandshake, if defined
     function ProcessHandshake(const ExtIn: TRawUTF8DynArray;
@@ -795,7 +810,14 @@ begin
     fEncryption := TECDHEProtocol.FromKey(aKey, aServer);
     if fEncryption = nil then
     begin
-      SHA256Weak(aKey, key); // fallback to deprecated TProtocolAES/TAESCFB
+      // use symetric TProtocolAES algorithm
+      if ProtocolAesRounds = 0 then
+        // mORMot 1.18 deprecated password derivation
+        SHA256Weak(aKey, key)
+      else
+        // new safer password derivation algorithm
+        PBKDF2_SHA3(SHA3_256, aKey, ProtocolAesSalt, ProtocolAesRounds,
+          @key, SizeOf(key));
       SetEncryptKeyAES(key, 256);
     end;
   end;
@@ -804,7 +826,7 @@ end;
 procedure TWebSocketProtocol.SetEncryptKeyAES(const aKey; aKeySize: cardinal);
 begin
   if aKeySize >= 128 then
-    fEncryption := TProtocolAES.Create(TAESCFB, aKey, aKeySize,
+    fEncryption := TProtocolAES.Create(ProtocolAesClass, aKey, aKeySize,
       WebSocketsIVReplayAttackCheck);
 end;
 

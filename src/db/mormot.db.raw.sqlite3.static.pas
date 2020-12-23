@@ -785,7 +785,7 @@ begin
       if encrypt then
       begin
         plain := PInt64(data + 16)^;
-        aes^.DoBlocksOFB(iv.b, data + 16, data + 16, len - 1);
+        aes^.DoBlocksOFB(@iv.b, data + 16, data + 16, len - 1);
         // 8..15 are encrypted bytes 16..23
         PInt64(data + 8)^ := PInt64(data + 16)^;
         PInt64(data + 16)^ := plain;
@@ -793,7 +793,7 @@ begin
       else
       begin
         PInt64(data + 16)^ := PInt64(data + 8)^;
-        aes^.DoBlocksOFB(iv.b, data + 16, data + 16, len - 1);
+        aes^.DoBlocksOFB(@iv.b, data + 16, data + 16, len - 1);
         if (data[21] = #64) and
            (data[22] = #32) and
            (data[23] = #32) then
@@ -805,7 +805,7 @@ begin
       FillZero(PHash128(data)^)
   else
     // whole page encryption if not the first one
-    aes^.DoBlocksOFB(iv.b, data, data, len);
+    aes^.DoBlocksOFB(@iv.b, data, data, len);
 end;
 
 function CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar;

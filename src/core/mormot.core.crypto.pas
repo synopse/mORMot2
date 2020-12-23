@@ -270,7 +270,7 @@ type
     // - may be called instead of TAESOFB when only a raw TAES is available
     // - as used e.g. by mormot.db.raw.sqlite3.static.pas for its DB encryption
     // - this method is thread-safe, and is optimized for AES-NI on x86_64
-    procedure DoBlocksOFB(const iv: TAESBlock; src, dst: pointer;
+    procedure DoBlocksOFB(iv: PAESBlock; src, dst: pointer;
       blockcount: PtrUInt);
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
     function Initialized: boolean;
@@ -3128,7 +3128,7 @@ begin
   DoBlocks(pIn, pOut, pIn, pOut, Count, doEncrypt);
 end;
 
-procedure TAES.DoBlocksOFB(const iv: TAESBlock; src, dst: pointer;
+procedure TAES.DoBlocksOFB(iv: PAESBlock; src, dst: pointer;
   blockcount: PtrUInt);
 var
   cv: TAESBlock;
@@ -3138,17 +3138,17 @@ begin
     case integer(TAESContext(Context).KeyBits) of
       128:
         begin
-          AesNiEncryptOFB_128(@iv, @Context, src, dst, blockcount);
+          AesNiEncryptOFB_128(iv, @Context, src, dst, blockcount);
           exit;
         end;
       256:
         begin
-          AesNiEncryptOFB_256(@iv, @Context, src, dst, blockcount);
+          AesNiEncryptOFB_256(iv, @Context, src, dst, blockcount);
           exit;
         end;
     end;
   {$endif USEAESNI64}
-  cv := iv;
+  cv := iv^;
   if blockcount > 0 then
     repeat
       TAESContext(Context).DoBlock(Context, cv, cv);
@@ -4922,7 +4922,7 @@ var
 begin
   {$ifdef USEAESNI64}
   if Count and AESBlockMod = 0 then
-    aes.DoBlocksOFB(fCV, BufIn, BufOut, Count shr AESBlockShift)
+    aes.DoBlocksOFB(@fCV, BufIn, BufOut, Count shr AESBlockShift)
   else
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
