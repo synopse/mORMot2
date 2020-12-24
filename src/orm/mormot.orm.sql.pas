@@ -180,8 +180,8 @@ type
   public
     /// initialize the remote database connection
     // - you should not use this, but rather call VirtualTableExternalRegister()
-    // - RecordProps.ExternalDatabase will map the associated TSQLDBConnectionProperties
-    // - RecordProps.ExternalTableName will retrieve the real full table name,
+    // - OrmProps.ExternalDatabase will map the associated TSQLDBConnectionProperties
+    // - OrmProps.ExternalTableName will retrieve the real full table name,
     // e.g. including any databas<e schema prefix
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); override;
     /// delete a row, calling the external engine with SQL
@@ -413,7 +413,7 @@ type
 // !  Model := TOrmModel.Create([TOrmCustomer],'root');
 // !  VirtualTableExternalRegister(Model,TOrmCustomer,Props,'Sales.Customer');
 // !  Server := TRestServerDB.Create(aModel,'application.db'),true)
-// - the supplied aExternalDB parameter is stored within aClass.RecordProps, so
+// - the supplied aExternalDB parameter is stored within aClass.OrmProps, so
 // the instance must stay alive until all database access to this external table
 // is finished (e.g. use a private/protected property)
 // - aMappingOptions can be specified now, or customized later
@@ -664,7 +664,7 @@ begin
     if fFieldsExternal = nil then
     begin
       // table is not yet existing -> try to create it
-      with aClass.RecordProps do
+      with aClass.OrmProps do
       begin
         SetLength(CreateColumns, Fields.Count + 1);
         CreateColumns[0].Name := fStoredClassMapping^.RowIDFieldName;
@@ -1448,7 +1448,7 @@ begin
   if (Value <> nil) and
      (Value.ID > 0) and
      (POrmClass(Value)^ = fStoredClass) then
-    with Value.RecordProps do
+    with Value.Orm do
       if BlobFields <> nil then
       begin
         rows := ExecuteDirect('select % from % where %=?',
@@ -1594,7 +1594,7 @@ begin
   result := false;
   if (Value <> nil) and
      (POrmClass(Value)^ = fStoredClass) then
-    with Value.RecordProps do
+    with Value.Orm do
       if BlobFields <> nil then
       begin
         aID := Value.ID;

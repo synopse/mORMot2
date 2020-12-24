@@ -3795,7 +3795,7 @@ begin
   if len > 4 then
   begin
     R.Init(pointer(tmp), len);
-    if not fHistoryTable.RecordProps.CheckBinaryHeader(R) then
+    if not fHistoryTable.OrmProps.CheckBinaryHeader(R) then
       // invalid content: TOrm layout may have changed
       exit;
     R.ReadVarUInt32Array(fHistoryUncompressedOffset);
@@ -3989,7 +3989,7 @@ begin
         newOffset[firstNewIndex + i] :=
           fHistoryAddOffset[i] + firstNewOffset;
       // write header
-      fHistoryTable.RecordProps.SaveBinaryHeader(W);
+      fHistoryTable.OrmProps.SaveBinaryHeader(W);
       W.WriteVarUInt32Array(newOffset, length(newOffset), wkOffsetU);
       // write data
       W.Write(@PByteArray(fHistoryUncompressed)[firstOldOffset], firstNewOffset);
@@ -4002,8 +4002,7 @@ begin
         Server.UpdateField(RecordClass,
           'Timestamp', Int64ToUTF8(Server.GetServerTimestamp),
           'RowID', Int64ToUtf8(fID));
-        Server.UpdateBlob(RecordClass, fID,
-          RecordProps.BlobFields[0].Name, fHistory);
+        Server.UpdateBlob(RecordClass, fID, Orm.BlobFields[0].Name, fHistory);
       end;
       result := true;
     finally

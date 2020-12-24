@@ -292,7 +292,7 @@ type
   // use P := PropList to get the first PRttiProp, and iterate with P^.Next
   // - this enumeration is very fast and doesn't require any temporary memory,
   //  as in the TypInfo.GetPropInfos() PPropList usage
-  // - for TOrm, you should better use the RecordProps.Fields[] array,
+  // - for TOrm, you should better use the Properties.Fields[] array,
   // which is faster and contains the properties published in parent classes
   TRttiProps = object
   public
@@ -1976,7 +1976,7 @@ type
     fParser: TRttiParserType;
     fParserComplex: TRttiParserComplexType;
     fFlags: TRttiCustomFlags;
-    fPrivate: TObject; // used e.g. by mormot.orm.base.pas or mormot.core.log.pas
+    fPrivate: pointer; // used e.g. by mormot.orm.base.pas or mormot.core.log.pas
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
     fCopy: TRttiCopier;
@@ -2119,7 +2119,7 @@ type
     /// opaque private instance used by mormot.orm.base.pas or mormot.core.log.pas
     // - stores e.g. the TOrmProperties ORM information of a TOrm,
     // or the TSynLogFamily of a TSynLog instance
-    property Private: TObject
+    property PrivateSlot: pointer
       read fPrivate write fPrivate;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
@@ -6370,7 +6370,7 @@ destructor TRttiCustom.Destroy;
 begin
   inherited Destroy;
   ObjArrayClear(fOwnedRtti);
-  fPrivate.Free;
+  TObject(fPrivate).Free;
 end;
 
 constructor TRttiCustom.CreateFromText(const RttiDefinition: RawUTF8);

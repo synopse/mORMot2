@@ -3165,7 +3165,7 @@ type
     function GetTable: TOrmTable;
   protected
     fInternalState: cardinal;
-    /// defined as a protected class function for RecordProps method inlining
+    /// defined as a protected class function for OrmProps method inlining
     class function PropsCreate: TOrmProperties;
     /// virtual class method to be overridden to register some custom properties
     // - do nothing by default, but allow inherited classes to define some
@@ -3174,8 +3174,8 @@ type
     // Props.RegisterCustomRTTIRecordProperty() methods
     // - can also be used to specify a custom text collation, by calling
     // Props.SetCustomCollationForAll() or SetCustomCollation() methods
-    // - do not call RecordProps from here (e.g. by calling AddFilter*): it
-    // woult trigger a stack overflow, since at this state Props is not stored -
+    // - do not call OrmProps from here (e.g. by calling AddFilter*): it
+    // would trigger a stack overflow, since at this state Props is not stored -
     // but rather use InternalDefineModel class method
     class procedure InternalRegisterCustomProperties(Props: TOrmProperties); virtual;
     /// virtual class method to be overridden to define some record-level modeling
@@ -3200,12 +3200,16 @@ type
     // so even Delphi XE syntax is not powerful enough for our purpose, and the
     // vmtAutoTable trick if very fast, and works with all versions of Delphi -
     // including 64-bit target)
-    class function RecordProps: TOrmProperties;
+    class function OrmProps: TOrmProperties;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// direct access to the TOrmProperties info of an existing TOrm instance
+    // - same as OrmProps, but we know that PropsCreate is never needed
+    function Orm: TOrmProperties;
       {$ifdef HASINLINE}inline;{$endif}
     /// the Table name in the database, associated with this TOrm class
     // - 'TSQL' or 'TOrm' chars are trimmed at the beginning of the ClassName
     // - or the ClassName is returned as is, if no 'TSQL' or 'TOrm' at first
-    // - is just a wrapper around RecordProps.SQLTableName field value
+    // - is just a wrapper around OrmProps.SQLTableName field value
     class function SQLTableName: RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
     /// register a custom filter (transformation) or validate to the
@@ -3213,7 +3217,7 @@ type
     // - this will be used by TOrm.Filter and TOrm.Validate
     // methods (in default implementation)
     // - will raise an EModelException on failure
-    // - this function is just a wrapper around RecordProps.AddFilterOrValidate
+    // - this function is just a wrapper around OrmProps.AddFilterOrValidate
     class procedure AddFilterOrValidate(const aFieldName: RawUTF8;
       aFilter: TSynFilterOrValidate);
     /// register a TSynFilterTrim and a TSynValidateText filters so that
@@ -3305,7 +3309,7 @@ type
 
     /// filter/transform the specified fields values of the TOrm instance
     // - by default, this will perform all TSynFilter as registered by
-    // [RecordProps.]AddFilterOrValidate()
+    // [OrmProps.]AddFilterOrValidate()
     // - inherited classes may add some custom filtering/transformation here, if
     // it's not needed nor mandatory to create a new TSynFilter class type: in
     // this case, the function has to return TRUE if the filtering took place,
@@ -3319,7 +3323,7 @@ type
     function Filter(const aFields: array of RawUTF8): boolean; overload;
     /// validate the specified fields values of the current TOrm instance
     // - by default, this will perform all TSynValidate as registered by
-    //  [RecordProps.]AddFilterOrValidate()
+    //  [OrmProps.]AddFilterOrValidate()
     // - it will also check if any UNIQUE field value won't be duplicated
     // - inherited classes may add some custom validation here, if it's not needed
     //  nor mandatory to create a new TSynValidate class type: in this case, the
@@ -3784,8 +3788,8 @@ type
     // - same as SetBinaryValues(), but also reading the ID field first
     function SetBinary(const binary: RawByteString): boolean; overload;
     /// set all field values from a supplied array of TSQLVar values
-    // - Values[] array must match the RecordProps.Field[] order: will return
-    // false if the Values[].VType does not match RecordProps.FieldType[]
+    // - Values[] array must match the OrmProps.Field[] order: will return
+    // false if the Values[].VType does not match OrmProps.FieldType[]
     function SetFieldSQLVars(const Values: TSQLVarDynArray): boolean;
     /// retrieve a field value from a given property name, as encoded UTF-8 text
     // - you should use strong typing and direct property access, following
@@ -4103,6 +4107,11 @@ type
     // - if the field index is not existing or not a dynamic array, result.IsVoid
     // will be TRUE
     function DynArray(DynArrayFieldIndex: integer): TDynArray; overload;
+
+    {$ifndef PUREMORMOT2}
+    class function RecordProps: TOrmProperties;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$endif PUREMORMOT2}
 
     /// this property stores the record's integer ID
     // - if this TOrm is not a instance, but a field value in a published
@@ -5725,7 +5734,7 @@ type
 
   /// some information about a given TOrm class properties
   // - used internaly by TOrm, via a global cache handled by this unit:
-  // you can access to each record's properties via TOrm.RecordProps class
+  // you can access to each record's properties via TOrm.OrmProps class
   // - such a global cache saves some memory for each TOrm instance,
   // and allows faster access to most wanted RTTI properties
   TOrmProperties = class
@@ -6844,7 +6853,7 @@ type
     property Root: RawUTF8 read fRoot write SetRoot;
     /// the associated ORM information about all handled TOrm class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
-    // fast direct access to the Tables[].RecordProps values
+    // fast direct access to the Tables[].OrmProps values
     property TableProps: TOrmModelPropertiesObjArray read fTableProps;
   end;
 
@@ -13436,7 +13445,7 @@ function TOrmTable.FieldPropFromTables(const PropName: RawUTF8;
     end
     else if fQueryTables[aTableIndex] <> nil then
     begin
-      PropInfo := fQueryTables[aTableIndex].RecordProps.Fields.ByName(aPropName);
+      PropInfo := fQueryTables[aTableIndex].OrmProps.Fields.ByName(aPropName);
       if PropInfo <> nil then
       begin
         result := PropInfo.OrmFieldTypeStored;
@@ -13487,7 +13496,7 @@ begin
       // handle property names as 'ClassName.PropertyName'
       for t := 0 to high(fQueryTables) do
         if fQueryTables[t] <> nil then // avoid GPF
-          if IdemPropNameU(fQueryTables[t].RecordProps.SQLTableName,
+          if IdemPropNameU(fQueryTables[t].OrmProps.SQLTableName,
             pointer(PropName), i) then
           begin
             SearchInQueryTables(@PropName[i + 2], t);
@@ -16159,15 +16168,21 @@ end;
 
 // some methods defined ahead of time for proper inlining
 
-class function TOrm.RecordProps: TOrmProperties;
+class function TOrm.OrmProps: TOrmProperties;
 begin
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if result <> nil then
     // we know TRttiCustom is in the slot, and Private is TOrmProperties
-    result := TOrmProperties(TRttiCustom(pointer(result)).Private);
+    result := TRttiCustom(pointer(result)).PrivateSlot;
   if result = nil then
     // first time we use this TOrm: generate information from RTTI
     result := PropsCreate;
+end;
+
+function TOrm.Orm: TOrmProperties;
+begin
+  // we know TRttiCustom is in the slot, and Private is TOrmProperties
+  result := PRttiCustom(PPAnsiChar(self)^ + vmtAutoTable)^.PrivateSlot;
 end;
 
 class function TOrm.SQLTableName: RawUTF8;
@@ -16175,7 +16190,7 @@ begin
   if self = nil then
     result := ''
   else
-    result := RecordProps.SQLTableName;
+    result := OrmProps.SQLTableName;
 end;
 
 
@@ -16222,7 +16237,7 @@ begin
     if IsRowID(pointer(aFieldName)) then
       AddMap(aRecord, nil, aIndex)
     else
-      with aRecord.RecordProps do
+      with aRecord.OrmProps do
       begin
         aFieldIndex := Fields.IndexByName(aFieldName);
         if aFieldIndex >= 0 then
@@ -16334,7 +16349,7 @@ begin
   fTable := aTable;
   if aTable.fResults = nil then
     exit; // void content
-  Props := aRecord.RecordProps;
+  Props := aRecord.Orm;
   for f := 0 to aTable.FieldCount - 1 do
   begin
     ColumnName := aTable.fResults[f];
@@ -16398,27 +16413,27 @@ var
   rtticustom: TRttiCustom;
   vmt: TObject;
 begin
-  // private sub function for proper TOrm.RecordProps method inlining
+  // private sub function for proper TOrm.OrmProps method inlining
   rtticustom := Rtti.RegisterClass(self);
   vmt := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if (rtticustom = nil) or (vmt <> rtticustom) then
-    // TOrm.RecordProps expects TRttiCustom in the first slot
-    raise EModelException.CreateUTF8('%.RecordProps: vmtAutoTable=% not %',
+    // TOrm.OrmProps expects TRttiCustom in the first slot
+    raise EModelException.CreateUTF8('%.OrmProps: vmtAutoTable=% not %',
       [self, vmt, rtticustom]);
   EnterCriticalSection(vmtAutoTableLock);
   try
-    result := TOrmProperties(rtticustom.Private); // Private is TOrmProperties
+    result := rtticustom.PrivateSlot; // Private is TOrmProperties
     if Assigned(result) then
       if result.InheritsFrom(TOrmProperties) then
         // registered by a background thread
         exit
       else
         // paranoid
-        raise EModelException.CreateUTF8('%.RecordProps: vmtAutoTable=%',
+        raise EModelException.CreateUTF8('%.OrmProps: vmtAutoTable=%',
           [self, result]);
     // create the properties information from RTTI
     result := TOrmProperties.Create(self);
-    rtticustom.Private := result; // will be owned by this TRttiCustom
+    rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
     self.InternalDefineModel(result);
   finally
     LeaveCriticalSection(vmtAutoTableLock);
@@ -16447,8 +16462,8 @@ end;
 
 constructor TOrm.Create;
 begin
-  // no inherited TSynPersistent.Create since vmtAutoTable is set by RecordProps
-  with RecordProps do
+  // no inherited TSynPersistent.Create since vmtAutoTable is set by OrmProps
+  with OrmProps do
     if pointer(ManyFields) <> nil then
       // auto-instanciate any TOrmMany instance
       ManyFieldsCreate(self, pointer(ManyFields));
@@ -16459,7 +16474,7 @@ var
   i: PtrInt;
   props: TOrmProperties;
 begin
-  props := RecordProps;
+  props := Orm;
   if fFill <> nil then
   begin
     if fFill.fJoinedFields then
@@ -16497,7 +16512,7 @@ begin
   result := RecordClass.Create;
   // copy properties content
   result.fID := fID;
-  with RecordProps do
+  with Orm do
     for f := 0 to length(CopiableFields) - 1 do
       CopiableFields[f].CopyValue(self, result);
 end;
@@ -16509,7 +16524,7 @@ begin
   result := RecordClass.Create;
   // copy properties content
   result.fID := fID;
-  with RecordProps do
+  with Orm do
     for f := 0 to Fields.Count - 1 do
       if (f in CustomFields) and (f in CopiableFieldsBits) then
         Fields.List[f].CopyValue(self, result);
@@ -16520,7 +16535,7 @@ var
   f: PtrInt;
 begin
   FillZero(result{%H-});
-  with RecordProps do
+  with Orm do
     for f := 0 to Fields.Count - 1 do
       if (f in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
         include(result, f);
@@ -16597,7 +16612,7 @@ begin
       if (FieldName = '') or IsRowID(pointer(FieldName)) then
         Server.CreateSQLIndex(self, 'ID', true); // for external tables
     // automatic column indexation of fields which are commonly searched by value
-    with RecordProps do
+    with OrmProps do
       for f := 0 to Fields.Count - 1 do
         with Fields.List[f] do
           if (FieldName = '') or IdemPropNameU(FieldName, Name) then
@@ -16619,7 +16634,7 @@ end;
 procedure TOrm.FillFrom(aRecord: TOrm);
 begin
   if (self <> nil) and (aRecord <> nil) then
-    FillFrom(aRecord, aRecord.RecordProps.CopiableFieldsBits);
+    FillFrom(aRecord, aRecord.OrmProps.CopiableFieldsBits);
 end;
 
 procedure TOrm.FillFrom(aRecord: TOrm; const aRecordFieldBits: TFieldBits);
@@ -16632,7 +16647,7 @@ var
 begin
   if (self = nil) or (aRecord = nil) or IsZero(aRecordFieldBits) then
     exit;
-  D := RecordProps;
+  D := Orm;
   if POrmClass(aRecord)^.InheritsFrom(POrmClass(self)^) then
   begin
     // fast atttribution for two sibbling classes
@@ -16644,7 +16659,7 @@ begin
     exit;
   end;
   // two diverse tables -> don't copy ID, and per-field lookup
-  S := aRecord.RecordProps;
+  S := aRecord.OrmProps;
   for i := 0 to S.Fields.Count - 1 do
     if i in aRecordFieldBits then
     begin
@@ -16905,7 +16920,7 @@ begin
       SetID(Value, fID)
     else
     begin
-      field := RecordProps.Fields.ByName(PropName);
+      field := Orm.Fields.ByName(PropName);
       if field <> nil then
       begin
         field.SetValue(self, Value, wasString);
@@ -16921,7 +16936,7 @@ var
 begin
   result := false;
   max := length(Values) - 1;
-  with RecordProps do
+  with Orm do
   begin
     // expect exact Values[] type match with FieldType[]
     if max <> Fields.Count - 1 then // must match field count
@@ -16941,7 +16956,7 @@ procedure TOrm.GetBinaryValues(W: TBufferWriter);
 var
   f: PtrInt;
 begin
-  with RecordProps do
+  with Orm do
     for f := 0 to Fields.Count - 1 do
       Fields.List[f].GetBinary(self, W);
 end;
@@ -16950,7 +16965,7 @@ procedure TOrm.GetBinaryValuesSimpleFields(W: TBufferWriter);
 var
   f: PtrInt;
 begin
-  with RecordProps do
+  with Orm do
     for f := 0 to SimpleFieldCount - 1 do
       SimpleFields[f].GetBinary(self, W);
 end;
@@ -16960,7 +16975,7 @@ procedure TOrm.GetBinaryValues(W: TBufferWriter;
 var
   f: PtrInt;
 begin
-  with RecordProps do
+  with Orm do
     for f := 0 to Fields.Count - 1 do
       if f in aFields then
         Fields.List[f].GetBinary(self, W);
@@ -16998,7 +17013,7 @@ begin
   result := false;
   if P = nil then
     exit; // on error
-  with RecordProps do
+  with Orm do
     for f := 0 to Fields.Count - 1 do
     begin
       P := Fields.List[f].SetBinary(self, P, PEnd);
@@ -17014,7 +17029,7 @@ var
   f: PtrInt;
 begin
   result := false;
-  with RecordProps do
+  with Orm do
     for f := 0 to SimpleFieldCount - 1 do
     begin
       P := SimpleFields[f].SetBinary(self, P, PEnd);
@@ -17053,7 +17068,7 @@ begin
   end;
   if W.Fields <> nil then
   begin
-    Props := RecordProps.Fields;
+    Props := Orm.Fields;
     for f := 0 to length(W.Fields) - 1 do
     begin
       if W.Expand then
@@ -17083,7 +17098,7 @@ begin
   end;
   W.AddShorter('{"ID":');
   W.Add(fID);
-  P := RecordProps;
+  P := Orm;
   if IsZero(Fields) then
     Fields := P.SimpleFieldsBits[ooSelect];
   Props := P.Fields;
@@ -17121,7 +17136,7 @@ var
   p: TOrmPropInfo;
 begin
   if self <> nil then
-    with RecordProps do
+    with Orm do
       if oftVariant in HasTypeFields then
         for i := 0 to Fields.Count - 1 do
         begin
@@ -17158,7 +17173,7 @@ var
 begin
   if self = nil then
     exit;
-  with RecordProps do
+  with Orm do
     serializer := CreateJSONWriter(JSON, Expand, withID, SimpleFieldsBits[Occasion],
       {knownrows=}0);
   serializer.OrmOptions := OrmOptions;
@@ -17173,7 +17188,7 @@ var
 begin
   J := TRawByteStringStream.Create;
   try
-    serializer := RecordProps.CreateJSONWriter(J, Expand, withID, Fields, {knownrows=}0);
+    serializer := Orm.CreateJSONWriter(J, Expand, withID, Fields, {knownrows=}0);
     serializer.OrmOptions := OrmOptions;
     GetJSONValuesAndFree(serializer);
     result := J.DataString;
@@ -17187,7 +17202,7 @@ function TOrm.GetJSONValues(Expand, withID: boolean;
 var
   bits: TFieldBits;
 begin
-  if RecordProps.FieldBitsFromCSV(FieldsCSV, bits) then
+  if Orm.FieldBitsFromCSV(FieldsCSV, bits) then
     result := GetJSONValues(Expand, withID, bits, OrmOptions)
   else
     result := '';
@@ -17199,7 +17214,7 @@ function TOrm.GetJSONValues(Expand, withID: boolean;
 var
   J: TRawByteStringStream;
 begin
-  if not withID and IsZero(RecordProps.SimpleFieldsBits[Occasion]) then
+  if not withID and IsZero(Orm.SimpleFieldsBits[Occasion]) then
     // no simple field to write -> quick return
     result := ''
   else
@@ -17356,7 +17371,7 @@ begin
   result := '';
   if self = nil then
     exit;
-  with RecordProps do
+  with Orm do
     for i := 0 to length(SimpleFields) - 1 do
       with SimpleFields[i] do
       begin
@@ -17378,7 +17393,7 @@ var
 begin
   result := '';
   if self <> nil then
-    with RecordProps do
+    with Orm do
       if SimpleFields = nil then
         exit
       else
@@ -17407,7 +17422,7 @@ begin
      (POrmClass(Reference)^ <> POrmClass(self)^) or
      (Reference.fID <> fID) then
     exit;
-  with RecordProps do
+  with Orm do
     for i := 0 to length(SimpleFields) - 1 do      // compare not RawBlob/TOrmMany fields
       with SimpleFields[i] do
         if CompareValue(self, Reference, false) <> 0 then
@@ -17429,7 +17444,7 @@ begin
     if POrmClass(Reference)^ = POrmClass(self)^ then
     begin
       // faster comparison on same exact class
-      with RecordProps do
+      with Orm do
         for i := 0 to length(SimpleFields) - 1 do      // compare not RawBlob/TOrmMany fields
           with SimpleFields[i] do
             if CompareValue(self, Reference, false) <> 0 then
@@ -17438,8 +17453,8 @@ begin
     else
     begin
       // comparison of all properties of Reference against self
-      This := RecordProps;
-      Ref := Reference.RecordProps;
+      This := Orm;
+      Ref := Reference.Orm;
       for i := 0 to length(Ref.SimpleFields) - 1 do
         with Ref.SimpleFields[i] do
         begin
@@ -17462,7 +17477,7 @@ begin
     exit;
   fInternalState := 0;
   fID := 0;
-  with RecordProps do
+  with Orm do
     if fFill.JoinedFields then
     begin
       for i := 0 to length(CopiableFields) - 1 do
@@ -17485,7 +17500,7 @@ var
 begin
   if (self = nil) or (aFieldsCSV = '') then
     exit;
-  with RecordProps do
+  with Orm do
   begin
     if aFieldsCSV = '*' then
       bits := SimpleFieldsBits[ooInsert]
@@ -17527,7 +17542,7 @@ begin
   if self = nil then
     result := false
   else // means error
-    with RecordProps do
+    with Orm do
       if length(SimpleFields) <> length(aSimpleFields) then
         result := false
       else
@@ -17634,7 +17649,7 @@ begin
       instance := JoinedFieldsTable[i].Create;
       JoinedFields[i - 1].SetInstance(self, instance);
       fFill.AddMapSimpleFields(instance,
-        JoinedFieldsTable[i].RecordProps.SimpleFields, n);
+        JoinedFieldsTable[i].OrmProps.SimpleFields, n);
     end;
   end;
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)
@@ -17642,7 +17657,7 @@ end;
 
 constructor TOrm.CreateJoined(const aClient: IRestOrm; aID: TID);
 begin
-  CreateAndFillPrepareJoined(aClient, '%.RowID=?', [RecordProps.SQLTableName], [aID]);
+  CreateAndFillPrepareJoined(aClient, '%.RowID=?', [Orm.SQLTableName], [aID]);
   FillOne;
 end;
 
@@ -17650,7 +17665,7 @@ constructor TOrm.CreateAndFillPrepareMany(const aClient: IRestOrm;
   const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 begin
   Create;
-  if Length(RecordProps.ManyFields) = 0 then
+  if Length(Orm.ManyFields) = 0 then
     raise EModelException.CreateUTF8(
       '%.CreateAndFillPrepareMany() with no many-to-many fields', [self]);
   if not FillPrepareMany(aClient, aFormatSQLJoin, aParamsSQLJoin, aBoundsSQLJoin) then
@@ -17778,7 +17793,7 @@ begin
     fFill.UnMap;
   // compute generic joined SQL statement and initialize Objects*[]+SQLFields[]
   SetLength(SQLFields, MAX_SQLFIELDS);
-  Props := RecordProps;
+  Props := Orm;
   n := Length(Props.ManyFields);
   if n = 0 then
     exit;
@@ -17796,7 +17811,7 @@ begin
     fFill.fTableMapRecordManyInstances[f] := M;
     Objects[f * 2 + 1] := M;
     ObjectsClass[f * 2 + 1] := POrmClass(M)^;
-    with M.RecordProps do
+    with M.Orm do
     begin
       if (fRecordManySourceProp.ObjectClass <> PClass(self)^) or
          (fRecordManyDestProp.ObjectClass = nil) then
@@ -17821,7 +17836,7 @@ begin
   SQLFieldsCount := 0;
   aField := 'A00';
   for f := 0 to length(ObjectsClass) - 1 do
-    with ObjectsClass[f].RecordProps do
+    with ObjectsClass[f].OrmProps do
     begin
       PWord(@aField[2])^ := ord('I') + ord('D') shl 8;
       if not AddField(nil) then
@@ -18000,7 +18015,7 @@ begin
   if self = nil then
     result := false
   else
-    result := RecordProps.BlobFields <> nil;
+    result := Orm.BlobFields <> nil;
 end;
 
 function TOrm.GetSimpleFieldCount: integer;
@@ -18008,7 +18023,7 @@ begin
   if self = nil then
     result := 0
   else
-    result := length(RecordProps.SimpleFields);
+    result := length(Orm.SimpleFields);
 end;
 
 function TOrm.GetFillCurrentRow: integer;
@@ -18040,7 +18055,7 @@ begin
   result := '';
   if self = nil then
     exit;
-  P := RecordProps.Fields.ByName(pointer(PropName));
+  P := Orm.Fields.ByName(pointer(PropName));
   if P <> nil then
     P.GetValueVar(self, False, result, nil);
 end;
@@ -18051,7 +18066,7 @@ var
 begin
   if self = nil then
     exit;
-  P := RecordProps.Fields.ByName(pointer(PropName));
+  P := Orm.Fields.ByName(pointer(PropName));
   if P <> nil then
     P.SetValue(self, Value, false);
 end;
@@ -18077,7 +18092,7 @@ begin
   VarClear(result);
   if self = nil then
     exit;
-  Fields := RecordProps.Fields;
+  Fields := Orm.Fields;
   doc.InitFast(Fields.Count + 1, dvObject);
   intvalues := nil;
   if options <> nil then
@@ -18107,7 +18122,7 @@ begin
   if self = nil then
     VarClear(result)
   else
-    GetAsDocVariant(withID, RecordProps.SimpleFieldsBits[ooSelect], result, options);
+    GetAsDocVariant(withID, Orm.SimpleFieldsBits[ooSelect], result, options);
 end;
 
 function TOrm.GetFieldVariant(const PropName: string): variant;
@@ -18117,7 +18132,7 @@ begin
   if self = nil then
     P := nil
   else
-    P := RecordProps.Fields.ByRawUTF8Name(
+    P := Orm.Fields.ByRawUTF8Name(
       {$ifdef UNICODE}StringToUTF8{$endif}(PropName));
   if P = nil then
     VarClear(result)
@@ -18132,7 +18147,7 @@ begin
   if self = nil then
     P := nil
   else
-    P := RecordProps.Fields.ByRawUTF8Name(
+    P := Orm.Fields.ByRawUTF8Name(
       {$ifdef UNICODE}StringToUTF8{$endif}(PropName));
   if P <> nil then
     P.SetVariant(self, Source);
@@ -18147,7 +18162,7 @@ begin
   if (self = nil) or result then
     // avoid GPF and handle case if no field was selected
     exit;
-  with RecordProps do
+  with Orm do
     if Filters = nil then
     // no filter set yet -> process OK
       result := true
@@ -18172,7 +18187,7 @@ function TOrm.Filter(const aFields: array of RawUTF8): boolean;
 var
   F: TFieldBits;
 begin
-  if RecordProps.FieldBitsFromRawUTF8(aFields, F) then
+  if Orm.FieldBitsFromRawUTF8(aFields, F) then
     // must always call the virtual Filter() method
     result := Filter(F)
   else
@@ -18224,14 +18239,14 @@ end;
 class procedure TOrm.AddFilterOrValidate(const aFieldName: RawUTF8;
   aFilter: TSynFilterOrValidate);
 begin
-  RecordProps.AddFilterOrValidate(aFieldName, aFilter);
+  OrmProps.AddFilterOrValidate(aFieldName, aFilter);
 end;
 
 class procedure TOrm.AddFilterNotVoidText(const aFieldNames: array of RawUTF8);
 var
   i, f: PtrInt;
 begin
-  with RecordProps do
+  with OrmProps do
     for i := 0 to high(aFieldNames) do
     begin
       f := Fields.IndexByNameOrExcept(aFieldNames[i]);
@@ -18244,7 +18259,7 @@ class procedure TOrm.AddFilterNotVoidAllTextFields;
 var
   f: PtrInt;
 begin
-  with RecordProps, Fields do
+  with OrmProps, Fields do
     for f := 0 to Count - 1 do
       if List[f].OrmFieldType in RAWTEXT_FIELDS then
       begin
@@ -18266,7 +18281,7 @@ begin
   if (self = nil) or IsZero(aFields) then
     // avoid GPF and handle case if no field was selected
     exit;
-  with RecordProps do
+  with Orm do
     if Filters <> nil then
       for f := 0 to Fields.Count - 1 do
         if Fields.List[f].OrmFieldType in COPIABLE_FIELDS then
@@ -18307,7 +18322,7 @@ function TOrm.Validate(const aRest: IRestOrm; const aFields: array of RawUTF8;
 var
   F: TFieldBits;
 begin
-  if RecordProps.FieldBitsFromRawUTF8(aFields, F) then
+  if Orm.FieldBitsFromRawUTF8(aFields, F) then
     // must always call the virtual Validate() method
     result := Validate(aRest, F, aInvalidFieldIndex, aValidator)
   else
@@ -18328,7 +18343,7 @@ begin
   begin
     if invalidField >= 0 then
       aErrorMessage := FormatString('"%": %',
-        [RecordProps.Fields.List[invalidField].GetNameDisplay, aErrorMessage]);
+        [Orm.Fields.List[invalidField].GetNameDisplay, aErrorMessage]);
     result := false;
   end;
 end;
@@ -18348,7 +18363,7 @@ function TOrm.DynArray(const DynArrayFieldName: RawUTF8): TDynArray;
 var
   F: PtrInt;
 begin
-  with RecordProps do
+  with Orm do
     for F := 0 to length(DynArrayFields) - 1 do
       with DynArrayFields[F] do
         if IdemPropNameU(Name, DynArrayFieldName) then
@@ -18364,7 +18379,7 @@ var
   F: PtrInt;
 begin
   if DynArrayFieldIndex > 0 then
-    with RecordProps do
+    with Orm do
       for F := 0 to length(DynArrayFields) - 1 do
         with DynArrayFields[F] do
           if DynArrayIndex = DynArrayFieldIndex then
@@ -18384,7 +18399,7 @@ var
   p: TOrmPropInfo;
 begin
   if (self <> nil) and (aRest <> nil) then
-    with RecordProps do
+    with Orm do
     begin
       integer(types) := 0;
       if oftModTime in HasTypeFields then
@@ -18414,6 +18429,13 @@ begin
       end;
     end;
 end;
+
+{$ifndef PUREMORMOT2}
+class function TOrm.RecordProps: TOrmProperties;
+begin
+  result := OrmProps;
+end;
+{$endif PUREMORMOT2}
 
 
 {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
@@ -18457,7 +18479,7 @@ end;
 constructor TOrmMany.Create;
 begin
   inherited Create;
-  with RecordProps do
+  with Orm do
     if (fRecordManySourceProp <> nil) and (fRecordManyDestProp <> nil) then
     begin
       fSourceID := fRecordManySourceProp.GetFieldAddr(self);
@@ -18532,7 +18554,7 @@ begin
     result := nil
   else
   begin
-    result := TOrmClass(RecordProps.fRecordManyDestProp.ObjectClass).Create;
+    result := TOrmClass(Orm.fRecordManyDestProp.ObjectClass).Create;
     aTable.OwnerMustFree := true;
     result.FillPrepare(aTable, ctnTrimExisting);
   end;
@@ -18750,7 +18772,7 @@ begin
   if (self = nil) or (Server = nil) then
     result := false
   else
-    with RecordProps do
+    with OrmProps do
       result := Server.ExecuteFmt('INSERT INTO %(%) VALUES(''optimize'');',
         [SQLTableName, SQLTableName]);
 end;
@@ -18818,7 +18840,7 @@ end;
 
 class function TOrmRTreeAbstract.RTreeSQLFunctionName: RawUTF8;
 begin
-  result := RecordProps.SQLTableName + '_in';
+  result := OrmProps.SQLTableName + '_in';
 end;
 
 { TOrmRTree }
@@ -18827,7 +18849,7 @@ class procedure TOrmRTree.BlobToCoord(const InBlob;
   var OutCoord: TOrmTreeCoords);
 begin // direct memory copy with no memory check
   MoveFast(InBlob, OutCoord,
-    (RecordProps.RTreeCoordBoundaryFields shr 1) * SizeOf(double));
+    (OrmProps.RTreeCoordBoundaryFields shr 1) * SizeOf(double));
 end;
 
 class function TOrmRTree.ContainedIn(const BlobA, BlobB): boolean;
@@ -18838,7 +18860,7 @@ begin
   BlobToCoord(BlobA, A);
   BlobToCoord(BlobB, B);
   result := false;
-  for i := 0 to (RecordProps.RTreeCoordBoundaryFields shr 1) - 1 do
+  for i := 0 to (OrmProps.RTreeCoordBoundaryFields shr 1) - 1 do
     if (A[i].max < B[i].min) or (A[i].min > B[i].max) then
       exit; // no match
   result := true; // box match
@@ -18850,7 +18872,7 @@ class procedure TOrmRTreeInteger.BlobToCoord(const InBlob;
   var OutCoord: TOrmTreeCoordsInteger);
 begin // direct memory copy with no memory check
   MoveFast(InBlob, OutCoord,
-    (RecordProps.RTreeCoordBoundaryFields shr 1) * SizeOf(integer));
+    (OrmProps.RTreeCoordBoundaryFields shr 1) * SizeOf(integer));
 end;
 
 class function TOrmRTreeInteger.ContainedIn(const BlobA, BlobB): boolean;
@@ -18861,7 +18883,7 @@ begin
   BlobToCoord(BlobA, A);
   BlobToCoord(BlobB, B);
   result := false;
-  for i := 0 to (RecordProps.RTreeCoordBoundaryFields shr 1) - 1 do
+  for i := 0 to (OrmProps.RTreeCoordBoundaryFields shr 1) - 1 do
     if (A[i].max < B[i].min) or (A[i].min > B[i].max) then
       exit; // no match
   result := true; // box match
@@ -19864,7 +19886,7 @@ begin
       begin
         aFieldName := Props.Props.JoinedFields[j - 1].Name;
         W.Add('%.RowID as `%.RowID`,', [aFieldName, aFieldName]);
-        with Props.Props.JoinedFieldsTable[j].RecordProps do
+        with Props.Props.JoinedFieldsTable[j].OrmProps do
           for f := 0 to High(SimpleFields) do
             if SimpleFields[f].OrmFieldType <> oftID then
               W.Add('%.% as `%.%`,', [aFieldName, SimpleFields[f].Name,
@@ -19876,7 +19898,7 @@ begin
       for j := 1 to high(Props.Props.JoinedFieldsTable) do
       begin
         aFieldName := Props.Props.JoinedFields[j - 1].Name;
-        with Props.Props.JoinedFieldsTable[j].RecordProps do
+        with Props.Props.JoinedFieldsTable[j].OrmProps do
           W.Add(' LEFT JOIN % AS % ON %.%=%.RowID',
             [SQLTableName, aFieldName, aTableName, aFieldName, aFieldName]);
       end;
@@ -20173,7 +20195,7 @@ var
 begin
   if (self <> nil) and (aTable <> nil) then
   begin
-    Props := aTable.RecordProps;
+    Props := aTable.OrmProps;
     if (Props <> nil) and (Props.fModelMax < fTablesMax) then
       // fastest O(1) search in all registered models (if worth it)
       for i := 0 to Props.fModelMax do
@@ -20265,7 +20287,7 @@ begin
   if self = nil then
     exit;
   if aTable <> nil then
-    result := aTable.RecordProps.SQLTableName
+    result := aTable.OrmProps.SQLTableName
   else
   begin
     result := Root;
@@ -20638,7 +20660,7 @@ var
 begin // similar to TOrmPropertiesMapping.ComputeSQL
   fModel := aModel;
   fTableIndex := fModel.GetTableIndexExisting(aTable);
-  fProps := aTable.RecordProps;
+  fProps := aTable.OrmProps;
   SetKind(aKind);
   with Props do
     for f := 0 to Fields.Count - 1 do
@@ -20785,7 +20807,7 @@ begin
   for i := 0 to Props.Fields.Count - 1 do
   begin
     field := Props.Fields.List[i].Name;
-    if ContentTable.RecordProps.Fields.IndexByName(field) < 0 then
+    if ContentTable.OrmProps.Fields.IndexByName(field) < 0 then
       raise EModelException.CreateUTF8('FTS4WithoutContent: %.% is not a % field',
         [Props.Table, field, ContentTable]);
     fFTSWithoutContentFields := fFTSWithoutContentFields + ',new.' + field;
@@ -20811,7 +20833,7 @@ procedure TOrmPropertiesMapping.Init(Table: TOrmClass;
   MappingOptions: TOrmPropertiesMappingOptions);
 begin
   // set associated properties
-  fProps := Table.RecordProps;
+  fProps := Table.OrmProps;
   if MappedTableName = '' then
     fTableName := fProps.SQLTableName
   else
@@ -21834,7 +21856,7 @@ begin
   if (fTable <> nil) and
      (POrmClass(Value)^ <> fTable) then
     exit;
-  Props := Value.RecordProps;
+  Props := Value.Orm;
   if SendData and
      (fModel.Props[POrmClass(Value)^].Kind in INSERT_WITH_ID) then
     ForceID := true; // same format as TRestClient.Add
@@ -21910,7 +21932,7 @@ begin
   end;
   AddID(fDeletedRecordRef, fDeletedCount, fModel.RecordReference(Table, ID));
   fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table",ID,...]}'
-  fBatch.AddString(Table.RecordProps.SQLTableName);
+  fBatch.AddString(Table.OrmProps.SQLTableName);
   fBatch.Add('"', ',');
   fBatch.Add(ID);
   fBatch.Add(',');
@@ -21982,7 +22004,7 @@ begin
   if (ID <= 0) or
      not fRest.RecordCanBeUpdated(Value.RecordClass, ID, oeUpdate) then
     exit; // invalid parameters, or not opened BATCH sequence
-  Props := Value.RecordProps;
+  Props := Value.Orm;
   if fTable <> nil then
     if POrmClass(Value)^ <> fTable then
       exit
@@ -22033,7 +22055,7 @@ begin
      (fBatch = nil) then
     result := -1
   else
-    result := Update(Value, Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
+    result := Update(Value, Value.Orm.FieldBitsFromCSV(CustomCSVFields),
       DoNotAutoComputeFields, ForceCacheUpdate);
 end;
 
@@ -22103,7 +22125,7 @@ begin
           (aProcessRec = nil) then
     result := true
   else
-    with aProcessRec.RecordProps do
+    with aProcessRec.Orm do
       if cardinal(aFieldIndex) >= cardinal(Fields.Count) then
         result := true
       else

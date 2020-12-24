@@ -560,7 +560,7 @@ begin
   if FieldNames = '' then
     result := fModel.Props[Table].SQLFromSelectWhere('*', WhereClause)
   else
-    with Table.RecordProps do
+    with Table.OrmProps do
       if FieldNames = '*' then
         result := SQLFromSelect(SQLTableName, SQLTableRetrieveAllFields, WhereClause, '')
       else if (PosExChar(',', FieldNames) = 0) and
@@ -595,7 +595,7 @@ begin
   end
   else if Value.IDValue = 0 then
     ForceID := false;
-  props := Value.RecordProps;
+  props := Value.Orm;
   if CustomFields <> nil then
     if DoNotAutoComputeFields then
       fields := CustomFields^ * props.CopiableFieldsBits
@@ -694,7 +694,7 @@ begin
     T := nil
   else
     T := ExecuteList([Table], 'SELECT Count(*) FROM ' +
-      Table.RecordProps.SQLTableName);
+      Table.OrmProps.SQLTableName);
   if T <> nil then
   try
     result := T.GetAsInt64(1, 0);
@@ -714,7 +714,7 @@ begin
     T := nil
   else
     T := ExecuteList([Table], 'SELECT RowID FROM ' +
-      Table.RecordProps.SQLTableName + ' LIMIT 1');
+      Table.OrmProps.SQLTableName + ' LIMIT 1');
   if T <> nil then
   try
     result := T.RowCount > 0;
@@ -734,7 +734,7 @@ begin
     T := nil
   else
     T := ExecuteList([Table], 'SELECT max(RowID) FROM ' +
-      Table.RecordProps.SQLTableName);
+      Table.OrmProps.SQLTableName);
   if T <> nil then
   try
     result := T.GetAsInt64(1, 0);
@@ -834,7 +834,7 @@ begin
   if (self <> nil) and
      (Table <> nil) and
      (n = length(FieldValue)) then
-    with Table.RecordProps do
+    with Table.OrmProps do
     begin
       if (n = 1) and
          IdemPChar(pointer(FieldName[0]), 'COUNT(*)') then
@@ -1104,7 +1104,7 @@ var
   i: PtrInt;
 begin
   result := false;
-  with Table.RecordProps do
+  with Table.OrmProps do
     if length(PerFieldWeight) <> length(SimpleFields) then
       exit
     else
@@ -1127,7 +1127,7 @@ begin
     result := ''
   else
   begin
-    result := Table.RecordProps.MainFieldName(ReturnFirstIfNoUnique);
+    result := Table.OrmProps.MainFieldName(ReturnFirstIfNoUnique);
     if result <> '' then
       result := OneFieldValue(Table, result, ID);
   end;
@@ -1141,7 +1141,7 @@ begin
   if (self <> nil) and
      (Value <> '') and
      (Table <> nil) then
-    with Table.RecordProps do
+    with Table.OrmProps do
     begin
       main := MainField[false];
       if main >= 0 then
@@ -1169,7 +1169,7 @@ begin
       end;
     end
     else
-      with Table.RecordProps do
+      with Table.OrmProps do
       begin
         // request all Values[] IDs at once
         main := MainField[false];
@@ -1396,7 +1396,7 @@ begin
   if (self <> nil) and
      (Table <> nil) then
   begin
-    with Table.RecordProps do
+    with Table.OrmProps do
       // handle optimized primary key direct access
       if fCache.IsCached(Table) and
          (length(BoundsSQLWhere) = 1) and
@@ -1485,8 +1485,8 @@ begin
      (RTreeTable = nil) or
      (DataTableBlobField = '') then
     exit;
-  RTree := RTreeTable.RecordProps;
-  Data := DataTable.RecordProps;
+  RTree := RTreeTable.OrmProps;
+  Data := DataTable.OrmProps;
   Blob := Data.BlobFieldPropFromRawUTF8(DataTableBlobFieldName);
   if Blob = nil then
     exit;
@@ -1595,7 +1595,7 @@ function TRestOrm.Add(Value: TOrm; const CustomCSVFields: RawUTF8;
 var
   f: TFieldBits;
 begin
-  with Value.RecordProps do
+  with Value.Orm do
     if CustomCSVFields = '*' then
       // FieldBitsFromCSV('*') will use [ooSelect]
       f := SimpleFieldsBits[ooInsert]
@@ -1683,16 +1683,16 @@ begin
        (Value.FillContext.TableMapRecordManyInstances = nil) then
       // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
       FieldBits := Value.FillContext.TableMapFields +
-        Value.RecordProps.FieldBits[oftModTime]
+        Value.Orm.FieldBits[oftModTime]
     else
       // update all simple/custom fields (also for FillPrepareMany)
-      FieldBits := Value.RecordProps.SimpleFieldsBits[ooUpdate]
+      FieldBits := Value.Orm.SimpleFieldsBits[ooUpdate]
   else
     // CustomFields<>[] -> update specified (and TModTime fields)
     if DoNotAutoComputeFields then
       FieldBits := CustomFields
     else
-      FieldBits := CustomFields + Value.RecordProps.FieldBits[oftModTime];
+      FieldBits := CustomFields + Value.Orm.FieldBits[oftModTime];
   if IsZero(FieldBits) then
   begin
     result := true; // a TOrm with NO simple fields (e.g. ID/blob pair)
@@ -1716,7 +1716,7 @@ begin
      (Value = nil) then
     result := false
   else
-    result := Update(Value, Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
+    result := Update(Value, Value.Orm.FieldBitsFromCSV(CustomCSVFields),
       DoNotAutoComputeFields);
 end;
 
@@ -1969,7 +1969,7 @@ begin
   if (self = nil) or
      (aID <= 0) then
     exit;
-  blob := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
+  blob := Table.OrmProps.BlobFieldPropFromRawUTF8(BlobFieldName);
   if blob = nil then
     exit;
   result := EngineRetrieveBlob(fModel.GetTableIndexExisting(Table), aID,
@@ -2001,7 +2001,7 @@ begin
      (aID <= 0) or
      not RecordCanBeUpdated(Table, aID, oeUpdate) then
     exit;
-  blob := Table.RecordProps.BlobFieldPropFromRawUTF8(BlobFieldName);
+  blob := Table.OrmProps.BlobFieldPropFromRawUTF8(BlobFieldName);
   if blob = nil then
     exit;
   result := EngineUpdateBlob(fModel.GetTableIndexExisting(Table), aID, blob,
@@ -2051,7 +2051,7 @@ begin
   if (Value = nil) or
      (Value.IDValue <= 0) then
     exit;
-  with Value.RecordProps do
+  with Value.Orm do
     if BlobFields <> nil then
     begin
       t := self.fModel.GetTableIndexExisting(POrmClass(Value)^);
@@ -2076,7 +2076,7 @@ begin
      (Value = nil) or
      (Value.IDValue <= 0) then
     exit;
-  with Value.RecordProps do
+  with Value.Orm do
     if BlobFields <> nil then
     begin
       t := self.fModel.GetTableIndexExisting(POrmClass(Value)^);

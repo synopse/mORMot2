@@ -1977,7 +1977,7 @@ begin
     raise EServiceException.CreateUTF8('%.Create(%): Slave=nil',
       [self, aTable]);
   fSlave := aSlave;
-  fRecordVersionField := aTable.RecordProps.RecordVersionField;
+  fRecordVersionField := aTable.OrmProps.RecordVersionField;
   if fRecordVersionField = nil then
     raise EServiceException.CreateUTF8('%.Create: % has no TRecordVersion field',
       [self, aTable]);

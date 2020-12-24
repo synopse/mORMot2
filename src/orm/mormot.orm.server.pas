@@ -499,7 +499,7 @@ begin
     fTrackChangesHistoryTableIndex[t] := -1;
   fOrmVersionDeleteTable := TOrmTableDeleted;
   for t := 0 to high(fModel.Tables) do
-    if fModel.Tables[t].RecordProps.RecordVersionField <> nil then
+    if fModel.Tables[t].OrmProps.RecordVersionField <> nil then
     begin
       fOrmVersionDeleteTable := fModel.AddTableInherited(TOrmTableDeleted);
       break;
@@ -678,7 +678,7 @@ begin
       current := 0;
       for m := 0 to fModel.TablesMax do
       begin
-        field := fModel.Tables[m].RecordProps.RecordVersionField;
+        field := fModel.Tables[m].OrmProps.RecordVersionField;
         if field <> nil then
         begin
           if OneFieldValue(fModel.Tables[m],

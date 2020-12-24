@@ -980,7 +980,7 @@ begin
   Rest := aRest;
   HelperName := RawUTF8(aTable.ClassName);
   Table := aTable;
-  TableProps := aTable.RecordProps;
+  TableProps := aTable.OrmProps;
   TSynMustache.HelperAdd(aHelpers, HelperName, ExpressionGet);
   HtmlTableStyle := TExpressionHtmlTableStyleBootstrap;
   TSynMustache.HelperAdd(aHelpers,

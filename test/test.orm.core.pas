@@ -430,15 +430,15 @@ begin
   M := TOrmModel.Create([TOrmTest]);
   for i := 0 to GetRttiProp(TOrmTest, P) - 1 do
   begin
-    Check(TOrmTest.RecordProps.Fields.IndexByName(LowerCase(P^.NameUTF8)) = i);
-    Check(T.RecordProps.Fields.ByRawUTF8Name(P^.NameUTF8) <> nil);
+    Check(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUTF8)) = i);
+    Check(T.OrmProps.Fields.ByRawUTF8Name(P^.NameUTF8) <> nil);
     P := P^.Next;
   end;
-  Check(TOrmTest.RecordProps.Fields.IndexByName('') < 0);
-  Check(TOrmTest.RecordProps.Fields.IndexByName('none') < 0);
-  Check(TOrmTest.RecordProps.Fields.IndexByName('nex') < 0);
-  Check(TOrmTest.RecordProps.Fields.IndexByName('next') >= 0);
-  Check(TOrmTest.RecordProps.Fields.IndexByName('nexte') < 0);
+  Check(TOrmTest.OrmProps.Fields.IndexByName('') < 0);
+  Check(TOrmTest.OrmProps.Fields.IndexByName('none') < 0);
+  Check(TOrmTest.OrmProps.Fields.IndexByName('nex') < 0);
+  Check(TOrmTest.OrmProps.Fields.IndexByName('next') >= 0);
+  Check(TOrmTest.OrmProps.Fields.IndexByName('nexte') < 0);
   s := TOrmTest.GetSQLCreate(M);
   CheckEqual(s,
     'CREATE TABLE Test(ID INTEGER PRIMARY KEY AUTOINCREMENT, Int INTEGER, ' +
@@ -446,13 +446,14 @@ begin
     'Ansi TEXT COLLATE NOCASE, ValFloat FLOAT, ValWord INTEGER, ' +
     'ValDate TEXT COLLATE ISO8601, Next INTEGER, Data BLOB, ' +
     'ValVariant TEXT COLLATE BINARY);');
-  s := TOrmTest.RecordProps.SQLAddField(0);
+  s := TOrmTest.OrmProps.SQLAddField(0);
   CheckEqual(s, 'ALTER TABLE Test ADD COLUMN Int INTEGER; ');
-  s := TOrmTest.RecordProps.SQLAddField(1000);
+  s := TOrmTest.OrmProps.SQLAddField(1000);
   CheckEqual(s, '');
   T2 := TOrmTest.Create;
   try
-    Check(T.RecordProps.SQLTableName = 'Test');
+    Check(T.OrmProps = T.Orm);
+    Check(T.Orm.SQLTableName = 'Test');
     Check(T.SQLTableName = 'Test');
     Check(GetCaptionFromClass(T.RecordClass) = 'Test');
     s := T.GetSQLSet;

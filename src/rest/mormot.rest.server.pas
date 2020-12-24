@@ -3483,7 +3483,7 @@ begin
               if URIBlobFieldName <> '' then
               begin
                 // GET ModelRoot/TableName/TableID/BlobFieldName: retrieve BLOB field content
-                Blob := Table.RecordProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
+                Blob := Table.OrmProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
                 if Blob <> nil then
                 begin
                   if TableEngine.EngineRetrieveBlob(TableIndex, TableID, Blob,
@@ -3779,7 +3779,7 @@ begin
           if URIBlobFieldName <> '' then
           begin
             // PUT ModelRoot/TableName/TableID/BlobFieldName: update BLOB field content
-            Blob := Table.RecordProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
+            Blob := Table.OrmProps.BlobFieldPropFromRawUTF8(URIBlobFieldName);
             if Blob <> nil then
               OK := TableEngine.EngineUpdateBlob(TableIndex, TableID, Blob, Call.InBody);
           end
@@ -7083,8 +7083,8 @@ begin
       fSessions.Safe.Lock;
       try
         W.WriteVarUInt32((fOrmInstance as TRestOrmServer).InternalState);
-        SQLAuthUserClass.RecordProps.SaveBinaryHeader(W);
-        SQLAuthGroupClass.RecordProps.SaveBinaryHeader(W);
+        SQLAuthUserClass.OrmProps.SaveBinaryHeader(W);
+        SQLAuthGroupClass.OrmProps.SaveBinaryHeader(W);
         W.WriteVarUInt32(fSessions.Count);
         for i := 0 to fSessions.Count - 1 do
           TAuthSession(fSessions.List[i]).SaveTo(W);
@@ -7129,8 +7129,8 @@ begin
   fSessions.Safe.Lock;
   try
     (fOrmInstance as TRestOrmServer).InternalState := R.VarUInt32;
-    if not SQLAuthUserClass.RecordProps.CheckBinaryHeader(R) or
-       not SQLAuthGroupClass.RecordProps.CheckBinaryHeader(R) then
+    if not SQLAuthUserClass.OrmProps.CheckBinaryHeader(R) or
+       not SQLAuthGroupClass.OrmProps.CheckBinaryHeader(R) then
       ContentError;
     n := R.VarUInt32;
     fSessions.Clear;

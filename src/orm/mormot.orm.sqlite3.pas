@@ -1797,7 +1797,7 @@ begin
   else if (DB <> nil) and
           (Value.ID > 0) and
           (POrmClass(Value)^ <> nil) then
-    with Value.RecordProps do
+    with Value.Orm do
       if BlobFields <> nil then
       begin
         SQL := FormatUTF8('SELECT % FROM % WHERE ROWID=?',
@@ -2175,7 +2175,7 @@ begin
       raise EORMBatchException.CreateUTF8(
         '%.InternalBatchStop(*Count?)', [self]);
     UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
-    Props := fModel.Tables[fBatchTableIndex].RecordProps;
+    Props := fModel.Tables[fBatchTableIndex].OrmProps;
     if fBatchValuesCount = 1 then
     begin
       // handle single record insert

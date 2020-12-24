@@ -358,7 +358,7 @@ type
     // - default implementation is to retrieve the structure for the associated
     // Module.RecordClass property (as set by GetTableModuleProperties) or
     // the Static.StoredClass: in both cases, column numbering will follow
-    // the TOrm published field order (TOrm.RecordProps.Fields[])
+    // the TOrm published field order (TOrm.Orm.Fields[])
     function Structure: RawUTF8; virtual;
     /// called when a DROP TABLE statement is executed against the virtual table
     // - should return true on success, false otherwise
@@ -1543,7 +1543,7 @@ class function TOrmVirtualTable.StructureFromClass(aClass: TOrmClass;
   const aTableName: RawUTF8): RawUTF8;
 begin
   FormatUTF8('CREATE TABLE % (%', [aTableName,
-    GetVirtualTableSQLCreate(aClass.RecordProps)], result);
+    GetVirtualTableSQLCreate(aClass.OrmProps)], result);
 end;
 
 function TOrmVirtualTable.Structure: RawUTF8;
@@ -1683,7 +1683,7 @@ begin
     raise ERestStorage.CreateUTF8('%.Create(aClass=nil)', [self]);
   InitializeCriticalSection(fStorageCriticalSection);
   fStoredClass := aClass;
-  fStoredClassRecordProps := aClass.RecordProps;
+  fStoredClassRecordProps := aClass.OrmProps;
   if aServer <> nil then
   begin
     fOwner := aServer;
@@ -3521,7 +3521,7 @@ begin
   if (Value <> nil) and
      (Value.IDValue > 0) and
      (POrmClass(Value)^ = fStoredClass) then
-    with Value.RecordProps do
+    with Value.Orm do
       if BlobFields <> nil then
       begin
         StorageLock(false, 'RetrieveBlobFields');
@@ -3578,7 +3578,7 @@ begin
   if (Value <> nil) and
      (Value.IDValue > 0) and
      (POrmClass(Value)^ = fStoredClass) then
-    with Value.RecordProps do
+    with Value.Orm do
     if BlobFields <> nil then
     begin
       StorageLock(true, 'UpdateBlobFields');

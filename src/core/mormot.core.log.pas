@@ -2994,7 +2994,7 @@ begin
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if result <> nil then
       // we know TRttiCustom is in the slot, and Private is TSynLogFamily
-      result := TSynLogFamily(TRttiCustom(pointer(result)).Private);
+      result := TSynLogFamily(TRttiCustom(pointer(result)).PrivateSlot);
     if result = nil then
       // register the TSynLogFamily to the TRttiCustom.Private field
       result := FamilyCreate;
@@ -3015,7 +3015,7 @@ begin
     if P <> nil then
     begin
       // we know TRttiCustom is in the slot, and Private is TSynLogFamily
-      P := TRttiCustom(P).Private;
+      P := TRttiCustom(P).PrivateSlot;
       result := TSynLogFamily(P).fGlobalLog;
       // <>nil for ptMergedInOneFile and ptIdentifiedInOnFile (most common case)
       if result = nil then
@@ -3047,7 +3047,7 @@ begin
         [self, vmt, rtticustom]);
     EnterCriticalSection(GlobalThreadLock);
     try
-      result := TSynLogFamily(rtticustom.Private);
+      result := rtticustom.PrivateSlot;
       if Assigned(result) then
         if result.InheritsFrom(TSynLogFamily) then
           // registered by a background thread
@@ -3058,7 +3058,7 @@ begin
             [self, result]);
       // create the TSynLogFamily instance associated with this TSynLog class
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
-      rtticustom.Private := result; // will be owned by this TRttiCustom
+      rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end;

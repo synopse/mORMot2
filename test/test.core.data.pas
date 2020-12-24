@@ -4069,7 +4069,7 @@ var
 
 begin
   Stmt := nil;
-  Props := TOrmPeople.RecordProps;
+  Props := TOrmPeople.OrmProps;
   NewStmt('select * from atable');
   Check(Stmt.TableName = 'atable');
   Check(Stmt.Where = nil);
