@@ -107,7 +107,8 @@ uses
   test.core.data           in '.\test.core.data.pas',
   test.core.crypto         in '.\test.core.crypto.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
-  test.net.proto           in '.\test.net.proto.pas';
+  test.net.proto           in '.\test.net.proto.pas',
+  test.orm.core            in '.\test.orm.core.pas';
 
 
 { TIntegrationTests }
@@ -116,13 +117,21 @@ type
   TIntegrationTests = class(TSynTestsLogged)
   published
     procedure CoreUnits;
+    procedure ORM;
   end;
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  AddCase([// 
+  AddCase([//
   //
-  TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
+    TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
+  ]);
+end;
+
+procedure TIntegrationTests.ORM;
+begin
+  AddCase([//
+    TTestOrmCore
   ]);
 end;
 

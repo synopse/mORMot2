@@ -103,7 +103,7 @@
             <TargetCPU Value="x86_64"/>
             <TargetOS Value="win64"/>
             <Optimizations>
-              <OptimizationLevel Value="2"/>
+              <OptimizationLevel Value="3"/>
             </Optimizations>
           </CodeGeneration>
           <Linking>
@@ -114,7 +114,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-dFPC_X64MM"/>
             <OtherDefines Count="5">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -153,13 +152,9 @@
             </Checks>
             <TargetCPU Value="i386"/>
             <TargetOS Value="linux"/>
-            <Optimizations>
-              <OptimizationLevel Value="3"/>
-            </Optimizations>
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
               <DebugInfoType Value="dsDwarf2Set"/>
               <UseExternalDbgSyms Value="True"/>
             </Debugging>
@@ -170,12 +165,13 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="5">
+            <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -288,6 +284,14 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <OtherDefines Count="6">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item6>
@@ -551,7 +555,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="83">
+    <Units Count="85">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -884,6 +888,14 @@
         <Filename Value="..\src\tools\ecc\mormot.tools.ecc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit82>
+      <Unit83>
+        <Filename Value="test.net.proto.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit83>
+      <Unit84>
+        <Filename Value="test.orm.core.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit84>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -927,7 +939,7 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="8">
+    <Exceptions Count="9">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -952,6 +964,9 @@
       <Item8>
         <Name Value="RunError(216)"/>
       </Item8>
+      <Item9>
+        <Name Value="ENetSock"/>
+      </Item9>
     </Exceptions>
   </Debugging>
 </CONFIG>

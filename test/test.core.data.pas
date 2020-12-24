@@ -1472,7 +1472,7 @@ var
     SetLength(AA, 100);
     for i := 0 to high(AA) do
     begin
-      SetLength(AA[i], random(100));
+      SetLength(AA[i], Random32(100));
       for a := 0 to high(AA[i]) do
       begin
         UInt32ToUtf8(i + a, AA[i, a]);
@@ -1944,7 +1944,7 @@ begin
   end;
   for i := 1 to 100 do
   begin
-    a := Random(maxInt);
+    a := Random32(maxInt);
     r := Random;
     U := RandomUTF8(i);
     J := JSONEncode(['a', a, 'r', r, 'u', U]);
