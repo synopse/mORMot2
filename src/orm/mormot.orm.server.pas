@@ -1149,7 +1149,7 @@ var
     RowCountForCurrentTransaction := 0;
   end;
 
-  function IsNotAllowed: boolean; {$ifdef HASINLINE} inline; {$endif}
+  function IsNotAllowed: boolean; {$ifdef FPC} inline; {$endif}
   begin
     result := (CurrentContext <> nil) and
               (CurrentContext.Command = execOrmWrite) and

@@ -407,7 +407,7 @@ begin
   if not Modified then
     exit;
   timer.Start;
-  S := TFileStream.Create(FileName, fmCreate);
+  S := TFileStream.Create(fFileName, fmCreate);
   try
     if fBinaryFile then
     begin
@@ -442,7 +442,7 @@ begin
   finally
     S.Free;
   end;
-  InternalLog('UpdateToFile done in %', [timer.Stop], sllDB);
+  InternalLog('UpdateToFile % done in %', [fFileName, timer.Stop], sllDB);
 end;
 
 function TRestOrmServerFullMemory.EngineExecute(const aSQL: RawUTF8): boolean;
