@@ -2820,7 +2820,7 @@ end;
 destructor TAutoLocker.Destroy;
 begin
   fSafe.Done;
-  inherited;
+  inherited Destroy;
 end;
 
 function TAutoLocker.ProtectMethod: IUnknown;
@@ -6202,7 +6202,7 @@ begin
   dec(n);
   s := fInfo.Cache.ItemSize;
   P := PAnsiChar(fValue^) + PtrUInt(aIndex) * s;
-  if fInfo.Cache.ItemInfo <> nil then
+  if fInfo.ArrayRtti <> nil then
     fInfo.ArrayRtti.ValueFinalize(P); // also for T*ObjArray
   if n > aIndex then
   begin
@@ -6264,7 +6264,7 @@ begin
   if (p = nil) or
      (Dest = nil) then
     exit;
-  if fInfo.Cache.ItemInfo <> nil then
+  if fInfo.ArrayRtti <> nil then
     fInfo.ArrayRtti.ValueFinalize(Dest); // also handle T*ObjArray
   MoveFast(p^, Dest^, fInfo.Cache.ItemSize);
   FillCharFast(p^, fInfo.Cache.ItemSize, 0);
