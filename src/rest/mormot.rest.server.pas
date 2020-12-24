@@ -5382,7 +5382,7 @@ begin
   if ServerNonceHash.Algorithm <> SHA3_256 then
   begin
     // first time used: initialize the private secret for this process lifetime
-    TAESPRNG.Main.Fill(@res, SizeOf(res)); // ensure unpredictable nonce
+    TAESPRNG.Main.Fill(res); // ensure unpredictable nonce
     hash.Init(SHA3_256);
     hash.Update(@res, SizeOf(res));
     GlobalLock;
@@ -6089,10 +6089,7 @@ begin
   fAfterCreation := true;
   fStats := TRestServerMonitor.Create(self);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
-  TAESPRNG.Main.Fill(@fSessionCounter, SizeOf(fSessionCounter));
-  if integer(fSessionCounter) < 0 then
-    // ensure the counter is a random but positive 31-bit integer
-    fSessionCounter := -fSessionCounter;
+  fSessionCounter := Random32(maxInt); // positive 31-bit integer
   // retrieve published methods
   fPublishedMethods.InitSpecific(
     TypeInfo(TRestServerMethods), fPublishedMethod, ptRawUTF8, nil, true);
@@ -6111,15 +6108,16 @@ var
   i: PtrInt;
 begin
   Shutdown;
-  fOrm.AsynchBatchStop(nil); // release all existing batch instances
-  FreeAndNil(fRun); // do it ASAP
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
   for i := 0 to fPublishedMethods.Count - 1 do
     fPublishedMethod[i].Stats.Free;
   ObjArrayClear(fSessionAuthentication);
+  fServer := nil; // for proper refcnt in inherited Destroy
   inherited Destroy; // calls fServices.Free which will update fStats
   FreeAndNil(fJWTForUnauthenticatedRequest);
   FreeAndNil(fStats);
+  fSessions.Free;
+  fAssociatedServices.Free;
 end;
 
 constructor TRestServer.CreateWithOwnModel(
@@ -6187,11 +6185,14 @@ begin
   finally
     fSessions.Safe.UnLock;
   end;
-  timeout := GetTickCount64 + 30000; // never wait forever
-  repeat
-    SleepHiRes(5);
-  until (fStats.AddCurrentRequestCount(0) = 0) or
-        (GetTickCount64 > timeout);
+  if fStats.CurrentRequestCount > 0 then
+  begin
+    timeout := GetTickCount64 + 30000; // never wait forever
+    repeat
+      SleepHiRes(5);
+    until (fStats.AddCurrentRequestCount(0) = 0) or
+          (GetTickCount64 > timeout);
+  end;
   if aStateFileName <> '' then
     SessionsSaveToFile(aStateFileName);
 end;

@@ -854,15 +854,17 @@ end;
 function TRestOrmClientURI.EngineBatchSend(Table: TOrmClass;
   var Data: RawUTF8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var
-  Resp: RawUTF8;
+  u, Resp: RawUTF8;
   R: PUTF8Char;
   i: PtrInt;
+  c: PtrUInt;
+  res: Int64;
 begin
   // TRest.BatchSend() ensured that Batch contains some data
   try
     // PUT on 'root/Batch' or 'root/Batch/Table' URI
-    result := URI(fModel.GetURICallBack('Batch', Table, 0),
-      'PUT', @Resp, nil, @Data).Lo;
+    u := fModel.GetURICallBack('Batch', Table, 0);
+    result := URI(u, 'PUT', @Resp, nil, @Data).Lo;
     if result <> HTTP_SUCCESS then
       exit;
     // returned Resp shall be an array of integers: '[200,200,...]'
@@ -887,7 +889,22 @@ begin
       inc(R); // jump first '['
       for i := 0 to ExpectedResultsCount - 1 do
       begin
-        Results[i] := GetNextItemQWord(R, #0);
+        while (R^ <= ' ') and
+              (R^ <> #0) do
+          inc(R);
+        res := byte(R^) - 48;
+        if res <= 9 then
+        begin
+          inc(R);
+          repeat
+            c := byte(R^) - 48;
+            if c > 9 then
+              break;
+            res := res * 10 + Int64(c);
+            inc(R);
+          until false;
+        end;
+        Results[i] := res;
         while R^ in [#1..' '] do
           inc(R);
         case R^ of
@@ -911,7 +928,7 @@ end;
 function TRestOrmClientURI.ExecuteList(const Tables: array of TOrmClass;
   const SQL: RawUTF8): TOrmTable;
 var
-  resp: RawUTF8;
+  JSON: RawUTF8;
   res: Int64Rec;
 begin
   if self = nil then
@@ -919,11 +936,10 @@ begin
   else
   begin
     // GET on 'root' URI with SQL as body (not fully HTTP compatible)
-    res := URI(fModel.Root, 'GET', @resp, nil, @SQL);
+    res := URI(fModel.Root, 'GET', @JSON, nil, @SQL);
     if res.Lo = HTTP_SUCCESS then
     begin
-      result := TOrmTableJSON.CreateFromTables(
-        Tables, SQL, pointer(resp), length(resp));
+      result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}true);
       result.InternalState := res.Hi;
     end
     else
@@ -935,7 +951,7 @@ end;
 function TRestOrmClientURI.List(const Tables: array of TOrmClass;
   const SQLSelect: RawUTF8; const SQLWhere: RawUTF8): TOrmTable;
 var
-  Resp, SQL: RawUTF8;
+  JSON, SQL: RawUTF8;
   U: RawUTF8;
   InternalState: cardinal;
 begin
@@ -960,22 +976,22 @@ begin
         U := U + '?where=';
       U := U + UrlEncode(SQLWhere);
     end;
-    with URI(Model.URI[Tables[0]] + U, 'GET', @Resp) do
+    with URI(Model.URI[Tables[0]] + U, 'GET', @JSON) do
       if Lo <> HTTP_SUCCESS then
         exit
       else
         InternalState := Hi;
-    result := TOrmTableJSON.CreateFromTables([Tables[0]], SQL, Resp); // get data
+    result := TOrmTableJSON.CreateFromTables([Tables[0]], SQL, JSON, {ownJSON=}true);
   end
   else
   begin
     // multiple tables -> send SQL statement as HTTP body
-    with URI(Model.Root,'GET', @Resp, nil, @SQL) do
+    with URI(Model.Root,'GET', @JSON, nil, @SQL) do
       if Lo <> HTTP_SUCCESS then
         exit
       else
         InternalState := Hi;
-    result := TOrmTableJSON.CreateFromTables(Tables, SQL, Resp); // get data
+    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}true);
   end;
   result.InternalState := InternalState;
 end;

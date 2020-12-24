@@ -5195,10 +5195,10 @@ type
     /// create the result table from a JSON-formated Data message
     // - you can specify a set of TOrm classes which will be used to
     // retrieve the column exact type information
-    // - the JSON data is parsed and formatted in-place, after having been
-    // copied in the protected fPrivateCopy variable
+    // - the JSON data is parsed and formatted in-place, after copied
+    // in the protected fPrivateCopy variable (by reference if aJSONOwned=true)
     constructor CreateFromTables(const Tables: array of TOrmClass; const
-      aSQL, aJSON: RawUTF8); reintroduce; overload;
+      aSQL, aJSON: RawUTF8; aJSONOwned: boolean = false); reintroduce; overload;
     /// initialize the result table from a JSON-formated Data message
     // - you can set the expected column types matching the results column layout
     // - the JSON data is parsed and formatted in-place
@@ -7082,7 +7082,7 @@ type
     fAutomaticTransactionPerRow: cardinal;
     fOptions: TRestBatchOptions;
     fOnWrite: TOnBatchWrite;
-    function GetCount: integer;
+    function GetCount: integer; {$ifdef HASINLINE} inline; {$endif}
     function GetSizeBytes: cardinal;
     procedure SetExpandedJSONWriter(Props: TOrmProperties;
       ForceResetFields, withID: boolean; const WrittenFields: TFieldBits);
@@ -11507,6 +11507,7 @@ begin
   if da.Count = 0 then
     data := ''
   else if fObjArray <> nil then
+    // T*ObjArray use JSON serialization
     with TJSONSerializer.CreateOwnedStream(temp) do
     try
       if ExtendedJson then
@@ -11517,6 +11518,7 @@ begin
       Free;
     end
   else
+    // regular (e.g. record) dynamic arrays use our binary encoding
     data := da.SaveTo;
 end;
 
@@ -11538,7 +11540,7 @@ procedure TOrmPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TBufferWriter
 var
   Value: RawByteString;
 begin
-  Serialize(Instance, Value, true);
+  Serialize(Instance, Value, true); // JSON for T*ObjArray, or our binary format
   if fObjArray <> nil then
     W.Write(Value)
   else
@@ -11632,15 +11634,17 @@ begin
   GetDynArray(Instance, da);
   if fObjArray <> nil then
   begin
+    // T*ObjArray use JSON serialization
     FromVarString(PByte(P), PByte(PEnd), tmp);
-    try // T*ObjArray use JSON serialization
+    try
       da.LoadFromJSON(tmp.buf);
     finally
       tmp.Done;
     end;
     result := P;
   end
-  else    // regular dynamic arrays use our binary encoding
+  else
+    // regular (e.g. record) dynamic arrays use our binary encoding
     result := da.LoadFrom(P, PEnd);
 end;
 
@@ -15908,7 +15912,7 @@ end;
 
 function TOrmTableJSON.ParseAndConvert(Buffer: PUTF8Char; BufferLen: integer): boolean;
 var
-  i, max, nfield, nrow, resmax, f: integer;
+  i, max, resmax, f: integer;
   EndOfObject: AnsiChar;
   P: PUTF8Char;
   wasString: boolean;
@@ -15933,7 +15937,7 @@ begin
       exit;
     end;
     // 2. initialize and fill fResults[] PPUTF8CharArray memory
-    max := (fRowCount + 1) * FieldCount;
+    max := (fRowCount + 1) * fFieldCount;
     SetLength(fJSONResults, max);
     fResults := @fJSONResults[0];
     // unescape+zeroify JSONData + fill fResults[] to proper place
@@ -15946,13 +15950,13 @@ begin
       if (P = nil) and (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
         exit;
-      if i >= FieldCount then
+      if i >= fFieldCount then
       begin
         if wasString then
           Include(fFieldParsedAsString, f); // mark column was "string"
         inc(f);
-        if f = FieldCount then
-          f := 0; // check all rows
+        if f = fFieldCount then
+          f := 0; // reached next row
       end;
     end;
   end
@@ -15980,20 +15984,20 @@ begin
       exit;
     end;
     inc(P);
-    nfield := GetFieldCountExpanded(P);
-    if nfield = 0 then
+    fFieldCount := GetFieldCountExpanded(P);
+    if fFieldCount = 0 then
       // invalid data for first row
       exit;
     // 2. get values (assume fields are always the same as in the first object)
-    max := nfield; // index to start storing values in fResults[]
-    resmax := nfield * 2;
-    SetLength(fJSONResults, resmax); // space for field names + 1 data row
-    nrow := 0;
+    max := fFieldCount; // index to start storing values in fResults[]
+    resmax := max * 2; // space for field names + 1 data row by default
+    SetLength(fJSONResults, resmax);
+    fRowCount := 0;
     repeat
       // let fJSONResults[] point to unescaped+zeroified JSON values
-      for f := 0 to nfield - 1 do
+      for f := 0 to fFieldCount - 1 do
       begin
-        if nrow = 0 then
+        if fRowCount = 0 then
           // get field name from 1st Row
           fJSONResults[f] := GetJSONPropName(P)
         else
@@ -16013,15 +16017,15 @@ begin
         if P = nil then
         begin
           // unexpected end
-          nfield := 0;
+          fFieldCount := 0;
           break;
         end;
         if wasString then // mark column was "string"
           Include(fFieldParsedAsString, f);
-        if (EndOfObject = '}') and (f < nfield - 1) then
+        if (EndOfObject = '}') and (f < fFieldCount - 1) then
         begin
           // allow some missing fields in the input object
-          inc(max, nfield - f);
+          inc(max, fFieldCount - f);
           break;
         end;
         inc(max);
@@ -16031,7 +16035,7 @@ begin
       if {%H-}EndOfObject <> '}' then
         // data field layout is not consistent: should never happen
         break;
-      inc(nrow);
+      inc(fRowCount);
       while (P^ <> '{') and
             (P^ <> ']') do
         // go to next object beginning
@@ -16043,18 +16047,15 @@ begin
         break;
       inc(P); // jmp ']'
     until false;
-    if max <> (nrow + 1) * nfield then
+    if max <> (fRowCount + 1) * fFieldCount then
     begin
       // field count must be the same for all objects
+      fJSONResults := nil;
       fFieldCount := 0;
       fRowCount := 0;
       exit; // data field layout is not consistent: should never happen
     end;
-    // 3. save field pointers to fResults[]
-    SetLength(fJSONResults, max); // resize to exact size
-    fResults := @fJSONResults[0];
-    fFieldCount := nfield;
-    fRowCount := nrow;
+    fResults := pointer(fJSONResults); // don't realloc fJSONResults[]
   end;
   for i := 0 to fFieldCount - 1 do
     if IsRowID(fResults[i]) then
@@ -16122,12 +16123,15 @@ begin
 end;
 
 constructor TOrmTableJSON.CreateFromTables(const Tables: array of TOrmClass;
-  const aSQL, aJSON: RawUTF8);
+  const aSQL, aJSON: RawUTF8; aJSONOwned: boolean);
 var
   len: integer;
 begin
   len := length(aJSON);
-  PrivateCopyChanged(pointer(aJSON), len, {updatehash=}false);
+  if aJSONOwned then
+    fPrivateCopy := aJSON
+  else
+    PrivateCopyChanged(pointer(aJSON), len, {updatehash=}false);
   CreateFromTables(Tables, aSQL, pointer(fPrivateCopy), len);
 end;
 
@@ -17918,7 +17922,7 @@ begin
     aBoundsSQLJoin, ObjectsClass, SQL);
   if JSON = '' then
     exit;
-  T := TOrmTableJSON.CreateFromTables(ObjectsClass, SQL, JSON);
+  T := TOrmTableJSON.CreateFromTables(ObjectsClass, SQL, JSON, {ownJSON=}true);
   if (T = nil) or (T.fResults = nil) then
   begin
     T.Free;

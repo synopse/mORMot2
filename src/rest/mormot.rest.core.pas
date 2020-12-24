@@ -1852,8 +1852,8 @@ begin
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
-      raise ERestException.CreateUTF8('%.Destroy: RefCount=%',
-        [self, fOrmInstance.RefCount])
+      raise ERestException.CreateUTF8('%.Destroy: %.RefCount=%',
+        [self, fOrmInstance, fOrmInstance.RefCount])
     else
       fOrmInstance := nil; // avoid dubious GPF
   fOrm := nil;
@@ -3286,12 +3286,12 @@ end;
 class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
   aHashSalt: RawUTF8; aHashRound: integer): RawUTF8;
 const
-  TAuthUser_SALT = 'salt';
+  DEPRECATED_SALT = 'salt';
 var
   dig: TSHA256Digest;
 begin
   if aHashSalt = '' then
-    result := SHA256(TAuthUser_SALT + aPasswordPlain)
+    result := SHA256(DEPRECATED_SALT + aPasswordPlain)
   else
   begin
     PBKDF2_HMAC_SHA256(aPasswordPlain, aHashSalt, aHashRound, dig);

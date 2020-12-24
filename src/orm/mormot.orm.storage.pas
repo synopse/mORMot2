@@ -623,7 +623,7 @@ type
     aDest: pointer; aRec: TOrm; aIndex: integer) of object;
 
   /// abstract REST storage exposing some internal TOrm-based methods
-  TRestStorageRecordBased = class(TRestStorage)
+  TRestStorageTOrm = class(TRestStorage)
   public
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUTF8): TID; override;
@@ -715,7 +715,7 @@ type
   // faster than SQLite3 for such queries - but its values remain in RAM,
   // therefore it is not meant to deal with more than 100,000 rows or if
   // ACID commit on disk is required
-  TRestStorageInMemory = class(TRestStorageRecordBased)
+  TRestStorageInMemory = class(TRestStorageTOrm)
   protected
     fValue: TOrmObjArray;
     fCount: integer;
@@ -1677,7 +1677,8 @@ end;
 
 constructor TRestStorage.Create(aClass: TOrmClass; aServer: TRestOrmServer);
 begin
-  inherited Create(nil); // calls fRest.SetOrmInstance(self)
+  fRest := aServer.Owner; // redirect high-level methods to the main TRestServer
+  inherited Create(nil);
   if aClass = nil then
     raise ERestStorage.CreateUTF8('%.Create(aClass=nil)', [self]);
   InitializeCriticalSection(fStorageCriticalSection);
@@ -1830,9 +1831,9 @@ end;
 { ************ TRestStorageInMemory as Stand-Alone JSON/Binary Storage }
 
 
-{ TRestStorageRecordBased }
+{ TRestStorageTOrm }
 
-function TRestStorageRecordBased.EngineAdd(TableModelIndex: integer;
+function TRestStorageTOrm.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 var
   rec: TOrm;
@@ -1855,7 +1856,7 @@ begin
   end;
 end;
 
-function TRestStorageRecordBased.EngineUpdate(TableModelIndex: integer;
+function TRestStorageTOrm.EngineUpdate(TableModelIndex: integer;
   ID: TID; const SentData: RawUTF8): boolean;
 var
   rec: TOrm;
@@ -1883,7 +1884,7 @@ begin
   end;
 end;
 
-function TRestStorageRecordBased.UpdateOne(ID: TID;
+function TRestStorageTOrm.UpdateOne(ID: TID;
   const Values: TSQLVarDynArray): boolean;
 var
   rec: TOrm;
@@ -3028,8 +3029,8 @@ begin
     // check header: expect same exact RTTI
     R.Init(MS.Memory, MS.Size);
     R.VarUTF8(s);
-    if (s <> '') and  // new fixed format
-       not IdemPropNameU(s, 'TOrmProperties') then // old buggy format
+    if (s <> '') and // 0='' in recent mORMot 1.18 format
+       not IdemPropNameU(s, 'TSQLRecordProperties') then // old buggy format
       exit;
     if not fStoredClassRecordProps.CheckBinaryHeader(R) then
       exit;
@@ -3132,7 +3133,7 @@ begin
     StorageLock(false, 'SaveToBinary');
     try
       // primitive magic and fields signature for file type identification
-      W.Write1(0); // ClassName='TOrmProperties' in old buggy format
+      W.Write1(0); // ClassName='TSQLRecordProperties' in old buggy format
       fStoredClassRecordProps.SaveBinaryHeader(W);
       // write IDs - in increasing order
       if fUnSortedID then

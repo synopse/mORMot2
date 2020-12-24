@@ -310,7 +310,7 @@ end;
 
 procedure TRestOrmServerFullMemory.LoadFromStream(aStream: TStream);
 var
-  JSON: RawUTF8;
+  magic, JSON: RawUTF8;
   P, TableName, Data: PUTF8Char;
   t: PtrInt;
   wasString: boolean;
@@ -320,7 +320,9 @@ begin
   if fBinaryFile then
   begin
     // optimized binary content with SynLZ + variable-length record storage
-    if ReadStringFromStream(aStream) = ToText(ClassType) + '00' then
+    magic := ReadStringFromStream(aStream);
+    if PosEx('ServerFullMemory00', magic) > 0 then
+      // compatible with mORMot 1.18 'TSQLRestServerFullMemory00'
       repeat
         t := Model.GetTableIndex(ReadStringFromStream(aStream));
         if t < 0 then

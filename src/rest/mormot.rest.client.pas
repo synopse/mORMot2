@@ -1095,7 +1095,7 @@ begin
       else if aHashSalt = '' then
         U.PasswordPlain := aPassword
       else
-        // compute SHA256('salt'+aPassword)
+        // compute SHA256() or proper PBKDF2_HMAC_SHA256()
         U.SetPassword(aPassword, aHashSalt, aHashRound);
       key := ClientComputeSessionKey(Sender, U);
       result := Sender.SessionCreate(self, U, key);
@@ -1929,6 +1929,7 @@ begin
       end;
     SessionClose; // if not already notified
   finally
+    fClient := nil; // for proper RefCnt in inherited Destroy
     // release memory and associated classes
     if fRemoteLogClass <> nil then
     begin
@@ -2525,7 +2526,7 @@ begin
        self, aUserName, aPassword, passKerberosSPN) then
     exit;
   {$endif DOMAINRESTAUTH}
-  result := TRestClientAuthentication.ClientSetUser(self, aUserName,
+  result := TRestClientAuthenticationDefault.ClientSetUser(self, aUserName,
     aPassword, HASH[aHashedPassword]);
 end;
 
@@ -2651,9 +2652,9 @@ end;
 
 destructor TRestClientLibraryRequest.Destroy;
 begin
+  inherited Destroy;
   if fLibraryHandle<>0 then
     LibraryClose(fLibraryHandle);
-  inherited;
 end;
 
 procedure TRestClientLibraryRequest.InternalURI(var Call: TRestURIParams);

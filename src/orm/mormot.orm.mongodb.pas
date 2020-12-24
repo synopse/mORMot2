@@ -1424,6 +1424,7 @@ const
   end;
 
 var
+  T: TOrmTableJSON;
   W: TJSONSerializer;
   MS: TRawByteStringStream;
   Res: TBSONDocument;
@@ -1511,16 +1512,18 @@ begin
             MS.Free;
           end;
           if TextOrderByField <> '' then
+          begin
             // $orderby is case sensitive with MongoDB -> client-side sort
-            with TOrmTableJSON.CreateFromTables([fStoredClass], SQL,
-              pointer(result), length(result)) do
+            T := TOrmTableJSON.CreateFromTables([fStoredClass], SQL,
+              pointer(result), length(result));
             try
-              SortFields(FieldIndex(TextOrderByField),
+              T.SortFields(T.FieldIndex(TextOrderByField),
                 not Stmt.OrderByDesc, nil, oftUTF8Text);
-              result := GetJSONValues(W.Expand);
+              result := T.GetJSONValues(W.Expand);
             finally
-              Free;
+              T.Free;
             end;
+          end;
         end;
       finally
         Stmt.Free;

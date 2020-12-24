@@ -1540,7 +1540,7 @@ var
 begin
   JSON := EngineList(SQL, false);
   if JSON <> '' then
-    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON)
+    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}true)
   else
     result := nil;
 end;
@@ -2191,7 +2191,7 @@ end;
 function TRestOrm.{%H-}BatchSend(Table: TOrmClass; var Data: RawUTF8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
-  raise EOrmException.CreateUTF8('BATCH not supported by %', [self]);
+  result := EngineBatchSend(Table, Data, Results, ExpectedResultsCount);
 end;
 
 function TRestOrm.AsynchBatchStart(Table: TOrmClass;

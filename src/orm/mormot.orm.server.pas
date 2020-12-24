@@ -514,14 +514,22 @@ begin
   for i := 0 to high(fStaticVirtualTable) do
     if fStaticVirtualTable[i] <> nil then
     begin
-      fStaticVirtualTable[i].Free;
+      if fStaticVirtualTable[i].RefCount <> 1 then
+        raise ERestStorage.CreateUTF8('%.Destroy: static virtual % refcnt=%',
+          [self, fStaticVirtualTable[i], fStaticVirtualTable[i].RefCount]);
+      TRestOrmServer(fStaticVirtualTable[i])._Release;
       if fStaticData <> nil then
         // free once as fStaticVirtualTable[i], just clear reference here
         fStaticData[i] := nil;
     end;
   // free lasting TRestStorage instances and update file if necessary
   for i := 0 to high(fStaticData) do
-    fStaticData[i].Free;
+    if fStaticData[i] <> nil then
+      if fStaticData[i].RefCount <> 1 then
+        raise ERestStorage.CreateUTF8('%.Destroy: static % refcnt=%',
+          [self, fStaticData[i], fStaticData[i].RefCount])
+      else
+        TRestOrmServer(fStaticData[i])._Release;
   inherited Destroy; // fCache.Free
 end;
 
@@ -574,7 +582,7 @@ begin
   begin
     i := fModel.GetTableIndexExisting(aClass);
     if i < cardinal(length(fStaticData)) then
-      result := fStaticData[i]
+      result := fStaticData[i] // no IRestOrm refcnt involved here
     else
       result := nil;
   end
@@ -592,7 +600,7 @@ begin
     i := fModel.GetTableIndexExisting(aClass);
     if (i >= 0) and
        (fModel.TableProps[i].Kind in IS_CUSTOM_VIRTUAL) then
-      result := fStaticVirtualTable[i];
+      result := fStaticVirtualTable[i]; // no IRestOrm refcnt involved here
   end;
 end;
 
@@ -612,7 +620,7 @@ begin
   if aTableIndex >= 0 then
   begin
     if cardinal(aTableIndex) < cardinal(length(fStaticData)) then
-      result := fStaticData[aTableIndex];
+      result := fStaticData[aTableIndex]; // no IRestOrm refcnt here
     if result = nil then
       if fVirtualTableDirect and
          (fStaticVirtualTable <> nil) then
@@ -1141,7 +1149,7 @@ var
     RowCountForCurrentTransaction := 0;
   end;
 
-  function IsNotAllowed: boolean;
+  function IsNotAllowed: boolean; {$ifdef HASINLINE} inline; {$endif}
   begin
     result := (CurrentContext <> nil) and
               (CurrentContext.Command = execOrmWrite) and
@@ -1491,7 +1499,7 @@ begin
   begin
     if cardinal(aTableIndex) < cardinal(length(fStaticData)) then
     begin
-      result := fStaticData[aTableIndex];
+      result := fStaticData[aTableIndex]; // no IRestOrm refcnt here
       if result <> nil then
       begin
         Kind := sStaticDataTable;
@@ -1501,7 +1509,7 @@ begin
     if fVirtualTableDirect and
        (fStaticVirtualTable <> nil) then
     begin
-      result := fStaticVirtualTable[aTableIndex];
+      result := fStaticVirtualTable[aTableIndex]; // no IRestOrm refcnt here
       if result <> nil then
         Kind := sVirtualTable;
     end;
@@ -1720,6 +1728,10 @@ begin
     raise ERestException.CreateUTF8(
       'SetStaticTable(%): existing % for %',
       [aTableIndex, aStatics[aTableIndex], aStatic]);
+  if aStatic <> nil then
+    TRestOrmServer(aStatic)._AddRef // manual reference counting
+  else
+    TRestOrmServer(aStatics[aTableIndex])._Release;
   aStatics[aTableIndex] := aStatic;
   if IsZero(pointer(aStatics), aTableCount * SizeOf(pointer)) then
     // void array if no more static
