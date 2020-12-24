@@ -2974,6 +2974,7 @@ end;
 {$else}
 function TInterfacedObjectFake.SelfFromInterface: TInterfacedObjectFake;
 asm
+        // asm version for oldest Delphi 7
         sub     eax, TInterfacedObjectFake.fVTable
 end;
 {$endif HASINLINE}

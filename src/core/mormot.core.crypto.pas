@@ -2366,7 +2366,7 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 // - note that this algorithm is proprietary, and less secure (and standard)
 // than the PBKDF2 algorithm, so it should be considered as deprecated; it
 // is supplied only for backward compatibility of existing code:
-// use PBKDF2_HMAC_SHA256 or similar functions for password derivation
+// use PBKDF2_HMAC_SHA256 or similar functions for safer password derivation
 procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 
 
@@ -5466,7 +5466,7 @@ begin
     sha3update;
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
-    result := sha3.Cypher(fromos); // = XOR OS entropy using SHA-3 in XOF mode
+    result := sha3.Cypher(fromos); // = xor OS entropy using SHA-3 in XOF mode
   finally
     sha3.Done;
     FillZero(fromos);

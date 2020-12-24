@@ -584,16 +584,19 @@ const
   GUID_NULL: TGUID = ({%H-});
 
 /// fill a GUID with 0
-procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endif}
+procedure FillZero(var result: TGUID); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
 function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-  guid1, guid2: TGUID): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+  guid1, guid2: TGUID): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(guid1, guid2: PGUID): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID(guid1, guid2: PGUID): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched
@@ -2545,7 +2548,8 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
 /// retrieve 128-bit of entropy, from system time and current execution state
-// - entropy is gathered using 4 crc32c 32-bit hashes, via crcblock()
+// - entropy is gathered using 4 crc32c 32-bit hashes, via crcblock(), and
+// 4 final xxHash32() 32-bit hashes
 // - calls RTL Now(), Random(), CreateGUID(), GetCurrentThreadID() and
 // current gsl_rng_taus2 Lecuyer state
 // - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs

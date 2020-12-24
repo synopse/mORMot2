@@ -807,6 +807,7 @@ begin
     fEncryption := nil
   else
   begin
+    // first try asymetric ES-256 ephemeral secret key and mutual authentication
     fEncryption := TECDHEProtocol.FromKey(aKey, aServer);
     if fEncryption = nil then
     begin

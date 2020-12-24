@@ -693,8 +693,6 @@ asm
         push    edi
         mov     edi, eax
         mov     eax, edx
-        nop
-        nop         // @s loop alignment
 @s:     sub     edi, 2
         cmp     eax, 100
         jb      @2
@@ -1021,9 +1019,9 @@ procedure LockedInc64(int64: PInt64);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
    lock inc     dword ptr [int64]
-        jnz     @ok
-   lock inc     dword ptr [int64 + 4] // collision is very unlikely
-@ok:
+        jz      @h
+        ret
+@h:lock inc     dword ptr [int64 + 4] // collision is very unlikely
 end;
 
 function InterlockedIncrement(var I: integer): integer;
