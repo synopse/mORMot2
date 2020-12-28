@@ -2993,8 +2993,8 @@ begin
     // inlined ClassPropertiesGet
     result := PPointer(PAnsiChar(result) + vmtAutoTable)^;
     if result <> nil then
-      // we know TRttiCustom is in the slot, and Private is TSynLogFamily
-      result := TSynLogFamily(TRttiCustom(pointer(result)).PrivateSlot);
+      // we know TRttiCustom is in the slot, and PrivateSlot as TSynLogFamily
+      result := TRttiCustom(pointer(result)).PrivateSlot;
     if result = nil then
       // register the TSynLogFamily to the TRttiCustom.Private field
       result := FamilyCreate;

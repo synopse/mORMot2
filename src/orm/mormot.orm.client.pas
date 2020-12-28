@@ -277,7 +277,7 @@ type
 type
   /// main entry point of TRestOrmClientURI, redirecting to TRestClientURI.URI()
   TOnRestOrmClientURI = function(const url, method: RawUTF8; Resp: PRawUTF8 = nil;
-    Head: PRawUTF8 = nil; SendData: PRawUTF8 = nil): Int64Rec of object;
+    Head: PRawUTF8 = nil; SendData: PRawUTF8 = nil; outStatus: PCardinal = nil): integer of object;
 
   /// URI-oriented REpresentational State Transfer (REST) client
   // - will later on be implemented over local, Windows messages, named pipe,
@@ -287,7 +287,7 @@ type
   protected
     // ForUpdate=true->LOCK ForUpdate=false->GET
     function URIGet(Table: TOrmClass; ID: TID; var Resp: RawUTF8;
-      ForUpdate: boolean=false): Int64Rec;
+      ForUpdate: boolean = false; outStatus: PCardinal = nil): integer;
   public
     /// will redirect any client call to TRestClientURI.URI()
     // - is injected by TRestClientURI.SetOrmInstance
@@ -653,10 +653,10 @@ begin
     // fTransactionActiveSession flag was not already set
     if aTable = nil then
       // BEGIN on 'root' URI
-      result := URI(fModel.Root, 'BEGIN').Lo in [HTTP_SUCCESS, HTTP_NOCONTENT]
+      result := URI(fModel.Root, 'BEGIN') in [HTTP_SUCCESS, HTTP_NOCONTENT]
     else
       // BEGIN on 'root/table' URI
-      result := URI(fModel.URI[aTable], 'BEGIN').Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
+      result := URI(fModel.URI[aTable], 'BEGIN') in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
 procedure TRestOrmClientURI.RollBack(SessionID: cardinal);
@@ -675,32 +675,27 @@ begin
     result := false
   else
     // UNLOCK on 'root/table/ID' URI
-    result := URI(fModel.GetURIID(Table, aID), 'UNLOCK').Lo in
+    result := URI(fModel.GetURIID(Table, aID), 'UNLOCK') in
       [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
 function TRestOrmClientURI.URIGet(Table: TOrmClass; ID: TID;
-  var Resp: RawUTF8; ForUpdate: boolean): Int64Rec;
+  var Resp: RawUTF8; ForUpdate: boolean; outStatus: PCardinal): integer;
 const
   METHOD: array[boolean] of RawUTF8 = (
     'GET', 'LOCK');
 begin
   // GET/LOCK on 'root/table/ID' URI
-  result := URI(fModel.GetURIID(Table, ID), METHOD[ForUpdate], @Resp, nil, nil);
+  result := URI(fModel.GetURIID(Table, ID),
+    METHOD[ForUpdate], @Resp, nil, nil, outStatus);
 end;
 
 function TRestOrmClientURI.ClientRetrieve(TableModelIndex: integer; ID: TID;
   ForUpdate: boolean; var InternalState: cardinal; var Resp: RawUTF8): boolean;
 begin
   if cardinal(TableModelIndex) <= cardinal(fModel.TablesMax) then
-    with URIGet(fModel.Tables[TableModelIndex], ID, Resp, ForUpdate) do
-      if Lo = HTTP_SUCCESS then
-      begin
-        InternalState := Hi;
-        result := true;
-      end
-      else
-        result := false
+    result := URIGet(fModel.Tables[TableModelIndex],
+      ID, Resp, ForUpdate, @InternalState) = HTTP_SUCCESS
   else
     result := false;
 end;
@@ -712,14 +707,14 @@ begin
      (SQL = '') or
      (ReturnedRowCount <> nil) or
      // GET on 'root' URI with SQL as body (not fully standard HTTP)
-     (URI(fModel.Root, 'GET', @result, nil, @SQL).Lo <> HTTP_SUCCESS) then
+     (URI(fModel.Root, 'GET', @result, nil, @SQL) <> HTTP_SUCCESS) then
     result := '';
 end;
 
 function TRestOrmClientURI.EngineExecute(const SQL: RawUTF8): boolean;
 begin
   // POST on 'root' URI with SQL as body
-  result := URI(fModel.Root, 'POST', nil, nil, @SQL).Lo in
+  result := URI(fModel.Root, 'POST', nil, nil, @SQL) in
     [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
@@ -732,7 +727,7 @@ begin
   result := 0;
   url := fModel.URI[fModel.Tables[TableModelIndex]];
   // POST on 'root/table' URI with JSON object as body
-  if URI(url, 'POST', nil, @Head, @SentData).Lo <> HTTP_CREATED then
+  if URI(url, 'POST', nil, @Head, @SentData) <> HTTP_CREATED then
     // response must be '201 Created'
     exit;
   P := pointer(Head); // we need to check the headers
@@ -771,7 +766,7 @@ var
 begin
   // PUT on 'root/table/ID' URI
   url := fModel.GetURIID(fModel.Tables[TableModelIndex], ID);
-  result := URI(url, 'PUT', nil, nil, @SentData).Lo in
+  result := URI(url, 'PUT', nil, nil, @SentData) in
     [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
@@ -782,7 +777,7 @@ var
 begin
   // DELETE on 'root/table/ID' URI
   url := fModel.GetURIID(fModel.Tables[TableModelIndex], ID);
-  result := URI(url, 'DELETE').Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
+  result := URI(url, 'DELETE') in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
 function TRestOrmClientURI.EngineDeleteWhere(TableModelIndex: integer;
@@ -793,7 +788,7 @@ begin
   // DELETE on 'root/table?where=WhereClause" URI
   url := fModel.GetURI(fModel.Tables[TableModelIndex]) +
     '?where=' + UrlEncode(SQLWhere);
-  result := URI(url, 'DELETE').Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
+  result := URI(url, 'DELETE') in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
 function TRestOrmClientURI.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
@@ -810,7 +805,7 @@ begin
     // GET on 'root/table/ID/BlobFieldName' URI
     url := fModel.GetURICallBack(BlobField^.NameUTF8,
       fModel.Tables[TableModelIndex], aID);
-    result := URI(url, 'GET', @BlobData).Lo = HTTP_SUCCESS;
+    result := URI(url, 'GET', @BlobData) = HTTP_SUCCESS;
   end;
 end;
 
@@ -829,7 +824,7 @@ begin
     // PUT on 'root/table/ID/BlobFieldName' URI
     url := fModel.GetURICallBack(BlobField^.NameUTF8,
       fModel.Tables[TableModelIndex], aID);
-    result := URI(url, 'PUT', nil, @Head, @BlobData).Lo in
+    result := URI(url, 'PUT', nil, @Head, @BlobData) in
       [HTTP_SUCCESS, HTTP_NOCONTENT];
   end;
 end;
@@ -847,7 +842,7 @@ begin
     FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
       [fModel.URI[fModel.Tables[TableModelIndex]], SetFieldName,
        UrlEncode(SetValue), WhereFieldName, UrlEncode(WhereValue)], url);
-    result := URI(url, 'PUT').Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
+    result := URI(url, 'PUT') in [HTTP_SUCCESS, HTTP_NOCONTENT];
   end;
 end;
 
@@ -864,7 +859,7 @@ begin
   try
     // PUT on 'root/Batch' or 'root/Batch/Table' URI
     u := fModel.GetURICallBack('Batch', Table, 0);
-    result := URI(u, 'PUT', @Resp, nil, @Data).Lo;
+    result := URI(u, 'PUT', @Resp, nil, @Data);
     if result <> HTTP_SUCCESS then
       exit;
     // returned Resp shall be an array of integers: '[200,200,...]'
@@ -929,18 +924,18 @@ function TRestOrmClientURI.ExecuteList(const Tables: array of TOrmClass;
   const SQL: RawUTF8): TOrmTable;
 var
   JSON: RawUTF8;
-  res: Int64Rec;
+  res, state: integer;
 begin
   if self = nil then
     result := nil
   else
   begin
     // GET on 'root' URI with SQL as body (not fully HTTP compatible)
-    res := URI(fModel.Root, 'GET', @JSON, nil, @SQL);
-    if res.Lo = HTTP_SUCCESS then
+    res := URI(fModel.Root, 'GET', @JSON, nil, @SQL, @state);
+    if res = HTTP_SUCCESS then
     begin
       result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}true);
-      result.InternalState := res.Hi;
+      result.InternalState := state;
     end
     else
       // no data on error
@@ -953,7 +948,7 @@ function TRestOrmClientURI.List(const Tables: array of TOrmClass;
 var
   JSON, SQL: RawUTF8;
   U: RawUTF8;
-  InternalState: cardinal;
+  state: integer;
 begin
   result := nil;
   if high(Tables) < 0 then
@@ -976,33 +971,27 @@ begin
         U := U + '?where=';
       U := U + UrlEncode(SQLWhere);
     end;
-    with URI(Model.URI[Tables[0]] + U, 'GET', @JSON) do
-      if Lo <> HTTP_SUCCESS then
-        exit
-      else
-        InternalState := Hi;
+    if URI(Model.URI[Tables[0]] + U,
+       'GET', @JSON, nil, nil, @state) <> HTTP_SUCCESS then
+      exit;
     result := TOrmTableJSON.CreateFromTables([Tables[0]], SQL, JSON, {ownJSON=}true);
   end
   else
   begin
     // multiple tables -> send SQL statement as HTTP body
-    with URI(Model.Root,'GET', @JSON, nil, @SQL) do
-      if Lo <> HTTP_SUCCESS then
-        exit
-      else
-        InternalState := Hi;
+    if URI(Model.Root,'GET', @JSON, nil, @SQL, @state) <> HTTP_SUCCESS then
+        exit;
     result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}true);
   end;
-  result.InternalState := InternalState;
+  result.InternalState := state;
 end;
 
 function TRestOrmClientURI.ServerInternalState: cardinal;
 begin
   if (self = nil) or
-     (fModel = nil) then // avoid GPF
-    result := cardinal(-1)
-  else
-    result := URI(fModel.Root, 'STATE').Hi;
+     (fModel = nil) or // avoid GPF
+     (URI(fModel.Root, 'STATE', nil, nil, nil, @result) <> HTTP_SUCCESS) then
+    result := cardinal(-1);
 end;
 
 function TRestOrmClientURI.UpdateFromServer(const Data: array of TObject;
@@ -1035,27 +1024,26 @@ begin
            (T.InternalState <> State) then
         begin
           // refresh needed
-          with URI(fModel.Root, 'GET', @Resp, nil, @T.QuerySQL) do
-            if Lo = HTTP_SUCCESS then
-            begin
-              // refresh after proper GET with SQL sent
-              if Assigned(OnTableUpdate) then
-                OnTableUpdate(T, tusPrepare);
-              TRefreshed := false;
-              if not T.UpdateFrom(Resp, TRefreshed, PCurrentRow) then
-                // mark error retrieving new content
-                result := false
-              else
-                // successfully refreshed with new data
-                T.InternalState := Hi;
-              if TRefreshed then
-                Refreshed := true;
-              if Assigned(OnTableUpdate) then
-                OnTableUpdate(T, _ST[TRefreshed]);
-            end
-            else
+          if URI(fModel.Root, 'GET', @Resp, nil, @T.QuerySQL, @State) = HTTP_SUCCESS then
+          begin
+            // refresh after proper GET with SQL sent
+            if Assigned(OnTableUpdate) then
+              OnTableUpdate(T, tusPrepare);
+            TRefreshed := false;
+            if not T.UpdateFrom(Resp, TRefreshed, PCurrentRow) then
               // mark error retrieving new content
-              result := false;
+              result := false
+            else
+              // successfully refreshed with new data
+              T.InternalState := State;
+            if TRefreshed then
+              Refreshed := true;
+            if Assigned(OnTableUpdate) then
+              OnTableUpdate(T, _ST[TRefreshed]);
+          end
+          else
+            // mark error retrieving new content
+            result := false;
         end;
       end
       else if Data[i].InheritsFrom(TOrm) then
@@ -1076,7 +1064,7 @@ begin
      (Model = nil) then // avoid GPF
     result := false
   else
-    result := URI(fModel.GetURICallBack('CacheFlush', aTable, aID), 'GET').Lo
+    result := URI(fModel.GetURICallBack('CacheFlush', aTable, aID), 'GET')
       in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 

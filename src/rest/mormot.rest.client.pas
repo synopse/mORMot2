@@ -620,7 +620,7 @@ type
     // (i.e. if the session was closed by the remote server, for any reason -
     // mostly a time out) if the OnAuthentificationFailed event handler is set
     function URI(const url, method: RawUTF8; Resp: PRawUTF8 = nil;
-      Head: PRawUTF8 = nil; SendData: PRawUTF8 = nil): Int64Rec;
+      Head: PRawUTF8 = nil; SendData: PRawUTF8 = nil; outStatus: PCardinal = nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
@@ -1759,8 +1759,8 @@ end;
 
 function TRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
 begin
-  result := URI(fModel.GetURICallBack('RemoteLog', nil, 0), 'PUT', nil, nil, @aText).
-    Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
+  result := URI(fModel.GetURICallBack('RemoteLog', nil, 0),
+    'PUT', nil, nil, @aText) in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
 function TRestClientURI.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
@@ -2148,7 +2148,7 @@ begin
 end;
 
 function TRestClientURI.URI(const url, method: RawUTF8; Resp: PRawUTF8;
-  Head: PRawUTF8; SendData: PRawUTF8): Int64Rec;
+  Head: PRawUTF8; SendData: PRawUTF8; outStatus: PCardinal): integer;
 var
   retry: integer;
   aUserName, aPassword: string;
@@ -2174,8 +2174,9 @@ var
     end
     else
       OnBackgroundProcess({SenderThread=}nil, @Call);
-    result.Lo := Call.OutStatus;
-    result.Hi := Call.OutInternalState;
+    result := Call.OutStatus;
+    if outStatus <> nil then
+      outStatus^ := Call.OutInternalState;
     if Head <> nil then
       Head^ := Call.OutHead;
     if Resp <> nil then
@@ -2186,7 +2187,7 @@ var
 begin
   if self = nil then
   begin
-    Int64(result) := HTTP_UNAVAILABLE;
+    result := HTTP_UNAVAILABLE;
     SetLastException(nil, HTTP_UNAVAILABLE);
     exit;
   end;
@@ -2196,7 +2197,7 @@ begin
   begin
     if not ServerTimestampSynchronize then
     begin
-      Int64(result) := HTTP_UNAVAILABLE;
+      result := HTTP_UNAVAILABLE;
       exit; // if Timestamp is not available, server is down!
     end;
   end;
@@ -2250,7 +2251,7 @@ begin
   except
     on E: Exception do
     begin
-      Int64(result) := HTTP_NOTIMPLEMENTED; // 501
+      result := HTTP_NOTIMPLEMENTED; // 501
       SetLastException(E, HTTP_NOTIMPLEMENTED, @Call);
       exit;
     end;
@@ -2272,7 +2273,7 @@ begin
     if high(aNameValueParameters) > 0 then
       url := url + UrlEncode(aNameValueParameters);
     log := fLogClass.Enter('CallBackGet %', [url], self);
-    result := URI(url, 'GET', @aResponse, @header).Lo;
+    result := URI(url, 'GET', @aResponse, @header);
     if aResponseHead <> nil then
       aResponseHead^ := header;
     if (log <> nil) and
@@ -2319,7 +2320,7 @@ begin
     u := fModel.GetURICallBack(aMethodName, aTable, aID);
     log := fLogClass.Enter('Callback %', [u], self);
     m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TURIMethod), ord(method)));
-    result := URI(u, m, @aResponse, aResponseHead, @aSentData).Lo;
+    result := URI(u, m, @aResponse, aResponseHead, @aSentData);
     InternalLog('% result=% resplen=%',
       [m, result, length(aResponse)], sllServiceReturn);
   end;

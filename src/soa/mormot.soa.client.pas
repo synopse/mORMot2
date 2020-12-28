@@ -606,7 +606,7 @@ var
          (service^.ArgsOutputValuesCount = 0) then
         rcu.CallbackNonBlockingSetHeader(head);
     end;
-    status := rcu.URI(uri, 'POST', @resp, @head, @sent).Lo;
+    status := rcu.URI(uri, 'POST', @resp, @head, @sent);
   end;
 
 begin

@@ -16172,16 +16172,16 @@ class function TOrm.OrmProps: TOrmProperties;
 begin
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
   if result <> nil then
-    // we know TRttiCustom is in the slot, and Private is TOrmProperties
+    // we expect TRttiCustom is in the slot, and PrivateSlot as TOrmProperties
     result := TRttiCustom(pointer(result)).PrivateSlot;
   if result = nil then
-    // first time we use this TOrm: generate information from RTTI
+    // first time we use this TOrm class: generate information from RTTI
     result := PropsCreate;
 end;
 
 function TOrm.Orm: TOrmProperties;
 begin
-  // we know TRttiCustom is in the slot, and Private is TOrmProperties
+  // we know TRttiCustom is in the slot, and PrivateSlot as TOrmProperties
   result := PRttiCustom(PPAnsiChar(self)^ + vmtAutoTable)^.PrivateSlot;
 end;
 
@@ -16408,15 +16408,9 @@ end;
 class function TOrm.PropsCreate: TOrmProperties;
 var
   rtticustom: TRttiCustom;
-  vmt: TObject;
 begin
   // private sub function for proper TOrm.OrmProps method inlining
   rtticustom := Rtti.RegisterClass(self);
-  vmt := PPointer(PAnsiChar(self) + vmtAutoTable)^;
-  if (rtticustom = nil) or (vmt <> rtticustom) then
-    // TOrm.OrmProps expects TRttiCustom in the first slot
-    raise EModelException.CreateUTF8('%.OrmProps: vmtAutoTable=% not %',
-      [self, vmt, rtticustom]);
   Rtti.DoLock;
   try
     result := rtticustom.PrivateSlot; // Private is TOrmProperties
