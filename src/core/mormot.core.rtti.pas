@@ -2306,6 +2306,10 @@ type
     // - the RTTI information will here be defined as plain text
     function RegisterFromText(const TypeName: RawUTF8;
       const RttiDefinition: RawUTF8): TRttiCustom; overload;
+    /// low-level access to the global mutex associated with this RTTI list
+    procedure DoLock;
+    /// low-level access to the global mutex associated with this RTTI list
+    procedure DoUnLock;
     /// default property to access a given RTTI TypeInfo() customization
     // - you can access or register one type by using this default property:
     // ! Rtti[TypeInfo(TMyClass)].Props.NameChange('old', 'new')
@@ -6955,6 +6959,16 @@ begin
   end
   else
     result := nil;
+end;
+
+procedure TRttiCustomList.DoLock;
+begin
+  EnterCriticalSection(Lock);
+end;
+
+procedure TRttiCustomList.DoUnLock;
+begin
+  LeaveCriticalSection(Lock);
 end;
 
 function TRttiCustomList.DoRegister(Info: PRttiInfo): TRttiCustom;

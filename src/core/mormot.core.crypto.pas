@@ -5395,6 +5395,7 @@ begin
   end;
   {$endif LINUX}
   {$ifdef MSWINDOWS}
+  // warning: on some Windows versions, this could take up to 30 ms!
   if CryptoAPI.Available then
     if CryptoAPI.AcquireContextA(prov, nil, nil,
       PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then

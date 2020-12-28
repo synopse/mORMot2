@@ -16405,9 +16405,6 @@ end;
 // http://hallvards.blogspot.com/2007/05/hack17-virtual-class-variables-part-ii.html
 // [a slower alternative may have been to use a global TSynDictionary]
 
-var
-  vmtAutoTableLock: TRTLCriticalSection; // atomic set of the VMT AutoTable entry
-
 class function TOrm.PropsCreate: TOrmProperties;
 var
   rtticustom: TRttiCustom;
@@ -16420,7 +16417,7 @@ begin
     // TOrm.OrmProps expects TRttiCustom in the first slot
     raise EModelException.CreateUTF8('%.OrmProps: vmtAutoTable=% not %',
       [self, vmt, rtticustom]);
-  EnterCriticalSection(vmtAutoTableLock);
+  Rtti.DoLock;
   try
     result := rtticustom.PrivateSlot; // Private is TOrmProperties
     if Assigned(result) then
@@ -16436,7 +16433,7 @@ begin
     rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
     self.InternalDefineModel(result);
   finally
-    LeaveCriticalSection(vmtAutoTableLock);
+    Rtti.DoUnLock;
   end;
 end;
 
@@ -22301,7 +22298,6 @@ end;
 
 procedure InitializeUnit;
 begin
-  InitializeCriticalSection(vmtAutoTableLock);
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(
     TypeInfo(TOrmModelPropertiesObjArray), TOrmModelProperties);
@@ -22319,12 +22315,12 @@ end;
 
 procedure FinalizeUnit;
 begin
-  DeleteCriticalSection(vmtAutoTableLock);
   FreeAndNil(OrmPropInfoRegistration);
 end;
 
 // yes, I know, this is a huge unit, but there are a lot of comments and
 // the core ORM types are coupled together by design :)
+// - we may uncouple some dependencies using interfaces, but not worth it now
 
 initialization
   InitializeUnit;

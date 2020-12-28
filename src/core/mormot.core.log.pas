@@ -3045,7 +3045,7 @@ begin
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
       raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=% not %',
         [self, vmt, rtticustom]);
-    EnterCriticalSection(GlobalThreadLock);
+    Rtti.DoLock;
     try
       result := rtticustom.PrivateSlot;
       if Assigned(result) then
@@ -3060,7 +3060,7 @@ begin
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
       rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
     finally
-      LeaveCriticalSection(GlobalThreadLock);
+      Rtti.DoUnlock;
     end;
   end
   else
