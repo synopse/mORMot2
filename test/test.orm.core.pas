@@ -140,7 +140,7 @@ begin
     Check(not FileExists('fullmem.data'));
     Server := TRestServerFullMemory.Create(Model, 'fullmem.data', true, true);
     try
-      Server.Server.CreateMissingTables;
+      Server.{$ifdef PUREMORMOT2}Server.{$endif}CreateMissingTables;
       {$ifdef MSWINDOWS2}
       Check(Server.ExportServerMessage('fullmem'));
       Client := TRestClientURIMessage.Create(Model, 'fullmem', 'fullmemclient', 1000);
@@ -343,10 +343,10 @@ begin
         for i := 1 to n do
           if i and 511 = 0 then
           begin
-            Check(Server.Orm.Delete(TOrmTest, i));
+            Check(Client.Orm.Delete(TOrmTest, i));
             dec(n);
           end;
-        CheckEqual(Server.Orm.TableRowCount(TOrmTest), n);
+        CheckEqual(Client.Orm.TableRowCount(TOrmTest), n);
         for i := 1 to n do
           Check(Server.Orm.MemberExists(TOrmTest, i) = (i and 511 <> 0));
         R := TOrmTest.CreateAndFillPrepare(Server.Orm, '', '*');

@@ -3343,8 +3343,11 @@ begin
     // find matching match[]
     if FindWhereEqual(WhereFieldIndex, WhereValueString,
         DoAddToListEvent, match, 0, 0) = 0 then
+    begin
       // match.Count=0 -> nothing to update
+      result := true; // as with SQL UPDATE
       exit;
+    end;
     // check that all records can be updated
     for i := 0 to match.Count - 1 do
       if not RecordCanBeUpdated(fStoredClass,

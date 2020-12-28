@@ -1898,7 +1898,8 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
     else
     begin
       Rest := GetStaticTableIndex(Ref^.TableIndex);
-      if Rest <> nil then // fast direct call
+      if Rest <> nil then
+        // fast direct call
         cascadeOK := Rest.EngineUpdateField(Ref^.TableIndex,
           Ref^.FieldType.Name, '0', Ref^.FieldType.Name, W)
       else
@@ -1906,8 +1907,8 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
           Ref^.FieldType.Name, '0', Ref^.FieldType.Name, W);
     end;
     if not cascadeOK then
-      InternalLog('AfterDeleteForceCoherency() failed to handle field %.%',
-        [fModel.Tables[Ref^.TableIndex], Ref^.FieldType.Name], sllWarning);
+      InternalLog('AfterDeleteForceCoherency() failed update %.%=%',
+        [fModel.Tables[Ref^.TableIndex], Ref^.FieldType.Name, W], sllWarning);
   end;
 
 var

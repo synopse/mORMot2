@@ -7571,7 +7571,7 @@ begin
       result := false;
 end;
 
-procedure LibraryRequestFree(Data: pointer); cdecl;
+procedure LibraryRequestFree(Data: pointer); cdecl; // match TLibraryRequestFree
 begin
   if Data <> nil then
     RawUTF8(Data) := '';
