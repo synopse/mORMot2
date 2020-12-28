@@ -2286,6 +2286,20 @@ type
     // - returns false if a TRestServer was already exported
     function ExportServerGlobalLibraryRequest: boolean;
 
+    {$ifndef PUREMORMOT2}
+    /// redirect to Server: IRestOrmServer methods
+    procedure CreateMissingTables(user_version: cardinal = 0;
+      options: TOrmInitializeTableOptions = []);
+    function CreateSQLIndex(Table: TOrmClass; const FieldName: RawUTF8;
+      Unique: boolean; const IndexName: RawUTF8 = ''): boolean; overload;
+    function CreateSQLIndex(Table: TOrmClass;
+      const FieldNames: array of RawUTF8; Unique: boolean): boolean; overload;
+    function CreateSQLMultiIndex(Table: TOrmClass;
+      const FieldNames: array of RawUTF8; Unique: boolean; IndexName: RawUTF8 = ''): boolean;
+    function IsInternalSQLite3Table(aTableIndex: integer): boolean;
+    function MaxUncompressedBlobSize(Table: TOrmClass): integer;
+    {$endif PUREMORMOT2}
+
     /// main access to the IRestOrmServer methods of this instance
     property Server: IRestOrmServer
       read fServer;
@@ -5373,16 +5387,17 @@ begin
   if Previous then
     dec(ticks);
   with ServerNonceCache[Previous] do
-    if ticks = tix then
+    if (ticks = tix) and
+       (res <> '') then  // check for res='' since ticks may be 0 at startup
     begin
-      // very efficiently retrieved from cache
+      // very efficiently retrieval from cache
       result := res;
       exit;
     end;
   if ServerNonceHash.Algorithm <> SHA3_256 then
   begin
     // first time used: initialize the private secret for this process lifetime
-    TAESPRNG.Main.Fill(res); // ensure unpredictable nonce
+    FillRandom(@res, SizeOf(res) shr 2); // good enough as seed
     hash.Init(SHA3_256);
     hash.Update(@res, SizeOf(res));
     GlobalLock;
@@ -7624,6 +7639,45 @@ begin
   pointer(call.OutHead) := nil; // will be released by HeadRespFree()
   pointer(call.OutBody) := nil;
 end;
+
+
+{$ifndef PUREMORMOT2}
+
+procedure TRestServer.CreateMissingTables(user_version: cardinal;
+  options: TOrmInitializeTableOptions);
+begin
+  fServer.CreateMissingTables(user_version, options);
+end;
+
+function TRestServer.CreateSQLIndex(Table: TOrmClass; const FieldName: RawUTF8;
+  Unique: boolean; const IndexName: RawUTF8): boolean;
+begin
+  result := fServer.CreateSQLIndex(Table, FieldName, Unique, IndexName);
+end;
+
+function TRestServer.CreateSQLIndex(Table: TOrmClass;
+  const FieldNames: array of RawUTF8; Unique: boolean): boolean;
+begin
+  result := fServer.CreateSQLIndex(Table, FieldNames, Unique);
+end;
+
+function TRestServer.CreateSQLMultiIndex(Table: TOrmClass;
+  const FieldNames: array of RawUTF8; Unique: boolean; IndexName: RawUTF8): boolean;
+begin
+  result := fServer.CreateSQLMultiIndex(Table, FieldNames, Unique, IndexName);
+end;
+
+function TRestServer.IsInternalSQLite3Table(aTableIndex: integer): boolean;
+begin
+  result := fServer.IsInternalSQLite3Table(aTableIndex);
+end;
+
+function TRestServer.MaxUncompressedBlobSize(Table: TOrmClass): integer;
+begin
+  result := fServer.MaxUncompressedBlobSize(Table);
+end;
+
+{$endif PUREMORMOT2}
 
 
 
