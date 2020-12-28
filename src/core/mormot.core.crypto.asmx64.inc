@@ -1537,7 +1537,7 @@ asm // W=rcx Buf=rdx
         pop     rsi
 end;
 
-procedure bswap256(s,d: PIntegerArray);
+procedure bswap256(s, d: PIntegerArray);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     eax, dword ptr[s]
         mov     r8d, dword ptr[s + 4]
@@ -1565,7 +1565,7 @@ procedure bswap256(s,d: PIntegerArray);
         mov     dword ptr[d + 28], r10d
 end;
 
-procedure bswap160(s,d: PIntegerArray);
+procedure bswap160(s, d: PIntegerArray);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     eax, dword ptr[s]
         mov     r8d, dword ptr[s + 4]
@@ -1586,7 +1586,7 @@ end;
 
 // see http://nicst.de/crc.pdf
 
-function gf2_multiply(x,y,m,bits: PtrUInt): PtrUInt;
+function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     rax, x
         and     rax, 1
@@ -2931,7 +2931,7 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         {$else}
         .align  16
         // circumvent Delphi inline asm compiler bug
-@s:     db $F2,$48,$0F,$38,$F1,$02
+@s:     db $F2, $48, $0F, $38, $F1, $02
         {$endif FPC}
         add     buf, 8
         dec     len
