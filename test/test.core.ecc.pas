@@ -419,7 +419,7 @@ begin
         check(ECCCommand(ecNew, sw) = eccSuccess);
         if CheckFailed(ctxt.ConsoleLines <> nil) then
           exit;
-        id := Trim(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)], '.'));
+        id := TrimU(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)], '.'));
         priv := format('%s.private', [id]);
         pub := format('%s.public', [id]);
         previd := id;

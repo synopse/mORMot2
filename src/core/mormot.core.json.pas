@@ -6955,21 +6955,24 @@ var
 begin
   result := false;
   if Valid then
-  begin
-    P := GotoNextNotSpace(JSON);
-    JSON := P;
-    if PCardinal(P)^ = NULL_LOW then
+    if JSON <> nil then
     begin
-      P := mormot.core.json.ParseEndOfObject(P + 4, EndOfObject);
-      if P <> nil then
+      P := GotoNextNotSpace(JSON);
+      JSON := P;
+      if PCardinal(P)^ = NULL_LOW then
       begin
-        JSON := P;
-        result := true;
-      end
-      else
-        Valid := false;
-    end;
-  end;
+        P := mormot.core.json.ParseEndOfObject(P + 4, EndOfObject);
+        if P <> nil then
+        begin
+          JSON := P;
+          result := true;
+        end
+        else
+          Valid := false;
+      end;
+    end
+    else
+      result := true; // nil -> null
 end;
 
 function TJsonParserContext.ParseArray: boolean;
@@ -7507,7 +7510,8 @@ var
 label
   nxt, any;
 begin
-  Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON);
+  if Ctxt.JSON <> nil then
+    Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON);
   if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
   begin
     // TRttiJson.RegisterCustomSerializer() custom callbacks
