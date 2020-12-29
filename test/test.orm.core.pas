@@ -39,6 +39,70 @@ uses
   test.core.data;
 
 type
+  /// common ancestor for tables with digitally signed RawUTF8 content
+  // - content is signed according to a specific User Name and the digital
+  // signature date and time
+  // - internaly uses the very secure SHA-256 hashing algorithm for performing
+  // the digital signature
+  TOrmSigned = class(TOrm)
+  protected
+    /// time and date of signature
+    fSignatureTime: TTimeLog;
+    /// hashed signature
+    fSignature: RawUTF8;
+    function ComputeSignature(const UserName, Content: RawByteString): RawUTF8;
+  public
+    /// time and date of signature
+    // - if the signature is invalid, this field will contain numerical 1 value
+    // - this property is defined here to allow inherited to just declared the name
+    // in its published section:
+    // ! property SignatureTime;
+    property SignatureTime: TTimeLog
+      read fSignatureTime write fSignatureTime;
+    /// as the Content of this record is added to the database,
+    // its value is hashed and stored as 'UserName/03A35C92....' into this property
+    // - secured SHA-256 hashing is used internaly
+    // - digital signature is allowed only once: this property is written only once
+    // - this property is defined here to allow inherited to just declared the name
+    // in its published section:
+    // ! property Signature;
+    property Signature: RawUTF8
+      read fSignature write fSignature;
+  public
+    /// use this procedure to sign the supplied Content of this record for a
+    // specified UserName, with the current Date and Time
+    // - SHA-256 hashing is used internaly
+    // - returns true if signed successfully (not already signed)
+    function SetAndSignContent(const UserName: RawUTF8; const Content:
+      RawByteString; ForcedSignatureTime: Int64 = 0): boolean;
+    /// returns true if this record content is correct according to the
+    // stored digital Signature
+    function CheckSignature(const Content: RawByteString): boolean;
+    /// retrieve the UserName who digitally signed this record
+    // - returns '' if was not digitally signed
+    function SignedBy: RawUTF8;
+    /// reset the stored digital signature
+    // - SetAndSignContent() can be called after this method
+    procedure UnSign;
+  end;
+
+  /// base ORM class, which will have creation and modification timestamp fields
+  TOrmTimed = class(TOrm)
+  protected
+    fCreated: TCreateTime;
+    fModified: TModTime;
+  published
+    /// will be filled by the ORM when this item will be created in the database
+    property Created: TCreateTime
+      read fCreated write fCreated;
+    /// will be filled by the ORM each time this item will be written in the database
+    property Modified: TModTime
+      read fModified write fModified;
+  end;
+
+
+
+type
   /// this test case will test some generic classes
   // defined and implemented in the mormot.orm.core.pas unit
   TTestOrmCore = class(TSynTestCase)
@@ -585,68 +649,6 @@ begin
     T.Free;
   end;
 end;
-
-type
-  /// common ancestor for tables with digitally signed RawUTF8 content
-  // - content is signed according to a specific User Name and the digital
-  // signature date and time
-  // - internaly uses the very secure SHA-256 hashing algorithm for performing
-  // the digital signature
-  TOrmSigned = class(TOrm)
-  protected
-    /// time and date of signature
-    fSignatureTime: TTimeLog;
-    /// hashed signature
-    fSignature: RawUTF8;
-    function ComputeSignature(const UserName, Content: RawByteString): RawUTF8;
-  public
-    /// time and date of signature
-    // - if the signature is invalid, this field will contain numerical 1 value
-    // - this property is defined here to allow inherited to just declared the name
-    // in its published section:
-    // ! property SignatureTime;
-    property SignatureTime: TTimeLog
-      read fSignatureTime write fSignatureTime;
-    /// as the Content of this record is added to the database,
-    // its value is hashed and stored as 'UserName/03A35C92....' into this property
-    // - secured SHA-256 hashing is used internaly
-    // - digital signature is allowed only once: this property is written only once
-    // - this property is defined here to allow inherited to just declared the name
-    // in its published section:
-    // ! property Signature;
-    property Signature: RawUTF8
-      read fSignature write fSignature;
-  public
-    /// use this procedure to sign the supplied Content of this record for a
-    // specified UserName, with the current Date and Time
-    // - SHA-256 hashing is used internaly
-    // - returns true if signed successfully (not already signed)
-    function SetAndSignContent(const UserName: RawUTF8; const Content:
-      RawByteString; ForcedSignatureTime: Int64 = 0): boolean;
-    /// returns true if this record content is correct according to the
-    // stored digital Signature
-    function CheckSignature(const Content: RawByteString): boolean;
-    /// retrieve the UserName who digitally signed this record
-    // - returns '' if was not digitally signed
-    function SignedBy: RawUTF8;
-    /// reset the stored digital signature
-    // - SetAndSignContent() can be called after this method
-    procedure UnSign;
-  end;
-
-  /// base ORM class, which will have creation and modification timestamp fields
-  TOrmTimed = class(TOrm)
-  protected
-    fCreated: TCreateTime;
-    fModified: TModTime;
-  published
-    /// will be filled by the ORM when this item will be created in the database
-    property Created: TCreateTime
-      read fCreated write fCreated;
-    /// will be filled by the ORM each time this item will be written in the database
-    property Modified: TModTime
-      read fModified write fModified;
-  end;
 
 
 { TOrmSigned }

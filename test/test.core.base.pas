@@ -31,6 +31,16 @@ uses
   mormot.orm.core,
   mormot.rest.client;
 
+
+
+const
+  {$ifdef MSWINDOWS}
+  HTTP_DEFAULTPORT = '888';
+  {$else}
+  HTTP_DEFAULTPORT = '8888'; // under Linux, port<1024 needs root user
+  {$endif MSWINDOWS}
+
+
 type
   /// a test class, used by TTestServiceOrientedArchitecture
   // - to test TPersistent objects used as parameters for remote service calls

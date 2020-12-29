@@ -138,6 +138,71 @@ type
     property ValVariant: variant read fVariant write fVariant;
   end;
 
+type
+  TCollTest = class(TCollectionItem)
+  private
+    FLength: Integer;
+    FColor: Integer;
+    FName: RawUTF8;
+  published
+    property Color: Integer read FColor write FColor;
+    property Length: Integer read FLength write FLength;
+    property Name: RawUTF8 read FName write FName;
+  end;
+
+  TCollTestsI = class(TInterfacedCollection)
+  protected
+    class function GetClass: TCollectionItemClass; override;
+  end;
+
+  TCollTests = class(TInterfacedCollection)
+  private
+    function GetCollItem(Index: Integer): TCollTest;
+  protected
+    class function GetClass: TCollectionItemClass; override;
+  public
+    function Add: TCollTest;
+    property Item[Index: Integer]: TCollTest read GetCollItem; default;
+  end;
+
+  TMyCollection = class(TCollection);
+
+  TCollTst = class(TPersistent)
+  private
+    fColl: TCollTests;
+    fTCollTest: TCollTest;
+    fStr: TStringList;
+    procedure SetColl(const Value: TCollTests); // validate Setter
+  public
+    constructor Create;
+    destructor Destroy; override;
+  published
+    property One: TCollTest read fTCollTest write fTCollTest;
+    property Coll: TCollTests read fColl write SetColl;
+    property Str: TStringList read fStr write fStr;
+  end;
+
+  TCollTstDynArray = class(TCollTst)
+  private
+    fInts: TIntegerDynArray;
+    fTimeLog: TTimeLogDynArray;
+    fFileVersions: TFVs;
+    class procedure FVReader(var Context: TJsonParserContext; Data: pointer);
+    class procedure FVWriter(W: TTextWriter; Data: pointer;
+      Options: TTextWriterWriteObjectOptions);
+    class procedure FVReader2(var Context: TJsonParserContext; Data: pointer);
+    class procedure FVWriter2(W: TTextWriter; Data: pointer;
+      Options: TTextWriterWriteObjectOptions);
+    class procedure FVClassReader(var Context: TJsonParserContext;
+       Value: TObject);
+    class procedure FVClassWriter(W: TTextWriter; Value: TObject;
+      Options: TTextWriterWriteObjectOptions);
+  published
+    property Ints: TIntegerDynArray read fInts write fInts;
+    property TimeLog: TTimeLogDynArray read fTimeLog write fTimeLog;
+    property FileVersion: TFVs read fFileVersions write fFileVersions;
+  end;
+
 
 
 implementation
@@ -620,75 +685,6 @@ begin
 end;
 
 
-{$ifdef UNICODE}
-{$WARNINGS OFF} // don't care about implicit string cast in tests
-{$endif UNICODE}
-
-type
-  TCollTest = class(TCollectionItem)
-  private
-    FLength: Integer;
-    FColor: Integer;
-    FName: RawUTF8;
-  published
-    property Color: Integer read FColor write FColor;
-    property Length: Integer read FLength write FLength;
-    property Name: RawUTF8 read FName write FName;
-  end;
-
-  TCollTestsI = class(TInterfacedCollection)
-  protected
-    class function GetClass: TCollectionItemClass; override;
-  end;
-
-  TCollTests = class(TInterfacedCollection)
-  private
-    function GetCollItem(Index: Integer): TCollTest;
-  protected
-    class function GetClass: TCollectionItemClass; override;
-  public
-    function Add: TCollTest;
-    property Item[Index: Integer]: TCollTest read GetCollItem; default;
-  end;
-
-  TMyCollection = class(TCollection);
-
-  TCollTst = class(TPersistent)
-  private
-    fColl: TCollTests;
-    fTCollTest: TCollTest;
-    fStr: TStringList;
-    procedure SetColl(const Value: TCollTests); // validate Setter
-  public
-    constructor Create;
-    destructor Destroy; override;
-  published
-    property One: TCollTest read fTCollTest write fTCollTest;
-    property Coll: TCollTests read fColl write SetColl;
-    property Str: TStringList read fStr write fStr;
-  end;
-
-  TCollTstDynArray = class(TCollTst)
-  private
-    fInts: TIntegerDynArray;
-    fTimeLog: TTimeLogDynArray;
-    fFileVersions: TFVs;
-    class procedure FVReader(var Context: TJsonParserContext; Data: pointer);
-    class procedure FVWriter(W: TTextWriter; Data: pointer;
-      Options: TTextWriterWriteObjectOptions);
-    class procedure FVReader2(var Context: TJsonParserContext; Data: pointer);
-    class procedure FVWriter2(W: TTextWriter; Data: pointer;
-      Options: TTextWriterWriteObjectOptions);
-    class procedure FVClassReader(var Context: TJsonParserContext;
-       Value: TObject);
-    class procedure FVClassWriter(W: TTextWriter; Value: TObject;
-      Options: TTextWriterWriteObjectOptions);
-  published
-    property Ints: TIntegerDynArray read fInts write fInts;
-    property TimeLog: TTimeLogDynArray read fTimeLog write fTimeLog;
-    property FileVersion: TFVs read fFileVersions write fFileVersions;
-  end;
-
 
 { TCollTestsI }
 
@@ -1031,9 +1027,9 @@ type
 
 const
   // convention may be to use __ or _ before the type name
-  __TTestCustomJSONRecord =
+  __TTestCustomJSONRecord: RawUTF8 =
       'A,B,C integer D RawUTF8 E{E1,E2 double} F TDateTime';
-  __TTestCustomJSONArray =
+  __TTestCustomJSONArray: RawUTF8 =
       'A,B,C byte D RawByteString E[E1 double E2 string] F TDateTime';
   __TTestCustomJSONArraySimple =
       'A,B Int64 C array of TGUID D RawUTF8 E [F RawUTF8 G array of RawUTF8] H RawUTF8';
@@ -1170,8 +1166,8 @@ var
         F.Minor := i + 2000;
         F.Release := i + 3000;
         F.Build := i + 4000;
-        str(i, F.Main);
-        str(i + 1000, F.Detailed);
+        F.Main := IntToStr(i);
+        F.Detailed := IntToStr(i + 1000);
         DA.Add(F);
       end;
       U := ObjectToJSON(CA);
@@ -1218,7 +1214,7 @@ var
           V.Minor := i + 2000;
           V.Release := i + 3000;
           V.Build := i + 4000;
-          str(i, V.Main);
+          V.Main := IntToStr(i);
         end;
         V.BuildDateTime := 4090.0 + i;
         J := ObjectToJSON(V);
@@ -2995,8 +2991,8 @@ begin
   Check(u = BSONID);
   o := ObjectID('507f191e810c19729de860ea');
   Check(TVarData(o).VType = BSONVariantType.VarType);
-  u := string(o);
-  Check(u = BSONID);
+  u := ToUTF8(string(o));
+  Check(u = BSONID, 'variant bsonid to string');
   d2 := Iso8601ToDateTime('2012-10-17T20:46:22');
   od := d2;
   Check(TVarData(od).VType = varDate);
@@ -3015,7 +3011,7 @@ begin
   Check(double(o) = double(o2));
   o := ObjectID;
   Check(Abs(NowUTC - double(o)) < 0.1);
-  oid.FromText(string(o));
+  oid.FromText(ToUTF8(string(o)));
   Check(Abs(NowUTC - oid.CreateDateTime) < 0.1);
   oid2.ComputeNew;
   Check(oid.MachineID.b1 = oid2.MachineID.b1);
@@ -3125,7 +3121,7 @@ begin
   {$ifndef FPC}
   Check(o2 = BSONAWESOME, 'BSONVariant casted to string');
   {$endif FPC}
-  u := string(o2);
+  u := ToUTF8(string(o2));
   CheckEqual(u, '{BSON:["awesome",5.05,1986]}', 'TBSONVariant: mongoShell syntax');
   BSONParseLength(b);
   Check(BSONParseNextElement(b, name, value, asDocVariantPerReference));
@@ -3754,12 +3750,12 @@ begin
   {$ifdef FPC}
   j := VariantToUTF8(V.Database);
   {$else}
-  j := V.Database;
-  {$endif}
+  j := ToUTF8(string(V.Database));
+  {$endif FPC}
   Check((j <> '') and
         (j[1] = #$E2) and
         (j[2] = #$80) and
-        (j[3] = #$9D));
+        (j[3] = #$9D), 'e2809d');
   V1 := _Arr([]);
   vs := 1.5;
   _Safe(V1)^.AddItem(vs);
