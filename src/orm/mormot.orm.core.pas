@@ -1587,8 +1587,6 @@ type
     constructor Create(const aTypeName, aName: RawUTF8; aPropertyIndex: integer;
       aPropertyPointer: pointer; aAttributes: TOrmPropInfoAttributes = [];
       aFieldWidth: integer = 0); reintroduce; overload;
-    /// finalize the instance
-    destructor Destroy; override;
     /// the corresponding custom JSON parser
     property CustomParser: TRttiJson read fCustomParser;
   public
@@ -12341,12 +12339,6 @@ begin
     raise EModelException.CreateUTF8(
       '%.SetCustomParser: Invalid type information for %', [self, Name]);
   fCustomParser := aCustomParser;
-end;
-
-destructor TOrmPropInfoCustomJSON.Destroy;
-begin
-  inherited;
-  fCustomParser.Free;
 end;
 
 procedure TOrmPropInfoCustomJSON.GetBinary(Instance: TObject; W: TBufferWriter);
