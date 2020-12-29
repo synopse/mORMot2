@@ -5530,6 +5530,7 @@ begin
       repeat
         if D >= BEnd then
         begin
+          B := D - 1;
           FlushToStream;
           D := B + 1;
         end;
@@ -5559,6 +5560,7 @@ begin
     repeat
       if D >= BEnd then
       begin
+        B := D - 1;
         FlushToStream;
         D := B + 1;
       end;
@@ -5955,6 +5957,7 @@ begin
       end
       else
       begin
+        B := P - 1;
         FlushToStream;
         P := B + 1;
       end;
