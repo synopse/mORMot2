@@ -4056,7 +4056,10 @@ begin
     if InputLen = 0 then
       result := ''
     else
+    begin
+      P[InputLen] := #0; // as SetString - needed if parsed e.g. as text/JSON
       PStrLen(P - _STRLEN)^ := InputLen;
+    end;
   end;
 end;
 

@@ -1046,7 +1046,7 @@ begin
   Rewrite(fSaveToFile);
   {$ifndef MSWINDOWS}
   TTextRec(fSaveToFile).LineEnd := #13#10;
-  {$endif}
+  {$endif MSWINDOWS}
   StdOut := TTextRec(fSaveToFile).Handle;
 end;
 
