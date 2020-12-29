@@ -969,14 +969,15 @@ type
   /// parent information about a published property retrieved from RTTI
   TOrmPropInfoRTTI = class(TOrmPropInfo)
   protected
-    fPropInfo: PRttiProp; // equals fPropRttiProp.Prop
+    fPropInfo: PRttiProp;
     fPropType: PRttiInfo;
-    fPropRtti: TRttiJson; // equals fPropRttiProp.Value
-    fPropRttiProp: PRttiCustomProp; // may be nil
+    fPropRtti: TRttiJson;
     fFlattenedProps: PRttiPropDynArray;
     fGetterIsFieldPropOffset: PtrUInt;
     fInPlaceCopySameClassPropOffset: PtrUInt;
+    fRttiCustomProp: PRttiCustomProp;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
+    function GetRttiCustomProp(Instance: TObject): PRttiCustomProp;
   public
     /// this meta-constructor will create an instance of the exact descendant
     // of the specified property RTTI
@@ -9669,7 +9670,7 @@ begin
     raise EModelException.CreateUTF8('Invalid %.CreateFrom(nil) call', [self]);
   result := nil;
   aOrmFieldType := oftUnknown;
-  aType := aPropInfo^.typeInfo;
+  aType := aPropInfo^.TypeInfo;
   if aType^.Kind = rkVariant then
   begin
     aOrmFieldType := NullableTypeToOrmFieldType(aType);
@@ -9774,6 +9775,13 @@ begin
   result := ToUTF8(fPropType^.Name^);
 end;
 
+function TOrmPropInfoRTTI.GetRttiCustomProp(Instance: TObject): PRttiCustomProp;
+begin
+  if (fRttiCustomProp = nil) and (Instance <> nil) then
+    fRttiCustomProp := Rtti.RegisterClass(PClass(Instance)^).Props.Find(Name);
+  result := fRttiCustomProp;
+end;
+
 function TOrmPropInfoRTTI.GetFieldAddr(Instance: TObject): pointer;
 begin
   if Instance = nil then
@@ -9813,13 +9821,10 @@ begin
   inherited Create(ToUTF8(aPropInfo^.Name^), aOrmFieldType, attrib, aPropInfo^.Index,
     aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
-  fPropType := aPropInfo^.typeInfo;
+  fPropType := aPropInfo^.TypeInfo;
   fPropRtti := Rtti.RegisterType(fPropType) as TRttiJson;
   if fPropRtti = nil then
     raise EModelException.CreateUTF8('%.Create(%): unknown type', [self, aPropInfo^.Name^]);
-  fPropRttiProp := fPropRtti.Props.Find(aPropInfo^.Name^);
-  if (fPropRttiProp <> nil) and (fPropRttiProp.Prop <> fPropInfo) then
-    raise EModelException.CreateUTF8('%.Create(%): invalid prop', [self, aPropInfo^.Name^]);
   if aPropInfo.GetterIsField then
   begin
     fGetterIsFieldPropOffset := PtrUInt(fPropInfo.GetterAddr(nil));
@@ -10741,7 +10746,7 @@ var
 begin
   tmp.Init(Value); // private copy since the buffer will be modified
   try
-    PropertyFromJSON(fPropRttiProp, Instance, tmp.buf, valid,
+    PropertyFromJSON(GetRttiCustomProp(Instance), Instance, tmp.buf, valid,
       JSONPARSER_TOLERANTOPTIONS);
   finally
     tmp.Done;
@@ -10771,7 +10776,7 @@ begin
   // unserialize object from JSON UTF-8 TEXT - not fast, but works
   FromVarString(PByte(P), PByte(PEnd), tmp);
   try
-    PropertyFromJSON(fPropRttiProp, Instance, tmp.buf, valid,
+    PropertyFromJSON(GetRttiCustomProp(Instance), Instance, tmp.buf, valid,
       JSONPARSER_TOLERANTOPTIONS);
   finally
     tmp.Done;
