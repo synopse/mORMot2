@@ -6467,6 +6467,7 @@ w:  if {%H-}wasString or
     if dvoJSONObjectParseWithinString in Options^ then
     begin
       P := GetJSONField(P, JSON, @wasString, EndOfObject, @Plen);
+      EndOfObject := nil;
       wasParsedWithinString := true;
     end
     else
