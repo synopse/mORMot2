@@ -1047,7 +1047,7 @@ var
   algo: TRestAuthenticationSignedURIAlgo absolute a;
 begin
   result := '';
-  if (Sender.CallBackGet('Auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
+  if (Sender.CallBackGet('auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
      (JSONDecode(pointer({%H-}resp),
       ['result', 'data', 'server', 'version', 'logonid', 'logonname',
        'logondisplay', 'logongroup', 'timeout', 'algo'], @values) = nil) then
@@ -1121,16 +1121,16 @@ begin
   result := '';
   if User.LogonName = '' then
     exit;
-  aServerNonce := Sender.CallBackGetResult('Auth', ['UserName', User.LogonName]);
+  aServerNonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
   if aServerNonce = '' then
     exit;
   TAESPRNG.Main.FillRandom(@rnd, SizeOf(rnd));
   aClientNonce := BinToHexLower(@rnd, SizeOf(rnd));
   result := ClientGetSessionKey(Sender, User, [
-    'UserName', User.LogonName,
-    'Password', Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
+    'username', User.LogonName,
+    'password', Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
                        User.LogonName + User.PasswordHashHexa),
-    'ClientNonce', aClientNonce]);
+    'clientnonce', aClientNonce]);
 end;
 
 
@@ -1306,7 +1306,7 @@ class function TRestClientAuthenticationNone.ClientComputeSessionKey(
   Sender: TRestClientURI; User: TAuthUser): RawUTF8;
 begin
   result := ClientGetSessionKey(Sender, User, [
-    'UserName', User.LogonName]);
+    'userName', User.LogonName]);
 end;
 
 
@@ -1407,7 +1407,7 @@ begin
         break; // 2nd pass
       // 1st call will return data, 2nd call SessionKey
       result := ClientGetSessionKey(Sender, User,
-        ['UserName', '',
+        ['username', '',
          'data', BinToBase64(OutData)]);
     until Sender.fSession.Data = '';
     if result <> '' then
@@ -1966,9 +1966,9 @@ begin
   try
     fRun.TimerDisable(SessionRenewEvent);
     InternalLog('SessionClose: notify server', sllTrace);
-    CallBackGet('Auth', [
-      'UserName', fSession.User.LogonName,
-      'Session', fSession.ID], tmp);
+    CallBackGet('auth', [
+      'userName', fSession.User.LogonName,
+      'session', fSession.ID], tmp);
   finally
     // back to no session, with default values
     fSession.ID := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
@@ -2445,7 +2445,7 @@ begin
     exit;
   end;
   fServerTimestamp.Offset := 0.0001; // avoid endless recursive call
-  status := CallBackGet('Timestamp', [], resp);
+  status := CallBackGet('timestamp', [], resp);
   result := (status = HTTP_SUCCESS) and
             (resp <> '');
   if result then

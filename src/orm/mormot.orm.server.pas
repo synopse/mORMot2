@@ -301,7 +301,7 @@ type
     // may increase storage space a lot (even if BLOB maximum size can be set),
     // so should be defined only when necessary
     procedure TrackChanges(const aTable: array of TOrmClass;
-      aTableHistory: TOrmHistoryClass = nil;
+      aTableHistory: TOrmClass = nil;
       aMaxHistoryRowBeforeBlob: integer = 1000;
       aMaxHistoryRowPerRecord: integer = 10;
       aMaxUncompressedBlobSize: integer = 64*1024); virtual;
@@ -310,7 +310,7 @@ type
     // aMaxHistoryRowBeforeBlob - as set by TrackChanges() method - is reached
     // - you can manually call this method to force History BLOB update, e.g.
     // when the server is in Idle state, and ready for process
-    procedure TrackChangesFlush(aTableHistory: TOrmHistoryClass); virtual;
+    procedure TrackChangesFlush(aTableHistory: TOrmClass); virtual;
     /// check if OnUpdateEvent or change tracked has been defined for this table
     // - is used internally e.g. by TRestServerDB.MainEngineUpdateField to
     // ensure that the updated ID fields will be computed as expected
@@ -335,7 +335,7 @@ type
     // - you can use RecordVersionSynchronizeSlaveToBatch if your purpose is
     // to access the updates before applying to the current slave storage
     function RecordVersionSynchronizeSlave(Table: TOrmClass;
-      Master: TRest; ChunkRowLimit: integer = 0;
+      const Master: IRestOrm; ChunkRowLimit: integer = 0;
       const OnWrite: TOnBatchWrite = nil): TRecordVersion;
     /// synchronous master/slave replication from a slave TRest into a Batch
     // - will retrieve all the updates from a (distant) master TRest for a
@@ -353,7 +353,7 @@ type
     // - usually, you should not need to use this method, but rather the more
     // straightforward RecordVersionSynchronizeSlave()
     function RecordVersionSynchronizeSlaveToBatch(Table: TOrmClass;
-      Master: TRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer = 0;
+      const Master: IRestOrm; var RecordVersion: TRecordVersion; MaxRowLimit: integer = 0;
       const OnWrite: TOnBatchWrite = nil): TRestBatch; virtual;
     /// access to the associated TRestServer main instance
     property Owner: TRestServer
@@ -453,10 +453,15 @@ type
     /// returns true if the server will handle per-user authentication and
     // access right management
     function HandleAuthentication: boolean;
+    /// this property can be left to its TRUE default value, to handle any
+    // TOrmVirtualTableJSON static tables (module JSON or BINARY) with direct
+    // calls to the storage instance
+    procedure SetStaticVirtualTableDirect(direct: boolean);
   published
     /// this property can be left to its TRUE default value, to handle any
     // TOrmVirtualTableJSON static tables (module JSON or BINARY) with direct
     // calls to the storage instance
+    // - see also IRestOrmServer.SetStaticVirtualTableDirect
     // - is set to TRUE by default to enable faster Direct mode
     // - in Direct mode, GET/POST/PUT/DELETE of individual records (or BLOB fields)
     // from URI() will call directly the corresponding TRestStorage
@@ -770,7 +775,7 @@ begin
 end;
 
 function TRestOrmServer.RecordVersionSynchronizeSlave(
-  Table: TOrmClass; Master: TRest; ChunkRowLimit: integer;
+  Table: TOrmClass; const Master: IRestOrm; ChunkRowLimit: integer;
   const OnWrite: TOnBatchWrite): TRecordVersion;
 var
   Writer: TRestBatch;
@@ -827,7 +832,7 @@ begin
 end;
 
 function TRestOrmServer.RecordVersionSynchronizeSlaveToBatch(
-  Table: TOrmClass; Master: TRest; var RecordVersion: TRecordVersion;
+  Table: TOrmClass; const Master: IRestOrm; var RecordVersion: TRecordVersion;
   MaxRowLimit: integer; const OnWrite: TOnBatchWrite): TRestBatch;
 var
   TableIndex, SourceTableIndex, UpdatedRow, DeletedRow: integer;
@@ -858,7 +863,7 @@ begin
     Where := '%>? order by %';
     if MaxRowLimit > 0 then
       Where := FormatUTF8('% limit %', [Where, MaxRowLimit]);
-    ListUpdated := Master.ORM.MultiFieldValues(Table, '*', Where,
+    ListUpdated := Master.MultiFieldValues(Table, '*', Where,
       [Props.RecordVersionField.Name, Props.RecordVersionField.Name],
       [RecordVersion]);
     if ListUpdated = nil then
@@ -870,7 +875,7 @@ begin
       Where := 'ID>? and ID<? order by ID';
       if MaxRowLimit > 0 then
         Where := FormatUTF8('% limit %', [Where, MaxRowLimit]);
-      ListDeleted := Master.ORM.MultiFieldValues(fOrmVersionDeleteTable,
+      ListDeleted := Master.MultiFieldValues(fOrmVersionDeleteTable,
         'ID,Deleted', Where, [DeletedMinID + RecordVersion,
          DeletedMinID + ORMVERSION_DELETEID_RANGE]);
       if ListDeleted = nil then
@@ -1126,7 +1131,8 @@ var
   RunStatic: TRestOrm;
   RunStaticKind: TRestServerKind;
   CurrentContext: TRestServerURIContext;
-  counts: array[mPOST..mDELETE] of cardinal;
+  timer: TPrecisionTimer;
+  counts: array[mPOST..mHEAD] of cardinal;
 
   procedure PerformAutomaticCommit;
   var
@@ -1203,6 +1209,7 @@ begin
   end
   else
     byte(batchOptions) := 0;
+  timer.Start;
   CurrentContext := ServiceRunningContext^.Request;
   MethodTable := nil;
   RunningBatchRest := nil;
@@ -1440,6 +1447,7 @@ begin
             [self, Count, Results[Count], Method, RunTable]);
         inc(Count);
         inc(counts[URIMethod]);
+        inc(counts[mHEAD]);
       until EndOfObject = ']';
       if (AutomaticTransactionPerRow > 0) and
          (RowCountForCurrentTransaction > 0) then
@@ -1452,9 +1460,9 @@ begin
           RunningBatchRest.InternalBatchStop;
       finally
         fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
-        InternalLog('EngineBatchSend json=% add=% update=% delete=% %%',
+        InternalLog('EngineBatchSend json=% add=% update=% delete=% %% % %/s',
           [KB(Data), counts[mPOST], counts[mPUT], counts[mDELETE],
-           MethodTable, Table]);
+           MethodTable, Table, timer.Stop, timer.PerSec(counts[mHEAD])]);
       end;
     end;
   except
@@ -1517,7 +1525,7 @@ begin
 end;
 
 procedure TRestOrmServer.TrackChanges(const aTable: array of TOrmClass;
-  aTableHistory: TOrmHistoryClass; aMaxHistoryRowBeforeBlob,
+  aTableHistory: TOrmClass; aMaxHistoryRowBeforeBlob,
   aMaxHistoryRowPerRecord, aMaxUncompressedBlobSize: integer);
 var
   t, tableIndex, TableHistoryIndex: PtrInt;
@@ -1525,6 +1533,10 @@ begin
   if (self = nil) or
      (high(aTable) < 0) then
     exit;
+  if (aTableHistory = nil) or
+     not aTableHistory.InheritsFrom(TOrmHistory) then
+    raise EOrmException.CreateUTF8('%.TrackChanges: % is not a TOrmHistory',
+      [self, aTableHistory]);
   if aMaxHistoryRowBeforeBlob <= 0 then
     // disable change tracking
     TableHistoryIndex := -1
@@ -1557,7 +1569,7 @@ begin
 end;
 
 procedure TRestOrmServer.TrackChangesFlush(
-  aTableHistory: TOrmHistoryClass);
+  aTableHistory: TOrmClass);
 var
   HistBlob: TOrmHistory;
   Rec: TOrm;
@@ -1570,6 +1582,10 @@ var
   log: ISynLog; // for Enter auto-leave to work with FPC
 begin
   log := fRest.LogClass.Enter('TrackChangesFlush(%)', [aTableHistory], self);
+  if (aTableHistory = nil) or
+     not aTableHistory.InheritsFrom(TOrmHistory) then
+    raise EOrmException.CreateUTF8('%.TrackChangesFlush: % is not a TOrmHistory',
+      [self, aTableHistory]);
   fRest.AcquireExecution[execOrmWrite].Safe.Lock; // avoid race condition
   try
     // low-level Add(TOrmHistory) without cache
@@ -1627,9 +1643,9 @@ begin
         [aTableHistory.SQLTableName,MaxRevisionJSON]); }
     Rec := nil;
     HistBlob := nil;
-    HistJson := aTableHistory.CreateAndFillPrepare(self, WhereClause);
+    HistJson := TOrmHistoryClass(aTableHistory).CreateAndFillPrepare(self, WhereClause);
     try
-      HistBlob := aTableHistory.Create;
+      HistBlob := aTableHistory.Create as TOrmHistory;
       while HistJson.FillOne do
       begin
         if HistJson.ModifiedRecord <> HistBlob.ModifiedRecord then
@@ -2056,6 +2072,12 @@ begin
   // the main TRestServer is responsible of sessions and authentication
   result := fOwner.HandleAuthentication;
 end;
+
+procedure TRestOrmServer.SetStaticVirtualTableDirect(direct: boolean);
+begin
+  fVirtualTableDirect := direct;
+end;
+
 
 { IRestOrm overriden methods }
 

@@ -122,6 +122,17 @@ type
     constructor Create(aClass: TOrmVirtualTableClass; aServer: TRestOrmServer); override;
   end;
 
+/// initialize a Virtual Table Module for a specified database
+// - to be used for low-level access to a virtual module, e.g. with
+// TSQLVirtualTableLog
+// - when using our ORM, you should call TSQLModel.VirtualTableRegister()
+// instead to associate a TSQLRecordVirtual class to a module
+// - returns the created TSQLVirtualTableModule instance (which will be a
+// TSQLVirtualTableModuleSQLite3 instance in fact)
+// - will raise an exception of failure
+function RegisterVirtualTableModule(aModule: TOrmVirtualTableClass;
+  aDatabase: TSQLDataBase): TOrmVirtualTableModule;
+
 
 
 { *********** TRestStorageShardDB for REST Storage Sharded Over SQlite3 Files }
@@ -148,12 +159,11 @@ type
     /// initialize the table storage redirection for sharding over SQLite3 DB
     // - if no aShardRootFileName is set, the executable folder and stored class
     // table name would be used
-    // - typical use may be:
-    // ! Server.StaticDataAdd(TRestStorageShardDB.Create(TOrmSharded,Server,500000))
+    // - will also register to the aServer.StaticDataServer[] internal array
     // - you may define some low-level tuning of SQLite3 process via aSynchronous
     // / aCacheSizePrevious / aCacheSizeLast / aMaxShardCount parameters, if
     // the default smOff / 1MB / 2MB / 100 values are not enough
-    constructor Create(aClass: TOrmClass; aServer: TRestOrmServer;
+    constructor Create(aClass: TOrmClass; aServer: TRestServer;
       aShardRange: TID;
       aOptions: TRestStorageShardOptions = [];
       const aShardRootFileName: TFileName = '';
@@ -949,22 +959,40 @@ begin
 end;
 
 
+function RegisterVirtualTableModule(aModule: TOrmVirtualTableClass;
+  aDatabase: TSQLDataBase): TOrmVirtualTableModule;
+begin
+  result := TOrmVirtualTableModuleSQLite3.Create(aModule, nil);
+  try
+    TOrmVirtualTableModuleSQLite3(result).Attach(aDatabase);
+  except
+    on Exception do begin
+      result.Free; // should be released by hand here
+      raise; // e.g. EBusinessLayerException or ESQLite3Exception
+    end;
+  end;
+end;
+
 
 { *********** TRestStorageShardDB for REST Storage Sharded Over SQlite3 Files }
 
 { TRestStorageShardDB }
 
 constructor TRestStorageShardDB.Create(aClass: TOrmClass;
-  aServer: TRestOrmServer; aShardRange: TID;
+  aServer: TRestServer; aShardRange: TID;
   aOptions: TRestStorageShardOptions; const aShardRootFileName: TFileName;
   aMaxShardCount: integer; aSynchronous: TSQLSynchronousMode;
   aCacheSizePrevious, aCacheSizeLast: integer);
+var
+  orm: TRestOrmServer;
 begin
   fShardRootFileName := aShardRootFileName;
   fSynchronous := aSynchronous;
   fCacheSizePrevious := aCacheSizePrevious;
   fCacheSizeLast := aCacheSizeLast;
-  inherited Create(aClass, aServer, aShardRange, aOptions, aMaxShardCount);
+  orm := aServer.OrmInstance as TRestOrmServer;
+  inherited Create(aClass, orm, aShardRange, aOptions, aMaxShardCount);
+  orm.StaticTableSetup(fStoredClassProps.TableIndex, self, sStaticDataTable);
 end;
 
 function TRestStorageShardDB.DBFileName(ShardIndex: integer): TFileName;

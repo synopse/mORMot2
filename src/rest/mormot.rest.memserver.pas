@@ -205,6 +205,7 @@ type
 
 
 /// create an external static in-memory database for a specific class
+// - aServer is expected to be a TRestOrmServer, e.g. from TRestServer.OrmInstance
 // - call it after TRestServer.Create, before IRestOrmServer.CreateMissingTables;
 // warning: if you don't call this method before CreateMissingTable method
 // is called, the table will be created as a regular table by the main
@@ -221,7 +222,7 @@ type
 // - you can use this method to change the filename of an existing storage
 // - return nil on any error, or an EModelException if the class is not in
 // the aServer database model
-function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
+function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
   const aFileName: TFileName = ''; aBinaryFile: boolean = false;
   aStorageClass: TRestStorageInMemoryClass = nil): TRestStorageInMemory;
 
@@ -595,26 +596,28 @@ end;
 
 { ************ TRestServerFullMemory Standalone REST Server }
 
-function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
+function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
   const aFileName: TFileName; aBinaryFile: boolean;
   aStorageClass: TRestStorageInMemoryClass): TRestStorageInMemory;
 var
   t: PtrInt;
+  s: TRestOrmServer;
 begin
+  s := aServer as TRestOrmServer;
   if aStorageClass = nil then
     // default in-memory engine
     aStorageClass := TRestStorageInMemory;
   t := aServer.Model.GetTableIndexExisting(aClass);
-  result := TRestStorageInMemory(aServer.GetStaticTableIndex(t));
+  result := TRestStorageInMemory(s.GetStaticTableIndex(t));
   if result <> nil then
     // class already registered -> check aStorageClass, and update file name
     (result as aStorageClass).FileName := aFileName
   else
   begin
     // class not already registered -> create and register now
-    result := aStorageClass.Create(aClass, aServer, aFileName, aBinaryFile);
+    result := aStorageClass.Create(aClass, s, aFileName, aBinaryFile);
     result.StorageLockShouldIncreaseOwnerInternalState := true;
-    aServer.StaticTableSetup(t, result, sStaticDataTable);
+    s.StaticTableSetup(t, result, sStaticDataTable);
   end;
 end;
 

@@ -2988,6 +2988,12 @@ type
   // TOrm.InitializeTable methods
   TOrmInitializeTableOptions = set of TOrmInitializeTableOption;
 
+  /// event signature triggered by TRestBatch.OnWrite
+  // - also used by TRestServer.RecordVersionSynchronizeSlave*() methods
+  TOnBatchWrite = procedure(Sender: TRestBatch; Event: TOrmOccasion;
+    Table: TOrmClass; const ID: TID; Value: TOrm;
+    const ValueFields: TFieldBits) of object;
+
   /// Server-Specific Object-Relational-Mapping calls for CRUD access to a database
   IRestOrmServer = interface(IRestOrm)
     ['{F8FB2109-5629-4DFB-A74C-7A0F86F91362}']
@@ -3024,6 +3030,79 @@ type
     // see "1.6 Multi-Column Indices" in @http://www.sqlite.org/queryplanner.html
     function CreateSQLMultiIndex(Table: TOrmClass;
       const FieldNames: array of RawUTF8; Unique: boolean; IndexName: RawUTF8 = ''): boolean;
+
+    /// initialize change tracking for the given tables
+    // - by default, it will use the aTableHistory table (which should be a
+    // TOrmHistory) to store the changes
+    // - if aTableHistory is not already part of the TOrmModel, it will be added
+    // - note that this setting should be consistent in time: if you disable
+    // tracking for a while, or did not enable tracking before adding a record,
+    // then the content history won't be consistent (or disabled) for this record
+    // - at every change, aTableHistory.SentDataJSON records will be added, up
+    // to aMaxHistoryRowBeforeBlob items - then aTableHistory.History will store
+    // a compressed version of all previous changes
+    // - aMaxHistoryRowBeforeBlob is the maximum number of JSON rows per Table
+    // before compression into BLOB is triggerred
+    // - aMaxHistoryRowPerRecord is the maximum number of JSON rows per record,
+    // above which the versions will be compressed as BLOB
+    // - aMaxUncompressedBlobSize is the maximum BLOB size per record
+    // - you can specify aMaxHistoryRowBeforeBlob=0 to disable change tracking
+    // - you should call this method after the CreateMissingTables call
+    // - note that change tracking may slow down the writing process, and
+    // may increase storage space a lot (even if BLOB maximum size can be set),
+    // so should be defined only when necessary
+    procedure TrackChanges(const aTable: array of TOrmClass;
+      aTableHistory: TOrmClass = nil;
+      aMaxHistoryRowBeforeBlob: integer = 1000;
+      aMaxHistoryRowPerRecord: integer = 10;
+      aMaxUncompressedBlobSize: integer = 64*1024);
+    /// force compression of all aTableHistory.SentDataJson into History BLOB
+    // - by default, this will take place in InternalUpdateEvent() when
+    // aMaxHistoryRowBeforeBlob - as set by TrackChanges() method - is reached
+    // - you can manually call this method to force History BLOB update, e.g.
+    // when the server is in Idle state, and ready for process
+    procedure TrackChangesFlush(aTableHistory: TOrmClass);
+    /// will compute the next monotonic value for a TRecordVersion field
+    function RecordVersionCompute: TRecordVersion;
+    /// read only access to the current monotonic value for a TRecordVersion field
+    function RecordVersionCurrent: TRecordVersion;
+    /// synchronous master/slave replication from a slave TRest
+    // - apply all the updates from another (distant) master TRestOrm for a given
+    // TOrm table, using its TRecordVersion field, to the calling slave
+    // - both remote Master and local slave TRestServer should have the supplied
+    // Table class in their data model (maybe in diverse order)
+    // - by default, all pending updates are retrieved, but you can define a value
+    // to ChunkRowLimit, so that the updates will be retrieved by smaller chunks
+    // - returns -1 on error, or the latest applied revision number (which may
+    // be 0 if there is no data in the table)
+    // - this method will use regular REST ORM commands, so will work with any
+    // communication channels: for real-time push synchronization, consider using
+    // RecordVersionSynchronizeMasterStart and RecordVersionSynchronizeSlaveStart
+    // over a bidirectionnal communication channel like WebSockets
+    // - you can use RecordVersionSynchronizeSlaveToBatch if your purpose is
+    // to access the updates before applying to the current slave storage
+    function RecordVersionSynchronizeSlave(Table: TOrmClass;
+      const Master: IRestOrm; ChunkRowLimit: integer = 0;
+      const OnWrite: TOnBatchWrite = nil): TRecordVersion;
+    /// synchronous master/slave replication from a slave TRest into a Batch
+    // - will retrieve all the updates from a (distant) master TRest for a
+    // given TOrm table, using its TRecordVersion field, and a supplied
+    // TRecordVersion monotonic value, into a TRestBatch instance
+    // - both remote Source and local TRestServer should have the supplied
+    // Table class in each of their data model
+    // - by default, all pending updates are retrieved, but you can define a value
+    // to MaxRowLimit, so that the updates will be retrieved by smaller chunks
+    // - returns nil if nothing new was found, or a TRestBatch instance
+    // containing all modifications since RecordVersion revision
+    // - when executing the returned TRestBatch on the database, you should
+    // set TRestServer.RecordVersionDeleteIgnore := true so that the
+    // TRecordVersion fields will be forced from the supplied value
+    // - usually, you should not need to use this method, but rather the more
+    // straightforward RecordVersionSynchronizeSlave()
+    function RecordVersionSynchronizeSlaveToBatch(Table: TOrmClass;
+      const Master: IRestOrm; var RecordVersion: TRecordVersion; MaxRowLimit: integer = 0;
+      const OnWrite: TOnBatchWrite = nil): TRestBatch;
+
     /// check if the supplied TOrm is not a virtual or static table
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// returns the maximum BLOB size per record as specified to TrackChanges()
@@ -3033,6 +3112,9 @@ type
     // - i.e. if the associated TOrmModel contains TAuthUser and
     // TAuthGroup tables (set by constructor)
     function HandleAuthentication: boolean;
+    /// set to false to force using SQlite3 virtual tables for
+    // TOrmVirtualTableJSON static tables (module JSON or BINARY)
+    procedure SetStaticVirtualTableDirect(direct: boolean);
   end;
 
 
@@ -7065,12 +7147,6 @@ type
 
 
   { -------------------- TRestBatch TRestBatchLocked Definitions }
-
-  /// event signature triggered by TRestBatch.OnWrite
-  // - also used by TRestServer.RecordVersionSynchronizeSlave*() methods
-  TOnBatchWrite = procedure(Sender: TRestBatch; Event: TOrmOccasion;
-    Table: TOrmClass; const ID: TID; Value: TOrm;
-    const ValueFields: TFieldBits) of object;
 
   /// used to store a BATCH sequence of writing operations
   // - is used by TRest to process BATCH requests using BatchSend() method,
@@ -17267,7 +17343,7 @@ begin
           M := aModel.VirtualTableModule(self);
           if (M = nil) or
              not Assigned(GetVirtualTableModuleName) then
-            raise EModelException.CreateUTF8('No ovkegistered module for %', [self]);
+            raise EModelException.CreateUTF8('No registered module for %', [self]);
           mname := GetVirtualTableModuleName(M);
           if Props.Props.Fields.Count = 0 then
             raise EModelException.CreateUTF8(

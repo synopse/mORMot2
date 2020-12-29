@@ -1302,8 +1302,8 @@ type
     procedure InternalBatchStop; override;
   public
     /// initialize the table storage redirection for sharding
-    // - you should not have to use this constructor, but e.g.
-    // TRestStorageShardDB.Create on a main TRestOrmServer.StaticDataAdd()
+    // - you should not have to use this abstract constructor, but e.g.
+    // TRestStorageShardDB.Create which involved the actual persistence
     // - the supplied aShardRange should be < 1000 - and once set, you should NOT
     // change this value on an existing shard, unless process will be broken
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer;

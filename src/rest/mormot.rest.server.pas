@@ -2652,7 +2652,6 @@ begin
   Server := aServer;
   Call := @aCall;
   Method := ToMethod(aCall.Method);
-  ;
   ThreadServer := PerThreadRunningContextAddress;
   ThreadServer^.Request := self;
 end;
@@ -6477,7 +6476,7 @@ begin
       // retrieve all pending versions (may retry up to 5 times)
       previous := current;
       current := (fOrmInstance as TRestOrmServer).RecordVersionSynchronizeSlave(
-        Table, MasterRemoteAccess, 10000, OnNotify);
+        Table, MasterRemoteAccess.Orm, 10000, OnNotify);
       if current < 0 then
       begin
         InternalLog('RecordVersionSynchronizeSlaveStart(%): REST failure',

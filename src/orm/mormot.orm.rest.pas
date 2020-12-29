@@ -9,6 +9,7 @@ unit mormot.orm.rest;
    IRestOrm Implementation as used by TRest
     - Some definitions Used by TRestOrm Implementation
     - TRestOrm Parent Class for abstract REST client/server
+    - TOrmTableWritable Read/Write TOrmTable
    
   *****************************************************************************
 }
@@ -469,6 +470,54 @@ type
 
   /// a dynamic array of TRestOrm instances, owning the instances
   TRestOrmObjArray = array of TRestOrm;
+
+
+{ ************ TOrmTableWritable Read/Write TOrmTable }
+
+type
+  /// store a writable ORM result table, optionally read from a JSON message
+  // - in respect to TOrmTableJSON, this class allows to modify field values,
+  // and add some new fields on the fly, even joined from another TOrmTable
+  TOrmTableWritable = class(TOrmTableJSON)
+  protected
+    fNewValues: TRawUTF8DynArray;
+    fNewValuesCount: integer;
+    fNewValuesInterning: TRawUTF8Interning;
+  public
+    /// modify a field value in-place, using a RawUTF8 text value
+    procedure Update(Row, Field: integer; const Value: RawUTF8); overload;
+    /// modify a field value in-place, using a RawUTF8 text value
+    procedure Update(Row: integer; const FieldName, Value: RawUTF8); overload;
+    /// modify a field value in-place, using a variant value
+    procedure Update(Row, Field: integer; const Value: variant); overload;
+    /// modify a field value in-place, using a variant value
+    procedure Update(Row: integer; const FieldName: RawUTF8;
+      const Value: variant); overload;
+    /// define a new field to be stored in this table
+    // - returns the internal index of the newly created field
+    function AddField(const FieldName: RawUTF8): integer; overload;
+    /// define a new field to be stored in this table
+    // - returns the internal index of the newly created field
+    function AddField(const FieldName: RawUTF8; FieldType: TOrmFieldType;
+      FieldTypeInfo: pointer = nil; FieldSize: integer = -1): integer; overload;
+    /// define a new field to be stored in this table
+    // - returns the internal index of the newly created field
+    function AddField(const FieldName: RawUTF8; FieldTable: TOrmClass;
+      const FieldTableName: RawUTF8 = ''): integer; overload;
+    /// append/merge data from a secondary TOrmTable
+    // - you should specify the primary keys on which the data rows are merged
+    // - merged data will point to From.fResults[] content: so the From instance
+    // should remain available as long as you use this TOrmTableWritable
+    // - warning: will call From.SortFields(FromKeyField) for faster process
+    procedure Join(From: TOrmTable; const FromKeyField, KeyField: RawUTF8);
+    /// optionaly de-duplicate Update() values
+    property NewValuesInterning: TRawUTF8Interning
+      read fNewValuesInterning write fNewValuesInterning;
+    /// how many values have been written via Update() overloaded methods
+    // - is not used if NewValuesInterning was defined
+    property NewValuesCount: integer
+      read fNewValuesCount;
+  end;
 
 
 implementation
@@ -2291,6 +2340,169 @@ end;
 function TRestOrm.GetCurrentSessionUserID: TID;
 begin
   result := fRest.GetCurrentSessionUserID;
+end;
+
+
+{ ************ TOrmTableWritable Read/Write TOrmTable }
+
+{ TOrmTableWritable }
+
+function TOrmTableWritable.AddField(const FieldName: RawUTF8): integer;
+var
+  prev: TPUTF8CharDynArray;
+  rowlen, i: integer;
+  S, D: PByte;
+begin
+  if (FieldName = '') or
+     (FieldIndex(FieldName) >= 0) then
+    raise EOrmTable.CreateUTF8('%.AddField(%) invalid fieldname', [self, FieldName]);
+  result := fFieldCount;
+  inc(fFieldCount);
+  SetLength(fFieldNames, fFieldCount);
+  fFieldNames[result] := FieldName;
+  fFieldNameOrder := nil;
+  prev := fJSONResults;
+  fJSONResults := nil;
+  SetLength(fJSONResults, (fRowCount + 1) * fFieldCount);
+  fResults := pointer(fJSONResults);
+  S := pointer(prev);
+  D := pointer(fJSONResults);
+  rowlen := result * SizeOf(pointer);
+  MoveFast(S^, D^, rowlen);
+  inc(S, rowlen);
+  inc(D, rowlen);
+  PPUTF8Char(D)^ := pointer(FieldName);
+  inc(D, SizeOf(pointer));
+  for i := 1 to fRowCount do
+  begin
+    MoveFast(S^, D^, rowlen);
+    inc(S, rowlen);
+    inc(D, rowlen + SizeOf(pointer)); // leave new field value as D^=nil
+  end;
+end;
+
+procedure TOrmTableWritable.Update(Row: integer; const FieldName, Value: RawUTF8);
+begin
+  Update(Row, FieldIndexExisting(FieldName), Value);
+end;
+
+procedure TOrmTableWritable.Update(Row, Field: integer; const Value: RawUTF8);
+var
+  U: PPUTF8Char;
+begin
+  if (self = nil) or
+     (fResults = nil) or
+     (Row <= 0) or
+     (Row > fRowCount) or
+     (cardinal(Field) >= cardinal(FieldCount)) then
+    exit;
+  U := @fResults[Row * FieldCount + Field];
+  if (U^ = nil) or
+     (StrComp(U^, pointer(Value)) <> 0) then
+    if fNewValuesInterning <> nil then
+      U^ := pointer(fNewValuesInterning.Unique(Value))
+    else
+    begin
+      AddRawUTF8(fNewValues, fNewValuesCount, Value);
+      U^ := pointer(Value);
+    end;
+end;
+
+function TOrmTableWritable.AddField(const FieldName: RawUTF8;
+  FieldType: TOrmFieldType; FieldTypeInfo: pointer; FieldSize: integer): integer;
+begin
+  result := AddField(FieldName);
+  SetFieldType(result, FieldType, FieldTypeInfo, FieldSize);
+end;
+
+function TOrmTableWritable.AddField(const FieldName: RawUTF8;
+  FieldTable: TOrmClass; const FieldTableName: RawUTF8): integer;
+var
+  prop: TOrmPropInfo;
+  nfo: pointer;
+begin
+  result := AddField(FieldName);
+  if FieldTable = nil then
+    exit;
+  with FieldTable.OrmProps.Fields do
+    if FieldTableName <> '' then
+      prop := ByRawUTF8Name(FieldTableName)
+    else
+      prop := ByRawUTF8Name(FieldName);
+  if prop = nil then
+    exit;
+  if prop.InheritsFrom(TOrmPropInfoRTTI) then
+    nfo := TOrmPropInfoRTTI(prop).PropType
+  else
+    nfo := nil;
+  SetFieldType(result, prop.OrmFieldTypeStored, nfo, prop.FieldWidth,
+    PtrArrayAddOnce(fQueryTables, FieldTable));
+end;
+
+procedure TOrmTableWritable.Update(Row: integer; const FieldName: RawUTF8;
+  const Value: variant);
+begin
+  Update(Row, FieldIndexExisting(FieldName), Value);
+end;
+
+procedure TOrmTableWritable.Update(Row, Field: integer; const Value: variant);
+var
+  U: RawUTF8;
+  wasString: boolean;
+begin
+  VariantToUTF8(Value, U, wasString);
+  Update(Row, Field, U);
+end;
+
+procedure TOrmTableWritable.Join(From: TOrmTable; const FromKeyField, KeyField: RawUTF8);
+var
+  fk, dk, f, i, k, ndx: integer;
+  n, fn: RawUTF8;
+  info: POrmTableFieldType;
+  new: TIntegerDynArray;
+begin
+  dk := FieldIndexExisting(KeyField);
+  SetLength(new, FieldCount);
+  fk := From.FieldIndexExisting(FromKeyField);
+  From.SortFields(fk); // faster merge with O(log(n)) binary search
+  for f := 0 to From.FieldCount - 1 do // add From fields (excluding FromKeyField)
+    if f <> fk then
+    begin
+      n := From.FieldNames[f];
+      fn := n;
+      if FieldIndex(fn) >= 0 then // ensure unique name
+        for i := 2 to 100 do
+        begin
+          fn := n + SmallUInt32UTF8[i];
+          if FieldIndex(fn) < 0 then
+            break;
+        end;
+      if From.FieldType(f, info) = oftUnknown then  // set TOrmTableFieldType
+        i := AddField(fn)
+      else if info.TableIndex >= 0 then
+        i := AddField(fn, From.QueryTables[info.TableIndex], n)
+      else
+      begin
+        i := AddField(fn);
+        if i >= length(fFieldType) then
+          SetLength(fFieldType, i + 1);
+        fFieldType[i] := info^;
+      end;
+      new[f] := i;
+    end;
+  ndx := FieldCount;
+  for i := 1 to fRowCount do
+  begin // merge data
+    k := From.SearchFieldSorted(fResults[ndx + dk], fk);
+    if k > 0 then
+    begin
+      k := k * From.FieldCount;
+      for f := 0 to From.FieldCount - 1 do
+        if f <> fk then
+          fResults[ndx + new[f]] := From.Results[k + f]; // fast PUTF8Char copy
+    end;
+    inc(ndx, FieldCount);
+  end;
 end;
 
 

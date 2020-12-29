@@ -49,6 +49,7 @@ uses
   mormot.core.interfaces,
   mormot.orm.core,
   mormot.orm.rest,
+  mormot.orm.client,
   mormot.soa.core,
   mormot.soa.client,
   mormot.db.core,
@@ -151,6 +152,10 @@ type
     // the TRestClientURI.SetUser() information, and Definition.DatabaseName
     // to store the extended options as an URL-encoded string
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
+
+    /// low-level access to the associated TRestOrmClientURI instance
+    function OrmInstance: TRestOrmClientURI;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns 'Server:Port' current value
     function HostName: RawUTF8;
     /// optional custom HTTP "User Agent:" header value
@@ -661,6 +666,11 @@ begin
      (aDefaultPort <> 0) then
     URI.Port := Int32ToUtf8(aDefaultPort);
   Create(URI.Address, URI.Port, aModel, aHttps);
+end;
+
+function TRestHttpClientGeneric.OrmInstance: TRestOrmClientURI;
+begin
+  result := fOrmInstance as TRestOrmClientURI;
 end;
 
 function TRestHttpClientGeneric.HostName: RawUTF8;
