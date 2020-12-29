@@ -1239,7 +1239,7 @@ begin
   if (self = nil) or
      (Value = nil) then
     exit;
-  sql := Trim(SQLWhere);
+  sql := TrimU(SQLWhere);
   if not EndWith(sql, ' LIMIT 1') then
     sql := sql + ' LIMIT 1'; // we keep a single record below
   T := MultiFieldValues(POrmClass(Value)^, aCustomFieldsCSV, sql);

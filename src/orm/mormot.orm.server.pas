@@ -1739,7 +1739,8 @@ begin
     exit;
   if length(aStatics) <> aTableCount then
     SetLength(aStatics, aTableCount);
-  if (aStatics[aTableIndex] <> nil) and
+  if (aStatic <> nil) and
+     (aStatics[aTableIndex] <> nil) and
      (aStatics[aTableIndex] <> aStatic) then
     raise ERestException.CreateUTF8(
       'SetStaticTable(%): existing % for %',

@@ -1677,7 +1677,8 @@ end;
 
 constructor TRestStorage.Create(aClass: TOrmClass; aServer: TRestOrmServer);
 begin
-  fRest := aServer.Owner; // redirect high-level methods to the main TRestServer
+  if aServer <> nil then // may be nil for a stand-alone single TOrm engine
+    fRest := aServer.Owner; // redirect high-level methods to the main TRestServer
   inherited Create(nil);
   if aClass = nil then
     raise ERestStorage.CreateUTF8('%.Create(aClass=nil)', [self]);
