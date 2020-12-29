@@ -850,7 +850,7 @@ begin
   if OldPassWord = NewPassword then
     exit;
   F := FileOpen(FileName, fmOpenReadWrite);
-  if F <= 0 then
+  if F > 0 then
   try
     if OldPassWord <> '' then
       CodecGenerateKey(old, pointer(OldPassWord), length(OldPassWord));
