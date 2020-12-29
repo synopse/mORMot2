@@ -950,7 +950,8 @@ begin
     res := URI(fModel.Root, 'GET', @JSON, nil, @SQL, @state);
     if res = HTTP_SUCCESS then
     begin
-      result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}false);
+      result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON,
+        {ownJSON=}PRefCnt(PtrUInt(JSON) - _DAREFCNT)^ = 1);
       result.InternalState := state;
     end
     else
@@ -990,15 +991,12 @@ begin
     if URI(Model.URI[Tables[0]] + U,
        'GET', @JSON, nil, nil, @state) <> HTTP_SUCCESS then
       exit;
-    result := TOrmTableJSON.CreateFromTables([Tables[0]], SQL, JSON, {ownJSON=}false);
   end
-  else
-  begin
-    // multiple tables -> send SQL statement as HTTP body
-    if URI(Model.Root,'GET', @JSON, nil, @SQL, @state) <> HTTP_SUCCESS then
-        exit;
-    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}false);
-  end;
+  // multiple tables -> send SQL statement as HTTP body
+  else if URI(Model.Root,'GET', @JSON, nil, @SQL, @state) <> HTTP_SUCCESS then
+    exit;
+  result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON,
+    {ownJSON=}PRefCnt(PtrUInt(JSON) - _DAREFCNT)^ = 1);
   result.InternalState := state;
 end;
 

@@ -1589,7 +1589,8 @@ var
 begin
   JSON := EngineList(SQL, false);
   if JSON <> '' then
-    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}false)
+    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON,
+      {ownJSON=}PRefCnt(PtrUInt(JSON) - _DAREFCNT)^ = 1)
   else
     result := nil;
 end;
