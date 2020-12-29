@@ -1169,8 +1169,7 @@ end;
 procedure TRestOrmServerDB.GetAndPrepareStatementRelease(E: Exception;
   const Msg: ShortString; ForceBindReset: boolean);
 var
-  tmp: TSynTempBuffer;
-  P: PAnsiChar;
+  c: AnsiChar;
 begin
   try
     if fStatementTimer <> nil then
@@ -1183,13 +1182,11 @@ begin
         if (fStatementTruncateSQLLogLen > 0) and
            (length(fStatementSQL) > fStatementTruncateSQLLogLen) then
         begin
-          tmp.Init(pointer(fStatementSQL), fStatementTruncateSQLLogLen);
-          P := tmp.buf;
-          PCardinal(P + fStatementTruncateSQLLogLen - 3)^ :=
-            ord('.') + ord('.') shl 8 + ord('.') shl 16;
-          InternalLog('% % % len=%',
-            [fStatementTimer^.LastTime, Msg, P, length(fStatementSQL)], sllSQL);
-          tmp.Done;
+          c := fStatementSQL[fStatementTruncateSQLLogLen];
+          fStatementSQL[fStatementTruncateSQLLogLen] := #0; // truncate
+          InternalLog('% % %... len=%', [fStatementTimer^.LastTime, Msg,
+            PAnsiChar(pointer(fStatementSQL)), length(fStatementSQL)], sllSQL);
+          fStatementSQL[fStatementTruncateSQLLogLen] := c; // restore
         end
         else
           InternalLog('% % %', [fStatementTimer^.LastTime, Msg, fStatementSQL], sllSQL)
