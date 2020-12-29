@@ -18010,7 +18010,7 @@ begin
     aBoundsSQLJoin, ObjectsClass, SQL);
   if JSON = '' then
     exit;
-  T := TOrmTableJSON.CreateFromTables(ObjectsClass, SQL, JSON, {ownJSON=}true);
+  T := TOrmTableJSON.CreateFromTables(ObjectsClass, SQL, JSON, {ownJSON=}false);
   if (T = nil) or (T.fResults = nil) then
   begin
     T.Free;

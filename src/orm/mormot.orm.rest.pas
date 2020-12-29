@@ -1589,7 +1589,7 @@ var
 begin
   JSON := EngineList(SQL, false);
   if JSON <> '' then
-    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}true)
+    result := TOrmTableJSON.CreateFromTables(Tables, SQL, JSON, {ownJSON=}false)
   else
     result := nil;
 end;
