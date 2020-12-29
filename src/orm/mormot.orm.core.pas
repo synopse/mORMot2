@@ -12319,7 +12319,7 @@ constructor TOrmPropInfoCustomJSON.Create(const aTypeName, aName: RawUTF8;
 begin
   inherited Create(aName, oftUTF8Custom, aAttributes, aFieldWidth,
     aPropertyIndex, aPropertyPointer, nil, nil);
-  SetCustomParser(Rtti.Find(pointer(aTypeName), length(aTypeName)) as TRttiJson);
+  SetCustomParser(Rtti.RegisterTypeFromName(aTypeName) as TRttiJson);
 end;
 
 function TOrmPropInfoCustomJSON.GetSQLFieldRTTITypeName: RawUTF8;
@@ -12333,8 +12333,8 @@ end;
 procedure TOrmPropInfoCustomJSON.SetCustomParser(aCustomParser: TRttiJson);
 begin
   if aCustomParser = nil then
-    raise EModelException.CreateUTF8('%.SetCustomParser: Invalid type information for %',
-      [self, Name]);
+    raise EModelException.CreateUTF8(
+      '%.SetCustomParser: Invalid type information for %', [self, Name]);
   fCustomParser := aCustomParser;
 end;
 
